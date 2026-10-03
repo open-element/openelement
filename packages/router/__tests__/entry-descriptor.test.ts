@@ -6,7 +6,8 @@
  *   2. renderEntry - renders data to code string
  */
 
-import { assertEquals, assertFalse, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 
@@ -24,57 +25,57 @@ const islandRoutes: RouteEntry[] = [
 
 // buildEntryDescriptor tests
 
-Deno.test('buildEntryDescriptor: default options produce correct structure', () => {
+test('buildEntryDescriptor: default options produce correct structure', () => {
   const desc = buildEntryDescriptor(sampleRoutes);
 
-  assertEquals(desc.isSSG, false);
-  assertEquals(desc.apiRoutes.length, 1);
-  assertEquals(desc.pageRoutes.length, 2);
-  assertEquals(desc.middleware.length, 4); // requestId, logger, cors, securityHeaders
-  assertEquals(desc.document.lang, 'en');
-  assertEquals(desc.document.title, 'openElement');
-  assertEquals(desc.document.headExtras, '');
+  expect(desc.isSSG).toEqual(false);
+  expect(desc.apiRoutes.length).toEqual(1);
+  expect(desc.pageRoutes.length).toEqual(2);
+  expect(desc.middleware.length).toEqual(4); // requestId, logger, cors, securityHeaders
+  expect(desc.document.lang).toEqual('en');
+  expect(desc.document.title).toEqual('openElement');
+  expect(desc.document.headExtras).toEqual('');
 });
 
-Deno.test('buildEntryDescriptor: SSG mode sets isSSG', () => {
+test('buildEntryDescriptor: SSG mode sets isSSG', () => {
   const desc = buildEntryDescriptor(sampleRoutes, { ssg: true });
 
-  assertEquals(desc.isSSG, true);
+  expect(desc.isSSG).toEqual(true);
 });
 
-Deno.test('buildEntryDescriptor: middleware can be disabled', () => {
+test('buildEntryDescriptor: middleware can be disabled', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     middleware: { cors: false, requestId: false },
   });
 
   const kinds = desc.middleware.map((m) => m.kind);
-  assertEquals(kinds.includes('cors'), false);
-  assertEquals(kinds.includes('requestId'), false);
-  assertEquals(kinds.includes('logger'), true);
-  assertEquals(kinds.includes('securityHeaders'), true);
+  expect(kinds.includes('cors')).toEqual(false);
+  expect(kinds.includes('requestId')).toEqual(false);
+  expect(kinds.includes('logger')).toEqual(true);
+  expect(kinds.includes('securityHeaders')).toEqual(true);
 });
 
-Deno.test('buildEntryDescriptor: custom CORS origin is serialized', () => {
+test('buildEntryDescriptor: custom CORS origin is serialized', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     middleware: { corsOrigin: 'https://example.com' },
   });
 
   const corsMw = desc.middleware.find((m) => m.kind === 'cors');
-  assertEquals(corsMw?.config?.corsOrigin, 'https://example.com');
+  expect(corsMw?.config?.corsOrigin).toEqual('https://example.com');
 });
 
-Deno.test('buildEntryDescriptor: array CORS origin is preserved', () => {
+test('buildEntryDescriptor: array CORS origin is preserved', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     middleware: { corsOrigin: ['https://a.com', 'https://b.com'] },
   });
 
   const corsMw = desc.middleware.find((m) => m.kind === 'cors');
-  assertEquals(corsMw?.config?.corsOrigin, ['https://a.com', 'https://b.com']);
+  expect(corsMw?.config?.corsOrigin).toEqual(['https://a.com', 'https://b.com']);
 });
 
-Deno.test('buildEntryDescriptor: function CORS origin fails with a migration error (Alpha.1)', () => {
+test('buildEntryDescriptor: function CORS origin fails with a migration error (Alpha.1)', () => {
   const originFn = (origin: string) => (origin.endsWith('.example.com') ? origin : '');
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       buildEntryDescriptor(sampleRoutes, {
         middleware: { corsOrigin: originFn as never },
@@ -84,18 +85,18 @@ Deno.test('buildEntryDescriptor: function CORS origin fails with a migration err
   );
 });
 
-Deno.test('buildEntryDescriptor: corsOriginModule is carried as an import path', () => {
+test('buildEntryDescriptor: corsOriginModule is carried as an import path', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     middleware: { corsOriginModule: './app/cors-origin.ts' },
   });
 
   const corsMw = desc.middleware.find((m) => m.kind === 'cors');
-  assertEquals(corsMw?.config?.corsOrigin, undefined);
-  assertEquals(corsMw?.config?.corsOriginModule, '/app/cors-origin.ts');
+  expect(corsMw?.config?.corsOrigin).toEqual(undefined);
+  expect(corsMw?.config?.corsOriginModule).toEqual('/app/cors-origin.ts');
 });
 
-Deno.test('buildEntryDescriptor: corsOrigin and corsOriginModule are mutually exclusive', () => {
-  assertThrows(
+test('buildEntryDescriptor: corsOrigin and corsOriginModule are mutually exclusive', () => {
+  assertThrowsIncludes(
     () =>
       buildEntryDescriptor(sampleRoutes, {
         middleware: {
@@ -108,37 +109,37 @@ Deno.test('buildEntryDescriptor: corsOrigin and corsOriginModule are mutually ex
   );
 });
 
-Deno.test('buildEntryDescriptor: custom html config is applied', () => {
+test('buildEntryDescriptor: custom html config is applied', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     html: { lang: 'zh-CN', title: 'My App' },
     headExtras: '<link rel="stylesheet" href="https://cdn.example.com/styles.css" />',
   });
 
-  assertEquals(desc.document.lang, 'zh-CN');
-  assertEquals(desc.document.title, 'My App');
-  assertStringIncludes(desc.document.headExtras, 'cdn.example.com');
+  expect(desc.document.lang).toEqual('zh-CN');
+  expect(desc.document.title).toEqual('My App');
+  expect(desc.document.headExtras).toContain('cdn.example.com');
 });
 
-Deno.test('buildEntryDescriptor: islands are mapped correctly', () => {
+test('buildEntryDescriptor: islands are mapped correctly', () => {
   const desc = buildEntryDescriptor(islandRoutes, {
     islandTagNames: ['my-counter', 'theme-toggle'],
     islandsDir: 'app/islands',
   });
 
-  assertEquals(desc.islands.length, 2);
-  assertEquals(desc.islands[0].tagName, 'my-counter');
-  assertEquals(desc.islands[0].modulePath, '/app/islands/my-counter.ts');
-  assertEquals(desc.islands[1].tagName, 'theme-toggle');
+  expect(desc.islands.length).toEqual(2);
+  expect(desc.islands[0].tagName).toEqual('my-counter');
+  expect(desc.islands[0].modulePath).toEqual('/app/islands/my-counter.ts');
+  expect(desc.islands[1].tagName).toEqual('theme-toggle');
 });
 
-Deno.test('buildEntryDescriptor: route import paths include routesDir', () => {
+test('buildEntryDescriptor: route import paths include routesDir', () => {
   const desc = buildEntryDescriptor(sampleRoutes, { routesDir: 'app/routes' });
 
-  assertEquals(desc.apiRoutes[0].importPath, '/app/routes/api/hello.ts');
-  assertEquals(desc.pageRoutes[0].importPath, '/app/routes/index.ts');
+  expect(desc.apiRoutes[0].importPath).toEqual('/app/routes/api/hello.ts');
+  expect(desc.pageRoutes[0].importPath).toEqual('/app/routes/index.ts');
 });
 
-Deno.test('buildEntryDescriptor: static components are explicit and rendered into the SSR entry', () => {
+test('buildEntryDescriptor: static components are explicit and rendered into the SSR entry', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     staticComponents: [
       {
@@ -150,30 +151,29 @@ Deno.test('buildEntryDescriptor: static components are explicit and rendered int
   });
   const code = renderEntry(desc);
 
-  assertEquals(desc.staticComponents, [
+  expect(desc.staticComponents).toEqual([
     {
       tagName: 'open-article-view',
       modulePath: '/app/components/article.tsx',
       compilerInteractionEvents: [],
     },
   ]);
-  assertStringIncludes(code, 'import * as __static_component_0 from "/app/components/article.tsx"');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('import * as __static_component_0 from "/app/components/article.tsx"');
+  expect(code).toContain(
     '__registerSsrComponent("open-article-view", __static_component_0.default)',
   );
   // The admitted-tag list is serialized build data inside the factory config
   // (#1470 block e — no standalone const anymore).
-  assertStringIncludes(code, '"open-article-view"');
-  assertStringIncludes(code, 'ssrRenderableTags: [');
-  assertEquals(code.includes('__expandNestedHosts'), false);
-  assertEquals(code.includes('__nestedShellPattern'), false);
-  assertEquals(code.includes('__propsFromAttrs'), false);
-  assertEquals(code.includes('__projectLightChildren'), false);
-  assertStringIncludes(code, '"open-article-view"');
+  expect(code).toContain('"open-article-view"');
+  expect(code).toContain('ssrRenderableTags: [');
+  expect(code.includes('__expandNestedHosts')).toEqual(false);
+  expect(code.includes('__nestedShellPattern')).toEqual(false);
+  expect(code.includes('__propsFromAttrs')).toEqual(false);
+  expect(code.includes('__projectLightChildren')).toEqual(false);
+  expect(code).toContain('"open-article-view"');
 });
 
-Deno.test('buildEntryDescriptor: compiler-proven interaction becomes one client admission input', () => {
+test('buildEntryDescriptor: compiler-proven interaction becomes one client admission input', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     upgradeStrategy: 'visible',
     staticComponents: [
@@ -186,8 +186,8 @@ Deno.test('buildEntryDescriptor: compiler-proven interaction becomes one client 
   });
   const code = renderEntry(desc);
 
-  assertEquals(desc.staticComponents, []);
-  assertEquals(desc.islands, [
+  expect(desc.staticComponents).toEqual([]);
+  expect(desc.islands).toEqual([
     {
       tagName: 'open-menu-button',
       modulePath: '/app/components/menu-button.tsx',
@@ -199,127 +199,119 @@ Deno.test('buildEntryDescriptor: compiler-proven interaction becomes one client 
       reason: 'compiler-proven interaction events: click, keydown',
     },
   ]);
-  assertEquals(desc.ssrAdmissionPlan.renderableTags, ['open-menu-button']);
-  assertStringIncludes(code, 'import * as __island_open_menu_button');
-  assertStringIncludes(code, '"open-menu-button"');
-  assertEquals(code.includes('__static_component_0'), false);
+  expect(desc.ssrAdmissionPlan.renderableTags).toEqual(['open-menu-button']);
+  expect(code).toContain('import * as __island_open_menu_button');
+  expect(code).toContain('"open-menu-button"');
+  expect(code.includes('__static_component_0')).toEqual(false);
 });
 
 // renderEntry tests
 
-Deno.test('renderEntry: produces valid module code', () => {
+test('renderEntry: produces valid module code', () => {
   const desc = buildEntryDescriptor(sampleRoutes);
   const code = renderEntry(desc);
 
   // ADR-0160 rule a (#1470 block e): the Hono app is the factory's — the
   // entry carries no Hono import and no `new Hono()` assembly.
-  assertFalse(code.includes("from 'hono'"));
-  assertFalse(code.includes('new Hono()'));
-  assertStringIncludes(code, 'const __app = createGeneratedApp({');
+  expect(code.includes("from 'hono'")).toBeFalsy();
+  expect(code.includes('new Hono()')).toBeFalsy();
+  expect(code).toContain('const __app = createGeneratedApp({');
   // v0.44 (ADR-0143): the sync compiled renderDsd is the only serializer
   // import — the legacy VNode tree renderer is gone.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { createDeferredDsdExecutor, renderDsd, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
   );
-  assertEquals(code.includes('renderDsdTree'), false);
-  assertStringIncludes(code, 'export default app');
+  expect(code.includes('renderDsdTree')).toEqual(false);
+  expect(code).toContain('export default app');
 });
 
-Deno.test('renderEntry: SSG mode excludes DOM shim (DSD renderer has no shim dependency)', () => {
+test('renderEntry: SSG mode excludes DOM shim (DSD renderer has no shim dependency)', () => {
   const desc = buildEntryDescriptor(sampleRoutes, { ssg: true });
   const code = renderEntry(desc);
 
   // v0.5.0: DSD renderer doesn't need DOM shim - no @lit-labs/ssr dependency
-  assertEquals(code.includes('install-global-dom-shim'), false);
+  expect(code.includes('install-global-dom-shim')).toEqual(false);
 });
 
-Deno.test('renderEntry: SSG mode omits /__kiss debug endpoint', () => {
+test('renderEntry: SSG mode omits /__kiss debug endpoint', () => {
   const desc = buildEntryDescriptor(sampleRoutes, { ssg: true });
   const code = renderEntry(desc);
 
-  assertEquals(code.includes('/__kiss'), false);
+  expect(code.includes('/__kiss')).toEqual(false);
 });
 
-Deno.test('renderEntry: dev mode omits the /__kiss debug endpoint', () => {
+test('renderEntry: dev mode omits the /__kiss debug endpoint', () => {
   const desc = buildEntryDescriptor(sampleRoutes);
   const code = renderEntry(desc);
 
   // Debug endpoint was removed in Phase 4A audit (security: leaked route info).
   // Generated code must NOT contain /__kiss.
-  assertEquals(code.includes('/__kiss'), false);
+  expect(code.includes('/__kiss')).toEqual(false);
 });
 
-Deno.test('renderEntry: API routes mount as functions or method-keyed WinterCG records', () => {
+test('renderEntry: API routes mount as functions or method-keyed WinterCG records', () => {
   const desc = buildEntryDescriptor(sampleRoutes);
   const code = renderEntry(desc);
 
   // API routes accept (ctx) => Response functions and method-keyed handler
   // records joined into the shared route middleware.
-  assertStringIncludes(code, 'app.all("/api/hello"');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('app.all("/api/hello"');
+  expect(code).toContain(
     '__apiRouteRecords.push({ id: "api/hello.ts", path: "/api/hello", handlers: $apiHello.default })',
   );
-  assertStringIncludes(code, 'request: c.req.raw');
-  assertStringIncludes(code, '$apiHello');
+  expect(code).toContain('request: c.req.raw');
+  expect(code).toContain('$apiHello');
 });
 
-Deno.test('renderEntry: page routes use SSR helper and wrapInDocument', () => {
+test('renderEntry: page routes use SSR helper and wrapInDocument', () => {
   const desc = buildEntryDescriptor(sampleRoutes);
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, '__pageHandlers["/"].GET = [');
+  expect(code).toContain('__pageHandlers["/"].GET = [');
   // v0.5.0: __ssr takes route params as second arg for SSR-time data access —
   // the renderer seam is imported runtime (ADR-0160 rule a); the handler call
   // site stays pinned and the native factory binding lives in
   // createGeneratedApp (#1470 block e).
-  assertStringIncludes(code, '__ssr(__tag,');
-  assertStringIncludes(code, 'ssr: __ssr,');
+  expect(code).toContain('__ssr(__tag,');
+  expect(code).toContain('ssr: __ssr,');
   // The WinterCG route middleware hands params to the handler directly.
-  assertStringIncludes(code, '__params = __route.params');
+  expect(code).toContain('__params = __route.params');
   // v0.3.4: SSR automatically registers page components for Shadow DOM rendering
   // (#952/#1339/#1470 block e: registration runs through the imported registry
   // guard — the wrapper and its registry reads are typed module code, so the
   // generated entry carries the register call sites only).
-  assertStringIncludes(code, '__registerSsrComponent(');
-  assertEquals(code.includes('customElements.define ='), false);
+  expect(code).toContain('__registerSsrComponent(');
+  expect(code.includes('customElements.define =')).toEqual(false);
   // v0.3.0: Uses wrapInDocument from ssr-handler.ts (single source of truth)
-  assertStringIncludes(code, 'wrapInDocument(');
+  expect(code).toContain('wrapInDocument(');
   // v0.5.0: No legacy SSR client artifacts
-  assertEquals(code.includes('generateHydrationScript'), false);
-  assertEquals(code.includes('stripLitComments'), false);
-  assertEquals(code.includes('lit-part'), false);
+  expect(code.includes('generateHydrationScript')).toEqual(false);
+  expect(code.includes('stripLitComments')).toEqual(false);
+  expect(code.includes('lit-part')).toEqual(false);
 });
 
-Deno.test('renderEntry: no process.env call in output', () => {
+test('renderEntry: no process.env call in output', () => {
   const desc = buildEntryDescriptor(sampleRoutes);
   const code = renderEntry(desc);
 
   // Check that process.env is not used as a runtime call (only in comments is fine)
   const codeLines = code.split('\n').filter((l) => !l.trimStart().startsWith('//'));
-  assertEquals(
-    codeLines.some((l) => l.includes('process.env')),
-    false,
-  );
+  expect(codeLines.some((l) => l.includes('process.env'))).toEqual(false);
 });
 
-Deno.test('renderEntry: custom CORS origin renders correctly', () => {
+test('renderEntry: custom CORS origin renders correctly', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     middleware: { corsOrigin: 'https://example.com' },
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, '"https://example.com"');
+  expect(code).toContain('"https://example.com"');
   // Verify no process.env call in non-comment lines
   const codeLines = code.split('\n').filter((l) => !l.trimStart().startsWith('//'));
-  assertEquals(
-    codeLines.some((l) => l.includes('process.env')),
-    false,
-  );
+  expect(codeLines.some((l) => l.includes('process.env'))).toEqual(false);
 });
 
-Deno.test('renderEntry: document config renders correctly', () => {
+test('renderEntry: document config renders correctly', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     html: { lang: 'zh-CN', title: 'Test' },
     headExtras: '<link rel="stylesheet" href="https://cdn.example.com/styles.css" />',
@@ -328,14 +320,14 @@ Deno.test('renderEntry: document config renders correctly', () => {
 
   // v0.3.0: wrapInDocument is called at runtime, not inlined HTML.
   // The generated code passes config as parameters.
-  assertStringIncludes(code, 'lang: "zh-CN"');
-  assertStringIncludes(code, 'title: __doc.title || "Test"');
-  assertStringIncludes(code, 'cdn.example.com');
+  expect(code).toContain('lang: "zh-CN"');
+  expect(code).toContain('title: __doc.title || "Test"');
+  expect(code).toContain('cdn.example.com');
 });
 
 // Integration test: buildEntryDescriptor + renderEntry end-to-end
 
-Deno.test('buildEntryDescriptor + renderEntry: end-to-end produces runnable code', () => {
+test('buildEntryDescriptor + renderEntry: end-to-end produces runnable code', () => {
   const code = renderEntry(
     buildEntryDescriptor(sampleRoutes, {
       routesDir: 'app/routes',
@@ -344,22 +336,19 @@ Deno.test('buildEntryDescriptor + renderEntry: end-to-end produces runnable code
   );
 
   // ADR-0160 rule a (#1470 block e): Hono assembly is the factory's.
-  assertFalse(code.includes("from 'hono'"));
-  assertStringIncludes(code, 'export default app');
-  assertStringIncludes(code, '__apiRouteRecords.push({ id: "api/hello.ts"');
-  assertStringIncludes(code, '__pageHandlers["/"].GET = [');
-  assertStringIncludes(code, '__pageHandlers["/about"].GET = [');
+  expect(code.includes("from 'hono'")).toBeFalsy();
+  expect(code).toContain('export default app');
+  expect(code).toContain('__apiRouteRecords.push({ id: "api/hello.ts"');
+  expect(code).toContain('__pageHandlers["/"].GET = [');
+  expect(code).toContain('__pageHandlers["/about"].GET = [');
   // No process.env call in non-comment lines
   const codeLines = code.split('\n').filter((l) => !l.trimStart().startsWith('//'));
-  assertEquals(
-    codeLines.some((l) => l.includes('process.env')),
-    false,
-  );
+  expect(codeLines.some((l) => l.includes('process.env'))).toEqual(false);
 });
 
 // v0.5 Trust Release regression tests
 
-Deno.test('buildEntryDescriptor: root middleware scope uses /* not //*', () => {
+test('buildEntryDescriptor: root middleware scope uses /* not //*', () => {
   // Bug: scope '/' + '/*' = '//*' in Hono only matches '/', not sub-paths.
   // Fix: scope '/' renders as '/*' (not '//*').
   const routesWithRootMiddleware: RouteEntry[] = [
@@ -377,11 +366,11 @@ Deno.test('buildEntryDescriptor: root middleware scope uses /* not //*', () => {
   const code = renderEntry(desc);
 
   // Root middleware must use '/*' (matches all paths), NOT '//*' (only matches /)
-  assertStringIncludes(code, 'app.use("/*"');
-  assertEquals(code.includes('app.use("//*"'), false, 'Root middleware must NOT use //* pattern');
+  expect(code).toContain('app.use("/*"');
+  expect(code.includes('app.use("//*"'), 'Root middleware must NOT use //* pattern').toEqual(false);
 });
 
-Deno.test('buildEntryDescriptor: nested island files use real paths, not tagName-derived paths', () => {
+test('buildEntryDescriptor: nested island files use real paths, not tagName-derived paths', () => {
   // Bug: tagName "posts-index" was used to build modulePath "/app/islands/posts-index.ts"
   //      but the real file is at "app/islands/posts/index.ts"
   // Fix: islandFiles provides real relative paths, used in preference to tagName
@@ -391,29 +380,28 @@ Deno.test('buildEntryDescriptor: nested island files use real paths, not tagName
     islandsDir: 'app/islands',
   });
 
-  assertEquals(desc.islands.length, 2);
+  expect(desc.islands.length).toEqual(2);
   // Top-level island: same as before
-  assertEquals(desc.islands[0].modulePath, '/app/islands/my-counter.ts');
+  expect(desc.islands[0].modulePath).toEqual('/app/islands/my-counter.ts');
   // Nested island: uses real file path, NOT /app/islands/posts-index.ts
-  assertEquals(desc.islands[1].modulePath, '/app/islands/posts/index.ts');
-  assertEquals(
+  expect(desc.islands[1].modulePath).toEqual('/app/islands/posts/index.ts');
+  expect(
     desc.islands[1].modulePath.includes('posts-index'),
-    false,
     'Nested island must NOT use tagName-derived path',
-  );
+  ).toEqual(false);
 });
 
-Deno.test('buildEntryDescriptor: islandFiles omitted falls back to tagName paths', () => {
+test('buildEntryDescriptor: islandFiles omitted falls back to tagName paths', () => {
   // Backwards compatibility: if islandFiles is not provided, use tagName
   const desc = buildEntryDescriptor(islandRoutes, {
     islandTagNames: ['my-counter'],
     islandsDir: 'app/islands',
   });
 
-  assertEquals(desc.islands[0].modulePath, '/app/islands/my-counter.ts');
+  expect(desc.islands[0].modulePath).toEqual('/app/islands/my-counter.ts');
 });
 
-Deno.test('buildEntryDescriptor: client:only is excluded from SSR admission', () => {
+test('buildEntryDescriptor: client:only is excluded from SSR admission', () => {
   const desc = buildEntryDescriptor(islandRoutes, {
     islandTagNames: ['client-only-widget'],
     islandFiles: ['client-only-widget.ts'],
@@ -425,26 +413,26 @@ Deno.test('buildEntryDescriptor: client:only is excluded from SSR admission', ()
     },
   });
 
-  assertEquals(desc.islands[0].hydrate, 'only');
-  assertEquals(desc.islands[0].ssr, false);
-  assertEquals(desc.islands[0].dsd, false);
-  assertEquals(desc.ssrAdmissionPlan.clientOnlyTags, ['client-only-widget']);
-  assertEquals(desc.ssrAdmissionPlan.renderableTags, []);
+  expect(desc.islands[0].hydrate).toEqual('only');
+  expect(desc.islands[0].ssr).toEqual(false);
+  expect(desc.islands[0].dsd).toEqual(false);
+  expect(desc.ssrAdmissionPlan.clientOnlyTags).toEqual(['client-only-widget']);
+  expect(desc.ssrAdmissionPlan.renderableTags).toEqual([]);
 });
 
 // Fetch middleware contract (ADR-0123 item 2, #858)
 
-Deno.test('buildEntryDescriptor: middleware.use module paths are normalized in order (#858)', () => {
+test('buildEntryDescriptor: middleware.use module paths are normalized in order (#858)', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     middleware: { use: ['./app/middleware/outer.ts', './app/middleware/inner.ts'] },
   });
 
-  assertEquals(desc.fetchMiddleware, ['/app/middleware/outer.ts', '/app/middleware/inner.ts']);
+  expect(desc.fetchMiddleware).toEqual(['/app/middleware/outer.ts', '/app/middleware/inner.ts']);
 });
 
-Deno.test('buildEntryDescriptor: middleware.use rejects function values with a migration error (#858)', () => {
+test('buildEntryDescriptor: middleware.use rejects function values with a migration error (#858)', () => {
   const fn = (_request: Request, next: () => Promise<Response>) => next();
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       buildEntryDescriptor(sampleRoutes, {
         middleware: { use: [fn as never] },
@@ -454,14 +442,14 @@ Deno.test('buildEntryDescriptor: middleware.use rejects function values with a m
   );
 });
 
-Deno.test('buildEntryDescriptor: no middleware.use leaves fetchMiddleware absent (#858)', () => {
+test('buildEntryDescriptor: no middleware.use leaves fetchMiddleware absent (#858)', () => {
   const desc = buildEntryDescriptor(sampleRoutes);
-  assertEquals(desc.fetchMiddleware, undefined);
+  expect(desc.fetchMiddleware).toEqual(undefined);
 });
 
 // #960: registration decoupling — definePage routes ignore the tagName export
 
-Deno.test('buildEntryDescriptor: definePage route registers under the fallback tag (#960)', () => {
+test('buildEntryDescriptor: definePage route registers under the fallback tag (#960)', () => {
   const routes: RouteEntry[] = [
     {
       path: '/',
@@ -474,25 +462,24 @@ Deno.test('buildEntryDescriptor: definePage route registers under the fallback t
   ];
   const desc = buildEntryDescriptor(routes);
 
-  assertEquals(desc.pageRoutes[0].defaultTagName, 'index-page');
-  assertEquals(
+  expect(desc.pageRoutes[0].defaultTagName).toEqual('index-page');
+  expect(
     desc.pageRoutes[0].tagName,
-    'index-page',
     'definePage route ignores the tagName export for registration',
-  );
+  ).toEqual('index-page');
 });
 
-Deno.test('buildEntryDescriptor: plain element route keeps its tagName export (#960)', () => {
+test('buildEntryDescriptor: plain element route keeps its tagName export (#960)', () => {
   const routes: RouteEntry[] = [
     { path: '/', filePath: 'index.tsx', type: 'page', varName: 'pageIndex', tagName: 'home-page' },
   ];
   const desc = buildEntryDescriptor(routes);
 
-  assertEquals(desc.pageRoutes[0].tagName, 'home-page');
-  assertEquals(desc.pageRoutes[0].defaultTagName, 'index-page');
+  expect(desc.pageRoutes[0].tagName).toEqual('home-page');
+  expect(desc.pageRoutes[0].defaultTagName).toEqual('index-page');
 });
 
-Deno.test('renderEntry: definePage route binds its tag through the compiled program, never the tagName export (#960, #1276)', () => {
+test('renderEntry: definePage route binds its tag through the compiled program, never the tagName export (#960, #1276)', () => {
   const routes: RouteEntry[] = [
     {
       path: '/',
@@ -511,13 +498,13 @@ Deno.test('renderEntry: definePage route binds its tag through the compiled prog
   // content-element tag never appears — a module-self-registered content
   // element can no longer shadow the definePage render (the #960 failure
   // mode).
-  assertStringIncludes(code, '__registerSsrComponent(__resolvePageTag($pageIndex, "index-page")');
-  assertEquals(code.includes('__registerSsrComponent("home-page"'), false);
-  assertEquals(code.includes('__resolvePageTag($pageIndex, "home-page"'), false);
-  assertStringIncludes(code, 'let __tag = __resolvePageTag($pageIndex, "index-page")');
+  expect(code).toContain('__registerSsrComponent(__resolvePageTag($pageIndex, "index-page")');
+  expect(code.includes('__registerSsrComponent("home-page"')).toEqual(false);
+  expect(code.includes('__resolvePageTag($pageIndex, "home-page"')).toEqual(false);
+  expect(code).toContain('let __tag = __resolvePageTag($pageIndex, "index-page")');
 });
 
-Deno.test('renderEntry: plain element route binds its tag through the compiled program too (#1276)', () => {
+test('renderEntry: plain element route binds its tag through the compiled program too (#1276)', () => {
   const routes: RouteEntry[] = [
     { path: '/', filePath: 'index.tsx', type: 'page', varName: 'pageIndex', tagName: 'home-page' },
   ];
@@ -525,6 +512,6 @@ Deno.test('renderEntry: plain element route binds its tag through the compiled p
 
   // One canonical binding for every page route: the scanner's tagName export
   // is the fallback argument; the compiled program tag wins at evaluation.
-  assertStringIncludes(code, '__registerSsrComponent(__resolvePageTag($pageIndex, "home-page")');
-  assertStringIncludes(code, 'let __tag = __resolvePageTag($pageIndex, "home-page")');
+  expect(code).toContain('__registerSsrComponent(__resolvePageTag($pageIndex, "home-page")');
+  expect(code).toContain('let __tag = __resolvePageTag($pageIndex, "home-page")');
 });

@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   buildManifest,
   hydrateFromClass,
@@ -8,18 +9,18 @@ import {
   parseSlots,
 } from './generate-ui-manifest.ts';
 
-Deno.test('UI event manifest parses nested detail objects with TypeScript AST', () => {
+test('UI event manifest parses nested detail objects with TypeScript AST', () => {
   const [event] = parseEvents(`
     this.dispatchEvent(new CustomEvent('change', {
       detail: { value: 1, nested: { enabled: true } },
       bubbles: true,
     }));
   `);
-  assertEquals(event.name, 'change');
-  assertStringIncludes(event.type ?? '', 'nested: { enabled: boolean }');
+  expect(event.name).toEqual('change');
+  expect(event.type ?? '').toContain('nested: { enabled: boolean }');
 });
 
-Deno.test('parseSlots picks up JSX <slot name=...> literals without doc comments', () => {
+test('parseSlots picks up JSX <slot name=...> literals without doc comments', () => {
   const slots = parseSlots(`
     export class OpenCard extends OpenElement {
       render() {
@@ -33,14 +34,11 @@ Deno.test('parseSlots picks up JSX <slot name=...> literals without doc comments
       }
     }
   `);
-  assertEquals(
-    slots.map((s) => s.name),
-    ['', 'header', 'footer'],
-  );
-  assertEquals(slots[0].description, 'Default slot');
+  expect(slots.map((s) => s.name)).toEqual(['', 'header', 'footer']);
+  expect(slots[0].description).toEqual('Default slot');
 });
 
-Deno.test('parseSlots keeps @slot doc descriptions and does not duplicate JSX matches', () => {
+test('parseSlots keeps @slot doc descriptions and does not duplicate JSX matches', () => {
   const slots = parseSlots(`
     /**
      * @slot tab - Tab label element (one per panel)
@@ -55,18 +53,12 @@ Deno.test('parseSlots keeps @slot doc descriptions and does not duplicate JSX ma
       );
     }
   `);
-  assertEquals(
-    slots.map((s) => s.name),
-    ['tab', 'panel'],
-  );
-  assertEquals(slots[0].description, 'Tab label element (one per panel)');
-  assertEquals(
-    slots.some((s) => s.name === ''),
-    false,
-  );
+  expect(slots.map((s) => s.name)).toEqual(['tab', 'panel']);
+  expect(slots[0].description).toEqual('Tab label element (one per panel)');
+  expect(slots.some((s) => s.name === '')).toEqual(false);
 });
 
-Deno.test('parseCssParts picks up JSX part=... literals without doc comments', () => {
+test('parseCssParts picks up JSX part=... literals without doc comments', () => {
   const parts = parseCssParts(`
     render() {
       return (
@@ -77,13 +69,10 @@ Deno.test('parseCssParts picks up JSX part=... literals without doc comments', (
       );
     }
   `);
-  assertEquals(
-    parts.map((p) => p.name),
-    ['container', 'icon', 'content'],
-  );
+  expect(parts.map((p) => p.name)).toEqual(['container', 'icon', 'content']);
 });
 
-Deno.test('parseCssParts prefers @csspart doc descriptions over JSX literals', () => {
+test('parseCssParts prefers @csspart doc descriptions over JSX literals', () => {
   const parts = parseCssParts(`
     /**
      * @csspart container - The article wrapper
@@ -92,46 +81,48 @@ Deno.test('parseCssParts prefers @csspart doc descriptions over JSX literals', (
       return <article part='container'><div part='body'></div></article>;
     }
   `);
-  assertEquals(
-    parts.map((p) => [p.name, p.description]),
-    [
-      ['container', 'The article wrapper'],
-      ['body', "The 'body' part"],
-    ],
+  expect(parts.map((p) => [p.name, p.description])).toEqual([
+    ['container', 'The article wrapper'],
+    ['body', "The 'body' part"],
+  ]);
+});
+
+test('layer/hydrate policies fail loud on unknown component classes', () => {
+  assertThrowsIncludes(
+    () => layerFromClass('OpenUnknown'),
+    Error,
+    'No layer/hydrate/status policy',
   );
+  assertThrowsIncludes(
+    () => hydrateFromClass('OpenUnknown'),
+    Error,
+    'No layer/hydrate/status policy',
+  );
+  expect(layerFromClass('OpenCard')).toEqual('dsd-static');
+  expect(layerFromClass('OpenDialog')).toEqual('dsd-interactive');
+  expect(hydrateFromClass('OpenDialog')).toEqual('idle');
+  expect(hydrateFromClass('OpenTabs')).toEqual('load');
 });
 
-Deno.test('layer/hydrate policies fail loud on unknown component classes', () => {
-  assertThrows(() => layerFromClass('OpenUnknown'), Error, 'No layer/hydrate/status policy');
-  assertThrows(() => hydrateFromClass('OpenUnknown'), Error, 'No layer/hydrate/status policy');
-  assertEquals(layerFromClass('OpenCard'), 'dsd-static');
-  assertEquals(layerFromClass('OpenDialog'), 'dsd-interactive');
-  assertEquals(hydrateFromClass('OpenDialog'), 'idle');
-  assertEquals(hydrateFromClass('OpenTabs'), 'load');
-});
-
-Deno.test('generated UI manifest covers every shipped component', () => {
+test('generated UI manifest covers every shipped component', () => {
   const manifest = buildManifest();
-  assertEquals(manifest.packageName, '@openelement/ui');
-  assertStringIncludes(manifest.$comment, 'GENERATED FILE');
-  assertEquals(
-    manifest.declarations.map((declaration) => declaration.tagName),
-    [
-      'open-card',
-      'open-callout',
-      'open-button',
-      'open-input',
-      'open-theme-toggle',
-      'open-code-block',
-      'open-badge',
-      'open-dialog',
-      'open-dropdown',
-      'open-tabs',
-    ],
-  );
+  expect(manifest.packageName).toEqual('@openelement/ui');
+  expect(manifest.$comment).toContain('GENERATED FILE');
+  expect(manifest.declarations.map((declaration) => declaration.tagName)).toEqual([
+    'open-card',
+    'open-callout',
+    'open-button',
+    'open-input',
+    'open-theme-toggle',
+    'open-code-block',
+    'open-badge',
+    'open-dialog',
+    'open-dropdown',
+    'open-tabs',
+  ]);
   for (const declaration of manifest.declarations) {
-    assert(declaration.className, `${declaration.tagName} missing className`);
-    assertEquals(declaration.openElement?.ssr, true);
-    assertEquals(declaration.openElement?.dsd, true);
+    expect(declaration.className, `${declaration.tagName} missing className`).toBeTruthy();
+    expect(declaration.openElement?.ssr).toEqual(true);
+    expect(declaration.openElement?.dsd).toEqual(true);
   }
 });

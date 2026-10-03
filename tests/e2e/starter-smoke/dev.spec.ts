@@ -1,5 +1,5 @@
 /**
- * Dev-mode smoke (#951/#952) — runs against `deno task dev` (vite dev server),
+ * Dev-mode smoke (#951/#952) — runs against `pnpm dev` (vite dev server),
  * not the production build:
  *
  * #951: dev used to 500 on /client/islands/client.js (the URL was treated as
@@ -13,9 +13,9 @@
  * now wins under the stub, so the next request renders the edited module.
  *
  * Prerequisites:
- *   deno task --cwd tests/e2e/starter-smoke setup
+ *   pnpm --dir tests/e2e/starter-smoke run setup
  *
- * Run: deno task --cwd tests/e2e/starter-smoke test:dev
+ * Run: pnpm --dir tests/e2e/starter-smoke run test:dev
  */
 import { expect, test } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';

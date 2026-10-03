@@ -11,6 +11,7 @@
  */
 
 import { join } from '@std/path';
+import { readFile, writeFile } from 'node:fs/promises';
 import {
   auditSiteE2e,
   isEmptyGrep,
@@ -193,9 +194,9 @@ export async function stageCloneSiteE2e(
   let reportBytes: Uint8Array;
   try {
     result = JSON.parse(
-      await Deno.readTextFile(join(artifacts, 'site-e2e-result.json')),
+      await readFile(join(artifacts, 'site-e2e-result.json'), 'utf8'),
     ) as SiteE2eRollup;
-    reportBytes = await Deno.readFile(join(artifacts, SITE_E2E_REPORT_FILE));
+    reportBytes = await readFile(join(artifacts, SITE_E2E_REPORT_FILE));
   } catch (cause) {
     if (!required) return unrecordable(cause);
     throw new Error(
@@ -212,7 +213,7 @@ export async function stageCloneSiteE2e(
       `Site E2E sidecar candidateSha=${JSON.stringify(result.candidateSha)} != ${expectedCommit}`,
     );
   }
-  await Deno.writeFile(join(outDir, SITE_E2E_REPORT_FILE), reportBytes);
+  await writeFile(join(outDir, SITE_E2E_REPORT_FILE), reportBytes);
   // A red run's evidence travels as-is: the report bytes are what a human
   // needs, and the validator's auditSiteE2e is what fails the aggregate.
   if (!required) return result;

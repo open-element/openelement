@@ -9,14 +9,15 @@
  * No globalThis bridge - ctx stays in createOpenPlugin() closure scope throughout.
  */
 
-import { existsSync } from '../internal/host-path.ts';
+import { existsSync, writeFileSync } from 'node:fs';
+import process from 'node:process';
 import type { Plugin, ResolvedConfig } from 'vite';
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
 import type { ClientAssetManifest } from './internal/protocol/client-assets.ts';
 import { serializeClientAssetsModule } from './internal/protocol/client-assets.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
-import { join } from '../internal/host-path.ts';
+import { join } from 'pathe';
 import { createLogger } from '@openelement/element';
 import { cleanSsrArtifacts, postProcessClientIslandBuild } from './internal/ssg/index.ts';
 import {
@@ -55,13 +56,14 @@ export function writeRequestTimeClientAssets(
   ctx: OpenElementBuildContext,
   manifest: ClientAssetManifest,
 ): void {
-  const root = ctx.phase3.root || Deno.cwd();
+  const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const serverIndex = join(root, outDir, 'server', 'index.js');
   if (!existsSync(serverIndex)) return;
-  Deno.writeTextFileSync(
+  writeFileSync(
     join(root, outDir, 'server', 'client-assets.js'),
     serializeClientAssetsModule(manifest),
+    'utf8',
   );
   log.info(`Request-time client assets recorded: ${manifest.entry}`);
 }

@@ -1,4 +1,5 @@
-import { assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 // The claim executor is installed by the package entry, not by the kernel
 // (#1416): the kernel resolves it through the claim seam. This file reaches
 // the kernel directly, so it installs it exactly as the default
@@ -26,7 +27,7 @@ function contextListenerCount(node: TestElement): number {
   return node.listeners.get('context-request')?.size ?? 0;
 }
 
-Deno.test('context consumption walks nested elements and crosses shadow boundaries', () => {
+test('context consumption walks nested elements and crosses shadow boundaries', () => {
   const document = new TestDocument();
   const theme = createContext<string>(Symbol('theme'), 'light');
 
@@ -44,7 +45,7 @@ Deno.test('context consumption walks nested elements and crosses shadow boundari
   const seen: string[] = [];
   nested.connect();
   nested.consume(theme, (value) => seen.push(value));
-  assertEquals(seen, ['dark']);
+  expect(seen).toEqual(['dark']);
 
   // Open and closed shadow roots both forward the lookup to the host.
   let provided = 'dark';
@@ -59,17 +60,17 @@ Deno.test('context consumption walks nested elements and crosses shadow boundari
     const shadowSeen: string[] = [];
     consumer.connect();
     consumer.consume(theme, (value) => shadowSeen.push(value));
-    assertEquals(shadowSeen, [provided], `${mode} shadow boundary is crossed`);
+    expect(shadowSeen, `${mode} shadow boundary is crossed`).toEqual([provided]);
 
     provided = `dim-${mode}`;
     provider.provide(theme, provided);
-    assertEquals(shadowSeen.length, 2, 'provider updates reach the subscriber exactly once');
-    assertEquals(shadowSeen[1], provided);
+    expect(shadowSeen.length, 'provider updates reach the subscriber exactly once').toEqual(2);
+    expect(shadowSeen[1]).toEqual(provided);
     consumer.dispose();
   }
 });
 
-Deno.test('context consumption without a provider yields the default value', () => {
+test('context consumption without a provider yields the default value', () => {
   const document = new TestDocument();
   const theme = createContext<string>(Symbol('unprovided'), 'light');
   const outer = document.createElement('x-outer');
@@ -80,11 +81,11 @@ Deno.test('context consumption without a provider yields the default value', () 
   const seen: string[] = [];
   consumer.connect();
   consumer.consume(theme, (value) => seen.push(value));
-  assertEquals(seen, ['light']);
+  expect(seen).toEqual(['light']);
   consumer.dispose();
 });
 
-Deno.test('nested providers select the nearest provider and notify exactly once', () => {
+test('nested providers select the nearest provider and notify exactly once', () => {
   const document = new TestDocument();
   const theme = createContext<string>(Symbol('nested-providers'), 'light');
   const outer = document.createElement('x-outer-provider');
@@ -97,28 +98,28 @@ Deno.test('nested providers select the nearest provider and notify exactly once'
   const innerProvider = new CompiledContextService(asElement(inner));
   outerProvider.provide(theme, 'outer');
   innerProvider.provide(theme, 'inner');
-  assertEquals(contextListenerCount(outer), 1);
-  assertEquals(contextListenerCount(inner), 1);
+  expect(contextListenerCount(outer)).toEqual(1);
+  expect(contextListenerCount(inner)).toEqual(1);
 
   const consumer = new CompiledContextService(asElement(leaf));
   const seen: string[] = [];
   consumer.consume(theme, (value) => seen.push(value));
   consumer.connect();
-  assertEquals(seen, ['inner'], 'the nearest provider wins');
+  expect(seen, 'the nearest provider wins').toEqual(['inner']);
 
   outerProvider.provide(theme, 'outer-update');
-  assertEquals(seen, ['inner'], 'an ancestor provider is stopped by the nearest one');
+  expect(seen, 'an ancestor provider is stopped by the nearest one').toEqual(['inner']);
   innerProvider.provide(theme, 'inner-update');
-  assertEquals(seen, ['inner', 'inner-update']);
+  expect(seen).toEqual(['inner', 'inner-update']);
   innerProvider.provide(theme, 'inner-update-2');
-  assertEquals(seen, ['inner', 'inner-update', 'inner-update-2']);
+  expect(seen).toEqual(['inner', 'inner-update', 'inner-update-2']);
 
   consumer.dispose();
   innerProvider.dispose();
   outerProvider.dispose();
 });
 
-Deno.test('context crosses nested open and closed shadow roots', () => {
+test('context crosses nested open and closed shadow roots', () => {
   const document = new TestDocument();
   const theme = createContext<string>(Symbol('nested-shadow-roots'), 'light');
   const providerHost = document.createElement('x-provider');
@@ -138,7 +139,7 @@ Deno.test('context crosses nested open and closed shadow roots', () => {
   const nestedSeen: string[] = [];
   nestedConsumer.consume(theme, (value) => nestedSeen.push(value));
   nestedConsumer.connect();
-  assertEquals(nestedSeen, ['dark'], 'open then closed roots remain composed');
+  expect(nestedSeen, 'open then closed roots remain composed').toEqual(['dark']);
 
   const closedOuterHost = document.createElement('x-closed-outer');
   providerHost.appendChild(closedOuterHost);
@@ -153,18 +154,18 @@ Deno.test('context crosses nested open and closed shadow roots', () => {
   const reverseSeen: string[] = [];
   reverseConsumer.consume(theme, (value) => reverseSeen.push(value));
   reverseConsumer.connect();
-  assertEquals(reverseSeen, ['dark'], 'closed then open roots remain composed');
+  expect(reverseSeen, 'closed then open roots remain composed').toEqual(['dark']);
 
   provider.provide(theme, 'dim');
-  assertEquals(nestedSeen, ['dark', 'dim']);
-  assertEquals(reverseSeen, ['dark', 'dim']);
+  expect(nestedSeen).toEqual(['dark', 'dim']);
+  expect(reverseSeen).toEqual(['dark', 'dim']);
 
   nestedConsumer.dispose();
   reverseConsumer.dispose();
   provider.dispose();
 });
 
-Deno.test('context subscriptions clean up exactly once and reconnect without duplicates', () => {
+test('context subscriptions clean up exactly once and reconnect without duplicates', () => {
   const document = new TestDocument();
   const theme = createContext<string>(Symbol('lifecycle'), 'light');
   const host = document.createElement('x-host');
@@ -177,29 +178,34 @@ Deno.test('context subscriptions clean up exactly once and reconnect without dup
   const seen: string[] = [];
   consumer.consume(theme, (value) => seen.push(value));
   consumer.connect();
-  assertEquals(seen, ['dark']);
+  expect(seen).toEqual(['dark']);
 
   provider.provide(theme, 'dim');
-  assertEquals(seen, ['dark', 'dim']);
+  expect(seen).toEqual(['dark', 'dim']);
 
   consumer.disconnect();
   consumer.disconnect();
   provider.provide(theme, 'solar');
-  assertEquals(seen, ['dark', 'dim'], 'disconnect unsubscribes exactly once');
+  expect(seen, 'disconnect unsubscribes exactly once').toEqual(['dark', 'dim']);
 
   consumer.connect();
-  assertEquals(seen, ['dark', 'dim', 'solar'], 'reconnect re-reads the current value');
+  expect(seen, 'reconnect re-reads the current value').toEqual(['dark', 'dim', 'solar']);
   provider.provide(theme, 'amber');
-  assertEquals(seen, ['dark', 'dim', 'solar', 'amber'], 'reconnect adds no duplicate subscription');
+  expect(seen, 'reconnect adds no duplicate subscription').toEqual([
+    'dark',
+    'dim',
+    'solar',
+    'amber',
+  ]);
 
   consumer.dispose();
   consumer.dispose();
   provider.provide(theme, 'void');
-  assertEquals(seen, ['dark', 'dim', 'solar', 'amber'], 'dispose stays unsubscribed');
-  assertThrows(() => consumer.consume(theme, () => {}), Error, 'service is disposed');
+  expect(seen, 'dispose stays unsubscribed').toEqual(['dark', 'dim', 'solar', 'amber']);
+  assertThrowsIncludes(() => consumer.consume(theme, () => {}), Error, 'service is disposed');
 });
 
-Deno.test('moving a consumer re-resolves providers without stale or growing subscriptions', () => {
+test('moving a consumer re-resolves providers without stale or growing subscriptions', () => {
   const document = new TestDocument();
   const theme = createContext<string>(Symbol('move-provider'), 'light');
   const root = document.createElement('x-root');
@@ -214,57 +220,57 @@ Deno.test('moving a consumer re-resolves providers without stale or growing subs
   const providerB = new CompiledContextService(asElement(providerBElement));
   providerA.provide(theme, 'a-0');
   providerB.provide(theme, 'b-0');
-  assertEquals(contextListenerCount(providerAElement), 1);
-  assertEquals(contextListenerCount(providerBElement), 1);
+  expect(contextListenerCount(providerAElement)).toEqual(1);
+  expect(contextListenerCount(providerBElement)).toEqual(1);
 
   const consumer = new CompiledContextService(asElement(consumerElement));
   const seen: string[] = [];
   consumer.consume(theme, (value) => seen.push(value));
   consumer.connect();
-  assertEquals(seen, ['a-0']);
+  expect(seen).toEqual(['a-0']);
 
   consumer.disconnect();
   providerBElement.appendChild(consumerElement);
   providerA.provide(theme, 'a-before-reconnect');
-  assertEquals(seen, ['a-0'], 'disconnect removes A before the move');
+  expect(seen, 'disconnect removes A before the move').toEqual(['a-0']);
 
   consumer.connect();
-  assertEquals(seen, ['a-0', 'b-0'], 'reconnect resolves against B');
+  expect(seen, 'reconnect resolves against B').toEqual(['a-0', 'b-0']);
   providerA.provide(theme, 'a-stale-after-move');
-  assertEquals(seen, ['a-0', 'b-0'], 'A cannot notify after the move');
+  expect(seen, 'A cannot notify after the move').toEqual(['a-0', 'b-0']);
   providerB.provide(theme, 'b-1');
-  assertEquals(seen, ['a-0', 'b-0', 'b-1']);
+  expect(seen).toEqual(['a-0', 'b-0', 'b-1']);
 
   for (let cycle = 0; cycle < 4; cycle++) {
     const beforeReconnect = seen.length;
     consumer.disconnect();
     consumer.disconnect();
     consumer.connect();
-    assertEquals(seen.length, beforeReconnect + 1, 'reconnect creates one subscription');
+    expect(seen.length, 'reconnect creates one subscription').toEqual(beforeReconnect + 1);
 
     const next = `b-${cycle + 2}`;
     providerB.provide(theme, next);
-    assertEquals(seen.length, beforeReconnect + 2, 'one provider update yields one callback');
-    assertEquals(seen[seen.length - 1], next);
+    expect(seen.length, 'one provider update yields one callback').toEqual(beforeReconnect + 2);
+    expect(seen[seen.length - 1]).toEqual(next);
   }
 
-  assertEquals(contextListenerCount(providerAElement), 1, 'A has no listener growth');
-  assertEquals(contextListenerCount(providerBElement), 1, 'B has no listener growth');
+  expect(contextListenerCount(providerAElement), 'A has no listener growth').toEqual(1);
+  expect(contextListenerCount(providerBElement), 'B has no listener growth').toEqual(1);
   consumer.dispose();
   consumer.dispose();
   providerA.provide(theme, 'a-after-dispose');
   providerB.provide(theme, 'b-after-dispose');
-  assertEquals(seen.length, 3 + 4 * 2, 'dispose removes every active subscription');
-  assertEquals(contextListenerCount(providerAElement), 1);
-  assertEquals(contextListenerCount(providerBElement), 1);
+  expect(seen.length, 'dispose removes every active subscription').toEqual(3 + 4 * 2);
+  expect(contextListenerCount(providerAElement)).toEqual(1);
+  expect(contextListenerCount(providerBElement)).toEqual(1);
 
   providerA.dispose();
   providerB.dispose();
-  assertEquals(contextListenerCount(providerAElement), 0);
-  assertEquals(contextListenerCount(providerBElement), 0);
+  expect(contextListenerCount(providerAElement)).toEqual(0);
+  expect(contextListenerCount(providerBElement)).toEqual(0);
 });
 
-Deno.test('the kernel owns context provision and consumption at the activation boundary', () => {
+test('the kernel owns context provision and consumption at the activation boundary', () => {
   const document = new TestDocument();
   const theme = createContext<string>(Symbol('kernel-theme'), 'light');
 
@@ -283,34 +289,34 @@ Deno.test('the kernel owns context provision and consumption at the activation b
 
   provider.connect();
   const shadow = providerElement.shadowRoot;
-  assertStrictEquals(shadow === null, false);
+  expect(shadow === null).toBe(false);
   shadow!.appendChild(consumerElement);
-  assertStrictEquals(consumerElement.getRootNode(), shadow!);
+  expect(consumerElement.getRootNode()).toBe(shadow!);
 
   const seen: string[] = [];
   consumer.context.consume(theme, (value) => seen.push(value));
   provider.context.provide(theme, 'dark');
   consumer.connect();
-  assertEquals(seen, ['dark'], 'consumption starts at connect across the shadow boundary');
+  expect(seen, 'consumption starts at connect across the shadow boundary').toEqual(['dark']);
 
   provider.context.provide(theme, 'dim');
-  assertEquals(seen, ['dark', 'dim'], 'provided-value changes notify the subscribed descendant');
+  expect(seen, 'provided-value changes notify the subscribed descendant').toEqual(['dark', 'dim']);
 
   consumer.disconnect();
   provider.context.provide(theme, 'solar');
-  assertEquals(seen, ['dark', 'dim'], 'kernel disconnect unsubscribes the consumer');
+  expect(seen, 'kernel disconnect unsubscribes the consumer').toEqual(['dark', 'dim']);
 
   consumer.connect();
-  assertEquals(
-    seen,
-    ['dark', 'dim', 'solar'],
-    'kernel reconnect resubscribes at the current value',
-  );
+  expect(seen, 'kernel reconnect resubscribes at the current value').toEqual([
+    'dark',
+    'dim',
+    'solar',
+  ]);
   provider.context.provide(theme, 'amber');
-  assertEquals(seen, ['dark', 'dim', 'solar', 'amber'], 'kernel reconnect adds no duplicate');
+  expect(seen, 'kernel reconnect adds no duplicate').toEqual(['dark', 'dim', 'solar', 'amber']);
 
   consumer.dispose();
   provider.context.provide(theme, 'void');
-  assertEquals(seen, ['dark', 'dim', 'solar', 'amber'], 'kernel dispose stays unsubscribed');
+  expect(seen, 'kernel dispose stays unsubscribed').toEqual(['dark', 'dim', 'solar', 'amber']);
   provider.dispose();
 });

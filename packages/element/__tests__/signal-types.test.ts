@@ -1,12 +1,12 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import type { Signal } from '../src/internal/protocol/signal.ts';
 import { signal } from '../src/internal/signal/framework.ts';
 import { isSignalLike } from '../src/internal/signal/types.ts';
 
-Deno.test('isSignalLike rejects unbranded value/subscribe impostors (#1092)', () => {
+test('isSignalLike rejects unbranded value/subscribe impostors (#1092)', () => {
   const fake = { value: 1, subscribe: () => () => {} };
-  assertEquals(isSignalLike(fake), false);
-  assertEquals(isSignalLike(signal(1)), true);
+  expect(isSignalLike(fake)).toEqual(false);
+  expect(isSignalLike(signal(1))).toEqual(true);
 });
 
 // Compile-time fixture: structural lookalikes cannot silently enter renderer

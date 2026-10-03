@@ -19,11 +19,16 @@
  *
  * Uses sync Node APIs so the resolution can run inside Vite's synchronous
  * plugin hooks.
+ *
+ * After B2 the repo no longer carries any deno.json, so the monorepo-root
+ * seeding special case (a module-relative WORKSPACE_ROOT probe) was retired
+ * (2026-10, #1509 review) — the nearest-deno.json walk below is the only
+ * resolution path.
  */
 
-import { existsSync } from '../internal/host-path.ts';
-import { join, resolve } from '../internal/host-path.ts';
-import { fromFileUrl } from '../internal/host-path.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'pathe';
+import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';
@@ -38,25 +43,11 @@ export interface ImportMapResolution {
   denoJsonDir: string;
 }
 
-/** Workspace root derived from this module's location.
- * Only valid in the local monorepo layout. In npm/JSR consumers, returns null. */
-const WORKSPACE_ROOT: string | null = (() => {
-  if (!import.meta.url.startsWith('file:')) return null;
-  try {
-    const root = normalizeSeparators(fromFileUrl(new URL('../../../..', import.meta.url)));
-    if (!existsSync(join(root, 'packages', 'element', 'deno.json'))) return null;
-    return root;
-  } catch (e) {
-    log.warn('Unable to resolve workspace root, falling back to null', e);
-    return null;
-  }
-})();
-
 /** Check a single directory for a deno.json with the given import. */
 function tryDenoJsonDir(id: string, dir: string): ImportMapResolution | null {
   const denoJsonPath = join(dir, 'deno.json');
   if (!existsSync(denoJsonPath)) return null;
-  const raw = Deno.readTextFileSync(denoJsonPath);
+  const raw = readFileSync(denoJsonPath, 'utf8');
   // #708: shared JSONC parser (single implementation with workspace-alias.ts).
   // Handles mid-line // comments, /* */ blocks, string literals, and trailing commas.
   const denoJson = parseJsonc(raw);
@@ -96,12 +87,6 @@ export function lookupInDenoJson(id: string, root: string): ImportMapResolution 
     dir = parent;
   }
 
-  // Also try workspace root (module-relative, for monorepo dev / testing)
-  if (WORKSPACE_ROOT && !denoJsonDirs.has(WORKSPACE_ROOT)) {
-    const found = tryDenoJsonDir(id, WORKSPACE_ROOT);
-    if (found) return found;
-  }
-
   return null;
 }
 
@@ -114,7 +99,7 @@ export function lookupInDenoJson(id: string, root: string): ImportMapResolution 
 export function convertImportMapTarget(target: string, denoJsonDir: string): string | null {
   if (target.startsWith('file://')) {
     try {
-      return normalizeSeparators(fromFileUrl(target));
+      return normalizeSeparators(fileURLToPath(target));
     } catch (e) {
       log.warn('Unable to convert file:// import-map target, skipping', e);
       return null;

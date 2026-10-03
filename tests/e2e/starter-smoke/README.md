@@ -1,15 +1,17 @@
 # starter-smoke
 
-Packed-starter **visual + interaction smoke** (#934). `setup.ts` runs the packed
-`@openelement/create` CLI to generate a fresh starter, rewires its
-`@openelement/*` imports to monorepo sources, and builds it; the Playwright
-suites then drive that real build.
+Packed-starter **visual + interaction smoke** (#934). `setup.ts` packs the
+release tarballs through the release toolchain (vp pack), runs the packed
+`@openelement/create` CLI under Node to generate a fresh starter, rewires its
+`@openelement/*` dependencies to those current-SHA tarballs, installs the
+starter's own dependency surface with pnpm, and builds it; the Playwright
+suites then drive that real build (B5/ADR-0161: Node/pnpm consumer surface).
 
 ```bash
-deno task --cwd tests/e2e/starter-smoke setup       # generate + rewire + build
-deno task --cwd tests/e2e/starter-smoke test        # all three browser projects
-deno task --cwd tests/e2e/starter-smoke test:dev    # `deno task dev` dev-mode smoke
-deno task --cwd tests/e2e/starter-smoke gate        # setup + test
+pnpm --dir tests/e2e/starter-smoke run setup       # pack + generate + rewire + install + build
+pnpm --dir tests/e2e/starter-smoke run test        # all three browser projects
+pnpm --dir tests/e2e/starter-smoke run test:dev    # `pnpm dev` dev-mode smoke
+pnpm --dir tests/e2e/starter-smoke run gate        # setup + test
 ```
 
 Guarded regression classes: unstyled page (missing `:root` baseline), dead

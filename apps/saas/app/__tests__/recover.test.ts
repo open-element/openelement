@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
@@ -25,7 +26,7 @@ function email(value = 'user@example.com') {
   return data;
 }
 
-Deno.test('recover rejects a Cloudflare rate-limit denial before auth', async () => {
+test('recover rejects a Cloudflare rate-limit denial before auth', async () => {
   let called = false;
   const action = createRecoverAction(() => {
     called = true;
@@ -36,37 +37,37 @@ Deno.test('recover rejects a Cloudflare rate-limit denial before auth', async ()
       AUTH_RATE_LIMITER: { limit: () => Promise.resolve({ success: false }) },
     }),
   );
-  assert(isActionFailure(result));
-  assertEquals(result.status, 429);
-  assertEquals(called, false);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(429);
+  expect(called).toEqual(false);
 });
 
-Deno.test('recover rejects a missing email', async () => {
+test('recover rejects a missing email', async () => {
   const result = await createRecoverAction(client())(context());
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
 });
 
-Deno.test('recover sanitizes provider failures', async () => {
+test('recover sanitizes provider failures', async () => {
   const result = await createRecoverAction(
     client({ message: 'private provider diagnostic eyJsecret' }),
   )(context(email()));
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
-  assertEquals(JSON.stringify(result.data).includes('eyJsecret'), false);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
+  expect(JSON.stringify(result.data).includes('eyJsecret')).toEqual(false);
 });
 
-Deno.test('recover success redirects to the sent confirmation with PRG (#1060)', async () => {
-  const error = await assertRejects(() => createRecoverAction(client())(context(email())));
-  assert(isOpenElementRedirect(error));
-  assertEquals((error as { location?: string }).location, '/recover?sent=1');
+test('recover success redirects to the sent confirmation with PRG (#1060)', async () => {
+  const error = await assertRejectsIncludes(() => createRecoverAction(client())(context(email())));
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect((error as { location?: string }).location).toEqual('/recover?sent=1');
 });
 
-Deno.test('recover loader exposes the sent confirmation state from the query', () => {
-  assertEquals(recoverLoader({ request: new Request('https://app.test/recover?sent=1') }), {
+test('recover loader exposes the sent confirmation state from the query', () => {
+  expect(recoverLoader({ request: new Request('https://app.test/recover?sent=1') })).toEqual({
     sent: true,
   });
-  assertEquals(recoverLoader({ request: new Request('https://app.test/recover') }), {
+  expect(recoverLoader({ request: new Request('https://app.test/recover') })).toEqual({
     sent: false,
   });
 });

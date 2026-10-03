@@ -6,7 +6,8 @@
  * can run in synchronous plugin hooks (config, configResolved).
  */
 
-import { resolve } from '../internal/host-path.ts';
+import { existsSync } from 'node:fs';
+import { resolve } from 'pathe';
 import { readJsonc } from './internal/jsonc.ts';
 
 interface AliasEntry {
@@ -16,6 +17,12 @@ interface AliasEntry {
 
 /**
  * Walk up from startDir to find a deno.json with a "workspace" field.
+ *
+ * Deliberately Deno-consumer-scoped: this is the discovery the workspace
+ * alias hijack guard (#1415) is built on, and deno.json import maps are a
+ * product feature of the router. Build-side stable-identity callers use
+ * findBuildWorkspaceRoot instead — since the B2 manifest conversion this
+ * repository itself is a pnpm workspace and has no deno.json marker.
  */
 export function findWorkspaceRoot(startDir: string): string | null {
   let dir = resolve(startDir);
@@ -23,6 +30,28 @@ export function findWorkspaceRoot(startDir: string): string | null {
   while (dir !== fsRoot && dir !== resolve(dir, '..')) {
     const cfg = readJsonc(resolve(dir, 'deno.json'));
     if (cfg?.workspace && Array.isArray(cfg.workspace)) return dir;
+    dir = resolve(dir, '..');
+  }
+  return null;
+}
+
+/**
+ * The workspace root of the project being BUILT, for machine-independent
+ * identities (stable module ids, source-map anchors, route-scan anchors).
+ * Recognizes both workspace manifest kinds: a pnpm workspace
+ * (`pnpm-workspace.yaml`, the B2 manifest surface this repository uses) and
+ * a Deno workspace (`deno.json` with a `workspace` field, the consumer
+ * surface) — Deno first, so an existing Deno-consumer build keeps exactly
+ * its pre-B2 anchor. Null when neither manifest kind is found: callers pass
+ * that through as "no anchor" and identities stay unanchored, as before.
+ */
+export function findBuildWorkspaceRoot(startDir: string): string | null {
+  let dir = resolve(startDir);
+  const fsRoot = resolve('/');
+  while (dir !== fsRoot && dir !== resolve(dir, '..')) {
+    const cfg = readJsonc(resolve(dir, 'deno.json'));
+    if (cfg?.workspace && Array.isArray(cfg.workspace)) return dir;
+    if (existsSync(resolve(dir, 'pnpm-workspace.yaml'))) return dir;
     dir = resolve(dir, '..');
   }
   return null;

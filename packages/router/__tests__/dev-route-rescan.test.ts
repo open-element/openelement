@@ -7,7 +7,9 @@
  * descriptor (virtualEntryPlugin.load() renders from it), invalidate the
  * virtual entry module, and full-reload.
  */
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
 import { join } from '@std/path';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 import { TestFileWatcher } from './test-watcher.ts';
@@ -51,12 +53,12 @@ async function waitFor(predicate: () => boolean, what: string): Promise<void> {
   }
 }
 
-Deno.test('openPlugin: route file added during dev triggers descriptor rescan (#1028)', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'oe-route-rescan-' });
+test('openPlugin: route file added during dev triggers descriptor rescan (#1028)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'oe-route-rescan-'));
   try {
     const routesDir = join(dir, 'routes');
-    await Deno.mkdir(routesDir, { recursive: true });
-    await Deno.writeTextFile(join(routesDir, 'index.tsx'), INDEX_ROUTE);
+    await mkdir(routesDir, { recursive: true });
+    await writeFile(join(routesDir, 'index.tsx'), INDEX_ROUTE);
 
     const plugins = createOpenPlugin({ routesDir }) as Hooked[];
     const core = plugins.find((p) => (p as { name?: string }).name === 'open:core')!;
@@ -67,8 +69,8 @@ Deno.test('openPlugin: route file added during dev triggers descriptor rescan (#
     await core.buildStart!();
 
     const entryBefore = String(virtualEntry.load!(RESOLVED_ENTRY_ID));
-    assertStringIncludes(entryBefore, 'index.tsx');
-    assertEquals(entryBefore.includes('about.tsx'), false);
+    expect(entryBefore).toContain('index.tsx');
+    expect(entryBefore.includes('about.tsx')).toEqual(false);
 
     const watcher = new TestFileWatcher();
     const sent: unknown[] = [];
@@ -85,34 +87,34 @@ Deno.test('openPlugin: route file added during dev triggers descriptor rescan (#
     });
 
     // A new route file appears while dev is running.
-    await Deno.writeTextFile(join(routesDir, 'about.tsx'), ABOUT_ROUTE);
+    await writeFile(join(routesDir, 'about.tsx'), ABOUT_ROUTE);
     watcher.emit('add', join(routesDir, 'about.tsx'));
 
     await waitFor(() => sent.length === 1, 'full-reload after route rescan');
-    assertEquals(sent[0], { type: 'full-reload' });
-    assertEquals(invalidated, [RESOLVED_ENTRY_ID]);
+    expect(sent[0]).toEqual({ type: 'full-reload' });
+    expect(invalidated).toEqual([RESOLVED_ENTRY_ID]);
 
     // load() must render from the re-scanned descriptor.
     const entryAfter = String(virtualEntry.load!(RESOLVED_ENTRY_ID));
-    assertStringIncludes(entryAfter, 'about.tsx');
+    expect(entryAfter).toContain('about.tsx');
 
     // Removing the route re-scans back down.
-    await Deno.remove(join(routesDir, 'about.tsx'));
+    await rm(join(routesDir, 'about.tsx'));
     watcher.emit('unlink', join(routesDir, 'about.tsx'));
     await waitFor(() => sent.length === 2, 'full-reload after route removal');
     const entryFinal = String(virtualEntry.load!(RESOLVED_ENTRY_ID));
-    assertEquals(entryFinal.includes('about.tsx'), false);
+    expect(entryFinal.includes('about.tsx')).toEqual(false);
   } finally {
-    await Deno.remove(dir, { recursive: true }).catch(() => {});
+    await rm(dir, { recursive: true }).catch(() => {});
   }
 });
 
-Deno.test('openPlugin: dev watcher ignores non-route files outside routesDir (#1028)', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'oe-route-rescan-guard-' });
+test('openPlugin: dev watcher ignores non-route files outside routesDir (#1028)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'oe-route-rescan-guard-'));
   try {
     const routesDir = join(dir, 'routes');
-    await Deno.mkdir(routesDir, { recursive: true });
-    await Deno.writeTextFile(join(routesDir, 'index.tsx'), INDEX_ROUTE);
+    await mkdir(routesDir, { recursive: true });
+    await writeFile(join(routesDir, 'index.tsx'), INDEX_ROUTE);
 
     const plugins = createOpenPlugin({ routesDir }) as Hooked[];
     const core = plugins.find((p) => (p as { name?: string }).name === 'open:core')!;
@@ -134,19 +136,19 @@ Deno.test('openPlugin: dev watcher ignores non-route files outside routesDir (#1
     watcher.emit('add', join(dir, 'elsewhere.tsx')); // outside routesDir
     watcher.emit('add', join(routesDir, 'notes.md')); // not a route extension
     await new Promise((r) => setTimeout(r, 50));
-    assertEquals(sent.length, 0);
+    expect(sent.length).toEqual(0);
   } finally {
-    await Deno.remove(dir, { recursive: true }).catch(() => {});
+    await rm(dir, { recursive: true }).catch(() => {});
   }
 });
 
-Deno.test('openPlugin: route content changes rebuild descriptor once after a burst (#1102)', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'oe-route-change-rescan-' });
+test('openPlugin: route content changes rebuild descriptor once after a burst (#1102)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'oe-route-change-rescan-'));
   try {
     const routesDir = join(dir, 'routes');
     const routeFile = join(routesDir, 'index.tsx');
-    await Deno.mkdir(routesDir, { recursive: true });
-    await Deno.writeTextFile(routeFile, INDEX_ROUTE);
+    await mkdir(routesDir, { recursive: true });
+    await writeFile(routeFile, INDEX_ROUTE);
 
     const plugins = createOpenPlugin({ routesDir }) as Hooked[];
     const core = plugins.find((p) => (p as { name?: string }).name === 'open:core')!;
@@ -170,7 +172,7 @@ Deno.test('openPlugin: route content changes rebuild descriptor once after a bur
       httpServer: null,
     });
 
-    await Deno.writeTextFile(routeFile, ENHANCED_INDEX_ROUTE);
+    await writeFile(routeFile, ENHANCED_INDEX_ROUTE);
     // Chokidar can coalesce or duplicate editor writes. Three rapid events
     // must produce one serialized descriptor commit from the final file.
     watcher.emit('change', routeFile);
@@ -179,11 +181,11 @@ Deno.test('openPlugin: route content changes rebuild descriptor once after a bur
 
     await waitFor(() => sent.length === 1, 'debounced descriptor rescan');
     await new Promise((resolve) => setTimeout(resolve, 60));
-    assertEquals(sent.length, 1);
+    expect(sent.length).toEqual(1);
     const entryAfter = String(virtualEntry.load!(RESOLVED_ENTRY_ID));
-    assertStringIncludes(entryAfter, 'import.meta.env.DEV && true');
-    assertEquals(invalidated.includes(RESOLVED_ENTRY_ID), true);
+    expect(entryAfter).toContain('import.meta.env.DEV && true');
+    expect(invalidated.includes(RESOLVED_ENTRY_ID)).toEqual(true);
   } finally {
-    await Deno.remove(dir, { recursive: true }).catch(() => {});
+    await rm(dir, { recursive: true }).catch(() => {});
   }
 });

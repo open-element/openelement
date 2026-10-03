@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 import { renderDsd } from '@openelement/element';
 import { NOTES_HTML_BUDGET_BYTES, NOTES_PAGE_SIZE } from '../../lib/notes-pagination.ts';
@@ -114,28 +115,30 @@ function form(title = 'First note', body = 'Hello'): FormData {
   return data;
 }
 
-Deno.test('notes loader redirects anonymous requests to sign-in (v0.44)', async () => {
+test('notes loader redirects anonymous requests to sign-in (v0.44)', async () => {
   // 0.43 rendered a denied branch; grammar v1 cannot pair a static denied
   // variant with a dynamic authenticated one, so the loader redirects.
-  const error = await assertRejects(() => createNotesLoader(stubClient({ user: null }))(ctx()));
-  assert(isOpenElementRedirect(error));
-  assertEquals((error as { location?: string }).location, '/login');
+  const error = await assertRejectsIncludes(() =>
+    createNotesLoader(stubClient({ user: null }))(ctx()),
+  );
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect((error as { location?: string }).location).toEqual('/login');
 });
 
-Deno.test('notes loader returns the signed-in owner rows', async () => {
+test('notes loader returns the signed-in owner rows', async () => {
   const notes = [{ id: '1', title: 'first', body: 'mine', created_at: '2026-08-17T00:00:00Z' }];
   let selected = '';
   const result = await createNotesLoader(stubClient({ notes, onSelect: (c) => (selected = c) }))(
     ctx(),
   );
-  assertEquals(selected, 'id, title, body, created_at');
-  assertEquals(result.denied, false);
-  assertEquals(result.notes, notes);
-  assertEquals(result.live?.userId, USER.id);
-  assertEquals(result.live?.accessTokenExpiresAt, 2_000_000_000);
+  expect(selected).toEqual('id, title, body, created_at');
+  expect(result.denied).toEqual(false);
+  expect(result.notes).toEqual(notes);
+  expect(result.live?.userId).toEqual(USER.id);
+  expect(result.live?.accessTokenExpiresAt).toEqual(2_000_000_000);
 });
 
-Deno.test('notes loader applies a fixed keyset page and emits a stable next cursor', async () => {
+test('notes loader applies a fixed keyset page and emits a stable next cursor', async () => {
   const notes = Array.from({ length: 11 }, (_, index) => ({
     id: `123e4567-e89b-42d3-a456-${String(426614174000 + index).padStart(12, '0')}`,
     title: `note-${index}`,
@@ -146,10 +149,10 @@ Deno.test('notes loader applies a fixed keyset page and emits a stable next curs
   const first = await createNotesLoader(stubClient({ notes, onLimit: (value) => (limit = value) }))(
     ctx(),
   );
-  assertEquals(limit, 11);
-  assertEquals(first.notes?.length, 10);
-  assert(first.nextCursor);
-  assert(first.nextHref?.startsWith('/notes?cursor='));
+  expect(limit).toEqual(11);
+  expect(first.notes?.length).toEqual(10);
+  expect(first.nextCursor).toBeTruthy();
+  expect(first.nextHref?.startsWith('/notes?cursor=')).toBeTruthy();
 
   let cursorFilter = '';
   await createNotesLoader(
@@ -158,11 +161,11 @@ Deno.test('notes loader applies a fixed keyset page and emits a stable next curs
       onOr: (value) => (cursorFilter = value),
     }),
   )({ ...ctx(), request: new Request(`http://localhost${first.nextHref}`) });
-  assert(cursorFilter.includes(`created_at.lt.${notes[9].created_at}`));
-  assert(cursorFilter.includes(`id.lt.${notes[9].id}`));
+  expect(cursorFilter.includes(`created_at.lt.${notes[9].created_at}`)).toBeTruthy();
+  expect(cursorFilter.includes(`id.lt.${notes[9].id}`)).toBeTruthy();
 });
 
-Deno.test('bounded Notes page stays under its SSR budget at database maxima', async () => {
+test('bounded Notes page stays under its SSR budget at database maxima', async () => {
   const notes = Array.from({ length: NOTES_PAGE_SIZE }, (_, index) => ({
     id: `123e4567-e89b-42d3-a456-${String(426614174000 + index).padStart(12, '0')}`,
     title: 't'.repeat(MAX_NOTE_TITLE_LENGTH),
@@ -170,12 +173,12 @@ Deno.test('bounded Notes page stays under its SSR budget at database maxima', as
     created_at: new Date(Date.UTC(2026, 7, 23, 0, 0, 20 - index)).toISOString(),
   }));
   const out = await renderNotesPage({ denied: false, notes });
-  assertEquals(out.errors, []);
+  expect(out.errors).toEqual([]);
   const bytes = new TextEncoder().encode(out.html).byteLength;
-  assert(bytes <= NOTES_HTML_BUDGET_BYTES, `${bytes} > ${NOTES_HTML_BUDGET_BYTES}`);
+  expect(bytes <= NOTES_HTML_BUDGET_BYTES, `${bytes} > ${NOTES_HTML_BUDGET_BYTES}`).toBeTruthy();
 });
 
-Deno.test('authenticated SSR places the user JWT only on the one-shot Realtime handoff', async () => {
+test('authenticated SSR places the user JWT only on the one-shot Realtime handoff', async () => {
   const token =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsInJvbGUiOiJhdXRoZW50aWNhdGVkIn0.signature';
   const out = await renderNotesPage({
@@ -188,19 +191,19 @@ Deno.test('authenticated SSR places the user JWT only on the one-shot Realtime h
       accessToken: token,
     },
   });
-  assertEquals(out.errors, []);
-  assertEquals(out.html.split(token).length - 1, 1);
-  assert(out.html.includes(`livetoken="${token}"`), out.html);
-  assertEquals(out.html.includes(`data-ssr-props="${token}`), false);
+  expect(out.errors).toEqual([]);
+  expect(out.html.split(token).length - 1).toEqual(1);
+  expect(out.html.includes(`livetoken="${token}"`), out.html).toBeTruthy();
+  expect(out.html.includes(`data-ssr-props="${token}`)).toEqual(false);
 });
 
-Deno.test('create note rejects anonymous writes with 401', async () => {
+test('create note rejects anonymous writes with 401', async () => {
   const result = await createNoteAction(stubClient({ user: null }))({ ...ctx(), formData: form() });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 401);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(401);
 });
 
-Deno.test('create note validates required and bounded input', async () => {
+test('create note validates required and bounded input', async () => {
   const action = createNoteAction(stubClient({}));
   for (const data of [
     form('   ', 'body'),
@@ -208,25 +211,25 @@ Deno.test('create note validates required and bounded input', async () => {
     form('title', 'x'.repeat(MAX_NOTE_BODY_LENGTH + 1)),
   ]) {
     const result = await action({ ...ctx(), formData: data });
-    assert(isActionFailure(result));
-    assertEquals(result.status, 422);
+    expect(isActionFailure(result)).toBeTruthy();
+    expect(result.status).toEqual(422);
   }
 });
 
-Deno.test('create note stamps the authenticated owner and redirects with PRG', async () => {
+test('create note stamps the authenticated owner and redirects with PRG', async () => {
   let inserted: { user_id: string; title: string; body: string } | undefined;
   const action = createNoteAction(stubClient({ onInsert: (values) => (inserted = values) }));
-  const error = await assertRejects(() =>
+  const error = await assertRejectsIncludes(() =>
     action({ ...ctx(), formData: form(' Title ', ' Body ') }),
   );
-  assert(isOpenElementRedirect(error));
-  assertEquals(inserted, { user_id: USER.id, title: 'Title', body: 'Body' });
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect(inserted).toEqual({ user_id: USER.id, title: 'Title', body: 'Body' });
 });
 
-Deno.test('create note returns database/RLS errors as 422 without redirecting', async () => {
+test('create note returns database/RLS errors as 422 without redirecting', async () => {
   const action = createNoteAction(stubClient({ insertError: { message: 'row level security' } }));
   const result = await action({ ...ctx(), formData: form() });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
-  assertEquals(result.data?.error, 'row level security');
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
+  expect(result.data?.error).toEqual('row level security');
 });

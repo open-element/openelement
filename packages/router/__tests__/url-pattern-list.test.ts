@@ -1,4 +1,4 @@
-import { assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
 import { type ListPattern, URLPatternList } from '@openelement/url-pattern-list';
 
 if (typeof globalThis.URLPattern !== 'function') {
@@ -18,7 +18,7 @@ function listFromEntries<T>(entries: Iterable<readonly [ListPattern, T]>): URLPa
 const constructors = [['native', NativeURLPattern] as const];
 
 for (const [name, Pattern] of constructors) {
-  Deno.test(`URLPatternList ${name}: complete results and identity against ordered oracle`, () => {
+  test(`URLPatternList ${name}: complete results and identity against ordered oracle`, () => {
     const patterns = [
       '/',
       '/static',
@@ -98,19 +98,18 @@ for (const [name, Pattern] of constructors) {
             }))
             .find((r) => r.result);
           const actual = list.match(input, 'https://example.com');
-          assertEquals(
+          expect(
             actual?.result ?? null,
-            expected?.result ?? null,
             `${name}: ${first.pathname}, ${second.pathname}, ${input}`,
-          );
-          assertStrictEquals(actual?.value, expected?.value);
-          assertEquals(list.match(url)?.result ?? null, expectedNoBase?.result ?? null);
+          ).toEqual(expected?.result ?? null);
+          expect(actual?.value).toBe(expected?.value);
+          expect(list.match(url)?.result ?? null).toEqual(expectedNoBase?.result ?? null);
         }
       }
     }
   });
 
-  Deno.test(`URLPatternList ${name}: ignoreCase and empty URL components`, () => {
+  test(`URLPatternList ${name}: ignoreCase and empty URL components`, () => {
     const CasePattern = Pattern as unknown as new (
       init: URLPatternInit,
       options: { ignoreCase: boolean },
@@ -127,12 +126,12 @@ for (const [name, Pattern] of constructors) {
       'http://example.com:81/case',
     ]) {
       const expected = entries.find(([p]) => p.exec(new URL(input).href));
-      assertEquals(list.match(input)?.value, expected?.[1]);
-      assertEquals(list.match(input)?.result, expected?.[0].exec(new URL(input).href));
+      expect(list.match(input)?.value).toEqual(expected?.[1]);
+      expect(list.match(input)?.result).toEqual(expected?.[0].exec(new URL(input).href));
     }
   });
 
-  Deno.test(`URLPatternList ${name}: seeded literal/conservative permutations`, () => {
+  test(`URLPatternList ${name}: seeded literal/conservative permutations`, () => {
     const seed = 1324;
     let state = seed;
     const next = () => (state = (Math.imul(state, 1664525) + 1013904223) >>> 0);
@@ -167,27 +166,26 @@ for (const [name, Pattern] of constructors) {
           } else index++;
         }
       }
-      assertEquals(
+      expect(
         mismatch(minimal),
-        false,
         `seed=${seed} iteration=${iteration} input=${input} patterns=${JSON.stringify(
           minimal.map(([p, value]) => ({ pathname: p.pathname, value })),
         )}`,
-      );
+      ).toEqual(false);
     }
   });
 }
 
-Deno.test('URLPatternList invalid URL boundary is consistent for empty and populated lists', () => {
+test('URLPatternList invalid URL boundary is consistent for empty and populated lists', () => {
   for (const entries of [[], [[new NativeURLPattern({ pathname: '*' }), 1] as const]]) {
     const list = listFromEntries(entries);
-    assertThrows(() => list.match('/relative'), TypeError);
-    assertThrows(() => list.match('http://['), TypeError);
-    assertEquals(list.match('https://example.com')?.value ?? null, entries.length ? 1 : null);
+    expect(() => list.match('/relative')).toThrow(TypeError);
+    expect(() => list.match('http://[')).toThrow(TypeError);
+    expect(list.match('https://example.com')?.value ?? null).toEqual(entries.length ? 1 : null);
   }
 });
 
-Deno.test('admitted route patterns match the native URLPattern oracle', () => {
+test('admitted route patterns match the native URLPattern oracle', () => {
   for (const pathname of [
     '/',
     '/:id',
@@ -200,11 +198,10 @@ Deno.test('admitted route patterns match the native URLPattern oracle', () => {
   ]) {
     for (const path of ['/', '/a', '/a/123', '/a/b/c', '/a//b', '/東京', '/%2F', '/%E0%A4%A']) {
       const input = new URL(path, 'https://example.com').href;
-      assertEquals(
+      expect(
         listFromEntries([[new NativeURLPattern({ pathname }), 1]]).match(input)?.value ?? null,
-        new NativeURLPattern({ pathname }).exec(input) ? 1 : null,
         `${pathname} ${input}`,
-      );
+      ).toEqual(new NativeURLPattern({ pathname }).exec(input) ? 1 : null);
     }
   }
 });

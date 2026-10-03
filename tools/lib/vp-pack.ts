@@ -38,6 +38,17 @@
  *     assets, matching the `import ... with { type: "json" }` contract.
  */
 
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { mkdtemp, rm } from 'node:fs/promises';
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { formatJson } from '@openelement/element/build-utils';
 import { runWithOutput } from './process.ts';
 import { parseNpmSpec, publishRange } from '../release/npm-manifest.ts';
@@ -391,11 +402,11 @@ const STAGING_SYNTHESIZED = new Set([
 /** Walk helper: package-relative paths of every file under a directory root. */
 function walkFiles(root: string, prefix = ''): string[] {
   const found: string[] = [];
-  for (const entry of Deno.readDirSync(root)) {
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
     const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory) {
+    if (entry.isDirectory()) {
       found.push(...walkFiles(`${root}/${entry.name}`, relative));
-    } else if (entry.isFile) {
+    } else if (entry.isFile()) {
       found.push(relative);
     }
   }
@@ -404,8 +415,8 @@ function walkFiles(root: string, prefix = ''): string[] {
 
 function copyFile(from: string, to: string): void {
   const parent = to.slice(0, Math.max(to.lastIndexOf('/'), 0));
-  Deno.mkdirSync(parent, { recursive: true });
-  Deno.writeFileSync(to, Deno.readFileSync(from));
+  mkdirSync(parent, { recursive: true });
+  writeFileSync(to, readFileSync(from));
 }
 
 export interface AssembleVpPackageTreeOptions {
@@ -475,7 +486,7 @@ export function assembleVpPackageTree(options: AssembleVpPackageTreeOptions): vo
   }
 
   // 4. manifest.
-  Deno.writeTextFileSync(`${outDir}/package.json`, formatJson(manifest));
+  writeFileSync(`${outDir}/package.json`, formatJson(manifest));
 }
 
 /** Deno.json fields the vp staging consumes. */
@@ -513,10 +524,10 @@ export async function prepareVpStagingFiles(
   options: PrepareVpStagingOptions,
 ): Promise<VpStagedWorkspace> {
   const { pkg, members, dependencyMap, sourceManifest } = options;
-  const stagingRoot = await Deno.makeTempDir({ prefix: 'openelement-vp-pack-' });
-  const cleanup = () => Deno.remove(stagingRoot, { recursive: true }).catch(() => undefined);
+  const stagingRoot = await mkdtemp(join(tmpdir(), 'openelement-vp-pack-'));
+  const cleanup = () => rm(stagingRoot, { recursive: true }).catch(() => undefined);
   try {
-    Deno.writeTextFileSync(
+    writeFileSync(
       `${stagingRoot}/package.json`,
       formatJson(rootStagingPackageJsonFor(members, dependencyMap)),
     );
@@ -524,15 +535,15 @@ export async function prepareVpStagingFiles(
       const base = member.dir.split('/').pop()!;
       const memberDir = `${stagingRoot}/${base}`;
       copyPackageDir(member.dir, memberDir);
-      Deno.writeTextFileSync(
+      writeFileSync(
         `${memberDir}/package.json`,
         formatJson(stagingPackageJsonFor(member, dependencyMap.get(member.name) ?? {})),
       );
     }
     const packDir = `${stagingRoot}/${pkg.dir.split('/').pop()!}`;
-    Deno.writeTextFileSync(`${packDir}/vite.config.ts`, vpPackConfigFile(vpPackEntries(pkg)));
+    writeFileSync(`${packDir}/vite.config.ts`, vpPackConfigFile(vpPackEntries(pkg)));
     if (sourceManifest.compilerOptions) {
-      Deno.writeTextFileSync(
+      writeFileSync(
         `${packDir}/tsconfig.json`,
         JSON.stringify({ compilerOptions: sourceManifest.compilerOptions }, null, 2) + '\n',
       );
@@ -547,43 +558,51 @@ export async function prepareVpStagingFiles(
 const STAGING_COPY_SKIP = new Set(['node_modules', 'dist', 'deno.json', 'package.json']);
 
 function copyPackageDir(src: string, dest: string): void {
-  Deno.mkdirSync(dest, { recursive: true });
-  for (const entry of Deno.readDirSync(src)) {
+  mkdirSync(dest, { recursive: true });
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
     if (STAGING_COPY_SKIP.has(entry.name)) continue;
-    if (entry.isFile && entry.name.endsWith('.tgz')) continue;
+    if (entry.isFile() && entry.name.endsWith('.tgz')) continue;
     const from = `${src}/${entry.name}`;
     const to = `${dest}/${entry.name}`;
-    if (entry.isDirectory) copyPackageDir(from, to);
-    else if (entry.isFile) Deno.copyFileSync(from, to);
+    if (entry.isDirectory()) copyPackageDir(from, to);
+    else if (entry.isFile()) copyFileSync(from, to);
   }
 }
 
 /**
- * Complete the staging: `deno install` the shared node_modules, then symlink
- * every workspace member under `node_modules/@openelement/` so declaration
- * emit resolves cross-package types from source.
+ * Complete the staging: npm-install the shared node_modules (lifecycle
+ * scripts off — the staged deps ship their platform binaries as optional
+ * dependencies), then symlink every workspace member under
+ * `node_modules/@openelement/` so declaration emit resolves cross-package
+ * types from source.
  */
 export async function installVpStagingWorkspace(
   staged: VpStagedWorkspace,
   members: readonly PackageInfo[],
 ): Promise<void> {
-  const install = await runWithOutput(Deno.execPath(), ['install'], { cwd: staged.stagingRoot });
+  const install = await runWithOutput(
+    'npm',
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
+    {
+      cwd: staged.stagingRoot,
+    },
+  );
   if (!install.success) {
     throw new Error(
-      `[vp-pack] deno install failed in the vp staging workspace:\n${install.stdout}\n${install.stderr}`,
+      `[vp-pack] npm install failed in the vp staging workspace:\n${install.stdout}\n${install.stderr}`,
     );
   }
   const scopeDir = `${staged.stagingRoot}/node_modules/@openelement`;
-  Deno.mkdirSync(scopeDir, { recursive: true });
+  mkdirSync(scopeDir, { recursive: true });
   for (const member of members) {
     if (!member.name.startsWith('@openelement/')) continue;
     const short = member.name.slice('@openelement/'.length);
     const link = `${scopeDir}/${short}`;
     try {
       // Resolved relative to the link's own directory (node_modules/@openelement/).
-      Deno.symlinkSync(`../../${member.dir.split('/').pop()!}`, link, { type: 'dir' });
+      symlinkSync(`../../${member.dir.split('/').pop()!}`, link);
     } catch (error) {
-      if (!(error instanceof Deno.errors.AlreadyExists)) throw error;
+      if ((error as NodeJS.ErrnoException)?.code !== 'EEXIST') throw error;
     }
   }
 }

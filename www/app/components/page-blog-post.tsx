@@ -5,7 +5,7 @@ import {
   type TrustedHtml,
   trustedHtml,
 } from '@openelement/element';
-import '@openelement/site-ui/open-reading-shell.tsx';
+import '#site-ui/open-reading-shell.tsx';
 import '../islands/open-page-rail.tsx';
 import { pageBlogPostStyles } from './page-blog-post-styles.ts';
 

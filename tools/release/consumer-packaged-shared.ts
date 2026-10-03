@@ -18,9 +18,11 @@
  * only published specifiers, and then runs the verification cells:
  *
  *   install                hermetic npm install of the tarballs
- *   types                  consumer deno task check against the packed .d.ts
- *   dev                    public dev command (`deno task dev` = vite dev over
- *                          the packed router plugin): live SSR probes for
+ *   types                  the consumer's own `check` script (tsc) against
+ *                          the packed .d.ts
+ *   dev                    public dev command (the package.json `dev` script =
+ *                          vite dev over the packed router plugin): live SSR
+ *                          probes for
  *                          /, /notes, detail, both 404 channels, form 422/303,
  *                          browser continuation, source-edit feedback (page
  *                          component AND route module edits must reach the
@@ -53,21 +55,24 @@
  * kernel legitimately carries diagnostic strings naming the compiler, and
  * the client entry bundles the router's browser runtimes by design.)
  *
- * Playwright note: playwright-core requires --allow-sys at import time
- * (osRelease), which the harness's documented 5-flag permission set does not
- * grant. The browser cell therefore runs as a child process (a scoped
- * permission set on a generated probe script, matching the scoped invocation
- * of consumer-packaged-element and the fixture e2e tasks); the parent harness
- * itself stays on --allow-read/write/run/env/net. Probe children carry
- * --deny-ffi --no-prompt: browser automation needs no native binding, so a
- * permission request fails closed instead of prompting.
+ * Playwright note: the browser cell runs as a child process on a generated
+ * probe script (matching the invocation of consumer-packaged-element and the
+ * fixture e2e tasks); the parent harness owns the server lifecycle. Probe
+ * children run on the plain node host — browser automation needs no special
+ * host permissions.
  *
  * Every cell prints a PASS/FAIL line so the #1339 §11 support matrix can be
  * filled from the log; any FAIL fails the harness run.
  */
 
-import { existsSync } from '@std/fs';
-import { walkSync } from '@std/fs/walk';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { walkSync } from '../lib/std-fs.ts';
+import { tmpdir } from 'node:os';
+import { commandOutput } from '../repo/node-command.ts';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync } from '../lib/std-fs.ts';
 import { dirname, join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { formatError } from '@openelement/element';
@@ -164,13 +169,13 @@ async function run(
           controller.abort();
         }, timeoutMs);
   try {
-    const result = await new Deno.Command(command, {
+    const result = await commandOutput(command, {
       args,
       cwd,
       stdout: 'piped',
       stderr: 'piped',
       ...(timeoutMs === undefined ? {} : { signal: controller.signal }),
-    }).output();
+    });
     const decoder = new TextDecoder();
     const output = decoder.decode(result.stdout) + decoder.decode(result.stderr);
     if (timedOut) {
@@ -187,44 +192,64 @@ async function run(
 
 // Let the OS choose from its ephemeral range (same rationale as
 // consumer-packaged-starter.ts: fixed ranges collide with parallel CI jobs).
-function reservePort(): number {
-  const probe = Deno.listen({ hostname: '127.0.0.1', port: 0 });
-  const port = (probe.addr as Deno.NetAddr).port;
-  probe.close();
-  return port;
+function reservePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('listening', () => {
+      const addr = probe.address() as { port: number };
+      probe.close(() => resolve(addr.port));
+    });
+    probe.once('error', reject);
+    probe.listen({ port: 0, host: '127.0.0.1' });
+  });
 }
 
 /**
- * Boot one long-running server (cli/start or the vite dev server), wait for
- * it to answer HTTP, run the probe callback against it, then stop it. A
- * green exit alone is not lifecycle evidence: the packed artifacts must
- * actually serve the documented routes over the wire.
+ * Boot one long-running server (a consumer package.json script through pnpm:
+ * the vite dev server or cli/start), wait for it to answer HTTP, run the
+ * probe callback against it, then stop it. A green exit alone is not
+ * lifecycle evidence: the packed artifacts must actually serve the documented
+ * routes over the wire.
  * `argsFor` receives the reserved port so servers configured by CLI flag (the
  * vite dev server) and by env (cli/start) share this lifecycle.
  * Resolves to the port so callers can assert the port is freed after stop.
  */
 async function withServer(
   label: string,
-  command: string,
+  script: string,
   argsFor: (port: number) => string[],
   cwd: string,
   probe: (baseUrl: string) => Promise<void>,
 ): Promise<number> {
-  const port = reservePort();
-  const server = new Deno.Command(command, {
-    args: argsFor(port),
+  const port = await reservePort();
+  const server = spawn('pnpm', ['run', script, ...argsFor(port)], {
     cwd,
-    env: { OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
-    stdout: 'piped',
-    stderr: 'piped',
-  }).spawn();
-  let exited = false;
-  const status = server.status.then((s) => {
-    exited = true;
-    return s;
+    env: { ...process.env, OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    // Own process group: the stop below must signal pnpm's node/sh
+    // grandchildren (vite, cli/start) too, not just pnpm. Orphaned
+    // grandchildren keep the inherited stdio pipes open, and the piped-output
+    // pumps below keep this process alive — the success path never exits
+    // (same teardown contract as the packed-starter harness).
+    detached: true,
   });
-  const stdout = new Response(server.stdout).text();
-  const stderr = new Response(server.stderr).text();
+  let exited = false;
+  server.addListener('exit', () => {
+    exited = true;
+  });
+
+  const stdoutChunks: Uint8Array[] = [];
+  const stderrChunks: Uint8Array[] = [];
+  void (async () => {
+    for await (const chunk of server.stdout!) stdoutChunks.push(chunk);
+  })();
+  void (async () => {
+    for await (const chunk of server.stderr!) stderrChunks.push(chunk);
+  })();
+  const stdoutText = () =>
+    new TextDecoder().decode(Buffer.concat(stdoutChunks.map((c) => Buffer.from(c))));
+  const stderrText = () =>
+    new TextDecoder().decode(Buffer.concat(stderrChunks.map((c) => Buffer.from(c))));
   let failure: unknown;
   try {
     const baseUrl = `http://127.0.0.1:${port}`;
@@ -249,24 +274,23 @@ async function withServer(
   } finally {
     if (!exited) {
       try {
-        server.kill('SIGTERM');
-      } catch (error) {
-        if (!(error instanceof TypeError)) {
-          console.error(`[packed-consumer] failed to stop ${label} server:`, error);
-        }
+        // Negative pid: signal the whole process group (see detached above).
+        process.kill(-server.pid!, 'SIGTERM');
+      } catch {
+        // process group already gone
       }
     }
-    await status.catch(() => undefined);
-    await Promise.all([stdout.catch(() => ''), stderr.catch(() => '')]);
+    await new Promise((resolveSettled) => {
+      if (exited) resolveSettled(null);
+      else server.addListener('exit', () => resolveSettled(null));
+    });
   }
   if (failure) {
     // Preserve the server-side cause of a failed dev/build probe. Drain only
     // after stopping the process; awaiting live pipes on a readiness timeout
     // would itself hang qualification forever.
     throw new Error(
-      `${label}: ${String(failure)}\n${(await stdout).slice(-12000)}\n${(await stderr).slice(
-        -12000,
-      )}`,
+      `${label}: ${String(failure)}\n${stdoutText().slice(-12000)}\n${stderrText().slice(-12000)}`,
       { cause: failure },
     );
   }
@@ -336,7 +360,7 @@ async function pollDevPage(
  */
 function editConsumerSource(tmp: string, path: string, from: string, to: string): string {
   const file = join(tmp, path);
-  const text = Deno.readTextFileSync(file);
+  const text = readFileSync(file, 'utf8');
   if (!text.includes(from)) {
     throw new Error(`dev feedback edit: ${path} does not contain the expected source ${from}`);
   }
@@ -345,7 +369,7 @@ function editConsumerSource(tmp: string, path: string, from: string, to: string)
       `dev feedback edit: ${path} already contains ${to} — the proof would be vacuous`,
     );
   }
-  Deno.writeTextFileSync(file, text.replace(from, to));
+  writeFileSync(file, text.replace(from, to));
   return text;
 }
 
@@ -431,42 +455,19 @@ async function attempt(fn: () => Promise<string | undefined>): Promise<PackedApp
 
 // ─── Browser continuation probe (Playwright child process) ──────────────────
 //
-// playwright-core calls os.release() at import time, which needs --allow-sys —
-// outside the harness's documented permission set. The probe therefore runs as
-// a scoped-permission child against the repo config (which maps
-// @playwright/test), exactly how consumer-packaged-element.ts and the fixture
-// e2e tasks invoke Playwright. The script is generated into the temp consumer
+// The probe runs as a plain node child resolving @playwright/test through the
+// consumer's own devDependency (node_modules resolution walks up from the
+// probe file inside the temp consumer — the same contract the packed-starter
+// browser matrix documents). The script is generated into the temp consumer
 // and removed with it. Args: <baseUrl> <native|lit> <chromium|firefox|webkit>.
 // One browser per invocation so every renderer x browser pair is an
-// individually identifiable PASS/FAIL unit in the gate output. Probe children
-// carry --deny-ffi --no-prompt (browser automation needs no native binding).
+// individually identifiable PASS/FAIL unit in the gate output.
 
 const PACKED_BROWSERS = ['chromium', 'firefox', 'webkit'] as const;
 
-/**
- * Scoped permission envelope for generated Playwright probe children:
- * browser automation needs no native binding, so FFI is denied and prompts
- * are off — a permission request fails closed instead of hanging on input.
- */
-export const PACKED_PROBE_PERMISSIONS = [
-  '--allow-read',
-  '--allow-write',
-  '--allow-env',
-  '--allow-net',
-  '--allow-run',
-  '--allow-sys',
-  // Playwright's Node-side polyfills assign Object.prototype.__proto__,
-  // which Deno disables by default (the probe hangs in waitForFunction
-  // without this; required for every Playwright-under-Deno probe).
-  '--unsafe-proto',
-  '--deny-ffi',
-  '--no-prompt',
-] as const;
+const PW_PROBE_SCRIPT = `import { chromium, firefox, webkit } from '@playwright/test';
 
-const PW_PROBE_SCRIPT = `import { assertEquals } from '@std/assert';
-import { chromium, firefox, webkit } from '@playwright/test';
-
-const [baseUrl, renderer, browserName] = Deno.args;
+const [baseUrl, renderer, browserName] = process.argv.slice(2);
 if (!baseUrl || (renderer !== 'native' && renderer !== 'lit')) {
   throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native|lit> <browser>');
 }
@@ -490,12 +491,10 @@ try {
     (globalThis as { __packedContinuation?: string }).__packedContinuation = 'alive';
   });
   const assertNoReload = async (): Promise<void> => {
-    assertEquals(
-      await page.evaluate(() =>
-        (globalThis as { __packedContinuation?: string }).__packedContinuation ?? null
-      ),
-      'alive',
+    const marker = await page.evaluate(() =>
+      (globalThis as { __packedContinuation?: string }).__packedContinuation ?? null
     );
+    if (marker !== 'alive') throw new Error('a full document reload dropped the continuation marker');
   };
 
   if (renderer === 'native') {
@@ -515,10 +514,9 @@ try {
     await button.click();
     await page.waitForFunction(islandCountText('2'), undefined, { timeout: 60000 });
     const activeCount = await count.elementHandle();
-    assertEquals(
-      await ssrCount!.evaluate((node, candidate) => node === candidate, activeCount),
-      true,
-    );
+    if (!await ssrCount!.evaluate((node, candidate) => node === candidate, activeCount)) {
+      throw new Error('native kernel re-rendered instead of claiming the SSR node');
+    }
     await assertNoReload();
   } else {
     // hydrate-support ADOPTS the island DSD: the defer-hydration marker is
@@ -540,19 +538,17 @@ try {
       { timeout: 60000 },
     );
     const hydratedButton = await counter.elementHandle();
-    assertEquals(
-      await ssrButton!.evaluate((node, candidate) => node === candidate, hydratedButton),
-      true,
-    );
+    if (!await ssrButton!.evaluate((node, candidate) => node === candidate, hydratedButton)) {
+      throw new Error('lit hydrate-support re-rendered instead of adopting the SSR node');
+    }
     await counter.click();
     await page.waitForFunction(counterText('count: 1'), undefined, { timeout: 60000 });
     await counter.click();
     await page.waitForFunction(counterText('count: 2'), undefined, { timeout: 60000 });
     const activeButton = await counter.elementHandle();
-    assertEquals(
-      await ssrButton!.evaluate((node, candidate) => node === candidate, activeButton),
-      true,
-    );
+    if (!await ssrButton!.evaluate((node, candidate) => node === candidate, activeButton)) {
+      throw new Error('lit hydration re-rendered the SSR button instead of patching in place');
+    }
     await assertNoReload();
   }
   console.log('BROWSER-CONTINUATION-OK ' + renderer + ' ' + browserName + ' ' + browser.version());
@@ -573,7 +569,7 @@ const PW_DEV_WARMUP_SCRIPT = `import { chromium } from '@playwright/test';
 // subsequent probe then runs against steady-state dev serving.
 // Args: <baseUrl> <native|lit>.
 
-const [baseUrl, renderer] = Deno.args;
+const [baseUrl, renderer] = process.argv.slice(2);
 if (!baseUrl || (renderer !== 'native' && renderer !== 'lit')) {
   throw new Error('usage: pw-dev-warmup-probe.ts <baseUrl> <native|lit>');
 }
@@ -628,14 +624,13 @@ export interface PackedAppLegSpec {
   renderer: PackedAppRenderer;
   /** npm externals pinned in the consumer package.json beyond vite/hono. */
   externals: Record<string, string>;
-  /** Import-map additions beyond the shared @openelement/* pins. */
-  importMapExtras: Record<string, string>;
-  /** Consumer deno.json compilerOptions (jsx for the native leg only). */
+  /**
+   * Consumer tsconfig.json compilerOptions merged over the node-face base
+   * (the jsx settings on the native leg only).
+   */
   compilerOptions: Record<string, unknown>;
   files: Record<string, string>;
   viteConfig: string;
-  /** `deno task check` entry list (quoted where the path has brackets). */
-  checkEntries: string[];
   probes: PackedAppProbe[];
   /**
    * Dev-feedback edits for the dev cell: one page-component edit and one
@@ -770,18 +765,9 @@ async function runBrowserContinuationProbe(
   const failures: string[] = [];
   for (const browserName of PACKED_BROWSERS) {
     const probe = await run(
-      Deno.execPath(),
-      [
-        'run',
-        '--config',
-        join(repoRoot, 'deno.json'),
-        ...PACKED_PROBE_PERMISSIONS,
-        join(tmp, 'pw-continuation-probe.ts'),
-        baseUrl,
-        leg,
-        browserName,
-      ],
-      repoRoot,
+      process.execPath,
+      [join(tmp, 'pw-continuation-probe.ts'), baseUrl, leg, browserName],
+      tmp,
       BROWSER_TIMEOUT_MS,
     );
     const marker = `BROWSER-CONTINUATION-OK ${leg} ${browserName}`;
@@ -809,17 +795,9 @@ async function runBrowserContinuationProbe(
  */
 async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: PackedAppRenderer) {
   const probe = await run(
-    Deno.execPath(),
-    [
-      'run',
-      '--config',
-      join(repoRoot, 'deno.json'),
-      ...PACKED_PROBE_PERMISSIONS,
-      join(tmp, 'pw-dev-warmup-probe.ts'),
-      baseUrl,
-      leg,
-    ],
-    repoRoot,
+    process.execPath,
+    [join(tmp, 'pw-dev-warmup-probe.ts'), baseUrl, leg],
+    tmp,
     BROWSER_TIMEOUT_MS,
   );
   if (!probe.success || !probe.output.includes(`DEV-WARMUP-OK ${leg}`)) {
@@ -830,8 +808,9 @@ async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: PackedAppRen
 // ─── Dev server session ─────────────────────────────────────────────────────
 //
 // The packed consumer's public development command is the same one the create
-// template exposes: `deno task dev` (npm:vite dev over the packed router
-// plugin). Development feedback is SSR re-render on the next request plus a
+// template exposes: the package.json `dev` script (vite dev over the packed
+// router plugin), run through pnpm exactly as an adopter would.
+// Development feedback is SSR re-render on the next request plus a
 // full page reload — no component-level HMR is promised or asserted. The
 // session proves:
 //   1. the dev server boots and serves the same routes/forms as the build
@@ -852,7 +831,6 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
   const leg = spec.renderer;
   const label = `packed-app-${leg} dev server`;
   const devArgs = (port: number): string[] => [
-    'task',
     'dev',
     '--host',
     '127.0.0.1',
@@ -860,7 +838,7 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
     String(port),
     '--strictPort',
   ];
-  const firstPort = await withServer(label, Deno.execPath(), devArgs, tmp, async (baseUrl) => {
+  const firstPort = await withServer(label, 'dev', devArgs, tmp, async (baseUrl) => {
     // 1. Live SSR over the wire: same probe set the production modes answer.
     await runGetProbes(spec, baseUrl);
     await postInvalid(spec, baseUrl);
@@ -877,8 +855,8 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
     //    Whatever happens, both files are restored byte-identically so the
     //    later build/start cells never read a mutated tree.
     const edits = spec.devEdits;
-    const componentOriginal = Deno.readTextFileSync(join(tmp, edits.componentFile));
-    const routeOriginal = Deno.readTextFileSync(join(tmp, edits.routeFile));
+    const componentOriginal = readFileSync(join(tmp, edits.componentFile), 'utf8');
+    const routeOriginal = readFileSync(join(tmp, edits.routeFile), 'utf8');
     try {
       editConsumerSource(tmp, edits.componentFile, edits.componentFrom, edits.componentTo);
       await pollDevPage(
@@ -899,7 +877,7 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
 
       // 4. A broken edit must surface as a server error — never disguised as
       //    success or as stale last-good content.
-      Deno.writeTextFileSync(
+      writeFileSync(
         join(tmp, edits.componentFile),
         `${componentOriginal}\nexport const __devBroken = ;\n`,
       );
@@ -910,7 +888,7 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
         { status: 500, absent: [edits.componentTo] },
         'dev error visibility: broken component edit',
       );
-      Deno.writeTextFileSync(join(tmp, edits.componentFile), componentOriginal);
+      writeFileSync(join(tmp, edits.componentFile), componentOriginal);
       await pollDevPage(
         spec,
         baseUrl,
@@ -919,8 +897,8 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
         'dev recovery after revert',
       );
     } finally {
-      Deno.writeTextFileSync(join(tmp, edits.componentFile), componentOriginal);
-      Deno.writeTextFileSync(join(tmp, edits.routeFile), routeOriginal);
+      writeFileSync(join(tmp, edits.componentFile), componentOriginal);
+      writeFileSync(join(tmp, edits.routeFile), routeOriginal);
     }
   });
 
@@ -928,7 +906,7 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
   await assertPortClosed(firstPort, label);
   const secondPort = await withServer(
     `${label} (restart)`,
-    Deno.execPath(),
+    'dev',
     devArgs,
     tmp,
     async (baseUrl) => {
@@ -961,7 +939,7 @@ interface SessionOutcome {
  */
 async function serveSession(spec: PackedAppLegSpec, tmp: string): Promise<SessionOutcome> {
   const label = `packed-app-${spec.renderer} start server`;
-  const argsFor = () => ['task', 'start'];
+  const argsFor = () => [];
   const pending = (phase: string): PackedAppOutcome => ({
     ok: false,
     detail: `${phase} not reached`,
@@ -972,7 +950,7 @@ async function serveSession(spec: PackedAppLegSpec, tmp: string): Promise<Sessio
     form303: pending('form-303'),
   };
   try {
-    await withServer(label, Deno.execPath(), argsFor, tmp, async (baseUrl) => {
+    await withServer(label, 'start', argsFor, tmp, async (baseUrl) => {
       result.gets = await attempt(() => runGetProbes(spec, baseUrl));
       result.form422 = await attempt(() => postInvalid(spec, baseUrl));
       result.form303 = await attempt(() => postValid(spec, baseUrl));
@@ -1015,14 +993,14 @@ function walkRouterDeclarations(tmp: string): string {
   const host = {
     fileExists: (name: string): boolean => {
       try {
-        return Deno.statSync(name).isFile;
+        return statSync(name).isFile();
       } catch {
         return false;
       }
     },
     readFile: (name: string): string | undefined => {
       try {
-        return Deno.readTextFileSync(name);
+        return readFileSync(name, 'utf8');
       } catch {
         return undefined;
       }
@@ -1035,7 +1013,7 @@ function walkRouterDeclarations(tmp: string): string {
   const walk = (path: string): void => {
     if (seen.has(path)) return;
     seen.add(path);
-    const text = Deno.readTextFileSync(path);
+    const text = readFileSync(path, 'utf8');
     // Leak scan sees every specifier, including side-effect-only imports.
     for (const { fileName } of ts.preProcessFile(text).importedFiles) {
       if (DECLARATION_LEAK_PATTERN.test(fileName)) leaks.push(`${path} -> ${fileName}`);
@@ -1102,7 +1080,7 @@ const PACKED_KERNEL_PATTERNS = [
 
 function assertPackedElementLeavesKernelFree(tmp: string): string {
   const elementDir = join(tmp, 'node_modules', '@openelement', 'element');
-  const pkgJson = JSON.parse(Deno.readTextFileSync(join(elementDir, 'package.json')));
+  const pkgJson = JSON.parse(readFileSync(join(elementDir, 'package.json'), 'utf8'));
   const seen = new Set<string>();
   const stack: string[] = [];
   for (const subpath of ['./html', './logger', './authoring']) {
@@ -1117,7 +1095,7 @@ function assertPackedElementLeavesKernelFree(tmp: string): string {
     const file = stack.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
-    const text = Deno.readTextFileSync(file);
+    const text = readFileSync(file, 'utf8');
     for (const { fileName } of ts.preProcessFile(text).importedFiles) {
       if (!fileName.startsWith('.')) continue;
       const target = join(dirname(file), fileName);
@@ -1156,39 +1134,50 @@ async function resolvePackedAppTarballs(): Promise<PackedAppTarball[]> {
   for (const tarball of tarballs) {
     if (!existsSync(tarball.path)) {
       throw new Error(
-        `Missing packed release artifact: ${tarball.path} (run \`deno task pack:dry-run\` first)`,
+        `Missing packed release artifact: ${tarball.path} (run \`pnpm --dir tools/release run pack:dry-run\` first)`,
       );
     }
   }
   return tarballs;
 }
 
-function consumerDenoJson(spec: PackedAppLegSpec): Record<string, unknown> {
+/**
+ * The consumer app's lifecycle on the B5 Node/pnpm surface (ADR-0161): the
+ * same package.json script face the create template scaffolds — `dev` runs
+ * vite over the packed router plugin, `build`/`start` call the packed router
+ * CLIs through node, `check` is tsc — with the packed tarballs as file:
+ * dependencies and the pinned externals beside them. Subpath imports
+ * (jsx-runtime, /vite, /lit, /lit-ssr) resolve through the packages' own
+ * exports maps — never separate pins (same contract the packed-starter
+ * consumer asserts on the generated starter manifest).
+ */
+function consumerScripts(): Record<string, string> {
   return {
-    imports: {
-      '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
-      '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
-      '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
-      '@openelement/element/jsx-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-runtime`,
-      '@openelement/element/jsx-dev-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-dev-runtime`,
-      ...spec.importMapExtras,
-      hono: 'npm:hono@4.12.0',
-      vite: `npm:vite@${VITE_DEV_PIN}`,
+    dev: 'vite',
+    check: 'tsc --noEmit',
+    build: 'node node_modules/@openelement/router/src/cli/build.js',
+    start: 'node node_modules/@openelement/router/src/cli/start.js',
+  };
+}
+
+/**
+ * The consumer tsconfig owns the `check` type-check surface: the leg's
+ * compilerOptions (the jsx settings on the native leg) merged over the same
+ * node-face base the create template's tsconfig.json ships.
+ */
+function consumerTsConfig(spec: PackedAppLegSpec): Record<string, unknown> {
+  return {
+    compilerOptions: {
+      target: 'ES2022',
+      module: 'ESNext',
+      moduleResolution: 'bundler',
+      ...spec.compilerOptions,
+      strict: true,
+      skipLibCheck: true,
+      noEmit: true,
+      allowImportingTsExtensions: true,
     },
-    nodeModulesDir: 'manual',
-    minimumDependencyAge: 0,
-    tasks: {
-      // The public development command, same shape as the create template:
-      // scoped permissions with the Vite native binding allowed (build/dev
-      // host) and prompts off.
-      dev: `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite@${VITE_DEV_PIN} dev`,
-      build: `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router@${PACKAGE_VERSION}/cli/build`,
-      start: `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router@${PACKAGE_VERSION}/cli/start`,
-      check: `deno check --config deno.json ${spec.checkEntries
-        .map((entry) => `'${entry}'`)
-        .join(' ')}`,
-    },
-    compilerOptions: spec.compilerOptions,
+    include: ['app', 'vite.config.ts'],
   };
 }
 
@@ -1207,7 +1196,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
   );
   for (const tarball of tarballs) console.log(`  ${tarball.path}`);
 
-  const tmp = await Deno.makeTempDir({ prefix: `openelement-packaged-app-${leg}-` });
+  const tmp = await mkdtemp(join(tmpdir(), `openelement-packaged-app-${leg}-`));
   const form422: { start?: PackedAppOutcome } = {};
   const form303: { start?: PackedAppOutcome } = {};
   try {
@@ -1225,15 +1214,25 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
         ...spec.externals,
       };
       for (const tarball of tarballs) dependencies[tarball.name] = `file:${tarball.path}`;
-      Deno.writeTextFileSync(
+      writeFileSync(
         join(tmp, 'package.json'),
         formatJson({
           name: `openelement-packed-app-consumer-${leg}`,
           private: true,
           type: 'module',
+          scripts: consumerScripts(),
           dependencies,
+          // Exact template pins: the generated Playwright probes resolve
+          // @playwright/test through this devDependency (node_modules
+          // resolution walks up from the probe file inside tmp), and the
+          // `check` script needs tsc.
+          devDependencies: {
+            '@playwright/test': '1.59.1',
+            typescript: '6.0.3',
+          },
         }),
       );
+      writeFileSync(join(tmp, 'tsconfig.json'), formatJson(consumerTsConfig(spec)));
 
       const install = await run(
         'npm',
@@ -1268,24 +1267,23 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       }
 
       // Materialize the consumer app from the harness's source constants.
-      Deno.writeTextFileSync(join(tmp, 'deno.json'), formatJson(consumerDenoJson(spec)));
-      Deno.writeTextFileSync(join(tmp, 'vite.config.ts'), spec.viteConfig);
+      writeFileSync(join(tmp, 'vite.config.ts'), spec.viteConfig);
       for (const [path, content] of Object.entries(spec.files)) {
         const target = join(tmp, path);
-        Deno.mkdirSync(dirname(target), { recursive: true });
-        Deno.writeTextFileSync(target, content);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, content);
       }
-      Deno.writeTextFileSync(join(tmp, 'pw-continuation-probe.ts'), PW_PROBE_SCRIPT);
-      Deno.writeTextFileSync(join(tmp, 'pw-dev-warmup-probe.ts'), PW_DEV_WARMUP_SCRIPT);
+      writeFileSync(join(tmp, 'pw-continuation-probe.ts'), PW_PROBE_SCRIPT);
+      writeFileSync(join(tmp, 'pw-dev-warmup-probe.ts'), PW_DEV_WARMUP_SCRIPT);
       return `${tarballs.length} tarballs + pinned externals installed hermetically`;
     });
 
     await cell(leg, 'types', ['install'], async () => {
-      const check = await run(Deno.execPath(), ['task', 'check'], tmp, TYPES_TIMEOUT_MS);
+      const check = await run('pnpm', ['run', 'check'], tmp, TYPES_TIMEOUT_MS);
       if (!check.success) {
         throw new Error(`Packed consumer typecheck failed:\n${check.output}`);
       }
-      return 'deno task check green against the packed declarations';
+      return 'the consumer check script (tsc) green against the packed declarations';
     });
 
     // The dev cell mutates and restores consumer sources; it runs before the
@@ -1297,7 +1295,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
     });
 
     await cell(leg, 'build', ['install'], async () => {
-      const build = await run(Deno.execPath(), ['task', 'build'], tmp, BUILD_TIMEOUT_MS);
+      const build = await run('pnpm', ['run', 'build'], tmp, BUILD_TIMEOUT_MS);
       if (!build.success) {
         throw new Error(`Packed app consumer SSG build failed:\n${build.output}`);
       }
@@ -1312,7 +1310,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       if (!existsSync(indexHtmlPath)) {
         throw new Error(`Build emitted no prerendered page: ${indexHtmlPath}`);
       }
-      const raw = Deno.readTextFileSync(indexHtmlPath);
+      const raw = readFileSync(indexHtmlPath, 'utf8');
       const html = spec.stripMarkers ? stripLitMarkers(raw) : raw;
       for (const marker of spec.probes[0].markers) {
         assertIncludes(html, marker, 'prerendered dist/index.html');
@@ -1344,8 +1342,8 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       let summary = '';
       await withServer(
         `packed-app-${leg} browser host`,
-        Deno.execPath(),
-        () => ['task', 'start'],
+        'start',
+        () => [],
         tmp,
         async (baseUrl) => {
           summary = await runBrowserContinuationProbe(tmp, baseUrl, leg);
@@ -1374,7 +1372,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
         if (BOUNDARY_ID_PATTERN.test(assetPath.slice(clientDir.length))) {
           throw new Error(`Browser asset path crosses the boundary: ${assetPath}`);
         }
-        const text = Deno.readTextFileSync(assetPath);
+        const text = readFileSync(assetPath, 'utf8');
         for (const { fileName } of ts.preProcessFile(text).importedFiles) {
           if (BOUNDARY_SPECIFIER_PATTERN.test(fileName)) {
             throw new Error(`Browser bundle boundary leak: ${assetPath} imports ${fileName}`);
@@ -1386,7 +1384,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       );
     });
   } finally {
-    await Deno.remove(tmp, { recursive: true }).catch(() => undefined);
+    await rm(tmp, { recursive: true }).catch(() => undefined);
   }
 
   console.log(`\nSupport matrix (#1339 §11 packed-consumer proof, ${leg} renderer):`);

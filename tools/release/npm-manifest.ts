@@ -7,6 +7,7 @@
  * byte-identical. Pure enough to test without packing.
  */
 
+import { readFileSync, readdirSync } from 'node:fs';
 import { sha256Hex } from '../lib/deterministic-tar.ts';
 import { extractOpenImports, type PackageInfo } from '../lib/package-graph.ts';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
@@ -45,21 +46,23 @@ const PACKAGE_KEYWORDS: Record<string, string[]> = {
 };
 
 /**
- * Host floors (#1412). `node` is the Alpha target the repository actually
- * exercises: ADR-0154 names Node 24, and CI runs the packed consumers on Node
- * 24 plus a 24/26 serve matrix. `deno` is the pinned, documented, CI-verified
- * Deno floor (`.dvmrc`, README) and is declared only by the two packages whose
- * supported toolchain is Deno-driven today: Router's `./vite` + `./cli/*`
- * subpaths call Deno APIs at build time (#1387 tracks the portable-host
- * migration) and Create's CLI is a `deno run` program. npm ignores unknown
- * engine keys, so the `deno` entry documents the requirement without
- * constraining npm installs.
+ * Host floors (#1412). `node >=24.2` is the Alpha floor every retained
+ * package declares: ADR-0154 names the Node 24 line, and CI runs the packed
+ * consumers on Node 24 plus a 24/26 serve matrix. The floor is 24.2, not
+ * bare 24: the Router CLI entries (`src/cli/build.ts`, `src/cli/start.ts`)
+ * gate their main block on `import.meta.main`, which Node added in 24.2.0 —
+ * on 24.0/24.1 the guard is `undefined`, so the CLI would exit 0 without
+ * doing anything. The starter template, the root engines, and the docs state
+ * the same 24.2 floor (one version contract, four surfaces). The former
+ * `deno` engine entries retired with the Deno consumer surface (owner
+ * ruling 2026-10-03, ADR-0161 amendment): every retained package is a plain
+ * Node program, and Create's CLI is a Node bin (`#!/usr/bin/env node`).
  */
 const ENGINES: Record<string, Record<string, string>> = {
-  '@openelement/element': { node: '>=24' },
-  '@openelement/router': { node: '>=24', deno: '>=2.9' },
-  '@openelement/create': { deno: '>=2.9' },
-  '@openelement/ui': { node: '>=24' },
+  '@openelement/element': { node: '>=24.2' },
+  '@openelement/router': { node: '>=24.2' },
+  '@openelement/create': { node: '>=24.2' },
+  '@openelement/ui': { node: '>=24.2' },
 };
 
 /**
@@ -133,7 +136,14 @@ export function packedMetadata(name: string): PackedMetadata {
   };
 }
 
-const CREATE_BIN = {
+/**
+ * The npm bins the packed Create artifact exposes (post-pack manifest
+ * mutation below). Both names point at the same packed `src/cli.js`, whose
+ * shebang is `#!/usr/bin/env node` — the qualification tooling and every
+ * documented install path run the CLI through these real bins, never by
+ * reaching into the installed tree for the entry file.
+ */
+export const CREATE_BIN: Record<string, string> = {
   'openelement-create': './src/cli.js',
   'create-openelement': './src/cli.js',
 };
@@ -164,13 +174,13 @@ export const APPROVED_MANIFEST_MUTATIONS: ReadonlySet<string> = new Set([
 export async function hashFileTree(root: string): Promise<Record<string, string>> {
   const manifest: Record<string, string> = {};
   const visit = async (dir: string, prefix: string): Promise<void> => {
-    for (const entry of Deno.readDirSync(dir)) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const diskPath = `${dir}/${entry.name}`;
       const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory) {
+      if (entry.isDirectory()) {
         await visit(diskPath, path);
-      } else if (entry.isFile) {
-        manifest[path] = await sha256Hex(Deno.readFileSync(diskPath));
+      } else if (entry.isFile()) {
+        manifest[path] = await sha256Hex(readFileSync(diskPath));
       }
     }
   };
@@ -242,19 +252,94 @@ export interface DeriveDepsIo {
   readSrcFiles: (dir: string) => string[];
 }
 
-const defaultDeriveDepsIo: DeriveDepsIo = {
-  readPkgJson: (dir) => JSON.parse(Deno.readTextFileSync(`${dir}/deno.json`)),
-  readRootJson: () => JSON.parse(Deno.readTextFileSync('deno.json')),
+/**
+ * Project a package.json dependency record into the `imports`-shaped
+ * `npm:<name>@<version>` form the derivation consumes. The B2 manifest
+ * conversion moved dependency truth from deno.json import maps here.
+ * `workspace:` values are internal (the source-import loop resolves them);
+ * `jsr:` values are skipped exactly as the old `jsr:` import-map values were
+ * — packed modules must carry no JSR bridge (check-package-artifacts).
+ */
+export function importsShapeFromPackageJson(
+  manifest: Record<string, unknown>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const record = manifest.dependencies as Record<string, string> | undefined;
+  for (const [name, value] of Object.entries(record ?? {})) {
+    if (typeof value !== 'string') continue;
+    if (
+      value.startsWith('workspace:') ||
+      value.startsWith('jsr:') ||
+      value.startsWith('catalog:')
+    ) {
+      continue;
+    }
+    out[name] = `npm:${name}@${value}`;
+  }
+  return out;
+}
+
+/**
+ * The workspace-wide specifier resolution set: the root manifest's dev
+ * dependencies plus every member's dependencies and dev dependencies. This
+ * mirrors how a bare specifier resolves inside the workspace since the B2
+ * conversion (the former root deno.json import map was the pre-B2 form of
+ * this set), so source-driven materialization derives the same published
+ * dependencies it did against the import maps.
+ */
+function workspaceResolutionImports(): Record<string, string> {
+  const read = (path: string): Record<string, unknown> => {
+    try {
+      return JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  };
+  const merge = (manifest: Record<string, unknown>, into: Record<string, string>): void => {
+    for (const source of ['dependencies', 'devDependencies'] as const) {
+      for (const [name, value] of Object.entries(
+        (manifest[source] as Record<string, string> | undefined) ?? {},
+      )) {
+        if (typeof value !== 'string') continue;
+        if (
+          value.startsWith('workspace:') ||
+          value.startsWith('jsr:') ||
+          value.startsWith('catalog:')
+        ) {
+          continue;
+        }
+        into[name] = `npm:${name}@${value}`;
+      }
+    }
+  };
+  const out: Record<string, string> = {};
+  merge(read('package.json'), out);
+  try {
+    for (const entry of readdirSync('packages', { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      merge(read(`packages/${entry.name}/package.json`), out);
+    }
+  } catch {
+    // no packages dir (non-workspace invocation)
+  }
+  return out;
+}
+
+export const defaultDeriveDepsIo: DeriveDepsIo = {
+  readPkgJson: (dir) => ({
+    imports: importsShapeFromPackageJson(JSON.parse(readFileSync(`${dir}/package.json`, 'utf8'))),
+  }),
+  readRootJson: () => ({ imports: workspaceResolutionImports() }),
   readSrcFiles: (dir) => {
     const files: string[] = [];
     const scan = (d: string): void => {
-      for (const entry of Deno.readDirSync(d)) {
+      for (const entry of readdirSync(d, { withFileTypes: true })) {
         const path = `${d}/${entry.name}`;
-        if (entry.isDirectory) {
+        if (entry.isDirectory()) {
           if (entry.name === 'node_modules' || entry.name === 'dist') continue;
           scan(path);
-        } else if (entry.isFile && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
-          files.push(Deno.readTextFileSync(path));
+        } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
+          files.push(readFileSync(path, 'utf8'));
         }
       }
     };
@@ -300,23 +385,17 @@ export function deriveDependencies(
   rootImports: Record<string, string> = io.readRootJson().imports ?? {},
 ): Record<string, string> {
   const deps: Record<string, string> = {};
-  const denoJson = io.readPkgJson(pkg.dir);
-  const imports = denoJson.imports ?? {};
   const sourceSpecifiers = new Set<string>();
   const byName = new Map(allPackages.map((p) => [p.name, p]));
 
-  // External npm dependencies from deno.json imports. Workspace members are
-  // resolved internally (source-import loop below), never as external npm
-  // deps; the maintained url-pattern-list fork shares the @openelement scope
-  // but is published outside the workspace, so it lands here exactly (#1324).
-  for (const [key, value] of Object.entries(imports)) {
-    if (typeof value !== 'string') continue;
-    const spec = parseNpmSpec(value, `${pkg.name} deno.json`);
-    if (!spec || byName.has(spec.name)) continue;
-    deps[dependencyKey(key, spec)] = dependencyRange(key, spec);
-  }
-
-  // Internal workspace dependencies from source imports.
+  // Internal workspace dependencies from source imports. External npm
+  // dependencies are materialized source-driven from the workspace-wide
+  // resolution set (loop below) — the pre-B2 imports-map declaration loop is
+  // gone with the import maps; the four retained packages derive byte-identical
+  // dependencies from the source scan alone (verified against the published
+  // 1.0.0-alpha.7 manifests). Workspace members are resolved internally; the
+  // maintained url-pattern-list fork shares the @openelement scope but is
+  // published outside the workspace, so it lands here exactly (#1324).
   for (const text of io.readSrcFiles(pkg.dir)) {
     for (const { value } of extractStaticModuleSpecifiers(text)) {
       sourceSpecifiers.add(value);
@@ -333,8 +412,8 @@ export function deriveDependencies(
     }
   }
 
-  // Workspace packages inherit the root import map. npm package.json files do
-  // not, so every root-mapped bare specifier used by package source must be
+  // External npm dependencies: every bare specifier used by package source
+  // that the workspace-wide resolution set (readRootJson) resolves must be
   // materialized as a dependency in the packed artifact. This includes
   // `@preact/signals-core`: it is the current sole signal implementation and
   // stays in `dependencies` (replaceable in the future — product source never
@@ -342,7 +421,7 @@ export function deriveDependencies(
   for (const specifier of sourceSpecifiers) {
     const value = rootImports[specifier];
     if (typeof value !== 'string') continue;
-    const spec = parseNpmSpec(value, `${pkg.name} root import`);
+    const spec = parseNpmSpec(value, `${pkg.name} resolution`);
     if (spec) {
       deps[dependencyKey(specifier, spec)] = dependencyRange(specifier, spec);
     }

@@ -2,12 +2,12 @@
  * Validate the openElement package dependency graph.
  *
  * Checks:
- * - all package deno.json files under packages/ are readable
+ * - all package package.json files under packages/ are readable
  * - all package versions are on one release line
  * - internal npm:@openelement/* specifiers point at that release line
  * - source-level @openelement/* imports resolve. Resolution is a workspace
  *   fallback: an import counts as declared when it matches ANY workspace
- *   package's name or export keys, or the importing package's own deno.json.
+ *   package's name or export keys, or the importing package's own manifest.
  *   It does NOT prove the importing package declares the dependency itself
  *   (publish-npm.ts materializes npm dependencies from the same source scan,
  *   so published artifacts still carry the dependency).
@@ -21,12 +21,13 @@
  *   Element), and no source reaches into another package via a private
  *   workspace path (merged from the former standalone package-surface check)
  * - release-critical package configuration: every package is on
- *   PACKAGE_VERSION, declares exports and publish.include (with
- *   deno.json/README.md/LICENSE present on disk), uses the @openelement
+ *   PACKAGE_VERSION, declares exports and a files allowlist (with
+ *   README.md/LICENSE present on disk), uses the @openelement
  *   scope, and the create CLI's embedded CREATE_VERSION tracks the release
  *   line (merged from the former standalone package-config verification)
  */
 
+import { readFile, stat, stat as statPath } from 'node:fs/promises';
 import {
   PACKAGE_COUNT,
   PACKAGE_VERSION,
@@ -43,12 +44,12 @@ import {
   releasePublishOrder,
   topologicalSort,
 } from '../lib/package-graph.ts';
-import { walk, walkSync } from '@std/fs/walk';
+import { walk, walkSync } from '../lib/std-fs.ts';
 import { basename, dirname, join } from '@std/path';
 import { formatError } from '@openelement/element';
 
 async function readJson(path: string): Promise<unknown> {
-  return JSON.parse(await Deno.readTextFile(path));
+  return JSON.parse(await readFile(path, 'utf8'));
 }
 
 /**
@@ -114,25 +115,6 @@ export function collectWorkspaceSpecifiers(packages: PackageInfo[]): Set<string>
   return specifiers;
 }
 
-async function validateRootImportMap(packages: PackageInfo[], failures: string[]): Promise<void> {
-  const rootConfig = (await readJson('deno.json')) as {
-    imports?: Record<string, string>;
-  };
-  const imports = rootConfig.imports ?? {};
-  const packageNames = packages.map((pkg) => pkg.name).sort((a, b) => b.length - a.length);
-
-  for (const specifier of Object.keys(imports)) {
-    const packageName = packageNames.find(
-      (name) => specifier === name || specifier.startsWith(`${name}/`),
-    );
-    if (!packageName) continue;
-    failures.push(
-      `Root deno.json imports must not alias workspace package "${specifier}". ` +
-        `Use ${packageName}/deno.json exports so deno publish can rewrite workspace deps.`,
-    );
-  }
-}
-
 function validateVersionConsistency(packages: PackageInfo[], failures: string[]): string | null {
   const versions = packagesByVersion(packages);
 
@@ -164,7 +146,7 @@ function validateInternalRanges(
       const parsed = parseInternalSpecifier(value);
       if (!parsed) {
         failures.push(
-          `${pkg.dir}/deno.json import "${key}" has invalid internal specifier: ${value}`,
+          `${pkg.dir}/package.json dependency "${key}" has invalid internal specifier: ${value}`,
         );
         continue;
       }
@@ -174,7 +156,7 @@ function validateInternalRanges(
       if (!packages.some((member) => member.name === parsed.packageName)) continue;
       if (parsed.version !== releaseVersion) {
         failures.push(
-          `${pkg.dir}/deno.json import "${key}" points to ${parsed.packageName}@${parsed.version}; ` +
+          `${pkg.dir}/package.json dependency "${key}" points to ${parsed.packageName}@${parsed.version}; ` +
             `expected ${releaseVersion}.`,
         );
       }
@@ -211,7 +193,7 @@ function surfaceSourceFiles(root: string): string[] {
   try {
     return [...walkSync(root, { includeDirs: false, exts: ['.ts', '.tsx'] })].map((e) => e.path);
   } catch (error) {
-    if (error instanceof Deno.errors.NotFound) return [];
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return [];
     throw error;
   }
 }
@@ -239,8 +221,9 @@ async function validatePackageSurface(packages: PackageInfo[], failures: string[
     for (const target of exportTargets(pkg.exports)) {
       const path = `${pkg.dir}/${target.replace(/^\.\//, '')}`;
       try {
-        const stat = await Deno.stat(path);
-        if (!stat.isFile) failures.push(`${pkg.name}: export target is not a file: ${target}`);
+        const targetStat = await statPath(path);
+        if (!targetStat.isFile())
+          failures.push(`${pkg.name}: export target is not a file: ${target}`);
       } catch {
         failures.push(`${pkg.name}: missing export target: ${target}`);
       }
@@ -248,18 +231,18 @@ async function validatePackageSurface(packages: PackageInfo[], failures: string[
   }
 
   for (const file of surfaceSourceFiles('packages/element/src')) {
-    const source = await Deno.readTextFile(file);
+    const source = await readFile(file, 'utf8');
     failures.push(...forbiddenImportFailures(file, source, ['@openelement/router']));
   }
 
   for (const file of ['packages/router/src/router.ts', 'packages/router/src/http.ts']) {
-    const source = await Deno.readTextFile(file);
+    const source = await readFile(file, 'utf8');
     failures.push(...forbiddenImportFailures(file, source, ['@openelement/element']));
   }
 
   for (const pkg of packages) {
     for (const file of surfaceSourceFiles(`${pkg.dir}/src`)) {
-      const source = await Deno.readTextFile(file);
+      const source = await readFile(file, 'utf8');
       if (/from\s+['"][^'"]*packages\//.test(source)) {
         failures.push(`${file}: private workspace path import`);
       }
@@ -267,12 +250,12 @@ async function validatePackageSurface(packages: PackageInfo[], failures: string[
   }
 }
 
-const REQUIRED_PUBLISHED_FILES = ['deno.json', 'README.md', 'LICENSE'];
+const REQUIRED_PUBLISHED_FILES = ['README.md', 'LICENSE'];
 
 /**
  * Cross-assert the embedded create CLI version against the workspace package
  * line (#713). packages/create/src/version.ts is rewritten by the version bump
- * but lives outside the package deno.json files the graph check covers, so a
+ * but lives outside the package manifest files the graph check covers, so a
  * missed bump would otherwise ship a CLI advertising a stale version.
  */
 export function createVersionFailures(createVersionSource: string): string[] {
@@ -290,17 +273,18 @@ export function createVersionFailures(createVersionSource: string): string[] {
 }
 
 async function validatePackageConfigs(packages: PackageInfo[], failures: string[]): Promise<void> {
-  failures.push(
-    ...createVersionFailures(await Deno.readTextFile('packages/create/src/version.ts')),
-  );
+  failures.push(...createVersionFailures(await readFile('packages/create/src/version.ts', 'utf8')));
 
   for (const pkg of packages) {
-    const configPath = join(pkg.dir, 'deno.json');
+    // The B2 manifest conversion moved package truth to package.json; the
+    // publish surface is its `files` allowlist (npm), never a deno publish
+    // config — JSR is not a release channel (ADR-0108).
+    const configPath = join(pkg.dir, 'package.json');
     const config = (await readJson(configPath)) as {
       name?: unknown;
       version?: unknown;
       exports?: unknown;
-      publish?: { include?: unknown };
+      files?: unknown;
     };
 
     if (config.version !== PACKAGE_VERSION) {
@@ -312,20 +296,20 @@ async function validatePackageConfigs(packages: PackageInfo[], failures: string[
     }
     if (!config.exports) failures.push(`${configPath}: missing public exports`);
 
-    const include = config.publish?.include;
-    if (!Array.isArray(include)) {
-      failures.push(`${configPath}: publish.include must be an array`);
+    const files = config.files;
+    if (!Array.isArray(files)) {
+      failures.push(`${configPath}: files must be an array (the npm publish allowlist)`);
     } else {
       for (const required of REQUIRED_PUBLISHED_FILES) {
-        if (!include.includes(required)) {
-          failures.push(`${configPath}: publish.include omits ${required}`);
+        if (!files.includes(required)) {
+          failures.push(`${configPath}: files omits ${required}`);
         }
       }
     }
 
     for (const required of REQUIRED_PUBLISHED_FILES) {
       try {
-        await Deno.stat(join(dirname(configPath), required));
+        await stat(join(dirname(configPath), required));
       } catch {
         failures.push(`${pkg.name}: missing ${required}`);
       }
@@ -396,12 +380,12 @@ async function main(): Promise<void> {
   for (const pkg of packages) {
     const sourceFiles = await collectTsFiles(`${pkg.dir}/src`);
     for (const file of sourceFiles) {
-      const source = await Deno.readTextFile(file);
+      const source = await readFile(file, 'utf8');
       for (const specifier of extractOpenImports(source)) {
         if (!isDeclaredImport(specifier, pkg, workspaceSpecifiers)) {
           const msg =
             `${file} imports "${specifier}" but no workspace package exports it ` +
-            `and ${pkg.dir}/deno.json does not declare it.`;
+            `and ${pkg.dir}/package.json does not declare it.`;
           console.error(`  FAIL: ${msg}`);
           failures.push(msg);
         }
@@ -425,13 +409,6 @@ async function main(): Promise<void> {
       '  PASS: All source-level @openelement/* imports resolve (workspace fallback) ' +
         'and follow the dependency-direction rules.',
     );
-  }
-
-  console.log('\n--- Root Import Map Validation ---');
-  const rootImportFailuresBefore = failures.length;
-  await validateRootImportMap(packages, failures);
-  if (failures.length === rootImportFailuresBefore) {
-    console.log('  PASS: Root deno.json does not alias workspace package exports.');
   }
 
   console.log('\n--- Topological Sort ---');
@@ -472,7 +449,7 @@ async function main(): Promise<void> {
   if (failures.length > 0) {
     console.error(`\nPackage graph check FAILED with ${failures.length} issue(s):`);
     for (const failure of failures) console.error(`  - ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
 
   console.log(

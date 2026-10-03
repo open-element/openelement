@@ -3,10 +3,10 @@
  * These assert DOM-op counts and structural invariants — never durations.
  * Measured timings are evidence only (benchmarks/micro/micro-evidence.json).
  */
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { runMicroSuite } from './micro.ts';
 
-Deno.test('micro suite: partial update and single-part paths are surgical', () => {
+test('micro suite: partial update and single-part paths are surgical', () => {
   const { facts } = runMicroSuite({
     partWriteReps: 200,
     churnCycles: 3,
@@ -15,43 +15,43 @@ Deno.test('micro suite: partial update and single-part paths are surgical', () =
   });
 
   // Signal -> single Part: one signal write produces exactly one DOM write.
-  assertEquals(facts.textPartWrites, 200);
-  assertEquals(facts.attrPartWrites, 200);
+  expect(facts.textPartWrites).toEqual(200);
+  expect(facts.attrPartWrites).toEqual(200);
   // The property Part equality guard skips a write identical to the current
   // value (loop starts at 0 == initial), so 199 or 200 writes are both exact.
-  assert(
+  expect(
     facts.propPartWrites === 199 || facts.propPartWrites === 200,
     `prop part writes must match the write count modulo the equality guard, got ${facts.propPartWrites}`,
-  );
+  ).toBeTruthy();
 
   // Partial update writes exactly every-10th row label and nothing else.
-  assertEquals(facts.update10thTextWrites, 100);
+  expect(facts.update10thTextWrites).toEqual(100);
 
   // Claim allocates zero DOM nodes.
-  assertEquals(facts.claimAllocations, 0);
+  expect(facts.claimAllocations).toEqual(0);
 
   // Remove disposes exactly one row; swap preserves keyed order.
-  assertEquals(facts.removeRemovals, 1);
-  assert(facts.swapOrderProbe[0] !== facts.swapOrderProbe[1]);
-  assert(facts.swapOrderProbe.every((id) => id.length > 0));
+  expect(facts.removeRemovals).toEqual(1);
+  expect(facts.swapOrderProbe[0] !== facts.swapOrderProbe[1]).toBeTruthy();
+  expect(facts.swapOrderProbe.every((id) => id.length > 0)).toBeTruthy();
 
   // Churn leaves no retained subscriptions or listeners.
-  assertEquals(facts.retainedSubscriptions, 0);
-  assertEquals(facts.retainedListeners, 0);
+  expect(facts.retainedSubscriptions).toEqual(0);
+  expect(facts.retainedListeners).toEqual(0);
 });
 
-Deno.test('micro suite: report schema carries evidence fields', () => {
+test('micro suite: report schema carries evidence fields', () => {
   const { report } = runMicroSuite({
     partWriteReps: 10,
     churnCycles: 1,
     compilerSamples: 1,
     openElementSha: 'test',
   });
-  assertEquals(report.kind, 'micro-baseline');
-  assertEquals(report.issue, 1219);
-  assert(report.table1k.serialize.htmlBytes > 0);
-  assert(report.table1k.claim.claimToFreshRatio > 0);
-  assert(Number.isFinite(report.compiler.medianMs));
+  expect(report.kind).toEqual('micro-baseline');
+  expect(report.issue).toEqual(1219);
+  expect(report.table1k.serialize.htmlBytes > 0).toBeTruthy();
+  expect(report.table1k.claim.claimToFreshRatio > 0).toBeTruthy();
+  expect(Number.isFinite(report.compiler.medianMs)).toBeTruthy();
   for (const op of [
     report.granularity.textPart,
     report.granularity.attrPart,
@@ -61,6 +61,9 @@ Deno.test('micro suite: report schema carries evidence fields', () => {
     report.table1k.replace1k,
     report.table1k.swap1k,
   ]) {
-    assert(Number.isFinite(op.totalMs) && op.totalMs >= 0, `${op.id} totalMs must be finite`);
+    expect(
+      Number.isFinite(op.totalMs) && op.totalMs >= 0,
+      `${op.id} totalMs must be finite`,
+    ).toBeTruthy();
   }
 });

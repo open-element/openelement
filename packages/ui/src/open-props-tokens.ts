@@ -1,13 +1,13 @@
 /**
  * GENERATED — do not edit; source: open-props@1.7.23 (MIT) + semantic-tokens.css.
- * Regenerate with: deno task generate:ui-tokens
+ * Regenerate with: pnpm --filter @openelement/ui run generate:ui-tokens
  */
 
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';
 
 const OPEN_PROPS_TOKEN_CSS = `/**
  * GENERATED — do not edit; source: open-props@1.7.23 (MIT) + semantic-tokens.css.
- * Regenerate with: deno task generate:ui-tokens
+ * Regenerate with: pnpm --filter @openelement/ui run generate:ui-tokens
  */
 
 /**

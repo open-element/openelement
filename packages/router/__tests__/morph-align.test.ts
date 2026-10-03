@@ -3,7 +3,7 @@
  * createMorphAlign with a minimal fake DOM, the same harness style as
  * enhance-client.test.ts (no browser/DOM library in the Deno test runtime).
  */
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { createMorphAlign } from '../src/vite/internal/ssg/morph-align.ts';
 
 type Win = Window & typeof globalThis;
@@ -148,7 +148,7 @@ function makeHarness(
   return { align, doc, incomingQueue, instantiated };
 }
 
-Deno.test('morph: a preserved slot-fallback app shell receives the new route document', () => {
+test('morph: a preserved slot-fallback app shell receives the new route document', () => {
   const { align, doc, incomingQueue } = makeHarness({
     tags: ['app-shell'],
     // The legacy light-surface comparison sees both hosts as empty and would
@@ -173,16 +173,16 @@ Deno.test('morph: a preserved slot-fallback app shell receives the new route doc
     ),
   });
 
-  assertEquals(align.morphDocument('<html></html>', null, null), true);
+  expect(align.morphDocument('<html></html>', null, null)).toEqual(true);
   const main = liveShadow.childNodes[0] as FakeElement;
   const slot = main.childNodes[0] as FakeElement;
   const page = slot.childNodes[0] as FakeElement;
   const paragraph = page.childNodes[0] as FakeElement;
-  assertEquals((paragraph.childNodes[0] as FakeText).data, 'after');
-  assertEquals(doc.body.childNodes[0], host, 'the activated shell host survives');
+  expect((paragraph.childNodes[0] as FakeText).data).toEqual('after');
+  expect(doc.body.childNodes[0], 'the activated shell host survives').toEqual(host);
 });
 
-Deno.test('morph: the light-DOM pass never inserts an inert DSD template into a live host', () => {
+test('morph: the light-DOM pass never inserts an inert DSD template into a live host', () => {
   const { align, doc, incomingQueue, instantiated } = makeHarness();
 
   // Live host: already DSD-instantiated (shadowRoot set) with a slotted
@@ -206,21 +206,22 @@ Deno.test('morph: the light-DOM pass never inserts an inert DSD template into a 
 
   const morphedOnce = align.morphDocument('<html></html>', null, null);
   const morphedTwice = align.morphDocument('<html></html>', null, null);
-  assertEquals(morphedOnce, true, 'first morph applies');
-  assertEquals(morphedTwice, true, 'second morph applies');
+  expect(morphedOnce, 'first morph applies').toEqual(true);
+  expect(morphedTwice, 'second morph applies').toEqual(true);
 
   const leaked = host.childNodes.filter(isDsdTemplate);
-  assertEquals(leaked.length, 0, 'host light DOM must not retain a template[shadowrootmode] node');
+  expect(leaked.length, 'host light DOM must not retain a template[shadowrootmode] node').toEqual(
+    0,
+  );
   // The shadow tree itself IS morphed from the template content.
   const shadowText = (liveShadow.childNodes[0] as FakeElement).childNodes[0] as FakeText;
-  assertEquals(shadowText.data, 'shadow v2', 'shadow content follows the incoming template');
+  expect(shadowText.data, 'shadow content follows the incoming template').toEqual('shadow v2');
   // The slotted light DOM child survives the morph.
-  assertEquals(
+  expect(
     host.childNodes.some((n) => n instanceof FakeElement && n.tagName === 'SPAN'),
-    true,
     'slotted light DOM child is preserved',
-  );
+  ).toEqual(true);
   // No template node was ever pushed through DSD instantiation as a light
   // child (instantiateDsd's querySelectorAll does not match the node itself).
-  assertEquals(instantiated.filter(isDsdTemplate).length, 0);
+  expect(instantiated.filter(isDsdTemplate).length).toEqual(0);
 });

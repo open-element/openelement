@@ -35,7 +35,7 @@ function readSitemapRoutes(): string[] {
     xml = readFileSync(SITEMAP_PATH, 'utf-8');
   } catch (error) {
     throw new Error(
-      `public IA coverage requires the built sitemap at ${SITEMAP_PATH} — run \`deno task build\` first (${error})`,
+      `public IA coverage requires the built sitemap at ${SITEMAP_PATH} — run \`pnpm run site:build\` first (${error})`,
     );
   }
   const routes = [...xml.matchAll(/<loc>https:\/\/openelement\.org([^<]*)<\/loc>/g)].map(

@@ -1,4 +1,4 @@
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { dirname, join } from '@std/path';
 import {
   readProductDocs,
@@ -6,33 +6,35 @@ import {
   scanProductClassification,
   stripParentheticals,
 } from './check-product-classification.ts';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
-Deno.test('product classification: the repository public docs pass', async () => {
+test('product classification: the repository public docs pass', async () => {
   const { sources, failures: readFailures } = await readProductDocs(repoRoot);
-  assertEquals(readFailures, []);
-  assertEquals(scanProductClassification(sources), []);
+  expect(readFailures).toEqual([]);
+  expect(scanProductClassification(sources)).toEqual([]);
 });
 
-Deno.test('product classification: required docs fail closed when unreadable', async () => {
-  const empty = await Deno.makeTempDir({ prefix: 'classification-empty-' });
+test('product classification: required docs fail closed when unreadable', async () => {
+  const empty = await mkdtemp(join(tmpdir(), 'classification-empty-'));
   try {
     const { sources, failures } = await readProductDocs(empty);
-    assertEquals(sources, []);
-    assertEquals(failures.length, REQUIRED_PRODUCT_DOCS.length);
+    expect(sources).toEqual([]);
+    expect(failures.length).toEqual(REQUIRED_PRODUCT_DOCS.length);
     for (const relative of REQUIRED_PRODUCT_DOCS) {
-      assert(
+      expect(
         failures.some((failure) => failure.includes(relative)),
         relative,
-      );
+      ).toBeTruthy();
     }
   } finally {
-    await Deno.remove(empty, { recursive: true });
+    await rm(empty, { recursive: true });
   }
 });
 
-Deno.test('product classification: SaaS-core clauses fail in English and Chinese', () => {
+test('product classification: SaaS-core clauses fail in English and Chinese', () => {
   const falseStatements = [
     'SaaS 是核心产品。',
     '核心产品包括 SaaS。',
@@ -57,11 +59,11 @@ Deno.test('product classification: SaaS-core clauses fail in English and Chinese
   ];
   for (const phrase of falseStatements) {
     const failures = scanProductClassification([{ path: 'probe.md', text: phrase }]);
-    assert(failures.length > 0, `expected rejection for: ${phrase}`);
+    expect(failures.length > 0, `expected rejection for: ${phrase}`).toBeTruthy();
   }
 });
 
-Deno.test('product classification: legal statements pass', () => {
+test('product classification: legal statements pass', () => {
   const legal = [
     'Element and Router are the framework core.',
     'Element 与 Router 是核心产品。',
@@ -86,31 +88,33 @@ Deno.test('product classification: legal statements pass', () => {
   ];
   for (const phrase of legal) {
     const failures = scanProductClassification([{ path: 'probe.md', text: phrase }]);
-    assertEquals(failures, [], `unexpected rejection for: ${phrase}`);
+    expect(failures, `unexpected rejection for: ${phrase}`).toEqual([]);
   }
 });
 
-Deno.test('product classification: parenthetical masking keeps positions and stray brackets', () => {
+test('product classification: parenthetical masking keeps positions and stray brackets', () => {
   const collapsed = (text: string) => text.replace(/\s+/g, ' ').trim();
   // Balanced groups (nested included) are masked out, positions preserved.
-  assertEquals(collapsed(stripParentheticals('((a))')), '');
-  assertEquals(collapsed(stripParentheticals('a (b (c) d) e')), 'a e');
-  assertEquals(collapsed(stripParentheticals('SaaS （独立治理） 是核心产品')), 'SaaS 是核心产品');
-  assertEquals(stripParentheticals('a (b) c').length, 'a (b) c'.length);
+  expect(collapsed(stripParentheticals('((a))'))).toEqual('');
+  expect(collapsed(stripParentheticals('a (b (c) d) e'))).toEqual('a e');
+  expect(collapsed(stripParentheticals('SaaS （独立治理） 是核心产品'))).toEqual('SaaS 是核心产品');
+  expect(stripParentheticals('a (b) c').length).toEqual('a (b) c'.length);
   // Unbalanced brackets are prose, not a group boundary.
-  assertEquals(stripParentheticals('a (b'), 'a (b');
-  assertEquals(stripParentheticals('a b) c'), 'a b) c');
+  expect(stripParentheticals('a (b')).toEqual('a (b');
+  expect(stripParentheticals('a b) c')).toEqual('a b) c');
 });
 
-Deno.test('product classification: clauses are evaluated independently', () => {
+test('product classification: clauses are evaluated independently', () => {
   const paragraph = [
     'SaaS is an independent first-party application.',
     'Element and Router are the framework core.',
   ].join(' ');
-  assertEquals(scanProductClassification([{ path: 'probe.md', text: paragraph }]), []);
+  expect(scanProductClassification([{ path: 'probe.md', text: paragraph }])).toEqual([]);
   const contradiction = [
     'Element and Router are the framework core.',
     'SaaS is a core product.',
   ].join(' ');
-  assert(scanProductClassification([{ path: 'probe.md', text: contradiction }]).length > 0);
+  expect(
+    scanProductClassification([{ path: 'probe.md', text: contradiction }]).length > 0,
+  ).toBeTruthy();
 });

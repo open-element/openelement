@@ -55,10 +55,9 @@ checks there.
 ## Run
 
 ```sh
-deno task --cwd tests/fixtures/third-party-web-components smoke   # from the repository root
+pnpm --dir tests/fixtures/third-party-web-components run smoke   # from the repository root
 # or directly:
-deno run --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys \
-  tests/fixtures/third-party-web-components/qualify.ts
+node tests/fixtures/third-party-web-components/qualify.ts
 ```
 
 Set `OPEN_ELEMENT_KEEP_THIRD_PARTY_WC_SMOKE=1` to keep the generated temp app
@@ -78,7 +77,7 @@ evidence, never as a publishing gate.
 
 ```sh
 OPEN_ELEMENT_T1_PROTOTYPE_REPORT=/tmp/openelement-t1-report.json \
-  deno task --cwd tests/fixtures/third-party-web-components snapshot:prototype
+  pnpm --dir tests/fixtures/third-party-web-components run snapshot:prototype
 ```
 
 Set `OPEN_ELEMENT_KEEP_T1_PROTOTYPE=1` to retain the generated demo and

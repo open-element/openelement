@@ -23,7 +23,9 @@
  * allowed to touch (Deno's runner provides no browser DOM).
  */
 
-import { assertEquals, assertStrictEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { describe, expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { signal } from '../src/internal/signal/framework.ts';
 import type { WritableSignal } from '../src/internal/signal/types.ts';
 import { SIGNAL_BRAND } from '../src/internal/protocol/signal.ts';
@@ -432,41 +434,42 @@ function makeLazyHost(counters: SubCounters) {
 
 // ─── Tests ───────────────────────────────────────────────────────────
 
-Deno.test('compiled part program v1 - harness sanity', async () => {
-  const programJson = await Deno.readTextFile(PROGRAM_URL);
+test('compiled part program v1 - harness sanity', async () => {
+  const programJson = await readFile(PROGRAM_URL, 'utf8');
   const program = JSON.parse(programJson);
-  assertEquals(program.tag, 'oe-program-counter');
+  expect(program.tag).toEqual('oe-program-counter');
   const doc = new FDocument();
   const host = parseHtml(
     doc,
     '<div class="proof"><h1>Count: <!--oe:p0-->0</h1><input value="ready"></div>',
   );
-  assertEquals(host.childNodes.length, 1);
-  assertEquals(
-    toHtml(host),
+  expect(host.childNodes.length).toEqual(1);
+  expect(toHtml(host)).toEqual(
     '<host><div class="proof"><h1>Count: <!--oe:p0-->0</h1><input value="ready"></div></host>',
   );
 });
 
-Deno.test('compiled part program v1 - one program, three execution modes', async (t) => {
-  const runtime = await loadProgramRuntime();
-  const programJson = await Deno.readTextFile(PROGRAM_URL);
-  const program = JSON.parse(programJson);
-  validatePartProgram(program);
+// Module-level loads (top-level await): the Deno parent body loaded these
+// once for every step below; vitest describe bodies are synchronous, so the
+// loads hoist here with identical semantics.
+const runtime = await loadProgramRuntime();
+const programJson = await readFile(PROGRAM_URL, 'utf8');
+const program = JSON.parse(programJson);
+validatePartProgram(program);
 
-  await t.step('program evidence: bytes and instruction count', () => {
+describe('compiled part program v1 - one program, three execution modes', () => {
+  test('program evidence: bytes and instruction count', () => {
     const programBytes = new TextEncoder().encode(programJson).length;
-    assertEquals(program.parts.length, 5);
+    expect(program.parts.length).toEqual(5);
     console.log(JSON.stringify({ proof: 'element-program', programBytes, instructionCount: 5 }));
   });
 
   let ssrHtml = '';
-  await t.step('server serialization emits the deterministic HTML', () => {
+  test('server serialization emits the deterministic HTML', () => {
     const counters = { subs: 0 };
     const { host } = makeHost(counters);
     ssrHtml = runtime.serializeToHtml(program, host);
-    assertEquals(
-      ssrHtml,
+    expect(ssrHtml).toEqual(
       '<div class="proof">' +
         '<h1>Count: <!--oe:p0-->0</h1>' +
         '<input value="ready">' +
@@ -480,22 +483,22 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
   const FRESH_ALLOCATIONS = { elements: 8, texts: 6, comments: 5 };
   const FRESH_ACTIVATION = { subs: 4, listenerAdds: 1 };
 
-  await t.step('fresh DOM creation from the same program matches SSR structure', () => {
+  test('fresh DOM creation from the same program matches SSR structure', () => {
     const freshDoc = new FDocument();
     const counters = { subs: 0 };
     const { host } = makeHost(counters);
     const freshRoot = freshDoc.createElement('host');
     freshDoc.resetCounts();
     runtime.createFreshDom(program, host, freshRoot);
-    assertEquals(toHtml(freshRoot), `<host>${ssrHtml}</host>`);
-    assertEquals(freshDoc.counts.elements, FRESH_ALLOCATIONS.elements);
-    assertEquals(freshDoc.counts.texts, FRESH_ALLOCATIONS.texts);
-    assertEquals(freshDoc.counts.comments, FRESH_ALLOCATIONS.comments);
-    assertEquals(counters.subs, FRESH_ACTIVATION.subs);
-    assertEquals(freshDoc.counts.listenerAdds, FRESH_ACTIVATION.listenerAdds);
+    expect(toHtml(freshRoot)).toEqual(`<host>${ssrHtml}</host>`);
+    expect(freshDoc.counts.elements).toEqual(FRESH_ALLOCATIONS.elements);
+    expect(freshDoc.counts.texts).toEqual(FRESH_ALLOCATIONS.texts);
+    expect(freshDoc.counts.comments).toEqual(FRESH_ALLOCATIONS.comments);
+    expect(counters.subs).toEqual(FRESH_ACTIVATION.subs);
+    expect(freshDoc.counts.listenerAdds).toEqual(FRESH_ACTIVATION.listenerAdds);
   });
 
-  await t.step('existing-DOM claim preserves identity, live value and attaches sinks', () => {
+  test('existing-DOM claim preserves identity, live value and attaches sinks', () => {
     const claimDoc = new FDocument();
     const claimRoot = parseHtml(claimDoc, ssrHtml);
     claimDoc.resetCounts();
@@ -508,26 +511,26 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
     runtime.claimExistingDom(program, host, claimRoot);
 
     // no allocation, no live-value overwrite, structure equivalent
-    assertEquals(claimDoc.counts.elements, 0);
-    assertEquals(claimDoc.counts.texts, 0);
-    assertEquals(claimDoc.counts.comments, 0);
-    assertEquals(claimDoc.counts.valueWrites, 0);
-    assertEquals(input.value, 'typed by user');
-    assertEquals(toHtml(claimRoot), `<host>${ssrHtml}</host>`);
-    assertEquals(counters.subs, FRESH_ACTIVATION.subs);
-    assertEquals(claimDoc.counts.listenerAdds, 1);
+    expect(claimDoc.counts.elements).toEqual(0);
+    expect(claimDoc.counts.texts).toEqual(0);
+    expect(claimDoc.counts.comments).toEqual(0);
+    expect(claimDoc.counts.valueWrites).toEqual(0);
+    expect(input.value).toEqual('typed by user');
+    expect(toHtml(claimRoot)).toEqual(`<host>${ssrHtml}</host>`);
+    expect(counters.subs).toEqual(FRESH_ACTIVATION.subs);
+    expect(claimDoc.counts.listenerAdds).toEqual(1);
 
     // the claimed event and text part are live; node identity is preserved
     const button = (claimRoot.childNodes[0] as FElement).childNodes[2] as FElement;
     button.dispatch('click');
-    assertEquals(count.value, 1);
+    expect(count.value).toEqual(1);
     const h1TextAfter = ((claimRoot.childNodes[0] as FElement).childNodes[0] as FElement)
       .childNodes[2] as FText;
-    assertStrictEquals(h1TextBefore, h1TextAfter);
-    assertEquals(h1TextAfter.data, '1');
+    expect(h1TextBefore).toBe(h1TextAfter);
+    expect(h1TextAfter.data).toEqual('1');
   });
 
-  await t.step('a Signal write touches only its subscribed Part/Region', () => {
+  test('a Signal write touches only its subscribed Part/Region', () => {
     const doc = new FDocument();
     const root = doc.createElement('host');
     const counters = { subs: 0 };
@@ -536,23 +539,23 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
     doc.resetCounts();
 
     label.value = 'edited';
-    assertEquals(doc.counts.valueWrites, 1);
-    assertEquals(doc.counts.textWrites, 0);
-    assertEquals(doc.counts.elements, 0);
+    expect(doc.counts.valueWrites).toEqual(1);
+    expect(doc.counts.textWrites).toEqual(0);
+    expect(doc.counts.elements).toEqual(0);
 
     doc.resetCounts();
     count.value = 1;
     // the subscribed text Part wrote once; the conditional Region swapped branches
-    assertEquals(doc.counts.textWrites, 1);
-    assertEquals(doc.counts.elements, 1); // replacement <p>
-    assertEquals(doc.counts.texts, 1); // replacement text
-    assertEquals(doc.counts.removals, 1); // old <p> (its text leaves with it)
+    expect(doc.counts.textWrites).toEqual(1);
+    expect(doc.counts.elements).toEqual(1); // replacement <p>
+    expect(doc.counts.texts).toEqual(1); // replacement text
+    expect(doc.counts.removals).toEqual(1); // old <p> (its text leaves with it)
     // the unrelated property sink recorded no write
-    assertEquals(doc.counts.valueWrites, 0);
-    assertEquals(doc.counts.listenerAdds, 0);
+    expect(doc.counts.valueWrites).toEqual(0);
+    expect(doc.counts.listenerAdds).toEqual(0);
   });
 
-  await t.step('lazy-delivery Signal: first write reaches only its subscribed Part', () => {
+  test('lazy-delivery Signal: first write reaches only its subscribed Part', () => {
     const doc = new FDocument();
     const root = doc.createElement('host');
     const counters = { subs: 0 };
@@ -564,18 +567,18 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
     // must be treated as a real update on the subscribed text Part, while the
     // unrelated property sink records no write.
     count.value = 1;
-    assertEquals(doc.counts.textWrites, 1);
-    assertEquals(doc.counts.valueWrites, 0);
-    assertEquals(doc.counts.listenerAdds, 0);
+    expect(doc.counts.textWrites).toEqual(1);
+    expect(doc.counts.valueWrites).toEqual(0);
+    expect(doc.counts.listenerAdds).toEqual(0);
 
     doc.resetCounts();
     label.value = 'lazy edit';
-    assertEquals(doc.counts.valueWrites, 1);
-    assertEquals(doc.counts.textWrites, 0);
-    assertEquals(doc.counts.elements, 0);
+    expect(doc.counts.valueWrites).toEqual(1);
+    expect(doc.counts.textWrites).toEqual(0);
+    expect(doc.counts.elements).toEqual(0);
   });
 
-  await t.step('keyed list Region preserves element identity across reorders', () => {
+  test('keyed list Region preserves element identity across reorders', () => {
     const doc = new FDocument();
     const root = doc.createElement('host');
     const counters = { subs: 0 };
@@ -595,22 +598,22 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
     const keptB = ul.childNodes[1] as FElement;
     const keptA = ul.childNodes[2] as FElement;
     const addedC = ul.childNodes[3] as FElement;
-    assertStrictEquals(keptB, liB);
-    assertStrictEquals(keptA, liA);
-    assertEquals((keptA.childNodes[0] as FText).data, 'ALPHA');
-    assertEquals((addedC.childNodes[0] as FText).data, 'gamma');
-    assertEquals(doc.counts.elements, 1); // only the new item
-    assertEquals(doc.counts.texts, 1);
-    assertEquals(doc.counts.removals, 0);
+    expect(keptB).toBe(liB);
+    expect(keptA).toBe(liA);
+    expect((keptA.childNodes[0] as FText).data).toEqual('ALPHA');
+    expect((addedC.childNodes[0] as FText).data).toEqual('gamma');
+    expect(doc.counts.elements).toEqual(1); // only the new item
+    expect(doc.counts.texts).toEqual(1);
+    expect(doc.counts.removals).toEqual(0);
 
     doc.resetCounts();
     items.value = [{ id: 'a', text: 'ALPHA' }];
-    assertEquals(ul.childNodes.length, 3); // anchors + one item
-    assertStrictEquals(ul.childNodes[1], liA);
-    assertEquals(doc.counts.removals, 2); // b and c elements
+    expect(ul.childNodes.length).toEqual(3); // anchors + one item
+    expect(ul.childNodes[1]).toBe(liA);
+    expect(doc.counts.removals).toEqual(2); // b and c elements
   });
 
-  await t.step('claim mismatch fails with a structured located diagnostic', () => {
+  test('claim mismatch fails with a structured located diagnostic', () => {
     const claimDoc = new FDocument();
     const claimRoot = parseHtml(claimDoc, ssrHtml);
     const staticText = ((claimRoot.childNodes[0] as FElement).childNodes[0] as FElement)
@@ -618,14 +621,14 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
     staticText.data = 'Count? ';
     const counters = { subs: 0 };
     const { host } = makeHost(counters);
-    const error = assertThrows(
+    const error = assertThrowsIncludes(
       () => runtime.claimExistingDom(program, host, claimRoot),
       runtime.PartProgramClaimError,
     );
-    assertStringIncludes(error.message, 'template[0].children[0].children[0]');
+    expect(error.message).toContain('template[0].children[0].children[0]');
   });
 
-  await t.step('dispose detaches every subscription', () => {
+  test('dispose detaches every subscription', () => {
     const doc = new FDocument();
     const root = doc.createElement('host');
     const counters = { subs: 0 };
@@ -635,22 +638,22 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
     doc.resetCounts();
     count.value = 9;
     label.value = 'gone';
-    assertEquals(doc.counts.textWrites, 0);
-    assertEquals(doc.counts.valueWrites, 0);
-    assertEquals(doc.counts.elements, 0);
+    expect(doc.counts.textWrites).toEqual(0);
+    expect(doc.counts.valueWrites).toEqual(0);
+    expect(doc.counts.elements).toEqual(0);
   });
 
-  await t.step('program validation still fails closed after the cast removal (repair-2)', () => {
+  test('program validation still fails closed after the cast removal (repair-2)', () => {
     const broken = JSON.parse(programJson);
     broken.parts[0] = { ...broken.parts[0], index: 7 };
-    assertThrows(
+    assertThrowsIncludes(
       () => validatePartProgram(broken),
       Error,
       'parts[0].index must equal its position',
     );
     const wrongVersion = JSON.parse(programJson);
     wrongVersion.version = 2;
-    assertThrows(() => validatePartProgram(wrongVersion), Error, 'version');
+    assertThrowsIncludes(() => validatePartProgram(wrongVersion), Error, 'version');
 
     const unknownInstruction = JSON.parse(programJson);
     unknownInstruction.parts[0].k = 'future';
@@ -664,15 +667,23 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
       const freshRoot = freshDoc.createElement('host');
       const claimDoc = new FDocument();
       const claimRoot = parseHtml(claimDoc, ssrHtml);
-      assertThrows(() => runtime.serializeToHtml(invalid, host), Error, diagnostic);
-      assertThrows(() => runtime.createFreshDom(invalid, host, freshRoot), Error, diagnostic);
-      assertThrows(() => runtime.claimExistingDom(invalid, host, claimRoot), Error, diagnostic);
-      assertEquals(toHtml(freshRoot), '<host></host>');
-      assertEquals(toHtml(claimRoot), `<host>${ssrHtml}</host>`);
+      assertThrowsIncludes(() => runtime.serializeToHtml(invalid, host), Error, diagnostic);
+      assertThrowsIncludes(
+        () => runtime.createFreshDom(invalid, host, freshRoot),
+        Error,
+        diagnostic,
+      );
+      assertThrowsIncludes(
+        () => runtime.claimExistingDom(invalid, host, claimRoot),
+        Error,
+        diagnostic,
+      );
+      expect(toHtml(freshRoot)).toEqual('<host></host>');
+      expect(toHtml(claimRoot)).toEqual(`<host>${ssrHtml}</host>`);
     }
   });
 
-  await t.step('measurement evidence against the frozen 0.43-equivalent proxy', () => {
+  test('measurement evidence against the frozen 0.43-equivalent proxy', () => {
     // 0.43-equivalent: full subtree re-allocation + full marker walk per update.
     const proxyDoc = new FDocument();
     build043Equivalent(proxyDoc, INITIAL_STATE);
@@ -708,11 +719,11 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
     // Frozen evidence pins (alpha.0 fixture). The proxy counts include its own
     // host root (+1 allocation, +1 walk visit) because it must allocate the
     // container the compiled element receives from the platform.
-    assertEquals(summary.compiled.freshAllocations, 19);
-    assertEquals(proxyBuildAllocations, 20);
-    assertEquals(proxyUpdateAllocations, 20);
-    assertEquals(proxyBuildWalk, 20);
-    assertEquals(proxyUpdateWalk, 20);
+    expect(summary.compiled.freshAllocations).toEqual(19);
+    expect(proxyBuildAllocations).toEqual(20);
+    expect(proxyUpdateAllocations).toEqual(20);
+    expect(proxyBuildWalk).toEqual(20);
+    expect(proxyUpdateWalk).toEqual(20);
     console.log(JSON.stringify(summary));
   });
 });

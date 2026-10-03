@@ -32,6 +32,7 @@
  * client.js evaluation (no click capture, no replay).
  */
 
+import { readFileSync, readdirSync } from 'node:fs';
 import { assertEquals } from '@std/assert';
 import { expect, test } from '@playwright/test';
 
@@ -53,11 +54,11 @@ test('fixture build: the probe chunk stays a dynamic import', () => {
   // shared runtime into it, client.js would statically import it, holding
   // would stall client.js evaluation, and this spec's premise is gone.
   const islandsDir = new URL('../dist/client/islands/', import.meta.url);
-  const files = [...Deno.readDirSync(islandsDir)].map((entry) => entry.name);
+  const files = readdirSync(islandsDir);
   const probe = files.find((name) => name.startsWith('island-open-light-probe-'));
   const carrier = files.find((name) => name.startsWith('island-light-probe-runtime-carrier-'));
   if (!probe || !carrier) throw new Error('fixture island chunks missing; build first');
-  const client = Deno.readTextFileSync(new URL('client.js', islandsDir));
+  const client = readFileSync(new URL('client.js', islandsDir), 'utf8');
   assertEquals(
     client.includes(`from"./${probe}"`),
     false,

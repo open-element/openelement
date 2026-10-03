@@ -8,7 +8,10 @@
  * public/internal entry a consumer would drive.
  */
 
-import { assert, assertEquals, assertRejects, assertThrows } from '@std/assert';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { join } from '@std/path';
 import { OpenElementError } from '@openelement/element';
 import { resolvePageDocument } from '../src/document.ts';
@@ -80,41 +83,42 @@ const TABLES = {
   SsgDynamicErrorCode,
 };
 
-Deno.test('error codes: every table value is a stable, unique, namespaced string', () => {
+test('error codes: every table value is a stable, unique, namespaced string', () => {
   const seen = new Map<string, string>();
   for (const [table, codes] of Object.entries(TABLES)) {
-    assert(Object.keys(codes).length > 0, `${table} must declare at least one code`);
+    expect(Object.keys(codes).length > 0, `${table} must declare at least one code`).toBeTruthy();
     for (const [name, value] of Object.entries(codes)) {
-      assert(
+      expect(
         typeof value === 'string' && value.startsWith('OE_'),
         `${table}.${name} must use the OE_ namespace`,
-      );
-      assert(
+      ).toBeTruthy();
+      expect(
         !seen.has(value),
         `${table}.${name} reuses code ${value}, already declared by ${seen.get(value)}`,
-      );
+      ).toBeTruthy();
       seen.set(value, `${table}.${name}`);
     }
   }
-  assertEquals(seen.get('OE_DOCUMENT_HEAD_INVALID'), 'DocumentErrorCode.HEAD_INVALID');
+  expect(seen.get('OE_DOCUMENT_HEAD_INVALID')).toEqual('DocumentErrorCode.HEAD_INVALID');
 });
 
-Deno.test('error codes: the factories carry the phase their surface implies', () => {
+test('error codes: the factories carry the phase their surface implies', () => {
   const validation = authoringError(PageErrorCode.PROJECTOR, 'boom');
-  assertThrows(() => {
+  assertThrowsIncludes(() => {
     throw validation;
   }, OpenElementError);
-  assertEquals(
-    [validation.phase, validation.severity, validation.recoverable],
-    ['validation', 'error', false],
-  );
+  expect([validation.phase, validation.severity, validation.recoverable]).toEqual([
+    'validation',
+    'error',
+    false,
+  ]);
   const build = buildError(DescriptorErrorCode.CORS, 'boom');
-  assertEquals([build.phase, build.severity, build.recoverable], ['build', 'error', false]);
+  expect([build.phase, build.severity, build.recoverable]).toEqual(['build', 'error', false]);
   // buildError preserves the wrapped cause for diagnostics.
   const cause = new Error('inner');
-  assertEquals(buildError(DeliveryErrorCode.TAGS, 'boom', { cause }).cause, cause);
+  expect(buildError(DeliveryErrorCode.TAGS, 'boom', { cause }).cause).toEqual(cause);
   const serve = serveError(StreamErrorCode.DEFERRED_TIMEOUT, 'boom');
-  assertEquals([serve.phase, serve.severity, serve.recoverable], ['ssr', 'error', false]);
+  expect([serve.phase, serve.severity, serve.recoverable]).toEqual(['ssr', 'error', false]);
 });
 
 function ctx(): PagePropsContext {
@@ -127,34 +131,34 @@ function ctx(): PagePropsContext {
   };
 }
 
-Deno.test('error codes: the Document seam reports HEAD_INVALID as a validation failure', () => {
-  const error = assertThrows(
+test('error codes: the Document seam reports HEAD_INVALID as a validation failure', () => {
+  const error = assertThrowsIncludes(
     () => resolvePageDocument('not-an-object' as never, ctx()),
     OpenElementError,
     '[openElement] resolvePageDocument:',
   );
-  assertEquals(error.code, DocumentErrorCode.HEAD_INVALID);
-  assertEquals(error.phase, 'validation');
+  expect(error.code).toEqual(DocumentErrorCode.HEAD_INVALID);
+  expect(error.phase).toEqual('validation');
 });
 
-Deno.test('error codes: island delivery and entry admission report build-phase codes', () => {
-  const media = assertThrows(
+test('error codes: island delivery and entry admission report build-phase codes', () => {
+  const media = assertThrowsIncludes(
     () => validateIslandMediaQuery(42, 'island'),
     OpenElementError,
     'Invalid island media query',
   );
-  assertEquals(media.code, DeliveryErrorCode.MEDIA_QUERY);
-  assertEquals(media.phase, 'build');
+  expect(media.code).toEqual(DeliveryErrorCode.MEDIA_QUERY);
+  expect(media.phase).toEqual('build');
 
-  const modulePath = assertThrows(
+  const modulePath = assertThrowsIncludes(
     () => validateIslandModuleSpecifier('https://evil.example/island.js'),
     OpenElementError,
     'Invalid island modulePath',
   );
-  assertEquals(modulePath.code, IslandEntryErrorCode.MODULE_PATH);
-  assertEquals(modulePath.phase, 'build');
+  expect(modulePath.code).toEqual(IslandEntryErrorCode.MODULE_PATH);
+  expect(modulePath.phase).toEqual('build');
 
-  const cors = assertThrows(
+  const cors = assertThrowsIncludes(
     () =>
       buildEntryDescriptor([], {
         middleware: { corsOrigin: (() => 'https://x') as never },
@@ -162,33 +166,33 @@ Deno.test('error codes: island delivery and entry admission report build-phase c
     OpenElementError,
     'middleware.corsOrigin',
   );
-  assertEquals(cors.code, DescriptorErrorCode.CORS);
+  expect(cors.code).toEqual(DescriptorErrorCode.CORS);
 });
 
-Deno.test('error codes: the SSG render pipeline reports build-phase codes', async () => {
-  const error = await assertRejects(
+test('error codes: the SSG render pipeline reports build-phase codes', async () => {
+  const error = await assertRejectsIncludes(
     () => ssgRender({} as unknown as SsrBundle, {} as SsgRenderOptions),
     OpenElementError,
     'does not export routeInfo',
   );
-  assertEquals(error.code, SsgRenderErrorCode.ROUTE_INFO_MISSING);
-  assertEquals(error.phase, 'build');
+  expect(error.code).toEqual(SsgRenderErrorCode.ROUTE_INFO_MISSING);
+  expect(error.phase).toEqual('build');
 });
 
-Deno.test('error codes: the client asset manifest reports build-phase codes', async () => {
-  const error = await assertRejects(
+test('error codes: the client asset manifest reports build-phase codes', async () => {
+  const error = await assertRejectsIncludes(
     () => readViteClientManifest('/nonexistent/dist/client/.vite/manifest.json'),
     OpenElementError,
     '/nonexistent/dist/client/.vite/manifest.json',
   );
-  assertEquals(error.code, ClientAssetErrorCode.MANIFEST_READ);
-  assertEquals(error.phase, 'build');
+  expect(error.code).toEqual(ClientAssetErrorCode.MANIFEST_READ);
+  expect(error.phase).toEqual('build');
 });
 
-Deno.test('error codes: manifest entry cardinality and tag ownership report build-phase codes', () => {
+test('error codes: manifest entry cardinality and tag ownership report build-phase codes', () => {
   // Two manifest records claiming the client entry fail regardless of the
   // order their keys iterate in (OE_CLIENT_ASSET_ENTRY_AMBIGUOUS).
-  const ambiguous = assertThrows(
+  const ambiguous = assertThrowsIncludes(
     () =>
       findClientEntryFile({
         'virtual:open-client-entry': { file: 'islands/client.js' },
@@ -196,12 +200,12 @@ Deno.test('error codes: manifest entry cardinality and tag ownership report buil
       }),
     OpenElementError,
   );
-  assertEquals(ambiguous.code, ClientAssetErrorCode.ENTRY_AMBIGUOUS);
-  assertEquals(ambiguous.phase, 'build');
+  expect(ambiguous.code).toEqual(ClientAssetErrorCode.ENTRY_AMBIGUOUS);
+  expect(ambiguous.phase).toEqual('build');
 
   // A delivery tag claimed by two island entries fails even when both would
   // resolve identically (OE_CLIENT_ASSET_ISLAND_TAG_DUPLICATE).
-  const duplicate = assertThrows(
+  const duplicate = assertThrowsIncludes(
     () =>
       buildClientAssetManifest({
         root: '/proj',
@@ -218,17 +222,17 @@ Deno.test('error codes: manifest entry cardinality and tag ownership report buil
       }),
     OpenElementError,
   );
-  assertEquals(duplicate.code, ClientAssetErrorCode.ISLAND_TAG_DUPLICATE);
-  assertEquals(duplicate.phase, 'build');
+  expect(duplicate.code).toEqual(ClientAssetErrorCode.ISLAND_TAG_DUPLICATE);
+  expect(duplicate.phase).toEqual('build');
 
   // The SSG post-processor's manifest join fails closed for an admitted
   // island with no manifest record (OE_CLIENT_ASSET_ISLAND_UNMAPPED).
-  const unmapped = assertThrows(
+  const unmapped = assertThrowsIncludes(
     () => islandChunkMapFromAssetManifest(null, ['open-ghost']),
     OpenElementError,
   );
-  assertEquals(unmapped.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
-  assertEquals(unmapped.phase, 'build');
+  expect(unmapped.code).toEqual(ClientAssetErrorCode.ISLAND_UNMAPPED);
+  expect(unmapped.phase).toEqual('build');
 });
 
 /** The minimal delivery entry the raiser proofs above need. */
@@ -244,34 +248,34 @@ function streamManifest(): StreamRouteManifest {
   };
 }
 
-Deno.test('error codes: the streaming pump reports ssr-phase codes', async () => {
+test('error codes: the streaming pump reports ssr-phase codes', async () => {
   // The front gate rejects non-object loader data (LOADER_NOT_OBJECT)…
-  const loader = assertThrows(
+  const loader = assertThrowsIncludes(
     () => streamFields('nope', streamManifest()),
     OpenElementError,
     'stream loader must return one object',
   );
-  assertEquals(loader.code, StreamErrorCode.LOADER_NOT_OBJECT);
-  assertEquals(loader.phase, 'ssr');
+  expect(loader.code).toEqual(StreamErrorCode.LOADER_NOT_OBJECT);
+  expect(loader.phase).toEqual('ssr');
   // …and the message text is unchanged — clients may match on it.
-  assertEquals(loader.message, 'stream loader must return one object');
+  expect(loader.message).toEqual('stream loader must return one object');
 
   // The deferred-shell gate fails closed on a route/manifest/program mismatch.
   const gate = createDeferredPageShell({
     streamManifests: {},
     createDeferredDsdExecutor: () => Promise.reject(new Error('unreached')),
   });
-  const mismatch = await assertRejects(
+  const mismatch = await assertRejectsIncludes(
     () => gate('/', { default: {} }, {}, 'i', 't'),
     OpenElementError,
     'no matching compiled route manifest/program',
   );
-  assertEquals(mismatch.code, StreamErrorCode.ROUTE_PROGRAM_MISMATCH);
-  assertEquals(mismatch.phase, 'ssr');
+  expect(mismatch.code).toEqual(StreamErrorCode.ROUTE_PROGRAM_MISMATCH);
+  expect(mismatch.phase).toEqual('ssr');
 });
 
-Deno.test('error codes: the dispatch guards and the renderer seam report ssr-phase codes', () => {
-  const litStream = assertThrows(
+test('error codes: the dispatch guards and the renderer seam report ssr-phase codes', () => {
+  const litStream = assertThrowsIncludes(
     () =>
       assertLitStreamRoute(
         { default: { openElementPage: { renderIntent: { stream: {} } } } },
@@ -281,38 +285,38 @@ Deno.test('error codes: the dispatch guards and the renderer seam report ssr-pha
     OpenElementError,
     'Lit renderer does not support stream route',
   );
-  assertEquals(litStream.code, DispatchErrorCode.LIT_STREAM_UNSUPPORTED);
-  assertEquals(litStream.phase, 'ssr');
+  expect(litStream.code).toEqual(DispatchErrorCode.LIT_STREAM_UNSUPPORTED);
+  expect(litStream.phase).toEqual('ssr');
 
   const renderer = createNativePageRenderer({
     renderDsd: () => ({ html: '' }),
     customElements: { get: () => undefined },
     ssrRenderableTags: [],
   });
-  const tagInvalid = assertThrows(
+  const tagInvalid = assertThrowsIncludes(
     () => renderer('nohyphen'),
     OpenElementError,
     'Invalid custom element tag',
   );
-  assertEquals(tagInvalid.code, RendererErrorCode.TAG_INVALID);
-  assertEquals(tagInvalid.phase, 'ssr');
-  const tagUnregistered = assertThrows(
+  expect(tagInvalid.code).toEqual(RendererErrorCode.TAG_INVALID);
+  expect(tagInvalid.phase).toEqual('ssr');
+  const tagUnregistered = assertThrowsIncludes(
     () => renderer('oe-ghost'),
     OpenElementError,
     'is not registered in the SSR registry',
   );
-  assertEquals(tagUnregistered.code, RendererErrorCode.TAG_UNREGISTERED);
-  assertEquals(tagUnregistered.phase, 'ssr');
+  expect(tagUnregistered.code).toEqual(RendererErrorCode.TAG_UNREGISTERED);
+  expect(tagUnregistered.phase).toEqual('ssr');
 });
 
-Deno.test('error codes: the mdx pipeline, the island scan, and the route scan report build-phase codes', async () => {
-  const mdx = assertThrows(
+test('error codes: the mdx pipeline, the island scan, and the route scan report build-phase codes', async () => {
+  const mdx = assertThrowsIncludes(
     () => mdxToCompiledPageSource('import x from "y";\n', '/proj/app/routes/hero.mdx'),
     OpenElementError,
     'static Markdown subset',
   );
-  assertEquals(mdx.code, MdxErrorCode.STATIC_CONTRACT);
-  assertEquals(mdx.phase, 'build');
+  expect(mdx.code).toEqual(MdxErrorCode.STATIC_CONTRACT);
+  expect(mdx.phase).toEqual('build');
 
   const manifest = (hydrate: string, media?: string) => ({
     schemaVersion: '1',
@@ -325,53 +329,53 @@ Deno.test('error codes: the mdx pipeline, the island scan, and the route scan re
       },
     ],
   });
-  const mediaWithoutDelivery = assertThrows(
+  const mediaWithoutDelivery = assertThrowsIncludes(
     () => buildPackageIslandDecls([manifest('media') as never]),
     OpenElementError,
     'uses media delivery without media',
   );
-  assertEquals(mediaWithoutDelivery.code, PackageIslandErrorCode.MEDIA_WITHOUT_DELIVERY);
-  assertEquals(mediaWithoutDelivery.phase, 'build');
-  const deliveryWithoutMedia = assertThrows(
+  expect(mediaWithoutDelivery.code).toEqual(PackageIslandErrorCode.MEDIA_WITHOUT_DELIVERY);
+  expect(mediaWithoutDelivery.phase).toEqual('build');
+  const deliveryWithoutMedia = assertThrowsIncludes(
     () => buildPackageIslandDecls([manifest('idle', '(max-width: 400px)') as never]),
     OpenElementError,
     'declares media without media delivery',
   );
-  assertEquals(deliveryWithoutMedia.code, PackageIslandErrorCode.DELIVERY_WITHOUT_MEDIA);
-  assertEquals(deliveryWithoutMedia.phase, 'build');
+  expect(deliveryWithoutMedia.code).toEqual(PackageIslandErrorCode.DELIVERY_WITHOUT_MEDIA);
+  expect(deliveryWithoutMedia.phase).toEqual('build');
 
-  const dir = await Deno.makeTempDir({ prefix: 'oe-error-codes-scan-' });
+  const dir = await mkdtemp(join(tmpdir(), 'oe-error-codes-scan-'));
   try {
     const routesDir = join(dir, 'routes');
-    await Deno.mkdir(routesDir, { recursive: true });
+    await mkdir(routesDir, { recursive: true });
     // `a-b` and `a_b` fold to the same generated identifier (#1029).
-    await Deno.writeTextFile(join(routesDir, 'a-b.tsx'), 'export default function Page() {}');
-    await Deno.writeTextFile(join(routesDir, 'a_b.tsx'), 'export default function Page() {}');
-    const collision = await assertRejects(
+    await writeFile(join(routesDir, 'a-b.tsx'), 'export default function Page() {}');
+    await writeFile(join(routesDir, 'a_b.tsx'), 'export default function Page() {}');
+    const collision = await assertRejectsIncludes(
       () => scanRoutes(routesDir),
       OpenElementError,
       'Route variable name collision',
     );
-    assertEquals(collision.code, RouteScanErrorCode.VAR_NAME_COLLISION);
-    assertEquals(collision.phase, 'build');
+    expect(collision.code).toEqual(RouteScanErrorCode.VAR_NAME_COLLISION);
+    expect(collision.phase).toEqual('build');
   } finally {
-    await Deno.remove(dir, { recursive: true }).catch(() => {});
+    await rm(dir, { recursive: true }).catch(() => {});
   }
 });
 
-Deno.test('error codes: the dynamic prerender admission reports build-phase codes', () => {
-  const missing = assertThrows(
+test('error codes: the dynamic prerender admission reports build-phase codes', () => {
+  const missing = assertThrowsIncludes(
     () => resolveDynamicRoutePath('/posts/:id', ['id'], {}),
     OpenElementError,
     'Missing value for route parameter',
   );
-  assertEquals(missing.code, SsgDynamicErrorCode.PARAM_MISSING);
-  assertEquals(missing.phase, 'build');
-  const unsafe = assertThrows(
+  expect(missing.code).toEqual(SsgDynamicErrorCode.PARAM_MISSING);
+  expect(missing.phase).toEqual('build');
+  const unsafe = assertThrowsIncludes(
     () => resolveDynamicRoutePath('/posts/:id', ['id'], { id: '../escape' }),
     OpenElementError,
     'Unsafe value for route parameter',
   );
-  assertEquals(unsafe.code, SsgDynamicErrorCode.PARAM_UNSAFE);
-  assertEquals(unsafe.phase, 'build');
+  expect(unsafe.code).toEqual(SsgDynamicErrorCode.PARAM_UNSAFE);
+  expect(unsafe.phase).toEqual('build');
 });

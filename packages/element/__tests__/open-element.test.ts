@@ -24,14 +24,7 @@
  * class at module evaluation time.
  */
 
-import {
-  assert,
-  assertEquals,
-  assertInstanceOf,
-  assertNotEquals,
-  assertStrictEquals,
-  assertStringIncludes,
-} from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   type FacadeElement,
   installFacadeDom,
@@ -91,23 +84,23 @@ function connect(element: FacadeElement): FacadeElement {
 
 // ─── Instantiation and base statics ────────────────────────────────
 
-Deno.test('OpenElement is instantiable', () => {
+test('OpenElement is instantiable', () => {
   const el = new OpenElement();
-  assertInstanceOf(el, OpenElement);
+  expect(el).toBeInstanceOf(OpenElement);
 });
 
-Deno.test('OpenElement exposes base static contract', () => {
-  assertEquals(OpenElement.styles, undefined);
-  assertEquals(typeof OpenElement.registerGlobalStyles, 'function');
-  assertEquals(typeof OpenElement.getGlobalStyles, 'function');
-  assertEquals(typeof OpenElement._resetGlobalStyles, 'function');
+test('OpenElement exposes base static contract', () => {
+  expect(OpenElement.styles).toEqual(undefined);
+  expect(typeof OpenElement.registerGlobalStyles).toEqual('function');
+  expect(typeof OpenElement.getGlobalStyles).toEqual('function');
+  expect(typeof OpenElement._resetGlobalStyles).toEqual('function');
   class LightElement extends OpenElement {
     static override renderMode = 'light' as const;
   }
-  assertEquals(LightElement.renderMode, 'light');
+  expect(LightElement.renderMode).toEqual('light');
 });
 
-Deno.test('OpenElement without a compiled program fails closed at connect', () => {
+test('OpenElement without a compiled program fails closed at connect', () => {
   const tag = uniqueTag('uncompiled');
   class Uncompiled extends OpenElement {}
   dom.registry.define(tag, Uncompiled as unknown as CustomElementConstructor);
@@ -120,13 +113,13 @@ Deno.test('OpenElement without a compiled program fails closed at connect', () =
       return caught;
     }
   })();
-  assertInstanceOf(error, OpenElementError);
-  assertEquals((error as InstanceType<typeof OpenElementError>).code, 'OE_PROGRAM_MISSING');
+  expect(error).toBeInstanceOf(OpenElementError);
+  expect((error as InstanceType<typeof OpenElementError>).code).toEqual('OE_PROGRAM_MISSING');
 });
 
 // ─── Root modes and lifecycle hooks ────────────────────────────────
 
-Deno.test('compiled shadow program creates a shadow root and calls onCsrRendered', () => {
+test('compiled shadow program creates a shadow root and calls onCsrRendered', () => {
   const tag = uniqueTag('shadow');
   let csr = 0;
   const ctor = defineCompiled({
@@ -139,12 +132,12 @@ Deno.test('compiled shadow program creates a shadow root and calls onCsrRendered
     csr++;
   };
   const el = connect(dom.document.createElement(tag)) as AnyElement;
-  assert(el.shadowRoot !== null);
-  assertEquals(toHtml(el.shadowRoot), '<div>shadow</div>');
-  assertEquals(csr, 1);
+  expect(el.shadowRoot !== null).toBeTruthy();
+  expect(toHtml(el.shadowRoot)).toEqual('<div>shadow</div>');
+  expect(csr).toEqual(1);
 });
 
-Deno.test('compiled light program renders into light DOM and calls onCsrRendered', () => {
+test('compiled light program renders into light DOM and calls onCsrRendered', () => {
   const tag = uniqueTag('light');
   let csr = 0;
   let dsd = 0;
@@ -161,12 +154,12 @@ Deno.test('compiled light program renders into light DOM and calls onCsrRendered
     dsd++;
   };
   const el = connect(dom.document.createElement(tag)) as AnyElement;
-  assertEquals(toHtml(el), `<${tag}><span>light</span></${tag}>`);
-  assertEquals(csr, 1);
-  assertEquals(dsd, 0);
+  expect(toHtml(el)).toEqual(`<${tag}><span>light</span></${tag}>`);
+  expect(csr).toEqual(1);
+  expect(dsd).toEqual(0);
 });
 
-Deno.test('compiled program claims serialized DSD and calls onDsdHydrated', () => {
+test('compiled program claims serialized DSD and calls onDsdHydrated', () => {
   const tag = uniqueTag('dsd');
   let csr = 0;
   let dsd = 0;
@@ -183,19 +176,19 @@ Deno.test('compiled program claims serialized DSD and calls onDsdHydrated', () =
     dsd++;
   };
   const html = renderDsd(tag, { componentClass: ctor }).html;
-  assertStringIncludes(html, '<template shadowrootmode="open">');
+  expect(html).toContain('<template shadowrootmode="open">');
   let claimedP: unknown;
   const el = mountSerialized(dom, html, (host) => {
     claimedP = (host as AnyElement).shadowRoot.childNodes[0];
   }) as AnyElement;
-  assertStrictEquals(el.shadowRoot.childNodes[0], claimedP, 'claim keeps node identity');
-  assertEquals(dsd, 1);
-  assertEquals(csr, 0);
+  expect(el.shadowRoot.childNodes[0], 'claim keeps node identity').toBe(claimedP);
+  expect(dsd).toEqual(1);
+  expect(csr).toEqual(0);
 });
 
 // ─── Styles ────────────────────────────────────────────────────────
 
-Deno.test('compiled element applies static styles via adoptedStyleSheets', () => {
+test('compiled element applies static styles via adoptedStyleSheets', () => {
   const tag = uniqueTag('styles');
   const sheet = new StyleSheet();
   sheet.replaceSync('oe-migrated-styles { color: red; }');
@@ -210,18 +203,18 @@ Deno.test('compiled element applies static styles via adoptedStyleSheets', () =>
     { styles: sheet },
   );
   const el = connect(dom.document.createElement(tag)) as AnyElement;
-  assertEquals(el.shadowRoot.adoptedStyleSheets.length, 1);
-  assertEquals(el.shadowRoot.adoptedStyleSheets[0], sheet);
+  expect(el.shadowRoot.adoptedStyleSheets.length).toEqual(1);
+  expect(el.shadowRoot.adoptedStyleSheets[0]).toEqual(sheet);
 });
 
-Deno.test('registerGlobalStyles applies to new shadow roots and is idempotent', () => {
+test('registerGlobalStyles applies to new shadow roots and is idempotent', () => {
   const tag = uniqueTag('global-styles');
   OpenElement._resetGlobalStyles();
   const sheet = new StyleSheet();
   sheet.replaceSync('oe-migrated-global { color: blue; }');
   OpenElement.registerGlobalStyles([sheet]);
   OpenElement.registerGlobalStyles([sheet]);
-  assertEquals(OpenElement.getGlobalStyles(), [sheet]);
+  expect(OpenElement.getGlobalStyles()).toEqual([sheet]);
   defineCompiled({
     tag,
     rootMode: 'shadow-open',
@@ -229,14 +222,14 @@ Deno.test('registerGlobalStyles applies to new shadow roots and is idempotent', 
     parts: [],
   });
   const el = connect(dom.document.createElement(tag)) as AnyElement;
-  assert(el.shadowRoot.adoptedStyleSheets.includes(sheet));
+  expect(el.shadowRoot.adoptedStyleSheets.includes(sheet)).toBeTruthy();
   OpenElement._resetGlobalStyles();
-  assertEquals(OpenElement.getGlobalStyles(), []);
+  expect(OpenElement.getGlobalStyles()).toEqual([]);
 });
 
 // ─── Theme broadcasts ──────────────────────────────────────────────
 
-Deno.test('connected compiled hosts receive and clear data-theme broadcasts', () => {
+test('connected compiled hosts receive and clear data-theme broadcasts', () => {
   const tag = uniqueTag('theme');
   defineCompiled({
     tag,
@@ -245,12 +238,12 @@ Deno.test('connected compiled hosts receive and clear data-theme broadcasts', ()
   });
   const el = connect(dom.document.createElement(tag)) as AnyElement;
   dom.document.documentElement.setAttribute('data-theme', 'dark');
-  assertEquals(el.getAttribute('data-theme'), 'dark');
+  expect(el.getAttribute('data-theme')).toEqual('dark');
   dom.document.documentElement.removeAttribute('data-theme');
-  assertEquals(el.hasAttribute('data-theme'), false);
+  expect(el.hasAttribute('data-theme')).toEqual(false);
 });
 
-Deno.test('theme broadcasts skip self-themed hosts and stop after disconnect (#773)', () => {
+test('theme broadcasts skip self-themed hosts and stop after disconnect (#773)', () => {
   const tag = uniqueTag('theme-self');
   defineCompiled({
     tag,
@@ -261,16 +254,16 @@ Deno.test('theme broadcasts skip self-themed hosts and stop after disconnect (#7
   el.setAttribute('data-theme', 'brand');
   connect(el);
   dom.document.documentElement.setAttribute('data-theme', 'dark');
-  assertEquals(el.getAttribute('data-theme'), 'brand', 'host-owned theme wins');
+  expect(el.getAttribute('data-theme'), 'host-owned theme wins').toEqual('brand');
   dom.document.body.removeChild(el);
   dom.document.documentElement.setAttribute('data-theme', 'light');
-  assertEquals(el.getAttribute('data-theme'), 'brand', 'disconnected hosts are not broadcast to');
+  expect(el.getAttribute('data-theme'), 'disconnected hosts are not broadcast to').toEqual('brand');
   dom.document.documentElement.removeAttribute('data-theme');
 });
 
 // ─── Signals, parts, events ────────────────────────────────────────
 
-Deno.test('signal-backed property writes update only the subscribed Part', () => {
+test('signal-backed property writes update only the subscribed Part', () => {
   const tag = uniqueTag('signal');
   defineCompiled({
     tag,
@@ -298,12 +291,12 @@ Deno.test('signal-backed property writes update only the subscribed Part', () =>
     ],
   });
   const el = connect(dom.document.createElement(tag)) as AnyElement;
-  assertEquals(toHtml(el), `<${tag}><div>v=<!--oe:p0-->a</div></${tag}>`);
+  expect(toHtml(el)).toEqual(`<${tag}><div>v=<!--oe:p0-->a</div></${tag}>`);
   el.label = 'b';
-  assertEquals(toHtml(el), `<${tag}><div>v=<!--oe:p0-->b</div></${tag}>`);
+  expect(toHtml(el)).toEqual(`<${tag}><div>v=<!--oe:p0-->b</div></${tag}>`);
 });
 
-Deno.test('compiled event parts bind instance methods once across reconnect', () => {
+test('compiled event parts bind instance methods once across reconnect', () => {
   const tag = uniqueTag('event');
   const calls: string[] = [];
   defineCompiled(
@@ -330,12 +323,12 @@ Deno.test('compiled event parts bind instance methods once across reconnect', ()
   const el = connect(dom.document.createElement(tag)) as AnyElement;
   const button = el.childNodes[0];
   button.dispatchEvent({ type: 'click', target: null, currentTarget: null });
-  assertEquals(calls.length, 1);
+  expect(calls.length).toEqual(1);
   dom.document.body.removeChild(el);
   connect(el);
-  assertEquals((button.listeners.get('click') ?? []).length, 1);
+  expect((button.listeners.get('click') ?? []).length).toEqual(1);
   button.dispatchEvent({ type: 'click', target: null, currentTarget: null });
-  assertEquals(calls.length, 2);
+  expect(calls.length).toEqual(2);
 });
 
 // ─── Compiled property contract ────────────────────────────────────
@@ -388,7 +381,7 @@ const PROP_SPEC: TestProgramSpec = {
   ],
 };
 
-Deno.test('compiled properties initialize from attributes via converters', () => {
+test('compiled properties initialize from attributes via converters', () => {
   const tag = uniqueTag('props-init');
   defineCompiled({ ...PROP_SPEC, tag });
   const el = dom.document.createElement(tag) as AnyElement;
@@ -398,62 +391,62 @@ Deno.test('compiled properties initialize from attributes via converters', () =>
   el.setAttribute('items', '[{"id":"a"}]');
   el.setAttribute('item-count', '3');
   connect(el);
-  assertEquals(el.count, 41);
-  assertEquals(el.label, 'hello');
-  assertEquals(el.disabled, true);
-  assertEquals(el.items, [{ id: 'a' }]);
-  assertEquals(el.itemCount, 3);
+  expect(el.count).toEqual(41);
+  expect(el.label).toEqual('hello');
+  expect(el.disabled).toEqual(true);
+  expect(el.items).toEqual([{ id: 'a' }]);
+  expect(el.itemCount).toEqual(3);
 });
 
-Deno.test('compiled properties react to attribute changes; removal restores defaults', () => {
+test('compiled properties react to attribute changes; removal restores defaults', () => {
   const tag = uniqueTag('props-react');
   defineCompiled({ ...PROP_SPEC, tag });
   const el = connect(dom.document.createElement(tag)) as AnyElement;
   el.setAttribute('count', '9');
-  assertEquals(el.count, 9);
+  expect(el.count).toEqual(9);
   el.setAttribute('count', 'not-a-number');
-  assertEquals(el.count, 0, 'NaN converts to 0');
+  expect(el.count, 'NaN converts to 0').toEqual(0);
   el.removeAttribute('label');
-  assertEquals(el.label, 'x', 'removal restores the compiled default');
+  expect(el.label, 'removal restores the compiled default').toEqual('x');
   el.removeAttribute('disabled');
-  assertEquals(el.disabled, false);
+  expect(el.disabled).toEqual(false);
 });
 
-Deno.test('reflect properties mirror property writes to attributes', () => {
+test('reflect properties mirror property writes to attributes', () => {
   const tag = uniqueTag('props-reflect');
   defineCompiled({ ...PROP_SPEC, tag });
   const el = connect(dom.document.createElement(tag)) as AnyElement;
   el.count = 7;
-  assertEquals(el.getAttribute('count'), '7');
+  expect(el.getAttribute('count')).toEqual('7');
   el.disabled = true;
-  assertEquals(el.getAttribute('disabled'), '');
+  expect(el.getAttribute('disabled')).toEqual('');
   el.disabled = false;
-  assertEquals(el.hasAttribute('disabled'), false);
+  expect(el.hasAttribute('disabled')).toEqual(false);
   // Removal of a reflected attribute restores the default and re-mirrors it.
   el.count = 12;
   el.removeAttribute('count');
-  assertEquals(el.count, 0);
-  assertEquals(el.getAttribute('count'), '0');
+  expect(el.count).toEqual(0);
+  expect(el.getAttribute('count')).toEqual('0');
 });
 
-Deno.test('property-set state survives disconnect→reconnect (#772)', () => {
+test('property-set state survives disconnect→reconnect (#772)', () => {
   const tag = uniqueTag('props-reconnect');
   defineCompiled({ ...PROP_SPEC, tag });
   const el = connect(dom.document.createElement(tag)) as AnyElement;
   el.label = 'kept';
   dom.document.body.removeChild(el);
   connect(el);
-  assertEquals(el.label, 'kept');
+  expect(el.label).toEqual('kept');
   // Present attributes re-sync on reconnect.
   el.setAttribute('label', 'from-attr');
   dom.document.body.removeChild(el);
   connect(el);
-  assertEquals(el.label, 'from-attr');
+  expect(el.label).toEqual('from-attr');
 });
 
 // ─── formAssociated / params ───────────────────────────────────────
 
-Deno.test('compiled element attaches ElementInternals when formAssociated', () => {
+test('compiled element attaches ElementInternals when formAssociated', () => {
   const tag = uniqueTag('form');
   let attached = 0;
   const ctor = defineCompiled({
@@ -467,10 +460,10 @@ Deno.test('compiled element attaches ElementInternals when formAssociated', () =
   };
   (ctor as unknown as Record<string, unknown>).formAssociated = true;
   connect(dom.document.createElement(tag));
-  assertEquals(attached, 1);
+  expect(attached).toEqual(1);
 });
 
-Deno.test('compiled element parses the params attribute into reactive params', () => {
+test('compiled element parses the params attribute into reactive params', () => {
   const tag = uniqueTag('params');
   defineCompiled({
     tag,
@@ -480,14 +473,14 @@ Deno.test('compiled element parses the params attribute into reactive params', (
   const el = dom.document.createElement(tag) as AnyElement;
   el.setAttribute('params', '{"id":"7"}');
   connect(el);
-  assertEquals(el.params, { id: '7' });
+  expect(el.params).toEqual({ id: '7' });
   el.params = { id: '8' };
-  assertEquals(el.params, { id: '8' });
+  expect(el.params).toEqual({ id: '8' });
 });
 
 // ─── Lifecycle helpers ─────────────────────────────────────────────
 
-Deno.test('_lifecycleSignal aborts on disconnect and re-arms on reconnect', () => {
+test('_lifecycleSignal aborts on disconnect and re-arms on reconnect', () => {
   const tag = uniqueTag('lifecycle');
   const seen: AbortSignal[] = [];
   const ctor = defineCompiled({
@@ -503,17 +496,17 @@ Deno.test('_lifecycleSignal aborts on disconnect and re-arms on reconnect', () =
   };
   const el = connect(dom.document.createElement(tag));
   const first = seen[0];
-  assert(first !== undefined && !first.aborted);
+  expect(first !== undefined && !first.aborted).toBeTruthy();
   dom.document.body.removeChild(el);
-  assert(first.aborted);
+  expect(first.aborted).toBeTruthy();
   connect(el);
   const second = seen[1];
-  assert(second !== undefined);
-  assertNotEquals(second, first);
-  assert(!second.aborted);
+  expect(second !== undefined).toBeTruthy();
+  expect(second).not.toEqual(first);
+  expect(!second.aborted).toBeTruthy();
 });
 
-Deno.test('public signals keep engine semantics for authored effects', async () => {
+test('public signals keep engine semantics for authored effects', async () => {
   const { effect, signal } = await import('@openelement/element');
   const count = signal(0);
   const seen: number[] = [];
@@ -523,5 +516,5 @@ Deno.test('public signals keep engine semantics for authored effects', async () 
   count.value = 2;
   dispose();
   count.value = 3;
-  assertEquals(seen, [0, 2]);
+  expect(seen).toEqual([0, 2]);
 });

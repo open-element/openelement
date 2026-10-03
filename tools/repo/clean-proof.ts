@@ -7,17 +7,19 @@
  * line is asserted by the candidate validator against the step's hashed log.
  *
  * Usage:
- *   deno run --allow-read --allow-run=git --deny-ffi --no-prompt \
- *     tools/repo/clean-proof.ts --sha <40hex> --tree <40hex> --phase before|after
+ *   node tools/repo/clean-proof.ts --sha <40hex> --tree <40hex> --phase before|after
  */
 
+import { commandOutput } from './node-command.ts';
+import process from 'node:process';
+
 async function git(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
-  const output = await new Deno.Command('git', {
+  const output = await commandOutput('git', {
     args,
-    cwd: Deno.cwd(),
+    cwd: process.cwd(),
     stdout: 'piped',
     stderr: 'piped',
-  }).output();
+  });
   return {
     code: output.code,
     stdout: new TextDecoder().decode(output.stdout).trim(),
@@ -26,8 +28,9 @@ async function git(args: string[]): Promise<{ code: number; stdout: string; stde
 }
 
 function flag(name: string): string {
-  const index = Deno.args.indexOf(`--${name}`);
-  const value = index === -1 ? undefined : Deno.args[index + 1];
+  const argv = process.argv.slice(2);
+  const index = argv.indexOf(`--${name}`);
+  const value = index === -1 ? undefined : argv[index + 1];
   if (!value) throw new Error(`clean-proof: --${name} is required`);
   return value;
 }
@@ -61,6 +64,6 @@ if (failures.length > 0) {
   if (status.stdout) console.error(`clean-proof dirty files:\n${status.stdout}`);
   const stat = await git(['diff', '--stat']);
   if (stat.stdout) console.error(`clean-proof diff stat:\n${stat.stdout}`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log(`clean-proof PASS phase=${phase} sha=${sha} tree=${tree}`);

@@ -1,55 +1,54 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { NavigationState } from '../src/internal/router/navigation-state.ts';
 
-Deno.test('stream FSM retires only a live pending token at the ownership point', () => {
+test('stream FSM retires only a live pending token at the ownership point', () => {
   const state = new NavigationState();
   state.observeStream('request-1');
-  assertEquals(state.streamStatus, 'pending');
+  expect(state.streamStatus).toEqual('pending');
   const vetoed = state.issue('programmatic');
-  assertEquals(state.streamStatus, 'pending', 'an attempted navigation has no side effect');
+  expect(state.streamStatus, 'an attempted navigation has no side effect').toEqual('pending');
   const winning = state.issue('browser');
-  assertEquals(state.retireStream(vetoed, 'request-1'), false);
-  assertEquals(state.retireStream(winning, 'wrong-request'), false);
-  assertEquals(state.retireStream(winning, 'request-1'), true);
-  assertEquals(state.streamStatus, 'retired');
-  assertEquals(state.retireStream(winning, 'request-1'), false, 'idempotent retirement');
+  expect(state.retireStream(vetoed, 'request-1')).toEqual(false);
+  expect(state.retireStream(winning, 'wrong-request')).toEqual(false);
+  expect(state.retireStream(winning, 'request-1')).toEqual(true);
+  expect(state.streamStatus).toEqual('retired');
+  expect(state.retireStream(winning, 'request-1'), 'idempotent retirement').toEqual(false);
   state.observeStream('request-2');
-  assertEquals(state.streamStatus, 'pending', 'new network request has a fresh identity');
+  expect(state.streamStatus, 'new network request has a fresh identity').toEqual('pending');
   state.settleStream('request-1');
-  assertEquals(state.streamStatus, 'pending', 'stale terminal cannot settle a new request');
+  expect(state.streamStatus, 'stale terminal cannot settle a new request').toEqual('pending');
   state.settleStream('request-2');
-  assertEquals(state.streamStatus, 'idle');
-  assertEquals(state.retireStream(winning, 'request-2'), false);
+  expect(state.streamStatus).toEqual('idle');
+  expect(state.retireStream(winning, 'request-2')).toEqual(false);
 });
 
-Deno.test('stream FSM leaves guards, aborted traversal, duplicate and BFCache state alone', () => {
+test('stream FSM leaves guards, aborted traversal, duplicate and BFCache state alone', () => {
   const state = new NavigationState();
   state.observeStream('request-1');
   const guarded = state.issue('browser');
-  assertEquals(state.streamStatus, 'pending');
+  expect(state.streamStatus).toEqual('pending');
   state.armRestore('https://router.test/current');
-  assertEquals(
+  expect(
     state.consumeRestore({
       destinationHref: 'https://router.test/current',
       navigationType: 'replace',
       info: undefined,
     }),
-    true,
-  );
-  assertEquals(state.streamStatus, 'pending', 'guard restore does not retire a stream');
+  ).toEqual(true);
+  expect(state.streamStatus, 'guard restore does not retire a stream').toEqual('pending');
   state.recordLanding('/current');
-  assertEquals(state.isDuplicateLanding('/current'), true);
-  assertEquals(state.streamStatus, 'pending', 'duplicate landing does not retire a stream');
+  expect(state.isDuplicateLanding('/current')).toEqual(true);
+  expect(state.streamStatus, 'duplicate landing does not retire a stream').toEqual('pending');
   state.supersede();
-  assertEquals(state.retireStream(guarded, 'request-1'), false);
-  assertEquals(state.streamStatus, 'pending');
+  expect(state.retireStream(guarded, 'request-1')).toEqual(false);
+  expect(state.streamStatus).toEqual('pending');
   // BFCache restoration reuses the saved document and seed; observing it
   // again never resets a terminal or retired state or replays a frame.
   state.settleStream('request-1');
   state.observeStream('request-1');
-  assertEquals(state.streamStatus, 'idle');
+  expect(state.streamStatus).toEqual('idle');
   state.dispose();
-  assertEquals(state.streamStatus, 'idle');
+  expect(state.streamStatus).toEqual('idle');
   state.observeStream('request-2');
-  assertEquals(state.streamStatus, 'idle');
+  expect(state.streamStatus).toEqual('idle');
 });

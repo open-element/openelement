@@ -8,8 +8,11 @@
  * payloads). Byte-size totals from `du` are deliberately NOT gated:
  * platform du accounting differs between macOS and Linux runners.
  */
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { fromFileUrl, join } from '@std/path';
+import { readFile, stat } from 'node:fs/promises';
+import process from 'node:process';
+import { commandOutput } from '../../tools/repo/node-command.ts';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const dist = join(repoRoot, 'www/dist');
@@ -38,13 +41,13 @@ function check(name: string, expected: number, actual: number, tolerance = 0): v
 async function gzipSize(file: string): Promise<number> {
   // Must be gzip -9: the doc figures are measured that way and
   // CompressionStream would produce different bytes.
-  const child = new Deno.Command('gzip', {
+  const child = await commandOutput('gzip', {
     args: ['-9', '-c', file],
     stdin: 'null',
     stdout: 'piped',
     stderr: 'null',
   });
-  const { code, stdout } = await child.output();
+  const { code, stdout } = child;
   if (code !== 0) throw new Error(`gzip -9 failed for ${file}`);
   return stdout.length;
 }
@@ -54,13 +57,13 @@ for await (const entry of walk(dist, { includeDirs: false })) {
   distFiles.set(entry.path.slice(dist.length + 1), entry.path);
 }
 const distHtml = [...distFiles.keys()].filter((path) => path.endsWith('.html'));
-const sitemap = await Deno.readTextFile(join(dist, 'sitemap.xml'));
+const sitemap = await readFile(join(dist, 'sitemap.xml'), 'utf8');
 const sitemapLocs = (sitemap.match(/<loc>/g) ?? []).length;
 const manifestPaths = [...distFiles.keys()].filter(
   (path) => path.startsWith('island-manifests/') && path.endsWith('.json'),
 );
 const manifests = await Promise.all(
-  manifestPaths.map(async (path) => JSON.parse(await Deno.readTextFile(join(dist, path)))),
+  manifestPaths.map(async (path) => JSON.parse(await readFile(join(dist, path), 'utf8'))),
 );
 const tagCounts = new Map<string, number>();
 let manifestEntries = 0;
@@ -70,7 +73,7 @@ for (const manifest of manifests) {
     manifestEntries++;
   }
 }
-const entryJson = JSON.parse(await Deno.readTextFile(join(dist, 'pagefind/pagefind-entry.json')));
+const entryJson = JSON.parse(await readFile(join(dist, 'pagefind/pagefind-entry.json'), 'utf8'));
 const fragmentFiles = [...distFiles.keys()].filter((path) => path.startsWith('pagefind/fragment/'));
 
 const chunkSize = new Map<string, { raw: number; gzip: number }>();
@@ -78,7 +81,7 @@ for (const [rel, abs] of distFiles) {
   const match = /^client\/islands\/(.+)\.js$/.exec(rel);
   if (match) {
     chunkSize.set(match[1], {
-      raw: (await Deno.stat(abs)).size,
+      raw: (await stat(abs)).size,
       gzip: await gzipSize(abs),
     });
   }
@@ -113,7 +116,7 @@ function routePayload(route: string): { bytes: number; chunks: number } {
 }
 
 for (const docPath of docs) {
-  const text = await Deno.readTextFile(docPath);
+  const text = await readFile(docPath, 'utf8');
   const short = docPath.slice(repoRoot.length).replace(/^\//, '');
   const scope = `${short}: `;
   const zh = docPath.endsWith('.zh.md');
@@ -196,6 +199,6 @@ for (const docPath of docs) {
 if (failures.length > 0) {
   console.error('doc figures check failed:');
   for (const failure of failures) console.error(`- ${failure}`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log('doc figures check passed.');

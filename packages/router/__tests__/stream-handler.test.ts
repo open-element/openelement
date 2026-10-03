@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import process from 'node:process';
+import { expect, test } from 'vitest';
 import {
   createDeferredDsdExecutor,
   documentStreamParts,
@@ -121,7 +122,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
   renderPageRoute(lines, route, [], config, false);
   const post: string[] = [];
   renderActionRoute(post, route, [], config, false);
-  assert(!post.join('\n').includes('__streamBody('));
+  expect(!post.join('\n').includes('__streamBody(')).toBeTruthy();
   const source = `
     const { routeModule, manifest, createDeferredDsdExecutor, documentStreamParts,
       escapeAttr, escapeHtml, wrapInDocument } = deps;
@@ -227,7 +228,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
   };
 }
 
-Deno.test('generated GET streams a shell then independent inert Part frames with frozen headers', async () => {
+test('generated GET streams a shell then independent inert Part frames with frozen headers', async () => {
   const { fetch, routeModule } = await handler();
   const first = deferred<string>();
   const second = deferred<string>();
@@ -238,40 +239,40 @@ Deno.test('generated GET streams a shell then independent inert Part frames with
     return { first: first.promise, second: second.promise };
   };
   const response = await fetch(new Request('https://example.test/'));
-  assertEquals(response.status, 200);
-  assertEquals(response.headers.get('Set-Cookie'), 'session=abc; HttpOnly');
+  expect(response.status).toEqual(200);
+  expect(response.headers.get('Set-Cookie')).toEqual('session=abc; HttpOnly');
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   const shell = decoder.decode((await reader.read()).value);
-  assertStringIncludes(shell, '<!DOCTYPE html>');
-  assertStringIncludes(shell, 'data-oe-stream-request=');
-  assertStringIncludes(shell, '<!--oe:p0--><!--oe:/p0-->');
-  assertStringIncludes(shell, 'data-oe-seed=');
-  assertStringIncludes(shell, '<script nonce="nonce123">');
-  assertStringIncludes(shell, 'data-oe-frame');
-  assertEquals(shell.indexOf('<script nonce="nonce123">') < shell.indexOf('</head>'), true);
-  assert(!shell.includes('</body>'));
+  expect(shell).toContain('<!DOCTYPE html>');
+  expect(shell).toContain('data-oe-stream-request=');
+  expect(shell).toContain('<!--oe:p0--><!--oe:/p0-->');
+  expect(shell).toContain('data-oe-seed=');
+  expect(shell).toContain('<script nonce="nonce123">');
+  expect(shell).toContain('data-oe-frame');
+  expect(shell.indexOf('<script nonce="nonce123">') < shell.indexOf('</head>')).toEqual(true);
+  expect(!shell.includes('</body>')).toBeTruthy();
   held.set('X-Late', 'discard');
   held.delete('Set-Cookie');
   held.forEach((_value, _name, reference) => reference.append('X-Callback-Late', 'discard'));
-  assertEquals(response.headers.get('X-Late'), null);
-  assertEquals(response.headers.get('X-Callback-Late'), null);
-  assertEquals(response.headers.get('Set-Cookie'), 'session=abc; HttpOnly');
+  expect(response.headers.get('X-Late')).toEqual(null);
+  expect(response.headers.get('X-Callback-Late')).toEqual(null);
+  expect(response.headers.get('Set-Cookie')).toEqual('session=abc; HttpOnly');
   second.resolve('<script>&');
   const frame2 = decoder.decode((await reader.read()).value);
-  assertStringIncludes(frame2, 'data-oe-frame=');
-  assertStringIncludes(frame2, 'part&quot;:1');
-  assertStringIncludes(frame2, '&lt;script&gt;&amp;');
-  assertStringIncludes(frame2, '<noscript>');
+  expect(frame2).toContain('data-oe-frame=');
+  expect(frame2).toContain('part&quot;:1');
+  expect(frame2).toContain('&lt;script&gt;&amp;');
+  expect(frame2).toContain('<noscript>');
   first.resolve('first');
   const frame1 = decoder.decode((await reader.read()).value);
-  assertStringIncludes(frame1, 'part&quot;:0');
-  assertStringIncludes(frame1, '<noscript>first</noscript>');
-  assertStringIncludes(decoder.decode((await reader.read()).value), 'nonce="nonce123"');
-  assertEquals((await reader.read()).done, true);
+  expect(frame1).toContain('part&quot;:0');
+  expect(frame1).toContain('<noscript>first</noscript>');
+  expect(decoder.decode((await reader.read()).value)).toContain('nonce="nonce123"');
+  expect((await reader.read()).done).toEqual(true);
 });
 
-Deno.test('the real channel merge keeps protocol headers and the streamed body', async () => {
+test('the real channel merge keeps protocol headers and the streamed body', async () => {
   const { fetch, routeModule } = await handler();
   const first = deferred<string>();
   const second = deferred<string>();
@@ -288,35 +289,35 @@ Deno.test('the real channel merge keeps protocol headers and the streamed body',
     return { first: first.promise, second: second.promise };
   };
   const response = await fetch(new Request('https://example.test/'));
-  assertEquals(response.status, 200);
+  expect(response.status).toEqual(200);
   // The channel cannot override a protocol header the response already set
   // (server-runtime/response-channel.ts: `PROTOCOL_HEADERS.has(key) && merged.has(key)`).
-  assertEquals(response.headers.get('Content-Type'), 'text/html; charset=UTF-8');
-  assertEquals(response.headers.get('Cache-Control'), 'private, no-cache');
+  expect(response.headers.get('Content-Type')).toEqual('text/html; charset=UTF-8');
+  expect(response.headers.get('Cache-Control')).toEqual('private, no-cache');
   // A protocol header the response does NOT carry, and every ordinary channel
   // header, are appended: the channel only loses a header it tried to replace.
-  assertEquals(response.headers.get('Location'), '/elsewhere');
-  assertEquals(response.headers.get('X-OpenElement-Action'), 'true');
-  assertEquals(response.headers.get('Set-Cookie'), 'session=abc; HttpOnly');
-  assertEquals(response.headers.get('Vary'), '*');
-  assertEquals(response.headers.get('X-Channel-Trace'), 'kept');
+  expect(response.headers.get('Location')).toEqual('/elsewhere');
+  expect(response.headers.get('X-OpenElement-Action')).toEqual('true');
+  expect(response.headers.get('Set-Cookie')).toEqual('session=abc; HttpOnly');
+  expect(response.headers.get('Vary')).toEqual('*');
+  expect(response.headers.get('X-Channel-Trace')).toEqual('kept');
   // The rebuilt `new Response(resp.body, …)` still streams: the shell and both
   // Part frames arrive after the merge.
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   const shell = decoder.decode((await reader.read()).value);
-  assertStringIncludes(shell, '<!DOCTYPE html>');
+  expect(shell).toContain('<!DOCTYPE html>');
   second.resolve('second');
   first.resolve('first');
   const frames = [
     decoder.decode((await reader.read()).value),
     decoder.decode((await reader.read()).value),
   ];
-  assertStringIncludes(frames.join(''), 'part&quot;:1');
-  assertStringIncludes(frames.join(''), 'part&quot;:0');
+  expect(frames.join('')).toContain('part&quot;:1');
+  expect(frames.join('')).toContain('part&quot;:0');
 });
 
-Deno.test('the generated GET refuses a resolved app shell with route-level guidance', async () => {
+test('the generated GET refuses a resolved app shell with route-level guidance', async () => {
   // Descriptors built outside buildEntryDescriptor (or reaching the runtime by
   // another path) still hit the generated route guard. It is the route-level
   // counterpart of the build gate and must name the same project-wide fix
@@ -325,37 +326,37 @@ Deno.test('the generated GET refuses a resolved app shell with route-level guida
   setResolvedAppShell({ tagName: 'open-layout' });
   routeModule.loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });
   const response = await fetch(new Request('https://example.test/'));
-  assertEquals(response.status, 500);
+  expect(response.status).toEqual(500);
   const body = await response.text();
-  assertStringIncludes(body, 'resolved a compiled app shell');
-  assertStringIncludes(body, 'appShell: false');
-  assertStringIncludes(body, 'leave streaming off');
+  expect(body).toContain('resolved a compiled app shell');
+  expect(body).toContain('appShell: false');
+  expect(body).toContain('leave streaming off');
 });
 
-Deno.test('generated GET rejects front-gate failures before a success shell', async () => {
+test('generated GET rejects front-gate failures before a success shell', async () => {
   const { fetch, routeModule } = await handler();
   let frontGateSignal!: AbortSignal;
   routeModule.loader = ({ request }: { request: Request }) => {
     frontGateSignal = request.signal;
     return { first: Promise.resolve('a') };
   };
-  assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
-  assertEquals(frontGateSignal.aborted, true);
+  expect((await fetch(new Request('https://example.test/'))).status).toEqual(500);
+  expect(frontGateSignal.aborted).toEqual(true);
   routeModule.loader = () => ({
     first: Promise.resolve('a'),
     second: Promise.resolve('b'),
     unknown: Promise.reject(new Error('not observed by the page')),
   });
-  assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+  expect((await fetch(new Request('https://example.test/'))).status).toEqual(500);
   routeModule.loader = () => {
     throw { redirect: true, location: '/login', status: 302 };
   };
   const redirect = await fetch(new Request('https://example.test/'));
-  assertEquals(redirect.status, 302);
-  assertEquals(redirect.headers.get('Location'), '/login');
+  expect(redirect.status).toEqual(302);
+  expect(redirect.headers.get('Location')).toEqual('/login');
 });
 
-Deno.test('generated GET abort and late failure do not turn into successful backfills', async () => {
+test('generated GET abort and late failure do not turn into successful backfills', async () => {
   const { fetch, routeModule } = await handler();
   const first = deferred<string>();
   const second = deferred<string>();
@@ -370,16 +371,16 @@ Deno.test('generated GET abort and late failure do not turn into successful back
   await reader.read();
   second.reject({ redirect: true, location: '/late', status: 302 });
   const frame = new TextDecoder().decode((await reader.read()).value);
-  assertStringIncludes(frame, 'outcome&quot;:&quot;error');
-  assertEquals(response.status, 200);
+  expect(frame).toContain('outcome&quot;:&quot;error');
+  expect(response.status).toEqual(200);
   controller.abort();
-  assertEquals(loaderSignal.aborted, true);
-  assertEquals((await reader.read()).done, true);
+  expect(loaderSignal.aborted).toEqual(true);
+  expect((await reader.read()).done).toEqual(true);
   first.resolve('too late');
   await Promise.resolve();
 });
 
-Deno.test('slow reader keeps only settled fields until a pull and cancel ignores late results', async () => {
+test('slow reader keeps only settled fields until a pull and cancel ignores late results', async () => {
   const { fetch, routeModule } = await handler();
   const first = deferred<string>();
   const second = deferred<string>();
@@ -394,10 +395,10 @@ Deno.test('slow reader keeps only settled fields until a pull and cancel ignores
   first.resolve('one');
   second.resolve('two');
   await Promise.resolve();
-  assertEquals((await reader.read()).done, false);
+  expect((await reader.read()).done).toEqual(false);
   await reader.cancel();
-  assertEquals(loaderSignal.aborted, true);
-  assertEquals((await reader.read()).done, true);
+  expect(loaderSignal.aborted).toEqual(true);
+  expect((await reader.read()).done).toEqual(true);
 });
 
 /**
@@ -475,7 +476,7 @@ function streamCloseProbe(): {
   };
 }
 
-Deno.test('cancel while a pull is parked at wake-await never closes the cancelled stream', async () => {
+test('cancel while a pull is parked at wake-await never closes the cancelled stream', async () => {
   const { fetch, routeModule } = await handler();
   const first = deferred<string>();
   const second = deferred<string>();
@@ -486,35 +487,34 @@ Deno.test('cancel while a pull is parked at wake-await never closes the cancelle
     const reader = response.body!.getReader();
     // The shell is consumed; the next read parks the pull at the wake-await
     // because both deferred fields are still unresolved.
-    assertStringIncludes(new TextDecoder().decode((await reader.read()).value), '<!DOCTYPE html>');
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain('<!DOCTYPE html>');
     const parked = reader.read();
     await probe.waitForPull(2);
     await reader.cancel();
-    assertEquals(await parked.then((result) => result.done), true, 'the parked read ends done');
+    expect(await parked.then((result) => result.done), 'the parked read ends done').toEqual(true);
     first.resolve('late');
     second.resolve('late');
     await Promise.resolve();
   } finally {
     probe.restore();
   }
-  assert(
+  expect(
     probe.events.includes('cancel'),
     `the body observed the cancel: ${probe.events.join(', ')}`,
-  );
+  ).toBeTruthy();
   // The stream was already closed by the cancel; the resumed pull must not try
   // to close again (that attempt is the TypeError).
-  assert(
+  expect(
     !probe.events.includes('close-after-cancel'),
     `resumed pull must not close a cancelled stream: ${probe.events.join(', ')}`,
-  );
-  assertEquals(
+  ).toBeTruthy();
+  expect(
     probe.events.filter((event) => event === 'close'),
-    [],
     'no close attempt belongs to the cancelled response',
-  );
+  ).toEqual([]);
 });
 
-Deno.test('a request abort with a parked pull still closes the stream body', async () => {
+test('a request abort with a parked pull still closes the stream body', async () => {
   const { fetch, routeModule } = await handler();
   const first = deferred<string>();
   const second = deferred<string>();
@@ -536,20 +536,19 @@ Deno.test('a request abort with a parked pull still closes the stream body', asy
     controller.abort();
     // An abort is not a cancel: the response body is still readable, so the
     // resumed pull must close it to terminate the body for the reader.
-    assertEquals(await parked.then((result) => result.done), true);
-    assertEquals(loaderSignal.aborted, true);
+    expect(await parked.then((result) => result.done)).toEqual(true);
+    expect(loaderSignal.aborted).toEqual(true);
   } finally {
     probe.restore();
   }
-  assertEquals(probe.events.includes('cancel'), false, 'an abort never cancels the body');
-  assertEquals(
+  expect(probe.events.includes('cancel'), 'an abort never cancels the body').toEqual(false);
+  expect(
     probe.events.filter((event) => event === 'close').length,
-    1,
     `exactly one close terminates the aborted body: ${probe.events.join(', ')}`,
-  );
+  ).toEqual(1);
 });
 
-Deno.test('deferred timeout aborts loader work but emits terminal error frames', async () => {
+test('deferred timeout aborts loader work but emits terminal error frames', async () => {
   const { fetch, routeModule } = await handler(20);
   let loaderSignal!: AbortSignal;
   routeModule.loader = ({ request }: { request: Request }) => {
@@ -565,15 +564,15 @@ Deno.test('deferred timeout aborts loader work but emits terminal error frames',
   const decoder = new TextDecoder();
   const first = decoder.decode((await reader.read()).value);
   const second = decoder.decode((await reader.read()).value);
-  assertEquals(loaderSignal.aborted, true);
-  assertStringIncludes(first, 'outcome&quot;:&quot;error');
-  assertStringIncludes(second, 'outcome&quot;:&quot;error');
-  assertStringIncludes(decoder.decode((await reader.read()).value), '</html>');
-  assertEquals((await reader.read()).done, true);
-  assertEquals(response.status, 200);
+  expect(loaderSignal.aborted).toEqual(true);
+  expect(first).toContain('outcome&quot;:&quot;error');
+  expect(second).toContain('outcome&quot;:&quot;error');
+  expect(decoder.decode((await reader.read()).value)).toContain('</html>');
+  expect((await reader.read()).done).toEqual(true);
+  expect(response.status).toEqual(200);
 });
 
-Deno.test('late loader success cannot overwrite a queued timeout error for a slow reader', async () => {
+test('late loader success cannot overwrite a queued timeout error for a slow reader', async () => {
   const { fetch, routeModule } = await handler(20);
   const first = deferred<string>();
   const second = deferred<string>();
@@ -599,29 +598,31 @@ Deno.test('late loader success cannot overwrite a queued timeout error for a slo
   const decoder = new TextDecoder();
   const onTime = decoder.decode((await reader.read()).value);
   const late = decoder.decode((await reader.read()).value);
-  assertStringIncludes(onTime, 'settled-before-timeout');
-  assertStringIncludes(onTime, 'outcome&quot;:&quot;content');
-  assertStringIncludes(late, 'outcome&quot;:&quot;error');
-  assertEquals(late.includes('settled-after-timeout'), false);
-  assertStringIncludes(decoder.decode((await reader.read()).value), '</html>');
-  assertEquals((await reader.read()).done, true);
+  expect(onTime).toContain('settled-before-timeout');
+  expect(onTime).toContain('outcome&quot;:&quot;content');
+  expect(late).toContain('outcome&quot;:&quot;error');
+  expect(late.includes('settled-after-timeout')).toEqual(false);
+  expect(decoder.decode((await reader.read()).value)).toContain('</html>');
+  expect((await reader.read()).done).toEqual(true);
 });
 
-/** Collect unhandled rejections so an observed-rejection contract can be asserted. */
+/** Collect unhandled rejections so an observed-rejection contract can be asserted.
+ *  node-host equivalent of the Deno-global listener: a registered process
+ *  'unhandledRejection' handler suppresses the default crash (the same role
+ *  preventDefault played under Deno). */
 function unhandledRejectionGuard(): { events: unknown[]; install(): void; restore(): void } {
   const events: unknown[] = [];
-  const listener = (event: PromiseRejectionEvent) => {
-    events.push(event.reason);
-    event.preventDefault();
+  const listener = (reason: unknown) => {
+    events.push(reason);
   };
   return {
     events,
-    install: () => globalThis.addEventListener('unhandledrejection', listener),
-    restore: () => globalThis.removeEventListener('unhandledrejection', listener),
+    install: () => process.on('unhandledRejection', listener),
+    restore: () => process.off('unhandledRejection', listener),
   };
 }
 
-Deno.test('front gate observes every loader rejection when a declared field is missing', async () => {
+test('front gate observes every loader rejection when a declared field is missing', async () => {
   const { fetch, routeModule } = await handler();
   const guard = unhandledRejectionGuard();
   guard.install();
@@ -633,18 +634,18 @@ Deno.test('front gate observes every loader rejection when a declared field is m
       first: Promise.reject(new Error('declared field rejection')),
       stray: Promise.reject(new Error('undeclared stray rejection')),
     });
-    assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+    expect((await fetch(new Request('https://example.test/'))).status).toEqual(500);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assertEquals(guard.events, []);
+    expect(guard.events).toEqual([]);
     // The process survives the front-gate throw and keeps serving requests.
     routeModule.loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });
-    assertEquals((await fetch(new Request('https://example.test/'))).status, 200);
+    expect((await fetch(new Request('https://example.test/'))).status).toEqual(200);
   } finally {
     guard.restore();
   }
 });
 
-Deno.test('front gate observes every loader rejection when several thenables are undeclared', async () => {
+test('front gate observes every loader rejection when several thenables are undeclared', async () => {
   const { fetch, routeModule } = await handler();
   const guard = unhandledRejectionGuard();
   guard.install();
@@ -657,17 +658,17 @@ Deno.test('front gate observes every loader rejection when several thenables are
       ghost1: Promise.reject(new Error('ghost one')),
       ghost2: Promise.reject(new Error('ghost two')),
     });
-    assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+    expect((await fetch(new Request('https://example.test/'))).status).toEqual(500);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assertEquals(guard.events, []);
+    expect(guard.events).toEqual([]);
     routeModule.loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });
-    assertEquals((await fetch(new Request('https://example.test/'))).status, 200);
+    expect((await fetch(new Request('https://example.test/'))).status).toEqual(200);
   } finally {
     guard.restore();
   }
 });
 
-Deno.test('front gate observes loader rejections when the loader returns a non-object', async () => {
+test('front gate observes loader rejections when the loader returns a non-object', async () => {
   const { fetch, routeModule } = await handler();
   const guard = unhandledRejectionGuard();
   guard.install();
@@ -676,18 +677,18 @@ Deno.test('front gate observes loader rejections when the loader returns a non-o
     // observer exists; its rejecting entries must still be observed or the
     // process dies instead of answering 500.
     routeModule.loader = () => [Promise.reject(new Error('array stray rejection'))];
-    assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+    expect((await fetch(new Request('https://example.test/'))).status).toEqual(500);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assertEquals(guard.events, []);
+    expect(guard.events).toEqual([]);
     // The process survives the front-gate throw and keeps serving requests.
     routeModule.loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });
-    assertEquals((await fetch(new Request('https://example.test/'))).status, 200);
+    expect((await fetch(new Request('https://example.test/'))).status).toEqual(200);
   } finally {
     guard.restore();
   }
 });
 
-Deno.test('front gate answers 500 when the loader itself returns a rejected promise', async () => {
+test('front gate answers 500 when the loader itself returns a rejected promise', async () => {
   const { fetch, routeModule } = await handler();
   const guard = unhandledRejectionGuard();
   guard.install();
@@ -696,18 +697,18 @@ Deno.test('front gate answers 500 when the loader itself returns a rejected prom
     // await consumes the rejection, so no stray unhandled rejection survives
     // and the route still answers 500 instead of crashing.
     routeModule.loader = () => Promise.reject(new Error('loader rejection'));
-    assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+    expect((await fetch(new Request('https://example.test/'))).status).toEqual(500);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assertEquals(guard.events, []);
+    expect(guard.events).toEqual([]);
     // The process survives and keeps serving requests.
     routeModule.loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });
-    assertEquals((await fetch(new Request('https://example.test/'))).status, 200);
+    expect((await fetch(new Request('https://example.test/'))).status).toEqual(200);
   } finally {
     guard.restore();
   }
 });
 
-Deno.test('stream budget front gate observes loader rejections before its diagnostic throw', async () => {
+test('stream budget front gate observes loader rejections before its diagnostic throw', async () => {
   // The budget diagnostic fires in __streamFields before the deferred shell is
   // created, so an over-budget manifest alone is enough to reach it through
   // the real generated handler.
@@ -724,9 +725,9 @@ Deno.test('stream budget front gate observes loader rejections before its diagno
   guard.install();
   try {
     routeModule.loader = () => ({ f0: Promise.reject(new Error('budget stray')) });
-    assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+    expect((await fetch(new Request('https://example.test/'))).status).toEqual(500);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assertEquals(guard.events, [], 'the budget throw observed the loader rejection');
+    expect(guard.events, 'the budget throw observed the loader rejection').toEqual([]);
   } finally {
     guard.restore();
   }

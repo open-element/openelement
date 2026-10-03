@@ -1,4 +1,7 @@
-import { assert, assertEquals } from '@std/assert';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, test } from 'vitest';
 import {
   buildDeclarationClosure,
   declarationCandidates,
@@ -21,17 +24,17 @@ function graphOf(files: Record<string, string>, roots: string[]) {
   return buildDeclarationClosure(roots, io(files));
 }
 
-Deno.test('declaration closure: a lone public export reaches itself', () => {
+test('declaration closure: a lone public export reaches itself', () => {
   const graph = graphOf(
     {
       'src/index.d.ts': 'export declare const entry: true;\n',
     },
     ['src/index.d.ts'],
   );
-  assertEquals(graph.reached, ['src/index.d.ts']);
+  expect(graph.reached).toEqual(['src/index.d.ts']);
 });
 
-Deno.test('declaration closure: a missing declaration behind a public .d.ts fails', () => {
+test('declaration closure: a missing declaration behind a public .d.ts fails', () => {
   const graph = graphOf(
     {
       'src/index.d.ts':
@@ -39,23 +42,23 @@ Deno.test('declaration closure: a missing declaration behind a public .d.ts fail
     },
     ['src/index.d.ts'],
   );
-  assertEquals(graph.reached, ['src/index.d.ts']);
-  assertEquals(graph.missing, [{ from: 'src/index.d.ts', specifier: './internal/helper.js' }]);
-  assertEquals(graph.escaped, []);
+  expect(graph.reached).toEqual(['src/index.d.ts']);
+  expect(graph.missing).toEqual([{ from: 'src/index.d.ts', specifier: './internal/helper.js' }]);
+  expect(graph.escaped).toEqual([]);
 });
 
-Deno.test('declaration closure: two and three level indirect references are reached', () => {
+test('declaration closure: two and three level indirect references are reached', () => {
   const files = {
     'src/index.d.ts': "export { B } from './b.js';\n",
     'src/b.d.ts': "export type { C } from './internal/c';\n",
     'src/internal/c.d.ts': 'export type C = true;\n',
   };
   const graph = graphOf(files, ['src/index.d.ts']);
-  assertEquals(graph.missing, []);
-  assertEquals(graph.reached, ['src/b.d.ts', 'src/index.d.ts', 'src/internal/c.d.ts']);
+  expect(graph.missing).toEqual([]);
+  expect(graph.reached).toEqual(['src/b.d.ts', 'src/index.d.ts', 'src/internal/c.d.ts']);
 });
 
-Deno.test('declaration closure: import("...") type references are followed', () => {
+test('declaration closure: import("...") type references are followed', () => {
   const graph = graphOf(
     {
       'src/index.d.ts': "export declare const x: import('./types.js').Shape;\n",
@@ -63,11 +66,11 @@ Deno.test('declaration closure: import("...") type references are followed', () 
     },
     ['src/index.d.ts'],
   );
-  assertEquals(graph.reached, ['src/index.d.ts', 'src/types.d.ts']);
-  assertEquals(graph.missing, []);
+  expect(graph.reached).toEqual(['src/index.d.ts', 'src/types.d.ts']);
+  expect(graph.missing).toEqual([]);
 });
 
-Deno.test('declaration closure: triple-slash path references are followed', () => {
+test('declaration closure: triple-slash path references are followed', () => {
   const graph = graphOf(
     {
       'src/index.d.ts': '/// <reference path="./globals.d.ts" />\nexport {};\n',
@@ -75,10 +78,10 @@ Deno.test('declaration closure: triple-slash path references are followed', () =
     },
     ['src/index.d.ts'],
   );
-  assertEquals(graph.reached, ['src/globals.d.ts', 'src/index.d.ts']);
+  expect(graph.reached).toEqual(['src/globals.d.ts', 'src/index.d.ts']);
 });
 
-Deno.test('declaration closure: cycles terminate and keep every member', () => {
+test('declaration closure: cycles terminate and keep every member', () => {
   const graph = graphOf(
     {
       'src/index.d.ts': "export * from './a.js';\n",
@@ -87,12 +90,12 @@ Deno.test('declaration closure: cycles terminate and keep every member', () => {
     },
     ['src/index.d.ts'],
   );
-  assertEquals(graph.reached, ['src/a.d.ts', 'src/b.d.ts', 'src/index.d.ts']);
-  assertEquals(graph.missing, []);
+  expect(graph.reached).toEqual(['src/a.d.ts', 'src/b.d.ts', 'src/index.d.ts']);
+  expect(graph.missing).toEqual([]);
 });
 
-Deno.test('declaration closure: extensionless and extension fallbacks resolve deterministically', () => {
-  assertEquals(declarationCandidates('src/x.js'), [
+test('declaration closure: extensionless and extension fallbacks resolve deterministically', () => {
+  expect(declarationCandidates('src/x.js')).toEqual([
     'src/x.d.ts',
     'src/x.d.mts',
     'src/x.d.cts',
@@ -108,8 +111,11 @@ Deno.test('declaration closure: extensionless and extension fallbacks resolve de
     },
     ['src/index.d.ts'],
   );
-  assert(direct.reached.includes('src/x.d.ts'));
-  assert(!direct.reached.includes('src/x/index.d.ts'), '.d.ts beats index when both exist');
+  expect(direct.reached.includes('src/x.d.ts')).toBeTruthy();
+  expect(
+    !direct.reached.includes('src/x/index.d.ts'),
+    '.d.ts beats index when both exist',
+  ).toBeTruthy();
 
   const indexOnly = graphOf(
     {
@@ -118,7 +124,7 @@ Deno.test('declaration closure: extensionless and extension fallbacks resolve de
     },
     ['src/index.d.ts'],
   );
-  assertEquals(indexOnly.reached, ['src/index.d.ts', 'src/y/index.d.ts']);
+  expect(indexOnly.reached).toEqual(['src/index.d.ts', 'src/y/index.d.ts']);
 
   const ecmaFallback = graphOf(
     {
@@ -127,22 +133,22 @@ Deno.test('declaration closure: extensionless and extension fallbacks resolve de
     },
     ['src/index.d.ts'],
   );
-  assertEquals(ecmaFallback.reached, ['src/index.d.ts', 'src/z.d.mts']);
+  expect(ecmaFallback.reached).toEqual(['src/index.d.ts', 'src/z.d.mts']);
 });
 
-Deno.test('declaration closure: path escapes fail closed', () => {
+test('declaration closure: path escapes fail closed', () => {
   const graph = graphOf(
     {
       'src/index.d.ts': "export * from '../../outside.d.ts';\n",
     },
     ['src/index.d.ts'],
   );
-  assertEquals(graph.reached, ['src/index.d.ts']);
-  assertEquals(graph.escaped.length, 1);
-  assertEquals(graph.missing, []);
+  expect(graph.reached).toEqual(['src/index.d.ts']);
+  expect(graph.escaped.length).toEqual(1);
+  expect(graph.missing).toEqual([]);
 });
 
-Deno.test('declaration closure: bare npm jsr and node specifiers are external', () => {
+test('declaration closure: bare npm jsr and node specifiers are external', () => {
   const graph = graphOf(
     {
       'src/index.d.ts':
@@ -155,12 +161,12 @@ Deno.test('declaration closure: bare npm jsr and node specifiers are external', 
     },
     ['src/index.d.ts'],
   );
-  assertEquals(graph.reached, ['src/index.d.ts']);
-  assertEquals(graph.missing, []);
-  assertEquals(graph.escaped, []);
+  expect(graph.reached).toEqual(['src/index.d.ts']);
+  expect(graph.missing).toEqual([]);
+  expect(graph.escaped).toEqual([]);
 });
 
-Deno.test('declaration closure: Windows separators behave like POSIX', () => {
+test('declaration closure: Windows separators behave like POSIX', () => {
   const graph = graphOf(
     {
       'src/index.d.ts': "export * from './internal\\\\helper.js';\n",
@@ -168,27 +174,27 @@ Deno.test('declaration closure: Windows separators behave like POSIX', () => {
     },
     ['src\\index.d.ts'],
   );
-  assertEquals(graph.reached, ['src/index.d.ts', 'src/internal/helper.d.ts']);
-  assertEquals(graph.missing, []);
+  expect(graph.reached).toEqual(['src/index.d.ts', 'src/internal/helper.d.ts']);
+  expect(graph.missing).toEqual([]);
   const escaped = graphOf(
     {
       'src/index.d.ts': "export * from '..\\\\..\\\\outside.js';\n",
     },
     ['src/index.d.ts'],
   );
-  assertEquals(escaped.escaped.length, 1);
+  expect(escaped.escaped.length).toEqual(1);
 });
 
-Deno.test('packageRootDeclarationIo reads a real extracted tree', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'declaration-closure-' });
+test('packageRootDeclarationIo reads a real extracted tree', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'declaration-closure-'));
   try {
-    await Deno.mkdir(`${root}/src`);
-    await Deno.writeTextFile(`${root}/src/index.d.ts`, 'export {};\n');
+    await mkdir(`${root}/src`);
+    await writeFile(`${root}/src/index.d.ts`, 'export {};\n');
     const files = packageRootDeclarationIo(root);
-    assertEquals(files.exists('src/index.d.ts'), true);
-    assertEquals(files.exists('src/missing.d.ts'), false);
-    assertEquals(files.read('src/index.d.ts'), 'export {};\n');
+    expect(files.exists('src/index.d.ts')).toEqual(true);
+    expect(files.exists('src/missing.d.ts')).toEqual(false);
+    expect(files.read('src/index.d.ts')).toEqual('export {};\n');
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });

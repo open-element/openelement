@@ -7,6 +7,7 @@
  * element imports) is not part of the fixture's dependency universe.
  */
 
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, toFileUrl } from '@std/path';
 
 /**
@@ -20,16 +21,21 @@ import { join, toFileUrl } from '@std/path';
 export function allPackageAliases(repoRoot: string): Map<string, string> {
   const entries: Array<[string, string]> = [];
 
-  for (const entry of Deno.readDirSync(join(repoRoot, 'packages'))) {
-    if (!entry.isDirectory) continue;
+  for (const entry of readdirSync(join(repoRoot, 'packages'), { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
     const pkgDir = join(repoRoot, 'packages', entry.name);
-    let denoJson: { name?: string; exports?: unknown };
+    // The B2 manifest conversion moved package truth to package.json; a
+    // member without one is not a package (never silently skipped).
+    let manifest: { name?: string; exports?: unknown };
     try {
-      denoJson = JSON.parse(Deno.readTextFileSync(join(pkgDir, 'deno.json')));
-    } catch {
-      continue;
+      manifest = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
+    } catch (error) {
+      throw new Error(
+        `package-aliases: ${join(pkgDir, 'package.json')} is missing or unparseable`,
+        { cause: error },
+      );
     }
-    const { name: packageName, exports: exportsField } = denoJson;
+    const { name: packageName, exports: exportsField } = manifest;
     if (!packageName) continue;
 
     if (typeof exportsField === 'string') {

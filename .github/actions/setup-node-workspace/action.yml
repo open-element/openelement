@@ -1,0 +1,34 @@
+name: Setup Node Workspace
+description: Install the Node toolchain and pnpm, restore workspace dependencies, and materialize node_modules.
+
+runs:
+  using: composite
+  steps:
+    # v4.4.0 — resolves the toolchain from .node-version (the repo's single
+    # toolchain pin since the B4 CI swap retired .dvmrc with the Deno host).
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version-file: .node-version
+    # pnpm owns dependency resolution and the task surface since the B2
+    # manifest conversion (single pnpm-lock.yaml) and the B4 CI swap.
+    - name: Install pnpm
+      shell: bash
+      run: npm install -g pnpm@12.8.1 # zizmor: ignore[adhoc-packages] — runner ships no preinstalled pnpm; corepack route awaits an ADR; exact pin integrity-verified over https against registry.npmjs.org
+    - name: Cache dependencies
+      # v4.3.0
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: node_modules
+        key: ${{ runner.os }}-pnpm-${{ hashFiles('.node-version') }}-${{ hashFiles('pnpm-lock.yaml') }}
+    - name: Install dependencies
+      shell: bash
+      run: |
+        pnpm install --frozen-lockfile
+        git diff --exit-code -- pnpm-lock.yaml
+    # The vp CLI (vite-plus, pinned root devDependency) is the unified task
+    # entry: workflow steps call `vp run ...` against package.json scripts.
+    # pnpm stays the package manager (dependency resolution is untouched);
+    # only the task entry moves.
+    - name: Expose workspace binaries to later steps
+      shell: bash
+      run: echo "$(pwd)/node_modules/.bin" >> "$GITHUB_PATH" # zizmor: ignore[github-env] — the value is a static literal path to this checkout's node_modules/.bin (no untrusted interpolation); this is how later steps resolve the vp CLI (vite-plus devDependency) that the converted workflow steps invoke.

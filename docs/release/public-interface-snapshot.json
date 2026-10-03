@@ -605,11 +605,10 @@
           "publicSymbols": []
         },
         "./install-command": {
-          "publicShapeSha256": "6d75f7e85b004a1a525b6dc25a206dcc4e27b1b4c1c3c25e76f6254ee3bde021",
+          "publicShapeSha256": "d07dc561bed50ed966620b3ff42d854133a15dd8cdbd9d83040194e18109e47d",
           "publicSymbols": [
-            "CREATE_INSTALL_PERMISSIONS=value:array(string)",
             "CREATE_INSTALL_TAG=value:\"alpha\"",
-            "CREATE_PACKAGE_SPECIFIER=value:\"npm:@openelement/create\"",
+            "CREATE_PACKAGE_SPECIFIER=value:\"@openelement/create\"",
             "CREATE_PROJECT_PLACEHOLDER=value:\"<project-name>\"",
             "createInstallCommand=value:{call:(projectName:string,options:{tag?:union(string|undefined)})=>string}"
           ]
@@ -621,6 +620,7 @@
       "exports": {
         ".": "./src/index.ts",
         "./instance-state": "./src/instance-state.ts",
+        "./manifest": "./src/manifest.ts",
         "./open-badge": "./src/open-badge.tsx",
         "./open-button": "./src/open-button.tsx",
         "./open-callout": "./src/open-callout.tsx",
@@ -660,6 +660,12 @@
           "publicSymbols": [
             "readInstanceState=value:{call:<T>(host:object,key:string,init:{call:()=>T})=>T}",
             "writeInstanceState=value:{call:(host:object,key:string,value:unknown)=>void}"
+          ]
+        },
+        "./manifest": {
+          "publicShapeSha256": "1b10e5c8f77b910a40a6631cff1128d7437eea941a152246e09d450aff685b37",
+          "publicSymbols": [
+            "manifest=value:OpenElementPackageManifest"
           ]
         },
         "./open-badge": {

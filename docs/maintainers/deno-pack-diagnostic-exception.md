@@ -43,7 +43,7 @@ All of the following still fail the pack closed (`tools/release/publish-npm.ts`)
 
 | Deno version | Verified where                                                                            | `deno pack` private-module warnings                              | Notes                                                                                                                                                                                                                      |
 | ------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2.9.0        | repo-locked `.dvmrc`; native pack proof + minimal repro in `.artifacts/deno-pack-repros/` | element 17, router 61, create 2, ui 2 (final 1.0.0-alpha.1 tree) | Counts are per exact candidate tree and have moved as modules were consolidated (element 18 -> 17 as private protocol modules were unified; router 60 -> 61); they are measured at every pack, never hardcoded in the gate |
+| 2.9.0        | repo-locked Deno floor (`.dvmrc` until the B4 retirement; now the transitional CI install); native pack proof + minimal repro in `.artifacts/deno-pack-repros/` | element 17, router 61, create 2, ui 2 (final 1.0.0-alpha.1 tree) | Counts are per exact candidate tree and have moved as modules were consolidated (element 18 -> 17 as private protocol modules were unified; router 60 -> 61); they are measured at every pack, never hardcoded in the gate |
 | 2.9.6        | upstream issue body (`denoland/deno#36829`, reported by the maintainer)                   | minimal repro only (1 warning)                                   | Not re-verified in this repository; do not widen the exception on this row alone                                                                                                                                           |
 
 First observed: during the `1.0.0-alpha.1` native-pack proof on the
@@ -66,17 +66,22 @@ re-measured.
    so an incomplete public type surface cannot pass them.
 
 The warning is produced for a private runtime module whose standalone
-declaration no consumer can import; `deno publish --dry-run` reports
-`Checking for slow types in the public API... Success` on the same sources.
+declaration no consumer can import; the retired Deno publisher's dry-run
+(`deno publish --dry-run`) reported
+`Checking for slow types in the public API... Success` on the same sources —
+historical evidence only: JSR was never a release channel (ADR-0108) and the
+deno pack/publish toolchain left with the A1 swap.
 The diagnostic is informational for private modules, but the release pipeline
 cannot distinguish informational from fatal without the closure proof — hence
 this exception is paired with the machine check, never used alone.
 
 ## Re-verification duties
 
-- After every Deno upgrade: run the native pack (`deno task --cwd tools/release
-  pack:native-check`) and the minimal repro in `.artifacts/deno-pack-repros/`
-  with the new exact version; append a row above with measured counts.
+- After every Deno upgrade: run the native pack dry-run and the minimal repro
+  in `.artifacts/deno-pack-repros/` with the new exact version; append a row
+  above with measured counts. (The `pack:native-check` gate task retired with
+  the B2 manifest conversion — no deno.json means no native deno pack surface;
+  the duty now falls to anyone deliberately reintroducing a deno.json.)
 - Any new warning shape fails the pipeline until this document adds it together
   with a closure-based argument for why it is private.
 - Unknown warnings always fail; there is no catch-all allowance.

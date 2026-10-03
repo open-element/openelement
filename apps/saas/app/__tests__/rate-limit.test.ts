@@ -1,7 +1,7 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { authRequestAllowed } from '../../lib/rate-limit.ts';
 
-Deno.test('auth rate limit uses the Cloudflare binding and client address', async () => {
+test('auth rate limit uses the Cloudflare binding and client address', async () => {
   let key = '';
   const allowed = await authRequestAllowed(
     {
@@ -15,15 +15,17 @@ Deno.test('auth rate limit uses the Cloudflare binding and client address', asyn
     new Request('https://app.test/login', { headers: { 'cf-connecting-ip': '192.0.2.1' } }),
     'login',
   );
-  assertEquals(allowed, false);
-  assertEquals(key, 'login:192.0.2.1');
+  expect(allowed).toEqual(false);
+  expect(key).toEqual('login:192.0.2.1');
 });
 
-Deno.test('local development has no fake process-local limiter', async () => {
-  assertEquals(await authRequestAllowed({}, new Request('http://localhost/login'), 'login'), true);
+test('local development has no fake process-local limiter', async () => {
+  expect(await authRequestAllowed({}, new Request('http://localhost/login'), 'login')).toEqual(
+    true,
+  );
 });
 
-Deno.test('production rate-limit binding errors fail closed', async () => {
+test('production rate-limit binding errors fail closed', async () => {
   const allowed = await authRequestAllowed(
     {
       AUTH_RATE_LIMITER: { limit: () => Promise.reject(new Error('provider detail')) },
@@ -31,5 +33,5 @@ Deno.test('production rate-limit binding errors fail closed', async () => {
     new Request('https://app.test/login'),
     'login',
   );
-  assertEquals(allowed, false);
+  expect(allowed).toEqual(false);
 });

@@ -1,7 +1,8 @@
-import { assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { testProgram } from './test-program.ts';
 
-Deno.test('fixed Parts validate every exact DOM sink', () => {
+test('fixed Parts validate every exact DOM sink', () => {
   const program = testProgram({
     tag: 'oe-fixed-parts',
     template: [
@@ -30,14 +31,19 @@ Deno.test('fixed Parts validate every exact DOM sink', () => {
     ],
   });
 
-  assertEquals(
-    program.parts.map((part) => part.k),
-    ['attr', 'prop', 'bool', 'class', 'style', 'event', 'ref'],
-  );
+  expect(program.parts.map((part) => part.k)).toEqual([
+    'attr',
+    'prop',
+    'bool',
+    'class',
+    'style',
+    'event',
+    'ref',
+  ]);
 });
 
-Deno.test('program validation rejects void elements with children', () => {
-  assertThrows(
+test('program validation rejects void elements with children', () => {
+  assertThrowsIncludes(
     () =>
       testProgram({
         tag: 'oe-invalid-void',

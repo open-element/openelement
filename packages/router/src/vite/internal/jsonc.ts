@@ -9,6 +9,7 @@
  * the packed tarball and force consumers onto the JSR registry bridge.
  */
 
+import { readFileSync } from 'node:fs';
 import { parse, type ParseError } from 'jsonc-parser';
 
 /**
@@ -31,7 +32,7 @@ export function parseJsonc(content: string): Record<string, unknown> | null {
 export function readJsonc(path: string): Record<string, unknown> | null {
   let content: string;
   try {
-    content = Deno.readTextFileSync(path);
+    content = readFileSync(path, 'utf8');
   } catch {
     return null;
   }

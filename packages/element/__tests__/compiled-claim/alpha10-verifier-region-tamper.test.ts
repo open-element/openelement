@@ -7,7 +7,8 @@
  * Both must fail closed at claim, while SSR/fresh stay byte-identical.
  */
 
-import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import {
   claimExistingDom,
   createFreshDom,
@@ -122,55 +123,55 @@ function eachSiblingProgram(): unknown {
   });
 }
 
-Deno.test('alpha10-verifier parity: claim fails closed when a static attr is REMOVED inside a when Region branch', () => {
+test('alpha10-verifier parity: claim fails closed when a static attr is REMOVED inside a when Region branch', () => {
   const program = whenSiblingProgram();
   const host = whenHost();
   const html = serializeServer(program, host);
   // SSR/fresh parity holds on the untampered payload.
-  assertEquals(serializeSeed(program, host), html);
+  expect(serializeSeed(program, host)).toEqual(html);
   const freshDoc = new TestDocument();
   const freshRoot = freshDoc.createElement('host');
   createFresh(program, host, freshRoot as unknown as Node).dispose();
-  assertEquals(freshRoot.innerHTML, html);
+  expect(freshRoot.innerHTML).toEqual(html);
 
   const doc = new TestDocument();
   const root = parseHtml(doc, html);
   const span = root.childNodes[2] as TestElement;
-  assertEquals(span.getAttribute('title'), 'static-on');
+  expect(span.getAttribute('title')).toEqual('static-on');
   span.removeAttribute('title'); // tamper: deletion, not value rewrite
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () => claimExisting(program, whenHost(), root as unknown as Node),
     PartProgramClaimError,
   );
-  assertStringIncludes(error.message, 'template[1].branch[0]');
+  expect(error.message).toContain('template[1].branch[0]');
 });
 
-Deno.test('alpha10-verifier parity: claim fails closed when an unexpected attr is INJECTED into an each Region item', () => {
+test('alpha10-verifier parity: claim fails closed when an unexpected attr is INJECTED into an each Region item', () => {
   const program = eachSiblingProgram();
   const host = eachHost();
   const html = serializeServer(program, host);
-  assertEquals(serializeSeed(program, host), html);
+  expect(serializeSeed(program, host)).toEqual(html);
   const freshDoc = new TestDocument();
   const freshRoot = freshDoc.createElement('host');
   createFresh(program, host, freshRoot as unknown as Node).dispose();
-  assertEquals(freshRoot.innerHTML, html);
+  expect(freshRoot.innerHTML).toEqual(html);
 
   const doc = new TestDocument();
   const root = parseHtml(doc, html);
   const li = root.childNodes[3] as TestElement; // second keyed item
   li.setAttribute('data-injected', 'evil'); // tamper: injection, not rewrite
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () => claimExisting(program, eachHost(), root as unknown as Node),
     PartProgramClaimError,
   );
-  assertStringIncludes(error.message, 'template[1].item');
+  expect(error.message).toContain('template[1].item');
 });
 
-Deno.test('alpha10-verifier parity: untampered SSR payload still claims with zero allocations (control)', () => {
+test('alpha10-verifier parity: untampered SSR payload still claims with zero allocations (control)', () => {
   const program = eachSiblingProgram();
   const doc = new TestDocument();
   const root = parseHtml(doc, serializeServer(program, eachHost()));
   const before = { ...doc.counts };
   claimExisting(program, eachHost(), root as unknown as Node).dispose();
-  assertEquals({ ...doc.counts }, before, 'a clean claim must allocate nothing');
+  expect({ ...doc.counts }, 'a clean claim must allocate nothing').toEqual(before);
 });

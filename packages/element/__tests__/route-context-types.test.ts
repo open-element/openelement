@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import type {
   ActionContext,
   LoaderContext,
@@ -36,6 +36,6 @@ function compileOnlyFixtures(
 }
 void compileOnlyFixtures;
 
-Deno.test('server route context compile-time fixtures (#615, #1110)', () => {
-  assertEquals(_serverFieldsAreExact, true);
+test('server route context compile-time fixtures (#615, #1110)', () => {
+  expect(_serverFieldsAreExact).toEqual(true);
 });

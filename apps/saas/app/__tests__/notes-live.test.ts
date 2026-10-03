@@ -9,7 +9,8 @@
  * pure logic lives in app/components/notes-live-shared.ts and the class is
  * compiled here through the real compiler before renderDsd.
  */
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { renderDsd } from '@openelement/element';
 import { compileComponentClass } from './compile-page.ts';
 import {
@@ -25,35 +26,37 @@ import {
   shouldRefreshAccessToken,
 } from '../components/notes-live-shared.ts';
 
-Deno.test('notes-live SSR render includes the status and event mount points', async () => {
+test('notes-live SSR render includes the status and event mount points', async () => {
   const NotesLive = await compileComponentClass('../islands/notes-live.tsx');
   const out = renderDsd('notes-live', { componentClass: NotesLive });
-  assertEquals(out.errors, []);
-  assert(out.html.includes("id='live-status'") || out.html.includes('id="live-status"'), out.html);
-  assert(out.html.includes('realtime:'), out.html);
-  assert(out.html.includes('live-events'), out.html);
-  assert(out.html.includes('Reconnect'), out.html);
+  expect(out.errors).toEqual([]);
+  expect(
+    out.html.includes("id='live-status'") || out.html.includes('id="live-status"'),
+    out.html,
+  ).toBeTruthy();
+  expect(out.html.includes('realtime:'), out.html).toBeTruthy();
+  expect(out.html.includes('live-events'), out.html).toBeTruthy();
+  expect(out.html.includes('Reconnect'), out.html).toBeTruthy();
 });
 
-Deno.test('notes-live deduplicates INSERT delivery by stable row id', () => {
+test('notes-live deduplicates INSERT delivery by stable row id', () => {
   const first = mergeLiveEvent([], { id: 'note-1', body: 'first' });
-  assertEquals(mergeLiveEvent(first, { id: 'note-1', body: 'duplicate payload' }), first);
-  assertEquals(
+  expect(mergeLiveEvent(first, { id: 'note-1', body: 'duplicate payload' })).toEqual(first);
+  expect(
     mergeLiveEvent(first, { id: 'note-2', body: 'same display body is allowed' }).length,
-    2,
-  );
+  ).toEqual(2);
 });
 
-Deno.test('notes-live retention is explicitly bounded', () => {
+test('notes-live retention is explicitly bounded', () => {
   let events: { id: string; body: string }[] = [];
   for (let index = 0; index < MAX_LIVE_EVENTS + 20; index++) {
     events = mergeLiveEvent(events, { id: String(index), body: String(index) });
   }
-  assertEquals(events.length, MAX_LIVE_EVENTS);
-  assertEquals(events[0].id, String(MAX_LIVE_EVENTS + 19));
+  expect(events.length).toEqual(MAX_LIVE_EVENTS);
+  expect(events[0].id).toEqual(String(MAX_LIVE_EVENTS + 19));
 });
 
-Deno.test('notes-live reconciliation repairs dropped events without duplicates', () => {
+test('notes-live reconciliation repairs dropped events without duplicates', () => {
   const live = [
     { id: 'note-3', body: 'delivered live' },
     { id: 'note-1', body: 'older live' },
@@ -63,7 +66,7 @@ Deno.test('notes-live reconciliation repairs dropped events without duplicates',
     { id: 'note-3', body: 'same durable row' },
     { id: 'note-2', body: 'missed before subscribe' },
   ];
-  assertEquals(mergeReconciledEvents(live, newestFirstSnapshot), [
+  expect(mergeReconciledEvents(live, newestFirstSnapshot)).toEqual([
     { id: 'note-4', body: 'missed during reconnect' },
     { id: 'note-3', body: 'delivered live' },
     { id: 'note-2', body: 'missed before subscribe' },
@@ -71,22 +74,13 @@ Deno.test('notes-live reconciliation repairs dropped events without duplicates',
   ]);
 });
 
-Deno.test('notes-live reconnect delay is exponential, jittered and capped', () => {
-  assertEquals(
-    reconnectDelayMs(0, () => 0.5),
-    500,
-  );
-  assertEquals(
-    reconnectDelayMs(3, () => 0.5),
-    4_000,
-  );
-  assertEquals(
-    reconnectDelayMs(99, () => 1),
-    MAX_RECONNECT_DELAY_MS,
-  );
+test('notes-live reconnect delay is exponential, jittered and capped', () => {
+  expect(reconnectDelayMs(0, () => 0.5)).toEqual(500);
+  expect(reconnectDelayMs(3, () => 0.5)).toEqual(4_000);
+  expect(reconnectDelayMs(99, () => 1)).toEqual(MAX_RECONNECT_DELAY_MS);
 });
 
-Deno.test('notes-live erases the SSR token only after handing it to Realtime', () => {
+test('notes-live erases the SSR token only after handing it to Realtime', () => {
   const calls: string[] = [];
   const removed: string[] = [];
   const client = {
@@ -97,28 +91,28 @@ Deno.test('notes-live erases the SSR token only after handing it to Realtime', (
   };
   const host = { removeAttribute: (name: string) => removed.push(name) };
 
-  assertEquals(handoffRealtimeAuth(client, host, 'signed-user-jwt'), true);
-  assertEquals(calls, ['signed-user-jwt']);
-  assertEquals(removed, ['livetoken']);
+  expect(handoffRealtimeAuth(client, host, 'signed-user-jwt')).toEqual(true);
+  expect(calls).toEqual(['signed-user-jwt']);
+  expect(removed).toEqual(['livetoken']);
 
-  assertEquals(handoffRealtimeAuth(null, host, 'not-yet-consumed'), false);
-  assertEquals(removed, ['livetoken']);
+  expect(handoffRealtimeAuth(null, host, 'not-yet-consumed')).toEqual(false);
+  expect(removed).toEqual(['livetoken']);
 });
 
-Deno.test('notes-live retains the user JWT for clients created after reconnect', () => {
-  assertEquals(resolveRealtimeAuthToken('fresh-jwt', null), 'fresh-jwt');
-  assertEquals(resolveRealtimeAuthToken(null, 'private-memory-jwt'), 'private-memory-jwt');
-  assertEquals(resolveRealtimeAuthToken(null, null), null);
+test('notes-live retains the user JWT for clients created after reconnect', () => {
+  expect(resolveRealtimeAuthToken('fresh-jwt', null)).toEqual('fresh-jwt');
+  expect(resolveRealtimeAuthToken(null, 'private-memory-jwt')).toEqual('private-memory-jwt');
+  expect(resolveRealtimeAuthToken(null, null)).toEqual(null);
 });
 
-Deno.test('notes-live refreshes only expired or near-expiry access tokens', () => {
+test('notes-live refreshes only expired or near-expiry access tokens', () => {
   const now = 1_700_000_000_000;
-  assertEquals(shouldRefreshAccessToken(null, now), true);
-  assertEquals(shouldRefreshAccessToken(now / 1_000 + 30, now), true);
-  assertEquals(shouldRefreshAccessToken(now / 1_000 + 120, now), false);
+  expect(shouldRefreshAccessToken(null, now)).toEqual(true);
+  expect(shouldRefreshAccessToken(now / 1_000 + 30, now)).toEqual(true);
+  expect(shouldRefreshAccessToken(now / 1_000 + 120, now)).toEqual(false);
 });
 
-Deno.test('notes-live renews through the same-origin cookie endpoint', async () => {
+test('notes-live renews through the same-origin cookie endpoint', async () => {
   let input: string | URL | Request = '';
   let init: RequestInit | undefined;
   const fresh = await requestNotesAccessToken((candidate, options) => {
@@ -126,19 +120,19 @@ Deno.test('notes-live renews through the same-origin cookie endpoint', async () 
     init = options;
     return Promise.resolve(Response.json({ accessToken: 'fresh-jwt', expiresAt: 2_000_000_000 }));
   });
-  assertEquals(input, '/api/session-token');
-  assertEquals(init?.method, 'POST');
-  assertEquals(init?.credentials, 'same-origin');
-  assertEquals(init?.cache, 'no-store');
-  assertEquals(fresh, { accessToken: 'fresh-jwt', expiresAt: 2_000_000_000 });
-  await assertRejects(() =>
+  expect(input).toEqual('/api/session-token');
+  expect(init?.method).toEqual('POST');
+  expect(init?.credentials).toEqual('same-origin');
+  expect(init?.cache).toEqual('no-store');
+  expect(fresh).toEqual({ accessToken: 'fresh-jwt', expiresAt: 2_000_000_000 });
+  await assertRejectsIncludes(() =>
     requestNotesAccessToken(() =>
       Promise.resolve(Response.json({ accessToken: 'fresh-jwt' }, { status: 401 })),
     ),
   );
 });
 
-Deno.test('notes-live snapshot sends the bounded RLS query and skips refresh on 200', async () => {
+test('notes-live snapshot sends the bounded RLS query and skips refresh on 200', async () => {
   const calls: { url: string; init: RequestInit | undefined }[] = [];
   let refreshed = 0;
   let handedOff = 0;
@@ -164,25 +158,24 @@ Deno.test('notes-live snapshot sends the bounded RLS query and skips refresh on 
       );
     },
   });
-  assertEquals(calls.length, 1);
+  expect(calls.length).toEqual(1);
   const endpoint = new URL(calls[0].url);
-  assertEquals(
-    `${endpoint.origin}${endpoint.pathname}`,
+  expect(`${endpoint.origin}${endpoint.pathname}`).toEqual(
     'https://project.supabase.co/rest/v1/notes',
   );
-  assertEquals(endpoint.searchParams.get('select'), 'id,body,created_at');
-  assertEquals(endpoint.searchParams.get('user_id'), 'eq.user-1');
-  assertEquals(endpoint.searchParams.get('order'), 'created_at.desc,id.desc');
-  assertEquals(endpoint.searchParams.get('limit'), String(MAX_LIVE_EVENTS));
-  assertEquals(calls[0].init?.cache, 'no-store');
+  expect(endpoint.searchParams.get('select')).toEqual('id,body,created_at');
+  expect(endpoint.searchParams.get('user_id')).toEqual('eq.user-1');
+  expect(endpoint.searchParams.get('order')).toEqual('created_at.desc,id.desc');
+  expect(endpoint.searchParams.get('limit')).toEqual(String(MAX_LIVE_EVENTS));
+  expect(calls[0].init?.cache).toEqual('no-store');
   const headers = calls[0].init?.headers as Record<string, string>;
-  assertEquals(headers.apikey, 'anon-key');
-  assertEquals(headers.authorization, 'Bearer token-1');
-  assertEquals(snapshot, [{ id: 'note-1', body: 'kept', createdAt: '2026-01-01T00:00:00Z' }]);
-  assertEquals({ refreshed, handedOff }, { refreshed: 0, handedOff: 0 });
+  expect(headers.apikey).toEqual('anon-key');
+  expect(headers.authorization).toEqual('Bearer token-1');
+  expect(snapshot).toEqual([{ id: 'note-1', body: 'kept', createdAt: '2026-01-01T00:00:00Z' }]);
+  expect({ refreshed, handedOff }).toEqual({ refreshed: 0, handedOff: 0 });
 });
 
-Deno.test('notes-live snapshot refreshes once on 401 and retries with the fresh token', async () => {
+test('notes-live snapshot refreshes once on 401 and retries with the fresh token', async () => {
   const order: string[] = [];
   let refreshed = 0;
   const snapshot = await fetchNotesSnapshot({
@@ -208,20 +201,20 @@ Deno.test('notes-live snapshot refreshes once on 401 and retries with the fresh 
       );
     },
   });
-  assertEquals(order, [
+  expect(order).toEqual([
     'fetch:Bearer stale-token',
     'refresh',
     'setAuth:fresh-token',
     'fetch:Bearer fresh-token',
   ]);
-  assertEquals(refreshed, 1);
-  assertEquals(snapshot, [{ id: 'n1', body: 'b', createdAt: 'c' }]);
+  expect(refreshed).toEqual(1);
+  expect(snapshot).toEqual([{ id: 'n1', body: 'b', createdAt: 'c' }]);
 });
 
-Deno.test('notes-live snapshot fails closed when the 401 retry also fails', async () => {
+test('notes-live snapshot fails closed when the 401 retry also fails', async () => {
   let fetches = 0;
   let refreshed = 0;
-  const error = await assertRejects(
+  const error = await assertRejectsIncludes(
     () =>
       fetchNotesSnapshot({
         url: 'https://project.supabase.co',
@@ -240,16 +233,16 @@ Deno.test('notes-live snapshot fails closed when the 401 retry also fails', asyn
       }),
     Error,
   );
-  assertEquals(error.message, 'Notes reconciliation failed with HTTP 401');
-  assertEquals({ fetches, refreshed }, { fetches: 2, refreshed: 1 });
+  expect(error.message).toEqual('Notes reconciliation failed with HTTP 401');
+  expect({ fetches, refreshed }).toEqual({ fetches: 2, refreshed: 1 });
 });
 
-Deno.test('notes-live snapshot fails closed when the 401 refresh itself fails', async () => {
+test('notes-live snapshot fails closed when the 401 refresh itself fails', async () => {
   const firstTry401 = () =>
     Promise.resolve(Response.json({ message: 'jwt expired' }, { status: 401 }));
 
   let rejectedFetches = 0;
-  const rejected = await assertRejects(
+  const rejected = await assertRejectsIncludes(
     () =>
       fetchNotesSnapshot({
         url: 'https://project.supabase.co',
@@ -265,12 +258,12 @@ Deno.test('notes-live snapshot fails closed when the 401 refresh itself fails', 
       }),
     Error,
   );
-  assertEquals(rejected.message, 'Session renewal failed (401)');
-  assertEquals(rejectedFetches, 1);
+  expect(rejected.message).toEqual('Session renewal failed (401)');
+  expect(rejectedFetches).toEqual(1);
 
   let nullFetches = 0;
   let nullHandoff = 0;
-  const nullRefresh = await assertRejects(
+  const nullRefresh = await assertRejectsIncludes(
     () =>
       fetchNotesSnapshot({
         url: 'https://project.supabase.co',
@@ -288,14 +281,14 @@ Deno.test('notes-live snapshot fails closed when the 401 refresh itself fails', 
       }),
     Error,
   );
-  assertEquals(nullRefresh.message, 'Notes session renewal failed');
-  assertEquals({ nullFetches, nullHandoff }, { nullFetches: 1, nullHandoff: 0 });
+  expect(nullRefresh.message).toEqual('Notes session renewal failed');
+  expect({ nullFetches, nullHandoff }).toEqual({ nullFetches: 1, nullHandoff: 0 });
 });
 
-Deno.test('notes-live snapshot neither refreshes nor retries on non-401 failures', async () => {
+test('notes-live snapshot neither refreshes nor retries on non-401 failures', async () => {
   let fetches = 0;
   let refreshed = 0;
-  const error = await assertRejects(
+  const error = await assertRejectsIncludes(
     () =>
       fetchNotesSnapshot({
         url: 'https://project.supabase.co',
@@ -313,12 +306,12 @@ Deno.test('notes-live snapshot neither refreshes nor retries on non-401 failures
       }),
     Error,
   );
-  assertEquals(error.message, 'Notes reconciliation failed with HTTP 500');
-  assertEquals({ fetches, refreshed }, { fetches: 1, refreshed: 0 });
+  expect(error.message).toEqual('Notes reconciliation failed with HTTP 500');
+  expect({ fetches, refreshed }).toEqual({ fetches: 1, refreshed: 0 });
 });
 
-Deno.test('notes-live snapshot rejects a non-array payload', async () => {
-  await assertRejects(
+test('notes-live snapshot rejects a non-array payload', async () => {
+  await assertRejectsIncludes(
     () =>
       fetchNotesSnapshot({
         url: 'https://project.supabase.co',

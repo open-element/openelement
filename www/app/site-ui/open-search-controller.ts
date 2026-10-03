@@ -1,5 +1,5 @@
 /** Browser-only behavior used by the open-search island. */
-import { stripLocalePrefix } from '@openelement/site-ui/link.ts';
+import { stripLocalePrefix } from '#site-ui/link.ts';
 import type { SiteLocale } from '../../site-config.ts';
 import { searchChromeStrings } from './chrome-strings.ts';
 

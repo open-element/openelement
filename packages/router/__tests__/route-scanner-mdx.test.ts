@@ -6,26 +6,28 @@
  * Phase 3 SSR build both carry mdxPlugin. These tests pin discovery; the
  * end-to-end render path is covered by static-only-build.test.ts.
  */
-import { assertEquals } from '@std/assert';
-import { join } from 'jsr:@std/path@^1.0.0';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
+import { join } from '@std/path';
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 
-Deno.test('scanRoutes discovers .mdx page routes (#954)', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'oe-scan-mdx-' });
+test('scanRoutes discovers .mdx page routes (#954)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'oe-scan-mdx-'));
   try {
     const routesDir = join(dir, 'routes');
-    await Deno.mkdir(join(routesDir, 'docs'), { recursive: true });
-    await Deno.writeTextFile(join(routesDir, 'index.tsx'), `export default null;\n`);
-    await Deno.writeTextFile(join(routesDir, 'guide.mdx'), `# Guide\n`);
-    await Deno.writeTextFile(join(routesDir, 'docs', 'deep.mdx'), `# Deep\n`);
+    await mkdir(join(routesDir, 'docs'), { recursive: true });
+    await writeFile(join(routesDir, 'index.tsx'), `export default null;\n`);
+    await writeFile(join(routesDir, 'guide.mdx'), `# Guide\n`);
+    await writeFile(join(routesDir, 'docs', 'deep.mdx'), `# Deep\n`);
 
     const entries = await scanRoutes(routesDir);
     const paths = entries.map((entry) => entry.path);
-    assertEquals(paths, ['/', '/docs/deep', '/guide']);
+    expect(paths).toEqual(['/', '/docs/deep', '/guide']);
     const mdx = entries.find((entry) => entry.path === '/guide');
-    assertEquals(mdx?.type, 'page');
-    assertEquals(mdx?.filePath, 'guide.mdx');
+    expect(mdx?.type).toEqual('page');
+    expect(mdx?.filePath).toEqual('guide.mdx');
   } finally {
-    await Deno.remove(dir, { recursive: true }).catch(() => {});
+    await rm(dir, { recursive: true }).catch(() => {});
   }
 });

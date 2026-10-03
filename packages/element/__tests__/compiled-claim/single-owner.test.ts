@@ -6,15 +6,17 @@
  * each have exactly one definition across packages/element/src — no parallel
  * or "backup" engine may exist.
  */
-import { assertEquals } from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
+import { readdirSync } from 'node:fs';
 
 const SRC_ROOT = new URL('../../src/', import.meta.url);
 
 async function sourceFiles(dir: URL): Promise<URL[]> {
   const out: URL[] = [];
-  for await (const entry of Deno.readDir(dir)) {
-    const child = new URL(`${entry.name}${entry.isDirectory ? '/' : ''}`, dir);
-    if (entry.isDirectory) out.push(...(await sourceFiles(child)));
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
+    if (entry.isDirectory()) out.push(...(await sourceFiles(child)));
     else if (entry.name.endsWith('.ts')) out.push(child);
   }
   return out;
@@ -35,12 +37,12 @@ const DEFINITION_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   },
 ];
 
-Deno.test('exactly one canonical claim executor exists across packages/element/src', async () => {
+test('exactly one canonical claim executor exists across packages/element/src', async () => {
   const files = await sourceFiles(SRC_ROOT);
   const sources = await Promise.all(
     files.map(async (file) => ({
       file: file.pathname,
-      text: await Deno.readTextFile(file),
+      text: await readFile(file, 'utf8'),
     })),
   );
   for (const { label, pattern } of DEFINITION_PATTERNS) {
@@ -50,10 +52,9 @@ Deno.test('exactly one canonical claim executor exists across packages/element/s
         return pattern.test(text);
       })
       .map(({ file }) => file);
-    assertEquals(
+    expect(
       owners.length,
-      1,
       `${label} must have exactly one owner, found: ${owners.join(', ') || '(none)'}`,
-    );
+    ).toEqual(1);
   }
 });

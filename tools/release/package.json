@@ -1,0 +1,32 @@
+{
+  "name": "@openelement/tools-release",
+  "private": true,
+  "version": "1.0.0-alpha.7",
+  "type": "module",
+  "//": "The release toolchain is node-hosted end to end (owner ruling 2026-10-03): scripts enter through node with type stripping, no Deno host required.",
+  "scripts": {
+    "pack": "node ../repo/run-in.ts --root ../.. -- node tools/release/publish-npm.ts pack",
+    "pack:dry-run": "node ../repo/run-in.ts --root ../.. -- node tools/release/publish-npm.ts pack:dry-run",
+    "package-artifacts:check": "node ../repo/run-in.ts --root ../.. -- node tools/release/check-package-artifacts.ts",
+    "package-artifacts:check:prepacked": "node ../repo/run-in.ts --root ../.. -- node tools/release/check-package-artifacts.ts --prepacked",
+    "pack-surface:check": "node ../repo/run-in.ts --root ../.. -- node tools/release/pack-surface.ts",
+    "publish:npm": "node ../repo/run-in.ts --root ../.. -- node tools/release/publish-npm.ts publish:npm",
+    "publish:npm:dry-run": "node ../repo/run-in.ts --root ../.. -- node tools/release/publish-npm.ts publish:npm:dry-run",
+    "consumer:packaged": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-starter.ts",
+    "consumer:packaged-element": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-element.ts",
+    "consumer:packaged-router": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-router.ts",
+    "consumer:packaged-ui": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-ui.ts",
+    "graph:check": "node ../repo/run-in.ts --root ../.. -- node tools/release/check-package-graph.ts",
+    "consumer:packaged-app": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-native.ts && node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-lit.ts",
+    "gate:packed": "node ../repo/gate.ts tools/repo#generate:all tools/release#typecheck tools/release#pack:dry-run tools/release#package-artifacts:check:prepacked tools/release#pack-surface:check tools/release#consumer:packaged tools/release#consumer:packaged-app tools/release#consumer:packaged-router tools/release#consumer:packaged-element tools/release#consumer:packaged-ui tests/fixtures/third-party-web-components#smoke",
+    "typecheck": "node ../repo/run-in.ts --root ../.. -- tsc --noEmit -p tools/tsconfig.json"
+  },
+  "devDependencies": {
+    "@std/assert": "jsr:^1.0.0",
+    "@std/cli": "jsr:^1.0.0",
+    "@std/fs": "jsr:^1.0.0",
+    "@std/path": "jsr:^1.0.0",
+    "@types/node": "26.5.0",
+    "typescript": "6.0.3"
+  }
+}

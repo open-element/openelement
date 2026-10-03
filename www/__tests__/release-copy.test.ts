@@ -4,7 +4,7 @@
  * no 0.43.x). The offline release-state checker also enforces this against
  * docs/release/release-state.json; this test keeps the shipped copy honest.
  */
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { SOURCE_LINE_PUBLISHED } from '../app/data/_generated-release-line.ts';
 import {
   COMMON_PUBLISHED_NOTE,
@@ -13,44 +13,45 @@ import {
   PUBLISHED_LATEST,
   REGISTRY_NOTE,
 } from '../app/data/version.ts';
+import { readFile } from 'node:fs/promises';
 
 const APP_ROOT = new URL('../app/', import.meta.url);
 
-Deno.test('release copy: there is no common complete version', () => {
-  assertEquals(COMMON_PUBLISHED_VERSION, null);
-  assertEquals(COMMON_PUBLISHED_NOTE('en').includes('no single stable version'), true);
-  assertEquals(COMMON_PUBLISHED_NOTE('zh').includes('稳定版本'), true);
-  assertEquals(PUBLISHED_LATEST['@openelement/router'], 'v0.41.0-alpha.6');
-  assertEquals(PUBLISHED_LATEST['@openelement/element'], 'v0.43.3');
+test('release copy: there is no common complete version', () => {
+  expect(COMMON_PUBLISHED_VERSION).toEqual(null);
+  expect(COMMON_PUBLISHED_NOTE('en').includes('no single stable version')).toEqual(true);
+  expect(COMMON_PUBLISHED_NOTE('zh').includes('稳定版本')).toEqual(true);
+  expect(PUBLISHED_LATEST['@openelement/router']).toEqual('v0.41.0-alpha.6');
+  expect(PUBLISHED_LATEST['@openelement/element']).toEqual('v0.43.3');
 });
 
-Deno.test('release copy: registry note is per package', () => {
+test('release copy: registry note is per package', () => {
   for (const [name, version] of Object.entries(PUBLISHED_LATEST)) {
-    assert(
+    expect(
       REGISTRY_NOTE.includes(`${name.replace('@openelement/', '')} ${version}`),
       `REGISTRY_NOTE must name ${name} ${version}`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('release copy: roadmap publish-state derives from release-state truth', () => {
+test('release copy: roadmap publish-state derives from release-state truth', () => {
   // The roadmap alpha-train status is derived from the generated
   // release-state fact, never hand-written in the route (see the
   // check:content-data drift guard in generate-site-content-data.ts).
   const en = prereleasePublishStatus('en');
   const zh = prereleasePublishStatus('zh');
   if (SOURCE_LINE_PUBLISHED) {
-    assert(!en.includes('not yet on npm'), `stale unpublished copy: ${en}`);
-    assert(!zh.includes('尚未发布到 npm'), `stale unpublished copy: ${zh}`);
-    assert(en.includes('@alpha'), `published copy must name the dist-tag: ${en}`);
-    assert(zh.includes('@alpha'), `published copy must name the dist-tag: ${zh}`);
+    expect(!en.includes('not yet on npm'), `stale unpublished copy: ${en}`).toBeTruthy();
+    expect(!zh.includes('尚未发布到 npm'), `stale unpublished copy: ${zh}`).toBeTruthy();
+    expect(en.includes('@alpha'), `published copy must name the dist-tag: ${en}`).toBeTruthy();
+    expect(zh.includes('@alpha'), `published copy must name the dist-tag: ${zh}`).toBeTruthy();
   } else {
-    assert(en.includes('not yet on npm'), `unpublished copy expected: ${en}`);
-    assert(zh.includes('尚未发布到 npm'), `unpublished copy expected: ${zh}`);
+    expect(en.includes('not yet on npm'), `unpublished copy expected: ${en}`).toBeTruthy();
+    expect(zh.includes('尚未发布到 npm'), `unpublished copy expected: ${zh}`).toBeTruthy();
   }
 });
 
-Deno.test('release copy: Site sources do not claim a four-package version', async () => {
+test('release copy: Site sources do not claim a four-package version', async () => {
   const files = [
     'data/version.ts',
     'routes/changelog.tsx',
@@ -60,14 +61,14 @@ Deno.test('release copy: Site sources do not claim a four-package version', asyn
     'components/page-changelog.tsx',
   ];
   for (const file of files) {
-    const source = await Deno.readTextFile(new URL(file, APP_ROOT));
-    assert(
+    const source = await readFile(new URL(file, APP_ROOT), 'utf8');
+    expect(
       !/published for all four packages is/iu.test(source),
       `${file}: reintroduced a four-package published-version claim`,
-    );
-    assert(
+    ).toBeTruthy();
+    expect(
       !/cumulative maintenance baseline/iu.test(source),
       `${file}: reintroduced the four-package cumulative baseline claim`,
-    );
+    ).toBeTruthy();
   }
 });

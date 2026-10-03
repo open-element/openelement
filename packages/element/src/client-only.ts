@@ -5,7 +5,8 @@
  * compiled claim executor: a bundle built from this entry carries no
  * claim-time validation, no recovery builders, and no structure walker at
  * all. For a page where no island can hydrate server DOM, that is ~9 KB of
- * bundle that could never have run — measured on the JFB keyed-table harness
+ * bundle that could never have run — measured on the upstream
+ * js-framework-benchmark keyed-table harness
  * (77,639 B full graph → 68,203 B from this entry).
  *
  * Use it when — and only when — every island the page can upgrade is

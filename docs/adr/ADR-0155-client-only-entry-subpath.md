@@ -200,8 +200,11 @@ cleanup; see ADR-0154 and the P5 clause on compatibility living only at
 deployment boundaries). If the condition is met and the deletion is deferred,
 that deferral is itself an ADR-level decision, not a maintenance default.
 
-The jfb harness's hand-written alias is not part of the retirement surface: it
+The JFB harness's hand-written alias is not part of the retirement surface: it
 is a sandbox config, and reverting one alias line is the whole cost there.
+(Update 2026-10-03: the entire in-repo JFB benchmark surface was removed by
+owner ruling — the upstream benchmark lane lives on the fork — so the alias,
+like the harness, no longer exists in this repository.)
 
 ## Verification
 

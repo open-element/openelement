@@ -14,7 +14,7 @@
  * covered directly instead: every generated searchRecord anchor must exist as
  * an id in the built /reference documents (both locales) below.
  */
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { fromFileUrl, join } from '@std/path';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../site-config.ts';
 import { normalize as posixNormalize } from '@std/path/posix';
@@ -30,6 +30,8 @@ import {
 import { apiReference } from '../app/data/_generated-api-reference.ts';
 import { stripHtmlToText } from '../app/site-ui/article-body.ts';
 import { currentContentTitles, retiredContentTitles } from './lib/site-retired.ts';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 
 export const SITE_DIST = 'www/dist';
 
@@ -48,7 +50,7 @@ export async function checkBuiltLinks(dist = join(repoRoot, SITE_DIST)): Promise
   const readHtml = async (file: string): Promise<string> => {
     const cached = htmlCache.get(file);
     if (cached !== undefined) return cached;
-    const text = await Deno.readTextFile(join(dist, file));
+    const text = await readFile(join(dist, file), 'utf8');
     htmlCache.set(file, text);
     return text;
   };
@@ -89,7 +91,7 @@ export async function checkBuiltLinks(dist = join(repoRoot, SITE_DIST)): Promise
 
   // Sitemap URLs must resolve to built pages.
   if (exists('sitemap.xml')) {
-    const sitemap = await Deno.readTextFile(join(dist, 'sitemap.xml'));
+    const sitemap = await readFile(join(dist, 'sitemap.xml'), 'utf8');
     for (const match of sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)) {
       const url = match[1];
       const path = new URL(url).pathname;
@@ -109,7 +111,7 @@ export async function checkBuiltLinks(dist = join(repoRoot, SITE_DIST)): Promise
   // and any #fragment must anchor there — a redirect to a 404 is a second
   // broken link wearing a 301.
   if (exists('_redirects')) {
-    const redirects = await Deno.readTextFile(join(dist, '_redirects'));
+    const redirects = await readFile(join(dist, '_redirects'), 'utf8');
     for (const [index, line] of redirects.split('\n').entries()) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
@@ -202,7 +204,7 @@ if (import.meta.main) {
     for (const failure of failures) {
       console.error(`- ${failure.file}: ${failure.message}`);
     }
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(`Built-output link check passed (${SITE_DIST}).`);
 }

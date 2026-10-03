@@ -7,9 +7,9 @@
  * e2e/server.ts.
  *
  * Prerequisites:
- *   deno task fixture:ui-dogfood:build
+ *   pnpm --dir tests/fixtures/router-ui-dogfood run build
  *
- * Run: deno task fixture:ui-dogfood:e2e
+ * Run: pnpm --dir tests/fixtures/router-ui-dogfood run e2e
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';
@@ -39,7 +39,7 @@ export default defineConfig({
   webServer: {
     // `exec` prevents the shell Playwright launches from orphaning Deno when
     // the suite finishes or is interrupted.
-    command: `exec deno run --config ../../../../deno.json --allow-read --allow-env --allow-net server.ts --port ${PORT} --dir ../dist`,
+    command: `exec node server.ts --port ${PORT} --dir ../dist`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 60_000,

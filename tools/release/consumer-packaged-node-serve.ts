@@ -2,27 +2,28 @@
  * Packed server-serve qualification (1.0.0-alpha.1 admission, Stage 5): prove
  * the PACKED @openelement/router + @openelement/element tarballs — never the
  * workspace source — build a minimal app and serve it under a plain
- * production runtime. Usage: `deno run ... consumer-packaged-node-serve.ts
+ * production runtime. Usage: `node tools/release/consumer-packaged-node-serve.ts
  * <node|bun>`. The runtime binary must be on PATH (CI provides it per job);
- * the app builds on the Deno-driven toolchain and serves its Nitro output
+ * the app builds on the node-hosted toolchain and serves its Nitro output
  * under the target runtime.
  *
  * Cells: install (empty npm cache, explicit timeouts) -> boundary (no dep
- * resolves into the repository) -> build (packed /vite buildApp on the
- * supported Deno-driven toolchain) -> serve (build the Nitro server output
- * from the packed app and boot it under the target runtime, probe the
- * static home and one request-time dynamic route over HTTP).
+ * resolves into the repository) -> build (packed /vite buildApp) -> serve
+ * (build the Nitro server output from the packed app and boot it under the
+ * target runtime, probe the static home and one request-time dynamic route
+ * over HTTP).
  *
- * The build deliberately does NOT run under plain node: packed first-party
- * build modules use the Deno API where the Web platform offers no
- * filesystem/process capability (per the Alpha platform doctrine), and the
- * supported build toolchain is Deno-driven (`deno run npm:vite`,
- * `deno run <router>/cli/build`). The deploy target runs the Nitro output:
- * local preview is served by cli/start (Deno.serve from TypeScript source),
- * so plain node (or bun) boots the Nitro server entry built from the packed
- * app via the packed @openelement/router/nitro-mount.
+ * The deploy target runs the Nitro output: local preview is served by
+ * cli/start, so plain node (or bun) boots the Nitro server entry built from
+ * the packed app via the packed @openelement/router/nitro-mount.
  */
-import { copy, existsSync } from '@std/fs';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { commandOutput } from '../repo/node-command.ts';
+import { cp, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+
 import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
@@ -34,7 +35,7 @@ const INSTALL_TIMEOUT_MS = 10 * 60_000;
 const BUILD_TIMEOUT_MS = 10 * 60_000;
 const SERVER_READY_TIMEOUT_MS = 60_000;
 
-const runtime = Deno.args[0];
+const runtime = process.argv[2];
 if (runtime !== 'node' && runtime !== 'bun') {
   throw new Error('usage: consumer-packaged-node-serve.ts <node|bun>');
 }
@@ -56,14 +57,14 @@ async function run(
           controller.abort();
         }, timeoutMs);
   try {
-    const result = await new Deno.Command(command, {
+    const result = await commandOutput(command, {
       args,
       cwd,
       env,
       stdout: 'piped',
       stderr: 'piped',
       ...(timeoutMs === undefined ? {} : { signal: controller.signal }),
-    }).output();
+    });
     const decoder = new TextDecoder();
     const output = decoder.decode(result.stdout) + decoder.decode(result.stderr);
     if (timedOut) {
@@ -93,32 +94,17 @@ const elementTarball = join(
 for (const tarball of [routerTarball, elementTarball]) {
   if (!existsSync(tarball)) {
     throw new Error(
-      `Missing packed release artifact: ${tarball} (run \`deno task pack:dry-run\` first)`,
+      `Missing packed release artifact: ${tarball} (run \`pnpm --dir tools/release run pack:dry-run\` first)`,
     );
   }
 }
 
-const tmp = await Deno.makeTempDir({ prefix: `openelement-packed-serve-${runtime}-` });
-let server: Deno.ChildProcess | undefined;
+const tmp = await mkdtemp(join(tmpdir(), `openelement-packed-serve-${runtime}-`));
+let server: import('node:child_process').ChildProcess | undefined;
 try {
-  // Deno-driven build contract (same shape as the packed-app legs): the
-  // unpublished @openelement/* pins resolve into the pre-laid node_modules
-  // tree instead of the registry.
-  Deno.writeTextFileSync(
-    join(tmp, 'deno.json'),
-    formatJson({
-      imports: {
-        '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
-        '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
-        '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
-        hono: 'npm:hono@4.12.0',
-        vite: `npm:vite@${VITE_DEV_PIN}`,
-      },
-      nodeModulesDir: 'manual',
-      minimumDependencyAge: 0,
-    }),
-  );
-  Deno.writeTextFileSync(
+  // The unpublished @openelement/* file: pins resolve into the installed
+  // node_modules tree instead of the registry.
+  writeFileSync(
     join(tmp, 'package.json'),
     formatJson({
       name: `openelement-packed-serve-consumer-${runtime}`,
@@ -147,7 +133,7 @@ try {
   console.log(`PASS packed-serve-${runtime} install — tarballs installed under an empty npm cache`);
 
   for (const name of ['@openelement/router', '@openelement/element', 'vite', 'hono']) {
-    const resolved = await Deno.realPath(join(tmp, 'node_modules', ...name.split('/')));
+    const resolved = await realpath(join(tmp, 'node_modules', ...name.split('/')));
     if (resolved === repoRoot || resolved.startsWith(`${repoRoot}/`)) {
       throw new Error(`Packed serve consumer resolved ${name} into the repository: ${resolved}`);
     }
@@ -252,30 +238,13 @@ export default class PackedLive extends OpenElement {
   };
   for (const [path, content] of Object.entries(files)) {
     const target = join(tmp, path);
-    Deno.mkdirSync(join(tmp, path.split('/').slice(0, -1).join('/')), { recursive: true });
-    Deno.writeTextFileSync(target, content);
+    mkdirSync(join(tmp, path.split('/').slice(0, -1).join('/')), { recursive: true });
+    writeFileSync(target, content);
   }
 
-  // build.mjs drives the packed router vite build (Rolldown native binding):
-  // scoped build-host permissions with prompts off.
-  const build = await run(
-    Deno.execPath(),
-    [
-      'run',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--allow-run',
-      '--allow-sys',
-      '--allow-ffi',
-      '--no-prompt',
-      'build.mjs',
-    ],
-    tmp,
-    {},
-    BUILD_TIMEOUT_MS,
-  );
+  // build.mjs drives the packed router vite build (Rolldown native binding)
+  // on the plain node host.
+  const build = await run(process.execPath, ['build.mjs'], tmp, {}, BUILD_TIMEOUT_MS);
   if (!build.success) throw new Error(`Packed serve build failed:\n${build.output}`);
   for (const artifact of ['dist/server/index.js', 'dist/index.html']) {
     if (!existsSync(join(tmp, artifact))) {
@@ -286,33 +255,23 @@ export default class PackedLive extends OpenElement {
 
   // Publish the prerendered tree for Nitro's static layer. dist/server/*
   // is server code, not a public asset, so it stays out of nitro-public/.
-  Deno.mkdirSync(join(tmp, 'nitro-public'), { recursive: true });
-  for (const entry of Deno.readDirSync(join(tmp, 'dist'))) {
+  mkdirSync(join(tmp, 'nitro-public'), { recursive: true });
+  for (const entry of readdirSync(join(tmp, 'dist'), { withFileTypes: true })) {
     if (entry.name === 'server') continue;
-    await copy(join(tmp, 'dist', entry.name), join(tmp, 'nitro-public', entry.name), {
-      overwrite: true,
+    await cp(join(tmp, 'dist', entry.name), join(tmp, 'nitro-public', entry.name), {
+      force: true,
+      recursive: entry.isDirectory(),
     });
   }
   if (existsSync(join(tmp, 'nitro-public', 'server'))) {
     throw new Error('Static publish leaked dist/server into the Nitro public dir');
   }
-  // Nitro 3 builds on a Rolldown-based pipeline (native binding): scoped
-  // build-host permissions with prompts off.
+  // Nitro 3 builds on a Rolldown-based pipeline (native binding). The pinned
+  // nitro CLI runs through npx (the temp consumer's own install satisfies the
+  // pin without a re-download).
   const nitroBuild = await run(
-    Deno.execPath(),
-    [
-      'run',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--allow-run',
-      '--allow-sys',
-      '--allow-ffi',
-      '--no-prompt',
-      `npm:nitro@${NITRO_VERSION}`,
-      'build',
-    ],
+    'npx',
+    ['--yes', `nitro@${NITRO_VERSION}`, 'build'],
     tmp,
     {},
     BUILD_TIMEOUT_MS,
@@ -326,35 +285,40 @@ export default class PackedLive extends OpenElement {
     `PASS packed-serve-${runtime} nitro — ${nitroPreset} output built from the packed app`,
   );
 
-  const probe = Deno.listen({ hostname: '127.0.0.1', port: 0 });
-  const port = (probe.addr as Deno.NetAddr).port;
-  probe.close();
-  server = new Deno.Command(runtime, {
-    args: [nitroEntry],
+  // Reserve a loopback port with a bind-and-close probe.
+  const port = await new Promise<number>((resolve, reject) => {
+    const probe = createServer();
+    probe.once('listening', () => {
+      const addr = probe.address() as { port: number };
+      probe.close(() => resolve(addr.port));
+    });
+    probe.once('error', reject);
+    probe.listen({ port: 0, host: '127.0.0.1' });
+  });
+  server = spawn(runtime, [nitroEntry], {
     cwd: tmp,
-    env: { PORT: String(port), HOST: '127.0.0.1' },
-    stdout: 'piped',
-    stderr: 'piped',
-  }).spawn();
+    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   let exited = false;
   let exitCode: number | null = null;
   let exitSignal: string | null = null;
-  server.status.then((status) => {
+  server.addListener('exit', (code: number | null, signal: NodeJS.Signals | null) => {
     exited = true;
-    exitCode = status.code;
-    exitSignal = status.signal;
+    exitCode = code;
+    exitSignal = signal;
   });
   const serverOutput: Uint8Array[] = [];
   void (async () => {
     try {
-      for await (const chunk of server.stdout) serverOutput.push(chunk);
+      for await (const chunk of server.stdout!) serverOutput.push(chunk);
     } catch {
       /* pipe closed on kill */
     }
   })();
   void (async () => {
     try {
-      for await (const chunk of server.stderr) serverOutput.push(chunk);
+      for await (const chunk of server.stderr!) serverOutput.push(chunk);
     } catch {
       /* pipe closed on kill */
     }
@@ -407,5 +371,5 @@ export default class PackedLive extends OpenElement {
   } catch {
     // Already exited; temp-dir removal below is the cleanup that matters.
   }
-  await Deno.remove(tmp, { recursive: true });
+  await rm(tmp, { recursive: true });
 }

@@ -1,0 +1,25 @@
+{
+  "name": "@openelement/fixture-router-lit-framework",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../../tools/repo/clean.ts dist && node ../../../packages/router/src/cli/build.ts",
+    "e2e": "playwright test --config e2e/playwright.config.ts --project=chromium",
+    "e2e:browsers": "playwright test --config e2e/playwright.config.ts",
+    "gate": "node ../../../tools/repo/gate.ts tests/fixtures/router-lit-framework#build tests/fixtures/router-lit-framework#e2e:browsers"
+  },
+  "dependencies": {
+    "@lit-labs/ssr": "4.1.0",
+    "@lit-labs/ssr-client": "1.1.8",
+    "@hono/node-server": "2.1.1",
+    "@openelement/element": "workspace:*",
+    "@openelement/router": "workspace:*",
+    "hono": "^4.12",
+    "lit": "3.3.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "vite": "8.0.16"
+  }
+}

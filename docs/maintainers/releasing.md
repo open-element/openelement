@@ -2,7 +2,7 @@
 
 Release state is owned by package manifests, registry state, Git tags, and the small machine-readable `docs/release/release-state.json` record. Do not maintain a second writable status or roadmap projection.
 
-`release-state.json` records registry truth **per package**: each package's `latest`/prerelease dist-tags, the latest prerelease's published/missing package partition, and a `commonCompleteVersion` that is the stable version present in **all four** packages or `null` when none exists (it is `null` today — Router has no 0.43.x). Never present a version present in only some packages as the shared published line. A partial publish (some packages shipped, others absent) is represented explicitly, never as one shared version string. `deno task --cwd tools/repo release:state-machine:check` validates that model offline (structure, source versions, Site copy consistency); `deno task --cwd tools/repo release:registry-check` queries npm read-only, recomputes the four-package stable intersection, and fails closed on any drift or false common version — it never publishes or moves a dist-tag, and the ordinary offline `deno task check` does not require network.
+`release-state.json` records registry truth **per package**: each package's `latest`/prerelease dist-tags, the latest prerelease's published/missing package partition, and a `commonCompleteVersion` that is the stable version present in **all four** packages or `null` when none exists (it is `null` today — Router has no 0.43.x). Never present a version present in only some packages as the shared published line. A partial publish (some packages shipped, others absent) is represented explicitly, never as one shared version string. `pnpm --dir tools/repo run release:state-machine:check` validates that model offline (structure, source versions, Site copy consistency); `pnpm --dir tools/repo run release:registry-check` queries npm read-only, recomputes the four-package stable intersection, and fails closed on any drift or false common version — it never publishes or moves a dist-tag, and the ordinary offline `pnpm run check` does not require network.
 
 ## Public 1.0 prerelease baseline
 
@@ -15,7 +15,7 @@ Public alpha packages use the npm `alpha` dist-tag. npm `latest` stays on the st
 1. Pin the exact candidate SHA and require a clean tracked worktree.
 2. Build and pack the intended packages through the release path. See [pack-post-processing](pack-post-processing.md) for what the generator (`vp pack`) does not do and the deletion condition of each retained step. The deno-pack diagnostic exception is retired with the A1 toolchain swap (audit trail in [deno-pack-diagnostic-exception](deno-pack-diagnostic-exception.md); do not reintroduce the classifier) — every pack warning now fails the pack closed.
 3. Install actual tarballs in disposable projects outside the workspace and verify exports, declarations, ESM graphs, and the independent Element/Router consumer worlds.
-4. Require all applicable Chromium, Firefox, WebKit, Deno, Node, Workers, Bun, and Nitro evidence for claims that remain supported.
+4. Require all applicable Chromium, Firefox, WebKit, Node, Workers, Bun, and Nitro evidence for claims that remain supported.
 5. Require green exact-SHA CI, CodeQL/security checks, human review, and a fresh independent verifier.
 6. Obtain explicit publication approval before creating tags, publishing packages, changing dist-tags, or creating the GitHub Release.
 
@@ -60,8 +60,8 @@ publish; a missing environment fails the job closed instead of publishing:
   surfaces. The SaaS application remains decoupled from the candidate:
   neither `tools/repo#gate:source` nor `tools/repo#gate:release` nor candidate
   evidence contains a SaaS step. Scope is explicit at the task level:
-  `deno task verify:core` is the
-  Element/Router Alpha candidate verification, `deno task verify` is the full
+  `pnpm run verify:core` is the
+  Element/Router Alpha candidate verification, `pnpm run verify` is the full
   repository verification (including SaaS). Post-publish
   (`published-consumers.yml`) verifies the registry afterward and never
   substitutes for the pre-publish matrix.
@@ -71,18 +71,19 @@ publish; a missing environment fails the job closed instead of publishing:
 The candidate gate is split so a pull request gets fast, honest feedback
 without giving up any release-time proof.
 
-- `tools/repo#gate:source` — the PR source layer (nine steps): `generate:all`,
-  `typecheck`, the Element and Router unit suites, markdown lint, the
+- `tools/repo#gate:source` — the PR source layer (ten steps): `generate:all`,
+  `typecheck`, the dependency-age quarantine check, the Element and Router
+  unit suites, markdown lint, the
   content-dates manifest check, the public-interface snapshot, the
   request-time fixture gate, and the Element browser gate (Chromium). The
   separate packed producer owns `tools/release#gate:packed`; the independent
-  fresh-clone lane runs source and packed once each with cold Deno/npm caches.
-  A green `deno task verify:core` runs source plus packed locally.
+  fresh-clone lane runs source and packed once each with cold pnpm/npm caches.
+  A green `pnpm run verify:core` runs source plus packed locally.
 - `tools/repo#gate:release` — the release train: Site build and every `www`
   check, coverage, all deploy/framework fixture gates, the boundary and
   provenance scans, the generator/floor/classification gates, the
   three-engine Site E2E suite and the full three-engine Element browser
-  conformance matrix. `deno task release:check` runs it (plus registry
+  conformance matrix. `pnpm run release:check` runs it (plus registry
   truth, the packed gate, and the publish dry-run) before anything is
   published, so every trimmed step is still a precondition of release.
 

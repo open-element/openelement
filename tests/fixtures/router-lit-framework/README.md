@@ -12,8 +12,6 @@ shared framework machinery — only the page renderer forks.
 rejected by the build), so the fixture stays shell-free.
 
 ```bash
-deno task --cwd tests/fixtures/router-lit-framework build
-deno task --cwd tests/fixtures/router-lit-framework gate    # build + e2e (all browsers)
+pnpm --dir tests/fixtures/router-lit-framework run build
+pnpm --dir tests/fixtures/router-lit-framework run gate    # build + e2e (all browsers)
 ```
-
-`deno.lock` is generated — see `tests/fixtures/README.md`.

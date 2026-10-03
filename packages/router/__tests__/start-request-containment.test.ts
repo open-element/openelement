@@ -5,7 +5,7 @@
  * escaping failure as a 500 response, never an unhandled rejection.
  */
 
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { createFetchHandler, type FetchHandlerOptions } from '../src/vite/internal/static-serve.ts';
 
 async function assertContained500(
@@ -18,15 +18,15 @@ async function assertContained500(
     dispatch,
   });
   const response = await handler(new Request('http://127.0.0.1/hostile'));
-  assertEquals(response.status, 500);
+  expect(response.status).toEqual(500);
   await response.text();
 }
 
-Deno.test('start: a rejected dispatch is contained as 500', async () => {
+test('start: a rejected dispatch is contained as 500', async () => {
   await assertContained500(() => Promise.reject(new Error('hostile escape')));
 });
 
-Deno.test('start: a synchronously throwing dispatch is contained as 500', async () => {
+test('start: a synchronously throwing dispatch is contained as 500', async () => {
   await assertContained500(() => {
     throw new Error('hostile synchronous escape');
   });

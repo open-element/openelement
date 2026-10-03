@@ -18,7 +18,7 @@
  * It also covers the claim path, whose entries are constructed separately and
  * must carry the same item identity as fresh mounts.
  */
-import { assertEquals, assertStrictEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   claimExistingDom,
   createFreshDom,
@@ -71,7 +71,7 @@ function textOf(list: TestElement, index: number): string {
   return (row.childNodes[0] as TestElement & { data?: string }).data ?? '';
 }
 
-Deno.test('#1416: the skip is reference identity, not a value comparison', () => {
+test('#1416: the skip is reference identity, not a value comparison', () => {
   // The cheap stand-in for "unchanged" is a deep/value comparison, and it is
   // wrong twice over: it collapses whatever a serializer drops (functions,
   // symbols, undefined) so two genuinely different projections compare equal,
@@ -89,18 +89,17 @@ Deno.test('#1416: the skip is reference identity, not a value comparison', () =>
   const firstText = textOf(list, 1);
 
   items.value = [second];
-  assertEquals(
+  expect(
     JSON.stringify({ id: 'a', text: () => 'one' }),
-    JSON.stringify({ id: 'a', text: () => 'two' }),
     'precondition: a value comparison cannot tell these items apart',
-  );
-  assertEquals(textOf(list, 1), String(second.text), 'a different object re-projects');
-  assertEquals(typeof firstText, 'string');
+  ).toEqual(JSON.stringify({ id: 'a', text: () => 'two' }));
+  expect(textOf(list, 1), 'a different object re-projects').toEqual(String(second.text));
+  expect(typeof firstText).toEqual('string');
 
   instance.dispose();
 });
 
-Deno.test('#1416: a same-reference item is not re-read, a new item still is', () => {
+test('#1416: a same-reference item is not re-read, a new item still is', () => {
   const first: Row = { id: 'a', text: 'alpha', cls: 'one' };
   const items = signal<Row[]>([first]);
   const host = { signals: { items }, handlers: {} } as unknown as CompiledRuntimeHost;
@@ -108,8 +107,7 @@ Deno.test('#1416: a same-reference item is not re-read, a new item still is', ()
   const root = doc.createElement('host');
   const instance = createFreshDom(PROGRAM, host, node(root));
   const list = listOf(root);
-  assertEquals(
-    toHtml(root),
+  expect(toHtml(root)).toEqual(
     '<host><ul><!--oe:p0--><li data-cls="one">alpha</li><!--oe:/p0--></ul></host>',
   );
 
@@ -119,19 +117,16 @@ Deno.test('#1416: a same-reference item is not re-read, a new item still is', ()
   first.text = 'MUTATED';
   first.cls = 'two';
   items.value = [first];
-  assertEquals(
-    toHtml(root),
+  expect(toHtml(root), 'same-reference mutation does not re-render (documented boundary)').toEqual(
     '<host><ul><!--oe:p0--><li data-cls="one">alpha</li><!--oe:/p0--></ul></host>',
-    'same-reference mutation does not re-render (documented boundary)',
   );
   const row = list.childNodes[1] as TestElement;
-  assertStrictEquals(row, list.childNodes[1], 'the row node is still the same node');
+  expect(row, 'the row node is still the same node').toBe(list.childNodes[1]);
 
   // A new item object under the same key: the projection must update, both the
   // value slot and the item attribute slot, through the same code path.
   items.value = [{ id: 'a', text: 'beta', cls: 'three' }];
-  assertEquals(
-    toHtml(root),
+  expect(toHtml(root)).toEqual(
     '<host><ul><!--oe:p0--><li data-cls="three">beta</li><!--oe:/p0--></ul></host>',
   );
 
@@ -139,20 +134,18 @@ Deno.test('#1416: a same-reference item is not re-read, a new item still is', ()
   // region-reference path must still produce a correctly ordered text node
   // after a remove-then-add cycle on the same entry.
   items.value = [{ id: 'a', text: '', cls: 'three' }];
-  assertEquals(
-    toHtml(root),
+  expect(toHtml(root)).toEqual(
     '<host><ul><!--oe:p0--><li data-cls="three"></li><!--oe:/p0--></ul></host>',
   );
   items.value = [{ id: 'a', text: 'gamma', cls: 'three' }];
-  assertEquals(
-    toHtml(root),
+  expect(toHtml(root)).toEqual(
     '<host><ul><!--oe:p0--><li data-cls="three">gamma</li><!--oe:/p0--></ul></host>',
   );
 
   instance.dispose();
 });
 
-Deno.test('#1416: reorder, insert, remove and partial update survive the skip', () => {
+test('#1416: reorder, insert, remove and partial update survive the skip', () => {
   const a: Row = { id: 'a', text: 'A' };
   const b: Row = { id: 'b', text: 'B' };
   const c: Row = { id: 'c', text: 'C' };
@@ -166,29 +159,29 @@ Deno.test('#1416: reorder, insert, remove and partial update survive the skip', 
 
   // Reversed order, all references reused: move only, no slot writes.
   items.value = [c, b, a];
-  assertEquals(textOf(list, 1), 'C');
-  assertEquals(textOf(list, 2), 'B');
-  assertEquals(textOf(list, 3), 'A');
-  assertStrictEquals(list.childNodes[3], rowA, 'key a kept its node across the reorder');
+  expect(textOf(list, 1)).toEqual('C');
+  expect(textOf(list, 2)).toEqual('B');
+  expect(textOf(list, 3)).toEqual('A');
+  expect(list.childNodes[3], 'key a kept its node across the reorder').toBe(rowA);
 
   // One changed item among unchanged ones: only that entry is re-projected.
   const b2: Row = { id: 'b', text: 'B2' };
   items.value = [c, b2, a];
-  assertEquals(textOf(list, 1), 'C');
-  assertEquals(textOf(list, 2), 'B2');
-  assertEquals(textOf(list, 3), 'A');
+  expect(textOf(list, 1)).toEqual('C');
+  expect(textOf(list, 2)).toEqual('B2');
+  expect(textOf(list, 3)).toEqual('A');
 
   // Remove + insert: disposed entry's node is gone, inserted entry is last.
   items.value = [c, a, { id: 'd', text: 'D' }];
-  assertEquals(list.childNodes.length, 5, 'two rows plus both anchors');
-  assertEquals(textOf(list, 1), 'C');
-  assertEquals(textOf(list, 2), 'A');
-  assertEquals(textOf(list, 3), 'D');
+  expect(list.childNodes.length, 'two rows plus both anchors').toEqual(5);
+  expect(textOf(list, 1)).toEqual('C');
+  expect(textOf(list, 2)).toEqual('A');
+  expect(textOf(list, 3)).toEqual('D');
 
   instance.dispose();
 });
 
-Deno.test('#1416: claim carries item identity through to the first update', () => {
+test('#1416: claim carries item identity through to the first update', () => {
   const a: Row = { id: 'a', text: 'alpha', cls: 'one' };
   const items = signal<Row[]>([a, { id: 'b', text: 'beta', cls: 'two' }]);
   const host = { signals: { items }, handlers: {} } as unknown as CompiledRuntimeHost;
@@ -197,7 +190,7 @@ Deno.test('#1416: claim carries item identity through to the first update', () =
   const claimRoot = parseHtml(claimDoc, html);
   const claimed = claimExistingDom(PROGRAM, host, node(claimRoot));
   const list = listOf(claimRoot);
-  assertEquals(textOf(list, 1), 'alpha');
+  expect(textOf(list, 1)).toEqual('alpha');
 
   // Same-reference array after claim: the claim-built entries already carry
   // the item, so this update must skip — and must not corrupt or duplicate
@@ -209,21 +202,21 @@ Deno.test('#1416: claim carries item identity through to the first update', () =
     { id: 'a', text: 'alpha', cls: 'one' },
     { id: 'b', text: 'beta', cls: 'two' },
   ];
-  assertStrictEquals(list.childNodes[1], rowBefore);
-  assertEquals(list.childNodes.length, 4);
+  expect(list.childNodes[1]).toBe(rowBefore);
+  expect(list.childNodes.length).toEqual(4);
 
   // A new item on the claimed entry updates in place (no rebuild).
   items.value = [
     { id: 'a', text: 'ALPHA', cls: 'one' },
     { id: 'b', text: 'beta', cls: 'two' },
   ];
-  assertStrictEquals(list.childNodes[1], rowBefore, 'claim entry updated, not rebuilt');
-  assertEquals(textOf(list, 1), 'ALPHA');
+  expect(list.childNodes[1], 'claim entry updated, not rebuilt').toBe(rowBefore);
+  expect(textOf(list, 1)).toEqual('ALPHA');
 
   claimed.dispose();
 });
 
-Deno.test('#1416: skip leaves an item attribute slot untouched, not removed', () => {
+test('#1416: skip leaves an item attribute slot untouched, not removed', () => {
   // The attr-slot branch removes an attribute when the projected value is
   // null. Skipping must not be confused with "null projection": an unchanged
   // item keeps whatever the previous projection wrote.
@@ -236,17 +229,17 @@ Deno.test('#1416: skip leaves an item attribute slot untouched, not removed', ()
   const list = listOf(root);
   const element = list.childNodes[1] as TestElement;
   const html = '<host><ul><!--oe:p0--><li data-cls="keep">A</li><!--oe:/p0--></ul></host>';
-  assertEquals(toHtml(root), html);
+  expect(toHtml(root)).toEqual(html);
 
   items.value = [row];
-  assertEquals(toHtml(root), html, 'same-reference update rewrites nothing');
-  assertEquals(element.getAttribute('data-cls'), 'keep');
+  expect(toHtml(root), 'same-reference update rewrites nothing').toEqual(html);
+  expect(element.getAttribute('data-cls')).toEqual('keep');
 
   // Dropping the field on a *new* item removes the attribute (the null path),
   // which is the contrast case that proves the skip above did not run it.
   items.value = [{ id: 'a', text: 'A' }];
-  assertEquals(element.getAttribute('data-cls'), null);
-  assertEquals(toHtml(root), '<host><ul><!--oe:p0--><li>A</li><!--oe:/p0--></ul></host>');
+  expect(element.getAttribute('data-cls')).toEqual(null);
+  expect(toHtml(root)).toEqual('<host><ul><!--oe:p0--><li>A</li><!--oe:/p0--></ul></host>');
 
   instance.dispose();
 });

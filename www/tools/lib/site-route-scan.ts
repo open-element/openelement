@@ -7,6 +7,7 @@
  * page; dynamic enumeration stays fail-closed in enumeratePublicRoutes.
  */
 import { join } from '@std/path';
+import { readdir } from 'node:fs/promises';
 import type { SiteRouteCatalogEntry } from './site-sitemap.ts';
 
 function fileToRoutePath(relativePath: string): string {
@@ -25,11 +26,11 @@ function fileToRoutePath(relativePath: string): string {
 export async function scanSiteRoutes(routesDir: string): Promise<SiteRouteCatalogEntry[]> {
   const entries: SiteRouteCatalogEntry[] = [];
   async function walk(dir: string, relative: string): Promise<void> {
-    for await (const dirEntry of Deno.readDir(dir)) {
+    for (const dirEntry of await readdir(dir, { withFileTypes: true })) {
       const relativePath = relative === '' ? dirEntry.name : `${relative}/${dirEntry.name}`;
-      if (dirEntry.isDirectory) {
+      if (dirEntry.isDirectory()) {
         await walk(join(dir, dirEntry.name), relativePath);
-      } else if (!dirEntry.isSymlink && /\.tsx?$/.test(dirEntry.name)) {
+      } else if (!dirEntry.isSymbolicLink() && /\.tsx?$/.test(dirEntry.name)) {
         // Symlinks are skipped on purpose: a linked route file would resolve
         // outside the scanned tree.
         entries.push({ path: fileToRoutePath(relativePath), type: 'page' });

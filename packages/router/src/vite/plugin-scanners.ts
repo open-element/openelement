@@ -7,11 +7,12 @@
  * plugin.ts verbatim: behavior, log lines and error wrapping are unchanged.
  */
 
+import process from 'node:process';
 import type { Plugin } from 'vite';
 import type { OpenElementPackageManifest, RouteEntry } from './internal/protocol/framework.ts';
 import type { IslandDecl } from './internal/protocol/ssg.ts';
 import { createLogger, formatError, OpenElementError } from '@openelement/element';
-import { join } from '../internal/host-path.ts';
+import { join } from 'pathe';
 import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './internal/paths.ts';
 import {
   buildEntryDescriptor,
@@ -94,12 +95,12 @@ export function generateEntry(
  */
 export async function rescanRoutes(state: OpenPluginState): Promise<void> {
   const routes = await scanRoutes(state.resolvedOptions.routesDir!, '', {
-    root: state.viteRoot ?? Deno.cwd(),
+    root: state.viteRoot ?? process.cwd(),
     workspaceRoot: state.workspaceRoot,
   });
   state.ctx.phase1.cachedRoutes = routes;
   state.ctx.phase1.staticComponents = await scanStaticComponents({
-    root: Deno.cwd(),
+    root: process.cwd(),
     routesDir: state.resolvedOptions.routesDir!,
     islandsDir: state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
     routes,
@@ -127,7 +128,7 @@ export async function rescanRoutes(state: OpenPluginState): Promise<void> {
  * virtual entries and full-reload, exactly as for routes.
  */
 export async function rescanIslands(state: OpenPluginState): Promise<void> {
-  const islandsRoot = join(Deno.cwd(), state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR);
+  const islandsRoot = join(process.cwd(), state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR);
   const islandFiles = await scanIslands(islandsRoot);
   state.ctx.phase1.islandTagNames = islandFiles.map((f) => fileToTagName(f));
   state.ctx.phase1.islandFiles = islandFiles;
@@ -152,18 +153,18 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
 
       try {
         const routes = await scanRoutes(state.resolvedOptions.routesDir!, '', {
-          root: state.viteRoot ?? Deno.cwd(),
+          root: state.viteRoot ?? process.cwd(),
           workspaceRoot: state.workspaceRoot,
         });
         state.ctx.phase1.staticComponents = await scanStaticComponents({
-          root: Deno.cwd(),
+          root: process.cwd(),
           routesDir: state.resolvedOptions.routesDir!,
           islandsDir: state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
           routes,
         });
 
         const islandsRoot = join(
-          Deno.cwd(),
+          process.cwd(),
           state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
         );
         const islandFiles = await scanIslands(islandsRoot);
@@ -200,7 +201,7 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
         // descriptor is built so the emitted entry and the SSR admission plan
         // share one descriptor instantiation (alpha.17 B1).
         try {
-          const nodeModulesDir = join(Deno.cwd(), 'node_modules');
+          const nodeModulesDir = join(process.cwd(), 'node_modules');
           state.ctx.phase1.cemClassifications = await detectAndClassifyCemPackages(nodeModulesDir);
           if (state.ctx.phase1.cemClassifications.length > 0) {
             log.info(
@@ -267,7 +268,7 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
             }
           }
           state.ctx.phase1.foreignTags = await scanForeignTags({
-            routesDir: join(Deno.cwd(), state.resolvedOptions.routesDir || DEFAULT_ROUTES_DIR),
+            routesDir: join(process.cwd(), state.resolvedOptions.routesDir || DEFAULT_ROUTES_DIR),
             islandsDir: islandsRoot,
             routeFiles: pageRoutes.map((r) => r.filePath),
             islandFiles,

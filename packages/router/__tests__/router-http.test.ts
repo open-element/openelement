@@ -1,8 +1,9 @@
-import { assertEquals, assertRejects, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { Hono } from 'hono';
 import { createRouteMiddleware, type HttpHandler } from '../src/http.ts';
 
-Deno.test('Request chooses one URL before methods; WinterCG middleware composes with the host chain', async () => {
+test('Request chooses one URL before methods; WinterCG middleware composes with the host chain', async () => {
   const events: string[] = [];
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -42,25 +43,25 @@ Deno.test('Request chooses one URL before methods; WinterCG middleware composes 
     }),
   );
   let response = await app.request('/products/new', { method: 'POST' });
-  assertEquals(response.status, 405);
-  assertEquals(response.headers.get('Allow'), 'GET, HEAD');
-  assertEquals(response.headers.get('x-host'), 'yes');
+  expect(response.status).toEqual(405);
+  expect(response.headers.get('Allow')).toEqual('GET, HEAD');
+  expect(response.headers.get('x-host')).toEqual('yes');
   response = await app.request('/products/new', { method: 'HEAD' });
-  assertEquals(response.status, 200);
-  assertEquals(await response.text(), '');
+  expect(response.status).toEqual(200);
+  expect(await response.text()).toEqual('');
   response = await app.request('/explicit-head', { method: 'HEAD' });
-  assertEquals(response.status, 202);
-  assertEquals(response.headers.get('x-explicit'), 'yes');
-  assertEquals(await response.text(), '');
+  expect(response.status).toEqual(202);
+  expect(response.headers.get('x-explicit')).toEqual('yes');
+  expect(await response.text()).toEqual('');
   response = await app.request('/products/a%252Fb?q=x', { method: 'POST' });
-  assertEquals(await response.json(), { params: { id: 'a%2Fb' } });
-  assertEquals(await (await app.request('/host')).text(), 'host');
-  assertEquals((await app.request('/missing')).status, 404);
-  assertEquals((await app.request('/products/new', { method: 'OPTIONS' })).status, 405);
-  assertEquals(events, Array.from({ length: 7 }, () => ['before', 'after']).flat());
+  expect(await response.json()).toEqual({ params: { id: 'a%2Fb' } });
+  expect(await (await app.request('/host')).text()).toEqual('host');
+  expect((await app.request('/missing')).status).toEqual(404);
+  expect((await app.request('/products/new', { method: 'OPTIONS' })).status).toEqual(405);
+  expect(events).toEqual(Array.from({ length: 7 }, () => ['before', 'after']).flat());
 });
 
-Deno.test('Handler chains run in onion order: short-circuit, pass-down and outer next', async () => {
+test('Handler chains run in onion order: short-circuit, pass-down and outer next', async () => {
   const events: string[] = [];
   const wrap =
     (name: string, handler: HttpHandler): HttpHandler =>
@@ -99,18 +100,18 @@ Deno.test('Handler chains run in onion order: short-circuit, pass-down and outer
     return Promise.resolve(new Response('outer host'));
   };
   let response = await routeMiddleware(new Request('https://example.test/short'), outerNext);
-  assertEquals(await response.text(), 'short-circuited');
-  assertEquals(events, ['a:in', 'a:out']);
+  expect(await response.text()).toEqual('short-circuited');
+  expect(events).toEqual(['a:in', 'a:out']);
   events.length = 0;
   // The last handler's next is the host chain's own next.
   response = await routeMiddleware(new Request('https://example.test/deep'), outerNext);
-  assertEquals(await response.text(), 'outer host');
-  assertEquals(response.headers.get('x-params'), '{}');
-  assertEquals(events, ['a:in', 'b:in', 'outer', 'b:out', 'a:out']);
+  expect(await response.text()).toEqual('outer host');
+  expect(response.headers.get('x-params')).toEqual('{}');
+  expect(events).toEqual(['a:in', 'b:in', 'outer', 'b:out', 'a:out']);
 });
 
-Deno.test('HTTP records reject ambiguous duplicate methods and preserve thrown handler errors', async () => {
-  assertThrows(
+test('HTTP records reject ambiguous duplicate methods and preserve thrown handler errors', async () => {
+  assertThrowsIncludes(
     () =>
       createRouteMiddleware([
         {
@@ -140,5 +141,9 @@ Deno.test('HTTP records reject ambiguous duplicate methods and preserve thrown h
       return c.res;
     }),
   );
-  await assertRejects(() => Promise.resolve(app.request('/')), Error, 'host error boundary');
+  await assertRejectsIncludes(
+    () => Promise.resolve(app.request('/')),
+    Error,
+    'host error boundary',
+  );
 });

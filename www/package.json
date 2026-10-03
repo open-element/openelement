@@ -1,0 +1,60 @@
+{
+  "name": "@openelement/www",
+  "private": true,
+  "version": "1.0.0-alpha.7",
+  "type": "module",
+  "imports": {
+    "#site-ui/*": "./app/site-ui/*",
+    "#generated/blog-data": "./app/data/_generated-blog-data.ts"
+  },
+  "scripts": {
+    "build": "node ../packages/router/src/cli/build.ts",
+    "test": "vitest run --root ../.. --project www",
+    "pagefind": "node build-pagefind.ts",
+    "e2e:browsers": "node ../tools/repo/site-e2e-run.ts --retries 1",
+    "generate:content": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-site-content-data.ts",
+    "check:content-data": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-site-content-data.ts --check",
+    "generate:nav": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-site-nav.ts",
+    "check:nav": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-site-nav.ts --check",
+    "generate:article-routes": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-site-article-routes.ts",
+    "check:article-routes": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-site-article-routes.ts --check",
+    "generate:api-reference": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-api-reference.ts",
+    "generate:error-reference": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-error-reference.ts",
+    "check:errors": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-error-reference.ts --check",
+    "check:api-reference": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-api-reference.ts --check",
+    "generate:error-codes": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-error-codes.ts",
+    "check:error-codes": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-error-codes.ts --check",
+    "generate:install-command": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-install-command.ts",
+    "check:install-command": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-install-command.ts --check",
+    "emit:redirects": "node ../tools/repo/run-in.ts --root .. -- node www/tools/emit-site-redirects.ts",
+    "emit:sitemap": "node ../tools/repo/run-in.ts --root .. -- node www/tools/emit-site-sitemap.ts",
+    "emit:rss": "node ../tools/repo/run-in.ts --root .. -- node www/tools/emit-site-rss.ts",
+    "check:content": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-content-examples.ts",
+    "check:content-dates": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-content-dates.ts",
+    "check:doc-figures": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-doc-figures.ts",
+    "check:retired-url": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-retired-urls.ts",
+    "refresh:retired-url": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-retired-urls.ts --refresh",
+    "check:links": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-site-links.ts",
+    "check:theme-tokens": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-site-theme-tokens.ts",
+    "check:machine-paths": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-no-machine-paths.ts",
+    "check:routes-types": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-www-routes-types.ts"
+  },
+  "dependencies": {
+    "@openelement/create": "workspace:*",
+    "@openelement/router": "workspace:*",
+    "@openelement/ui": "workspace:*",
+    "gray-matter": "^4.0.3",
+    "hono": "^4.12",
+    "marked": "^15.0.0",
+    "vite": "8.0.16"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@std/assert": "jsr:^1.0.0",
+    "@std/fs": "jsr:^1.0.0",
+    "@std/path": "jsr:^1.0.0",
+    "@types/node": "26.5.0",
+    "pagefind": "^1.4.0",
+    "typescript": "6.0.3"
+  }
+}

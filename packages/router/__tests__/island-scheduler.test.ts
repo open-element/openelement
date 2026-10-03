@@ -4,7 +4,7 @@
  * contract (every non-empty strategy bucket fires) and the #606 deep,
  * shadow-root-aware visible scheduling.
  */
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { createIslandScheduler } from '../src/vite/internal/ssg/island-scheduler.ts';
 
 type Win = Window & typeof globalThis;
@@ -79,7 +79,7 @@ const STRATEGIES = (
   only: overrides.only ?? [],
 });
 
-Deno.test('#605 load and only buckets fire open:ready immediately', async () => {
+test('#605 load and only buckets fire open:ready immediately', async () => {
   const readyEvents: ReadyEvent[] = [];
   const scheduler = createIslandScheduler({
     log: { warn: () => {} },
@@ -90,8 +90,8 @@ Deno.test('#605 load and only buckets fire open:ready immediately', async () => 
     strategies: STRATEGIES({ load: ['x-load'], only: ['x-only'] }),
     onIslandLoaded: null,
   });
-  assertEquals(typeof scheduler.observeVisible, 'function');
-  assertEquals(readyEvents, [
+  expect(typeof scheduler.observeVisible).toEqual('function');
+  expect(readyEvents).toEqual([
     { strategy: 'load', islands: ['x-load'] },
     { strategy: 'only', islands: ['x-only'] },
   ]);
@@ -99,7 +99,7 @@ Deno.test('#605 load and only buckets fire open:ready immediately', async () => 
   await Promise.resolve();
 });
 
-Deno.test('#605 idle bucket fires open:ready when idle time arrives', () => {
+test('#605 idle bucket fires open:ready when idle time arrives', () => {
   const readyEvents: ReadyEvent[] = [];
   let idleCallback: (() => void) | null = null;
   createIslandScheduler({
@@ -112,12 +112,12 @@ Deno.test('#605 idle bucket fires open:ready when idle time arrives', () => {
     onIslandLoaded: null,
   });
   // Not yet: idle deferral means no import and no event so far.
-  assertEquals(readyEvents, []);
+  expect(readyEvents).toEqual([]);
   idleCallback!();
-  assertEquals(readyEvents, [{ strategy: 'idle', islands: ['x-idle'] }]);
+  expect(readyEvents).toEqual([{ strategy: 'idle', islands: ['x-idle'] }]);
 });
 
-Deno.test('#605 idle fallback defers through setTimeout with the injected policy timeout', () => {
+test('#605 idle fallback defers through setTimeout with the injected policy timeout', () => {
   const readyEvents: ReadyEvent[] = [];
   const scheduled: [() => void, number][] = [];
   createIslandScheduler({
@@ -136,14 +136,14 @@ Deno.test('#605 idle fallback defers through setTimeout with the injected policy
     strategies: STRATEGIES({ idle: ['x-idle'] }),
     onIslandLoaded: null,
   });
-  assertEquals(readyEvents, []);
-  assertEquals(scheduled.length, 1);
-  assertEquals(scheduled[0][1], 25);
+  expect(readyEvents).toEqual([]);
+  expect(scheduled.length).toEqual(1);
+  expect(scheduled[0][1]).toEqual(25);
   scheduled[0][0]();
-  assertEquals(readyEvents, [{ strategy: 'idle', islands: ['x-idle'] }]);
+  expect(readyEvents).toEqual([{ strategy: 'idle', islands: ['x-idle'] }]);
 });
 
-Deno.test('#605 empty buckets never fire open:ready', () => {
+test('#605 empty buckets never fire open:ready', () => {
   const readyEvents: ReadyEvent[] = [];
   createIslandScheduler({
     log: { warn: () => {} },
@@ -154,10 +154,10 @@ Deno.test('#605 empty buckets never fire open:ready', () => {
     strategies: STRATEGIES(),
     onIslandLoaded: null,
   });
-  assertEquals(readyEvents, []);
+  expect(readyEvents).toEqual([]);
 });
 
-Deno.test('#606 visible scheduling finds islands inside shadow roots (deep query)', () => {
+test('#606 visible scheduling finds islands inside shadow roots (deep query)', () => {
   const readyEvents: ReadyEvent[] = [];
   const observed: FakeElement[] = [];
   class FakeIO {
@@ -201,14 +201,14 @@ Deno.test('#606 visible scheduling finds islands inside shadow roots (deep query
     strategies: STRATEGIES({ visible: ['x-vis'] }),
     onIslandLoaded: null,
   });
-  assertEquals(observed, [island]);
-  assertEquals(loaded, 0);
+  expect(observed).toEqual([island]);
+  expect(loaded).toEqual(0);
   FakeIO.instances[0].intersect();
-  assertEquals(loaded, 1);
-  assertEquals(readyEvents, [{ strategy: 'visible', islands: ['x-vis'] }]);
+  expect(loaded).toEqual(1);
+  expect(readyEvents).toEqual([{ strategy: 'visible', islands: ['x-vis'] }]);
 });
 
-Deno.test('#606 visible without IntersectionObserver loads every visible tag', () => {
+test('#606 visible without IntersectionObserver loads every visible tag', () => {
   const readyEvents: ReadyEvent[] = [];
   const loaded: string[] = [];
   createIslandScheduler({
@@ -225,11 +225,11 @@ Deno.test('#606 visible without IntersectionObserver loads every visible tag', (
     strategies: STRATEGIES({ visible: ['x-vis'] }),
     onIslandLoaded: null,
   });
-  assertEquals(loaded, ['x-vis']);
-  assertEquals(readyEvents, [{ strategy: 'visible', islands: ['x-vis'] }]);
+  expect(loaded).toEqual(['x-vis']);
+  expect(readyEvents).toEqual([{ strategy: 'visible', islands: ['x-vis'] }]);
 });
 
-Deno.test('#584 onIslandLoaded runs (macrotask-deferred) after an island module resolves', async () => {
+test('#584 onIslandLoaded runs (macrotask-deferred) after an island module resolves', async () => {
   const calls: string[] = [];
   const timeouts: (() => void)[] = [];
   createIslandScheduler({
@@ -248,13 +248,13 @@ Deno.test('#584 onIslandLoaded runs (macrotask-deferred) after an island module 
   });
   await Promise.resolve();
   await Promise.resolve();
-  assertEquals(calls, ['import']);
-  assertEquals(timeouts.length, 1);
+  expect(calls).toEqual(['import']);
+  expect(timeouts.length).toEqual(1);
   timeouts[0]();
-  assertEquals(calls, ['import', 'rescan']);
+  expect(calls).toEqual(['import', 'rescan']);
 });
 
-Deno.test('#1039 detached visible island is released and a reinsert gets a fresh observer', () => {
+test('#1039 detached visible island is released and a reinsert gets a fresh observer', () => {
   const readyEvents: ReadyEvent[] = [];
   const observed: FakeElement[] = [];
   const disconnected: FakeIO[] = [];
@@ -295,25 +295,25 @@ Deno.test('#1039 detached visible island is released and a reinsert gets a fresh
     strategies: STRATEGIES({ visible: ['x-vis'] }),
     onIslandLoaded: null,
   });
-  assertEquals(observed, [island]);
-  assertEquals(FakeIO.instances.length, 1);
+  expect(observed).toEqual([island]);
+  expect(FakeIO.instances.length).toEqual(1);
 
   // The island leaves the DOM before ever intersecting: its observer can
   // never fire again, so it must be released (not pinned forever).
   island.isConnected = false;
   page.children.length = 0;
   scheduler.observeVisible();
-  assertEquals(disconnected.length, 1);
-  assertEquals(FakeIO.instances.length, 1);
+  expect(disconnected.length).toEqual(1);
+  expect(FakeIO.instances.length).toEqual(1);
 
   // Reinserted before intersection: a fresh observer is attached so the
   // island still loads when it scrolls into view.
   island.isConnected = true;
   page.children.push(island);
   scheduler.observeVisible();
-  assertEquals(FakeIO.instances.length, 2);
-  assertEquals(observed, [island, island]);
+  expect(FakeIO.instances.length).toEqual(2);
+  expect(observed).toEqual([island, island]);
   FakeIO.instances[1].intersect();
-  assertEquals(loaded, 1);
-  assertEquals(readyEvents, [{ strategy: 'visible', islands: ['x-vis'] }]);
+  expect(loaded).toEqual(1);
+  expect(readyEvents).toEqual([{ strategy: 'visible', islands: ['x-vis'] }]);
 });

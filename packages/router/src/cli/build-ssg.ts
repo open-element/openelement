@@ -14,9 +14,11 @@
  *   deno task build  (unified entry - runs all 3 phases)
  */
 
-import { existsSync } from '../internal/host-path.ts';
-import { join, resolve } from '../internal/host-path.ts';
-import { toFileUrl } from '../internal/host-path.ts';
+import { rm } from 'node:fs/promises';
+import process from 'node:process';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'pathe';
+import { pathToFileURL } from 'node:url';
 import { normalizePath } from 'vite';
 import type {
   CompatibilityClassification,
@@ -31,7 +33,7 @@ import type {
   StaticComponentDecl,
 } from '../vite/internal/protocol/ssg.ts';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
-import { findWorkspaceRoot } from '../vite/workspace-alias.ts';
+import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
 import {
   buildEntryDescriptor,
   fileToTagName,
@@ -91,12 +93,12 @@ function litSsrDataUrlStubPlugin(): import('vite').Plugin {
 
 /**
  * file:// URL for the dynamic import of the built SSR bundle (issue #1220,
- * M13). toFileUrl percent-encodes spaces, `#`, `?`, and non-ASCII bytes
+ * M13). pathToFileURL percent-encodes spaces, `#`, `?`, and non-ASCII bytes
  * and handles Windows drive letters; string concatenation mis-resolved such
  * project paths. Same correct usage as internal/static-serve.ts.
  */
 export function ssrBundleImportUrl(ssrBundlePath: string): string {
-  return toFileUrl(ssrBundlePath).href;
+  return pathToFileURL(ssrBundlePath).href;
 }
 
 const VIRTUAL_SSG_ENTRY_ID = 'virtual:open-ssg-entry';
@@ -224,7 +226,7 @@ async function buildSSG(
   options: BuildSSGOptions = {},
   ctx: OpenElementBuildContext,
 ): Promise<void> {
-  const root = options.root || ctx.phase3.root || Deno.cwd();
+  const root = options.root || ctx.phase3.root || process.cwd();
   const outDir = options.outDir || ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const routesDir = options.routesDir || ctx.phase3.routesDir || DEFAULT_ROUTES_DIR;
   const islandsDir = options.islandsDir || ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR;
@@ -258,7 +260,7 @@ async function buildSSG(
     options.routes ??
     (await scanRoutes(routesDir, '', {
       root,
-      workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+      workspaceRoot: findBuildWorkspaceRoot(process.cwd()) ?? undefined,
     }));
   const staticComponents =
     options.staticComponents ??
@@ -427,7 +429,7 @@ async function buildSSG(
         compiledElementPlugin({
           // Linked workspace packages sit outside the project root; without the
           // workspace anchor their absolute ids would land in the source maps.
-          workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+          workspaceRoot: findBuildWorkspaceRoot(process.cwd()) ?? undefined,
           // Route/island sources carry the island delivery policy statement;
           // the compiler admits it only through the injected descriptor.
           staticSidecars: [ISLAND_ADMISSION],
@@ -533,7 +535,7 @@ async function buildSSG(
     // pure-static project nothing under dist/server is deployable, so remove
     // the directory instead of shipping the server bundle to static hosting.
     if (!existsSync(join(ssrOutDir, 'index.js'))) {
-      await Deno.remove(ssrOutDir, { recursive: true }).catch(() => {});
+      await rm(ssrOutDir, { recursive: true, force: true }).catch(() => {});
       log.info('Pure-static build: removed build-time SSR bundle (dist/server)');
     }
 

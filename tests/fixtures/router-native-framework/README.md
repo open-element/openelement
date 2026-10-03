@@ -9,10 +9,9 @@ pages exactly like on prerendered pages — the generated request-time server
 entry injects the island client entry itself.
 
 ```bash
-deno task --cwd tests/fixtures/router-native-framework build   # build
-deno task --cwd tests/fixtures/router-native-framework gate    # build + e2e (chromium/firefox/webkit)
+pnpm --dir tests/fixtures/router-native-framework run build   # build
+pnpm --dir tests/fixtures/router-native-framework run gate    # build + e2e (chromium/firefox/webkit)
 ```
 
-The fixture consumes workspace sources through `deno.json` (relative paths to
-`packages/*/src`), never npm releases, so it always proves the checkout.
-`deno.lock` is generated — see `tests/fixtures/README.md`.
+The fixture consumes workspace sources (relative paths to `packages/*/src`),
+never npm releases, so it always proves the checkout.

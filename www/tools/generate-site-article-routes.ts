@@ -45,8 +45,10 @@
  * exported and pinned by generate-site-article-routes.test.ts; the entry point
  * below only runs as the main module, so importing it never writes.
  */
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { dirname, fromFileUrl, join, relative } from '@std/path';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { loadCollectionData } from '../lib/content.ts';
 import { articleCollections } from '../content-collections.ts';
 
@@ -327,7 +329,7 @@ export function managedDirectories(): Map<string, number> {
 
 async function readIfPresent(path: string): Promise<string | undefined> {
   try {
-    return await Deno.readTextFile(path);
+    return await readFile(path, 'utf8');
   } catch {
     return undefined;
   }
@@ -350,7 +352,7 @@ async function main(): Promise<void> {
   for (const [dir, maxDepth] of managedDirectories()) {
     let dirExists = true;
     try {
-      if (!(await Deno.stat(join(siteRoot, dir))).isDirectory) dirExists = false;
+      if (!(await stat(join(siteRoot, dir))).isDirectory()) dirExists = false;
     } catch {
       dirExists = false;
     }
@@ -383,7 +385,7 @@ async function main(): Promise<void> {
         'matching content (www/content/docs/<collection>/<slug>.md) or move the file out of the ' +
         'managed directory — it will not be deleted or overwritten.',
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 
   const drift: string[] = [];
@@ -392,23 +394,23 @@ async function main(): Promise<void> {
     if (current !== content) drift.push(rel);
   }
 
-  const check = Deno.args.includes('--check');
+  const check = process.argv.slice(2).includes('--check');
   if (check) {
     if (drift.length > 0 || stale.length > 0) {
       console.error('article routes drift:');
       for (const rel of [...drift].sort()) console.error(`  differs from content: ${rel}`);
       for (const rel of [...stale].sort()) console.error(`  stale (content gone): ${rel}`);
-      console.error('regenerate with deno task --cwd www generate:article-routes');
-      Deno.exit(1);
+      console.error('regenerate with pnpm --filter @openelement/www run generate:article-routes');
+      process.exit(1);
     }
     console.log(`article routes check passed (${routes.length} article(s)).`);
   } else {
     for (const [rel, content] of expected) {
       const path = join(siteRoot, rel);
-      await Deno.mkdir(dirname(path), { recursive: true });
-      await Deno.writeTextFile(path, content);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, content);
     }
-    for (const rel of stale) await Deno.remove(join(siteRoot, rel));
+    for (const rel of stale) await rm(join(siteRoot, rel));
     console.log(
       `article routes written: ${routes.length} article(s) -> ${routes.length} route module(s), ` +
         `${routes.length} binding(s), table${

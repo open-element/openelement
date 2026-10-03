@@ -1,4 +1,4 @@
-import { assertEquals, assertInstanceOf } from '@std/assert';
+import { expect, test } from 'vitest';
 import { OpenElementError } from '../src/internal/core/errors.ts';
 import {
   documentStreamParts,
@@ -8,72 +8,70 @@ import {
   wrapInDocument,
 } from '../src/internal/core/html-escape.ts';
 
-Deno.test('escapeHtml and escapeAttr share one ESCAPE_MAP and identical output', () => {
+test('escapeHtml and escapeAttr share one ESCAPE_MAP and identical output', () => {
   const samples = ['', 'a', '&<>"\'', '<script>alert(1)</script>', 'a&b<c>d"e\'f'];
   for (const s of samples) {
-    assertEquals(
-      escapeAttr(s),
+    expect(escapeAttr(s), `escapeAttr must equal escapeHtml for ${JSON.stringify(s)}`).toEqual(
       escapeHtml(s),
-      `escapeAttr must equal escapeHtml for ${JSON.stringify(s)}`,
     );
   }
 });
 
-Deno.test('escapeHtml escapes all five special characters in one pass', () => {
-  assertEquals(escapeHtml('&<>"\''), '&amp;&lt;&gt;&quot;&#39;');
+test('escapeHtml escapes all five special characters in one pass', () => {
+  expect(escapeHtml('&<>"\'')).toEqual('&amp;&lt;&gt;&quot;&#39;');
 });
 
-Deno.test('escapeAttr escapes the ampersand before quoting (no double escape)', () => {
-  assertEquals(escapeAttr('a&b'), 'a&amp;b');
+test('escapeAttr escapes the ampersand before quoting (no double escape)', () => {
+  expect(escapeAttr('a&b')).toEqual('a&amp;b');
 });
 
-Deno.test('escapeAttrValue coerces non-string via String() while escapeHtml returns empty for non-string', () => {
-  assertEquals(escapeAttrValue(null), '');
-  assertEquals(escapeAttrValue(undefined), '');
-  assertEquals(escapeAttrValue(42), '42');
-  assertEquals(escapeHtml(null as unknown as string), '');
-  assertEquals(escapeHtml(42 as unknown as string), '');
+test('escapeAttrValue coerces non-string via String() while escapeHtml returns empty for non-string', () => {
+  expect(escapeAttrValue(null)).toEqual('');
+  expect(escapeAttrValue(undefined)).toEqual('');
+  expect(escapeAttrValue(42)).toEqual('42');
+  expect(escapeHtml(null as unknown as string)).toEqual('');
+  expect(escapeHtml(42 as unknown as string)).toEqual('');
 });
 
-Deno.test('wrapInDocument: strips unclosed script tags from headExtras', () => {
+test('wrapInDocument: strips unclosed script tags from headExtras', () => {
   const out = wrapInDocument('x', { headExtras: '<script src="https://evil.example/x.js">' });
-  assertEquals(out.includes('<script'), false);
-  assertEquals(out.includes('evil.example'), false);
+  expect(out.includes('<script')).toEqual(false);
+  expect(out.includes('evil.example')).toEqual(false);
 });
 
-Deno.test('wrapInDocument: strips slash-delimited script tags from headExtras', () => {
+test('wrapInDocument: strips slash-delimited script tags from headExtras', () => {
   const out = wrapInDocument('x', {
     headExtras: '<script/src="https://evil.example/x.js"></script><meta name="ok" content="1">',
   });
-  assertEquals(out.includes('<script'), false);
-  assertEquals(out.includes('evil.example'), false);
-  assertEquals(out.includes('<meta name="ok" content="1">'), true);
+  expect(out.includes('<script')).toEqual(false);
+  expect(out.includes('evil.example')).toEqual(false);
+  expect(out.includes('<meta name="ok" content="1">')).toEqual(true);
 });
 
-Deno.test('wrapInDocument: script end tags with attributes close the strip precisely (#1281, CodeQL bad-tag-filter)', () => {
+test('wrapInDocument: script end tags with attributes close the strip precisely (#1281, CodeQL bad-tag-filter)', () => {
   // Browsers accept `</script\t\n bar>` as a script end tag (attributes on end
   // tags are ignored), so the stripper must match it — and must stop there
   // instead of falling back to the strip-to-EOF pass that eats later markup.
   const out = wrapInDocument('x', {
     headExtras: '<script>alert(1)</script\t\n bar><meta name="ok" content="1">',
   });
-  assertEquals(out.includes('alert(1)'), false);
-  assertEquals(out.includes('<meta name="ok" content="1">'), true);
+  expect(out.includes('alert(1)')).toEqual(false);
+  expect(out.includes('<meta name="ok" content="1">')).toEqual(true);
 });
 
-Deno.test('wrapInDocument: strips re-formed script tags to a fixed point (#1281, CodeQL incomplete sanitization)', () => {
+test('wrapInDocument: strips re-formed script tags to a fixed point (#1281, CodeQL incomplete sanitization)', () => {
   // Removing the inner pair of a nested fragment re-forms a live outer
   // `<script>...</script>`; the strip must consume it precisely instead of
   // falling back to strip-to-EOF, which would eat the trailing <meta>.
   const out = wrapInDocument('x', {
     headExtras: '<scri<script></script>pt>alert(1)</scri</script>pt><meta name="ok" content="1">',
   });
-  assertEquals(out.includes('<script'), false);
-  assertEquals(out.includes('alert(1)'), false);
-  assertEquals(out.includes('<meta name="ok" content="1">'), true);
+  expect(out.includes('<script')).toEqual(false);
+  expect(out.includes('alert(1)')).toEqual(false);
+  expect(out.includes('<meta name="ok" content="1">')).toEqual(true);
 });
 
-Deno.test('wrapInDocument: strips on* handlers exposed by an earlier strip (#1281, CodeQL incomplete sanitization)', () => {
+test('wrapInDocument: strips on* handlers exposed by an earlier strip (#1281, CodeQL incomplete sanitization)', () => {
   // Removing ` onx='y'` concatenates the leftover ` o` prefix with the
   // `nclick=...` suffix, re-forming a live `onclick` handler that a
   // single-pass strip emits into the document. The strip must repeat until
@@ -81,12 +79,12 @@ Deno.test('wrapInDocument: strips on* handlers exposed by an earlier strip (#128
   const out = wrapInDocument('x', {
     headExtras: `<a o onx='y'nclick=alert(1)>text</a>`,
   });
-  assertEquals(out.includes('onclick'), false);
-  assertEquals(out.includes('alert(1)'), false);
-  assertEquals(out.includes('text'), true);
+  expect(out.includes('onclick')).toEqual(false);
+  expect(out.includes('alert(1)')).toEqual(false);
+  expect(out.includes('text')).toEqual(true);
 });
 
-Deno.test('wrapInDocument: --!> counts as a comment close in the balance check (#1281, CodeQL bad-tag-filter)', () => {
+test('wrapInDocument: --!> counts as a comment close in the balance check (#1281, CodeQL bad-tag-filter)', () => {
   const warnings: string[] = [];
   const originalWarn = console.warn;
   console.warn = (msg: unknown) => warnings.push(String(msg));
@@ -97,10 +95,10 @@ Deno.test('wrapInDocument: --!> counts as a comment close in the balance check (
     console.warn = originalWarn;
   }
   const unbalanced = warnings.filter((w) => w.includes('unbalanced HTML comments'));
-  assertEquals(unbalanced.length, 1);
+  expect(unbalanced.length).toEqual(1);
 });
 
-Deno.test('wrapInDocument: emits link tags (canonical, hreflang alternates) after meta (#1326)', () => {
+test('wrapInDocument: emits link tags (canonical, hreflang alternates) after meta (#1326)', () => {
   const out = wrapInDocument('x', {
     title: 'Notes',
     meta: { description: 'All notes' },
@@ -131,7 +129,7 @@ Deno.test('wrapInDocument: emits link tags (canonical, hreflang alternates) afte
   }
 });
 
-Deno.test('wrapInDocument: escapes link attributes and skips entries without rel or href', () => {
+test('wrapInDocument: escapes link attributes and skips entries without rel or href', () => {
   const out = wrapInDocument('x', {
     links: [
       { rel: 'canonical', href: 'https://example.com/?a=1&b=<x>"' },
@@ -146,22 +144,22 @@ Deno.test('wrapInDocument: escapes link attributes and skips entries without rel
     throw new Error(`entry without rel must be skipped:\n${out}`);
   }
   // No links at all must keep the document byte-identical to before.
-  assertEquals(wrapInDocument('x', { title: 'T' }).includes('<link'), false);
+  expect(wrapInDocument('x', { title: 'T' }).includes('<link')).toEqual(false);
 });
 
 // ─── Structured script descriptors + CSP nonce (Alpha.1 closure) ────────
 
-Deno.test('wrapInDocument: no scripts and no nonce stays byte-identical', () => {
+test('wrapInDocument: no scripts and no nonce stays byte-identical', () => {
   const baseline =
     '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n' +
     '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
     '  <title>T</title>\n  \n</head>\n<body>\n  x\n  \n</body>\n</html>';
-  assertEquals(wrapInDocument('x', { title: 'T' }), baseline);
+  expect(wrapInDocument('x', { title: 'T' })).toEqual(baseline);
   // An explicitly empty descriptor list changes nothing either.
-  assertEquals(wrapInDocument('x', { title: 'T', scripts: [] }), baseline);
+  expect(wrapInDocument('x', { title: 'T', scripts: [] })).toEqual(baseline);
 });
 
-Deno.test('documentStreamParts reuses the exact document boundary and nonce rules', () => {
+test('documentStreamParts reuses the exact document boundary and nonce rules', () => {
   const options = {
     title: '<Stream>',
     cspNonce: 'nonce123',
@@ -169,30 +167,27 @@ Deno.test('documentStreamParts reuses the exact document boundary and nonce rule
     meta: { description: 'a & b' },
   };
   const { prefix, suffix } = documentStreamParts(options);
-  assertEquals(
-    prefix + '<main>shell</main>' + suffix,
+  expect(prefix + '<main>shell</main>' + suffix).toEqual(
     wrapInDocument('<main>shell</main>', options),
   );
-  assertEquals(prefix.includes('</body>'), false);
-  assertEquals(suffix.includes('nonce="nonce123"'), true);
+  expect(prefix.includes('</body>')).toEqual(false);
+  expect(suffix.includes('nonce="nonce123"')).toEqual(true);
 });
 
-Deno.test('documentStreamParts emits an optional nonce-bearing classic bootstrap in the head', () => {
+test('documentStreamParts emits an optional nonce-bearing classic bootstrap in the head', () => {
   const baseline = documentStreamParts({ title: 'T' });
   const streamed = documentStreamParts({
     title: 'T',
     cspNonce: 'nonce123',
     streamBootstrap: 'window.__streamStarted = true;',
   });
-  assertEquals(
+  expect(
     streamed.prefix.includes(
       '<script nonce="nonce123">window.__streamStarted = true;</script>\n</head>',
     ),
-    true,
-  );
-  assertEquals(streamed.suffix, baseline.suffix);
-  assertEquals(
-    streamed.prefix + 'shell' + streamed.suffix,
+  ).toEqual(true);
+  expect(streamed.suffix).toEqual(baseline.suffix);
+  expect(streamed.prefix + 'shell' + streamed.suffix).toEqual(
     wrapInDocument('shell', {
       title: 'T',
       cspNonce: 'nonce123',
@@ -201,36 +196,34 @@ Deno.test('documentStreamParts emits an optional nonce-bearing classic bootstrap
   );
 });
 
-Deno.test('wrapInDocument: script descriptors serialize byte-identically to the retired injectors when no nonce is present', () => {
+test('wrapInDocument: script descriptors serialize byte-identically to the retired injectors when no nonce is present', () => {
   const out = wrapInDocument('x', {
     scripts: [{ type: 'module', src: '/client/islands/client.js' }],
   });
-  assertEquals(
-    out.includes('<script type="module" src="/client/islands/client.js"></script>'),
+  expect(out.includes('<script type="module" src="/client/islands/client.js"></script>')).toEqual(
     true,
   );
-  assertEquals(out.includes('nonce'), false);
+  expect(out.includes('nonce')).toEqual(false);
 });
 
-Deno.test('wrapInDocument: a valid CSP nonce reaches EVERY generated script tag', () => {
+test('wrapInDocument: a valid CSP nonce reaches EVERY generated script tag', () => {
   const out = wrapInDocument('x', {
     cspNonce: 'abc123+/=_-',
     scripts: [{ type: 'module', src: '/client/islands/client.js' }, { code: 'window.__x = 1;' }],
   });
-  assertEquals(
+  expect(
     out.includes(
       '<script type="module" src="/client/islands/client.js" nonce="abc123+/=_-"></script>',
     ),
-    true,
-  );
-  assertEquals(out.includes('<script nonce="abc123+/=_-">window.__x = 1;</script>'), true);
+  ).toEqual(true);
+  expect(out.includes('<script nonce="abc123+/=_-">window.__x = 1;</script>')).toEqual(true);
   // Every <script ...> in the body carries the nonce.
   const tags = out.match(/<script\b[^>]*>[\s\S]*?<\/script(?:\s+[^>]*)?>/gi) ?? [];
-  assertEquals(tags.length, 2);
-  for (const tag of tags) assertEquals(tag.includes('nonce="abc123+/=_-"'), true, tag);
+  expect(tags.length).toEqual(2);
+  for (const tag of tags) expect(tag.includes('nonce="abc123+/=_-"'), tag).toEqual(true);
 });
 
-Deno.test('wrapInDocument: an invalid nonce still warns and emits no nonce attribute', () => {
+test('wrapInDocument: an invalid nonce still warns and emits no nonce attribute', () => {
   const warnings: string[] = [];
   const originalWarn = console.warn;
   console.warn = (msg: unknown) => warnings.push(String(msg));
@@ -243,18 +236,14 @@ Deno.test('wrapInDocument: an invalid nonce still warns and emits no nonce attri
   } finally {
     console.warn = originalWarn;
   }
-  assertEquals(
-    warnings.some((w) => w.includes('Invalid CSP nonce format')),
-    true,
-  );
-  assertEquals(out.includes('nonce='), false);
-  assertEquals(
-    out.includes('<script type="module" src="/client/islands/client.js"></script>'),
+  expect(warnings.some((w) => w.includes('Invalid CSP nonce format'))).toEqual(true);
+  expect(out.includes('nonce=')).toEqual(false);
+  expect(out.includes('<script type="module" src="/client/islands/client.js"></script>')).toEqual(
     true,
   );
 });
 
-Deno.test('wrapInDocument: script descriptor attributes are escaped; inline </script is guarded', () => {
+test('wrapInDocument: script descriptor attributes are escaped; inline </script is guarded', () => {
   const out = wrapInDocument('x', {
     cspNonce: 'nonce-1_ok=',
     scripts: [
@@ -262,20 +251,20 @@ Deno.test('wrapInDocument: script descriptor attributes are escaped; inline </sc
       { code: 'const s = "</script><script>alert(1)</script>";' },
     ],
   });
-  assertEquals(out.includes('src="/client/a.js?x=1&amp;y=&lt;2&gt;&quot;"'), true);
+  expect(out.includes('src="/client/a.js?x=1&amp;y=&lt;2&gt;&quot;"')).toEqual(true);
   // A literal end tag inside an inline body must not close the element early.
-  assertEquals(out.includes('"</script><script>alert(1)</script>"'), false);
-  assertEquals(out.includes('"<\\/script><script>alert(1)<\\/script>"'), true);
+  expect(out.includes('"</script><script>alert(1)</script>"')).toEqual(false);
+  expect(out.includes('"<\\/script><script>alert(1)<\\/script>"')).toEqual(true);
 });
 
-Deno.test('wrapInDocument: descriptors without src or code are skipped', () => {
+test('wrapInDocument: descriptors without src or code are skipped', () => {
   const out = wrapInDocument('x', { scripts: [{ type: 'module' }] });
-  assertEquals(out.includes('<script'), false);
+  expect(out.includes('<script')).toEqual(false);
 });
 
 // ─── Structured data channel (JSON-LD) ─────────────────────────────────
 
-Deno.test('wrapInDocument: structured data serializes into <head> as application/ld+json', () => {
+test('wrapInDocument: structured data serializes into <head> as application/ld+json', () => {
   const out = wrapInDocument('x', {
     title: 'Notes',
     meta: { description: 'All notes' },
@@ -285,22 +274,21 @@ Deno.test('wrapInDocument: structured data serializes into <head> as application
   const tag =
     '  <script type="application/ld+json">' +
     '{"@context":"https://schema.org","@type":"WebSite","name":"Example"}</script>';
-  assertEquals(out.includes(tag), true);
+  expect(out.includes(tag)).toEqual(true);
   // Inside <head>, after the link collection, before any raw head extras.
   const head = out.slice(out.indexOf('<head>'), out.indexOf('</head>'));
   const tagIndex = head.indexOf(tag);
-  assertEquals(tagIndex > head.indexOf('<link rel="canonical"'), true);
-  assertEquals(head.includes(tag), true);
+  expect(tagIndex > head.indexOf('<link rel="canonical"')).toEqual(true);
+  expect(head.includes(tag)).toEqual(true);
   // The payload is data, not markup: nothing is HTML-escaped or re-encoded.
-  assertEquals(tag.includes('&quot;'), false);
+  expect(tag.includes('&quot;')).toEqual(false);
   // No structured data (or an empty list) changes nothing.
-  assertEquals(
-    wrapInDocument('x', { title: 'T' }),
+  expect(wrapInDocument('x', { title: 'T' })).toEqual(
     wrapInDocument('x', { title: 'T', structuredData: [] }),
   );
 });
 
-Deno.test('wrapInDocument: structured data cannot close its script element or open a comment', () => {
+test('wrapInDocument: structured data cannot close its script element or open a comment', () => {
   const payload = 'Notes</script><img src=x onerror=alert(1)><!--<script>alert(2)</script>';
   const open = '<script type="application/ld+json">';
   const out = wrapInDocument('x', {
@@ -308,33 +296,32 @@ Deno.test('wrapInDocument: structured data cannot close its script element or op
   });
   // Exactly one end tag: the framework's own. Nothing in the payload can
   // close the element, open a comment or start a nested script.
-  assertEquals((out.match(/<\/script>/g) ?? []).length, 1);
+  expect((out.match(/<\/script>/g) ?? []).length).toEqual(1);
   for (const forbidden of ['<!--', '<img', '<script>alert(2)']) {
-    assertEquals(out.includes(forbidden), false, `${forbidden} must not survive in the document`);
+    expect(out.includes(forbidden), `${forbidden} must not survive in the document`).toEqual(false);
   }
-  assertEquals(out.includes('\\u003C/script>\\u003Cimg'), true);
+  expect(out.includes('\\u003C/script>\\u003Cimg')).toEqual(true);
   // The JSON still round-trips to the original text: escaping is a markup
   // constraint, not a change of meaning.
-  assertEquals(JSON.parse(out.slice(out.indexOf(open) + open.length, out.indexOf('</script>'))), {
+  expect(JSON.parse(out.slice(out.indexOf(open) + open.length, out.indexOf('</script>')))).toEqual({
     '@type': 'Article',
     headline: payload,
   });
 });
 
-Deno.test('wrapInDocument: a valid CSP nonce also reaches the structured data tag', () => {
+test('wrapInDocument: a valid CSP nonce also reaches the structured data tag', () => {
   const out = wrapInDocument('x', {
     cspNonce: 'nonce-1_ok=',
     structuredData: [{ '@type': 'WebSite' }],
   });
-  assertEquals(
+  expect(
     out.includes(
       '<script type="application/ld+json" nonce="nonce-1_ok=">{"@type":"WebSite"}</script>',
     ),
-    true,
-  );
+  ).toEqual(true);
 });
 
-Deno.test('wrapInDocument: non-JSON structured data entries fail closed', () => {
+test('wrapInDocument: non-JSON structured data entries fail closed', () => {
   // Values JSON itself cannot represent (a function- or undefined-valued
   // property is silently DROPPED by JSON.stringify) are rejected a layer up,
   // by the structured-data channel in @openelement/router/document; this
@@ -363,16 +350,16 @@ Deno.test('wrapInDocument: non-JSON structured data entries fail closed', () => 
     } catch (error) {
       thrown = error;
     }
-    assertInstanceOf(thrown, OpenElementError, name);
-    assertEquals(thrown.code, 'OE_INVALID_STRUCTURED_DATA', name);
-    assertEquals(thrown.phase, 'build', name);
-    assertEquals(thrown.message.includes('structuredData'), true, name);
+    expect(thrown, name).toBeInstanceOf(OpenElementError);
+    expect(thrown.code, name).toEqual('OE_INVALID_STRUCTURED_DATA');
+    expect(thrown.phase, name).toEqual('build');
+    expect(thrown.message.includes('structuredData'), name).toEqual(true);
   }
 });
 
 // ─── meta.tags attribute names fail closed (#1373, P4) ─────────────────
 
-Deno.test('wrapInDocument: well-formed meta.tags keys still serialize unchanged (#1373)', () => {
+test('wrapInDocument: well-formed meta.tags keys still serialize unchanged (#1373)', () => {
   // Safe-input parity: the name validation only adds rejections; keys that
   // were safe before emit the same bytes as before.
   const out = wrapInDocument('x', {
@@ -383,11 +370,11 @@ Deno.test('wrapInDocument: well-formed meta.tags keys still serialize unchanged 
       ],
     },
   });
-  assertEquals(out.includes('<meta name="robots" content="index, follow">'), true);
-  assertEquals(out.includes('<meta http-equiv="refresh" data:x-tra="1" flag="true">'), true);
+  expect(out.includes('<meta name="robots" content="index, follow">')).toEqual(true);
+  expect(out.includes('<meta http-equiv="refresh" data:x-tra="1" flag="true">')).toEqual(true);
 });
 
-Deno.test('wrapInDocument: unsafe meta.tags keys throw with a structured code (#1373)', () => {
+test('wrapInDocument: unsafe meta.tags keys throw with a structured code (#1373)', () => {
   // `escapeAttr` escapes value characters but not NAME grammar, so a key
   // carrying a space or `=` would inject attributes into the emitted <meta>
   // element. The canonical isSafeAttributeName predicate rejects those keys
@@ -409,9 +396,9 @@ Deno.test('wrapInDocument: unsafe meta.tags keys throw with a structured code (#
     } catch (e) {
       thrown = e;
     }
-    assertInstanceOf(thrown, OpenElementError, name);
-    assertEquals(thrown.code, 'OE_UNSAFE_META_ATTRIBUTE', name);
-    assertEquals(thrown.message.includes('unsafe meta attribute name'), true, name);
-    assertEquals(thrown.recoverable, false, name);
+    expect(thrown, name).toBeInstanceOf(OpenElementError);
+    expect(thrown.code, name).toEqual('OE_UNSAFE_META_ATTRIBUTE');
+    expect(thrown.message.includes('unsafe meta attribute name'), name).toEqual(true);
+    expect(thrown.recoverable, name).toEqual(false);
   }
 });

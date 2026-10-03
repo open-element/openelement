@@ -427,10 +427,6 @@ export default defineConfig({
   // Exercise Linux's fs.watch backend on every host, including macOS.
   server: { watch: { useFsEvents: false, usePolling: false } },
   base: '/',
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: '@openelement/element',
-  },
   plugins: [
     ...openElement({
       routesDir: 'app/routes',
@@ -451,7 +447,6 @@ export default defineConfig({
 const NATIVE_LEG: PackedAppLegSpec = {
   renderer: 'native',
   externals: {},
-  importMapExtras: {},
   compilerOptions: {
     lib: ['ES2022', 'DOM', 'DOM.Iterable'],
     jsx: 'react-jsx',
@@ -472,15 +467,6 @@ const NATIVE_LEG: PackedAppLegSpec = {
     'app/islands/note-counter.tsx': NATIVE_ISLAND_COUNTER,
   },
   viteConfig: NATIVE_VITE_CONFIG,
-  checkEntries: [
-    'app/routes/index.tsx',
-    'app/routes/notes/index.tsx',
-    `app/routes/notes/[id].tsx`,
-    'app/routes/notes/new.tsx',
-    'app/routes/404.tsx',
-    'app/islands/note-counter.tsx',
-    'app/store.ts',
-  ],
   probes: [
     { path: '/', status: 200, markers: ['packed-app-native home', 'build-count=2'] },
     {

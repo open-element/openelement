@@ -1,4 +1,5 @@
-import { assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { createDeferredServerExecutor } from '../../src/internal/compiled/server/index.ts';
 import {
   STREAM_STATE_KEY,
@@ -94,16 +95,16 @@ function fixture(early: boolean, seedType = 'string') {
   return { element, main, state, listeners, original };
 }
 
-Deno.test('OpenElement adopts a streamed text Part that arrived before claim', () => {
+test('OpenElement adopts a streamed text Part that arrived before claim', () => {
   const { element, main, original } = fixture(true);
-  assertStrictEquals(main.childNodes[2], original);
-  assertEquals(element.title, 'Early');
+  expect(main.childNodes[2]).toBe(original);
+  expect(element.title).toEqual('Early');
   element.title = 'Updated';
-  assertEquals((original as { data: string }).data, 'Updated');
+  expect((original as { data: string }).data).toEqual('Updated');
   dom.document.body.removeChild(element);
 });
 
-Deno.test('OpenElement claims an empty streamed Part then adopts a late frame', () => {
+test('OpenElement claims an empty streamed Part then adopts a late frame', () => {
   const { element, main, state, listeners } = fixture(false);
   const staticNode = main.childNodes[0];
   const end = main.childNodes.find((node) => 'data' in node && node.data === 'oe:/p0')!;
@@ -112,40 +113,40 @@ Deno.test('OpenElement claims an empty streamed Part then adopts a late frame', 
   state.properties.title = { state: 'resolved', type: 'string', value: 'Late' };
   state.pending.delete(0);
   for (const listener of listeners) listener(0, 'title', 'content');
-  assertStrictEquals(main.childNodes[0], staticNode);
-  assertStrictEquals(main.childNodes[2], text);
-  assertEquals(element.title, 'Late');
+  expect(main.childNodes[0]).toBe(staticNode);
+  expect(main.childNodes[2]).toBe(text);
+  expect(element.title).toEqual('Late');
   element.title = 'Updated';
-  assertEquals(text.data, 'Updated');
+  expect(text.data).toEqual('Updated');
   dom.document.body.removeChild(element);
-  assertEquals(listeners.size, 0);
+  expect(listeners.size).toEqual(0);
 });
 
-Deno.test('OpenElement disconnect cancels pending stream adoption without losing signal value', () => {
+test('OpenElement disconnect cancels pending stream adoption without losing signal value', () => {
   const { element, main, state, listeners } = fixture(false);
   const original = main.childNodes[0];
   element.title = 'Local';
   dom.document.body.removeChild(element);
-  assertEquals(listeners.size, 0);
+  expect(listeners.size).toEqual(0);
   state.properties.title = { state: 'resolved', type: 'string', value: 'Too late' };
   state.pending.delete(0);
   for (const listener of listeners) listener(0, 'title', 'content');
-  assertEquals(element.title, 'Local');
-  assertStrictEquals(main.childNodes[0], original);
+  expect(element.title).toEqual('Local');
+  expect(main.childNodes[0]).toBe(original);
 });
 
-Deno.test('a streamed seed whose type mismatches the compiled record fails closed with its own code', () => {
+test('a streamed seed whose type mismatches the compiled record fails closed with its own code', () => {
   // The mismatch is its own raiser, not a PROGRAM_MISSING reuse.
-  assertEquals(FacadeErrorCode.STREAM_TYPE_MISMATCH, 'OE_STREAM_TYPE_MISMATCH');
+  expect(FacadeErrorCode.STREAM_TYPE_MISMATCH).toEqual('OE_STREAM_TYPE_MISMATCH');
   // Mount throws out of connectedCallback with the element already attached;
   // release the stray host so the failure stays isolated to this test.
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () => fixture(false, 'number'),
     OpenElementError,
     'has a mismatched type',
   );
   const stray = dom.document.body.childNodes.at(-1);
   if (stray) dom.document.body.removeChild(stray as never);
-  assertEquals(error.code, 'OE_STREAM_TYPE_MISMATCH');
-  assertEquals(error.phase, 'csr');
+  expect(error.code).toEqual('OE_STREAM_TYPE_MISMATCH');
+  expect(error.phase).toEqual('csr');
 });

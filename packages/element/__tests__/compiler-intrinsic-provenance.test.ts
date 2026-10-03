@@ -22,7 +22,8 @@
  *   - compileElementProgram:  the compiler boundary (throws OEC9xx)
  */
 
-import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   CompiledElementError,
   compileElementProgram,
@@ -66,13 +67,16 @@ function compileError(source: string, file = FILE): CompiledElementError {
   try {
     compileElementProgram(source, file);
   } catch (error) {
-    assert(error instanceof CompiledElementError, `expected CompiledElementError, got ${error}`);
+    expect(
+      error instanceof CompiledElementError,
+      `expected CompiledElementError, got ${error}`,
+    ).toBeTruthy();
     return error;
   }
   throw new Error(`expected compilation to fail closed:\n${source}`);
 }
 
-Deno.test('provenance: canonical imports admit the grammar and intrinsic bindings are stripped', () => {
+test('provenance: canonical imports admit the grammar and intrinsic bindings are stripped', () => {
   const source = [
     "import { element, OpenElement, property } from '@openelement/element';",
     "@element('oe-provenance-canonical')",
@@ -83,24 +87,24 @@ Deno.test('provenance: canonical imports admit the grammar and intrinsic binding
   ].join('\n');
 
   const analysis = analyzeModuleSemantics(source, FILE);
-  assertEquals(analysis.compiledElementDecorator, true);
-  assertEquals(analysis.definedCustomElementTags, ['oe-provenance-canonical']);
+  expect(analysis.compiledElementDecorator).toEqual(true);
+  expect(analysis.definedCustomElementTags).toEqual(['oe-provenance-canonical']);
 
   const gated = compileElementModule(source, FILE);
-  assert(gated !== null, 'canonical module must be admitted through the plugin gate');
+  expect(gated !== null, 'canonical module must be admitted through the plugin gate').toBeTruthy();
 
   const { code, program } = compileElementProgram(source, FILE);
-  assertEquals(program.tag, 'oe-provenance-canonical');
+  expect(program.tag).toEqual('oe-provenance-canonical');
   // element/property are compile-time-only intrinsics: the runtime package
   // exports neither, so the generated module must not import them.
-  assertStringIncludes(code, "import { OpenElement } from '@openelement/element';");
-  assertEquals(code.includes('element,'), false, code);
-  assertEquals(code.includes('property,'), false, code);
-  assertEquals(code.includes('@element'), false);
-  assertEquals(code.includes('@property'), false);
+  expect(code).toContain("import { OpenElement } from '@openelement/element';");
+  expect(code.includes('element,'), code).toEqual(false);
+  expect(code.includes('property,'), code).toEqual(false);
+  expect(code.includes('@element')).toEqual(false);
+  expect(code.includes('@property')).toEqual(false);
 });
 
-Deno.test('provenance: aliased canonical OpenElement heritage compiles and codegen follows the alias', () => {
+test('provenance: aliased canonical OpenElement heritage compiles and codegen follows the alias', () => {
   const source = [
     "import { element, OpenElement as OpenBase, property } from '@openelement/element';",
     "@element('oe-provenance-alias-base')",
@@ -110,12 +114,12 @@ Deno.test('provenance: aliased canonical OpenElement heritage compiles and codeg
     '}',
   ].join('\n');
   const { code, program } = compileElementProgram(source, FILE);
-  assertEquals(program.tag, 'oe-provenance-alias-base');
-  assertStringIncludes(code, 'extends OpenBase {');
-  assertStringIncludes(code, "import { OpenElement as OpenBase } from '@openelement/element';");
+  expect(program.tag).toEqual('oe-provenance-alias-base');
+  expect(code).toContain('extends OpenBase {');
+  expect(code).toContain("import { OpenElement as OpenBase } from '@openelement/element';");
 });
 
-Deno.test('provenance: aliased canonical decorator and property imports compile', () => {
+test('provenance: aliased canonical decorator and property imports compile', () => {
   const source = [
     "import { element as defineElement, OpenElement, property as field } from '@openelement/element';",
     "@defineElement('oe-provenance-alias-decorator')",
@@ -125,18 +129,18 @@ Deno.test('provenance: aliased canonical decorator and property imports compile'
     '}',
   ].join('\n');
   const analysis = analyzeModuleSemantics(source, FILE);
-  assertEquals(analysis.compiledElementDecorator, true);
-  assertEquals(analysis.definedCustomElementTags, ['oe-provenance-alias-decorator']);
+  expect(analysis.compiledElementDecorator).toEqual(true);
+  expect(analysis.definedCustomElementTags).toEqual(['oe-provenance-alias-decorator']);
   const { code, program } = compileElementProgram(source, FILE);
-  assertEquals(program.tag, 'oe-provenance-alias-decorator');
-  assertEquals(program.metadata.properties[0].name, 'label');
+  expect(program.tag).toEqual('oe-provenance-alias-decorator');
+  expect(program.metadata.properties[0].name).toEqual('label');
   // Both compile-time-only bindings strip to the one runtime import.
-  assertStringIncludes(code, "import { OpenElement } from '@openelement/element';");
-  assertEquals(code.includes('defineElement'), false, code);
-  assertEquals(code.includes('@field'), false, code);
+  expect(code).toContain("import { OpenElement } from '@openelement/element';");
+  expect(code.includes('defineElement'), code).toEqual(false);
+  expect(code.includes('@field'), code).toEqual(false);
 });
 
-Deno.test('provenance: aliased computed, trustedHtml and defineIslandConfig stay canonical', () => {
+test('provenance: aliased computed, trustedHtml and defineIslandConfig stay canonical', () => {
   const source = [
     'import {',
     '  computed as derive,',
@@ -162,25 +166,24 @@ Deno.test('provenance: aliased computed, trustedHtml and defineIslandConfig stay
   const { code, program } = compileElementProgram(source, FILE, {
     staticSidecars: [ISLAND_SIDECAR],
   });
-  assertEquals(program.root.kind, 'shadow-open');
+  expect(program.root.kind).toEqual('shadow-open');
   const upper = program.metadata.properties.find((p) => p.name === 'upper');
-  assertEquals(upper?.computed, true);
-  assertEquals(upper?.deps, ['label']);
+  expect(upper?.computed).toEqual(true);
+  expect(upper?.deps).toEqual(['label']);
   // The island policy statement is recognized by provenance (aliased import)
   // and copied verbatim into the generated module.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "export const openElement = island({ hydrate: 'load', ssr: true, dsd: true });",
   );
   // The derived-signal factory calls the aliased canonical binding.
-  assertStringIncludes(code, 'derive(() => __s.label.value)');
-  assert(
+  expect(code).toContain('derive(() => __s.label.value)');
+  expect(
     program.parts.some((part) => part.k === 'html'),
     'html Part must exist',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('provenance: an unrelated third-party function named element is never admitted', () => {
+test('provenance: an unrelated third-party function named element is never admitted', () => {
   const source = [
     "import { element } from '@third-party/decorators';",
     "import { OpenElement, property } from '@openelement/element';",
@@ -190,13 +193,13 @@ Deno.test('provenance: an unrelated third-party function named element is never 
     '  render() { return <div>{this.x}</div>; }',
     '}',
   ].join('\n');
-  assertEquals(analyzeModuleSemantics(source, FILE).compiledElementDecorator, false);
-  assertEquals(compileElementModule(source, FILE), null);
+  expect(analyzeModuleSemantics(source, FILE).compiledElementDecorator).toEqual(false);
+  expect(compileElementModule(source, FILE)).toEqual(null);
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9001');
+  expect(String(error)).toContain('OEC9001');
 });
 
-Deno.test('provenance: an unrelated local class named OpenElement fails heritage closed', () => {
+test('provenance: an unrelated local class named OpenElement fails heritage closed', () => {
   const source = [
     "import { element, property } from '@openelement/element';",
     // An ambient module-scope binding keeps the compiled-module grammar shape
@@ -211,14 +214,14 @@ Deno.test('provenance: an unrelated local class named OpenElement fails heritage
   ].join('\n');
   // The decorator is canonical, so the module is admitted — then the heritage
   // clause fails closed because the local class is not the canonical binding.
-  assertEquals(analyzeModuleSemantics(source, FILE).compiledElementDecorator, true);
+  expect(analyzeModuleSemantics(source, FILE).compiledElementDecorator).toEqual(true);
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9003');
-  assertStringIncludes(String(error), 'OpenElement');
-  assertThrows(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9003');
+  expect(String(error)).toContain('OEC9003');
+  expect(String(error)).toContain('OpenElement');
+  assertThrowsIncludes(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9003');
 });
 
-Deno.test('provenance: a local same-name element function is never admitted', () => {
+test('provenance: a local same-name element function is never admitted', () => {
   const source = [
     "import { OpenElement, property } from '@openelement/element';",
     'function element(_tag: string) {',
@@ -230,16 +233,16 @@ Deno.test('provenance: a local same-name element function is never admitted', ()
     '  render() { return <div>{this.x}</div>; }',
     '}',
   ].join('\n');
-  assertEquals(analyzeModuleSemantics(source, FILE).compiledElementDecorator, false);
-  assertEquals(compileElementModule(source, FILE), null);
+  expect(analyzeModuleSemantics(source, FILE).compiledElementDecorator).toEqual(false);
+  expect(compileElementModule(source, FILE)).toEqual(null);
   // Fed to the compiler directly, the local function declaration is itself
   // outside the compiled module grammar — either way the module never enters
   // the language through a same-name spelling.
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9008');
+  expect(String(error)).toContain('OEC9008');
 });
 
-Deno.test('provenance: the legacy ambient declare spelling is never admitted', () => {
+test('provenance: the legacy ambient declare spelling is never admitted', () => {
   const source = [
     "import { OpenElement, property } from '@openelement/element';",
     'declare function element(tag: string): ClassDecorator;',
@@ -249,13 +252,13 @@ Deno.test('provenance: the legacy ambient declare spelling is never admitted', (
     '  render() { return <div>{this.x}</div>; }',
     '}',
   ].join('\n');
-  assertEquals(analyzeModuleSemantics(source, FILE).compiledElementDecorator, false);
-  assertEquals(compileElementModule(source, FILE), null);
+  expect(analyzeModuleSemantics(source, FILE).compiledElementDecorator).toEqual(false);
+  expect(compileElementModule(source, FILE)).toEqual(null);
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9001');
+  expect(String(error)).toContain('OEC9001');
 });
 
-Deno.test('provenance: an unbound bare element spelling is never admitted', () => {
+test('provenance: an unbound bare element spelling is never admitted', () => {
   const source = [
     "import { OpenElement } from '@openelement/element';",
     "@element('oe-unbound-element')",
@@ -263,13 +266,13 @@ Deno.test('provenance: an unbound bare element spelling is never admitted', () =
     '  render() { return <div>ok</div>; }',
     '}',
   ].join('\n');
-  assertEquals(analyzeModuleSemantics(source, FILE).compiledElementDecorator, false);
-  assertEquals(compileElementModule(source, FILE), null);
+  expect(analyzeModuleSemantics(source, FILE).compiledElementDecorator).toEqual(false);
+  expect(compileElementModule(source, FILE)).toEqual(null);
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9001');
+  expect(String(error)).toContain('OEC9001');
 });
 
-Deno.test('provenance: lexical shadowing of computed by a local binding fails closed', () => {
+test('provenance: lexical shadowing of computed by a local binding fails closed', () => {
   const source = [
     "import { element, OpenElement, property } from '@openelement/element';",
     // An ambient module-scope binding shadows the (absent) canonical import:
@@ -284,11 +287,11 @@ Deno.test('provenance: lexical shadowing of computed by a local binding fails cl
     '}',
   ].join('\n');
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9025');
-  assertStringIncludes(String(error), 'computed');
+  expect(String(error)).toContain('OEC9025');
+  expect(String(error)).toContain('computed');
 });
 
-Deno.test('provenance: computed imported from a third-party module fails closed', () => {
+test('provenance: computed imported from a third-party module fails closed', () => {
   const source = [
     "import { element, OpenElement, property } from '@openelement/element';",
     "import { computed } from '@preact/signals-core';",
@@ -300,11 +303,11 @@ Deno.test('provenance: computed imported from a third-party module fails closed'
     '}',
   ].join('\n');
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9025');
-  assertStringIncludes(String(error), '@openelement/element');
+  expect(String(error)).toContain('OEC9025');
+  expect(String(error)).toContain('@openelement/element');
 });
 
-Deno.test('provenance: a bare trustedHtml wrapper without the canonical import fails closed', () => {
+test('provenance: a bare trustedHtml wrapper without the canonical import fails closed', () => {
   const source = [
     "import { element, OpenElement, property } from '@openelement/element';",
     "@element('oe-bare-trusted-html')",
@@ -315,11 +318,11 @@ Deno.test('provenance: a bare trustedHtml wrapper without the canonical import f
     '}',
   ].join('\n');
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9026');
-  assertStringIncludes(String(error), 'trustedHtml');
+  expect(String(error)).toContain('OEC9026');
+  expect(String(error)).toContain('trustedHtml');
 });
 
-Deno.test('provenance: a third-party property decorator fails closed', () => {
+test('provenance: a third-party property decorator fails closed', () => {
   const source = [
     "import { element, OpenElement } from '@openelement/element';",
     "import { property } from '@third-party/decorators';",
@@ -330,10 +333,10 @@ Deno.test('provenance: a third-party property decorator fails closed', () => {
     '}',
   ].join('\n');
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9004');
+  expect(String(error)).toContain('OEC9004');
 });
 
-Deno.test('provenance: type-only element imports are unsupported and fail closed (OEC9027)', () => {
+test('provenance: type-only element imports are unsupported and fail closed (OEC9027)', () => {
   for (const importLine of [
     "import type { element } from '@openelement/element';\n" +
       "import { OpenElement, property } from '@openelement/element';",
@@ -348,19 +351,19 @@ Deno.test('provenance: type-only element imports are unsupported and fail closed
       '}',
     ].join('\n');
     const analysis = analyzeModuleSemantics(source, FILE);
-    assertEquals(analysis.compiledElementDecorator, false);
-    assert(
+    expect(analysis.compiledElementDecorator).toEqual(false);
+    expect(
       typeof analysis.unsupportedElementDecorator === 'string',
       'module analysis must surface the unsupported decorator provenance',
-    );
-    assertThrows(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9027');
+    ).toBeTruthy();
+    assertThrowsIncludes(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9027');
     const error = compileError(source);
-    assertStringIncludes(String(error), 'OEC9027');
-    assertStringIncludes(String(error), 'type-only');
+    expect(String(error)).toContain('OEC9027');
+    expect(String(error)).toContain('type-only');
   }
 });
 
-Deno.test('provenance: namespace imports are unsupported and fail closed (OEC9027)', () => {
+test('provenance: namespace imports are unsupported and fail closed (OEC9027)', () => {
   const source = [
     "import * as OE from '@openelement/element';",
     "@OE.element('oe-namespace-element')",
@@ -368,19 +371,19 @@ Deno.test('provenance: namespace imports are unsupported and fail closed (OEC902
     '  render() { return <div>ok</div>; }',
     '}',
   ].join('\n');
-  assertEquals(analyzeModuleSemantics(source, FILE).compiledElementDecorator, false);
+  expect(analyzeModuleSemantics(source, FILE).compiledElementDecorator).toEqual(false);
   // The cheap plugin prefilter matches '@element(' literally, so a
   // namespace-qualified decorator never even reaches analysis — the module
   // passes through untouched rather than entering the grammar.
-  assertEquals(compileElementModule(source, FILE), null);
+  expect(compileElementModule(source, FILE)).toEqual(null);
   // The compiler boundary itself still fails closed with the provenance
   // diagnostic when invoked directly.
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9027');
-  assertStringIncludes(String(error), 'namespace');
+  expect(String(error)).toContain('OEC9027');
+  expect(String(error)).toContain('namespace');
 });
 
-Deno.test('provenance: duplicate conflicting element bindings fail closed (OEC9027)', () => {
+test('provenance: duplicate conflicting element bindings fail closed (OEC9027)', () => {
   const source = [
     "import { element } from '@openelement/element';",
     "import { element } from '@third-party/decorators';",
@@ -391,14 +394,14 @@ Deno.test('provenance: duplicate conflicting element bindings fail closed (OEC90
     '  render() { return <div>{this.x}</div>; }',
     '}',
   ].join('\n');
-  assertEquals(analyzeModuleSemantics(source, FILE).compiledElementDecorator, false);
-  assertThrows(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9027');
+  expect(analyzeModuleSemantics(source, FILE).compiledElementDecorator).toEqual(false);
+  assertThrowsIncludes(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9027');
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9027');
-  assertStringIncludes(String(error), 'conflicting');
+  expect(String(error)).toContain('OEC9027');
+  expect(String(error)).toContain('conflicting');
 });
 
-Deno.test('provenance: relative-module re-export provenance fails closed (OEC9027)', () => {
+test('provenance: relative-module re-export provenance fails closed (OEC9027)', () => {
   // Deliberate non-support: the semantic core analyzes one module and stays
   // bundler-neutral (ADR-0148), so it never follows re-exports across files.
   // A relative import of the intrinsic name is treated as an intended but
@@ -413,14 +416,14 @@ Deno.test('provenance: relative-module re-export provenance fails closed (OEC902
     '}',
   ].join('\n');
   const analysis = analyzeModuleSemantics(source, FILE);
-  assertEquals(analysis.compiledElementDecorator, false);
-  assertStringIncludes(analysis.unsupportedElementDecorator ?? '', 'canonical');
-  assertThrows(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9027');
+  expect(analysis.compiledElementDecorator).toEqual(false);
+  expect(analysis.unsupportedElementDecorator ?? '').toContain('canonical');
+  assertThrowsIncludes(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9027');
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9027');
+  expect(String(error)).toContain('OEC9027');
 });
 
-Deno.test('provenance: the island policy statement requires the canonical defineIslandConfig', () => {
+test('provenance: the island policy statement requires the canonical defineIslandConfig', () => {
   const source = [
     "import { element, OpenElement } from '@openelement/element';",
     "export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });",
@@ -430,17 +433,17 @@ Deno.test('provenance: the island policy statement requires the canonical define
     '}',
   ].join('\n');
   const error = compileError(source);
-  assertStringIncludes(String(error), 'OEC9008');
+  expect(String(error)).toContain('OEC9008');
   // Injection does not soften the bare-spelling edge: an unbound spelling is
   // never the policy statement, descriptor or not.
-  assertThrows(
+  assertThrowsIncludes(
     () => compileElementProgram(source, FILE, { staticSidecars: [ISLAND_SIDECAR] }),
     CompiledElementError,
     'OEC9008',
   );
 });
 
-Deno.test('provenance: the island sidecar is admitted only through the injected descriptor', () => {
+test('provenance: the island sidecar is admitted only through the injected descriptor', () => {
   const imported = [
     "import { element, OpenElement } from '@openelement/element';",
     "import { defineIslandConfig } from '@openelement/router';",
@@ -455,17 +458,20 @@ Deno.test('provenance: the island sidecar is admitted only through the injected 
   // imported statement stays outside the compiled module grammar (OEC9008)
   // at both the plugin gate and the compiler boundary.
   const error = compileError(imported);
-  assertStringIncludes(String(error), 'OEC9008');
-  assertThrows(() => compileElementModule(imported, FILE), CompiledElementError, 'OEC9008');
+  expect(String(error)).toContain('OEC9008');
+  assertThrowsIncludes(() => compileElementModule(imported, FILE), CompiledElementError, 'OEC9008');
 
   // With the host descriptor injected, the plugin gate and the compiler
   // boundary share the same admission and copy the statement verbatim.
   const options = { staticSidecars: [ISLAND_SIDECAR] };
   const gated = compileElementModule(imported, FILE, options);
-  assert(gated !== null, 'the injected descriptor must admit the island policy statement');
-  assertStringIncludes(gated.code, 'export const openElement = defineIslandConfig(');
+  expect(
+    gated !== null,
+    'the injected descriptor must admit the island policy statement',
+  ).toBeTruthy();
+  expect(gated.code).toContain('export const openElement = defineIslandConfig(');
   const { code } = compileElementProgram(imported, FILE, options);
-  assertStringIncludes(code, 'export const openElement = defineIslandConfig(');
+  expect(code).toContain('export const openElement = defineIslandConfig(');
 
   // The fail-closed provenance edges are descriptor-scoped, not
   // spelling-scoped: namespace access, type-only imports, default imports,
@@ -505,17 +511,17 @@ Deno.test('provenance: the island sidecar is admitted only through the injected 
   ];
   for (const [importLine, statement] of edges) {
     const edgeError = compileError(withEdge(importLine, statement));
-    assertStringIncludes(String(edgeError), 'OEC9008');
+    expect(String(edgeError)).toContain('OEC9008');
   }
 });
 
-Deno.test('provenance: module analysis drops bare-spelling defineElement but keeps bound imports', () => {
+test('provenance: module analysis drops bare-spelling defineElement but keeps bound imports', () => {
   const bare = analyzeModuleSemantics(
     "defineElement('oe-bare-defined', {});",
     '/project/app/routes/bare.tsx',
   );
-  assertEquals(bare.definedCustomElementTags, []);
-  assertEquals(bare.usesExportedTagName, false);
+  expect(bare.definedCustomElementTags).toEqual([]);
+  expect(bare.usesExportedTagName).toEqual(false);
 
   const boundSource = [
     "import { defineElement } from '@openelement/router';",
@@ -525,12 +531,12 @@ Deno.test('provenance: module analysis drops bare-spelling defineElement but kee
   // Default scan (no injected vocabulary): the router factory is unknown —
   // fail closed.
   const unadmitted = analyzeModuleSemantics(boundSource, '/project/app/routes/unadmitted.tsx');
-  assertEquals(unadmitted.definedCustomElementTags, []);
-  assertEquals(unadmitted.usesExportedTagName, false);
+  expect(unadmitted.definedCustomElementTags).toEqual([]);
+  expect(unadmitted.usesExportedTagName).toEqual(false);
   // Host-injected vocabulary: the bound import is recognized (aliases
   // followed, canonical specifier).
   const bound = analyzeModuleSemantics(boundSource, '/project/app/routes/bound.tsx', {
     vocabulary: ROUTER_VOCABULARY,
   });
-  assertEquals(bound.usesExportedTagName, true);
+  expect(bound.usesExportedTagName).toEqual(true);
 });

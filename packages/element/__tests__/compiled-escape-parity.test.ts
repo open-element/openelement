@@ -15,7 +15,8 @@
  * regrowing a private walker in either execution module.
  */
 
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
 import { serializeToHtml as serializeRuntime } from '../src/internal/compiled/runtime.ts';
 import { serializeToHtml as serializeServer } from '../src/internal/compiled/server/index.ts';
 import { escapeAttr } from '../src/internal/core/html-escape.ts';
@@ -49,7 +50,7 @@ function hostWith(value: unknown) {
 
 type RuntimeHost = Parameters<typeof serializeRuntime>[1];
 
-Deno.test('escape parity: attr Part corpus is byte-identical across both serializers', () => {
+test('escape parity: attr Part corpus is byte-identical across both serializers', () => {
   for (const value of CORPUS) {
     const program = testProgram({
       tag: 'x-parity',
@@ -58,16 +59,14 @@ Deno.test('escape parity: attr Part corpus is byte-identical across both seriali
     });
     const runtime = serializeRuntime(program, hostWith(value) as unknown as RuntimeHost);
     const server = serializeServer(program, hostWith(value));
-    assertEquals(runtime, server, `serializers diverged for ${JSON.stringify(value)}`);
-    assertEquals(
-      runtime,
+    expect(runtime, `serializers diverged for ${JSON.stringify(value)}`).toEqual(server);
+    expect(runtime, `shared escapeAttr contract broken for ${JSON.stringify(value)}`).toEqual(
       `<div title="${escapeAttr(value)}"></div>`,
-      `shared escapeAttr contract broken for ${JSON.stringify(value)}`,
     );
   }
 });
 
-Deno.test('escape parity: fixed attribute corpus is byte-identical across both serializers', () => {
+test('escape parity: fixed attribute corpus is byte-identical across both serializers', () => {
   for (const value of CORPUS) {
     const program = testProgram({
       tag: 'x-parity',
@@ -76,13 +75,13 @@ Deno.test('escape parity: fixed attribute corpus is byte-identical across both s
     });
     const runtime = serializeRuntime(program, hostWith(undefined) as unknown as RuntimeHost);
     const server = serializeServer(program, hostWith(undefined));
-    assertEquals(runtime, server, `serializers diverged for ${JSON.stringify(value)}`);
-    assertEquals(runtime, `<div title="${escapeAttr(value)}"></div>`);
+    expect(runtime, `serializers diverged for ${JSON.stringify(value)}`).toEqual(server);
+    expect(runtime).toEqual(`<div title="${escapeAttr(value)}"></div>`);
   }
 });
 
-Deno.test('escape parity: canonical contract escapes & < > " and \'', () => {
-  assertEquals(escapeAttr(`a&b"c<d>e'f`), 'a&amp;b&quot;c&lt;d&gt;e&#39;f');
+test('escape parity: canonical contract escapes & < > " and \'', () => {
+  expect(escapeAttr(`a&b"c<d>e'f`)).toEqual('a&amp;b&quot;c&lt;d&gt;e&#39;f');
 });
 
 /**
@@ -110,7 +109,7 @@ const TEXT_CORPUS: readonly string[] = [
   `</script><script>alert(1)</script>`,
 ];
 
-Deno.test('escape parity: static text corpus is byte-identical across both serializers', () => {
+test('escape parity: static text corpus is byte-identical across both serializers', () => {
   for (const value of TEXT_CORPUS) {
     const program = testProgram({
       tag: 'x-parity',
@@ -119,16 +118,14 @@ Deno.test('escape parity: static text corpus is byte-identical across both seria
     });
     const runtime = serializeRuntime(program, hostWith(undefined) as unknown as RuntimeHost);
     const server = serializeServer(program, hostWith(undefined));
-    assertEquals(runtime, server, `serializers diverged for ${JSON.stringify(value)}`);
-    assertEquals(
-      runtime,
+    expect(runtime, `serializers diverged for ${JSON.stringify(value)}`).toEqual(server);
+    expect(runtime, `shared escapeText contract broken for ${JSON.stringify(value)}`).toEqual(
       `<div>${escapeText(value)}</div>`,
-      `shared escapeText contract broken for ${JSON.stringify(value)}`,
     );
   }
 });
 
-Deno.test('escape parity: text Part corpus is byte-identical across both serializers', () => {
+test('escape parity: text Part corpus is byte-identical across both serializers', () => {
   for (const value of TEXT_CORPUS) {
     const program = testProgram({
       tag: 'x-parity',
@@ -137,18 +134,16 @@ Deno.test('escape parity: text Part corpus is byte-identical across both seriali
     });
     const runtime = serializeRuntime(program, hostWith(value) as unknown as RuntimeHost);
     const server = serializeServer(program, hostWith(value));
-    assertEquals(runtime, server, `serializers diverged for ${JSON.stringify(value)}`);
-    assertStringIncludes(
-      runtime,
+    expect(runtime, `serializers diverged for ${JSON.stringify(value)}`).toEqual(server);
+    expect(runtime, `escaped text missing from output for ${JSON.stringify(value)}`).toContain(
       escapeText(value),
-      `escaped text missing from output for ${JSON.stringify(value)}`,
     );
   }
 });
 
-Deno.test('escape parity: text contract escapes & < > and passes quotes and non-ASCII through', () => {
-  assertEquals(escapeText(`a&b"c<d>e'f`), 'a&amp;b"c&lt;d&gt;e\'f');
-  assertEquals(escapeText(`unicode é ‹› „ “`), `unicode é ‹› „ “`);
+test('escape parity: text contract escapes & < > and passes quotes and non-ASCII through', () => {
+  expect(escapeText(`a&b"c<d>e'f`)).toEqual('a&amp;b"c&lt;d&gt;e\'f');
+  expect(escapeText(`unicode é ‹› „ “`)).toEqual(`unicode é ‹› „ “`);
 });
 
 /**
@@ -159,23 +154,22 @@ Deno.test('escape parity: text contract escapes & < > and passes quotes and non-
  * module is a lane failure. (The claim/fresh paths legitimately construct
  * comment markers for DOM creation — that is not a serializer.)
  */
-Deno.test('escape parity: both execution modules delegate the walk to the shared kernel', async () => {
+test('escape parity: both execution modules delegate the walk to the shared kernel', async () => {
   for (const path of EXECUTION_SITES) {
-    const source = await Deno.readTextFile(new URL(path, REPO_ROOT));
-    assert(
+    const source = await readFile(new URL(path, REPO_ROOT), 'utf8');
+    expect(
       source.includes('serializer/serialize-program.ts'),
       `${path}: serialization must import the shared kernel`,
-    );
+    ).toBeTruthy();
     for (const privateWalker of [
       'function serializeNode(',
       'function serializeElement(',
       'function serializeChildren(',
     ]) {
-      assertEquals(
+      expect(
         source.includes(privateWalker),
-        false,
         `${path}: private template walk regrew (${JSON.stringify(privateWalker)})`,
-      );
+      ).toEqual(false);
     }
   }
 });

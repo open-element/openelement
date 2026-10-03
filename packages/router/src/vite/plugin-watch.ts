@@ -9,9 +9,10 @@
  * unchanged.
  */
 
+import process from 'node:process';
 import type { Plugin, ViteDevServer } from 'vite';
 import { createLogger, formatError } from '@openelement/element';
-import { relative, resolve } from '../internal/host-path.ts';
+import { relative, resolve } from 'pathe';
 import { DEFAULT_ISLANDS_DIR } from './internal/paths.ts';
 import { RESOLVED_CLIENT_ENTRY_ID } from './dev-island-client.ts';
 import { rescanIslands, rescanRoutes } from './plugin-scanners.ts';
@@ -24,9 +25,9 @@ const log = createLogger('router-vite');
 export function createConfigureServerHook(state: OpenPluginState): Pick<Plugin, 'configureServer'> {
   return {
     configureServer(server: ViteDevServer) {
-      const absoluteRoutesDir = resolve(Deno.cwd(), state.resolvedOptions.routesDir!);
+      const absoluteRoutesDir = resolve(process.cwd(), state.resolvedOptions.routesDir!);
       const absoluteIslandsDir = resolve(
-        Deno.cwd(),
+        process.cwd(),
         state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
       );
       server.watcher.add(absoluteRoutesDir);
@@ -85,7 +86,9 @@ export function createConfigureServerHook(state: OpenPluginState): Pick<Plugin, 
                 RESOLVED_ENTRY_ID,
                 ...(scanIslandsNow ? [RESOLVED_CLIENT_ENTRY_ID] : []),
               ]);
-              log.info(`Sources changed: ${relative(Deno.cwd(), latestChangedFile)} - reloading`);
+              log.info(
+                `Sources changed: ${relative(process.cwd(), latestChangedFile)} - reloading`,
+              );
               server.hot.send({ type: 'full-reload' });
             })
             .catch((err: unknown) => {

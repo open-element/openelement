@@ -11,10 +11,10 @@
  * projects share the one server in any order.
  *
  * Prerequisites:
- *   deno task build  (in this directory)
+ *   pnpm run build  (in this directory)
  *
- * Run: deno task e2e           (chromium only)
- *      deno task e2e:browsers  (chromium + firefox + webkit)
+ * Run: pnpm run e2e           (chromium only)
+ *      pnpm run e2e:browsers  (chromium + firefox + webkit)
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';
@@ -43,7 +43,7 @@ export default defineConfig({
   webServer: {
     // `exec` prevents the shell Playwright launches from orphaning Deno when
     // the suite finishes or is interrupted.
-    command: `OPEN_ELEMENT_DISABLE_CSRF=1 exec deno run --config ../../../../deno.json --allow-read --allow-env --allow-net server.ts --port ${PORT} --dir ../dist`,
+    command: `OPEN_ELEMENT_DISABLE_CSRF=1 exec node server.ts --port ${PORT} --dir ../dist`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 60_000,

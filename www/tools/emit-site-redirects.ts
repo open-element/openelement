@@ -10,6 +10,8 @@
 import { fromFileUrl, join } from '@std/path';
 import { SITE_LOCALES } from '../site-config.ts';
 import { loadRedirectTable } from './lib/site-retired.ts';
+import { writeFile } from 'node:fs/promises';
+import process from 'node:process';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const outFile = join(repoRoot, 'www/dist/_redirects');
@@ -27,12 +29,16 @@ for (const mapping of mappings) {
   }
 }
 
+// EAFP (CodeQL js/toctou-race-condition): open the output with O_EXCL ('wx')
+// instead of stat-then-write, so there is no check/act window for the file to
+// change through — the kernel rejects an existing target atomically with EEXIST.
 try {
-  await Deno.stat(outFile);
-  console.error(`site:redirects: ${outFile} already exists — refusing to overwrite.`);
-  Deno.exit(1);
-} catch {
-  // Missing file is the expected case; fall through to writing.
+  await writeFile(outFile, lines.join('\n') + '\n', { flag: 'wx' });
+} catch (error) {
+  if ((error as { code?: string }).code === 'EEXIST') {
+    console.error(`site:redirects: ${outFile} already exists — refusing to overwrite.`);
+    process.exit(1);
+  }
+  throw error;
 }
-await Deno.writeTextFile(outFile, lines.join('\n') + '\n');
 console.log(`site redirects written: ${lines.length} rules (${outFile}).`);

@@ -1,0 +1,28 @@
+# pnpm workspace membership for the openElement monorepo (B2 manifest
+# conversion). tools/repo/workspace-tasks.ts parses this file for canonical
+# workspace discovery — keep it to the documented shape: a `packages:` list of
+# single-level globs or plain paths, plus '!' exclusions.
+packages:
+  - packages/*
+  - apps/*
+  - www
+  - tools/*
+  - tests/fixtures/*
+  - tests/e2e/starter-smoke
+  # Own npm ci + audit-signature universe with its own package-lock; never a
+  # workspace member (url-pattern-list:provenance installs it standalone).
+  - '!tests/fixtures/url-pattern-list-audit'
+  # Shared script library consumed by path from tools/repo+tools/release; no
+  # manifest of its own (it was never a Deno workspace member either).
+  - '!tools/lib'
+
+# Supply-chain guard carried over from the former Deno
+# `minimumDependencyAge: "P3D"`: registry entries must have existed for at
+# least 3 days (4320 minutes) before they are eligible for resolution.
+minimumReleaseAge: 4320
+
+# Postinstall allowlist (pnpm blocks build scripts by default). esbuild
+# validates/links its platform binary; pagefind downloads the search binary.
+allowBuilds:
+  esbuild: true
+  pagefind: true

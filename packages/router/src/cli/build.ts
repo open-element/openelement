@@ -10,13 +10,14 @@
  *   deno task build
  */
 
+import process from 'node:process';
 import { formatError } from '@openelement/element';
 import { buildApp } from '../vite/index.ts';
 
 if (import.meta.main) {
   try {
     await buildApp();
-    Deno.exit(0);
+    process.exit(0);
   } catch (error) {
     console.error(
       `Build failed: ${
@@ -24,6 +25,6 @@ if (import.meta.main) {
       }`,
     );
     if (error instanceof Error && error.cause) console.error('Caused by:', error.cause);
-    Deno.exit(1);
+    process.exit(1);
   }
 }

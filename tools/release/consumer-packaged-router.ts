@@ -14,7 +14,10 @@
  * URLPattern types are Router-owned per `route-table.ts`, not a DOM-lib
  * version assumption.
  */
-import { existsSync } from '@std/fs';
+import { tmpdir } from 'node:os';
+import { commandOutput } from '../repo/node-command.ts';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from '../lib/std-fs.ts';
 import { join, resolve } from '@std/path';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { readPackages } from '../lib/package-graph.ts';
@@ -29,16 +32,17 @@ if (!element) throw new Error('@openelement/element is missing from the package 
 const routerTarball = join(repoRoot, tarballPath(router));
 const elementTarball = join(repoRoot, tarballPath(element));
 for (const tarball of [routerTarball, elementTarball]) {
-  if (!existsSync(tarball)) throw new Error(`Missing ${tarball}; run deno task pack:dry-run first`);
+  if (!existsSync(tarball))
+    throw new Error(`Missing ${tarball}; run pnpm --dir tools/release run pack:dry-run first`);
 }
 
 async function run(command: string, args: string[], cwd: string): Promise<string> {
-  const result = await new Deno.Command(command, {
+  const result = await commandOutput(command, {
     args,
     cwd,
     stdout: 'piped',
     stderr: 'piped',
-  }).output();
+  });
   const output = new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr);
   if (!result.success) throw new Error(`${command} ${args.join(' ')} failed:\n${output}`);
   return output;
@@ -56,7 +60,7 @@ const STRICT_TSCONFIG = {
 };
 
 async function routeModeConsumer(tmp: string): Promise<void> {
-  await Deno.writeTextFile(
+  await writeFile(
     join(tmp, 'package.json'),
     JSON.stringify(
       {
@@ -73,11 +77,11 @@ async function routeModeConsumer(tmp: string): Promise<void> {
       2,
     ),
   );
-  await Deno.writeTextFile(
+  await writeFile(
     join(tmp, 'tsconfig.json'),
     JSON.stringify({ ...STRICT_TSCONFIG, include: ['route-mode.ts'] }, null, 2),
   );
-  await Deno.writeTextFile(
+  await writeFile(
     join(tmp, 'route-mode.ts'),
     `import { RouteTable, type RouteRecord } from '@openelement/router/router';
 import { createRouteMiddleware } from '@openelement/router/http';
@@ -94,7 +98,7 @@ const typedOnly: RouterInstance | undefined = undefined;
 void createRouter; void typedOnly;
 `,
   );
-  await Deno.writeTextFile(
+  await writeFile(
     join(tmp, 'route-mode.mjs'),
     `import { RouteTable } from '@openelement/router/router';
 import { createRouteMiddleware } from '@openelement/router/http';
@@ -133,7 +137,7 @@ console.log('packed Router Route Mode PASS');
 }
 
 async function frameworkRootConsumer(tmp: string): Promise<void> {
-  await Deno.writeTextFile(
+  await writeFile(
     join(tmp, 'package.json'),
     JSON.stringify(
       {
@@ -150,7 +154,7 @@ async function frameworkRootConsumer(tmp: string): Promise<void> {
       2,
     ),
   );
-  await Deno.writeTextFile(
+  await writeFile(
     join(tmp, 'tsconfig.json'),
     JSON.stringify(
       {
@@ -164,7 +168,7 @@ async function frameworkRootConsumer(tmp: string): Promise<void> {
   );
   // The documented root: Framework Mode authoring. Element must resolve for
   // these declarations; the consumer installs it exactly as the README says.
-  await Deno.writeTextFile(
+  await writeFile(
     join(tmp, 'root.ts'),
     `import { createRequestContext, definePage } from '@openelement/router';
 import type { LoaderContext, OpenElementPageDescriptor } from '@openelement/router';
@@ -189,7 +193,7 @@ if (context.path !== '/items/42') throw new Error('request context failed');
     throw new Error('Framework Mode root did not install the declared Element peer');
   }
   await run('node', ['node_modules/typescript/bin/tsc'], tmp);
-  await Deno.writeTextFile(
+  await writeFile(
     join(tmp, 'root.mjs'),
     `import { createRequestContext } from '@openelement/router';
 const context = createRequestContext({ request: new Request('https://example.test/items/42?view=full') });
@@ -203,14 +207,14 @@ console.log('packed Router Framework Mode root PASS');
   }
 }
 
-const routeModeTmp = await Deno.makeTempDir({ prefix: 'openelement-packed-router-routemode-' });
-const rootTmp = await Deno.makeTempDir({ prefix: 'openelement-packed-router-root-' });
+const routeModeTmp = await mkdtemp(join(tmpdir(), 'openelement-packed-router-routemode-'));
+const rootTmp = await mkdtemp(join(tmpdir(), 'openelement-packed-router-root-'));
 try {
   await routeModeConsumer(routeModeTmp);
   console.log(`Packed Router Route Mode passed for ${PACKAGE_VERSION} without Element.`);
   await frameworkRootConsumer(rootTmp);
   console.log(`Packed Router Framework Mode root passed for ${PACKAGE_VERSION} with Element.`);
 } finally {
-  await Deno.remove(routeModeTmp, { recursive: true }).catch(() => undefined);
-  await Deno.remove(rootTmp, { recursive: true }).catch(() => undefined);
+  await rm(routeModeTmp, { recursive: true }).catch(() => undefined);
+  await rm(rootTmp, { recursive: true }).catch(() => undefined);
 }

@@ -12,7 +12,7 @@
  * and the Router `open:core` plugin both call.
  */
 
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 
 type PluginModule = typeof import('../src/internal/compiler/plugin.ts');
 
@@ -61,7 +61,7 @@ function captureBuildError(): { errors: unknown[]; context: { error(e: unknown):
   };
 }
 
-Deno.test('compiler plugin diagnostics (#1413): the adapter passes {id, loc, frame}', async () => {
+test('compiler plugin diagnostics (#1413): the adapter passes {id, loc, frame}', async () => {
   const { compiledElementPlugin } = await loadPluginModule();
   const transform = compiledElementPlugin().transform as unknown as (
     this: { error(e: unknown): never },
@@ -76,36 +76,36 @@ Deno.test('compiler plugin diagnostics (#1413): the adapter passes {id, loc, fra
   } catch {
     thrown = true;
   }
-  assert(thrown, 'unsupported spread must fail closed');
-  assertEquals(errors.length, 1, 'exactly one build error is raised');
+  expect(thrown, 'unsupported spread must fail closed').toBeTruthy();
+  expect(errors.length, 'exactly one build error is raised').toEqual(1);
 
   const error = errors[0] as BuildError;
-  assert(
+  expect(
     error !== null && typeof error === 'object',
     'the build error must be a structured object',
-  );
+  ).toBeTruthy();
   // `id` is the caller's own module id — the key module resolution/HMR use.
-  assertEquals(error.id, FILE);
+  expect(error.id).toEqual(FILE);
   // `loc` is the authored position: named file, 1-based line and column. With
   // no project/workspace root in this harness the compiler's stable module id
   // is the id unchanged, so the diagnostic names the same file as `id`.
-  assertEquals(error.loc.file, FILE);
-  assertEquals(error.loc.line, 5, 'the spread attribute sits on source line 5');
-  assert(error.loc.column > 0, 'the column is 1-based');
+  expect(error.loc.file).toEqual(FILE);
+  expect(error.loc.line, 'the spread attribute sits on source line 5').toEqual(5);
+  expect(error.loc.column > 0, 'the column is 1-based').toBeTruthy();
   // `frame` renders the authored line and carets the offending range.
-  assertStringIncludes(error.frame, '{...this.attrs}');
-  assertStringIncludes(error.frame, '^');
-  assertStringIncludes(error.frame, '5 |');
+  expect(error.frame).toContain('{...this.attrs}');
+  expect(error.frame).toContain('^');
+  expect(error.frame).toContain('5 |');
   // The display message survives for log-only consumers.
-  assertStringIncludes(error.message, 'diag-proof.tsx:5:');
-  assertStringIncludes(error.message, 'OEC9011');
+  expect(error.message).toContain('diag-proof.tsx:5:');
+  expect(error.message).toContain('OEC9011');
   // The machine-readable array rides along, so no consumer parses the string.
-  assertEquals(error.diagnostics.length, 1);
-  assertEquals(error.diagnostics[0].code, 'OEC9011');
-  assertEquals(error.diagnostics[0].line, error.loc.line);
+  expect(error.diagnostics.length).toEqual(1);
+  expect(error.diagnostics[0].code).toEqual('OEC9011');
+  expect(error.diagnostics[0].line).toEqual(error.loc.line);
 });
 
-Deno.test('compiler plugin diagnostics (#1413): a clean module still transforms', async () => {
+test('compiler plugin diagnostics (#1413): a clean module still transforms', async () => {
   const { compiledElementPlugin } = await loadPluginModule();
   const transform = compiledElementPlugin().transform as unknown as (
     this: { error(e: unknown): never },
@@ -122,6 +122,6 @@ Deno.test('compiler plugin diagnostics (#1413): a clean module still transforms'
     '}',
   ].join('\n');
   const emitted = transform.call(context, clean, '/project/app/islands/diag-clean.tsx');
-  assertEquals(errors, []);
-  assert(typeof emitted === 'string' && emitted.includes('__partProgram'));
+  expect(errors).toEqual([]);
+  expect(typeof emitted === 'string' && emitted.includes('__partProgram')).toBeTruthy();
 });

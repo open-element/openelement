@@ -1,0 +1,14 @@
+{
+  "name": "@openelement/fixture-router-nitro",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "//": "The nitro proof harness runs on the node host (owner ruling 2026-10-03); scripts enter through node with type stripping.",
+  "scripts": {
+    "proof:node": "node proof.ts node",
+    "proof:workers": "node proof.ts workers"
+  },
+  "devDependencies": {
+    "@std/fs": "jsr:^1.0.0"
+  }
+}

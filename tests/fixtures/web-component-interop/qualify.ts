@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys
+#!/usr/bin/env node
 /**
  * Web Components interoperability qualification (#1175).
  *
@@ -19,6 +19,10 @@
  * committed as a second hand-written source of truth.
  */
 
+import { readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import process from 'node:process';
 import { dirname, fromFileUrl, join, resolve } from '@std/path';
 import type {
   CustomElementDeclaration,
@@ -37,7 +41,7 @@ import { jsonText, readJson } from '../../lib/qualify-harness/json-file.ts';
 import { scaffoldApp } from '../../lib/qualify-harness/scaffold-app.ts';
 import {
   applyWorkspaceAliases,
-  primeAppNodeModules,
+  installAppDependencies,
 } from '../../lib/qualify-harness/workspace-alias.ts';
 import { escapeRegExp } from '../../../tools/lib/text.ts';
 
@@ -539,43 +543,6 @@ export async function loadInteropCorpus(
   return { ...typedConfig, cem };
 }
 
-function localPackageImports(root: string): Record<string, string> {
-  const imports: Record<string, string> = {};
-  try {
-    const rootJson = JSON.parse(Deno.readTextFileSync(join(root, 'deno.json'))) as Record<
-      string,
-      unknown
-    >;
-    if (isRecord(rootJson.imports)) {
-      for (const [specifier, target] of Object.entries(rootJson.imports)) {
-        if (typeof target === 'string' && !specifier.startsWith('@openelement/')) {
-          imports[specifier] = target;
-        }
-      }
-    }
-  } catch {
-    // The repository root manifest is required by the build, but keep the
-    // helper diagnostic-free if a caller supplies a different root.
-  }
-  for (const packageEntry of Deno.readDirSync(join(root, 'packages'))) {
-    if (!packageEntry.isDirectory) continue;
-    const packagePath = join(root, 'packages', packageEntry.name, 'deno.json');
-    try {
-      const packageJson = JSON.parse(Deno.readTextFileSync(packagePath)) as Record<string, unknown>;
-      const packageImports = packageJson.imports;
-      if (!isRecord(packageImports)) continue;
-      for (const [specifier, target] of Object.entries(packageImports)) {
-        if (typeof target === 'string' && !specifier.startsWith('@openelement/')) {
-          imports[specifier] = target;
-        }
-      }
-    } catch {
-      // A package without a readable manifest contributes no temp-app imports.
-    }
-  }
-  return imports;
-}
-
 async function patchApp(appDir: string): Promise<void> {
   await applyWorkspaceAliases(appDir, {
     repoRoot,
@@ -583,14 +550,13 @@ async function patchApp(appDir: string): Promise<void> {
       lit: 'npm:lit@3.3.3',
       '@microsoft/fast-element': 'npm:@microsoft/fast-element@3.0.2',
       '@ionic/core': 'npm:@ionic/core@8.8.18',
-      '@ionic/core/': 'npm:@ionic/core@8.8.18/',
-      ...localPackageImports(repoRoot),
+      // The app-local vite alias for @preact/signals-core needs its
+      // node_modules entry to exist: the install below materializes it.
+      '@preact/signals-core': 'npm:@preact/signals-core@^1.12.1',
     },
     externalViteAliases: ['@preact/signals-core'],
   });
-  // The app-local vite alias for @preact/signals-core needs its node_modules
-  // entry to exist: priming installs the app's npm dependencies up front.
-  await primeAppNodeModules(appDir, '@preact/signals-core');
+  await installAppDependencies(appDir);
 }
 
 const FIXTURE_SOURCE_FILES = [
@@ -616,9 +582,9 @@ async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvid
   const distDir = join(appDir, 'dist');
   const htmlPath = await findFile(distDir, 'index.html');
   if (!htmlPath) throw new Error(`SSG index.html not found under ${distDir}`);
-  const html = await Deno.readTextFile(htmlPath);
+  const html = await readFile(htmlPath, 'utf8');
   const entryPath = await findServerEntry(distDir);
-  const plan = extractSsrAdmissionPlan(await Deno.readTextFile(entryPath));
+  const plan = extractSsrAdmissionPlan(await readFile(entryPath, 'utf8'));
   const decisions = new Map(plan.decisions.map((decision) => [decision.tagName, decision]));
   const foreignComponents: SsrComponentEvidence[] = [];
   const failures: string[] = [];
@@ -1061,10 +1027,8 @@ async function qualify(
   const admission = Object.fromEntries(
     corpus.components.map((component) => [component.tag, classifySsrCapability(undefined)]),
   ) as Record<string, SsrCapabilityDecision>;
-  const tmpRoot = await Deno.makeTempDir({
-    prefix: 'openelement-web-component-interop-',
-  });
-  const keep = Deno.env.get('OPEN_ELEMENT_KEEP_INTEROP') === '1';
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'openelement-web-component-interop-'));
+  const keep = process.env.OPEN_ELEMENT_KEEP_INTEROP === '1';
   try {
     const appDir = await prepareInteropApp(tmpRoot, root);
     const ssr = await verifySsr(appDir, corpus);
@@ -1092,14 +1056,14 @@ async function qualify(
     // Generated artifacts land in the temporary work directory only: the CEM
     // is regenerated from corpus.json and the evidence is regenerated on
     // every run. Neither is committed (see .gitignore).
-    await Deno.writeTextFile(join(tmpRoot, 'compiler-output.cem.json'), jsonText(corpus.cem));
-    await Deno.writeTextFile(join(tmpRoot, 'interop-evidence.json'), jsonText(evidence));
+    await writeFile(join(tmpRoot, 'compiler-output.cem.json'), jsonText(corpus.cem));
+    await writeFile(join(tmpRoot, 'interop-evidence.json'), jsonText(evidence));
     console.log(JSON.stringify(evidence, null, 2));
     console.log('Web Components interoperability qualification passed');
     return evidence;
   } finally {
     if (keep) console.log(`Keeping interop temporary app at ${tmpRoot}`);
-    else await Deno.remove(tmpRoot, { recursive: true });
+    else await rm(tmpRoot, { recursive: true });
   }
 }
 

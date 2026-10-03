@@ -8,7 +8,8 @@
  * removed; its absence is pinned below.)
  */
 
-import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codegen.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
@@ -19,20 +20,20 @@ const litRoutes: RouteEntry[] = [
   { path: '/notes', filePath: 'notes.ts', type: 'page', varName: 'pageNotes', definePage: true },
 ];
 
-Deno.test('lit renderer: descriptor forks imports and rejects a compiled appShell', () => {
+test('lit renderer: descriptor forks imports and rejects a compiled appShell', () => {
   const desc = buildEntryDescriptor(litRoutes, { renderer: 'lit', appShell: false });
-  assertEquals(desc.renderer, 'lit');
+  expect(desc.renderer).toEqual('lit');
   // The lit server entry never imports the runtime barrel at all; the pure
   // HTML utilities arrive through the kernel-free @openelement/element/html
   // leaf (proven at module-graph level in lit-graph-boundary.test.ts).
   const barrelImport = desc.imports.find((imp) => imp.from === '@openelement/element');
-  assertEquals(barrelImport, undefined);
+  expect(barrelImport).toEqual(undefined);
   const htmlImport = desc.imports.find((imp) => imp.from === '@openelement/element/html');
-  assertEquals(htmlImport?.names, ['trustedHtml', 'escapeHtml', 'wrapInDocument']);
+  expect(htmlImport?.names).toEqual(['trustedHtml', 'escapeHtml', 'wrapInDocument']);
   const litImport = desc.imports.find((imp) => imp.from === '@openelement/router/lit-ssr');
-  assertEquals(litImport?.names, ['renderLitPageToHtml']);
+  expect(litImport?.names).toEqual(['renderLitPageToHtml']);
 
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       buildEntryDescriptor(litRoutes, {
         renderer: 'lit',
@@ -43,99 +44,94 @@ Deno.test('lit renderer: descriptor forks imports and rejects a compiled appShel
   );
 });
 
-Deno.test('lit renderer: native descriptor shape is unchanged (renderer absent)', () => {
+test('lit renderer: native descriptor shape is unchanged (renderer absent)', () => {
   const desc = buildEntryDescriptor(litRoutes);
-  assertEquals('renderer' in desc, false);
+  expect('renderer' in desc).toEqual(false);
   const elementImport = desc.imports.find((imp) => imp.from === '@openelement/element');
-  assertEquals(elementImport?.names.includes('renderDsd'), true);
+  expect(elementImport?.names.includes('renderDsd')).toEqual(true);
 });
 
-Deno.test('lit renderer: entry forks tag resolution and page render (no page-data side channel)', () => {
+test('lit renderer: entry forks tag resolution and page render (no page-data side channel)', () => {
   const litEntry = renderEntry(
     buildEntryDescriptor(litRoutes, { renderer: 'lit', appShell: false, ssg: true }),
   );
   // First import installs the lit DOM shim before any route module evaluates.
-  assertEquals(litEntry.startsWith("import '@lit-labs/ssr/lib/install-global-dom-shim.js';"), true);
+  expect(litEntry.startsWith("import '@lit-labs/ssr/lib/install-global-dom-shim.js';")).toEqual(
+    true,
+  );
   // The lit forks bind through the typed runtime seam (ADR-0160 rule a): the
   // lit page-tag resolver is an import and the lit page renderer is bound
   // inside the generated-app factory via the pageRuntime config (#1470
   // block e); the call sites stay renderer-neutral.
-  assertStringIncludes(
-    litEntry,
+  expect(litEntry).toContain(
     "import { resolveLitPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
   );
-  assertStringIncludes(
-    litEntry,
+  expect(litEntry).toContain(
     "import { renderLitPageToHtml as __renderLitPageToHtml } from '@openelement/router/lit-ssr'",
   );
-  assertStringIncludes(litEntry, "mode: 'lit',");
-  assertStringIncludes(litEntry, 'renderLitPageToHtml: __renderLitPageToHtml,');
+  expect(litEntry).toContain("mode: 'lit',");
+  expect(litEntry).toContain('renderLitPageToHtml: __renderLitPageToHtml,');
   // Beta.2.2 review: the embedded page-data JSON channel had no consumer —
   // it is removed and its absence is pinned on both renderers.
-  assertEquals(litEntry.includes('__litPageDataScript'), false);
-  assertEquals(litEntry.includes('data-open-element-page-data'), false);
+  expect(litEntry.includes('__litPageDataScript')).toEqual(false);
+  expect(litEntry.includes('data-open-element-page-data')).toEqual(false);
   // The compiled serializer / Part Program kernel is never referenced — the
   // typed renderer modules carry no Element edge of their own.
-  assertEquals(litEntry.includes('renderDsd'), false);
-  assertEquals(litEntry.includes('__partProgram'), false);
+  expect(litEntry.includes('renderDsd')).toEqual(false);
+  expect(litEntry.includes('__partProgram')).toEqual(false);
 
   // Loader/action protocol stays: the lit entry keeps the shared machinery.
-  assertStringIncludes(litEntry, '__runActionProtocol');
+  expect(litEntry).toContain('__runActionProtocol');
 
   const nativeEntry = renderEntry(buildEntryDescriptor(litRoutes, { ssg: true }));
-  assertStringIncludes(nativeEntry, 'renderDsd');
-  assertEquals(nativeEntry.includes('__litPageDataScript'), false);
+  expect(nativeEntry).toContain('renderDsd');
+  expect(nativeEntry.includes('__litPageDataScript')).toEqual(false);
 });
 
-Deno.test('lit renderer: client entry installs hydrate-support first and stays element-free', () => {
+test('lit renderer: client entry installs hydrate-support first and stays element-free', () => {
   const client = generateClientEntry(
     [{ tagName: 'note-counter', modulePath: '/app/islands/note-counter.ts', strategy: 'load' }],
     { enhancedForms: true, renderer: 'lit' },
   );
   const importLines = client.split('\n').filter((line) => line.startsWith('import '));
-  assertEquals(importLines[0], "import '@lit-labs/ssr-client/lit-element-hydrate-support.js';");
-  assertEquals(
-    importLines.some((line) => line.includes('@openelement/element')),
-    false,
-  );
-  assertStringIncludes(client, 'createEnhanceClient');
-  assertStringIncludes(client, '__liftDeferHydration');
+  expect(importLines[0]).toEqual("import '@lit-labs/ssr-client/lit-element-hydrate-support.js';");
+  expect(importLines.some((line) => line.includes('@openelement/element'))).toEqual(false);
+  expect(client).toContain('createEnhanceClient');
+  expect(client).toContain('__liftDeferHydration');
   // The header comment names the native claim helpers to document their
   // absence; assert the CALLS are gone, not the words.
-  assertEquals(client.includes('ensurePreHydrationClickCapture();'), false);
-  assertEquals(client.includes('ensurePreHydrationClickCapture(document, __tags);'), false);
-  assertEquals(client.includes('ensureDeepFragmentNavigation();'), false);
+  expect(client.includes('ensurePreHydrationClickCapture();')).toEqual(false);
+  expect(client.includes('ensurePreHydrationClickCapture(document, __tags);')).toEqual(false);
+  expect(client.includes('ensureDeepFragmentNavigation();')).toEqual(false);
 
   const nativeClient = generateClientEntry(
     [{ tagName: 'note-counter', modulePath: '/app/islands/note-counter.ts', strategy: 'load' }],
     { enhancedForms: true },
   );
-  assertStringIncludes(nativeClient, "from '@openelement/element'");
-  assertEquals(nativeClient.includes('lit-element-hydrate-support'), false);
+  expect(nativeClient).toContain("from '@openelement/element'");
+  expect(nativeClient.includes('lit-element-hydrate-support')).toEqual(false);
 });
 
-Deno.test('lit renderer: route scanner semantics accept defineLitPage from @openelement/router/lit', () => {
+test('lit renderer: route scanner semantics accept defineLitPage from @openelement/router/lit', () => {
   const source = [
     "import { defineLitPage } from '@openelement/router/lit';",
     "import { NotesPage } from '../components/notes-page.ts';",
     "export default defineLitPage('notes-list-page', NotesPage, {});",
   ].join('\n');
-  assertEquals(
+  expect(
     analyzeModuleSemantics(source, 'notes.ts', {
       vocabulary: ROUTER_MODULE_VOCABULARY,
     }).definePage,
-    true,
-  );
+  ).toEqual(true);
   // A same-named foreign binding must not count — even with the vocabulary
   // injected, admission stays a canonical import binding.
   const foreign = [
     "import { defineLitPage } from './local.ts';",
     'export default defineLitPage(x, y, {});',
   ].join('\n');
-  assertEquals(
+  expect(
     analyzeModuleSemantics(foreign, 'notes.ts', {
       vocabulary: ROUTER_MODULE_VOCABULARY,
     }).definePage,
-    false,
-  );
+  ).toEqual(false);
 });

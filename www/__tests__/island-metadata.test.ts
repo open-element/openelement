@@ -1,5 +1,5 @@
-import { assert, assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
-import { fromFileUrl, join } from 'jsr:@std/path@^1.0.0';
+import { expect, test } from 'vitest';
+import { fromFileUrl, join } from '@std/path';
 import {
   fileToTagName,
   scanIslandMeta,
@@ -22,27 +22,28 @@ async function scanWwwIslandMetadata() {
   return { islandFiles, meta };
 }
 
-Deno.test('site local islands expose explicit island metadata', async () => {
+test('site local islands expose explicit island metadata', async () => {
   const { islandFiles, meta } = await scanWwwIslandMetadata();
   const scannedTags = new Set(islandFiles.map(fileToTagName));
 
   for (const [tagName, expected] of Object.entries(REQUIRED_LOCAL_ISLANDS)) {
-    assert(scannedTags.has(tagName), `${tagName} must exist under www/app/islands`);
+    expect(scannedTags.has(tagName), `${tagName} must exist under www/app/islands`).toBeTruthy();
     const actual = meta[tagName];
-    assertExists(actual, `${tagName} must export defineIslandConfig(...) metadata`);
-    assertEquals(actual.hydrate, expected.hydrate, `${tagName} hydrate strategy drifted`);
-    assertEquals(actual.ssr, expected.ssr, `${tagName} SSR flag drifted`);
+    expect(actual, `${tagName} must export defineIslandConfig(...) metadata`).toEqual(
+      expect.anything(),
+    );
+    expect(actual.hydrate, `${tagName} hydrate strategy drifted`).toEqual(expected.hydrate);
+    expect(actual.ssr, `${tagName} SSR flag drifted`).toEqual(expected.ssr);
   }
 
   const missingMetadata = [...scannedTags].filter((tagName) => meta[tagName] === undefined);
-  assertEquals(
+  expect(
     missingMetadata,
-    [],
     `All www/app/islands files must declare defineIslandConfig(...): ${missingMetadata.join(', ')}`,
-  );
+  ).toEqual([]);
 });
 
-Deno.test('site search island metadata schedules immediate client hydration', async () => {
+test('site search island metadata schedules immediate client hydration', async () => {
   const { islandFiles, meta } = await scanWwwIslandMetadata();
   const entries = islandFiles.map((filePath) => {
     const tagName = fileToTagName(filePath);
@@ -59,13 +60,11 @@ Deno.test('site search island metadata schedules immediate client hydration', as
   const loadTags = code.match(/strategies:\s*\{\s*load:\s*\[(.*?)\]/s)?.[1] ?? '';
   const idleTags = code.match(/idle:\s*\[(.*?)\]/s)?.[1] ?? '';
 
-  assertStringIncludes(
-    loadTags,
+  expect(loadTags, 'open-search must be in the immediate client:load bucket').toContain(
     '"open-search"',
-    'open-search must be in the immediate client:load bucket',
   );
-  assertFalse(
+  expect(
     idleTags.includes('"open-search"'),
     'open-search must not silently fall back to idle hydration',
-  );
+  ).toBeFalsy();
 });

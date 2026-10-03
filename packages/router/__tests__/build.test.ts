@@ -4,7 +4,8 @@
  * ADR 0011: closeBundle writes metadata to ctx, not .openElement/build-metadata.json.
  * Tests verify OpenElementBuildContext fields instead of filesystem.
  */
-import { assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
+import process from 'node:process';
+import { beforeAll, describe, expect, test } from 'vitest';
 import { generateClientEntry } from '../src/vite/internal/ssg/index.ts';
 import { buildPlugin } from '../src/vite/build.ts';
 import { OpenElementBuildContext } from '../src/vite/build-context.ts';
@@ -36,19 +37,19 @@ async function callAsyncHook(hook: unknown, ...args: unknown[]): Promise<void> {
 }
 
 function makeConfig(command: 'build' | 'serve', base = '/'): Record<string, unknown> {
-  return { command, base, root: Deno.cwd() } as Record<string, unknown>;
+  return { command, base, root: process.cwd() } as Record<string, unknown>;
 }
 
 // --- generateClientEntry tests -------------------------------------------------
 
-Deno.test('build - generateClientEntry', async (t) => {
-  await t.step('returns empty comment when no islands', () => {
+describe('build - generateClientEntry', () => {
+  test('returns empty comment when no islands', () => {
     const code = generateClientEntry([]);
-    assertStringIncludes(code, 'No islands detected');
-    assertEquals(code.includes('hydrate'), false);
+    expect(code).toContain('No islands detected');
+    expect(code.includes('hydrate')).toEqual(false);
   });
 
-  await t.step('generates dynamic imports for island files', () => {
+  test('generates dynamic imports for island files', () => {
     const islands = [
       {
         tagName: 'my-counter',
@@ -63,11 +64,11 @@ Deno.test('build - generateClientEntry', async (t) => {
     ];
     const code = generateClientEntry(islands);
     // All islands use dynamic import for CE auto-upgrade
-    assertStringIncludes(code, 'import("/app/islands/my-counter.ts")');
-    assertStringIncludes(code, 'import("/app/islands/theme-toggle.ts")');
+    expect(code).toContain('import("/app/islands/my-counter.ts")');
+    expect(code).toContain('import("/app/islands/theme-toggle.ts")');
   });
 
-  await t.step('islands self-register via dynamic import side effects', () => {
+  test('islands self-register via dynamic import side effects', () => {
     const islands = [
       {
         tagName: 'my-counter',
@@ -77,11 +78,11 @@ Deno.test('build - generateClientEntry', async (t) => {
     ];
     const code = generateClientEntry(islands);
     // No explicit customElements.define() - islands self-register via dynamic import
-    assertFalse(code.includes("customElements.define('my-counter'"));
-    assertFalse(code.includes("customElements.get('my-counter')"));
+    expect(code.includes("customElements.define('my-counter'")).toBeFalsy();
+    expect(code.includes("customElements.get('my-counter')")).toBeFalsy();
   });
 
-  await t.step('no duplicate registration guards needed', () => {
+  test('no duplicate registration guards needed', () => {
     const islands = [
       {
         tagName: 'my-counter',
@@ -91,10 +92,10 @@ Deno.test('build - generateClientEntry', async (t) => {
     ];
     const code = generateClientEntry(islands);
     // No explicit customElements.define() - no duplicate guard needed
-    assertFalse(code.includes("if (!customElements.get('my-counter'))"));
+    expect(code.includes("if (!customElements.get('my-counter'))")).toBeFalsy();
   });
 
-  await t.step('includes openElement Client Entry comment', () => {
+  test('includes openElement Client Entry comment', () => {
     const islands = [
       {
         tagName: 'my-counter',
@@ -103,10 +104,10 @@ Deno.test('build - generateClientEntry', async (t) => {
       },
     ];
     const code = generateClientEntry(islands);
-    assertStringIncludes(code, 'openElement Client Entry');
+    expect(code).toContain('openElement Client Entry');
   });
 
-  await t.step('no legacy SSR client imports (v0.5.0 CE-native upgrade)', () => {
+  test('no legacy SSR client imports (v0.5.0 CE-native upgrade)', () => {
     const islands = [
       {
         tagName: 'my-counter',
@@ -116,12 +117,12 @@ Deno.test('build - generateClientEntry', async (t) => {
     ];
     const code = generateClientEntry(islands);
     // v0.5.0: browser CE spec handles upgrade
-    assertEquals(code.includes('lit-element-hydrate-support'), false);
-    assertEquals(code.includes('litElementHydrateSupport'), false);
-    assertEquals(code.includes('LitElement'), false);
+    expect(code.includes('lit-element-hydrate-support')).toEqual(false);
+    expect(code.includes('litElementHydrateSupport')).toEqual(false);
+    expect(code.includes('LitElement')).toEqual(false);
   });
 
-  await t.step('uses idle-time idle loading', () => {
+  test('uses idle-time idle loading', () => {
     const islands = [
       {
         tagName: 'my-counter',
@@ -132,34 +133,31 @@ Deno.test('build - generateClientEntry', async (t) => {
     const code = generateClientEntry(islands);
     // #868: the scheduler module (bundled via virtual:open-client-runtime,
     // not inline) owns idle deferral — the entry wires the strategy.
-    assertStringIncludes(code, 'idle: ["my-counter"]');
-    assertStringIncludes(code, 'virtual:open-client-runtime/scheduler');
+    expect(code).toContain('idle: ["my-counter"]');
+    expect(code).toContain('virtual:open-client-runtime/scheduler');
   });
 
-  await t.step(
-    'capture installs after __tags with the declared list, before island imports',
-    () => {
-      const islands = [
-        {
-          tagName: 'my-counter',
-          modulePath: '/app/islands/my-counter.ts',
-          strategy: 'idle' as const,
-        },
-      ];
-      const code = generateClientEntry(islands);
-      const captureCall = 'ensurePreHydrationClickCapture(document, __tags);';
-      assertStringIncludes(code, captureCall);
-      assertEquals(code.includes('ensurePreHydrationClickCapture();'), false);
-      const tagsIndex = code.indexOf('var __tags =');
-      const captureIndex = code.indexOf(captureCall);
-      // The island import() strings live inside __map factories defined
-      // above; they only EXECUTE when the scheduler below invokes them, so
-      // execution order is capture-before-scheduler, not string order.
-      const schedulerIndex = code.indexOf('__schedule({');
-      assertEquals(tagsIndex >= 0 && captureIndex > tagsIndex, true);
-      assertEquals(schedulerIndex > captureIndex, true);
-    },
-  );
+  test('capture installs after __tags with the declared list, before island imports', () => {
+    const islands = [
+      {
+        tagName: 'my-counter',
+        modulePath: '/app/islands/my-counter.ts',
+        strategy: 'idle' as const,
+      },
+    ];
+    const code = generateClientEntry(islands);
+    const captureCall = 'ensurePreHydrationClickCapture(document, __tags);';
+    expect(code).toContain(captureCall);
+    expect(code.includes('ensurePreHydrationClickCapture();')).toEqual(false);
+    const tagsIndex = code.indexOf('var __tags =');
+    const captureIndex = code.indexOf(captureCall);
+    // The island import() strings live inside __map factories defined
+    // above; they only EXECUTE when the scheduler below invokes them, so
+    // execution order is capture-before-scheduler, not string order.
+    const schedulerIndex = code.indexOf('__schedule({');
+    expect(tagsIndex >= 0 && captureIndex > tagsIndex).toEqual(true);
+    expect(schedulerIndex > captureIndex).toEqual(true);
+  });
 });
 
 // --- buildPlugin tests --------------------------------------------------------
@@ -168,25 +166,21 @@ Deno.test('build - generateClientEntry', async (t) => {
 // NOTE: Phase 2/3 (buildClient, buildSSG) require a real Vite project with
 // routes/islands - they are tested in ssg-smoke.test.ts instead.
 
-Deno.test('buildPlugin - configResolved', () => {
+test('buildPlugin - configResolved', () => {
   const plugin = buildPlugin();
   const config = makeConfig('build', '/base/');
   callHook(plugin.configResolved, config);
   // If we reach here without error, the hook ran.
   // We can't directly inspect `base` (it's closed over), but closeBundle will use it.
-  assertEquals(typeof plugin.name, 'string');
-  assertEquals(plugin.name, 'open:build');
+  expect(typeof plugin.name).toEqual('string');
+  expect(plugin.name).toEqual('open:build');
 });
 
-Deno.test({
-  name: 'buildPlugin - closeBundle (build mode, no islands) writes to ctx',
-  // Rolldown's SignalExit registers SIGINT/SIGTERM listeners during viteBuild()
-  // that aren't cleaned up when the build fails. This is a known rolldown issue,
-  // not a leak in our code. Sanitize ops to avoid false-positive leak detection.
-  sanitizeOps: false,
-  sanitizeResources: false,
-  async fn(t) {
-    const ctx = new OpenElementBuildContext({});
+describe('buildPlugin - closeBundle (build mode, no islands) writes to ctx', () => {
+  let ctx: OpenElementBuildContext;
+
+  beforeAll(async () => {
+    ctx = new OpenElementBuildContext({});
     const plugin = buildPlugin({}, ctx);
     const config = makeConfig('build');
     callHook(plugin.configResolved, config);
@@ -197,50 +191,44 @@ Deno.test({
     } catch {
       // Phase 2/3 may fail without a real project - that's OK, we only test Phase 1
     }
+  });
 
-    await t.step('ctx fields are populated by Phase 1', () => {
-      assertEquals(ctx.phase3.outDir, 'dist');
-      assertEquals(ctx.phase3.base, '/');
-      assertEquals(ctx.phase3.ssrNoExternal.length, 0);
-    });
+  test('ctx fields are populated by Phase 1', () => {
+    expect(ctx.phase3.outDir).toEqual('dist');
+    expect(ctx.phase3.base).toEqual('/');
+    expect(ctx.phase3.ssrNoExternal.length).toEqual(0);
+  });
 
-    await t.step('no islands in ctx', () => {
-      assertEquals(ctx.phase1.islandTagNames.length, 0);
-      assertEquals(ctx.phase1.packageManifests.length, 0);
-      assertEquals(ctx.phase1.packageIslandDecls.length, 0);
-    });
-  },
+  test('no islands in ctx', () => {
+    expect(ctx.phase1.islandTagNames.length).toEqual(0);
+    expect(ctx.phase1.packageManifests.length).toEqual(0);
+    expect(ctx.phase1.packageIslandDecls.length).toEqual(0);
+  });
 });
 
-Deno.test({
-  name: 'buildPlugin - closeBundle (dev mode, skips write)',
-  // Previous build-mode tests spawn Vite SSR builds whose dangling async
-  // fs.access (Deno.lstat) ops can leak across test boundaries.
-  sanitizeOps: false,
-  sanitizeResources: false,
-  async fn(t) {
-    const ctx = new OpenElementBuildContext({});
+describe('buildPlugin - closeBundle (dev mode, skips write)', () => {
+  let ctx: OpenElementBuildContext;
+
+  beforeAll(async () => {
+    ctx = new OpenElementBuildContext({});
     const plugin = buildPlugin({}, ctx);
     const config = makeConfig('serve'); // dev mode
     callHook(plugin.configResolved, config);
     await callAsyncHook(plugin.closeBundle);
+  });
 
-    await t.step('does NOT write ctx fields in dev mode', () => {
-      // In dev mode, closeBundle returns early - ctx fields should remain default
-      assertEquals(ctx.phase3.root, '');
-      assertEquals(ctx.phase3.outDir, 'dist'); // default value
-    });
-  },
+  test('does NOT write ctx fields in dev mode', () => {
+    // In dev mode, closeBundle returns early - ctx fields should remain default
+    expect(ctx.phase3.root).toEqual('');
+    expect(ctx.phase3.outDir).toEqual('dist'); // default value
+  });
 });
 
-Deno.test({
-  name: 'buildPlugin - custom outDir and options writes to ctx',
-  // Rolldown/Vite SSR build spawns dangling async fs.access (Deno.lstat) ops
-  // that the sanitizer flags as leaks. Same root cause as closeBundle test above.
-  sanitizeOps: false,
-  sanitizeResources: false,
-  async fn(t) {
-    const ctx = new OpenElementBuildContext({});
+describe('buildPlugin - custom outDir and options writes to ctx', () => {
+  let ctx: OpenElementBuildContext;
+
+  beforeAll(async () => {
+    ctx = new OpenElementBuildContext({});
     const options = {
       build: { outDir: 'custom-dist' },
       islandsDir: 'src/islands',
@@ -259,24 +247,22 @@ Deno.test({
     } catch {
       // Phase 2/3 may fail without a real project
     }
+  });
 
-    await t.step('writes custom options to ctx', () => {
-      assertEquals(ctx.phase3.outDir, 'custom-dist');
-      assertEquals(ctx.phase3.islandsDir, 'src/islands');
-      assertEquals(ctx.phase3.routesDir, 'src/routes');
-      assertEquals(ctx.phase3.html?.lang, 'zh');
-      assertEquals(ctx.phase3.upgradeStrategy, 'load');
-    });
-  },
+  test('writes custom options to ctx', () => {
+    expect(ctx.phase3.outDir).toEqual('custom-dist');
+    expect(ctx.phase3.islandsDir).toEqual('src/islands');
+    expect(ctx.phase3.routesDir).toEqual('src/routes');
+    expect(ctx.phase3.html?.lang).toEqual('zh');
+    expect(ctx.phase3.upgradeStrategy).toEqual('load');
+  });
 });
 
-Deno.test({
-  name: 'buildPlugin - ssr.noExternal RegExp serialization writes to ctx',
-  // Rolldown/Vite SSR build spawns dangling async fs.access (Deno.lstat) ops
-  sanitizeOps: false,
-  sanitizeResources: false,
-  async fn(t) {
-    const ctx = new OpenElementBuildContext({});
+describe('buildPlugin - ssr.noExternal RegExp serialization writes to ctx', () => {
+  let ctx: OpenElementBuildContext;
+
+  beforeAll(async () => {
+    ctx = new OpenElementBuildContext({});
     const options = {
       ssr: { noExternal: [/@openelement\/.*/, 'lit'] },
     };
@@ -289,24 +275,22 @@ Deno.test({
     } catch {
       // Phase 2/3 may fail without a real project
     }
+  });
 
-    await t.step('serializes RegExp as __type objects in ctx', () => {
-      assertExists(ctx.phase3.ssrNoExternal);
-      const first = ctx.phase3.ssrNoExternal[0] as { __type?: string; source?: string };
-      assertEquals(first.__type, 'RegExp');
-      assertEquals(first.source, '@openelement\\/.*');
-      assertEquals(ctx.phase3.ssrNoExternal[1], 'lit');
-    });
-  },
+  test('serializes RegExp as __type objects in ctx', () => {
+    expect(ctx.phase3.ssrNoExternal).toEqual(expect.anything());
+    const first = ctx.phase3.ssrNoExternal[0] as { __type?: string; source?: string };
+    expect(first.__type).toEqual('RegExp');
+    expect(first.source).toEqual('@openelement\\/.*');
+    expect(ctx.phase3.ssrNoExternal[1]).toEqual('lit');
+  });
 });
 
-Deno.test({
-  name: 'buildPlugin - base without trailing slash ensures base ends with /',
-  // Rolldown/Vite SSR build spawns dangling async fs.access (Deno.lstat) ops
-  sanitizeOps: false,
-  sanitizeResources: false,
-  async fn(t) {
-    const ctx = new OpenElementBuildContext({});
+describe('buildPlugin - base without trailing slash ensures base ends with /', () => {
+  let ctx: OpenElementBuildContext;
+
+  beforeAll(async () => {
+    ctx = new OpenElementBuildContext({});
     const plugin = buildPlugin({}, ctx);
     const config = makeConfig('build', '/base'); // no trailing slash
     callHook(plugin.configResolved, config);
@@ -316,9 +300,9 @@ Deno.test({
     } catch {
       // Phase 2/3 may fail without a real project
     }
+  });
 
-    await t.step('ensures base ends with /', () => {
-      assertEquals(ctx.phase3.base, '/base/');
-    });
-  },
+  test('ensures base ends with /', () => {
+    expect(ctx.phase3.base).toEqual('/base/');
+  });
 });

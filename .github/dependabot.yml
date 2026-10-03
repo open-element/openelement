@@ -1,7 +1,9 @@
-# Dependabot supports GitHub Actions but not the Deno workspace/lockfile.
-# npm/jsr dependencies are covered by the scheduled dependency-audit workflow
-# (.github/workflows/dependency-audit.yml); update PRs are human-authored and
-# run the full CI gate. No auto-merge anywhere.
+# Dependabot supports GitHub Actions but not the pnpm workspace lockfile;
+# the former Deno-side dependency-audit workflow retired with the B2 manifest
+# conversion (the single pnpm-lock.yaml carries dependency resolution, and
+# pnpm-workspace.yaml enforces minimumReleaseAge as the supply-chain guard).
+# Dependency update PRs are human-authored and run the full CI gate.
+# No auto-merge anywhere.
 version: 2
 updates:
   - package-ecosystem: github-actions

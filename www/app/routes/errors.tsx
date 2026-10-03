@@ -10,8 +10,8 @@
  * Only the surrounding prose is authored.
  */
 import { definePage } from '@openelement/router';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
 import type { SiteLocale } from '../../site-config.ts';
 import { errorCodes } from '../data/_generated-error-codes.ts';
 import { sourceLineStamp } from '../data/version.ts';

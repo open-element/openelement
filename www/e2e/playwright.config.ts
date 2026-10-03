@@ -6,9 +6,9 @@
  * in CI due to config resolution issues).
  *
  * Prerequisites:
- *   1. deno task site:build   (build the site to www/dist/)
+ *   1. pnpm run site:build   (build the site to www/dist/)
  *
- * Run: deno task --cwd www e2e:browsers
+ * Run: pnpm --dir www run e2e:browsers
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';
@@ -44,13 +44,15 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  // Auto-start a Deno static file server for www/dist/.
+  // Auto-start the node static file server (www/e2e/static-server.ts, a
+  // node:* port — the fresh-clone runner has no deno binary) for www/dist/.
   // Callers that need parallel isolation can pass openElement_E2E_PORT.  A
   // deterministic default keeps the server and all workers on the same URL.
   webServer: {
-    // `exec` prevents the shell Playwright launches from orphaning Deno when
-    // the suite finishes or is interrupted.
-    command: `exec deno run --allow-read --allow-net --allow-env --deny-ffi --no-prompt static-server.ts --port ${PORT} --dir ../dist`,
+    // `exec` prevents the shell Playwright launches from orphaning the
+    // server when the suite finishes or is interrupted. Node direct-runs the
+    // .ts entry (type stripping), the same as every other www script.
+    command: `exec node static-server.ts --port ${PORT} --dir ../dist`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

@@ -1,4 +1,5 @@
-import { assert, assertEquals } from '@std/assert';
+import { readFileSync } from 'node:fs';
+import { expect, test } from 'vitest';
 import {
   collectWorkspaceSpecifiers,
   createVersionFailures,
@@ -20,51 +21,57 @@ function fixture(name: string, exports: unknown): PackageInfo {
   };
 }
 
-Deno.test('package graph: subpath export keys join the package name without a stray dot', () => {
+test('package graph: subpath export keys join the package name without a stray dot', () => {
   const specifiers = collectWorkspaceSpecifiers([
     fixture('@openelement/router', { '.': './src/index.ts', './model': './src/model.ts' }),
   ]);
-  assertEquals(specifiers.has('@openelement/router'), true);
-  assertEquals(specifiers.has('@openelement/router/model'), true);
-  assertEquals(specifiers.has('@openelement/router./model'), false);
+  expect(specifiers.has('@openelement/router')).toEqual(true);
+  expect(specifiers.has('@openelement/router/model')).toEqual(true);
+  expect(specifiers.has('@openelement/router./model')).toEqual(false);
 });
 
-Deno.test('package graph: direction rules encode the package layering', () => {
-  assertEquals(isAllowedDependencyDirection('@openelement/router', '@openelement/element'), true);
-  assertEquals(isAllowedDependencyDirection('@openelement/element', '@openelement/router'), false);
-  assertEquals(isAllowedDependencyDirection('@openelement/create', '@openelement/element'), false);
+test('package graph: direction rules encode the package layering', () => {
+  expect(isAllowedDependencyDirection('@openelement/router', '@openelement/element')).toEqual(true);
+  expect(isAllowedDependencyDirection('@openelement/element', '@openelement/router')).toEqual(
+    false,
+  );
+  expect(isAllowedDependencyDirection('@openelement/create', '@openelement/element')).toEqual(
+    false,
+  );
 });
 
-Deno.test('package surface: retained set is accepted regardless of order', () => {
-  assertEquals(packageSetFailures(['b', 'a'], ['a', 'b']), []);
+test('package surface: retained set is accepted regardless of order', () => {
+  expect(packageSetFailures(['b', 'a'], ['a', 'b'])).toEqual([]);
 });
 
-Deno.test('package surface: missing and unowned packages are reported', () => {
-  assertEquals(packageSetFailures(['element', 'ui'], ['element', 'app']), [
+test('package surface: missing and unowned packages are reported', () => {
+  expect(packageSetFailures(['element', 'ui'], ['element', 'app'])).toEqual([
     'missing retained package: app',
     'unowned workspace package: ui',
   ]);
 });
 
-Deno.test('package configs: embedded create CLI version matches the package line', () => {
-  assertEquals(createVersionFailures(`export const CREATE_VERSION = '${PACKAGE_VERSION}';\n`), []);
+test('package configs: embedded create CLI version matches the package line', () => {
+  expect(createVersionFailures(`export const CREATE_VERSION = '${PACKAGE_VERSION}';\n`)).toEqual(
+    [],
+  );
 });
 
-Deno.test('package configs: drifted create CLI version is rejected', () => {
+test('package configs: drifted create CLI version is rejected', () => {
   const failures = createVersionFailures("export const CREATE_VERSION = '0.0.0-alpha.0';\n");
-  assertEquals(failures.length, 1);
-  assert(failures[0].includes('does not match'));
-  assert(failures[0].includes(PACKAGE_VERSION));
+  expect(failures.length).toEqual(1);
+  expect(failures[0].includes('does not match')).toBeTruthy();
+  expect(failures[0].includes(PACKAGE_VERSION)).toBeTruthy();
 });
 
-Deno.test('package configs: missing CREATE_VERSION anchor is rejected', () => {
+test('package configs: missing CREATE_VERSION anchor is rejected', () => {
   const failures = createVersionFailures('export const SOMETHING_ELSE = 1;\n');
-  assertEquals(failures.length, 1);
-  assert(failures[0].includes('CREATE_VERSION anchor missing'));
+  expect(failures.length).toEqual(1);
+  expect(failures[0].includes('CREATE_VERSION anchor missing')).toBeTruthy();
 });
 
-Deno.test('package configs: real repo create version source is in sync with release state', () => {
+test('package configs: real repo create version source is in sync with release state', () => {
   // main() runs this against disk; asserting it here keeps the embedded CLI
   // version honest when a bump forgets packages/create/src/version.ts (#713).
-  assertEquals(createVersionFailures(Deno.readTextFileSync('packages/create/src/version.ts')), []);
+  expect(createVersionFailures(readFileSync('packages/create/src/version.ts', 'utf8'))).toEqual([]);
 });

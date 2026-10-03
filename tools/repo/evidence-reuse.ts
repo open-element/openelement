@@ -47,7 +47,10 @@
  */
 
 import { join, resolve } from '@std/path';
+import { appendFile, readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { JOB_NAMES, type JobName } from './candidate-steps.ts';
+import { commandOutput } from './node-command.ts';
 
 /** Artifact name prefix every producer lane uploads under. */
 export const EVIDENCE_ARTIFACT_PREFIX = 'evidence-';
@@ -339,20 +342,21 @@ function repoRootArg(): string {
 }
 
 function flagValue(name: string): string | undefined {
+  const argv = process.argv.slice(2);
   const prefix = `--${name}=`;
-  const inline = Deno.args.find((arg) => arg.startsWith(prefix));
+  const inline = argv.find((arg) => arg.startsWith(prefix));
   if (inline) return inline.slice(prefix.length);
-  const index = Deno.args.indexOf(`--${name}`);
-  return index >= 0 ? Deno.args[index + 1] : undefined;
+  const index = argv.indexOf(`--${name}`);
+  return index >= 0 ? argv[index + 1] : undefined;
 }
 
 async function git(args: string[], cwd: string = repoRootArg()): Promise<string> {
-  const result = await new Deno.Command('git', {
+  const result = await commandOutput('git', {
     args,
     cwd,
     stdout: 'piped',
     stderr: 'piped',
-  }).output();
+  });
   if (!result.success) {
     throw new Error(`git ${args.join(' ')} failed: ${new TextDecoder().decode(result.stderr)}`);
   }
@@ -360,8 +364,8 @@ async function git(args: string[], cwd: string = repoRootArg()): Promise<string>
 }
 
 if (import.meta.main) {
-  if (Deno.args.includes('--resolve')) await resolveCommand();
-  else if (Deno.args.includes('--claim')) await claimCommand();
+  if (process.argv.slice(2).includes('--resolve')) await resolveCommand();
+  else if (process.argv.slice(2).includes('--claim')) await claimCommand();
   else {
     console.error(
       'usage: evidence-reuse.ts --resolve [--github-output <path>]\n' +
@@ -372,19 +376,19 @@ if (import.meta.main) {
         '       matching key: the claim compares TREES. Both accept --repo-root <dir>\n' +
         '       (default: the checkout this tool ships in).',
     );
-    Deno.exit(2);
+    process.exit(2);
   }
 }
 
 /** Run `gh` and return its raw stdout (for `--jq` expressions). */
 async function ghText(args: string[]): Promise<string> {
-  const result = await new Deno.Command('gh', {
+  const result = await commandOutput('gh', {
     args,
     cwd: repoRootArg(),
     stdout: 'piped',
     stderr: 'piped',
-    env: { ...Deno.env.toObject(), GH_PROMPT_DISABLED: '1' },
-  }).output();
+    env: { ...process.env, GH_PROMPT_DISABLED: '1' },
+  });
   if (!result.success) {
     throw new Error(
       `gh ${args.join(' ')} failed: ${new TextDecoder().decode(result.stderr).trim()}`,
@@ -411,7 +415,8 @@ async function writeOutputs(
     console.log(lines.trimEnd());
     return;
   }
-  await Deno.writeTextFile(path, lines, { append: true, create: true });
+  // Deno's writeTextFile(append+create) is node's appendFile.
+  await appendFile(path, lines, 'utf8');
 }
 
 export function workflowRunListArgs(limit: number): string[] {
@@ -543,7 +548,7 @@ async function claimCommand(): Promise<void> {
   }
   const [sha, tree] = [await git(['rev-parse', 'HEAD']), await git(['rev-parse', 'HEAD^{tree}'])];
   const resultPath = join(outDir, job, 'result.json');
-  const raw = JSON.parse(await Deno.readTextFile(resultPath)) as Record<string, unknown>;
+  const raw = JSON.parse(await readFile(resultPath, 'utf8')) as Record<string, unknown>;
   const { claimed, failures } = await claimReusedResult(raw, {
     job,
     currentSha: sha,
@@ -556,7 +561,7 @@ async function claimCommand(): Promise<void> {
   if (failures.length > 0) {
     throw new Error(`refusing to stamp reused evidence:\n- ${failures.join('\n- ')}`);
   }
-  await Deno.writeTextFile(resultPath, JSON.stringify(claimed, null, 2) + '\n');
+  await writeFile(resultPath, JSON.stringify(claimed, null, 2) + '\n', 'utf8');
   // The resolved source commit is printed for the reader; it is deliberately
   // NOT a matching key any more (#1439) — the record's own producer commit and
   // this tree are what the claim verified.

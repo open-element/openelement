@@ -6,10 +6,10 @@
  * only the markup and declared properties (ADR-0143/ADR-0148).
  */
 import { definePage } from '@openelement/router';
-import { posts } from '@openelement/generated/blog-data';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { localizePath } from '@openelement/site-ui/link.ts';
+import { posts } from '#generated/blog-data';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
+import { localizePath } from '#site-ui/link.ts';
 import BlogIndexPage from '../../components/page-blog-index.tsx';
 
 // Blog, changelog, roadmap and contributing are the project's own pages, not

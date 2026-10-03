@@ -1,7 +1,8 @@
 /** Client island entry emission; browser runtime wiring only. */
+import process from 'node:process';
 import { ACTION_FETCH_HEADER, IDLE_FALLBACK_TIMEOUT_MS } from '@openelement/element';
 import { stableModuleId } from '@openelement/element/compiler';
-import { findWorkspaceRoot } from '../../workspace-alias.ts';
+import { findBuildWorkspaceRoot } from '../../workspace-alias.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
 import {
@@ -14,7 +15,7 @@ import type { ClientIslandDeliveryEntry, ClientIslandDeliveryInput } from './del
 
 // Machine-independent identity for the generated error copy: the workspace
 // anchor keeps absolute build paths out of the shipped client bundle.
-const WORKSPACE_ROOT = findWorkspaceRoot(Deno.cwd()) ?? undefined;
+const WORKSPACE_ROOT = findBuildWorkspaceRoot(process.cwd()) ?? undefined;
 
 function islandImportFactory(
   modulePath: AdmittedIslandModuleSpecifier,

@@ -11,8 +11,8 @@
  * - the default `@openelement/element` entry imports
  *   `runtime/claim-install.ts`, whose evaluation installs the executor;
  * - the `@openelement/element/client-only` entry does not, and a bundler then
- *   drops the claim cluster as unreferenced (measured: 9.4 KB on the JFB
- *   keyed-table harness).
+ *   drops the claim cluster as unreferenced (measured: 9.4 KB on the upstream
+ *   js-framework-benchmark keyed-table harness).
  *
  * The executor is a module-level binding rather than a global: installation is
  * an ordinary module side effect, so it happens before any element can

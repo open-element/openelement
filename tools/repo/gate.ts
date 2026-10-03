@@ -1,21 +1,21 @@
 /**
  * Readable fail-closed gate coordinator (1.0 Alpha baseline).
  *
- * Root `gate:*` tasks must not be single-line `&&` chains of dozens of
- * subtasks: failures hide mid-chain and no per-step report exists. Gates
- * delegate here with the same member tasks; each member runs as
- * `deno task <name>` from the repository root with inherited stdio, and the
+ * Root `gate:*` scripts must not be single-line `&&` chains of dozens of
+ * sub-scripts: failures hide mid-chain and no per-step report exists. Gates
+ * delegate here with the same member scripts; each member runs as
+ * `pnpm run <name>` from the repository root with inherited stdio, and the
  * coordinator prints one PASS/FAIL line with the duration per step. The
  * first failure stops the gate and the process exits 1 (fail-closed); a
  * fully green gate prints the step count and exits 0. This coordinator owns
  * no test logic — it only sequences formal tasks.
  *
  * Usage:
- *   deno run --allow-run tools/repo/gate.ts <step> [<step> ...]
+ *   node tools/repo/gate.ts <step> [<step> ...]
  *
- * A step is either a root task (`typecheck`) or a workspace task
- * (`<dir>#<task>`, e.g. `www#build`): the latter runs as
- * `deno task --cwd <dir> <task>` from the repository root. `<dir>` must
+ * A step is either a root script (`typecheck`) or a workspace script
+ * (`<dir>#<script>`, e.g. `www#build`): the latter runs as
+ * `pnpm --dir <dir> run <script>` from the repository root. `<dir>` must
  * stay inside the repo (no `..`, no absolute paths) and both parts are
  * restricted to task-name characters, so a gate definition cannot smuggle
  * shell composition past review.
@@ -33,6 +33,9 @@ export interface GateStep {
   dir: string | null;
   task: string;
 }
+
+import { commandStatus } from './node-command.ts';
+import process from 'node:process';
 
 const STEP_CHARS = /^[A-Za-z0-9:_-]+$/;
 const DIR_CHARS = /^[A-Za-z0-9_./-]+$/;
@@ -75,6 +78,21 @@ export async function runGate(
   return { ok: true, results };
 }
 
+/**
+ * The pnpm entry used for every spawned step. When gate.ts itself is run
+ * through a pnpm script (the normal path), `npm_execpath` names the running
+ * pnpm JS entry — spawning it with the current `process.execPath` avoids
+ * PATH/shebang surprises. A direct `node gate.ts` invocation falls back to
+ * the `pnpm` on PATH.
+ */
+function pnpmLauncher(): { command: string; extraArgs: string[] } {
+  const execpath = process.env.npm_execpath;
+  if (execpath && execpath.endsWith('.cjs')) {
+    return { command: process.execPath, extraArgs: [execpath] };
+  }
+  return { command: 'pnpm', extraArgs: [] };
+}
+
 async function defaultSpawn(step: string): Promise<number> {
   let parsed: GateStep;
   try {
@@ -83,25 +101,28 @@ async function defaultSpawn(step: string): Promise<number> {
     console.error((error as Error).message);
     return 127;
   }
-  const args =
-    parsed.dir === null ? ['task', parsed.task] : ['task', '--cwd', parsed.dir, parsed.task];
-  const child = new Deno.Command(Deno.execPath(), {
+  const { command, extraArgs } = pnpmLauncher();
+  const args = [
+    ...extraArgs,
+    ...(parsed.dir === null ? ['run', parsed.task] : ['--dir', parsed.dir, 'run', parsed.task]),
+  ];
+  const status = await commandStatus(command, {
     args,
     cwd: repoRoot,
-    // Gates never interact: stdin stays closed so a permission request fails
-    // closed instead of hanging on a prompt (non-interactive invariant).
+    // Gates never interact: stdin stays closed so an unexpected prompt fails
+    // closed instead of hanging (non-interactive invariant).
     stdin: 'null',
     stdout: 'inherit',
     stderr: 'inherit',
-  }).spawn();
-  return (await child.status).code;
+  });
+  return status.code;
 }
 
 if (import.meta.main) {
-  if (Deno.args.length === 0) {
+  if (process.argv.slice(2).length === 0) {
     console.error('gate: at least one task name is required');
-    Deno.exit(2);
+    process.exit(2);
   }
-  const { ok } = await runGate(Deno.args);
-  if (!ok) Deno.exit(1);
+  const { ok } = await runGate(process.argv.slice(2));
+  if (!ok) process.exit(1);
 }

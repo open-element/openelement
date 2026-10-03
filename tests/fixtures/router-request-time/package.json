@@ -1,0 +1,26 @@
+{
+  "name": "@openelement/fixture-router-request-time",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../../packages/router/src/cli/build.ts",
+    "e2e": "playwright test --config e2e/playwright.config.ts --project=chromium",
+    "e2e:browsers": "playwright test --config e2e/playwright.config.ts",
+    "gate": "node ../../../tools/repo/gate.ts tests/fixtures/router-request-time#build tests/fixtures/router-request-time#e2e:browsers"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.1",
+    "@openelement/element": "workspace:*",
+    "@openelement/router": "workspace:*",
+    "@zag-js/combobox": "1.43.3",
+    "@zag-js/vanilla": "1.43.3",
+    "hono": "^4.12",
+    "valibot": "^1.1",
+    "zod": "^3.25"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "vite": "8.0.16"
+  }
+}

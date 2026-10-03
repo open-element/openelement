@@ -9,7 +9,7 @@ order: 2
 
 ## 开始之前
 
-需要 **Deno 2.9 或更高版本**，以及一个终端。没有别的前置条件——不需要装 Node.js，也没有 `package.json`。
+需要 **Node.js 24.2+** 与 pnpm，以及一个终端。唯一一条 bootstrap 命令是一次普通的 Node 调用（ADR-0161）——不涉及第二个运行时，之后的每一步都是 Node 与 pnpm。
 
 本教程用五步做出一个小应用，每一步都以「看得见的结果」收尾：
 
@@ -26,10 +26,11 @@ order: 2
 ```bash
 {{INSTALL_COMMAND}}
 cd my-app
-deno task dev
+pnpm install
+pnpm dev
 ```
 
-`--minimum-dependency-age 0` 只在一种情况下需要：Deno 默认（约 24 小时）会拒绝发布未满一天的包。
+这条命令跑在普通 Node 工具链上：从 npm 拉取已发布的 `@openelement/create@alpha` 包，并把解析出的精确依赖版本脚手架进项目。
 
 create CLI 每个文件打印一行 `created <path>`，随后打印后续命令：
 
@@ -37,11 +38,12 @@ create CLI 每个文件打印一行 `created <path>`，随后打印后续命令�
 openElement project created at ./my-app/
 
   cd my-app
-  deno task dev
-  See README.md for all tasks (check/build/start/preview)
+  pnpm install
+  pnpm dev
+  See README.md for all scripts (check/test/build/start/preview)
 ```
 
-`deno task dev` 启动 Vite dev server，并打印要打开的地址：
+`pnpm dev` 启动 Vite dev server，并打印要打开的地址：
 
 ```text
   VITE v8.0.16  ready in 412 ms
@@ -53,7 +55,7 @@ openElement project created at ./my-app/
 
 ```text
 my-app/
-  deno.json         import map 与任务：dev、check、test、build、start、preview
+  package.json      依赖与 pnpm 脚本：dev、check、test、build、start、preview
   openelement.config.ts  框架选项（token、head、shell 约定）
   vite.config.ts    Vite 配置；插件调用不接受参数
   app/routes/       一个文件对应一个 URL
@@ -62,7 +64,7 @@ my-app/
   public/           静态资源，原样拷进 dist/
 ```
 
-`deno task check` 会类型检查 starter 的 `app/` 目录以及 `vite.config.ts` 与 `openelement.config.ts`；新增的路由会被自动纳入。
+`pnpm check` 会类型检查 starter 的 `app/` 目录以及 `vite.config.ts` 与 `openelement.config.ts`；新增的路由会被自动纳入。
 
 ## 第 2 步：加第一个页面
 
@@ -285,7 +287,7 @@ location: /notes?saved=hello
 ## 第 5 步：构建并起服务
 
 ```bash
-deno task build
+pnpm build
 ```
 
 构建会预渲染所有静态路由、为每个可达 island 打一个 chunk，并且——因为 `/notes` 是请求时的——同时写出服务端入口。预期输出（已截取：starter 自带的 island 也在同一张表里，逐页清单省略）：
@@ -323,7 +325,7 @@ server/index.js     回答 POST /notes 的请求时处理器
 起服务：
 
 ```bash
-deno task start
+pnpm start
 ```
 
 ```text
@@ -341,7 +343,7 @@ curl -i http://localhost:4173/hello | head -1
 HTTP/1.1 200 OK
 ```
 
-`/hello` 是磁盘上的文件；`/notes` 走到了服务端入口。`deno task preview` 是纯静态模式，只要 `dist/server` 存在就拒绝运行——所以带请求时路由的项目要用 `deno task start` 起。
+`/hello` 是磁盘上的文件；`/notes` 走到了服务端入口。`pnpm preview` 是纯静态模式，只要 `dist/server` 存在就拒绝运行——所以带请求时路由的项目要用 `pnpm start` 起。
 
 到这里你有了一个项目、一个页面、一个 island、一个表单 action，以及一份可以部署的构建产物。
 

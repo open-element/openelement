@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   createLogger,
   createWarnScope,
@@ -7,7 +7,7 @@ import {
 } from '../src/internal/core/logger.ts';
 import * as publicElement from '../src/index.ts';
 
-Deno.test('warnOnce test reset is internal and restores test isolation', () => {
+test('warnOnce test reset is internal and restores test isolation', () => {
   const messages: string[] = [];
   const logger = {
     debug: () => {},
@@ -22,11 +22,11 @@ Deno.test('warnOnce test reset is internal and restores test isolation', () => {
   resetWarnOnceForTests();
   warnOnce('same-key', logger, 'after reset');
 
-  assertEquals(messages, ['first', 'after reset']);
-  assertEquals('resetWarnOnceForTests' in publicElement, false);
+  expect(messages).toEqual(['first', 'after reset']);
+  expect('resetWarnOnceForTests' in publicElement).toEqual(false);
 });
 
-Deno.test('warnOnce with a render scope is isolated to that scope, not process-global', () => {
+test('warnOnce with a render scope is isolated to that scope, not process-global', () => {
   const messages: string[] = [];
   const original = console.warn;
   console.warn = (...args: unknown[]) => messages.push(args.join(' '));
@@ -37,13 +37,13 @@ Deno.test('warnOnce with a render scope is isolated to that scope, not process-g
     warnOnce('k', logger, 'a-dup', scopeA);
     const scopeB = createWarnScope();
     warnOnce('k', logger, 'b', scopeB);
-    assertEquals(messages, ['[t] a', '[t] b']);
+    expect(messages).toEqual(['[t] a', '[t] b']);
   } finally {
     console.warn = original;
   }
 });
 
-Deno.test('warnOnce without a scope uses the global fallback and resetWarnOnceForTests clears it', () => {
+test('warnOnce without a scope uses the global fallback and resetWarnOnceForTests clears it', () => {
   const messages: string[] = [];
   const original = console.warn;
   console.warn = (...args: unknown[]) => messages.push(args.join(' '));
@@ -52,16 +52,16 @@ Deno.test('warnOnce without a scope uses the global fallback and resetWarnOnceFo
     resetWarnOnceForTests();
     warnOnce('gk', logger, 'one');
     warnOnce('gk', logger, 'two');
-    assertEquals(messages, ['[t2] one']);
+    expect(messages).toEqual(['[t2] one']);
     resetWarnOnceForTests();
     warnOnce('gk', logger, 'three');
-    assertEquals(messages, ['[t2] one', '[t2] three']);
+    expect(messages).toEqual(['[t2] one', '[t2] three']);
   } finally {
     console.warn = original;
   }
 });
 
-Deno.test('createWarnScope returns an independent scope per render', () => {
-  assertEquals(createWarnScope().warned.size, 0);
-  assertEquals(createWarnScope() !== createWarnScope(), true);
+test('createWarnScope returns an independent scope per render', () => {
+  expect(createWarnScope().warned.size).toEqual(0);
+  expect(createWarnScope() !== createWarnScope()).toEqual(true);
 });

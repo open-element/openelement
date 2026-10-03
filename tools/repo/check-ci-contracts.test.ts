@@ -5,27 +5,26 @@
  * must install all three packed-gate browsers.
  */
 
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { dirname, join } from '@std/path';
+import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
-const workflow = await Deno.readTextFile(join(repoRoot, '.github/workflows/autoflow-ci.yml'));
-const releasing = await Deno.readTextFile(join(repoRoot, 'docs/maintainers/releasing.md'));
-const dependencyAudit = await Deno.readTextFile(
-  join(repoRoot, '.github/workflows/dependency-audit.yml'),
-);
-const siteConfig = await Deno.readTextFile(join(repoRoot, 'www/openelement.config.ts'));
+const workflow = await readFile(join(repoRoot, '.github/workflows/autoflow-ci.yml'), 'utf8');
+const releasing = await readFile(join(repoRoot, 'docs/maintainers/releasing.md'), 'utf8');
+const siteConfig = await readFile(join(repoRoot, 'www/openelement.config.ts'), 'utf8');
 
 /** Extract one top-level job block (two-space `name:` jobs) by job key. */
 function jobBlock(text: string, job: string): string {
   const start = text.indexOf(`\n  ${job}:`);
-  assert(start >= 0, `workflow job missing: ${job}`);
+  expect(start >= 0, `workflow job missing: ${job}`).toBeTruthy();
   const rest = text.slice(start + 1);
   const next = rest.slice(1).search(/\n {2}[a-z0-9-]+:/);
   return next < 0 ? rest : rest.slice(0, next + 1);
 }
 
-Deno.test('ci contract: required jobs stay blocking', () => {
+test('ci contract: required jobs stay blocking', () => {
   for (const job of [
     'autoflow-ci',
     'node-serve-smoke',
@@ -33,14 +32,14 @@ Deno.test('ci contract: required jobs stay blocking', () => {
     'bfcache-chrome',
   ]) {
     const block = jobBlock(workflow, job);
-    assert(
+    expect(
       !/continue-on-error:\s*true/.test(block),
       `required job ${job} must not carry continue-on-error: true`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('ci contract: release guide names individually required ruleset checks', () => {
+test('ci contract: release guide names individually required ruleset checks', () => {
   const normalizedReleasing = releasing.replace(/\s+/gu, ' ');
   for (const check of [
     '21775463',
@@ -52,57 +51,57 @@ Deno.test('ci contract: release guide names individually required ruleset checks
     '`CodeQL`',
     'strict required status-check policy',
   ]) {
-    assert(
+    expect(
       normalizedReleasing.includes(check),
       `releasing guide must name required check ${check}`,
-    );
+    ).toBeTruthy();
   }
-  assert(
+  expect(
     !/producers are not individual required checks/u.test(releasing),
     'the guide must not describe the aggregate as the only required CI check',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: Site config omits the inert empty stylesheet channel', () => {
-  assert(
+test('ci contract: Site config omits the inert empty stylesheet channel', () => {
+  expect(
     !/stylesheets:\s*\[\s*\]/u.test(siteConfig),
     'the Site must not configure an empty stylesheet list',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: packed-consumer matrix installs all three packed-gate browsers', () => {
+test('ci contract: packed-consumer matrix installs all three packed-gate browsers', () => {
   const block = jobBlock(workflow, 'packed-consumer-matrix');
-  assert(
+  expect(
     /playwright install[^\n]*chromium[^\n]*firefox[^\n]*webkit/.test(block),
     'packed-consumer-matrix must install chromium+firefox+webkit for the packed gates',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: dependency-review runs on pull requests', () => {
-  assert(
+test('ci contract: dependency-review runs on pull requests', () => {
+  expect(
     /pull_request:/.test(workflow),
     'autoflow-ci must trigger on pull_request for dependency review',
-  );
+  ).toBeTruthy();
   const block = jobBlock(workflow, 'dependency-review');
-  assert(
+  expect(
     /github\.event_name\s*==\s*['"]pull_request['"]/.test(block),
     'dependency-review must be gated to pull_request events',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /dependency-review-action@/.test(block),
     'dependency-review must run the dependency review action',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: node serve smoke pins the required Node matrix', () => {
+test('ci contract: node serve smoke pins the required Node matrix', () => {
   const block = jobBlock(workflow, 'node-serve-smoke');
-  assert(
+  expect(
     /'24'/.test(block) && /'26'/.test(block),
     'node-serve-smoke must pin the required Node 24/26 matrix',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: execution jobs are separate from evidence aggregation', () => {
+test('ci contract: execution jobs are separate from evidence aggregation', () => {
   const producers: Array<[string, RegExp]> = [
     ['fast-checks', /candidate:evidence:fast/],
     ['source-matrix', /candidate:evidence:source/],
@@ -111,57 +110,57 @@ Deno.test('ci contract: execution jobs are separate from evidence aggregation', 
   ];
   for (const [job, command] of producers) {
     const block = jobBlock(workflow, job);
-    assert(command.test(block), `${job} must run its own evidence slice`);
-    assert(
+    expect(command.test(block), `${job} must run its own evidence slice`).toBeTruthy();
+    expect(
       /actions\/upload-artifact@/.test(block),
       `${job} must upload its result + logs artifact`,
-    );
+    ).toBeTruthy();
   }
   const aggregate = jobBlock(workflow, 'autoflow-ci');
-  assert(
+  expect(
     /needs:\s*\[[^\]]*fast-checks[^\]]*source-matrix[^\]]*packed-consumers[^\]]*fresh-clone/.test(
       aggregate,
     ),
     'autoflow-ci must depend on every producer job',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /candidate:evidence:aggregate/.test(aggregate) && /candidate:evidence:validate/.test(aggregate),
     'autoflow-ci must aggregate and validate, never recompute',
-  );
+  ).toBeTruthy();
   const rerunForbidden = aggregate
     .split('\n')
     .filter((line) => !line.trimStart().startsWith('#'))
     .join('\n');
-  for (const rerun of ['gate:source', 'gate:packed', 'publish:npm:dry-run', 'deno task check']) {
-    assert(
+  for (const rerun of ['gate:source', 'gate:packed', 'publish:npm:dry-run', 'pnpm run check']) {
+    expect(
       !rerunForbidden.includes(rerun),
       `autoflow-ci aggregation must not re-run the suite: found ${rerun}`,
-    );
+    ).toBeTruthy();
   }
-  assert(
+  expect(
     /actions\/download-artifact@/.test(aggregate),
     'autoflow-ci must read the producer artifacts',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: every evidence producer installs the recorded browsers', () => {
+test('ci contract: every evidence producer installs the recorded browsers', () => {
   for (const job of ['fast-checks', 'source-matrix', 'packed-consumers', 'fresh-clone']) {
     const block = jobBlock(workflow, job);
-    assert(
+    expect(
       /playwright install[^\n]*chromium[^\n]*firefox[^\n]*webkit/.test(block),
       `${job} must install chromium+firefox+webkit before recording toolVersions`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('ci contract: candidate evidence bundle ships JSON and every log/manifest', () => {
+test('ci contract: candidate evidence bundle ships JSON and every log/manifest', () => {
   const aggregate = jobBlock(workflow, 'autoflow-ci');
-  assert(
+  expect(
     /name:\s*candidate-evidence-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/.test(
       aggregate,
     ),
     'the candidate artifact name must stay SHA/run-bound',
-  );
+  ).toBeTruthy();
   for (const path of [
     '.artifacts/candidate-evidence.json',
     '.artifacts/tarball-manifest.json',
@@ -169,333 +168,337 @@ Deno.test('ci contract: candidate evidence bundle ships JSON and every log/manif
     '.artifacts/tarballs',
     '.artifacts/ci',
   ]) {
-    assert(aggregate.includes(path), `candidate artifact must include ${path}`);
+    expect(aggregate.includes(path), `candidate artifact must include ${path}`).toBeTruthy();
   }
-  assert(
+  expect(
     /retention-days:\s*14/.test(aggregate) &&
       /retention-days:\s*14/.test(jobBlock(workflow, 'fresh-clone')),
     'evidence retention must stay 14 days and match the release window',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: release workflow permissions cover its GitHub API use', async () => {
-  const releasing = await Deno.readTextFile(
+test('ci contract: release workflow permissions cover its GitHub API use', async () => {
+  const releasing = await readFile(
     join(repoRoot, '.github/workflows/autoflow-release.yml'),
+    'utf8',
   );
   // With an explicit permissions map, unlisted scopes are none. The release
   // job calls `gh run list/view/download`, which needs Actions read.
-  assert(
+  expect(
     /actions:\s*read/.test(releasing),
     'release must grant actions: read to read workflow runs and artifacts',
-  );
-  assert(/contents:\s*read/.test(releasing), 'release must keep contents: read');
-  assert(
+  ).toBeTruthy();
+  expect(/contents:\s*read/.test(releasing), 'release must keep contents: read').toBeTruthy();
+  expect(
     /id-token:\s*write/.test(releasing),
     'release must keep id-token: write for npm Trusted Publishing',
-  );
+  ).toBeTruthy();
   const writeScopes = [...releasing.matchAll(/^\s{6}([a-z-]+):\s*write\s*$/gm)].map((m) => m[1]);
-  assertEquals(
-    writeScopes.sort(),
-    ['id-token'],
-    'only id-token may be a write scope in the release job',
-  );
-  assert(
+  expect(writeScopes.sort(), 'only id-token may be a write scope in the release job').toEqual([
+    'id-token',
+  ]);
+  expect(
     /gh run list/.test(releasing) && /gh run download/.test(releasing),
     'the API-scope contract test assumes the release job reads runs/artifacts',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: release consumes the bound, non-expired CI artifact', async () => {
-  const releasingWorkflow = await Deno.readTextFile(
+test('ci contract: release consumes the bound, non-expired CI artifact', async () => {
+  const releasingWorkflow = await readFile(
     join(repoRoot, '.github/workflows/autoflow-release.yml'),
+    'utf8',
   );
-  assert(
+  expect(
     /gh run list[^]*--commit "\$CANDIDATE_SHA"[^]*--status success/.test(releasingWorkflow),
     'release must require a successful CI run for the exact candidate SHA',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /gh run download[^]*--pattern 'candidate-evidence-\*'/.test(releasingWorkflow),
     'release must download the candidate evidence artifact',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /candidate-evidence\.ts[^]*--validate/.test(releasingWorkflow),
     'release must validate the downloaded evidence by recomputing hashes',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /age_days[^\n]*14/.test(releasingWorkflow),
     'release must refuse evidence older than the retention window',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     !/pull_request_target/.test(releasingWorkflow) && /workflow_dispatch/.test(releasingWorkflow),
     'release stays workflow_dispatch only and never runs on untrusted PR events',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: post-publish consumers are chained, not manual-only', async () => {
-  const releasing = await Deno.readTextFile(
+test('ci contract: post-publish consumers are chained, not manual-only', async () => {
+  const releasing = await readFile(
     join(repoRoot, '.github/workflows/autoflow-release.yml'),
+    'utf8',
   );
-  const published = await Deno.readTextFile(
+  const published = await readFile(
     join(repoRoot, '.github/workflows/published-consumers.yml'),
+    'utf8',
   );
-  assert(
+  expect(
     /workflow_call:/.test(published),
     'published-consumers must expose workflow_call so release can chain it',
-  );
+  ).toBeTruthy();
   const postPublish = jobBlock(releasing, 'post-publish-consumers');
-  assert(
+  expect(
     /needs:\s*release/.test(postPublish) && /if:\s*inputs\.publish/.test(postPublish),
     'post-publish-consumers must run after a real publish',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /uses:\s*\.\/\.github\/workflows\/published-consumers\.yml/.test(postPublish),
     'post-publish-consumers must call the published-consumers workflow',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: packed-consumer matrix pins the two release OSes', () => {
+test('ci contract: packed-consumer matrix pins the two release OSes', () => {
   const block = jobBlock(workflow, 'packed-consumer-matrix');
-  assert(
+  expect(
     /ubuntu-latest/.test(block) && /macos-latest/.test(block),
     'packed-consumer-matrix must stay Linux/macOS required',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     !/windows-latest/.test(block),
     'Windows is out of scope for the candidate: deno pack drops the Router ./vite types condition there (upstream), and the deploy targets are Linux/Workers',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: Deno dependencies are audited, never auto-merged', () => {
-  assert(/contents:\s*read/.test(dependencyAudit), 'dependency-audit must stay read-only');
-  assert(
-    /deno outdated/.test(dependencyAudit) && /deno audit/.test(dependencyAudit),
-    'dependency-audit must run the Deno outdated and vulnerability audits',
-  );
-  assert(
-    !/pull_request_target/.test(dependencyAudit) &&
-      !/auto-merge|dependabot\[bot\][^\n]*merge/i.test(dependencyAudit),
-    'dependency-audit must never auto-merge or run on pull_request_target',
-  );
+test('ci contract: dependency updates stay human-authored, never auto-merged', () => {
+  // The dependency-audit workflow retired with the B2 manifest conversion
+  // (its deno outdated/audit surface read the deleted Deno workspace
+  // lockfile). The surviving contract: dependabot opens human PRs only, and
+  // nothing auto-merges them.
+  const dependabot = readFileSync(join(repoRoot, '.github/dependabot.yml'), 'utf8');
+  expect(
+    !/gh pr merge|enableAutoMerge|auto_merge:/i.test(dependabot),
+    'dependabot must never auto-merge (mechanics, not prose mentions)',
+  ).toBeTruthy();
+  expect(
+    /human-authored/.test(dependabot),
+    'dependabot config must document the human-authored update PR contract',
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () => {
+test('ci contract: BFCache runs a blocking Chrome-channel lane', async () => {
   const block = jobBlock(workflow, 'bfcache-chrome');
-  assert(block.length > 0, 'bfcache-chrome job must exist');
-  assertEquals(
+  expect(block.length > 0, 'bfcache-chrome job must exist').toBeTruthy();
+  expect(
     /continue-on-error:\s*true/.test(block),
-    false,
     'the BFCache lane must be blocking, not optional',
-  );
-  assert(
+  ).toEqual(false);
+  expect(
     block.includes('playwright install chrome'),
     'the BFCache lane must install the Chrome channel',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     block.includes('test:bfcache'),
     'the BFCache lane must run the chrome-bfcache project task',
-  );
+  ).toBeTruthy();
   // The official three-browser Site matrix is a release-train step: it must
   // stay wired into gate:release (the trimmed PR layer no longer builds or
   // drives the Site) and the PR-layer fresh-clone lane must keep producing
   // the Site E2E sidecar that the required candidate evidence requires.
   const repoConfig = JSON.parse(
-    await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
-  ) as { tasks: Record<string, string> };
-  assert(
-    repoConfig.tasks['gate:release'].includes('www#e2e:browsers'),
+    await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8'),
+  ) as { scripts: Record<string, string> };
+  expect(
+    repoConfig.scripts['gate:release'].includes('www#e2e:browsers'),
     'gate:release must run the three-browser Site E2E matrix',
-  );
-  assert(
-    !repoConfig.tasks['gate:source'].includes('www#e2e:browsers'),
+  ).toBeTruthy();
+  expect(
+    !repoConfig.scripts['gate:source'].includes('www#e2e:browsers'),
     'the PR layer must not run the three-browser Site matrix (it is a release-train step)',
-  );
+  ).toBeTruthy();
   const freshClone = jobBlock(workflow, 'fresh-clone');
-  assert(
+  expect(
     freshClone.includes('candidate:evidence:fresh'),
     'the fresh-clone lane records the candidate Site E2E sidecar',
-  );
-  const candidateSteps = await Deno.readTextFile(join(repoRoot, 'tools/repo/candidate-steps.ts'));
-  assert(
+  ).toBeTruthy();
+  const candidateSteps = await readFile(join(repoRoot, 'tools/repo/candidate-steps.ts'), 'utf8');
+  expect(
     /name:\s*'task-site-e2e'/.test(candidateSteps) &&
       /name:\s*'task-site-build'/.test(candidateSteps),
     'the fresh-clone contract must pin the Site build and Site E2E steps that produce the sidecar',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: Site E2E evidence is owned by the fresh-clone lane', async () => {
+test('ci contract: Site E2E evidence is owned by the fresh-clone lane', async () => {
   // #1473 split candidate-evidence.ts into single-duty modules; each contract
   // assertion reads the module the symbol now lives in, semantics unchanged.
-  const siteE2e = await Deno.readTextFile(
+  const siteE2e = await readFile(
     join(repoRoot, 'tools/repo/candidate-evidence-site-e2e.ts'),
+    'utf8',
   );
-  assert(
+  expect(
     /SITE_E2E_REPORT_BUNDLE_PATH\s*=\s*`ci\/fresh-clone\//.test(siteE2e),
     'the raw Site E2E report must travel in the fresh-clone evidence tree',
-  );
-  const aggregate = await Deno.readTextFile(
+  ).toBeTruthy();
+  const aggregate = await readFile(
     join(repoRoot, 'tools/repo/candidate-evidence-aggregate.ts'),
+    'utf8',
   );
-  assert(
+  expect(
     /jobs\.find\(\(\{ job \}\) => job\.job === 'fresh-clone'\)[\s\S]{0,200}siteE2e/.test(aggregate),
     'aggregation must read the Site E2E sidecar from the fresh-clone job',
-  );
+  ).toBeTruthy();
   // The producer's per-job extras staging lives on candidate-evidence-record.ts
   // (alpha6 record split), so the no-reintroduction guard reads it there.
-  const evidence = await Deno.readTextFile(
+  const evidence = await readFile(
     join(repoRoot, 'tools/repo/candidate-evidence-record.ts'),
+    'utf8',
   );
-  assert(
+  expect(
     !/job === 'source-matrix'[\s\S]{0,40}sourceExtras/.test(evidence),
     'the source-matrix producer must no longer stage Site E2E evidence',
-  );
+  ).toBeTruthy();
   // The trimmed PR gate must not lose the Site proof outright: the release
   // train still runs the official suite, and the sidecar is recomputed.
-  const validator = await Deno.readTextFile(
+  const validator = await readFile(
     join(repoRoot, 'tools/repo/candidate-evidence-validate.ts'),
+    'utf8',
   );
-  assert(
+  expect(
     /auditSiteE2e\(rollup\.siteE2e\)/.test(validator),
     'the Site E2E audit must stay wired into the rollup',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async () => {
+test('ci contract: SaaS is decoupled from the core candidate gate', async () => {
   const repoConfig = JSON.parse(
-    await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
-  ) as { tasks: Record<string, string> };
-  const gateSource = repoConfig.tasks['gate:source'];
+    await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8'),
+  ) as { scripts: Record<string, string> };
+  const gateSource = repoConfig.scripts['gate:source'];
   for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
-    assert(!gateSource.includes(token), `gate:source must not include SaaS step ${token}`);
+    expect(
+      !gateSource.includes(token),
+      `gate:source must not include SaaS step ${token}`,
+    ).toBeTruthy();
   }
   // The framework core still proves deploy output through the Router fixture —
   // on the release train, where the deploy-proof steps now live. It must not
   // be in neither gate.
-  const gateRelease = repoConfig.tasks['gate:release'];
+  const gateRelease = repoConfig.scripts['gate:release'];
   for (const step of [
     'tests/fixtures/router-nitro#proof:workers',
     'tests/fixtures/router-nitro#proof:node',
   ]) {
-    assert(
+    expect(
       gateRelease.includes(step),
       `the Router deploy proof '${step}' must remain wired into gate:release`,
-    );
-    assert(!gateSource.includes(step), `'${step}' is a release-train step, not a PR-layer one`);
+    ).toBeTruthy();
+    expect(
+      !gateSource.includes(step),
+      `'${step}' is a release-train step, not a PR-layer one`,
+    ).toBeTruthy();
   }
   for (const gate of [gateSource, gateRelease]) {
     for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
-      assert(!gate.includes(token), `no candidate gate may include SaaS step ${token}`);
+      expect(
+        !gate.includes(token),
+        `no candidate gate may include SaaS step ${token}`,
+      ).toBeTruthy();
     }
   }
 
-  const rootConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'deno.json'))) as {
-    tasks: Record<string, string>;
+  const rootConfig = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')) as {
+    scripts: Record<string, string>;
   };
-  assert(rootConfig.tasks['verify:core'], 'root verify:core must exist');
-  assert(!rootConfig.tasks['verify:core'].toLowerCase().includes('saas'));
-  assert(rootConfig.tasks['verify'].includes('saas:verify'), 'full verify keeps SaaS');
+  expect(rootConfig.scripts['verify:core'], 'root verify:core must exist').toBeTruthy();
+  expect(!rootConfig.scripts['verify:core'].toLowerCase().includes('saas')).toBeTruthy();
+  expect(
+    rootConfig.scripts['verify'].includes('saas:verify'),
+    'full verify keeps SaaS',
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: partial publish receipts are persisted as recovery records', async () => {
-  const releasing = await Deno.readTextFile(
+test('ci contract: partial publish receipts are persisted as recovery records', async () => {
+  const releasing = await readFile(
     join(repoRoot, '.github/workflows/autoflow-release.yml'),
+    'utf8',
   );
   const block = releasing.slice(releasing.indexOf('Upload release receipt'));
-  assert(
+  expect(
     /if:\s*\$\{\{\s*always\(\)\s*&&\s*inputs\.publish\s*\}\}/.test(block),
     'the receipt upload must run on always() when publishing',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /path:\s*\.artifacts\/release-receipt\.json/.test(block),
     'the receipt upload must target exactly .artifacts/release-receipt.json',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     !/path:\s*\.artifacts\/?\s*$/m.test(block),
     'the receipt upload must not upload the whole .artifacts tree',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /release-receipt-\$\{\{\s*inputs\.candidate_sha\s*\}\}-\$\{\{\s*github\.run_id\s*\}\}-\$\{\{\s*github\.run_attempt\s*\}\}/.test(
       block,
     ),
     'the receipt artifact name must bind the candidate SHA and run id/attempt',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /if-no-files-found:\s*error/.test(block),
     'a publish run with no receipt must fail closed',
-  );
+  ).toBeTruthy();
 
-  const publish = await Deno.readTextFile(join(repoRoot, 'tools/release/publish-npm.ts'));
-  assert(
-    /receipt\.result !== 'published'[\s\S]{0,40}Deno\.exit\(1\)/.test(publish),
+  const publish = await readFile(join(repoRoot, 'tools/release/publish-npm.ts'), 'utf8');
+  expect(
+    /receipt\.result !== 'published'[\s\S]{0,40}process\.exit\(1\)/.test(publish),
     'a partial/failed publish must exit non-zero',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('ci contract: the requeue companion re-runs a failed CI run exactly once', async () => {
+test('ci contract: the requeue companion re-runs a failed CI run exactly once', async () => {
   // #1409: webkit fails deterministically PER RUNNER, so the only retry that
   // can change the outcome is a re-run on fresh runners — and exactly one of
   // them, or a genuine failure would be retried forever.
-  const requeue = await Deno.readTextFile(join(repoRoot, '.github/workflows/requeue-once.yml'));
-  assert(
+  const requeue = await readFile(join(repoRoot, '.github/workflows/requeue-once.yml'), 'utf8');
+  expect(
     /workflow_run:/.test(requeue) && /workflows:\s*\['AutoFlow CI'\]/.test(requeue),
     'the requeue must trigger on the AutoFlow CI workflow_run event',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /types:\s*\[completed\]/.test(requeue),
     'the requeue must wait for completion: an in-progress run cannot be re-run',
-  );
-  assert(/conclusion\s*==\s*'failure'/.test(requeue), 'only a failed run may be requeued');
-  assert(
+  ).toBeTruthy();
+  expect(
+    /conclusion\s*==\s*'failure'/.test(requeue),
+    'only a failed run may be requeued',
+  ).toBeTruthy();
+  expect(
     /run_attempt\s*==\s*1/.test(requeue),
     'only attempt 1 may be requeued; a second failure is the verdict',
-  );
-  assert(/rerun-failed-jobs/.test(requeue), 'the requeue must call the rerun-failed-jobs endpoint');
+  ).toBeTruthy();
+  expect(
+    /rerun-failed-jobs/.test(requeue),
+    'the requeue must call the rerun-failed-jobs endpoint',
+  ).toBeTruthy();
   // Scope discipline: actions: write is the whole point, and nothing else.
   const writeScopes = [...requeue.matchAll(/^\s{4,6}([a-z-]+):\s*write\s*$/gm)].map((m) => m[1]);
-  assertEquals(writeScopes, ['actions'], 'only actions may be a write scope');
-  assert(requeue.includes('contents: read'), 'the requeue must keep contents: read');
+  expect(writeScopes, 'only actions may be a write scope').toEqual(['actions']);
+  expect(requeue.includes('contents: read'), 'the requeue must keep contents: read').toBeTruthy();
 });
 
-Deno.test('ci contract: the nightly JFB workflow measures, never gates', async () => {
-  const nightly = await Deno.readTextFile(join(repoRoot, '.github/workflows/jfb-nightly.yml'));
-  assert(
-    /continue-on-error:\s*true/.test(nightly),
-    'benchmark numbers move with the runner; a nightly measurement must not gate anything',
-  );
-  assert(nightly.includes('contents: read'), 'the nightly benchmark workflow is read-only');
-  assert(
-    /benchmarks\/jfb\/harness\/build\.ts/.test(nightly) &&
-      /benchmarks\/jfb\/harness\/run\.ts/.test(nightly),
-    'the nightly must run the real harness build and runner',
-  );
-  assert(
-    /actions\/upload-artifact@/.test(nightly) && /jfb-evidence\.json/.test(nightly),
-    'the nightly must publish the redacted evidence record as an artifact',
-  );
-  assert(
-    /playwright install[^\n]*chromium/.test(nightly),
-    'the nightly must install the browser the harness drives',
-  );
-  assert(!/pull_request/.test(nightly), 'a nightly measurement never runs on pull requests');
-});
-
-Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source', async () => {
+test('ci contract: tree-SHA evidence reuse is fail-closed and single-source', async () => {
   // #1425 follow-up: the four producer lanes may replay a tree-identical
   // package instead of re-running their gates. The safety properties are
   // structural, so they are pinned here rather than left to review.
   const reuse = jobBlock(workflow, 'reuse');
-  assert(
+  expect(
     /actions:\s*read/.test(reuse),
     'the resolver needs actions: read to list runs and their artifacts',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     !/actions:\s*write/.test(reuse) && !/contents:\s*write/.test(reuse),
     'the resolver must stay read-only',
-  );
+  ).toBeTruthy();
   for (const output of ['reused', 'source_run_id', 'source_sha', 'tree']) {
-    assert(
+    expect(
       new RegExp(`^\\s{6}${output}:`, 'm').test(reuse),
       `the reuse job must expose the '${output}' output the lanes consume`,
-    );
+    ).toBeTruthy();
   }
 
   // Every producer lane depends on the decision, and each lane's gate runs
@@ -516,87 +519,88 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
   ];
   for (const [job, task] of lanes) {
     const block = jobBlock(workflow, job);
-    assert(
+    expect(
       /permissions:\s*\n\s+contents:\s*read\s*\n\s+actions:\s*read/.test(block),
       `${job} must grant actions: read for the cross-run evidence claim`,
-    );
-    assert(
+    ).toBeTruthy();
+    expect(
       /needs:\s*reuse\b/.test(block) || /needs:\s*\[.*\breuse\b.*\]/.test(block),
       `${job} must depend on the reuse decision`,
-    );
+    ).toBeTruthy();
     const taskIndex = block.indexOf(task);
-    assert(taskIndex >= 0, `${job} must run its evidence task`);
+    expect(taskIndex >= 0, `${job} must run its evidence task`).toBeTruthy();
     // The gate step's `if:` guard sits between the previous step and the run.
     const head = block.slice(0, taskIndex);
     const lastIf = head.lastIndexOf('if:');
-    assert(
+    expect(
       lastIf >= 0 &&
         /needs\.reuse\.outputs\.reused\s*!=\s*'true'\s*\|\|\s*steps\.claim\.outcome\s*!=\s*'success'/.test(
           head.slice(lastIf),
         ),
       `${job}'s gate must run unless the decision AND the claim both succeeded`,
-    );
+    ).toBeTruthy();
     // The claim is present, guarded to the reused branch, and NON-FATAL: a
     // refusal must fall through to the gate instead of failing the lane.
-    assert(
+    expect(
       /claim-reused-evidence/.test(block),
       `${job} must claim the reused artifact in the reuse branch`,
-    );
+    ).toBeTruthy();
     const claimIndex = block.indexOf('claim-reused-evidence');
     const claimHead = block.slice(0, claimIndex);
     // The step's own keys: from its `- name:` line to its `uses:` line.
     const claimStepStart = claimHead.lastIndexOf('\n      - ');
     const claimStep = claimHead.slice(claimStepStart);
-    assert(
+    expect(
       claimStepStart >= 0 && /if:\s*needs\.reuse\.outputs\.reused\s*==\s*'true'/.test(claimStep),
       `${job}'s claim must run only when the decision says reuse`,
-    );
-    assert(
+    ).toBeTruthy();
+    expect(
       /continue-on-error:\s*true/.test(claimStep),
       `${job}'s claim must be non-fatal so a refusal falls back to the gate`,
-    );
-    assert(
+    ).toBeTruthy();
+    expect(
       /id:\s*claim\b/.test(claimStep),
       `${job}'s claim must carry the step id the gate's fallback condition reads`,
-    );
+    ).toBeTruthy();
     // The rejected download must be removed before the fallback gate runs:
     // otherwise another run's files (or a stale artifact) reach this lane's
     // evidence upload.
-    assert(
+    expect(
       /steps\.claim\.outcome\s*!=\s*'success'/.test(block) && /rm -rf \.artifacts\/ci/.test(block),
       `${job} must discard the unclaimable download before its fallback gate`,
-    );
+    ).toBeTruthy();
   }
 
   // The claim must download the SOURCE run's artifact and stamp it through the
   // audited tool, never by hand.
-  const claim = await Deno.readTextFile(
+  const claim = await readFile(
     join(repoRoot, '.github/actions/claim-reused-evidence/action.yml'),
+    'utf8',
   );
-  assert(
+  expect(
     /run-id:\s*\$\{\{\s*inputs\.source-run-id\s*\}\}/.test(claim),
     'the claim must download from the resolved source run',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /candidate:evidence:reuse:claim/.test(claim),
     'the claim must stamp through the audited tool',
-  );
+  ).toBeTruthy();
 
   // The aggregate must wait for the decision rather than race it, and the
   // released bundle keeps proving the tree the package was produced for.
   const aggregate = jobBlock(workflow, 'autoflow-ci');
-  assert(
+  expect(
     /needs:\s*\[reuse,/.test(aggregate),
     'the aggregate must wait for the reuse decision instead of racing it',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /candidate:evidence:reuse:resolve/.test(reuse) && /candidate:evidence:reuse:claim/.test(claim),
     'both reuse tasks must be wired to their tools',
-  );
+  ).toBeTruthy();
   const repoConfig = JSON.parse(
-    await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
-  ) as { tasks: Record<string, string> };
+    await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8'),
+  ) as { scripts: Record<string, string> };
   for (const task of ['candidate:evidence:reuse:resolve', 'candidate:evidence:reuse:claim']) {
-    assert(repoConfig.tasks[task] !== undefined, `${task} must exist as a task`);
+    expect(repoConfig.scripts[task] !== undefined, `${task} must exist as a script`).toBeTruthy();
   }
 });

@@ -8,6 +8,7 @@
  * orchestration and calls `verifyNpmRelease`.
  */
 
+import { commandOutput } from '../repo/node-command.ts';
 import {
   type PrereleaseChannel,
   prereleaseChannel,
@@ -26,11 +27,12 @@ import {
 const DEFAULT_REGISTRY_DELAYS_MS = [0, 5_000, 10_000, 20_000, 30_000, 45_000, 60_000] as const;
 
 export class NpmViewError extends Error {
-  constructor(
-    message: string,
-    readonly retryable: boolean,
-  ) {
+  /** Explicit field (no parameter property): node's strip-only TS mode rejects them. */
+  readonly retryable: boolean;
+
+  constructor(message: string, retryable: boolean) {
     super(message);
+    this.retryable = retryable;
     this.name = 'NpmViewError';
   }
 }
@@ -39,11 +41,11 @@ type NpmReleaseQuery = (specifier: string, field: string) => Promise<string>;
 
 /** Run `npm view <specifier> <field> --json` and parse the JSON string value. */
 export async function npmView(specifier: string, field: string): Promise<string> {
-  const output = await new Deno.Command('npm', {
+  const output = await commandOutput('npm', {
     args: ['view', specifier, field, '--json'],
     stdout: 'piped',
     stderr: 'piped',
-  }).output();
+  });
   const stderr = new TextDecoder().decode(output.stderr);
   if (!output.success) {
     const retryable = !/\b(?:E401|E403)\b/u.test(stderr);

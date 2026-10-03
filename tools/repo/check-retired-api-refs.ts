@@ -14,7 +14,10 @@
  * stays only for packages/subpaths and for symbols that never reached a
  * release tag (e.g. toRootCss, added and removed inside this PR).
  */
-import { walk } from '@std/fs';
+import { walk } from '../../tools/lib/std-fs.ts';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
+import { commandOutput } from './node-command.ts';
 
 const RETIRED = [
   '@openelement/app',
@@ -82,12 +85,12 @@ function symbolNames(snapshot: SnapshotLike): Set<string> {
 
 async function gitShow(ref: string): Promise<string | undefined> {
   try {
-    const output = await new Deno.Command('git', {
+    const output = await commandOutput('git', {
       args: ['show', `${ref}:docs/release/public-interface-snapshot.json`],
       stdin: 'null',
       stdout: 'piped',
       stderr: 'null',
-    }).output();
+    });
     if (output.code !== 0) return undefined;
     return new TextDecoder().decode(output.stdout);
   } catch {
@@ -98,14 +101,12 @@ async function gitShow(ref: string): Promise<string | undefined> {
 /** Names present at the newest tagged release snapshot but gone today. */
 async function deriveRetiredSymbols(): Promise<Set<string>> {
   const retired = new Set<string>(ADDITIONAL_RETIRED_SYMBOLS);
-  const tags = await new Deno.Command('git', {
+  const tags = await commandOutput('git', {
     args: ['tag', '--list', 'v*', '--sort=-creatordate'],
     stdin: 'null',
     stdout: 'piped',
     stderr: 'null',
-  })
-    .output()
-    .catch(() => undefined);
+  }).catch(() => undefined);
   if (!tags || tags.code !== 0) return retired;
   let base: SnapshotLike | undefined;
   for (const tag of new TextDecoder()
@@ -129,7 +130,7 @@ async function deriveRetiredSymbols(): Promise<Set<string>> {
     return retired;
   }
   const current = JSON.parse(
-    await Deno.readTextFile('docs/release/public-interface-snapshot.json'),
+    await readFile('docs/release/public-interface-snapshot.json', 'utf8'),
   ) as SnapshotLike;
   const currentNames = symbolNames(current);
   for (const name of symbolNames(base)) {
@@ -152,7 +153,7 @@ for (const file of files) {
   // collections, package exports); version-titled blog history may name
   // retired APIs, so scan sources rather than serialized output.
   if (file.includes('www/app/data/_generated-')) continue;
-  const text = await Deno.readTextFile(file);
+  const text = await readFile(file, 'utf8');
   // Markdown formatters may wrap a retired-package list across physical
   // lines; match against logical lines (consecutive blockquote lines
   // merged) so `Retired: ... \n > adapter-vite` stays documentation.
@@ -198,6 +199,6 @@ for (const file of files) {
 }
 if (failures > 0) {
   console.error(`current-doc retired-API scan failed: ${failures} file(s)`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log('current-doc retired-API scan passed.');

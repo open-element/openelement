@@ -7,7 +7,7 @@
  * HMR invalidation, `?import`).
  */
 
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { devIslandClientPlugin } from '../src/vite/dev-island-client.ts';
 
 type ResolveIdHook = (id: string) => unknown;
@@ -17,17 +17,16 @@ function makeResolveId(): ResolveIdHook {
   return plugin.resolveId as unknown as ResolveIdHook;
 }
 
-Deno.test('dev-island-client resolveId maps the public client entry path', () => {
+test('dev-island-client resolveId maps the public client entry path', () => {
   const resolveId = makeResolveId();
-  assertEquals(resolveId('/client/islands/client.js'), '\0virtual:open-client-entry');
-  assertEquals(resolveId('/client/islands/other.js'), null);
+  expect(resolveId('/client/islands/client.js')).toEqual('\0virtual:open-client-entry');
+  expect(resolveId('/client/islands/other.js')).toEqual(null);
 });
 
-Deno.test('dev-island-client resolveId tolerates query strings on the entry URL', () => {
+test('dev-island-client resolveId tolerates query strings on the entry URL', () => {
   const resolveId = makeResolveId();
-  assertEquals(
-    resolveId('/client/islands/client.js?t=1723500000000'),
+  expect(resolveId('/client/islands/client.js?t=1723500000000')).toEqual(
     '\0virtual:open-client-entry',
   );
-  assertEquals(resolveId('/client/islands/client.js?import'), '\0virtual:open-client-entry');
+  expect(resolveId('/client/islands/client.js?import')).toEqual('\0virtual:open-client-entry');
 });

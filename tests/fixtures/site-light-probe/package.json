@@ -1,0 +1,21 @@
+{
+  "name": "@openelement/fixture-site-light-probe",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../../tools/repo/clean.ts dist && node ../../../packages/router/src/cli/build.ts",
+    "e2e": "playwright test --config e2e/playwright.config.ts --project=chromium",
+    "e2e:browsers": "playwright test --config e2e/playwright.config.ts",
+    "gate": "node ../../../tools/repo/gate.ts tests/fixtures/site-light-probe#build tests/fixtures/site-light-probe#e2e:browsers"
+  },
+  "dependencies": {
+    "@openelement/element": "workspace:*",
+    "@openelement/router": "workspace:*",
+    "hono": "^4.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "vite": "8.0.16"
+  }
+}

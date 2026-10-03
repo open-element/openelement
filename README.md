@@ -9,13 +9,14 @@ The source tree is `1.0.0-alpha.5`, a new public baseline for Element and Router
 
 ## Quick Start
 
-Requires **Deno 2.9+**. Create, run, and build:
+Requires **Node.js 24.2+** and pnpm. Create, install, run, and build:
 
 ```bash
-deno run -A npm:@openelement/create@alpha my-app
+npm exec @openelement/create@alpha -- my-app
 cd my-app
-deno task dev
-deno task build
+pnpm install
+pnpm dev
+pnpm build
 ```
 
 Add a page — one compiled element plus one route record:
@@ -46,15 +47,16 @@ export default definePage(HelloPage, {
 });
 ```
 
-Re-run `deno task dev`, open the URL Vite prints plus `/hello`, and `deno task build` emits the static-first `dist/` output. Full walkthrough: <https://openelement.org/guide/getting-started>.
+Re-run `pnpm dev`, open the URL Vite prints plus `/hello`, and `pnpm build` emits the static-first `dist/` output. Full walkthrough: <https://openelement.org/guide/getting-started>.
 
-**Build-time host:** Framework Mode development and builds require Deno 2.9+ by
-design (ADR-0108). The `@openelement/router` tooling subpaths (`./vite`,
-`./cli/*`) are not a plain Node/npm build interface. The request-time output
-uses standard ESM and Web `Request`/`Response`; deployment support is limited
-to the runtimes and Nitro targets actually covered by the qualification
-matrix, not every runtime that can load ESM. Element remains independently
-consumable in npm-only projects.
+**Build-time host:** Framework Mode development and builds run on Node.js
+24.2+ through pnpm scripts (ADR-0161, superseding the Deno-native decision in
+ADR-0108): the `@openelement/router` tooling subpaths (`./vite`, `./cli/*`)
+are consumed through the starter's own dependency pins as plain Node
+programs. The request-time output uses standard ESM and Web
+`Request`/`Response`; deployment support is limited to the runtimes and Nitro
+targets actually covered by the qualification matrix, not every runtime that
+can load ESM. Element remains independently consumable in npm-only projects.
 
 ## Features
 
@@ -78,15 +80,17 @@ Element and Router are the public framework core. UI is an experimental product;
 
 ## Development
 
-The source repository is Deno-native; published npm artifacts are qualified separately in disposable npm consumers.
+The source repository is a pnpm workspace on Node (`.node-version` pins the
+development line, 24.18); published npm artifacts are qualified separately in
+disposable npm consumers.
 
 ```sh
-deno install
-deno task fmt:check
-deno task lint
-deno task typecheck
-deno task test
-deno task build
+pnpm install
+pnpm run fmt:check
+pnpm run lint
+pnpm run typecheck
+pnpm test
+pnpm run build
 ```
 
 ## Documentation

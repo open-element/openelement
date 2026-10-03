@@ -1,12 +1,13 @@
 /** Changelog route: request projection and build-time Markdown loading. */
 import { definePage } from '@openelement/router';
 import { trustedHtml } from '@openelement/element';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { localizePath } from '@openelement/site-ui/link.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
+import { localizePath } from '#site-ui/link.ts';
 import { marked } from 'marked';
 import PageChangelog from '../components/page-changelog.tsx';
 import { COMMON_PUBLISHED_LABEL, REGISTRY_NOTE } from '../data/version.ts';
+import { readFileSync, statSync } from 'node:fs';
 
 export const meta = { section: '', label: 'Changelog', order: 20 };
 
@@ -85,7 +86,7 @@ function loadChangelogHtml(copy: {
   for (let depth = 0; depth < 8 && !changelogPath; depth++) {
     const candidate = new URL('CHANGELOG.md', cursor);
     try {
-      Deno.statSync(candidate);
+      statSync(candidate);
       changelogPath = candidate;
     } catch {
       cursor = new URL('../', cursor);
@@ -93,7 +94,7 @@ function loadChangelogHtml(copy: {
   }
   try {
     if (!changelogPath) throw new Error('CHANGELOG.md not found');
-    const markdown = Deno.readTextFileSync(changelogPath)
+    const markdown = readFileSync(changelogPath, 'utf8')
       .replace(/^#\s+Changelog\s*\n/, '')
       // CHANGELOG.md links are repository-relative so they resolve on GitHub;
       // on the built site they would 404 (#1159 link truth), so project them

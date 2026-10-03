@@ -13,9 +13,17 @@
  * one emitted module are Phase 2 build failures (OE_CLIENT_ASSET_* codes) —
  * a silently dropped or mis-attributed island identity would ship pages
  * whose client scripts never load.
+ *
+ * Identity resolution has one source: the manifest
+ * resolves package specifiers through island-resolution.ts over the same
+ * sorted alias table the build ships as `resolve.alias` — never through a
+ * second, parallel resolution mechanism. A resolved path is consumed only
+ * when the emitted module graph confirms it.
  */
 
-import { join, relative } from '../internal/host-path.ts';
+import { readFile } from 'node:fs/promises';
+import { join, relative } from 'pathe';
+import type { Alias } from 'vite';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, ClientAssetErrorCode } from '../internal/error-codes.ts';
 import type { ClientAssetManifest, ClientIslandAsset } from './internal/protocol/client-assets.ts';
@@ -23,6 +31,7 @@ import {
   type ClientIslandDeliveryEntry,
   resolveIslandDeliveryTags,
 } from './internal/ssg/delivery.ts';
+import { resolveIslandIdentityPath } from './island-resolution.ts';
 
 /** One dist/client/.vite/manifest.json entry (the fields the builder reads). */
 export interface ViteClientManifestEntry {
@@ -55,7 +64,7 @@ export async function readViteClientManifest(
 ): Promise<Record<string, ViteClientManifestEntry>> {
   let text: string;
   try {
-    text = await Deno.readTextFile(manifestPath);
+    text = await readFile(manifestPath, 'utf8');
   } catch (cause) {
     throw buildError(
       ClientAssetErrorCode.MANIFEST_READ,
@@ -165,13 +174,23 @@ export function moduleIdentityMatches(moduleId: string, identity: string): boole
  * in the emitted graph. Zero matches and several matches both fail: a
  * silent first-hit would ship another package's file under this island's
  * identity, and a silent fallback would deliver a different module than the
- * declared specifier names.
+ * declared specifier names. `resolvedIdentity` — the island specifier's
+ * real module path from island-resolution.ts, resolved through the same
+ * import map / alias table / import-condition chain the build used — is a
+ * hint that must be confirmed by the emitted graph before it short-circuits
+ * the scan: a resolution the build did not emit is a drift the join refuses
+ * to ship, falling through to the exact identity rule below.
  */
 export function resolveIslandModuleId(
   fileByModuleId: Map<string, string>,
   identity: string,
   islandLabel: string,
+  resolvedIdentity?: string,
 ): string {
+  // Node-host module ids are real paths: an identity resolved through the
+  // exports map IS a key of fileByModuleId, so return the identity itself
+  // (the module id), not the chunk file the caller looks up with it.
+  if (resolvedIdentity && fileByModuleId.has(resolvedIdentity)) return resolvedIdentity;
   const matches: string[] = [];
   for (const id of fileByModuleId.keys()) {
     if (moduleIdentityMatches(id, identity)) matches.push(id);
@@ -229,6 +248,7 @@ function resolveIslandChunkFile(
   fileByModuleId: Map<string, string>,
   fileByManifestKey: Map<string, string>,
   manifestPath: string,
+  resolvedIdentity?: string,
 ): string | null {
   if (island.sourceFile) {
     const direct = fileByModuleId.get(normalizeSeparators(island.sourceFile));
@@ -244,6 +264,7 @@ function resolveIslandChunkFile(
     fileByModuleId,
     island.entry.modulePath,
     `${island.entry.tagName} (${island.entry.modulePath})`,
+    resolvedIdentity,
   );
   const file = fileByModuleId.get(id);
   if (!file) {
@@ -269,6 +290,15 @@ export function buildClientAssetManifest(options: {
   chunks: ClientBuildChunk[];
   /** The manifest's path, named in every failure this builder raises. */
   manifestPath: string;
+  /**
+   * The build's sorted alias table — the same array shipped as
+   * `resolve.alias` (same source, same order). The identity resolution
+   * consumes it so the manifest join and the build resolve through one
+   * mechanism. Omitted only by direct callers
+   * without aliases; the join then stays on the import-map + fallback
+   * chain.
+   */
+  aliases?: ReadonlyArray<Alias>;
 }): ClientAssetManifest {
   const { root, base, islands, viteManifest, chunks, manifestPath } = options;
   const assetUrl = (file: string) => `${base}client/${file}`;
@@ -294,6 +324,24 @@ export function buildClientAssetManifest(options: {
     }
   }
 
+  // Package-island identities are bare specifiers; resolve each one once
+  // through the same resolution chain the build used — the deno.json import
+  // map, then the SAME sorted alias table the build shipped as
+  // `resolve.alias`, then (only when both have no file target) the
+  // import-condition node_modules fallback. One source, one order: the
+  // answer that joins the manifest is the answer the build resolved, and
+  // the fallback is consumed only when the emitted graph confirms it (see
+  // resolveIslandModuleId).
+  const identityPaths = new Map<string, string>();
+  const aliases = options.aliases ?? [];
+  for (const island of islands) {
+    const identity = island.entry.modulePath;
+    if (identity && !identityPaths.has(identity)) {
+      const resolved = resolveIslandIdentityPath(root, identity, aliases);
+      if (resolved) identityPaths.set(identity, resolved);
+    }
+  }
+
   // Vite build manifest: source key -> emitted file (facade + asset view).
   const fileByManifestKey = new Map<string, string>();
   for (const [src, entry] of Object.entries(viteManifest)) {
@@ -311,7 +359,14 @@ export function buildClientAssetManifest(options: {
   const tagOwners = new Map<string, string>();
   for (const island of islands) {
     const file =
-      resolveIslandChunkFile(root, island, fileByModuleId, fileByManifestKey, manifestPath) ??
+      resolveIslandChunkFile(
+        root,
+        island,
+        fileByModuleId,
+        fileByManifestKey,
+        manifestPath,
+        identityPaths.get(island.entry.modulePath),
+      ) ??
       // An island without a chunk of its own rides the client entry chunk —
       // the same fallback the post-build chunk map applies.
       entryFile;
@@ -365,6 +420,8 @@ export async function createClientAssetManifest(options: {
   islands: ClientAssetIslandInput[];
   manifestPath: string;
   buildResult: unknown;
+  /** The build's sorted alias table — see {@linkcode buildClientAssetManifest}. */
+  aliases?: ReadonlyArray<Alias>;
 }): Promise<ClientAssetManifest> {
   const viteManifest = await readViteClientManifest(join(options.manifestPath));
   return buildClientAssetManifest({
@@ -374,5 +431,6 @@ export async function createClientAssetManifest(options: {
     viteManifest,
     chunks: collectClientBuildChunks(options.buildResult),
     manifestPath: options.manifestPath,
+    aliases: options.aliases,
   });
 }

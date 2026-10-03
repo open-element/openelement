@@ -1,4 +1,6 @@
-import { assertEquals, assertRejects, assertThrows } from '@std/assert';
+import process from 'node:process';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   compileRouteMatcher,
   createRouter,
@@ -16,14 +18,14 @@ const NativeURLPattern = globalThis.URLPattern;
 
 const routes: RouteConfig[] = [{ path: '/items/:id', tagName: 'item-page' }];
 
-Deno.test('client router keeps decoded path parameters separate from query', () => {
+test('client router keeps decoded path parameters separate from query', () => {
   const match = matchRoute('/items/hello%20world', '?id=query&view=full', routes);
-  assertEquals(match?.params.id, 'hello world');
-  assertEquals(match?.params.view, undefined);
-  assertEquals(match?.searchParams.get('view'), 'full');
+  expect(match?.params.id).toEqual('hello world');
+  expect(match?.params.view).toEqual(undefined);
+  expect(match?.searchParams.get('view')).toEqual('full');
 });
 
-Deno.test('client router decodes query components exactly once', () => {
+test('client router decodes query components exactly once', () => {
   const cases = [
     ['?value=%25', '%'],
     ['?value=%2525', '%25'],
@@ -31,15 +33,15 @@ Deno.test('client router decodes query components exactly once', () => {
     ['?value=%2B', '+'],
   ] as const;
   for (const [search, expected] of cases) {
-    assertEquals(matchRoute('/items/id', search, routes)?.searchParams.get('value'), expected);
+    expect(matchRoute('/items/id', search, routes)?.searchParams.get('value')).toEqual(expected);
   }
 });
 
-Deno.test('client router preserves malformed query escapes without aborting matching', () => {
+test('client router preserves malformed query escapes without aborting matching', () => {
   const match = matchRoute('/items/id', '?bad=%&also=%2&key%=value%', routes);
-  assertEquals(match?.searchParams.get('bad'), '%');
-  assertEquals(match?.searchParams.get('also'), '%2');
-  assertEquals(match?.searchParams.get('key%'), 'value%');
+  expect(match?.searchParams.get('bad')).toEqual('%');
+  expect(match?.searchParams.get('also')).toEqual('%2');
+  expect(match?.searchParams.get('key%')).toEqual('value%');
 });
 
 interface ExpectedRouteMatch {
@@ -218,7 +220,7 @@ const semanticCases: Array<{
   },
 ];
 
-Deno.test('RouteTable and URLPattern engines agree on the semantic corpus', () => {
+test('RouteTable and URLPattern engines agree on the semantic corpus', () => {
   const engines = matcherEngines(semanticRoutes);
   const compiled = compileRouteMatcher(semanticRoutes);
 
@@ -228,21 +230,21 @@ Deno.test('RouteTable and URLPattern engines agree on the semantic corpus', () =
       result: concreteMatch(table.match(testCase.pathname, testCase.search)),
     }));
     const canonical = results[0].result;
-    assertEquals(canonical, testCase.expected, `${testCase.name}: native expected result`);
+    expect(canonical, `${testCase.name}: native expected result`).toEqual(testCase.expected);
     for (const { name, result } of results) {
-      assertEquals(result, canonical, `${testCase.name}: ${name} differs from native`);
+      expect(result, `${testCase.name}: ${name} differs from native`).toEqual(canonical);
     }
 
     const publicResult = concreteMatch(
       matchRoute(testCase.pathname, testCase.search, semanticRoutes),
     );
     const compiledResult = concreteMatch(compiled.match(testCase.pathname, testCase.search));
-    assertEquals(publicResult, canonical, `${testCase.name}: public matchRoute differs`);
-    assertEquals(compiledResult, canonical, `${testCase.name}: compiled matcher differs`);
+    expect(publicResult, `${testCase.name}: public matchRoute differs`).toEqual(canonical);
+    expect(compiledResult, `${testCase.name}: compiled matcher differs`).toEqual(canonical);
   }
 });
 
-Deno.test('RouteTable preserves the 5,000-route static candidate regression', () => {
+test('RouteTable preserves the 5,000-route static candidate regression', () => {
   const largeRoutes = Array.from({ length: 5_000 }, (_, index) => ({
     path: `/catalog/${index}/details`,
     tagName: `catalog-${index}`,
@@ -251,13 +253,13 @@ Deno.test('RouteTable preserves the 5,000-route static candidate regression', ()
   const compiled = compileRouteMatcher(largeRoutes);
 
   const expected = { route: 'catalog-4999', params: {} };
-  assertEquals(concreteMatch(table.match('/catalog/4999/details', '')), expected);
-  assertEquals(concreteMatch(compiled.match('/catalog/4999/details', '')), expected);
-  assertEquals(table.candidateCount('/catalog/4999/details'), 1);
-  assertEquals(compiled.candidateCount('/catalog/4999/details'), 1);
+  expect(concreteMatch(table.match('/catalog/4999/details', ''))).toEqual(expected);
+  expect(concreteMatch(compiled.match('/catalog/4999/details', ''))).toEqual(expected);
+  expect(table.candidateCount('/catalog/4999/details')).toEqual(1);
+  expect(compiled.candidateCount('/catalog/4999/details')).toEqual(1);
 });
 
-Deno.test('RouteTable rejects malformed URLPattern patterns consistently', () => {
+test('RouteTable rejects malformed URLPattern patterns consistently', () => {
   const malformedPatterns = [
     '/foo/:',
     '/foo/bar?',
@@ -270,15 +272,18 @@ Deno.test('RouteTable rejects malformed URLPattern patterns consistently', () =>
 
   for (const path of malformedPatterns) {
     for (const [, Pattern] of constructors) {
-      assertThrows(() => new RouteTable([{ path, tagName: 'bad-page' }], Pattern), TypeError);
+      assertThrowsIncludes(
+        () => new RouteTable([{ path, tagName: 'bad-page' }], Pattern),
+        TypeError,
+      );
     }
     const routes: RouteConfig[] = [{ path, tagName: 'bad-page' }];
-    assertThrows(() => compileRouteMatcher(routes), TypeError);
-    assertThrows(() => matchRoute('/foo/bar', '', routes), TypeError);
+    assertThrowsIncludes(() => compileRouteMatcher(routes), TypeError);
+    assertThrowsIncludes(() => matchRoute('/foo/bar', '', routes), TypeError);
   }
 });
 
-Deno.test('RouteTable classifies methods, HEAD, base paths, and trailing-slash policy', () => {
+test('RouteTable classifies methods, HEAD, base paths, and trailing-slash policy', () => {
   type MethodRoute = RouteConfig & { methods: readonly string[] };
   const methodRoutes: MethodRoute[] = [
     { path: '/items/:id', tagName: 'item', methods: ['GET', 'POST'] },
@@ -313,19 +318,19 @@ Deno.test('RouteTable classifies methods, HEAD, base paths, and trailing-slash p
           }
         : resolution,
     );
-    assertEquals(actual as unknown, expected as unknown);
+    expect(actual as unknown).toEqual(expected as unknown);
   }
 });
 
-Deno.test('static RouteTable lookup preserves URLPattern Unicode normalization', () => {
+test('static RouteTable lookup preserves URLPattern Unicode normalization', () => {
   const unicodeRoutes: RouteConfig[] = [{ path: '/café', tagName: 'cafe-page' }];
   for (const { table } of matcherEngines(unicodeRoutes)) {
-    assertEquals(table.match('/café')?.route.tagName, 'cafe-page');
-    assertEquals(table.match('/caf%C3%A9')?.route.tagName, 'cafe-page');
+    expect(table.match('/café')?.route.tagName).toEqual('cafe-page');
+    expect(table.match('/caf%C3%A9')?.route.tagName).toEqual('cafe-page');
   }
 });
 
-Deno.test('client router dispose removes event listeners and double dispose is safe', () => {
+test('client router dispose removes event listeners and double dispose is safe', () => {
   const original = {
     location: Object.getOwnPropertyDescriptor(globalThis, 'location'),
     history: Object.getOwnPropertyDescriptor(globalThis, 'history'),
@@ -359,8 +364,8 @@ Deno.test('client router dispose removes event listeners and double dispose is s
     const router = createRouter({ mode: 'history', routes });
     router.dispose();
     router.dispose();
-    assertEquals(added.length, 1);
-    assertEquals(removed, added);
+    expect(added.length).toEqual(1);
+    expect(removed).toEqual(added);
   } finally {
     globalThis.addEventListener = original.add;
     globalThis.removeEventListener = original.remove;
@@ -371,7 +376,7 @@ Deno.test('client router dispose removes event listeners and double dispose is s
   }
 });
 
-Deno.test('client router guard redirect limit rejects redirect loops', async () => {
+test('client router guard redirect limit rejects redirect loops', async () => {
   const loop: RouteConfig[] = [
     {
       path: '/loop',
@@ -381,6 +386,8 @@ Deno.test('client router guard redirect limit rejects redirect loops', async () 
   ];
   const originalLocation = Object.getOwnPropertyDescriptor(globalThis, 'location');
   const originalHistory = Object.getOwnPropertyDescriptor(globalThis, 'history');
+  const originalAdd = globalThis.addEventListener;
+  const originalRemove = globalThis.removeEventListener;
   Object.defineProperty(globalThis, 'location', {
     configurable: true,
     value: {
@@ -395,19 +402,31 @@ Deno.test('client router guard redirect limit rejects redirect loops', async () 
     configurable: true,
     value: { pushState() {}, replaceState() {} },
   });
+  // Deno exposes DOM event globals natively; node does not — install the same
+  // fake listeners the other router suites use and restore them.
+  globalThis.addEventListener = ((_type: string, listener: EventListener) => {
+    void _type;
+    void listener;
+  }) as typeof globalThis.addEventListener;
+  globalThis.removeEventListener = ((_type: string, listener: EventListener) => {
+    void _type;
+    void listener;
+  }) as typeof globalThis.removeEventListener;
   const router = createRouter({ mode: 'history', routes: loop });
   try {
-    await assertRejects(() => router.navigate('/loop'), Error, 'redirect limit');
+    await assertRejectsIncludes(() => router.navigate('/loop'), Error, 'redirect limit');
   } finally {
     router.dispose();
     if (originalLocation) Object.defineProperty(globalThis, 'location', originalLocation);
     else delete (globalThis as Record<string, unknown>).location;
     if (originalHistory) Object.defineProperty(globalThis, 'history', originalHistory);
     else delete (globalThis as Record<string, unknown>).history;
+    globalThis.addEventListener = originalAdd;
+    globalThis.removeEventListener = originalRemove;
   }
 });
 
-Deno.test('client router dispose invalidates a pending programmatic guard', async () => {
+test('client router dispose invalidates a pending programmatic guard', async () => {
   let resolveGuard!: (value: boolean) => void;
   const guard = new Promise<boolean>((resolve) => (resolveGuard = resolve));
   const browser = installFakeBrowser('/public');
@@ -427,16 +446,16 @@ Deno.test('client router dispose invalidates a pending programmatic guard', asyn
     router.dispose();
     resolveGuard(true);
     await navigation;
-    assertEquals(browser.applied, []);
-    assertEquals(browser.path(), '/public');
-    assertEquals(changes, 0);
+    expect(browser.applied).toEqual([]);
+    expect(browser.path()).toEqual('/public');
+    expect(changes).toEqual(0);
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('client router dispose invalidates a pending browser guard', async () => {
+test('client router dispose invalidates a pending browser guard', async () => {
   let resolveGuard!: (value: boolean) => void;
   const guard = new Promise<boolean>((resolve) => (resolveGuard = resolve));
   const browser = installFakeBrowser('/public');
@@ -458,10 +477,10 @@ Deno.test('client router dispose invalidates a pending browser guard', async () 
     router.dispose();
     resolveGuard(true);
     await flushBrowserNavigation();
-    assertEquals(router.currentPath, '/public');
-    assertEquals(router.currentRoute?.tagName, 'public-page');
-    assertEquals(browser.applied, []);
-    assertEquals(changes, 0);
+    expect(router.currentPath).toEqual('/public');
+    expect(router.currentRoute?.tagName).toEqual('public-page');
+    expect(browser.applied).toEqual([]);
+    expect(changes).toEqual(0);
   } finally {
     router.dispose();
     browser.restore();
@@ -568,7 +587,7 @@ async function flushBrowserNavigation(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-Deno.test('stream frames retire only after a guarded router navigation owns intent', async () => {
+test('stream frames retire only after a guarded router navigation owns intent', async () => {
   const browser = installFakeBrowser('/public');
   const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   let cancellations = 0;
@@ -594,13 +613,13 @@ Deno.test('stream frames retire only after a guarded router navigation owns inte
   });
   try {
     await router.navigate('/blocked');
-    assertEquals(cancellations, 0);
-    assertEquals(browser.path(), '/public');
+    expect(cancellations).toEqual(0);
+    expect(browser.path()).toEqual('/public');
     await router.navigate('/next');
-    assertEquals(cancellations, 1);
-    assertEquals(browser.path(), '/next');
+    expect(cancellations).toEqual(1);
+    expect(browser.path()).toEqual('/next');
     await router.replace('/public');
-    assertEquals(cancellations, 1, 'retirement is one-shot');
+    expect(cancellations, 'retirement is one-shot').toEqual(1);
   } finally {
     router.dispose();
     browser.restore();
@@ -609,7 +628,7 @@ Deno.test('stream frames retire only after a guarded router navigation owns inte
   }
 });
 
-Deno.test('popstate runs the guard and restores the previous entry when blocked', async () => {
+test('popstate runs the guard and restores the previous entry when blocked', async () => {
   const browser = installFakeBrowser('/public');
   const events: string[] = [];
   const router = createRouter({
@@ -636,17 +655,17 @@ Deno.test('popstate runs the guard and restores the previous entry when blocked'
     await flushBrowserNavigation();
     // The guard ran, rejected the navigation, and the previous entry was
     // restored without notifying a change that never committed.
-    assertEquals(events, ['guard']);
-    assertEquals(router.currentPath, '/public');
-    assertEquals(browser.path(), '/public');
-    assertEquals(browser.applied, ['/public']);
+    expect(events).toEqual(['guard']);
+    expect(router.currentPath).toEqual('/public');
+    expect(browser.path()).toEqual('/public');
+    expect(browser.applied).toEqual(['/public']);
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('popstate commits the landed route when the guard allows it', async () => {
+test('popstate commits the landed route when the guard allows it', async () => {
   const browser = installFakeBrowser('/public');
   const events: string[] = [];
   const router = createRouter({
@@ -670,16 +689,16 @@ Deno.test('popstate commits the landed route when the guard allows it', async ()
     browser.jumpTo('/protected');
     browser.fire('popstate');
     await flushBrowserNavigation();
-    assertEquals(events, ['guard', 'change']);
-    assertEquals(router.currentPath, '/protected');
-    assertEquals(router.currentRoute?.tagName, 'protected-page');
+    expect(events).toEqual(['guard', 'change']);
+    expect(router.currentPath).toEqual('/protected');
+    expect(router.currentRoute?.tagName).toEqual('protected-page');
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('popstate follows a guard redirect with replace semantics', async () => {
+test('popstate follows a guard redirect with replace semantics', async () => {
   const browser = installFakeBrowser('/public');
   const events: string[] = [];
   const router = createRouter({
@@ -697,17 +716,17 @@ Deno.test('popstate follows a guard redirect with replace semantics', async () =
     browser.jumpTo('/protected');
     browser.fire('popstate');
     await flushBrowserNavigation();
-    assertEquals(events, ['change']);
-    assertEquals(router.currentPath, '/login');
-    assertEquals(router.currentRoute?.tagName, 'login-page');
-    assertEquals(browser.path(), '/login');
+    expect(events).toEqual(['change']);
+    expect(router.currentPath).toEqual('/login');
+    expect(router.currentRoute?.tagName).toEqual('login-page');
+    expect(browser.path()).toEqual('/login');
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('popstate follows a multi-hop guard redirect chain', async () => {
+test('popstate follows a multi-hop guard redirect chain', async () => {
   const browser = installFakeBrowser('/public');
   const router = createRouter({
     mode: 'history',
@@ -722,16 +741,16 @@ Deno.test('popstate follows a multi-hop guard redirect chain', async () => {
     browser.jumpTo('/old');
     browser.fire('popstate');
     await flushBrowserNavigation();
-    assertEquals(router.currentPath, '/newest');
-    assertEquals(router.currentRoute?.tagName, 'newest-page');
-    assertEquals(browser.path(), '/newest');
+    expect(router.currentPath).toEqual('/newest');
+    expect(router.currentRoute?.tagName).toEqual('newest-page');
+    expect(browser.path()).toEqual('/newest');
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('popstate restores the source entry when a guard redirect target is blocked', async () => {
+test('popstate restores the source entry when a guard redirect target is blocked', async () => {
   const browser = installFakeBrowser('/public');
   const events: string[] = [];
   const router = createRouter({
@@ -758,18 +777,18 @@ Deno.test('popstate restores the source entry when a guard redirect target is bl
     await flushBrowserNavigation();
     // The redirect target's guard blocked, so the entry the user came from
     // was restored and no change was notified.
-    assertEquals(events, ['guard']);
-    assertEquals(router.currentPath, '/public');
-    assertEquals(router.currentRoute?.tagName, 'public-page');
-    assertEquals(browser.path(), '/public');
-    assertEquals(browser.applied, ['/public']);
+    expect(events).toEqual(['guard']);
+    expect(router.currentPath).toEqual('/public');
+    expect(router.currentRoute?.tagName).toEqual('public-page');
+    expect(browser.path()).toEqual('/public');
+    expect(browser.applied).toEqual(['/public']);
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('popstate dedupes consecutive events landing on the same URL', async () => {
+test('popstate dedupes consecutive events landing on the same URL', async () => {
   const browser = installFakeBrowser('/public');
   const events: string[] = [];
   const router = createRouter({
@@ -794,15 +813,15 @@ Deno.test('popstate dedupes consecutive events landing on the same URL', async (
     browser.fire('popstate');
     browser.fire('popstate');
     await flushBrowserNavigation();
-    assertEquals(events, ['guard', 'change']);
-    assertEquals(router.currentPath, '/protected');
+    expect(events).toEqual(['guard', 'change']);
+    expect(router.currentPath).toEqual('/protected');
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('hashchange runs the guard and restores the previous hash entry when blocked', async () => {
+test('hashchange runs the guard and restores the previous hash entry when blocked', async () => {
   const browser = installFakeBrowser('#/public');
   const events: string[] = [];
   const router = createRouter({
@@ -826,17 +845,17 @@ Deno.test('hashchange runs the guard and restores the previous hash entry when b
     browser.jumpTo('#/protected');
     browser.fire('hashchange');
     await flushBrowserNavigation();
-    assertEquals(events, ['guard']);
-    assertEquals(router.currentPath, '/public');
-    assertEquals(browser.path(), '/public');
-    assertEquals(browser.applied, ['#/public']);
+    expect(events).toEqual(['guard']);
+    expect(router.currentPath).toEqual('/public');
+    expect(browser.path()).toEqual('/public');
+    expect(browser.applied).toEqual(['#/public']);
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('programmatic navigations are latest-wins: a slow stale guard cannot roll back a newer navigation (#1023)', async () => {
+test('programmatic navigations are latest-wins: a slow stale guard cannot roll back a newer navigation (#1023)', async () => {
   const browser = installFakeBrowser('/start');
   let releaseGuard!: () => void;
   const events: string[] = [];
@@ -863,21 +882,21 @@ Deno.test('programmatic navigations are latest-wins: a slow stale guard cannot r
     const stale = router.navigate('/guarded');
     // A newer navigation commits while the first guard is still pending.
     await router.navigate('/newer');
-    assertEquals(router.currentPath, '/newer');
+    expect(router.currentPath).toEqual('/newer');
     // The stale guard resolves afterwards: it must not push state or rematch.
     releaseGuard();
     await stale;
-    assertEquals(router.currentPath, '/newer');
-    assertEquals(browser.path(), '/newer');
-    assertEquals(browser.applied, ['/newer']);
-    assertEquals(events, ['change']);
+    expect(router.currentPath).toEqual('/newer');
+    expect(browser.path()).toEqual('/newer');
+    expect(browser.applied).toEqual(['/newer']);
+    expect(events).toEqual(['change']);
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('popstate guard redirect does not override a newer programmatic navigation (#1063)', async () => {
+test('popstate guard redirect does not override a newer programmatic navigation (#1063)', async () => {
   const browser = installFakeBrowser('/public');
   let releaseGuard!: () => void;
   const router = createRouter({
@@ -903,22 +922,22 @@ Deno.test('popstate guard redirect does not override a newer programmatic naviga
     await flushBrowserNavigation();
     // A programmatic navigation commits while the guard is still pending.
     await router.navigate('/x');
-    assertEquals(router.currentPath, '/x');
+    expect(router.currentPath).toEqual('/x');
     // The stale guard resolves with a redirect afterwards: it must not
     // replaceState over the newer navigation.
     releaseGuard();
     await flushBrowserNavigation();
-    assertEquals(router.currentPath, '/x');
-    assertEquals(router.currentRoute?.tagName, 'x-page');
-    assertEquals(browser.path(), '/x');
-    assertEquals(browser.applied, ['/x']);
+    expect(router.currentPath).toEqual('/x');
+    expect(router.currentRoute?.tagName).toEqual('x-page');
+    expect(browser.path()).toEqual('/x');
+    expect(browser.applied).toEqual(['/x']);
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('popstate guard redirect does not override a newer programmatic navigation while the redirect target guard is pending', async () => {
+test('popstate guard redirect does not override a newer programmatic navigation while the redirect target guard is pending', async () => {
   const browser = installFakeBrowser('/public');
   let releaseGuard!: () => void;
   let releaseRedirectGuard!: () => void;
@@ -955,15 +974,15 @@ Deno.test('popstate guard redirect does not override a newer programmatic naviga
     await flushBrowserNavigation();
     // A programmatic navigation commits while the nested guard is pending.
     await router.navigate('/x');
-    assertEquals(router.currentPath, '/x');
+    expect(router.currentPath).toEqual('/x');
     // The stale nested guard resolves afterwards: it must not replaceState
     // over the newer navigation's history entry.
     releaseRedirectGuard();
     await flushBrowserNavigation();
-    assertEquals(router.currentPath, '/x');
-    assertEquals(router.currentRoute?.tagName, 'x-page');
-    assertEquals(browser.path(), '/x');
-    assertEquals(browser.applied, ['/x']);
+    expect(router.currentPath).toEqual('/x');
+    expect(router.currentRoute?.tagName).toEqual('x-page');
+    expect(browser.path()).toEqual('/x');
+    expect(browser.applied).toEqual(['/x']);
   } finally {
     router.dispose();
     browser.restore();
@@ -1050,7 +1069,7 @@ function installFakeHistoryStack(initialEntries: string[]) {
   };
 }
 
-Deno.test('popstate guard veto does not trap earlier history entries (#1036)', async () => {
+test('popstate guard veto does not trap earlier history entries (#1036)', async () => {
   // /a ← /guarded ← /b: the user backs onto the vetoed /guarded entry.
   const browser = installFakeHistoryStack(['/a', '/guarded', '/b']);
   const router = createRouter({
@@ -1065,23 +1084,23 @@ Deno.test('popstate guard veto does not trap earlier history entries (#1036)', a
     browser.back();
     await flushBrowserNavigation();
     // Vetoed: the router and the address bar stay on /b.
-    assertEquals(router.currentPath, '/b');
-    assertEquals(browser.path(), '/b');
+    expect(router.currentPath).toEqual('/b');
+    expect(browser.path()).toEqual('/b');
     // The vetoed entry must not sit under the restored one forever: with
     // push-restore the next back re-landed on /guarded and bounced again,
     // leaving /a unreachable; replace-restore rewrites the vetoed entry, so
     // the next back reaches /a.
     browser.back();
     await flushBrowserNavigation();
-    assertEquals(router.currentPath, '/a');
-    assertEquals(browser.path(), '/a');
+    expect(router.currentPath).toEqual('/a');
+    expect(browser.path()).toEqual('/a');
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('back onto a veto-restored entry after a programmatic navigation re-syncs the router', async () => {
+test('back onto a veto-restored entry after a programmatic navigation re-syncs the router', async () => {
   // /a ← /guarded ← /b: the user backs onto the vetoed /guarded entry, a
   // programmatic navigation commits, then the user backs onto the /b entry
   // the veto restore rewrote.
@@ -1099,18 +1118,18 @@ Deno.test('back onto a veto-restored entry after a programmatic navigation re-sy
     browser.back();
     await flushBrowserNavigation();
     // Vetoed: the router and the address bar stay on /b.
-    assertEquals(router.currentPath, '/b');
-    assertEquals(browser.path(), '/b');
+    expect(router.currentPath).toEqual('/b');
+    expect(browser.path()).toEqual('/b');
     // A programmatic navigation commits; pushState does not fire popstate.
     await router.navigate('/x');
-    assertEquals(router.currentPath, '/x');
+    expect(router.currentPath).toEqual('/x');
     // A genuine back lands on the restored /b entry: the dedup key left
     // over from the veto restore must not swallow it, or the address bar
     // (/b) and the router (/x) diverge.
     browser.back();
     await flushBrowserNavigation();
-    assertEquals(router.currentPath, '/b');
-    assertEquals(browser.path(), '/b');
+    expect(router.currentPath).toEqual('/b');
+    expect(browser.path()).toEqual('/b');
   } finally {
     router.dispose();
     browser.restore();
@@ -1120,29 +1139,26 @@ Deno.test('back onto a veto-restored entry after a programmatic navigation re-sy
 // ─── Adversarial dispose / guard-failure coverage (#1146, area 3) ───
 
 /**
- * Process-level unhandledRejection trap (#1146-3d).
- *
- * Must be installed BEFORE installFakeBrowser (which replaces
- * globalThis.addEventListener) so the trap lands on the real event target,
- * and restored AFTER browser.restore() puts the real functions back.
- * preventDefault keeps the run alive; the assertions report failures.
+ * Process-level unhandledRejection trap (#1146-3d) — the node-host equivalent
+ * of the former Deno-global 'unhandledrejection' listener: a registered
+ * process handler keeps the run alive (node's default crash-on-unhandled is
+ * suppressed) while the assertions report failures.
  */
 function trapUnhandledRejections(): { rejections: unknown[]; restore(): void } {
   const rejections: unknown[] = [];
-  const onUnhandled = (event: PromiseRejectionEvent) => {
-    rejections.push(event.reason);
-    event.preventDefault();
+  const onUnhandled = (reason: unknown): void => {
+    rejections.push(reason);
   };
-  addEventListener('unhandledrejection', onUnhandled);
+  process.on('unhandledrejection', onUnhandled);
   return {
     rejections,
     restore() {
-      removeEventListener('unhandledrejection', onUnhandled);
+      process.off('unhandledrejection', onUnhandled);
     },
   };
 }
 
-Deno.test('client router dispose mid-redirect-chain commits nothing and unhooks listeners (#1146-3a/3d)', async () => {
+test('client router dispose mid-redirect-chain commits nothing and unhooks listeners (#1146-3a/3d)', async () => {
   const trap = trapUnhandledRejections();
   const browser = installFakeBrowser('/');
   let resolveB!: (value: string) => void;
@@ -1178,7 +1194,7 @@ Deno.test('client router dispose mid-redirect-chain commits nothing and unhooks 
     const navigation = router.navigate('/a');
     // Hop 1 (/a → /b) resolves; hop 2 (/b's guard) suspends.
     await flushBrowserNavigation();
-    assertEquals(guardCalls, ['a', 'b']);
+    expect(guardCalls).toEqual(['a', 'b']);
     // Dispose between hops, then let the stale guard resolve the chain on.
     router.dispose();
     resolveB('/c');
@@ -1186,18 +1202,18 @@ Deno.test('client router dispose mid-redirect-chain commits nothing and unhooks 
     await flushBrowserNavigation();
     // No navigation committed: nothing pushed/replaced, router state and the
     // address bar still describe the initial entry, no change notified.
-    assertEquals(browser.applied, []);
-    assertEquals(browser.path(), '/');
-    assertEquals(router.currentPath, '/');
-    assertEquals(router.currentRoute?.tagName, 'home-page');
-    assertEquals(changes, 0);
+    expect(browser.applied).toEqual([]);
+    expect(browser.path()).toEqual('/');
+    expect(router.currentPath).toEqual('/');
+    expect(router.currentRoute?.tagName).toEqual('home-page');
+    expect(changes).toEqual(0);
     // Listeners were removed: a browser event after dispose runs no guard.
     browser.jumpTo('/a');
     browser.fire('popstate');
     await flushBrowserNavigation();
-    assertEquals(guardCalls, ['a', 'b']);
-    assertEquals(router.currentPath, '/');
-    assertEquals(trap.rejections, []);
+    expect(guardCalls).toEqual(['a', 'b']);
+    expect(router.currentPath).toEqual('/');
+    expect(trap.rejections).toEqual([]);
   } finally {
     router.dispose();
     browser.restore();
@@ -1205,7 +1221,7 @@ Deno.test('client router dispose mid-redirect-chain commits nothing and unhooks 
   }
 });
 
-Deno.test('client router dispose invalidates a pending hash-mode browser guard (#1146-3b/3d)', async () => {
+test('client router dispose invalidates a pending hash-mode browser guard (#1146-3b/3d)', async () => {
   const trap = trapUnhandledRejections();
   let resolveGuard!: (value: boolean) => void;
   let guardCalls = 0;
@@ -1232,21 +1248,21 @@ Deno.test('client router dispose invalidates a pending hash-mode browser guard (
     browser.jumpTo('#/protected');
     browser.fire('hashchange');
     await flushBrowserNavigation();
-    assertEquals(guardCalls, 1);
+    expect(guardCalls).toEqual(1);
     router.dispose();
     resolveGuard(true);
     await flushBrowserNavigation();
     // The stale guard resolution committed nothing and restored nothing.
-    assertEquals(router.currentPath, '/public');
-    assertEquals(router.currentRoute?.tagName, 'public-page');
-    assertEquals(browser.applied, []);
-    assertEquals(changes, 0);
+    expect(router.currentPath).toEqual('/public');
+    expect(router.currentRoute?.tagName).toEqual('public-page');
+    expect(browser.applied).toEqual([]);
+    expect(changes).toEqual(0);
     // The hashchange listener is gone: further hash events run no guard.
     browser.jumpTo('#/protected');
     browser.fire('hashchange');
     await flushBrowserNavigation();
-    assertEquals(guardCalls, 1);
-    assertEquals(trap.rejections, []);
+    expect(guardCalls).toEqual(1);
+    expect(trap.rejections).toEqual([]);
   } finally {
     router.dispose();
     browser.restore();
@@ -1254,7 +1270,7 @@ Deno.test('client router dispose invalidates a pending hash-mode browser guard (
   }
 });
 
-Deno.test('client router navigate rejects on a synchronously-throwing guard without corrupting state (#1146-3c/3d)', async () => {
+test('client router navigate rejects on a synchronously-throwing guard without corrupting state (#1146-3c/3d)', async () => {
   const trap = trapUnhandledRejections();
   const browser = installFakeBrowser('/');
   let changes = 0;
@@ -1278,17 +1294,17 @@ Deno.test('client router navigate rejects on a synchronously-throwing guard with
   try {
     // Contract: a sync-throwing guard surfaces as a rejection of the
     // navigate() promise (same as an async rejection), before any commit.
-    await assertRejects(() => router.navigate('/boom'), Error, 'guard boom');
-    assertEquals(browser.applied, []);
-    assertEquals(router.currentPath, '/');
-    assertEquals(router.currentRoute?.tagName, 'home-page');
-    assertEquals(changes, 0);
+    await assertRejectsIncludes(() => router.navigate('/boom'), Error, 'guard boom');
+    expect(browser.applied).toEqual([]);
+    expect(router.currentPath).toEqual('/');
+    expect(router.currentRoute?.tagName).toEqual('home-page');
+    expect(changes).toEqual(0);
     // The router is not corrupted: a later navigation still commits.
     await router.navigate('/ok');
-    assertEquals(router.currentPath, '/ok');
-    assertEquals(router.currentRoute?.tagName, 'ok-page');
-    assertEquals(changes, 1);
-    assertEquals(trap.rejections, []);
+    expect(router.currentPath).toEqual('/ok');
+    expect(router.currentRoute?.tagName).toEqual('ok-page');
+    expect(changes).toEqual(1);
+    expect(trap.rejections).toEqual([]);
   } finally {
     router.dispose();
     browser.restore();
@@ -1296,7 +1312,7 @@ Deno.test('client router navigate rejects on a synchronously-throwing guard with
   }
 });
 
-Deno.test('client router popstate with a synchronously-throwing guard fails open without wedging the queue (#1146-3c/3d)', async () => {
+test('client router popstate with a synchronously-throwing guard fails open without wedging the queue (#1146-3c/3d)', async () => {
   const trap = trapUnhandledRejections();
   const browser = installFakeBrowser('/public');
   const events: string[] = [];
@@ -1323,19 +1339,19 @@ Deno.test('client router popstate with a synchronously-throwing guard fails open
     await flushBrowserNavigation();
     // Documented fail-open: the queue catch logs the error, rematches to the
     // real URL and notifies — the address bar wins over the crashed guard.
-    assertEquals(events, ['guard', 'change']);
-    assertEquals(router.currentPath, '/boom');
-    assertEquals(router.currentRoute?.tagName, 'boom-page');
-    assertEquals(browser.path(), '/boom');
+    expect(events).toEqual(['guard', 'change']);
+    expect(router.currentPath).toEqual('/boom');
+    expect(router.currentRoute?.tagName).toEqual('boom-page');
+    expect(browser.path()).toEqual('/boom');
     // The serialized browser-navigation queue is not wedged by the throw:
     // a later popstate still processes.
     browser.jumpTo('/public');
     browser.fire('popstate');
     await flushBrowserNavigation();
-    assertEquals(events, ['guard', 'change', 'change']);
-    assertEquals(router.currentPath, '/public');
-    assertEquals(router.currentRoute?.tagName, 'public-page');
-    assertEquals(trap.rejections, []);
+    expect(events).toEqual(['guard', 'change', 'change']);
+    expect(router.currentPath).toEqual('/public');
+    expect(router.currentRoute?.tagName).toEqual('public-page');
+    expect(trap.rejections).toEqual([]);
   } finally {
     router.dispose();
     browser.restore();
@@ -1468,7 +1484,7 @@ function installFakeNavigation() {
   };
 }
 
-Deno.test('native POST with formData stays browser-owned: no pending, no intercept', () => {
+test('native POST with formData stays browser-owned: no pending, no intercept', () => {
   const nav = installFakeNavigation();
   let pending = 0;
   const router = createRouter({
@@ -1482,16 +1498,16 @@ Deno.test('native POST with formData stays browser-owned: no pending, no interce
       formData: new FormData(),
     });
     nav.fire(event);
-    assertEquals(event.intercepted, false);
-    assertEquals(pending, 0);
-    assertEquals(router.currentPath, '/a');
+    expect(event.intercepted).toEqual(false);
+    expect(pending).toEqual(0);
+    expect(router.currentPath).toEqual('/a');
   } finally {
     router.dispose();
     nav.restore();
   }
 });
 
-Deno.test('native fragment-only navigation stays browser-owned without cancelling loaders', () => {
+test('native fragment-only navigation stays browser-owned without cancelling loaders', () => {
   const nav = installFakeNavigation();
   let pending = 0;
   let guards = 0;
@@ -1504,17 +1520,17 @@ Deno.test('native fragment-only navigation stays browser-owned without cancellin
   try {
     const event = nav.makeEvent({ destination: { url: 'http://router.test/a#section' } });
     nav.fire(event);
-    assertEquals(event.intercepted, false);
-    assertEquals(pending, 0);
-    assertEquals(guards, 0);
-    assertEquals(router.currentPath, '/a');
+    expect(event.intercepted).toEqual(false);
+    expect(pending).toEqual(0);
+    expect(guards).toEqual(0);
+    expect(router.currentPath).toEqual('/a');
   } finally {
     router.dispose();
     nav.restore();
   }
 });
 
-Deno.test('native reload stays browser-owned', () => {
+test('native reload stays browser-owned', () => {
   const nav = installFakeNavigation();
   let pending = 0;
   const router = createRouter({
@@ -1528,15 +1544,15 @@ Deno.test('native reload stays browser-owned', () => {
       navigationType: 'reload',
     });
     nav.fire(event);
-    assertEquals(event.intercepted, false);
-    assertEquals(pending, 0);
+    expect(event.intercepted).toEqual(false);
+    expect(pending).toEqual(0);
   } finally {
     router.dispose();
     nav.restore();
   }
 });
 
-Deno.test('native same-origin GET without formData still intercepts', async () => {
+test('native same-origin GET without formData still intercepts', async () => {
   const nav = installFakeNavigation();
   let pending = 0;
   const router = createRouter({
@@ -1550,14 +1566,14 @@ Deno.test('native same-origin GET without formData still intercepts', async () =
   try {
     const event = nav.makeEvent({ destination: { url: 'http://router.test/b' } });
     nav.fire(event);
-    assertEquals(event.intercepted, true);
+    expect(event.intercepted).toEqual(true);
     // Cancellation fires at the ownership point — inside the intercepted
     // handler after the (here absent) guard resolves — not at event time, so
     // a vetoed traversal cancels nothing (#1343 review).
-    assertEquals(pending, 0);
+    expect(pending).toEqual(0);
     await event.runHandler();
-    assertEquals(pending, 1);
-    assertEquals(router.currentPath, '/b');
+    expect(pending).toEqual(1);
+    expect(router.currentPath).toEqual('/b');
   } finally {
     router.dispose();
     nav.restore();
@@ -1568,7 +1584,7 @@ Deno.test('native same-origin GET without formData still intercepts', async () =
 // leave pending execution (the current route's in-flight render) untouched.
 // Cancellation is retained exactly when a navigation takes ownership.
 
-Deno.test('guard-vetoed programmatic navigation never cancels pending execution (#1343 review)', async () => {
+test('guard-vetoed programmatic navigation never cancels pending execution (#1343 review)', async () => {
   const browser = installFakeBrowser('/current');
   let pending = 0;
   let changes = 0;
@@ -1588,23 +1604,23 @@ Deno.test('guard-vetoed programmatic navigation never cancels pending execution 
   });
   try {
     await router.navigate('/blocked');
-    assertEquals(pending, 0, 'a vetoed navigation must not invalidate pending execution');
-    assertEquals(changes, 0);
-    assertEquals(router.currentPath, '/current');
+    expect(pending, 'a vetoed navigation must not invalidate pending execution').toEqual(0);
+    expect(changes).toEqual(0);
+    expect(router.currentPath).toEqual('/current');
     await router.navigate('/allowed');
-    assertEquals(pending, 1, 'an ownership-taking navigation cancels pending execution once');
-    assertEquals(changes, 1);
-    assertEquals(router.currentPath, '/allowed');
+    expect(pending, 'an ownership-taking navigation cancels pending execution once').toEqual(1);
+    expect(changes).toEqual(1);
+    expect(router.currentPath).toEqual('/allowed');
     await router.replace('/blocked');
-    assertEquals(pending, 1, 'a vetoed replace cancels nothing');
-    assertEquals(router.currentPath, '/allowed');
+    expect(pending, 'a vetoed replace cancels nothing').toEqual(1);
+    expect(router.currentPath).toEqual('/allowed');
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('guard-vetoed popstate never cancels pending execution (#1343 review)', async () => {
+test('guard-vetoed popstate never cancels pending execution (#1343 review)', async () => {
   const browser = installFakeBrowser('/public');
   let pending = 0;
   const events: string[] = [];
@@ -1629,23 +1645,23 @@ Deno.test('guard-vetoed popstate never cancels pending execution (#1343 review)'
     browser.jumpTo('/protected');
     browser.fire('popstate');
     await flushBrowserNavigation();
-    assertEquals(events, []);
-    assertEquals(pending, 0);
-    assertEquals(router.currentPath, '/public');
-    assertEquals(browser.path(), '/public');
+    expect(events).toEqual([]);
+    expect(pending).toEqual(0);
+    expect(router.currentPath).toEqual('/public');
+    expect(browser.path()).toEqual('/public');
     // An allowed traversal still cancels pending execution exactly once.
     browser.jumpTo('/open');
     browser.fire('popstate');
     await flushBrowserNavigation();
-    assertEquals(events, ['pending', 'change']);
-    assertEquals(router.currentPath, '/open');
+    expect(events).toEqual(['pending', 'change']);
+    expect(router.currentPath).toEqual('/open');
   } finally {
     router.dispose();
     browser.restore();
   }
 });
 
-Deno.test('guard-vetoed native traverse never cancels pending execution (#1343 review)', async () => {
+test('guard-vetoed native traverse never cancels pending execution (#1343 review)', async () => {
   const nav = installFakeNavigation();
   let pending = 0;
   const router = createRouter({
@@ -1659,17 +1675,17 @@ Deno.test('guard-vetoed native traverse never cancels pending execution (#1343 r
   try {
     const event = nav.makeEvent({ destination: { url: 'http://router.test/blocked' } });
     nav.fire(event);
-    assertEquals(event.intercepted, true);
+    expect(event.intercepted).toEqual(true);
     await event.runHandler();
-    assertEquals(pending, 0, 'a vetoed native traverse must not invalidate pending execution');
-    assertEquals(router.currentPath, '/a');
+    expect(pending, 'a vetoed native traverse must not invalidate pending execution').toEqual(0);
+    expect(router.currentPath).toEqual('/a');
   } finally {
     router.dispose();
     nav.restore();
   }
 });
 
-Deno.test('client router never leaks unhandled rejections across dispose and guard-failure storms (#1146-3d)', async () => {
+test('client router never leaks unhandled rejections across dispose and guard-failure storms (#1146-3d)', async () => {
   const trap = trapUnhandledRejections();
   const browser = installFakeBrowser('/public');
   let rejectBrowserGuard!: (err: Error) => void;
@@ -1712,11 +1728,11 @@ Deno.test('client router never leaks unhandled rejections across dispose and gua
     // The browser-queue rejection is swallowed post-dispose; the navigate()
     // rejection still surfaces to its caller (handled here), so nothing is
     // left unhandled.
-    await assertRejects(() => navigation, Error, 'late chain guard failure');
+    await assertRejectsIncludes(() => navigation, Error, 'late chain guard failure');
     await flushBrowserNavigation();
-    assertEquals(router.currentPath, '/public');
-    assertEquals(browser.applied, []);
-    assertEquals(trap.rejections, []);
+    expect(router.currentPath).toEqual('/public');
+    expect(browser.applied).toEqual([]);
+    expect(trap.rejections).toEqual([]);
   } finally {
     router.dispose();
     browser.restore();
@@ -1724,26 +1740,26 @@ Deno.test('client router never leaks unhandled rejections across dispose and gua
   }
 });
 
-Deno.test('client router searchParams are per-reader snapshots, never shared mutable state', async () => {
+test('client router searchParams are per-reader snapshots, never shared mutable state', async () => {
   const browser = installFakeBrowser('/items/1?view=full');
   const router = createRouter({
     mode: 'history',
     routes: [{ path: '/items/:id', tagName: 'item-page' }],
   });
   try {
-    assertEquals(router.searchParams.get('view'), 'full');
+    expect(router.searchParams.get('view')).toEqual('full');
     // Mutating a returned snapshot cannot reach the router's own state...
     const leaked = router.searchParams;
     leaked.set('view', 'hacked');
     leaked.append('injected', '1');
-    assertEquals(router.searchParams.get('view'), 'full');
-    assertEquals(router.searchParams.has('injected'), false);
+    expect(router.searchParams.get('view')).toEqual('full');
+    expect(router.searchParams.has('injected')).toEqual(false);
     // ...nor the address bar...
-    assertEquals(browser.path(), '/items/1?view=full');
+    expect(browser.path()).toEqual('/items/1?view=full');
     // ...nor the snapshots of subsequent navigations.
     await router.navigate('/items/2?view=mini');
-    assertEquals(router.searchParams.get('view'), 'mini');
-    assertEquals(router.searchParams.has('injected'), false);
+    expect(router.searchParams.get('view')).toEqual('mini');
+    expect(router.searchParams.has('injected')).toEqual(false);
   } finally {
     router.dispose();
     browser.restore();
@@ -1758,7 +1774,7 @@ Deno.test('client router searchParams are per-reader snapshots, never shared mut
 // *interactions* across the router's navigation flows — the pairing that
 // motivated the extraction.
 
-Deno.test('Navigation API: an aborted traversal is superseded and never commits (#1385)', async () => {
+test('Navigation API: an aborted traversal is superseded and never commits (#1385)', async () => {
   const nav = installFakeNavigation();
   let pending = 0;
   const router = createRouter({
@@ -1776,27 +1792,27 @@ Deno.test('Navigation API: an aborted traversal is superseded and never commits 
       signal: controller.signal,
     });
     nav.fire(event);
-    assertEquals(event.intercepted, true);
+    expect(event.intercepted).toEqual(true);
     // The browser aborts the traversal (a newer navigation took over) before
     // the intercept handler runs: the ticket is retired, so the handler is a
     // no-op — no rematch, no notify, and no pending cancellation.
     controller.abort();
     await event.runHandler();
-    assertEquals(pending, 0, 'an aborted traversal must not cancel pending execution');
-    assertEquals(router.currentPath, '/a', 'an aborted traversal must not rematch');
+    expect(pending, 'an aborted traversal must not cancel pending execution').toEqual(0);
+    expect(router.currentPath, 'an aborted traversal must not rematch').toEqual('/a');
     // The router still works: a later native traverse commits normally.
     const next = nav.makeEvent({ destination: { url: 'http://router.test/b' } });
     nav.fire(next);
     await next.runHandler();
-    assertEquals(pending, 1);
-    assertEquals(router.currentPath, '/b');
+    expect(pending).toEqual(1);
+    expect(router.currentPath).toEqual('/b');
   } finally {
     router.dispose();
     nav.restore();
   }
 });
 
-Deno.test('Navigation API: a guard-vetoed traverse leaves the queued newer navigation owning intent (#1385)', async () => {
+test('Navigation API: a guard-vetoed traverse leaves the queued newer navigation owning intent (#1385)', async () => {
   const nav = installFakeNavigation();
   let pending = 0;
   let guards = 0;
@@ -1820,31 +1836,31 @@ Deno.test('Navigation API: a guard-vetoed traverse leaves the queued newer navig
   try {
     const blocked = nav.makeEvent({ destination: { url: 'http://router.test/blocked' } });
     nav.fire(blocked);
-    assertEquals(blocked.intercepted, true);
+    expect(blocked.intercepted).toEqual(true);
     // The traversal suspends in its guard (the pending render must survive),
     // and a newer traversal takes over while it is suspended.
     const blockedRun = blocked.runHandler();
     await flushBrowserNavigation();
-    assertEquals(guards, 1, 'the first traversal reached its guard');
+    expect(guards, 'the first traversal reached its guard').toEqual(1);
     const open = nav.makeEvent({ destination: { url: 'http://router.test/open' } });
     nav.fire(open);
     // The stale traversal now resolves with a veto: it owns no intent, so it
     // must not rematch, notify, restore or cancel pending execution.
     releaseGuard();
     await blockedRun;
-    assertEquals(pending, 0, 'a vetoed traversal owns no intent');
-    assertEquals(router.currentPath, '/a');
+    expect(pending, 'a vetoed traversal owns no intent').toEqual(0);
+    expect(router.currentPath).toEqual('/a');
     // The newer traversal still commits and cancels pending execution once.
     await open.runHandler();
-    assertEquals(pending, 1);
-    assertEquals(router.currentPath, '/open');
+    expect(pending).toEqual(1);
+    expect(router.currentPath).toEqual('/open');
   } finally {
     router.dispose();
     nav.restore();
   }
 });
 
-Deno.test("Navigation API: the router's own restore is intercepted without rematch or notify (#1036, #1385)", async () => {
+test("Navigation API: the router's own restore is intercepted without rematch or notify (#1036, #1385)", async () => {
   const nav = installFakeNavigation();
   let changes = 0;
   const router = createRouter({
@@ -1864,13 +1880,11 @@ Deno.test("Navigation API: the router's own restore is intercepted without remat
     const traverse = nav.makeEvent({ destination: { url: 'http://router.test/blocked' } });
     nav.fire(traverse);
     await traverse.runHandler();
-    assertEquals(
-      nav.historyCalls,
-      [{ method: 'replaceState', url: '/a' }],
-      'the veto rewrote the landed entry instead of pushing',
-    );
-    assertEquals(changes, 0);
-    assertEquals(router.currentPath, '/a');
+    expect(nav.historyCalls, 'the veto rewrote the landed entry instead of pushing').toEqual([
+      { method: 'replaceState', url: '/a' },
+    ]);
+    expect(changes).toEqual(0);
+    expect(router.currentPath).toEqual('/a');
 
     // The navigate event that replaceState fires: the router recognizes it as
     // its own restore, intercepts it (so the vetoed traverse stays
@@ -1880,26 +1894,26 @@ Deno.test("Navigation API: the router's own restore is intercepted without remat
       navigationType: 'replace',
     });
     nav.fire(restoreEvent);
-    assertEquals(restoreEvent.intercepted, true, "the router's own restore is intercepted");
+    expect(restoreEvent.intercepted, "the router's own restore is intercepted").toEqual(true);
     await restoreEvent.runHandler();
-    assertEquals(changes, 0, 'the restore is not a change');
-    assertEquals(router.currentPath, '/a');
+    expect(changes, 'the restore is not a change').toEqual(0);
+    expect(router.currentPath).toEqual('/a');
 
     // A later genuine traversal is NOT swallowed by a stale marker: the
     // one-shot marker is gone, so the router runs it as a normal traverse.
     const genuine = nav.makeEvent({ destination: { url: 'http://router.test/b' } });
     nav.fire(genuine);
-    assertEquals(genuine.intercepted, true);
+    expect(genuine.intercepted).toEqual(true);
     await genuine.runHandler();
-    assertEquals(router.currentPath, '/b');
-    assertEquals(changes, 1, 'a genuine traversal after the restore still commits');
+    expect(router.currentPath).toEqual('/b');
+    expect(changes, 'a genuine traversal after the restore still commits').toEqual(1);
   } finally {
     router.dispose();
     nav.restore();
   }
 });
 
-Deno.test('Navigation API: a programmatic navigation superseded mid-guard never reaches the address bar (#1385)', async () => {
+test('Navigation API: a programmatic navigation superseded mid-guard never reaches the address bar (#1385)', async () => {
   const nav = installFakeNavigation();
   let pending = 0;
   let releaseSlowGuard!: () => void;
@@ -1924,16 +1938,15 @@ Deno.test('Navigation API: a programmatic navigation superseded mid-guard never 
     const fast = router.navigate('/fast');
     releaseSlowGuard();
     await Promise.all([slow, fast]);
-    assertEquals(
+    expect(
       nav.navigations.map((entry) => entry.url),
-      ['/fast'],
       'only the newest navigation issues a navigate() call',
-    );
+    ).toEqual(['/fast']);
     // The winner's own navigate event is the ownership point.
     const own = nav.firePendingOwnNavigation();
     await own.runHandler();
-    assertEquals(pending, 1);
-    assertEquals(router.currentPath, '/fast');
+    expect(pending).toEqual(1);
+    expect(router.currentPath).toEqual('/fast');
   } finally {
     router.dispose();
     nav.restore();

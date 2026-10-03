@@ -7,6 +7,6 @@ covers (light-root page, light-root island, real public package exports)
 without any Site shell, navigation, or content collections.
 
 ```bash
-deno task --cwd tests/fixtures/site-light-probe build
-deno task --cwd tests/fixtures/site-light-probe e2e:browsers
+pnpm --dir tests/fixtures/site-light-probe run build
+pnpm --dir tests/fixtures/site-light-probe run e2e:browsers
 ```

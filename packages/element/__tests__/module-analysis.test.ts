@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   analyzeModuleSemantics,
   type ModuleSemanticFacts,
@@ -348,17 +348,17 @@ const semanticCases: SemanticCase[] = [
 ];
 
 for (const testCase of semanticCases) {
-  Deno.test(`analyzeModuleSemantics: ${testCase.name}`, () => {
+  test(`analyzeModuleSemantics: ${testCase.name}`, () => {
     const actual = analyzeModuleSemantics(
       testCase.source,
       testCase.fileName ?? `/matrix/${testCase.name}.tsx`,
       { vocabulary: testCase.vocabulary },
     );
-    assertEquals(actual, { ...emptyFacts(), ...testCase.expected }, testCase.name);
+    expect(actual, testCase.name).toEqual({ ...emptyFacts(), ...testCase.expected });
   });
 }
 
-Deno.test('analyzeModuleSemantics is deterministic across repeated analysis', () => {
+test('analyzeModuleSemantics is deterministic across repeated analysis', () => {
   const source = `
     import { defineElement } from '@openelement/router';
     export const tagName = 'oe-repeatable';
@@ -376,7 +376,7 @@ Deno.test('analyzeModuleSemantics is deterministic across repeated analysis', ()
   );
 
   for (const output of outputs.slice(1)) {
-    assertEquals(output, outputs[0]);
-    assertEquals(JSON.stringify(output), JSON.stringify(outputs[0]));
+    expect(output).toEqual(outputs[0]);
+    expect(JSON.stringify(output)).toEqual(JSON.stringify(outputs[0]));
   }
 });

@@ -1,16 +1,17 @@
-import { assert, assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isOpenElementNotFound } from '@openelement/router';
 import { hasAdminRole, requireAdmin } from '../../lib/authorization.ts';
 
-Deno.test('admin authorization trusts app_metadata.role only', () => {
-  assertEquals(hasAdminRole({ id: '1', app_metadata: { role: 'admin' } }), true);
-  assertEquals(hasAdminRole({ id: '1', app_metadata: { role: 'member' } }), false);
-  assertEquals(hasAdminRole(null), false);
+test('admin authorization trusts app_metadata.role only', () => {
+  expect(hasAdminRole({ id: '1', app_metadata: { role: 'admin' } })).toEqual(true);
+  expect(hasAdminRole({ id: '1', app_metadata: { role: 'member' } })).toEqual(false);
+  expect(hasAdminRole(null)).toEqual(false);
 });
 
-Deno.test('user-writable metadata can never grant admin', () => {
+test('user-writable metadata can never grant admin', () => {
   const forged = { id: 'attacker', app_metadata: {}, user_metadata: { role: 'admin' } };
-  assertEquals(hasAdminRole(forged), false);
-  const error = assertThrows(() => requireAdmin(forged));
-  assert(isOpenElementNotFound(error));
+  expect(hasAdminRole(forged)).toEqual(false);
+  const error = assertThrowsIncludes(() => requireAdmin(forged));
+  expect(isOpenElementNotFound(error)).toBeTruthy();
 });

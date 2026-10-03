@@ -1,11 +1,10 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { normalizeRoutePatternForURLPattern } from '../src/internal/router/route-pattern.ts';
 
-Deno.test('shared route normalizer preserves params and converts Hono catch-alls (#1103)', () => {
-  assertEquals(normalizeRoutePatternForURLPattern('/item/:id'), '/item/:id');
-  assertEquals(normalizeRoutePatternForURLPattern('/docs/:path{.+}'), '/docs/:path(.+)');
-  assertEquals(
-    normalizeRoutePatternForURLPattern('/org/:org/repo/:path{.*}'),
+test('shared route normalizer preserves params and converts Hono catch-alls (#1103)', () => {
+  expect(normalizeRoutePatternForURLPattern('/item/:id')).toEqual('/item/:id');
+  expect(normalizeRoutePatternForURLPattern('/docs/:path{.+}')).toEqual('/docs/:path(.+)');
+  expect(normalizeRoutePatternForURLPattern('/org/:org/repo/:path{.*}')).toEqual(
     '/org/:org/repo/:path(.*)',
   );
 });

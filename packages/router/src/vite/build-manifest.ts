@@ -15,8 +15,8 @@
  *   - cli/build-ssg.ts    (after Phase 3: HTML + post-process complete)
  */
 
-import { existsSync } from '../internal/host-path.ts';
-import { basename, join, resolve } from '../internal/host-path.ts';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { basename, join, resolve } from 'pathe';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { DEFAULT_OUT_DIR } from './internal/paths.ts';
@@ -73,7 +73,7 @@ function collectFiles(dir: string, extension: string): ArtifactInfo[] {
   for (const entry of walkFileEntries(dir, extension)) {
     const relPath = normalizeSeparators(entry.relativePath);
     try {
-      const stat = Deno.statSync(entry.absolutePath);
+      const stat = statSync(entry.absolutePath);
       results.push({
         name: basename(entry.absolutePath),
         path: relPath,
@@ -102,12 +102,12 @@ export function scanClientBuild(
   // Scan islands/ subdirectory (single pass - avoid redundant directory scans)
   const islandsDir = join(clientDir, 'islands');
   if (existsSync(islandsDir)) {
-    const files = [...Deno.readDirSync(islandsDir)].map((e) => e.name);
+    const files = readdirSync(islandsDir);
     for (const file of files) {
       if (!file.endsWith('.js')) continue;
       const fullPath = join(islandsDir, file);
       try {
-        const fileStat = Deno.statSync(fullPath);
+        const fileStat = statSync(fullPath);
         if (file === 'client.js') {
           // Client entry (shared island upgrade runtime)
           clientEntry = {

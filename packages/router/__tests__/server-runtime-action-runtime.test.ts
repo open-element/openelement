@@ -13,7 +13,7 @@
  * end-to-end behavior stays pinned by the read-only request-time-parity
  * oracle on both the dev and the build runtime.
  */
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import { fail } from '../src/authoring.ts';
 import {
   ACTION_FETCH_HEADER,
@@ -107,7 +107,7 @@ function formPost(options: {
   return { context, state: { isFetch: false } };
 }
 
-Deno.test('named action dispatch answers success with PRG 303, marker stripped, search kept', async () => {
+test('named action dispatch answers success with PRG 303, marker stripped, search kept', async () => {
   const { context, state } = formPost({
     path: '/form?/save&keep=1',
     origin: 'https://pages.example.test',
@@ -119,13 +119,13 @@ Deno.test('named action dispatch answers success with PRG 303, marker stripped, 
     statusPage,
     state,
   );
-  assertEquals(state.isFetch, false);
-  assert(execution.response, 'success answers a PRG response');
-  assertEquals(execution.response.status, 303);
-  assertEquals(execution.response.headers.get('Location'), '/form?keep=1');
+  expect(state.isFetch).toEqual(false);
+  expect(execution.response, 'success answers a PRG response').toBeTruthy();
+  expect(execution.response.status).toEqual(303);
+  expect(execution.response.headers.get('Location')).toEqual('/form?keep=1');
 });
 
-Deno.test('the bare `action` export dispatches when no ?/name is present', async () => {
+test('the bare `action` export dispatches when no ?/name is present', async () => {
   const { context, state } = formPost({ origin: 'https://pages.example.test' });
   const execution = await runActionProtocol(
     context,
@@ -134,10 +134,10 @@ Deno.test('the bare `action` export dispatches when no ?/name is present', async
     statusPage,
     state,
   );
-  assertEquals(execution.response?.status, 303);
+  expect(execution.response?.status).toEqual(303);
 });
 
-Deno.test('fail() re-render channel: native callers receive the classified outcome at 422', async () => {
+test('fail() re-render channel: native callers receive the classified outcome at 422', async () => {
   const { context, state } = formPost({ origin: 'https://pages.example.test' });
   const execution = await runActionProtocol(
     context,
@@ -146,15 +146,15 @@ Deno.test('fail() re-render channel: native callers receive the classified outco
     statusPage,
     state,
   );
-  assertEquals(execution.response, undefined);
-  assertEquals(execution.actionResult, {
+  expect(execution.response).toEqual(undefined);
+  expect(execution.actionResult).toEqual({
     kind: 'failure',
     status: 422,
     data: { message: 'message is required' },
   });
 });
 
-Deno.test('fail() fetch channel answers the ActionResult JSON with degraded unserializable data', async () => {
+test('fail() fetch channel answers the ActionResult JSON with degraded unserializable data', async () => {
   for (const data of [
     undefined,
     () => 'nope',
@@ -178,13 +178,13 @@ Deno.test('fail() fetch channel answers the ActionResult JSON with degraded unse
       state,
     );
     const response = execution.response!;
-    assertEquals(response.status, 422, 'the author status survives the fetch channel');
-    assertEquals(response.headers.get('Content-Type'), 'application/json');
-    assertEquals(await response.json(), { type: 'failure', status: 422, data: null });
+    expect(response.status, 'the author status survives the fetch channel').toEqual(422);
+    expect(response.headers.get('Content-Type')).toEqual('application/json');
+    expect(await response.json()).toEqual({ type: 'failure', status: 422, data: null });
   }
 });
 
-Deno.test('fail() fetch channel keeps serializable data intact', async () => {
+test('fail() fetch channel keeps serializable data intact', async () => {
   const { context, state } = formPost({
     origin: 'https://pages.example.test',
     fetchHeader: true,
@@ -196,14 +196,14 @@ Deno.test('fail() fetch channel keeps serializable data intact', async () => {
     statusPage,
     state,
   );
-  assertEquals(await execution.response!.json(), {
+  expect(await execution.response!.json()).toEqual({
     type: 'failure',
     status: 422,
     data: { message: 'echo' },
   });
 });
 
-Deno.test('unknown named action: fetch callers get problem+json 404, native callers the status page', async () => {
+test('unknown named action: fetch callers get problem+json 404, native callers the status page', async () => {
   const fetchPost = formPost({
     path: '/form?/nope',
     origin: 'https://pages.example.test',
@@ -217,9 +217,9 @@ Deno.test('unknown named action: fetch callers get problem+json 404, native call
     fetchPost.state,
   );
   const problem = fetchExecution.response!;
-  assertEquals(problem.status, 404);
-  assertEquals(problem.headers.get('Content-Type'), PROBLEM_JSON);
-  assertEquals(await problem.json(), {
+  expect(problem.status).toEqual(404);
+  expect(problem.headers.get('Content-Type')).toEqual(PROBLEM_JSON);
+  expect(await problem.json()).toEqual({
     type: 'about:blank',
     title: 'Not Found',
     status: 404,
@@ -234,11 +234,11 @@ Deno.test('unknown named action: fetch callers get problem+json 404, native call
     statusPage,
     nativePost.state,
   );
-  assertEquals(nativeExecution.response!.status, 404);
-  assertStringIncludes(await nativeExecution.response!.text(), '404 Not Found|');
+  expect(nativeExecution.response!.status).toEqual(404);
+  expect(await nativeExecution.response!.text()).toContain('404 Not Found|');
 });
 
-Deno.test('prototype-chain action names are not dispatchable (#542)', async () => {
+test('prototype-chain action names are not dispatchable (#542)', async () => {
   const { context, state } = formPost({
     path: '/form?/constructor',
     origin: 'https://pages.example.test',
@@ -251,16 +251,16 @@ Deno.test('prototype-chain action names are not dispatchable (#542)', async () =
     statusPage,
     state,
   );
-  assertEquals(execution.response!.status, 404);
+  expect(execution.response!.status).toEqual(404);
 });
 
-Deno.test('a route without any action export is a defined 404, not a render', async () => {
+test('a route without any action export is a defined 404, not a render', async () => {
   const { context, state } = formPost({
     origin: 'https://pages.example.test',
     fetchHeader: true,
   });
   const execution = await runActionProtocol(context, {}, { env: {} }, statusPage, state);
-  assertEquals(await execution.response!.json(), {
+  expect(await execution.response!.json()).toEqual({
     type: 'about:blank',
     title: 'Not Found',
     status: 404,
@@ -268,7 +268,7 @@ Deno.test('a route without any action export is a defined 404, not a render', as
   });
 });
 
-Deno.test('the CSRF floor rejects cross-site posts: problem+json on fetch, plain text native (#611)', async () => {
+test('the CSRF floor rejects cross-site posts: problem+json on fetch, plain text native (#611)', async () => {
   const fetchPost = formPost({
     origin: 'https://evil.example',
     fetchHeader: true,
@@ -281,9 +281,9 @@ Deno.test('the CSRF floor rejects cross-site posts: problem+json on fetch, plain
     fetchPost.state,
   );
   const problem = fetchExecution.response!;
-  assertEquals(problem.status, 403);
-  assertEquals(problem.headers.get('Content-Type'), PROBLEM_JSON);
-  assertEquals(await problem.json(), {
+  expect(problem.status).toEqual(403);
+  expect(problem.headers.get('Content-Type')).toEqual(PROBLEM_JSON);
+  expect(await problem.json()).toEqual({
     type: 'about:blank',
     title: 'Forbidden',
     status: 403,
@@ -298,11 +298,11 @@ Deno.test('the CSRF floor rejects cross-site posts: problem+json on fetch, plain
     statusPage,
     nativePost.state,
   );
-  assertEquals(nativeExecution.response!.status, 403);
-  assertEquals(await nativeExecution.response!.text(), 'Forbidden');
+  expect(nativeExecution.response!.status).toEqual(403);
+  expect(await nativeExecution.response!.text()).toEqual('Forbidden');
 });
 
-Deno.test('OPEN_ELEMENT_DISABLE_CSRF=1 turns the floor off', async () => {
+test('OPEN_ELEMENT_DISABLE_CSRF=1 turns the floor off', async () => {
   const { context, state } = formPost({
     origin: 'https://evil.example',
     fetchHeader: true,
@@ -317,14 +317,14 @@ Deno.test('OPEN_ELEMENT_DISABLE_CSRF=1 turns the floor off', async () => {
   );
   // The fetch redirect outcome rides HTTP 200 with the 303 in the ActionResult
   // body (the shape the request-time-parity oracle pins).
-  assertEquals(await execution.response!.json(), {
+  expect(await execution.response!.json()).toEqual({
     type: 'redirect',
     status: 303,
     location: '/form',
   });
 });
 
-Deno.test('same-origin posts pass; the http loopback allowance covers host variety (#921)', async () => {
+test('same-origin posts pass; the http loopback allowance covers host variety (#921)', async () => {
   const raw = new Request('http://127.0.0.1:8000/form', {
     method: 'POST',
     headers: {
@@ -350,10 +350,10 @@ Deno.test('same-origin posts pass; the http loopback allowance covers host varie
     statusPage,
     { isFetch: false },
   );
-  assertEquals(execution.response!.status, 303);
+  expect(execution.response!.status).toEqual(303);
 });
 
-Deno.test('an Origin of literal null is the no-referrer case and is allowed (#938)', async () => {
+test('an Origin of literal null is the no-referrer case and is allowed (#938)', async () => {
   const { context, state } = formPost({
     origin: 'null',
     fetchHeader: true,
@@ -365,10 +365,10 @@ Deno.test('an Origin of literal null is the no-referrer case and is allowed (#93
     statusPage,
     state,
   );
-  assertEquals((await execution.response!.json()).status, 303);
+  expect((await execution.response!.json()).status).toEqual(303);
 });
 
-Deno.test('same-site Fetch Metadata without a matching origin fails closed', async () => {
+test('same-site Fetch Metadata without a matching origin fails closed', async () => {
   const { context, state } = formPost({
     fetchHeader: true,
     secFetchSite: 'same-site',
@@ -380,10 +380,10 @@ Deno.test('same-site Fetch Metadata without a matching origin fails closed', asy
     statusPage,
     state,
   );
-  assertEquals(execution.response!.status, 403);
+  expect(execution.response!.status).toEqual(403);
 });
 
-Deno.test('browser-shaped form body without Origin or Fetch Metadata fails closed (#1382)', async () => {
+test('browser-shaped form body without Origin or Fetch Metadata fails closed (#1382)', async () => {
   for (const evidence of [
     { upgradeInsecureRequests: '1' },
     { accept: 'text/html,application/xhtml+xml' },
@@ -396,11 +396,11 @@ Deno.test('browser-shaped form body without Origin or Fetch Metadata fails close
       statusPage,
       state,
     );
-    assertEquals(execution.response!.status, 403);
+    expect(execution.response!.status).toEqual(403);
   }
 });
 
-Deno.test('an unparseable body answers 400 per channel', async () => {
+test('an unparseable body answers 400 per channel', async () => {
   const fetchPost = formPost({
     origin: 'https://pages.example.test',
     fetchHeader: true,
@@ -415,9 +415,9 @@ Deno.test('an unparseable body answers 400 per channel', async () => {
     fetchPost.state,
   );
   const problem = fetchExecution.response!;
-  assertEquals(problem.status, 400);
-  assertEquals(problem.headers.get('Content-Type'), PROBLEM_JSON);
-  assertEquals((await problem.json()).detail, 'Could not parse the form body.');
+  expect(problem.status).toEqual(400);
+  expect(problem.headers.get('Content-Type')).toEqual(PROBLEM_JSON);
+  expect((await problem.json()).detail).toEqual('Could not parse the form body.');
 
   const nativePost = formPost({
     origin: 'https://pages.example.test',
@@ -431,10 +431,10 @@ Deno.test('an unparseable body answers 400 per channel', async () => {
     statusPage,
     nativePost.state,
   );
-  assertEquals(nativeExecution.response!.status, 400);
+  expect(nativeExecution.response!.status).toEqual(400);
 });
 
-Deno.test('the fetch redirect outcome is the ActionResult shape, not a 303 document (#548)', async () => {
+test('the fetch redirect outcome is the ActionResult shape, not a 303 document (#548)', async () => {
   const { context, state } = formPost({
     path: '/form?/save',
     origin: 'https://pages.example.test',
@@ -447,32 +447,32 @@ Deno.test('the fetch redirect outcome is the ActionResult shape, not a 303 docum
     statusPage,
     state,
   );
-  assertEquals(state.isFetch, true);
-  assertEquals(await execution.response!.json(), {
+  expect(state.isFetch).toEqual(true);
+  expect(await execution.response!.json()).toEqual({
     type: 'redirect',
     status: 303,
     location: '/form',
   });
 });
 
-Deno.test('actionRedirectResponse: native 303, fetch HTTP 200 with the ActionResult body (ADR-0121)', async () => {
+test('actionRedirectResponse: native 303, fetch HTTP 200 with the ActionResult body (ADR-0121)', async () => {
   const context = actionContext({ url: 'https://pages.example.test/form' });
   const native = actionRedirectResponse(context, '/elsewhere', false);
-  assertEquals(native.status, 303);
-  assertEquals(native.headers.get('Location'), '/elsewhere');
+  expect(native.status).toEqual(303);
+  expect(native.headers.get('Location')).toEqual('/elsewhere');
 
   // The serialized client executor matches on the body, not the HTTP status:
   // the fetch channel answers 200 with the 303 carried in the redirect shape.
   const fetchResponse = actionRedirectResponse(context, '/elsewhere', true);
-  assertEquals(fetchResponse.status, 200);
-  assertEquals(await fetchResponse.json(), {
+  expect(fetchResponse.status).toEqual(200);
+  expect(await fetchResponse.json()).toEqual({
     type: 'redirect',
     status: 303,
     location: '/elsewhere',
   });
 });
 
-Deno.test('actionErrorResponse answers problem+json 500 and scrubs internals in production (#558)', () => {
+test('actionErrorResponse answers problem+json 500 and scrubs internals in production (#558)', () => {
   const capture: unknown[][] = [];
   const originalError = console.error;
   console.error = (...args: unknown[]) => {
@@ -485,8 +485,8 @@ Deno.test('actionErrorResponse answers problem+json 500 and scrubs internals in 
       new Error('secret stack detail'),
       false,
     );
-    assertEquals(dev.status, 500);
-    assertEquals(dev.headers.get('Content-Type'), PROBLEM_JSON);
+    expect(dev.status).toEqual(500);
+    expect(dev.headers.get('Content-Type')).toEqual(PROBLEM_JSON);
 
     const production = actionErrorResponse(
       actionContext({ url: 'https://pages.example.test/form' }),
@@ -494,15 +494,15 @@ Deno.test('actionErrorResponse answers problem+json 500 and scrubs internals in 
       new Error('secret stack detail'),
       true,
     );
-    assertEquals(production.status, 500);
+    expect(production.status).toEqual(500);
   } finally {
     console.error = originalError;
   }
-  assertEquals(capture.length, 2);
-  assertEquals(capture[0][0], '[openElement] Action POST failed for /form:');
+  expect(capture.length).toEqual(2);
+  expect(capture[0][0]).toEqual('[openElement] Action POST failed for /form:');
 });
 
-Deno.test('createActionBodyLimit answers an oversized body per channel (#568)', async () => {
+test('createActionBodyLimit answers an oversized body per channel (#568)', async () => {
   const limit = createActionBodyLimit(1024);
 
   // An oversized body: the fetch channel speaks problem+json with the
@@ -539,18 +539,20 @@ Deno.test('createActionBodyLimit answers an oversized body per channel (#568)', 
   }
 
   const problem = await oversize(true);
-  assertEquals(problem.status, 413);
-  assertEquals(problem.headers.get('Content-Type'), PROBLEM_JSON);
-  assertEquals(problem.headers.get('Cache-Control'), 'no-store');
-  assertEquals(problem.headers.get('Vary'), ACTION_FETCH_HEADER);
-  assertEquals((await problem.json()).detail, 'The request body exceeded the 10 MiB action limit.');
+  expect(problem.status).toEqual(413);
+  expect(problem.headers.get('Content-Type')).toEqual(PROBLEM_JSON);
+  expect(problem.headers.get('Cache-Control')).toEqual('no-store');
+  expect(problem.headers.get('Vary')).toEqual(ACTION_FETCH_HEADER);
+  expect((await problem.json()).detail).toEqual(
+    'The request body exceeded the 10 MiB action limit.',
+  );
 
   const plain = await oversize(false);
-  assertEquals(plain.status, 413);
-  assertEquals(await plain.text(), 'Payload Too Large');
+  expect(plain.status).toEqual(413);
+  expect(await plain.text()).toEqual('Payload Too Large');
 });
 
-Deno.test('createActionBodyLimit passes an under-limit body through to next()', async () => {
+test('createActionBodyLimit passes an under-limit body through to next()', async () => {
   const limit = createActionBodyLimit(1024);
   const raw = new Request('https://pages.example.test/form', {
     method: 'POST',
@@ -561,10 +563,10 @@ Deno.test('createActionBodyLimit passes an under-limit body through to next()', 
   await (limit as (c: unknown, next: () => unknown) => Promise<unknown>)({ req: { raw } }, () => {
     reachedNext = true;
   });
-  assertEquals(reachedNext, true);
+  expect(reachedNext).toEqual(true);
 });
 
-Deno.test('the Hono bridge binds contexts by request identity', async () => {
+test('the Hono bridge binds contexts by request identity', async () => {
   const bridge = createHonoBridge();
   const request = new Request('https://pages.example.test/');
   const context = actionContext({ url: request.url });
@@ -576,12 +578,12 @@ Deno.test('the Hono bridge binds contexts by request identity', async () => {
     return new Response('handled');
   });
   const response = await handler(request, { params: {} }, () => undefined);
-  assertEquals(await (response as Response).text(), 'handled');
-  assertEquals(handled[0], context);
-  assertEquals(handled[1], { params: {} });
+  expect(await (response as Response).text()).toEqual('handled');
+  expect(handled[0]).toEqual(context);
+  expect(handled[1]).toEqual({ params: {} });
 });
 
-Deno.test('the Hono bridge middleware keeps onion order and the response fallbacks', async () => {
+test('the Hono bridge middleware keeps onion order and the response fallbacks', async () => {
   const bridge = createHonoBridge();
   const request = new Request('https://pages.example.test/');
   const context = actionContext({ url: request.url });
@@ -589,22 +591,20 @@ Deno.test('the Hono bridge middleware keeps onion order and the response fallbac
 
   // A middleware that returns its own response wins over the downstream one.
   const own = bridge.asFetchMiddleware((c, next) => {
-    assert(c === context);
+    expect(c === context).toBeTruthy();
     void next();
     return new Response('own');
   });
-  assertEquals(
+  expect(
     await ((await own(request, {}, () => new Response('downstream'))) as Response).text(),
-    'own',
-  );
+  ).toEqual('own');
 
   // A pass-through middleware falls back to the downstream response, then to
   // the context's own response.
   const pass = bridge.asFetchMiddleware((_c, next) => next());
-  assertEquals(
+  expect(
     await ((await pass(request, {}, () => new Response('downstream'))) as Response).text(),
-    'downstream',
-  );
+  ).toEqual('downstream');
   const fallback = (await pass(request, {}, () => undefined)) as Response;
-  assertEquals(fallback, context.res);
+  expect(fallback).toEqual(context.res);
 });

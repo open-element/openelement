@@ -4,8 +4,8 @@
  * Scope: docs typography, prose width, code, tables, callouts, and simple
  * content navigation. Product components still come from @openelement/ui.
  */
-import '@openelement/site-ui/open-reading-shell.tsx';
-import '@openelement/site-ui/open-artifact-panel.tsx';
+import '#site-ui/open-reading-shell.tsx';
+import '#site-ui/open-artifact-panel.tsx';
 import '../islands/open-page-rail.tsx';
 
 /**

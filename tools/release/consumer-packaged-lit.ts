@@ -16,7 +16,6 @@
  * Run via the root `consumer:packaged-app` task (chained with the native leg).
  */
 
-import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { type PackedAppLegSpec, qualifyPackedAppLeg } from './consumer-packaged-shared.ts';
 
 // ─── Consumer app sources (lit renderer leg) ────────────────────────────────
@@ -443,10 +442,6 @@ export default defineConfig({
   // Exercise Linux's fs.watch backend on every host, including macOS.
   server: { watch: { useFsEvents: false, usePolling: false } },
   base: '/',
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: '@openelement/element',
-  },
   plugins: [
     ...openElement({
       renderer: 'lit',
@@ -473,13 +468,6 @@ const LIT_LEG: PackedAppLegSpec = {
     '@lit-labs/ssr': '4.1.0',
     '@lit-labs/ssr-client': '1.1.8',
   },
-  importMapExtras: {
-    '@openelement/router/lit': `npm:@openelement/router@${PACKAGE_VERSION}/lit`,
-    '@openelement/router/lit-ssr': `npm:@openelement/router@${PACKAGE_VERSION}/lit-ssr`,
-    lit: 'npm:lit@3.3.3',
-    '@lit-labs/ssr': 'npm:@lit-labs/ssr@4.1.0',
-    '@lit-labs/ssr-client': 'npm:@lit-labs/ssr-client@1.1.8',
-  },
   compilerOptions: {
     lib: ['ES2022', 'DOM', 'DOM.Iterable'],
   },
@@ -498,15 +486,6 @@ const LIT_LEG: PackedAppLegSpec = {
     'app/islands/note-counter.ts': LIT_ISLAND_COUNTER,
   },
   viteConfig: LIT_VITE_CONFIG,
-  checkEntries: [
-    'app/routes/index.ts',
-    'app/routes/notes.ts',
-    `app/routes/notes/[id].ts`,
-    'app/routes/notes/new.ts',
-    'app/routes/404.ts',
-    'app/islands/note-counter.ts',
-    'app/store.ts',
-  ],
   probes: [
     { path: '/', status: 200, markers: ['packed-app-lit', 'build-count=2'] },
     {

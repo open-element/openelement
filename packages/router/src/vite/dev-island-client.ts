@@ -17,10 +17,11 @@
  * __clientScriptDescriptors).
  */
 
-import { existsSync } from '../internal/host-path.ts';
+import { existsSync } from 'node:fs';
+import process from 'node:process';
 import type { Plugin } from 'vite';
 
-import { fromFileUrl } from '../internal/host-path.ts';
+import { fileURLToPath } from 'node:url';
 
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
@@ -42,7 +43,7 @@ const CLIENT_ENTRY_PUBLIC_PATH = 'client/islands/client.js';
 // raw TypeScript, so an installed tarball resolves the staged
 // JavaScript counterpart instead.
 function devRuntimeModulePath(relativeSource: string): string {
-  const sourcePath = fromFileUrl(new URL(relativeSource, import.meta.url));
+  const sourcePath = fileURLToPath(new URL(relativeSource, import.meta.url));
   if (existsSync(sourcePath)) return sourcePath;
   return sourcePath.replace(/\.(?:[cm]?ts|tsx)$/, '.js');
 }
@@ -87,7 +88,7 @@ export function devIslandClientPlugin(
 
     load(id) {
       if (id !== RESOLVED_CLIENT_ENTRY_ID) return;
-      const root = Deno.cwd();
+      const root = process.cwd();
       const islandsDir = options.islandsDir || DEFAULT_ISLANDS_DIR;
       // #569: an island-free app with data-open-enhance forms still needs the
       // client entry — it carries the form-enhancement layer.

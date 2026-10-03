@@ -10,7 +10,8 @@
  * thrown `EachKeyError` only as secondary provenance.
  */
 
-import { assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { createFreshDom, serializeToHtml } from '../../src/internal/compiled/runtime.ts';
 import type { CompiledRuntimeHost } from '../../src/internal/compiled/runtime.ts';
 import { signal } from '../../src/internal/signal/framework.ts';
@@ -35,20 +36,20 @@ function eachProgram(): ReturnType<typeof testProgram> {
   });
 }
 
-Deno.test('#1413 runtime messages: a non-array list Region names the module and property', () => {
+test('#1413 runtime messages: a non-array list Region names the module and property', () => {
   const program = eachProgram();
   const rows = signal<unknown>('not-an-array');
   const host = { signals: { rows }, handlers: {} } as unknown as CompiledRuntimeHost;
 
-  const error = assertThrows(() => serializeToHtml(program, host), Error);
-  assertStringIncludes(error.message, '/app/components/message-proof.tsx');
-  assertStringIncludes(error.message, '<oe-message-proof>');
-  assertStringIncludes(error.message, 'this.rows');
-  assertStringIncludes(error.message, 'got string');
-  assertStringIncludes(error.message, 'expects an array');
+  const error = assertThrowsIncludes(() => serializeToHtml(program, host), Error);
+  expect(error.message).toContain('/app/components/message-proof.tsx');
+  expect(error.message).toContain('<oe-message-proof>');
+  expect(error.message).toContain('this.rows');
+  expect(error.message).toContain('got string');
+  expect(error.message).toContain('expects an array');
 });
 
-Deno.test('#1413 runtime messages: null and undefined list values are named precisely', () => {
+test('#1413 runtime messages: null and undefined list values are named precisely', () => {
   const program = eachProgram();
   const cases: Array<[unknown, string]> = [
     [null, 'null'],
@@ -57,12 +58,12 @@ Deno.test('#1413 runtime messages: null and undefined list values are named prec
   for (const [value, expected] of cases) {
     const rows = signal<unknown>(value);
     const host = { signals: { rows }, handlers: {} } as unknown as CompiledRuntimeHost;
-    const error = assertThrows(() => serializeToHtml(program, host), Error);
-    assertStringIncludes(error.message, `got ${expected}`);
+    const error = assertThrowsIncludes(() => serializeToHtml(program, host), Error);
+    expect(error.message).toContain(`got ${expected}`);
   }
 });
 
-Deno.test('#1413 runtime messages: a duplicate item key names the key field and value', () => {
+test('#1413 runtime messages: a duplicate item key names the key field and value', () => {
   const program = eachProgram();
   const rows = signal<unknown>([
     { id: 'a', label: 'one' },
@@ -75,52 +76,61 @@ Deno.test('#1413 runtime messages: a duplicate item key names the key field and 
   // Keyed identity is a client concern: the SSR serializer emits the items
   // order-preserving, while the fresh-DOM builder rejects the collision
   // before it builds a single node from the ambiguous list.
-  const error = assertThrows(() => createFreshDom(program, host, root as unknown as Node), Error);
-  assertStringIncludes(error.message, '/app/components/message-proof.tsx');
-  assertStringIncludes(error.message, 'duplicate key');
-  assertStringIncludes(error.message, 'this.rows');
-  assertStringIncludes(error.message, '"id"');
-  assertStringIncludes(error.message, 'string:a');
+  const error = assertThrowsIncludes(
+    () => createFreshDom(program, host, root as unknown as Node),
+    Error,
+  );
+  expect(error.message).toContain('/app/components/message-proof.tsx');
+  expect(error.message).toContain('duplicate key');
+  expect(error.message).toContain('this.rows');
+  expect(error.message).toContain('"id"');
+  expect(error.message).toContain('string:a');
   // The guidance names the fix, not just the fault.
-  assertStringIncludes(error.message, 'unique');
+  expect(error.message).toContain('unique');
 });
 
-Deno.test('#1413 runtime messages: an absent host signal names the property to declare', () => {
+test('#1413 runtime messages: an absent host signal names the property to declare', () => {
   const program = eachProgram();
   const host = { signals: {}, handlers: {} } as unknown as CompiledRuntimeHost;
 
-  const error = assertThrows(() => serializeToHtml(program, host), Error);
-  assertStringIncludes(error.message, 'this.rows');
-  assertStringIncludes(error.message, '@property');
-  assertStringIncludes(error.message, '/app/components/message-proof.tsx');
+  const error = assertThrowsIncludes(() => serializeToHtml(program, host), Error);
+  expect(error.message).toContain('this.rows');
+  expect(error.message).toContain('@property');
+  expect(error.message).toContain('/app/components/message-proof.tsx');
 });
 
-Deno.test('#1413 runtime messages: a non-object list item names the key field', () => {
+test('#1413 runtime messages: a non-object list item names the key field', () => {
   const program = eachProgram();
   const rows = signal<unknown>(['not-a-record']);
   const host = { signals: { rows }, handlers: {} } as unknown as CompiledRuntimeHost;
   const document = new TestDocument();
   const root = document.createElement('oe-message-proof');
 
-  const error = assertThrows(() => createFreshDom(program, host, root as unknown as Node), Error);
+  const error = assertThrowsIncludes(
+    () => createFreshDom(program, host, root as unknown as Node),
+    Error,
+  );
   // The shared EachKeyError reason is authored text: the reader learns which
   // field must exist, not which part index raised it.
-  assertStringIncludes(error.message, 'keyed list must be an object');
-  assertStringIncludes(error.message, '"id"');
+  expect(error.message).toContain('keyed list must be an object');
+  expect(error.message).toContain('"id"');
 });
 
-Deno.test('#1413 runtime messages: fresh-DOM mount and SSR report identically', () => {
+test('#1413 runtime messages: fresh-DOM mount and SSR report identically', () => {
   const program = eachProgram();
   const rows = signal<unknown>('not-an-array');
   const host = { signals: { rows }, handlers: {} } as unknown as CompiledRuntimeHost;
   const document = new TestDocument();
   const root = document.createElement('oe-message-proof');
 
-  const fresh = assertThrows(() => createFreshDom(program, host, root as unknown as Node), Error);
-  const ssr = assertThrows(() => serializeToHtml(program, host), Error);
+  const fresh = assertThrowsIncludes(
+    () => createFreshDom(program, host, root as unknown as Node),
+    Error,
+  );
+  const ssr = assertThrowsIncludes(() => serializeToHtml(program, host), Error);
   // Both execution modes are the same failure for the author: one vocabulary.
-  assertStringIncludes(fresh.message, 'this.rows');
-  assertStringIncludes(ssr.message, 'this.rows');
-  assertStringIncludes(fresh.message, 'expects an array');
-  assertStringIncludes(ssr.message, 'expects an array');
+  expect(fresh.message).toContain('this.rows');
+  expect(ssr.message).toContain('this.rows');
+  expect(fresh.message).toContain('expects an array');
+  expect(ssr.message).toContain('expects an array');
 });

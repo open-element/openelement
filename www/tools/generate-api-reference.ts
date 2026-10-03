@@ -35,6 +35,9 @@ import {
   readPackages,
   releasePublishOrder,
 } from '../../tools/lib/package-graph.ts';
+import { readFile, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import process from 'node:process';
 
 export const API_REFERENCE_ARTIFACT = 'www/app/data/_generated-api-reference.ts';
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
@@ -417,7 +420,7 @@ function optionsOfDeclaration(checker: ts.TypeChecker, target: ts.Symbol): Optio
  */
 function entryRecord(entryFile: string, repoRoot: string): ExportRecord {
   const resolvedEntry = resolve(entryFile);
-  const text = Deno.readTextFileSync(resolvedEntry);
+  const text = readFileSync(resolvedEntry, 'utf8');
   const leading = ts
     .getLeadingCommentRanges(text, 0)
     ?.find((range) => range.kind === ts.SyntaxKind.MultiLineCommentTrivia);
@@ -535,7 +538,7 @@ function readConfigOptions(paths: Record<string, string[]>): OptionRecord[] {
 
 export async function buildApiReference(): Promise<ApiReferenceBuild> {
   const failures: string[] = [];
-  const manifest = JSON.parse(await Deno.readTextFile(join(repoRoot, UI_MANIFEST))) as {
+  const manifest = JSON.parse(await readFile(join(repoRoot, UI_MANIFEST), 'utf8')) as {
     declarations?: Array<Record<string, unknown>>;
   };
   const manifestDescriptionByClass = new Map<string, string>();
@@ -672,40 +675,40 @@ export function renderApiReferenceModule(build: ApiReferenceBuild): string {
     '// Source of truth: packages/<name>/deno.json exports + JSDoc, the router\n' +
     '// application options type (packages/router/src/vite/index.ts\n' +
     '// OpenElementOptions) and packages/ui/src/generated-manifest.json.\n' +
-    '// Regenerate with `deno task --cwd www generate:api-reference`; the file is\n' +
+    '// Regenerate with `pnpm --filter @openelement/www run generate:api-reference`; the file is\n' +
     '// untracked and rebuilt before test/site:build.\n' +
     `export const apiReference = ${formatJson(payload).trimEnd()} as const;\n`
   );
 }
 
 if (import.meta.main) {
-  const check = Deno.args.includes('--check');
+  const check = process.argv.slice(2).includes('--check');
   const build = await buildApiReference();
   if (build.failures.length > 0) {
     console.error('API reference validation failed:');
     for (const failure of build.failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   const module = renderApiReferenceModule(build);
   if (check) {
     let existing: string;
     try {
-      existing = await Deno.readTextFile(join(repoRoot, API_REFERENCE_ARTIFACT));
+      existing = await readFile(join(repoRoot, API_REFERENCE_ARTIFACT), 'utf8');
     } catch {
       console.error(
-        `${API_REFERENCE_ARTIFACT} is missing; run deno task --cwd www generate:api-reference`,
+        `${API_REFERENCE_ARTIFACT} is missing; run pnpm --filter @openelement/www run generate:api-reference`,
       );
-      Deno.exit(1);
+      process.exit(1);
     }
     if (existing !== module) {
       console.error(
-        `${API_REFERENCE_ARTIFACT} is stale; run deno task --cwd www generate:api-reference`,
+        `${API_REFERENCE_ARTIFACT} is stale; run pnpm --filter @openelement/www run generate:api-reference`,
       );
-      Deno.exit(1);
+      process.exit(1);
     }
     console.log(`API reference check passed (${API_REFERENCE_ARTIFACT} is byte-identical).`);
   } else {
-    await Deno.writeTextFile(join(repoRoot, API_REFERENCE_ARTIFACT), module);
+    await writeFile(join(repoRoot, API_REFERENCE_ARTIFACT), module);
     const exportCount = build.packages.reduce(
       (sum, pkg) => sum + pkg.subpaths.reduce((inner, sub) => inner + sub.exports.length, 0),
       0,

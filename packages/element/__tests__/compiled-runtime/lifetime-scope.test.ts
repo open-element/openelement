@@ -1,13 +1,8 @@
-import {
-  assert,
-  assertEquals,
-  assertNotStrictEquals,
-  assertStrictEquals,
-  assertThrows,
-} from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { LifetimeScope } from '../../src/internal/compiled/lifetime-scope.ts';
 
-Deno.test('scope: abort precedes child and subscription cleanup', () => {
+test('scope: abort precedes child and subscription cleanup', () => {
   const root = new LifetimeScope();
   const child = root.child();
   const events: string[] = [];
@@ -18,14 +13,14 @@ Deno.test('scope: abort precedes child and subscription cleanup', () => {
 
   root.dispose();
   root.dispose();
-  assertEquals(events, ['abort', 'child', 'parent']);
-  assert(root.signal.aborted);
-  assert(!root.active);
-  assert(child.disposed);
-  assertThrows(() => root.child(), Error, 'disposed');
+  expect(events).toEqual(['abort', 'child', 'parent']);
+  expect(root.signal.aborted).toBeTruthy();
+  expect(!root.active).toBeTruthy();
+  expect(child.disposed).toBeTruthy();
+  assertThrowsIncludes(() => root.child(), Error, 'disposed');
 });
 
-Deno.test('scope: cleanup errors do not strand sibling owners', () => {
+test('scope: cleanup errors do not strand sibling owners', () => {
   const root = new LifetimeScope();
   const sibling = root.child();
   const failing = root.child();
@@ -36,20 +31,20 @@ Deno.test('scope: cleanup errors do not strand sibling owners', () => {
   sibling.add(() => {
     cleaned = true;
   });
-  assertThrows(() => root.dispose(), Error, 'first failure');
-  assert(cleaned);
-  assert(root.disposed);
+  assertThrowsIncludes(() => root.dispose(), Error, 'first failure');
+  expect(cleaned).toBeTruthy();
+  expect(root.disposed).toBeTruthy();
   root.dispose();
 });
 
-Deno.test('scope: disconnect preserves owned range and replacement removes it', () => {
+test('scope: disconnect preserves owned range and replacement removes it', () => {
   let preserved = 0;
   const root = new LifetimeScope();
   const part = root.child();
   part.addRangeCleanup(() => preserved++);
   root.dispose();
   part.addRangeCleanup(() => preserved++);
-  assertEquals(preserved, 0);
+  expect(preserved).toEqual(0);
 
   let removed = 0;
   const next = new LifetimeScope();
@@ -57,29 +52,29 @@ Deno.test('scope: disconnect preserves owned range and replacement removes it', 
   region.addRangeCleanup(() => removed++);
   region.dispose(true);
   region.addRangeCleanup(() => removed++);
-  assertEquals(removed, 2);
+  expect(removed).toEqual(2);
   next.dispose();
 });
 
-Deno.test('scope: a reconnect gets a distinct live signal', () => {
+test('scope: a reconnect gets a distinct live signal', () => {
   const former = new LifetimeScope();
   const signal = former.signal;
   former.dispose();
   const next = new LifetimeScope();
-  assert(signal.aborted);
-  assert(!next.signal.aborted);
-  assertNotStrictEquals(next.signal, signal);
+  expect(signal.aborted).toBeTruthy();
+  expect(!next.signal.aborted).toBeTruthy();
+  expect(next.signal).not.toBe(signal);
   // The live getter is cached: every read hands back the same AbortSignal.
   const live = next.signal;
-  assertStrictEquals(next.signal, live);
+  expect(next.signal).toBe(live);
   // A disposed scope's current signal is aborted too
   // (lifetime-scope.ts:42), so "un-aborted" is what identifies the live one.
-  assert(former.signal.aborted, 'the disposed scope never hands back a live signal');
+  expect(former.signal.aborted, 'the disposed scope never hands back a live signal').toBeTruthy();
   next.dispose();
-  assert(live.aborted);
+  expect(live.aborted).toBeTruthy();
 });
 
-Deno.test('scope: animation frame is cancelled on dispose', () => {
+test('scope: animation frame is cancelled on dispose', () => {
   const originalRequest = globalThis.requestAnimationFrame;
   const originalCancel = globalThis.cancelAnimationFrame;
   const cancelled: number[] = [];
@@ -89,12 +84,9 @@ Deno.test('scope: animation frame is cancelled on dispose', () => {
   };
   try {
     const scope = new LifetimeScope();
-    assertEquals(
-      scope.requestAnimationFrame(() => {}),
-      17,
-    );
+    expect(scope.requestAnimationFrame(() => {})).toEqual(17);
     scope.dispose();
-    assertEquals(cancelled, [17]);
+    expect(cancelled).toEqual([17]);
   } finally {
     globalThis.requestAnimationFrame = originalRequest;
     globalThis.cancelAnimationFrame = originalCancel;

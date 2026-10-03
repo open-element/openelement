@@ -1,8 +1,8 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { createRequestContext } from '@openelement/router';
 import { createOpenElementNitroHandler } from '../src/nitro-mount.ts';
 
-Deno.test('nitro mount: passes the event req through to the handler and returns its Response', async () => {
+test('nitro mount: passes the event req through to the handler and returns its Response', async () => {
   let seen: Request | undefined;
   const handler = createOpenElementNitroHandler({
     handler: async (request, context) => {
@@ -37,10 +37,10 @@ Deno.test('nitro mount: passes the event req through to the handler and returns 
   });
   const response = await handler({ req });
 
-  assertEquals(seen, req);
-  assertEquals(response.status, 201);
-  assertEquals(response.headers.get('content-type'), 'application/json');
-  assertEquals(await response.json(), {
+  expect(seen).toEqual(req);
+  expect(response.status).toEqual(201);
+  expect(response.headers.get('content-type')).toEqual('application/json');
+  expect(await response.json()).toEqual({
     url: 'https://example.test/api/hello?x=1',
     method: 'POST',
     contentType: 'text/plain',
@@ -50,7 +50,7 @@ Deno.test('nitro mount: passes the event req through to the handler and returns 
   });
 });
 
-Deno.test('nitro mount: event env/platform override the mount options', async () => {
+test('nitro mount: event env/platform override the mount options', async () => {
   const handler = createOpenElementNitroHandler({
     handler: (_request, context) =>
       new Response(JSON.stringify({ env: context?.env, platform: context?.platform })),
@@ -64,10 +64,10 @@ Deno.test('nitro mount: event env/platform override the mount options', async ()
     platform: 'event-platform',
   });
 
-  assertEquals(await response.json(), { env: { name: 'event-env' }, platform: 'event-platform' });
+  expect(await response.json()).toEqual({ env: { name: 'event-env' }, platform: 'event-platform' });
 });
 
-Deno.test('nitro mount: exposes h3 v2 context.params through runtime and request contexts', async () => {
+test('nitro mount: exposes h3 v2 context.params through runtime and request contexts', async () => {
   const contexts: Array<{
     path: string;
     method: string;
@@ -95,9 +95,9 @@ Deno.test('nitro mount: exposes h3 v2 context.params through runtime and request
     context: { params: { slug: 'notes' } },
   });
 
-  assertEquals(await response.text(), 'notes');
+  expect(await response.text()).toEqual('notes');
 
-  assertEquals(contexts, [
+  expect(contexts).toEqual([
     {
       path: '/reader/notes',
       method: 'PUT',
@@ -108,7 +108,7 @@ Deno.test('nitro mount: exposes h3 v2 context.params through runtime and request
   ]);
 });
 
-Deno.test('nitro mount: extracts the Cloudflare Workers env from req.runtime.cloudflare.env', async () => {
+test('nitro mount: extracts the Cloudflare Workers env from req.runtime.cloudflare.env', async () => {
   // Nitro v3 (h3 v2) delivers worker bindings on req.runtime.cloudflare.env;
   // the h3 event has no env field, so the mount must read the runtime channel
   // (spike evidence, #981).
@@ -124,10 +124,10 @@ Deno.test('nitro mount: extracts the Cloudflare Workers env from req.runtime.clo
 
   const response = await handler({ req: req as Request });
 
-  assertEquals(await response.json(), { env: { OPEN_ELEMENT_DISABLE_CSRF: '1' } });
+  expect(await response.json()).toEqual({ env: { OPEN_ELEMENT_DISABLE_CSRF: '1' } });
 });
 
-Deno.test('nitro mount: runtime cloudflare env wins over event.env and mount options', async () => {
+test('nitro mount: runtime cloudflare env wins over event.env and mount options', async () => {
   const handler = createOpenElementNitroHandler({
     handler: (_request, context) => new Response(JSON.stringify({ env: context?.env })),
     env: { name: 'option-env' },
@@ -143,7 +143,7 @@ Deno.test('nitro mount: runtime cloudflare env wins over event.env and mount opt
     env: { name: 'event-env' },
   });
 
-  assertEquals(await response.json(), { env: { source: 'runtime' } });
+  expect(await response.json()).toEqual({ env: { source: 'runtime' } });
 });
 
 // Shape-parity contract (#657): nitro-mount.ts intentionally does NOT reuse
@@ -154,7 +154,7 @@ Deno.test('nitro mount: runtime cloudflare env wins over event.env and mount opt
 // bundle time. The type-only import there pins the shape; this test is the
 // behavioral backstop. If it fails, one side of the contract drifted — fix the
 // drift, do not relax this test.
-Deno.test('nitro mount: request context shape matches app/model createRequestContext contract', async () => {
+test('nitro mount: request context shape matches app/model createRequestContext contract', async () => {
   let nitroContext: ReturnType<typeof createRequestContext> | undefined;
 
   const handler = createOpenElementNitroHandler({
@@ -189,5 +189,5 @@ Deno.test('nitro mount: request context shape matches app/model createRequestCon
     platform: ctx.platform,
   });
 
-  assertEquals(pick(nitroContext!), pick(appContext));
+  expect(pick(nitroContext!)).toEqual(pick(appContext));
 });

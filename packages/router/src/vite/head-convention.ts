@@ -29,10 +29,9 @@
  * every other head fragment.
  */
 
-import { existsSync } from '../internal/host-path.ts';
-import { isAbsolute } from '../internal/host-path.ts';
-import { join } from '../internal/host-path.ts';
-import { toFileUrl } from '../internal/host-path.ts';
+import { existsSync } from 'node:fs';
+import { isAbsolute, join } from 'pathe';
+import { pathToFileURL } from 'node:url';
 import { OpenElementError } from '@openelement/element/authoring';
 import { OPEN_ELEMENT_DIR } from './internal/paths.ts';
 import { resolveHeadConventionExport, serializeHeadConvention } from './head-channel.ts';
@@ -114,7 +113,9 @@ export async function resolveHeadConvention(input: HeadConventionInput): Promise
 
   let module: { default?: unknown };
   try {
-    module = (await import(`${toFileUrl(emitted)}?t=${Date.now()}`)) as { default?: unknown };
+    module = (await import(`${pathToFileURL(emitted).href}?t=${Date.now()}`)) as {
+      default?: unknown;
+    };
   } catch (error) {
     throw new OpenElementError(
       `[openElement] ${relativePath} could not be evaluated: ${

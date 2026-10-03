@@ -16,6 +16,7 @@
 import matter from 'gray-matter';
 import { marked } from 'marked';
 import { createInstallCommand } from '@openelement/create/install-command';
+import { readFile, readdir } from 'node:fs/promises';
 
 /** Primitive frontmatter field types supported by content collections. */
 export type CollectionFieldType = 'string' | 'number' | 'boolean' | 'string[]';
@@ -199,8 +200,8 @@ export async function loadCollectionData(
   let fileNames: string[];
   try {
     fileNames = [];
-    for await (const entry of Deno.readDir(options.contentDir)) {
-      if (entry.isFile) fileNames.push(entry.name);
+    for (const entry of await readdir(options.contentDir, { withFileTypes: true })) {
+      if (entry.isFile()) fileNames.push(entry.name);
     }
   } catch {
     return [];
@@ -211,7 +212,7 @@ export async function loadCollectionData(
   for (const fileName of fileNames) {
     if (!fileName.endsWith('.md') && !fileName.endsWith('.mdx')) continue;
     const filePath = `${options.contentDir}/${fileName}`;
-    const source = await Deno.readTextFile(filePath);
+    const source = await readFile(filePath, 'utf8');
     const parsed = matter(source);
     // Resolve before rendering so both the stored `content` and the rendered
     // `html` carry the same computed text.

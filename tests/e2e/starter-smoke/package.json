@@ -1,0 +1,21 @@
+{
+  "name": "@openelement/e2e-starter-smoke",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "//": "setup.ts drives the packed-consumer flow on the Node/pnpm surface (vp pack tarballs + a scaffolded Node starter, B5/ADR-0161); the Playwright suites run on the node-installed @playwright/test CLI. The former `install` task is `browsers:install` here: a script named `install` is a pnpm lifecycle hook and would download browsers on every workspace install.",
+  "scripts": {
+    "setup": "node setup.ts",
+    "browsers:install": "playwright install chromium firefox webkit",
+    "test": "playwright test --config ./playwright.config.ts --project=chromium --project=firefox --project=webkit",
+    "test:dev": "playwright test --config ./playwright.dev.config.ts",
+    "gate": "node ../../../tools/repo/gate.ts tests/e2e/starter-smoke#setup tests/e2e/starter-smoke#test",
+    "install:chrome": "playwright install chrome",
+    "test:bfcache": "playwright test --config ./playwright.config.ts --project=chrome-bfcache"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@std/fs": "jsr:^1.0.0",
+    "@std/path": "jsr:^1.0.0"
+  }
+}

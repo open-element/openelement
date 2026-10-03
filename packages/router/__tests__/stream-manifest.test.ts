@@ -1,5 +1,8 @@
-import { assertEquals, assertRejects, assertStringIncludes, assertThrows } from '@std/assert';
-import { dirname, join } from 'jsr:@std/path@^1.0.0';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
+import { dirname, join } from '@std/path';
 import ts from 'typescript';
 import { createDeferredDsdExecutor } from '@openelement/element';
 import { compileElementProgram } from '@openelement/element/compiler';
@@ -31,55 +34,42 @@ async function fixture(
   routeSource = route,
   file = 'index.tsx',
 ): Promise<void> {
-  const root = await Deno.makeTempDir({ prefix: 'oe-stream-manifest-' });
+  const root = await mkdtemp(join(tmpdir(), 'oe-stream-manifest-'));
   try {
     const routesDir = join(root, 'routes');
-    await Deno.mkdir(routesDir);
-    await Deno.mkdir(join(root, 'components'));
-    await Deno.writeTextFile(join(root, 'components/page.tsx'), pageSource);
-    await Deno.writeTextFile(join(routesDir, file), routeSource);
+    await mkdir(routesDir);
+    await mkdir(join(root, 'components'));
+    await writeFile(join(root, 'components/page.tsx'), pageSource);
+    await writeFile(join(routesDir, file), routeSource);
     await check(routesDir);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 }
 
-Deno.test('stream manifest binds two loader fields to independent compiled Part owners and program identity', async () => {
+test('stream manifest binds two loader fields to independent compiled Part owners and program identity', async () => {
   await fixture(async (dir) => {
     const routes = await scanRoutes(dir, '', { root: dirname(dir) });
     const manifest = routes[0].streamManifest!;
-    assertEquals(manifest.program.version, 1);
-    assertEquals(manifest.program.tag, 'stream-page');
-    assertEquals(manifest.program.sha256.length, 64);
-    assertEquals(
-      manifest.fields.map((entry) => entry.field),
-      ['first', 'second'],
-    );
-    assertEquals(
-      manifest.fields.map((entry) => entry.signal),
-      ['first', 'second'],
-    );
-    assertEquals(
-      manifest.fields.map((entry) => entry.owners.map((owner) => owner.index)),
-      [[0], [1]],
-    );
-    assertEquals(
-      manifest.fields.map((entry) => entry.owners[0].location),
-      ['p0', 'p1'],
-    );
-    assertEquals(
-      manifest.fields.map((entry) => entry.owners[0].kind),
-      ['part', 'part'],
-    );
-    assertEquals(
+    expect(manifest.program.version).toEqual(1);
+    expect(manifest.program.tag).toEqual('stream-page');
+    expect(manifest.program.sha256.length).toEqual(64);
+    expect(manifest.fields.map((entry) => entry.field)).toEqual(['first', 'second']);
+    expect(manifest.fields.map((entry) => entry.signal)).toEqual(['first', 'second']);
+    expect(manifest.fields.map((entry) => entry.owners.map((owner) => owner.index))).toEqual([
+      [0],
+      [1],
+    ]);
+    expect(manifest.fields.map((entry) => entry.owners[0].location)).toEqual(['p0', 'p1']);
+    expect(manifest.fields.map((entry) => entry.owners[0].kind)).toEqual(['part', 'part']);
+    expect(
       manifest.fields.every(
         (entry) =>
           entry.owners[0].source.file.endsWith('components/page.tsx') &&
           entry.owners[0].source.start.line > 0,
       ),
-      true,
-    );
-    assertEquals((await scanRoutes(dir, '', { root: dirname(dir) }))[0].streamManifest, manifest);
+    ).toEqual(true);
+    expect((await scanRoutes(dir, '', { root: dirname(dir) }))[0].streamManifest).toEqual(manifest);
     const emittedTs = compileElementProgram(page, 'components/page.tsx').code.replaceAll(
       "'@openelement/element'",
       JSON.stringify(new URL('../../element/src/index.ts', import.meta.url).href),
@@ -102,13 +92,12 @@ Deno.test('stream manifest binds two loader fields to independent compiled Part 
       'SHA-256',
       new TextEncoder().encode(JSON.stringify(wireProgram)),
     );
-    assertEquals(
-      manifest.program.sha256,
+    expect(manifest.program.sha256).toEqual(
       [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(''),
     );
     const changedProgram = structuredClone(runtimeProgram);
-    assertEquals(changedProgram.version, manifest.program.version);
-    assertEquals(changedProgram.tag, manifest.program.tag);
+    expect(changedProgram.version).toEqual(manifest.program.version);
+    expect(changedProgram.tag).toEqual(manifest.program.tag);
     const changedRoot = changedProgram.template[0];
     if (changedRoot.k !== 'el') throw new Error('expected a root element');
     changedRoot.tag = 'section';
@@ -117,7 +106,7 @@ Deno.test('stream manifest binds two loader fields to independent compiled Part 
       __partProgram: changedProgram,
       __compiledProperties: runtimeClass.__compiledProperties,
     });
-    await assertRejects(
+    await assertRejectsIncludes(
       () =>
         createDeferredDsdExecutor({
           componentClass: ChangedPage as unknown as CustomElementConstructor,
@@ -127,63 +116,52 @@ Deno.test('stream manifest binds two loader fields to independent compiled Part 
       Error,
       'does not match compiled program',
     );
-    assertEquals(manifest.fields[0].owners[0].source.file, 'components/page.tsx');
+    expect(manifest.fields[0].owners[0].source.file).toEqual('components/page.tsx');
     const desc = buildEntryDescriptor(routes, { ssg: true });
-    assertEquals(desc.pageRoutes[0].streamManifest, manifest);
+    expect(desc.pageRoutes[0].streamManifest).toEqual(manifest);
     const code = renderEntry(desc);
-    assertStringIncludes(code, 'streamManifest:');
-    assertStringIncludes(code, 'export const __streamManifests =');
-    assertStringIncludes(code, manifest.program.sha256);
+    expect(code).toContain('streamManifest:');
+    expect(code).toContain('export const __streamManifests =');
+    expect(code).toContain(manifest.program.sha256);
     // ADR-0160 Amendment 1: the deferred-shell gate is the typed runtime
     // module — the entry imports the factory, binds it to the serialized
     // manifests + createDeferredDsdExecutor import, and keeps the call site;
     // the gate's fail-closed contract is pinned by the behavior tests in
     // server-runtime-stream-runtime.test.ts instead of emitted text.
-    assertStringIncludes(
-      code,
+    expect(code).toContain(
       "import { createDeferredPageShell as __createDeferredPageShellGate } from '@openelement/router/server-runtime'",
     );
-    assertStringIncludes(
-      code,
+    expect(code).toContain(
       'const __createDeferredPageShell = __createDeferredPageShellGate({ streamManifests: __streamManifests, createDeferredDsdExecutor });',
     );
-    assertStringIncludes(code, 'await __createDeferredPageShell(');
-    assertStringIncludes(code, '"location":"p1"');
-    assertStringIncludes(
-      renderEntry(buildEntryDescriptor(routes)),
-      'export const __streamManifests =',
-    );
+    expect(code).toContain('await __createDeferredPageShell(');
+    expect(code).toContain('"location":"p1"');
+    expect(renderEntry(buildEntryDescriptor(routes))).toContain('export const __streamManifests =');
   });
 });
 
-Deno.test('ordinary routes do not gain stream metadata', async () => {
+test('ordinary routes do not gain stream metadata', async () => {
   await fixture(
     async (dir) => {
       const routes = await scanRoutes(dir);
-      assertEquals(routes[0].streamManifest, undefined);
+      expect(routes[0].streamManifest).toEqual(undefined);
       const code = renderEntry(buildEntryDescriptor(routes, { ssg: true }));
-      assertEquals(code.includes('streamManifest:'), false);
+      expect(code.includes('streamManifest:')).toEqual(false);
     },
     page,
     route.replace("stream: { defer: ['first', 'second'] }", ''),
   );
 });
 
-Deno.test('bounded when/each Regions own their deferred field independently', async () => {
+test('bounded when/each Regions own their deferred field independently', async () => {
   const whenPage = page.replace(
     '<h1>{this.first}</h1>',
     '{this.first ? <h1>on</h1> : <h1>off</h1>}',
   );
   await fixture(async (dir) => {
     const fields = (await scanRoutes(dir))[0].streamManifest!.fields;
-    assertEquals(
-      fields.map((field) => field.owners[0].kind),
-      ['region', 'part'],
-    );
-    assertEquals(
-      fields.map((field) => field.owners[0].index),
-      [0, 1],
-    );
+    expect(fields.map((field) => field.owners[0].kind)).toEqual(['region', 'part']);
+    expect(fields.map((field) => field.owners[0].index)).toEqual([0, 1]);
   }, whenPage);
   const eachPage = page
     .replace(
@@ -196,16 +174,12 @@ Deno.test('bounded when/each Regions own their deferred field independently', as
     );
   await fixture(async (dir) => {
     const fields = (await scanRoutes(dir))[0].streamManifest!.fields;
-    assertEquals(
-      fields.map((field) => field.owners[0].kind),
-      ['region', 'part'],
-    );
+    expect(fields.map((field) => field.owners[0].kind)).toEqual(['region', 'part']);
   }, eachPage);
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(
-        error.message,
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain(
         'each p0 has an opaque host, unsafe frame tag/attribute, or item attribute',
       );
     },
@@ -213,44 +187,44 @@ Deno.test('bounded when/each Regions own their deferred field independently', as
   );
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'unsafe frame tag/attribute');
-      assertStringIncludes(error.message, 'first');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('unsafe frame tag/attribute');
+      expect(error.message).toContain('first');
     },
     whenPage.replace('<h1>on</h1>', '<template><b>on</b></template>'),
   );
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'unsafe frame tag/attribute');
-      assertStringIncludes(error.message, 'first');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('unsafe frame tag/attribute');
+      expect(error.message).toContain('first');
     },
     eachPage.replace('<li key={item.id}>', '<iframe key={item.id}>').replace('</li>', '</iframe>'),
   );
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'unsafe frame tag/attribute');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('unsafe frame tag/attribute');
     },
     whenPage.replace('<h1>on</h1>', '<a href="javascript:alert(1)">on</a>'),
   );
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'unsafe frame tag/attribute');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('unsafe frame tag/attribute');
     },
     whenPage.replace('<h1>on</h1>', '<a href="java\tscript:alert(1)">on</a>'),
   );
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'unsafe frame tag/attribute');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('unsafe frame tag/attribute');
     },
     whenPage.replace('<h1>on</h1>', '<span data-oe-frame="spoof">on</span>'),
   );
 });
 
-Deno.test('stream admission rejects unsupported authoring and sinks with route, field and source', async () => {
+test('stream admission rejects unsupported authoring and sinks with route, field and source', async () => {
   const cases: Array<[string, string, string, string, string]> = [
     [
       'attribute sink',
@@ -468,9 +442,9 @@ Deno.test('stream admission rejects unsupported authoring and sinks with route, 
   for (const [name, pageSource, routeSource, field, reason] of cases) {
     await fixture(
       async (dir) => {
-        const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-        assertStringIncludes(error.message, reason, name);
-        if (field) assertStringIncludes(error.message, `field ${field}`, name);
+        const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+        expect(error.message, name).toContain(reason);
+        if (field) expect(error.message, name).toContain(`field ${field}`);
       },
       pageSource,
       routeSource,
@@ -478,20 +452,20 @@ Deno.test('stream admission rejects unsupported authoring and sinks with route, 
   }
 });
 
-Deno.test('a static head object and an aliased definePage import keep the default projection', async () => {
+test('a static head object and an aliased definePage import keep the default projection', async () => {
   const source = route
     .replace('import { definePage }', 'import { definePage as pageDefinition }')
     .replace('definePage(Page, {', "pageDefinition(Page, {\n  head: { title: 'Known' },");
   await fixture(
     async (dir) => {
-      assertEquals((await scanRoutes(dir))[0].streamManifest?.fields.length, 2);
+      expect((await scanRoutes(dir))[0].streamManifest?.fields.length).toEqual(2);
     },
     page,
     source,
   );
 });
 
-Deno.test('stream admission requires the loader named export used by the generated entry', async () => {
+test('stream admission requires the loader named export used by the generated entry', async () => {
   for (const unexported of [
     route.replace('export const loader', 'const loader'),
     route.replace(
@@ -507,9 +481,9 @@ Deno.test('stream admission requires the loader named export used by the generat
   ]) {
     await fixture(
       async (dir) => {
-        const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-        assertStringIncludes(error.message, 'stream route /, field defer');
-        assertStringIncludes(error.message, 'loader must be a named export');
+        const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+        expect(error.message).toContain('stream route /, field defer');
+        expect(error.message).toContain('loader must be a named export');
       },
       page,
       unexported,
@@ -517,14 +491,14 @@ Deno.test('stream admission requires the loader named export used by the generat
   }
   await fixture(
     async (dir) => {
-      assertEquals((await scanRoutes(dir))[0].streamManifest?.fields.length, 2);
+      expect((await scanRoutes(dir))[0].streamManifest?.fields.length).toEqual(2);
     },
     page,
     route.replace('export const loader', 'const loader') + '\nexport { loader };',
   );
 });
 
-Deno.test('an export alias may publish the loader the generated entry reads', async () => {
+test('an export alias may publish the loader the generated entry reads', async () => {
   // The generated entry reads `module.loader`, so the EXPORT name is the
   // contract: `export { statsLoader as loader }` publishes the same
   // `module.loader` as `export const loader = …`.
@@ -549,23 +523,17 @@ ${descriptor}`;
     async (dir) => {
       const routes = await scanRoutes(dir);
       const manifest = routes[0].streamManifest!;
-      assertEquals(
-        manifest.fields.map((entry) => entry.field),
-        ['first', 'second'],
-      );
-      assertEquals(
-        manifest.fields.map((entry) => entry.owners.map((owner) => owner.index)),
-        [[0], [1]],
-      );
-      assertEquals(
-        manifest.fields.map((entry) => entry.owners[0].kind),
-        ['part', 'part'],
-      );
-      assertEquals(manifest.program.tag, 'stream-page');
-      assertEquals(manifest.program.sha256.length, 64);
+      expect(manifest.fields.map((entry) => entry.field)).toEqual(['first', 'second']);
+      expect(manifest.fields.map((entry) => entry.owners.map((owner) => owner.index))).toEqual([
+        [0],
+        [1],
+      ]);
+      expect(manifest.fields.map((entry) => entry.owners[0].kind)).toEqual(['part', 'part']);
+      expect(manifest.program.tag).toEqual('stream-page');
+      expect(manifest.program.sha256.length).toEqual(64);
       const desc = buildEntryDescriptor(routes, { ssg: true });
-      assertEquals(desc.pageRoutes[0].streamManifest, manifest);
-      assertStringIncludes(renderEntry(desc), 'export const __streamManifests =');
+      expect(desc.pageRoutes[0].streamManifest).toEqual(manifest);
+      expect(renderEntry(desc)).toContain('export const __streamManifests =');
     },
     page,
     aliasedVariable,
@@ -574,14 +542,11 @@ ${descriptor}`;
   await fixture(
     async (dir) => {
       const manifest = (await scanRoutes(dir))[0].streamManifest!;
-      assertEquals(
-        manifest.fields.map((entry) => entry.field),
-        ['first', 'second'],
-      );
-      assertEquals(
-        manifest.fields.map((entry) => entry.owners.map((owner) => owner.index)),
-        [[0], [1]],
-      );
+      expect(manifest.fields.map((entry) => entry.field)).toEqual(['first', 'second']);
+      expect(manifest.fields.map((entry) => entry.owners.map((owner) => owner.index))).toEqual([
+        [0],
+        [1],
+      ]);
     },
     page,
     aliasedFunction,
@@ -590,9 +555,9 @@ ${descriptor}`;
   // the aliased loader never produces still fails the build.
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'field second');
-      assertStringIncludes(error.message, 'missing from literal loader object');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('field second');
+      expect(error.message).toContain('missing from literal loader object');
     },
     page,
     aliasedVariable.replace("second: Promise.resolve('b')", "other: Promise.resolve('b')"),
@@ -600,9 +565,9 @@ ${descriptor}`;
   // The alias is admitted only when it names a local binding.
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'stream route /, field defer');
-      assertStringIncludes(error.message, 'requires a route loader');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('stream route /, field defer');
+      expect(error.message).toContain('requires a route loader');
     },
     page,
     `${routePreamble}export { statsLoader as loader };
@@ -612,8 +577,8 @@ ${descriptor}`,
   // undefined, so admission stays closed.
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'loader must be a named export');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('loader must be a named export');
     },
     page,
     `${routePreamble}const loader = () => (${body});
@@ -624,8 +589,8 @@ ${descriptor}`,
   // rejected against the aliased loader body, not silently skipped.
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'loader object spread');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('loader object spread');
     },
     page,
     aliasedVariable.replace(
@@ -635,7 +600,7 @@ ${descriptor}`,
   );
 });
 
-Deno.test('a duplicate `as loader` export is rejected by the scan itself', async () => {
+test('a duplicate `as loader` export is rejected by the scan itself', async () => {
   // `export { a as loader, b as loader }` is a module SyntaxError at load
   // time; the scan still names the problem so the build fails with the
   // framework's own diagnostic instead of the parser's.
@@ -654,16 +619,16 @@ export { a as loader, b as loader };
 ${descriptor}`;
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'exports `loader` more than once');
-      assertStringIncludes(error.message, 'at most once');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('exports `loader` more than once');
+      expect(error.message).toContain('at most once');
     },
     page,
     duplicateAliases,
   );
 });
 
-Deno.test('stream page program must belong to the one class selected by its import', async () => {
+test('stream page program must belong to the one class selected by its import', async () => {
   const secondClass = `
 @element('other-page')
 export class OtherPage extends OpenElement {
@@ -673,22 +638,22 @@ export class OtherPage extends OpenElement {
 `;
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'stream route /, field first');
-      assertStringIncludes(error.message, 'declares 2 classes');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('stream route /, field first');
+      expect(error.message).toContain('declares 2 classes');
     },
     page.replace("@element('stream-page'", secondClass + "\n@element('stream-page'"),
   );
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'imported page class does not own');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('imported page class does not own');
     },
     page.replace('export default class StreamPage', 'export class StreamPage'),
   );
   await fixture(
     async (dir) => {
-      assertEquals((await scanRoutes(dir))[0].streamManifest?.program.tag, 'stream-page');
+      expect((await scanRoutes(dir))[0].streamManifest?.program.tag).toEqual('stream-page');
     },
     page.replace('export default class StreamPage', 'export class StreamPage'),
     route.replace(
@@ -698,7 +663,7 @@ export class OtherPage extends OpenElement {
   );
 });
 
-Deno.test('generated entry rejects opaque stream descriptors before serving GET', async () => {
+test('generated entry rejects opaque stream descriptors before serving GET', async () => {
   const indirectRoutes = [
     route.replace(
       "export default definePage(Page, {\n  renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },\n});",
@@ -718,12 +683,9 @@ Deno.test('generated entry rejects opaque stream descriptors before serving GET'
     await fixture(
       async (dir) => {
         const routes = await scanRoutes(dir);
-        assertEquals(routes[0].streamManifest, undefined);
+        expect(routes[0].streamManifest).toEqual(undefined);
         const code = renderEntry(buildEntryDescriptor(routes));
-        assertStringIncludes(
-          code,
-          '__assertStreamRoute($Route_Index, "/", "index.tsx", undefined)',
-        );
+        expect(code).toContain('__assertStreamRoute($Route_Index, "/", "index.tsx", undefined)');
         // #1470 block e (ADR-0160 rule a): the guard is the shipped typed
         // module — the entry binds it via import, and this harness executes
         // the module directly (the old emitted-helper extraction cannot carry
@@ -739,12 +701,12 @@ Deno.test('generated entry rejects opaque stream descriptors before serving GET'
             __partProgram: { version: 1, tag: 'stream-page' },
           },
         };
-        const error = assertThrows(
+        const error = assertThrowsIncludes(
           () => mod.__assertStreamRoute(pageModule, '/', 'index.tsx', undefined),
           Error,
           'no matching compiled route manifest/program',
         );
-        assertStringIncludes(error.message, 'field first at index.tsx');
+        expect(error.message).toContain('field first at index.tsx');
       },
       page,
       source,
@@ -767,7 +729,7 @@ Deno.test('generated entry rejects opaque stream descriptors before serving GET'
       },
     };
     mod.__assertStreamRoute(pageModule, '/', 'index.tsx', routes[0].streamManifest);
-    assertThrows(
+    assertThrowsIncludes(
       () =>
         mod.__assertStreamRoute(
           {
@@ -786,7 +748,7 @@ Deno.test('generated entry rejects opaque stream descriptors before serving GET'
   });
 });
 
-Deno.test('streaming requires the project-wide app shell to be off, and the gate says so', async () => {
+test('streaming requires the project-wide app shell to be off, and the gate says so', async () => {
   const shell = { tagName: 'open-layout', import: '@acme/components/open-layout', props: {} };
   const cases: Array<[string, Parameters<typeof buildEntryDescriptor>[1], string]> = [
     ['default appShell', { ssg: true, appShell: shell }, 'whole project'],
@@ -800,15 +762,15 @@ Deno.test('streaming requires the project-wide app shell to be off, and the gate
   for (const [name, options, expected] of cases) {
     await fixture(async (dir) => {
       const routes = await scanRoutes(dir);
-      assertEquals(routes[0].streamManifest !== undefined, true, name);
-      const error = assertThrows(() => buildEntryDescriptor(routes, options)) as Error;
+      expect(routes[0].streamManifest !== undefined, name).toEqual(true);
+      const error = assertThrowsIncludes(() => buildEntryDescriptor(routes, options)) as Error;
       // The gate is project-level, so the guidance must name the project-wide
       // action instead of a per-route opt-out the build cannot see.
-      assertStringIncludes(error.message, expected, name);
-      assertStringIncludes(error.message, 'appShell: false', name);
-      assertStringIncludes(error.message, 'layouts', name);
-      assertStringIncludes(error.message, 'cannot satisfy this gate', name);
-      assertStringIncludes(error.message, 'route: { layout: false }', name);
+      expect(error.message, name).toContain(expected);
+      expect(error.message, name).toContain('appShell: false');
+      expect(error.message, name).toContain('layouts');
+      expect(error.message, name).toContain('cannot satisfy this gate');
+      expect(error.message, name).toContain('route: { layout: false }');
     });
   }
   // The same configuration without a stream route builds normally: the gate is
@@ -817,8 +779,8 @@ Deno.test('streaming requires the project-wide app shell to be off, and the gate
     async (dir) => {
       const routes = await scanRoutes(dir);
       const desc = buildEntryDescriptor(routes, { ssg: true, appShell: shell });
-      assertEquals(desc.pageRoutes[0].streamManifest, undefined);
-      assertEquals(desc.appShell.default === false, false);
+      expect(desc.pageRoutes[0].streamManifest).toEqual(undefined);
+      expect(desc.appShell.default === false).toEqual(false);
     },
     page,
     route.replace("stream: { defer: ['first', 'second'] }", ''),
@@ -828,16 +790,16 @@ Deno.test('streaming requires the project-wide app shell to be off, and the gate
   await fixture(async (dir) => {
     const routes = await scanRoutes(dir);
     const desc = buildEntryDescriptor(routes, { ssg: true, appShell: false, layouts: {} });
-    assertEquals(desc.pageRoutes[0].streamManifest?.fields.length, 2);
-    assertEquals(desc.appShell.default, false);
+    expect(desc.pageRoutes[0].streamManifest?.fields.length).toEqual(2);
+    expect(desc.appShell.default).toEqual(false);
   });
 });
 
-Deno.test('stream route params and opaque wrappers fail closed', async () => {
+test('stream route params and opaque wrappers fail closed', async () => {
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'collides with an injected route param property');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('collides with an injected route param property');
     },
     page,
     route,
@@ -845,7 +807,7 @@ Deno.test('stream route params and opaque wrappers fail closed', async () => {
   );
   await fixture(async (dir) => {
     const routes = await scanRoutes(dir);
-    const error = assertThrows(() =>
+    const error = assertThrowsIncludes(() =>
       buildEntryDescriptor([
         ...routes,
         {
@@ -857,7 +819,7 @@ Deno.test('stream route params and opaque wrappers fail closed', async () => {
         },
       ]),
     ) as Error;
-    assertStringIncludes(error.message, 'opaque renderer wrapper');
+    expect(error.message).toContain('opaque renderer wrapper');
   });
 });
 
@@ -894,13 +856,13 @@ export default definePage(Page, {
   return { pageSource, routeSource };
 }
 
-Deno.test('stream admission enforces the build-time field/owner budget aligned with the runtime seed contract', async () => {
+test('stream admission enforces the build-time field/owner budget aligned with the runtime seed contract', async () => {
   // Negative: 33 fields are rejected at build time.
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'bounded deferred budget');
-      assertStringIncludes(error.message, '33 fields (max 32), 33 Part owners');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('bounded deferred budget');
+      expect(error.message).toContain('33 fields (max 32), 33 Part owners');
     },
     budgetFixture(33, 1).pageSource,
     budgetFixture(33, 1).routeSource,
@@ -908,9 +870,9 @@ Deno.test('stream admission enforces the build-time field/owner budget aligned w
   // Negative: 65 owners on one field are rejected at build time.
   await fixture(
     async (dir) => {
-      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
-      assertStringIncludes(error.message, 'bounded deferred budget');
-      assertStringIncludes(error.message, '1 fields (max 32), 65 Part owners (max 64)');
+      const error = (await assertRejectsIncludes(() => scanRoutes(dir))) as Error;
+      expect(error.message).toContain('bounded deferred budget');
+      expect(error.message).toContain('1 fields (max 32), 65 Part owners (max 64)');
     },
     budgetFixture(1, 65).pageSource,
     budgetFixture(1, 65).routeSource,
@@ -919,11 +881,8 @@ Deno.test('stream admission enforces the build-time field/owner budget aligned w
   await fixture(
     async (dir) => {
       const manifest = (await scanRoutes(dir))[0].streamManifest!;
-      assertEquals(manifest.fields.length, 32);
-      assertEquals(
-        manifest.fields.reduce((count, entry) => count + entry.owners.length, 0),
-        64,
-      );
+      expect(manifest.fields.length).toEqual(32);
+      expect(manifest.fields.reduce((count, entry) => count + entry.owners.length, 0)).toEqual(64);
     },
     budgetFixture(32, 2).pageSource,
     budgetFixture(32, 2).routeSource,

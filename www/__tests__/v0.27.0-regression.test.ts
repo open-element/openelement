@@ -10,13 +10,14 @@
  *   - JSX must be available from the supported Element root
  *   - parse5 must NOT be a dependency
  *
- * Run: deno test www/__tests__/v0.27.0-regression.test.ts --allow-read --allow-run
- * Prerequisite: `deno task build`
+ * Run: pnpm --dir www run test (the vitest www project)
+ * Prerequisite: `pnpm run site:build`
  */
 
-import { assert, assertEquals, assertFalse, assertStringIncludes } from '@std/assert';
-import { existsSync } from '@std/fs';
+import { expect, test } from 'vitest';
+import { existsSync } from 'node:fs';
 import { join } from '@std/path';
+import { readFileSync } from 'node:fs';
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 const DOCS_PAGE = join(DIST, 'zh', 'guide', 'getting-started', 'index.html');
@@ -28,18 +29,18 @@ const REGISTRY_PAGE = join(DIST, 'zh', 'registry', 'index.html');
 
 function readPage(path: string): string {
   if (!existsSync(path)) throw new Error(`Page not found: ${path}`);
-  return Deno.readTextFileSync(path);
+  return readFileSync(path, 'utf8');
 }
 
 // ─── Bug 1: Sidebar not missing ─────────────────────────────────────
 
-Deno.test('v0.44 regression: compiled reading shell and page rail are present in guide pages', () => {
+test('v0.44 regression: compiled reading shell and page rail are present in guide pages', () => {
   const html = readPage(DOCS_PAGE);
-  assertStringIncludes(html, '<open-reading-shell', 'Reading shell must be present');
-  assertStringIncludes(html, '<open-page-rail', 'Page rail must be present');
+  expect(html, 'Reading shell must be present').toContain('<open-reading-shell');
+  expect(html, 'Page rail must be present').toContain('<open-page-rail');
 });
 
-Deno.test('v0.27.0 regression: open-layout has DSD template', () => {
+test('v0.27.0 regression: open-layout has DSD template', () => {
   const html = readPage(DOCS_PAGE);
   // The light-root app shell and static article chain must be expanded, while
   // admitted shadow-root islands retain native DSD. Article-embedded components
@@ -48,64 +49,65 @@ Deno.test('v0.27.0 regression: open-layout has DSD template', () => {
   // admitted islands compose server-side. The inert host must not gain a
   // server DSD template from an opaque string.
   const count = (html.match(/shadowrootmode="open"/g) || []).length;
-  assert(count >= 1, `Expected >= 1 DSD template in docs page, got ${count}`);
-  assertStringIncludes(html, '<open-layout', 'App shell host must be present');
-  assertStringIncludes(html, 'data-oe-light', 'Compiled light roots must be expanded');
-  assertStringIncludes(
-    html,
+  expect(count >= 1, `Expected >= 1 DSD template in docs page, got ${count}`).toBeTruthy();
+  expect(html, 'App shell host must be present').toContain('<open-layout');
+  expect(html, 'Compiled light roots must be expanded').toContain('data-oe-light');
+  expect(html, 'Admitted shadow islands must keep native DSD').toContain(
     '<open-theme-toggle><template shadowrootmode="open"',
-    'Admitted shadow islands must keep native DSD',
   );
   const codeBlock = html.indexOf('<open-code-block');
-  assert(codeBlock !== -1, 'open-code-block host must be present in article content');
-  assertFalse(
+  expect(codeBlock !== -1, 'open-code-block host must be present in article content').toBeTruthy();
+  expect(
     html.slice(codeBlock, codeBlock + 200).includes('<template shadowrootmode'),
     'Trusted HTML content must stay opaque to nested composition',
-  );
+  ).toBeFalsy();
 });
 
-Deno.test('v0.27.0 regression: open-search is present in output', () => {
+test('v0.27.0 regression: open-search is present in output', () => {
   for (const page of [DOCS_PAGE, HOME_PAGE, ARCHITECTURE_PAGE]) {
     const html = readPage(page);
-    assert(html.includes('<open-search'), `open-search missing in ${page}`);
+    expect(html.includes('<open-search'), `open-search missing in ${page}`).toBeTruthy();
   }
 });
 
-Deno.test('v0.27.0 regression: open-theme-toggle is present in output', () => {
+test('v0.27.0 regression: open-theme-toggle is present in output', () => {
   for (const page of [DOCS_PAGE, HOME_PAGE, ARCHITECTURE_PAGE]) {
     const html = readPage(page);
-    assert(html.includes('<open-theme-toggle'), `open-theme-toggle missing in ${page}`);
+    expect(
+      html.includes('<open-theme-toggle'),
+      `open-theme-toggle missing in ${page}`,
+    ).toBeTruthy();
   }
 });
 
 // ─── Bug 2: No [object Object] or [object Promise] ──────────────────
 
-Deno.test('v0.27.0 regression: no [object Object] in rendered HTML', () => {
+test('v0.27.0 regression: no [object Object] in rendered HTML', () => {
   for (const page of [DOCS_PAGE, HOME_PAGE, ARCHITECTURE_PAGE]) {
     const html = readPage(page);
-    assertFalse(html.includes('[object Object]'), `[object Object] found in ${page}`);
+    expect(html.includes('[object Object]'), `[object Object] found in ${page}`).toBeFalsy();
   }
 });
 
-Deno.test('v0.27.0 regression: no [object Promise] in rendered HTML', () => {
+test('v0.27.0 regression: no [object Promise] in rendered HTML', () => {
   for (const page of [DOCS_PAGE, HOME_PAGE, ARCHITECTURE_PAGE]) {
     const html = readPage(page);
-    assertFalse(html.includes('[object Promise]'), `[object Promise] found in ${page}`);
+    expect(html.includes('[object Promise]'), `[object Promise] found in ${page}`).toBeFalsy();
   }
 });
 
 // ─── Bug 3: No <dialog> in output ────────────────────────────────────
 
-Deno.test('v0.27.0 regression: no <dialog> in rendered HTML', () => {
+test('v0.27.0 regression: no <dialog> in rendered HTML', () => {
   for (const page of [DOCS_PAGE, HOME_PAGE, ARCHITECTURE_PAGE]) {
     const html = readPage(page);
-    assertFalse(html.includes('<dialog'), `<dialog> found in ${page}`);
+    expect(html.includes('<dialog'), `<dialog> found in ${page}`).toBeFalsy();
   }
 });
 
 // ─── API Surface: jsx NOT in root export ────────────────────────────
 
-Deno.test('v0.44 surface: JSX factories live only in the supported jsx-runtime subpath', () => {
+test('v0.44 surface: JSX factories live only in the supported jsx-runtime subpath', () => {
   const elementRoot = join(
     import.meta.dirname ?? '.',
     '..',
@@ -133,48 +135,54 @@ Deno.test('v0.44 surface: JSX factories live only in the supported jsx-runtime s
     'src',
     'jsx-dev-runtime.ts',
   );
-  const rootSource = Deno.readTextFileSync(elementRoot);
-  const src = Deno.readTextFileSync(runtimePath);
-  const devSource = Deno.readTextFileSync(devRuntimePath);
+  const rootSource = readFileSync(elementRoot, 'utf8');
+  const src = readFileSync(runtimePath, 'utf8');
+  const devSource = readFileSync(devRuntimePath, 'utf8');
   for (const name of ['Fragment', 'jsx', 'jsxs']) {
-    assert(src.includes(name), `${name} should be exported from jsx-runtime`);
+    expect(src.includes(name), `${name} should be exported from jsx-runtime`).toBeTruthy();
   }
-  assert(devSource.includes('jsxDEV'), 'jsxDEV should be exported from jsx-dev-runtime');
-  assertFalse(
+  expect(
+    devSource.includes('jsxDEV'),
+    'jsxDEV should be exported from jsx-dev-runtime',
+  ).toBeTruthy();
+  expect(
     rootSource.includes("from './jsx-runtime.ts'"),
     'Element root must not re-export JSX',
-  );
+  ).toBeFalsy();
 });
 
 // ─── parse5 not a dependency ─────────────────────────────────────────
 
-Deno.test('alpha.10 surface: retired package directories stay deleted', () => {
+test('alpha.10 surface: retired package directories stay deleted', () => {
   const packages = join(import.meta.dirname ?? '.', '..', '..', 'packages');
   // 1.0 baseline note: 'router' was retired at v0.27, but the directory name was
   // re-legitimized by the @openelement/router product (ADR-0152) — excluded here.
   for (const name of ['core', 'signal', 'protocol', 'content', 'ssg']) {
-    assertFalse(existsSync(join(packages, name)), `retired package directory returned: ${name}`);
+    expect(
+      existsSync(join(packages, name)),
+      `retired package directory returned: ${name}`,
+    ).toBeFalsy();
   }
 });
 
 // ─── Registry Hub iframe ─────────────────────────────────────────────
 
-Deno.test('v0.40.0 cleanup: registry output is not built', () => {
-  assertFalse(existsSync(REGISTRY_PAGE), 'registry page should not be generated in v0.40');
+test('v0.40.0 cleanup: registry output is not built', () => {
+  expect(existsSync(REGISTRY_PAGE), 'registry page should not be generated in v0.40').toBeFalsy();
   const componentPage = join(DIST, 'en', 'registry', '@openelement~ui', 'open-card', 'index.html');
-  assertFalse(
+  expect(
     existsSync(componentPage),
     'registry component page should not be generated in v0.40',
-  );
+  ).toBeFalsy();
 });
 
 // ─── Custom element count sanity ─────────────────────────────────────
 
-Deno.test('v0.27.0 regression: open-layout tags not duplicated', () => {
+test('v0.27.0 regression: open-layout tags not duplicated', () => {
   const html = readPage(DOCS_PAGE);
   // open-layout should appear exactly once as the wrapper (opening + closing)
   const opens = (html.match(/<open-layout/g) || []).length;
   const closes = (html.match(/<\/open-layout>/g) || []).length;
-  assertEquals(opens, closes, 'Mismatched open-layout tags');
-  assert(opens >= 1 && opens <= 3, `open-layout appears ${opens} times, expected 1-3`);
+  expect(opens, 'Mismatched open-layout tags').toEqual(closes);
+  expect(opens >= 1 && opens <= 3, `open-layout appears ${opens} times, expected 1-3`).toBeTruthy();
 });
