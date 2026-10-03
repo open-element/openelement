@@ -9,10 +9,10 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 
 ## 快速开始
 
-需要 **Node.js 24.2+** 与 pnpm（唯一一条 bootstrap 命令经 Deno 2.9+ 运行；Deno 消费者通过 `npm:` specifier 解析这些包——见 ADR-0161）。创建、安装、运行、构建：
+需要 **Node.js 24.2+** 与 pnpm。创建、安装、运行、构建：
 
 ```bash
-deno run -A npm:@openelement/create@alpha my-app
+npm exec @openelement/create@alpha -- my-app
 cd my-app
 pnpm install
 pnpm dev

@@ -84,7 +84,7 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
   const stdout = (await runStep('node', [createCli], { cwd: workDir, allowFailure: true })).stdout;
   const printed = stdout
     .split('\n')
-    .find((line) => line.includes('npm:@openelement/create@'))
+    .find((line) => line.includes('@openelement/create@'))
     ?.replace(/^Usage \(Alpha\): /, '')
     .trim();
   if (printed !== expected) {

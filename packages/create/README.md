@@ -16,7 +16,7 @@ pages. The generated project is a plain Node/pnpm project.
 ## Usage (1.0 Alpha)
 
 ```bash
-deno run -A npm:@openelement/create@alpha my-app
+npm exec @openelement/create@alpha -- my-app
 cd my-app
 pnpm install
 pnpm dev
@@ -29,26 +29,30 @@ when reproducibility matters (verify against the live registry with
 `npm view @openelement/create dist-tags.alpha`):
 
 ```bash
-deno run -A npm:@openelement/create@1.0.0-alpha.7 my-app
+npm exec @openelement/create@1.0.0-alpha.7 -- my-app
 ```
-
-`--minimum-dependency-age 0` is needed because Deno's default
-minimumDependencyAge (~24h) refuses packages published within the last day.
 
 The generated starter pins the exact `@openelement/*` versions it was built
 from in its `package.json` dependencies.
 
 The canonical install command is exported from `@openelement/create/install-command` (one builder, every documented copy derives from it).
 
-## The bootstrap is a Deno invocation; the generated project is Node
+## The bootstrap is a plain npm invocation; the generated project is Node
 
-The documented bootstrap runs the generator through `deno run … npm:…` — a
-Deno 2.9+ install is needed for that one command (the `@alpha` dist-tag only
-exists on npm; Deno consumers resolve it through the `npm:` specifier).
+The documented bootstrap runs the generator through `npm exec` (or the `npx`
+short form, or `pnpm dlx`) — plain Node tooling, no second runtime. Node.js
+24.2+ is the only host requirement for both the bootstrap and the generated
+project. The packed package ships two equivalent npm bins
+(`openelement-create`, `create-openelement`, both the same entry), so the pnpm
+form must name one explicitly:
+
+```bash
+npx @openelement/create@alpha my-app
+pnpm dlx --package=@openelement/create@alpha openelement-create my-app
+```
+
 The scaffolded project itself is Node-native: Node.js 24.2+ and
-pnpm run its scripts, and `npx`/`pnpm dlx` entry points for the generator
-remain a deferred roadmap item (portable-host tooling,
-[#1387](https://github.com/open-element/openelement/issues/1387)).
+pnpm run its scripts.
 
 ## Stable 0.43 (maintenance line)
 
@@ -57,13 +61,13 @@ A versionless install resolves the npm `latest` dist-tag to it; pin the line
 explicitly instead:
 
 ```bash
-deno run -A npm:@openelement/create@0.43 my-app
+npm exec @openelement/create@0.43 -- my-app
 ```
 
 ## Requirements
 
-- **Bootstrap:** Deno 2.9+ for the documented `deno run … npm:…` bootstrap
-  command (the verified floor this repository exercises in CI).
+- **Bootstrap:** Node.js 24.2+ with npm (or pnpm for the `pnpm dlx` variant) —
+  the verified floor this repository exercises in CI.
 - **Generated project:** Node.js 24.2+ (the floor the packed `@openelement/*`
   engines declare and CI exercises; `.node-version` pins the development
   line) and pnpm for the lifecycle scripts.

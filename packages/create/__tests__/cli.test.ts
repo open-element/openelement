@@ -108,15 +108,20 @@ test('embedded CLI version matches its package manifest', () => {
 
 test('Alpha README never emits an untagged create install command', () => {
   const readme = readFileSync(join(packageDir, 'README.md'), 'utf8');
-  const installs = [...readme.matchAll(/npm:@openelement\/create(?:@([^\s`]+))?/g)];
+  // The documented bootstrap is a plain Node runner invoking the create
+  // package (npm exec / npx / pnpm dlx — owner ruling 2026-10-03, the
+  // `deno run` bootstrap is retired with the Deno consumer surface).
+  const installs = [
+    ...readme.matchAll(/(?:npm exec|npx|pnpm dlx)[^\n`]*@openelement\/create(@([^\s`]+))?/g),
+  ];
   expect(installs.length > 0, 'README must document at least one install command').toBeTruthy();
   for (const [command, tag] of installs) {
-    // A versionless `npm:@openelement/create` resolves the stable 0.43 line.
+    // A versionless `@openelement/create` resolves the stable 0.43 line.
     expect(tag, `install command must carry an explicit tag or version: ${command}`).toBeTruthy();
   }
   expect(
-    readme.includes('npm:@openelement/create@alpha my-app'),
-    'the primary Alpha install path must use the @alpha dist-tag',
+    readme.includes('npm exec @openelement/create@alpha -- my-app'),
+    'the primary Alpha install path must use the canonical @alpha command',
   ).toBeTruthy();
   // The exact-version pin is bound to registry truth (release-state.json), not
   // to the source-tree version: before the release is published the README must
@@ -129,7 +134,7 @@ test('Alpha README never emits an untagged create install command', () => {
   ).registry;
   const isPublished = Object.values(createRegistry).includes(CREATE_VERSION);
   expect(
-    readme.includes(`npm:@openelement/create@${CREATE_VERSION}`) === isPublished,
+    readme.includes(`@openelement/create@${CREATE_VERSION}`) === isPublished,
     isPublished
       ? `README must document the exact Alpha version @${CREATE_VERSION}`
       : `README must not pin the unpublished version @${CREATE_VERSION}`,

@@ -10,9 +10,10 @@
  * command that differs from what the CLI prints fails `--check`, which
  * gate:release (the release train) runs.
  *
- * The assertion compares the command's *prefix* (the `deno run … npm:…@tag`
- * part) so a documentation example may name its own project (`my-app`) while
- * every flag and specifier stays the CLI's.
+ * The assertion compares the command's specifier-plus-tag (`…create@<tag>`)
+ * so a documentation example may name its own project (`my-app`) and choose
+ * among the verified runner spellings (npm exec / npx / pnpm dlx) while the
+ * package and dist-tag stay the CLI's.
  */
 import { fromFileUrl, join } from '@std/path';
 import { createInstallCommand } from '../../packages/create/src/install-command.ts';
@@ -25,7 +26,7 @@ const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 /**
  * Files that display the install command to a reader. Each must either use the
  * generated truth (the placeholder or the generated module) or carry a command
- * whose prefix matches the canonical one exactly.
+ * whose specifier and dist-tag match the canonical one exactly.
  *
  * CHANGELOG.md is deliberately absent: it is a dated record of what shipped,
  * so an older command in it is history, not current guidance (the same reason
@@ -45,23 +46,26 @@ const DISPLAY_FILES: readonly string[] = [
 ];
 
 /**
- * A documented install command: any `deno run … npm:@openelement/create@tag`
- * invocation. The match ends at the specifier — the project name that follows
- * is a free example, so two copies agree exactly when their flags and
- * specifier agree.
+ * A documented install command: a Node runner (npm exec / npx / pnpm dlx,
+ * including the pnpm form's explicit `--package=` + bin — the packed package
+ * ships two bins, so a bare `pnpm dlx` cannot resolve one) invoking the
+ * create package with an explicit tag. The match ends at the specifier — the
+ * project name that follows is a free example.
  */
-const DOCUMENTED_COMMAND =
-  /deno run (?:-{1,2}[a-zA-Z][a-zA-Z-]*(?: [^-\s][^\s]*)? )*npm:@openelement\/create@[^\s]+/g;
+const DOCUMENTED_COMMAND = /(?:npm exec|npx|pnpm dlx)\b[^`\n]*?@openelement\/create@[^\s`]+/g;
+
+const DOCUMENTED_SPECIFIER = /@openelement\/create@[^\s`]+/;
 
 /**
- * The comparable shape of an install command: its flags and specifier, with
- * the dist-tag normalized so a deliberately pinned version is compared on the
- * flags alone (`@<tag>`).
+ * The comparable shape of an install command: its package specifier with the
+ * dist-tag normalized, so a deliberately pinned version is compared on the
+ * package alone (`@<tag>`). Runner and flags are the docs' choice among the
+ * verified spellings; package and tag are the CLI's.
  */
 function commandShape(command: string): string {
-  const match = command.match(DOCUMENTED_COMMAND)?.[0];
+  const match = command.match(DOCUMENTED_SPECIFIER)?.[0];
   if (!match) return '';
-  return match.replace(/@[^\s]+$/, '@<tag>');
+  return match.replace(/@[^\s`]+$/, '@<tag>');
 }
 
 const canonicalCommand = createInstallCommand('my-app');

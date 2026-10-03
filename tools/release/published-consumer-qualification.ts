@@ -36,6 +36,7 @@ import { formatError } from '@openelement/element';
 import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { runWithOutput } from '../lib/process.ts';
+import { CREATE_BIN } from './npm-manifest.ts';
 
 // ---------------------------------------------------------------------------
 // Release-gate verdict contract (#1216, A10.8)
@@ -123,6 +124,15 @@ export function releaseGateExitCode(
 // ---------------------------------------------------------------------------
 
 export type QualificationMode = 'starter' | 'runtime' | 'all';
+
+/**
+ * The create npm bin the qualification executes: the packed manifest declares
+ * the bins (both spellings point at the same entry), and the sorted-first
+ * name keeps the choice deterministic.
+ */
+function createBinName(): string {
+  return Object.keys(CREATE_BIN).sort()[0];
+}
 
 export interface QualificationOptions {
   mode: QualificationMode;
@@ -214,13 +224,14 @@ async function qualificationMain(): Promise<void> {
 
   try {
     if (options.mode === 'starter' || options.mode === 'all') {
-      // The create package exposes no bin: node consumers install it and run
-      // the packed cli.js entry directly (the documented Node consumer
-      // surface, same contract the starter-smoke setup exercises).
-      const createConsumer = join(root, 'create-consumer');
-      await mkdir(createConsumer);
+      // The create package declares its npm bins in the packed manifest
+      // (npm-manifest.ts CREATE_BIN); the qualification installs the published
+      // package into the scratch root and runs the CLI through its real bin —
+      // `npm exec <bin>` resolves the local node_modules/.bin shim (which is
+      // why the install shares the exec cwd), never the entry file directly
+      // (same contract consumer-packaged-starter exercises).
       await writeFile(
-        join(createConsumer, 'package.json'),
+        join(root, 'package.json'),
         JSON.stringify({ private: true, type: 'module' }, null, 2),
       );
       await runStep(
@@ -233,20 +244,12 @@ async function qualificationMain(): Promise<void> {
           '--no-fund',
           `@openelement/create@${options.version}`,
         ],
-        createConsumer,
-      );
-      const createCli = join(
-        createConsumer,
-        'node_modules',
-        '@openelement',
-        'create',
-        'src',
-        'cli.js',
+        root,
       );
       await runStep(
         'generate exact-version starter',
-        process.execPath,
-        [createCli, 'starter'],
+        'npm',
+        ['exec', createBinName(), '--', 'starter'],
         root,
       );
       const starter = join(root, 'starter');
@@ -477,29 +480,22 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
   const tmpDir = await mkdtemp(join(tmpdir(), 'openelement-smoke-starter-'));
   console.log(`\n[Exact-version starter] ${tmpDir}`);
   try {
-    // The create package exposes no bin: install it, then run the packed
-    // cli.js entry with node (the documented Node consumer surface).
-    const createConsumer = join(tmpDir, 'create-consumer');
-    await mkdir(createConsumer);
+    // The create package ships real npm bins (npm-manifest.ts CREATE_BIN);
+    // the smoke installs it into the smoke root and runs the CLI through its
+    // bin via npm exec — the documented consumer surface — not by reaching
+    // into node_modules for the entry file. The install shares the exec cwd
+    // so npm exec resolves the local node_modules/.bin shim.
     await writeFile(
-      join(createConsumer, 'package.json'),
+      join(tmpDir, 'package.json'),
       JSON.stringify({ private: true, type: 'module' }, null, 2),
     );
     const install = await run(
       'npm',
       ['install', '--ignore-scripts', '--no-audit', '--no-fund', `@openelement/create@${version}`],
-      createConsumer,
+      tmpDir,
     );
     if (!install.success) throw new Error(`create install failed:\n${install.output}`);
-    const createCli = join(
-      createConsumer,
-      'node_modules',
-      '@openelement',
-      'create',
-      'src',
-      'cli.js',
-    );
-    const create = await run(process.execPath, [createCli, 'starter'], tmpDir);
+    const create = await run('npm', ['exec', createBinName(), '--', 'starter'], tmpDir);
     if (!create.success) throw new Error(`starter generation failed:\n${create.output}`);
     const manifest = (await readJson(`${tmpDir}/starter/package.json`)) as {
       dependencies: Record<string, string>;

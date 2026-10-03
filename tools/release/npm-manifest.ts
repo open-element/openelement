@@ -46,27 +46,22 @@ const PACKAGE_KEYWORDS: Record<string, string[]> = {
 };
 
 /**
- * Host floors (#1412). `node` is the Alpha target the repository actually
- * exercises: ADR-0154 names the Node 24 line, and CI runs the packed
+ * Host floors (#1412). `node >=24.2` is the Alpha floor every retained
+ * package declares: ADR-0154 names the Node 24 line, and CI runs the packed
  * consumers on Node 24 plus a 24/26 serve matrix. The floor is 24.2, not
  * bare 24: the Router CLI entries (`src/cli/build.ts`, `src/cli/start.ts`)
  * gate their main block on `import.meta.main`, which Node added in 24.2.0 —
  * on 24.0/24.1 the guard is `undefined`, so the CLI would exit 0 without
  * doing anything. The starter template, the root engines, and the docs state
- * the same 24.2 floor (one version contract, four surfaces). `deno` is the
- * documented, CI-verified
- * Deno floor (README; CI-pinned since the B4 .dvmrc retirement) and is
- * declared only by the two packages whose
- * supported toolchain is Deno-driven today: Router's `./vite` + `./cli/*`
- * subpaths call Deno APIs at build time (#1387 tracks the portable-host
- * migration) and Create's CLI is a `deno run` program. npm ignores unknown
- * engine keys, so the `deno` entry documents the requirement without
- * constraining npm installs.
+ * the same 24.2 floor (one version contract, four surfaces). The former
+ * `deno` engine entries retired with the Deno consumer surface (owner
+ * ruling 2026-10-03, ADR-0161 amendment): every retained package is a plain
+ * Node program, and Create's CLI is a Node bin (`#!/usr/bin/env node`).
  */
 const ENGINES: Record<string, Record<string, string>> = {
   '@openelement/element': { node: '>=24.2' },
-  '@openelement/router': { node: '>=24.2', deno: '>=2.9' },
-  '@openelement/create': { deno: '>=2.9' },
+  '@openelement/router': { node: '>=24.2' },
+  '@openelement/create': { node: '>=24.2' },
   '@openelement/ui': { node: '>=24.2' },
 };
 
@@ -141,7 +136,14 @@ export function packedMetadata(name: string): PackedMetadata {
   };
 }
 
-const CREATE_BIN = {
+/**
+ * The npm bins the packed Create artifact exposes (post-pack manifest
+ * mutation below). Both names point at the same packed `src/cli.js`, whose
+ * shebang is `#!/usr/bin/env node` — the qualification tooling and every
+ * documented install path run the CLI through these real bins, never by
+ * reaching into the installed tree for the entry file.
+ */
+export const CREATE_BIN: Record<string, string> = {
   'openelement-create': './src/cli.js',
   'create-openelement': './src/cli.js',
 };

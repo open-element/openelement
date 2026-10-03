@@ -49,6 +49,7 @@ import { join, resolve } from '@std/path';
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constants.ts';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
+import { CREATE_BIN } from './npm-manifest.ts';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
@@ -472,10 +473,20 @@ try {
   );
   if (!install.success) throw new Error(`Packed package installation failed:\n${install.output}`);
 
-  const createCli = join(tmp, 'node_modules', '@openelement', 'create', 'src', 'cli.js');
-  // The packed Create CLI is node-hosted (its source is node:*-ported) and
-  // only scaffolds files: no prompts, no native bindings.
-  const create = await run('node', [createCli, 'starter'], tmp);
+  // The packed Create CLI runs through its real npm bin: the manifest declares
+  // the bins (npm-manifest.ts CREATE_BIN), npm materializes them as
+  // node_modules/.bin shims at install time, and `npm exec <bin> -- <args>`
+  // resolves the local shim without touching the registry. The packed CLI is
+  // node-hosted (its source is node:*-ported, shebang `#!/usr/bin/env node`)
+  // and only scaffolds files: no prompts, no native bindings.
+  const createBinName = Object.keys(CREATE_BIN).sort()[0];
+  const create = await run(
+    'npm',
+    ['exec', createBinName, '--', 'starter'],
+    tmp,
+    NPM_INSTALL_TIMEOUT_MS,
+    npmEnv,
+  );
   if (!create.success) throw new Error(`Packed starter generation failed:\n${create.output}`);
 
   const starter = join(tmp, 'starter');

@@ -63,9 +63,20 @@ test('pack surface: a missing or divergent facade field fails', () => {
   }
 });
 
-test('pack surface: create declares a Deno-floor engine and a cli side effect', () => {
+test('pack surface: every retained package declares the Node 24.2 floor', () => {
+  for (const name of [
+    '@openelement/element',
+    '@openelement/router',
+    '@openelement/create',
+    '@openelement/ui',
+  ]) {
+    expect(packedMetadata(name).engines, name).toEqual({ node: '>=24.2' });
+  }
+});
+
+test('pack surface: create declares a Node-floor engine and a cli side effect', () => {
   const metadata = packedMetadata('@openelement/create');
-  expect(metadata.engines).toEqual({ deno: '>=2.9' });
+  expect(metadata.engines).toEqual({ node: '>=24.2' });
   expect(metadata.sideEffects).toEqual(['./src/cli.js']);
   expect(
     findMetadataViolations('@openelement/create', manifest('@openelement/create'), metadata),

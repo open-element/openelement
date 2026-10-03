@@ -9,12 +9,10 @@ The source tree is `1.0.0-alpha.5`, a new public baseline for Element and Router
 
 ## Quick Start
 
-Requires **Node.js 24.2+** and pnpm (the one documented bootstrap command runs
-through a Deno 2.9+ install; Deno consumers resolve the packages through
-`npm:` specifiers — ADR-0161). Create, install, run, and build:
+Requires **Node.js 24.2+** and pnpm. Create, install, run, and build:
 
 ```bash
-deno run -A npm:@openelement/create@alpha my-app
+npm exec @openelement/create@alpha -- my-app
 cd my-app
 pnpm install
 pnpm dev

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write
+#!/usr/bin/env node
 /**
  * @openelement/create - Minimal project scaffold for openElement framework.
  *
@@ -22,12 +22,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** node:fs error shape for "path does not exist" (Deno's NotFound). */
+/** node:fs error shape for "path does not exist". */
 function isNotFound(error: unknown): boolean {
   return (error as { code?: string }).code === 'ENOENT';
 }
 
-/** node:fs error shapes for "not permitted" (Deno's PermissionDenied). */
+/** node:fs error shapes for "not permitted". */
 function isPermissionDenied(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   return code === 'EACCES' || code === 'EPERM';
