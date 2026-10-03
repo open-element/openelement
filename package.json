@@ -19,6 +19,7 @@
     "verify": "node tools/repo/gate.ts check test tools/repo#gate:source saas:verify saas:workers tools/release#gate:packed",
     "release:check": "node tools/repo/gate.ts tools/repo#generate:all tools/repo#release:registry-check tools/repo#gate:release tools/release#gate:packed tools/release#publish:npm:dry-run",
     "site:build": "node tools/repo/gate.ts tools/repo#generate:all www#build www#pagefind www#emit:redirects www#emit:sitemap www#emit:rss",
+    "pages:build": "vp run site:build",
     "site:verify": "node tools/repo/gate.ts site:build www#check:links www#check:theme-tokens www#check:content tools/repo#retired-api:check",
     "generate": "node tools/repo/generate-all.ts",
     "generate:all": "node tools/repo/generate-all.ts",
