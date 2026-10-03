@@ -83,7 +83,7 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 
 ### 产物体积
 
-以下数字于 2026-10-01 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。这些数字最近一次变动是因为 alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）：每个包 island 现在按模块身份产出自己的 `island-<tag>-<hash>.js` chunk，而此前被编译的组件代码会打进引用它的那个 island chunk——因此多个 chunk 被重新切分和改名，页面载荷跟随它自己的 island 集合，不再继承被错误归并的 bundle。
+以下数字于 2026-10-03 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。alpha6 之后数字变动过两次：alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）；alpha8 的 B2 manifest 转换（pnpm workspaces，不再有 `deno.json` workspace 标记）重新切分了应用侧 island chunk——三个应用 island 现在以普通 `open-<tag>-<hash>.js` 依赖 chunk 形态产出——同时列车期间的客户端运行时工作增长了各 island 的编译产物。
 
 | 指标                 | 数值                                             |
 | -------------------- | ------------------------------------------------ |
@@ -108,29 +108,29 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `island-open-layout`           | 100,147  | 17,217  |
-| `island-open-badge`            | 88,210   | 27,363  |
-| `island-open-button`           | 16,279   | 3,122   |
-| `island-open-dragon-live-gaze` | 14,198   | 5,182   |
-| `island-open-page-rail`        | 9,721    | 2,757   |
-| `island-open-code-block`       | 8,476    | 2,819   |
-| `island-open-cinematic-scroll` | 7,817    | 3,094   |
-| `island-open-hero-polish`      | 4,478    | 1,865   |
+| `island-open-layout`           | 101,825  | 17,633  |
+| `island-open-cinematic-scroll` | 90,692   | 28,699  |
+| `open-button`                  | 16,312   | 3,122   |
+| `island-open-dragon-live-gaze` | 14,153   | 5,164   |
+| `island-open-page-rail`        | 9,676    | 2,740   |
+| `open-code-block`              | 8,463    | 2,806   |
+| `island-open-hero-polish`      | 4,428    | 1,845   |
+| `open-badge`                   | 4,002    | 1,131   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
 gzip -9 -c www/dist/client/islands/client.js | wc -c
 ```
 
-共享入口（`client.js`，约 7 KB）有意不定死：它在错误串里内嵌了 checkout 绝对路径，字节随 checkout 深度变化。同一类跨平台字节方差下，逐 chunk 的原始字节行容忍 ±1%、gzip 行容忍 ±3%；下面的路由载荷容忍 ±1%；chunk 数量保持精确。
+共享入口（`client.js`，约 7 KB）有意不定死：其中的 island import 工厂与错误串跟随被准入的 island 集合，字节随该集合变化。同一类跨平台字节方差下，逐 chunk 的原始字节行容忍 ±1%、gzip 行容忍 ±3%；下面的路由载荷容忍 ±1%；chunk 数量保持精确。
 
 页面实际下载什么，由它自己的 island manifest 决定，而不是由总量决定：
 
 | 路由                     | 客户端载荷（原始） | 不同 chunk 数 |
 | ------------------------ | ------------------ | ------------- |
-| `/guide/mdx`             | 125,219 B          | 4             |
-| `/guide/getting-started` | 125,219 B          | 4             |
-| `/`                      | 141,991 B          | 6             |
+| `/guide/mdx`             | 126,761 B          | 4             |
+| `/guide/getting-started` | 126,761 B          | 4             |
+| `/`                      | 226,358 B          | 6             |
 
 70 份页面 manifest 合计声明了 10 个 island 标签、334 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 60 页，`open-code-block` 出现在 48 页，其余标签只在少数页面上。
 
