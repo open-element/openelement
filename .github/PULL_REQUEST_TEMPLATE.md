@@ -14,11 +14,11 @@ Read [CONTRIBUTING.md](../CONTRIBUTING.md) first.
 ## Verification
 
 - [ ] Focused behavioral tests
-- [ ] `pnpm run fmt`
-- [ ] `pnpm run lint`
-- [ ] `pnpm run typecheck`
-- [ ] `pnpm run test`
-- [ ] `pnpm run build`
+- [ ] `vp run fmt`
+- [ ] `vp run lint`
+- [ ] `vp run typecheck`
+- [ ] `vp run test`
+- [ ] `vp run build`
 - [ ] Packed/browser/runtime gates applicable to this change
 
 ## Release impact

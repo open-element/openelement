@@ -25,3 +25,10 @@ runs:
       run: |
         pnpm install --frozen-lockfile
         git diff --exit-code -- pnpm-lock.yaml
+    # The vp CLI (vite-plus, pinned root devDependency) is the unified task
+    # entry: workflow steps call `vp run ...` against package.json scripts.
+    # pnpm stays the package manager (dependency resolution is untouched);
+    # only the task entry moves.
+    - name: Expose workspace binaries to later steps
+      shell: bash
+      run: echo "$(pwd)/node_modules/.bin" >> "$GITHUB_PATH" # zizmor: ignore[github-env] — the value is a static literal path to this checkout's node_modules/.bin (no untrusted interpolation); this is how later steps resolve the vp CLI (vite-plus devDependency) that the converted workflow steps invoke.
