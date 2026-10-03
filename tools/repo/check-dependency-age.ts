@@ -21,6 +21,25 @@ const FETCH_TIMEOUT_MS = 60_000;
 const FETCH_ATTEMPTS = 2;
 const CONCURRENCY = 12;
 
+/**
+ * The only registry hosts this gate may query. The lockfile's per-package
+ * `tarball:` lines are repository-controlled but still file data; the fetch
+ * below therefore fails closed on any host outside this set. A new registry
+ * (a new jsr-style mirror) is a deliberate, reviewed extension of this set.
+ */
+const REGISTRY_HOSTS = new Set(['registry.npmjs.org', 'npm.jsr.io']);
+
+/**
+ * npm's package-name grammar (validate-npm-package-name): lowercase, scoped
+ * (`@scope/name`) or bare, no leading dot/underscore. With the name provably
+ * in-grammar, encoding exactly the scope separator (`/` → `%2F`) is a
+ * complete URL path encoding — the `@` scope marker is legal in a URL path
+ * and must stay literal. This replaces an encode-then-unescape
+ * (`encodeURIComponent` + `%40` → `@`), whose post-encoding reversal is the
+ * incomplete-sanitization shape static analysis flags.
+ */
+const NPM_NAME_RE = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
+
 export interface LockPackage {
   key: string;
   name: string;
@@ -88,15 +107,26 @@ async function fetchPublishTime(pkg: LockPackage): Promise<string> {
   let reason = 'no attempt';
   for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
     try {
+      // Fail closed before any network touch: the registry origin is lockfile
+      // data, so both its parsability and its host are re-validated here
+      // rather than trusted from the parser.
+      const registry = new URL(pkg.registry);
+      if (!REGISTRY_HOSTS.has(registry.host)) {
+        return (
+          `${pkg.key}: registry host ${JSON.stringify(registry.host)} is not allowlisted ` +
+          `(expected one of ${[...REGISTRY_HOSTS].sort().join(', ')}) — failing closed; ` +
+          'extend REGISTRY_HOSTS deliberately if this registry is intended'
+        );
+      }
+      if (!NPM_NAME_RE.test(pkg.name)) {
+        return `${pkg.key}: package name ${JSON.stringify(pkg.name)} is not a legal npm name — failing closed`;
+      }
       // Full (non-abbreviated) packuments: only they carry the `time` map,
       // and for meta-packages like playwright they reach ~20MB.
-      const response = await fetch(
-        `${pkg.registry}/${encodeURIComponent(pkg.name).replaceAll('%40', '@')}`,
-        {
-          headers: { accept: 'application/json' },
-          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        },
-      );
+      const response = await fetch(`${pkg.registry}/${pkg.name.replace('/', '%2F')}`, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
       if (!response.ok)
         return `${pkg.key}: registry ${pkg.registry} returned HTTP ${response.status} — failing closed`;
       const packument = await response.json();
