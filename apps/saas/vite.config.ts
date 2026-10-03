@@ -1,7 +1,7 @@
 /**
  * OpenElement SaaS (#983): first-party core consumer product. OpenElement app
  * shell + DSD-first SSR, deployed through the Nitro cloudflare_module output
- * (see `deno task nitro:build-workers`). The notes route renders at request
+ * (see `pnpm nitro:build-workers`). The notes route renders at request
  * time (session-aware); the home page is prerendered.
  */
 import { openElement } from '@openelement/router/vite';
@@ -34,7 +34,7 @@ export default defineConfig({
         manifestBudget: { islandKB: 102, totalJsKB: 120 },
       },
       // Explicit CORS allowlist (#983): the deployed worker origin plus the
-      // local request-time server (deno task start, default port 4173).
+      // local request-time server (pnpm start, default port 4173).
       middleware: {
         corsOrigin: [
           'https://openelement-saas.freemanzheng.workers.dev',

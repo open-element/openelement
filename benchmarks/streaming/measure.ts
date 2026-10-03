@@ -1,12 +1,16 @@
 /**
- * Local alpha5 streamed-GET comparison. MANUAL benchmark — `deno task bench`
- * and CI never run it. After building the Native fixture:
- * deno run --allow-read --allow-write --allow-net --allow-env --allow-sys \
- *   --allow-run benchmarks/streaming/measure.ts --samples 10 --delay 100 \
+ * Local alpha5 streamed-GET comparison. MANUAL benchmark — `pnpm run bench`
+ * (the vitest benchmarks project covers benchmarks/micro only) and CI never
+ * run it. After building the Native fixture:
+ * node benchmarks/streaming/measure.ts --samples 10 --delay 100 \
  *   --out .artifacts/stream-alpha5-local.json
  */
+import { mkdir, stat, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { chromium } from '@playwright/test';
 import { dirname, fromFileUrl } from '@std/path';
+import { commandOutput } from '../../tools/repo/node-command.ts';
+import { serveFetch } from '../../packages/router/src/internal/node-http.ts';
 import {
   dispatchRequest,
   importRequestTimeServer,
@@ -18,8 +22,19 @@ const serverEntry = new URL('dist/server/index.js', fixture);
 const message = 'Rendered as data resolves';
 
 function option(name: string, fallback?: string): string | undefined {
-  const index = Deno.args.indexOf(name);
-  return index < 0 ? fallback : Deno.args[index + 1];
+  const argv = process.argv.slice(2);
+  const index = argv.indexOf(name);
+  return index < 0 ? fallback : argv[index + 1];
+}
+
+function envRecord(): Record<string, string> {
+  // Mirrors the start CLI's processEnvRecord: node's process.env carries
+  // `string | undefined` values; the dispatch contract wants plain strings.
+  const record: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) record[key] = value;
+  }
+  return record;
 }
 
 function median(values: number[]): number {
@@ -31,12 +46,7 @@ function median(values: number[]): number {
 }
 
 async function git(args: string[]): Promise<string> {
-  const result = await new Deno.Command('git', {
-    args,
-    cwd: fixture.pathname,
-    stdout: 'piped',
-    stderr: 'piped',
-  }).output();
+  const result = await commandOutput('git', { args, cwd: fixture.pathname });
   if (!result.success) throw new Error(`git ${args.join(' ')} failed`);
   return new TextDecoder().decode(result.stdout).trim();
 }
@@ -69,33 +79,40 @@ if (
 ) {
   throw new Error('pass --out <path>, --samples 2..100 and --delay 5..100');
 }
-await Deno.stat(serverEntry);
+await stat(fromFileUrl(serverEntry));
 
 // One serving socket owns the port for the whole measurement. The previous
 // shape bound port 0, read the port, closed the listener and hoped the
 // generated server would win the re-bind — a window in which any process on
-// the machine can take the port. Deno.serve({ port: 0 }) picks the port and
-// this same server answers every request until shutdown.
+// the machine can take the port. The node:http ↔ fetch adapter
+// (`serveFetch` in packages/router/src/internal/node-http.ts — the same
+// server the start CLI and the shared static test server run on) picks the
+// port and this same server answers every request until shutdown.
 // Requests reach the fixture's built output through the shared static and
 // request-time adapter the fixture's own e2e/server.ts wraps, so the measured
 // artifact is still dist/ + dist/server.
 const distRoot = fromFileUrl(distDir);
 const serverMod = await importRequestTimeServer(fromFileUrl(serverEntry));
-const server = Deno.serve(
-  {
-    hostname: '127.0.0.1',
-    port: 0,
-    onListen: () => {},
-  },
-  (request) =>
+const server = serveFetch({
+  hostname: '127.0.0.1',
+  port: 0,
+  handler: (request) =>
     dispatchRequest(request, {
       distDir: distRoot,
       serverMod,
-      env: { ...Deno.env.toObject(), OPEN_ELEMENT_DISABLE_CSRF: '1' },
+      env: { ...envRecord(), OPEN_ELEMENT_DISABLE_CSRF: '1' },
       onHandlerError: (error) => console.error('[streaming measure] fixture handler error:', error),
     }),
-);
-const base = `http://127.0.0.1:${server.addr.port}`;
+});
+await new Promise<void>((resolve, reject) => {
+  server.once('listening', () => resolve());
+  server.once('error', reject);
+});
+const address = server.address();
+if (address === null || typeof address === 'string') {
+  throw new Error('fixture server: loopback listener has no port');
+}
+const base = `http://127.0.0.1:${address.port}`;
 
 try {
   await ready(base);
@@ -164,9 +181,9 @@ try {
         environment: {
           revision: await git(['rev-parse', 'HEAD']),
           workspaceDirty: (await git(['status', '--porcelain'])).length > 0,
-          deno: Deno.version.deno,
-          os: Deno.build.os,
-          arch: Deno.build.arch,
+          node: process.version,
+          os: process.platform,
+          arch: process.arch,
           browser: `chromium ${browser.version()}`,
           viewport: '1280x800',
         },
@@ -186,8 +203,8 @@ try {
         observations,
         medians: { stream: summary('stream'), off: summary('off') },
       };
-      await Deno.mkdir(dirname(out), { recursive: true });
-      await Deno.writeTextFile(out, `${JSON.stringify(report, null, 2)}\n`);
+      await mkdir(dirname(out), { recursive: true });
+      await writeFile(out, `${JSON.stringify(report, null, 2)}\n`);
       console.log(`stream comparison: ${samples} samples/mode, FCP and Part-ready proxy -> ${out}`);
     } finally {
       await context.close();
@@ -196,5 +213,8 @@ try {
     await browser.close();
   }
 } finally {
-  await server.shutdown();
+  // close() stops the listener; closeAllConnections() drops the keep-alive
+  // sockets Chromium leaves open so the close callback resolves promptly.
+  server.closeAllConnections();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
 }

@@ -61,9 +61,20 @@ scaffold-app) — and deleted the transitional `setup-deno` step from
 `setup-node-workspace` (deno@2.9.0, the retired `.dvmrc` pin, is no longer
 installed anywhere in CI). The published-consumer qualification's Deno-consumer
 leg retired with the host: the npm-mode Node consumer leg (core imports plus
-the `@openelement/router/vite` entry) now carries that proof. STILL
-deno-entered, none of it CI-reachable: `apps/saas` build scripts (decoupled
-from the candidate gates) and the streaming measurement script in §5.
+the `@openelement/router/vite` entry) now carries that proof. The alpha8
+residue sweep closed the last non-CI entries too: the `apps/saas` package
+scripts (`nitro:build` / `nitro:build-workers`) run
+`node ../../tools/release/nitro-build.ts`, the provider-gated
+`apps/saas/scripts/quota-race-proof.ts` carries a `#!/usr/bin/env node`
+shebang (still deliberately excluded from the saas vitest project — the
+script races the real Supabase project and reads provider secrets), and the
+streaming measurement script moved onto the node-http shape (§5). What
+remains is dormant or textual, none of it an executed entry: the
+`benchmarks/micro` standalone `import.meta.main` blocks (`micro.ts`,
+`keyed-reorder.ts`) are still written against Deno host APIs and only run
+under a Deno host — the vitest benchmarks project never executes them — and
+a few `tools/repo` script headers (clean-proof, run-in, check-release-version,
+check-esm-boundary) still carry stale `deno run` usage prose.
 
 ## 4. Module resolution artifacts
 
@@ -74,7 +85,7 @@ universes like url-pattern-list-audit keep their own committed lockfile).
 jsr: specifiers survive as pnpm `jsr:` dependencies resolved to `@jsr/*`
 registry mirrors. `check-fixture-locks.ts` was deleted with its gate step.
 
-## 5. `Deno.serve` — no node:\* one-liner; product replaced, repo has live residuals
+## 5. `Deno.serve` — no node:\* one-liner; RESOLVED in the alpha8 residue sweep
 
 No node:\* one-liner exists for a fetch-handler server. B1a replaced the
 router product usage with `packages/router/src/internal/node-http.ts`
@@ -83,14 +94,14 @@ server (`tools/lib/static-server.ts`), the pack qualification server
 (`tools/release/consumer-packaged-element.ts`), and the parity harness;
 B4 ported the JFB harness's `run.ts` onto `node:http` (that whole in-repo JFB
 surface was removed on 2026-10-03, owner ruling — upstream lane on the fork —
-taking its unrunnable swap-repeat probe with it). Still live:
+taking its unrunnable swap-repeat probe with it). The last executable call —
+the manual `benchmarks/streaming/measure.ts` fixture server — now runs the
+same `serveFetch` adapter (node:http carrying the standard fetch(Request):
+Response dispatch), so no executable `Deno.serve` remains in the repository.
 
-- `benchmarks/streaming/measure.ts:85` — manual measurement script
-
-Comment-only mentions (no executable call): `tests/lib/qualify-harness/serve-static.ts:5`,
-`docs/adr/ADR-0154`. `www/content/docs/guide/deployment*.md` and one blog post
-teach it in prose. Expiry: a benchmark-owner pass replaces the remaining call
-with the node-http shape; docs follow the product copy.
+Comment-only mentions (no executable call), owned by the other lanes of the
+same sweep: `docs/adr/ADR-0154`; `www/content/docs/guide/deployment*.md` and
+one blog post teach it in prose.
 
 ## 6. Error taxonomy
 
