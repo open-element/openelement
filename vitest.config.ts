@@ -4,9 +4,9 @@
  * One project per existing `deno test` universe, so per-area filters
  * (`--project router`) and per-project settings stay possible after the
  * codemod (tools/repo/codemod-deno-test-to-vitest.ts) converts registration.
- * The Deno runner is untouched by this file: it stays authoritative until a
- * later B3 step flips the cutover, which is why nothing here is wired into
- * the `test` / `verify` gate scripts yet.
+ * The cutover has landed: vitest is the wired runner (root `test`, the
+ * gate:source/fast-checks layers, and the release train all drive these
+ * projects).
  *
  * Versions (2026-10-02): vitest / @vitest/browser / @vitest/browser-playwright
  * pinned to 5.0.2 — newest of the stable 5.x line older than the workspace
@@ -35,11 +35,12 @@
  *            browser, so a plain node project covers it — no
  *            browser-mode adaptation, no skips. benchmarks/streaming is a
  *            manual `deno run` measurement script, not a test universe.
- * `element-browser` is the vitest-browser-mode replacement
- * for the @web/test-runner universe in packages/element/__wtr__ (#1333
- * conformance suite): chai-based suites are collected from the same files
- * until the port lands, served against the working-tree runtime source
- * exactly as the wtr config did.
+ * `element-browser` is the vitest-browser-mode owner of the
+ * packages/element/__wtr__ conformance suite (#1333): the chai-based suites
+ * kept their files and their working-tree runtime aliases
+ * (`@openelement/element` → source, the two production ui modules →
+ * `packages/ui/src`) when the port landed; the retired web-test-runner
+ * install chain is gone from `__wtr__/package.json`.
  */
 import { fileURLToPath } from 'node:url';
 import { playwright } from '@vitest/browser-playwright';
@@ -130,9 +131,9 @@ export default defineConfig({
       {
         resolve: {
           alias: [
-            // Same working-tree contract as __wtr__/web-test-runner.config.js:
-            // the bare runtime specifier and the two production ui source
-            // modules served from packages/ui/src resolve to THIS tree.
+            // The __wtr__ conformance suite's working-tree contract: the bare
+            // runtime specifier and the two production ui source modules
+            // resolve to THIS tree, never to a published artifact.
             {
               find: '@openelement/element',
               replacement: `${rootDir}packages/element/src/index.ts`,

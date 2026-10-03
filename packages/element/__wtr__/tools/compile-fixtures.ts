@@ -55,8 +55,9 @@ const fixtures: FixtureSpec[] = [
   {
     // packages/ui production overlay components (#1339 slice): compiled through
     // the same official path; their './component-recipes.ts' /
-    // './instance-state.ts' imports are served from packages/ui/src by the
-    // ui-source plugin in web-test-runner.config.js (no copies committed).
+    // './instance-state.ts' imports resolve to packages/ui/src at vitest
+    // serve time through the element-browser project's aliases (no copies
+    // committed).
     source: join(elementPkg, '../ui/src/open-dialog.tsx'),
     id: 'open-dialog.tsx',
     out: 'open-dialog.ts',

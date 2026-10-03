@@ -3,9 +3,11 @@
  *
  * The OpenElement exit contract: a browser run that executes ZERO tests — or
  * any single failing test, broken transform, or dead browser channel — is a
- * FAILURE, never a silent pass. Under web-test-runner this was proven through
- * the negative/*.config.js fixtures and the zero-tests-guard reporter. Under
- * vitest the same contract is proven against the live runner:
+ * FAILURE, never a silent pass. Under the retired web-test-runner this was
+ * proven through dedicated negative config fixtures and a zero-tests-guard
+ * reporter (both deleted with the runner — stock WTR 1.0.0 reported success
+ * on a zero-test run). Under vitest the same contract is proven against the
+ * live runner:
  *
  *   1. failing-assertion   a scratch suite whose test fails   → exit ≠ 0
  *   2. broken-transform    a scratch suite with invalid code  → exit ≠ 0

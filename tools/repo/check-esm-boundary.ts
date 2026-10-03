@@ -17,9 +17,6 @@
  * scans for them (a scanner testing scanners). No other exemption exists.
  *
  * Exemptions (documented, narrow):
- * - `packages/element/__wtr__/*.config.js`: runs under Node via the WTR
- *   runner, covered by the local ESM package boundary (`type: module`);
- *   still ESM syntax, only the host is Node
  * - `vendor/`, `node_modules/`, build output (`dist/`, Nitro `.output`
  *   trees, `.nitro/`), and dependency lockfiles: third-party territory
  *
