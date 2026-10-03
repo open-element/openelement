@@ -4,13 +4,12 @@ Build the Native Framework fixture, then measure its generated streamed and
 non-streamed GET paths with the same simulated slow loader:
 
 ```sh
-deno task --cwd tests/fixtures/router-native-framework build
-deno run --allow-read --allow-write --allow-net --allow-env --allow-sys --allow-run \
-  benchmarks/streaming/measure.ts --samples 10 --delay 100 \
+pnpm --dir tests/fixtures/router-native-framework run build
+node benchmarks/streaming/measure.ts --samples 10 --delay 100 \
   --out .artifacts/stream-alpha5-local.json
 ```
 
-**Manual benchmark**: nothing invokes this script automatically — `deno task
+**Manual benchmark**: nothing invokes this script automatically — `pnpm run
 bench` and CI never run it. Its output is local evidence: write it to the
 gitignored `.artifacts/` tree or another explicit `--out` path, never into
 the repository.
