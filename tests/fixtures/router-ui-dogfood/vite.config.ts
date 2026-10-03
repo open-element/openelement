@@ -8,7 +8,7 @@
  * serve -> hydrate path; interactive evidence lives in e2e/*.spec.ts.
  */
 import { openElement } from '@openelement/router/vite';
-import { openPropsTokenSheet } from '@openelement/ui';
+import { openPropsTokenSheet } from '@openelement/ui/open-props-tokens';
 import { defineConfig } from 'vite';
 
 // Token sheet as document CSS so the ui recipes resolve their variables on
