@@ -168,7 +168,7 @@ test('task wiring: gate:packed covers every required packed consumer', async () 
 test('task wiring: the release workflow qualifies through the official task', async () => {
   const workflow = await readFile(join(repoRoot, '.github/workflows/autoflow-release.yml'), 'utf8');
   expect(
-    /run:\s*pnpm run release:check\b/.test(workflow),
-    'the release workflow must call `pnpm run release:check`',
+    /run:\s*vp run release:check\b/.test(workflow),
+    'the release workflow must call `vp run release:check` (the S3 unified task entry)',
   ).toBeTruthy();
 });

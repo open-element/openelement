@@ -82,7 +82,15 @@ export default defineConfig({
         // tsconfig — packages/element/tsconfig.json carries
         // experimentalDecorators for exactly this surface (Deno parsed them
         // natively pre-migration).
-        test: { name: 'element', include: ['packages/element/__tests__/**/*.test.ts'] },
+        // The #1386 emitted-module typecheck tests run a TypeScript program
+        // per test; under the coverage lane's instrumentation that exceeds
+        // vitest's 5s default, so the project carries the same per-test
+        // budget the tools/benchmarks projects already declare.
+        test: {
+          name: 'element',
+          include: ['packages/element/__tests__/**/*.test.ts'],
+          testTimeout: 20_000,
+        },
       },
       {
         test: { name: 'router', include: ['packages/router/__tests__/**/*.test.ts'] },

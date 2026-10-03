@@ -33,7 +33,8 @@ make the framework the only reason a Node shop keeps a Deno install.
   packed-starter consumer qualifications run dev, check, test, build, start,
   and the three-browser matrix through those scripts.
 - **Deno consumers are npm: consumers.** The documented create bootstrap
-  remains `deno run -A npm:@openelement/create@alpha <name>` — Deno resolves
+  remains the scaffold command shown in the README (a plain `deno run` of
+  `npm:@openelement/create@alpha <name>`) — Deno resolves
   the published packages through `npm:` specifiers from the same registry
   artifacts. No JSR identifier is published or supported.
 - **Runtime floors are stated per verified fact.** Node.js 24.2+ is the
