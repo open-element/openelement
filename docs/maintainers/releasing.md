@@ -71,8 +71,9 @@ publish; a missing environment fails the job closed instead of publishing:
 The candidate gate is split so a pull request gets fast, honest feedback
 without giving up any release-time proof.
 
-- `tools/repo#gate:source` — the PR source layer (nine steps): `generate:all`,
-  `typecheck`, the Element and Router unit suites, markdown lint, the
+- `tools/repo#gate:source` — the PR source layer (ten steps): `generate:all`,
+  `typecheck`, the dependency-age quarantine check, the Element and Router
+  unit suites, markdown lint, the
   content-dates manifest check, the public-interface snapshot, the
   request-time fixture gate, and the Element browser gate (Chromium). The
   separate packed producer owns `tools/release#gate:packed`; the independent

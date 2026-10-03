@@ -97,6 +97,7 @@ test('task contract: gate:source is the fast PR-layer step set', () => {
   ).toEqual([
     'tools/repo#generate:all',
     'tools/repo#typecheck',
+    'check:dep-age',
     'packages/element#test',
     'packages/router#test',
     'tools/repo#lint:markdown',

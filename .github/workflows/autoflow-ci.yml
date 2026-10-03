@@ -230,7 +230,7 @@ jobs:
 
   # Core source matrix for the candidate scope (Element, Router, Create, UI,
   # Site, repo/release tooling). This lane runs the PR-layer source gate
-  # (`tools/repo#gate:source`, nine steps). The separate packed-consumers lane
+  # (`tools/repo#gate:source`, ten steps). The separate packed-consumers lane
   # owns the packed gate; fresh-clone runs it once in its isolated checkout.
   # The release train's heavier steps are `tools/repo#gate:release`, which the
   # Release workflow runs. Independently governed apps/saas is outside this
@@ -419,6 +419,32 @@ jobs:
           path: .artifacts/ci
           if-no-files-found: ignore
           retention-days: 14
+
+  # TS7 shadow gate (1.0 Alpha convergence — "TypeScript 7: split decision").
+  # Resident on every PR run but NON-BLOCKING by design
+  # (tools/repo/ts7-shadow-gate.ts header): it graduates to required only
+  # after a complete matching matrix against the classic checker, and until
+  # then every PR run accumulates one more observation. Job-level
+  # continue-on-error keeps the workflow green while the job's own
+  # red/green summary carries the evidence. It is deliberately absent from
+  # the evidence bundle and from the AutoFlow CI aggregate below: it is not
+  # one of the five required producer lanes.
+  ts7-shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # #1156 R11: same exact-SHA expression as every required job.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-workspace
+      - name: TS7 shadow gate (typescript@7 CLI vs pinned TS6 baseline)
+        run: vp run --fail-if-no-match @openelement/tools-repo#gate:ts7:shadow
 
   # Candidate evidence aggregation: reads the four job artifacts, verifies one
   # commit/tree, recomputes every log hash from real bytes, and publishes the

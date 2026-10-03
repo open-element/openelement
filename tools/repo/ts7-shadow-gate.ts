@@ -193,9 +193,15 @@ const tarballs = new Map(packages.map((pkg) => [pkg.name, join(repoRoot, tarball
 const tmp = await mkdtemp(join(tmpdir(), 'openelement-ts7-shadow-'));
 try {
   await cell('pack', [], async () => {
+    // Task invocations go through the pnpm run face, the repo's node-port
+    // convention (gate.ts and candidate-steps.ts spawn `pnpm --dir <pkg>
+    // run <task>` the same way). The former `process.execPath + ['task',
+    // '--cwd', …]` pair was the Deno-era `deno task` shape left behind by
+    // the port: under node it asks node to execute a module literally named
+    // `task`, which can never run.
     const packed = await run(
-      process.execPath,
-      ['task', '--cwd', 'tools/release', 'pack:dry-run'],
+      'pnpm',
+      ['--dir', 'tools/release', 'run', 'pack:dry-run'],
       repoRoot,
       PACK_TIMEOUT_MS,
     );
