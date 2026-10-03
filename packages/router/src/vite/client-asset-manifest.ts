@@ -14,7 +14,7 @@
  * a silently dropped or mis-attributed island identity would ship pages
  * whose client scripts never load.
  *
- * Identity resolution has one source (ADR-0160 rule (d), P6): the manifest
+ * Identity resolution has one source: the manifest
  * resolves package specifiers through island-resolution.ts over the same
  * sorted alias table the build ships as `resolve.alias` — never through a
  * second, parallel resolution mechanism. A resolved path is consumed only
@@ -294,7 +294,7 @@ export function buildClientAssetManifest(options: {
    * The build's sorted alias table — the same array shipped as
    * `resolve.alias` (same source, same order). The identity resolution
    * consumes it so the manifest join and the build resolve through one
-   * mechanism (ADR-0160 rule (d), P6). Omitted only by direct callers
+   * mechanism. Omitted only by direct callers
    * without aliases; the join then stays on the import-map + fallback
    * chain.
    */
@@ -328,10 +328,10 @@ export function buildClientAssetManifest(options: {
   // through the same resolution chain the build used — the deno.json import
   // map, then the SAME sorted alias table the build shipped as
   // `resolve.alias`, then (only when both have no file target) the
-  // import-condition node_modules fallback. One source, one order (ADR-0160
-  // rule (d), P6): the answer that joins the manifest is the answer the
-  // build resolved, and the fallback is consumed only when the emitted
-  // graph confirms it (see resolveIslandModuleId).
+  // import-condition node_modules fallback. One source, one order: the
+  // answer that joins the manifest is the answer the build resolved, and
+  // the fallback is consumed only when the emitted graph confirms it (see
+  // resolveIslandModuleId).
   const identityPaths = new Map<string, string>();
   const aliases = options.aliases ?? [];
   for (const island of islands) {

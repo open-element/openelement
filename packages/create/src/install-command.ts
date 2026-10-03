@@ -33,9 +33,9 @@ export const CREATE_PROJECT_PLACEHOLDER = '<project-name>';
  *     ships two bins, so a bare `pnpm dlx <pkg>` cannot resolve one (and no
  *     package named `create-openelement` exists on the registry).
  *
- * Owner ruling 2026-10-03 (ADR-0161 amendment): the former Deno bootstrap
- * (`deno run` of the npm specifier) is retired with the Deno consumer
- * surface; the generator is invoked through plain Node tooling.
+ * Owner ruling 2026-10-03: the former Deno bootstrap (`deno run` of the npm
+ * specifier) is retired with the Deno consumer surface; the generator is
+ * invoked through plain Node tooling.
  */
 export function createInstallCommand(
   projectName: string = CREATE_PROJECT_PLACEHOLDER,

@@ -2,10 +2,10 @@
  * @openelement/router - the one package-island specifier → module-path
  * resolution.
  *
- * ADR-0160 rule (d) + P6: island identity is joined through the same
- * resolution mechanism the build used, and that mechanism has exactly one
- * source. Both consumers import this module over the same inputs (app root
- * + the same sorted alias table the build ships as `resolve.alias`):
+ * Island identity is joined through the same resolution mechanism the
+ * build used, and that mechanism has exactly one source. Both consumers
+ * import this module over the same inputs (app root + the same sorted
+ * alias table the build ships as `resolve.alias`):
  *
  *   - the client build (`cli/build-client.ts`) resolves each admitted
  *     package island's declared specifier to the real module path its chunk

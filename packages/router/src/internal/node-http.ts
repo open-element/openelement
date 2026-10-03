@@ -14,8 +14,8 @@
  * 400 and an escaping handler failure answers 500; the fetch handler itself
  * owns the user-facing error copy.
  *
- * Disconnect propagation (ADR-0158, "Flow control and cancellation"):
- * `Request.signal` and stream `cancel()` converge on one idempotent cleanup.
+ * Disconnect propagation (flow control and cancellation): `Request.signal`
+ * and stream `cancel()` converge on one idempotent cleanup.
  * This adapter owns the host side of that convergence — the client socket's
  * disconnect aborts `Request.signal` BEFORE the handler is dispatched, so
  * loader/stream work observes it through the signal (the one
@@ -98,8 +98,8 @@ export function serveFetch(options: {
   const fallbackHost = `${options.hostname}:${options.port}`;
   const server = createServer((req, res) => {
     void (async () => {
-      // ADR-0158: the disconnect detection is wired before the handler runs.
-      // The Request below carries this controller's signal, so a hanging
+      // Disconnect detection is wired BEFORE the handler runs. The Request
+      // below carries this controller's signal, so a hanging
       // handler (or one awaiting loader/stream work) observes the client
       // going away through `request.signal` instead of never.
       const abort = new AbortController();
