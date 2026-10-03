@@ -21,7 +21,7 @@ import { type Alias, build as viteBuild, type InlineConfig } from 'vite';
 import { dirname, isAbsolute, join, relative, resolve } from 'pathe';
 import { fileURLToPath } from 'node:url';
 import { extractCustomElementTags, generateClientEntry } from '../vite/internal/ssg/index.ts';
-import { findWorkspaceRoot } from '../vite/workspace-alias.ts';
+import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
 import {
   type ClientIslandDeliveryEntry,
@@ -566,7 +566,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       compiledElementPlugin({
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
-        workspaceRoot: findWorkspaceRoot(process.cwd()) ?? undefined,
+        workspaceRoot: findBuildWorkspaceRoot(process.cwd()) ?? undefined,
         // Island modules carry the island delivery policy statement; the
         // compiler admits it only through the injected descriptor.
         staticSidecars: [ISLAND_ADMISSION],

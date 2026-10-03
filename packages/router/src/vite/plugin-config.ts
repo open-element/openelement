@@ -37,7 +37,7 @@ import { generateEntry } from './plugin-scanners.ts';
 import { VIRTUAL_BUILD_TRIGGER_ID } from './plugin-virtual-modules.ts';
 import {
   detectWorkspaceAliasHijack,
-  findWorkspaceRoot,
+  findBuildWorkspaceRoot,
   generateWorkspaceAliases,
   workspaceAliasHijackError,
 } from './workspace-alias.ts';
@@ -291,7 +291,7 @@ export function createOpenPluginState(
   // all read ctx.phase1.userResolveAlias - zero redundant generation.
   let workspaceRoot: string | undefined;
   try {
-    const wsRoot = findWorkspaceRoot(process.cwd());
+    const wsRoot = findBuildWorkspaceRoot(process.cwd());
     workspaceRoot = wsRoot ?? undefined;
     if (wsRoot) {
       ctx.phase1.userResolveAlias = generateWorkspaceAliases(wsRoot);

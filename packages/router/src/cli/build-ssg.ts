@@ -33,7 +33,7 @@ import type {
   StaticComponentDecl,
 } from '../vite/internal/protocol/ssg.ts';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
-import { findWorkspaceRoot } from '../vite/workspace-alias.ts';
+import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
 import {
   buildEntryDescriptor,
   fileToTagName,
@@ -260,7 +260,7 @@ async function buildSSG(
     options.routes ??
     (await scanRoutes(routesDir, '', {
       root,
-      workspaceRoot: findWorkspaceRoot(process.cwd()) ?? undefined,
+      workspaceRoot: findBuildWorkspaceRoot(process.cwd()) ?? undefined,
     }));
   const staticComponents =
     options.staticComponents ??
@@ -429,7 +429,7 @@ async function buildSSG(
         compiledElementPlugin({
           // Linked workspace packages sit outside the project root; without the
           // workspace anchor their absolute ids would land in the source maps.
-          workspaceRoot: findWorkspaceRoot(process.cwd()) ?? undefined,
+          workspaceRoot: findBuildWorkspaceRoot(process.cwd()) ?? undefined,
           // Route/island sources carry the island delivery policy statement;
           // the compiler admits it only through the injected descriptor.
           staticSidecars: [ISLAND_ADMISSION],
