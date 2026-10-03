@@ -13,6 +13,14 @@
  * Error containment mirrors that server's: a malformed request line answers
  * 400 and an escaping handler failure answers 500; the fetch handler itself
  * owns the user-facing error copy.
+ *
+ * Disconnect propagation (ADR-0158, "Flow control and cancellation"):
+ * `Request.signal` and stream `cancel()` converge on one idempotent cleanup.
+ * This adapter owns the host side of that convergence — the client socket's
+ * disconnect aborts `Request.signal` BEFORE the handler is dispatched, so
+ * loader/stream work observes it through the signal (the one
+ * `createStreamRequestScope` fans out from) instead of only after the
+ * response body conversion.
  */
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -23,7 +31,11 @@ import type { ReadableStream as NodeWebReadableStream } from 'node:stream/web';
 export type FetchHandler = (request: Request) => Promise<Response>;
 
 /** Build a fetch Request from a node IncomingMessage. */
-function requestFromIncoming(req: IncomingMessage, fallbackHost: string): Request {
+function requestFromIncoming(
+  req: IncomingMessage,
+  fallbackHost: string,
+  signal: AbortSignal,
+): Request {
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers)) {
     if (Array.isArray(value)) {
@@ -34,7 +46,7 @@ function requestFromIncoming(req: IncomingMessage, fallbackHost: string): Reques
   }
   const host = req.headers.host ?? fallbackHost;
   const method = req.method ?? 'GET';
-  const init: RequestInit & { duplex?: 'half' } = { method, headers };
+  const init: RequestInit & { duplex?: 'half' } = { method, headers, signal };
   if (method !== 'GET' && method !== 'HEAD') {
     // Stream the request body (the Deno-host server did the same); the
     // generated request-time handlers consume it through
@@ -86,14 +98,46 @@ export function serveFetch(options: {
   const fallbackHost = `${options.hostname}:${options.port}`;
   const server = createServer((req, res) => {
     void (async () => {
+      // ADR-0158: the disconnect detection is wired before the handler runs.
+      // The Request below carries this controller's signal, so a hanging
+      // handler (or one awaiting loader/stream work) observes the client
+      // going away through `request.signal` instead of never.
+      const abort = new AbortController();
       let request: Request;
       try {
-        request = requestFromIncoming(req, fallbackHost);
+        request = requestFromIncoming(req, fallbackHost, abort.signal);
       } catch {
         res.statusCode = 400;
         res.end('Bad Request');
         return;
       }
+      const onAborted = () => abort.abort();
+      const onReqClose = () => {
+        // IncomingMessage 'close' also fires after a fully answered exchange
+        // (measured: it follows ServerResponse 'finish', with the response
+        // already flushed); only a response that never finished means the
+        // client disconnected mid-exchange.
+        if (!res.writableFinished) abort.abort();
+      };
+      const detach = () => {
+        req.off('aborted', onAborted);
+        req.off('close', onReqClose);
+        res.off('close', onResClose);
+      };
+      const onResClose = () => {
+        // 'close' is the final event of the exchange on both the answered
+        // and the disconnected path; an unflushed response here means the
+        // disconnect slipped past the request-side listeners above.
+        if (!res.writableFinished) abort.abort();
+        // The exchange is over either way — drop the listeners so a reused
+        // keep-alive socket cannot fire stale handlers on the next request.
+        detach();
+      };
+      req.on('aborted', onAborted);
+      req.on('close', onReqClose);
+      res.on('close', onResClose);
+      // A disconnect that already landed before the listeners attached.
+      if (req.destroyed && !res.writableFinished) abort.abort();
       let response: Response;
       try {
         response = await options.handler(request);
