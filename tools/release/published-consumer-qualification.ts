@@ -35,6 +35,7 @@ import { dirname, join } from 'node:path';
 import { formatError } from '@openelement/element';
 import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
+import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import { runWithOutput } from '../lib/process.ts';
 import { CREATE_BIN } from './npm-manifest.ts';
 
@@ -182,6 +183,31 @@ function tail(output: string): string {
   return output.length > 12_000 ? output.slice(-12_000) : output;
 }
 
+/**
+ * The runtime-mode node-consumer manifest. `@openelement/router/vite`
+ * top-level-imports vite (packages/router/src/vite/plugin-config.ts), and the
+ * published router declares vite only as an OPTIONAL peer — npm never
+ * auto-installs optional peers, so the verifier's dependency set must carry
+ * the canonical dev pin itself (same pin the packaged-element author proof
+ * installs through consumer-packaged-element.ts). This is a harness gap, not
+ * a product defect: the `./vite` subpath requires vite by definition.
+ */
+export function nodeConsumerManifest(version: string): {
+  dependencies: Record<string, string>;
+  devDependencies: Record<string, string>;
+  private: boolean;
+  type: 'module';
+} {
+  return {
+    dependencies: Object.fromEntries(
+      ['element', 'router'].map((pkg) => [`@openelement/${pkg}`, version]),
+    ),
+    devDependencies: { vite: VITE_DEV_PIN },
+    private: true,
+    type: 'module',
+  };
+}
+
 async function writeReport(path: string, report: QualificationReport): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, formatJson(report));
@@ -275,17 +301,7 @@ async function qualificationMain(): Promise<void> {
       await mkdir(nodeConsumer);
       await writeFile(
         join(nodeConsumer, 'package.json'),
-        JSON.stringify(
-          {
-            dependencies: Object.fromEntries(
-              ['element', 'router'].map((pkg) => [`@openelement/${pkg}`, options.version]),
-            ),
-            private: true,
-            type: 'module',
-          },
-          null,
-          2,
-        ),
+        JSON.stringify(nodeConsumerManifest(options.version), null, 2),
       );
       await writeFile(join(nodeConsumer, 'smoke.mjs'), NODE_RUNTIME_SMOKE_SOURCE);
       await writeFile(join(nodeConsumer, 'vite-entry.mjs'), VITE_SMOKE_SOURCE);

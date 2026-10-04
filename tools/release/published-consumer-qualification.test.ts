@@ -1,11 +1,13 @@
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
+import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import {
   admitsRelease,
   cdnAvailabilityDecision,
   classifyRegistryResponse,
   fail,
   NODE_RUNTIME_SMOKE_SOURCE,
+  nodeConsumerManifest,
   npmAvailabilityDecision,
   parseConsumerSmokeOptions,
   parseQualificationOptions,
@@ -46,6 +48,17 @@ test('published-consumer qualification rejects an unknown mode', () => {
     Error,
     '--mode must be starter, runtime, or all',
   );
+});
+
+test('runtime-mode node-consumer manifest pins vite explicitly (router/vite needs it; an optional peer is never auto-installed)', () => {
+  const manifest = nodeConsumerManifest('1.0.0-alpha.8');
+  expect(manifest.dependencies).toEqual({
+    '@openelement/element': '1.0.0-alpha.8',
+    '@openelement/router': '1.0.0-alpha.8',
+  });
+  // The `./vite` subpath top-level-imports vite; the published router declares
+  // it only as an optional peer, so the manifest must carry the canonical pin.
+  expect(manifest.devDependencies.vite).toEqual(VITE_DEV_PIN);
 });
 
 test('consumer-smoke options: --local smokes the workspace with no CDN or Nitro probes', () => {

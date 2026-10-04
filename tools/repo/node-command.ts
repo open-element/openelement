@@ -19,10 +19,15 @@
  *   carries the signal name; `success` stays false.
  * - A child that cannot be spawned (missing binary) REJECTS, matching
  *   Deno.Command throwing `NotFound` at the call site.
+ * - On win32 only, extension-less commands resolve through PATH x PATHEXT
+ *   (planWin32Spawn below) so `.cmd` shims like npm/pnpm execute; POSIX
+ *   behavior is untouched.
  */
 
 import { spawn, spawnSync } from 'node:child_process';
+import { statSync } from 'node:fs';
 import { constants } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
 
 export interface CommandResult {
@@ -86,6 +91,121 @@ function mergedEnv(env: CommandOptions['env']): NodeJS.ProcessEnv | undefined {
   return { ...process.env, ...env };
 }
 
+// ---------------------------------------------------------------------------
+// win32 spawn planning: npm/pnpm are .cmd shims
+// ---------------------------------------------------------------------------
+
+/** The spawn target a command resolves to (win32 only; posix always yields null). */
+export interface SpawnPlan {
+  args: string[];
+  file: string;
+  /**
+   * Pass windowsVerbatimArguments: the command line is fully pre-quoted, so
+   * node must join file+args verbatim instead of applying its MSVCRT quoting
+   * (whose `\"` escapes cmd.exe does not parse).
+   */
+  verbatim: boolean;
+}
+
+/** The env keys win32 resolution reads (injectable for tests). */
+export interface Win32SpawnEnv {
+  comspec?: string;
+  PATH?: string;
+  PATHEXT?: string;
+}
+
+const DEFAULT_PATHEXT = '.COM;.EXE;.BAT;.CMD';
+
+/**
+ * Conservative cmd.exe argument quoting: whitespace and shell metacharacters
+ * force double quotes (they are literal inside quotes), embedded quotes double.
+ */
+function quoteForCmd(arg: string): string {
+  // cmd expands %VAR% even inside double quotes, so such an argument cannot be
+  // passed faithfully through a .cmd shim — fail closed instead of corrupting it.
+  if (arg.includes('%')) {
+    throw new Error(`cannot pass an argument containing '%' through cmd.exe: ${arg}`);
+  }
+  if (arg === '') return '""';
+  const escaped = arg.replaceAll('"', '""');
+  return /[\s"&|<>^()]/.test(escaped) ? `"${escaped}"` : escaped;
+}
+
+function cmdShellPlan(resolved: string, args: readonly string[], env: Win32SpawnEnv): SpawnPlan {
+  const line = [resolved, ...args].map(quoteForCmd).join(' ');
+  // /d skips AutoRun registry scripts; /s makes cmd strip exactly the outer
+  // quote pair below — the same ['cmd.exe','/d','/s','/c','"<line>"'] shape
+  // node itself builds for shell:true.
+  return { args: ['/d', '/s', '/c', `"${line}"`], file: env.comspec ?? 'cmd.exe', verbatim: true };
+}
+
+/**
+ * Resolve an extension-less command the way cmd.exe would (PATH x PATHEXT) and
+ * return the spawn target:
+ *
+ * - `.exe`/`.com` hit → direct spawn with verbatim args, identical to the POSIX
+ *   path (no shell parsing anywhere).
+ * - `.cmd`/`.bat` (or any other PATHEXT hit) → `cmd.exe /d /s /c` wrapper. npm
+ *   and pnpm on win32 are `.cmd` shims: CreateProcess appends only `.exe`, and
+ *   node refuses to spawn `.cmd`/`.bat` without a shell (the CVE-2024-27980
+ *   EINVAL hardening), so a resolved shim must go through cmd.exe. Blanket
+ *   `shell: true` was rejected on purpose: it drags every extension-less
+ *   command's args through cmd parsing; resolution keeps the shell scoped to
+ *   the shim class that genuinely requires it.
+ * - No hit, or a command that already carries an extension or a path separator
+ *   → null: spawn exactly as before (CreateProcess keeps its own PATH + `.exe`
+ *   search). On POSIX this always returns null, so posix behavior is
+ *   unchanged.
+ */
+export function planWin32Spawn(
+  command: string,
+  args: readonly string[],
+  platform: string,
+  env: Win32SpawnEnv,
+  isFile: (path: string) => boolean,
+): SpawnPlan | null {
+  if (platform !== 'win32') return null;
+  // Path-qualified and extension-bearing commands are out of scope: they spawn
+  // unchanged today (CreateProcess handles both) and must keep doing so.
+  if (/[\\/]/.test(command) || /\.[^\\/]+$/.test(command)) return null;
+  const extensions = (env.PATHEXT ?? DEFAULT_PATHEXT).split(';');
+  for (const rawDir of (env.PATH ?? '').split(';')) {
+    // Legacy PATH entries may carry surrounding quotes.
+    const dir = rawDir.replace(/^"(.*)"$/, '$1');
+    if (dir === '') continue;
+    for (const ext of extensions) {
+      if (ext === '') continue;
+      const candidate = join(dir, command + ext);
+      if (!isFile(candidate)) continue;
+      return /\.(exe|com)$/i.test(candidate)
+        ? { args: [...args], file: candidate, verbatim: false }
+        : cmdShellPlan(candidate, args, env);
+    }
+  }
+  return null;
+}
+
+/** Production file probe for planWin32Spawn: existence + regular file. */
+function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolution against the environment the child will actually see (a passed env
+ * merges over the parent and may retarget PATH), not the parent's alone.
+ */
+function spawnPlanFor(
+  command: string,
+  args: readonly string[],
+  env: CommandOptions['env'],
+): SpawnPlan | null {
+  return planWin32Spawn(command, args, process.platform, mergedEnv(env) ?? process.env, isFile);
+}
+
 async function runCommand(command: string, options: CommandOptions): Promise<CommandResult> {
   const {
     args = [],
@@ -96,11 +216,13 @@ async function runCommand(command: string, options: CommandOptions): Promise<Com
     stdout = 'piped',
     stderr = 'piped',
   } = options;
-  const child = spawn(command, args, {
+  const plan = spawnPlanFor(command, args, env);
+  const child = spawn(plan?.file ?? command, plan?.args ?? args, {
     cwd,
     env: mergedEnv(env),
     signal,
     stdio: [NODE_STDIO[stdin], NODE_STDIO[stdout], NODE_STDIO[stderr]],
+    ...(plan?.verbatim ? { windowsVerbatimArguments: true } : {}),
   });
   const stdoutChunks: Buffer[] = [];
   const stderrChunks: Buffer[] = [];
@@ -154,11 +276,13 @@ export function commandOutputSync(command: string, options: CommandOptions = {})
     stdout = 'piped',
     stderr = 'piped',
   } = options;
-  const result = spawnSync(command, args, {
+  const plan = spawnPlanFor(command, args, env);
+  const result = spawnSync(plan?.file ?? command, plan?.args ?? args, {
     cwd,
     env: mergedEnv(env),
     signal,
     stdio: [NODE_STDIO[stdin], NODE_STDIO[stdout], NODE_STDIO[stderr]],
+    ...(plan?.verbatim ? { windowsVerbatimArguments: true } : {}),
   });
   // A spawn failure (ENOENT/EACCES) throws like Deno.Command.outputSync.
   if (result.error) throw result.error;
