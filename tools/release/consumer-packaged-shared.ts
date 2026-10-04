@@ -13,11 +13,15 @@
  * never the workspace source. The harness stages a scratch consumer OUTSIDE
  * the repository (so the workspace auto-alias in workspace-alias.ts cannot
  * substitute workspace source), installs the tarballs hermetically through an
- * explicit package.json (file: deps + pinned externals), materializes a
+ * explicit package.json (file: deps + pinned externals) plus a
+ * pnpm-workspace.yaml overriding every packed @openelement/* spec back to its
+ * own file: tarball (consumerPnpmOverridesYaml), materializes a
  * minimal notes app modeled on tests/fixtures/router-{native,lit}-framework/ using
  * only published specifiers, and then runs the verification cells:
  *
- *   install                hermetic npm install of the tarballs
+ *   install                hermetic npm install of the tarballs + the pnpm
+ *                          overrides that keep every pnpm resolution path on
+ *                          the same tarballs
  *   types                  the consumer's own `check` script (tsc) against
  *                          the packed .d.ts
  *   dev                    public dev command (the package.json `dev` script =
@@ -1228,6 +1232,34 @@ function consumerTsConfig(spec: PackedAppLegSpec): Record<string, unknown> {
 }
 
 /**
+ * The pnpm half of the hermetic seal: pnpm-workspace.yaml content overriding
+ * every packed @openelement/* name to its own file: tarball. The lifecycle
+ * cells below run `pnpm run check/dev/build/start` against the npm-installed
+ * consumer, and pnpm >= 10 verifies dependencies before running — an
+ * out-of-sync node_modules triggers a FULL re-resolution, where the packed
+ * tarballs' cross-package specs (exact registry versions: ui dependencies,
+ * router peers) query registry.npmjs.org for the candidate version. Before
+ * the publish that fails (ERR_PNPM_NO_MATCHING_VERSION); after it, it would
+ * silently mix the published copy into the packed proof — the same leak the
+ * npm install seal below forbids. Overrides accept file: specs, so every
+ * pnpm resolution path lands back on the local tarballs.
+ *
+ * The carrier must be pnpm-workspace.yaml: pnpm >= 10 no longer reads the
+ * `pnpm` field from package.json, and pnpm 12 fails verify-deps-before-run
+ * closed when an install would drop that field's settings
+ * (ERR_PNPM_VERIFY_DEPS_BEFORE_RUN). A bare overrides-only workspace file
+ * makes the scratch consumer its own workspace root, which is harmless — it
+ * lists no packages, and nothing above the temp directory is a workspace.
+ */
+export function consumerPnpmOverridesYaml(tarballs: readonly PackedAppTarball[]): string {
+  const lines = ['overrides:'];
+  for (const tarball of tarballs) {
+    lines.push(`  '${tarball.name}': 'file:${tarball.path}'`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/**
  * Run the complete packed-consumer qualification for one renderer leg:
  * resolve the tarballs, stage the scratch consumer outside the repository,
  * execute every verification cell, print the per-cell support matrix, and
@@ -1260,6 +1292,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
         ...spec.externals,
       };
       for (const tarball of tarballs) dependencies[tarball.name] = `file:${tarball.path}`;
+      writeFileSync(join(tmp, 'pnpm-workspace.yaml'), consumerPnpmOverridesYaml(tarballs));
       writeFileSync(
         join(tmp, 'package.json'),
         formatJson({
@@ -1293,7 +1326,10 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       // Hermeticity: npm lays the tarball contents into node_modules directly
       // (no repo node_modules scavenging), and the file: tarballs must be the
       // SINGLE @openelement/* copy — a nested registry copy under a dependent
-      // would silently mix published code into the packed proof.
+      // would silently mix published code into the packed proof. The pnpm
+      // lifecycle below re-resolves the tree (verify-deps-before-run); the
+      // pnpm-workspace.yaml written above pins that resolution to the same
+      // tarballs.
       for (const tarball of tarballs) {
         if (!existsSync(join(tmp, 'node_modules', ...tarball.name.split('/')))) {
           throw new Error(`npm install did not lay out ${tarball.name} into node_modules`);
