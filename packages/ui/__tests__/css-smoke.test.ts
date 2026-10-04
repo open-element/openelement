@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 
 const themeCss = await readFile(new URL('../src/theme.css', import.meta.url), 'utf8');
-const aliasCss = await readFile(new URL('../src/semantic-tokens.css', import.meta.url), 'utf8');
 const { themeTokenCss, themeTokenSheet } = await import('../src/theme-tokens.ts');
 
 // The installed Tailwind theme.css is the scale authority since the C2
@@ -18,13 +17,11 @@ const tailwindScaleCss = await readFile(
 // must land on the rule, not the prose.
 const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const themeCode = stripComments(themeCss);
-const aliasCode = stripComments(aliasCss);
 const twinCode = stripComments(themeTokenCss);
 const scaleCode = stripComments(tailwindScaleCss);
 
 const DARK_SELECTOR = ":root[data-theme='dark']";
 const themeDark = themeCode.indexOf(DARK_SELECTOR);
-const aliasDark = aliasCode.indexOf(DARK_SELECTOR);
 const twinDark = twinCode.indexOf(DARK_SELECTOR);
 
 /** Collect every `--name: value` declaration in a comment-stripped span. */
@@ -73,21 +70,77 @@ test('the @theme source and the compiled twin agree on the role contract', () =>
   }
 });
 
-test('the carrier carries the alias source verbatim', () => {
-  expect(
-    themeTokenCss.includes(aliasCss),
-    'semantic-tokens.css text must be inlined byte-identical',
-  ).toEqual(true);
-  // The sources ride in template literals; metacharacters there would corrupt
-  // the sheet (the retired generator enforced the same rule at write time).
-  expect(aliasCss).toMatch(/^[^`$\\]*$/);
-});
-
-test('token layer exposes semantic component recipes', () => {
+test('token layer exposes the shadcn role table (the C3 single sheet)', () => {
   expect(themeTokenSheet).toEqual(expect.anything());
   const css = themeTokenCss;
-  for (const token of ['--surface-glass', '--ui-control-bg', '--focus-ring', '--motion-standard']) {
-    expect(css.includes(token), `${token} must be part of the semantic contract`).toEqual(true);
+  for (const token of [
+    '--color-background',
+    '--color-primary',
+    '--color-destructive',
+    '--color-success',
+    '--color-warning',
+    '--color-info',
+    '--radius-md',
+    '--spacing',
+  ]) {
+    expect(css.includes(token), `${token} must be part of the role contract`).toEqual(true);
+  }
+});
+
+test('the C1 alias layer stays deleted — no retired name anywhere in the package', async () => {
+  // C1's DELETION CONDITION (semantic-tokens.css header) fired in C3 #1506:
+  // the file, its exports-map entry and every retired var() reference are
+  // gone. A re-introduction fails here before any consumer can regress.
+  await expect(readFile(new URL('../src/semantic-tokens.css', import.meta.url))).rejects.toThrow();
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  expect(pkg.exports['./semantic-tokens.css']).toBeUndefined();
+  const retired = [
+    '--bg-base',
+    '--bg-surface',
+    '--bg-card',
+    '--bg-elevated',
+    '--bg-muted',
+    '--bg-hover',
+    '--text-primary',
+    '--text-secondary',
+    '--text-muted',
+    '--brand',
+    '--on-brand',
+    '--focus-ring',
+    '--bg-code',
+    '--code-text',
+    '--code-border',
+    '--surface-glass',
+    '--surface-overlay',
+    '--ui-control-bg',
+    '--size-4',
+    '--radius-2',
+    '--font-size-1',
+    '--font-weight-7',
+    '--motion-fast',
+    '--violet-5',
+    '--gray-11',
+  ];
+  expect(themeTokenCss.includes('--brand:'), 'the carrier must not define alias names').toEqual(
+    false,
+  );
+  for (const file of [
+    '../src/component-recipes.ts',
+    '../src/open-badge.tsx',
+    '../src/open-button.tsx',
+    '../src/open-callout.tsx',
+    '../src/open-card.tsx',
+    '../src/open-code-block.tsx',
+    '../src/open-dialog.tsx',
+    '../src/open-dropdown.tsx',
+    '../src/open-input.tsx',
+    '../src/open-tabs.tsx',
+    '../src/open-theme-toggle.tsx',
+  ]) {
+    const source = await readFile(new URL(file, import.meta.url), 'utf8');
+    for (const name of retired) {
+      expect(source.includes(`var(${name}`), `${file} must not reference ${name}`).toEqual(false);
+    }
   }
 });
 
@@ -112,6 +165,7 @@ test('retired token exports stay gone', async () => {
   expect('openPropsRootSheet' in mod).toBeFalsy();
   expect('toRootCss' in mod).toBeFalsy();
   expect('openPropsTokenSheet' in mod).toBeFalsy();
+  expect('ALIAS_CSS' in mod).toBeFalsy();
   const index = await import('../src/index.ts');
   expect('openPropsTokenSheet' in index).toBeFalsy();
 });
@@ -138,7 +192,122 @@ test('retained interactive components are exported', async () => {
   expect(index.OpenTabs).toEqual(expect.anything());
 });
 
-/* ─── color resolution + WCAG math over the token sources ──────────────── */
+/* ─── forced-colors: every role re-seats on a system color ────────────────
+   The Windows-high-contrast contract (#1506 C3): the @media (forced-colors:
+   active) tier must re-seat EVERY role the light/dark blocks declare, in
+   both selector blocks, and no author color literal may survive there. The
+   component recipes consume only role names, so a total role re-seat is a
+   total component re-seat — asserted compositionally below (per-browser
+   visual capture lives with the e2e suites). */
+
+const FORCED_SYSTEM_COLORS = new Set([
+  'Canvas',
+  'CanvasText',
+  'ButtonFace',
+  'ButtonText',
+  'GrayText',
+  'Highlight',
+  'LinkText',
+  'Mark',
+]);
+
+const forcedSpan = (css: string): string => {
+  const marker = '@media (forced-colors: active)';
+  const at = css.indexOf(marker);
+  expect(at >= 0, 'a forced-colors tier must exist').toEqual(true);
+  const open = css.indexOf('{', at);
+  // The media body runs to the matching close of its single wrapper brace.
+  let depth = 0;
+  let end = open;
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === '{') depth++;
+    if (css[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  return css.slice(open + 1, end);
+};
+
+/** Split a forced tier into its light (:root) and dark (re-pointed) halves. */
+const forcedHalves = (css: string): { light: Map<string, string>; dark: Map<string, string> } => {
+  const span = forcedSpan(css);
+  const darkAt = span.indexOf(DARK_SELECTOR);
+  expect(darkAt > 0, 'the forced tier must carry a dark block').toEqual(true);
+  return {
+    light: declarationsOf(span, 0, darkAt),
+    dark: declarationsOf(span, darkAt),
+  };
+};
+
+test('every role has a light, dark and forced-colors seat (forced tier is total)', () => {
+  const roles = [...declarationsOf(themeCode, ...themeRoleSpan()).keys()];
+  expect(roles.length).toBeGreaterThan(20);
+  const darkRoles = declarationsOf(themeCode, themeDark);
+  const themeForced = forcedHalves(themeCode);
+  const twinForced = forcedHalves(twinCode);
+  for (const role of roles) {
+    expect(darkRoles.has(role), `dark block must re-declare ${role}`).toEqual(true);
+    expect(themeForced.light.has(role), `forced-colors must re-seat ${role} (light block)`).toEqual(
+      true,
+    );
+    expect(themeForced.dark.has(role), `forced-colors must re-seat ${role} (dark block)`).toEqual(
+      true,
+    );
+    for (const [half, value] of [
+      ['light', themeForced.light.get(role)!],
+      ['dark', themeForced.dark.get(role)!],
+    ] as const) {
+      expect(
+        FORCED_SYSTEM_COLORS.has(value),
+        `${role} forced ${half} value must be a system color, got ${value}`,
+      ).toEqual(true);
+    }
+    // The compiled twin mirrors the tier (preset-OFF consumers get the same
+    // forced-colors behavior).
+    expect(twinForced.light.get(role), `twin forced light must carry ${role}`).toEqual(
+      themeForced.light.get(role),
+    );
+    expect(twinForced.dark.get(role), `twin forced dark must carry ${role}`).toEqual(
+      themeForced.dark.get(role),
+    );
+  }
+});
+
+test('component recipes consume only declared roles', async () => {
+  const roles = new Set([
+    ...declarationsOf(themeCode, ...themeRoleSpan()).keys(),
+    ...declarationsOf(scaleCode).keys(),
+  ]);
+  const files = [
+    'component-recipes.ts',
+    'open-badge.tsx',
+    'open-button.tsx',
+    'open-callout.tsx',
+    'open-card.tsx',
+    'open-code-block.tsx',
+    'open-dialog.tsx',
+    'open-dropdown.tsx',
+    'open-input.tsx',
+    'open-tabs.tsx',
+    'open-theme-toggle.tsx',
+  ];
+  for (const file of files) {
+    const source = await readFile(new URL(`../src/${file}`, import.meta.url), 'utf8');
+    const code = stripComments(source);
+    for (const match of code.matchAll(/var\(\s*(--[a-zA-Z0-9-]+)/g)) {
+      expect(
+        roles.has(match[1]!),
+        `${file} references ${match[1]}, which no theme block declares`,
+      ).toEqual(true);
+    }
+  }
+});
+
+/* ─── color resolution + WCAG math over the role sources ───────────────── */
 
 /** oklch(L% C H) → gamma-encoded sRGB [0..1] (OKLab → LMS → linear sRGB). */
 function oklchToRgb(LPercent: number, C: number, H: number): Rgb {
@@ -193,14 +362,12 @@ const declaration = (css: string, name: string, from = 0): string | undefined =>
   new RegExp(`${name}:\\s*([^;]+);`).exec(css.slice(from))?.[1]?.trim();
 
 /**
- * Follow a var() chain to a literal. Alias lookups come first (old names and
- * their dark pairs), then role lookups over the @theme source (its dark block
- * first), then the installed Tailwind scale — the ramps' value authority
- * since the C2 handoff (the @theme source references them by name only).
+ * Follow a var() chain to a literal. Role lookups hit the dark block first,
+ * then the @theme source, then the installed Tailwind scale — the ramps'
+ * value authority since the C2 handoff (the @theme source references them
+ * by name only).
  */
 const lookupToken = (name: string, dark: boolean): string | undefined =>
-  (dark && aliasDark > 0 ? declaration(aliasCode, name, aliasDark) : undefined) ??
-  declaration(aliasCode, name, 0) ??
   (dark && themeDark > 0 ? declaration(themeCode, name, themeDark) : undefined) ??
   declaration(themeCode, name, 0) ??
   declaration(scaleCode, name, 0);
@@ -235,7 +402,7 @@ const surface = (dark: boolean): { name: string; rgb: Rgb }[] =>
 
 test('focus ring clears the WCAG 1.4.11 3:1 floor in both themes', () => {
   for (const dark of [false, true]) {
-    const ring = resolveColor('--focus-ring', dark);
+    const ring = resolveColor('--color-ring', dark);
     for (const { name, rgb } of surface(dark)) {
       const ratio = contrast(ring, rgb);
       expect(
@@ -246,31 +413,44 @@ test('focus ring clears the WCAG 1.4.11 3:1 floor in both themes', () => {
   }
 });
 
-test('state inks clear the 4.5:1 AA floor on the background and their badge wash', () => {
+test('status role inks clear the 4.5:1 AA floor on the background and their recipe wash', async () => {
+  // The 10% wash now lives where it is painted: open-badge washes the three
+  // positive/negative tones, open-callout washes destructive (its danger
+  // type). Parse the percentages from those recipes so the math can never
+  // drift from what ships.
+  const badge = stripComments(
+    await readFile(new URL('../src/open-badge.tsx', import.meta.url), 'utf8'),
+  );
+  const callout = stripComments(
+    await readFile(new URL('../src/open-callout.tsx', import.meta.url), 'utf8'),
+  );
+  const washOf = (role: string): { source: string; percent: number } => {
+    const re = new RegExp(
+      `color-mix\\(in srgb,\\s*var\\(${role}\\)\\s*([\\d.]+)%,\\s*transparent\\)`,
+    );
+    const hit = re.exec(role === '--color-destructive' ? callout : badge);
+    expect(hit, `${role} must have a recipe wash`).toBeTruthy();
+    return { source: role, percent: Number(hit![1]) };
+  };
   for (const dark of [false, true]) {
-    for (const tone of ['error', 'success', 'warning', 'info']) {
-      const ink = resolveColor(`--${tone}`, dark);
+    for (const role of [
+      '--color-destructive',
+      '--color-success',
+      '--color-warning',
+      '--color-info',
+    ]) {
+      const ink = resolveColor(role, dark);
       const bg = resolveColor('--color-background', dark);
       const onBase = contrast(ink, bg);
       expect(
         onBase >= 4.5,
-        `${dark ? 'dark' : 'light'} ${tone} on base = ${onBase.toFixed(2)}:1`,
+        `${dark ? 'dark' : 'light'} ${role} on base = ${onBase.toFixed(2)}:1`,
       ).toEqual(true);
-      // Badges paint the ink on a 10% wash of itself: --<tone>-subtle is a
-      // color-mix of the ink over transparent, so composite it over the base.
-      const subtle = resolveToken(`--${tone}-subtle`, dark);
-      const mix = /^color-mix\(in srgb, var\((--[a-z0-9-]+)\) ([\d.]+)%, transparent\)$/.exec(
-        subtle,
-      );
-      expect(
-        mix !== null,
-        `${tone}-subtle must be a color-mix wash of the ink, got ${subtle}`,
-      ).toEqual(true);
-      const washInk = resolveColor(mix![1], dark);
-      const onWash = contrast(ink, compositeWash(washInk, Number(mix![2]) / 100, bg));
+      const { percent } = washOf(role);
+      const onWash = contrast(ink, compositeWash(ink, percent / 100, bg));
       expect(
         onWash >= 4.5,
-        `${dark ? 'dark' : 'light'} ${tone} on its wash = ${onWash.toFixed(2)}:1`,
+        `${dark ? 'dark' : 'light'} ${role} on its ${percent}% wash = ${onWash.toFixed(2)}:1`,
       ).toEqual(true);
     }
   }

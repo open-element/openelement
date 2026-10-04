@@ -17,12 +17,12 @@
     "./open-tabs": "./src/open-tabs.tsx",
     "./instance-state": "./src/instance-state.ts",
     "./theme-tokens": "./src/theme-tokens.ts",
-    "./theme.css": "./src/theme.css",
-    "./semantic-tokens.css": "./src/semantic-tokens.css"
+    "./theme.css": "./src/theme.css"
   },
   "files": [
     "src/**",
     "README.md",
+    "CUSTOMIZATION.md",
     "LICENSE"
   ],
   "scripts": {

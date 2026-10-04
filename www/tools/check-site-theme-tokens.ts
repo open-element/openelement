@@ -1,8 +1,8 @@
 /**
  * site theme-token gate: theme values in the site must come from the
- * @theme-derived token table (packages/ui/src/theme.css + the alias layer in
- * packages/ui/src/semantic-tokens.css, carried by @openelement/ui/theme-tokens)
- * or the site alias layer (www/site-css.ts), never from hardcoded literals.
+ * @theme-derived token table (packages/ui/src/theme.css, carried by
+ * @openelement/ui/theme-tokens) or the site alias layer (www/site-css.ts),
+ * never from hardcoded literals.
  *
  * Rules for sources under www/app/ (routes, islands, components):
  *  1. No hex color literals. 6/8-digit forms always fail; 3/4-digit forms

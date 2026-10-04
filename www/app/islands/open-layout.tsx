@@ -40,8 +40,8 @@ export default class OpenLayout extends OpenElement {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    background: var(--bg-base);
-    color: var(--text-primary);
+    background: var(--color-background);
+    color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -54,8 +54,8 @@ export default class OpenLayout extends OpenElement {
     margin: 0 auto;
     width: 100%;
     background:
-      linear-gradient(90deg, color-mix(in srgb, var(--border) 18%, transparent) 1px, transparent 1px),
-      var(--bg-base);
+      linear-gradient(90deg, color-mix(in srgb, var(--color-border) 18%, transparent) 1px, transparent 1px),
+      var(--color-background);
     background-size: 220px 100%;
   }
 
@@ -69,21 +69,21 @@ export default class OpenLayout extends OpenElement {
   /* Skip link: visually hidden until keyboard focus (#D-8). */
   .skip-link {
     position: absolute;
-    inset-block-start: var(--size-2);
-    inset-inline-start: var(--size-4);
+    inset-block-start: calc(var(--spacing) * 2);
+    inset-inline-start: calc(var(--spacing) * 4);
     z-index: 200;
-    padding: var(--size-2) var(--size-4);
-    border: var(--border-size-1) solid var(--border);
-    border-radius: var(--radius-2);
-    background: var(--bg-elevated);
-    color: var(--text-primary);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+    border: calc(var(--spacing) * 0.25) solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-popover);
+    color: var(--color-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     text-decoration: none;
   }
   .skip-link:focus-visible {
-    outline: var(--focus-size) solid var(--focus-ring);
-    outline-offset: var(--focus-offset);
+    outline: calc(var(--spacing) * 0.5) solid var(--color-ring);
+    outline-offset: calc(var(--spacing) * 0.75);
   }
   .skip-link:not(:focus-visible),
   .visually-hidden {
@@ -102,26 +102,26 @@ export default class OpenLayout extends OpenElement {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: var(--size-9);
-    padding: 0 var(--size-2);
+    height: calc(var(--spacing) * 9);
+    padding: 0 calc(var(--spacing) * 2);
     border: 0;
-    border-radius: var(--radius-round);
+    border-radius: calc(infinity * 1px);
     background: transparent;
-    color: var(--text-primary);
+    color: var(--color-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     letter-spacing: .02em;
     text-decoration: none;
     white-space: nowrap;
     transition: all 0.15s ease;
   }
   .locale-switch:hover {
-    color: var(--brand);
-    background: color-mix(in srgb, var(--brand-pale) 34%, transparent);
+    color: var(--color-primary);
+    background: color-mix(in srgb, color-mix(in srgb, var(--color-primary) 16%, transparent) 34%, transparent);
   }
   .locale-switch:focus-visible {
-    outline: var(--focus-size) solid var(--focus-ring);
-    outline-offset: var(--focus-offset);
+    outline: calc(var(--spacing) * 0.5) solid var(--color-ring);
+    outline-offset: calc(var(--spacing) * 0.75);
   }
 
   /* Repository link: same 36px round target as the search trigger beside it. */
@@ -129,26 +129,26 @@ export default class OpenLayout extends OpenElement {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--size-9);
-    height: var(--size-9);
+    width: calc(var(--spacing) * 9);
+    height: calc(var(--spacing) * 9);
     padding: 0;
     border: 0;
-    border-radius: var(--radius-round);
+    border-radius: calc(infinity * 1px);
     background: transparent;
-    color: var(--text-primary);
-    transition: all var(--ease-2) var(--duration-2);
+    color: var(--color-foreground);
+    transition: all var(--ease-in-out) var(--default-transition-duration);
   }
   .repository-link:hover {
-    color: var(--brand);
-    background: color-mix(in srgb, var(--brand-pale) 34%, transparent);
+    color: var(--color-primary);
+    background: color-mix(in srgb, color-mix(in srgb, var(--color-primary) 16%, transparent) 34%, transparent);
   }
   .repository-link:focus-visible {
-    outline: var(--focus-size) solid var(--focus-ring);
-    outline-offset: var(--focus-offset);
+    outline: calc(var(--spacing) * 0.5) solid var(--color-ring);
+    outline-offset: calc(var(--spacing) * 0.75);
   }
   .repository-link svg {
-    width: var(--size-5);
-    height: var(--size-5);
+    width: calc(var(--spacing) * 5);
+    height: calc(var(--spacing) * 5);
     fill: currentColor;
   }
 
@@ -158,39 +158,39 @@ export default class OpenLayout extends OpenElement {
     top: 0;
     z-index: 100;
     background: var(--nav-bg);
-    border-bottom: var(--border-size-1) solid var(--border);
+    border-bottom: calc(var(--spacing) * 0.25) solid var(--color-border);
     backdrop-filter: blur(18px) saturate(150%);
     -webkit-backdrop-filter: blur(18px) saturate(150%);
-    transition: background .32s var(--motion-standard), border-color .32s var(--motion-standard), box-shadow .32s var(--motion-standard), padding .32s var(--motion-standard);
+    transition: background .32s var(--ease-out), border-color .32s var(--ease-out), box-shadow .32s var(--ease-out), padding .32s var(--ease-out);
   }
   .header-inner {
     max-width: none;
     margin: 0 auto;
-    padding: 0 clamp(var(--size-5), 3.5vw, var(--size-9));
+    padding: 0 clamp(calc(var(--spacing) * 5), 3.5vw, calc(var(--spacing) * 9));
     display: flex;
     align-items: center;
     min-height: var(--nav-height);
-    gap: var(--size-6);
+    gap: calc(var(--spacing) * 6);
   }
 
   .mobile-menu-btn {
     display: none;
     align-items: center;
     justify-content: center;
-    width: var(--size-10);
-    height: var(--size-10);
-    border: var(--border-size-1) solid var(--border);
-    border-radius: var(--radius-round);
-    background: color-mix(in srgb, var(--bg-elevated) 74%, transparent);
-    color: var(--text-secondary);
+    width: calc(var(--spacing) * 10);
+    height: calc(var(--spacing) * 10);
+    border: calc(var(--spacing) * 0.25) solid var(--color-border);
+    border-radius: calc(infinity * 1px);
+    background: color-mix(in srgb, var(--color-popover) 74%, transparent);
+    color: var(--color-muted-foreground);
     cursor: pointer;
     padding: 0;
     transition: all 0.15s ease;
   }
   .mobile-menu-btn:hover {
-    color: var(--text-primary);
-    border-color: var(--border-hover);
-    background: var(--bg-hover);
+    color: var(--color-foreground);
+    border-color: color-mix(in srgb, var(--color-foreground) 25%, var(--color-border));
+    background: var(--color-accent);
   }
   .mobile-menu {
     position: relative;
@@ -216,56 +216,56 @@ export default class OpenLayout extends OpenElement {
     border: 0;
   }
   .mobile-menu-icon {
-    font-size: var(--font-size-2);
+    font-size: var(--text-xl);
     line-height: 1;
   }
   .mobile-menu-panel {
     position: absolute;
-    inset-block-start: calc(100% + var(--size-2));
+    inset-block-start: calc(100% + calc(var(--spacing) * 2));
     inset-inline-end: 0;
     z-index: 110;
     display: grid;
     min-width: 12rem;
-    padding: var(--size-2);
-    border: var(--border-size-1) solid var(--border);
-    border-radius: var(--radius-2);
-    background: var(--bg-elevated);
-    box-shadow: var(--shadow-2);
+    padding: calc(var(--spacing) * 2);
+    border: calc(var(--spacing) * 0.25) solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-popover);
+    box-shadow: var(--shadow-2xl);
   }
   .mobile-menu-panel a {
-    padding: var(--size-2) var(--size-3);
-    border-radius: var(--radius-1);
-    color: var(--text-secondary);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+    border-radius: var(--radius-md);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     text-decoration: none;
   }
   .mobile-menu-panel a:hover,
   .mobile-menu-panel a:focus-visible {
-    color: var(--text-primary);
-    background: var(--bg-hover);
+    color: var(--color-foreground);
+    background: var(--color-accent);
   }
 
   .logo {
     display: inline-flex;
     align-items: center;
-    gap: var(--size-3);
+    gap: calc(var(--spacing) * 3);
     flex: 0 0 auto;
-    min-height: var(--size-10);
+    min-height: calc(var(--spacing) * 10);
     width: 52px;
     min-width: 52px;
     max-width: 52px;
     background: transparent;
-    font-size: var(--font-size-3);
-    font-weight: var(--font-weight-8);
-    color: var(--text-primary);
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-extrabold);
+    color: var(--color-foreground);
     text-decoration: none;
     letter-spacing: 0;
     white-space: nowrap;
   }
 
   .logo:hover .logo-glyph {
-    transform: translateY(calc(var(--border-size-1) * -1));
+    transform: translateY(calc(calc(var(--spacing) * 0.25) * -1));
   }
 
   .logo-glyph {
@@ -276,69 +276,69 @@ export default class OpenLayout extends OpenElement {
     width: 48px;
     height: 48px;
     max-width: 100%;
-    color: var(--text-primary);
+    color: var(--color-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     font-weight: 800;
     letter-spacing: -.09em;
     line-height: 1;
     white-space: nowrap;
-    transition: transform var(--duration-2) var(--ease-2);
+    transition: transform var(--default-transition-duration) var(--ease-in-out);
     view-transition-name: open-brand-mark;
   }
 
   .logo-slash {
-    color: var(--brand);
+    color: var(--color-primary);
   }
 
   .logo:focus-visible {
-    outline: var(--focus-size) solid var(--focus-ring);
-    outline-offset: var(--focus-offset);
-    border-radius: var(--radius-2);
+    outline: calc(var(--spacing) * 0.5) solid var(--color-ring);
+    outline-offset: calc(var(--spacing) * 0.75);
+    border-radius: var(--radius-lg);
   }
 
   .header-nav {
     display: flex;
-    gap: var(--size-1);
+    gap: calc(var(--spacing) * 1);
     flex: 1;
     min-width: 0;
     justify-content: center;
     width: fit-content;
     max-width: fit-content;
     margin-inline: auto;
-    padding: var(--size-1);
-    border: var(--border-size-1) solid color-mix(in srgb, var(--border) 78%, var(--brand));
-    border-radius: var(--radius-round);
-    background: color-mix(in srgb, var(--bg-elevated) 68%, transparent);
+    padding: calc(var(--spacing) * 1);
+    border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, var(--color-border) 78%, var(--color-primary));
+    border-radius: calc(infinity * 1px);
+    background: color-mix(in srgb, var(--color-popover) 68%, transparent);
     box-shadow: inset 0 1px 0 var(--edge-highlight);
   }
   .header-nav a {
     color: var(--nav-link-color);
     text-decoration: none;
-    font-weight: var(--font-weight-5);
-    padding: var(--size-2) var(--size-4);
-    border-radius: var(--radius-round);
+    font-weight: var(--font-weight-medium);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+    border-radius: calc(infinity * 1px);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     letter-spacing: .02em;
-    transition: color .2s var(--motion-standard), background .2s var(--motion-standard), transform .2s var(--motion-standard);
+    transition: color .2s var(--ease-out), background .2s var(--ease-out), transform .2s var(--ease-out);
   }
   .header-nav a:hover {
     color: var(--nav-link-hover);
-    background: color-mix(in srgb, var(--brand) 10%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
     transform: translateY(-1px);
   }
   .header-nav a[aria-current="page"] {
-    color: var(--text-primary);
-    font-weight: var(--font-weight-8);
-    background: color-mix(in srgb, var(--brand) 18%, var(--bg-elevated));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 44%, transparent);
+    color: var(--color-foreground);
+    font-weight: var(--font-weight-extrabold);
+    background: color-mix(in srgb, var(--color-primary) 18%, var(--color-popover));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 44%, transparent);
   }
 
   .header-right {
     display: flex;
     align-items: center;
-    gap: var(--size-1);
+    gap: calc(var(--spacing) * 1);
     margin-left: auto;
   }
 
@@ -346,16 +346,16 @@ export default class OpenLayout extends OpenElement {
   .docs-sidebar {
     width: clamp(200px, 20vw, 260px);
     flex-shrink: 0;
-    border-right: var(--border-size-1) solid var(--border);
+    border-right: calc(var(--spacing) * 0.25) solid var(--color-border);
     padding: 2rem 0;
     overflow-y: auto;
     height: calc(100vh - var(--nav-height));
     position: sticky;
     top: var(--nav-height);
     scrollbar-width: thin;
-    background: linear-gradient(180deg,color-mix(in srgb,var(--violet-2) 26%,var(--bg-base)),color-mix(in srgb,var(--bg-elevated) 72%,transparent));
+    background: linear-gradient(180deg,color-mix(in srgb,var(--color-border) 26%,var(--color-background)),color-mix(in srgb,var(--color-popover) 72%,transparent));
     backdrop-filter: blur(20px) saturate(140%);
-    box-shadow: inset -1px 0 0 color-mix(in srgb,var(--brand) 10%,transparent);
+    box-shadow: inset -1px 0 0 color-mix(in srgb,var(--color-primary) 10%,transparent);
   }
   .docs-sidebar[hidden] {
     display: none;
@@ -374,7 +374,7 @@ export default class OpenLayout extends OpenElement {
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.22em;
-    color: var(--text-muted);
+    color: var(--color-muted-foreground);
     padding: 0 1.5rem;
     user-select: none;
   }
@@ -382,25 +382,25 @@ export default class OpenLayout extends OpenElement {
   .docs-sidebar a,
   .sidebar-mobile-panel a {
     display: block;
-    color: var(--text-muted);
+    color: var(--color-muted-foreground);
     text-decoration: none;
     font-size: var(--font-size-tiny);
     margin: .12rem .7rem;
     padding: .5rem .8rem;
     border-left: 2px solid transparent;
-    border-radius: var(--radius-2);
+    border-radius: var(--radius-lg);
     transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
   }
   .docs-sidebar a:hover,
   .sidebar-mobile-panel a:hover {
-    color: var(--text-secondary);
-    background: var(--bg-hover);
+    color: var(--color-muted-foreground);
+    background: var(--color-accent);
   }
   .docs-sidebar a[aria-current="page"],
   .sidebar-mobile-panel a[aria-current="page"] {
-    color: var(--brand);
-    border-left-color: var(--brand);
-    background: var(--brand-subtle);
+    color: var(--color-primary);
+    border-left-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 14%, transparent);
     font-weight: 600;
   }
   .nav-row[data-kind="section"] a,
@@ -416,57 +416,57 @@ export default class OpenLayout extends OpenElement {
 
   /* Footer */
   .app-footer {
-    border-top: var(--border-size-1) solid var(--border);
-    background: color-mix(in srgb, var(--bg-elevated) 58%, transparent);
+    border-top: calc(var(--spacing) * 0.25) solid var(--color-border);
+    background: color-mix(in srgb, var(--color-popover) 58%, transparent);
   }
   .footer-inner {
     max-width: var(--site-container-wide);
     margin: 0 auto;
-    padding: var(--size-16) var(--size-8);
+    padding: calc(var(--spacing) * 16) calc(var(--spacing) * 8);
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: var(--size-8);
+    gap: calc(var(--spacing) * 8);
   }
   .footer-heading {
     display: block;
     font-size: var(--font-size-button);
     font-weight: var(--font-weight-semibold);
-    color: var(--text-primary);
-    margin: 0 0 var(--size-4);
+    color: var(--color-foreground);
+    margin: 0 0 calc(var(--spacing) * 4);
   }
   .footer-column a {
     display: block;
-    color: var(--text-secondary);
+    color: var(--color-muted-foreground);
     text-decoration: none;
     font-size: var(--font-size-body-sm);
     padding: 4px 0;
     transition: color 0.15s ease;
   }
   .footer-column a:hover {
-    color: var(--text-primary);
+    color: var(--color-foreground);
   }
   .footer-bottom {
-    border-top: var(--border-size-1) solid var(--border);
-    padding: var(--size-4) var(--size-8);
+    border-top: calc(var(--spacing) * 0.25) solid var(--color-border);
+    padding: calc(var(--spacing) * 4) calc(var(--spacing) * 8);
     max-width: var(--site-container-wide);
     margin: 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: var(--size-4);
-    color: var(--text-muted);
+    gap: calc(var(--spacing) * 4);
+    color: var(--color-muted-foreground);
     font-size: var(--font-size-body-sm);
   }
 
   /* Responsive */
   @media (max-width: 1120px) {
     .header-inner {
-      gap: var(--size-3);
-      padding-inline: var(--size-4);
+      gap: calc(var(--spacing) * 3);
+      padding-inline: calc(var(--spacing) * 4);
     }
 
     .header-nav {
-      gap: var(--size-3);
+      gap: calc(var(--spacing) * 3);
     }
   }
 
@@ -476,43 +476,43 @@ export default class OpenLayout extends OpenElement {
 
   @media (max-width: 900px) {
     .mobile-menu-btn { display: flex; }
-    .header-inner { padding: 0 var(--size-4); gap: var(--size-2); }
+    .header-inner { padding: 0 calc(var(--spacing) * 4); gap: calc(var(--spacing) * 2); }
     .header-nav { display: none; }
     .header-right { gap: 4px; }
 
     .docs-sidebar { display: none; }
     .sidebar-mobile {
       display: block;
-      margin: var(--size-4) var(--size-4) 0;
+      margin: calc(var(--spacing) * 4) calc(var(--spacing) * 4) 0;
     }
     .sidebar-mobile[hidden] { display: none; }
     .sidebar-mobile-toggle {
       cursor: pointer;
-      color: var(--text-primary);
+      color: var(--color-foreground);
       font-family: var(--font-mono);
-      font-size: var(--font-size-00);
-      font-weight: var(--font-weight-8);
+      font-size: var(--text-xs);
+      font-weight: var(--font-weight-extrabold);
       letter-spacing: .12em;
       text-transform: uppercase;
-      border: var(--border-size-1) solid var(--border);
-      border-radius: var(--radius-2);
-      padding: var(--size-3) var(--size-4);
+      border: calc(var(--spacing) * 0.25) solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
       background: var(--surface-1);
     }
-    .sidebar-mobile-panel { padding-block-start: var(--size-3); }
+    .sidebar-mobile-panel { padding-block-start: calc(var(--spacing) * 3); }
     .sidebar-mobile .nav-row[data-kind="section"] { margin: 0.5rem 0 0; }
-    .sidebar-mobile .nav-heading { padding: var(--size-2) var(--size-4); }
+    .sidebar-mobile .nav-heading { padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4); }
     .sidebar-mobile-panel a { padding: 0.5rem 1rem 0.5rem 2rem; }
 
     .layout-main { width: 100%; }
     .footer-inner {
       grid-template-columns: repeat(2, 1fr);
-      padding: var(--size-12) var(--size-4);
+      padding: calc(var(--spacing) * 12) calc(var(--spacing) * 4);
     }
     .footer-bottom {
       flex-direction: column;
-      gap: var(--size-2);
-      padding: var(--size-4);
+      gap: calc(var(--spacing) * 2);
+      padding: calc(var(--spacing) * 4);
       text-align: center;
     }
   }
@@ -521,7 +521,7 @@ export default class OpenLayout extends OpenElement {
     .header-right { gap: 4px; }
   }
   @media (max-width: 480px) {
-    .header-inner { padding: 0 var(--size-3); gap: var(--size-1); }
+    .header-inner { padding: 0 calc(var(--spacing) * 3); gap: calc(var(--spacing) * 1); }
   }
 `),
   ];

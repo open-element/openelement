@@ -1,8 +1,9 @@
 /**
  * @openelement/ui - theme token carrier (hand-maintained).
  *
- * The alias source lives in a CSS file; the role table lives in TWO
- * maintained forms since the C2 handoff executed (#1504 draft, #1505):
+ * The role table lives in TWO maintained forms since the C2 handoff executed
+ * (#1504 draft, #1505); C3 (#1506) deleted the alias layer that used to sit
+ * beside them, so the recipes and the site read the role names directly:
  *
  *   src/theme.css             — the real @theme role source, compiled by the
  *                               @openelement/router tailwind preset into the
@@ -19,12 +20,10 @@
  *                               baseline (C2 task 0) — the v4.1.16 scale
  *                               evaluation stays frozen here until the
  *                               baseline retires.
- *   src/semantic-tokens.css   — the alias layer (retired names → roles)
  *
- * ALIAS_CSS is a byte-identical copy of its file; the ui suite fails closed
- * on divergence (css-smoke drift test). THEME_CSS and src/theme.css are
- * drift-gated on the migration contract instead — role names and dark pairs
- * must match between the @theme source and the compiled twin.
+ * THEME_CSS and src/theme.css are drift-gated on the migration contract —
+ * role names and dark pairs must match between the @theme source and the
+ * compiled twin (css-smoke).
  */
 
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';
@@ -226,6 +225,11 @@ const THEME_CSS = `/* ═══════════════════�
   --color-destructive: var(--color-red-700);
   --color-destructive-foreground: var(--color-white);
 
+  /* Status inks (non-shadcn addition — see the header note). */
+  --color-success: var(--color-green-800);
+  --color-warning: var(--color-amber-800);
+  --color-info: var(--color-blue-700);
+
   --color-border: var(--color-violet-200);
   --color-input: var(--color-violet-200);
   --color-ring: var(--color-violet-500);
@@ -264,6 +268,10 @@ const THEME_CSS = `/* ═══════════════════�
   --color-destructive: var(--color-red-400);
   --color-destructive-foreground: var(--color-red-950);
 
+  --color-success: var(--color-green-400);
+  --color-warning: var(--color-amber-400);
+  --color-info: var(--color-blue-400);
+
   --color-border: var(--color-zinc-800);
   --color-input: var(--color-zinc-800);
   --color-ring: var(--color-violet-400);
@@ -298,6 +306,9 @@ const THEME_CSS = `/* ═══════════════════�
     --color-accent-foreground: ButtonText;
     --color-destructive: CanvasText;
     --color-destructive-foreground: Canvas;
+    --color-success: CanvasText;
+    --color-warning: CanvasText;
+    --color-info: CanvasText;
     --color-border: CanvasText;
     --color-input: CanvasText;
     --color-ring: Highlight;
@@ -325,6 +336,9 @@ const THEME_CSS = `/* ═══════════════════�
     --color-accent-foreground: ButtonText;
     --color-destructive: CanvasText;
     --color-destructive-foreground: Canvas;
+    --color-success: CanvasText;
+    --color-warning: CanvasText;
+    --color-info: CanvasText;
     --color-border: CanvasText;
     --color-input: CanvasText;
     --color-ring: Highlight;
@@ -337,245 +351,8 @@ const THEME_CSS = `/* ═══════════════════�
 }
 `;
 
-const ALIAS_CSS = `/**
- * @openelement/ui - semantic alias layer (hand-maintained).
- *
- * Every retired token name the component recipes and the reference site still
- * consume is aliased here onto the shadcn roles of 'theme.css' — this file
- * defines NO roles of its own and carries no color literals. The recipes keep
- * their old names on purpose: renaming them is C3 work (#1504 umbrella), and
- * this layer is what lets the eleven components render unchanged in the
- * meantime.
- *
- * DELETION CONDITION: when C3 renames the component recipes and the site
- * sources onto the role names, this whole layer (including the raw ramp
- * aliases and their dark mirrors) is deleted with no replacement. Do not add
- * new consumers of these names.
- *
- * Structure: the :host structural fallback is host-exclusive (display/
- * containment must never land on <html>); everything else selects
- * :root, :host so one sheet serves document adoption and shadow adoption.
- */
-
-:host {
-  display: block;
-  min-height: 1px;
-  contain: layout style;
-}
-
-:root,
-:host {
-  /* ── surfaces & ink → roles ── */
-  --bg-base: var(--color-background);
-  --bg-surface: var(--color-muted); /* BREAK: violet-tinted mix → neutral muted */
-  --bg-card: var(--color-card);
-  --bg-elevated: var(--color-popover);
-  --bg-muted: var(--color-muted);
-  --bg-hover: var(--color-accent);
-  --text-primary: var(--color-foreground);
-  /* BREAK: the site's 3-step ink ladder collapses onto shadcn's 2 slots. */
-  --text-secondary: var(--color-muted-foreground);
-  --text-muted: var(--color-muted-foreground);
-  --border: var(--color-border); /* BREAK: neutral gray → violet-tinted border */
-  --border-hover: color-mix(in srgb, var(--color-foreground) 25%, var(--color-border));
-
-  /* ── brand → primary family ── */
-  --brand: var(--color-primary);
-  --brand-hover: color-mix(in srgb, var(--color-primary) 80%, var(--color-foreground));
-  --brand-light: var(--color-violet-400); /* static: identical in both themes */
-  --brand-pale: color-mix(in srgb, var(--color-primary) 16%, transparent);
-  --brand-subtle: color-mix(in srgb, var(--color-primary) 14%, transparent);
-  --brand-glow: color-mix(in srgb, var(--color-primary) 23%, transparent);
-  --brand-deep: var(--color-violet-950); /* dark pair below */
-  --on-brand: var(--color-primary-foreground);
-  --focus-ring: var(--color-ring);
-
-  /* ── code surfaces: the retired sheet kept code blocks dark in BOTH
-     themes; the static mapping preserves that (no flip needed) ── */
-  --bg-code: var(--color-zinc-950);
-  --code-text: var(--color-zinc-200);
-  --code-border: var(--color-zinc-700);
-
-  /* ── status inks: each clears the 4.5:1 AA floor on its background AND on
-     the 10% wash of itself the badge paints (measured in the ui suite).
-     Light steps sit one darker than the nearest TW4 default for exactly
-     that floor; dark steps flip lighter. ── */
-  --error: var(--color-destructive);
-  --error-subtle: color-mix(in srgb, var(--error) 10%, transparent);
-  --success: var(--color-green-800); /* dark pair below */
-  --success-subtle: color-mix(in srgb, var(--success) 10%, transparent);
-  --warning: var(--color-amber-800); /* dark pair below */
-  --warning-subtle: color-mix(in srgb, var(--warning) 10%, transparent);
-  --info: var(--color-blue-700); /* dark pair below */
-  --info-subtle: color-mix(in srgb, var(--info) 10%, transparent);
-
-  /* ── raw ramp aliases (theme-aware). BREAK by construction: the retired
-     13-step ramps re-seat on the TW4 11-step ramps, nearest step. These are
-     the last consumers of raw ramp names; they die with the C3 rename. ── */
-  --gray-0: var(--color-zinc-50);
-  --gray-1: var(--color-zinc-100);
-  --gray-2: var(--color-zinc-200);
-  --gray-3: var(--color-zinc-200);
-  --gray-4: var(--color-zinc-300);
-  --gray-6: var(--color-zinc-500);
-  --gray-7: var(--color-zinc-700);
-  --gray-8: var(--color-zinc-800);
-  --gray-9: var(--color-zinc-900);
-  --gray-10: var(--color-zinc-900);
-  --gray-11: var(--color-zinc-950);
-  --gray-12: var(--color-zinc-950);
-  --violet-0: var(--color-violet-50);
-  --violet-1: var(--color-violet-100);
-  --violet-2: var(--color-violet-200);
-  --violet-3: var(--color-violet-300);
-  --violet-4: var(--color-violet-400);
-  --violet-5: var(--color-violet-500);
-  --violet-6: var(--color-violet-600);
-  --violet-7: var(--color-violet-700);
-  --violet-8: var(--color-violet-800);
-  --violet-10: var(--color-violet-950);
-  --violet-11: var(--color-violet-950); /* BREAK: top steps collapse onto 950 */
-  --violet-12: var(--color-violet-950);
-  --indigo-6: var(--color-indigo-500);
-
-  /* ── spacing: the retired px steps are exact 4px multiples of the TW4 base
-     — zero visual change ── */
-  --size-1: calc(var(--spacing) * 1);
-  --size-2: calc(var(--spacing) * 2);
-  --size-3: calc(var(--spacing) * 3);
-  --size-4: calc(var(--spacing) * 4);
-  --size-5: calc(var(--spacing) * 5);
-  --size-6: calc(var(--spacing) * 6);
-  --size-7: calc(var(--spacing) * 7);
-  --size-8: calc(var(--spacing) * 8);
-  --size-9: calc(var(--spacing) * 9);
-  --size-10: calc(var(--spacing) * 10);
-  --size-12: calc(var(--spacing) * 12);
-  --size-16: calc(var(--spacing) * 16);
-
-  /* ── radius (md/lg/xl are value-identical to the retired tuned steps) ── */
-  --radius-1: var(--radius-md); /* 6px exact */
-  --radius-2: var(--radius-lg); /* 8px exact */
-  --radius-3: var(--radius-xl); /* 12px exact */
-  --radius-4: var(--radius-2xl); /* BREAK: 20px → 16px */
-  --radius-round: calc(infinity * 1px); /* TW4 rounded-full idiom */
-  --badge-radius: var(--radius-md);
-  --btn-radius: var(--radius-md);
-  --card-radius: var(--radius-md);
-  --surface-radius: var(--radius-lg);
-  --overlay-radius: var(--radius-xl);
-  --ui-control-radius: var(--radius-md);
-
-  /* ── typography (00..3 exact; 4..6 BREAK to the TW4 steps above them) ── */
-  --font-size-00: var(--text-xs);
-  --font-size-0: var(--text-sm);
-  --font-size-1: var(--text-base);
-  --font-size-2: var(--text-xl);
-  --font-size-3: var(--text-2xl);
-  --font-size-4: var(--text-4xl); /* BREAK: 2rem → 2.25rem */
-  --font-size-5: var(--text-5xl); /* BREAK: 2.5rem → 3rem */
-  --font-size-6: var(--text-6xl); /* BREAK: 3.125rem → 3.75rem */
-  --font-weight-4: var(--font-weight-normal);
-  --font-weight-5: var(--font-weight-medium);
-  --font-weight-6: var(--font-weight-semibold);
-  --font-weight-7: var(--font-weight-bold);
-  --font-weight-8: var(--font-weight-extrabold);
-  --font-weight-9: var(--font-weight-black);
-  --font-lineheight-1: var(--leading-tight); /* BREAK: 0.95 → 1.25 */
-  --font-lineheight-2: var(--leading-snug); /* was referenced but undefined in the retired sheet */
-  --font-lineheight-3: var(--leading-normal); /* 1.5 exact */
-  --font-lineheight-4: var(--leading-relaxed); /* BREAK: 1.75 → 1.625 */
-  --font-letterspacing-2: var(--tracking-normal); /* 0 exact */
-  --font-letterspacing-4: var(--tracking-wider); /* BREAK: 0.04em → 0.05em */
-  --font-letterspacing-5: var(--tracking-widest); /* BREAK: 0.08em → 0.1em */
-
-  /* ── borders ── */
-  --border-size-1: calc(var(--spacing) * 0.25); /* 1px exact */
-  --border-size-2: calc(var(--spacing) * 0.5); /* 2px exact */
-  --border-size-3: calc(var(--spacing) * 1); /* was referenced but undefined; 4px */
-
-  /* ── motion ── */
-  --motion-fast: var(--default-transition-duration); /* BREAK: 160 → 150ms */
-  --duration-2: var(--default-transition-duration); /* BREAK: 200 → 150ms */
-  --motion-standard: var(--ease-out); /* BREAK: (.2,.8,.2,1) → TW4 out */
-  --ease-2: var(--ease-in-out);
-  --ease-3: var(--ease-out);
-
-  /* ── focus geometry (spacing-derived: exact) ── */
-  --focus-size: calc(var(--spacing) * 0.5); /* 2px */
-  --focus-offset: calc(var(--spacing) * 0.75); /* 3px */
-
-  /* ── shadows ── */
-  --shadow-1: var(--shadow-sm); /* value-identical to the retired tuned shadow */
-  --shadow-2: var(--shadow-2xl); /* BREAK: loses the 60px violet-tinted bloom */
-  --shadow-color: var(--color-zinc-950);
-  --overlay-shadow: var(--shadow-2xl); /* BREAK: 90px bloom → TW4 2xl */
-  --surface-shadow: var(--shadow-2xl); /* BREAK: same */
-
-  /* ── badge recipe ── */
-  --badge-font-size: var(--text-xs);
-  --badge-padding-x: calc(var(--spacing) * 2);
-  --badge-padding-y: calc(var(--spacing) * 0.5);
-
-  /* ── ui-control family (formulas re-derived from roles) ── */
-  --ui-control-text: var(--color-foreground);
-  --ui-control-bg: color-mix(in srgb, var(--color-popover) 78%, transparent);
-  --ui-control-border: color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
-  --ui-control-border-hover: color-mix(in srgb, var(--color-violet-400) 74%, var(--color-border));
-  --ui-control-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-white) 12%, transparent);
-
-  /* ── surface family (formulas re-derived from roles) ── */
-  --surface-glass: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--color-primary) 9%, var(--color-card)),
-    color-mix(in srgb, var(--color-card) 90%, transparent)
-  );
-  --surface-overlay: color-mix(in srgb, var(--color-popover) 92%, transparent);
-  --surface-border: color-mix(in srgb, var(--color-border) 78%, var(--color-primary));
-  --surface-border-strong: color-mix(in srgb, var(--border-hover) 62%, var(--color-primary));
-  --surface-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-white) 8%, transparent);
-}
-
-/* Dark pairs for the aliases whose retired dark value isn't derivable by a
-   theme-agnostic formula: status inks flip to lighter steps; the mirrored
-   dark ramps translate to their own TW4 steps. */
-:root[data-theme='dark'],
-:host([data-theme='dark']) {
-  --brand-deep: var(--color-violet-100);
-  --success: var(--color-green-400);
-  --warning: var(--color-amber-400);
-  --info: var(--color-blue-400);
-
-  /* dark-side ramp aliases (the retired dark ramp mirrored the light ramp) */
-  --gray-0: var(--color-zinc-950);
-  --gray-1: var(--color-zinc-950);
-  --gray-2: var(--color-zinc-900);
-  --gray-3: var(--color-zinc-900);
-  --gray-4: var(--color-zinc-800);
-  --gray-6: var(--color-zinc-500);
-  --gray-7: var(--color-zinc-400);
-  --gray-8: var(--color-zinc-300);
-  --gray-9: var(--color-zinc-200);
-  --gray-10: var(--color-zinc-200);
-  --gray-11: var(--color-zinc-100);
-  --gray-12: var(--color-zinc-50);
-  --violet-0: var(--color-violet-950);
-  --violet-1: var(--color-violet-950);
-  --violet-2: var(--color-violet-950);
-  --violet-3: var(--color-violet-900);
-  --violet-4: var(--color-violet-800);
-  --violet-5: var(--color-violet-700);
-  --violet-6: var(--color-violet-600);
-  --violet-7: var(--color-violet-500);
-  --violet-8: var(--color-violet-400);
-  --violet-10: var(--color-violet-200);
-  --violet-11: var(--color-violet-100);
-  --violet-12: var(--color-violet-50);
-}
-`;
-
-/** Both sources concatenated: the deployable token sheet text. */
-export const themeTokenCss: string = THEME_CSS + ALIAS_CSS;
+/** The deployable token sheet text (the compiled twin of src/theme.css). */
+export const themeTokenCss: string = THEME_CSS;
 
 /**
  * The full token set as one constructable sheet. The token blocks select

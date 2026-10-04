@@ -309,38 +309,38 @@ export function prepareArticle(
 /** Prose typography shared by blog and guide article bodies. */
 export function articleContentStyles(scope: string): string {
   return `
-    ${scope} { font-family: var(--font-sans); font-size: var(--font-size-1); line-height: 1.8; color: var(--text-secondary); }
-    ${scope} h2, ${scope} h3 { scroll-margin-top: calc(var(--nav-height) + var(--size-4)); }
-    ${scope} h2 { margin-top: var(--size-10); color: var(--text-primary); font-family: var(--font-sans); font-size: var(--font-size-4); font-weight: var(--font-weight-8); letter-spacing: -0.02em; text-wrap: balance; }
-    ${scope} h3 { margin-top: var(--size-8); color: var(--text-primary); font-family: var(--font-sans); font-size: var(--font-size-2); font-weight: var(--font-weight-8); text-wrap: balance; }
+    ${scope} { font-family: var(--font-sans); font-size: var(--text-base); line-height: 1.8; color: var(--color-muted-foreground); }
+    ${scope} h2, ${scope} h3 { scroll-margin-top: calc(var(--nav-height) + calc(var(--spacing) * 4)); }
+    ${scope} h2 { margin-top: calc(var(--spacing) * 10); color: var(--color-foreground); font-family: var(--font-sans); font-size: var(--text-4xl); font-weight: var(--font-weight-extrabold); letter-spacing: -0.02em; text-wrap: balance; }
+    ${scope} h3 { margin-top: calc(var(--spacing) * 8); color: var(--color-foreground); font-family: var(--font-sans); font-size: var(--text-xl); font-weight: var(--font-weight-extrabold); text-wrap: balance; }
     /* Line-art diagrams (locale-free, static): ink from currentColor, one
        brand accent carried by the markup itself. */
-    ${scope} figure.diagram { margin: var(--size-6) 0; color: var(--text-muted); }
+    ${scope} figure.diagram { margin: calc(var(--spacing) * 6) 0; color: var(--color-muted-foreground); }
     ${scope} figure.diagram svg { display: block; height: 120px; width: auto; }
-    ${scope} .heading-anchor { margin-inline-start: var(--size-2); color: var(--text-muted); font-weight: var(--font-weight-4); text-decoration: none; opacity: 0; }
+    ${scope} .heading-anchor { margin-inline-start: calc(var(--spacing) * 2); color: var(--color-muted-foreground); font-weight: var(--font-weight-normal); text-decoration: none; opacity: 0; }
     ${scope} .heading-anchor::after { content: "#"; }
-    ${scope} h2:hover .heading-anchor, ${scope} h3:hover .heading-anchor, ${scope} .heading-anchor:focus-visible { opacity: 1; color: var(--brand); }
-    ${scope} p { margin: var(--size-4) 0; }
-    ${scope} ul, ${scope} ol { padding-left: var(--size-6); margin: var(--size-4) 0; }
+    ${scope} h2:hover .heading-anchor, ${scope} h3:hover .heading-anchor, ${scope} .heading-anchor:focus-visible { opacity: 1; color: var(--color-primary); }
+    ${scope} p { margin: calc(var(--spacing) * 4) 0; }
+    ${scope} ul, ${scope} ol { padding-left: calc(var(--spacing) * 6); margin: calc(var(--spacing) * 4) 0; }
     ${scope} li { margin: 0.375rem 0; }
-    ${scope} strong { color: var(--text-primary); }
-    ${scope} code { background: var(--bg-surface); color: var(--text-primary); padding: 0.125rem 0.375rem; border-radius: var(--radius-1); font-size: var(--font-size-0); font-family: var(--font-mono); }
-    ${scope} pre { background: var(--surface-code); border: 0.5px solid var(--border); border-radius: var(--radius-2); padding: var(--size-4); overflow-x: auto; margin: var(--size-4) 0; }
-    ${scope} pre code { background: none; color: var(--code-text); padding: 0; font-size: var(--font-size-0); line-height: 1.6; }
-    ${scope} open-code-block { margin: var(--size-5) 0; }
+    ${scope} strong { color: var(--color-foreground); }
+    ${scope} code { background: var(--color-muted); color: var(--color-foreground); padding: 0.125rem 0.375rem; border-radius: var(--radius-md); font-size: var(--text-sm); font-family: var(--font-mono); }
+    ${scope} pre { background: var(--surface-code); border: 0.5px solid var(--color-border); border-radius: var(--radius-lg); padding: calc(var(--spacing) * 4); overflow-x: auto; margin: calc(var(--spacing) * 4) 0; }
+    ${scope} pre code { background: none; color: var(--color-zinc-200); padding: 0; font-size: var(--text-sm); line-height: 1.6; }
+    ${scope} open-code-block { margin: calc(var(--spacing) * 5) 0; }
     /* Tables carry their own scroll container: a comparison table's min-content
        (706px on /architecture/comparison) exceeds the reading column below
        ~1280px, and at 390px it pushed the document to 722px. overflow is
        ignored on a display:table box, so the table becomes a block that
        scrolls only when its content actually needs the room — desktop output
        is byte-identical. */
-    ${scope} table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: var(--size-4) 0; font-size: var(--font-size-1); }
-    ${scope} th, ${scope} td { padding: var(--size-2) var(--size-3); text-align: left; border-bottom: 0.5px solid var(--border); }
-    ${scope} th { background: var(--bg-surface); color: var(--text-secondary); font-weight: var(--font-weight-6); font-size: var(--font-size-overline); text-transform: uppercase; letter-spacing: var(--font-letterspacing-2); }
-    ${scope} a { color: var(--brand); text-decoration: none; }
+    ${scope} table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: calc(var(--spacing) * 4) 0; font-size: var(--text-base); }
+    ${scope} th, ${scope} td { padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3); text-align: left; border-bottom: 0.5px solid var(--color-border); }
+    ${scope} th { background: var(--color-muted); color: var(--color-muted-foreground); font-weight: var(--font-weight-semibold); font-size: var(--font-size-overline); text-transform: uppercase; letter-spacing: var(--tracking-normal); }
+    ${scope} a { color: var(--color-primary); text-decoration: none; }
     ${scope} a:hover { text-decoration: underline; }
-    ${scope} hr { border: none; border-top: 0.5px solid var(--border); margin: var(--size-8) 0; }
-    ${scope} blockquote { margin: var(--size-8) 0; padding: var(--size-6) var(--size-4); border: 0; border-block: 1.5px solid color-mix(in srgb, var(--violet-5) 55%, transparent); color: var(--violet-8); font-family: var(--font-serif); font-style: italic; font-size: clamp(1.5rem, 3vw, 2.2rem); line-height: 1.35; text-align: center; }
+    ${scope} hr { border: none; border-top: 0.5px solid var(--color-border); margin: calc(var(--spacing) * 8) 0; }
+    ${scope} blockquote { margin: calc(var(--spacing) * 8) 0; padding: calc(var(--spacing) * 6) calc(var(--spacing) * 4); border: 0; border-block: 1.5px solid color-mix(in srgb, var(--color-ring) 55%, transparent); color: var(--color-primary); font-family: var(--font-serif); font-style: italic; font-size: clamp(1.5rem, 3vw, 2.2rem); line-height: 1.35; text-align: center; }
     ${scope} blockquote p { margin: 0; }
   `;
 }

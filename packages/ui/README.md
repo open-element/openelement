@@ -48,9 +48,8 @@ Dependencies flow in one direction:
 
 ```text
 @theme-derived token table (theme.css)
-  -> semantic alias layer (semantic-tokens.css)
-    -> component recipes
-      -> Web Component primitives
+  -> component recipes (role names, direct)
+    -> Web Component primitives
 ```
 
 Tokens contain shared style values and classes and import no components.
@@ -85,8 +84,8 @@ The reference site wires the same scripts through its Vite `inject` option.
 
 ## Design tokens
 
-The token layer is hand-maintained — there is no generator. Two authored CSS
-sources, one carrier:
+The token layer is hand-maintained — there is no generator. One authored CSS
+source, one carrier:
 
 - `src/theme.css` — **the single source of design roles** (P6: the only place
   in the repository that defines them). shadcn-convention roles
@@ -95,26 +94,29 @@ sources, one carrier:
   the verbatim Tailwind v4.1.16 default), roles reference only scale
   variables, dark pairs follow the shadcn v4 convention with the selector
   re-pointed at this repo's `[data-theme='dark']` mechanism, and a
-  forced-colors layer re-seats every role on a system color. When Tailwind is
-  installed (roadmap C2), this file's scale layer becomes the real `@theme`
-  block; role names are the migration contract.
-- `src/semantic-tokens.css` — the alias layer: retired token names
-  (`--brand`, `--size-*`, `--violet-*`, …) mapped onto the roles so the
-  component recipes keep rendering. It defines no roles and no color values.
-  It is deleted with no replacement once C3 renames the recipes onto the role
-  names.
-- `src/theme-tokens.ts` — the carrier: inlines both sources verbatim and
+  forced-colors layer re-seats every role on a system color. Since alpha9 C2
+  the scale layer is the real `@theme` block; role names are the migration
+  contract. Since C3 (#1506) the component recipes read these role names
+  directly — the C1 alias layer (`semantic-tokens.css`) was deleted under its
+  own DELETION CONDITION, and three non-shadcn status roles
+  (`--color-success/-warning/-info`) joined the table with the same
+  forced-colors and dark-pair discipline.
+- `src/theme-tokens.ts` — the carrier: inlines the source verbatim and
   exports `themeTokenCss` (the deployable sheet text) plus `themeTokenSheet`
   (a constructable sheet built from it). The token blocks select
   `:root, :host`, so the same sheet serves document-level adoption and
   shadow-root adoption (only the structural fallback is `:host`-only).
 
 `themeTokenSheet` is the only token entry point. The ui suite fails closed on
-carrier/source divergence, on token-contract regressions (`--surface-glass`,
-`--ui-control-bg`, `--focus-ring`, `--motion-standard`), and on WCAG floors
-(3:1 focus ring, 4.5:1 state inks on their background and their badge wash).
-`daisyClassSheet`, modal and step-card are retired and must not reappear in
-exports, manifests, docs or packed artifacts.
+carrier/source divergence, on the role contract (@theme ↔ compiled twin, dark
+pairs, forced-colors totality), on recipes consuming undeclared variables,
+and on WCAG floors (3:1 focus ring, 4.5:1 status inks on the background and
+their 10% recipe washes). `daisyClassSheet`, modal and step-card are retired
+and must not reappear in exports, manifests, docs or packed artifacts.
+
+The per-component customization surface (`::part` names, consumed variables,
+the alpha8 alias→role rename map) is declared in
+[CUSTOMIZATION.md](./CUSTOMIZATION.md) and pinned by test.
 
 Existing per-component imports remain stable across this layering change.
 

@@ -641,7 +641,6 @@
         "./open-input": "./src/open-input.tsx",
         "./open-tabs": "./src/open-tabs.tsx",
         "./open-theme-toggle": "./src/open-theme-toggle.tsx",
-        "./semantic-tokens.css": "./src/semantic-tokens.css",
         "./theme-tokens": "./src/theme-tokens.ts",
         "./theme.css": "./src/theme.css"
       },

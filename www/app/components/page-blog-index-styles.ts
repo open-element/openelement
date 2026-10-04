@@ -5,8 +5,8 @@ export const pageBlogIndexStyles = [
   compiledStyle(`
   :host {
     display: block;
-    color: var(--text-primary);
-    background: var(--bg-base);
+    color: var(--color-foreground);
+    background: var(--color-background);
   }
 
   * {
@@ -32,23 +32,23 @@ export const pageBlogIndexStyles = [
     font-size: clamp(4.2rem, 13vw, 11rem);
     line-height: 0.92;
     letter-spacing: -0.02em;
-    color: var(--violet-8);
+    color: var(--color-primary);
   }
 
   .lede {
     max-width: 38rem;
     margin-block-start: clamp(1.25rem, 3vh, 2rem);
-    color: var(--text-secondary);
+    color: var(--color-muted-foreground);
     font-size: clamp(1rem, 1.2vw, 1.1rem);
     line-height: 1.75;
   }
 
   .origin-note {
     max-width: 38rem;
-    margin-block-start: var(--size-3);
-    color: var(--text-muted);
+    margin-block-start: calc(var(--spacing) * 3);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     line-height: 1.75;
   }
 
@@ -60,8 +60,8 @@ export const pageBlogIndexStyles = [
   .featured {
     display: block;
     padding: clamp(2.5rem, 6vh, 4.5rem) clamp(1.5rem, 5vw, 4.5rem);
-    border-block: 1px solid var(--border);
-    background: color-mix(in srgb, var(--bg-elevated) 55%, var(--bg-base));
+    border-block: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-popover) 55%, var(--color-background));
     color: inherit;
     text-decoration: none;
   }
@@ -69,45 +69,45 @@ export const pageBlogIndexStyles = [
   .featured-kicker {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--size-3);
+    gap: calc(var(--spacing) * 3);
     align-items: baseline;
-    color: var(--brand);
+    color: var(--color-primary);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
-    font-weight: var(--font-weight-8);
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-extrabold);
     letter-spacing: 0.16em;
     text-transform: uppercase;
   }
 
   .featured-kicker .read-time {
     margin-inline-start: auto;
-    color: var(--text-muted);
-    font-weight: var(--font-weight-5);
+    color: var(--color-muted-foreground);
+    font-weight: var(--font-weight-medium);
     letter-spacing: 0.08em;
   }
 
   .featured h2 {
     max-width: 20ch;
-    margin-block-start: var(--size-5);
+    margin-block-start: calc(var(--spacing) * 5);
     font-family: var(--font-serif);
     font-weight: 400;
     font-size: clamp(2.4rem, 5.5vw, 4.6rem);
     line-height: 1;
     letter-spacing: -0.01em;
-    color: var(--text-primary);
+    color: var(--color-foreground);
     transition: color 0.15s ease;
   }
 
   .featured:hover h2 {
-    color: var(--violet-8);
+    color: var(--color-primary);
   }
 
   .featured-excerpt {
     max-width: 44rem;
-    margin-block-start: var(--size-4);
-    color: var(--text-secondary);
+    margin-block-start: calc(var(--spacing) * 4);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-0);
+    font-size: var(--text-sm);
     line-height: 1.75;
   }
 
@@ -118,11 +118,11 @@ export const pageBlogIndexStyles = [
 
   .read-more {
     display: inline-block;
-    margin-block-start: var(--size-5);
-    color: var(--violet-8);
+    margin-block-start: calc(var(--spacing) * 5);
+    color: var(--color-primary);
     font-family: var(--font-mono);
-    font-size: var(--font-size-0);
-    font-weight: var(--font-weight-7);
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-bold);
   }
 
   /* ── numbered article rows ── */
@@ -137,14 +137,14 @@ export const pageBlogIndexStyles = [
     gap: clamp(1rem, 4vw, 4rem);
     align-items: center;
     padding: clamp(1.5rem, 4vh, 2.75rem) clamp(1.5rem, 5vw, 4.5rem);
-    border-block-end: 1px solid var(--border);
+    border-block-end: 1px solid var(--color-border);
     color: inherit;
     text-decoration: none;
     transition: background 0.15s ease;
   }
 
   .row:hover {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 8%, transparent), transparent);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent);
   }
 
   .row-index {
@@ -153,7 +153,7 @@ export const pageBlogIndexStyles = [
     font-weight: 800;
     line-height: 1;
     color: transparent;
-    -webkit-text-stroke: 1.5px color-mix(in srgb, var(--violet-5) 55%, transparent);
+    -webkit-text-stroke: 1.5px color-mix(in srgb, var(--color-ring) 55%, transparent);
   }
 
   .row-title {
@@ -162,31 +162,31 @@ export const pageBlogIndexStyles = [
     font-weight: 400;
     font-size: clamp(1.6rem, 3vw, 2.6rem);
     line-height: 1.05;
-    color: var(--text-primary);
+    color: var(--color-foreground);
     transition: color 0.15s ease;
   }
 
   .row:hover .row-title {
-    color: var(--violet-8);
+    color: var(--color-primary);
   }
 
   .row-excerpt {
-    margin-block-start: var(--size-2);
-    color: var(--text-secondary);
+    margin-block-start: calc(var(--spacing) * 2);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     line-height: 1.6;
   }
 
   .row-lang {
     display: inline-block;
-    margin-block-start: var(--size-2);
-    padding: 0 var(--size-2);
-    border: var(--border-size-1) solid color-mix(in srgb, var(--violet-5) 45%, transparent);
-    border-radius: var(--radius-1);
-    color: var(--text-muted);
+    margin-block-start: calc(var(--spacing) * 2);
+    padding: 0 calc(var(--spacing) * 2);
+    border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, var(--color-ring) 45%, transparent);
+    border-radius: var(--radius-md);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     letter-spacing: 0.08em;
   }
 
@@ -195,16 +195,16 @@ export const pageBlogIndexStyles = [
   }
 
   .row-date {
-    color: var(--text-muted);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     white-space: nowrap;
   }
 
   @media (max-width: 720px) {
     .row {
       grid-template-columns: minmax(0, 1fr);
-      gap: var(--size-2);
+      gap: calc(var(--spacing) * 2);
     }
 
     .row-date {

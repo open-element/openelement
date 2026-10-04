@@ -35,6 +35,13 @@
      --color-destructive sits on red-700, not red-600 — red-600 clears 4.5:1
      on the background but drops to ~3.8:1 on the 10% badge wash of itself
      that open-badge paints; red-700 clears both (measured in the ui suite).
+   - Three non-shadcn status roles (--color-success/-warning/-info) joined
+     the table in C3 (#1506): the components' status tones need theme-aware
+     inks and the alias layer that used to carry them is deleted. Their light
+     steps are the AA-tuned ones the alias layer measured (same floor rule as
+     destructive above); forced-colors re-seats them on CanvasText like
+     destructive — high-contrast palettes own hue, so status is carried by
+     the label and the border, not by color.
 
    Consumption: the @openelement/router tailwind preset compiles this file
    into the bundle's theme layer (`tailwind: { theme: [...] }`). Plain-CSS
@@ -70,6 +77,11 @@
 
   --color-destructive: var(--color-red-700);
   --color-destructive-foreground: var(--color-white);
+
+  /* Status inks (non-shadcn addition — see the header note). */
+  --color-success: var(--color-green-800);
+  --color-warning: var(--color-amber-800);
+  --color-info: var(--color-blue-700);
 
   --color-border: var(--color-violet-200);
   --color-input: var(--color-violet-200);
@@ -109,6 +121,10 @@
   --color-destructive: var(--color-red-400);
   --color-destructive-foreground: var(--color-red-950);
 
+  --color-success: var(--color-green-400);
+  --color-warning: var(--color-amber-400);
+  --color-info: var(--color-blue-400);
+
   --color-border: var(--color-zinc-800);
   --color-input: var(--color-zinc-800);
   --color-ring: var(--color-violet-400);
@@ -143,6 +159,9 @@
     --color-accent-foreground: ButtonText;
     --color-destructive: CanvasText;
     --color-destructive-foreground: Canvas;
+    --color-success: CanvasText;
+    --color-warning: CanvasText;
+    --color-info: CanvasText;
     --color-border: CanvasText;
     --color-input: CanvasText;
     --color-ring: Highlight;
@@ -170,6 +189,9 @@
     --color-accent-foreground: ButtonText;
     --color-destructive: CanvasText;
     --color-destructive-foreground: Canvas;
+    --color-success: CanvasText;
+    --color-warning: CanvasText;
+    --color-info: CanvasText;
     --color-border: CanvasText;
     --color-input: CanvasText;
     --color-ring: Highlight;

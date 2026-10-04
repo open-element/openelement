@@ -1,7 +1,9 @@
 /**
  * @openelement/ui - open-badge
  *
- * Compact status badge backed by the semantic token layer.
+ * Compact status badge themed by the shadcn role table (C3 #1506).
+ * Tones read the destructive/success/warning/info roles, whose 10%
+ * color-mix washes the recipes compute inline.
  * Compiled authoring. Variant styling follows the
  * reflected `tone`/`size` host attributes (:host([...]) selectors).
  *
@@ -23,47 +25,47 @@ export class OpenBadge extends OpenElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: var(--size-6);
-      padding: var(--badge-padding-y) var(--badge-padding-x);
-      border: var(--border-size-1) solid var(--border);
-      border-radius: var(--badge-radius);
-      background: var(--bg-surface);
-      color: var(--text-secondary);
+      min-height: calc(var(--spacing) * 6);
+      padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 2);
+      border: calc(var(--spacing) * 0.25) solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-muted);
+      color: var(--color-muted-foreground);
       font-family: var(--font-mono);
-      font-size: var(--badge-font-size);
-      font-weight: var(--font-weight-8);
-      line-height: var(--font-lineheight-3);
+      font-size: var(--text-xs);
+      font-weight: var(--font-weight-extrabold);
+      line-height: var(--leading-normal);
       letter-spacing: 0;
       white-space: nowrap;
     }
 
     :host([tone='brand']) .badge {
-      border-color: var(--brand);
-      background: var(--brand-subtle);
-      color: var(--brand);
+      border-color: var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+      color: var(--color-primary);
     }
 
     :host([tone='success']) .badge {
-      border-color: var(--success);
-      background: var(--success-subtle);
-      color: var(--success);
+      border-color: var(--color-success);
+      background: color-mix(in srgb, var(--color-success) 10%, transparent);
+      color: var(--color-success);
     }
 
     :host([tone='warning']) .badge {
-      border-color: var(--warning);
-      background: var(--warning-subtle);
-      color: var(--warning);
+      border-color: var(--color-warning);
+      background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+      color: var(--color-warning);
     }
 
     :host([tone='info']) .badge {
-      border-color: var(--info);
-      background: var(--info-subtle);
-      color: var(--info);
+      border-color: var(--color-info);
+      background: color-mix(in srgb, var(--color-info) 10%, transparent);
+      color: var(--color-info);
     }
 
     :host([size='sm']) .badge {
-      min-height: var(--size-5);
-      padding-inline: var(--size-2);
+      min-height: calc(var(--spacing) * 5);
+      padding-inline: calc(var(--spacing) * 2);
     }
   `),
   ];

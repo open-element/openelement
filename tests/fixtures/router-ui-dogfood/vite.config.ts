@@ -13,7 +13,9 @@
  * instead: the token sheet moves into the preset's linked, layer-ordered
  * bundle (`@layer theme, base, components, utilities`) and the DSD/head
  * emission becomes link-not-inline. The two states are the C2 acceptance
- * pair; nothing else in the fixture changes between them.
+ * pair; nothing else in the fixture changes between them. Since C3 (#1506)
+ * the recipes read the theme roles directly, so no components-layer source
+ * is configured in either state — the @theme roles are the only sheet.
  */
 import { openElement } from '@openelement/router/vite';
 import { manifest } from '@openelement/ui/manifest';
@@ -52,7 +54,8 @@ export default defineConfig({
       tailwind: tailwindPresetEnabled
         ? {
             theme: ['@openelement/ui/theme.css'],
-            components: ['@openelement/ui/semantic-tokens.css'],
+            // C3: the recipes read the @theme roles directly — no components
+            // layer is needed, the roles ARE the component sheet.
             // The @scope light-DOM face, one block per delivered ui tag.
             scopeTags: manifest.declarations.map((declaration) => declaration.tagName),
           }
