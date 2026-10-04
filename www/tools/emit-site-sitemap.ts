@@ -1,23 +1,26 @@
 /**
  * Generate site sitemap.xml + robots.txt from the route catalog (#1327).
- * Runs in `deno task site:build` after the router build: the public index is
+ * Runs in `pnpm run site:build` after the router build: the public index is
  * enumerated from the route catalog plus the blog collection loaded straight
  * from source — never by scanning built output or request-time Documents,
  * and never from a hand-synced index.
  * Fails closed: an unenumerable dynamic route or a duplicate fails the build.
  */
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../site-config.ts';
 import { loadCollectionData } from '../lib/content.ts';
 import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
 import { scanSiteRoutes } from './lib/site-route-scan.ts';
 import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './lib/site-sitemap.ts';
 import { articleLastmodByRoute } from './lib/site-lastmod.ts';
+import { writeFile } from 'node:fs/promises';
+import process from 'node:process';
 
 export const SITE_DIST = 'www/dist';
 const SITE_ROUTES = 'www/app/routes';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const siteRoot = join(repoRoot, 'www', '');
 
 export async function generateSiteSitemap(dist = join(repoRoot, SITE_DIST)): Promise<string[]> {
@@ -35,7 +38,7 @@ export async function generateSiteSitemap(dist = join(repoRoot, SITE_DIST)): Pro
   if (failures.length > 0) {
     console.error('site sitemap generation failed:');
     for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   // Real source dates, not the build clock: routes without a known content
   // date omit <lastmod> entirely, and the artifact stays byte-stable across
@@ -43,8 +46,8 @@ export async function generateSiteSitemap(dist = join(repoRoot, SITE_DIST)): Pro
   const lastmod = await articleLastmodByRoute(publicRoutes);
   const sitemapPath = join(dist, 'sitemap.xml');
   const robotsPath = join(dist, 'robots.txt');
-  await Deno.writeTextFile(sitemapPath, renderSitemapXml(publicRoutes, { lastmod }));
-  await Deno.writeTextFile(robotsPath, renderRobotsTxt());
+  await writeFile(sitemapPath, renderSitemapXml(publicRoutes, { lastmod }));
+  await writeFile(robotsPath, renderRobotsTxt());
   return [sitemapPath, robotsPath];
 }
 

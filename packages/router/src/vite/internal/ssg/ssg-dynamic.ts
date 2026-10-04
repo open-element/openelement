@@ -4,7 +4,7 @@
  * Handles dynamic route rendering using getStaticPaths() + renderRoute()
  * from the SSR bundle, and i18n locale expansion.
  *
- * alpha.18 (R2-H3): renderRoute() defined results are honored here -
+ * renderRoute() defined results are honored here -
  * redirect/notFound pages are skipped (never persisted as 200 pages), and
  * render failures (status >= 500, collected errors, or a renderRoute throw)
  * either abort the build ('fail', default) or are logged and skipped
@@ -15,7 +15,8 @@
  * both expansion paths (dynamic routes and i18n locale expansion).
  */
 
-import { join } from '../../../internal/host-path.ts';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'pathe';
 import { buildError, SsgDynamicErrorCode } from '../../../internal/error-codes.ts';
 import type {
   RouteInfoEntry,
@@ -37,7 +38,7 @@ type RenderRouteFn =
 
 type GetStaticPathsFn = ((path: string) => Promise<Array<Record<string, string>>>) | undefined;
 
-/** Classification of a renderRoute() result (alpha.18 R2-H3). */
+/** Classification of a renderRoute() result. */
 type PageOutcome =
   | { kind: 'ok'; html: string }
   | { kind: 'redirect'; status: number; location?: string }
@@ -143,8 +144,8 @@ async function writeRenderedPage(
   }
 
   const pageDir = join(root, outDir, targetPath);
-  Deno.mkdirSync(pageDir, { recursive: true });
-  Deno.writeTextFileSync(join(pageDir, 'index.html'), outcome.html);
+  mkdirSync(pageDir, { recursive: true });
+  writeFileSync(join(pageDir, 'index.html'), outcome.html, 'utf8');
 
   log.info(
     locale
@@ -160,7 +161,7 @@ async function writeRenderedPage(
  *
  * Returns a map of static path params keyed by route path, which is
  * consumed later when building the ISR manifest. Only params whose page
- * was actually written are registered (alpha.18 R2-H3).
+ * was actually written are registered.
  */
 export async function expandDynamicRoutes(
   dynamicRoutes: RouteInfoItem[],

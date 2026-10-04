@@ -1,8 +1,11 @@
-import { normalize } from '@std/path';
+import { normalize } from 'node:path';
+import { commandOutput } from '../repo/node-command.ts';
 
 const RELEASE_EVIDENCE_PATHS = Object.freeze({
   prefixes: ['docs/release/', 'vendor/', 'www/app/data/_generated-'],
-  exact: ['deno.lock'],
+  // The release flow itself refreshes the workspace lockfile, so it may
+  // legitimately differ here.
+  exact: ['pnpm-lock.yaml'],
 });
 
 function normalizeGitPath(path: string): string {
@@ -35,11 +38,11 @@ export function filterNonEvidenceDirty(status: string): string[] {
  * the thrown error; the dirty paths follow on subsequent lines.
  */
 export async function assertCleanWorktree(refusal: string): Promise<void> {
-  const output = await new Deno.Command('git', {
+  const output = await commandOutput('git', {
     args: ['status', '--porcelain'],
     stdout: 'piped',
     stderr: 'piped',
-  }).output();
+  });
   if (!output.success) {
     throw new Error(`git status failed with exit code ${output.code}`);
   }

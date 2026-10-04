@@ -1,11 +1,12 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys
+#!/usr/bin/env node
 /**
  * Third-party Web Components qualification fixture.
  *
  * Artifact consumption: this fixture consumes workspace SOURCE artifacts. The
  * runner generates a fresh app with packages/create into a temp directory,
- * aliases every workspace package to its in-repo source (file: URLs in the
- * app import map and Vite config), copies the fixture sources from ./app in,
+ * aliases every workspace package to its in-repo source (`link:` entries in
+ * the app package.json plus a `resolve.alias` block in the Vite config),
+ * copies the fixture sources from ./app in,
  * and builds with the in-repo Router build CLI. The third-party libraries
  * (Shoelace, Material Web, FAST, Ionic/Stencil, Lit) are consumed as pinned
  * npm packages, exactly as a real application would consume them.
@@ -34,7 +35,12 @@
  * output; generated evidence is not committed to the product repository.
  */
 
-import { dirname, fromFileUrl, join } from '@std/path';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import process from 'node:process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { Page } from '@playwright/test';
 import { formatJson } from '@openelement/element/build-utils';
@@ -43,21 +49,24 @@ import { extractSsrAdmissionPlan } from '../../lib/qualify-harness/admission-pla
 import { runRouterBuild } from '../../lib/qualify-harness/build-router.ts';
 import { launchQualifyBrowser } from '../../lib/qualify-harness/drive-chromium.ts';
 import { scaffoldApp } from '../../lib/qualify-harness/scaffold-app.ts';
-import { applyWorkspaceAliases } from '../../lib/qualify-harness/workspace-alias.ts';
+import {
+  applyWorkspaceAliases,
+  installAppDependencies,
+} from '../../lib/qualify-harness/workspace-alias.ts';
 
-const repoRoot = dirname(dirname(dirname(dirname(fromFileUrl(import.meta.url)))));
-const fixtureDir = dirname(fromFileUrl(import.meta.url));
+const repoRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
+const fixtureDir = dirname(fileURLToPath(import.meta.url));
 const PROJECT_NAME = 'third-party-web-components-app';
 
+// Plain package.json ranges for the scaffolded app's dependencies (the
+// import-map prefix shapes of the Deno era are gone: the bare package pin
+// covers every subpath).
 const THIRD_PARTY_IMPORTS = {
-  lit: 'npm:lit@3.3.3',
-  '@shoelace-style/shoelace': 'npm:@shoelace-style/shoelace@2.20.1',
-  '@shoelace-style/shoelace/': 'npm:@shoelace-style/shoelace@2.20.1/',
-  '@material/web': 'npm:@material/web@2.4.1',
-  '@material/web/': 'npm:@material/web@2.4.1/',
-  '@microsoft/fast-element': 'npm:@microsoft/fast-element@3.0.2',
-  '@ionic/core': 'npm:@ionic/core@8.8.18',
-  '@ionic/core/': 'npm:@ionic/core@8.8.18/',
+  lit: '3.3.3',
+  '@shoelace-style/shoelace': '2.20.1',
+  '@material/web': '2.4.1',
+  '@microsoft/fast-element': '3.0.2',
+  '@ionic/core': '8.8.18',
 };
 
 async function readEventCount(page: Page): Promise<number> {
@@ -478,7 +487,7 @@ export async function verifyBrowser(distDir: string): Promise<{
 }
 
 async function verifySsrHtml(appDir: string): Promise<void> {
-  const html = await Deno.readTextFile(join(appDir, 'dist', 'third-party-wc', 'index.html'));
+  const html = await readFile(join(appDir, 'dist', 'third-party-wc', 'index.html'), 'utf8');
   // SSR form: foreign tags remain opaque hosts; three slot-first Lit probes
   // have server-born children, while the other labels are attached by the
   // fixture after activation. The legacy data-eid marker is not emitted.
@@ -536,6 +545,10 @@ export async function prepareFixtureApp(tmpRoot: string): Promise<string> {
         "packageIslands: ['@acme/components'],\n    island: { upgradeStrategy: 'load' },",
       ),
   });
+  // The install materializes the scaffolded app's npm dependencies up front
+  // (same mechanism as the web-component-interop qualify harness), so
+  // vite.config.ts resolves when the build loads it.
+  await installAppDependencies(appDir);
   await runRouterBuild(appDir);
   return appDir;
 }
@@ -724,10 +737,10 @@ const METADATA_PROBES = [
 
 async function pathExists(path: string): Promise<boolean> {
   try {
-    await Deno.stat(path);
+    await stat(path);
     return true;
   } catch (error) {
-    if (error instanceof Deno.errors.NotFound) return false;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
     throw error;
   }
 }
@@ -816,13 +829,13 @@ function observeSsrForm(html: string, entry: CorpusEntry): SsrFormObservation {
 }
 
 async function main(): Promise<void> {
-  const tmpRoot = await Deno.makeTempDir({ prefix: 'openelement-third-party-wc-' });
-  const keep = Deno.env.get('OPEN_ELEMENT_KEEP_THIRD_PARTY_WC_SMOKE') === '1';
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'openelement-third-party-wc-'));
+  const keep = process.env.OPEN_ELEMENT_KEEP_THIRD_PARTY_WC_SMOKE === '1';
   try {
     const appDir = await prepareFixtureApp(tmpRoot);
     await verifySsrHtml(appDir);
-    const html = await Deno.readTextFile(join(appDir, 'dist', 'third-party-wc', 'index.html'));
-    const entryJs = await Deno.readTextFile(join(appDir, 'dist', 'server', 'entry.js'));
+    const html = await readFile(join(appDir, 'dist', 'third-party-wc', 'index.html'), 'utf8');
+    const entryJs = await readFile(join(appDir, 'dist', 'server', 'entry.js'), 'utf8');
     const plan = extractSsrAdmissionPlan(entryJs);
     const decisionByTag = new Map(plan.decisions.map((d) => [d.tagName, d]));
     const {
@@ -910,10 +923,10 @@ async function main(): Promise<void> {
       schemaVersion: 1,
       basis: 'observed SSR HTML and Chromium upgrade; not an adapter declaration',
       evidenceIdentity: {
-        candidateSha: Deno.env.get('CANDIDATE_SHA') ?? null,
+        candidateSha: process.env.CANDIDATE_SHA ?? null,
         htmlSha256: await hash(html),
         entrySha256: await hash(entryJs),
-        deno: Deno.version.deno,
+        node: process.version,
         chromium: browserVersion,
       },
       entries: entries
@@ -966,10 +979,10 @@ async function main(): Promise<void> {
       slotFirst,
       tierReport,
     };
-    const reportPath = Deno.env.get('OPEN_ELEMENT_TIER_REPORT');
+    const reportPath = process.env.OPEN_ELEMENT_TIER_REPORT;
     if (reportPath) {
-      await Deno.mkdir(dirname(reportPath), { recursive: true });
-      await Deno.writeTextFile(reportPath, formatJson(tierReport));
+      await mkdir(dirname(reportPath), { recursive: true });
+      await writeFile(reportPath, formatJson(tierReport));
     }
     console.log(JSON.stringify(record, null, 2));
     const t0Proved = tierReport.entries.filter((entry) => entry.highestPassedTier === 'T0').length;
@@ -980,7 +993,7 @@ async function main(): Promise<void> {
     if (keep) {
       console.log(`Keeping third-party WC qualification project at ${tmpRoot}`);
     } else {
-      await Deno.remove(tmpRoot, { recursive: true });
+      await rm(tmpRoot, { recursive: true });
     }
   }
 }

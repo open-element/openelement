@@ -12,11 +12,9 @@
  * - clicking the button increments the count property — interaction survives
  *   the stream backfill that lands in a neighboring Part of the same page.
  *
- * The `lit` bare specifier resolves through the workspace import map pin
- * (`lit: npm:lit@3.3.3`, the same pin the third-party and router-lit
- * fixtures use) and the workspace node_modules; the fixture's own deno.json
- * stays untouched because router-native-framework shares its dependency
- * universe (and byte-identical lockfile) with router-request-time.
+ * The `lit` bare specifier resolves from this fixture's own package.json
+ * (`lit: 3.3.3`, the same pin the router-lit fixture declares) through the
+ * workspace node_modules.
  */
 import { css, html, LitElement } from 'lit';
 

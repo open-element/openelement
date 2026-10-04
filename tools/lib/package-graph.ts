@@ -1,11 +1,13 @@
 /**
  * Shared package graph utilities for openElement workspace tooling.
  *
- * Reads packages/<name>/deno.json, builds an internal dependency graph, and provides
- * topological sorting / cycle detection used by graph:check and release tasks.
+ * Reads packages/<name>/package.json, builds an internal dependency graph,
+ * and provides topological sorting / cycle detection used by graph:check and
+ * release tasks.
  */
 
-import { walkSync } from '@std/fs/walk';
+import { readFileSync, readdirSync } from 'node:fs';
+import { readdir, readFile } from 'node:fs/promises';
 import { formatError } from '@openelement/element';
 import { extractStaticModuleSpecifiers } from './typescript-ast.ts';
 
@@ -61,7 +63,7 @@ function collectInternalDeps(dir: string, exports: unknown, self: string): strin
   function scanFile(relativePath: string): void {
     const cleanPath = relativePath.replace(/^\.\//, '');
     try {
-      const text = Deno.readTextFileSync(`${dir}/${cleanPath}`);
+      const text = readFileSync(`${dir}/${cleanPath}`, 'utf8');
       for (const specifier of extractOpenImports(text)) {
         const base = normalizeInternalDep(specifier, self);
         if (base) deps.add(base);
@@ -73,12 +75,12 @@ function collectInternalDeps(dir: string, exports: unknown, self: string): strin
 
   // Scan src/ if present.
   try {
-    for (const entry of walkSync(srcDir, {
-      includeDirs: false,
-      skip: [/^node_modules$/, /^dist$/],
-    })) {
+    const entries = readdirSync(srcDir, { recursive: true, withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) continue;
       if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue;
-      const text = Deno.readTextFileSync(entry.path);
+      const entryPath = `${entry.parentPath}/${entry.name}`;
+      const text = readFileSync(entryPath, 'utf8');
       for (const specifier of extractOpenImports(text)) {
         const base = normalizeInternalDep(specifier, self);
         if (base) deps.add(base);
@@ -101,18 +103,19 @@ function collectInternalDeps(dir: string, exports: unknown, self: string): strin
 }
 
 export async function readPackage(dir: string): Promise<PackageInfo | null> {
-  const path = `${dir}/deno.json`;
+  const path = `${dir}/package.json`;
   let raw: string;
   try {
-    raw = await Deno.readTextFile(path);
+    raw = await readFile(path, 'utf8');
   } catch (error) {
-    if (error instanceof Deno.errors.NotFound) return null;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
   }
   let json: {
     name?: string;
     version?: string;
-    imports?: Record<string, string>;
+    dependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
     exports?: unknown;
   };
   try {
@@ -127,7 +130,10 @@ export async function readPackage(dir: string): Promise<PackageInfo | null> {
   }
   const name = json.name;
   if (!name) return null;
-  const imports: Record<string, string> = json.imports ?? {};
+  // The dependency declaration (dependencies + peers) is the manifest's
+  // import surface: workspace members declare `@openelement/*` here with
+  // `workspace:*`.
+  const imports: Record<string, string> = { ...json.dependencies, ...json.peerDependencies };
   const declaredDeps = Object.keys(imports)
     .map((specifier) => normalizeInternalDep(specifier, name))
     .filter((specifier): specifier is string => specifier !== null);
@@ -146,9 +152,9 @@ export async function readPackage(dir: string): Promise<PackageInfo | null> {
 
 export async function readPackages(): Promise<PackageInfo[]> {
   const packages: PackageInfo[] = [];
-  for await (const entry of Deno.readDir('packages')) {
-    if (!entry.isDirectory) continue;
-    const info = await readPackage(`packages/${entry.name}`);
+  for (const name of await readdir('packages', { withFileTypes: true })) {
+    if (!name.isDirectory()) continue;
+    const info = await readPackage(`packages/${name.name}`);
     if (info) packages.push(info);
   }
   return packages.sort((a, b) => a.name.localeCompare(b.name));

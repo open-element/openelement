@@ -13,7 +13,9 @@
  *        missing or stale. Wired into `gate:release` as ui-manifest:check.
  */
 
-import { walkSync } from '@std/fs/walk';
+import { readFileSync, readdirSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import type {
   OpenElementAttribute,
   OpenElementCssPart,
@@ -27,10 +29,10 @@ import { formatJson } from '@openelement/element/build-utils';
 import { parseTypeScript } from '../../../tools/lib/typescript-ast.ts';
 
 const UI_SRC_DIR = new URL('../src/', import.meta.url);
-const UI_DENO_JSON = new URL('../deno.json', import.meta.url);
+const UI_PACKAGE_JSON = new URL('../package.json', import.meta.url);
 const OUT_FILE = new URL('../src/generated-manifest.json', import.meta.url);
 
-const pkgVersion = JSON.parse(Deno.readTextFileSync(UI_DENO_JSON)).version;
+const pkgVersion = JSON.parse(readFileSync(UI_PACKAGE_JSON, 'utf8')).version;
 
 interface ComponentMeta {
   file: string;
@@ -338,9 +340,11 @@ function buildMeta(file: string, source: string): ComponentMeta {
 
 function readComponentSources(): ComponentMeta[] {
   const metas: ComponentMeta[] = [];
-  for (const entry of walkSync(UI_SRC_DIR, { includeDirs: false })) {
-    if (!entry.isFile || !entry.name.startsWith('open-') || !entry.name.endsWith('.tsx')) continue;
-    const source = Deno.readTextFileSync(entry.path);
+  for (const entry of readdirSync(UI_SRC_DIR, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory() || !entry.name.startsWith('open-') || !entry.name.endsWith('.tsx')) {
+      continue;
+    }
+    const source = readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8');
     if (!source.includes('extends OpenElement')) continue;
     metas.push(buildMeta(entry.name, source));
   }
@@ -385,7 +389,7 @@ export function buildManifest(): GeneratedUiManifest {
 
   return {
     $comment:
-      'GENERATED FILE - do not edit. Regenerate with: deno task generate:ui-manifest (drift gate: ui-manifest:check).',
+      'GENERATED FILE - do not edit. Regenerate with: pnpm --filter @openelement/ui run generate:ui-manifest (drift gate: ui-manifest:check).',
     schemaVersion: '1.0.0',
     packageName: '@openelement/ui',
     version: pkgVersion,
@@ -402,21 +406,25 @@ if (import.meta.main) {
   const manifest = buildManifest();
   const text = formatJson(manifest);
   const target = OUT_FILE.pathname;
-  if (Deno.args.includes('--check')) {
+  if (process.argv.slice(2).includes('--check')) {
     let existing: string;
     try {
-      existing = await Deno.readTextFile(OUT_FILE);
+      existing = await readFile(OUT_FILE, 'utf8');
     } catch {
-      console.error(`${target} is missing; run deno task --cwd packages/ui generate:ui-manifest`);
-      Deno.exit(1);
+      console.error(
+        `${target} is missing; run pnpm --filter @openelement/ui run generate:ui-manifest`,
+      );
+      process.exit(1);
     }
     if (existing !== text) {
-      console.error(`${target} is stale; run deno task --cwd packages/ui generate:ui-manifest`);
-      Deno.exit(1);
+      console.error(
+        `${target} is stale; run pnpm --filter @openelement/ui run generate:ui-manifest`,
+      );
+      process.exit(1);
     }
     console.log(`UI manifest check passed (${manifest.declarations.length} declarations).`);
   } else {
-    await Deno.writeTextFile(OUT_FILE, text);
+    await writeFile(OUT_FILE, text);
     console.log(`Wrote ${manifest.declarations.length} declarations to ${target}`);
   }
 }

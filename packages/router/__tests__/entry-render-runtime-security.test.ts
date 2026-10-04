@@ -11,7 +11,7 @@
  * so hostile route params, loader data, or author projector records can
  * never pollute the props record that flows into the compiled serializer.
  */
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { DANGEROUS_KEYS as CANONICAL_DANGEROUS_KEYS } from '../../element/src/internal/core/security.ts';
 import { DANGEROUS_KEYS } from '../src/vite/internal/server-runtime/security.ts';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
@@ -24,30 +24,33 @@ const basicRoutes = [
   { path: '/', filePath: 'index.tsx', type: 'page', varName: 'pageIndex', definePage: true },
 ] as const;
 
-Deno.test('the security module binds the canonical security.ts set, and generated entries carry no copy', () => {
+test('the security module binds the canonical security.ts set, and generated entries carry no copy', () => {
   // The factory-side binding is the canonical set itself (one import edge,
   // no serialization to drift).
-  assertEquals(DANGEROUS_KEYS, CANONICAL_DANGEROUS_KEYS);
+  expect(DANGEROUS_KEYS).toEqual(CANONICAL_DANGEROUS_KEYS);
   // #1470 block e: the serialized __DANGEROUS_KEYS copy is retired from the
   // generated entry in every consumer setup (the repo's string-eval harnesses
   // bind implementations through their evaluation context, so they never
   // needed the copy either).
   const code = renderEntry(buildEntryDescriptor([...basicRoutes]));
-  assert(!code.includes('__DANGEROUS_KEYS'), 'no serialized dangerous-key copy');
+  expect(!code.includes('__DANGEROUS_KEYS'), 'no serialized dangerous-key copy').toBeTruthy();
   for (const key of DANGEROUS_KEYS) {
-    assert(!code.includes(`"${key}"`), `generated entries must not serialize the key ${key}`);
+    expect(
+      !code.includes(`"${key}"`),
+      `generated entries must not serialize the key ${key}`,
+    ).toBeTruthy();
   }
 });
 
 function assertFiltered(record: Record<string, unknown>, expected: Record<string, unknown>): void {
-  assertEquals(Object.getPrototypeOf(record), Object.prototype);
-  assertEquals(Object.hasOwn(record, '__proto__'), false);
-  assertEquals(Object.hasOwn(record, 'constructor'), false);
-  assertEquals(Object.hasOwn(record, 'prototype'), false);
-  assertEquals(record, expected);
+  expect(Object.getPrototypeOf(record)).toEqual(Object.prototype);
+  expect(Object.hasOwn(record, '__proto__')).toEqual(false);
+  expect(Object.hasOwn(record, 'constructor')).toEqual(false);
+  expect(Object.hasOwn(record, 'prototype')).toEqual(false);
+  expect(record).toEqual(expected);
 }
 
-Deno.test('defaultPageProps filters dangerous keys from params and loader data (#1214)', () => {
+test('defaultPageProps filters dangerous keys from params and loader data (#1214)', () => {
   const runtime = createPagePropsRuntime({ dangerousKeys: DANGEROUS_KEYS });
   const params = JSON.parse(
     '{"__proto__": "x", "constructor": "y", "prototype": "z", "id": "42"}',
@@ -55,21 +58,23 @@ Deno.test('defaultPageProps filters dangerous keys from params and loader data (
   const data = JSON.parse(HOSTILE_JSON) as Record<string, unknown>;
   const projected = runtime.defaultPageProps({ params, data });
   assertFiltered(projected, { id: '42', title: 'legit' });
-  assertEquals(({} as { polluted?: unknown }).polluted, undefined);
+  expect(({} as { polluted?: unknown }).polluted).toEqual(undefined);
 });
 
-Deno.test('defaultPageProps keeps full parity for legitimate keys (#1214)', () => {
+test('defaultPageProps keeps full parity for legitimate keys (#1214)', () => {
   const runtime = createPagePropsRuntime({ dangerousKeys: DANGEROUS_KEYS });
-  assertEquals(runtime.defaultPageProps({ params: { id: '42' }, data: { title: 'Hello', n: 1 } }), {
+  expect(
+    runtime.defaultPageProps({ params: { id: '42' }, data: { title: 'Hello', n: 1 } }),
+  ).toEqual({
     id: '42',
     title: 'Hello',
     n: 1,
   });
-  assertEquals(runtime.defaultPageProps({ params: { id: '7' }, data: ['a'] }), { id: '7' });
-  assertEquals(runtime.defaultPageProps({}), {});
+  expect(runtime.defaultPageProps({ params: { id: '7' }, data: ['a'] })).toEqual({ id: '7' });
+  expect(runtime.defaultPageProps({})).toEqual({});
 });
 
-Deno.test('pageProps filters dangerous keys returned by the descriptor props projector (#1214)', () => {
+test('pageProps filters dangerous keys returned by the descriptor props projector (#1214)', () => {
   const runtime = createPagePropsRuntime({ dangerousKeys: DANGEROUS_KEYS });
   const routeModule = {
     default: {
@@ -81,7 +86,7 @@ Deno.test('pageProps filters dangerous keys returned by the descriptor props pro
   assertFiltered(runtime.pageProps(routeModule, { data: {}, params: {} }), { title: 'legit' });
 });
 
-Deno.test('pageErrorProps filters dangerous keys returned by the descriptor error projector (#1214)', () => {
+test('pageErrorProps filters dangerous keys returned by the descriptor error projector (#1214)', () => {
   const runtime = createPagePropsRuntime({ dangerousKeys: DANGEROUS_KEYS });
   const routeModule = {
     default: {

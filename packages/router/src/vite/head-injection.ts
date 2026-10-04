@@ -1,8 +1,6 @@
 /**
  * @openelement/router — Head injection validation & serialization.
  *
- * Extracted from index.ts in v0.22 (SOP-004: build tooling decomposition).
- *
  * Provides:
  * - assertNoScriptTags() — script tag safety check for head fragments
  * - validateSafeUrl()    — URL protocol validation against XSS vectors
@@ -98,9 +96,9 @@ export function validateSafeUrl(url: string, context: string): string {
       }
     }
   } catch (e) {
-    // H-01 fix: Re-throw OpenElementError so security warnings are not swallowed
+    // Re-throw OpenElementError so security warnings are not swallowed
     if (e instanceof OpenElementError) throw e;
-    // v0.14.3: decodeURIComponent can throw for two reasons:
+    // decodeURIComponent can throw for two reasons:
     //   1. Malicious URLs with invalid percent-encoding (e.g., "%ZZ")
     //   2. Legitimate URLs with lone surrogates (rare, but valid URI-encoded)
     // We treat actual URIError as unsafe, but log the distinction for debugging.
@@ -191,7 +189,7 @@ export function buildHeadExtras(options: FrameworkOptions): HeadExtrasResult {
         attrs[k] = v;
       }
     }
-    // H-04/05 fix: Add SRI attributes for CDN security
+    // SRI attributes for CDN security
     if (isObjectScript) {
       if (script.integrity) attrs.integrity = script.integrity;
       if (script.crossorigin) attrs.crossorigin = script.crossorigin;

@@ -1,49 +1,24 @@
 /** Packed UI consumer: fresh TypeScript project installs the UI tarball and typechecks. */
-import { existsSync } from '@std/fs';
-import { join, resolve } from '@std/path';
+import { tmpdir } from 'node:os';
+import { runProcess, walkPackedDeclarations } from './consumer-packaged-shared.ts';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { formatJson } from '@openelement/element/build-utils';
-import ts from 'typescript';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
-import { DECLARATION_LEAK_PATTERN } from './consumer-packaged-shared.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
 const INSTALL_TIMEOUT_MS = 5 * 60_000;
 const TYPES_TIMEOUT_MS = 5 * 60_000;
 
-async function run(
+function run(
   command: string,
   args: string[],
   cwd: string,
   env: Record<string, string>,
   timeoutMs: number,
 ): Promise<{ success: boolean; output: string }> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const timeoutId = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  try {
-    const result = await new Deno.Command(command, {
-      args,
-      cwd,
-      env,
-      stdout: 'piped',
-      stderr: 'piped',
-      signal: controller.signal,
-    }).output();
-    const decoder = new TextDecoder();
-    const output = decoder.decode(result.stdout) + decoder.decode(result.stderr);
-    if (timedOut) {
-      return {
-        success: false,
-        output: `Timed out after ${timeoutMs}ms: ${command} ${args.join(' ')}\n${output}`,
-      };
-    }
-    return { success: result.success, output };
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  return runProcess(command, args, cwd, { timeoutMs, env });
 }
 
 const uiTarball = join(repoRoot, 'packages', 'ui', `openelement-ui-${PACKAGE_VERSION}.tgz`);
@@ -56,14 +31,14 @@ const elementTarball = join(
 for (const tarball of [uiTarball, elementTarball]) {
   if (!existsSync(tarball)) {
     throw new Error(
-      `Missing packed release artifact: ${tarball} (run \`deno task pack:dry-run\` first)`,
+      `Missing packed release artifact: ${tarball} (run \`pnpm --dir tools/release run pack:dry-run\` first)`,
     );
   }
 }
 
-const tmp = await Deno.makeTempDir({ prefix: 'openelement-packaged-ui-' });
+const tmp = await mkdtemp(join(tmpdir(), 'openelement-packaged-ui-'));
 try {
-  Deno.writeTextFileSync(
+  writeFileSync(
     join(tmp, 'package.json'),
     formatJson({
       name: 'openelement-packed-ui-consumer',
@@ -89,14 +64,14 @@ try {
   );
 
   for (const name of ['@openelement/ui', '@openelement/element']) {
-    const resolved = await Deno.realPath(join(tmp, 'node_modules', ...name.split('/')));
+    const resolved = await realpath(join(tmp, 'node_modules', ...name.split('/')));
     if (resolved === repoRoot || resolved.startsWith(`${repoRoot}/`)) {
       throw new Error(`Packed UI consumer resolved ${name} into the repository: ${resolved}`);
     }
   }
   console.log('PASS packaged-ui boundary — no dependency resolves into the repository');
 
-  Deno.writeTextFileSync(
+  writeFileSync(
     join(tmp, 'main.ts'),
     `import { OpenButton, OpenCallout, OpenInput, manifest, registerOpenUi } from '@openelement/ui';
 import { OpenDropdown } from '@openelement/ui/open-dropdown';
@@ -121,7 +96,7 @@ void [button, input, callout, dropdown];
 if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI manifest');
 `,
   );
-  Deno.writeTextFileSync(
+  writeFileSync(
     join(tmp, 'tsconfig.json'),
     formatJson({
       compilerOptions: {
@@ -150,53 +125,9 @@ if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI m
   );
 
   const uiDir = join(tmp, 'node_modules', '@openelement', 'ui');
-  const pkgJson = JSON.parse(Deno.readTextFileSync(join(uiDir, 'package.json')));
-  const host = {
-    fileExists: (name: string): boolean => {
-      try {
-        return Deno.statSync(name).isFile;
-      } catch {
-        return false;
-      }
-    },
-    readFile: (name: string): string | undefined => {
-      try {
-        return Deno.readTextFileSync(name);
-      } catch {
-        return undefined;
-      }
-    },
-  };
-  const seen = new Set<string>();
+  const pkgJson = JSON.parse(readFileSync(join(uiDir, 'package.json'), 'utf8'));
   const problems: string[] = [];
-  const walk = (path: string): void => {
-    if (seen.has(path)) return;
-    seen.add(path);
-    const text = Deno.readTextFileSync(path);
-    for (const { fileName } of ts.preProcessFile(text).importedFiles) {
-      if (DECLARATION_LEAK_PATTERN.test(fileName)) problems.push(`${path} -> ${fileName}`);
-      const resolved = ts.resolveModuleName(
-        fileName,
-        path,
-        {
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          module: ts.ModuleKind.ESNext,
-        },
-        host,
-      ).resolvedModule;
-      if (!resolved) {
-        problems.push(`${path} -> ${fileName} (unresolved)`);
-        continue;
-      }
-      if (!/\.d\.[cm]?ts$/.test(resolved.resolvedFileName)) {
-        problems.push(
-          `${path} -> ${fileName} (resolves to ${resolved.resolvedFileName}; no packed .d.ts)`,
-        );
-        continue;
-      }
-      walk(resolved.resolvedFileName);
-    }
-  };
+  const entryPaths: string[] = [];
   for (const [subpath, conditions] of Object.entries(pkgJson.exports ?? {})) {
     const cond = conditions as Record<string, string>;
     const typesTarget = cond.types;
@@ -204,12 +135,17 @@ if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI m
       problems.push(`export '${subpath}' has no types condition`);
       continue;
     }
-    walk(join(uiDir, typesTarget));
+    entryPaths.push(join(uiDir, typesTarget));
   }
+  // The shared packed-declaration walker: leak scan over every specifier,
+  // resolution over type-bearing edges only (same semantics as the router and
+  // element legs).
+  const { modules, problems: walkProblems } = walkPackedDeclarations({ entries: entryPaths });
+  problems.push(...walkProblems);
   if (problems.length > 0) {
     throw new Error(`Packed @openelement/ui declaration graph violations:\n${problems.join('\n')}`);
   }
-  console.log(`PASS packaged-ui declarations — ${seen.size} declaration modules resolved clean`);
+  console.log(`PASS packaged-ui declarations — ${modules} declaration modules resolved clean`);
 } finally {
-  await Deno.remove(tmp, { recursive: true });
+  await rm(tmp, { recursive: true });
 }

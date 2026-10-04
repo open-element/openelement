@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   analyzeModuleSemantics,
   type ModuleSemanticFacts,
@@ -148,7 +148,7 @@ const semanticCases: SemanticCase[] = [
     },
   },
   {
-    name: 'recognizes defineElement aliases from both packages',
+    name: 'recognizes injected router defineElement; element package exposes no factory',
     vocabulary: ROUTER_VOCABULARY,
     source: `
       import { defineElement as appElement } from '@openelement/router';
@@ -157,11 +157,14 @@ const semanticCases: SemanticCase[] = [
       elementElement('oe-element-element', {});
     `,
     expected: {
-      definedCustomElementTags: ['oe-app-element', 'oe-element-element'],
+      // The element package has no defineElement factory: compiled
+      // registration is the @element decorator, so its namesake import only
+      // resolves through host-injected vocabulary and fails closed here.
+      definedCustomElementTags: ['oe-app-element'],
     },
   },
   {
-    name: 'default scan knows only the element defineElement — defineIsland is retired vocabulary',
+    name: 'default scan knows no registration factories — retired names fail closed',
     source: `
       import {
         defineElement as elementElement,
@@ -178,9 +181,9 @@ const semanticCases: SemanticCase[] = [
     `,
     expected: {
       // The default scan fails closed on every retired or foreign factory:
-      // defineIsland left both packages' authoring surface in v0.44, and the
-      // router's defineElement rides host-injected vocabulary only.
-      definedCustomElementTags: ['oe-element-element'],
+      // neither package's defineElement nor defineIsland is core vocabulary,
+      // and the router's live factories ride host-injected vocabulary only.
+      definedCustomElementTags: [],
     },
   },
   {
@@ -348,17 +351,17 @@ const semanticCases: SemanticCase[] = [
 ];
 
 for (const testCase of semanticCases) {
-  Deno.test(`analyzeModuleSemantics: ${testCase.name}`, () => {
+  test(`analyzeModuleSemantics: ${testCase.name}`, () => {
     const actual = analyzeModuleSemantics(
       testCase.source,
       testCase.fileName ?? `/matrix/${testCase.name}.tsx`,
       { vocabulary: testCase.vocabulary },
     );
-    assertEquals(actual, { ...emptyFacts(), ...testCase.expected }, testCase.name);
+    expect(actual, testCase.name).toEqual({ ...emptyFacts(), ...testCase.expected });
   });
 }
 
-Deno.test('analyzeModuleSemantics is deterministic across repeated analysis', () => {
+test('analyzeModuleSemantics is deterministic across repeated analysis', () => {
   const source = `
     import { defineElement } from '@openelement/router';
     export const tagName = 'oe-repeatable';
@@ -376,7 +379,7 @@ Deno.test('analyzeModuleSemantics is deterministic across repeated analysis', ()
   );
 
   for (const output of outputs.slice(1)) {
-    assertEquals(output, outputs[0]);
-    assertEquals(JSON.stringify(output), JSON.stringify(outputs[0]));
+    expect(output).toEqual(outputs[0]);
+    expect(JSON.stringify(output)).toEqual(JSON.stringify(outputs[0]));
   }
 });

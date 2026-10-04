@@ -120,9 +120,8 @@ export default class PageContributing extends OpenElement {
               <pre>
                 <code>{`git clone https://github.com/open-element/openelement.git
 cd openelement
-deno install
-deno task test
-deno task dev`}</code>
+pnpm install
+pnpm test`}</code>
               </pre>
             </open-code-block>
             <p class='setup-copy'>

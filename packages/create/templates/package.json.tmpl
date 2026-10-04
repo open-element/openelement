@@ -1,6 +1,29 @@
 {
   "name": "${name}",
   "private": true,
+  "version": "0.0.0",
   "type": "module",
-  "dependencies": {}
+  "packageManager": "pnpm@12.8.1",
+  "engines": {
+    "node": ">=24.2"
+  },
+  "scripts": {
+    "dev": "vite",
+    "check": "tsc --noEmit",
+    "test": "node --test",
+    "build": "node node_modules/@openelement/router/src/cli/build.js",
+    "start": "node node_modules/@openelement/router/src/cli/start.js",
+    "preview": "node node_modules/@openelement/router/src/cli/start.js --mode=preview"
+  },
+  "dependencies": {
+    "@hono/vite-dev-server": "^0.25.3",
+    "@openelement/element": "${v.element}",
+    "@openelement/router": "${v.router}",
+    "hono": "^4.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "typescript": "6.0.3",
+    "vite": "${v.vite}"
+  }
 }

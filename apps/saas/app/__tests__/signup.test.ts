@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
@@ -36,7 +37,7 @@ function credentials(email = 'user@example.com', password = 'password-8') {
   return data;
 }
 
-Deno.test('signup rejects a Cloudflare rate-limit denial before auth', async () => {
+test('signup rejects a Cloudflare rate-limit denial before auth', async () => {
   let called = false;
   const action = createSignupAction(() => {
     called = true;
@@ -47,46 +48,50 @@ Deno.test('signup rejects a Cloudflare rate-limit denial before auth', async () 
       AUTH_RATE_LIMITER: { limit: () => Promise.resolve({ success: false }) },
     }),
   );
-  assert(isActionFailure(result));
-  assertEquals(result.status, 429);
-  assertEquals(called, false);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(429);
+  expect(called).toEqual(false);
 });
 
-Deno.test('signup rejects missing credentials and short passwords', async () => {
+test('signup rejects missing credentials and short passwords', async () => {
   const result = await createSignupAction(client())(context());
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
   const short = await createSignupAction(client())(context(credentials('user@example.com', 'x')));
-  assert(isActionFailure(short));
-  assertEquals(short.status, 422);
+  expect(isActionFailure(short)).toBeTruthy();
+  expect(short.status).toEqual(422);
 });
 
-Deno.test('signup sanitizes provider failures', async () => {
+test('signup sanitizes provider failures', async () => {
   const result = await createSignupAction(
     client({ error: { message: 'private provider diagnostic eyJsecret' } }),
   )(context(credentials()));
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
-  assertEquals(JSON.stringify(result.data).includes('eyJsecret'), false);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
+  expect(JSON.stringify(result.data).includes('eyJsecret')).toEqual(false);
 });
 
-Deno.test('signup with an immediate session redirects to next', async () => {
-  const error = await assertRejects(() =>
+test('signup with an immediate session redirects to next', async () => {
+  const error = await assertRejectsIncludes(() =>
     createSignupAction(client({ session: { access_token: 'token' } }))(context(credentials())),
   );
-  assert(isOpenElementRedirect(error));
-  assertEquals((error as { location?: string }).location, '/notes');
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect((error as { location?: string }).location).toEqual('/notes');
 });
 
-Deno.test('signup success redirects to the sent confirmation with PRG (#1060)', async () => {
-  const error = await assertRejects(() => createSignupAction(client())(context(credentials())));
-  assert(isOpenElementRedirect(error));
-  assertEquals((error as { location?: string }).location, '/signup?sent=1');
+test('signup success redirects to the sent confirmation with PRG (#1060)', async () => {
+  const error = await assertRejectsIncludes(() =>
+    createSignupAction(client())(context(credentials())),
+  );
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect((error as { location?: string }).location).toEqual('/signup?sent=1');
 });
 
-Deno.test('signup loader exposes the sent confirmation state from the query', () => {
-  assertEquals(signupLoader({ request: new Request('https://app.test/signup?sent=1') }), {
+test('signup loader exposes the sent confirmation state from the query', () => {
+  expect(signupLoader({ request: new Request('https://app.test/signup?sent=1') })).toEqual({
     sent: true,
   });
-  assertEquals(signupLoader({ request: new Request('https://app.test/signup') }), { sent: false });
+  expect(signupLoader({ request: new Request('https://app.test/signup') })).toEqual({
+    sent: false,
+  });
 });

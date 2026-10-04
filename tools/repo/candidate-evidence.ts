@@ -25,8 +25,9 @@
  *   source-matrix-> gate:source (the fast PR-layer gate) + permission/FFI scans
  *   packed       -> gate:packed + publish:npm:dry-run + tarball hashes +
  *                   structured pack diagnostics
- *   fresh-clone  -> clean clone, empty DENO_DIR/npm cache, install, check,
- *                   source gate, packed gate, Site build + official Site E2E
+ *   fresh-clone  -> clean clone, isolated pnpm store/npm cache, install,
+ *                   check, source gate, packed gate, Site build + official
+ *                   Site E2E
  *
  * Each `--job` run writes `<out>/result.json` plus `<out>/logs/*.log`; the
  * result records command, exit code, result, log path, and the log SHA-256.
@@ -47,7 +48,8 @@
  * All commands run with stdin closed (non-interactive invariant).
  */
 
-import { join } from '@std/path';
+import { join } from 'node:path';
+import process from 'node:process';
 import { JOB_NAMES, type JobName } from './candidate-steps.ts';
 import { aggregate } from './candidate-evidence-aggregate.ts';
 import { ARTIFACT_RETENTION_DAYS, validate } from './candidate-evidence-validate.ts';
@@ -85,7 +87,7 @@ export { composeBundleJobs } from './candidate-evidence-aggregate.ts';
 // primitives moved to candidate-evidence-record.ts and the audit lanes import
 // them there; these keep the historical import paths working.
 export {
-  denoExe,
+  nodeExe,
   expectedSha,
   type JobResult,
   type LoadedJob,
@@ -112,10 +114,10 @@ if (import.meta.main) {
   if (validatePath) {
     await validate(
       validatePath,
-      flagValue('expected-sha') ?? Deno.env.get('CANDIDATE_SHA'),
+      flagValue('expected-sha') ?? process.env['CANDIDATE_SHA'],
       Number(flagValue('max-age-days') ?? ARTIFACT_RETENTION_DAYS),
     );
-  } else if (Deno.args.includes('--aggregate')) {
+  } else if (process.argv.slice(2).includes('--aggregate')) {
     await aggregate(
       flagValue('input-dir') ?? join(repoRoot, '.artifacts/ci'),
       flagValue('output') ?? join(repoRoot, '.artifacts/candidate-evidence.json'),

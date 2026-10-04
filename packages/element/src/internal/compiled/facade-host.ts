@@ -353,7 +353,7 @@ export function handleCompiledAttributeChange(
     newValue === null ? record.default : convertFromAttribute(record, newValue);
   // Real signals suppress equal-value notifications: when removal restores
   // the value the signal already holds, the accessor's short-circuit skips
-  // the mirror — restore it explicitly (legacy reflect-removal contract).
+  // the mirror — restore it explicitly (the reflect-removal contract).
   if (newValue === null && record.reflect && record.attribute !== null && state.kernel?.active) {
     const serialized = convertToAttribute(record, sig.value);
     if (serialized !== null && element.getAttribute(record.attribute) !== serialized) {

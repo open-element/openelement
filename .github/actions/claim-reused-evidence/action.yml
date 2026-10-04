@@ -41,7 +41,7 @@ runs:
         REUSE_RUN_ID: ${{ inputs.source-run-id }}
         REUSE_SHA: ${{ inputs.source-sha }}
       run: |
-        deno task --cwd tools/repo candidate:evidence:reuse:claim \
+        vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:reuse:claim \
           --job "$REUSE_JOB" \
           --source-run-id "$REUSE_RUN_ID" \
           --source-sha "$REUSE_SHA"

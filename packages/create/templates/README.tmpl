@@ -6,7 +6,7 @@ elements and shared style sheets in `app/components/`, and client islands
 (including the `app-shell` layout island) in `app/islands/`.
 
 This starter pins the exact `@openelement/element` and `@openelement/router`
-versions it was generated from (`${v.element}`) in `deno.json`; update both
+versions it was generated from (`${v.element}`) in `package.json`; update both
 there when moving to a new release.
 
 Styling ownership is split three ways. Global design tokens and the document
@@ -37,17 +37,18 @@ accepted-key list. `vite.config.ts` stays Vite-only: `plugins: [...openElement()
 The conventions follow the `dirs` block, so moving the three roots under
 `src/` moves the token, shell and head files with them.
 
-## Tasks
+## Scripts
 
-- `deno task dev` — start the Vite dev server.
-- `deno task check` — type-check every route/component file. When you add a
-  route file, add it to this task's file list in `deno.json`.
-- `deno task test` — run Deno tests (the starter ships none).
-- `deno task build` — production build (SSG + Nitro server) into `dist/`.
-- `deno task start` — serve the production build. Use this for production
+- `pnpm dev` — start the Vite dev server.
+- `pnpm check` — type-check every route/component file. The check covers the
+  whole `app/` directory (`tsconfig.json`), so new files are picked up
+  automatically.
+- `pnpm test` — run Node's built-in test runner (the starter ships none).
+- `pnpm build` — production build (SSG + Nitro server) into `dist/`.
+- `pnpm start` — serve the production build. Use this for production
   preview: the starter ships a request-time route (`/contact`), so
-  `deno task preview` (static-only preview, #601) is refused by design.
-- `deno task preview` — static-only preview; refused for this starter (see
+  `pnpm preview` (static-only preview, #601) is refused by design.
+- `pnpm preview` — static-only preview; refused for this starter (see
   above).
 
 ## Blog
@@ -59,14 +60,13 @@ then link it from `app/routes/blog/index.tsx` (the index list is static
 authoring). Interactive content belongs in a compiled island composed from
 the page.
 
-## Import map notes
+## Dependency notes
 
-`deno.json` maps `@openelement/router/nitro-mount` and `hono` even
-though no source file imports them: the dev server and the production
-build resolve `hono` when loading the generated server entry (the
-bundled `dist/` output inlines it), and Nitro deployments bridge the
-built handler through `@openelement/router/nitro-mount`. Do not remove
-them.
+`hono` and `@hono/vite-dev-server` are installed even though no source file
+imports them: the dev server resolves `hono` when loading the generated
+server entry (the bundled `dist/` output inlines it). For Nitro deployments,
+the built handler bridges through the `@openelement/router/nitro-mount`
+subpath of the one `@openelement/router` dependency. Do not remove them.
 
 ## Brand assets
 

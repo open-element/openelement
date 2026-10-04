@@ -1,9 +1,10 @@
 /**
  * `--mode=start|preview` argument parsing for `src/cli/start.ts`.
  *
- * Internal to the Router CLI: the `./cli/start` export entry exists so
- * `deno run npm:@openelement/router/cli/start` can boot the built-output
- * server; its argument parsing is not public API.
+ * Internal to the Router CLI: the `./cli/start` export entry exists so the
+ * generated project's `start` script (and an equivalent `node
+ * node_modules/@openelement/router/src/cli/start.js`) can boot the
+ * built-output server; its argument parsing is not public API.
  */
 
 import { authoringError, ServeErrorCode } from './error-codes.ts';

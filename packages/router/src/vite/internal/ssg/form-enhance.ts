@@ -37,7 +37,7 @@ interface FormEnhance {
 
 /**
  * The effective submission tuple of one form submission — the HTML "submit
- * button" algorithm (Beta.2.2, #1339 §5). Submitter overrides
+ * button" algorithm (#1339 §5). Submitter overrides
  * (formaction/formmethod/formenctype/formtarget/formnovalidate) win over form
  * attributes; missing or invalid method/enctype values fall back to the
  * platform defaults (GET / application/x-www-form-urlencoded). The submit
@@ -184,7 +184,7 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
     if (!(form instanceof win.HTMLFormElement)) return;
     if (!form.hasAttribute('data-open-enhance')) return;
     const submitter = (event as SubmitEvent).submitter as HTMLElement | null;
-    // Beta.2.2 (#1339): the effective submission tuple (the HTML "submit
+    // #1339: the effective submission tuple (the HTML "submit
     // button" algorithm — submitter overrides win over form attributes) is
     // computed in full BEFORE preventDefault(), and every interception
     // decision reads only it. A submission the application does not

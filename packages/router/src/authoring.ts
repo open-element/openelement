@@ -255,12 +255,12 @@ export interface PageHead {
   description?: string;
   meta?: Array<Record<string, string | number | boolean>>;
   /**
-   * Canonical URL of this page (Beta.2.2, #1326), resolved into
+   * Canonical URL of this page (#1326), resolved into
    * <link rel="canonical"> by the shared Document seam.
    */
   canonical?: string;
   /**
-   * Locale alternates of this page (Beta.2.2, #1326), resolved into
+   * Locale alternates of this page (#1326), resolved into
    * <link rel="alternate" hreflang="..."> entries in author order.
    */
   alternates?: Array<{ href: string; hreflang?: string }>;
@@ -324,7 +324,7 @@ export type PageErrorProjector<
 > = (error: unknown, context: PagePropsContext<Data, Params>) => Record<string, unknown>;
 
 /**
- * Resolves a page's head from the request-scoped context (Beta.2.2, #1326).
+ * Resolves a page's head from the request-scoped context (#1326).
  * The resolver receives the same context object the props projector gets and
  * must stay a pure function of it — the Document seam (@openelement/router/
  * document) never fetches, caches, or schedules loaders on its own.
@@ -567,9 +567,10 @@ export interface IslandConfig {
   ssr?: boolean;
   dsd?: boolean;
   /**
-   * Hydration strategy — same values as `IslandOptions.hydrate` on the
-   * element package (`the element/src/internal/protocol/island.ts`):
-   * 'load' | 'idle' | 'visible' | 'media' | 'only'.
+   * Delivery strategy for this island: one of the four element hydration
+   * triggers ('load' | 'idle' | 'visible' | 'only' — the element package's
+   * `HydrationStrategy`), or the router-level 'media' delivery strategy,
+   * which fetches the chunk only while the required `media` query matches.
    */
   hydrate?: IslandDeliveryStrategy;
   /** Media query required by the `media` delivery strategy. */

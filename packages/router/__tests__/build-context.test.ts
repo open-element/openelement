@@ -1,25 +1,26 @@
 /**
- * @openelement/router - build-context.ts tests (Deno)
+ * @openelement/router - build-context.ts tests
  */
-import { assertEquals, assertExists, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { OpenElementBuildContext } from '../src/vite/build-context.ts';
 
-Deno.test('OpenElementBuildContext creates instance without error', () => {
+test('OpenElementBuildContext creates instance without error', () => {
   const ctx = new OpenElementBuildContext({});
-  assertExists(ctx);
+  expect(ctx).toEqual(expect.anything());
 });
 
-Deno.test('OpenElementBuildContext has empty default mutable state', () => {
+test('OpenElementBuildContext has empty default mutable state', () => {
   const ctx = new OpenElementBuildContext({});
 
   // Empty state
-  assertEquals(ctx.phase1.islandTagNames.length, 0);
-  assertEquals(ctx.phase1.packageManifests.length, 0);
-  assertEquals(ctx.phase1.packageIslandDecls.length, 0);
-  assertEquals(ctx.phase1.userResolveAlias, null);
+  expect(ctx.phase1.islandTagNames.length).toEqual(0);
+  expect(ctx.phase1.packageManifests.length).toEqual(0);
+  expect(ctx.phase1.packageIslandDecls.length).toEqual(0);
+  expect(ctx.phase1.userResolveAlias).toEqual(null);
 });
 
-Deno.test('OpenElementBuildContext reset clears all mutable state', () => {
+test('OpenElementBuildContext reset clears all mutable state', () => {
   const ctx = new OpenElementBuildContext({});
 
   // Mutate
@@ -29,16 +30,16 @@ Deno.test('OpenElementBuildContext reset clears all mutable state', () => {
 
   ctx.reset();
 
-  assertEquals(ctx.phase1.islandTagNames.length, 0);
-  assertEquals(ctx.phase1.packageManifests.length, 0);
-  assertEquals(ctx.phase1.packageIslandDecls.length, 0);
+  expect(ctx.phase1.islandTagNames.length).toEqual(0);
+  expect(ctx.phase1.packageManifests.length).toEqual(0);
+  expect(ctx.phase1.packageIslandDecls.length).toEqual(0);
   // NOTE: userResolveAlias is intentionally NOT reset - it's user configuration,
   // not build state (see build-context.ts:138-140). It persists through reset()
   // so Phase 2/3 can still access resolve aliases after buildStart() calls reset().
-  assertEquals(ctx.phase1.userResolveAlias, { '@acme/components': './ui' });
+  expect(ctx.phase1.userResolveAlias).toEqual({ '@acme/components': './ui' });
 });
 
-Deno.test('OpenElementBuildContext populatePhase3 sets phase3 invariants', () => {
+test('OpenElementBuildContext populatePhase3 sets phase3 invariants', () => {
   const ctx = new OpenElementBuildContext({});
   const options = {
     build: { outDir: 'custom-dist' },
@@ -66,51 +67,55 @@ Deno.test('OpenElementBuildContext populatePhase3 sets phase3 invariants', () =>
     'lit',
   ]);
 
-  assertEquals(ctx.phase3.root, '/project');
-  assertEquals(ctx.phase3.outDir, 'custom-dist');
-  assertEquals(ctx.phase3.base, '/base/');
-  assertEquals(ctx.phase3.routesDir, 'src/routes');
-  assertEquals(ctx.phase3.islandsDir, 'src/islands');
-  assertEquals(ctx.phase3.componentsDir, 'src/components');
-  assertEquals(ctx.phase3.middleware, { cors: true });
-  assertEquals(ctx.phase3.html, { lang: 'zh', title: 'Test' });
-  assertEquals(ctx.phase3.upgradeStrategy, 'load');
-  assertEquals(ctx.phase3.viewTransition, false);
-  assertEquals(ctx.phase3.speculation, { prerender: ['/guide/*'] });
-  assertEquals(ctx.phase3.headExtras, '<meta name="theme-color" content="#000">');
-  assertEquals(ctx.phase3.allowHeadExtrasScripts, true);
-  assertEquals(ctx.phase3.appShell, 'default');
-  assertEquals(ctx.phase3.layouts, { docs: 'default' });
-  assertEquals(ctx.phase3.ssrNoExternal.length, 2);
+  expect(ctx.phase3.root).toEqual('/project');
+  expect(ctx.phase3.outDir).toEqual('custom-dist');
+  expect(ctx.phase3.base).toEqual('/base/');
+  expect(ctx.phase3.routesDir).toEqual('src/routes');
+  expect(ctx.phase3.islandsDir).toEqual('src/islands');
+  expect(ctx.phase3.componentsDir).toEqual('src/components');
+  expect(ctx.phase3.middleware).toEqual({ cors: true });
+  expect(ctx.phase3.html).toEqual({ lang: 'zh', title: 'Test' });
+  expect(ctx.phase3.upgradeStrategy).toEqual('load');
+  expect(ctx.phase3.viewTransition).toEqual(false);
+  expect(ctx.phase3.speculation).toEqual({ prerender: ['/guide/*'] });
+  expect(ctx.phase3.headExtras).toEqual('<meta name="theme-color" content="#000">');
+  expect(ctx.phase3.allowHeadExtrasScripts).toEqual(true);
+  expect(ctx.phase3.appShell).toEqual('default');
+  expect(ctx.phase3.layouts).toEqual({ docs: 'default' });
+  expect(ctx.phase3.ssrNoExternal.length).toEqual(2);
 });
 
-Deno.test('OpenElementBuildContext phase ordering is enforced', () => {
+test('OpenElementBuildContext phase ordering is enforced', () => {
   const ctx = new OpenElementBuildContext({});
 
-  assertThrows(() => ctx.markComplete(3), Error, 'Phase 3 requires Phase 1 to be completed first');
+  assertThrowsIncludes(
+    () => ctx.markComplete(3),
+    Error,
+    'Phase 3 requires Phase 1 to be completed first',
+  );
 
   ctx.markComplete(1);
-  assertEquals(ctx.isComplete(1), true);
-  assertEquals(ctx.isComplete(3), false);
+  expect(ctx.isComplete(1)).toEqual(true);
+  expect(ctx.isComplete(3)).toEqual(false);
 
   ctx.markComplete(3);
-  assertEquals(ctx.isComplete(3), true);
+  expect(ctx.isComplete(3)).toEqual(true);
 
   ctx.markComplete(2);
-  assertEquals(ctx.isComplete(2), true);
+  expect(ctx.isComplete(2)).toEqual(true);
 });
 
-Deno.test('OpenElementBuildContext reset clears completed phases', () => {
+test('OpenElementBuildContext reset clears completed phases', () => {
   const ctx = new OpenElementBuildContext({});
 
   ctx.markComplete(1);
   ctx.markComplete(3);
   ctx.markComplete(2);
-  assertEquals(ctx.isComplete(2), true);
+  expect(ctx.isComplete(2)).toEqual(true);
 
   ctx.reset();
 
-  assertEquals(ctx.isComplete(1), false);
-  assertEquals(ctx.isComplete(2), false);
-  assertEquals(ctx.isComplete(3), false);
+  expect(ctx.isComplete(1)).toEqual(false);
+  expect(ctx.isComplete(2)).toEqual(false);
+  expect(ctx.isComplete(3)).toEqual(false);
 });

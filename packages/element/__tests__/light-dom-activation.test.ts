@@ -17,7 +17,7 @@
  * before the package is imported.
  */
 
-import { assert, assertEquals, assertStrictEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   FacadeEvent,
   installFacadeDom,
@@ -26,75 +26,21 @@ import {
   toHtml,
 } from './compiled-runtime/facade-dom.ts';
 import { testProgram } from './compiled-runtime/test-program.ts';
+import { defineLightCounter, makeUniqueTag } from './compiled-runtime/light-counter-harness.ts';
 
 const dom = installFacadeDom();
 
 const { OpenElement, renderDsd } = await import('@openelement/element');
 const { PartProgramClaimError } = await import('../src/internal/compiled/runtime.ts');
 
-// oxlint-disable-next-line no-explicit-any
-type AnyElement = any;
+const uniqueTag = makeUniqueTag('light');
+const lightCounterDeps = { OpenElement, testProgram, registry: dom.registry };
 
-let tagCounter = 0;
-function uniqueTag(prefix: string): string {
-  return `oe-light-${prefix}-${++tagCounter}`;
-}
-
-const LIGHT_PROGRAM = {
-  template: [
-    {
-      k: 'el' as const,
-      tag: 'button',
-      attrs: [['type', 'button']] as Array<[string, string]>,
-      children: [
-        { k: 'text' as const, value: 'count: ' },
-        { k: 'part' as const, index: 0 },
-      ],
-    },
-  ],
-  parts: [
-    { k: 'text' as const, index: 0, signal: 'count' },
-    {
-      k: 'event' as const,
-      index: 1,
-      event: 'click',
-      handler: 'increment',
-      action: { kind: 'method' as const, name: 'increment' },
-      path: [0],
-    },
-  ],
-  properties: [
-    {
-      name: 'count',
-      attribute: 'count',
-      type: 'number' as const,
-      converter: 'number' as const,
-      reflect: true,
-      default: 0,
-    },
-  ],
-};
-
-function defineLightCounter(tag: string): CustomElementConstructor {
-  const program = testProgram({ tag, rootMode: 'light', ...LIGHT_PROGRAM });
-  const ctor = class extends OpenElement {
-    increment(this: AnyElement): void {
-      this.count++;
-    }
-  } as unknown as CustomElementConstructor & Record<string, unknown>;
-  ctor.__partProgram = program;
-  ctor.__compiledProperties = program.metadata.properties;
-  ctor.__elementMetadata = program.metadata;
-  ctor.observedAttributes = program.metadata.observedAttributes;
-  dom.registry.define(tag, ctor);
-  return ctor;
-}
-
-Deno.test('light activation claims the serialized subtree in place (node identity kept)', () => {
+test('light activation claims the serialized subtree in place (node identity kept)', () => {
   const tag = uniqueTag('claim');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   const html = renderDsd(tag, { componentClass: ctor, props: { count: 2 } }).html;
-  assertStringIncludes(html, `<${tag} count="2"`);
+  expect(html).toContain(`<${tag} count="2"`);
 
   let button: AnyElement | undefined;
   let countText: AnyElement | undefined;
@@ -104,19 +50,19 @@ Deno.test('light activation claims the serialized subtree in place (node identit
     countText = button.childNodes[2];
   }) as AnyElement;
 
-  assertStrictEquals(el.childNodes[0], button, 'the SSR button is claimed, not replaced');
-  assertStrictEquals(button.childNodes[2], countText, 'the SSR text node is claimed');
-  assertEquals(el.count, 2);
+  expect(el.childNodes[0], 'the SSR button is claimed, not replaced').toBe(button);
+  expect(button.childNodes[2], 'the SSR text node is claimed').toBe(countText);
+  expect(el.count).toEqual(2);
 
   // Activation is live on the existing nodes.
   button.dispatchEvent(new FacadeEvent('click'));
-  assertEquals(el.count, 3);
-  assertEquals(countText.data, '3');
+  expect(el.count).toEqual(3);
+  expect(countText.data).toEqual('3');
 });
 
-Deno.test('light activation drift fails closed with a structured claim mismatch', () => {
+test('light activation drift fails closed with a structured claim mismatch', () => {
   const tag = uniqueTag('drift');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   void ctor;
 
   const el = dom.document.createElement(tag) as AnyElement;
@@ -131,25 +77,30 @@ Deno.test('light activation drift fails closed with a structured claim mismatch'
   } catch (error) {
     thrown = error;
   }
-  assert(thrown instanceof PartProgramClaimError, 'claim drift throws the structured diagnostic');
-  assertStringIncludes((thrown as Error).message, 'oe:p0');
+  expect(
+    thrown instanceof PartProgramClaimError,
+    'claim drift throws the structured diagnostic',
+  ).toBeTruthy();
+  expect((thrown as Error).message).toContain('oe:p0');
   // No binding was attempted against the misaligned DOM.
   (el.childNodes[0] as AnyElement).dispatchEvent(new FacadeEvent('click'));
-  assertEquals(el.count, 2, 'the handler never activated');
+  expect(el.count, 'the handler never activated').toEqual(2);
 });
 
-Deno.test('light host without serialized content renders fresh (empty root)', () => {
+test('light host without serialized content renders fresh (empty root)', () => {
   const tag = uniqueTag('fresh');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   void ctor;
   const el = dom.document.createElement(tag) as AnyElement;
   dom.document.body.appendChild(el);
-  assertEquals(toHtml(el), `<${tag}><button type="button">count: <!--oe:p0-->0</button></${tag}>`);
+  expect(toHtml(el)).toEqual(
+    `<${tag}><button type="button">count: <!--oe:p0-->0</button></${tag}>`,
+  );
 });
 
-Deno.test('light reconnect re-activates in place without duplicate listeners', () => {
+test('light reconnect re-activates in place without duplicate listeners', () => {
   const tag = uniqueTag('reconnect');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   const html = renderDsd(tag, { componentClass: ctor, props: { count: 1 } }).html;
 
   let button: AnyElement | undefined;
@@ -157,19 +108,19 @@ Deno.test('light reconnect re-activates in place without duplicate listeners', (
     button = host.childNodes[0];
   }) as AnyElement;
   const listenerCount = () => (button.listeners.get('click') ?? []).length;
-  assertEquals(listenerCount(), 1);
+  expect(listenerCount()).toEqual(1);
 
   dom.document.body.removeChild(el);
-  assertEquals(listenerCount(), 0);
+  expect(listenerCount()).toEqual(0);
   dom.document.body.appendChild(el);
-  assertStrictEquals(el.childNodes[0], button, 'reconnect re-claims the same DOM');
-  assertEquals(listenerCount(), 1, 'no duplicate listener');
-  assertEquals(el.count, 1, 'state survives the disconnect→reconnect cycle');
+  expect(el.childNodes[0], 'reconnect re-claims the same DOM').toBe(button);
+  expect(listenerCount(), 'no duplicate listener').toEqual(1);
+  expect(el.count, 'state survives the disconnect→reconnect cycle').toEqual(1);
   button.dispatchEvent(new FacadeEvent('click'));
-  assertEquals(el.count, 2);
+  expect(el.count).toEqual(2);
 });
 
-Deno.test('nested light hosts claim in their own scopes', () => {
+test('nested light hosts claim in their own scopes', () => {
   const outerTag = uniqueTag('outer');
   const innerTag = uniqueTag('inner');
 
@@ -228,6 +179,6 @@ Deno.test('nested light hosts claim in their own scopes', () => {
 
   // Both claims are read-only: the inner host re-walks the same nodes when it
   // connects (child connect follows the parent's), preserving identity.
-  assertStrictEquals(innerEl.childNodes[0], innerEm, 'nested claim preserves node identity');
-  assertEquals(toHtml(innerEl), `<${innerTag} data-oe-light=""><em>inner</em></${innerTag}>`);
+  expect(innerEl.childNodes[0], 'nested claim preserves node identity').toBe(innerEm);
+  expect(toHtml(innerEl)).toEqual(`<${innerTag} data-oe-light=""><em>inner</em></${innerTag}>`);
 });

@@ -14,7 +14,9 @@
  * only.
  */
 
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 import {
   auditFreshCloneIsolation,
   auditStep,
@@ -51,15 +53,16 @@ export const ARTIFACT_RETENTION_DAYS = 14;
 /**
  * Required packed-consumer proof set. Kept as the single canonical list that
  * the validator and its tests share; a task-wiring guard asserts every entry
- * appears in the gate:packed definition so the two cannot drift.
+ * appears in the gate:packed definition so the two cannot drift. Names are
+ * the exact package-qualified step strings the gate coordinator reports.
  */
 export const REQUIRED_PACKED_CONSUMERS: readonly string[] = [
-  'tools/release#consumer:packaged',
-  'tools/release#consumer:packaged-app',
-  'tools/release#consumer:packaged-router',
-  'tools/release#consumer:packaged-element',
-  'tools/release#consumer:packaged-ui',
-  'tests/fixtures/third-party-web-components#smoke',
+  '@openelement/tools-release#consumer:packaged',
+  '@openelement/tools-release#consumer:packaged-app',
+  '@openelement/tools-release#consumer:packaged-router',
+  '@openelement/tools-release#consumer:packaged-element',
+  '@openelement/tools-release#consumer:packaged-ui',
+  '@openelement/fixture-third-party-web-components#smoke',
 ];
 
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
@@ -72,20 +75,20 @@ function unknownKeys(record: Record<string, unknown>, allowed: readonly string[]
   return Object.keys(record).filter((key) => !allowed.includes(key));
 }
 
+/** Log-path policy over the one shared safe-relative-path guard. */
 function auditArtifactPath(jobName: JobName, value: unknown, mode: 'job' | 'bundle'): string[] {
-  if (typeof value !== 'string' || value === '') return ['log path must be a non-empty string'];
-  if (value.startsWith('/') || value.includes('\\')) {
-    return [`log path must be a relative POSIX path, got ${JSON.stringify(value)}`];
-  }
-  const segments = value.split('/');
-  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
-    return [`log path must not contain empty, '.', or '..' segments, got ${JSON.stringify(value)}`];
-  }
+  const failures = auditSafeRelativePath(value).map((failure) =>
+    failure.replace(/^path /u, 'log path '),
+  );
+  if (failures.length > 0) return failures;
+  const path = value as string;
   const prefix = mode === 'bundle' ? `ci/${jobName}/logs/` : 'logs/';
-  if (!value.startsWith(prefix) || !value.endsWith('.log')) {
-    return [`log path must be under ${prefix} and end with .log, got ${JSON.stringify(value)}`];
+  if (!path.startsWith(prefix) || !path.endsWith('.log')) {
+    failures.push(
+      `log path must be under ${prefix} and end with .log, got ${JSON.stringify(path)}`,
+    );
   }
-  return [];
+  return failures;
 }
 
 interface AuditJobContext {
@@ -346,9 +349,8 @@ async function auditJob(
       if (extra.length > 0) failures.push(`${job}: unknown extras fields: ${extra.join(', ')}`);
     }
   } else if (job === 'packed') {
-    // ponytail: bundle mode checks shape only; final archive bytes are
-    // re-verified against the top-level maps (upgrade: byte-check here too
-    // once packed paths are bundle-relative).
+    // Bundle mode checks shape only; final archive bytes are
+    // re-verified against the top-level maps.
     failures.push(
       ...(await collectPackedTarballFailures(rawJob.extras, {
         read: context.read,
@@ -882,7 +884,7 @@ export async function validate(
   maxAgeDays: number,
 ): Promise<void> {
   const root = dirname(evidencePath);
-  const evidence = JSON.parse(await Deno.readTextFile(evidencePath)) as Parameters<
+  const evidence = JSON.parse(await readFile(evidencePath, 'utf8')) as Parameters<
     typeof collectBundleFailures
   >[0];
   const sha = await required('git', ['rev-parse', 'HEAD']);
@@ -890,12 +892,12 @@ export async function validate(
   const failures = await collectBundleFailures(evidence, {
     expectedSha: expected ?? sha,
     expectedTree: tree,
-    read: (path) => Deno.readFile(join(root, path)).catch(() => null),
+    read: (path) => readFile(join(root, path)).catch(() => null),
     maxAgeDays,
   });
   if (failures.length > 0) {
     console.error(`evidence validation FAILED:\n${failures.join('\n')}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   const boundSha =
     isRecord(evidence) && typeof evidence.sha === 'string' ? evidence.sha : 'unknown';

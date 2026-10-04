@@ -61,8 +61,8 @@ here or contract probes there.
 
 ```sh
 cd fixtures/web-component-interop
-deno task test       # fast corpus/CEM validation tests (no browsers)
-deno task qualify    # full qualification: builds a temp app, probes 3 browsers
+pnpm run test        # fast corpus/CEM validation tests (no browsers)
+pnpm run qualify     # full qualification: builds a temp app, probes 3 browsers
 ```
 
 Set `OPEN_ELEMENT_KEEP_INTEROP=1` to keep the generated temp app and the

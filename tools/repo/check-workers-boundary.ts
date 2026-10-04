@@ -16,7 +16,8 @@
  * `apps/saas#nitro:build-workers` (the root `saas:workers` task does).
  */
 
-import { walkSync } from '@std/fs/walk';
+import { readdir, readFile } from 'node:fs/promises';
+import process from 'node:process';
 import ts from 'typescript';
 import { extractStaticModuleSpecifiers, parseTypeScript } from '../lib/typescript-ast.ts';
 
@@ -244,22 +245,24 @@ function printShims(): void {
 }
 
 if (import.meta.main) {
-  const outputRoot = Deno.args[0] ?? 'apps/saas/.output-workers';
+  const outputRoot = process.argv[2] ?? 'apps/saas/.output-workers';
   printShims();
   let manifest: WorkersManifest;
   try {
-    manifest = JSON.parse(await Deno.readTextFile(`${outputRoot}/nitro.json`)) as WorkersManifest;
+    manifest = JSON.parse(await readFile(`${outputRoot}/nitro.json`, 'utf8')) as WorkersManifest;
   } catch (error) {
     console.error(`Workers boundary check failed: cannot read ${outputRoot}/nitro.json`);
     console.error(error instanceof Error ? error.message : String(error));
-    Deno.exit(1);
+    process.exit(1);
   }
   const serverDir = `${outputRoot}/server`;
   const modules: WorkersModule[] = [];
-  for (const entry of walkSync(serverDir, { includeDirs: false, exts: ['.mjs'] })) {
+  for (const entry of await readdir(serverDir, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory() || !entry.name.endsWith('.mjs')) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
     modules.push({
-      path: normalize(entry.path.slice(serverDir.length + 1)),
-      text: await Deno.readTextFile(entry.path),
+      path: normalize(entryPath.slice(serverDir.length + 1)),
+      text: await readFile(entryPath, 'utf8'),
     });
   }
   // Manifest serverEntry is relative to the output root (`server/index.mjs`).
@@ -268,7 +271,7 @@ if (import.meta.main) {
   if (violations.length > 0) {
     console.error('Workers output boundary violations detected:');
     for (const violation of violations) console.error(`  ${violation}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(`Workers output boundary check passed (${modules.length} server modules).`);
 }

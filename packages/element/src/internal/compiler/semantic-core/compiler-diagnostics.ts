@@ -2,7 +2,7 @@
  * Compiler-boundary diagnostics for the semantic core: the element compiler's
  * error class, the syntax-diagnostic adapter, and the shared source-location
  * helpers every later stage (analysis, lowering, program and module emission)
- * consumes (#1473 split — moved verbatim from the compile facade).
+ * consumes (#1473 split).
  */
 
 import ts from 'typescript';

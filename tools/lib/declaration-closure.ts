@@ -1,15 +1,10 @@
 /**
  * Public declaration closure for packed npm tarballs.
  *
- * The deno-pack generator (retired in the A1 swap) could drop a private
- * module's standalone `.d.ts`
- * (`Could not generate types ... Types will not be included for this module`)
- * while still generating a complete public export declaration. The only proof
- * that a dropped declaration is harmless is reachability: if no public
- * declaration transitively imports the module, no consumer type surface can
- * miss it. That proof outlived the generator: the closure is the structural
- * declaration-integrity check the packed payload still answers to
- * (docs/maintainers/deno-pack-diagnostic-exception.md, "Retirement").
+ * Structural declaration-integrity check for the packed payload: a consumer's
+ * type surface can only reach declarations transitively imported from the
+ * public `types` targets, so every declaration on such a reachable edge must
+ * exist — a missing one would break the packed type contract.
  *
  * This module builds the reachable closure of declaration files starting at
  * every public `types` target and following package-local relative edges:
@@ -24,6 +19,7 @@
  * reachable edge fails the release.
  */
 
+import { readFileSync, statSync } from 'node:fs';
 import { extractStaticModuleSpecifiers } from './typescript-ast.ts';
 
 export interface DeclarationGraph {
@@ -181,11 +177,11 @@ export function packageRootDeclarationIo(packageRoot: string): DeclarationIo {
   return {
     exists: (path) => {
       try {
-        return Deno.statSync(`${packageRoot}/${path}`).isFile;
+        return statSync(`${packageRoot}/${path}`).isFile();
       } catch {
         return false;
       }
     },
-    read: (path) => Deno.readTextFileSync(`${packageRoot}/${path}`),
+    read: (path) => readFileSync(`${packageRoot}/${path}`, 'utf8'),
   };
 }

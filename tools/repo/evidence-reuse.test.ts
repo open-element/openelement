@@ -12,7 +12,7 @@
  * what licenses the stamp, and the producer commit survives as its audit
  * field.
  */
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   auditReusedStamp,
   claimReusedResult,
@@ -77,19 +77,19 @@ async function resolve(options: {
   });
 }
 
-Deno.test('reuse resolver: a tree-identical successful run with the artifact is reused', async () => {
+test('reuse resolver: a tree-identical successful run with the artifact is reused', async () => {
   const decision = await resolve({
     runs: [{ runId: 42, headSha: SOURCE_SHA }],
     trees: { [SOURCE_SHA]: TREE },
     artifacts: { 42: [evidenceArtifactName('packed')] },
   });
-  assertEquals(decision.reused, true);
-  assertEquals(decision.sourceRunId, 42);
-  assertEquals(decision.sourceSha, SOURCE_SHA);
+  expect(decision.reused).toEqual(true);
+  expect(decision.sourceRunId).toEqual(42);
+  expect(decision.sourceSha).toEqual(SOURCE_SHA);
 });
 
-Deno.test('reuse GitHub queries stay scoped and paginate artifact listings', () => {
-  assertEquals(workflowRunListArgs(50), [
+test('reuse GitHub queries stay scoped and paginate artifact listings', () => {
+  expect(workflowRunListArgs(50)).toEqual([
     'run',
     'list',
     '--workflow',
@@ -99,7 +99,7 @@ Deno.test('reuse GitHub queries stay scoped and paginate artifact listings', () 
     '--json',
     'databaseId,headSha,conclusion,createdAt',
   ]);
-  assertEquals(workflowArtifactListArgs(42), [
+  expect(workflowArtifactListArgs(42)).toEqual([
     'api',
     '--paginate',
     'repos/{owner}/{repo}/actions/runs/42/artifacts?per_page=100',
@@ -108,17 +108,17 @@ Deno.test('reuse GitHub queries stay scoped and paginate artifact listings', () 
   ]);
 });
 
-Deno.test('reuse resolver: a different tree is never a source', async () => {
+test('reuse resolver: a different tree is never a source', async () => {
   const decision = await resolve({
     runs: [{ runId: 42, headSha: SOURCE_SHA }],
     trees: { [SOURCE_SHA]: OTHER_TREE },
     artifacts: { 42: [evidenceArtifactName('packed')] },
   });
-  assertEquals(decision.reused, false);
-  assertEquals(decision.sourceRunId, undefined);
+  expect(decision.reused).toEqual(false);
+  expect(decision.sourceRunId).toEqual(undefined);
 });
 
-Deno.test('reuse resolver: the candidate commit and failed runs are skipped', async () => {
+test('reuse resolver: the candidate commit and failed runs are skipped', async () => {
   // Same tree, but the only carriers are our own commit and a failed run.
   const decision = await resolve({
     runs: [
@@ -128,10 +128,10 @@ Deno.test('reuse resolver: the candidate commit and failed runs are skipped', as
     trees: { [SHA]: TREE, [SOURCE_SHA]: TREE },
     artifacts: { 43: [evidenceArtifactName('packed')], 44: [evidenceArtifactName('packed')] },
   });
-  assertEquals(decision.reused, false);
+  expect(decision.reused).toEqual(false);
 });
 
-Deno.test('reuse resolver: a successful run without the lane artifact is skipped', async () => {
+test('reuse resolver: a successful run without the lane artifact is skipped', async () => {
   const decision = await resolve({
     runs: [
       { runId: 45, headSha: 'f'.repeat(40) },
@@ -141,47 +141,47 @@ Deno.test('reuse resolver: a successful run without the lane artifact is skipped
     // The newer run proved the tree but carries only another lane's artifact.
     artifacts: { 45: [evidenceArtifactName('fast-checks')], 42: [evidenceArtifactName('packed')] },
   });
-  assertEquals(decision.reused, true);
-  assertEquals(decision.sourceRunId, 42);
+  expect(decision.reused).toEqual(true);
+  expect(decision.sourceRunId).toEqual(42);
 });
 
-Deno.test('reuse resolver: an artifact listing failure is fail-closed', async () => {
+test('reuse resolver: an artifact listing failure is fail-closed', async () => {
   const decision = await resolve({
     runs: [{ runId: 42, headSha: SOURCE_SHA }],
     trees: { [SOURCE_SHA]: TREE },
     artifacts: {},
     failArtifacts: true,
   });
-  assertEquals(decision.reused, false);
-  assertEquals(decision.reason.includes('could not be listed'), true);
+  expect(decision.reused).toEqual(false);
+  expect(decision.reason.includes('could not be listed')).toEqual(true);
 });
 
-Deno.test('reuse resolver: runs past the artifact retention window are not sources', async () => {
+test('reuse resolver: runs past the artifact retention window are not sources', async () => {
   const decision = await resolve({
     runs: [{ runId: 42, headSha: SOURCE_SHA, createdAt: fresh(15 * DAY) }],
     trees: { [SOURCE_SHA]: TREE },
     artifacts: { 42: [evidenceArtifactName('packed')] },
   });
-  assertEquals(decision.reused, false);
+  expect(decision.reused).toEqual(false);
   // The boundary itself still counts: 13 days is inside a 14-day window.
   const inside = await resolve({
     runs: [{ runId: 42, headSha: SOURCE_SHA, createdAt: fresh(13 * DAY) }],
     trees: { [SOURCE_SHA]: TREE },
     artifacts: { 42: [evidenceArtifactName('packed')] },
   });
-  assertEquals(inside.reused, true);
+  expect(inside.reused).toEqual(true);
 });
 
-Deno.test('reuse resolver: an unparsable createdAt is not reused from', async () => {
+test('reuse resolver: an unparsable createdAt is not reused from', async () => {
   const decision = await resolve({
     runs: [{ runId: 42, headSha: SOURCE_SHA, createdAt: 'not-a-date' }],
     trees: { [SOURCE_SHA]: TREE },
     artifacts: { 42: [evidenceArtifactName('packed')] },
   });
-  assertEquals(decision.reused, false);
+  expect(decision.reused).toEqual(false);
 });
 
-Deno.test('reuse resolver: an unresolvable commit is skipped, not guessed', async () => {
+test('reuse resolver: an unresolvable commit is skipped, not guessed', async () => {
   const decision = await resolve({
     runs: [
       { runId: 41, headSha: '1'.repeat(40) },
@@ -191,11 +191,11 @@ Deno.test('reuse resolver: an unresolvable commit is skipped, not guessed', asyn
     trees: { [SOURCE_SHA]: TREE },
     artifacts: { 41: [evidenceArtifactName('packed')], 42: [evidenceArtifactName('packed')] },
   });
-  assertEquals(decision.reused, true);
-  assertEquals(decision.sourceRunId, 42);
+  expect(decision.reused).toEqual(true);
+  expect(decision.sourceRunId).toEqual(42);
 });
 
-Deno.test('reuse resolver: maxCandidates bounds inspected eligible runs, including unresolved trees', async () => {
+test('reuse resolver: maxCandidates bounds inspected eligible runs, including unresolved trees', async () => {
   let treeLookups = 0;
   const decision = await resolveReuse({
     currentSha: SHA,
@@ -215,12 +215,12 @@ Deno.test('reuse resolver: maxCandidates bounds inspected eligible runs, includi
     },
     listArtifacts: () => Promise.resolve([evidenceArtifactName('packed')]),
   });
-  assertEquals(treeLookups, 2);
-  assertEquals(decision.reused, false);
-  assertEquals(decision.reason.includes('2 inspected candidate(s)'), true);
+  expect(treeLookups).toEqual(2);
+  expect(decision.reused).toEqual(false);
+  expect(decision.reason.includes('2 inspected candidate(s)')).toEqual(true);
 });
 
-Deno.test('reuse resolver: a run-list failure is fail-closed', async () => {
+test('reuse resolver: a run-list failure is fail-closed', async () => {
   const decision = await resolveReuse({
     currentSha: SHA,
     currentTree: TREE,
@@ -230,11 +230,11 @@ Deno.test('reuse resolver: a run-list failure is fail-closed', async () => {
     resolveTree: () => Promise.resolve(TREE),
     listArtifacts: () => Promise.resolve([evidenceArtifactName('packed')]),
   });
-  assertEquals(decision.reused, false);
-  assertEquals(decision.reason.includes('could not list runs'), true);
+  expect(decision.reused).toEqual(false);
+  expect(decision.reason.includes('could not list runs')).toEqual(true);
 });
 
-Deno.test('reuse resolver: every lane must come from the SAME source run', async () => {
+test('reuse resolver: every lane must come from the SAME source run', async () => {
   // Run 42 carries three of the four lanes, run 41 carries the fourth. A
   // bundle spliced from two runs is what the single-tree identity check exists
   // to prevent, so neither is a source.
@@ -255,7 +255,7 @@ Deno.test('reuse resolver: every lane must come from the SAME source run', async
       },
     }),
   });
-  assertEquals(partial.reused, false);
+  expect(partial.reused).toEqual(false);
 
   // The same four lanes from one run is a source.
   const complete = await resolveReuse({
@@ -276,8 +276,8 @@ Deno.test('reuse resolver: every lane must come from the SAME source run', async
       },
     }),
   });
-  assertEquals(complete.reused, true);
-  assertEquals(complete.sourceRunId, 42);
+  expect(complete.reused).toEqual(true);
+  expect(complete.sourceRunId).toEqual(42);
 });
 
 /** A `resolveTree` stub over an explicit commit→tree map (absent = unresolvable). */
@@ -312,9 +312,9 @@ async function claim(
   });
 }
 
-Deno.test('reuse claim: stamps a record that binds this tree and source', async () => {
+test('reuse claim: stamps a record that binds this tree and source', async () => {
   const record = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     job: 'packed',
     sha: SOURCE_SHA,
     tree: TREE,
@@ -323,14 +323,14 @@ Deno.test('reuse claim: stamps a record that binds this tree and source', async 
     steps: [],
   };
   const { claimed, failures } = await claim(record);
-  assertEquals(failures, []);
-  assertEquals(claimed.reused, { runId: 42, sha: SOURCE_SHA });
-  assertEquals(auditReusedStamp(claimed.reused), []);
+  expect(failures).toEqual([]);
+  expect(claimed.reused).toEqual({ runId: 42, sha: SOURCE_SHA });
+  expect(auditReusedStamp(claimed.reused)).toEqual([]);
   // The record keeps claiming the commit that actually ran the gate.
-  assertEquals(claimed.sha, SOURCE_SHA);
+  expect(claimed.sha).toEqual(SOURCE_SHA);
 });
 
-Deno.test('reuse claim: a chained package is accepted on its PRODUCER tree', async () => {
+test('reuse claim: a chained package is accepted on its PRODUCER tree', async () => {
   // The #1439 regression, exactly: run B (head SOURCE_SHA) replayed a package
   // produced by run A at ORIGIN_SHA and uploaded its own copy. The lane on
   // run C resolves B as its source, and the record inside the downloaded
@@ -338,7 +338,7 @@ Deno.test('reuse claim: a chained package is accepted on its PRODUCER tree', asy
   // resolved source. Tree identity is what licenses the reuse, so this must
   // stamp, and the producer commit must survive as the stamp's audit field.
   const record = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     job: 'packed',
     sha: ORIGIN_SHA,
     tree: TREE,
@@ -350,12 +350,12 @@ Deno.test('reuse claim: a chained package is accepted on its PRODUCER tree', asy
     sourceRunId: 9,
     producerTree: TREE,
   });
-  assertEquals(failures, []);
-  assertEquals(claimed.reused, { runId: 9, sha: ORIGIN_SHA });
-  assertEquals(claimed.sha, ORIGIN_SHA, 'the producer commit must not be rewritten');
+  expect(failures).toEqual([]);
+  expect(claimed.reused).toEqual({ runId: 9, sha: ORIGIN_SHA });
+  expect(claimed.sha, 'the producer commit must not be rewritten').toEqual(ORIGIN_SHA);
 });
 
-Deno.test('reuse claim: an already-stamped chain keeps its ORIGIN run and sha', async () => {
+test('reuse claim: an already-stamped chain keeps its ORIGIN run and sha', async () => {
   // The downloaded record was itself claimed from run 7 (produced by
   // ORIGIN_SHA) and handed forward again. The stamp must still name run 7
   // and the commit that ran the gate: provenance cannot point at a no-op.
@@ -370,12 +370,12 @@ Deno.test('reuse claim: an already-stamped chain keeps its ORIGIN run and sha', 
     sourceRunId: 9,
     producerTree: TREE,
   });
-  assertEquals(failures, []);
-  assertEquals(claimed.reused, { runId: 7, sha: ORIGIN_SHA });
-  assertEquals(claimed.sha, ORIGIN_SHA);
+  expect(failures).toEqual([]);
+  expect(claimed.reused).toEqual({ runId: 7, sha: ORIGIN_SHA });
+  expect(claimed.sha).toEqual(ORIGIN_SHA);
 });
 
-Deno.test('reuse claim: refuses a tree mismatch instead of stamping it', async () => {
+test('reuse claim: refuses a tree mismatch instead of stamping it', async () => {
   const record = {
     job: 'packed',
     sha: SOURCE_SHA,
@@ -383,75 +383,75 @@ Deno.test('reuse claim: refuses a tree mismatch instead of stamping it', async (
     result: 'PASS',
   };
   const { claimed, failures } = await claim(record);
-  assertEquals(failures.length, 1);
-  assertEquals(failures[0].includes('not the checked-out tree'), true);
-  assertEquals(claimed.reused, undefined);
+  expect(failures.length).toEqual(1);
+  expect(failures[0].includes('not the checked-out tree')).toEqual(true);
+  expect(claimed.reused).toEqual(undefined);
 });
 
-Deno.test('reuse claim: a producer commit with a DIFFERENT tree is refused', async () => {
+test('reuse claim: a producer commit with a DIFFERENT tree is refused', async () => {
   // The record claims this tree in its own `tree` field, but the commit that
   // produced it is on another tree. This is the branch that proves the check
   // was not weakened into trusting the record: the second condition is
   // re-derived, not read.
   const record = { job: 'packed', sha: SOURCE_SHA, tree: TREE, result: 'PASS' };
   const { claimed, failures } = await claim(record, { producerTree: OTHER_TREE });
-  assertEquals(failures.length, 1);
-  assertEquals(failures[0].includes(`produced by ${SOURCE_SHA}`), true);
-  assertEquals(failures[0].includes('not the checked-out tree'), true);
-  assertEquals(claimed.reused, undefined);
+  expect(failures.length).toEqual(1);
+  expect(failures[0].includes(`produced by ${SOURCE_SHA}`)).toEqual(true);
+  expect(failures[0].includes('not the checked-out tree')).toEqual(true);
+  expect(claimed.reused).toEqual(undefined);
 });
 
-Deno.test('reuse claim: an unresolvable producer commit is refused, not trusted', async () => {
+test('reuse claim: an unresolvable producer commit is refused, not trusted', async () => {
   const record = { job: 'packed', sha: SOURCE_SHA, tree: TREE, result: 'PASS' };
   const { claimed, failures } = await claim(record, { producerTree: null });
-  assertEquals(failures.length, 1);
-  assertEquals(failures[0].includes('could not be resolved'), true);
-  assertEquals(claimed.reused, undefined);
+  expect(failures.length).toEqual(1);
+  expect(failures[0].includes('could not be resolved')).toEqual(true);
+  expect(claimed.reused).toEqual(undefined);
 });
 
-Deno.test('reuse claim: the checked-out commit cannot be its own source', async () => {
+test('reuse claim: the checked-out commit cannot be its own source', async () => {
   // Reusing a record produced by THIS commit would skip the gate that is
   // supposed to prove it; the aggregate refuses that shape, so the claim does.
   const record = { job: 'packed', sha: SHA, tree: TREE, result: 'PASS' };
   const { claimed, failures } = await claim(record);
-  assertEquals(failures.length, 1);
-  assertEquals(failures[0].includes('the checked-out commit'), true);
-  assertEquals(claimed.reused, undefined);
+  expect(failures.length).toEqual(1);
+  expect(failures[0].includes('the checked-out commit')).toEqual(true);
+  expect(claimed.reused).toEqual(undefined);
 });
 
-Deno.test('reuse claim: a malformed producer sha is refused', async () => {
+test('reuse claim: a malformed producer sha is refused', async () => {
   for (const sha of [undefined, '', 'short', 42]) {
     const { failures } = await claim({ job: 'packed', sha, tree: TREE, result: 'PASS' });
-    assertEquals(failures.length, 1, `sha ${JSON.stringify(sha)} must be refused`);
+    expect(failures.length, `sha ${JSON.stringify(sha)} must be refused`).toEqual(1);
   }
 });
 
-Deno.test('reuse claim: refuses a mismatched job or non-PASS record', async () => {
+test('reuse claim: refuses a mismatched job or non-PASS record', async () => {
   const base = { job: 'packed', sha: SOURCE_SHA, tree: TREE, result: 'PASS' };
-  assertEquals((await claim({ ...base, job: 'fresh-clone' })).failures.length, 1);
-  assertEquals((await claim({ ...base, result: 'FAIL' })).failures.length, 1);
+  expect((await claim({ ...base, job: 'fresh-clone' })).failures.length).toEqual(1);
+  expect((await claim({ ...base, result: 'FAIL' })).failures.length).toEqual(1);
 });
 
-Deno.test('reuse claim: a carried stamp that contradicts the record is refused', async () => {
+test('reuse claim: a carried stamp that contradicts the record is refused', async () => {
   const base = { job: 'packed', sha: SOURCE_SHA, tree: TREE, result: 'PASS' };
   // Malformed: the shape audit the aggregate runs would reject it.
   const malformed = await claim({ ...base, reused: { runId: 0, sha: SOURCE_SHA } });
-  assertEquals(malformed.failures.length, 1);
-  assertEquals(malformed.failures[0].includes('reused.runId'), true);
+  expect(malformed.failures.length).toEqual(1);
+  expect(malformed.failures[0].includes('reused.runId')).toEqual(true);
   // Names a commit the record was not produced by: provenance would lie.
   const contradictory = await claim({
     ...base,
     reused: { runId: 7, sha: ORIGIN_SHA },
   });
-  assertEquals(contradictory.failures.length, 1);
-  assertEquals(contradictory.failures[0].includes('carries a stamp for'), true);
+  expect(contradictory.failures.length).toEqual(1);
+  expect(contradictory.failures[0].includes('carries a stamp for')).toEqual(true);
 });
 
-Deno.test('reuse stamp audit rejects malformed stamps', () => {
-  assertEquals(auditReusedStamp({ runId: 1, sha: SHA }), []);
-  assertEquals(auditReusedStamp(undefined).length, 1);
-  assertEquals(auditReusedStamp({ runId: 0, sha: SHA }).length, 1);
-  assertEquals(auditReusedStamp({ runId: 1.5, sha: SHA }).length, 1);
-  assertEquals(auditReusedStamp({ runId: 1, sha: 'short' }).length, 1);
-  assertEquals(auditReusedStamp({ runId: 1, sha: SHA, extra: true }).length, 1);
+test('reuse stamp audit rejects malformed stamps', () => {
+  expect(auditReusedStamp({ runId: 1, sha: SHA })).toEqual([]);
+  expect(auditReusedStamp(undefined).length).toEqual(1);
+  expect(auditReusedStamp({ runId: 0, sha: SHA }).length).toEqual(1);
+  expect(auditReusedStamp({ runId: 1.5, sha: SHA }).length).toEqual(1);
+  expect(auditReusedStamp({ runId: 1, sha: 'short' }).length).toEqual(1);
+  expect(auditReusedStamp({ runId: 1, sha: SHA, extra: true }).length).toEqual(1);
 });

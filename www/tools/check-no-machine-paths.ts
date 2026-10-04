@@ -12,10 +12,12 @@
  * leak through them, and decoding them as text produces replacement bytes
  * that coincidentally match drive-path markers.
  */
-import { walk } from '@std/fs/walk';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readFile, readdir, stat } from 'node:fs/promises';
+import process from 'node:process';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const dist = join(repoRoot, 'www/dist');
 
 export const MACHINE_PATH_MARKERS: Array<[RegExp, string]> = [
@@ -46,15 +48,15 @@ export async function scanRoots(repoRoot: string): Promise<string[]> {
   const roots: string[] = [];
   const siteDist = join(repoRoot, 'www/dist');
   try {
-    if ((await Deno.stat(siteDist)).isDirectory) roots.push(siteDist);
+    if ((await stat(siteDist)).isDirectory()) roots.push(siteDist);
   } catch {
     // Missing site build is handled by the caller's error message.
   }
-  for await (const entry of Deno.readDir(join(repoRoot, 'packages'))) {
-    if (!entry.isDirectory) continue;
+  for (const entry of await readdir(join(repoRoot, 'packages'), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
     const dist = join(repoRoot, 'packages', entry.name, 'dist');
     try {
-      if ((await Deno.stat(dist)).isDirectory) roots.push(dist);
+      if ((await stat(dist)).isDirectory()) roots.push(dist);
     } catch {
       // No build output for this package.
     }
@@ -85,21 +87,23 @@ async function main(): Promise<void> {
   const roots = await scanRoots(repoRoot);
   if (roots.length === 0) {
     console.error(
-      `machine-path check: no build output found (expected ${dist}) — run the site build first (deno task site:build).`,
+      `machine-path check: no build output found (expected ${dist}) — run the site build first (pnpm run site:build).`,
     );
-    Deno.exit(1);
+    process.exit(1);
   }
   const failures: string[] = [];
   const oversize: string[] = [];
   let scanned = 0;
   let skippedBinary = 0;
   for (const root of roots) {
-    for await (const entry of walk(root, { includeDirs: false })) {
-      const bytes = await Deno.readFile(entry.path);
+    for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
+      if (entry.isDirectory()) continue;
+      const entryPath = `${entry.parentPath}/${entry.name}`;
+      const bytes = await readFile(entryPath);
       // Cheap pre-filter: decoding megabytes of media wastes the gate budget.
       // Oversize files are listed, never silently skipped.
       if (bytes.length > 4_000_000) {
-        oversize.push(`${entry.path.slice(root.length + 1)} (${bytes.length}B)`);
+        oversize.push(`${entryPath.slice(root.length + 1)} (${bytes.length}B)`);
         continue;
       }
       if (!isTextArtifact(bytes)) {
@@ -116,7 +120,7 @@ async function main(): Promise<void> {
     console.error('machine-path check failed (artifacts must not carry build-machine paths):');
     for (const failure of failures.slice(0, 20)) console.error(`- ${failure}`);
     if (failures.length > 20) console.error(`... and ${failures.length - 20} more`);
-    Deno.exit(1);
+    process.exit(1);
   }
   if (oversize.length > 0) {
     console.log(`oversize files not scanned (${oversize.length}): ${oversize.join(', ')}`);

@@ -1,12 +1,13 @@
 /** Redirect-table and baseline-manifest contract tests (pure parsers). */
-import { assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   parseBaselineManifest,
   parseRedirectTable,
   redirectLedgerFailures,
 } from './site-retired.ts';
 
-Deno.test('parseRedirectTable: accepts the canonical table shape', () => {
+test('parseRedirectTable: accepts the canonical table shape', () => {
   const mappings = parseRedirectTable(
     {
       redirects: [
@@ -16,13 +17,13 @@ Deno.test('parseRedirectTable: accepts the canonical table shape', () => {
     },
     'fixture',
   );
-  assertEquals(mappings, [
+  expect(mappings).toEqual([
     { from: '/apilist', to: '/reference', status: 301 },
     { from: '/a', to: '/b#frag', toZh: '/b#译文', status: 301 },
   ]);
 });
 
-Deno.test('parseRedirectTable: rejects every malformed shape', () => {
+test('parseRedirectTable: rejects every malformed shape', () => {
   const bad: unknown[] = [
     null,
     {},
@@ -36,11 +37,11 @@ Deno.test('parseRedirectTable: rejects every malformed shape', () => {
     { redirects: [{ from: '/a', to: '/b' }] },
   ];
   for (const entry of bad) {
-    assertThrows(() => parseRedirectTable(entry, 'fixture'), Error, 'fixture');
+    assertThrowsIncludes(() => parseRedirectTable(entry, 'fixture'), Error, 'fixture');
   }
 });
 
-Deno.test('parseBaselineManifest: accepts the snapshot shape', () => {
+test('parseBaselineManifest: accepts the snapshot shape', () => {
   const manifest = parseBaselineManifest(
     {
       baseline: { ref: 'origin/main', sha: 'abc123' },
@@ -49,11 +50,11 @@ Deno.test('parseBaselineManifest: accepts the snapshot shape', () => {
     },
     'fixture',
   );
-  assertEquals(manifest.routes, ['/', '/a']);
-  assertEquals(manifest.retiredTitles, ['Old Page']);
+  expect(manifest.routes).toEqual(['/', '/a']);
+  expect(manifest.retiredTitles).toEqual(['Old Page']);
 });
 
-Deno.test('parseBaselineManifest: rejects every malformed shape', () => {
+test('parseBaselineManifest: rejects every malformed shape', () => {
   const good = {
     baseline: { ref: 'origin/main', sha: 'abc123' },
     routes: ['/'],
@@ -69,11 +70,11 @@ Deno.test('parseBaselineManifest: rejects every malformed shape', () => {
     { ...good, retiredTitles: [1] },
   ];
   for (const entry of bad) {
-    assertThrows(() => parseBaselineManifest(entry, 'fixture'), Error, 'fixture');
+    assertThrowsIncludes(() => parseBaselineManifest(entry, 'fixture'), Error, 'fixture');
   }
 });
 
-Deno.test('redirectLedgerFailures: mappings survive a baseline refresh', () => {
+test('redirectLedgerFailures: mappings survive a baseline refresh', () => {
   // Baseline advanced past /apilist: no longer in `retired`, but it was a
   // real route at the old baseline, so the mapping stays valid.
   const failures = redirectLedgerFailures({
@@ -82,27 +83,27 @@ Deno.test('redirectLedgerFailures: mappings survive a baseline refresh', () => {
     retired: new Set(),
     mappings: [{ from: '/apilist', to: '/reference', status: 301 }],
   });
-  assertEquals(failures, []);
+  expect(failures).toEqual([]);
 });
 
-Deno.test('redirectLedgerFailures: newly retired paths still need mappings', () => {
+test('redirectLedgerFailures: newly retired paths still need mappings', () => {
   const failures = redirectLedgerFailures({
     headRoutes: new Set(['/']),
     historicalRoutes: new Set(['/', '/old']),
     retired: new Set(['/old']),
     mappings: [],
   });
-  assertEquals(failures, ['retired with no mapping: /old']);
+  expect(failures).toEqual(['retired with no mapping: /old']);
 });
 
-Deno.test('redirectLedgerFailures: rejects live sources and never-shipped sources', () => {
+test('redirectLedgerFailures: rejects live sources and never-shipped sources', () => {
   const live = redirectLedgerFailures({
     headRoutes: new Set(['/reference']),
     historicalRoutes: new Set(['/reference']),
     retired: new Set(),
     mappings: [{ from: '/reference', to: '/guide', status: 301 }],
   });
-  assertEquals(live, ['mapping source is a live route: /reference']);
+  expect(live).toEqual(['mapping source is a live route: /reference']);
 
   const typo = redirectLedgerFailures({
     headRoutes: new Set(['/']),
@@ -110,5 +111,5 @@ Deno.test('redirectLedgerFailures: rejects live sources and never-shipped source
     retired: new Set(),
     mappings: [{ from: '/apilistt', to: '/reference', status: 301 }],
   });
-  assertEquals(typo, ['mapping source was never a public route: /apilistt']);
+  expect(typo).toEqual(['mapping source was never a public route: /apilistt']);
 });

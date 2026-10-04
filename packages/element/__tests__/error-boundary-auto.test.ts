@@ -17,9 +17,10 @@
  * before the package is imported.
  */
 
-import { assertEquals, assertInstanceOf, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import { installFacadeDom, parseHtml } from './compiled-runtime/facade-dom.ts';
 import { testProgram, type TestProgramSpec } from './compiled-runtime/test-program.ts';
+import { makeUniqueTag } from './compiled-runtime/light-counter-harness.ts';
 
 const dom = installFacadeDom();
 
@@ -30,10 +31,7 @@ const { renderDsd } = await import('@openelement/element');
 type AnyElement = any;
 type BoundaryInstance = InstanceType<typeof ErrorBoundary>;
 
-let tagCounter = 0;
-function uniqueTag(prefix: string): string {
-  return `oe-boundary-${prefix}-${++tagCounter}`;
-}
+const uniqueTag = makeUniqueTag('boundary');
 
 const COUNTER_SPEC: Omit<TestProgramSpec, 'tag'> = {
   template: [
@@ -86,16 +84,16 @@ function connectDrifted(tag: string): BoundaryInstance {
   return el as BoundaryInstance;
 }
 
-Deno.test('compiled boundary captures connect-time claim failures automatically', () => {
+test('compiled boundary captures connect-time claim failures automatically', () => {
   const tag = uniqueTag('auto');
   defineBoundary(tag);
   const el = connectDrifted(tag);
-  assertEquals(el.hasError, true);
-  assertInstanceOf(el.error, Error);
-  assertStringIncludes(el.error?.message ?? '', 'compiled-claim');
+  expect(el.hasError).toEqual(true);
+  expect(el.error).toBeInstanceOf(Error);
+  expect(el.error?.message ?? '').toContain('compiled-claim');
 });
 
-Deno.test('boundary without failure stays clean and renders normally', () => {
+test('boundary without failure stays clean and renders normally', () => {
   const tag = uniqueTag('clean');
   const { ctor } = defineBoundary(tag);
   const html = renderDsd(tag, { componentClass: ctor, props: { count: 4 } }).html;
@@ -105,15 +103,15 @@ Deno.test('boundary without failure stays clean and renders normally', () => {
   for (const [name, value] of parsedHost.attributes) el.setAttribute(name, value);
   for (const child of [...parsedHost.childNodes]) el.appendChild(child);
   dom.document.body.appendChild(el);
-  assertEquals(el.hasError, false);
-  assertEquals(el.count, 4);
+  expect(el.hasError).toEqual(false);
+  expect(el.count).toEqual(4);
 });
 
-Deno.test('retry re-activates the captured source after the drift is fixed', () => {
+test('retry re-activates the captured source after the drift is fixed', () => {
   const tag = uniqueTag('retry');
   const { ctor } = defineBoundary(tag);
   const el = connectDrifted(tag) as AnyElement;
-  assertEquals(el.hasError, true);
+  expect(el.hasError).toEqual(true);
 
   // Repair the DOM to match the program's expectation for count=2.
   const html = renderDsd(tag, { componentClass: ctor, props: { count: 2 } }).html;
@@ -123,34 +121,34 @@ Deno.test('retry re-activates the captured source after the drift is fixed', () 
   for (const child of [...parsedHost.childNodes]) el.appendChild(child);
 
   el.retry();
-  assertEquals(el.hasError, false, 'retry cleared the error after a successful re-activation');
-  assertEquals(el.count, 2);
+  expect(el.hasError, 'retry cleared the error after a successful re-activation').toEqual(false);
+  expect(el.count).toEqual(2);
 });
 
-Deno.test('retry with a still-broken source recaptures the error', () => {
+test('retry with a still-broken source recaptures the error', () => {
   const tag = uniqueTag('retry-broken');
   defineBoundary(tag);
   const el = connectDrifted(tag);
-  assertEquals(el.hasError, true);
+  expect(el.hasError).toEqual(true);
   el.retry();
-  assertEquals(el.hasError, true, 'the still-failing source recaptures');
+  expect(el.hasError, 'the still-failing source recaptures').toEqual(true);
 });
 
-Deno.test('retry budget exhausts at maxRetries', () => {
+test('retry budget exhausts at maxRetries', () => {
   const tag = uniqueTag('exhausted');
   const { ctor } = defineBoundary(tag);
   void ctor;
   const el = connectDrifted(tag);
   (el as AnyElement).maxRetries = 1;
-  assertEquals(el.hasError, true);
+  expect(el.hasError).toEqual(true);
   el.retry(); // recaptures (still broken)
-  assertEquals(el.hasError, true);
+  expect(el.hasError).toEqual(true);
   el.retry(); // exhausted: no further recovery attempt
-  assertEquals(el.retryCount, 1);
-  assertEquals(el.hasError, true);
+  expect(el.retryCount).toEqual(1);
+  expect(el.hasError).toEqual(true);
 });
 
-Deno.test('nested boundaries keep error state service-local (inner captures only)', () => {
+test('nested boundaries keep error state service-local (inner captures only)', () => {
   const innerTag = uniqueTag('inner');
   const outerTag = uniqueTag('outer');
   defineBoundary(innerTag);
@@ -163,21 +161,21 @@ Deno.test('nested boundaries keep error state service-local (inner captures only
   const inner = connectDrifted(innerTag);
   outer.appendChild(inner);
 
-  assertEquals(inner.hasError, true, 'the inner boundary captured its own failure');
-  assertEquals(outer.hasError, false, 'no state leaks to the outer boundary');
+  expect(inner.hasError, 'the inner boundary captured its own failure').toEqual(true);
+  expect(outer.hasError, 'no state leaks to the outer boundary').toEqual(false);
 });
 
-Deno.test('application-driven catchError and reset keep the public contract', () => {
+test('application-driven catchError and reset keep the public contract', () => {
   const tag = uniqueTag('manual');
   defineBoundary(tag);
   const el = dom.document.createElement(tag) as unknown as BoundaryInstance;
   dom.document.body.appendChild(el as never);
 
   el.catchError(new Error('manual boom'), { origin: 'test' });
-  assertEquals(el.hasError, true);
-  assertEquals(el.error?.message, 'manual boom');
+  expect(el.hasError).toEqual(true);
+  expect(el.error?.message).toEqual('manual boom');
 
   el.reset();
-  assertEquals(el.hasError, false);
-  assertEquals(el.retryCount, 0);
+  expect(el.hasError).toEqual(false);
+  expect(el.retryCount).toEqual(0);
 });

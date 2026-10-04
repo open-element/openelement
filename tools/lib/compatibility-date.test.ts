@@ -1,17 +1,18 @@
-import { assertThrows } from '@std/assert';
+import { test } from 'vitest';
+import { assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import { assertCompatibilityDate } from './compatibility-date.ts';
 
-Deno.test('compatibility date accepts a current project date', () => {
+test('compatibility date accepts a current project date', () => {
   assertCompatibilityDate('2026-06-12', new Date('2026-07-15T12:00:00Z'));
 });
 
-Deno.test('compatibility date rejects future and stale dates', () => {
-  assertThrows(
+test('compatibility date rejects future and stale dates', () => {
+  assertThrowsIncludes(
     () => assertCompatibilityDate('2026-07-16', new Date('2026-07-15T12:00:00Z')),
     Error,
     'future',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () => assertCompatibilityDate('2025-01-01', new Date('2026-07-15T12:00:00Z')),
     Error,
     'maximum',

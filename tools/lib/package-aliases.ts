@@ -1,17 +1,20 @@
 /**
  * Workspace package alias mapping for tooling and test harnesses.
  *
- * Deliberately dependency-light (only @std/path): this module is imported by
- * test fixtures that resolve under their own scoped deno.json, where the
- * heavier tools/lib/package-graph.ts graph machinery (typescript-ast, packed
- * element imports) is not part of the fixture's dependency universe.
+ * Deliberately dependency-light (node:fs + node:path/node:url only): this
+ * module is imported by
+ * the qualify-harness workspace-alias resolution, where the heavier
+ * tools/lib/package-graph.ts graph machinery (typescript-ast, packed element
+ * imports) is not part of the harness dependency universe.
  */
 
-import { join, toFileUrl } from '@std/path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 /**
  * Returns a Map of specifier → file URL for all local package entries
- * derived from each package's deno.json exports. Used by smoke tests to
+ * derived from each package's package.json exports. Used by smoke tests to
  * resolve @openelement/* imports to local source.
  *
  * Entries are ordered by key length descending so that Vite alias resolution
@@ -20,24 +23,29 @@ import { join, toFileUrl } from '@std/path';
 export function allPackageAliases(repoRoot: string): Map<string, string> {
   const entries: Array<[string, string]> = [];
 
-  for (const entry of Deno.readDirSync(join(repoRoot, 'packages'))) {
-    if (!entry.isDirectory) continue;
+  for (const entry of readdirSync(join(repoRoot, 'packages'), { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
     const pkgDir = join(repoRoot, 'packages', entry.name);
-    let denoJson: { name?: string; exports?: unknown };
+    // A member without a package.json manifest is not a package (never
+    // silently skipped).
+    let manifest: { name?: string; exports?: unknown };
     try {
-      denoJson = JSON.parse(Deno.readTextFileSync(join(pkgDir, 'deno.json')));
-    } catch {
-      continue;
+      manifest = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
+    } catch (error) {
+      throw new Error(
+        `package-aliases: ${join(pkgDir, 'package.json')} is missing or unparseable`,
+        { cause: error },
+      );
     }
-    const { name: packageName, exports: exportsField } = denoJson;
+    const { name: packageName, exports: exportsField } = manifest;
     if (!packageName) continue;
 
     if (typeof exportsField === 'string') {
-      entries.push([packageName, toFileUrl(join(pkgDir, exportsField)).href]);
+      entries.push([packageName, pathToFileURL(join(pkgDir, exportsField)).href]);
     } else if (exportsField && typeof exportsField === 'object') {
       for (const [subpath, target] of Object.entries(exportsField as Record<string, string>)) {
         const specifier = subpath === '.' ? packageName : `${packageName}${subpath.slice(1)}`;
-        entries.push([specifier, toFileUrl(join(pkgDir, target)).href]);
+        entries.push([specifier, pathToFileURL(join(pkgDir, target)).href]);
       }
     }
   }

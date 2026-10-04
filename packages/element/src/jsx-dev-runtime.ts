@@ -9,7 +9,8 @@
  * The JSX namespace is declared inline here (and in jsx-runtime.ts) because
  * TypeScript's automatic JSX transform resolves it from the jsx-runtime
  * module's emitted declarations — a `/// <reference>` indirection does not
- * survive `deno pack` declaration emit (consumer:packaged gate).
+ * survive the packaged declaration emit the consumer:packaged gate
+ * checks.
  */
 import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
 

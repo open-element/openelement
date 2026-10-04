@@ -5,7 +5,7 @@
  * pin the public surface's behavior directly (entity obfuscation forms, the
  * greedy-hex parser-faithful non-match, and the scheme-anchored boundary).
  */
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   STREAM_FRAME_FORBIDDEN_TAGS,
   STREAM_FRAME_UNSAFE_URL,
@@ -14,7 +14,7 @@ import {
   unsafeStreamFrameAttribute,
 } from '../src/index.ts';
 
-Deno.test('streamed-frame policy: attribute predicate screens names and URL values', () => {
+test('streamed-frame policy: attribute predicate screens names and URL values', () => {
   const corpus: Array<[string, string, boolean]> = [
     // Names fail outright regardless of value.
     ['onclick', 'alert(1)', true],
@@ -62,24 +62,33 @@ Deno.test('streamed-frame policy: attribute predicate screens names and URL valu
     ['title', 'javascript&#58;alert(1)', false],
   ];
   for (const [name, value, expected] of corpus) {
-    assertEquals(
+    expect(
       unsafeStreamFrameAttribute(name, value),
-      expected,
       `frame-attribute predicate mismatch for ${name}=${value}`,
-    );
+    ).toEqual(expected);
   }
 });
 
-Deno.test('streamed-frame policy: exported deny lists match the documented contract', () => {
-  assertEquals(
-    [...STREAM_FRAME_FORBIDDEN_TAGS],
-    ['script', 'style', 'template', 'iframe', 'object', 'embed', 'base', 'meta', 'link'],
-  );
-  assertEquals(
-    [...STREAM_FRAME_URL_ATTRIBUTES],
-    ['href', 'src', 'action', 'formaction', 'xlink:href'],
-  );
-  assertEquals(STREAM_FRAME_URL_CONTROL_MAX, 32);
-  assertEquals(STREAM_FRAME_UNSAFE_URL.source, '^(javascript|vbscript|data):');
-  assertEquals(STREAM_FRAME_UNSAFE_URL.flags, 'i');
+test('streamed-frame policy: exported deny lists match the documented contract', () => {
+  expect([...STREAM_FRAME_FORBIDDEN_TAGS]).toEqual([
+    'script',
+    'style',
+    'template',
+    'iframe',
+    'object',
+    'embed',
+    'base',
+    'meta',
+    'link',
+  ]);
+  expect([...STREAM_FRAME_URL_ATTRIBUTES]).toEqual([
+    'href',
+    'src',
+    'action',
+    'formaction',
+    'xlink:href',
+  ]);
+  expect(STREAM_FRAME_URL_CONTROL_MAX).toEqual(32);
+  expect(STREAM_FRAME_UNSAFE_URL.source).toEqual('^(javascript|vbscript|data):');
+  expect(STREAM_FRAME_UNSAFE_URL.flags).toEqual('i');
 });

@@ -2,15 +2,12 @@
  * errors.ts — the single declaration site of the openElement error contract
  * (#1386 item 3).
  *
- * Four error conventions used to coexist in this package: OEC structured
- * compiler diagnostics, `OpenElementError` with codes, ~40 bare `Error`s
- * carrying `[compiled-*]` string prefixes, and dedicated exception classes
- * (`PartProgramClaimError`, `CompiledProgramValidationError`, `EachKeyError`).
- * A consumer could not catch a failure by code without importing three classes
- * and reading message text for the rest. Now every failure raised by this
- * package is an {@linkcode OpenElementError} carrying `code`, `severity`,
- * `phase` and `recoverable`; the dedicated classes below only ADD their own
- * provenance fields on top of that contract.
+ * Every failure raised by this package is an {@linkcode OpenElementError}
+ * carrying `code`, `severity`, `phase` and `recoverable`; the dedicated
+ * exception classes below (`PartProgramClaimError`,
+ * `CompiledProgramValidationError`, `EachKeyError`) only ADD their own
+ * provenance fields on top of that contract, so a consumer catches by code
+ * through the one class.
  *
  * The class lives here, not in `../core/errors.ts`, because this module is
  * import-free: the semantic core and the canonical Part Program protocol may

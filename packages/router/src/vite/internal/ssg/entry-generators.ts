@@ -7,7 +7,6 @@
  * specifiers resolved by build-client.ts. String emission lives in
  * entry-codegen.ts.
  *
- * v0.21.0: manifest-driven hydration strategies.
  * Zero DOM interaction - cannot interfere with DSD rendering.
  */
 

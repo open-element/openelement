@@ -13,6 +13,10 @@
  * touching this file.
  */
 
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import {
   type PackageInfo,
   packagesByVersion,
@@ -49,16 +53,21 @@ import { publishPackage } from './npm-publisher.ts';
 
 // The coordinator re-exports the manifest/publisher surface its behavioral
 // tests import; the implementations live in npm-manifest.ts / npm-publisher.ts.
-export { deriveAllDependencies, deriveDependencies, type DeriveDepsIo } from './npm-manifest.ts';
+export {
+  deriveAllDependencies,
+  deriveDependencies,
+  type DeriveDepsIo,
+  importsShapeFromPackageJson,
+} from './npm-manifest.ts';
 export { npmPublishTag, publishPackage, type PublishPackageIo } from './npm-publisher.ts';
 
 const COMMANDS = new Set(['pack', 'pack:dry-run', 'publish:npm', 'publish:npm:dry-run']);
 
 function cleanStaleTarballs(packages: PackageInfo[]): void {
   for (const pkg of packages) {
-    for (const entry of Deno.readDirSync(pkg.dir)) {
-      if (entry.isFile && entry.name.endsWith('.tgz')) {
-        Deno.removeSync(`${pkg.dir}/${entry.name}`);
+    for (const entry of readdirSync(pkg.dir, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith('.tgz')) {
+        rmSync(`${pkg.dir}/${entry.name}`);
       }
     }
   }
@@ -76,14 +85,14 @@ function cleanStaleTarballs(packages: PackageInfo[]): void {
 export function findRawTypeScriptPayload(packageRoot: string): string[] {
   const found: string[] = [];
   const visit = (dir: string): void => {
-    for (const entry of Deno.readDirSync(dir)) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = `${dir}/${entry.name}`;
-      if (entry.isDirectory) {
+      if (entry.isDirectory()) {
         visit(path);
         continue;
       }
       if (
-        entry.isFile &&
+        entry.isFile() &&
         (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) &&
         !entry.name.endsWith('.d.ts')
       ) {
@@ -129,16 +138,16 @@ export function findAbsoluteFileUrlPayload(packageRoot: string): string[] {
   };
   const found: string[] = [];
   const visit = (dir: string): void => {
-    for (const entry of Deno.readDirSync(dir)) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = `${dir}/${entry.name}`;
-      if (entry.isDirectory) {
+      if (entry.isDirectory()) {
         visit(path);
         continue;
       }
       if (
-        entry.isFile &&
+        entry.isFile() &&
         /\.(?:js|mjs|cjs)$/.test(entry.name) &&
-        hasMachineSourceUrl(Deno.readTextFileSync(path))
+        hasMachineSourceUrl(readFileSync(path, 'utf8'))
       ) {
         found.push(path.slice(packageRoot.length + 1));
       }
@@ -148,6 +157,36 @@ export function findAbsoluteFileUrlPayload(packageRoot: string): string[] {
   return found.sort();
 }
 
+/**
+ * The publish-relevant slice of a package's package.json: `peerDependencies`
+ * (plain ranges, passed through verbatim) and the npm `files` allowlist
+ * (with its `!` exclusions) as the publish include/exclude glob pair.
+ */
+function readPackageSourceManifest(dir: string): {
+  peerDependencies?: Record<string, string>;
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+  publish?: { include: string[]; exclude: string[] };
+} {
+  const manifest = JSON.parse(readFileSync(`${dir}/package.json`, 'utf8')) as {
+    peerDependencies?: Record<string, string>;
+    peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+    files?: string[];
+  };
+  const include: string[] = [];
+  const exclude: string[] = [];
+  for (const entry of manifest.files ?? []) {
+    if (entry.startsWith('!')) exclude.push(entry.slice(1));
+    else include.push(entry);
+  }
+  return {
+    ...(manifest.peerDependencies ? { peerDependencies: manifest.peerDependencies } : {}),
+    ...(manifest.peerDependenciesMeta
+      ? { peerDependenciesMeta: manifest.peerDependenciesMeta }
+      : {}),
+    publish: { include, exclude },
+  };
+}
+
 export async function packPackage(
   pkg: PackageInfo,
   dependencies: Record<string, string>,
@@ -155,12 +194,7 @@ export async function packPackage(
   allPackages: PackageInfo[],
 ): Promise<string> {
   const out = tarballPath(pkg);
-  const sourceManifest = JSON.parse(Deno.readTextFileSync(`${pkg.dir}/deno.json`)) as {
-    peerDependencies?: Record<string, string>;
-    peerDependenciesMeta?: Record<string, { optional?: boolean }>;
-    compilerOptions?: Record<string, unknown>;
-    publish?: { include?: string[]; exclude?: string[] };
-  };
+  const sourceManifest = readPackageSourceManifest(pkg.dir);
 
   // #1301: a package shipping compiled-element sources (.tsx modules with a
   // canonically bound @element decorator) must run the open:compiled-element
@@ -171,7 +205,7 @@ export async function packPackage(
   // replaces module contents with the same compiler output a consumer's own
   // build would produce from workspace source.
   const compiledModules = compilePackageElementModules(pkg.dir);
-  // The staged workspace mirrors the deno workspace 1:1: every package is
+  // The staged workspace mirrors the pnpm workspace 1:1: every package is
   // staged and symlinked under node_modules/@openelement/, so cross-package
   // declaration emit resolves types from source exactly like the real
   // workspace, and the shared install carries the union of every member's
@@ -183,12 +217,11 @@ export async function packPackage(
     pkg,
     members,
     dependencyMap,
-    sourceManifest,
   });
   try {
     if (compiledModules.length > 0) {
       for (const output of compiledModules) {
-        Deno.writeTextFileSync(`${staged.packDir}/${output.relativePath}`, output.code);
+        writeFileSync(`${staged.packDir}/${output.relativePath}`, output.code);
       }
       console.log(
         `[npm] ${pkg.name}: packing staged compiler output for ${compiledModules.length} ` +
@@ -238,14 +271,14 @@ export async function packPackage(
       );
     }
 
-    const tmp = await Deno.makeTempDir({ prefix: 'pack-' });
+    const tmp = await mkdtemp(join(tmpdir(), 'pack-'));
     const tarEnv = { COPYFILE_DISABLE: '1' };
     try {
       // Assemble the raw package tree: vp dist under src/, publish-scoped
       // non-module payload files, and the synthesized manifest that preserves
       // the published exports shape (types+import+default over src/*.js).
       const pkgRoot = `${tmp}/package`;
-      Deno.mkdirSync(pkgRoot);
+      mkdirSync(pkgRoot);
       assembleVpPackageTree({
         pkg,
         stagedPackDir: staged.packDir,
@@ -258,11 +291,11 @@ export async function packPackage(
       });
       const pkgJsonPath = `${pkgRoot}/package.json`;
       const rawManifest = await hashFileTree(tmp);
-      const rawPackageJson = JSON.parse(Deno.readTextFileSync(pkgJsonPath)) as Record<
+      const rawPackageJson = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as Record<
         string,
         unknown
       >;
-      const pkgJson = JSON.parse(Deno.readTextFileSync(pkgJsonPath));
+      const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
       const rawPayload = findRawTypeScriptPayload(pkgRoot);
       if (rawPayload.length > 0) {
         throw new Error(
@@ -281,7 +314,9 @@ export async function packPackage(
       }
       applyPackageJsonOverrides(pkg, pkgJson);
       for (const [name, value] of Object.entries(sourceManifest.peerDependencies ?? {})) {
-        const parsed = parseNpmSpec(value, `${pkg.name} peer dependency`);
+        // Plain package.json ranges; validated and normalized through the
+        // same parser the published derivation uses.
+        const parsed = parseNpmSpec(`npm:${name}@${value}`, `${pkg.name} peer dependency`);
         if (!parsed) {
           throw new Error(`Invalid npm peer dependency ${name}=${value}`);
         }
@@ -336,7 +371,7 @@ export async function packPackage(
           );
         }
         try {
-          await Deno.stat(`${pkgRoot}/${types.slice(2)}`);
+          await stat(`${pkgRoot}/${types.slice(2)}`);
         } catch {
           throw new Error(
             `[npm] ${pkg.name}: export '${subpath}' types file missing at ${types} (failing closed).`,
@@ -377,7 +412,7 @@ export async function packPackage(
           `publicDeclarations=${publicDeclarations} declarationClosure=${declarationGraph.reached.length} ` +
           `unresolvedExternals=${summary.unresolvedImports.length}`,
       );
-      Deno.writeTextFileSync(pkgJsonPath, formatJson(pkgJson));
+      writeFileSync(pkgJsonPath, formatJson(pkgJson));
       // Repack proof: only approved manifest fields may differ from the raw
       // pack output; every JS/declaration byte is identical.
       const finalManifest = await hashFileTree(tmp);
@@ -385,10 +420,10 @@ export async function packPackage(
       const archive = await createDeterministicTarGz(readTreeEntries(tmp), {
         executablePaths: packageBinArchivePaths(pkgJson),
       });
-      await Deno.writeFile(out, archive);
+      await writeFile(out, archive);
       // Shipped-archive proof: re-extract the final tarball and confirm every
       // member matches the verified tree (catches any writer defect).
-      const verifyDir = await Deno.makeTempDir({ prefix: 'pack-verify-' });
+      const verifyDir = await mkdtemp(join(tmpdir(), 'pack-verify-'));
       try {
         await runCommand('tar', ['-xzf', out, '-C', verifyDir], { env: tarEnv });
         const shippedManifest = await hashFileTree(verifyDir);
@@ -398,10 +433,10 @@ export async function packPackage(
           );
         }
       } finally {
-        await Deno.remove(verifyDir, { recursive: true });
+        await rm(verifyDir, { recursive: true });
       }
     } finally {
-      await Deno.remove(tmp, { recursive: true });
+      await rm(tmp, { recursive: true });
     }
   } finally {
     await staged.cleanup();
@@ -417,7 +452,7 @@ async function gitRef(ref: string): Promise<string> {
 }
 
 async function sha256File(path: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', await Deno.readFile(path));
+  const digest = await crypto.subtle.digest('SHA-256', await readFile(path));
   return (
     'sha256:' +
     [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -546,11 +581,9 @@ function parseCommand(): {
   dryRun: boolean;
   publish: boolean;
 } {
-  const command = Deno.args[0];
+  const command = process.argv[2];
   if (!COMMANDS.has(command)) {
-    throw new Error(
-      `Usage: deno run --allow-read --allow-run tools/publish-npm.ts ${[...COMMANDS].join('|')}`,
-    );
+    throw new Error(`Usage: node tools/release/publish-npm.ts ${[...COMMANDS].join('|')}`);
   }
   const dryRun = command.endsWith(':dry-run');
   const publish = command.startsWith('publish:');
@@ -611,15 +644,12 @@ async function main(): Promise<void> {
       tree: () => gitRef('HEAD^{tree}'),
       tarballHash: (pkg) => sha256File(tarballPath(pkg)),
       writeReceipt: async (value) => {
-        await Deno.mkdir('.artifacts', { recursive: true });
-        await Deno.writeTextFile(
-          '.artifacts/release-receipt.json',
-          JSON.stringify(value, null, 2) + '\n',
-        );
+        await mkdir('.artifacts', { recursive: true });
+        await writeFile('.artifacts/release-receipt.json', JSON.stringify(value, null, 2) + '\n');
       },
       log: console.log,
     });
-    if (receipt.result !== 'published') Deno.exit(1);
+    if (receipt.result !== 'published') process.exit(1);
   }
 
   console.log(`[npm] ${command} complete. Tarballs:`);

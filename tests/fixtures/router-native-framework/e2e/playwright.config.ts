@@ -6,9 +6,9 @@
  * renderIntent 'dynamic' routes delegated to dist/server/index.js.
  *
  * Prerequisites:
- *   deno task --cwd tests/fixtures/router-native-framework build
+ *   pnpm --dir tests/fixtures/router-native-framework run build
  *
- * Run: deno task --cwd tests/fixtures/router-native-framework e2e
+ * Run: pnpm --dir tests/fixtures/router-native-framework run e2e
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';
@@ -39,9 +39,9 @@ export default defineConfig({
   },
 
   webServer: {
-    // `exec` prevents the shell Playwright launches from orphaning Deno when
-    // the suite finishes or is interrupted.
-    command: `OPEN_ELEMENT_DISABLE_CSRF=1 exec deno run --config ../../../../deno.json --allow-read --allow-env --allow-net server.ts --port ${PORT} --dir ../dist`,
+    // `exec` replaces the shell with the node server process, so the webServer
+    // child is killed (not orphaned) when the suite finishes or is interrupted.
+    command: `OPEN_ELEMENT_DISABLE_CSRF=1 exec node server.ts --port ${PORT} --dir ../dist`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 60_000,

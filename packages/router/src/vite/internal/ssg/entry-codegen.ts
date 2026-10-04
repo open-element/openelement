@@ -141,7 +141,7 @@ function renderRouteContentLines(
   // The page renders as its own compiled host element via __ssr; the page
   // descriptor's props projector maps request-scoped data onto the compiled
   // properties. Renderer modules (_renderer.ts) wrap the rendered HTML string.
-  // (Beta.2.2 review: the lit page-data side channel — embedded JSON no
+  // (the lit page-data side channel — embedded JSON no
   // client consumed — was removed; page-state restoration needs a real
   // consumer contract first.)
   lines.push(`${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${pathLiteral} })`);
@@ -383,9 +383,3 @@ export function renderActionRoute(
 ): void {
   renderRouteHandler(lines, { method: 'post', route, renderers, docConfig, isSSG, renderer });
 }
-
-/**
- * Generate the Hono notFound fallback (#923): unmatched paths render the
- * /404 page with a 404 status. Any failure inside the fallback degrades to
- * the plain status page — the fallback itself never 500s.
- */

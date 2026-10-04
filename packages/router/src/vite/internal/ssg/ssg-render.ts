@@ -12,8 +12,11 @@
  *   - Utility helpers (ssg-helpers.ts)
  */
 
-import { existsSync } from '../../../internal/host-path.ts';
-import { dirname, join, relative } from '../../../internal/host-path.ts';
+import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
+import process from 'node:process';
+import { existsSync } from 'node:fs';
+import { dirname, join, relative } from 'pathe';
 import type {
   RouteInfoEntry,
   SsgPageOutput,
@@ -53,7 +56,7 @@ export async function ssgRender(
   options: SsgRenderOptions,
   evidence: SsgRenderEvidence = {},
 ): Promise<SsgRenderSummary> {
-  const root = options.root || Deno.cwd();
+  const root = options.root || process.cwd();
   const outDir = options.outDir || DEFAULT_OUT_DIR;
 
   // ── Dynamic route expansion via bundle.getStaticPaths() ──────
@@ -103,16 +106,16 @@ export async function ssgRender(
   const fsModule = {
     writeFile: async (path: string, data: string | Uint8Array) => {
       const dir = dirname(path);
-      await Deno.mkdir(dir, { recursive: true });
-      if (typeof data === 'string') await Deno.writeTextFile(path, data);
-      else await Deno.writeFile(path, data);
+      await mkdir(dir, { recursive: true });
+      if (typeof data === 'string') await writeFile(path, data, 'utf8');
+      else await writeFile(path, data);
     },
     mkdir: async (path: string) => {
-      await Deno.mkdir(path, { recursive: true });
+      await mkdir(path, { recursive: true });
     },
     isDirectory: async (path: string) => {
       try {
-        return (await Deno.stat(path)).isDirectory;
+        return (await stat(path)).isDirectory();
       } catch {
         return false;
       }
@@ -128,13 +131,13 @@ export async function ssgRender(
     );
   }
 
-  // alpha.18 (R2-H3): hono/ssg's defaultPlugin silently drops every non-200
-  // response, so static-route 404/500/redirect pages used to vanish without a
-  // trace. Record them through a request wrapper (the afterResponseHook does
-  // not receive the request path) and surface them in the build summary.
+  // hono/ssg's defaultPlugin silently drops every non-200 response, so
+  // static-route 404/500/redirect pages would vanish without a trace. Record
+  // them through a request wrapper (the afterResponseHook does not receive the
+  // request path) and surface them in the build summary.
   const staticNon200: Array<{ path: string; status: number }> = [];
   const warnings: string[] = [];
-  // Beta.2.1 (#1325): the unified entry serves pages behind a single
+  // #1325: the unified entry serves pages behind a single
   // app.all('*', dispatcher), so app.routes no longer enumerates pages and
   // hono/ssg discovers nothing. Project eligible static pages from canonical
   // routeInfo for DISCOVERY ONLY — matching/rendering still runs through the
@@ -204,7 +207,7 @@ export async function ssgRender(
   const actionRoutes = routeInfo.filter((r) => r.hasAction === true);
   if (requestTimeRoutes.length > 0 || actionRoutes.length > 0) {
     const serverDir = join(outputDir, 'server');
-    Deno.mkdirSync(serverDir, { recursive: true });
+    mkdirSync(serverDir, { recursive: true });
     const serverManifest = {
       version: 1,
       requestTimeRoutes: requestTimeRoutes.map((r) => ({
@@ -214,8 +217,8 @@ export async function ssgRender(
         hasAction: r.hasAction === true,
       })),
     };
-    Deno.writeTextFileSync(join(serverDir, 'server-manifest.json'), formatJson(serverManifest));
-    Deno.writeTextFileSync(
+    writeFileSync(join(serverDir, 'server-manifest.json'), formatJson(serverManifest), 'utf8');
+    writeFileSync(
       join(serverDir, 'index.js'),
       // Admission predicate derivation (#1215): only the route paths reach the
       // generated module — params/precedence stay with the canonical entry.
@@ -225,15 +228,17 @@ export async function ssgRender(
     // real record when the project ships a client bundle (build.ts
     // writeRequestTimeClientAssets). Structured data only — no injection
     // logic (#1471).
-    Deno.writeTextFileSync(
+    writeFileSync(
       join(serverDir, 'client-assets.js'),
       serializeClientAssetsModule(EMPTY_CLIENT_ASSET_MANIFEST),
+      'utf8',
     );
     // Local preview is served by the start CLI from TypeScript source
-    // (Deno.serve over the shared fetch handler); production deploys go
-    // through the Nitro mount. No second production server is generated.
+    // (the node:http fetch server over the shared fetch handler); production
+    // deploys go through the Nitro mount. No second production server is
+    // generated.
     // index.js/entry.js are ESM .js files; mark the server dir as ESM.
-    Deno.writeTextFileSync(join(serverDir, 'package.json'), '{ "type": "module" }\n');
+    writeFileSync(join(serverDir, 'package.json'), '{ "type": "module" }\n', 'utf8');
     log.info(
       `Request-time server -> ${join(serverDir, 'index.js')} ` +
         `(${requestTimeRoutes.length} request-time route(s)` +
@@ -278,8 +283,8 @@ export async function ssgRender(
     // routes flat (blog.html), which dropped them from the sitemap. Only an
     // existing index.html is a real clash.
     if (existsSync(indexPath)) continue;
-    Deno.mkdirSync(dirPath, { recursive: true });
-    Deno.renameSync(filePath, indexPath);
+    mkdirSync(dirPath, { recursive: true });
+    renameSync(filePath, indexPath);
     log.info(`Clean URL: /${urlBaseName} -> ${urlBaseName}/index.html`);
   }
 
@@ -308,18 +313,18 @@ export async function ssgRender(
     const html = join(dir, '404.html');
     if (existsSync(html)) {
       log.warn('404.html already exists in output dir - removing before rename');
-      Deno.removeSync(html);
+      rmSync(html);
     }
-    Deno.renameSync(index, html);
+    renameSync(index, html);
     const dir404 = join(dir, '404');
     if (existsSync(dir404)) {
-      Deno.removeSync(dir404, { recursive: true });
+      rmSync(dir404, { recursive: true });
     }
     log.info(`404 page -> ${label}404.html (GitHub Pages)`);
   };
   rename404Dir(outputDir, 'dist/');
-  for (const entry of Deno.readDirSync(outputDir)) {
-    if (entry.isDirectory) {
+  for (const entry of readdirSync(outputDir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
       rename404Dir(join(outputDir, entry.name), `dist/${entry.name}/`);
     }
   }

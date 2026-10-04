@@ -1,6 +1,6 @@
 /** Community Context Protocol transport conformance without ancestry walking. */
 
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   ContextConsumer as LitContextConsumer,
   ContextProvider as LitContextProvider,
@@ -44,7 +44,7 @@ function asLitHost(node: TestElement): LitHost {
   return host;
 }
 
-Deno.test('signal-context: OE provider and consumer interoperate through a composed request', () => {
+test('signal-context: OE provider and consumer interoperate through a composed request', () => {
   const document = new TestDocument();
   const context = createContext(Symbol('count'), 0);
   const provider = document.createElement('x-provider');
@@ -55,10 +55,10 @@ Deno.test('signal-context: OE provider and consumer interoperate through a compo
 
   provideContext(asElement(provider), context, 42);
   const local = consumeContext(context, asElement(consumer));
-  assertEquals(local.value, 42);
+  expect(local.value).toEqual(42);
 });
 
-Deno.test('signal-context: vanilla provider supplies plain values to an OE consumer', () => {
+test('signal-context: vanilla provider supplies plain values to an OE consumer', () => {
   const document = new TestDocument();
   const context = createContext(Symbol('vanilla-provider'), 'fallback');
   const provider = document.createElement('x-provider');
@@ -71,10 +71,10 @@ Deno.test('signal-context: vanilla provider supplies plain values to an OE consu
     request.callback('vanilla');
   });
 
-  assertEquals(consumeContext(context, asElement(consumer)).value, 'vanilla');
+  expect(consumeContext(context, asElement(consumer)).value).toEqual('vanilla');
 });
 
-Deno.test('signal-context: OE provider supplies plain values to a vanilla consumer', () => {
+test('signal-context: OE provider supplies plain values to a vanilla consumer', () => {
   const document = new TestDocument();
   const context = createContext(Symbol('vanilla-consumer'), 'fallback');
   const provider = document.createElement('x-provider');
@@ -85,10 +85,10 @@ Deno.test('signal-context: OE provider supplies plain values to a vanilla consum
   consumer.dispatchEvent(
     new ContextRequestEvent<string>(context.key, asElement(consumer), (next) => (value = next)),
   );
-  assertEquals(value, 'open-element');
+  expect(value).toEqual('open-element');
 });
 
-Deno.test('signal-context: protocol identity uses strict equality and defaults are consumer-local', () => {
+test('signal-context: protocol identity uses strict equality and defaults are consumer-local', () => {
   const document = new TestDocument();
   const providerContext = createContext(Symbol('theme'), 'provider-default');
   const otherContext = createContext(Symbol('theme'), 'consumer-default');
@@ -100,11 +100,11 @@ Deno.test('signal-context: protocol identity uses strict equality and defaults a
   const first = consumeContext(otherContext, asElement(consumer));
   const second = consumeContext(otherContext, asElement(consumer));
   first.value = 'local-only';
-  assertEquals(first.value, 'local-only');
-  assertEquals(second.value, 'consumer-default');
+  expect(first.value).toEqual('local-only');
+  expect(second.value).toEqual('consumer-default');
 });
 
-Deno.test('signal-context: OE provider interoperates with a real @lit/context consumer', () => {
+test('signal-context: OE provider interoperates with a real @lit/context consumer', () => {
   const document = new TestDocument();
   const key = Symbol('oe-to-lit');
   const context = createContext(key, 'fallback');
@@ -121,15 +121,15 @@ Deno.test('signal-context: OE provider interoperates with a real @lit/context co
 
   provideContext(asElement(provider), context, 'open-element');
   consumer.hostConnected();
-  assertEquals(seen, ['open-element']);
+  expect(seen).toEqual(['open-element']);
   provideContext(asElement(provider), context, 'updated');
-  assertEquals(seen, ['open-element', 'updated']);
+  expect(seen).toEqual(['open-element', 'updated']);
   consumer.hostDisconnected();
   provideContext(asElement(provider), context, 'detached');
-  assertEquals(seen, ['open-element', 'updated']);
+  expect(seen).toEqual(['open-element', 'updated']);
 });
 
-Deno.test('signal-context: real @lit/context provider interoperates with an OE consumer', () => {
+test('signal-context: real @lit/context provider interoperates with an OE consumer', () => {
   const document = new TestDocument();
   const key = Symbol('lit-to-oe');
   const context = createContext(key, 'fallback');
@@ -144,10 +144,10 @@ Deno.test('signal-context: real @lit/context provider interoperates with an OE c
   provider.hostConnected();
 
   const local = consumeContext(context, asElement(consumerElement));
-  assertEquals(local.value, 'lit');
+  expect(local.value).toEqual('lit');
   provider.setValue('updated');
-  assertEquals(local.value, 'updated');
+  expect(local.value).toEqual('updated');
   releaseConsumedContext(local);
   provider.setValue('detached');
-  assertEquals(local.value, 'updated');
+  expect(local.value).toEqual('updated');
 });

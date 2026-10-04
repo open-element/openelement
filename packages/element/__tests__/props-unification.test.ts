@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { collectPublicProps, normalizePublicProps } from '../src/internal/core/props-utils.ts';
 import { isDangerousKey } from '../src/internal/core/security.ts';
 
@@ -22,25 +22,25 @@ const FIXTURE: Record<string, unknown> = Object.fromEntries([
   ...SAFE.map((k) => [k, 'v'] as [string, unknown]),
 ]);
 
-Deno.test('isDangerousKey covers the prototype-pollution key set', () => {
+test('isDangerousKey covers the prototype-pollution key set', () => {
   for (const key of DANGEROUS) {
-    assertEquals(isDangerousKey(key), true, `expected ${key} to be dangerous`);
+    expect(isDangerousKey(key), `expected ${key} to be dangerous`).toEqual(true);
   }
-  assertEquals(isDangerousKey('class'), false);
-  assertEquals(isDangerousKey('onclick'), false);
+  expect(isDangerousKey('class')).toEqual(false);
+  expect(isDangerousKey('onclick')).toEqual(false);
 });
 
-Deno.test('normalizePublicProps strips dangerous + internal keys, keeps the rest', () => {
+test('normalizePublicProps strips dangerous + internal keys, keeps the rest', () => {
   const clean = normalizePublicProps(FIXTURE);
-  assertEquals(Object.keys(clean).sort(), [...SAFE].sort());
+  expect(Object.keys(clean).sort()).toEqual([...SAFE].sort());
 });
 
-Deno.test('SSR path (collectPublicProps) filters identically to the shared core', () => {
+test('SSR path (collectPublicProps) filters identically to the shared core', () => {
   const host = { ...FIXTURE } as unknown as object;
-  assertEquals(Object.keys(collectPublicProps(host)).sort(), [...SAFE].sort());
+  expect(Object.keys(collectPublicProps(host)).sort()).toEqual([...SAFE].sort());
 });
 
-Deno.test('collectPublicProps strips framework-internal host instance fields (#1037)', () => {
+test('collectPublicProps strips framework-internal host instance fields (#1037)', () => {
   // Host instances may carry own-enumerable framework internals. Collected
   // into props they leak into `{...props}` spreads as garbage attributes
   // (`signal-registry="[object Map]"`) and diverge SSR/CSR output.
@@ -49,5 +49,5 @@ Deno.test('collectPublicProps strips framework-internal host instance fields (#1
     signalRegistry: new Map(),
     _internals: undefined,
   } as unknown as object;
-  assertEquals(collectPublicProps(host), { label: 'public' });
+  expect(collectPublicProps(host)).toEqual({ label: 'public' });
 });

@@ -81,7 +81,7 @@ export function buildEntryDescriptor(
     /** Relative file paths for local islands (preserves subdirectory structure) */
     islandFiles?: string[];
     /**
-     * Page renderer (Beta.2.2, #1339). 'native' (default) renders pages via
+     * Page renderer (#1339). 'native' (default) renders pages via
      * renderDsd; 'lit' renders LitElement pages via @openelement/router/lit-ssr.
      * Explicit config only — never inferred from route sources.
      */
@@ -90,12 +90,12 @@ export function buildEntryDescriptor(
     islandMeta?: Record<string, Partial<IslandDecl>>;
     /** Compiled non-island components reachable from local page imports. */
     staticComponents?: StaticComponentDecl[];
-    /** Package manifests discovered from npm/JSR packages */
+    /** Package manifests discovered from npm packages */
     packageManifests?: OpenElementPackageManifest[];
     /** CEM-derived compatibility classifications (from compatibility classifier) */
     cemClassifications?: CompatibilityClassification[];
     /**
-     * #979 (0.43.0-alpha.2): foreign custom-element tags discovered by
+     * #979: foreign custom-element tags discovered by
      * scanForeignTags() in page/island JSX. Recorded in the admission plan as
      * explicit client-only entries (visibility only — no SSR behavior change).
      */
@@ -109,8 +109,8 @@ export function buildEntryDescriptor(
     layouts?: FrameworkOptions['layouts'];
     /**
      * #1411: emit the default-CORS production advisory into the generated
-     * entry. The dev server passes false so a first `deno task dev` run is
-     * warning-free; production builds keep the warning (default true).
+     * entry. The dev server passes false so a first dev run is warning-free;
+     * production builds keep the warning (default true).
      */
     warnOnDefaultCors?: boolean;
     /** Declared project locales; absent keeps the single-locale descriptor shape. */
@@ -410,7 +410,7 @@ export function buildEntryDescriptor(
       };
     });
 
-  // --- Special files: _renderer.ts / _middleware.ts (v0.3.0) ---
+  // --- Special files: _renderer.ts / _middleware.ts ---
   const specialRoutes = routes.filter((r) => r.type === 'special');
 
   const renderers: RendererDecl[] = specialRoutes
@@ -719,13 +719,12 @@ export function buildSsrAdmissionPlan(
     });
   }
 
-  // #979 (0.43.0-alpha.2): record foreign custom-element tags discovered in
+  // #979: record foreign custom-element tags discovered in
   // page/island JSX. Visibility only — the tags stay out of
   // renderableTags/clientOnlyTags/rejectedTags so SSR rendering and hydration
   // behavior are byte-identical to the pre-#979 plan; each tag gets an honest
-  // source:'foreign' client-only decision instead of being absent ('unscanned'
-  // in the alpha.1 corpus). A foreign tag that collides with an island
-  // declaration keeps the island decision.
+  // source:'foreign' client-only decision instead of being absent. A foreign
+  // tag that collides with an island declaration keeps the island decision.
   const recordedForeignTags: string[] = [];
   for (const tagName of foreignTags) {
     if (seen.has(tagName)) continue;

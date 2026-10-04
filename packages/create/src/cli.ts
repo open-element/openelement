@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write
+#!/usr/bin/env node
 /**
  * @openelement/create - Minimal project scaffold for openElement framework.
  *
@@ -13,6 +13,8 @@
  * runtime stack trace.
  */
 
+import { mkdir, stat, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { buildTemplates, resolveVersions, validateProjectName } from './template-builder.ts';
 import { createInstallCommand } from './install-command.ts';
 
@@ -20,9 +22,20 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** node:fs error shape for "path does not exist". */
+function isNotFound(error: unknown): boolean {
+  return (error as { code?: string }).code === 'ENOENT';
+}
+
+/** node:fs error shapes for "not permitted". */
+function isPermissionDenied(error: unknown): boolean {
+  const code = (error as { code?: string }).code;
+  return code === 'EACCES' || code === 'EPERM';
+}
+
 function fail(message: string): never {
   console.error(`error: ${message}`);
-  Deno.exit(1);
+  process.exit(1);
 }
 
 function joinPosix(...parts: string[]): string {
@@ -37,17 +50,17 @@ function dirnameOf(path: string): string {
 }
 
 async function main(): Promise<void> {
-  const name = Deno.args[0];
+  const name = process.argv[2];
   if (!name || name === '--help' || name === '-h') {
     console.log(`Usage (Alpha): ${createInstallCommand()}`);
     console.log('(a versionless install resolves the stable 0.43 line)');
-    Deno.exit(name ? 0 : 1);
+    process.exit(name ? 0 : 1);
   }
 
   const invalid = validateProjectName(name);
   if (invalid) fail(`Invalid project name "${name}". ${invalid}`);
 
-  const cwd = Deno.cwd().replace(/\/+$/, '');
+  const cwd = process.cwd().replace(/\/+$/, '');
   const targetDir = `${cwd}/${name}`;
   const relativeTarget = name;
 
@@ -63,12 +76,12 @@ async function main(): Promise<void> {
   }
 
   try {
-    await Deno.stat(targetDir);
+    await stat(targetDir);
     fail(
       `Directory "${name}" already exists. Choose a different name or remove the existing directory.`,
     );
   } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) {
+    if (!isNotFound(error)) {
       throw new Error(`Could not inspect target directory "${name}": ${errorMessage(error)}`);
     }
   }
@@ -76,19 +89,18 @@ async function main(): Promise<void> {
   const v = resolveVersions();
 
   try {
-    await Deno.mkdir(targetDir, { recursive: true });
+    await mkdir(targetDir, { recursive: true });
     const TPL = await buildTemplates(v, name);
     for (const [path, content] of Object.entries(TPL)) {
       const fullPath = joinPosix(targetDir, path);
-      await Deno.mkdir(dirnameOf(fullPath), { recursive: true });
-      await Deno.writeTextFile(fullPath, content);
+      await mkdir(dirnameOf(fullPath), { recursive: true });
+      await writeFile(fullPath, content, 'utf8');
       console.info(`  created ${path}`);
     }
   } catch (error) {
-    const detail =
-      error instanceof Deno.errors.PermissionDenied
-        ? `Permission denied. Check write permissions for ${targetDir}.`
-        : errorMessage(error);
+    const detail = isPermissionDenied(error)
+      ? `Permission denied. Check write permissions for ${targetDir}.`
+      : errorMessage(error);
     throw new Error(
       `Failed to write project files in "${name}": ${detail} ` +
         'Remove the partially created directory before retrying.',
@@ -97,8 +109,9 @@ async function main(): Promise<void> {
 
   console.info(`\nopenElement project created at ./${relativeTarget}/`);
   console.info(`\n  cd ${relativeTarget}`);
-  console.info('  deno task dev');
-  console.info('  See README.md for all tasks (check/build/start/preview)');
+  console.info('  pnpm install');
+  console.info('  pnpm dev');
+  console.info('  See README.md for all scripts (check/test/build/start/preview)');
 }
 
 try {

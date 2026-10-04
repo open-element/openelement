@@ -8,9 +8,9 @@ import { element, OpenElement, property } from '@openelement/element';
 import '@openelement/ui/open-badge';
 import '@openelement/ui/open-button';
 import '../site-ui/open-standards-visual.tsx';
-import '@openelement/site-ui/open-artifact-panel.tsx';
-import '@openelement/site-ui/open-section-frame.tsx';
-import '@openelement/site-ui/open-reading-shell.tsx';
+import '#site-ui/open-artifact-panel.tsx';
+import '#site-ui/open-section-frame.tsx';
+import '#site-ui/open-reading-shell.tsx';
 import '../islands/open-page-rail.tsx';
 import { pageRoadmapStyles } from './page-roadmap-styles.ts';
 

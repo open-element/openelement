@@ -1,4 +1,8 @@
-import { assert, assertEquals, assertThrows } from '@std/assert';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import {
   createDeterministicTar,
   createDeterministicTarGz,
@@ -62,67 +66,67 @@ function fixture(): TarFileEntry[] {
   ];
 }
 
-Deno.test('deterministic tar: identical entries produce identical bytes twice', async () => {
+test('deterministic tar: identical entries produce identical bytes twice', async () => {
   const first = await createDeterministicTarGz(fixture());
   const second = await createDeterministicTarGz(fixture());
-  assertEquals(await sha256Hex(first), await sha256Hex(second));
-  assertEquals([...first], [...second]);
+  expect(await sha256Hex(first)).toEqual(await sha256Hex(second));
+  expect([...first]).toEqual([...second]);
   const reordered = await createDeterministicTarGz([fixture()[2], fixture()[0], fixture()[1]]);
-  assertEquals(await sha256Hex(reordered), await sha256Hex(first), 'input order is irrelevant');
+  expect(await sha256Hex(reordered), 'input order is irrelevant').toEqual(await sha256Hex(first));
 });
 
-Deno.test('deterministic tar: fixed uid gid mtime and normalized modes', async () => {
+test('deterministic tar: fixed uid gid mtime and normalized modes', async () => {
   const archive = await gunzip(
     await createDeterministicTarGz(fixture(), {
       executablePaths: ['package/src/cli.js'],
     }),
   );
   const entries = parseTar(archive);
-  assertEquals(
-    entries.map((entry) => entry.path),
-    ['package/package.json', 'package/src/cli.js', 'package/src/index.js'],
-  );
+  expect(entries.map((entry) => entry.path)).toEqual([
+    'package/package.json',
+    'package/src/cli.js',
+    'package/src/index.js',
+  ]);
   for (const entry of entries) {
-    assertEquals(entry.uid, 0);
-    assertEquals(entry.gid, 0);
-    assertEquals(entry.mtime, 0);
-    assertEquals(entry.type, '0');
+    expect(entry.uid).toEqual(0);
+    expect(entry.gid).toEqual(0);
+    expect(entry.mtime).toEqual(0);
+    expect(entry.type).toEqual('0');
   }
-  assertEquals(entries[1].mode, 0o755, 'bin path keeps the executable bit');
-  assertEquals(entries[0].mode, 0o644);
-  assertEquals(entries[2].mode, 0o644);
-  assertEquals(new TextDecoder().decode(entries[2].data), 'export {};');
+  expect(entries[1].mode, 'bin path keeps the executable bit').toEqual(0o755);
+  expect(entries[0].mode).toEqual(0o644);
+  expect(entries[2].mode).toEqual(0o644);
+  expect(new TextDecoder().decode(entries[2].data)).toEqual('export {};');
 });
 
-Deno.test('deterministic tar: gzip wrapper carries no mtime or OS variance', async () => {
+test('deterministic tar: gzip wrapper carries no mtime or OS variance', async () => {
   const gz = await createDeterministicTarGz(fixture());
-  assertEquals(
-    [...gz.subarray(0, 10)],
-    [0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff],
-  );
+  expect([...gz.subarray(0, 10)]).toEqual([
+    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff,
+  ]);
   const direct = await gzipDeterministic(encoder.encode('payload'));
-  assertEquals([...direct.subarray(4, 8)], [0, 0, 0, 0], 'gzip mtime field is zero');
+  expect([...direct.subarray(4, 8)], 'gzip mtime field is zero').toEqual([0, 0, 0, 0]);
 });
 
-Deno.test('deterministic tar: long paths use the ustar prefix field', () => {
+test('deterministic tar: long paths use the ustar prefix field', () => {
   const longPath = `package/${'deeply/'.repeat(16)}module.d.ts`;
-  assert(longPath.length > 100);
+  expect(longPath.length > 100).toBeTruthy();
   const archive = createDeterministicTar([{ path: longPath, data: encoder.encode('x') }]);
   const entries = parseTar(archive);
-  assertEquals(entries.length, 1);
-  assertEquals(entries[0].path, longPath);
+  expect(entries.length).toEqual(1);
+  expect(entries[0].path).toEqual(longPath);
 });
 
-Deno.test('deterministic tar: unsafe and duplicate paths fail closed', () => {
+test('deterministic tar: unsafe and duplicate paths fail closed', () => {
   const unsafe = ['/abs', '../escape', 'a/../b', 'a\\b', 'a//b', ''];
   for (const path of unsafe) {
-    assertThrows(
+    assertThrowsIncludes(
       () => createDeterministicTar([{ path, data: encoder.encode('x') }]),
       Error,
       'unsafe archive path',
     );
   }
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       createDeterministicTar([
         { path: 'a', data: encoder.encode('1') },
@@ -133,39 +137,39 @@ Deno.test('deterministic tar: unsafe and duplicate paths fail closed', () => {
   );
 });
 
-Deno.test('deterministic tar: archives exceed 100 chars only through prefix', () => {
+test('deterministic tar: archives exceed 100 chars only through prefix', () => {
   const tooLong = 'x'.repeat(256);
-  assertThrows(
+  assertThrowsIncludes(
     () => createDeterministicTar([{ path: tooLong, data: encoder.encode('x') }]),
     Error,
     'cannot be encoded',
   );
 });
 
-Deno.test('deterministic tar: readTreeEntries walks a real tree deterministically', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'deterministic-tar-' });
+test('deterministic tar: readTreeEntries walks a real tree deterministically', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deterministic-tar-'));
   try {
-    await Deno.mkdir(`${root}/package/src`, { recursive: true });
-    await Deno.writeTextFile(`${root}/package/package.json`, '{"name":"x"}');
-    await Deno.writeTextFile(`${root}/package/src/index.js`, 'export {};');
+    await mkdir(`${root}/package/src`, { recursive: true });
+    await writeFile(`${root}/package/package.json`, '{"name":"x"}');
+    await writeFile(`${root}/package/src/index.js`, 'export {};');
     const entries = readTreeEntries(root);
-    assertEquals(
-      entries.map((entry) => entry.path),
-      ['package/package.json', 'package/src/index.js'],
-    );
+    expect(entries.map((entry) => entry.path)).toEqual([
+      'package/package.json',
+      'package/src/index.js',
+    ]);
     const tgz = await createDeterministicTarGz(entries);
     const roundTrip = parseTar(await gunzip(tgz));
-    assertEquals(
-      roundTrip.map((entry) => entry.path),
-      ['package/package.json', 'package/src/index.js'],
-    );
-    assertEquals(new TextDecoder().decode(roundTrip[1].data), 'export {};');
+    expect(roundTrip.map((entry) => entry.path)).toEqual([
+      'package/package.json',
+      'package/src/index.js',
+    ]);
+    expect(new TextDecoder().decode(roundTrip[1].data)).toEqual('export {};');
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('deterministic tar: sha256Hex matches crypto digest', async () => {
+test('deterministic tar: sha256Hex matches crypto digest', async () => {
   const hash = await sha256Hex(encoder.encode('abc'));
-  assertEquals(hash, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  expect(hash).toEqual('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
 });

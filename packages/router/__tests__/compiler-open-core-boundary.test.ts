@@ -15,8 +15,8 @@
  *     packages/element/__tests__/v044-delivery/compiler-gate.test.ts)
  */
 
-import { assert, assertEquals, assertNotEquals } from '@std/assert';
-import { eachMapping, TraceMap } from 'npm:@jridgewell/trace-mapping@0.3.31';
+import { expect, test } from 'vitest';
+import { eachMapping, TraceMap } from '@jridgewell/trace-mapping';
 import type { Plugin } from 'vite';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 
@@ -51,39 +51,46 @@ function coreTransform(): (
   id: string,
 ) => { code: string; map?: { mappings: string } } | string | null {
   const core = createOpenPlugin().find((plugin: Plugin) => plugin.name === 'open:core');
-  assert(core, 'open:core plugin must be registered');
-  assert(typeof core.transform === 'function', 'open:core must expose a transform hook');
+  expect(core, 'open:core plugin must be registered').toBeTruthy();
+  expect(
+    typeof core.transform === 'function',
+    'open:core must expose a transform hook',
+  ).toBeTruthy();
   return core.transform as unknown as ReturnType<typeof coreTransform>;
 }
 
-Deno.test('open:core hands the real map to Vite without a double map story', () => {
+test('open:core hands the real map to Vite without a double map story', () => {
   const transformed = coreTransform().call(failingContext(), SOURCE, FILE);
-  assert(transformed !== null && typeof transformed === 'object', 'open:core must return code+map');
-  assertEquals(
+  expect(
+    transformed !== null && typeof transformed === 'object',
+    'open:core must return code+map',
+  ).toBeTruthy();
+  expect(
     transformed.code.includes('sourceMappingURL'),
-    false,
     'no inline map comment may survive the boundary',
-  );
-  assert(transformed.map, 'open:core must return the real map object');
-  assertNotEquals(transformed.map!.mappings, '');
+  ).toEqual(false);
+  expect(transformed.map, 'open:core must return the real map object').toBeTruthy();
+  expect(transformed.map!.mappings).not.toEqual('');
 
   // The returned map ties every generated segment back to the authored TSX.
   const trace = new TraceMap(transformed.map as never);
-  assertEquals(
+  expect(
     (transformed.map as { sources?: string[] }).sources,
-    [FILE],
     'map must name the authored module as its only source',
-  );
+  ).toEqual([FILE]);
   const originalLines = new Set<number>();
   eachMapping(trace, (mapping) => {
-    assertEquals(mapping.source, FILE);
+    expect(mapping.source).toEqual(FILE);
     if (mapping.originalLine !== null) originalLines.add(mapping.originalLine);
   });
-  assert(originalLines.size > 0, 'map must carry segments');
-  assert(originalLines.has(4), 'map must resolve segments to the authored @property line');
+  expect(originalLines.size > 0, 'map must carry segments').toBeTruthy();
+  expect(
+    originalLines.has(4),
+    'map must resolve segments to the authored @property line',
+  ).toBeTruthy();
 });
 
-Deno.test('open:core applies the compiler admission gate to marker mentions', () => {
+test('open:core applies the compiler admission gate to marker mentions', () => {
   // '@element(' appears only inside a string literal and comments — the cheap
   // substring prefilter matches, but no real decorator exists, so the default
   // pipeline passes the module through instead of failing the build.
@@ -94,8 +101,7 @@ Deno.test('open:core applies the compiler admission gate to marker mentions', ()
     '  render() { return <div>not compiled</div>; }',
     '}',
   ].join('\n');
-  assertEquals(
+  expect(
     coreTransform().call(failingContext(), mentionOnly, '/project/app/components/mention.tsx'),
-    null,
-  );
+  ).toEqual(null);
 });

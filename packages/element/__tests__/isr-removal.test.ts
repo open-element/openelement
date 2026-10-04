@@ -8,37 +8,36 @@
  * deleted surface.
  */
 
-import { assert, assertEquals } from '@std/assert';
+import { readFile, stat } from 'node:fs/promises';
+import { expect, test } from 'vitest';
 
 const repoRoot = new URL('../../../', import.meta.url);
 
 async function readRepoFile(path: string): Promise<string> {
-  return await Deno.readTextFile(new URL(path, repoRoot));
+  return await readFile(new URL(path, repoRoot), 'utf8');
 }
 
 async function repoFileExists(path: string): Promise<boolean> {
   try {
-    await Deno.stat(new URL(path, repoRoot));
+    await stat(new URL(path, repoRoot));
     return true;
   } catch {
     return false;
   }
 }
 
-Deno.test('ISR modules are deleted from @openelement/element internals', async () => {
-  assertEquals(
+test('ISR modules are deleted from @openelement/element internals', async () => {
+  expect(
     await repoFileExists('packages/element/src/internal/core/isr.ts'),
-    false,
     'packages/element/src/internal/core/isr.ts must be deleted (#1217)',
-  );
-  assertEquals(
+  ).toEqual(false);
+  expect(
     await repoFileExists('packages/element/src/internal/protocol/isr.ts'),
-    false,
     'packages/element/src/internal/protocol/isr.ts must be deleted (#1217)',
-  );
+  ).toEqual(false);
 });
 
-Deno.test('no ISR surface remains in element public entry points', async () => {
+test('no ISR surface remains in element public entry points', async () => {
   for (const path of [
     'packages/element/src/index.ts',
     // #1416: the export list lives in public-surface.ts and both entries
@@ -47,7 +46,6 @@ Deno.test('no ISR surface remains in element public entry points', async () => {
     'packages/element/src/public-surface.ts',
     'packages/element/src/client-only.ts',
     'packages/element/src/public-contracts.ts',
-    'packages/element/src/public-build-runtime.ts',
     'packages/element/src/build-utils.ts',
     'packages/element/src/internal/core/index.ts',
     'packages/element/src/internal/protocol/framework.ts',
@@ -64,12 +62,12 @@ Deno.test('no ISR surface remains in element public entry points', async () => {
       'isr-manifest',
       'revalidate',
     ]) {
-      assert(!source.includes(token), `${path} must not reference ${token} (#1217)`);
+      expect(!source.includes(token), `${path} must not reference ${token} (#1217)`).toBeTruthy();
     }
   }
 });
 
-Deno.test('no ISR/revalidate semantics remain in app authoring or adapter SSG', async () => {
+test('no ISR/revalidate semantics remain in app authoring or adapter SSG', async () => {
   for (const path of [
     'packages/router/src/authoring.ts',
     'packages/router/src/vite/internal/ssg/ssg-helpers.ts',
@@ -88,7 +86,7 @@ Deno.test('no ISR/revalidate semantics remain in app authoring or adapter SSG', 
       'isr-manifest',
       'revalidate',
     ]) {
-      assert(!source.includes(token), `${path} must not reference ${token} (#1217)`);
+      expect(!source.includes(token), `${path} must not reference ${token} (#1217)`).toBeTruthy();
     }
   }
 });

@@ -46,7 +46,7 @@
 import type { RouteEntry, SpecialFileType } from '../protocol/framework.ts';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
-import { dirname, join, resolve } from '../../../internal/host-path.ts';
+import { dirname, join, resolve } from 'pathe';
 import { buildError, RouteScanErrorCode } from '../../../internal/error-codes.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
@@ -110,7 +110,7 @@ const notedIgnoredTagName = new Set<string>();
  * Convert a route file path to a URL path pattern.
  * e.g., 'index.ts' -> '/', 'about.ts' -> '/about', 'posts/[id].ts' -> '/posts/:id'
  *
- * v0.6: Uses URLPattern-compatible syntax where possible.
+ * Uses URLPattern-compatible syntax where possible.
  * URLPattern is the WHATWG standard for URL matching (section7.2).
  * Pattern :param is compatible with both Hono and URLPattern.
  */
@@ -118,10 +118,10 @@ export function parseRouteFilePath(filePath: string): string {
   // Normalize separators - handle Windows backslash paths
   let p = normalizeSeparators(filePath);
 
-  // v0.25: AST-verified — path utility, regex is the appropriate tool
+  // Path utility: regex is the appropriate tool
   p = p.replace(/\.[^.]+$/, '');
 
-  // v0.25: AST-verified — path utility, converts [param] to :param
+  // Path utility: converts [param] to :param
   // #556: a catch-all segment [...path] becomes the Hono
   // named regex parameter :path{.+} (matches across '/'), not the literal
   // single-segment ':...path' the naive replacement produced.
@@ -156,7 +156,7 @@ function getRouteType(filePath: string): 'page' | 'api' {
  * e.g., '/' -> 'RouteIndex', '/about' -> 'RouteAbout', '/posts/:id' -> 'RoutePostsId'
  */
 function pathToVarName(path: string): string {
-  // v0.25: AST-verified — path-to-identifier transformation, regex is the appropriate tool
+  // Path-to-identifier transformation: regex is the appropriate tool
   let name = path
     .replace(/^\//, '')
     .replace(/\/$/, '')
@@ -229,7 +229,7 @@ export async function scanRoutes(
       continue;
     }
 
-    if (fileStat.isDirectory) {
+    if (fileStat.isDirectory()) {
       // Recurse into subdirectories
       const subEntries = await scanRoutes(fullPath, relativePath, options);
       entries.push(...subEntries);
@@ -252,7 +252,7 @@ export async function scanRoutes(
         // Regular route file
         const routePath = parseRouteFilePath(relativePath);
         const routeType = getRouteType(relativePath);
-        // v0.25: AST-verified — path utility, extracts [param] patterns
+        // Path utility: extracts [param] patterns
         // #556: a catch-all [...path] contributes the bare
         // param name 'path' (no '...' prefix) to match the ':path{.+}' pattern.
         const paramMatches = relativePath.match(/\[([^\]]+)\]/g);

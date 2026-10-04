@@ -89,7 +89,7 @@ The reference site wires the same scripts through its Vite `inject` option.
 the package directory with:
 
 ```bash
-deno task generate:ui-tokens
+pnpm run generate:ui-tokens
 ```
 
 The drift gate for the same task runs as `ui-tokens:check`.
@@ -161,6 +161,7 @@ manifest; the per-component JSDoc is the source of truth for those.
 @openelement/ui/open-props-tokens
 @openelement/ui/open-props-tokens.js   (legacy alias of the previous entry)
 @openelement/ui/instance-state         (per-element instance state store; tree-shakeable leaf)
+@openelement/ui/manifest               (generated WC package manifest; node-safe leaf)
 ```
 
 The last entry is a compatibility alias kept for import maps written against the

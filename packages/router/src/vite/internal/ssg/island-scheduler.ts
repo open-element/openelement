@@ -7,10 +7,10 @@
  * enters the viewport, and `media` islands wait for a matching media query —
  * located by a deep, shadow-root-aware query because
  * islands live inside page-element DSD shadow roots where a light-DOM
- * querySelectorAll never looks (#562). defineIsland() in @openelement/element
- * carries no scheduling of its own: an island module only evaluates after
- * this scheduler decided to import it, so defineIsland() registers on
- * evaluation.
+ * querySelectorAll never looks (#562). Island modules carry no scheduling of
+ * their own: a module only evaluates after this scheduler decided to import
+ * it, and the import registers the island's custom element as its side
+ * effect.
  *
  * The generated client entry imports this module through the
  * virtual:open-client-runtime specifier (resolved by build-client.ts) and the

@@ -8,7 +8,7 @@
  * @openelement/element + the jsx-runtime via jsxImportSource). Marker strings
  * are renamed so the harness log is attributable to the packed consumer, not
  * the fixtures. All process/server/temp-project lifecycle, the cell
- * framework, and the probes live in tools/consumer-packaged-shared.ts; the
+ * framework, and the probes live in tools/release/consumer-packaged-shared.ts; the
  * renderer-specific continuation claim (the compiled kernel claims the island
  * DSD, node identity survives interaction, no full reload) is asserted by the
  * generated Playwright probe that module runs with `native`.
@@ -235,8 +235,8 @@ export default definePage(NoteNewPage, {
   props(context: PagePropsContext) {
     const actionData = context.actionData as NewActionData | undefined;
     return {
-      // Named titleText (not title): a field named 'title' would shadow
-      // HTMLElement.title and trip Deno's default noImplicitOverride.
+      // Named titleText (not title): a class field named 'title' would shadow
+      // HTMLElement.title on the custom element.
       titleText: actionData?.title ?? '',
       hasError: actionData?.error ? 1 : 0,
       intentText: \`intent=\${noteStore.lastIntent()}\`,
@@ -427,10 +427,6 @@ export default defineConfig({
   // Exercise Linux's fs.watch backend on every host, including macOS.
   server: { watch: { useFsEvents: false, usePolling: false } },
   base: '/',
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: '@openelement/element',
-  },
   plugins: [
     ...openElement({
       routesDir: 'app/routes',
@@ -451,7 +447,6 @@ export default defineConfig({
 const NATIVE_LEG: PackedAppLegSpec = {
   renderer: 'native',
   externals: {},
-  importMapExtras: {},
   compilerOptions: {
     lib: ['ES2022', 'DOM', 'DOM.Iterable'],
     jsx: 'react-jsx',
@@ -472,15 +467,6 @@ const NATIVE_LEG: PackedAppLegSpec = {
     'app/islands/note-counter.tsx': NATIVE_ISLAND_COUNTER,
   },
   viteConfig: NATIVE_VITE_CONFIG,
-  checkEntries: [
-    'app/routes/index.tsx',
-    'app/routes/notes/index.tsx',
-    `app/routes/notes/[id].tsx`,
-    'app/routes/notes/new.tsx',
-    'app/routes/404.tsx',
-    'app/islands/note-counter.tsx',
-    'app/store.ts',
-  ],
   probes: [
     { path: '/', status: 200, markers: ['packed-app-native home', 'build-count=2'] },
     {

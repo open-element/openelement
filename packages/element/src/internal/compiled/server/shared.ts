@@ -2,7 +2,7 @@
  * Shared validation and host access for the compiled server and claim modes.
  *
  * This module deliberately consumes the unified Part Program v1 shape defined
- * in `../program.ts`. It owns no DOM discovery and performs no rendering
+ * in `../../protocol/part-program.ts`. It owns no DOM discovery and performs no rendering
  * fallback: malformed programs and unsafe values are rejected before either
  * execution mode can produce or attach to output. The server/claim grammar is
  * the compiler-emitted vocabulary — fixed `prop`/`attr`/`bool`/`class`/`style`/
@@ -19,6 +19,7 @@ import {
 import {
   FORBIDDEN_PROPERTY_NAMES,
   forbiddenSinkReason,
+  isSafeAttributeName as canonicalAttributeNameIsSafe,
   RAW_TEXT_TAGS,
 } from '../../protocol/forbidden-sinks.ts';
 import { OpenElementError, ServerErrorCode } from '../../protocol/errors.ts';
@@ -470,11 +471,7 @@ export function rawTextElement(tag: string): boolean {
   return RAW_TEXT_TAGS.has(tag);
 }
 
+/** The server face of the one canonical attribute-name predicate. */
 export function attributeNameIsSafe(name: string): boolean {
-  const lower = name.toLowerCase();
-  return (
-    ATTRIBUTE_NAME_RE.test(name) &&
-    !lower.startsWith('on') &&
-    forbiddenSinkReason('attr', name) === null
-  );
+  return canonicalAttributeNameIsSafe(name);
 }

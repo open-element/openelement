@@ -16,9 +16,9 @@
  */
 
 import type { FrameworkOptions } from './framework.ts';
-import { existsSync } from '../internal/host-path.ts';
-import { join } from '../internal/host-path.ts';
-import { toFileUrl } from '../internal/host-path.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'pathe';
+import { pathToFileURL } from 'node:url';
 import { escapeAttr } from '@openelement/element/html';
 import { OpenElementError } from '@openelement/element/authoring';
 import { conventionAppShellPath } from '../config.ts';
@@ -113,13 +113,15 @@ export function detectAppConfigFile(root: string): string | null {
 }
 
 /**
- * Import the config file through the host runtime (Deno's native TS support in
- * both the repo and the starter). The cache-busting query makes a dev-server
+ * Import the config file through the host runtime (Node's native TypeScript
+ * import — zero new dependencies). The cache-busting query makes a dev-server
  * edit observable; the Vite plugin path uses Vite's loader instead, which does
  * its own invalidation.
  */
 export async function importAppConfigModule(filePath: string): Promise<unknown> {
-  const module = (await import(`${toFileUrl(filePath)}?t=${Date.now()}`)) as { default?: unknown };
+  const module = (await import(`${pathToFileURL(filePath).href}?t=${Date.now()}`)) as {
+    default?: unknown;
+  };
   if (module.default === undefined) {
     throw new OpenElementError(
       `[openElement] ${OPEN_ELEMENT_CONFIG_FILE} must default-export a config object: ` +
@@ -143,7 +145,7 @@ function tokensFragmentFor(css: string): string {
 function readTextFileIfPresent(path: string): string | null {
   if (!existsSync(path)) return null;
   try {
-    return Deno.readTextFileSync(path);
+    return readFileSync(path, 'utf8');
   } catch (error) {
     throw new OpenElementError(
       `[openElement] Could not read ${path}: ${error instanceof Error ? error.message : error}`,
@@ -313,7 +315,13 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
   }
 
   // --- title: override > inline head.title > package.json name ---
-  let title = headBlock?.title ?? null;
+  // Two channels read the title with different omissions semantics: the
+  // document <title> falls back to the package.json name, but the site-level
+  // og:* block honors EXPLICIT configuration only — a head block that omits
+  // `title` suppresses the og:title/og:site_name pair, which the page-level
+  // head owns (the Document seam emits it ahead of these fragments).
+  const explicitTitle = headBlock?.title ?? null;
+  let title = explicitTitle;
   if (title === null) {
     const name = packageName(root);
     if (name !== null) {
@@ -345,7 +353,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
 
   const headFragments = [
     ...(tokensFragment === undefined ? [] : [tokensFragment]),
-    ...headFragmentsFor({ head: headBlock, title }),
+    ...headFragmentsFor({ head: headBlock, title: explicitTitle }),
   ];
 
   // Only defined keys are returned: the caller applies this on top of its own

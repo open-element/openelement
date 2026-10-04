@@ -5,9 +5,11 @@
  * them (the retired www#check task pinned a hand-maintained __tests__ list and
  * rotted). This gate derives the route entry list from the framework's own
  * route scanner — the same module the dev server and SSG build enumerate with
- * — then runs `deno check` per route module against the root config (which
- * owns the jsxImportSource/strict compiler options the routes are written
- * against). Derivation means a new route file joins the gate automatically.
+ * — then type-checks the route modules with the workspace TypeScript compiler
+ * under the compiler options the routes are written against
+ * (allowImportingTsExtensions, strict, bundler resolution; see the flags
+ * passed to tsc below).
+ * Derivation means a new route file joins the gate automatically.
  *
  * Fail-closed invariants:
  *   - generated modules are produced by `generate:all`, which both gate:source
@@ -15,16 +17,19 @@
  *     one is diagnosed from the compiler's own TS2307
  *     output (see below), so the hint can never go stale;
  *   - a zero-entry scan is an error, never a vacuous pass;
- *   - any per-module `deno check` failure fails the gate.
+ *   - any compiler failure fails the gate.
  *
  * Usage:
- *   deno run --allow-read --allow-env --allow-run tools/repo/check-www-routes-types.ts
+ *   node www/tools/check-www-routes-types.ts
  */
 
-import { dirname, fromFileUrl, join, relative, resolve } from '@std/path';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { scanRoutes } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
+import process from 'node:process';
+import { commandOutput } from '../../tools/repo/node-command.ts';
 
-const repoRoot = fromFileUrl(new URL('../..', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const routesDir = join(repoRoot, 'www/app/routes');
 
 const entries = await scanRoutes(routesDir);
@@ -37,13 +42,13 @@ if (files.length === 0) {
     `routes typecheck: route scan of ${routesDir} returned zero entries — ` +
       'the scanner or the routes directory is broken; refusing to vacuously pass.',
   );
-  Deno.exit(1);
+  process.exit(1);
 }
 
 /**
- * A missing generated module surfaces as TS2307. Deno reports the culprit
- * as an absolute file:// URL (or, rarely, the source-relative specifier);
- * normalize either to an absolute path. When git ignores it, it is a
+ * A missing generated module surfaces as TS2307. The compiler reports the
+ * culprit as an absolute file:// URL (or, rarely, the source-relative
+ * specifier); normalize either to an absolute path. When git ignores it, it is a
  * generated module that was never produced — say so, naming generate:all.
  * Returns the repo-relative path when that diagnosis fires, else null.
  */
@@ -52,55 +57,89 @@ async function generatedModuleHint(output: string, importerFile: string): Promis
   for (const match of output.matchAll(/Cannot find module '([^']+)'/g)) {
     const specifier = match[1];
     const abs = specifier.startsWith('file://')
-      ? fromFileUrl(specifier)
+      ? fileURLToPath(specifier)
       : specifier.startsWith('.')
         ? resolve(dirname(importerFile), specifier)
         : null;
     if (!abs) continue;
-    const check = new Deno.Command('git', {
+    const check = await commandOutput('git', {
       args: ['check-ignore', '-q', abs],
       cwd: repoRoot,
       stdin: 'null',
       stdout: 'null',
       stderr: 'null',
     });
-    const { code } = await check.output();
+    const { code } = check;
     if (code === 0) return relative(repoRoot, abs);
   }
   return null;
 }
 
-let failures = 0;
-for (const file of files) {
-  const child = new Deno.Command(Deno.execPath(), {
-    args: ['check', '--config', join(repoRoot, 'deno.json'), file],
-    cwd: repoRoot,
-    // Fail closed on a permission prompt rather than hanging (gate invariant).
-    stdin: 'null',
-    stdout: 'piped',
-    stderr: 'piped',
-  }).spawn();
-  const { code, stdout, stderr } = await child.output();
-  const text = new TextDecoder().decode(stdout) + new TextDecoder().decode(stderr);
-  // Preserve the historical pass-through log shape.
-  await Deno.stdout.write(new TextEncoder().encode(text));
-  if (code === 0) {
-    console.log(`PASS ${relative(repoRoot, file)}`);
-  } else {
-    console.error(`FAIL ${relative(repoRoot, file)} (deno check exited ${code})`);
-    const hinted = await generatedModuleHint(text, file);
-    if (hinted) {
-      console.error(
-        `hint: ${hinted} is a generated module (gitignored). Run ` +
-          '`deno task --cwd tools/repo generate:all` first.',
-      );
-    }
-    failures++;
-  }
-}
+const tsc = join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
+const check = await commandOutput(process.execPath, {
+  args: [
+    tsc,
+    '--noEmit',
+    '--allowImportingTsExtensions',
+    '--strict',
+    '--skipLibCheck',
+    '--target',
+    'es2023',
+    '--module',
+    'esnext',
+    '--moduleResolution',
+    'bundler',
+    '--lib',
+    'es2023,dom,dom.iterable',
+    '--jsx',
+    'react-jsx',
+    '--jsxImportSource',
+    '@openelement/element',
+    '--experimentalDecorators',
+    '--noImplicitOverride',
+    '--types',
+    'node',
+    ...files,
+  ],
+  cwd: repoRoot,
+  // Fail closed on a prompt rather than hanging (gate invariant).
+  stdin: 'null',
+  stdout: 'piped',
+  stderr: 'piped',
+});
+const text = new TextDecoder().decode(check.stdout) + new TextDecoder().decode(check.stderr);
+// Preserve the historical pass-through log shape.
+await process.stdout.write(new TextEncoder().encode(text));
 
-if (failures > 0) {
+if (check.code !== 0) {
+  // Attribute each diagnostic to its route module for the per-file FAIL log;
+  // errors from transitively checked sources still fail the gate.
+  const failedRoutes = new Set<string>(
+    files.filter((file) => text.includes(relative(repoRoot, file))),
+  );
+  let failures = 0;
+  for (const file of files) {
+    if (failedRoutes.has(file)) {
+      console.error(`FAIL ${relative(repoRoot, file)}`);
+      const hinted = await generatedModuleHint(text, file);
+      if (hinted) {
+        console.error(
+          `hint: ${hinted} is a generated module (gitignored). Run ` +
+            '`pnpm --filter @openelement/tools-repo run generate:all` first.',
+        );
+      }
+      failures++;
+    } else {
+      console.log(`PASS ${relative(repoRoot, file)}`);
+    }
+  }
+  if (failures === 0) {
+    // Diagnostics outside the route modules themselves: still fail closed.
+    console.error('FAIL routes typecheck (errors in transitively checked sources)');
+    failures = 1;
+  }
   console.error(`routes typecheck failed: ${failures}/${files.length} route module(s)`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log(`routes typecheck ok: ${files.length} route module(s) checked`);
+process.exit(0);

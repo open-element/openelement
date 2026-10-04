@@ -1,5 +1,5 @@
 /**
- * Declarative critical-rendering-path assets for the alpha.4 adapter.
+ * Declarative critical-rendering-path assets for the router build adapter.
  *
  * This is a build-time serializer. It emits ordinary HTML head resources and
  * never adds a second rendering or client-runtime path. External blocking

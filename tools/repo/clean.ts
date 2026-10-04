@@ -4,7 +4,7 @@
  *
  * Root tasks must not shell out to `rm -rf`: it does not exist on Windows
  * cmd. This tool removes ONLY allowlisted, repo-generated paths and is the
- * only sanctioned deletion primitive inside `deno task` strings.
+ * only sanctioned deletion primitive inside package.json script strings.
  *
  * Every target is repo-relative and validated twice: against the built-in
  * allowlist below and against the resolved repo root, so `/`, `~`, HOME,
@@ -14,12 +14,15 @@
  * by construction.
  *
  * Usage:
- *   deno run --allow-read --allow-write tools/repo/clean.ts            # default generated targets
- *   deno run --allow-read --allow-write tools/repo/clean.ts --deep     # + installed dependency trees
- *   deno run --allow-read --allow-write tools/repo/clean.ts <pattern>  # allowlisted pattern(s)
+ *   pnpm run clean                      # default generated targets
+ *   pnpm run clean:deep                 # + installed dependency trees
+ *   node tools/repo/clean.ts <pattern>  # allowlisted pattern(s)
  */
-import { expandGlob } from '@std/fs';
-import { fromFileUrl, isAbsolute, join, relative, resolve, SEPARATOR } from '@std/path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { glob, lstat, realpath, rm } from 'node:fs/promises';
+import type { Stats } from 'node:fs';
+import process from 'node:process';
 
 /** Generated build/test output with no long-term value. Safe by default. */
 export const DEFAULT_TARGETS: readonly string[] = [
@@ -60,6 +63,8 @@ export const DEFAULT_TARGETS: readonly string[] = [
 
 /** Opt-in extras: reinstallable dependency trees, never touched by default. */
 export const DEEP_TARGETS: readonly string[] = [
+  // Removes the .deno cache directory left over from the old Deno toolchain;
+  // no current tool reads its contents.
   '.deno',
   'node_modules',
   'apps/saas/node_modules',
@@ -95,7 +100,7 @@ export function assertSafeTarget(target: string): void {
 
 /** Fails closed unless `resolved` is a strict descendant of `root`. */
 function assertWithinRoot(root: string, target: string, resolved: string): void {
-  const rootWithSep = root.endsWith(SEPARATOR) ? root : `${root}${SEPARATOR}`;
+  const rootWithSep = root.endsWith(sep) ? root : `${root}${sep}`;
   if (resolved === root || !resolved.startsWith(rootWithSep)) {
     throw new Error(`clean: '${target}' resolves outside the repo root (${resolved})`);
   }
@@ -139,7 +144,7 @@ export async function cleanTargets(
   io: CleanIo = { log: console.log },
 ): Promise<number> {
   const resolvedRoot = resolve(root);
-  const realRoot = await Deno.realPath(resolvedRoot);
+  const realRoot = await realpath(resolvedRoot);
   for (const target of targets) {
     assertSafeTarget(target);
     if (!ALLOWLIST.has(target)) {
@@ -149,27 +154,31 @@ export async function cleanTargets(
 
   let removed = 0;
   const remove = async (absolute: string, label: string): Promise<void> => {
-    let stat: Deno.FileInfo;
+    let stat: Stats;
     try {
-      stat = await Deno.lstat(absolute);
+      stat = await lstat(absolute);
     } catch (error) {
-      if (error instanceof Deno.errors.NotFound) return;
+      // node:fs signals "path does not exist" with ENOENT (Deno: NotFound).
+      if ((error as { code?: string }).code === 'ENOENT') return;
       throw error;
     }
     assertWithinRoot(resolvedRoot, label, absolute);
     // A symlink is removed as a link; a real entry must live under the repo
     // even after resolving symlinked ancestors (fail closed on escapes).
-    if (!stat.isSymlink) {
-      assertWithinRoot(realRoot, label, await Deno.realPath(absolute));
+    if (!stat.isSymbolicLink()) {
+      assertWithinRoot(realRoot, label, await realpath(absolute));
     }
-    await Deno.remove(absolute, { recursive: true });
+    await rm(absolute, { recursive: true });
     io.log(`clean: removed ${label}`);
     removed++;
   };
   for (const target of targets) {
     if (target.includes('*')) {
-      for await (const entry of expandGlob(target, { root: resolvedRoot })) {
-        const absolute = resolve(entry.path);
+      // Single-level `*` segments only (assertSafeTarget rejects '**'); the
+      // default dot:false keeps dot-directories unexpanded, matching the
+      // former allowlist expansion.
+      for await (const entryPath of glob(target, { cwd: resolvedRoot })) {
+        const absolute = resolve(resolvedRoot, entryPath);
         await remove(absolute, relative(resolvedRoot, absolute));
       }
       continue;
@@ -180,12 +189,12 @@ export async function cleanTargets(
 }
 
 if (import.meta.main) {
-  const { targets, deep } = parseCleanArgs(Deno.args);
+  const { targets, deep } = parseCleanArgs(process.argv.slice(2));
   if (deep) {
     console.log(`clean --deep targets (${targets.length}):`);
     for (const target of targets) console.log(`  ${target}`);
   }
-  const root = fromFileUrl(new URL('../..', import.meta.url));
+  const root = fileURLToPath(new URL('../..', import.meta.url));
   const removed = await cleanTargets(root, targets);
   console.log(`clean ok: removed ${removed} path(s)`);
 }

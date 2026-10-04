@@ -1,4 +1,5 @@
-import { assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import {
   claimExistingDom,
   createFreshDom,
@@ -66,11 +67,10 @@ function divOf(root: TestElement): TestElement {
   return root.childNodes[0] as TestElement;
 }
 
-Deno.test('Regions own branch lifetimes and keyed identity in fresh DOM', () => {
+test('Regions own branch lifetimes and keyed identity in fresh DOM', () => {
   const state = regionHost();
   const html = serializeToHtml(REGION_PROGRAM, state.host);
-  assertEquals(
-    html,
+  expect(html).toEqual(
     '<div><!--oe:p0-->hello<!--oe:p1--><p>nested</p><!--oe:/p1-->' +
       '<ul><!--oe:p2--><li>alpha</li><li>beta</li><!--oe:/p2--></ul></div>',
   );
@@ -82,35 +82,35 @@ Deno.test('Regions own branch lifetimes and keyed identity in fresh DOM', () => 
   const list = div.childNodes[5] as TestElement;
   const first = list.childNodes[1] as TestElement;
   const second = list.childNodes[2] as TestElement;
-  assertEquals(toHtml(root), `<host>${html}</host>`);
+  expect(toHtml(root)).toEqual(`<host>${html}</host>`);
 
   state.visible.value = 0;
-  assertEquals((div.childNodes[3] as TestElement).tagName, 'EM');
+  expect((div.childNodes[3] as TestElement).tagName).toEqual('EM');
 
   state.visible.value = 1;
   const restoredParagraph = div.childNodes[3] as TestElement;
-  assertEquals((restoredParagraph.childNodes[0] as TestText).data, 'nested');
+  expect((restoredParagraph.childNodes[0] as TestText).data).toEqual('nested');
 
   state.items.value = [
     { id: 'b', text: 'beta' },
     { id: 'a', text: 'ALPHA' },
     { id: 'c', text: 'gamma' },
   ];
-  assertStrictEquals(list.childNodes[1], second, 'key b moved with its DOM node');
-  assertStrictEquals(list.childNodes[2], first, 'key a moved with its DOM node');
-  assertEquals(((list.childNodes[2] as TestElement).childNodes[0] as TestText).data, 'ALPHA');
-  assertEquals(((list.childNodes[3] as TestElement).childNodes[0] as TestText).data, 'gamma');
+  expect(list.childNodes[1], 'key b moved with its DOM node').toBe(second);
+  expect(list.childNodes[2], 'key a moved with its DOM node').toBe(first);
+  expect(((list.childNodes[2] as TestElement).childNodes[0] as TestText).data).toEqual('ALPHA');
+  expect(((list.childNodes[3] as TestElement).childNodes[0] as TestText).data).toEqual('gamma');
 
   state.items.value = [{ id: 'a', text: 'ALPHA' }];
-  assertStrictEquals(list.childNodes[1], first);
-  assertEquals(list.childNodes.length, 3, 'Region retains only its anchors and live entries');
+  expect(list.childNodes[1]).toBe(first);
+  expect(list.childNodes.length, 'Region retains only its anchors and live entries').toEqual(3);
 
   instance.dispose();
   state.message.value = 'disposed';
-  assertEquals((div.childNodes[1] as TestText).data, 'hello');
+  expect((div.childNodes[1] as TestText).data).toEqual('hello');
 });
 
-Deno.test('item value slots create their text node when an item becomes non-empty', () => {
+test('item value slots create their text node when an item becomes non-empty', () => {
   const items = signal([{ id: 'a', text: '' }]);
   const program = testProgram({
     tag: 'oe-item-values',
@@ -130,18 +130,18 @@ Deno.test('item value slots create their text node when an item becomes non-empt
   const doc = new TestDocument();
   const root = doc.createElement('host');
   const fresh = createFreshDom(program, host, node(root));
-  assertEquals(
+  expect(
     ((root.childNodes[0] as TestElement).childNodes[1] as TestElement).childNodes.length,
-    0,
-  );
+  ).toEqual(0);
 
   items.value = [{ id: 'a', text: 'now visible' }];
-  assertEquals(toHtml(root), '<host><ul><!--oe:p0--><li>now visible</li><!--oe:/p0--></ul></host>');
-  items.value = [{ id: 'a', text: '' }];
-  assertEquals(
-    ((root.childNodes[0] as TestElement).childNodes[1] as TestElement).childNodes.length,
-    0,
+  expect(toHtml(root)).toEqual(
+    '<host><ul><!--oe:p0--><li>now visible</li><!--oe:/p0--></ul></host>',
   );
+  items.value = [{ id: 'a', text: '' }];
+  expect(
+    ((root.childNodes[0] as TestElement).childNodes[1] as TestElement).childNodes.length,
+  ).toEqual(0);
 
   fresh.dispose();
   items.value = [{ id: 'a', text: '' }];
@@ -149,24 +149,21 @@ Deno.test('item value slots create their text node when an item becomes non-empt
   const claimDoc = new TestDocument();
   const claimRoot = parseHtml(claimDoc, html);
   const claimed = claimExistingDom(program, host, node(claimRoot));
-  assertEquals(
+  expect(
     ((claimRoot.childNodes[0] as TestElement).childNodes[1] as TestElement).childNodes.length,
-    0,
-  );
+  ).toEqual(0);
   items.value = [{ id: 'a', text: 'claimed visible' }];
-  assertEquals(
-    toHtml(claimRoot),
+  expect(toHtml(claimRoot)).toEqual(
     '<host><ul><!--oe:p0--><li>claimed visible</li><!--oe:/p0--></ul></host>',
   );
   items.value = [{ id: 'a', text: '' }];
-  assertEquals(
+  expect(
     ((claimRoot.childNodes[0] as TestElement).childNodes[1] as TestElement).childNodes.length,
-    0,
-  );
+  ).toEqual(0);
   claimed.dispose();
 });
 
-Deno.test('direct item value slots keep empty and multi-node item ranges ordered', () => {
+test('direct item value slots keep empty and multi-node item ranges ordered', () => {
   const items = signal([
     { id: 'a', text: '' },
     { id: 'b', text: 'B' },
@@ -194,21 +191,21 @@ Deno.test('direct item value slots keep empty and multi-node item ranges ordered
   const root = doc.createElement('host');
   const instance = createFreshDom(program, host, node(root));
 
-  assertEquals(toHtml(root), '<host><div><!--oe:p0-->[][B]<!--oe:/p0--></div></host>');
+  expect(toHtml(root)).toEqual('<host><div><!--oe:p0-->[][B]<!--oe:/p0--></div></host>');
   items.value = [
     { id: 'b', text: '' },
     { id: 'a', text: 'A' },
   ];
-  assertEquals(toHtml(root), '<host><div><!--oe:p0-->[][A]<!--oe:/p0--></div></host>');
+  expect(toHtml(root)).toEqual('<host><div><!--oe:p0-->[][A]<!--oe:/p0--></div></host>');
   items.value = [
     { id: 'a', text: '' },
     { id: 'b', text: 'B' },
   ];
-  assertEquals(toHtml(root), '<host><div><!--oe:p0-->[][B]<!--oe:/p0--></div></host>');
+  expect(toHtml(root)).toEqual('<host><div><!--oe:p0-->[][B]<!--oe:/p0--></div></host>');
   instance.dispose();
 });
 
-Deno.test('Region update errors propagate when the host has no update-error sink (#1375)', () => {
+test('Region update errors propagate when the host has no update-error sink (#1375)', () => {
   const items = signal<unknown>([{ id: 'a', text: 'alpha' }]);
   const program = testProgram({
     tag: 'oe-unguarded-each',
@@ -231,7 +228,7 @@ Deno.test('Region update errors propagate when the host has no update-error sink
   // The isolation contract is a kernel feature: a bare runtime host without
   // onUpdateError keeps the propagating behavior. #1413: the thrown message
   // names the authored property, not the compiler's part index.
-  assertThrows(
+  assertThrowsIncludes(
     () => {
       items.value = 'not-an-array';
     },
@@ -241,7 +238,7 @@ Deno.test('Region update errors propagate when the host has no update-error sink
   instance.dispose();
 });
 
-Deno.test('each validates every reused item projection before mutating and keeps its subscription', () => {
+test('each validates every reused item projection before mutating and keeps its subscription', () => {
   const items = signal<unknown>([
     { id: 'a', text: 'A' },
     { id: 'b', text: 'B' },
@@ -279,13 +276,13 @@ Deno.test('each validates every reused item projection before mutating and keeps
       },
     },
   ];
-  assertEquals(errors.length, 1);
-  assertEquals(toHtml(root), before);
+  expect(errors.length).toEqual(1);
+  expect(toHtml(root)).toEqual(before);
 
   items.value = [
     { id: 'a', text: 'A2' },
     { id: 'b', text: 'B2' },
   ];
-  assertEquals(toHtml(root).includes('<li>A2</li><li>B2</li>'), true);
+  expect(toHtml(root).includes('<li>A2</li><li>B2</li>')).toEqual(true);
   instance.dispose();
 });

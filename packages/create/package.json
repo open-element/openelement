@@ -1,0 +1,28 @@
+{
+  "name": "@openelement/create",
+  "version": "1.0.0-alpha.7",
+  "type": "module",
+  "exports": {
+    ".": "./src/cli.ts",
+    "./install-command": "./src/install-command.ts"
+  },
+  "files": [
+    "src/cli.ts",
+    "src/install-command.ts",
+    "src/template-builder.ts",
+    "src/version.ts",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "run": "node src/cli.ts",
+    "build": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. --project create",
+    "lint": "oxlint src __tests__",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "26.5.0"
+  }
+}

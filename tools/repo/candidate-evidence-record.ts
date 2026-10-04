@@ -2,7 +2,7 @@
  * Candidate evidence — the record foundation (alpha6 record split).
  *
  * One CI job's proof is recorded here: the job-record shapes (`StepResult`,
- * `JobResult`, `LoadedJob`), the process primitives (`repoRoot`, `denoExe`,
+ * `JobResult`, `LoadedJob`), the process primitives (`repoRoot`, `nodeExe`,
  * `required`, the `CANDIDATE_SHA`/`--expected-sha` resolution in
  * `expectedSha`, the tracked-clean probe in `assertCleanAtSha`), the step
  * runner with its SHA-free log bookkeeping (`runStep`, `toolVersions`,
@@ -12,17 +12,18 @@
  * (candidate-evidence-fresh-clone.ts); the audit lanes
  * (candidate-evidence-aggregate.ts / candidate-evidence-validate.ts) import
  * the shapes and primitives from here read-only, so consuming recorded
- * evidence never imports the CLI shell. Moved out of candidate-evidence.ts
- * verbatim (alpha6 architecture-debt lane): shapes, failure texts, and
- * behavior are unchanged.
+ * evidence never imports the CLI shell.
  *
  * Every recorded path is normalized to the shared roles (`$SOURCE`, `$CLONE`,
  * `$TEMP`) via the candidate-steps mapping, so real machine locations stay
  * private and the validator only ever sees the roles.
  */
 
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { readPackages } from '../lib/package-graph.ts';
+import { commandOutput } from './node-command.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 import {
   CANDIDATE_EVIDENCE_SCHEMA_VERSION,
@@ -44,7 +45,23 @@ import {
 
 export const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
-export const denoExe = Deno.execPath();
+export const nodeExe = process.execPath;
+
+/**
+ * Evidence records use the canonical build-identifier spellings
+ * 'windows'/'aarch64'/'x86_64'; translate node's 'win32'/'arm64'/'x64'
+ * instead of recording them raw, so the record strings stay byte-identical
+ * across producer machines.
+ */
+function evidenceOs(): string {
+  return process.platform === 'win32' ? 'windows' : process.platform;
+}
+
+function evidenceArch(): string {
+  if (process.arch === 'arm64') return 'aarch64';
+  if (process.arch === 'x64') return 'x86_64';
+  return process.arch;
+}
 
 /** One step of a job's result.json record. */
 export interface StepResult {
@@ -90,12 +107,12 @@ export interface LoadedJob {
 }
 
 export async function required(command: string, args: string[]): Promise<string> {
-  const output = await new Deno.Command(command, {
+  const output = await commandOutput(command, {
     args,
     cwd: repoRoot,
     stdout: 'piped',
     stderr: 'piped',
-  }).output();
+  });
   const text =
     new TextDecoder().decode(output.stdout).trim() + new TextDecoder().decode(output.stderr).trim();
   if (!output.success) throw new Error(`${command} ${args.join(' ')} failed: ${text}`);
@@ -104,12 +121,13 @@ export async function required(command: string, args: string[]): Promise<string>
 
 /** Read one `--<name> <value>` flag from the argv of this tool family's CLI. */
 export function flagValue(name: string): string | undefined {
-  const index = Deno.args.indexOf(`--${name}`);
-  return index === -1 ? undefined : Deno.args[index + 1];
+  const argv = process.argv.slice(2);
+  const index = argv.indexOf(`--${name}`);
+  return index === -1 ? undefined : argv[index + 1];
 }
 
 export function expectedSha(): string {
-  const value = flagValue('expected-sha') ?? Deno.env.get('CANDIDATE_SHA');
+  const value = flagValue('expected-sha') ?? process.env['CANDIDATE_SHA'];
   if (!value || !/^[0-9a-f]{40}$/u.test(value)) {
     throw new Error('Set CANDIDATE_SHA (or --expected-sha) to the exact 40-character SHA.');
   }
@@ -125,7 +143,7 @@ export async function assertCleanAtSha(expected: string): Promise<{ sha: string;
     ['diff', '--quiet'],
     ['diff', '--cached', '--quiet'],
   ]) {
-    const result = await new Deno.Command('git', { args, cwd: repoRoot }).output();
+    const result = await commandOutput('git', { args, cwd: repoRoot });
     if (!result.success) {
       throw new Error(`Candidate requires a tracked-clean worktree (git ${args.join(' ')}).`);
     }
@@ -148,15 +166,15 @@ function gateStepCounts(text: string): { pass: number; fail: number } {
 
 async function playwrightBrowserVersions(): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
-  const home = Deno.env.get('HOME') ?? Deno.env.get('USERPROFILE') ?? '';
+  const home = process.env['HOME'] ?? process.env['USERPROFILE'] ?? '';
   for (const cache of [
     join(home, '.cache/ms-playwright'),
     join(home, 'Library/Caches/ms-playwright'),
     join('C:', 'Users', 'runneradmin', 'AppData', 'Local', 'ms-playwright'),
   ]) {
     try {
-      for await (const entry of Deno.readDir(cache)) {
-        if (!entry.isDirectory) continue;
+      for (const entry of await readdir(cache, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
         const match = /^(chromium|firefox|webkit|ffmpeg|chromium_headless_shell)-(.+)$/.exec(
           entry.name,
         );
@@ -171,18 +189,58 @@ async function playwrightBrowserVersions(): Promise<Record<string, string>> {
   return out;
 }
 
+/**
+ * The workspace TypeScript version, taken from the installed dependency —
+ * `node_modules/typescript/package.json` — the exact copy the workspace gates
+ * typechecked with. `process.versions` carries no TypeScript field, and a
+ * registry probe or a constant would record a version the gates never ran,
+ * so this fails closed instead.
+ */
+export async function workspaceTypescriptVersion(root: string): Promise<string> {
+  const manifestPath = join(root, 'node_modules', 'typescript', 'package.json');
+  let raw: string;
+  try {
+    raw = await readFile(manifestPath, 'utf8');
+  } catch (cause) {
+    throw new Error(
+      `evidence toolVersions: TypeScript version unavailable — ${manifestPath} is not readable ` +
+        `(${cause instanceof Error ? cause.message : String(cause)}); install the workspace ` +
+        `(pnpm install) so the recorded version is the one the gates actually ran.`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      `evidence toolVersions: ${manifestPath} is not valid JSON; refusing to record a fabricated version.`,
+    );
+  }
+  const version =
+    typeof parsed === 'object' && parsed !== null && 'version' in parsed
+      ? (parsed as { version: unknown }).version
+      : undefined;
+  if (typeof version !== 'string' || version === '') {
+    throw new Error(
+      `evidence toolVersions: ${manifestPath} has no non-empty version string; refusing to record a fabricated version.`,
+    );
+  }
+  return version;
+}
+
 export async function toolVersions(): Promise<EvidenceToolVersions> {
-  const [node, npm] = await Promise.all([
-    required('node', ['--version']).catch(() => 'unavailable'),
-    required('npm', ['--version']).catch(() => 'unavailable'),
-  ]);
+  // Sequential by the session serial rule: no concurrent subprocess fan-out.
+  const node = await required('node', ['--version']).catch(() => 'unavailable');
+  const npm = await required('npm', ['--version']).catch(() => 'unavailable');
+  const pnpm = await required('pnpm', ['--version']).catch(() => 'unavailable');
+  const typescript = await workspaceTypescriptVersion(repoRoot);
   return {
-    deno: Deno.version.deno,
-    v8: Deno.version.v8,
-    typescript: Deno.version.typescript,
     node,
+    pnpm,
+    v8: process.versions.v8!,
+    typescript,
     npm,
-    os: `${Deno.build.os}/${Deno.build.arch}`,
+    os: `${evidenceOs()}/${evidenceArch()}`,
     playwrightBrowsers: await playwrightBrowserVersions(),
   };
 }
@@ -197,15 +255,15 @@ async function runStep(
   const startedAt = new Date().toISOString();
   const started = Date.now();
   const logPath = `logs/${name}.log`;
-  const output = await new Deno.Command(command[0], {
+  const output = await commandOutput(command[0], {
     args: command.slice(1),
     cwd,
     stdin: 'null',
     stdout: 'piped',
     stderr: 'piped',
-  }).output();
+  });
   const text = new TextDecoder().decode(output.stdout) + new TextDecoder().decode(output.stderr);
-  await Deno.writeTextFile(join(outDir, logPath), text);
+  await writeFile(join(outDir, logPath), text, 'utf8');
   return {
     name,
     command: command.map((element) => normalizeEvidencePath(element, roles)),
@@ -219,7 +277,13 @@ async function runStep(
   };
 }
 
-const PACKED_CONSUMER_STEP = /^PASS ((?:tools|apps|tests)\/[^\s(]+#(?:consumer:[^\s(]+|smoke))\b/m;
+/**
+ * Gate step lines are the coordinator's own report (`PASS <name> (N.Ns)`,
+ * one per step, names now package-qualified). Consumers are the packed
+ * consumer tasks; the prepacked artifact check is pinned to the exact step
+ * gate:packed runs (the standalone scanner is contractually forbidden there).
+ */
+const PACKED_CONSUMER_STEP = /^PASS (\S+#(?:consumer:\S+|smoke))\b/m;
 
 /** Derive packed-gate facts from the real gate log, never from a summary. */
 export function packedRollupFromLog(logText: string): {
@@ -230,7 +294,9 @@ export function packedRollupFromLog(logText: string): {
     ...stripAnsi(logText).matchAll(new RegExp(PACKED_CONSUMER_STEP.source, 'gm')),
   ].map((match) => match[1]);
   return {
-    artifactCheck: /^PASS tools\/release#package-artifacts:check\b/m.test(stripAnsi(logText)),
+    artifactCheck: /^PASS @openelement\/tools-release#package-artifacts:check:prepacked\b/m.test(
+      stripAnsi(logText),
+    ),
     consumers: [...new Set(consumers)].sort(),
   };
 }
@@ -240,11 +306,11 @@ async function packExtras(
   outDir: string,
 ): Promise<Record<string, unknown>> {
   const gatePacked = packedSteps.find((step) => step.name === 'gate-packed');
-  const packedText = gatePacked ? await Deno.readTextFile(join(outDir, gatePacked.logPath)) : '';
+  const packedText = gatePacked ? await readFile(join(outDir, gatePacked.logPath), 'utf8') : '';
   const { artifactCheck, consumers } = packedRollupFromLog(packedText);
 
   const publish = packedSteps.find((step) => step.name === 'publish-npm-dry-run');
-  const text = publish ? await Deno.readTextFile(join(outDir, publish.logPath)) : '';
+  const text = publish ? await readFile(join(outDir, publish.logPath), 'utf8') : '';
   const packSummaries = [
     ...stripAnsi(text).matchAll(
       /\[npm\] (@openelement\/\S+): pack diagnostics errors=(\d+) unexpectedWarnings=(\d+) knownUpstreamPrivateWarnings=(\d+) publicDeclarations=(\d+) declarationClosure=(\d+)/g,
@@ -315,11 +381,11 @@ export async function recordJob(
 ): Promise<void> {
   const expected = expectedSha();
   const { sha, tree } = await assertCleanAtSha(expected);
-  await Deno.mkdir(join(outDir, 'logs'), { recursive: true });
+  await mkdir(join(outDir, 'logs'), { recursive: true });
   const steps: StepResult[] = [];
   const runCleanProof = async (phase: 'before' | 'after'): Promise<void> => {
     const name = `workspace-clean-${phase}`;
-    const argv = [denoExe, ...cleanProofArgv(sha, tree, phase).slice(1)];
+    const argv = [nodeExe, ...cleanProofArgv(sha, tree, phase).slice(1)];
     console.log(`[evidence] ${job}: ${name}: ${argv.join(' ')}`);
     const step = await runStep(name, argv, outDir, repoRoot, SOURCE_ROLES);
     steps.push(step);
@@ -334,7 +400,7 @@ export async function recordJob(
     console.log(`[evidence] ${job}: ${name}: ${argv.join(' ')}`);
     const step = await runStep(name, argv, outDir, repoRoot, SOURCE_ROLES);
     if (name === 'gate-source' || name === 'gate-packed') {
-      const text = await Deno.readTextFile(join(outDir, step.logPath));
+      const text = await readFile(join(outDir, step.logPath), 'utf8');
       step.counts = gateStepCounts(text);
     }
     steps.push(step);
@@ -359,6 +425,6 @@ export async function recordJob(
     extras,
     generatedAt: new Date().toISOString(),
   };
-  await Deno.writeTextFile(join(outDir, 'result.json'), JSON.stringify(result, null, 2) + '\n');
-  if (result.result !== 'PASS') Deno.exit(1);
+  await writeFile(join(outDir, 'result.json'), JSON.stringify(result, null, 2) + '\n', 'utf8');
+  if (result.result !== 'PASS') process.exit(1);
 }

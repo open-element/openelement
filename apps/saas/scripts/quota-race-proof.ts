@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-net --allow-env
+#!/usr/bin/env node
 /**
  * quota-race-proof — Alpha 5 (#1000): prove the 10 MiB per-owner attachment
  * quota holds under concurrent reservations against the REAL Supabase project.
@@ -16,15 +16,17 @@
  * timestamps only — never credentials, emails, or user ids.
  *
  * Provider-gated: it runs only when the three provider secrets are present in
- * the environment. It is intentionally NOT part of `deno task test`, which
- * grants --allow-env only and must stay hermetic (same pattern as
- * tools/smoke-supabase-browser.ts).
+ * the environment. It is intentionally NOT part of the saas vitest project
+ * (`pnpm --dir apps/saas run test` covers only `app/__tests__`), which must
+ * stay hermetic — this script races the real project over the network and
+ * reads provider secrets, neither of which a hermetic unit run allows.
  *
- * Usage:
+ * Usage (node:* only — global fetch and crypto, no host-specific APIs):
  *   SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=... \
- *     deno run --allow-net --allow-env \
- *     apps/saas/scripts/quota-race-proof.ts
+ *     node apps/saas/scripts/quota-race-proof.ts
  */
+
+import process from 'node:process';
 
 const QUOTA_BYTES = 10 * 1024 * 1024; // 10 MiB, from the migration
 const RACE_SIZE_BYTES = 1024 * 1024; // 1 MiB per reservation
@@ -32,7 +34,7 @@ const CONCURRENCY = 12;
 const EXPECTED_SUCCESSES = QUOTA_BYTES / RACE_SIZE_BYTES; // 10
 
 function required(name: string): string {
-  const value = Deno.env.get(name);
+  const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
   return value;
 }

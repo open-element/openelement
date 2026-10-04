@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   OpenElementError,
   reportError,
@@ -6,7 +6,7 @@ import {
   setErrorTelemetryHook,
 } from '../src/internal/core/errors.ts';
 
-Deno.test('setErrorTelemetryHook is reconfigurable (#1099)', () => {
+test('setErrorTelemetryHook is reconfigurable (#1099)', () => {
   resetErrorTelemetryHookForTests();
   try {
     let received: string | null = null;
@@ -18,22 +18,22 @@ Deno.test('setErrorTelemetryHook is reconfigurable (#1099)', () => {
       replacement = error.message;
     });
     reportError(new OpenElementError('boom'));
-    assertEquals(received, null);
-    assertEquals(replacement, 'boom');
+    expect(received).toEqual(null);
+    expect(replacement).toEqual('boom');
   } finally {
     resetErrorTelemetryHookForTests();
   }
 });
 
-Deno.test('reportError falls back to console.error when no hook is set (#644)', () => {
+test('reportError falls back to console.error when no hook is set (#644)', () => {
   resetErrorTelemetryHookForTests();
   const original = console.error;
   const messages: string[] = [];
   console.error = (...args: unknown[]) => messages.push(args.join(' '));
   try {
     reportError(new OpenElementError('fallback'));
-    assertEquals(messages.length, 1);
-    assertEquals(messages[0].includes('fallback'), true);
+    expect(messages.length).toEqual(1);
+    expect(messages[0].includes('fallback')).toEqual(true);
   } finally {
     console.error = original;
     resetErrorTelemetryHookForTests();

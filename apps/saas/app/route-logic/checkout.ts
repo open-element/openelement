@@ -1,6 +1,6 @@
 /**
  * /checkout route logic (v0.44): one-time Stripe Checkout with idempotent
- * order reservation. Plain module so Deno tests never evaluate the compiled
+ * order reservation. Plain module so vitest tests never evaluate the compiled
  * page class.
  */
 import {

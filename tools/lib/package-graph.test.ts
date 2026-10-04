@@ -1,4 +1,8 @@
-import { assert, assertEquals, assertRejects, assertThrows } from '@std/assert';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes, assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import {
   detectCycles,
   extractOpenImports,
@@ -22,7 +26,7 @@ function pkg(name: string, version: string, deps: string[] = []): PackageInfo {
   };
 }
 
-Deno.test('extractOpenImports finds static, type and dynamic imports', () => {
+test('extractOpenImports finds static, type and dynamic imports', () => {
   const source = `
     import { foo } from '@openelement/element';
     import type { Bar } from '@openelement/router';
@@ -32,42 +36,42 @@ Deno.test('extractOpenImports finds static, type and dynamic imports', () => {
     import { y } from 'npm:react';
   `;
   const imports = extractOpenImports(source).sort();
-  assertEquals(imports, ['@openelement/create', '@openelement/element', '@openelement/router']);
+  expect(imports).toEqual(['@openelement/create', '@openelement/element', '@openelement/router']);
 });
 
-Deno.test('extractOpenImports ignores comments and nested template text', () => {
+test('extractOpenImports ignores comments and nested template text', () => {
   const source = `
     // import '@openelement/comment';
     const sample = \`text \${\`import('@openelement/string')\`}\`;
     const actual = import(\`@openelement/router/router\`);
   `;
-  assertEquals(extractOpenImports(source), ['@openelement/router/router']);
+  expect(extractOpenImports(source)).toEqual(['@openelement/router/router']);
 });
 
-Deno.test('detectCycles reports a cycle in the dependency graph', () => {
+test('detectCycles reports a cycle in the dependency graph', () => {
   const graph = new Map<string, string[]>([
     ['a', ['b']],
     ['b', ['c']],
     ['c', ['a']],
   ]);
   const cycles = detectCycles(graph);
-  assertEquals(cycles.length, 1);
+  expect(cycles.length).toEqual(1);
   const cycle = cycles[0];
-  assertEquals([...new Set(cycle)].sort(), ['a', 'b', 'c']);
-  assertEquals(cycle[0], 'a');
-  assertEquals(cycle[cycle.length - 1], 'a');
+  expect([...new Set(cycle)].sort()).toEqual(['a', 'b', 'c']);
+  expect(cycle[0]).toEqual('a');
+  expect(cycle[cycle.length - 1]).toEqual('a');
 });
 
-Deno.test('detectCycles returns nothing for a DAG', () => {
+test('detectCycles returns nothing for a DAG', () => {
   const graph = new Map<string, string[]>([
     ['a', ['b', 'c']],
     ['b', []],
     ['c', []],
   ]);
-  assertEquals(detectCycles(graph), []);
+  expect(detectCycles(graph)).toEqual([]);
 });
 
-Deno.test('topologicalSort orders dependencies before dependents', () => {
+test('topologicalSort orders dependencies before dependents', () => {
   const graph = new Map<string, string[]>([
     ['app', ['element']],
     ['element', []],
@@ -75,20 +79,20 @@ Deno.test('topologicalSort orders dependencies before dependents', () => {
   ]);
   const order = topologicalSort(graph);
   const pos = (n: string) => order.indexOf(n);
-  assert(pos('element') < pos('app'));
-  assert(pos('element') < pos('router'));
-  assertEquals(order.length, graph.size);
+  expect(pos('element') < pos('app')).toBeTruthy();
+  expect(pos('element') < pos('router')).toBeTruthy();
+  expect(order.length).toEqual(graph.size);
 });
 
-Deno.test('topologicalSort throws on a cycle', () => {
+test('topologicalSort throws on a cycle', () => {
   const graph = new Map<string, string[]>([
     ['a', ['b']],
     ['b', ['a']],
   ]);
-  assertThrows(() => topologicalSort(graph), Error, 'cycle');
+  assertThrowsIncludes(() => topologicalSort(graph), Error, 'cycle');
 });
 
-Deno.test('releasePublishOrder respects dependency and priority constraints', () => {
+test('releasePublishOrder respects dependency and priority constraints', () => {
   const packages = [
     pkg('@openelement/element', '1.0.0'),
     pkg('@openelement/router', '1.0.0', ['@openelement/element']),
@@ -97,67 +101,65 @@ Deno.test('releasePublishOrder respects dependency and priority constraints', ()
   const order = releasePublishOrder(packages).map((p) => p.name);
   const pos = (n: string) => order.indexOf(n);
   // dependencies before dependents
-  assert(pos('@openelement/element') < pos('@openelement/router'));
-  assert(pos('@openelement/router') < pos('@openelement/create'));
-  assertEquals(order.length, packages.length);
+  expect(pos('@openelement/element') < pos('@openelement/router')).toBeTruthy();
+  expect(pos('@openelement/router') < pos('@openelement/create')).toBeTruthy();
+  expect(order.length).toEqual(packages.length);
 });
 
-Deno.test('normalizeInternalDep rejects non-internal specifiers', () => {
-  assertEquals(
-    normalizeInternalDep('@openelement/element/jsx-runtime', '@openelement/router'),
+test('normalizeInternalDep rejects non-internal specifiers', () => {
+  expect(normalizeInternalDep('@openelement/element/jsx-runtime', '@openelement/router')).toEqual(
     '@openelement/element',
   );
-  assertEquals(normalizeInternalDep('@openelement/router', '@openelement/router'), null);
-  assertEquals(normalizeInternalDep('npm:react', '@openelement/router'), null);
-  assertEquals(normalizeInternalDep('react', '@openelement/router'), null);
+  expect(normalizeInternalDep('@openelement/router', '@openelement/router')).toEqual(null);
+  expect(normalizeInternalDep('npm:react', '@openelement/router')).toEqual(null);
+  expect(normalizeInternalDep('react', '@openelement/router')).toEqual(null);
 });
 
-Deno.test('normalizeDep passes non-internal specifiers through unchanged', () => {
-  assertEquals(
-    normalizeDep('@openelement/element/jsx-runtime', '@openelement/router'),
+test('normalizeDep passes non-internal specifiers through unchanged', () => {
+  expect(normalizeDep('@openelement/element/jsx-runtime', '@openelement/router')).toEqual(
     '@openelement/element',
   );
-  assertEquals(normalizeDep('@openelement/router', '@openelement/router'), null);
-  assertEquals(normalizeDep('npm:react', '@openelement/router'), 'npm:react');
-  assertEquals(normalizeDep('react', '@openelement/router'), 'react');
+  expect(normalizeDep('@openelement/router', '@openelement/router')).toEqual(null);
+  expect(normalizeDep('npm:react', '@openelement/router')).toEqual('npm:react');
+  expect(normalizeDep('react', '@openelement/router')).toEqual('react');
 });
 
-Deno.test('readPackage returns null when deno.json does not exist', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'package-graph-missing-' });
+test('readPackage returns null when package.json does not exist', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'package-graph-missing-'));
   try {
-    assertEquals(await readPackage(dir), null);
+    expect(await readPackage(dir)).toEqual(null);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await rm(dir, { recursive: true });
   }
 });
 
-Deno.test('readPackage fails loud on unparseable deno.json (#753)', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'package-graph-corrupt-' });
+test('readPackage fails loud on unparseable package.json (#753)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'package-graph-corrupt-'));
   try {
-    await Deno.writeTextFile(`${dir}/deno.json`, '{ "name": "@openelement/x", // jsonc\n}');
-    const error = await assertRejects(() => readPackage(dir), Error);
-    assert(
-      error.message.includes(`${dir}/deno.json`),
+    await writeFile(`${dir}/package.json`, '{ not json');
+    const error = await assertRejectsIncludes(() => readPackage(dir), Error);
+    expect(
+      error.message.includes(`${dir}/package.json`),
       `error must name the corrupt file: ${error.message}`,
-    );
+    ).toBeTruthy();
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await rm(dir, { recursive: true });
   }
 });
 
-Deno.test('readPackage does not report source self-imports as dependencies', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'package-graph-self-import-' });
+test('readPackage does not report source self-imports as dependencies', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'package-graph-self-import-'));
   try {
-    await Deno.mkdir(`${dir}/src`);
-    await Deno.writeTextFile(
-      `${dir}/deno.json`,
+    await mkdir(`${dir}/src`);
+    await writeFile(
+      `${dir}/package.json`,
       JSON.stringify({
         name: '@openelement/router',
         version: '1.0.0-alpha.1',
         exports: './src/index.ts',
       }),
     );
-    await Deno.writeTextFile(
+    await writeFile(
       `${dir}/src/index.ts`,
       ["export * from '@openelement/router/model';", "export * from '@openelement/element';"].join(
         '\n',
@@ -165,8 +167,8 @@ Deno.test('readPackage does not report source self-imports as dependencies', asy
     );
 
     const info = await readPackage(dir);
-    assertEquals(info?.deps, ['@openelement/element']);
+    expect(info?.deps).toEqual(['@openelement/element']);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await rm(dir, { recursive: true });
   }
 });

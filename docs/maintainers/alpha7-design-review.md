@@ -105,21 +105,23 @@ Cleaned (clear-cut dead):
 Listed, deliberately untouched (kept value or needs a maintainer decision):
 
 - `docs/maintainers/deno-pack-diagnostic-exception.md` — marked RETIRED,
-  kept as the audit trail with a written reintroduction condition, and
-  load-bearing: `tools/repo/check-deno-floor.ts` reads it as required text.
-  Its "现存价值" is exactly that: history plus the do-not-reintroduce rule.
-- `tools/release/native-pack-check.ts` + the `pack:native-check` task — the
-  native `deno pack --dry-run` proof is still wired into the live
-  `gate:packed`; its header still says deno pack "is the sole" generator.
-  Whether the native proof should stay in the gate under the vp regime (and
-  what it then proves) is a release-design decision, not comment rot.
-- `tools/release/published-consumer-qualification.ts:521-535` — the
+  kept as the audit trail with a written reintroduction condition. At review
+  time it was still load-bearing (`tools/repo/check-deno-floor.ts` read it as
+  required text); that gate was deleted with the deno floor itself, so the
+  document's remaining value is exactly that: history plus the
+  do-not-reintroduce rule.
+- ~~`tools/release/native-pack-check.ts` + the `pack:native-check` task~~ —
+  resolved by the B2 manifest conversion: without a deno.json the native
+  `deno pack --dry-run` premise is gone entirely, so the gate member and
+  script were deleted (vp pack remains the sole generator; the open question
+  of what a "native proof" would even mean under the vp regime is moot).
+- ~~`tools/release/published-consumer-qualification.ts:521-535` — the
   `--local` mode of `nodeEsmSmoke` still EXECUTES `deno pack --allow-dirty`
-  to build a local element tarball. CI never passes `--local`
-  (published-consumers.yml uses `--mode`/`--smoke`), so it is a manual-only
-  path producing a payload shape nobody ships; repointing it at the vp
-  pipeline (which packs the whole workspace) or retiring the flag is a
-  tooling-behavior decision.
+  to build a local element tarball~~ — resolved by the S2 release-lane port:
+  the Deno-consumer leg retired with the host and the file no longer executes
+  `deno pack` anywhere. `--local` survives only as the `nodeEsmSmoke` mode
+  switch for smoking against workspace sources instead of the registry; the
+  Node npm-mode consumer leg carries the qualification proof.
 - `.github/workflows/autoflow-ci.yml:577-580` +
   `tools/repo/check-ci-contracts.test.ts:264` — the Windows exclusion's
   rationale cites the deno-pack-on-Windows types-condition defect. The

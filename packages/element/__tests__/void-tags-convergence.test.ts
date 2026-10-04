@@ -11,7 +11,8 @@
  * __tests__ are independent serializers and intentionally out of scope.
  */
 
-import { assert, assertEquals } from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
 
 const REPO_ROOT = new URL('../../../', import.meta.url);
 
@@ -48,36 +49,45 @@ function voidTagsBlock(source: string, path: string): string {
   const match = source.match(
     /VOID_TAGS(?::\s*ReadonlySet<string>)?\s*=\s*new Set\(\[([\s\S]*?)\]\)/,
   );
-  assert(match, `${path}: VOID_TAGS set definition not found`);
+  expect(match, `${path}: VOID_TAGS set definition not found`).toBeTruthy();
   return match[1];
 }
 
-Deno.test('VOID_TAGS owner matches the HTML Standard void-element set', async () => {
-  const source = await Deno.readTextFile(new URL(OWNER, REPO_ROOT));
+test('VOID_TAGS owner matches the HTML Standard void-element set', async () => {
+  const source = await readFile(new URL(OWNER, REPO_ROOT), 'utf8');
   const tags = [...voidTagsBlock(source, OWNER).matchAll(/'([^']+)'/g)].map((m) => m[1]);
-  assertEquals(tags, HTML_VOID_ELEMENTS);
+  expect(tags).toEqual(HTML_VOID_ELEMENTS);
 });
 
-Deno.test('VOID_TAGS has one definition; the runtime and protocol re-export it', async () => {
-  const owner = await Deno.readTextFile(new URL(OWNER, REPO_ROOT));
-  assert(owner.includes('export const VOID_TAGS'), `${OWNER}: must own the definition`);
+test('VOID_TAGS has one definition; the runtime and protocol re-export it', async () => {
+  const owner = await readFile(new URL(OWNER, REPO_ROOT), 'utf8');
+  expect(
+    owner.includes('export const VOID_TAGS'),
+    `${OWNER}: must own the definition`,
+  ).toBeTruthy();
   for (const path of REEXPORTERS) {
-    const source = await Deno.readTextFile(new URL(path, REPO_ROOT));
-    assert(!/VOID_TAGS[^=]*=\s*new Set\(/.test(source), `${path}: must not redefine VOID_TAGS`);
-    assert(
+    const source = await readFile(new URL(path, REPO_ROOT), 'utf8');
+    expect(
+      !/VOID_TAGS[^=]*=\s*new Set\(/.test(source),
+      `${path}: must not redefine VOID_TAGS`,
+    ).toBeTruthy();
+    expect(
       /void-tags\.ts/.test(source) && /\bVOID_TAGS\b/.test(source),
       `${path}: must import/re-export the canonical VOID_TAGS owner`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('VOID_TAGS consumers reference the shared set instead of redefining it', async () => {
+test('VOID_TAGS consumers reference the shared set instead of redefining it', async () => {
   for (const path of CONSUMERS) {
-    const source = await Deno.readTextFile(new URL(path, REPO_ROOT));
-    assert(
+    const source = await readFile(new URL(path, REPO_ROOT), 'utf8');
+    expect(
       !source.includes('const VOID_TAGS') && !/VOID_TAGS[^=]*=\s*new Set\(/.test(source),
       `${path}: re-introduced a local VOID_TAGS definition`,
-    );
-    assert(/\bVOID_TAGS\b/.test(source), `${path}: expected to use the imported VOID_TAGS`);
+    ).toBeTruthy();
+    expect(
+      /\bVOID_TAGS\b/.test(source),
+      `${path}: expected to use the imported VOID_TAGS`,
+    ).toBeTruthy();
   }
 });

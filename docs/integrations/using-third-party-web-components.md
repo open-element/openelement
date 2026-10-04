@@ -44,7 +44,8 @@ shadow rendering. Otherwise, light-DOM/client-upgrade fallback is expected.
 
 ## SSR-Safe Imports
 
-Use this pattern when a library is safe to evaluate in Deno during SSG:
+Use this pattern when a library is safe to evaluate on the Node build host
+during SSG:
 
 ```tsx
 /** @jsxImportSource @openelement/element */
@@ -138,7 +139,7 @@ or not exercised for that tag. It is never converted to a passing `true`.
 Run the fixture with:
 
 ```sh
-deno task --cwd tests/fixtures/third-party-web-components smoke
+pnpm --dir tests/fixtures/third-party-web-components run smoke
 ```
 
 The fixture source lives under `fixtures/third-party-web-components/` and is copied

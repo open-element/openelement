@@ -20,6 +20,7 @@
  * without `marked` installed fails closed with install guidance.
  */
 
+import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'vite';
 import { buildError, MdxErrorCode } from '../internal/error-codes.ts';
 
@@ -46,9 +47,8 @@ function loadLower(): Promise<LowerModule> {
       throw buildError(
         MdxErrorCode.OPTIONAL_PEER_MISSING,
         '[openElement] MDX routes require the optional peer dependency "marked" ' +
-          '(declared by @openelement/router). Install it into your app: add ' +
-          '"marked": "npm:marked@^15.0.0" to the deno.json imports ' +
-          '(npm consumers: `npm install --save-dev marked`).',
+          '(declared by @openelement/router). Install it into your app: ' +
+          '`npm install --save-dev marked` (or add "marked" to your dependencies).',
         { cause },
       );
     }
@@ -76,7 +76,7 @@ export function mdxPlugin(options: OpenMdxPluginOptions = {}): Plugin {
       if (!id.startsWith(VIRTUAL_PREFIX) || !id.endsWith(VIRTUAL_SUFFIX)) return null;
       const filePath = id.slice(VIRTUAL_PREFIX.length, -VIRTUAL_SUFFIX.length);
       try {
-        return await Deno.readTextFile(filePath);
+        return await readFile(filePath, 'utf8');
       } catch {
         throw buildError(
           MdxErrorCode.PAGE_UNREADABLE,

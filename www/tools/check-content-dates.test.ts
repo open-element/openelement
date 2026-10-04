@@ -8,19 +8,20 @@
  * calendar date — while accepting per-locale differences and the
  * 'uncommitted' sentinel. Tests call the exported core directly and use a
  * fake directory reader, so they need no filesystem permission; the real
- * tree is covered by `deno task --cwd www check:content-dates`.
+ * tree is covered by the www#check:content-dates task.
  */
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   collectDocKeys,
   COLLECTIONS,
+  type DirReader,
   isCalendarDate,
   UNCOMMITTED,
   validateManifest,
 } from './check-content-dates.ts';
 
-/** A fake Deno.readDir over `{ directoryName: fileNames }`. */
-function fakeTree(files: Record<string, string[]>): (path: string) => AsyncIterable<Deno.DirEntry> {
+/** A fake directory reader over `{ directoryName: fileNames }`. */
+function fakeTree(files: Record<string, string[]>): DirReader {
   return (path) => {
     const name = path.split(/[\\/]/).pop() ?? '';
     return {
@@ -28,10 +29,10 @@ function fakeTree(files: Record<string, string[]>): (path: string) => AsyncItera
         for (const entryName of files[name] ?? []) {
           yield {
             name: entryName,
-            isFile: !entryName.endsWith('/'),
-            isDirectory: entryName.endsWith('/'),
-            isSymlink: false,
-          } as Deno.DirEntry;
+            isFile: () => !entryName.endsWith('/'),
+            isDirectory: () => entryName.endsWith('/'),
+            isSymbolicLink: () => false,
+          };
         }
       },
     };
@@ -44,11 +45,11 @@ function manifest(articles: Record<string, unknown>): unknown {
   return { generatedFrom: 'test fixture', articles };
 }
 
-Deno.test('content dates: the scanned collections are guide and architecture', () => {
-  assertEquals(COLLECTIONS, ['guide', 'architecture']);
+test('content dates: the scanned collections are guide and architecture', () => {
+  expect(COLLECTIONS).toEqual(['guide', 'architecture']);
 });
 
-Deno.test('content dates: docs scan folds .zh.md onto its English key', async () => {
+test('content dates: docs scan folds .zh.md onto its English key', async () => {
   const keys = await collectDocKeys(
     'docs',
     fakeTree({
@@ -56,14 +57,13 @@ Deno.test('content dates: docs scan folds .zh.md onto its English key', async ()
       architecture: ['architecture.md', 'architecture.zh.md'],
     }),
   );
-  assertEquals(
+  expect(
     [...keys].sort(),
-    ['architecture/architecture', 'guide/api', 'guide/styling'],
     '.zh.md pairs fold onto one key; non-markdown files and directories are skipped',
-  );
+  ).toEqual(['architecture/architecture', 'guide/api', 'guide/styling']);
 });
 
-Deno.test('content dates: per-locale stamps and the uncommitted sentinel pass', () => {
+test('content dates: per-locale stamps and the uncommitted sentinel pass', () => {
   const problems = validateManifest(
     manifest({
       'architecture/architecture': { en: '2026-09-16', zh: UNCOMMITTED },
@@ -71,21 +71,21 @@ Deno.test('content dates: per-locale stamps and the uncommitted sentinel pass', 
     }),
     DOC_KEYS,
   );
-  assertEquals(problems, [], 'distinct en/zh dates and the sentinel are both valid');
+  expect(problems, 'distinct en/zh dates and the sentinel are both valid').toEqual([]);
 });
 
-Deno.test('content dates: a docs article with no manifest entry fails', () => {
+test('content dates: a docs article with no manifest entry fails', () => {
   const problems = validateManifest(
     manifest({ 'guide/api': { en: '2026-09-19', zh: '2026-09-19' } }),
     DOC_KEYS,
   );
-  assert(
+  expect(
     problems.some((problem) => problem.includes('architecture/architecture: missing from')),
     `expected a missing-entry problem, got: ${problems.join(' | ')}`,
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('content dates: a manifest entry with no docs article fails', () => {
+test('content dates: a manifest entry with no docs article fails', () => {
   const problems = validateManifest(
     manifest({
       'architecture/architecture': { en: '2026-09-16', zh: '2026-09-16' },
@@ -94,14 +94,14 @@ Deno.test('content dates: a manifest entry with no docs article fails', () => {
     }),
     DOC_KEYS,
   );
-  assertEquals(problems.length, 1, problems.join(' | '));
-  assert(
+  expect(problems.length, problems.join(' | ')).toEqual(1);
+  expect(
     problems[0].includes('guide/ghost: no article at www/content/docs/guide/ghost.md'),
     problems[0],
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('content dates: a missing locale fails, an unknown locale fails', () => {
+test('content dates: a missing locale fails, an unknown locale fails', () => {
   const missingZh = validateManifest(
     manifest({
       'architecture/architecture': { en: '2026-09-16', zh: '2026-09-16' },
@@ -109,10 +109,10 @@ Deno.test('content dates: a missing locale fails, an unknown locale fails', () =
     }),
     DOC_KEYS,
   );
-  assert(
+  expect(
     missingZh.some((problem) => problem.includes("guide/api: missing 'zh' stamp")),
     missingZh.join(' | '),
-  );
+  ).toBeTruthy();
 
   const unknownLocale = validateManifest(
     manifest({
@@ -121,15 +121,15 @@ Deno.test('content dates: a missing locale fails, an unknown locale fails', () =
     }),
     DOC_KEYS,
   );
-  assert(
+  expect(
     unknownLocale.some((problem) =>
       problem.includes('architecture/architecture.fr: unknown locale'),
     ),
     unknownLocale.join(' | '),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('content dates: a non-string stamp fails', () => {
+test('content dates: a non-string stamp fails', () => {
   for (const stamp of [20260919, null, true, { date: '2026-09-19' }]) {
     const problems = validateManifest(
       manifest({
@@ -138,14 +138,14 @@ Deno.test('content dates: a non-string stamp fails', () => {
       }),
       DOC_KEYS,
     );
-    assert(
+    expect(
       problems.some((problem) => problem.includes('guide/api.en: stamp must be a string')),
       `${JSON.stringify(stamp)}: ${problems.join(' | ')}`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('content dates: an entry that is not an object fails', () => {
+test('content dates: an entry that is not an object fails', () => {
   const problems = validateManifest(
     manifest({
       'architecture/architecture': { en: '2026-09-16', zh: '2026-09-16' },
@@ -153,13 +153,13 @@ Deno.test('content dates: an entry that is not an object fails', () => {
     }),
     DOC_KEYS,
   );
-  assert(
+  expect(
     problems.some((problem) => problem.includes('guide/api: entry must be an object')),
     problems.join(' | '),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('content dates: impossible calendar dates fail, real ones pass', () => {
+test('content dates: impossible calendar dates fail, real ones pass', () => {
   for (const value of [
     '2026-02-30',
     '2026-02-29',
@@ -172,7 +172,7 @@ Deno.test('content dates: impossible calendar dates fail, real ones pass', () =>
     'not-a-date',
     '',
   ]) {
-    assertEquals(isCalendarDate(value), false, `${JSON.stringify(value)} is not a real date`);
+    expect(isCalendarDate(value), `${JSON.stringify(value)} is not a real date`).toEqual(false);
     const problems = validateManifest(
       manifest({
         'architecture/architecture': { en: value, zh: '2026-09-16' },
@@ -180,26 +180,28 @@ Deno.test('content dates: impossible calendar dates fail, real ones pass', () =>
       }),
       DOC_KEYS,
     );
-    assert(
+    expect(
       problems.some((problem) => problem.includes(`'${value}' is not a YYYY-MM-DD calendar date`)),
       `${JSON.stringify(value)}: ${problems.join(' | ')}`,
-    );
+    ).toBeTruthy();
   }
   for (const value of ['2026-09-19', '2024-02-29', '2028-02-29', '2000-01-01', '0001-01-01']) {
-    assertEquals(isCalendarDate(value), true, `${value} is a real date`);
+    expect(isCalendarDate(value), `${value} is a real date`).toEqual(true);
   }
-  assertEquals(isCalendarDate(UNCOMMITTED), false, 'the sentinel is handled outside date parsing');
+  expect(isCalendarDate(UNCOMMITTED), 'the sentinel is handled outside date parsing').toEqual(
+    false,
+  );
 });
 
-Deno.test('content dates: manifest shape is validated before entries', () => {
+test('content dates: manifest shape is validated before entries', () => {
   for (const value of [null, 'articles', 42, []]) {
     const problems = validateManifest(value, DOC_KEYS);
-    assertEquals(problems, ['manifest must be a JSON object'], JSON.stringify(value));
+    expect(problems, JSON.stringify(value)).toEqual(['manifest must be a JSON object']);
   }
-  assertEquals(validateManifest({ generatedFrom: 'x' }, DOC_KEYS), [
+  expect(validateManifest({ generatedFrom: 'x' }, DOC_KEYS)).toEqual([
     'manifest.articles must be a JSON object',
   ]);
-  assertEquals(validateManifest({ articles: [] }, DOC_KEYS), [
+  expect(validateManifest({ articles: [] }, DOC_KEYS)).toEqual([
     'manifest.articles must be a JSON object',
   ]);
 });

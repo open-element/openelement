@@ -1,4 +1,4 @@
-import { assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
 import { createDeferredServerExecutor } from '../../src/internal/compiled/server/index.ts';
 import {
   claimExistingDom,
@@ -62,7 +62,7 @@ function endMarker(main: TestElement, index: number): Node {
   return end as unknown as Node;
 }
 
-Deno.test('streamed text arriving before claim adopts the original node', () => {
+test('streamed text arriving before claim adopts the original node', () => {
   const { doc, root, main, host, title } = setup();
   title.value = 'Early';
   const text = doc.createTextNode('Early');
@@ -71,17 +71,14 @@ Deno.test('streamed text arriving before claim adopts the original node', () => 
     streamParts: [0, 1],
     pendingParts: [1],
   });
-  assertStrictEquals(main.childNodes[2], text);
-  assertEquals(
-    main.childNodes.some((node) => 'data' in node && node.data === 'oe:p1'),
-    true,
-  );
+  expect(main.childNodes[2]).toBe(text);
+  expect(main.childNodes.some((node) => 'data' in node && node.data === 'oe:p1')).toEqual(true);
   title.value = 'Updated';
-  assertEquals(text.data, 'Updated');
+  expect(text.data).toEqual('Updated');
   instance.dispose();
 });
 
-Deno.test('pending text and Region adopt after claim without touching siblings', () => {
+test('pending text and Region adopt after claim without touching siblings', () => {
   const { doc, root, main, host, title, enabled } = setup();
   const staticNode = main.childNodes[0];
   const instance = claimExistingDom(program, host, root as unknown as Node, {
@@ -92,28 +89,25 @@ Deno.test('pending text and Region adopt after claim without touching siblings',
   const text = doc.createTextNode('Late');
   main.insertBefore(text, endMarker(main, 0) as never);
   instance.resolveDeferred?.(0);
-  assertStrictEquals(main.childNodes[0], staticNode);
-  assertStrictEquals(main.childNodes[2], text);
+  expect(main.childNodes[0]).toBe(staticNode);
+  expect(main.childNodes[2]).toBe(text);
   title.value = 'Changed';
-  assertEquals(text.data, 'Changed');
-  assertThrows(() => instance.resolveDeferred?.(0), PartProgramClaimError);
+  expect(text.data).toEqual('Changed');
+  expect(() => instance.resolveDeferred?.(0)).toThrow(PartProgramClaimError);
 
   enabled.value = true;
   const strong = doc.createElement('strong');
   strong.appendChild(doc.createTextNode('Ready'));
   main.insertBefore(strong, endMarker(main, 1) as never);
   instance.resolveDeferred?.(1);
-  assertStrictEquals(main.childNodes[0], staticNode);
-  assertStrictEquals(
-    main.childNodes.find((node) => node === strong),
-    strong,
-  );
+  expect(main.childNodes[0]).toBe(staticNode);
+  expect(main.childNodes.find((node) => node === strong)).toBe(strong);
   enabled.value = false;
-  assertEquals(toHtml(root).includes('Waiting<!--oe:/p1-->'), true);
+  expect(toHtml(root).includes('Waiting<!--oe:/p1-->')).toEqual(true);
   instance.dispose();
 });
 
-Deno.test('streamed Region drift recovers inside its anchors only when opted in', () => {
+test('streamed Region drift recovers inside its anchors only when opted in', () => {
   const { doc, root, main, host, enabled } = setup();
   const staticNode = main.childNodes[0];
   let mismatches = 0;
@@ -127,9 +121,9 @@ Deno.test('streamed Region drift recovers inside its anchors only when opted in'
   const wrong = doc.createElement('em');
   main.insertBefore(wrong, endMarker(main, 1) as never);
   instance.resolveDeferred?.(1);
-  assertEquals(mismatches, 1);
-  assertStrictEquals(main.childNodes[0], staticNode);
-  assertEquals(toHtml(root).includes('<strong>Ready</strong><!--oe:/p1-->'), true);
-  assertEquals(toHtml(root).includes('<em>'), false);
+  expect(mismatches).toEqual(1);
+  expect(main.childNodes[0]).toBe(staticNode);
+  expect(toHtml(root).includes('<strong>Ready</strong><!--oe:/p1-->')).toEqual(true);
+  expect(toHtml(root).includes('<em>')).toEqual(false);
   instance.dispose();
 });

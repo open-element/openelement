@@ -55,7 +55,7 @@ function refreshFromIntersections(state: RailState, targets: Map<string, Element
 
 function viteDevMode(): boolean {
   // import.meta.env exists only in Vite-built output; optional access keeps
-  // SSR evaluation (Deno has no import.meta.env) quiet by construction.
+  // SSR evaluation (bare Node has no import.meta.env either) quiet by construction.
   return (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV ?? false;
 }
 

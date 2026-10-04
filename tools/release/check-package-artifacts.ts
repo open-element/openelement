@@ -1,15 +1,17 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-net --allow-env
+#!/usr/bin/env node
 // esm-boundary:scanner — this file scans for CJS constructs, so it names them.
 /**
  * Release gate: verify packed npm artifacts stay ESM-only and keep host APIs
  * out of all four published packages — runtime-free element/router/ui bar
- * Node and Deno APIs, the Deno-hosted create CLI bars Node APIs, and every
- * packed module is checked for CJS syntax, undeclared imports, and the JSR
- * bridge.
+ * Node AND Deno APIs, the node-hosted create CLI bars Deno APIs,
+ * and every packed module is checked for CJS syntax, undeclared imports, and
+ * the JSR bridge.
  */
 
-import { walkSync } from '@std/fs/walk';
-import { dirname } from '@std/path';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { stripComments } from '../lib/text.ts';
 import { runCommand } from '../lib/process.ts';
 import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';
@@ -26,22 +28,63 @@ const RUNTIME_FREE_PACKAGES = new Set([
 ]);
 
 /**
- * Shipped-but-Deno-hosted packages: the packed artifact may use Deno APIs
- * (the create CLI runs under Deno) but must stay free of Node APIs, the same
- * `node:*`/process/Buffer bar every packed artifact carries.
+ * The node-hosted create CLI: its packed artifact bars the Deno API surface
+ * (unlike the runtime-free trio above, which also bars `node:*` /
+ * process / Buffer).
  */
 const NODE_FREE_PACKAGES = new Set(['@openelement/create']);
+
+/**
+ * The runtime face of @openelement/router — packed paths loaded at REQUEST
+ * time by the generated entries — checked BEFORE the host-tooling allowlist
+ * below, so a broad tooling-tree entry can never re-open them to host APIs.
+ *
+ * The judgment, read off packages/router/package.json `exports` and
+ * src/vite/internal/server-runtime/mod.ts. Of the twelve public subpaths,
+ * eight are the runtime face (request-time, host-API-free):
+ *   `.`                 -> src/index.ts
+ *   `./http`            -> src/http.ts
+ *   `./router`          -> src/router.ts
+ *   `./router/client`   -> src/router-client.ts
+ *   `./document`        -> src/document.ts
+ *   `./lit`             -> src/lit.ts
+ *   `./lit-ssr`         -> src/lit-ssr.ts
+ *   `./server-runtime`  -> src/vite/internal/server-runtime/mod.ts
+ * The remaining four are build host tooling (host/dev processes):
+ *   `./vite` -> src/vite/index.ts, `./nitro-mount` -> src/nitro-mount.ts,
+ *   `./cli/build` -> src/cli/build.ts, `./cli/start` -> src/cli/start.ts.
+ *
+ * The seven src-root runtime modules sit outside every allowlist tree, but
+ * `./server-runtime` points INTO src/vite/, so two internal trees are part of
+ * the request-time graph even though their parent tree is host tooling:
+ *   - src/vite/internal/server-runtime/: the ./server-runtime target itself
+ *     (mod.ts re-exports the whole tree; entry-descriptor.ts emits
+ *     `@openelement/router/server-runtime` as the entries' only request-time
+ *     import);
+ *   - src/vite/internal/protocol/: shared protocol vocabulary — framework,
+ *     ssg and registry-markers are imported by server-runtime modules
+ *     (response-channel, security, app, stream-runtime), and any other file
+ *     in the tree can join the request-time graph with a single import edit,
+ *     so the whole tree stays fail-closed rather than enumerating files.
+ */
+const RUNTIME_SURFACE_PATHS: Record<string, RegExp> = {
+  '@openelement/router': /^src\/vite\/internal\/(?:server-runtime\/|protocol\/)/,
+};
 
 /**
  * Host-side tooling trees inside runtime-free packages: the packed artifacts
  * ship src/** transpiled, so the Router lifecycle tooling (Vite orchestration,
  * build/start CLI, Nitro mount) would otherwise trip the host-API scan. These
- * paths mirror DENO_HOST_TOOLING in tools/repo/check-deno-api-free.ts and are
- * reachable only through the @openelement/router/vite, /cli/* and
- * /nitro-mount subpaths; every other packed file stays fail-closed.
+ * paths are reachable only through the @openelement/router/vite, /cli/* and
+ * /nitro-mount subpaths (plus the node-host server seam the start CLI boots),
+ * and RUNTIME_SURFACE_PATHS above takes precedence over this allowlist; every
+ * other packed file stays fail-closed.
  */
 const HOST_TOOLING_PATH_ALLOWLIST: Record<string, RegExp> = {
-  '@openelement/router': /^src\/(?:vite\/|cli\/|nitro-mount\.)/,
+  // node-http is the node-host server seam (start CLI + static serving); it
+  // runs only when a consumer boots the server on node, never in the browser
+  // runtime, so it is host tooling like the vite/cli trees.
+  '@openelement/router': /^src\/(?:vite\/|cli\/|nitro-mount\.|internal\/node-http\.)/,
 };
 
 /**
@@ -73,16 +116,14 @@ const NODE_PATTERNS: Array<[RegExp, string]> = [
   [/\bclearImmediate\b/, 'Node clearImmediate global'],
 ];
 
-const HOST_PATTERNS: Array<[RegExp, string]> = [
-  ...NODE_PATTERNS,
-  [/\bDeno\.[A-Za-z_]/, 'Deno API'],
-];
+const DENO_PATTERNS: Array<[RegExp, string]> = [[/\bDeno\.[A-Za-z_]/, 'Deno API']];
 
-// #1273 / B2.13 (stage #1288 risk #8): dead v0.43 renderer/binding/hydration
-// residue must not silently reappear in PUBLISHED artifacts (the packages
-// ship src/**, so a removed module that comes back would go straight to
-// npm). Paths are relative to the extracted package root; the audit table in
-// the B2.13 PR records the dead-code proof for each entry.
+const HOST_PATTERNS: Array<[RegExp, string]> = [...NODE_PATTERNS, ...DENO_PATTERNS];
+
+// #1273: dead v0.43 renderer/binding/hydration residue must not silently
+// reappear in PUBLISHED artifacts (the packages ship src/**, so a removed
+// module that comes back would go straight to npm). Paths are relative to
+// the extracted package root.
 const FORBIDDEN_LEGACY_PATHS: Record<string, ReadonlyArray<string>> = {
   '@openelement/element': [
     // Legacy ElementDefinition / runtime-renderer typing (VNode model).
@@ -168,10 +209,14 @@ function manifestImportViolations(
     ...Object.keys((packageJson.optionalDependencies as Record<string, string>) ?? {}),
   ]);
   const violations: ArtifactViolation[] = [];
-  for (const entry of walkSync(packageRoot, { includeDirs: false, skip: [/^node_modules$/] })) {
-    const relative = entry.path.slice(packageRoot.length + 1);
+  for (const entry of readdirSync(packageRoot, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory()) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const relative = entryPath.slice(packageRoot.length + 1);
+    // Prune installed dependency trees inside the extracted package.
+    if (relative.split('/').includes('node_modules')) continue;
     if (!isModuleScanPath(relative)) continue;
-    const source = Deno.readTextFileSync(entry.path);
+    const source = readFileSync(entryPath, 'utf8');
     for (const { value, line } of extractStaticModuleSpecifiers(source, relative)) {
       if (isForbiddenBridgeSpecifier(value)) {
         violations.push({
@@ -198,7 +243,7 @@ function pushPackageJsonViolations(
   packageJsonPath: string,
   violations: ArtifactViolation[],
 ): Record<string, unknown> {
-  const packageJson = JSON.parse(Deno.readTextFileSync(packageJsonPath)) as Record<string, unknown>;
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as Record<string, unknown>;
   if (packageJson.type !== 'module') {
     violations.push({
       path: `${packageName}/package.json`,
@@ -232,7 +277,21 @@ function pushPackageJsonViolations(
   return packageJson;
 }
 
-type HostPolicy = 'runtime-free' | 'node-free' | 'none';
+type HostPolicy = 'runtime-free' | 'deno-free' | 'none';
+
+/**
+ * Runtime-free packages: the request-time runtime face always scans strict,
+ * confirmed host tooling scans with no host patterns, and everything else
+ * stays fail-closed strict. create's packed CLI is Deno-barred only.
+ */
+function hostPolicyFor(packageName: string, relative: string): HostPolicy {
+  if (!RUNTIME_FREE_PACKAGES.has(packageName)) {
+    return NODE_FREE_PACKAGES.has(packageName) ? 'deno-free' : 'none';
+  }
+  if (RUNTIME_SURFACE_PATHS[packageName]?.test(relative)) return 'runtime-free';
+  if (HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative)) return 'none';
+  return 'runtime-free';
+}
 
 function scanRuntimeFile(
   root: string,
@@ -250,12 +309,12 @@ function scanRuntimeFile(
     });
   }
 
-  const text = Deno.readTextFileSync(path);
+  const text = readFileSync(path, 'utf8');
   const firstCodeLine = text.split('\n').find((l) => l.trim() !== '') ?? '';
   const hostScanAllowed = !firstCodeLine.trim().startsWith('// deno-api-free:ignore');
   const lines = stripComments(text).split('\n');
   const hostPatterns =
-    hostPolicy === 'runtime-free' ? HOST_PATTERNS : hostPolicy === 'node-free' ? NODE_PATTERNS : [];
+    hostPolicy === 'runtime-free' ? HOST_PATTERNS : hostPolicy === 'deno-free' ? DENO_PATTERNS : [];
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
@@ -295,15 +354,14 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   );
   violations.push(...manifestImportViolations(packageName, packageRoot, packageJson));
 
-  const nodeFreePackage = NODE_FREE_PACKAGES.has(packageName);
   const forbiddenPaths = FORBIDDEN_LEGACY_PATHS[packageName] ?? [];
   const forbiddenSourcePatterns = FORBIDDEN_LEGACY_SOURCE_PATTERNS[packageName] ?? [];
   const files = new Set<string>();
-  for (const entry of walkSync(packageRoot, {
-    includeDirs: false,
-    skip: [/^node_modules$/],
-  })) {
-    const relative = entry.path.slice(packageRoot.length + 1);
+  for (const entry of readdirSync(packageRoot, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory()) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const relative = entryPath.slice(packageRoot.length + 1);
+    if (relative.split('/').includes('node_modules')) continue;
     files.add(relative);
     if (isRawTypeScript(relative)) {
       violations.push({
@@ -315,11 +373,11 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
     if (forbiddenPaths.includes(relative)) {
       violations.push({
         path: `${packageName}/${relative}`,
-        message: 'dead v0.43 residue must not be published (#1273/B2.13)',
+        message: 'dead v0.43 residue must not be published (#1273)',
       });
     }
-    if (forbiddenSourcePatterns.length > 0 && SOURCE_SCAN_EXTENSIONS.has(extension(entry.path))) {
-      const text = stripComments(Deno.readTextFileSync(entry.path));
+    if (forbiddenSourcePatterns.length > 0 && SOURCE_SCAN_EXTENSIONS.has(extension(entryPath))) {
+      const text = stripComments(readFileSync(entryPath, 'utf8'));
       for (const [pattern, message] of forbiddenSourcePatterns) {
         if (pattern.test(text)) {
           violations.push({ path: `${packageName}/${relative}`, message });
@@ -340,15 +398,10 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
         message: 'internal test and fixture files must not be published',
       });
     }
-    if (!RUNTIME_EXTENSIONS.has(extension(entry.path))) continue;
-    const hostPolicy: HostPolicy = RUNTIME_FREE_PACKAGES.has(packageName)
-      ? HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative)
-        ? 'none'
-        : 'runtime-free'
-      : nodeFreePackage
-        ? 'node-free'
-        : 'none';
-    violations.push(...scanRuntimeFile(packageRoot, entry.path, packageName, hostPolicy));
+    if (!RUNTIME_EXTENSIONS.has(extension(entryPath))) continue;
+    violations.push(
+      ...scanRuntimeFile(packageRoot, entryPath, packageName, hostPolicyFor(packageName, relative)),
+    );
   }
 
   if (packageName === '@openelement/router') {
@@ -367,7 +420,7 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   // upstream copyright and permission notice.
   if (packageName === '@openelement/ui') {
     const notice = files.has('THIRD_PARTY_NOTICES.md')
-      ? Deno.readTextFileSync(`${packageRoot}/THIRD_PARTY_NOTICES.md`)
+      ? readFileSync(`${packageRoot}/THIRD_PARTY_NOTICES.md`, 'utf8')
       : '';
     for (const required of ['open-props 1.7.23', 'Copyright (c) 2021 Adam Argyle', 'MIT License']) {
       if (!notice.includes(required)) {
@@ -408,41 +461,21 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
 }
 
 async function extractTarball(tarball: string): Promise<string> {
-  const tmp = await Deno.makeTempDir({ prefix: 'openelement-artifact-' });
+  const tmp = await mkdtemp(join(tmpdir(), 'openelement-artifact-'));
   await runCommand('tar', ['-xzf', tarball, '-C', tmp], undefined);
   return `${tmp}/package`;
 }
 
 async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
   const tarball = tarballPath(pkg);
-  await Deno.stat(tarball);
+  await stat(tarball);
 
-  // publint/ATTW are pure-JS verifiers: scoped permissions with FFI denied
-  // (fail closed, never prompt).
-  await runCommand(Deno.execPath(), [
-    'run',
-    '--allow-read',
-    '--allow-write',
-    '--allow-env',
-    '--allow-net',
-    '--allow-run',
-    '--deny-ffi',
-    '--no-prompt',
-    `npm:publint@${PUBLINT_VERSION}`,
-    'run',
-    tarball,
-    '--strict',
-  ]);
-  await runCommand(Deno.execPath(), [
-    'run',
-    '--allow-read',
-    '--allow-write',
-    '--allow-env',
-    '--allow-net',
-    '--allow-run',
-    '--deny-ffi',
-    '--no-prompt',
-    `npm:@arethetypeswrong/cli@${ATTW_VERSION}`,
+  // publint/ATTW are pure-JS verifiers, run through npx at their pinned
+  // versions.
+  await runCommand('npx', ['--yes', `publint@${PUBLINT_VERSION}`, 'run', tarball, '--strict']);
+  await runCommand('npx', [
+    '--yes',
+    `@arethetypeswrong/cli@${ATTW_VERSION}`,
     '--profile',
     'esm-only',
     tarball,
@@ -451,26 +484,28 @@ async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
   const packageRoot = await extractTarball(tarball);
   try {
     let unpackedBytes = 0;
-    for (const entry of walkSync(packageRoot, { includeDirs: false })) {
-      unpackedBytes += Deno.statSync(entry.path).size;
+    for (const entry of readdirSync(packageRoot, { recursive: true, withFileTypes: true })) {
+      if (entry.isDirectory()) continue;
+      unpackedBytes += statSync(`${entry.parentPath}/${entry.name}`).size;
     }
-    const packedBytes = (await Deno.stat(tarball)).size;
+    const packedBytes = (await stat(tarball)).size;
     console.log(`[artifact-size] ${pkg.name}: packed=${packedBytes}B unpacked=${unpackedBytes}B`);
     return scanExtractedPackage(pkg.name, packageRoot);
   } finally {
-    await Deno.remove(dirname(packageRoot), {
+    await rm(dirname(packageRoot), {
       recursive: true,
     });
   }
 }
 
 async function main(): Promise<void> {
-  const prepacked = Deno.args.length === 1 && Deno.args[0] === '--prepacked';
-  if (Deno.args.length > 0 && !prepacked) {
+  const argv = process.argv.slice(2);
+  const prepacked = argv.length === 1 && argv[0] === '--prepacked';
+  if (argv.length > 0 && !prepacked) {
     throw new Error('Usage: check-package-artifacts.ts [--prepacked]');
   }
   if (!prepacked) {
-    await runCommand(Deno.execPath(), ['task', '--cwd', 'tools/release', 'pack:dry-run']);
+    await runCommand('pnpm', ['--dir', 'tools/release', 'run', 'pack:dry-run']);
   }
 
   const packages = releasePublishOrder(await readPackages());
@@ -487,7 +522,7 @@ async function main(): Promise<void> {
       const line = violation.line ? `:${violation.line}` : '';
       console.error(`  ${violation.path}${line}: ${violation.message}`);
     }
-    Deno.exit(1);
+    process.exit(1);
   }
 
   console.log(`\nPackage artifact checks passed for ${packages.length} packages.`);

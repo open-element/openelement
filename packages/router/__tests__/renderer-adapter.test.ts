@@ -1,4 +1,5 @@
-import { assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codegen.ts';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
@@ -36,23 +37,29 @@ const routes: RouteEntry[] = [
 // did not re-pin. Diffing the full dumped entries across d94b0af5e..current
 // shows exactly that one comment line per mode and nothing else; the later
 // comment-only sweep commits regenerate byte-identical entries to 8b75ebdc8.
+// Pins moved once more for the alpha8 emitted-comment restatement: the server
+// entry's '// v0.17.4: SSR admission plan' header dropped its version tag
+// (-9 bytes each mode) and the native client header's retired
+// '(defineIsland() registers on module evaluation)' parenthetical was
+// restated as '(island modules register on evaluation)' (-8 bytes; the lit
+// client header never carried it, so lit client bytes are unchanged).
 const expected = {
   native: {
-    server: [14231, 'e37d5c1831e39fddbe947d551215c39ace5cfab7c4c56232a0987e61fdecdbb8'],
-    client: [2012, 'd38366aedd3e45243f27e7191b5e10a0fbc7ab06b273c457b22a8c6cea33674d'],
+    server: [14222, '29d0b971ebb8a3610ee59d186f5396140882a13727cce56edb9222fa71360548'],
+    client: [2004, 'dbd5414e1f2a392a26e98cdce1a2b7c2dc69d4305228c6b7d199b4af6ce00d6f'],
   },
   lit: {
-    server: [14344, '4433f89be2807e7dae6f7ec804f60607d09b2048ed6b5f9b9bcdc8477a9854e3'],
+    server: [14335, 'ea611d2d6c1bc4bbf616ec6fd70a73a17c53f9b91864e5a17de155c435ab11b2'],
     client: [3167, '7dcb18fd659ffe53b039adfc5139a2496e1b4c02b5d4322ed6c216606511f418'],
   },
 } as const;
 
-Deno.test('internal Native/Lit selection preserves the generated server/client bytes', async () => {
+test('internal Native/Lit selection preserves the generated server/client bytes', async () => {
   for (const mode of ['native', 'lit'] as const) {
     const adapter = selectRendererAdapter(mode);
-    assertEquals(adapter.mode, mode);
-    assertEquals(adapter.supportsCompiledStream, mode === 'native');
-    assertEquals(adapter.hydration, mode === 'native' ? 'compiled-claim' : 'lit-adoption');
+    expect(adapter.mode).toEqual(mode);
+    expect(adapter.supportsCompiledStream).toEqual(mode === 'native');
+    expect(adapter.hydration).toEqual(mode === 'native' ? 'compiled-claim' : 'lit-adoption');
     const descriptor = buildEntryDescriptor(routes, { renderer: mode });
     const server = renderEntry(descriptor);
     const client = generateClientEntry(
@@ -75,18 +82,20 @@ Deno.test('internal Native/Lit selection preserves the generated server/client b
       const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
         .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('');
-      assertEquals(bytes.length, expected[mode][kind][0]);
-      assertEquals(hash, expected[mode][kind][1]);
+      expect(bytes.length).toEqual(expected[mode][kind][0]);
+      expect(hash).toEqual(expected[mode][kind][1]);
     }
-    assertEquals(
-      descriptor.imports.some((entry) => entry.from === '@openelement/element'),
+    expect(descriptor.imports.some((entry) => entry.from === '@openelement/element')).toEqual(
       mode === 'native',
     );
-    assertEquals(
+    expect(
       descriptor.imports.some((entry) => entry.from === '@openelement/router/lit-ssr'),
-      mode === 'lit',
-    );
+    ).toEqual(mode === 'lit');
   }
-  assertEquals(selectRendererAdapter(undefined).mode, 'native');
-  assertThrows(() => selectRendererAdapter('future'), Error, "renderer must be 'native' or 'lit'");
+  expect(selectRendererAdapter(undefined).mode).toEqual('native');
+  assertThrowsIncludes(
+    () => selectRendererAdapter('future'),
+    Error,
+    "renderer must be 'native' or 'lit'",
+  );
 });

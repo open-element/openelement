@@ -1,11 +1,17 @@
 /**
  * Shared process/command helpers for openElement tooling.
+ *
+ * These helpers run on node:* via tools/repo/node-command.ts; the exported
+ * shapes (runCommand throwing on non-zero exit, runWithOutput capturing
+ * stdio, runCaptured's error copy) are shared by the release-flow call sites.
  */
+import { commandOutput, commandStatus } from '../repo/node-command.ts';
+import process from 'node:process';
 
-/** Read the value of a `--flag value` pair from Deno.args, or null. */
+/** Read the value of a `--flag value` pair from process.argv, or null. */
 export function getArg(flag: string): string | null {
-  const idx = Deno.args.indexOf(flag);
-  if (idx !== -1 && idx + 1 < Deno.args.length) return Deno.args[idx + 1];
+  const idx = process.argv.indexOf(flag);
+  if (idx !== -1 && idx + 1 < process.argv.length) return process.argv[idx + 1];
   return null;
 }
 
@@ -33,16 +39,15 @@ export async function runCommand(
 ): Promise<void> {
   const { cwd, env, stdin = 'inherit', stdout = 'inherit', stderr = 'inherit', signal } = options;
   console.log(`$ ${[command, ...args].join(' ')}${cwd ? `  # cwd=${cwd}` : ''}`);
-  const proc = new Deno.Command(command, {
+  const status = await commandStatus(command, {
     args,
-    cwd,
+    cwd: cwd === undefined ? undefined : typeof cwd === 'string' ? cwd : undefined,
     env,
-    stdin,
+    signal,
+    stdin: stdin === 'piped' ? 'inherit' : stdin,
     stdout,
     stderr,
-    signal,
   });
-  const status = await proc.spawn().status;
   if (!status.success) {
     throw new Error(`Command failed with exit code ${status.code}: ${command} ${args.join(' ')}`);
   }
@@ -61,17 +66,17 @@ export async function runWithOutput(
   options: RunWithOutputOptions = {},
 ): Promise<RunWithOutputResult> {
   const { cwd, env, signal } = options;
-  const result = await new Deno.Command(command, {
+  const result = await commandOutput(command, {
     args,
-    cwd,
+    cwd: cwd === undefined ? undefined : typeof cwd === 'string' ? cwd : undefined,
     env,
+    signal,
     stdout: 'piped',
     stderr: 'piped',
-    signal,
-  }).output();
+  });
   const decoder = new TextDecoder();
   return {
-    success: result.code === 0,
+    success: result.success,
     code: result.code,
     stdout: decoder.decode(result.stdout),
     stderr: decoder.decode(result.stderr),

@@ -6,7 +6,7 @@
  * loader/render error paths (redirect, 404, 500 + errors collection) are
  * exercised for real, not just string-matched.
  */
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { renderSsgSection } from '../src/vite/internal/ssg/entry-render-ssg.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
@@ -94,74 +94,77 @@ function __renderAppShell(pageHtml, routePath) { ${options.renderAppShellBody} }
   return mod.renderRoute;
 }
 
-Deno.test('renderRoute: happy path returns html with empty errors', async () => {
+test('renderRoute: happy path returns html with empty errors', async () => {
   const renderRoute = await loadGeneratedRenderRoute({
     renderAppShellBody: 'return "<div>ok " + pageHtml + "</div>";',
   });
   const result = await renderRoute('/boom');
-  assertStringIncludes(result.html, '<div>ok boom-page</div>');
-  assertEquals(result.status, undefined);
-  assertEquals(result.errors, []);
+  expect(result.html).toContain('<div>ok boom-page</div>');
+  expect(result.status).toEqual(undefined);
+  expect(result.errors).toEqual([]);
 });
 
-Deno.test('renderRoute: locale reaches the page props projector', async () => {
+test('renderRoute: locale reaches the page props projector', async () => {
   const renderRoute = await loadGeneratedRenderRoute({
     renderAppShellBody: 'return "<div>" + pageHtml + "</div>";',
   });
   const result = await renderRoute('/boom', { locale: 'zh-CN' });
-  assertStringIncludes(result.html, '<div>boom-page:zh-CN</div>');
+  expect(result.html).toContain('<div>boom-page:zh-CN</div>');
 });
 
-Deno.test('renderRoute: render failure produces defined 500 and collects a RenderError', async () => {
+test('renderRoute: render failure produces defined 500 and collects a RenderError', async () => {
   const renderRoute = await loadGeneratedRenderRoute({
     renderAppShellBody: 'throw new Error("render exploded");',
   });
   const result = await renderRoute('/boom');
-  assertEquals(result.status, 500);
-  assertStringIncludes(result.html, '500 Internal Server Error');
-  assertEquals(result.errors.length, 1);
-  assertEquals(result.errors[0].code, 'OPEN_ELEMENT_RENDER_RENDER_FAILED');
-  assertEquals(result.errors[0].severity, 'error');
-  assertEquals(result.errors[0].phase, 'render');
-  assertEquals(result.errors[0].tagName, 'boom-page');
-  assertEquals(result.errors[0].message, 'render exploded');
+  expect(result.status).toEqual(500);
+  expect(result.html).toContain('500 Internal Server Error');
+  expect(result.errors.length).toEqual(1);
+  expect(result.errors[0].code).toEqual('OPEN_ELEMENT_RENDER_RENDER_FAILED');
+  expect(result.errors[0].severity).toEqual('error');
+  expect(result.errors[0].phase).toEqual('render');
+  expect(result.errors[0].tagName).toEqual('boom-page');
+  expect(result.errors[0].message).toEqual('render exploded');
 });
 
-Deno.test('renderRoute: loader failure produces defined 500 and collects a RenderError', async () => {
+test('renderRoute: loader failure produces defined 500 and collects a RenderError', async () => {
   const renderRoute = await loadGeneratedRenderRoute({
     renderAppShellBody: 'return "unreachable";',
     loaderBody: 'async () => { throw new Error("loader exploded"); }',
   });
   const result = await renderRoute('/boom');
-  assertEquals(result.status, 500);
-  assertEquals(result.errors.length, 1);
-  assertEquals(result.errors[0].message, 'loader exploded');
+  expect(result.status).toEqual(500);
+  expect(result.errors.length).toEqual(1);
+  expect(result.errors[0].message).toEqual('loader exploded');
 });
 
-Deno.test('renderRoute: production mode hides the error stack from the 500 page', async () => {
+test('renderRoute: production mode hides the error stack from the 500 page', async () => {
   const renderRoute = await loadGeneratedRenderRoute({
     renderAppShellBody: 'throw new Error("render exploded");',
     prod: true,
   });
   const result = await renderRoute('/boom');
-  assertEquals(result.status, 500);
-  assert(!result.html.includes('render exploded'), 'prod 500 page must not leak error details');
+  expect(result.status).toEqual(500);
+  expect(
+    !result.html.includes('render exploded'),
+    'prod 500 page must not leak error details',
+  ).toBeTruthy();
   // The structured error is still collected for observability.
-  assertEquals(result.errors[0].message, 'render exploded');
+  expect(result.errors[0].message).toEqual('render exploded');
 });
 
-Deno.test('renderRoute: redirect and not-found still short-circuit with status pages', async () => {
+test('renderRoute: redirect and not-found still short-circuit with status pages', async () => {
   const redirect = await loadGeneratedRenderRoute({
     renderAppShellBody: 'throw { __openRedirect: true, location: "/login", status: 302 };',
   });
   const redirectResult = await redirect('/boom');
-  assertEquals(redirectResult.status, 302);
-  assertEquals(redirectResult.errors, []);
+  expect(redirectResult.status).toEqual(302);
+  expect(redirectResult.errors).toEqual([]);
 
   const notFound = await loadGeneratedRenderRoute({
     renderAppShellBody: 'throw { __openNotFound: true, message: "gone" };',
   });
   const notFoundResult = await notFound('/boom');
-  assertEquals(notFoundResult.status, 404);
-  assertEquals(notFoundResult.errors, []);
+  expect(notFoundResult.status).toEqual(404);
+  expect(notFoundResult.errors).toEqual([]);
 });

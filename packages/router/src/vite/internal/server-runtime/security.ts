@@ -4,9 +4,9 @@
  * The request-time registration security of the generated entry (#952,
  * #965, #1339): the idempotent `customElements.define` wrapper, the
  * registration-ownership tracking, and the fail-closed conflict rule the
- * entry's component registrations run through. Migrated verbatim from the
- * generated-entry strings (entry-orchestrator.ts) so the guard is visible to
- * `deno check` and directly unit-testable.
+ * entry's component registrations run through. The guard lives in this real
+ * module rather than inside a codegen template string, so it is directly
+ * unit-testable.
  *
  * The marker constants are imported from the canonical protocol module
  * (../protocol/registry-markers.ts) instead of being injected into the

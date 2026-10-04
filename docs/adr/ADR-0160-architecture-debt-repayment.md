@@ -211,6 +211,16 @@ from `lookupInDenoJson` to `resolveThroughAliases` over the same sorted alias
 table the build ships as `resolve.alias`, so the disclosure is retired by
 Amendment 3 below (with the green site-build evidence).
 
+(Amended 2026-10-04: the resolution chain described here and in Amendment 3's
+workspace-alias repair — `lookupInDenoJson` falling through to
+`resolveThroughAliases` — is itself gone. Since the alpha8 island-identity
+work (6a3202857, consolidated by the deep-clean train 0dd7a71d9) the client
+build resolves each admitted island's declared specifier once, in the
+`open:island-identity-resolution` buildStart pass through the build's own
+resolver, and that map (`resolvedIslandModuleIds`) is the single resolution
+source the manifest and the chunk grouping join on; no parallel resolution
+mechanism exists.)
+
 ### defineIsland: final decision (removed)
 
 The module-scan vocabularies on both sides registered `defineIsland` as an

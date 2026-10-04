@@ -1,5 +1,5 @@
 /**
- * @openelement/router - plugin.ts tests (Deno)
+ * @openelement/router - plugin.ts tests
  *
  * Focused tests for the internal plugin factory (plugin.ts):
  * Tests the raw `createOpenPlugin()` function which is NOT part of the public API —
@@ -7,14 +7,12 @@
  *
  * Complements index-plugin.test.ts which tests the public API surface.
  */
-import {
-  assertArrayIncludes,
-  assertEquals,
-  assertExists,
-  assertStringIncludes,
-  assertThrows,
-} from '@std/assert';
-import { join } from '@std/path';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import process from 'node:process';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
+import { join } from 'node:path';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 
 type PluginOptions = Parameters<typeof createOpenPlugin>[0];
@@ -40,31 +38,31 @@ async function callConfig(
   config: Record<string, unknown> = {},
 ): Promise<Record<string, unknown>> {
   const hook = (plugin as HookRecord).config;
-  assertExists(hook, 'config hook must exist');
+  expect(hook, 'config hook must exist').toEqual(expect.anything());
   const result = await (hook as TestConfigHook)(config, { command: 'build', mode: 'production' });
   return result as Record<string, unknown>;
 }
 
 function callResolveId(plugin: unknown, id: string): unknown {
   const hook = (plugin as HookRecord).resolveId;
-  assertExists(hook, 'resolveId hook must exist');
+  expect(hook, 'resolveId hook must exist').toEqual(expect.anything());
   return (hook as TestResolveIdHook)(id);
 }
 
 function callLoad(plugin: unknown, id: string): unknown {
   const hook = (plugin as HookRecord).load;
-  assertExists(hook, 'load hook must exist');
+  expect(hook, 'load hook must exist').toEqual(expect.anything());
   return (hook as TestLoadHook)(id);
 }
 
 // ─── Plugin Order & Structure ─────────────────────────────────
 
-Deno.test('openPlugin: returns retained plugins in correct order', () => {
+test('openPlugin: returns retained plugins in correct order', () => {
   const plugins = createOpenPlugin();
-  assertEquals(plugins.length, 7);
+  expect(plugins.length).toEqual(7);
 
   const names = plugins.map((p) => p.name);
-  assertEquals(names, [
+  expect(names).toEqual([
     'open:mdx',
     'open:core',
     'open:virtual-entry',
@@ -88,28 +86,28 @@ async function renderVirtualEntry(
   options: PluginOptions,
   setup?: (tmp: string) => void,
 ): Promise<string> {
-  const tmp = Deno.makeTempDirSync({ prefix: 'open-plugin-opts-' });
-  const origCwd = Deno.cwd();
+  const tmp = mkdtempSync(join(tmpdir(), 'open-plugin-opts-'));
+  const origCwd = process.cwd();
   try {
     setup?.(tmp);
-    Deno.chdir(tmp);
+    process.chdir(tmp);
     const plugins = createOpenPlugin(options);
     const corePlugin = plugins.find((p) => p.name === 'open:core')!;
     const virtualPlugin = plugins.find((p) => p.name === 'open:virtual-entry')!;
     await callConfig(corePlugin);
     const configResolved = (corePlugin as { configResolved?: unknown }).configResolved;
-    assertExists(configResolved, 'configResolved hook must exist');
+    expect(configResolved, 'configResolved hook must exist').toEqual(expect.anything());
     (configResolved as (config: never) => void)({} as never);
     const buildStart = (corePlugin as { buildStart?: unknown }).buildStart;
-    assertExists(buildStart, 'buildStart hook must exist');
+    expect(buildStart, 'buildStart hook must exist').toEqual(expect.anything());
     await (buildStart as () => Promise<void>)();
     const code = callLoad(virtualPlugin, '\0virtual:open-hono-entry');
-    assertExists(code, 'virtual entry load must return code');
+    expect(code, 'virtual entry load must return code').toEqual(expect.anything());
     return String(code);
   } finally {
-    Deno.chdir(origCwd);
+    process.chdir(origCwd);
     try {
-      Deno.removeSync(tmp, { recursive: true });
+      rmSync(tmp, { recursive: true });
     } catch {
       /* ignore */
     }
@@ -117,183 +115,183 @@ async function renderVirtualEntry(
 }
 
 function writeRouteIndex(dir: string): void {
-  Deno.mkdirSync(dir, { recursive: true });
-  Deno.writeTextFileSync(join(dir, 'index.ts'), 'export default () => "<h1>Hello</h1>"');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'index.ts'), 'export default () => "<h1>Hello</h1>"');
 }
 
 function writeIsland(dir: string): void {
-  Deno.mkdirSync(dir, { recursive: true });
-  Deno.writeTextFileSync(join(dir, 'my-counter.ts'), 'export const tagName = "my-counter"');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'my-counter.ts'), 'export const tagName = "my-counter"');
 }
 
-Deno.test('openPlugin: defaults routesDir to app/routes', async () => {
+test('openPlugin: defaults routesDir to app/routes', async () => {
   const code = await renderVirtualEntry({}, (tmp) => writeRouteIndex(join(tmp, 'app', 'routes')));
-  assertStringIncludes(code, '/app/routes/index.ts');
+  expect(code).toContain('/app/routes/index.ts');
 });
 
-Deno.test('openPlugin: defaults islandsDir to app/islands', async () => {
+test('openPlugin: defaults islandsDir to app/islands', async () => {
   const code = await renderVirtualEntry({}, (tmp) => writeIsland(join(tmp, 'app', 'islands')));
-  assertStringIncludes(code, '/app/islands/my-counter.ts');
+  expect(code).toContain('/app/islands/my-counter.ts');
 });
 
-Deno.test('openPlugin: respects custom routesDir', async () => {
+test('openPlugin: respects custom routesDir', async () => {
   const code = await renderVirtualEntry({ routesDir: 'src/pages' }, (tmp) =>
     writeRouteIndex(join(tmp, 'src', 'pages')),
   );
-  assertStringIncludes(code, '/src/pages/index.ts');
+  expect(code).toContain('/src/pages/index.ts');
 });
 
-Deno.test('openPlugin: respects custom islandsDir', async () => {
+test('openPlugin: respects custom islandsDir', async () => {
   const code = await renderVirtualEntry({ islandsDir: 'src/widgets' }, (tmp) =>
     writeIsland(join(tmp, 'src', 'widgets')),
   );
-  assertStringIncludes(code, '/src/widgets/my-counter.ts');
+  expect(code).toContain('/src/widgets/my-counter.ts');
 });
 
-Deno.test('openPlugin: accepts default and custom componentsDir', () => {
+test('openPlugin: accepts default and custom componentsDir', () => {
   // componentsDir is only consumed by the build closeBundle phase; here we can
   // only assert both forms construct a valid pipeline.
-  assertEquals(createOpenPlugin({}).length, 7);
-  assertEquals(createOpenPlugin({ componentsDir: 'src/ui' }).length, 7);
+  expect(createOpenPlugin({}).length).toEqual(7);
+  expect(createOpenPlugin({ componentsDir: 'src/ui' }).length).toEqual(7);
 });
 
 // ─── Upgrade Strategy ─────────────────────────────────────────
 
-Deno.test('openPlugin: island.upgradeStrategy flows into the SSR admission plan', async () => {
+test('openPlugin: island.upgradeStrategy flows into the SSR admission plan', async () => {
   const setup = (tmp: string) => writeIsland(join(tmp, 'app', 'islands'));
 
   // Default ('idle'): local islands are SSR-admitted and imported by the entry.
   const defaultCode = await renderVirtualEntry({}, setup);
-  assertStringIncludes(defaultCode, 'import * as __island_my_counter');
+  expect(defaultCode).toContain('import * as __island_my_counter');
 
   // 'only': islands are excluded from SSR and marked client-only in the plan.
   const onlyCode = await renderVirtualEntry({ island: { upgradeStrategy: 'only' } }, setup);
-  assertEquals(onlyCode.includes('import * as __island_my_counter'), false);
-  assertStringIncludes(onlyCode, 'client-only');
+  expect(onlyCode.includes('import * as __island_my_counter')).toEqual(false);
+  expect(onlyCode).toContain('client-only');
 
   // 'load' / 'visible' remain valid construction options.
-  assertEquals(createOpenPlugin({ island: { upgradeStrategy: 'load' } }).length, 7);
-  assertEquals(createOpenPlugin({ island: { upgradeStrategy: 'visible' } }).length, 7);
+  expect(createOpenPlugin({ island: { upgradeStrategy: 'load' } }).length).toEqual(7);
+  expect(createOpenPlugin({ island: { upgradeStrategy: 'visible' } }).length).toEqual(7);
 });
 
 // ─── Invalid Options ──────────────────────────────────────────
 
-Deno.test('openPlugin: rejects script tags in headExtras', () => {
-  assertThrows(
+test('openPlugin: rejects script tags in headExtras', () => {
+  assertThrowsIncludes(
     () => createOpenPlugin({ headExtras: '<script>alert(1)</script>' }),
     Error,
     'headExtras must not contain <script> tags',
   );
 });
 
-Deno.test('openPlugin: rejects script tags in inject.headFragments', () => {
-  assertThrows(
+test('openPlugin: rejects script tags in inject.headFragments', () => {
+  assertThrowsIncludes(
     () => createOpenPlugin({ inject: { headFragments: ['<script src="/x.js"></script>'] } }),
     Error,
     'inject.headFragments must not contain <script> tags',
   );
 });
 
-Deno.test('openPlugin: handles empty options object', () => {
+test('openPlugin: handles empty options object', () => {
   const plugins = createOpenPlugin({});
-  assertEquals(plugins.length, 7);
+  expect(plugins.length).toEqual(7);
 });
 
-Deno.test('openPlugin: handles undefined options', () => {
+test('openPlugin: handles undefined options', () => {
   const plugins = createOpenPlugin();
-  assertEquals(plugins.length, 7);
+  expect(plugins.length).toEqual(7);
 });
 
 // ─── Virtual Entry Plugin Behaviors ───────────────────────────
 
-Deno.test('openPlugin: virtual-entry resolves virtual:open-hono-entry', () => {
+test('openPlugin: virtual-entry resolves virtual:open-hono-entry', () => {
   const plugins = createOpenPlugin({});
   const virtualPlugin = plugins.find((p) => p.name === 'open:virtual-entry')!;
 
   const resolved = callResolveId(virtualPlugin, 'virtual:open-hono-entry');
-  assertExists(resolved);
-  assertEquals(resolved, '\0virtual:open-hono-entry');
+  expect(resolved).toEqual(expect.anything());
+  expect(resolved).toEqual('\0virtual:open-hono-entry');
 });
 
-Deno.test('openPlugin: virtual-entry resolves virtual:open-build-trigger', () => {
+test('openPlugin: virtual-entry resolves virtual:open-build-trigger', () => {
   const plugins = createOpenPlugin({});
   const virtualPlugin = plugins.find((p) => p.name === 'open:virtual-entry')!;
 
   const resolved = callResolveId(virtualPlugin, 'virtual:open-build-trigger');
-  assertExists(resolved);
-  assertEquals(resolved, '\0virtual:open-build-trigger');
+  expect(resolved).toEqual(expect.anything());
+  expect(resolved).toEqual('\0virtual:open-build-trigger');
 });
 
-Deno.test('openPlugin: virtual-entry resolveId returns undefined for unknown IDs', () => {
+test('openPlugin: virtual-entry resolveId returns undefined for unknown IDs', () => {
   const plugins = createOpenPlugin({});
   const virtualPlugin = plugins.find((p) => p.name === 'open:virtual-entry')!;
 
   const result = callResolveId(virtualPlugin, 'some-random-module');
-  assertEquals(result, undefined);
+  expect(result).toEqual(undefined);
 });
 
-Deno.test('openPlugin: virtual-entry load returns code for resolved entry ID', () => {
+test('openPlugin: virtual-entry load returns code for resolved entry ID', () => {
   const plugins = createOpenPlugin({});
   const virtualPlugin = plugins.find((p) => p.name === 'open:virtual-entry')!;
 
   const code = callLoad(virtualPlugin, '\0virtual:open-hono-entry');
-  assertExists(code);
-  assertStringIncludes(code as string, 'hono');
+  expect(code).toEqual(expect.anything());
+  expect(code as string).toContain('hono');
 });
 
-Deno.test('openPlugin: virtual-entry load returns null export for build trigger', () => {
+test('openPlugin: virtual-entry load returns null export for build trigger', () => {
   const plugins = createOpenPlugin({});
   const virtualPlugin = plugins.find((p) => p.name === 'open:virtual-entry')!;
 
   const code = callLoad(virtualPlugin, '\0virtual:open-build-trigger');
-  assertExists(code);
-  assertEquals(code, 'export default null;');
+  expect(code).toEqual(expect.anything());
+  expect(code).toEqual('export default null;');
 });
 
-Deno.test('openPlugin: virtual-entry load returns undefined for unknown IDs', () => {
+test('openPlugin: virtual-entry load returns undefined for unknown IDs', () => {
   const plugins = createOpenPlugin({});
   const virtualPlugin = plugins.find((p) => p.name === 'open:virtual-entry')!;
 
   const result = callLoad(virtualPlugin, 'unknown-virtual-id');
-  assertEquals(result, undefined);
+  expect(result).toEqual(undefined);
 });
 
 // ─── Core Plugin Hooks ────────────────────────────────────────
 
-Deno.test('openPlugin: core plugin has config hook', () => {
+test('openPlugin: core plugin has config hook', () => {
   const plugins = createOpenPlugin({});
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
 
-  assertExists(corePlugin.config);
-  assertEquals(typeof corePlugin.config, 'function');
+  expect(corePlugin.config).toEqual(expect.anything());
+  expect(typeof corePlugin.config).toEqual('function');
 });
 
-Deno.test('openPlugin: core plugin has configResolved hook', () => {
+test('openPlugin: core plugin has configResolved hook', () => {
   const plugins = createOpenPlugin({});
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
 
-  assertExists(corePlugin.configResolved);
-  assertEquals(typeof corePlugin.configResolved, 'function');
+  expect(corePlugin.configResolved).toEqual(expect.anything());
+  expect(typeof corePlugin.configResolved).toEqual('function');
 });
 
-Deno.test('openPlugin: core plugin has buildStart hook', () => {
+test('openPlugin: core plugin has buildStart hook', () => {
   const plugins = createOpenPlugin({});
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
 
-  assertExists(corePlugin.buildStart);
-  assertEquals(typeof corePlugin.buildStart, 'function');
+  expect(corePlugin.buildStart).toEqual(expect.anything());
+  expect(typeof corePlugin.buildStart).toEqual('function');
 });
 
-Deno.test('openPlugin: core config sets chunkSizeWarningLimit', async () => {
+test('openPlugin: core config sets chunkSizeWarningLimit', async () => {
   const plugins = createOpenPlugin({});
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
 
   const result = await callConfig(corePlugin);
   const build = result.build as Record<string, unknown>;
-  assertEquals(build.chunkSizeWarningLimit, 1500);
+  expect(build.chunkSizeWarningLimit).toEqual(1500);
 });
 
-Deno.test('openPlugin: core config includes rollupOptions with build trigger input', async () => {
+test('openPlugin: core config includes rollupOptions with build trigger input', async () => {
   const plugins = createOpenPlugin({});
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
 
@@ -302,11 +300,11 @@ Deno.test('openPlugin: core config includes rollupOptions with build trigger inp
   const rollupOptions = build.rollupOptions as Record<string, unknown>;
   const input = rollupOptions.input as string[];
 
-  assertExists(input);
-  assertArrayIncludes(input, ['virtual:open-build-trigger']);
+  expect(input).toEqual(expect.anything());
+  expect(input).toEqual(expect.arrayContaining(['virtual:open-build-trigger']));
 });
 
-Deno.test('openPlugin: core config sorts aliases by subpath specificity', async () => {
+test('openPlugin: core config sorts aliases by subpath specificity', async () => {
   const plugins = createOpenPlugin({});
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
 
@@ -322,120 +320,122 @@ Deno.test('openPlugin: core config sorts aliases by subpath specificity', async 
   const coreCsrIndex = resolve.alias.findIndex((alias) => alias.find === '@openelement/core/csr');
   const coreRootIndex = resolve.alias.findIndex((alias) => alias.find === '@openelement/element');
 
-  assertEquals(coreCsrIndex >= 0, true);
-  assertEquals(coreRootIndex >= 0, true);
-  assertEquals(coreCsrIndex < coreRootIndex, true);
+  expect(coreCsrIndex >= 0).toEqual(true);
+  expect(coreRootIndex >= 0).toEqual(true);
+  expect(coreCsrIndex < coreRootIndex).toEqual(true);
 });
 
 // ─── Island Transform Plugin ──────────────────────────────────
 
-Deno.test('openPlugin: island-transform plugin exists with correct name', () => {
+test('openPlugin: island-transform plugin exists with correct name', () => {
   const plugins = createOpenPlugin({});
   const islandPlugin = plugins.find((p) => p.name === 'open:island-transform')!;
 
-  assertExists(islandPlugin);
-  assertEquals(islandPlugin.name, 'open:island-transform');
+  expect(islandPlugin).toEqual(expect.anything());
+  expect(islandPlugin.name).toEqual('open:island-transform');
 });
 
-Deno.test('openPlugin: island-transform has transform hook', () => {
+test('openPlugin: island-transform has transform hook', () => {
   const plugins = createOpenPlugin({});
   const islandPlugin = plugins.find((p) => p.name === 'open:island-transform')!;
 
-  assertExists(islandPlugin.transform, 'island transform must have transform hook');
+  expect(islandPlugin.transform, 'island transform must have transform hook').toEqual(
+    expect.anything(),
+  );
 });
 
 // ─── Build Plugin ─────────────────────────────────────────────
 
-Deno.test('openPlugin: build plugin exists', () => {
+test('openPlugin: build plugin exists', () => {
   const plugins = createOpenPlugin({});
   const buildPlugin = plugins.find((p) => p.name === 'open:build')!;
 
-  assertExists(buildPlugin);
+  expect(buildPlugin).toEqual(expect.anything());
 });
 
 // ─── Dev Server Plugin ────────────────────────────────────────
 
-Deno.test('openPlugin: dev server plugin is @hono/vite-dev-server', () => {
+test('openPlugin: dev server plugin is @hono/vite-dev-server', () => {
   const plugins = createOpenPlugin({});
   const devServerPlugin = plugins.find((p) => p.name === '@hono/vite-dev-server')!;
 
-  assertExists(devServerPlugin);
+  expect(devServerPlugin).toEqual(expect.anything());
 });
 
-Deno.test('openPlugin: SSG mode (default) includes @hono/vite-dev-server (7 plugins)', () => {
+test('openPlugin: SSG mode (default) includes @hono/vite-dev-server (7 plugins)', () => {
   const plugins = createOpenPlugin({});
-  assertEquals(plugins.length, 7);
-  assertExists(plugins.find((p) => p.name === '@hono/vite-dev-server'));
+  expect(plugins.length).toEqual(7);
+  expect(plugins.find((p) => p.name === '@hono/vite-dev-server')).toEqual(expect.anything());
 });
 
-Deno.test('openPlugin: explicit SSG mode includes @hono/vite-dev-server', () => {
+test('openPlugin: explicit SSG mode includes @hono/vite-dev-server', () => {
   const plugins = createOpenPlugin({ mode: 'ssg' });
-  assertEquals(plugins.length, 7);
-  assertExists(plugins.find((p) => p.name === '@hono/vite-dev-server'));
+  expect(plugins.length).toEqual(7);
+  expect(plugins.find((p) => p.name === '@hono/vite-dev-server')).toEqual(expect.anything());
 });
 
 // ─── packageIslands Option ────────────────────────────────────
 
-Deno.test('openPlugin: accepts packageIslands option', () => {
+test('openPlugin: accepts packageIslands option', () => {
   const plugins = createOpenPlugin({ packageIslands: ['@acme/components'] });
-  assertExists(plugins);
-  assertEquals(plugins.length, 7);
+  expect(plugins).toEqual(expect.anything());
+  expect(plugins.length).toEqual(7);
 });
 
-Deno.test('openPlugin: accepts empty packageIslands', () => {
+test('openPlugin: accepts empty packageIslands', () => {
   const plugins = createOpenPlugin({ packageIslands: [] });
-  assertExists(plugins);
-  assertEquals(plugins.length, 7);
+  expect(plugins).toEqual(expect.anything());
+  expect(plugins.length).toEqual(7);
 });
 
-Deno.test('openPlugin: accepts multiple packageIslands', () => {
+test('openPlugin: accepts multiple packageIslands', () => {
   const plugins = createOpenPlugin({
     packageIslands: ['@acme/components', '@openelement/element'],
   });
-  assertExists(plugins);
+  expect(plugins).toEqual(expect.anything());
 });
 
 // ─── CORS Origin Edge Cases ───────────────────────────────────
 
-Deno.test('openPlugin: accepts middleware.corsOrigin as string', () => {
+test('openPlugin: accepts middleware.corsOrigin as string', () => {
   const plugins = createOpenPlugin({ middleware: { corsOrigin: 'https://example.com' } });
-  assertExists(plugins);
+  expect(plugins).toEqual(expect.anything());
 });
 
-Deno.test('openPlugin: accepts middleware.corsOrigin as array', () => {
+test('openPlugin: accepts middleware.corsOrigin as array', () => {
   const plugins = createOpenPlugin({
     middleware: { corsOrigin: ['https://a.com', 'https://b.com'] },
   });
-  assertExists(plugins);
+  expect(plugins).toEqual(expect.anything());
 });
 
 // ─── HTML Config ──────────────────────────────────────────────
 
-Deno.test('openPlugin: accepts html config with title', () => {
+test('openPlugin: accepts html config with title', () => {
   const plugins = createOpenPlugin({ html: { title: 'My App' } });
-  assertExists(plugins);
+  expect(plugins).toEqual(expect.anything());
 });
 
-Deno.test('openPlugin: accepts html config with lang', () => {
+test('openPlugin: accepts html config with lang', () => {
   const plugins = createOpenPlugin({ html: { lang: 'zh-CN' } });
-  assertExists(plugins);
+  expect(plugins).toEqual(expect.anything());
 });
 
-Deno.test('openPlugin: accepts full html config', () => {
+test('openPlugin: accepts full html config', () => {
   const plugins = createOpenPlugin({ html: { lang: 'ja', title: 'テスト' } });
-  assertExists(plugins);
+  expect(plugins).toEqual(expect.anything());
 });
 
 // ─── Inject Structured API ────────────────────────────────────
 
-Deno.test('openPlugin: inject.stylesheets string form', () => {
+test('openPlugin: inject.stylesheets string form', () => {
   const plugins = createOpenPlugin({
     inject: { stylesheets: ['https://cdn.example.com/app.css'] },
   });
-  assertExists(plugins);
+  expect(plugins).toEqual(expect.anything());
 });
 
-Deno.test('openPlugin: inject.stylesheets object form with integrity', () => {
+test('openPlugin: inject.stylesheets object form with integrity', () => {
   const plugins = createOpenPlugin({
     inject: {
       stylesheets: [
@@ -446,20 +446,20 @@ Deno.test('openPlugin: inject.stylesheets object form with integrity', () => {
       ],
     },
   });
-  assertExists(plugins);
+  expect(plugins).toEqual(expect.anything());
 });
 
-Deno.test('openPlugin: inject.scripts with defer', () => {
+test('openPlugin: inject.scripts with defer', () => {
   const plugins = createOpenPlugin({
     inject: { scripts: [{ src: 'https://cdn.example.com/app.js', defer: true }] },
   });
-  assertExists(plugins);
+  expect(plugins).toEqual(expect.anything());
 });
 
-Deno.test('openPlugin: headExtras and inject work together (headExtras wins)', () => {
+test('openPlugin: headExtras and inject work together (headExtras wins)', () => {
   const plugins = createOpenPlugin({
     headExtras: '<meta name="override" />',
     inject: { stylesheets: ['https://cdn.example.com/app.css'] },
   });
-  assertExists(plugins);
+  expect(plugins).toEqual(expect.anything());
 });

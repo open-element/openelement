@@ -7,7 +7,7 @@ import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { buildError, PackageIslandErrorCode } from '../../../internal/error-codes.ts';
-import { join } from '../../../internal/host-path.ts';
+import { join } from 'pathe';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import {
   ISLAND_DELIVERY_STRATEGIES,
@@ -43,13 +43,11 @@ export interface LocalIslandMeta {
 export type StoredIslandMeta = LocalIslandMeta & Partial<IslandDecl>;
 
 /**
- * Single source of truth for island render directives (alpha.17 B1).
- *
- * Previously the `hydrate === 'only' ? false : meta?.ssr` coercion and the
- * `hydrate || upgradeStrategy || 'idle'` fallback were copied across
- * plugin.ts, entry-descriptor.ts, island-scanner.ts and build-client.ts,
- * and the copies had diverged (package islands in plugin.ts skipped the
- * upgrade-strategy fallback).
+ * Single source of truth for island render directives: the
+ * `hydrate === 'only' ? false : meta?.ssr` coercion and the
+ * `hydrate || upgradeStrategy || 'idle'` fallback are defined here once, and
+ * every consumer (plugin.ts, entry-descriptor.ts, island-scanner.ts,
+ * build-client.ts) resolves through them.
  */
 
 /** Coerce ssr/dsd for client:only islands: hydrate 'only' forces both off. */
@@ -437,7 +435,7 @@ export async function scanIslands(islandsDir: string, relativeDir: string = ''):
 
     const relativePath = relativeDir ? join(relativeDir, entry) : entry;
 
-    if (fileStat.isDirectory) {
+    if (fileStat.isDirectory()) {
       const subFiles = await scanIslands(fullPath, relativePath);
       files.push(...subFiles);
     } else if (/\.(ts|tsx|js|jsx)$/.test(entry)) {
@@ -535,25 +533,37 @@ export async function scanPackageManifests(
   const allManifests: OpenElementPackageManifest[] = [];
 
   for (const pkg of packageNames) {
-    // @vite-ignore suppresses unanalyzable-dynamic-import JSR warning.
+    // @vite-ignore suppresses Vite's unanalyzable-dynamic-import warning.
+    // The `./manifest` subpath is preferred when a package declares one: it
+    // loads only the manifest module, so a node-host build-time scan never
+    // pulls the package's component modules (.tsx), which node cannot load.
+    // Packages without the subpath keep the root-entry contract.
     let mod: Record<string, unknown>;
     try {
-      mod = (await import(/* @vite-ignore */ pkg)) as Record<string, unknown>;
-    } catch (e) {
-      if (isBrowserOnlyPackageImportError(e)) {
-        log.warn(
-          `Skipping package manifest from "${pkg}": browser-only package cannot be imported during SSR discovery`,
-        );
-        continue;
+      mod = (await import(/* @vite-ignore */ `${pkg}/manifest`)) as Record<string, unknown>;
+    } catch (subpathError) {
+      const code = (subpathError as NodeJS.ErrnoException)?.code ?? '';
+      if (code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED' && code !== 'ERR_MODULE_NOT_FOUND') {
+        throw subpathError;
       }
-      throw new OpenElementError(
-        `Failed to scan package manifest from "${pkg}": ${formatError(e)}`,
-        {
-          code: 'PACKAGE_SCAN_ERROR',
-          statusCode: 500,
-          recoverable: false,
-        },
-      );
+      try {
+        mod = (await import(/* @vite-ignore */ pkg)) as Record<string, unknown>;
+      } catch (e) {
+        if (isBrowserOnlyPackageImportError(e)) {
+          log.warn(
+            `Skipping package manifest from "${pkg}": browser-only package cannot be imported during SSR discovery`,
+          );
+          continue;
+        }
+        throw new OpenElementError(
+          `Failed to scan package manifest from "${pkg}": ${formatError(e)}`,
+          {
+            code: 'PACKAGE_SCAN_ERROR',
+            statusCode: 500,
+            recoverable: false,
+          },
+        );
+      }
     }
     if (mod.manifest && typeof mod.manifest === 'object') {
       const manifest = mod.manifest as OpenElementPackageManifest;
@@ -582,8 +592,8 @@ export async function scanPackageManifests(
 }
 
 /**
- * v0.25: AST-verified — error message classification, regex is the appropriate tool
- * for matching runtime error strings from failed dynamic imports.
+ * Error message classification: regex is the appropriate tool for matching
+ * runtime error strings from failed dynamic imports.
  */
 function isBrowserOnlyPackageImportError(error: unknown): boolean {
   const message = formatError(error);

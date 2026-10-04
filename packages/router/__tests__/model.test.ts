@@ -1,7 +1,7 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { createRequestContext } from '../src/model.ts';
 
-Deno.test('request context normalizes Web Request details', () => {
+test('request context normalizes Web Request details', () => {
   const context = createRequestContext({
     request: new Request('https://example.test/notes/42?tab=reader', { method: 'POST' }),
     params: { id: '42' },
@@ -9,21 +9,21 @@ Deno.test('request context normalizes Web Request details', () => {
     platform: { runtime: 'node' },
   });
 
-  assertEquals(context.path, '/notes/42');
-  assertEquals(context.method, 'POST');
-  assertEquals(context.params, { id: '42' });
-  assertEquals(context.searchParams.get('tab'), 'reader');
-  assertEquals(context.env, { stage: 'test' });
-  assertEquals(context.platform, { runtime: 'node' });
+  expect(context.path).toEqual('/notes/42');
+  expect(context.method).toEqual('POST');
+  expect(context.params).toEqual({ id: '42' });
+  expect(context.searchParams.get('tab')).toEqual('reader');
+  expect(context.env).toEqual({ stage: 'test' });
+  expect(context.platform).toEqual({ runtime: 'node' });
 });
 
-Deno.test('request context defaults optional params', () => {
+test('request context defaults optional params', () => {
   const context = createRequestContext({
     request: new Request('https://example.test/freeform'),
   });
 
-  assertEquals(context.path, '/freeform');
-  assertEquals(context.method, 'GET');
-  assertEquals(context.params, {});
-  assertEquals(context.platform, undefined);
+  expect(context.path).toEqual('/freeform');
+  expect(context.method).toEqual('GET');
+  expect(context.params).toEqual({});
+  expect(context.platform).toEqual(undefined);
 });

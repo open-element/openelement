@@ -16,7 +16,9 @@
  *     `OpenElementError` with a code from the catalogue, read through the same
  *     public/wire entries a consumer uses.
  */
-import { assert, assertEquals, assertInstanceOf, assertStringIncludes } from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
+import { readdirSync } from 'node:fs';
 import ts from 'typescript';
 import {
   AuthoringErrorCode,
@@ -39,9 +41,9 @@ const SRC_ROOT = new URL('../src/', import.meta.url);
 
 async function sourceFiles(dir: URL): Promise<URL[]> {
   const out: URL[] = [];
-  for await (const entry of Deno.readDir(dir)) {
-    const child = new URL(`${entry.name}${entry.isDirectory ? '/' : ''}`, dir);
-    if (entry.isDirectory) out.push(...(await sourceFiles(child)));
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
+    if (entry.isDirectory()) out.push(...(await sourceFiles(child)));
     else if (entry.name.endsWith('.ts')) out.push(child);
   }
   return out;
@@ -80,22 +82,21 @@ function bareThrows(source: string, path: string): string[] {
   return found;
 }
 
-Deno.test('#1386: no source module raises a bare Error; every failure carries a code', async () => {
+test('#1386: no source module raises a bare Error; every failure carries a code', async () => {
   const files = await sourceFiles(SRC_ROOT);
-  assert(files.length > 0, 'the package must have source files');
+  expect(files.length > 0, 'the package must have source files').toBeTruthy();
   const offenders: string[] = [];
   for (const file of files) {
     const relative = file.pathname.slice(file.pathname.indexOf('/src/') + 1);
-    offenders.push(...bareThrows(await Deno.readTextFile(file), relative));
+    offenders.push(...bareThrows(await readFile(file, 'utf8'), relative));
   }
-  assertEquals(
+  expect(
     offenders,
-    [],
     'every throw must construct an OpenElementError with a catalogued code',
-  );
+  ).toEqual([]);
 });
 
-Deno.test('#1386: the catalogue covers every failure surface with stable values', () => {
+test('#1386: the catalogue covers every failure surface with stable values', () => {
   const tables = {
     ProgramErrorCode,
     EachKeyErrorCode,
@@ -113,19 +114,19 @@ Deno.test('#1386: the catalogue covers every failure surface with stable values'
   const seen = new Map<string, string>();
   for (const [table, codes] of Object.entries(tables)) {
     const values = Object.values(codes);
-    assert(values.length > 0, `${table} must declare at least one code`);
+    expect(values.length > 0, `${table} must declare at least one code`).toBeTruthy();
     for (const [name, value] of Object.entries(codes)) {
-      assert(
+      expect(
         typeof value === 'string' && value.length > 0,
         `${table}.${name} must be a non-empty string`,
-      );
+      ).toBeTruthy();
       // Two tables naming the same value would make `code` ambiguous as a
       // lookup key, which is the only thing a consumer can match on.
       const owner = seen.get(value);
-      assert(
+      expect(
         owner === undefined,
         `${table}.${name} reuses code ${value}, already declared by ${owner}`,
-      );
+      ).toBeTruthy();
       seen.set(value, `${table}.${name}`);
       // Codes that predate this dialect keep their exact values: they shipped
       // in 1.0.0-alpha.3 and consumers match on them.
@@ -136,34 +137,34 @@ Deno.test('#1386: the catalogue covers every failure surface with stable values'
         'UNKNOWN',
         'BOUNDARY_CAUGHT',
       ];
-      assert(
+      expect(
         value.startsWith('OE_') || value.startsWith('OPEN_ELEMENT_') || legacy.includes(value),
         `${table}.${name} (${value}) is outside the documented code namespaces`,
-      );
+      ).toBeTruthy();
     }
   }
   // The two values a released consumer already matches on.
-  assertEquals(ClaimErrorCode.STRUCTURE_MISMATCH, 'OPEN_ELEMENT_COMPILED_CLAIM_MISMATCH');
-  assertEquals(ServerErrorCode.PROGRAM_INVALID, 'OPEN_ELEMENT_COMPILED_PROGRAM_INVALID');
+  expect(ClaimErrorCode.STRUCTURE_MISMATCH).toEqual('OPEN_ELEMENT_COMPILED_CLAIM_MISMATCH');
+  expect(ServerErrorCode.PROGRAM_INVALID).toEqual('OPEN_ELEMENT_COMPILED_PROGRAM_INVALID');
 });
 
-Deno.test('#1386: frameworkError carries code, severity, phase and recoverable', () => {
+test('#1386: frameworkError carries code, severity, phase and recoverable', () => {
   const error = frameworkError('OE_TEST_CODE', 'boom', { phase: 'csr', recoverable: true });
-  assertInstanceOf(error, OpenElementError);
-  assertEquals(error.code, 'OE_TEST_CODE');
-  assertEquals(error.severity, 'error');
-  assertEquals(error.phase, 'csr');
-  assertEquals(error.recoverable, true);
+  expect(error).toBeInstanceOf(OpenElementError);
+  expect(error.code).toEqual('OE_TEST_CODE');
+  expect(error.severity).toEqual('error');
+  expect(error.phase).toEqual('csr');
+  expect(error.recoverable).toEqual(true);
   // The defaults: a framework failure is a render-phase error that is not
   // recoverable unless the caller says otherwise.
   const fallback = frameworkError('OE_OTHER', 'boom');
-  assertEquals(fallback.phase, 'render');
-  assertEquals(fallback.severity, 'error');
-  assertEquals(fallback.recoverable, false);
-  assertEquals(fallback.toJSON().code, 'OE_OTHER');
+  expect(fallback.phase).toEqual('render');
+  expect(fallback.severity).toEqual('error');
+  expect(fallback.recoverable).toEqual(false);
+  expect(fallback.toJSON().code).toEqual('OE_OTHER');
 });
 
-Deno.test('#1386: the runtime raisers report their code through the wire entries', async () => {
+test('#1386: the runtime raisers report their code through the wire entries', async () => {
   const { createFreshDom, serializeToHtml } = await import('../src/internal/compiled/runtime.ts');
   const { testProgram } = await import('./compiled-runtime/test-program.ts');
   const { signal } = await import('../src/internal/signal/framework.ts');
@@ -207,11 +208,11 @@ Deno.test('#1386: the runtime raisers report their code through the wire entries
     } catch (error) {
       thrown = error;
     }
-    assertInstanceOf(thrown, OpenElementError, label);
-    assertEquals(thrown.code, RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, label);
-    assertEquals(thrown.phase, 'render', label);
+    expect(thrown, label).toBeInstanceOf(OpenElementError);
+    expect(thrown.code, label).toEqual(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY);
+    expect(thrown.phase, label).toEqual('render');
     // The reader still gets the authored vocabulary (#1413).
-    assertStringIncludes(thrown.message, 'this.rows', label);
+    expect(thrown.message, label).toContain('this.rows');
   }
 
   // A duplicate item key: the server and the client agree on the key code.
@@ -234,28 +235,28 @@ Deno.test('#1386: the runtime raisers report their code through the wire entries
   } catch (error) {
     keyThrown = error;
   }
-  assertInstanceOf(keyThrown, OpenElementError);
-  assertEquals(keyThrown.code, EachKeyErrorCode.DUPLICATE_KEY);
+  expect(keyThrown).toBeInstanceOf(OpenElementError);
+  expect(keyThrown.code).toEqual(EachKeyErrorCode.DUPLICATE_KEY);
 });
 
-Deno.test('#1386: a claim mismatch is an OpenElementError with the released code', async () => {
+test('#1386: a claim mismatch is an OpenElementError with the released code', async () => {
   const { PartProgramClaimError } = await import('../src/internal/compiled/runtime.ts');
   const error = new PartProgramClaimError('template[0]', 'drifted', {
     kind: 'root',
     root: {} as Node,
   });
-  assertInstanceOf(error, OpenElementError);
-  assertEquals(error.code, ClaimErrorCode.STRUCTURE_MISMATCH);
-  assertEquals(error.code, 'OPEN_ELEMENT_COMPILED_CLAIM_MISMATCH');
-  assertEquals(error.phase, 'render');
-  assertEquals(error.recoverable, true);
+  expect(error).toBeInstanceOf(OpenElementError);
+  expect(error.code).toEqual(ClaimErrorCode.STRUCTURE_MISMATCH);
+  expect(error.code).toEqual('OPEN_ELEMENT_COMPILED_CLAIM_MISMATCH');
+  expect(error.phase).toEqual('render');
+  expect(error.recoverable).toEqual(true);
   // Provenance fields stay fields, not contract.
-  assertEquals(error.path, 'template[0]');
-  assertEquals(error.detail, 'drifted');
-  assertEquals(error.ownerKind, 'root');
+  expect(error.path).toEqual('template[0]');
+  expect(error.detail).toEqual('drifted');
+  expect(error.ownerKind).toEqual('root');
 });
 
-Deno.test('#1386: the compiled program grammar raises catchable codes per failure family', async () => {
+test('#1386: the compiled program grammar raises catchable codes per failure family', async () => {
   const { assertCompiledProgram, CompiledProgramValidationError } =
     await import('../src/internal/compiled/server/index.ts');
   // Every grammar rejection is the same class with the same code, so a host
@@ -266,10 +267,10 @@ Deno.test('#1386: the compiled program grammar raises catchable codes per failur
   } catch (error) {
     grammarThrown = error;
   }
-  assertInstanceOf(grammarThrown, OpenElementError);
-  assertEquals(grammarThrown.code, ServerErrorCode.PROGRAM_INVALID);
-  assertEquals(grammarThrown.code, 'OPEN_ELEMENT_COMPILED_PROGRAM_INVALID');
-  assertInstanceOf(grammarThrown, CompiledProgramValidationError);
+  expect(grammarThrown).toBeInstanceOf(OpenElementError);
+  expect(grammarThrown.code).toEqual(ServerErrorCode.PROGRAM_INVALID);
+  expect(grammarThrown.code).toEqual('OPEN_ELEMENT_COMPILED_PROGRAM_INVALID');
+  expect(grammarThrown).toBeInstanceOf(CompiledProgramValidationError);
 
   // The wire program validator raises the program family's code.
   const wireProtocol: typeof import('../src/internal/protocol/part-program.ts') =
@@ -280,11 +281,11 @@ Deno.test('#1386: the compiled program grammar raises catchable codes per failur
   } catch (error) {
     wireThrown = error;
   }
-  assertInstanceOf(wireThrown, OpenElementError);
-  assertEquals(wireThrown.code, ProgramErrorCode.INVALID_PROGRAM);
+  expect(wireThrown).toBeInstanceOf(OpenElementError);
+  expect(wireThrown.code).toEqual(ProgramErrorCode.INVALID_PROGRAM);
 });
 
-Deno.test('#1386: the compiler reports a failed compile as one catchable code', async () => {
+test('#1386: the compiler reports a failed compile as one catchable code', async () => {
   const { CompiledElementError, compileElementProgram } =
     await import('../src/internal/compiler/semantic-core/compile.ts');
   let thrown: unknown;
@@ -293,21 +294,20 @@ Deno.test('#1386: the compiler reports a failed compile as one catchable code', 
   } catch (error) {
     thrown = error;
   }
-  assertInstanceOf(thrown, OpenElementError);
-  assertInstanceOf(thrown, CompiledElementError);
-  assertEquals(thrown.code, CompilerErrorCode.DIAGNOSTICS);
-  assertEquals(thrown.phase, 'build');
+  expect(thrown).toBeInstanceOf(OpenElementError);
+  expect(thrown).toBeInstanceOf(CompiledElementError);
+  expect(thrown.code).toEqual(CompilerErrorCode.DIAGNOSTICS);
+  expect(thrown.phase).toEqual('build');
   // The per-diagnostic OEC codes stay on the records: those locate source.
-  assert((thrown as InstanceType<typeof CompiledElementError>).diagnostics.length > 0);
-  assertEquals(
+  expect((thrown as InstanceType<typeof CompiledElementError>).diagnostics.length > 0).toBeTruthy();
+  expect(
     (thrown as InstanceType<typeof CompiledElementError>).diagnostics.every((record) =>
       /^OEC\d{4}$/.test(record.code),
     ),
-    true,
-  );
+  ).toEqual(true);
 });
 
-Deno.test('#1386: lifecycle raisers carry their own family codes', async () => {
+test('#1386: lifecycle raisers carry their own family codes', async () => {
   const { CompiledContextService } = await import('../src/internal/compiled/runtime/context.ts');
   let thrown: unknown;
   try {
@@ -325,11 +325,11 @@ Deno.test('#1386: lifecycle raisers carry their own family codes', async () => {
   // The guard only fires once disposed; when it does, the code is the
   // context family's. Assert the mapping itself when the state is reached.
   if (thrown !== undefined) {
-    assertInstanceOf(thrown, OpenElementError);
-    assertEquals(thrown.code, ContextErrorCode.SERVICE_DISPOSED);
+    expect(thrown).toBeInstanceOf(OpenElementError);
+    expect(thrown.code).toEqual(ContextErrorCode.SERVICE_DISPOSED);
   }
-  assertEquals(typeof AuthoringErrorCode.INVALID_TAG_NAME, 'string');
-  assertEquals(typeof KernelErrorCode.DISPOSED, 'string');
-  assertEquals(typeof StyleErrorCode.LIGHT_SINK_WITHOUT_DOCUMENT, 'string');
-  assertEquals(typeof FacadeErrorCode.PROGRAM_MISSING, 'string');
+  expect(typeof AuthoringErrorCode.INVALID_TAG_NAME).toEqual('string');
+  expect(typeof KernelErrorCode.DISPOSED).toEqual('string');
+  expect(typeof StyleErrorCode.LIGHT_SINK_WITHOUT_DOCUMENT).toEqual('string');
+  expect(typeof FacadeErrorCode.PROGRAM_MISSING).toEqual('string');
 });

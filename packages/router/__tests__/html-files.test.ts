@@ -4,7 +4,10 @@
  * The single directory walker shared by SSG post-processing, sitemap
  * generation, island manifests, and build artifact collection.
  */
-import { assertEquals } from '@std/assert';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, test } from 'vitest';
 import {
   visitHtmlFiles,
   walkFileEntries,
@@ -15,20 +18,20 @@ async function withTempTree(
   files: Record<string, string>,
   fn: (root: string) => void | Promise<void>,
 ) {
-  const root = await Deno.makeTempDir();
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     for (const [rel, content] of Object.entries(files)) {
       const path = `${root}/${rel}`;
-      await Deno.mkdir(path.slice(0, path.lastIndexOf('/')), { recursive: true });
-      await Deno.writeTextFile(path, content);
+      await mkdir(path.slice(0, path.lastIndexOf('/')), { recursive: true });
+      await writeFile(path, content);
     }
     await fn(root);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 }
 
-Deno.test('walkHtmlFileEntries - recurses, skips dotfiles, and sorts deterministically', async () => {
+test('walkHtmlFileEntries - recurses, skips dotfiles, and sorts deterministically', async () => {
   await withTempTree(
     {
       'b/page.html': '<html>b</html>',
@@ -39,20 +42,17 @@ Deno.test('walkHtmlFileEntries - recurses, skips dotfiles, and sorts determinist
     },
     (root) => {
       const entries = walkHtmlFileEntries(root);
-      assertEquals(
-        entries.map((e) => e.relativePath),
-        ['a/index.html', 'b/page.html'],
-      );
-      assertEquals(entries[0].absolutePath, `${root}/a/index.html`);
+      expect(entries.map((e) => e.relativePath)).toEqual(['a/index.html', 'b/page.html']);
+      expect(entries[0].absolutePath).toEqual(`${root}/a/index.html`);
     },
   );
 });
 
-Deno.test('walkHtmlFileEntries - returns [] for a missing directory', () => {
-  assertEquals(walkHtmlFileEntries('/nonexistent-open-dir'), []);
+test('walkHtmlFileEntries - returns [] for a missing directory', () => {
+  expect(walkHtmlFileEntries('/nonexistent-open-dir')).toEqual([]);
 });
 
-Deno.test('walkFileEntries - filters by extension and walks all files without one', async () => {
+test('walkFileEntries - filters by extension and walks all files without one', async () => {
   await withTempTree(
     {
       'x/app.js': 'js',
@@ -60,19 +60,20 @@ Deno.test('walkFileEntries - filters by extension and walks all files without on
       'x/y/deep.js': 'js',
     },
     (root) => {
-      assertEquals(
-        walkFileEntries(root, '.js').map((e) => e.relativePath),
-        ['x/app.js', 'x/y/deep.js'],
-      );
-      assertEquals(
-        walkFileEntries(root).map((e) => e.relativePath),
-        ['x/app.css', 'x/app.js', 'x/y/deep.js'],
-      );
+      expect(walkFileEntries(root, '.js').map((e) => e.relativePath)).toEqual([
+        'x/app.js',
+        'x/y/deep.js',
+      ]);
+      expect(walkFileEntries(root).map((e) => e.relativePath)).toEqual([
+        'x/app.css',
+        'x/app.js',
+        'x/y/deep.js',
+      ]);
     },
   );
 });
 
-Deno.test('visitHtmlFiles - overwrites only files the visitor rewrites', async () => {
+test('visitHtmlFiles - overwrites only files the visitor rewrites', async () => {
   await withTempTree(
     {
       'index.html': '<html><body>home</body></html>',
@@ -84,10 +85,11 @@ Deno.test('visitHtmlFiles - overwrites only files the visitor rewrites', async (
         visited.push(fullPath);
         return content.includes('home') ? content.replace('home', 'HOME') : null;
       });
-      assertEquals(visited, [`${root}/about/index.html`, `${root}/index.html`]);
-      assertEquals(await Deno.readTextFile(`${root}/index.html`), '<html><body>HOME</body></html>');
-      assertEquals(
-        await Deno.readTextFile(`${root}/about/index.html`),
+      expect(visited).toEqual([`${root}/about/index.html`, `${root}/index.html`]);
+      expect(await readFile(`${root}/index.html`, 'utf8')).toEqual(
+        '<html><body>HOME</body></html>',
+      );
+      expect(await readFile(`${root}/about/index.html`, 'utf8')).toEqual(
         '<html><body>about</body></html>',
       );
     },

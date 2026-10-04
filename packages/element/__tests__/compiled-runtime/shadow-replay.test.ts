@@ -19,15 +19,15 @@
  * real-browser coverage lives in tests/e2e/starter-smoke/interaction-matrix.
  */
 
-import { assertEquals, assertStrictEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   type FacadeDom,
   FacadeElement,
-  FacadeEvent,
   type FacadeShadowRoot,
   installFacadeDom,
   parseHtml,
 } from './facade-dom.ts';
+import { click as composedClick } from './pre-upgrade-helpers.ts';
 import { testProgram } from './test-program.ts';
 
 // The facade captures its HTMLElement base at module evaluation time.
@@ -143,17 +143,13 @@ function upgradeShadowInPlace(ssrHost: FacadeElement): ShadowCounterElement {
   return element;
 }
 
-function composedClick(): FacadeEvent {
-  return new FacadeEvent('click', { bubbles: true, composed: true });
-}
-
 function innerButton(ssrHost: FacadeElement): AnyElement {
   const shadow = ssrHost.shadowRoot as unknown as FacadeShadowRoot;
   if (shadow) return shadow.childNodes[0] as unknown as AnyElement;
   return ssrHost.childNodes[0] as AnyElement;
 }
 
-Deno.test('shadow replay: pre-hydration click inside an open island shadow replays exactly once (#942)', () => {
+test('shadow replay: pre-hydration click inside an open island shadow replays exactly once (#942)', () => {
   defineCounter('oe-shadow-replay', 'shadow-open');
   // The generated entry installs capture on the document before any upgrade.
   ensurePreHydrationClickCapture();
@@ -164,21 +160,20 @@ Deno.test('shadow replay: pre-hydration click inside an open island shadow repla
   button.dispatchEvent(composedClick());
 
   const element = upgradeShadowInPlace(ssrHost);
-  assertEquals(element.hydrated, 1);
-  assertEquals(element.count, 1, 'the shadow-retargeted click replays exactly once');
-  assertStrictEquals(
+  expect(element.hydrated).toEqual(1);
+  expect(element.count, 'the shadow-retargeted click replays exactly once').toEqual(1);
+  expect(
     (element as unknown as FacadeElement).shadowRoot!.childNodes[0],
-    button,
     'in-place activation keeps node identity',
-  );
+  ).toBe(button);
 
   // Reconnect reclaims; the consumed record never replays again.
   dom.document.body.removeChild(element as unknown as FacadeElement);
   dom.document.body.appendChild(element as unknown as FacadeElement);
-  assertEquals(element.count, 1, 'no second replay after the record was consumed');
+  expect(element.count, 'no second replay after the record was consumed').toEqual(1);
 });
 
-Deno.test('shadow replay: light-DOM island replay still works through the same capture (#942)', () => {
+test('shadow replay: light-DOM island replay still works through the same capture (#942)', () => {
   defineCounter('oe-shadow-replay-light', 'light');
   ensurePreHydrationClickCapture();
 
@@ -188,11 +183,11 @@ Deno.test('shadow replay: light-DOM island replay still works through the same c
   button.dispatchEvent(composedClick());
 
   const element = upgradeShadowInPlace(ssrHost);
-  assertEquals(element.hydrated, 1);
-  assertEquals(element.count, 1, 'the light-DOM replay contract still holds');
+  expect(element.hydrated).toEqual(1);
+  expect(element.count, 'the light-DOM replay contract still holds').toEqual(1);
 });
 
-Deno.test('shadow replay: a click never replays into the wrong island (#942)', () => {
+test('shadow replay: a click never replays into the wrong island (#942)', () => {
   defineCounter('oe-shadow-replay-a', 'shadow-open');
   defineCounter('oe-shadow-replay-b', 'shadow-open');
   ensurePreHydrationClickCapture();
@@ -204,14 +199,14 @@ Deno.test('shadow replay: a click never replays into the wrong island (#942)', (
   innerButton(hostA).dispatchEvent(composedClick());
 
   const elementB = upgradeShadowInPlace(hostB);
-  assertEquals(elementB.count, 0, 'the unclicked island replays nothing');
+  expect(elementB.count, 'the unclicked island replays nothing').toEqual(0);
 
   const elementA = upgradeShadowInPlace(hostA);
-  assertEquals(elementA.count, 1, 'the clicked island still replays exactly once');
-  assertEquals(elementB.count, 0, 'the sibling island stays silent');
+  expect(elementA.count, 'the clicked island still replays exactly once').toEqual(1);
+  expect(elementB.count, 'the sibling island stays silent').toEqual(0);
 });
 
-Deno.test('shadow replay: post-hydration clicks fire once and are never re-replayed (#942)', () => {
+test('shadow replay: post-hydration clicks fire once and are never re-replayed (#942)', () => {
   defineCounter('oe-shadow-replay-live', 'shadow-open');
   defineCounter('oe-shadow-replay-sibling', 'shadow-open');
   ensurePreHydrationClickCapture();
@@ -223,21 +218,21 @@ Deno.test('shadow replay: post-hydration clicks fire once and are never re-repla
       return host;
     })(),
   );
-  assertEquals(element.count, 0);
+  expect(element.count).toEqual(0);
 
   const liveButton = (element as unknown as FacadeElement).shadowRoot!.childNodes[0] as AnyElement;
   liveButton.dispatchEvent(composedClick());
-  assertEquals(element.count, 1, 'a hydrated click fires exactly once');
+  expect(element.count, 'a hydrated click fires exactly once').toEqual(1);
 
   // A later sibling upgrade must not resurrect the live click as a replay.
   const siblingHost = ssrShadowHost('oe-shadow-replay-sibling');
   dom.document.body.appendChild(siblingHost);
   const sibling = upgradeShadowInPlace(siblingHost);
-  assertEquals(sibling.count, 0);
-  assertEquals(element.count, 1, 'no duplicate replay after a sibling activation');
+  expect(sibling.count).toEqual(0);
+  expect(element.count, 'no duplicate replay after a sibling activation').toEqual(1);
 });
 
-Deno.test('shadow replay: a target removed before hydration fails closed (#942)', () => {
+test('shadow replay: a target removed before hydration fails closed (#942)', () => {
   defineCounter('oe-shadow-replay-removed', 'shadow-open');
   ensurePreHydrationClickCapture();
 
@@ -249,5 +244,5 @@ Deno.test('shadow replay: a target removed before hydration fails closed (#942)'
   (ssrHost.shadowRoot as unknown as FacadeShadowRoot).removeChild(button);
 
   const element = upgradeShadowInPlace(ssrHost);
-  assertEquals(element.count, 0, 'the detached click replays nowhere');
+  expect(element.count, 'the detached click replays nowhere').toEqual(0);
 });

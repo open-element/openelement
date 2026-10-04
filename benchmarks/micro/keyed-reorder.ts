@@ -3,9 +3,14 @@
  * measures the compiled runtime and counts actual insertBefore operations.
  * Timings are evidence, never a CI threshold or a claim about an old build.
  *
- * deno run --allow-write --allow-run benchmarks/micro/keyed-reorder.ts \
+ * node benchmarks/micro/keyed-reorder.ts \
  *   --samples 10 --out /tmp/openelement-keyed-reorder.json
  */
+import { execFile as execFileCallback } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
+
+const execFile = promisify(execFileCallback);
 import {
   type CompiledRuntimeHost,
   createFreshDom,
@@ -90,8 +95,8 @@ function measure(size: number, scenario: 'swap' | 'rotate') {
 
 if (import.meta.main) {
   const option = (name: string, fallback?: string): string | undefined => {
-    const position = Deno.args.indexOf(name);
-    return position < 0 ? fallback : Deno.args[position + 1];
+    const position = process.argv.indexOf(name);
+    return position < 0 ? fallback : process.argv[position + 1];
   };
   const sampleCount = Number(option('--samples', '10'));
   const out = option('--out');
@@ -99,13 +104,11 @@ if (import.meta.main) {
     throw new Error('pass --samples 2..100 and --out <path>');
   }
   const git = async (args: string[]): Promise<string> => {
-    const result = await new Deno.Command('git', {
-      args,
-      stdout: 'piped',
-      stderr: 'null',
-    }).output();
-    if (!result.success) throw new Error(`git ${args.join(' ')} failed`);
-    return new TextDecoder().decode(result.stdout).trim();
+    try {
+      return (await execFile('git', args)).stdout.trim();
+    } catch {
+      throw new Error(`git ${args.join(' ')} failed`);
+    }
   };
   const revision = await git(['rev-parse', 'HEAD']);
   // Real working-tree provenance: the tracked evidence says which tree it was
@@ -129,16 +132,16 @@ if (import.meta.main) {
     environment: {
       revision,
       workspaceDirty,
-      deno: Deno.version.deno,
-      os: Deno.build.os,
-      arch: Deno.build.arch,
+      node: process.version,
+      os: process.platform,
+      arch: process.arch,
       logicalCores: navigator.hardwareConcurrency,
       dom: 'counting fake DOM; no browser layout or paint',
     },
     sampleCount,
     cases,
   };
-  await Deno.writeTextFile(out, `${JSON.stringify(report, null, 2)}\n`);
+  await writeFile(out, `${JSON.stringify(report, null, 2)}\n`);
   console.log(
     `keyed reorder evidence: ${cases.length} cases, ${sampleCount} samples each -> ${out}`,
   );

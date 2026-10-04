@@ -8,9 +8,9 @@
  * Site shell, content collections, or navigation.
  *
  * Prerequisites:
- *   deno task --cwd tests/fixtures/site-light-probe build
+ *   pnpm --dir tests/fixtures/site-light-probe run build
  *
- * Run: deno task --cwd tests/fixtures/site-light-probe e2e:browsers
+ * Run: pnpm --dir tests/fixtures/site-light-probe run e2e:browsers
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';
@@ -35,10 +35,11 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  // Auto-start the fixture's static server. `exec` prevents the shell
-  // Playwright launches from orphaning Deno when the suite finishes.
+  // Auto-start the fixture's static server. `exec` replaces the shell with
+  // the node server process, so the webServer child is killed (not orphaned)
+  // when the suite finishes.
   webServer: {
-    command: `exec deno run --config ../../../../deno.json --allow-read --allow-net --allow-env --deny-ffi --no-prompt static-server.ts --port ${PORT} --dir ../dist`,
+    command: `exec node static-server.ts --port ${PORT} --dir ../dist`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

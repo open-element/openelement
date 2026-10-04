@@ -28,11 +28,10 @@ export function createLogger(tag: string): Logger {
  * A render-scoped warning tracker.
  *
  * Pass a fresh `WarnScope` (via `createWarnScope()`) into `warnOnce` at a
- * render entry (e.g. once per SSR document in `wrapInDocument`). This keeps a
- * given key from being suppressed for the entire process: the next page/request
- * gets a new scope and the warning can fire again. This fixes the previous
- * behavior where `warnOnce` permanently muted a key across all requests/SSG
- * pages (#643).
+ * render entry (e.g. once per SSR document in `wrapInDocument`). Suppression
+ * is therefore scoped to a single render: the next page/request gets a new
+ * scope and the same key can warn again, so one muted key can never silence a
+ * diagnostic across all requests/SSG pages (#643).
  */
 export interface WarnScope {
   warned: Set<string>;

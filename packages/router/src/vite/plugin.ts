@@ -1,16 +1,14 @@
 /**
- * Extracted from index.ts in v0.22 (SOP-004: build tooling decomposition).
- *
  * This is the core build plugin implementation. It is NOT part of the
  * public API. Use `openPipeline()` from the main entry instead.
  *
  * Internal only: called by openPipeline() and the @openelement/router umbrella.
  *
- * Since the #1473 extraction this file only COMPOSES: the shared plugin state
- * comes from plugin-config.ts, each hook family lives in its own single-duty
- * module (plugin-config.ts, plugin-scanners.ts, plugin-hmr.ts,
- * plugin-watch.ts, plugin-virtual-modules.ts), and the assembly below keeps
- * the plugin names, the hook set and the returned plugin order unchanged.
+ * This file only COMPOSES: the shared plugin state comes from
+ * plugin-config.ts, each hook family lives in its own single-duty module
+ * (plugin-config.ts, plugin-scanners.ts, plugin-hmr.ts, plugin-watch.ts,
+ * plugin-virtual-modules.ts), and the assembly below fixes the plugin names,
+ * the hook set and the returned plugin order.
  */
 
 import type { Plugin } from 'vite';

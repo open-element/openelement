@@ -8,7 +8,7 @@
  * The kernel owns the whole walk: template/Part/Region traversal, anchor
  * markers, item and slot interpretation, escaping, and attribute assembly. It
  * is host-free by design (same base-of-graph discipline as
- * `stream-frame-policy.ts`): zero DOM, zero Deno, zero Router, no module
+ * `stream-frame-policy.ts`): zero DOM, zero Router, no module
  * state, and it never creates a signal. Everything that varies between the
  * execution modes is an explicit seam on {@linkcode SerializeProgramSeams}:
  *

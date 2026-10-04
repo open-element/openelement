@@ -17,7 +17,10 @@
  * workspace's script locations must be referenced by some task; an
  * unreferenced script is an unowned mechanism.
  */
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readFile, stat } from 'node:fs/promises';
+import process from 'node:process';
 import {
   discoverScriptFiles,
   emitterEntries,
@@ -26,14 +29,14 @@ import {
   scriptInCommand,
 } from './workspace-tasks.ts';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const workspaces = await readWorkspaces(repoRoot);
 const repoTasks =
   (
-    JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
-      tasks?: Record<string, string>;
+    JSON.parse(await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8')) as {
+      scripts?: Record<string, string>;
     }
-  ).tasks ?? {};
+  ).scripts ?? {};
 /**
  * The two gate layers a check task may be wired into: `gate:source` is what
  * every pull request runs, `gate:release` is the release train (the steps
@@ -45,15 +48,21 @@ const GATE_LAYERS = ['gate:source', 'gate:release'] as const;
 const gateSteps = new Map<string, Set<string>>(
   GATE_LAYERS.map((layer) => [layer, new Set(repoTasks[layer]?.split(/\s+/) ?? [])]),
 );
-const gateOf = (step: string): string | undefined =>
-  GATE_LAYERS.find((layer) => gateSteps.get(layer)!.has(step));
+/**
+ * Gate steps are package-qualified (`@openelement/www#check:content`), the
+ * exact form vp dispatches by, so wiring checks compare the workspace's
+ * package NAME, never its repo-relative path (the path form silently no-ops
+ * under vp run).
+ */
+const gateOf = (pkg: string, task: string): string | undefined =>
+  GATE_LAYERS.find((layer) => gateSteps.get(layer)!.has(`${pkg}#${task}`));
 for (const layer of GATE_LAYERS) {
   if (gateSteps.get(layer)!.size === 0) {
     console.error(
-      `generator-gates: ${layer} is missing or empty in tools/repo/deno.json — refusing to ` +
+      `generator-gates: ${layer} is missing or empty in tools/repo/package.json — refusing to ` +
         `report on a gate list it could not read.`,
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
@@ -61,13 +70,16 @@ const failures: string[] = [];
 const rows: string[] = [];
 
 for (const ws of workspaces) {
+  // Dispatch identity: a workspace without a package name cannot be
+  // dispatched by vp, so it can never satisfy a gate wiring check either.
+  const pkg = ws.name ?? `(no package name: ${ws.workspace})`;
   const generators = generatorEntries([ws]);
   for (const entry of generators) {
     const checkTask =
       Object.keys(ws.tasks).find(
         (key) => ws.tasks[key].includes(entry.script) && ws.tasks[key].includes('--check'),
       ) ?? '(none)';
-    const inGate = checkTask === '(none)' ? undefined : gateOf(`${ws.workspace}#${checkTask}`);
+    const inGate = checkTask === '(none)' ? undefined : gateOf(pkg, checkTask);
     rows.push(`generate | ${ws.workspace} | ${entry.script} | ${checkTask} | ${inGate ?? 'NO'}`);
     if (checkTask === '(none)') {
       failures.push(`${ws.workspace}/${entry.script}: no --check task wired`);
@@ -81,7 +93,7 @@ for (const ws of workspaces) {
 
   for (const entry of emitterEntries([ws])) {
     const declaresCheck = ws.tasks[entry.taskKey].includes('--check');
-    const inGate = gateOf(`${ws.workspace}#${entry.taskKey}`);
+    const inGate = gateOf(pkg, entry.taskKey);
     rows.push(
       `emit | ${ws.workspace} | ${entry.script} | ${declaresCheck ? 'has --check' : '(none)'} | ${
         inGate ?? 'no'
@@ -107,7 +119,7 @@ async function resolveScript(workspace: string, script: string): Promise<string>
   const wsDir = workspaces.find((ws) => ws.workspace === workspace)!.dir;
   for (const candidate of [join(wsDir, script), join(repoRoot, script)]) {
     try {
-      await Deno.stat(candidate);
+      await stat(candidate);
       return candidate;
     } catch {
       // try the next base
@@ -138,12 +150,12 @@ if (generatorCount === 0 || emitterCount === 0) {
     `generator-gates: expected both generators and emitters, found ${generatorCount} and ` +
       `${emitterCount} — refusing to vacuously pass.`,
   );
-  Deno.exit(1);
+  process.exit(1);
 }
 if (failures.length > 0) {
   console.error(`generator-gates: ${failures.length} wiring problem(s):`);
   for (const failure of failures) console.error(`  ${failure}`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log(
   `generator-gates: ${generatorCount} committed generator(s) checked, ${emitterCount} artifact emitter(s) clean.`,

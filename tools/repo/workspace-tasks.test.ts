@@ -1,24 +1,28 @@
 /**
- * Workspace/task discovery failure semantics (governance fail-closed).
+ * Workspace/script discovery failure semantics (governance fail-closed).
  *
  * The discovery feeds generate-all and the generator gate; a silently
  * skipped workspace would let both miss the same generators. Every malformed
  * shape must therefore throw with the offending path, never degrade to an
- * empty or partial workspace list.
+ * empty or partial workspace list. The discovery source is the
+ * pnpm-workspace.yaml globs + per-member package.json scripts.
  */
-import { assert, assertEquals, assertRejects } from '@std/assert';
-import { dirname, join } from '@std/path';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../tests/lib/vitest-asserts.ts';
+import { dirname, join } from 'node:path';
 import { emitterEntries, generatorEntries, readWorkspaces } from './workspace-tasks.ts';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 async function fixture(files: Record<string, string>): Promise<string> {
   // Canonicalize the root so the tests exercise the duplicate logic itself,
   // not a platform accident (macOS /var is a symlink to /private/var; Linux
   // /tmp is canonical — the symlink test passed for the wrong reason there).
-  const root = await Deno.realPath(await Deno.makeTempDir({ prefix: 'workspace-tasks-fixture-' }));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'workspace-tasks-fixture-')));
   for (const [relative, content] of Object.entries(files)) {
     const path = join(root, relative);
-    await Deno.mkdir(dirname(path), { recursive: true });
-    await Deno.writeTextFile(path, content);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, content);
   }
   return root;
 }
@@ -31,126 +35,112 @@ async function withFixture(
   try {
     await fn(root);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 }
 
-const rootConfig = (workspace: unknown) => JSON.stringify({ workspace }, null, 2);
-const workspaceConfig = (tasks: unknown) => JSON.stringify({ tasks }, null, 2);
+const workspaceManifest = (scripts: unknown) => JSON.stringify({ scripts }, null, 2);
 
-Deno.test('readWorkspaces: reads every member with its task graph', async () => {
+test('readWorkspaces: reads every member with its script graph', async () => {
   await withFixture(
     {
-      'deno.json': rootConfig(['./alpha', './beta']),
-      'alpha/deno.json': workspaceConfig({ 'generate:x': 'deno run --allow-read x.ts' }),
-      'beta/deno.json': JSON.stringify({}),
+      'pnpm-workspace.yaml': 'packages:\n  - packages/*\n',
+      'packages/alpha/package.json': workspaceManifest({
+        'generate:x': 'deno run --allow-read x.ts',
+      }),
+      'packages/beta/package.json': JSON.stringify({ name: 'beta' }),
     },
     async (root) => {
       const workspaces = await readWorkspaces(root);
-      assertEquals(
-        workspaces.map((ws) => ws.workspace),
-        ['alpha', 'beta'],
-      );
-      assertEquals(workspaces[0].tasks['generate:x'], 'deno run --allow-read x.ts');
-      assertEquals(workspaces[1].tasks, {});
+      expect(workspaces.map((ws) => ws.workspace)).toEqual(['packages/alpha', 'packages/beta']);
+      expect(workspaces[0].tasks['generate:x']).toEqual('deno run --allow-read x.ts');
+      expect(workspaces[1].tasks).toEqual({});
     },
   );
 });
 
-Deno.test('readWorkspaces: malformed root configuration fails closed', async () => {
+test('readWorkspaces: malformed pnpm-workspace.yaml fails closed', async () => {
   const cases: Array<[string, string]> = [
-    ['workspace missing', JSON.stringify({})],
-    ['workspace not an array', rootConfig('./alpha')],
-    ['workspace item not a string', rootConfig([1])],
-    ['workspace item empty', rootConfig([''])],
-    ['duplicate workspace', rootConfig(['./alpha', './alpha'])],
-    ['escaping the repository root', rootConfig(['../evil'])],
+    ['packages list missing', 'foo: bar\n'],
+    ['packages list empty', 'packages: []\n'],
+    ['empty packages entry', 'packages:\n  - packages/*\n  -\n'],
   ];
   for (const [label, config] of cases) {
-    await withFixture({ 'deno.json': config }, async (root) => {
-      await assertRejects(
+    await withFixture({ 'pnpm-workspace.yaml': config }, async (root) => {
+      await assertRejectsIncludes(
         () => readWorkspaces(root),
         Error,
-        label === 'workspace missing' ? 'workspace' : undefined,
+        label === 'packages list missing' ? 'packages' : undefined,
       );
     });
   }
 });
 
-Deno.test('readWorkspaces: broken workspaces fail closed with their path', async () => {
-  const cases: Array<[string, Record<string, string>]> = [
+test('readWorkspaces: broken workspaces fail closed with their path', async () => {
+  const cases: Array<[Record<string, string>]> = [
     [
-      'missing directory',
       {
-        'deno.json': rootConfig(['./alpha']),
+        'pnpm-workspace.yaml': 'packages:\n  - packages/alpha\n',
       },
     ],
     [
-      'missing deno.json',
       {
-        'deno.json': rootConfig(['./alpha']),
-        'alpha/.keep': '',
+        'pnpm-workspace.yaml': 'packages:\n  - packages/alpha\n',
+        'packages/alpha/.keep': '',
       },
     ],
     [
-      'invalid JSON',
       {
-        'deno.json': rootConfig(['./alpha']),
-        'alpha/deno.json': '{ not json',
+        'pnpm-workspace.yaml': 'packages:\n  - packages/alpha\n',
+        'packages/alpha/package.json': '{ not json',
       },
     ],
     [
-      'config not an object',
       {
-        'deno.json': rootConfig(['./alpha']),
-        'alpha/deno.json': '[]',
+        'pnpm-workspace.yaml': 'packages:\n  - packages/alpha\n',
+        'packages/alpha/package.json': '[]',
       },
     ],
     [
-      'tasks not an object',
       {
-        'deno.json': rootConfig(['./alpha']),
-        'alpha/deno.json': JSON.stringify({ tasks: [] }),
+        'pnpm-workspace.yaml': 'packages:\n  - packages/alpha\n',
+        'packages/alpha/package.json': JSON.stringify({ scripts: [] }),
       },
     ],
     [
-      'empty task name',
       {
-        'deno.json': rootConfig(['./alpha']),
-        'alpha/deno.json': JSON.stringify({ tasks: { '': 'deno run x.ts' } }),
+        'pnpm-workspace.yaml': 'packages:\n  - packages/alpha\n',
+        'packages/alpha/package.json': JSON.stringify({ scripts: { '': 'deno run x.ts' } }),
       },
     ],
     [
-      'command not a string',
       {
-        'deno.json': rootConfig(['./alpha']),
-        'alpha/deno.json': JSON.stringify({ tasks: { 'generate:x': 1 } }),
+        'pnpm-workspace.yaml': 'packages:\n  - packages/alpha\n',
+        'packages/alpha/package.json': JSON.stringify({ scripts: { 'generate:x': 1 } }),
       },
     ],
   ];
-  for (const [label, files] of cases) {
+  for (const [files] of cases) {
     await withFixture(files, async (root) => {
-      await assertRejects(() => readWorkspaces(root), Error, 'alpha');
-      void label;
+      await assertRejectsIncludes(() => readWorkspaces(root), Error, 'alpha');
     });
   }
 });
 
-Deno.test('readWorkspaces: duplicate detection uses canonical workspace identity', async () => {
+test('readWorkspaces: duplicate detection uses canonical workspace identity', async () => {
   const duplicateCases: string[][] = [
+    ['alpha', 'alpha'],
     ['./alpha', 'alpha'],
-    ['alpha', './alpha'],
     ['alpha', 'foo/../alpha'],
-    ['./alpha', 'foo/../alpha'],
   ];
   for (const members of duplicateCases) {
     await withFixture(
       {
-        'deno.json': rootConfig(members),
-        'alpha/deno.json': workspaceConfig({}),
+        'pnpm-workspace.yaml': `packages:\n  - ${members[0]}\n  - ${members[1]}\n`,
+        'alpha/package.json': workspaceManifest({}),
       },
       async (root) => {
-        await assertRejects(
+        await assertRejectsIncludes(
           () => readWorkspaces(root),
           Error,
           'duplicate workspace identity',
@@ -163,29 +153,26 @@ Deno.test('readWorkspaces: duplicate detection uses canonical workspace identity
   // canonical repository-relative form.
   await withFixture(
     {
-      'deno.json': rootConfig(['./alpha', 'beta']),
-      'alpha/deno.json': workspaceConfig({}),
-      'beta/deno.json': workspaceConfig({}),
+      'pnpm-workspace.yaml': 'packages:\n  - alpha\n  - beta\n',
+      'alpha/package.json': workspaceManifest({}),
+      'beta/package.json': workspaceManifest({}),
     },
     async (root) => {
       const workspaces = await readWorkspaces(root);
-      assertEquals(
-        workspaces.map((ws) => ws.workspace),
-        ['alpha', 'beta'],
-      );
+      expect(workspaces.map((ws) => ws.workspace)).toEqual(['alpha', 'beta']);
     },
   );
 });
 
-Deno.test('readWorkspaces: failure never degrades into a partial list', async () => {
+test('readWorkspaces: failure never degrades into a partial list', async () => {
   await withFixture(
     {
-      'deno.json': rootConfig(['./good', './broken']),
-      'good/deno.json': workspaceConfig({ 'generate:x': 'deno run --allow-read x.ts' }),
-      'broken/deno.json': '{ nope',
+      'pnpm-workspace.yaml': 'packages:\n  - good\n  - broken\n',
+      'good/package.json': workspaceManifest({ 'generate:x': 'deno run --allow-read x.ts' }),
+      'broken/package.json': '{ nope',
     },
     async (root) => {
-      await assertRejects(
+      await assertRejectsIncludes(
         () => readWorkspaces(root),
         Error,
         'broken',
@@ -195,11 +182,11 @@ Deno.test('readWorkspaces: failure never degrades into a partial list', async ()
   );
 });
 
-Deno.test('generator and emitter discovery derive from the task graph', async () => {
+test('generator and emitter discovery derive from the script graph', async () => {
   await withFixture(
     {
-      'deno.json': rootConfig(['./pkg']),
-      'pkg/deno.json': workspaceConfig({
+      'pnpm-workspace.yaml': 'packages:\n  - pkg\n',
+      'pkg/package.json': workspaceManifest({
         'generate:foo': 'deno run --allow-read --allow-write tools/generate-foo.ts',
         'check:foo': 'deno run --allow-read tools/generate-foo.ts --check',
         'emit:bar': 'deno run --allow-read tools/emit-bar.ts',
@@ -208,48 +195,52 @@ Deno.test('generator and emitter discovery derive from the task graph', async ()
     },
     async (root) => {
       const workspaces = await readWorkspaces(root);
-      assertEquals(generatorEntries(workspaces), [
+      expect(generatorEntries(workspaces)).toEqual([
         { workspace: 'pkg', taskKey: 'generate:foo', script: 'tools/generate-foo.ts' },
       ]);
-      assertEquals(emitterEntries(workspaces), [
+      expect(emitterEntries(workspaces)).toEqual([
         { workspace: 'pkg', taskKey: 'emit:bar', script: 'tools/emit-bar.ts' },
       ]);
     },
   );
 });
 
-Deno.test('generate-all and generator-gates share the canonical discovery', async () => {
+test('generate-all and generator-gates share the canonical discovery', async () => {
   for (const name of ['generate-all.ts', 'check-generator-gates.ts']) {
-    const source = await Deno.readTextFile(new URL(name, import.meta.url));
+    const source = await readFile(new URL(name, import.meta.url), 'utf8');
     if (!source.includes("from './workspace-tasks.ts'")) {
       throw new Error(`${name} must consume ./workspace-tasks.ts, not a private workspace list`);
     }
   }
 });
 
-Deno.test('readWorkspaces: symlinked members resolving to one directory are duplicates', async () => {
+test('readWorkspaces: symlinked members resolving to one directory are duplicates', async () => {
   await withFixture(
     {
-      'deno.json': rootConfig(['alpha', 'alias']),
-      'alpha/deno.json': workspaceConfig({}),
+      'pnpm-workspace.yaml': 'packages:\n  - alpha\n  - alias\n',
+      'alpha/package.json': workspaceManifest({}),
     },
     async (root) => {
-      await Deno.symlink(join(root, 'alpha'), join(root, 'alias'), { type: 'dir' });
-      await assertRejects(() => readWorkspaces(root), Error, 'duplicate workspace identity');
+      await symlink(join(root, 'alpha'), join(root, 'alias'), 'dir');
+      await assertRejectsIncludes(
+        () => readWorkspaces(root),
+        Error,
+        'duplicate workspace identity',
+      );
     },
   );
 });
 
-Deno.test('readWorkspaces: diagnostics use repository-relative paths', async () => {
+test('readWorkspaces: diagnostics use repository-relative paths', async () => {
   await withFixture(
     {
-      'deno.json': rootConfig(['alpha']),
+      'pnpm-workspace.yaml': 'packages:\n  - alpha\n',
     },
     async (root) => {
-      const error = await assertRejects(() => readWorkspaces(root), Error);
+      const error = await assertRejectsIncludes(() => readWorkspaces(root), Error);
       const message = (error as Error).message;
-      assertEquals(message.includes(root), false, `message leaks the checkout path: ${message}`);
-      assert(message.includes('alpha'), `message lacks the member path: ${message}`);
+      expect(message.includes(root), `message leaks the checkout path: ${message}`).toEqual(false);
+      expect(message.includes('alpha'), `message lacks the member path: ${message}`).toBeTruthy();
     },
   );
 });

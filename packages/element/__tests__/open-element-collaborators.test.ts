@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertNotStrictEquals, assertStrictEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { ElementParams } from '../src/open-element-params.ts';
 import { LifetimeScope } from '../src/internal/compiled/lifetime-scope.ts';
 import { attachFormInternals } from '../src/open-element-form.ts';
@@ -24,33 +24,33 @@ class ParamsHost {
   }
 }
 
-Deno.test('params: attribute parsed into reactive box', () => {
+test('params: attribute parsed into reactive box', () => {
   const host = new ParamsHost() as unknown as HTMLElement;
   (host as { getAttribute(name: string): string | null }).getAttribute = (name) =>
     name === 'params' ? '{"id":"7"}' : null;
   const params = new ElementParams();
-  assert(params.syncFromAttribute(host));
-  assertEquals(params.value, { id: '7' });
+  expect(params.syncFromAttribute(host)).toBeTruthy();
+  expect(params.value).toEqual({ id: '7' });
 });
 
-Deno.test('params: missing attribute is a no-op', () => {
+test('params: missing attribute is a no-op', () => {
   const host = new ParamsHost() as unknown as HTMLElement;
   const params = new ElementParams();
-  assert(!params.syncFromAttribute(host));
-  assertEquals(params.value, {});
+  expect(!params.syncFromAttribute(host)).toBeTruthy();
+  expect(params.value).toEqual({});
 });
 
-Deno.test('params: oversized attribute logs instead of throwing', () => {
+test('params: oversized attribute logs instead of throwing', () => {
   const host = new ParamsHost() as unknown as HTMLElement;
   (host as { getAttribute(name: string): string | null }).getAttribute = () =>
     `{"pad":"${'x'.repeat(64 * 1024)}"}`;
   const params = new ElementParams();
   // The guard throws OpenElementError internally; syncFromAttribute catches it.
-  assert(params.syncFromAttribute(host));
-  assertEquals(params.value, {});
+  expect(params.syncFromAttribute(host)).toBeTruthy();
+  expect(params.value).toEqual({});
 });
 
-Deno.test('params: non-string-map JSON warns and falls back to an empty object (#1036)', () => {
+test('params: non-string-map JSON warns and falls back to an empty object (#1036)', () => {
   // "null" / "[1,2]" / '{"a":1}' all JSON.parse cleanly but are not route
   // params; `params.id` on null throws a TypeError downstream. Reject anything
   // that is not a flat string→string map.
@@ -59,17 +59,17 @@ Deno.test('params: non-string-map JSON warns and falls back to an empty object (
     (host as { getAttribute(name: string): string | null }).getAttribute = (name) =>
       name === 'params' ? bad : null;
     const params = new ElementParams();
-    assert(params.syncFromAttribute(host));
-    assertEquals(params.value, {}, `expected {} for ${bad}`);
+    expect(params.syncFromAttribute(host)).toBeTruthy();
+    expect(params.value, `expected {} for ${bad}`).toEqual({});
   }
 });
 
-Deno.test('params: setter copies, getter returns the copy', () => {
+test('params: setter copies, getter returns the copy', () => {
   const params = new ElementParams();
   const source = { a: '1' };
   params.value = source;
   source.a = 'mutated';
-  assertEquals(params.value, { a: '1' });
+  expect(params.value).toEqual({ a: '1' });
 });
 
 // ─── LifetimeScope (#1458) ───────────────────────────────────────────
@@ -80,16 +80,19 @@ const KERNEL_PROGRAM = testProgram({
   parts: [{ k: 'text', index: 0, signal: 'message' }],
 });
 
-Deno.test('lifecycle: dispose aborts the scope signal', () => {
+test('lifecycle: dispose aborts the scope signal', () => {
   const lifecycle = new LifetimeScope();
   const first = lifecycle.signal;
   lifecycle.dispose();
-  assert(first.aborted, 'the signal held by the disposed scope is aborted');
-  assert(lifecycle.signal.aborted, 'the disposed scope keeps reporting an aborted signal');
-  assert(!lifecycle.active);
+  expect(first.aborted, 'the signal held by the disposed scope is aborted').toBeTruthy();
+  expect(
+    lifecycle.signal.aborted,
+    'the disposed scope keeps reporting an aborted signal',
+  ).toBeTruthy();
+  expect(!lifecycle.active).toBeTruthy();
 });
 
-Deno.test('lifecycle: a kernel reconnect replaces the scope and starts a fresh live signal', () => {
+test('lifecycle: a kernel reconnect replaces the scope and starts a fresh live signal', () => {
   const document = new TestDocument();
   const element = document.createElement('oe-collaborators-kernel');
   const message = signal('first');
@@ -108,28 +111,31 @@ Deno.test('lifecycle: a kernel reconnect replaces the scope and starts a fresh l
   // different instance — the current signal of a disposed scope is itself
   // aborted (lifetime-scope.ts:42), so "aborted" alone cannot identify it.
   const replacement = kernel.lifecycle;
-  assert(activation.disposed, 'disconnect disposes the activation scope');
-  assert(connectedSignal.aborted, 'the disposed activation signal is aborted');
-  assert(!replacement.disposed, 'the replacement scope is live');
-  assert(!replacement.signal.aborted);
-  assertNotStrictEquals(replacement, activation);
-  assertNotStrictEquals(replacement.signal, connectedSignal);
+  expect(activation.disposed, 'disconnect disposes the activation scope').toBeTruthy();
+  expect(connectedSignal.aborted, 'the disposed activation signal is aborted').toBeTruthy();
+  expect(!replacement.disposed, 'the replacement scope is live').toBeTruthy();
+  expect(!replacement.signal.aborted).toBeTruthy();
+  expect(replacement).not.toBe(activation);
+  expect(replacement.signal).not.toBe(connectedSignal);
 
   // Reconnect reuses the replacement scope — connect() never swaps the scope
   // (kernel.ts:177) — so the live signal observed after disconnect is the one
   // the reconnected activation runs against, and it is still un-aborted.
   kernel.connect();
-  assertStrictEquals(kernel.lifecycle, replacement);
-  assert(connectedSignal.aborted, 'the aborted signal stays aborted across reconnect');
-  assert(!kernel.lifecycle.signal.aborted);
+  expect(kernel.lifecycle).toBe(replacement);
+  expect(connectedSignal.aborted, 'the aborted signal stays aborted across reconnect').toBeTruthy();
+  expect(!kernel.lifecycle.signal.aborted).toBeTruthy();
 
   kernel.disconnect();
-  assert(replacement.disposed, 'disconnect disposes the scope the reconnect activated');
-  assertNotStrictEquals(kernel.lifecycle, replacement);
-  assert(!kernel.lifecycle.signal.aborted, 'the third scope starts live');
+  expect(
+    replacement.disposed,
+    'disconnect disposes the scope the reconnect activated',
+  ).toBeTruthy();
+  expect(kernel.lifecycle).not.toBe(replacement);
+  expect(!kernel.lifecycle.signal.aborted, 'the third scope starts live').toBeTruthy();
 });
 
-Deno.test('lifecycle: setTimeout is cleared on dispose', async () => {
+test('lifecycle: setTimeout is cleared on dispose', async () => {
   const lifecycle = new LifetimeScope();
   let fired = false;
   lifecycle.setTimeout(() => {
@@ -137,27 +143,27 @@ Deno.test('lifecycle: setTimeout is cleared on dispose', async () => {
   }, 10);
   lifecycle.dispose();
   await new Promise((resolve) => setTimeout(resolve, 30));
-  assert(!fired, 'timer must be cleared on dispose');
+  expect(!fired, 'timer must be cleared on dispose').toBeTruthy();
 });
 
-Deno.test('lifecycle: setTimeout fires when not disposed', async () => {
+test('lifecycle: setTimeout fires when not disposed', async () => {
   const lifecycle = new LifetimeScope();
   let fired = false;
   lifecycle.setTimeout(() => {
     fired = true;
   }, 5);
   await new Promise((resolve) => setTimeout(resolve, 30));
-  assert(fired);
+  expect(fired).toBeTruthy();
 });
 
 // ─── attachFormInternals (#904) ──────────────────────────────────────
 
-Deno.test('form: attaches internals only when opted in', () => {
+test('form: attaches internals only when opted in', () => {
   const fakeInternals = {} as ElementInternals;
   const withAttach = {
     attachInternals: () => fakeInternals,
   };
-  assertEquals(attachFormInternals(withAttach, { formAssociated: true }), fakeInternals);
-  assertEquals(attachFormInternals(withAttach, {}), undefined);
-  assertEquals(attachFormInternals({}, { formAssociated: true }), undefined);
+  expect(attachFormInternals(withAttach, { formAssociated: true })).toEqual(fakeInternals);
+  expect(attachFormInternals(withAttach, {})).toEqual(undefined);
+  expect(attachFormInternals({}, { formAssociated: true })).toEqual(undefined);
 });

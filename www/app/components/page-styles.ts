@@ -4,8 +4,8 @@
  * Scope: docs typography, prose width, code, tables, callouts, and simple
  * content navigation. Product components still come from @openelement/ui.
  */
-import '@openelement/site-ui/open-reading-shell.tsx';
-import '@openelement/site-ui/open-artifact-panel.tsx';
+import '#site-ui/open-reading-shell.tsx';
+import '#site-ui/open-artifact-panel.tsx';
 import '../islands/open-page-rail.tsx';
 
 /**
@@ -31,6 +31,49 @@ export const mastheadStyles = `
     background-size: 72px 72px;
     mask-image: linear-gradient(180deg, black, transparent);
   }
+`;
+
+/**
+ * Shared eyebrow overline: mono uppercase kicker with the brand rule. Used by
+ * the blog index, contributing, and docs landing routes, which interpolate it
+ * into their own route sheets.
+ */
+export const eyebrowStyles = `
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--violet-8);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-00);
+    font-weight: var(--font-weight-8);
+    letter-spacing: 0.29em;
+    text-transform: uppercase;
+  }
+  /* Subject-side :lang — @scope'd sheets cannot match the html[lang] ancestor. */
+  .eyebrow:lang(zh) {
+    text-transform: none;
+    letter-spacing: 0.08em;
+  }
+
+  .eyebrow::before {
+    content: "";
+    width: 2rem;
+    height: 2px;
+    background: var(--brand);
+  }
+`;
+
+/**
+ * Shared crumb row: mono overline breadcrumb. The current-page ink is fixed
+ * here; link ink and hover belong to the caller (only some crumbs link).
+ */
+export const crumbStyles = `
+  .crumb { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--size-2); margin: 0 0 var(--size-4); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-size-00); font-weight: var(--font-weight-8); letter-spacing: 0.1em; text-transform: uppercase; }
+  /* No .crumb-sep ink: the 55% tint of --text-muted measured 2.62:1 on the
+     light base (2.52:1 dark); the separator carries the .crumb --text-muted
+     (7.74:1 light, 6.09:1 dark) instead. */
+  .crumb .crumb-current { color: var(--violet-8); }
 `;
 
 export const pageStyles = `

@@ -1,20 +1,23 @@
 /**
  * Generate the site blog feed (www/dist/blog/rss.xml, #1441).
- * Runs in `deno task site:build` right after the sitemap: the items are the
+ * Runs in `pnpm run site:build` right after the sitemap: the items are the
  * same source-loaded blog collection the /blog routes and the sitemap
  * enumerate — drafts dropped, newest first — never scanned out of built
  * output and never hand-synced.
  * Fails closed: a post that cannot carry a permalink or an RFC 822 date stops
  * the build instead of dropping out of the feed.
  */
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadCollectionData } from '../lib/content.ts';
 import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
 import { feedFailures, renderBlogFeedXml, SITE_FEED_PATH } from './lib/site-rss.ts';
+import { writeFile } from 'node:fs/promises';
+import process from 'node:process';
 
 export const SITE_DIST = 'www/dist';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const siteRoot = join(repoRoot, 'www', '');
 
 export async function generateSiteRss(dist = join(repoRoot, SITE_DIST)): Promise<string> {
@@ -24,10 +27,10 @@ export async function generateSiteRss(dist = join(repoRoot, SITE_DIST)): Promise
   if (failures.length > 0) {
     console.error('site rss generation failed:');
     for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   const feedPath = join(dist, SITE_FEED_PATH);
-  await Deno.writeTextFile(feedPath, renderBlogFeedXml(posts));
+  await writeFile(feedPath, renderBlogFeedXml(posts));
   return feedPath;
 }
 

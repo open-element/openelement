@@ -172,12 +172,12 @@ function assertStyleTag(attributes: string, css: string, context: string): strin
  * CSS blacklist (assertStyleTag). The assertion is the whole contract — it
  * throws on the first unsafe or malformed element and returns nothing.
  *
- * Structure discovery is deliberately local and strict: the previous
- * complete-tag regex silently skipped unterminated `<style ...` openings,
- * which let an unclosed element carry `@import` past the blacklist. This
- * scanner owns ONLY raw-text boundary detection (quote-aware opening tag,
- * real `>`/`</style>` boundaries, EOF). CSS policy stays in the one
- * canonical validator below.
+ * Structure discovery is deliberately local and strict: an unterminated
+ * `<style ...` opening is treated as a raw-text boundary (not assumed to be
+ * a complete tag), so an unclosed element cannot carry `@import` past the
+ * blacklist. This scanner owns ONLY raw-text boundary detection (quote-aware
+ * opening tag, real `>`/`</style>` boundaries, EOF). CSS policy stays in the
+ * one canonical validator below.
  */
 export function assertTrustedHeadHtml(html: string, context: string): void {
   const lower = html.toLowerCase();

@@ -2,11 +2,10 @@
  * @openelement/router/internal/router/client-router - URLPattern/RouteTable client router.
  *
  * Supports history (pushState), hash, and auto-detection modes.
- * Alpha.9 authority: URLPattern owns pathname grammar and RouteTable owns
- * declaration order, separate query/captures, and HTTP policy.
- *
- * Alpha.9 removes client-local route grammars and compatibility matchers so
- * browser navigation and the other route consumers share one semantic owner.
+ * URLPattern owns pathname grammar; RouteTable owns declaration order,
+ * separate query/captures, and HTTP policy. There are no client-local route
+ * grammars or compatibility matchers: browser navigation and the other route
+ * consumers share one semantic owner.
  */
 import { NavigationState, type NavigationTicket } from './navigation-state.ts';
 import { type RouteMatch, type RouteRecord, RouteTable } from './route-table.ts';
@@ -72,7 +71,7 @@ function resolveMode(mode: RouterMode): 'history' | 'hash' {
   return mode;
 }
 
-/** Match a route through the canonical Alpha.9 RouteTable. */
+/** Match a route through the canonical RouteTable. */
 export function matchRoute(
   pathname: string,
   search: string,

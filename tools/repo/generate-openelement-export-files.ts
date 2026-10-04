@@ -1,29 +1,29 @@
 /**
  * Generates packages/router/src/vite/generated-export-files.ts from the
- * "exports" maps declared in each package deno.json.
+ * "exports" maps declared in each package package.json.
  *
  * OPENELEMENT_EXPORT_FILES used to be a
  * hand-maintained copy of those export maps, which drifted (e.g. content's
- * nav-data was renamed to write-json in its deno.json but never updated in
- * the resolver). This script makes deno.json the single source of truth.
+ * nav-data was renamed to write-json in its manifest but never updated in
+ * the resolver). This script makes package.json the single source of truth.
  *
  * Usage:
- *   deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts
+ *   node tools/repo/generate-openelement-export-files.ts
  *     -> (re)write the generated file and format it.
- *   deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts --check
+ *   node tools/repo/generate-openelement-export-files.ts --check
  *     -> regenerate, format, and fail (exit 1) if the committed file is stale.
  */
 
+import { readFile, readdir, writeFile } from 'node:fs/promises';
+import process from 'node:process';
+import { commandOutput } from './node-command.ts';
+
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
-  return JSON.parse(await Deno.readTextFile(path)) as T;
+  return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
 interface PackageExports {
   [subpath: string]: string;
-}
-
-interface RootConfig {
-  workspace?: unknown;
 }
 
 interface PackageConfig {
@@ -34,19 +34,10 @@ const REPO_ROOT = new URL('../../', import.meta.url).pathname;
 const TARGET = `${REPO_ROOT}packages/router/src/vite/generated-export-files.ts`;
 
 async function resolverPackages(): Promise<string[]> {
-  const rootConfig = await readJson<RootConfig>(`${REPO_ROOT}deno.json`);
-  if (!Array.isArray(rootConfig.workspace)) {
-    throw new Error('deno.json workspace must be an array of package paths');
-  }
-
-  return rootConfig.workspace
-    .filter((entry: unknown) => typeof entry === 'string' && entry.startsWith('./packages/'))
-    .map((entry: unknown) => {
-      if (typeof entry !== 'string' || !/^\.\/packages\/[^/]+$/u.test(entry)) {
-        throw new Error(`unsupported workspace package path: ${String(entry)}`);
-      }
-      return entry.slice('./packages/'.length);
-    })
+  const entries = await readdir(`${REPO_ROOT}packages`, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map((entry) => entry.name)
     .sort();
 }
 
@@ -55,7 +46,7 @@ function stripLeadingSlash(value: string): string {
 }
 
 async function readPackageExports(pkg: string): Promise<PackageExports> {
-  const path = `${REPO_ROOT}packages/${pkg}/deno.json`;
+  const path = `${REPO_ROOT}packages/${pkg}/package.json`;
   const raw = await readJson<PackageConfig>(path);
   const exportsField = raw.exports;
 
@@ -103,19 +94,17 @@ function render(map: Record<string, PackageExports>): string {
 }
 
 async function runFormatter(target: string): Promise<void> {
-  // oxfmt is the repository formatter (A2 engine swap); the binary comes
-  // from the deno-installed root node_modules (pinned in deno.json imports).
+  // oxfmt is the repository formatter; the binary comes from the
+  // pnpm-installed root node_modules.
   const oxfmt = new URL('../../node_modules/.bin/oxfmt', import.meta.url).pathname;
-  const cmd = new Deno.Command(oxfmt, { args: [target] });
-  const status = await cmd.output();
+  const status = await commandOutput(oxfmt, { args: [target] });
   if (!status.success) {
     throw new Error(`oxfmt failed on ${target}`);
   }
 }
 
 async function gitDiffIsEmpty(target: string): Promise<boolean> {
-  const cmd = new Deno.Command('git', { args: ['diff', '--quiet', '--', target] });
-  const status = await cmd.output();
+  const status = await commandOutput('git', { args: ['diff', '--quiet', '--', target] });
   return status.code === 0;
 }
 
@@ -124,21 +113,20 @@ async function main(args: string[]): Promise<void> {
   const map = await buildExportFiles();
   const source = render(map);
 
-  await Deno.writeTextFile(TARGET, source);
+  await writeFile(TARGET, source, 'utf8');
   await runFormatter(TARGET);
 
   if (checkOnly) {
     const clean = await gitDiffIsEmpty(TARGET);
     if (!clean) {
-      const diff = new Deno.Command('git', {
+      const out = await commandOutput('git', {
         args: ['--no-pager', 'diff', '--', TARGET],
       });
-      const out = await diff.output();
       console.error('export-files sync check failed: generated file is stale.');
       console.error(new TextDecoder().decode(out.stdout));
-      Deno.exit(1);
+      process.exit(1);
     }
-    console.log('export-files sync check passed (generated file matches deno.json exports).');
+    console.log('export-files sync check passed (generated file matches package.json exports).');
     return;
   }
 
@@ -146,5 +134,5 @@ async function main(args: string[]): Promise<void> {
 }
 
 if (import.meta.main) {
-  await main(Deno.args);
+  await main(process.argv.slice(2));
 }

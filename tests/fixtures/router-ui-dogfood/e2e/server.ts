@@ -7,22 +7,27 @@
  * cli/start prove in CI.
  *
  * Usage:
- *   deno run --allow-read --allow-env --allow-net server.ts --port 4197 --dir ../dist
+ *   node server.ts --port 4197 --dir ../dist
  */
 
+import { serve } from '@hono/node-server';
+import process from 'node:process';
 import { resolve } from 'node:path';
 import { dispatchRequest } from '../../../../packages/router/src/vite/internal/static-serve.ts';
 
 const args: Record<string, string> = {};
-for (let i = 0; i < Deno.args.length; i += 2) {
-  if (Deno.args[i].startsWith('--')) args[Deno.args[i].slice(2)] = Deno.args[i + 1] ?? '';
+const cliArgs = process.argv.slice(2);
+for (let i = 0; i < cliArgs.length; i += 2) {
+  if (cliArgs[i].startsWith('--')) args[cliArgs[i].slice(2)] = cliArgs[i + 1] ?? '';
 }
 
 const PORT = Number(args.port ?? '4197');
-const ROOT = resolve(Deno.cwd(), args.dir ?? '../dist');
+const ROOT = resolve(process.cwd(), args.dir ?? '../dist');
 
-Deno.serve({ port: PORT, hostname: '127.0.0.1' }, (request) =>
-  dispatchRequest(request, { distDir: ROOT, serverMod: null }),
-);
+serve({
+  port: PORT,
+  hostname: '127.0.0.1',
+  fetch: (request) => dispatchRequest(request, { distDir: ROOT, serverMod: null }),
+});
 
 console.log(`ui-dogfood fixture server -> http://127.0.0.1:${PORT} (root: ${ROOT})`);

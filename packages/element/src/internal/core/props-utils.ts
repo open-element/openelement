@@ -1,8 +1,9 @@
 /**
  * props-utils.ts - Shared prop collection utility (#621).
  *
- * Single implementation of public-prop extraction used by both
- * defineElement (element package) and definePage (app package).
+ * Single implementation of public-prop extraction backing the element
+ * package's public `collectPublicProps` export and the page-prop projection
+ * surface shared with the router's `definePage` authoring API.
  * Filters internal `__openElement` prefixed keys and uses Reflect.get
  * for safe access to inherited getters.
  *
@@ -23,11 +24,10 @@ import { formatError } from './errors.ts';
 const log = createLogger('props-utils');
 
 /**
- * Framework-internal own fields of an OpenElement instance that are not user
- * props (#1037): the signal registry (a Map) and ElementInternals. Both are
- * own-enumerable (the constructor assigns `_internals` unconditionally, so the
- * key exists even when undefined), so without filtering they leak into
- * collected props and serialize as garbage attributes
+ * Framework-internal keys that are not user props (#1037), filtered as a
+ * defensive fail-safe: if a host instance ever carries an own-enumerable
+ * framework bookkeeping field (a signal registry, ElementInternals), it must
+ * not leak into collected props and serialize as a garbage attribute
  * (`signal-registry="[object Map]"`).
  */
 const INTERNAL_HOST_FIELDS = new Set(['signalRegistry', '_internals']);

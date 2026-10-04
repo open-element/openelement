@@ -1,6 +1,6 @@
 /**
  * /login route logic (v0.44): email+password sign-in (#983) plus optional
- * OAuth providers (#998). Plain module so Deno tests never evaluate the
+ * OAuth providers (#998). Plain module so vitest tests never evaluate the
  * compiled page class; the route module (app/routes/login.tsx) is the thin
  * wrapper.
  *

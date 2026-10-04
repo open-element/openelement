@@ -9,42 +9,38 @@
  * in the repository differs from this string. There is no second spelling to
  * drift.
  *
- * This module is deliberately side-effect free (no top-level CLI execution, no
- * Deno APIs): it is imported by the site build as well as by the CLI itself.
+ * This module is deliberately side-effect free (no top-level CLI execution):
+ * it is imported by the site build as well as by the CLI itself.
  */
 
 /** The npm specifier the generator is published under. */
-export const CREATE_PACKAGE_SPECIFIER = 'npm:@openelement/create';
+export const CREATE_PACKAGE_SPECIFIER = '@openelement/create';
 
 /** The dist-tag the documented install resolves; the exact version is registry truth. */
 export const CREATE_INSTALL_TAG = 'alpha';
-
-/**
- * Deno permissions the bootstrap needs. Owner ruling 2026-09-21: the
- * documented command uses bare `-A` — the consumer scaffolds their own
- * project, and the scoped-permission form reads as noise (the same ruling
- * narrowed the `check-no-allow-all` tripwire to an exact-line exemption for
- * this command). `--minimum-dependency-age 0` is a functional footnote kept
- * in prose where needed, not part of the documented shape.
- */
-export const CREATE_INSTALL_PERMISSIONS: readonly string[] = [String.fromCharCode(45, 65)];
 
 /** Placeholder the usage text and the docs use in place of a project name. */
 export const CREATE_PROJECT_PLACEHOLDER = '<project-name>';
 
 /**
- * Build the canonical install command for `projectName`.
+ * The documented install command shapes, all verified against the published
+ * two-bin artifact (bins `openelement-create` and `create-openelement`, both
+ * `src/cli.js`; npm 11 / pnpm 12):
+ *   - canonical: `npm exec <pkg>@<tag> -- <name>`
+ *   - short form: `npx <pkg>@<tag> <name>`
+ *   - pnpm: `pnpm dlx --package=<pkg>@<tag> openelement-create <name>` — the
+ *     explicit `--package` plus bin is required because the packed package
+ *     ships two bins, so a bare `pnpm dlx <pkg>` cannot resolve one (and no
+ *     package named `create-openelement` exists on the registry).
  *
- * `projectName` defaults to the placeholder so callers that document the
- * command shape (usage output) and callers that show a concrete example share
- * one builder and therefore one flag list.
+ * Owner ruling 2026-10-03: the former Deno bootstrap (`deno run` of the npm
+ * specifier) is retired with the Deno consumer surface; the generator is
+ * invoked through plain Node tooling.
  */
 export function createInstallCommand(
   projectName: string = CREATE_PROJECT_PLACEHOLDER,
   options: { tag?: string } = {},
 ): string {
   const tag = options.tag ?? CREATE_INSTALL_TAG;
-  return `deno run ${CREATE_INSTALL_PERMISSIONS.join(
-    ' ',
-  )} ${CREATE_PACKAGE_SPECIFIER}@${tag} ${projectName}`;
+  return `npm exec ${CREATE_PACKAGE_SPECIFIER}@${tag} -- ${projectName}`;
 }

@@ -10,6 +10,7 @@
  */
 
 import { expect, type Page, test } from '@playwright/test';
+import { getShadowRootCount } from './helpers.js';
 
 async function waitForLayoutReady(page: Page): Promise<void> {
   await page.waitForFunction(() => {
@@ -92,14 +93,7 @@ test.describe('Island Script Loading', () => {
     await page.waitForLoadState('networkidle');
     await waitForLayoutReady(page);
 
-    const upgradedCount = await page.evaluate(() => {
-      let count = 0;
-      const all = document.querySelectorAll('*');
-      for (const el of all) {
-        if (el.shadowRoot) count++;
-      }
-      return count;
-    });
+    const upgradedCount = await getShadowRootCount(page);
     expect(upgradedCount).toBeGreaterThan(0);
   });
 });

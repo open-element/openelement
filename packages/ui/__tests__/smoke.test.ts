@@ -8,7 +8,7 @@
  * compiled program, not a runtime `tagName` export, and the registration
  * table is owned by register.ts.
  */
-import { assertEquals, assertExists } from '@std/assert';
+import { expect, test } from 'vitest';
 
 const EXPECTED_TAGS = [
   'open-card',
@@ -23,18 +23,15 @@ const EXPECTED_TAGS = [
   'open-tabs',
 ];
 
-Deno.test('open-ui - index exports manifest (WC Package Protocol)', async () => {
+test('open-ui - index exports manifest (WC Package Protocol)', async () => {
   const mod = await import('../src/index.ts');
-  assertExists(mod.manifest, 'manifest export should exist');
-  assertEquals(typeof mod.manifest, 'object');
-  assertEquals(mod.manifest.packageName, '@openelement/ui');
-  assertEquals(
-    mod.manifest.declarations.map((decl) => decl.tagName),
-    EXPECTED_TAGS,
-  );
+  expect(mod.manifest, 'manifest export should exist').toEqual(expect.anything());
+  expect(typeof mod.manifest).toEqual('object');
+  expect(mod.manifest.packageName).toEqual('@openelement/ui');
+  expect(mod.manifest.declarations.map((decl) => decl.tagName)).toEqual(EXPECTED_TAGS);
 });
 
-Deno.test('open-ui - explicit registration is complete and idempotent', async () => {
+test('open-ui - explicit registration is complete and idempotent', async () => {
   const { registerOpenUi } = await import('../src/index.ts');
   const definitions = new Map<string, CustomElementConstructor>();
   const registry = {
@@ -44,11 +41,11 @@ Deno.test('open-ui - explicit registration is complete and idempotent', async ()
 
   registerOpenUi(registry);
   registerOpenUi(registry);
-  assertEquals(definitions.size, 10);
-  assertEquals([...definitions.keys()], EXPECTED_TAGS);
+  expect(definitions.size).toEqual(10);
+  expect([...definitions.keys()]).toEqual(EXPECTED_TAGS);
 });
 
-Deno.test('open-ui - every component module exports its class', async () => {
+test('open-ui - every component module exports its class', async () => {
   const expectedExports: Record<string, string> = {
     'open-badge': 'OpenBadge',
     'open-button': 'OpenButton',
@@ -63,11 +60,13 @@ Deno.test('open-ui - every component module exports its class', async () => {
   };
   for (const [name, exportName] of Object.entries(expectedExports)) {
     const mod = await import(`../src/${name}.tsx`);
-    assertExists(mod[exportName], `${name} should export ${exportName}`);
+    expect(mod[exportName], `${name} should export ${exportName}`).toEqual(expect.anything());
   }
 });
 
-Deno.test('open-ui - open-props-tokens exports openPropsTokenSheet', async () => {
+test('open-ui - open-props-tokens exports openPropsTokenSheet', async () => {
   const mod = await import('../src/open-props-tokens.ts');
-  assertExists(mod.openPropsTokenSheet, 'openPropsTokenSheet should be exported');
+  expect(mod.openPropsTokenSheet, 'openPropsTokenSheet should be exported').toEqual(
+    expect.anything(),
+  );
 });

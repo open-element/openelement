@@ -1,7 +1,7 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { OpenElementThemeManager } from '../src/open-element-theme.ts';
 
-Deno.test('theme manager disconnects its observer with the last host (#1099)', () => {
+test('theme manager disconnects its observer with the last host (#1099)', () => {
   const previousDocument = globalThis.document;
   const previousObserver = globalThis.MutationObserver;
   let created = 0;
@@ -27,13 +27,13 @@ Deno.test('theme manager disconnects its observer with the last host (#1099)', (
       removeAttribute: () => {},
     } as unknown as HTMLElement;
     manager.connect(host);
-    assertEquals(created, 1);
+    expect(created).toEqual(1);
     manager.disconnect(host);
-    assertEquals(disconnected, 1);
+    expect(disconnected).toEqual(1);
     manager.connect(host);
-    assertEquals(created, 2);
+    expect(created).toEqual(2);
     manager.disconnect(host);
-    assertEquals(disconnected, 2);
+    expect(disconnected).toEqual(2);
   } finally {
     if (previousDocument === undefined) delete (globalThis as { document?: unknown }).document;
     else {

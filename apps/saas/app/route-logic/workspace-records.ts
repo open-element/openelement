@@ -1,5 +1,5 @@
 /**
- * /workspace-records route logic (v0.44): plain module so Deno tests never
+ * /workspace-records route logic (v0.44): plain module so vitest tests never
  * evaluate the compiled page class.
  */
 import { type LoaderContext, type PagePropsContext, redirect } from '@openelement/router';

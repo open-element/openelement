@@ -1,4 +1,6 @@
-import { assert, assertEquals } from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
+import { readdirSync } from 'node:fs';
 import ts from 'typescript';
 import {
   CompiledElementError,
@@ -36,10 +38,10 @@ const PROTOCOL_BASE = [
 
 async function sourceFiles(root: URL): Promise<URL[]> {
   const files: URL[] = [];
-  for await (const entry of Deno.readDir(root)) {
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
     const url = new URL(entry.name, root);
-    if (entry.isDirectory) files.push(...(await sourceFiles(new URL(`${url.href}/`))));
-    if (entry.isFile && entry.name.endsWith('.ts')) files.push(url);
+    if (entry.isDirectory()) files.push(...(await sourceFiles(new URL(`${url.href}/`))));
+    if (entry.isFile() && entry.name.endsWith('.ts')) files.push(url);
   }
   return files.sort((a, b) => a.href.localeCompare(b.href));
 }
@@ -65,15 +67,15 @@ function moduleSpecifiers(source: string, file: URL): string[] {
   return specifiers;
 }
 
-Deno.test('ADR-0148 semantic core imports stay bundler-neutral and inside the core', async () => {
+test('ADR-0148 semantic core imports stay bundler-neutral and inside the core', async () => {
   const files = await sourceFiles(CORE_ROOT);
-  assert(files.length > 0, 'semantic core must contain source files');
+  expect(files.length > 0, 'semantic core must contain source files').toBeTruthy();
 
   for (const file of files) {
-    const source = await Deno.readTextFile(file);
+    const source = await readFile(file, 'utf8');
     for (const specifier of moduleSpecifiers(source, file)) {
       if (!specifier.startsWith('.')) {
-        assertEquals(specifier, 'typescript', `${file.pathname} external import`);
+        expect(specifier, `${file.pathname} external import`).toEqual('typescript');
         continue;
       }
       const resolved = new URL(specifier, file);
@@ -81,45 +83,44 @@ Deno.test('ADR-0148 semantic core imports stay bundler-neutral and inside the co
       const isCanonicalProtocol =
         resolved.href === PROTOCOL_PROGRAM.href ||
         PROTOCOL_BASE.some((base) => base.url.href === resolved.href);
-      assert(
+      expect(
         insideCore || isCanonicalProtocol,
         `${file.pathname} escapes semantic core through ${specifier}`,
-      );
+      ).toBeTruthy();
     }
 
-    assert(
+    expect(
       !/PluginContext|moduleGraph|hotUpdate|devServer/.test(source),
       `${file.pathname} accepts integration lifecycle state`,
-    );
+    ).toBeTruthy();
   }
 
   // The allowed outside modules must stay neutral: no runtime, Vite, or Node
   // capability may ride into the semantic core. The Part Program artifact's
   // only edges are the import-free canonical protocol base owners.
-  const protocolSource = await Deno.readTextFile(PROTOCOL_PROGRAM);
-  assertEquals(
+  const protocolSource = await readFile(PROTOCOL_PROGRAM, 'utf8');
+  expect(
     moduleSpecifiers(protocolSource, PROTOCOL_PROGRAM),
-    ['./errors.ts', './forbidden-sinks.ts', './void-tags.ts'],
     'canonical Part Program protocol may only import the protocol base owners (ADR-0148)',
-  );
+  ).toEqual(['./errors.ts', './forbidden-sinks.ts', './void-tags.ts']);
   for (const { url, label } of PROTOCOL_BASE) {
-    const source = await Deno.readTextFile(url);
-    assertEquals(moduleSpecifiers(source, url), [], `canonical ${label} must stay import-free`);
+    const source = await readFile(url, 'utf8');
+    expect(moduleSpecifiers(source, url), `canonical ${label} must stay import-free`).toEqual([]);
   }
   for (const [source, label] of [
     [protocolSource, 'Part Program protocol'],
     ...(await Promise.all(
-      PROTOCOL_BASE.map(async ({ url, label }) => [await Deno.readTextFile(url), label] as const),
+      PROTOCOL_BASE.map(async ({ url, label }) => [await readFile(url, 'utf8'), label] as const),
     )),
   ] as const) {
-    assert(
+    expect(
       !/PluginContext|moduleGraph|hotUpdate|devServer|Deno\./.test(source),
       `${label} must not accept integration or host state`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('ADR-0148 semantic output and diagnostics are stable for canonical inputs', () => {
+test('ADR-0148 semantic output and diagnostics are stable for canonical inputs', () => {
   const source = `
 import { element, OpenElement, property } from '@openelement/element';
 @element('oe-deterministic')
@@ -130,10 +131,10 @@ export default class DeterministicElement extends OpenElement {
 }`;
   const file = '/canonical/app/islands/deterministic.tsx';
   const outputs = Array.from({ length: 3 }, () => compileElementProgram(source, file));
-  assertEquals(outputs[1].code, outputs[0].code);
-  assertEquals(outputs[2].code, outputs[0].code);
-  assertEquals(JSON.stringify(outputs[1].program), JSON.stringify(outputs[0].program));
-  assertEquals(JSON.stringify(outputs[2].program), JSON.stringify(outputs[0].program));
+  expect(outputs[1].code).toEqual(outputs[0].code);
+  expect(outputs[2].code).toEqual(outputs[0].code);
+  expect(JSON.stringify(outputs[1].program)).toEqual(JSON.stringify(outputs[0].program));
+  expect(JSON.stringify(outputs[2].program)).toEqual(JSON.stringify(outputs[0].program));
 
   const invalid = `${source}\nconst runtimeTopLevel = Date.now();`;
   const diagnostics = Array.from({ length: 3 }, () => {
@@ -141,10 +142,10 @@ export default class DeterministicElement extends OpenElement {
       compileElementProgram(invalid, file);
       throw new Error('invalid source unexpectedly compiled');
     } catch (error) {
-      assert(error instanceof CompiledElementError);
+      expect(error instanceof CompiledElementError).toBeTruthy();
       return JSON.stringify(error.diagnostics);
     }
   });
-  assertEquals(diagnostics[1], diagnostics[0]);
-  assertEquals(diagnostics[2], diagnostics[0]);
+  expect(diagnostics[1]).toEqual(diagnostics[0]);
+  expect(diagnostics[2]).toEqual(diagnostics[0]);
 });

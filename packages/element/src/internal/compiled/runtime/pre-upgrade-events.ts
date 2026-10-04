@@ -51,7 +51,7 @@ const SUPPORTED_PRE_UPGRADE_EVENTS = new Set([
  * large island page (8 event types x 8 pending islands) while keeping the
  * queue provably finite in a long-lived SPA.
  *
- * ponytail: fixed cap, not LRU — evicting pending replays would silently
+ * The cap is fixed, not LRU — evicting pending replays would silently
  * drop pre-hydration clicks; upgrade path is per-pending-root local capture
  * if a page ever legitimately exceeds this bound (no such page known).
  */

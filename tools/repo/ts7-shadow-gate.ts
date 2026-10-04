@@ -6,15 +6,14 @@
  * matching matrix against the current checker.
  *
  * The layered TypeScript strategy this gate enforces/observes:
- * - Deno source keeps using Deno's supported checker (deno task typecheck).
  * - The Element compiler and every other AST consumer keep using the classic
- *   TypeScript compiler API, resolved through the import-map name
- *   "typescript" -> npm:typescript@6.0.3. The packed Element dependency owns
+ *   TypeScript compiler API from the workspace's TypeScript 6 dependency.
+ *   The packed Element dependency owns
  *   that classic compiler API; the disposable consumer root owns TS7 only.
  * - The TS7 tsc CLI is exercised here, and only here, against the Node/npm
  *   consumer contract: the tools/release#pack:dry-run tarballs installed into a disposable
  *   consumer OUTSIDE the workspace (same observational rule as
- *   tools/consumer-packaged-shared.ts — qualify the packed artifact, never the
+ *   tools/release/consumer-packaged-shared.ts — qualify the packed artifact, never the
  *   workspace source).
  *
  * Cells (every cell prints PASS/FAIL; any TS7 checker error fails the run —
@@ -41,10 +40,14 @@
  * the matrix is reproducible locally and in CI.
  */
 
-import { existsSync } from '@std/fs';
-import { join, resolve } from '@std/path';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import process from 'node:process';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
+import { commandOutput } from './node-command.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
 
@@ -103,14 +106,14 @@ async function run(
     controller.abort();
   }, timeoutMs);
   try {
-    const result = await new Deno.Command(command, {
+    const result = await commandOutput(command, {
       args,
       cwd,
       stdout: 'piped',
       stderr: 'piped',
       signal: controller.signal,
       env,
-    }).output();
+    });
     const output =
       new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr);
     if (timedOut) {
@@ -186,12 +189,15 @@ const TSCONFIG_BASE = {
 const packages = await readPackages();
 const tarballs = new Map(packages.map((pkg) => [pkg.name, join(repoRoot, tarballPath(pkg))]));
 
-const tmp = await Deno.makeTempDir({ prefix: 'openelement-ts7-shadow-' });
+const tmp = await mkdtemp(join(tmpdir(), 'openelement-ts7-shadow-'));
 try {
   await cell('pack', [], async () => {
+    // Task invocations go through the pnpm run face, the repo's node-port
+    // convention (gate.ts and candidate-steps.ts spawn `pnpm --dir <pkg>
+    // run <task>` the same way).
     const packed = await run(
-      Deno.execPath(),
-      ['task', '--cwd', 'tools/release', 'pack:dry-run'],
+      'pnpm',
+      ['--dir', 'tools/release', 'run', 'pack:dry-run'],
       repoRoot,
       PACK_TIMEOUT_MS,
     );
@@ -232,7 +238,7 @@ try {
   await cell('install', ['manifest'], async () => {
     const dependencies: Record<string, string> = {};
     for (const [name, tar] of tarballs) dependencies[name] = `file:${tar}`;
-    await Deno.writeTextFile(
+    await writeFile(
       join(tmp, 'package.json'),
       JSON.stringify(
         {
@@ -247,17 +253,19 @@ try {
         null,
         2,
       ),
+      'utf8',
     );
-    await Deno.writeTextFile(join(tmp, 'main.ts'), consumerProgram());
-    await Deno.writeTextFile(
+    await writeFile(join(tmp, 'main.ts'), consumerProgram(), 'utf8');
+    await writeFile(
       join(tmp, 'tsconfig.check.json'),
       JSON.stringify(
         { compilerOptions: { ...TSCONFIG_BASE, noEmit: true }, include: ['main.ts'] },
         null,
         2,
       ),
+      'utf8',
     );
-    await Deno.writeTextFile(
+    await writeFile(
       join(tmp, 'tsconfig.emit.json'),
       JSON.stringify(
         {
@@ -274,6 +282,7 @@ try {
         null,
         2,
       ),
+      'utf8',
     );
     const installed = await run(
       'npm',
@@ -407,6 +416,6 @@ try {
       ? `TS7 shadow gate PASS — typescript@${TS7_VERSION} CLI vs Element-owned typescript@${TS6_VERSION} baseline (shadow only; not a required gate).`
       : `TS7 shadow gate FAIL — ${failed.map(([name]) => name).join(', ')}`,
   );
-  await Deno.remove(tmp, { recursive: true }).catch(() => undefined);
-  if (failed.length > 0) Deno.exit(1);
+  await rm(tmp, { recursive: true }).catch(() => undefined);
+  if (failed.length > 0) process.exit(1);
 }

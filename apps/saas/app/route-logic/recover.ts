@@ -1,6 +1,6 @@
 /**
  * /recover route logic (v0.44): the loader/action live in this plain module
- * so Deno tests can import them without evaluating the compiled page class
+ * so vitest tests can import them without evaluating the compiled page class
  * (decorators are compile-time-only input and throw outside the adapter
  * transform). The route module (app/routes/recover.tsx) is the thin wrapper.
  */

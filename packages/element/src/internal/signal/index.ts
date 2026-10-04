@@ -2,7 +2,7 @@
  * index.ts - Reactive signals powered by @preact/signals-core.
  *
  * @preact/signals-core (via the built-in preact-engine adapter) is the only
- * engine supported and verified in 1.0.0-alpha.1. Preact's own API is not
+ * engine supported and verified by the package. Preact's own API is not
  * Element public API, and this internal barrel is not re-exported from the
  * package root; the root exposes only the protocol types and the
  * signal()/computed()/effect() framework functions.

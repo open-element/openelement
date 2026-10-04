@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   normalizeViteAliases,
   resolveThroughAliases,
@@ -7,20 +7,20 @@ import {
 
 // #1067: `{ react: 'preact' }` — a bare package name is a module specifier,
 // not a root-relative path; resolving it against root corrupted the mapping.
-Deno.test('normalizeViteAliases passes bare package specifiers through untouched', () => {
+test('normalizeViteAliases passes bare package specifiers through untouched', () => {
   const fromRecord = normalizeViteAliases({ react: 'preact' }, '/repo') ?? [];
-  assertEquals(fromRecord.find((alias) => alias.find === 'react')?.replacement, 'preact');
+  expect(fromRecord.find((alias) => alias.find === 'react')?.replacement).toEqual('preact');
 
   const fromArray = normalizeViteAliases([{ find: 'react', replacement: 'preact' }], '/repo') ?? [];
-  assertEquals(fromArray.find((alias) => alias.find === 'react')?.replacement, 'preact');
+  expect(fromArray.find((alias) => alias.find === 'react')?.replacement).toEqual('preact');
 });
 
-Deno.test('normalizeViteAliases still resolves relative replacements against root', () => {
+test('normalizeViteAliases still resolves relative replacements against root', () => {
   const aliases = normalizeViteAliases({ '@app': './src/app.ts' }, '/repo') ?? [];
-  assertEquals(aliases.find((alias) => alias.find === '@app')?.replacement, '/repo/src/app.ts');
+  expect(aliases.find((alias) => alias.find === '@app')?.replacement).toEqual('/repo/src/app.ts');
 });
 
-Deno.test('normalizeViteAliases expands retained Element public subpaths', () => {
+test('normalizeViteAliases expands retained Element public subpaths', () => {
   const aliases =
     normalizeViteAliases(
       {
@@ -29,25 +29,19 @@ Deno.test('normalizeViteAliases expands retained Element public subpaths', () =>
       '/repo',
     ) ?? [];
 
-  assertEquals(
+  expect(
     aliases.find((alias) => alias.find === '@openelement/element/jsx-runtime')?.replacement,
-    '/repo/packages/element/src/jsx-runtime.ts',
-  );
-  assertEquals(
+  ).toEqual('/repo/packages/element/src/jsx-runtime.ts');
+  expect(
     aliases.find((alias) => alias.find === '@openelement/element/jsx-dev-runtime')?.replacement,
-    '/repo/packages/element/src/jsx-dev-runtime.ts',
-  );
-  assertEquals(
+  ).toEqual('/repo/packages/element/src/jsx-dev-runtime.ts');
+  expect(
     aliases.find((alias) => alias.find === '@openelement/element/build-utils')?.replacement,
-    '/repo/packages/element/src/build-utils.ts',
-  );
-  assertEquals(
-    aliases.some((alias) => String(alias.find).includes('@openelement/core')),
-    false,
-  );
+  ).toEqual('/repo/packages/element/src/build-utils.ts');
+  expect(aliases.some((alias) => String(alias.find).includes('@openelement/core'))).toEqual(false);
 });
 
-Deno.test('normalizeViteAliases keeps explicit retained subpath aliases authoritative', () => {
+test('normalizeViteAliases keeps explicit retained subpath aliases authoritative', () => {
   const aliases =
     normalizeViteAliases(
       [
@@ -57,20 +51,18 @@ Deno.test('normalizeViteAliases keeps explicit retained subpath aliases authorit
       '/repo',
     ) ?? [];
 
-  assertEquals(
+  expect(
     aliases.filter((alias) => alias.find === '@openelement/element/jsx-runtime').length,
-    1,
-  );
-  assertEquals(
+  ).toEqual(1);
+  expect(
     aliases.find((alias) => alias.find === '@openelement/element/jsx-runtime')?.replacement,
-    '/custom/jsx-runtime.ts',
-  );
+  ).toEqual('/custom/jsx-runtime.ts');
 });
 
 // #733: the subpath table derives from generated-export-files.ts (itself
-// generated from each package's deno.json "exports"), so dropped export
-// entries must not reappear here.
-Deno.test('normalizeViteAliases drops subpaths removed from deno.json exports', () => {
+// generated from each workspace package manifest's "exports" field), so
+// dropped export entries must not reappear here.
+test('normalizeViteAliases drops subpaths removed from the package manifest exports', () => {
   const aliases =
     normalizeViteAliases(
       {
@@ -82,13 +74,13 @@ Deno.test('normalizeViteAliases drops subpaths removed from deno.json exports', 
   const finds = aliases.map((alias) => String(alias.find));
 
   // packages/router/src/hono.ts was deleted; the export entry is gone too.
-  assertEquals(finds.includes('@openelement/router/hono'), false);
+  expect(finds.includes('@openelement/router/hono')).toEqual(false);
   // open-element-render/open-element-hydration are no longer exported.
-  assertEquals(finds.includes('@openelement/element/open-element-render'), false);
-  assertEquals(finds.includes('@openelement/element/open-element-hydration'), false);
+  expect(finds.includes('@openelement/element/open-element-render')).toEqual(false);
+  expect(finds.includes('@openelement/element/open-element-hydration')).toEqual(false);
 });
 
-Deno.test('normalizeViteAliases expands Router subpaths from the generated export map', () => {
+test('normalizeViteAliases expands Router subpaths from the generated export map', () => {
   const aliases =
     normalizeViteAliases(
       {
@@ -98,14 +90,13 @@ Deno.test('normalizeViteAliases expands Router subpaths from the generated expor
     ) ?? [];
 
   for (const subpath of ['http', 'document', 'lit', 'lit-ssr']) {
-    assertEquals(
+    expect(
       aliases.find((alias) => alias.find === `@openelement/router/${subpath}`)?.replacement,
-      `/repo/packages/router/src/${subpath}.ts`,
-    );
+    ).toEqual(`/repo/packages/router/src/${subpath}.ts`);
   }
 });
 
-Deno.test('normalizeViteAliases preserves nested export subpaths', () => {
+test('normalizeViteAliases preserves nested export subpaths', () => {
   const aliases =
     normalizeViteAliases(
       {
@@ -114,15 +105,14 @@ Deno.test('normalizeViteAliases preserves nested export subpaths', () => {
       '/repo',
     ) ?? [];
 
-  assertEquals(
+  expect(
     aliases.find((alias) => alias.find === '@openelement/router/cli/start')?.replacement,
-    '/repo/packages/router/src/cli/start.ts',
-  );
+  ).toEqual('/repo/packages/router/src/cli/start.ts');
 });
 
 // #709: the client build previously carried a second inline copy of this
 // specificity sort; pin the shared implementation directly.
-Deno.test('sortAliasEntries orders longer string finds first without mutating input', () => {
+test('sortAliasEntries orders longer string finds first without mutating input', () => {
   const input = [
     { find: '@open', replacement: '/a' },
     { find: /^@open\//, replacement: '/b' },
@@ -131,17 +121,14 @@ Deno.test('sortAliasEntries orders longer string finds first without mutating in
   ];
   const sorted = sortAliasEntries(input);
 
-  assertEquals(
-    sorted.map((alias) => alias.replacement),
-    ['/c', '/d', '/a', '/b'],
-  );
-  assertEquals(input[0].find, '@open');
+  expect(sorted.map((alias) => alias.replacement)).toEqual(['/c', '/d', '/a', '/b']);
+  expect(input[0].find).toEqual('@open');
 });
 
 // #1471 follow-up: package islands resolve their declared specifier through
 // the same alias table the build ships as resolve.alias — workspace packages
 // have no import-map entry, so the alias rewrite IS their module identity.
-Deno.test('resolveThroughAliases matches string finds exactly and at segment boundaries', () => {
+test('resolveThroughAliases matches string finds exactly and at segment boundaries', () => {
   // The caller passes the same sorted table the build ships as resolve.alias
   // (longer finds first), so the subpath alias wins over the parent.
   const aliases = sortAliasEntries([
@@ -149,43 +136,41 @@ Deno.test('resolveThroughAliases matches string finds exactly and at segment bou
     { find: '@openelement/ui/open-button', replacement: '/repo/packages/ui/src/open-button.tsx' },
   ]);
 
-  assertEquals(
-    resolveThroughAliases(aliases, '@openelement/ui/open-button'),
+  expect(resolveThroughAliases(aliases, '@openelement/ui/open-button')).toEqual(
     '/repo/packages/ui/src/open-button.tsx',
   );
-  assertEquals(resolveThroughAliases(aliases, '@openelement/ui'), '/repo/packages/ui/src/index.ts');
+  expect(resolveThroughAliases(aliases, '@openelement/ui')).toEqual(
+    '/repo/packages/ui/src/index.ts',
+  );
   // Boundary rule: a longer specifier under the parent find rewrites as
   // replacement + remainder (first-occurrence replace, plugin-alias parity).
-  assertEquals(
-    resolveThroughAliases(aliases, '@openelement/ui/unexported'),
+  expect(resolveThroughAliases(aliases, '@openelement/ui/unexported')).toEqual(
     '/repo/packages/ui/src/index.ts/unexported',
   );
   // First match wins in table order — an unsorted table resolves the
   // subpath through the parent find.
-  assertEquals(
-    resolveThroughAliases([...aliases].reverse(), '@openelement/ui/open-button'),
+  expect(resolveThroughAliases([...aliases].reverse(), '@openelement/ui/open-button')).toEqual(
     '/repo/packages/ui/src/index.ts/open-button',
   );
   // A same-suffix specifier is not identity: the find must align on `/`.
-  assertEquals(resolveThroughAliases(aliases, 'x@openelement/ui'), null);
-  assertEquals(resolveThroughAliases(aliases, '@openelement/ui-other'), null);
+  expect(resolveThroughAliases(aliases, 'x@openelement/ui')).toEqual(null);
+  expect(resolveThroughAliases(aliases, '@openelement/ui-other')).toEqual(null);
 });
 
-Deno.test('resolveThroughAliases applies RegExp finds by test-and-replace', () => {
+test('resolveThroughAliases applies RegExp finds by test-and-replace', () => {
   const aliases = [{ find: /^@app\/(.*)$/, replacement: '/repo/src/$1.tsx' }];
 
-  assertEquals(resolveThroughAliases(aliases, '@app/widgets/card'), '/repo/src/widgets/card.tsx');
-  assertEquals(resolveThroughAliases(aliases, 'other'), null);
+  expect(resolveThroughAliases(aliases, '@app/widgets/card')).toEqual('/repo/src/widgets/card.tsx');
+  expect(resolveThroughAliases(aliases, 'other')).toEqual(null);
 });
 
-Deno.test('resolveThroughAliases refuses rewrites that are not absolute module paths', () => {
+test('resolveThroughAliases refuses rewrites that are not absolute module paths', () => {
   // A bare-specifier replacement ({ react: 'preact' }) is a specifier, not a
   // file path — the caller must keep the declared specifier as identity.
-  assertEquals(resolveThroughAliases([{ find: 'react', replacement: 'preact' }], 'react'), null);
+  expect(resolveThroughAliases([{ find: 'react', replacement: 'preact' }], 'react')).toEqual(null);
   // A virtual id (\0-prefixed) is not a filesystem module either.
-  assertEquals(
+  expect(
     resolveThroughAliases([{ find: 'virtual:x', replacement: '\0virtual:x' }], 'virtual:x'),
-    null,
-  );
-  assertEquals(resolveThroughAliases([], '@openelement/ui/open-button'), null);
+  ).toEqual(null);
+  expect(resolveThroughAliases([], '@openelement/ui/open-button')).toEqual(null);
 });

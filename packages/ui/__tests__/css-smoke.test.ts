@@ -1,57 +1,58 @@
-import { assertEquals, assertExists, assertFalse } from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
 
-Deno.test('token layer exposes semantic component recipes', async () => {
+test('token layer exposes semantic component recipes', async () => {
   const { openPropsTokenSheet } = await import('../src/open-props-tokens.ts');
   const css = openPropsTokenSheet.cssRules.map((rule) => rule.cssText).join('\n');
-  assertExists(openPropsTokenSheet);
+  expect(openPropsTokenSheet).toEqual(expect.anything());
   for (const token of ['--surface-glass', '--ui-control-bg', '--focus-ring', '--motion-standard']) {
-    assertEquals(css.includes(token), true, `${token} must be part of the semantic contract`);
+    expect(css.includes(token), `${token} must be part of the semantic contract`).toEqual(true);
   }
 });
 
-Deno.test('one token sheet serves document and shadow adoption', async () => {
+test('one token sheet serves document and shadow adoption', async () => {
   const { openPropsTokenSheet } = await import('../src/open-props-tokens.ts');
   const css = openPropsTokenSheet.cssRules.map((rule) => rule.cssText).join('\n');
   // The token block is dual: :root for document adoption, :host for shadow
   // adoption. There is no separate transformed sheet and no transformer.
-  assertEquals(/:root,\s+:host/.test(css), true, 'token block must select :root, :host');
-  assertEquals(css.includes(':root[data-theme='), true, 'dark block must select :root');
-  assertEquals(css.includes(":host([data-theme='dark'])"), true, 'dark block must select :host');
+  expect(/:root,\s+:host/.test(css), 'token block must select :root, :host').toEqual(true);
+  expect(css.includes(':root[data-theme='), 'dark block must select :root').toEqual(true);
+  expect(css.includes(":host([data-theme='dark'])"), 'dark block must select :host').toEqual(true);
   const darkDecls = (css.split(':root[data-theme=')[1]?.match(/--[a-z0-9-]+\s*:/g) ?? []).length;
-  assertEquals(darkDecls > 0, true, 'the dark block must carry declarations');
+  expect(darkDecls > 0, 'the dark block must carry declarations').toEqual(true);
   // The structural fallback (containment) is :host-exclusive: it must never
   // be applied to the document root.
   const rootRule = css.match(/:root,\s*:host\s*\{([^}]*)\}/)?.[1] ?? '';
-  assertEquals(rootRule.includes('display: block'), false);
-  assertEquals(rootRule.includes('contain:'), false);
+  expect(rootRule.includes('display: block')).toEqual(false);
+  expect(rootRule.includes('contain:')).toEqual(false);
 });
 
-Deno.test('the retired root-sheet export and transformer stay gone', async () => {
+test('the retired root-sheet export and transformer stay gone', async () => {
   const mod = await import('../src/open-props-tokens.ts');
-  assertFalse('openPropsRootSheet' in mod);
-  assertFalse('toRootCss' in mod);
+  expect('openPropsRootSheet' in mod).toBeFalsy();
+  expect('toRootCss' in mod).toBeFalsy();
 });
 
-Deno.test('component recipes are valid constructable sheets', async () => {
+test('component recipes are valid constructable sheets', async () => {
   const recipes = await import('../src/component-recipes.ts');
   for (const sheet of [recipes.controlRecipe, recipes.surfaceRecipe, recipes.overlayRecipe]) {
-    assertEquals(typeof sheet.replaceSync, 'function');
-    assertEquals(sheet.cssRules.length > 0, true);
+    expect(typeof sheet.replaceSync).toEqual('function');
+    expect(sheet.cssRules.length > 0).toEqual(true);
   }
 });
 
-Deno.test('retired daisy, modal and step-card surfaces stay absent', async () => {
+test('retired daisy, modal and step-card surfaces stay absent', async () => {
   const index = await import('../src/index.ts');
-  assertFalse('daisyClassSheet' in index);
-  assertFalse('OpenModal' in index);
-  assertFalse('OpenStepCard' in index);
+  expect('daisyClassSheet' in index).toBeFalsy();
+  expect('OpenModal' in index).toBeFalsy();
+  expect('OpenStepCard' in index).toBeFalsy();
 });
 
-Deno.test('retained interactive components are exported', async () => {
+test('retained interactive components are exported', async () => {
   const index = await import('../src/index.ts');
-  assertExists(index.OpenDialog);
-  assertExists(index.OpenDropdown);
-  assertExists(index.OpenTabs);
+  expect(index.OpenDialog).toEqual(expect.anything());
+  expect(index.OpenDropdown).toEqual(expect.anything());
+  expect(index.OpenTabs).toEqual(expect.anything());
 });
 
 /** Relative luminance / contrast ratio (WCAG 2.x) over #rrggbb values. */
@@ -70,8 +71,8 @@ const contrast = (a: string, b: string): number => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
-Deno.test('focus ring clears the WCAG 1.4.11 3:1 floor in both themes', async () => {
-  const source = await Deno.readTextFile(new URL('../src/open-props-tokens.ts', import.meta.url));
+test('focus ring clears the WCAG 1.4.11 3:1 floor in both themes', async () => {
+  const source = await readFile(new URL('../src/open-props-tokens.ts', import.meta.url), 'utf8');
   const declaration = (name: string, from = 0): string | undefined =>
     new RegExp(`${name}:\\s*([^;]+);`).exec(source.slice(from))?.[1]?.trim();
   // Follow var() aliases to a literal colour.
@@ -85,17 +86,17 @@ Deno.test('focus ring clears the WCAG 1.4.11 3:1 floor in both themes', async ()
     return value;
   };
   const darkStart = source.indexOf("data-theme='dark'");
-  assertEquals(darkStart > 0, true, 'the generated sheet must carry a dark block');
+  expect(darkStart > 0, 'the generated sheet must carry a dark block').toEqual(true);
 
   const lightRing = resolve('--focus-ring');
-  assertEquals(
-    /^#[0-9a-f]{6}$/i.test(lightRing),
+  expect(/^#[0-9a-f]{6}$/i.test(lightRing), `light --focus-ring resolves to ${lightRing}`).toEqual(
     true,
-    `light --focus-ring resolves to ${lightRing}`,
   );
   for (const surface of ['#ffffff', '#f8f9fa', '#f6f4fb']) {
     const ratio = contrast(lightRing, surface);
-    assertEquals(ratio >= 3, true, `light ring ${lightRing} vs ${surface} = ${ratio.toFixed(2)}:1`);
+    expect(ratio >= 3, `light ring ${lightRing} vs ${surface} = ${ratio.toFixed(2)}:1`).toEqual(
+      true,
+    );
   }
 
   // --focus-ring is declared once (light block) and aliases --brand, which
@@ -103,17 +104,18 @@ Deno.test('focus ring clears the WCAG 1.4.11 3:1 floor in both themes', async ()
   const darkRingValue = resolve('--focus-ring');
   const darkAlias = /^var\((--[a-z0-9-]+)\)$/.exec(darkRingValue);
   const darkRing = darkAlias ? resolve(darkAlias[1], darkStart) : darkRingValue;
-  assertEquals(/^#[0-9a-f]{6}$/i.test(darkRing), true, `dark --focus-ring resolves to ${darkRing}`);
-  const darkBase = resolve('--bg-base', darkStart);
-  assertEquals(
-    contrast(darkRing, darkBase) >= 3,
+  expect(/^#[0-9a-f]{6}$/i.test(darkRing), `dark --focus-ring resolves to ${darkRing}`).toEqual(
     true,
-    `dark ring ${darkRing} vs ${darkBase} = ${contrast(darkRing, darkBase).toFixed(2)}:1`,
   );
+  const darkBase = resolve('--bg-base', darkStart);
+  expect(
+    contrast(darkRing, darkBase) >= 3,
+    `dark ring ${darkRing} vs ${darkBase} = ${contrast(darkRing, darkBase).toFixed(2)}:1`,
+  ).toEqual(true);
 });
 
-Deno.test('state inks clear the 4.5:1 AA floor on --bg-base and their badge wash', async () => {
-  const source = await Deno.readTextFile(new URL('../src/open-props-tokens.ts', import.meta.url));
+test('state inks clear the 4.5:1 AA floor on --bg-base and their badge wash', async () => {
+  const source = await readFile(new URL('../src/open-props-tokens.ts', import.meta.url), 'utf8');
   const declaration = (name: string): string | undefined =>
     new RegExp(`${name}:\\s*([^;]+);`).exec(source)?.[1]?.trim();
   // The light block's base is color-mix(violet-0 42%, gray-0) = #f9f8fc; the
@@ -121,7 +123,7 @@ Deno.test('state inks clear the 4.5:1 AA floor on --bg-base and their badge wash
   const BASE = '#f9f8fc';
   const composite = (rgba: string, over: string): string => {
     const match = /rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/.exec(rgba);
-    assertEquals(match !== null, true, `expected an rgba() subtle wash, got ${rgba}`);
+    expect(match !== null, `expected an rgba() subtle wash, got ${rgba}`).toEqual(true);
     const [, r, g, b, a] = match!;
     const alpha = Number(a);
     const base = [1, 3, 5].map((i) => Number.parseInt(over.slice(i, i + 2), 16));
@@ -132,11 +134,11 @@ Deno.test('state inks clear the 4.5:1 AA floor on --bg-base and their badge wash
   for (const tone of ['success', 'warning', 'error', 'info']) {
     const ink = declaration(`--${tone}`) ?? '';
     const subtle = declaration(`--${tone}-subtle`) ?? '';
-    assertEquals(/^#[0-9a-f]{6}$/i.test(ink), true, `${tone} ink resolves to ${ink}`);
+    expect(/^#[0-9a-f]{6}$/i.test(ink), `${tone} ink resolves to ${ink}`).toEqual(true);
     const onBase = contrast(ink, BASE);
-    assertEquals(onBase >= 4.5, true, `${tone} on base = ${onBase.toFixed(2)}:1`);
+    expect(onBase >= 4.5, `${tone} on base = ${onBase.toFixed(2)}:1`).toEqual(true);
     const wash = composite(subtle, BASE);
     const onWash = contrast(ink, wash);
-    assertEquals(onWash >= 4.5, true, `${tone} on its wash ${wash} = ${onWash.toFixed(2)}:1`);
+    expect(onWash >= 4.5, `${tone} on its wash ${wash} = ${onWash.toFixed(2)}:1`).toEqual(true);
   }
 });

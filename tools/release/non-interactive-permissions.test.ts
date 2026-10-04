@@ -3,104 +3,61 @@
  *
  * A packed Element/Playwright consumer once stalled on an FFI prompt
  * (`Deno requests ffi access to ".../fsevents/fsevents.node" / Allow?
- * [y/n/A]`), which a human had to refuse by hand. The fix has two halves:
- *   1. mechanism (this file): a genuine FFI request under --deny-ffi
- *      --no-prompt with stdin closed fails closed promptly and never prints
- *      a permission prompt;
- *   2. wiring (this file): every packed-consumer gate entry in
- *      tools/release/deno.json carries --deny-ffi --no-prompt, and gate.ts
- *      spawns children with stdin closed so a missing flag fails closed
- *      instead of hanging on input.
+ * [y/n/A]`), which a human had to refuse by hand. The deno-era fix carried
+ * `--deny-ffi --no-prompt` on every release-lane entry; the S2 exit (owner
+ * ruling 2026-10-03) removed the deno host entirely, and with it the
+ * permission-prompt mechanism itself — on the node host non-interactivity is
+ * structural. What remains auditable here:
+ *   1. wiring (this file): tools/release/package.json carries NO deno-run
+ *      entry — a reintroduced deno entry would reintroduce the host and its
+ *      prompt surface;
+ *   2. the real launcher chain (gate.ts -> vp -> task) completes with the
+ *      gate's stdin closed: a step that read input would hang and hit the
+ *      timeout instead of finishing.
  * The full dynamic proof (gate:packed with stdin closed, zero prompt text)
  * runs in candidate evidence, not here — re-running whole packed consumers
  * inside a unit test would double CI time for no extra signal.
  */
 
-import { assert, assertEquals } from '@std/assert';
-import { dirname, join } from '@std/path';
+import { expect, test } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import process from 'node:process';
+import { runProcess } from './consumer-packaged-shared.ts';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
-const PROMPT_MARKERS = ['Allow?', 'requests ffi access'];
+test('permissions: the release lane carries no deno-run entries', () => {
+  const text = readFileSync(join(repoRoot, 'tools/release/package.json'), 'utf8');
+  const scripts = (JSON.parse(text) as { scripts: Record<string, string> }).scripts;
+  const denoEntries = Object.entries(scripts).filter(([, command]) =>
+    /\bdeno\s+(run|task|test|eval)\b/.test(command),
+  );
+  expect(
+    denoEntries,
+    `tools/release/package.json is node-hosted (owner ruling 2026-10-03); a deno entry ` +
+      `reintroduces the host and its permission-prompt surface:\n${denoEntries
+        .map(([name, command]) => `${name}: ${command}`)
+        .join('\n')}`,
+  ).toEqual([]);
+});
 
-async function runClosed(
-  args: string[],
-  timeoutMs: number,
-): Promise<{ code: number; output: string; timedOut: boolean }> {
-  // output() drains piped stdio concurrently with the wait (awaiting status
-  // first deadlocks once output exceeds the pipe buffer); the timeout kills
-  // the child so a prompt can never hang the test.
-  const child = new Deno.Command(Deno.execPath(), {
-    args,
-    cwd: repoRoot,
-    stdin: 'null',
-    stdout: 'piped',
-    stderr: 'piped',
-  }).spawn();
-  const timeout = new Promise<{ timedOut: true }>((resolve) =>
-    setTimeout(() => resolve({ timedOut: true as const }), timeoutMs),
-  );
-  const finished = child.output().then((output) => ({
-    code: output.code,
-    output: new TextDecoder().decode(output.stdout) + new TextDecoder().decode(output.stderr),
-    timedOut: false as const,
-  }));
-  const result = await Promise.race([finished, timeout]);
-  if (result.timedOut) {
-    try {
-      child.kill('SIGKILL');
-    } catch {
-      // Already exited between the race and the kill.
-    }
-    await child.status.catch(() => undefined);
-    return { code: -1, output: '', timedOut: true };
-  }
-  return result;
-}
-
-Deno.test('permissions: an FFI request with stdin closed fails closed without prompting', async () => {
-  const result = await runClosed(
-    ['eval', '--deny-ffi', '--no-prompt', 'Deno.dlopen("noninteractive-ffi-probe", {});'],
-    30_000,
-  );
-  assert(!result.timedOut, 'the denied FFI request must settle promptly, never hang on input');
-  assert(
-    result.code !== 0,
-    `the denied FFI request must fail closed, got exit 0:\n${result.output}`,
-  );
-  for (const marker of PROMPT_MARKERS) {
-    assert(
-      !result.output.includes(marker),
-      `denied FFI must never print a permission prompt (found ${JSON.stringify(
-        marker,
-      )}):\n${result.output}`,
+test(
+  'permissions: the gate task entry completes with stdin closed (no prompt hang)',
+  { timeout: 180_000 },
+  async () => {
+    // The real launcher chain against the fastest read-only gate step
+    // (root fmt:check through vp): the gate itself runs with stdin closed —
+    // the condition that used to surface a permission prompt as a hang.
+    const run = await runProcess(process.execPath, ['tools/repo/gate.ts', 'fmt:check'], repoRoot, {
+      timeoutMs: 150_000,
+    });
+    expect(
+      run.success,
+      `gate fmt:check must pass with stdin closed:\n${run.output.slice(-4000)}`,
+    ).toBeTruthy();
+    expect(run.output, 'the timed-out marker means the chain hung on input').not.toContain(
+      'Timed out after',
     );
-  }
-});
-
-Deno.test('permissions: packed gate tasks deny FFI and never prompt', () => {
-  const text = Deno.readTextFileSync(join(repoRoot, 'tools/release/deno.json'));
-  const tasks = (JSON.parse(text) as { tasks: Record<string, string> }).tasks;
-  const gated = Object.entries(tasks).filter(
-    ([name]) => name !== 'gate:packed' && name !== 'typecheck',
-  );
-  assert(gated.length > 0, 'tools/release/deno.json must keep gate tasks to audit');
-  const violations: string[] = [];
-  for (const [name, command] of gated) {
-    if (!command.includes('--deny-ffi')) violations.push(`${name}: missing --deny-ffi`);
-    if (!command.includes('--no-prompt')) violations.push(`${name}: missing --no-prompt`);
-  }
-  assertEquals(
-    violations,
-    [],
-    `packed gate tasks must be non-interactive:\n${violations.join('\n')}`,
-  );
-});
-
-Deno.test('permissions: the gate coordinator spawns children with stdin closed', () => {
-  const gate = Deno.readTextFileSync(join(repoRoot, 'tools/repo/gate.ts'));
-  assert(
-    gate.includes("stdin: 'null'"),
-    'gate.ts must spawn gate children with stdin closed so a permission request fails closed instead of prompting',
-  );
-});
+  },
+);

@@ -7,21 +7,21 @@
  * start CLI, e2e fixture server, Nitro entry) shares.
  */
 
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import { composeFetchMiddleware } from '../src/build-utils.ts';
 import type { Middleware } from '../src/index.ts';
 
 const okHandler = (request: Request): Promise<Response> =>
   Promise.resolve(new Response(`handled:${new URL(request.url).pathname}`));
 
-Deno.test('composeFetchMiddleware: empty chain returns the handler response', async () => {
+test('composeFetchMiddleware: empty chain returns the handler response', async () => {
   const handler = composeFetchMiddleware([], okHandler);
   const response = await handler(new Request('https://example.com/live'));
-  assertEquals(response.status, 200);
-  assertEquals(await response.text(), 'handled:/live');
+  expect(response.status).toEqual(200);
+  expect(await response.text()).toEqual('handled:/live');
 });
 
-Deno.test('composeFetchMiddleware: onion order — use[0] is outermost', async () => {
+test('composeFetchMiddleware: onion order — use[0] is outermost', async () => {
   const order: string[] = [];
   const outer: Middleware = async (_request, next) => {
     order.push('outer-in');
@@ -37,10 +37,10 @@ Deno.test('composeFetchMiddleware: onion order — use[0] is outermost', async (
   };
   const handler = composeFetchMiddleware([outer, inner], okHandler);
   await handler(new Request('https://example.com/live'));
-  assertEquals(order, ['outer-in', 'inner-in', 'inner-out', 'outer-out']);
+  expect(order).toEqual(['outer-in', 'inner-in', 'inner-out', 'outer-out']);
 });
 
-Deno.test('composeFetchMiddleware: short-circuit skips the handler and inner middleware', async () => {
+test('composeFetchMiddleware: short-circuit skips the handler and inner middleware', async () => {
   let handlerRan = false;
   let innerRan = false;
   const outer: Middleware = async (_request, next) => {
@@ -61,19 +61,19 @@ Deno.test('composeFetchMiddleware: short-circuit skips the handler and inner mid
   });
 
   const stopped = await handler(new Request('https://example.com/live?stop=1'));
-  assertEquals(stopped.status, 418);
-  assertEquals(await stopped.text(), 'stopped');
+  expect(stopped.status).toEqual(418);
+  expect(await stopped.text()).toEqual('stopped');
   // The outer middleware still post-processes the short-circuit response.
-  assertEquals(stopped.headers.get('x-outer'), 'seen');
-  assertEquals(handlerRan, false);
+  expect(stopped.headers.get('x-outer')).toEqual('seen');
+  expect(handlerRan).toEqual(false);
 
   const passed = await handler(new Request('https://example.com/live'));
-  assertEquals(innerRan, true);
-  assertEquals(handlerRan, false); // 'passed' response came from the middleware itself
-  assertEquals(await passed.text(), 'passed');
+  expect(innerRan).toEqual(true);
+  expect(handlerRan).toEqual(false); // 'passed' response came from the middleware itself
+  expect(await passed.text()).toEqual('passed');
 });
 
-Deno.test('composeFetchMiddleware: post-processing sees the handler response', async () => {
+test('composeFetchMiddleware: post-processing sees the handler response', async () => {
   const addHeader: Middleware = async (_request, next) => {
     const response = await next();
     response.headers.append('x-chain', 'a');
@@ -87,19 +87,19 @@ Deno.test('composeFetchMiddleware: post-processing sees the handler response', a
   const handler = composeFetchMiddleware([addHeader, addSecondHeader], okHandler);
   const response = await handler(new Request('https://example.com/live'));
   // Inner middleware post-processes first: b is appended before a.
-  assertEquals(response.headers.get('x-chain'), 'b, a');
+  expect(response.headers.get('x-chain')).toEqual('b, a');
 });
 
-Deno.test('composeFetchMiddleware: handler errors propagate through the chain', async () => {
+test('composeFetchMiddleware: handler errors propagate through the chain', async () => {
   const passthrough: Middleware = (_request, next) => next();
   const handler = composeFetchMiddleware([passthrough], () =>
     Promise.reject(new Error('boom from handler')),
   );
   const error = await handler(new Request('https://example.com/live')).catch((err) => err);
-  assertStringIncludes(String(error), 'boom from handler');
+  expect(String(error)).toContain('boom from handler');
 });
 
-Deno.test('composeFetchMiddleware: runtime context threads past the chain to the handler', async () => {
+test('composeFetchMiddleware: runtime context threads past the chain to the handler', async () => {
   type Ctx = { env: Record<string, string | undefined> };
   const seen: string[] = [];
   const middleware: Middleware = async (_request, next) => {
@@ -113,6 +113,6 @@ Deno.test('composeFetchMiddleware: runtime context threads past the chain to the
   const response = await handler(new Request('https://example.com/live'), {
     env: { TARGET: 'reached' },
   });
-  assertEquals(seen, ['mw', 'handler:reached']);
-  assertEquals(await response.text(), '/live');
+  expect(seen).toEqual(['mw', 'handler:reached']);
+  expect(await response.text()).toEqual('/live');
 });

@@ -9,6 +9,67 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.8
+
+**Platform train: the repository and its consumer surface move from the Deno
+host to Node/pnpm; product behavior stays put.** Every Deno.* runtime API in
+product and tooling source ports to `node:*`, the manifests consolidate into
+one pnpm workspace with a single lockfile, the test runner becomes vitest
+everywhere, the CI gate surface runs on Node, and the `@openelement/create`
+starter becomes a plain Node/pnpm project (ADR-0161, superseding the
+Deno-native distribution decision in ADR-0108).
+
+### Highlights
+
+- **Host ports (B1a/B1b).** Product source (router, create), the fixtures,
+  `tools/repo` evidence machinery, www site tooling, and the SaaS app lose
+  every `Deno.*` API in favor of `node:fs`, `node:process`,
+  `node:child_process`, and friends; the ports-and-adapters bridge and its
+  gate are deleted outright. A node-porting residuals inventory tracks what
+  the port left behind and each residue's expiry path (release/qualify
+  tooling, #1387).
+- **One workspace, one lockfile (B2).** All 19 `deno.json` manifests become
+  `package.json` members of a single pnpm workspace (`pnpm-workspace.yaml`,
+  one `pnpm-lock.yaml`); all 7 `deno.lock` files and the vendor/
+  `nodeModulesDir` machinery retire. Package truth (name, version, exports,
+  deps, publish files) is read from package.json by the package-graph,
+  release-state, version-bump, and alias tooling, and the packed alpha.7
+  manifests are byte-identical to the published artifacts. The JSR publish
+  config is dropped; npm stays the only publish channel.
+- **vitest everywhere (B3).** All Deno.test suites migrate to vitest,
+  including the browser mode suites; the runner surface is a vitest workspace
+  with per-project configs, and a codemod script documents the migration.
+- **CI on the Node/pnpm task surface (B4).** The workflow gates run
+  `pnpm`/`node` tasks (fmt via oxfmt, lint via oxlint, tsc typecheck,
+  vitest, gate.ts), `.dvmrc` retires in favor of `.node-version` (24.18
+  development line), and a dependency-age supply-chain gate runs over the
+  pnpm lockfile.
+- **Consumer surface closeout (B5, ADR-0161).** The generated starter is a
+  plain Node/pnpm project: exact `@openelement/*` dependency pins and pnpm
+  lifecycle scripts in `package.json` (the Deno import map and its task
+  surface retire), a generated `tsconfig.json` behind `pnpm check`, and
+  `node --test` as the starter test runner. The documented create bootstrap
+  is the `npm exec @openelement/create@alpha` invocation — the Deno consumer
+  surface retired with the host, so nothing in the consumer path needs a
+  Deno install. Runtime floors are stated per verified fact: Node.js
+  24+ for generated projects (the packed engines' floor, CI-exercised).
+  The packed-starter consumer
+  qualifications and the starter smoke drive the starter's own pnpm scripts
+  (dev/check/test/build/start/preview), the preview CLI spawns the app's own
+  vite on a Node host, and the guides' install/build commands (README,
+  getting-started, tutorial, deployment, testing, zh counterparts) teach the
+  pnpm face.
+
+### Validation
+
+- `pnpm run check` (fmt + lint + typecheck + markdown lint) green on this
+  tree.
+- `packages/create` vitest project green, including the packed-CLI template
+  smoke (vp pack dry-run → node-run packed CLI → generated-starter shape).
+- Site content gates green: `check:content-data`, `check:install-command`,
+  `check:content` (guide examples type-checked against framework sources
+  after the Node test-runner rewrite).
+
 ## 1.0.0-alpha.7
 
 **vp toolchain train: the release toolchain swaps engines; product behavior

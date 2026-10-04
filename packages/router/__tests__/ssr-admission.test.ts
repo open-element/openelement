@@ -7,7 +7,7 @@
  * v0.18.0: Extended to support CEM-derived compatibility classifications.
  */
 
-import { assertEquals, assertExists } from '@std/assert';
+import { expect, test } from 'vitest';
 import { buildSsrAdmissionPlan } from '../src/vite/internal/ssg/index.ts';
 import type { IslandDecl } from '../src/vite/internal/ssg/index.ts';
 import type { CompatibilityClassification } from '../src/vite/internal/protocol/framework.ts';
@@ -67,137 +67,137 @@ const parentWithClientChild: IslandDecl = {
 
 // Section
 
-Deno.test('SSR Admission: local island with ssr=false -> clientOnlyTags', () => {
+test('SSR Admission: local island with ssr=false -> clientOnlyTags', () => {
   const islands: IslandDecl[] = [localSsrFalse];
   const plan = buildSsrAdmissionPlan(islands);
 
-  assertEquals(plan.clientOnlyTags.includes('local-ssr-false'), true);
-  assertEquals(plan.renderableTags.includes('local-ssr-false'), false);
-  assertEquals(plan.rejectedTags.includes('local-ssr-false'), false);
+  expect(plan.clientOnlyTags.includes('local-ssr-false')).toEqual(true);
+  expect(plan.renderableTags.includes('local-ssr-false')).toEqual(false);
+  expect(plan.rejectedTags.includes('local-ssr-false')).toEqual(false);
 
   const decision = plan.decisions.find((d) => d.tagName === 'local-ssr-false');
-  assertExists(decision);
-  assertEquals(decision.renderPath, 'client-only');
-  assertEquals(decision.reason, 'local island exports openElement.ssr=false');
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('client-only');
+  expect(decision.reason).toEqual('local island exports openElement.ssr=false');
 });
 
-Deno.test('SSR Admission: package island with ssr=false -> clientOnlyTags', () => {
+test('SSR Admission: package island with ssr=false -> clientOnlyTags', () => {
   const islands: IslandDecl[] = [packageSsrFalse];
   const plan = buildSsrAdmissionPlan(islands);
 
-  assertEquals(plan.clientOnlyTags.includes('package-ssr-false'), true);
-  assertEquals(plan.renderableTags.includes('package-ssr-false'), false);
+  expect(plan.clientOnlyTags.includes('package-ssr-false')).toEqual(true);
+  expect(plan.renderableTags.includes('package-ssr-false')).toEqual(false);
 
   const decision = plan.decisions.find((d) => d.tagName === 'package-ssr-false');
-  assertExists(decision);
-  assertEquals(decision.renderPath, 'client-only');
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('client-only');
   // buildSsrAdmissionPlan returns island.reason || 'openElement.ssr is false' when ssr === false
-  assertEquals(decision.reason, 'openElement.ssr is false');
+  expect(decision.reason).toEqual('openElement.ssr is false');
 });
 
-Deno.test('SSR Admission: local island with ssr=true -> renderableTags', () => {
+test('SSR Admission: local island with ssr=true -> renderableTags', () => {
   const islands: IslandDecl[] = [localSsrTrue];
   const plan = buildSsrAdmissionPlan(islands);
 
-  assertEquals(plan.renderableTags.includes('local-ssr-true'), true);
-  assertEquals(plan.clientOnlyTags.includes('local-ssr-true'), false);
+  expect(plan.renderableTags.includes('local-ssr-true')).toEqual(true);
+  expect(plan.clientOnlyTags.includes('local-ssr-true')).toEqual(false);
 
   const decision = plan.decisions.find((d) => d.tagName === 'local-ssr-true');
-  assertExists(decision);
-  assertEquals(decision.renderPath, 'ssr+client');
-  assertEquals(decision.reason, 'openElement.ssr is true');
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('ssr+client');
+  expect(decision.reason).toEqual('openElement.ssr is true');
 });
 
-Deno.test('SSR Admission: package island with ssr=true -> renderableTags', () => {
+test('SSR Admission: package island with ssr=true -> renderableTags', () => {
   const islands: IslandDecl[] = [packageSsrTrue];
   const plan = buildSsrAdmissionPlan(islands);
 
-  assertEquals(plan.renderableTags.includes('package-ssr-true'), true);
-  assertEquals(plan.clientOnlyTags.includes('package-ssr-true'), false);
+  expect(plan.renderableTags.includes('package-ssr-true')).toEqual(true);
+  expect(plan.clientOnlyTags.includes('package-ssr-true')).toEqual(false);
 
   const decision = plan.decisions.find((d) => d.tagName === 'package-ssr-true');
-  assertExists(decision);
-  assertEquals(decision.renderPath, 'ssr+client');
-  assertEquals(decision.reason, 'package island with openElement.ssr=true');
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('ssr+client');
+  expect(decision.reason).toEqual('package island with openElement.ssr=true');
 });
 
-Deno.test('SSR Admission: duplicate tag -> rejectedTags', () => {
+test('SSR Admission: duplicate tag -> rejectedTags', () => {
   // Create two islands with same tagName to simulate duplicate
   const island1 = { ...localSsrFalse };
   const island2 = { ...localSsrFalse, modulePath: localSsrFalse.modulePath + '.2' };
   const islands: IslandDecl[] = [island1, island2];
   const plan = buildSsrAdmissionPlan(islands);
 
-  assertEquals(plan.rejectedTags.includes('local-ssr-false'), true);
-  assertEquals(plan.renderableTags.includes('local-ssr-false'), false);
-  assertEquals(plan.clientOnlyTags.includes('local-ssr-false'), false);
+  expect(plan.rejectedTags.includes('local-ssr-false')).toEqual(true);
+  expect(plan.renderableTags.includes('local-ssr-false')).toEqual(false);
+  expect(plan.clientOnlyTags.includes('local-ssr-false')).toEqual(false);
 
   const decision = plan.decisions.find(
     (d) => d.tagName === 'local-ssr-false' && d.renderPath === 'rejected',
   );
-  assertExists(decision);
-  assertEquals(decision.reason, 'duplicate custom element tag');
+  expect(decision).toEqual(expect.anything());
+  expect(decision.reason).toEqual('duplicate custom element tag');
 });
 
-Deno.test('SSR Admission: parent with client-child -> parent renderable, child client-only', () => {
+test('SSR Admission: parent with client-child -> parent renderable, child client-only', () => {
   const islands: IslandDecl[] = [parentWithClientChild, localSsrFalse];
   const plan = buildSsrAdmissionPlan(islands);
 
   // Parent should be renderable
-  assertEquals(plan.renderableTags.includes('parent-with-client-child'), true);
+  expect(plan.renderableTags.includes('parent-with-client-child')).toEqual(true);
 
   // Child should be client-only
-  assertEquals(plan.clientOnlyTags.includes('local-ssr-false'), true);
+  expect(plan.clientOnlyTags.includes('local-ssr-false')).toEqual(true);
 
   // Verify reasons
   const parentDecision = plan.decisions.find((d) => d.tagName === 'parent-with-client-child');
-  assertExists(parentDecision);
-  assertEquals(parentDecision.renderPath, 'ssr+client');
+  expect(parentDecision).toEqual(expect.anything());
+  expect(parentDecision.renderPath).toEqual('ssr+client');
 
   const childDecision = plan.decisions.find((d) => d.tagName === 'local-ssr-false');
-  assertExists(childDecision);
-  assertEquals(childDecision.renderPath, 'client-only');
+  expect(childDecision).toEqual(expect.anything());
+  expect(childDecision.renderPath).toEqual('client-only');
 });
 
-Deno.test('SSR Admission: mixed islands -> correct categorization', () => {
+test('SSR Admission: mixed islands -> correct categorization', () => {
   const islands: IslandDecl[] = [localSsrTrue, localSsrFalse, packageSsrTrue, packageSsrFalse];
   const plan = buildSsrAdmissionPlan(islands);
 
-  assertEquals(plan.renderableTags.length, 2);
-  assertEquals(plan.clientOnlyTags.length, 2);
-  assertEquals(plan.rejectedTags.length, 0);
+  expect(plan.renderableTags.length).toEqual(2);
+  expect(plan.clientOnlyTags.length).toEqual(2);
+  expect(plan.rejectedTags.length).toEqual(0);
 
-  assertEquals(plan.renderableTags.includes('local-ssr-true'), true);
-  assertEquals(plan.renderableTags.includes('package-ssr-true'), true);
-  assertEquals(plan.clientOnlyTags.includes('local-ssr-false'), true);
-  assertEquals(plan.clientOnlyTags.includes('package-ssr-false'), true);
+  expect(plan.renderableTags.includes('local-ssr-true')).toEqual(true);
+  expect(plan.renderableTags.includes('package-ssr-true')).toEqual(true);
+  expect(plan.clientOnlyTags.includes('local-ssr-false')).toEqual(true);
+  expect(plan.clientOnlyTags.includes('package-ssr-false')).toEqual(true);
 });
 
-Deno.test('SSR Admission: plan records reasons for all tags', () => {
+test('SSR Admission: plan records reasons for all tags', () => {
   const islands: IslandDecl[] = [localSsrTrue, localSsrFalse];
   const plan = buildSsrAdmissionPlan(islands);
 
-  assertEquals(plan.reasons['local-ssr-true'], 'openElement.ssr is true');
-  assertEquals(plan.reasons['local-ssr-false'], 'local island exports openElement.ssr=false');
+  expect(plan.reasons['local-ssr-true']).toEqual('openElement.ssr is true');
+  expect(plan.reasons['local-ssr-false']).toEqual('local island exports openElement.ssr=false');
 });
 
-Deno.test('SSR Admission: decisions array has correct structure', () => {
+test('SSR Admission: decisions array has correct structure', () => {
   const islands: IslandDecl[] = [localSsrTrue];
   const plan = buildSsrAdmissionPlan(islands);
 
-  assertEquals(plan.decisions.length, 1);
+  expect(plan.decisions.length).toEqual(1);
 
   const decision = plan.decisions[0];
-  assertEquals(typeof decision.tagName, 'string');
-  assertEquals(typeof decision.modulePath, 'string');
-  assertEquals(['local', 'package', 'nested'].includes(decision.source), true);
-  assertEquals(['ssr+client', 'client-only', 'rejected'].includes(decision.renderPath), true);
-  assertEquals(typeof decision.reason, 'string');
+  expect(typeof decision.tagName).toEqual('string');
+  expect(typeof decision.modulePath).toEqual('string');
+  expect(['local', 'package', 'nested'].includes(decision.source)).toEqual(true);
+  expect(['ssr+client', 'client-only', 'rejected'].includes(decision.renderPath)).toEqual(true);
+  expect(typeof decision.reason).toEqual('string');
 });
 
 // Section
 
-Deno.test('SSR Admission: CEM ssr-capable -> renderableTags', () => {
+test('SSR Admission: CEM ssr-capable -> renderableTags', () => {
   const islands: IslandDecl[] = [
     {
       tagName: 'cem-ssr-capable',
@@ -220,17 +220,17 @@ Deno.test('SSR Admission: CEM ssr-capable -> renderableTags', () => {
 
   const plan = buildSsrAdmissionPlan(islands, cemClassifications);
 
-  assertEquals(plan.renderableTags.includes('cem-ssr-capable'), true);
-  assertEquals(plan.clientOnlyTags.includes('cem-ssr-capable'), false);
-  assertEquals(plan.rejectedTags.includes('cem-ssr-capable'), false);
+  expect(plan.renderableTags.includes('cem-ssr-capable')).toEqual(true);
+  expect(plan.clientOnlyTags.includes('cem-ssr-capable')).toEqual(false);
+  expect(plan.rejectedTags.includes('cem-ssr-capable')).toEqual(false);
 
   const decision = plan.decisions.find((d) => d.tagName === 'cem-ssr-capable');
-  assertExists(decision);
-  assertEquals(decision.renderPath, 'ssr+client');
-  assertEquals(decision.reason.includes('CEM ssr-capable'), true);
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('ssr+client');
+  expect(decision.reason.includes('CEM ssr-capable')).toEqual(true);
 });
 
-Deno.test('SSR Admission: CEM client-only -> clientOnlyTags', () => {
+test('SSR Admission: CEM client-only -> clientOnlyTags', () => {
   const islands: IslandDecl[] = [
     {
       tagName: 'cem-client-only',
@@ -253,17 +253,17 @@ Deno.test('SSR Admission: CEM client-only -> clientOnlyTags', () => {
 
   const plan = buildSsrAdmissionPlan(islands, cemClassifications);
 
-  assertEquals(plan.clientOnlyTags.includes('cem-client-only'), true);
-  assertEquals(plan.renderableTags.includes('cem-client-only'), false);
-  assertEquals(plan.rejectedTags.includes('cem-client-only'), false);
+  expect(plan.clientOnlyTags.includes('cem-client-only')).toEqual(true);
+  expect(plan.renderableTags.includes('cem-client-only')).toEqual(false);
+  expect(plan.rejectedTags.includes('cem-client-only')).toEqual(false);
 
   const decision = plan.decisions.find((d) => d.tagName === 'cem-client-only');
-  assertExists(decision);
-  assertEquals(decision.renderPath, 'client-only');
-  assertEquals(decision.reason.includes('CEM client-only'), true);
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('client-only');
+  expect(decision.reason.includes('CEM client-only')).toEqual(true);
 });
 
-Deno.test('SSR Admission: CEM rejected -> rejectedTags', () => {
+test('SSR Admission: CEM rejected -> rejectedTags', () => {
   const islands: IslandDecl[] = [
     {
       tagName: 'cem-rejected',
@@ -286,17 +286,17 @@ Deno.test('SSR Admission: CEM rejected -> rejectedTags', () => {
 
   const plan = buildSsrAdmissionPlan(islands, cemClassifications);
 
-  assertEquals(plan.rejectedTags.includes('cem-rejected'), true);
-  assertEquals(plan.renderableTags.includes('cem-rejected'), false);
-  assertEquals(plan.clientOnlyTags.includes('cem-rejected'), false);
+  expect(plan.rejectedTags.includes('cem-rejected')).toEqual(true);
+  expect(plan.renderableTags.includes('cem-rejected')).toEqual(false);
+  expect(plan.clientOnlyTags.includes('cem-rejected')).toEqual(false);
 
   const decision = plan.decisions.find((d) => d.tagName === 'cem-rejected');
-  assertExists(decision);
-  assertEquals(decision.renderPath, 'rejected');
-  assertEquals(decision.reason.includes('CEM rejected'), true);
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('rejected');
+  expect(decision.reason.includes('CEM rejected')).toEqual(true);
 });
 
-Deno.test('SSR Admission: CEM experimental-dom -> clientOnlyTags (conservative)', () => {
+test('SSR Admission: CEM experimental-dom -> clientOnlyTags (conservative)', () => {
   const islands: IslandDecl[] = [
     {
       tagName: 'cem-experimental',
@@ -320,17 +320,17 @@ Deno.test('SSR Admission: CEM experimental-dom -> clientOnlyTags (conservative)'
   const plan = buildSsrAdmissionPlan(islands, cemClassifications);
 
   // Experimental DOM is treated as client-only by default (conservative default)
-  assertEquals(plan.clientOnlyTags.includes('cem-experimental'), true);
-  assertEquals(plan.renderableTags.includes('cem-experimental'), false);
-  assertEquals(plan.rejectedTags.includes('cem-experimental'), false);
+  expect(plan.clientOnlyTags.includes('cem-experimental')).toEqual(true);
+  expect(plan.renderableTags.includes('cem-experimental')).toEqual(false);
+  expect(plan.rejectedTags.includes('cem-experimental')).toEqual(false);
 
   const decision = plan.decisions.find((d) => d.tagName === 'cem-experimental');
-  assertExists(decision);
-  assertEquals(decision.renderPath, 'client-only');
-  assertEquals(decision.reason.includes('CEM experimental-dom'), true);
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('client-only');
+  expect(decision.reason.includes('CEM experimental-dom')).toEqual(true);
 });
 
-Deno.test('SSR Admission: CEM classifications are preserved in plan', () => {
+test('SSR Admission: CEM classifications are preserved in plan', () => {
   const islands: IslandDecl[] = [
     {
       tagName: 'cem-preserved',
@@ -355,16 +355,16 @@ Deno.test('SSR Admission: CEM classifications are preserved in plan', () => {
   const plan = buildSsrAdmissionPlan(islands, cemClassifications);
 
   // Verify CEM classifications are preserved
-  assertExists(plan.cemClassifications);
-  assertEquals(plan.cemClassifications.length, 1);
-  assertEquals(plan.cemClassifications[0].tagName, 'cem-preserved');
-  assertEquals(plan.cemClassifications[0].tier, 'ssr-capable');
-  assertEquals(plan.cemClassifications[0].ssr, true);
-  assertEquals(plan.cemClassifications[0].dsd, true);
-  assertEquals(plan.cemClassifications[0].hydrate, 'load');
+  expect(plan.cemClassifications).toEqual(expect.anything());
+  expect(plan.cemClassifications.length).toEqual(1);
+  expect(plan.cemClassifications[0].tagName).toEqual('cem-preserved');
+  expect(plan.cemClassifications[0].tier).toEqual('ssr-capable');
+  expect(plan.cemClassifications[0].ssr).toEqual(true);
+  expect(plan.cemClassifications[0].dsd).toEqual(true);
+  expect(plan.cemClassifications[0].hydrate).toEqual('load');
 });
 
-Deno.test('SSR Admission: CEM takes precedence over island metadata', () => {
+test('SSR Admission: CEM takes precedence over island metadata', () => {
   // Island has ssr: true, but CEM says client-only
   const islands: IslandDecl[] = [
     {
@@ -389,16 +389,16 @@ Deno.test('SSR Admission: CEM takes precedence over island metadata', () => {
   const plan = buildSsrAdmissionPlan(islands, cemClassifications);
 
   // CEM takes precedence - should be client-only
-  assertEquals(plan.clientOnlyTags.includes('mixed-precedence'), true);
-  assertEquals(plan.renderableTags.includes('mixed-precedence'), false);
+  expect(plan.clientOnlyTags.includes('mixed-precedence')).toEqual(true);
+  expect(plan.renderableTags.includes('mixed-precedence')).toEqual(false);
 
   const decision = plan.decisions.find((d) => d.tagName === 'mixed-precedence');
-  assertExists(decision);
-  assertEquals(decision.renderPath, 'client-only');
-  assertEquals(decision.reason.includes('CEM client-only'), true);
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('client-only');
+  expect(decision.reason.includes('CEM client-only')).toEqual(true);
 });
 
-Deno.test('SSR Admission: conservative default - CEM without Less extension -> client-only', () => {
+test('SSR Admission: conservative default - CEM without Less extension -> client-only', () => {
   // No Less extension, just a bare CEM without ssr/dsd metadata
   const islands: IslandDecl[] = [
     {
@@ -423,15 +423,15 @@ Deno.test('SSR Admission: conservative default - CEM without Less extension -> c
   const plan = buildSsrAdmissionPlan(islands, cemClassifications);
 
   // Conservative default: CEM without Less extension is client-only
-  assertEquals(plan.clientOnlyTags.includes('bare-cem'), true);
-  assertEquals(plan.renderableTags.includes('bare-cem'), false);
+  expect(plan.clientOnlyTags.includes('bare-cem')).toEqual(true);
+  expect(plan.renderableTags.includes('bare-cem')).toEqual(false);
 
   const decision = plan.decisions.find((d) => d.tagName === 'bare-cem');
-  assertExists(decision);
-  assertEquals(decision.reason.includes('CEM client-only'), true);
+  expect(decision).toEqual(expect.anything());
+  expect(decision.reason.includes('CEM client-only')).toEqual(true);
 });
 
-Deno.test('SSR Admission: mixed island + CEM classifications', () => {
+test('SSR Admission: mixed island + CEM classifications', () => {
   const islands: IslandDecl[] = [
     localSsrTrue,
     {
@@ -470,24 +470,24 @@ Deno.test('SSR Admission: mixed island + CEM classifications', () => {
   const plan = buildSsrAdmissionPlan(islands, cemClassifications);
 
   // localSsrTrue -> ssr+client (island metadata)
-  assertEquals(plan.renderableTags.includes('local-ssr-true'), true);
+  expect(plan.renderableTags.includes('local-ssr-true')).toEqual(true);
 
   // packageSsrFalse -> client-only (island metadata)
-  assertEquals(plan.clientOnlyTags.includes('package-ssr-false'), true);
+  expect(plan.clientOnlyTags.includes('package-ssr-false')).toEqual(true);
 
   // cem-ssr-capable -> ssr+client (CEM classification)
-  assertEquals(plan.renderableTags.includes('cem-ssr-capable'), true);
+  expect(plan.renderableTags.includes('cem-ssr-capable')).toEqual(true);
 
   // cem-client-only -> client-only (CEM classification)
-  assertEquals(plan.clientOnlyTags.includes('cem-client-only'), true);
+  expect(plan.clientOnlyTags.includes('cem-client-only')).toEqual(true);
 
   // Total counts
-  assertEquals(plan.renderableTags.length, 2);
-  assertEquals(plan.clientOnlyTags.length, 2);
-  assertEquals(plan.rejectedTags.length, 0);
+  expect(plan.renderableTags.length).toEqual(2);
+  expect(plan.clientOnlyTags.length).toEqual(2);
+  expect(plan.rejectedTags.length).toEqual(0);
 });
 
-Deno.test('SSR Admission: plan includes CEM classifications in result', () => {
+test('SSR Admission: plan includes CEM classifications in result', () => {
   const islands: IslandDecl[] = [];
   const cemClassifications: CompatibilityClassification[] = [
     {
@@ -503,6 +503,6 @@ Deno.test('SSR Admission: plan includes CEM classifications in result', () => {
   const plan = buildSsrAdmissionPlan(islands, cemClassifications);
 
   // Even with no islands, CEM classifications are preserved
-  assertEquals(plan.cemClassifications?.length, 1);
-  assertEquals(plan.cemClassifications?.[0].tagName, 'standalone-cem');
+  expect(plan.cemClassifications?.length).toEqual(1);
+  expect(plan.cemClassifications?.[0].tagName).toEqual('standalone-cem');
 });

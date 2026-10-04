@@ -8,7 +8,11 @@
  */
 
 import type { SignalLike, Unsubscribe } from '../../protocol/signal.ts';
-import type { PartProgramV1, ProgramEachPart } from '../../protocol/part-program.ts';
+import type {
+  PartProgramV1,
+  ProgramEachPart,
+  ProgramTreeNode,
+} from '../../protocol/part-program.ts';
 // The single error dialect (#1386 item 3): every failure raised by this module
 // is an OpenElementError carrying a code from the catalogue, so a consumer
 // classifies a compiled-runtime failure by code instead of by message prefix.
@@ -213,6 +217,29 @@ export function itemValue(part: ProgramEachPart, item: unknown, field?: string):
   if (selected === undefined) return item;
   if (typeof item !== 'object' || item === null) return undefined;
   return (item as Record<string, unknown>)[selected];
+}
+
+/**
+ * Item fields referenced by an each Region's template (ival + iattr slots):
+ * the one required-field set both the claim validator and the server each
+ * serializer admit records against, so the two paths cannot disagree on
+ * which fields a record must carry.
+ */
+export function itemTemplateFields(
+  nodes: readonly ProgramTreeNode[],
+  out = new Set<string>(),
+): Set<string> {
+  for (const node of nodes) {
+    if (node.k === 'ival') {
+      if (node.field !== undefined) out.add(node.field);
+      continue;
+    }
+    if (node.k === 'el') {
+      for (const [, field] of node.iattrs ?? []) out.add(field);
+      itemTemplateFields(node.children, out);
+    }
+  }
+  return out;
 }
 
 /** Per-item attribute slot value: bare when true, omitted when falsy/absent. */

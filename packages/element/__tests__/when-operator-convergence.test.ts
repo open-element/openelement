@@ -12,7 +12,9 @@
  * the operator set stays closed to the seven admitted forms.
  */
 
-import { assert, assertEquals, assertThrows } from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   type ConditionOperator,
   validatePartProgram,
@@ -58,7 +60,7 @@ function whenProgram(op: string, value: number | string | boolean | null) {
   });
 }
 
-Deno.test('when operator: the validator admits every documented operator and rejects anything else', () => {
+test('when operator: the validator admits every documented operator and rejects anything else', () => {
   // One shape the predicate allows per operator.
   const allowed: Array<[string, number | string | boolean]> = [
     ['greater-than', 0],
@@ -75,7 +77,7 @@ Deno.test('when operator: the validator admits every documented operator and rej
 
   // Unknown operators stay closed.
   for (const op of ['contains', 'matches', '', '>', 'GREATHER-THAN']) {
-    assertThrows(
+    assertThrowsIncludes(
       () => validatePartProgram(whenProgram(op, 0)),
       Error,
       'truthiness',
@@ -95,7 +97,7 @@ Deno.test('when operator: the validator admits every documented operator and rej
     ['truthy', 'yes'],
   ];
   for (const [op, value] of mismatched) {
-    assertThrows(
+    assertThrowsIncludes(
       () => validatePartProgram(whenProgram(op, value)),
       Error,
       'truthiness',
@@ -104,67 +106,66 @@ Deno.test('when operator: the validator admits every documented operator and rej
   }
 });
 
-Deno.test('when operator: the canonical ConditionOperator declaration stays closed to the admitted set', async () => {
+test('when operator: the canonical ConditionOperator declaration stays closed to the admitted set', async () => {
   const path = 'packages/element/src/internal/protocol/part-program.ts';
-  const source = await Deno.readTextFile(new URL(path, REPO_ROOT));
+  const source = await readFile(new URL(path, REPO_ROOT), 'utf8');
   for (const op of ADMITTED_OPS) {
-    assert(
+    expect(
       source.includes(`| '${op}'`),
       `${path}: ConditionOperator lost the '${op}' arm — widen every evaluator in the same change`,
-    );
+    ).toBeTruthy();
   }
-  assert(
+  expect(
     source.includes('export function conditionLiteralAllowed'),
     `${path}: the shared operator/literal predicate moved — update the validators together`,
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('when operator: evaluation sites route through conditionHolds, no private comparisons', async () => {
+test('when operator: evaluation sites route through conditionHolds, no private comparisons', async () => {
   for (const path of EVALUATION_SITES) {
-    const source = await Deno.readTextFile(new URL(path, REPO_ROOT));
-    assert(
+    const source = await readFile(new URL(path, REPO_ROOT), 'utf8');
+    expect(
       source.includes("import { conditionHolds } from './condition-holds.ts'") ||
         source.includes("import { conditionHolds } from '../condition-holds.ts'"),
       `${path}: when evaluation must import the canonical conditionHolds module`,
-    );
+    ).toBeTruthy();
     const privateComparisons = [
       ...source.matchAll(/Number\(value\)\s*([<>]=?|===?|!==?)\s*(part\.test\.)?value/g),
     ];
-    assertEquals(
+    expect(
       privateComparisons.length,
-      0,
       `${path}: when comparison drifted out of the shared module`,
-    );
+    ).toEqual(0);
   }
 });
 
-Deno.test('when operator: conditionHolds semantics per operator (#1372)', () => {
+test('when operator: conditionHolds semantics per operator (#1372)', () => {
   const holds = (op: string, value: number | string | boolean, v: unknown) =>
     conditionHolds({ signal: 'x', op: op as never, value }, v);
 
   // Ordering coerces with Number() (pre-#1372 behavior preserved).
-  assertEquals(holds('greater-than', 5, 6), true);
-  assertEquals(holds('greater-than', 5, '6'), true);
-  assertEquals(holds('greater-than', 5, 5), false);
-  assertEquals(holds('greater-or-equal', 5, 5), true);
-  assertEquals(holds('greater-or-equal', 5, 4.9), false);
-  assertEquals(holds('less-than', 5, '4'), true);
-  assertEquals(holds('less-or-equal', 5, 5), true);
-  assertEquals(holds('less-or-equal', 5, 5.1), false);
+  expect(holds('greater-than', 5, 6)).toEqual(true);
+  expect(holds('greater-than', 5, '6')).toEqual(true);
+  expect(holds('greater-than', 5, 5)).toEqual(false);
+  expect(holds('greater-or-equal', 5, 5)).toEqual(true);
+  expect(holds('greater-or-equal', 5, 4.9)).toEqual(false);
+  expect(holds('less-than', 5, '4')).toEqual(true);
+  expect(holds('less-or-equal', 5, 5)).toEqual(true);
+  expect(holds('less-or-equal', 5, 5.1)).toEqual(false);
 
   // Equality is strict: no cross-type coercion.
-  assertEquals(holds('equals', 'pending', 'pending'), true);
-  assertEquals(holds('equals', 'pending', 'other'), false);
-  assertEquals(holds('equals', 1, '1'), false);
-  assertEquals(holds('equals', 1, 1), true);
-  assertEquals(holds('not-equals', false, false), false);
-  assertEquals(holds('not-equals', false, true), true);
-  assertEquals(holds('not-equals', 'a', 0), true);
+  expect(holds('equals', 'pending', 'pending')).toEqual(true);
+  expect(holds('equals', 'pending', 'other')).toEqual(false);
+  expect(holds('equals', 1, '1')).toEqual(false);
+  expect(holds('equals', 1, 1)).toEqual(true);
+  expect(holds('not-equals', false, false)).toEqual(false);
+  expect(holds('not-equals', false, true)).toEqual(true);
+  expect(holds('not-equals', 'a', 0)).toEqual(true);
 
   // Truthiness compares Boolean(value) against the recorded expectation.
-  assertEquals(holds('truthy', true, 'x'), true);
-  assertEquals(holds('truthy', true, ''), false);
-  assertEquals(holds('truthy', true, 0), false);
-  assertEquals(holds('truthy', false, ''), true);
-  assertEquals(holds('truthy', false, 'x'), false);
+  expect(holds('truthy', true, 'x')).toEqual(true);
+  expect(holds('truthy', true, '')).toEqual(false);
+  expect(holds('truthy', true, 0)).toEqual(false);
+  expect(holds('truthy', false, '')).toEqual(true);
+  expect(holds('truthy', false, 'x')).toEqual(false);
 });

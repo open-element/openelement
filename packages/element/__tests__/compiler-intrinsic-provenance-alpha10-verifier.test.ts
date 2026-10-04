@@ -11,7 +11,8 @@
  * Each must fail closed at every admission level.
  */
 
-import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   CompiledElementError,
   compileElementProgram,
@@ -25,12 +26,15 @@ const FILE = '/project/app/islands/alpha10-verifier-impostor.tsx';
 const NEAR_MISS_SPECIFIER = '@openelement/element' + 's';
 
 function assertProgramFailsClosed(source: string, code: string): CompiledElementError {
-  const error = assertThrows(() => compileElementProgram(source, FILE), CompiledElementError);
-  assertStringIncludes(error.message, code, `expected ${code} in: ${error.message}`);
+  const error = assertThrowsIncludes(
+    () => compileElementProgram(source, FILE),
+    CompiledElementError,
+  );
+  expect(error.message, `expected ${code} in: ${error.message}`).toContain(code);
   return error;
 }
 
-Deno.test('alpha10-verifier provenance: near-miss specifier (canonical + "s") never admits the grammar', () => {
+test('alpha10-verifier provenance: near-miss specifier (canonical + "s") never admits the grammar', () => {
   const source = [
     `import { element, OpenElement } from '${NEAR_MISS_SPECIFIER}';`,
     "@element('oe-alpha10-impostor-plural')",
@@ -38,13 +42,13 @@ Deno.test('alpha10-verifier provenance: near-miss specifier (canonical + "s") ne
   ].join('\n');
 
   const analysis = analyzeModuleSemantics(source, FILE);
-  assertEquals(analysis.compiledElementDecorator, false);
-  assertEquals(analysis.definedCustomElementTags, []);
-  assertEquals(compileElementModule(source, FILE), null, 'plugin gate must not admit');
+  expect(analysis.compiledElementDecorator).toEqual(false);
+  expect(analysis.definedCustomElementTags).toEqual([]);
+  expect(compileElementModule(source, FILE), 'plugin gate must not admit').toEqual(null);
   assertProgramFailsClosed(source, 'OEC9001');
 });
 
-Deno.test('alpha10-verifier provenance: default-import spelling of element fails closed (OEC9027)', () => {
+test('alpha10-verifier provenance: default-import spelling of element fails closed (OEC9027)', () => {
   const source = [
     "import element from '@openelement/element';",
     "import { OpenElement } from '@openelement/element';",
@@ -52,12 +56,12 @@ Deno.test('alpha10-verifier provenance: default-import spelling of element fails
     'export class Impostor extends OpenElement { render() { return <div/>; } }',
   ].join('\n');
 
-  assertThrows(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9027');
+  assertThrowsIncludes(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9027');
   const error = assertProgramFailsClosed(source, 'OEC9027');
-  assertStringIncludes(error.message, 'default import');
+  expect(error.message).toContain('default import');
 });
 
-Deno.test('alpha10-verifier provenance: indirect rebinding through a const alias is never admitted', () => {
+test('alpha10-verifier provenance: indirect rebinding through a const alias is never admitted', () => {
   const source = [
     "import { element, OpenElement } from '@openelement/element';",
     'const el = element;',
@@ -66,21 +70,23 @@ Deno.test('alpha10-verifier provenance: indirect rebinding through a const alias
   ].join('\n');
 
   const analysis = analyzeModuleSemantics(source, FILE);
-  assertEquals(
+  expect(
     analysis.compiledElementDecorator,
-    false,
     'the @el spelling must not be admitted even though `element` is canonically imported',
+  ).toEqual(false);
+  expect(analysis.definedCustomElementTags).toEqual([]);
+  expect(compileElementModule(source, FILE)).toEqual(null);
+  const error = assertThrowsIncludes(
+    () => compileElementProgram(source, FILE),
+    CompiledElementError,
   );
-  assertEquals(analysis.definedCustomElementTags, []);
-  assertEquals(compileElementModule(source, FILE), null);
-  const error = assertThrows(() => compileElementProgram(source, FILE), CompiledElementError);
-  assert(
+  expect(
     error.message.includes('OEC9008') || error.message.includes('OEC9001'),
     `expected fail-closed diagnostic, got: ${error.message}`,
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('alpha10-verifier provenance: subpath impostor specifier "@openelement/element/fake" never admits the grammar', () => {
+test('alpha10-verifier provenance: subpath impostor specifier "@openelement/element/fake" never admits the grammar', () => {
   const source = [
     "import { element, OpenElement } from '@openelement/element/fake';",
     "@element('oe-alpha10-impostor-subpath')",
@@ -88,22 +94,22 @@ Deno.test('alpha10-verifier provenance: subpath impostor specifier "@openelement
   ].join('\n');
 
   const analysis = analyzeModuleSemantics(source, FILE);
-  assertEquals(analysis.compiledElementDecorator, false);
-  assertEquals(analysis.definedCustomElementTags, []);
-  assertEquals(compileElementModule(source, FILE), null);
+  expect(analysis.compiledElementDecorator).toEqual(false);
+  expect(analysis.definedCustomElementTags).toEqual([]);
+  expect(compileElementModule(source, FILE)).toEqual(null);
   assertProgramFailsClosed(source, 'OEC9001');
 });
 
-Deno.test('alpha10-verifier provenance: differential control — the same identifier spelling IS admitted only from the canonical module', () => {
+test('alpha10-verifier provenance: differential control — the same identifier spelling IS admitted only from the canonical module', () => {
   const canonical = [
     "import { element, OpenElement } from '@openelement/element';",
     "@element('oe-alpha10-control-canonical')",
     'export class Control extends OpenElement { render() { return <div/>; } }',
   ].join('\n');
   const analysis = analyzeModuleSemantics(canonical, FILE);
-  assertEquals(analysis.compiledElementDecorator, true);
-  assertEquals(analysis.definedCustomElementTags, ['oe-alpha10-control-canonical']);
-  assert(compileElementModule(canonical, FILE) !== null);
+  expect(analysis.compiledElementDecorator).toEqual(true);
+  expect(analysis.definedCustomElementTags).toEqual(['oe-alpha10-control-canonical']);
+  expect(compileElementModule(canonical, FILE) !== null).toBeTruthy();
   const { program } = compileElementProgram(canonical, FILE);
-  assertEquals(program.tag, 'oe-alpha10-control-canonical');
+  expect(program.tag).toEqual('oe-alpha10-control-canonical');
 });

@@ -10,7 +10,7 @@
  *     DOES re-prototype the host, proving the guard is load-bearing
  */
 
-import { assert, assertEquals, assertNotStrictEquals, assertStrictEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { injectPropsSafe } from '@openelement/element';
 import { projectPageProps } from '../src/index.ts';
 
@@ -24,7 +24,7 @@ function makeHost(): { host: Record<string, unknown>; proto: object } {
   return { host, proto };
 }
 
-Deno.test('alpha10-verifier projection: defineProperty-crafted own __proto__ key fails closed at the write boundary', () => {
+test('alpha10-verifier projection: defineProperty-crafted own __proto__ key fails closed at the write boundary', () => {
   const payload: Record<string, unknown> = {};
   Object.defineProperty(payload, '__proto__', {
     value: { polluted: true },
@@ -37,14 +37,14 @@ Deno.test('alpha10-verifier projection: defineProperty-crafted own __proto__ key
   const { host, proto } = makeHost();
   injectPropsSafe(host, payload, 'oe-alpha10-probe', silentLog);
 
-  assertStrictEquals(Object.getPrototypeOf(host), proto, 'host prototype identity must not move');
-  assertEquals(Object.hasOwn(host, '__proto__'), false);
-  assertEquals((host as { polluted?: unknown }).polluted, undefined);
-  assertEquals(host.title, 'legit');
-  assertEquals(({} as { polluted?: unknown }).polluted, undefined, 'global prototype unpolluted');
+  expect(Object.getPrototypeOf(host), 'host prototype identity must not move').toBe(proto);
+  expect(Object.hasOwn(host, '__proto__')).toEqual(false);
+  expect((host as { polluted?: unknown }).polluted).toEqual(undefined);
+  expect(host.title).toEqual('legit');
+  expect(({} as { polluted?: unknown }).polluted, 'global prototype unpolluted').toEqual(undefined);
 });
 
-Deno.test('alpha10-verifier projection: constructor.prototype re-prototyping attempt fails closed', () => {
+test('alpha10-verifier projection: constructor.prototype re-prototyping attempt fails closed', () => {
   const payload = JSON.parse(
     '{"constructor": {"prototype": {"polluted": true}}, "prototype": {"polluted": true}, "id": "7"}',
   ) as Record<string, unknown>;
@@ -52,14 +52,14 @@ Deno.test('alpha10-verifier projection: constructor.prototype re-prototyping att
   const { host, proto } = makeHost();
   injectPropsSafe(host, payload, 'oe-alpha10-probe', silentLog);
 
-  assertStrictEquals(Object.getPrototypeOf(host), proto);
-  assertEquals(Object.hasOwn(host, 'constructor'), false);
-  assertEquals(Object.hasOwn(host, 'prototype'), false);
-  assertEquals(host.id, '7');
-  assertEquals(({} as { polluted?: unknown }).polluted, undefined);
+  expect(Object.getPrototypeOf(host)).toBe(proto);
+  expect(Object.hasOwn(host, 'constructor')).toEqual(false);
+  expect(Object.hasOwn(host, 'prototype')).toEqual(false);
+  expect(host.id).toEqual('7');
+  expect(({} as { polluted?: unknown }).polluted).toEqual(undefined);
 });
 
-Deno.test('alpha10-verifier projection: full page-projection chain projectPageProps → injectPropsSafe fails closed', () => {
+test('alpha10-verifier projection: full page-projection chain projectPageProps → injectPropsSafe fails closed', () => {
   const params = JSON.parse('{"__proto__": "x", "slug": "hello"}') as Record<string, string>;
   const data = JSON.parse(
     '{"__proto__": {"polluted": true}, "constructor": "evil", "title": "legit"}',
@@ -69,16 +69,16 @@ Deno.test('alpha10-verifier projection: full page-projection chain projectPagePr
   const { host, proto } = makeHost();
   injectPropsSafe(host, projected, 'oe-alpha10-probe', silentLog);
 
-  assertStrictEquals(Object.getPrototypeOf(host), proto);
+  expect(Object.getPrototypeOf(host)).toBe(proto);
   for (const key of ['__proto__', 'constructor', 'prototype']) {
-    assertEquals(Object.hasOwn(host, key), false, `dangerous key ${key} must not land on host`);
+    expect(Object.hasOwn(host, key), `dangerous key ${key} must not land on host`).toEqual(false);
   }
-  assertEquals(host.slug, 'hello');
-  assertEquals(host.title, 'legit');
-  assertEquals(({} as { polluted?: unknown }).polluted, undefined);
+  expect(host.slug).toEqual('hello');
+  expect(host.title).toEqual('legit');
+  expect(({} as { polluted?: unknown }).polluted).toEqual(undefined);
 });
 
-Deno.test('alpha10-verifier projection: nested __proto__ payload cannot reach the host prototype', () => {
+test('alpha10-verifier projection: nested __proto__ payload cannot reach the host prototype', () => {
   const data = JSON.parse('{"a": {"__proto__": {"polluted": true}}, "b": 1}') as Record<
     string,
     unknown
@@ -86,14 +86,14 @@ Deno.test('alpha10-verifier projection: nested __proto__ payload cannot reach th
   const { host, proto } = makeHost();
   injectPropsSafe(host, projectPageProps({ data }), 'oe-alpha10-probe', silentLog);
 
-  assertStrictEquals(Object.getPrototypeOf(host), proto);
-  assertEquals(host.b, 1);
+  expect(Object.getPrototypeOf(host)).toBe(proto);
+  expect(host.b).toEqual(1);
   // The nested object may be carried as inert data; it must never re-prototype anything.
-  assertEquals(({} as { polluted?: unknown }).polluted, undefined);
-  assertEquals((host.a as Record<string, unknown>).polluted, undefined);
+  expect(({} as { polluted?: unknown }).polluted).toEqual(undefined);
+  expect((host.a as Record<string, unknown>).polluted).toEqual(undefined);
 });
 
-Deno.test('alpha10-verifier projection: differential control — a naive assignment loop DOES re-prototype (guard is load-bearing)', () => {
+test('alpha10-verifier projection: differential control — a naive assignment loop DOES re-prototype (guard is load-bearing)', () => {
   const payload = JSON.parse('{"__proto__": {"polluted": true}, "title": "legit"}') as Record<
     string,
     unknown
@@ -116,10 +116,9 @@ Deno.test('alpha10-verifier projection: differential control — a naive assignm
     // closure evidence bundle (control re-prototypes; guarded path does not).
     return;
   }
-  assertNotStrictEquals(
+  expect(
     Object.getPrototypeOf(host),
-    proto,
     'control must show the naive loop re-prototypes the host, else the probe proves nothing',
-  );
-  assert((host as { polluted?: unknown }).polluted === true);
+  ).not.toBe(proto);
+  expect((host as { polluted?: unknown }).polluted === true).toBeTruthy();
 });

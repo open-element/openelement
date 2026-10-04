@@ -1,10 +1,22 @@
 /**
- * Bounded diagnostic, not a ranking: run through the package suite
- * (scoped permissions, never -A). The qualified
- * construction/hit/miss/memory evidence for #1324 lives in the maintained
- * fork: open-element/url-pattern-list BENCHMARKS.md (Node, GC-controlled).
+ * Bounded diagnostic, not a ranking: run with Node
+ * (`node packages/router/__tests__/url-pattern-list.bench.ts`; not part of
+ * the vitest suite). The qualified construction/hit/miss/memory evidence for
+ * #1324 lives in the maintained fork: open-element/url-pattern-list
+ * BENCHMARKS.md (Node, GC-controlled).
  */
+import { execFile as execFileCallback } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
+import process from 'node:process';
+import { ScriptTarget, transpileModule } from 'typescript';
+
+const execFile = promisify(execFileCallback);
 import { RouteTable } from '../src/internal/router/route-table.ts';
+import { URLPatternList } from '@openelement/url-pattern-list';
 
 if (typeof globalThis.URLPattern !== 'function') {
   throw new TypeError(
@@ -12,31 +24,44 @@ if (typeof globalThis.URLPattern !== 'function') {
   );
 }
 const NativeURLPattern = globalThis.URLPattern;
-import { URLPatternList } from '@openelement/url-pattern-list';
 
 async function main(): Promise<void> {
   const base = '0d826954cb96b3a9306119830defd6000a798c95';
-  const source = await new Deno.Command('git', {
-    args: ['show', `${base}:packages/router/src/internal/router/route-table.ts`],
-    stdout: 'piped',
-  }).output();
-  if (!source.success) throw new Error('Baseline source unavailable');
-  const baselineCode = new TextDecoder()
-    .decode(source.stdout)
+  // The baseline predates the router package extraction: the table lived in
+  // packages/app/src/internal/router/.
+  const { stdout } = await execFile('git', [
+    'show',
+    `${base}:packages/app/src/internal/router/route-table.ts`,
+  ]);
+  const baselineCode = stdout
     .replace(
       '@openelement/element/build-utils',
       new URL('../src/internal/router/route-pattern.ts', import.meta.url).href,
     )
-    // The baseline's retired 'urlpattern-polyfill' import resolves through the
-    // maintained fork — same code lineage, present in every lockfile (#1324).
-    .replace("'urlpattern-polyfill'", "'@openelement/url-pattern-list'");
-  const file = await Deno.makeTempFile({ suffix: '.ts' });
-  await Deno.writeTextFile(file, baselineCode);
+    // The baseline's retired 'urlpattern-polyfill' fallback import: the
+    // maintained fork no longer exports a URLPattern class, and the baseline
+    // itself prefers globalThis.URLPattern when it exists (it does on every
+    // supported Node), so the fallback binds to the native constructor.
+    .replace(
+      "import { URLPattern as URLPatternPolyfill } from 'urlpattern-polyfill';",
+      'const URLPatternPolyfill = globalThis.URLPattern;',
+    );
+  // The baseline uses parameter properties, which Node's type stripping
+  // rejects: transpile to plain JavaScript before importing.
+  const baselineJs = transpileModule(baselineCode, {
+    compilerOptions: {
+      target: ScriptTarget.Latest,
+      module: ScriptTarget.ESNext,
+    },
+  }).outputText;
+  const dir = await mkdtemp(join(tmpdir(), 'oe-url-pattern-bench-'));
+  const file = join(dir, 'route-table.baseline.mjs');
+  await writeFile(file, baselineJs);
   try {
-    const { RouteTable: Baseline } = await import(new URL(`file://${file}`).href);
+    const { RouteTable: Baseline } = await import(pathToFileURL(file).href);
     console.log(
       JSON.stringify({
-        deno: Deno.version,
+        node: process.version,
         baseline: base,
         memory: 'measured in the fork: open-element/url-pattern-list BENCHMARKS.md',
         samples: 5,
@@ -100,7 +125,7 @@ async function main(): Promise<void> {
       }
     }
   } finally {
-    await Deno.remove(file);
+    await rm(dir, { recursive: true, force: true });
   }
 }
 

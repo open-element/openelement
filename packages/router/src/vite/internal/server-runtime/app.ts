@@ -3,8 +3,8 @@
  *
  * `createGeneratedApp` is the assembly half of the generated Hono entry
  * (#1470 block e): the entry's final form is imports + a
- * route descriptor + one factory call, and this module owns everything that
- * used to be emitted as entry-template assembly code — the Hono app and its
+ * route descriptor + one factory call, and this module owns the entry
+ * assembly — the Hono app and its
  * WinterCG bridge, the composed `openElementHandler` (with the middleware.use
  * onion), the runtime adapter exports, the island client-script plumbing
  * (#951), the SSR registration seam (security.ts), the page-render runtime
@@ -213,8 +213,7 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
   };
 
   // The page-render seam binds to the entry's injected
-  // Element functions and its serialized build data — exactly the wiring the
-  // entry template used to emit (renderer-adapter selected), now typed. The
+  // Element functions and its serialized build data. The
   // dangerous keys are the canonical policy imported from the kernel-free
   // /authoring leaf: the entry carries no serialized copy of it (#1214,
   // #1470 block e).

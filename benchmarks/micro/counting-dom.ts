@@ -53,7 +53,7 @@ export abstract class FNodeBase {
   insertBefore(node: FNode, reference: FNode): FNode {
     this.detachForMove(node);
     const index = this.childNodes.indexOf(reference);
-    if (index < 0) throw new Error('[v044-performance] insertBefore reference is missing');
+    if (index < 0) throw new Error('[counting-dom] insertBefore reference is missing');
     node.parentNode = this as unknown as FElement;
     this.childNodes.splice(index, 0, node);
     this.ownerDocument.counts.insertions++;
@@ -70,7 +70,7 @@ export abstract class FNodeBase {
 
   removeChild(node: FNode): FNode {
     const index = this.childNodes.indexOf(node);
-    if (index < 0) throw new Error('[v044-performance] removeChild node is missing');
+    if (index < 0) throw new Error('[counting-dom] removeChild node is missing');
     this.childNodes.splice(index, 1);
     node.parentNode = null;
     this.ownerDocument.counts.removals++;
@@ -261,7 +261,7 @@ export function parseHtml(doc: FDocument, html: string): FElement {
     if (token.startsWith('<!--')) {
       parent.appendChild(doc.createComment(token.slice(4, -3)));
     } else if (token.startsWith('</')) {
-      if (stack.length === 1) throw new Error('[v044-performance] malformed fixture closing tag');
+      if (stack.length === 1) throw new Error('[counting-dom] malformed fixture closing tag');
       stack.pop();
     } else if (token.startsWith('<')) {
       const inner = token.slice(1, -1);
@@ -279,7 +279,7 @@ export function parseHtml(doc: FDocument, html: string): FElement {
       parent.appendChild(doc.createTextNode(unescapeText(token)));
     }
   }
-  if (stack.length !== 1) throw new Error('[v044-performance] malformed fixture opening tag');
+  if (stack.length !== 1) throw new Error('[counting-dom] malformed fixture opening tag');
   return host;
 }
 

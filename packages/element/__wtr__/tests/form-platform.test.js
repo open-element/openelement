@@ -17,7 +17,7 @@
  *   6. action/method/enctype/target IDL vs attribute resolution, including
  *      submitter formaction/formmethod/formenctype/formtarget overrides
  *      (IDL reads the document URL when the attribute is absent — #576).
- *   7. Restore-reason path: the component (like third-party component package open-input.tsx)
+ *   7. Restore-reason path: the component (like packages/ui open-input.tsx)
  *      implements formResetCallback only; the inherited
  *      formStateRestoreCallback is a safe no-op because no restore hook is
  *      registered. Only what the component implements is asserted.
@@ -25,21 +25,12 @@
  * Style: no sleeps; async settling is awaited through waitFor predicates.
  */
 import { assert } from 'chai';
-import { sendKeys } from '@web/test-runner-commands';
+import { userEvent } from 'vitest/browser';
 import { WtrField } from '../generated/wtr-field.ts';
+import { formDataForSubmitter, typeInto, waitFor } from './helpers.js';
 
 customElements.define('wtr-field', WtrField);
 await customElements.whenDefined('wtr-field');
-
-/** Poll a predicate on animation frames; fail with a label on timeout. */
-async function waitFor(predicate, label) {
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-  }
-  assert.fail(`timed out waiting for ${label}`);
-}
 
 /** form > wtr-field(name=q) + caller-supplied extra controls; connected. */
 function setup({ required = true } = {}) {
@@ -63,13 +54,6 @@ function makeSubmitter(name, value, attrs = {}) {
   return button;
 }
 
-/** Simulate typing: set the inner control's value and dispatch input. */
-function typeInto(field, value) {
-  const input = field.shadowRoot.querySelector('input');
-  input.value = value;
-  input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-}
-
 /** Count submit/invalid events; submits are always canceled in-page. */
 function watch(form) {
   const events = { submits: [], invalids: 0 };
@@ -79,13 +63,6 @@ function watch(form) {
   });
   form.addEventListener('invalid', () => events.invalids++, true);
   return events;
-}
-
-/** Exercise the browser-standard FormData(form, submitter) overload.
- * Reflect.construct keeps CodeQL's Node-only FormData model from treating the
- * browser overload as a superfluous argument. */
-function formDataForSubmitter(form, submitter) {
-  return Reflect.construct(FormData, [form, submitter]);
 }
 
 describe('form/platform matrix', () => {
@@ -161,7 +138,7 @@ describe('form/platform matrix', () => {
     typeInto(field, 'typed');
     input.value = 'enter-title';
     input.focus();
-    await sendKeys({ press: 'Enter' });
+    await userEvent.keyboard('{Enter}');
 
     await waitFor(() => events.submits.length === 1, 'implicit submission submit event');
     const submit = events.submits[0];

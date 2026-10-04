@@ -1,11 +1,5 @@
-import {
-  assert,
-  assertEquals,
-  assertFalse,
-  assertStrictEquals,
-  assertStringIncludes,
-  assertThrows,
-} from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { CompiledErrorBoundary } from '../../src/error-boundary.ts';
 import { ElementFormController } from '../../src/open-element-form.ts';
 // The claim executor is installed by the package entry, not by the kernel
@@ -52,7 +46,7 @@ function elementChild(root: { childNodes: ArrayLike<unknown> }): TestElement {
   return root.childNodes[0] as TestElement;
 }
 
-Deno.test('compiled kernel owns root, claim reconnect, and lifecycle disposal', () => {
+test('compiled kernel owns root, claim reconnect, and lifecycle disposal', () => {
   const document = new TestDocument();
   const element = document.createElement('oe-kernel-test');
   const message = signal('first');
@@ -63,36 +57,36 @@ Deno.test('compiled kernel owns root, claim reconnect, and lifecycle disposal', 
   });
 
   kernel.connect();
-  assert(kernel.active);
-  assert(kernel.lifecycle.active);
+  expect(kernel.active).toBeTruthy();
+  expect(kernel.lifecycle.active).toBeTruthy();
   const root = kernel.root;
-  assert(root !== undefined);
+  expect(root !== undefined).toBeTruthy();
   const first = elementChild(root);
   const connectedSignal = kernel.lifecycle.signal;
-  assertEquals(toHtml(first), '<div data-static="yes"><!--oe:p0-->first</div>');
+  expect(toHtml(first)).toEqual('<div data-static="yes"><!--oe:p0-->first</div>');
   message.value = 'second';
-  assertEquals(toHtml(first), '<div data-static="yes"><!--oe:p0-->second</div>');
+  expect(toHtml(first)).toEqual('<div data-static="yes"><!--oe:p0-->second</div>');
 
   kernel.disconnect();
-  assertFalse(kernel.active);
-  assert(connectedSignal.aborted);
-  assert(!kernel.lifecycle.signal.aborted);
+  expect(kernel.active).toBeFalsy();
+  expect(connectedSignal.aborted).toBeTruthy();
+  expect(!kernel.lifecycle.signal.aborted).toBeTruthy();
   message.value = 'after-disconnect';
-  assertEquals(toHtml(first), '<div data-static="yes"><!--oe:p0-->second</div>');
+  expect(toHtml(first)).toEqual('<div data-static="yes"><!--oe:p0-->second</div>');
   message.value = 'second';
 
   kernel.connect();
-  assertStrictEquals(kernel.root, root);
-  assertStrictEquals(elementChild(root), first);
-  assert(kernel.active);
+  expect(kernel.root).toBe(root);
+  expect(elementChild(root)).toBe(first);
+  expect(kernel.active).toBeTruthy();
   message.value = 'reconnected';
-  assertEquals(toHtml(first), '<div data-static="yes"><!--oe:p0-->reconnected</div>');
+  expect(toHtml(first)).toEqual('<div data-static="yes"><!--oe:p0-->reconnected</div>');
   kernel.dispose();
-  assertFalse(kernel.active);
-  assertThrows(() => kernel.connect(), Error, 'kernel is disposed');
+  expect(kernel.active).toBeFalsy();
+  assertThrowsIncludes(() => kernel.connect(), Error, 'kernel is disposed');
 });
 
-Deno.test('compiled kernel connect returns the activation mode truth', () => {
+test('compiled kernel connect returns the activation mode truth', () => {
   const document = new TestDocument();
   const element = document.createElement('oe-kernel-test');
   const message = signal('truth');
@@ -104,24 +98,24 @@ Deno.test('compiled kernel connect returns the activation mode truth', () => {
 
   // connect() owns the claim-vs-fresh truth (#1213).
   const fresh = kernel.connect() as unknown as { mode: string; root: unknown };
-  assertEquals(fresh.mode, 'fresh');
-  assertStrictEquals(fresh.root, kernel.root);
+  expect(fresh.mode).toEqual('fresh');
+  expect(fresh.root).toBe(kernel.root);
 
   // A redundant connect while active reports the same activation.
   const again = kernel.connect() as unknown as { mode: string; root: unknown };
-  assertEquals(again.mode, 'fresh');
-  assertStrictEquals(again.root, fresh.root);
+  expect(again.mode).toEqual('fresh');
+  expect(again.root).toBe(fresh.root);
 
   kernel.disconnect();
 
   // Reconnect into the retained content is a claim.
   const reclaimed = kernel.connect() as unknown as { mode: string; root: unknown };
-  assertEquals(reclaimed.mode, 'claim');
-  assertStrictEquals(reclaimed.root, fresh.root);
+  expect(reclaimed.mode).toEqual('claim');
+  expect(reclaimed.root).toBe(fresh.root);
   kernel.dispose();
 });
 
-Deno.test('compiled kernel claims a supplied existing closed root and reports claim mode', () => {
+test('compiled kernel claims a supplied existing closed root and reports claim mode', () => {
   const document = new TestDocument();
   const element = document.createElement('oe-kernel-test');
   const message = signal('supplied');
@@ -141,13 +135,13 @@ Deno.test('compiled kernel claims a supplied existing closed root and reports cl
     root: closedRoot as unknown as ShadowRoot,
   });
   const activation = kernel.connect() as unknown as { mode: string; root: unknown };
-  assertEquals(activation.mode, 'claim');
-  assertStrictEquals(activation.root, closedRoot);
-  assertStrictEquals(closedRoot.childNodes[0], claimedDiv, 'claim preserves node identity');
+  expect(activation.mode).toEqual('claim');
+  expect(activation.root).toBe(closedRoot);
+  expect(closedRoot.childNodes[0], 'claim preserves node identity').toBe(claimedDiv);
   kernel.dispose();
 });
 
-Deno.test('compiled kernel keeps light-DOM styles outside the claimed template', () => {
+test('compiled kernel keeps light-DOM styles outside the claimed template', () => {
   const document = new TestDocument();
   const element = document.createElement('oe-kernel-test');
   const message = signal('light');
@@ -163,17 +157,16 @@ Deno.test('compiled kernel keeps light-DOM styles outside the claimed template',
   });
 
   kernel.connect();
-  assertEquals(document.head.childNodes.length, 1);
-  assertEquals(
-    (document.head.childNodes[0] as unknown as { textContent: string }).textContent,
+  expect(document.head.childNodes.length).toEqual(1);
+  expect((document.head.childNodes[0] as unknown as { textContent: string }).textContent).toEqual(
     '@scope (oe-kernel-test) {\noe-light-test { color: red; }\n}',
   );
-  assertEquals(element.childNodes.length, 1);
+  expect(element.childNodes.length).toEqual(1);
   kernel.disconnect();
-  assertEquals(document.head.childNodes.length, 0);
+  expect(document.head.childNodes.length).toEqual(0);
 });
 
-Deno.test('compiled kernel applies styles into open and closed shadow roots', () => {
+test('compiled kernel applies styles into open and closed shadow roots', () => {
   for (const mode of ['open', 'closed'] as const) {
     const document = new TestDocument();
     const element = document.createElement('oe-kernel-test');
@@ -198,29 +191,26 @@ Deno.test('compiled kernel applies styles into open and closed shadow roots', ()
 
     kernel.connect();
     const root = kernel.root as unknown as TestShadowRoot;
-    assertStrictEquals(root, attached);
-    assertEquals(
+    expect(root).toBe(attached);
+    expect(
       root.adoptedStyleSheets,
-      [preExisting, sheet],
       `${mode} root adopts scope sheets after pre-existing ones`,
-    );
-    assertEquals(document.head.childNodes.length, 0, `${mode} root leaves light DOM untouched`);
+    ).toEqual([preExisting, sheet]);
+    expect(document.head.childNodes.length, `${mode} root leaves light DOM untouched`).toEqual(0);
 
     kernel.disconnect();
-    assertEquals(
-      root.adoptedStyleSheets,
+    expect(root.adoptedStyleSheets, `${mode} disconnect removes only scope-applied sheets`).toEqual(
       [preExisting],
-      `${mode} disconnect removes only scope-applied sheets`,
     );
 
     kernel.connect();
-    assertEquals(root.adoptedStyleSheets, [preExisting, sheet], `${mode} reconnect re-applies`);
+    expect(root.adoptedStyleSheets, `${mode} reconnect re-applies`).toEqual([preExisting, sheet]);
     kernel.dispose();
-    assertEquals(root.adoptedStyleSheets, [preExisting], `${mode} dispose cleans up`);
+    expect(root.adoptedStyleSheets, `${mode} dispose cleans up`).toEqual([preExisting]);
   }
 });
 
-Deno.test('compiled kernel claims fixed Parts after the serialized static style node', () => {
+test('compiled kernel claims fixed Parts after the serialized static style node', () => {
   const document = new TestDocument();
   const element = document.createElement('oe-kernel-test');
   const root = element.attachShadow({ mode: 'open' });
@@ -276,13 +266,13 @@ Deno.test('compiled kernel claims fixed Parts after the serialized static style 
   kernel.connect();
   const button = (root.childNodes[1] as TestElement).childNodes[0] as TestElement;
   button.dispatch('click');
-  assertEquals(clicks, 1);
+  expect(clicks).toEqual(1);
   message.value = 'after';
-  assertEquals(toHtml(root.childNodes[1]), '<div><button>+</button><!--oe:p0-->after</div>');
+  expect(toHtml(root.childNodes[1])).toEqual('<div><button>+</button><!--oe:p0-->after</div>');
   kernel.dispose();
 });
 
-Deno.test('compiled kernel retains a closed root without aliasing light DOM', () => {
+test('compiled kernel retains a closed root without aliasing light DOM', () => {
   const document = new TestDocument();
   const element = document.createElement('oe-kernel-test');
   const message = signal('closed');
@@ -294,17 +284,17 @@ Deno.test('compiled kernel retains a closed root without aliasing light DOM', ()
 
   kernel.connect();
   const root = kernel.root;
-  assert(root !== undefined && 'host' in root);
-  assertStrictEquals(root.host, element);
-  assertStrictEquals(element.shadowRoot, null);
-  assertEquals(root.childNodes.length, 1);
+  expect(root !== undefined && 'host' in root).toBeTruthy();
+  expect(root.host).toBe(element);
+  expect(element.shadowRoot).toBe(null);
+  expect(root.childNodes.length).toEqual(1);
   kernel.disconnect();
   kernel.connect();
-  assertStrictEquals(kernel.root, root);
+  expect(kernel.root).toBe(root);
   kernel.dispose();
 });
 
-Deno.test('kernel reconnect cycles never duplicate event listeners', () => {
+test('kernel reconnect cycles never duplicate event listeners', () => {
   const document = new TestDocument();
   const element = document.createElement('oe-kernel-test');
   const message = signal('x');
@@ -333,26 +323,26 @@ Deno.test('kernel reconnect cycles never duplicate event listeners', () => {
   const listenerCount = () => div().listeners.get('click')?.size ?? 0;
 
   kernel.connect();
-  assertEquals(listenerCount(), 1);
+  expect(listenerCount()).toEqual(1);
   div().dispatch('click');
-  assertEquals(calls, ['clicked']);
+  expect(calls).toEqual(['clicked']);
 
   kernel.disconnect();
-  assertEquals(listenerCount(), 0, 'disconnect removes the listener');
+  expect(listenerCount(), 'disconnect removes the listener').toEqual(0);
 
   kernel.connect();
-  assertEquals(listenerCount(), 1, 'reconnect into the claimed DOM adds exactly one listener');
+  expect(listenerCount(), 'reconnect into the claimed DOM adds exactly one listener').toEqual(1);
   div().dispatch('click');
-  assertEquals(calls, ['clicked', 'clicked'], 'one dispatch fires the handler exactly once');
+  expect(calls, 'one dispatch fires the handler exactly once').toEqual(['clicked', 'clicked']);
 
   kernel.disconnect();
   kernel.connect();
-  assertEquals(listenerCount(), 1);
+  expect(listenerCount()).toEqual(1);
   kernel.dispose();
-  assertEquals(listenerCount(), 0, 'dispose leaves no listener behind');
+  expect(listenerCount(), 'dispose leaves no listener behind').toEqual(0);
 });
 
-Deno.test('compiled form and error controllers remain element-local', () => {
+test('compiled form and error controllers remain element-local', () => {
   const formCalls: unknown[][] = [];
   const internals = {
     setFormValue(value: unknown, state?: unknown): void {
@@ -364,8 +354,8 @@ Deno.test('compiled form and error controllers remain element-local', () => {
   } as unknown as ElementInternals;
   const form = new ElementFormController();
   const formHost = { attachInternals: () => internals };
-  assertStrictEquals(form.attach(formHost, { formAssociated: true }), internals);
-  assertStrictEquals(form.attach(formHost, { formAssociated: true }), internals);
+  expect(form.attach(formHost, { formAssociated: true })).toBe(internals);
+  expect(form.attach(formHost, { formAssociated: true })).toBe(internals);
   form.setFormValue('value', 'state');
   form.setValidity({ customError: true }, 'bad');
   let resets = 0;
@@ -374,10 +364,10 @@ Deno.test('compiled form and error controllers remain element-local', () => {
   form.onRestore((state, mode) => (restored = `${state}:${mode}`));
   form.formResetCallback();
   form.formStateRestoreCallback('saved', 'restore');
-  assertEquals(formCalls[0], ['value', 'value', 'state']);
-  assertEquals(formCalls[1][0], 'validity');
-  assertEquals(resets, 1);
-  assertEquals(restored, 'saved:restore');
+  expect(formCalls[0]).toEqual(['value', 'value', 'state']);
+  expect(formCalls[1][0]).toEqual('validity');
+  expect(resets).toEqual(1);
+  expect(restored).toEqual('saved:restore');
 
   let reported = '';
   let recovered = 0;
@@ -386,21 +376,21 @@ Deno.test('compiled form and error controllers remain element-local', () => {
     onError: (error) => (reported = error.message),
   });
   boundary.capture(new Error('compiled boom'));
-  assert(boundary.hasError);
-  assertEquals(reported, 'compiled boom');
-  assert(boundary.retry(() => recovered++));
-  assertEquals(recovered, 1);
-  assertFalse(boundary.hasError);
+  expect(boundary.hasError).toBeTruthy();
+  expect(reported).toEqual('compiled boom');
+  expect(boundary.retry(() => recovered++)).toBeTruthy();
+  expect(recovered).toEqual(1);
+  expect(boundary.hasError).toBeFalsy();
   boundary.capture(new Error('again'));
-  assert(boundary.hasError);
-  assertFalse(boundary.retry());
+  expect(boundary.hasError).toBeTruthy();
+  expect(boundary.retry()).toBeFalsy();
   boundary.reset();
-  assertFalse(boundary.hasError);
+  expect(boundary.hasError).toBeFalsy();
   form.dispose();
   boundary.dispose();
 });
 
-Deno.test('kernel boundary captures a failing signal update (#1375)', () => {
+test('kernel boundary captures a failing signal update (#1375)', () => {
   const document = new TestDocument();
   const element = document.createElement('oe-kernel-each-test');
   const items = signal<unknown>([{ id: 'a', text: 'alpha' }]);
@@ -413,25 +403,25 @@ Deno.test('kernel boundary captures a failing signal update (#1375)', () => {
   });
   kernel.connect();
   const root = kernel.root;
-  assert(root !== undefined);
+  expect(root !== undefined).toBeTruthy();
   const list = elementChild(root);
   const alpha = list.childNodes[1] as TestElement;
-  assertEquals(toHtml(list), '<ul><!--oe:p0--><li>alpha</li><!--oe:/p0--></ul>');
+  expect(toHtml(list)).toEqual('<ul><!--oe:p0--><li>alpha</li><!--oe:/p0--></ul>');
 
   // A non-array write throws inside the update phase. The kernel boundary
   // captures it — the write site never sees the throw — and the each Region's
   // pre-validation leaves the previous DOM untouched. #1413: the message names
   // the authored property and the compiled module, never the part index.
   items.value = 'not-an-array';
-  assert(kernel.errors.hasError);
-  assertStringIncludes(kernel.errors.error?.message ?? '', 'expects an array');
-  assertStringIncludes(kernel.errors.error?.message ?? '', 'this.items');
-  assertStrictEquals(kernel.errors.source, element);
-  assertEquals(reported.length, 1);
-  assertStringIncludes(reported[0], 'this.items');
-  assertStringIncludes(reported[0], KERNEL_EACH_PROGRAM.metadata.sourceFile);
-  assertEquals(toHtml(list), '<ul><!--oe:p0--><li>alpha</li><!--oe:/p0--></ul>');
-  assertStrictEquals(list.childNodes[1], alpha);
+  expect(kernel.errors.hasError).toBeTruthy();
+  expect(kernel.errors.error?.message ?? '').toContain('expects an array');
+  expect(kernel.errors.error?.message ?? '').toContain('this.items');
+  expect(kernel.errors.source).toBe(element);
+  expect(reported.length).toEqual(1);
+  expect(reported[0]).toContain('this.items');
+  expect(reported[0]).toContain(KERNEL_EACH_PROGRAM.metadata.sourceFile);
+  expect(toHtml(list)).toEqual('<ul><!--oe:p0--><li>alpha</li><!--oe:/p0--></ul>');
+  expect(list.childNodes[1]).toBe(alpha);
 
   // Same capture for a duplicate-key write: rejected before any mutation; the
   // message names the authored key field and the colliding key value.
@@ -439,16 +429,16 @@ Deno.test('kernel boundary captures a failing signal update (#1375)', () => {
     { id: 'a', text: 'one' },
     { id: 'a', text: 'two' },
   ];
-  assertEquals(reported.length, 2);
-  assertStringIncludes(kernel.errors.error?.message ?? '', 'duplicate key');
-  assertStringIncludes(kernel.errors.error?.message ?? '', '"id"');
-  assertStringIncludes(kernel.errors.error?.message ?? '', 'this.items');
-  assertStrictEquals(list.childNodes[1], alpha);
+  expect(reported.length).toEqual(2);
+  expect(kernel.errors.error?.message ?? '').toContain('duplicate key');
+  expect(kernel.errors.error?.message ?? '').toContain('"id"');
+  expect(kernel.errors.error?.message ?? '').toContain('this.items');
+  expect(list.childNodes[1]).toBe(alpha);
 
   // The subscription stays live: the next valid write applies normally.
   items.value = [{ id: 'b', text: 'beta' }];
-  assertEquals(toHtml(list), '<ul><!--oe:p0--><li>beta</li><!--oe:/p0--></ul>');
+  expect(toHtml(list)).toEqual('<ul><!--oe:p0--><li>beta</li><!--oe:/p0--></ul>');
 
   kernel.dispose();
-  assertFalse(kernel.errors.hasError);
+  expect(kernel.errors.hasError).toBeFalsy();
 });

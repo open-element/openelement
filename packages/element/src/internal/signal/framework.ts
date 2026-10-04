@@ -5,7 +5,7 @@
  * signal(), computed(), effect() - the primary API surface.
  *
  * @preact/signals-core is the built-in implementation and the only engine
- * supported in 1.0.0-alpha.1 (see selection.ts); Preact's own API is never
+ * supported engine (see selection.ts); Preact's own API is never
  * re-exported here.
  *
  * @module ./framework.ts

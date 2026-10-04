@@ -30,13 +30,10 @@ deployment subpath instead expects the deploying application to install
 `nitro@3.0.0`, whose own `vite@^7` peer conflicts with the tooling's
 `vite@^8` requirement and breaks a bare `npm install`.
 
-The `./vite` and `./cli/*` tooling subpaths call Deno APIs directly and
-require a Deno host at **build time** — invoking `openElement()` from a
-plain Node `vite.config.ts` fails with `Deno is not defined`. The
-request-time output is WinterCG-pure and deploys to any target. This is an
-interim constraint: the portable-host tooling migration that removes it is
-a deferred roadmap item
-([#1387](https://github.com/open-element/openelement/issues/1387)).
+The `./vite` and `./cli/*` tooling subpaths run under Node at **build
+time** — `openElement()` is invoked from the project's `vite.config.ts` and
+the CLI subpaths run through `node`. The
+request-time output is WinterCG-pure and deploys to any target.
 
 > The 1.0 baseline uses compiled element classes for page authoring. Route Mode
 > stays independently consumable without Element; Framework Mode installs
@@ -106,21 +103,20 @@ A Vite-mode consumer installs the host packages the tooling peers on:
   it is loaded lazily, so `build`/`start` never resolve it, and dev mode
   fails closed with an install hint when it is missing).
 
-Deno consumers declare both as `npm:` imports (the generated starter does
-this); npm consumers install them as dev dependencies.
+Consumers install them as dev dependencies (the generated starter does this).
 
 ## Lifecycle CLI
 
 Generated applications build and serve through the Router CLI subpaths:
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router/cli/build   # production build (SSG + client)
-deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router/cli/start   # serve built output
+node node_modules/@openelement/router/src/cli/build.js   # production build (SSG + client)
+node node_modules/@openelement/router/src/cli/start.js   # serve built output
 ```
 
-In a generated project the same commands are the scoped `deno task build`
-and `deno task start` tasks (the Vite native binding needs `--allow-ffi`;
-browser/consumer harnesses instead run `--deny-ffi --no-prompt`).
+In a generated project the same commands are the package scripts
+`pnpm build` and `pnpm start` (plus `pnpm dev` for the Vite dev server and
+`pnpm preview` for static-only preview).
 
 The build executes in a fixed phase order — SSG (Phase 3) runs before the client
 bundle (Phase 2), because client chunk hashes do not affect HTML content and
@@ -149,8 +145,7 @@ The generated server entries import their request-time runtime from
 handler exports, and the page-render bindings), the response-header channel
 with its commitment gate, the CSP auto-nonce, the page SSR renderer seam, the
 action POST protocol, and the streaming pump. The logic lives in typecheckable
-modules instead of codegen template strings, so it stays visible to `deno
-check` and directly unit-testable.
+modules instead of codegen template strings, so it is directly unit-testable.
 
 Applications never import this subpath directly — the entries the Vite
 pipeline generates do. It is exported for type-aware tooling and for hosts
@@ -242,9 +237,9 @@ Route Mode only uses these subpaths and needs nothing else. Framework Mode
 npm install @openelement/router @openelement/element
 ```
 
-Note that the `./vite` and `./cli/*` tooling subpaths additionally require a
-Deno host at **build time** — run builds through the Deno-hosted CLI
-(`deno run npm:@openelement/router/cli/build`) or the Vite CLI under Deno.
+Note that the `./vite` and `./cli/*` tooling subpaths are **build-time**
+modules — run builds through the Node-hosted CLI
+(`node node_modules/@openelement/router/src/cli/build.js`) or the Vite CLI.
 The request-time output is host-free and deploys to any WinterCG target.
 
 ## License

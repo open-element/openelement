@@ -1,4 +1,6 @@
-import { assertEquals, assertNotStrictEquals, assertStrictEquals, assertThrows } from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
 import { validatePartProgram } from '../src/internal/protocol/part-program.ts';
 import { normalizePartProgram } from '../src/internal/compiled/runtime-program.ts';
@@ -268,44 +270,44 @@ const faults: Fault[] = [
   },
 ];
 
-Deno.test('canonical serialized corpus normalizes to one immutable RuntimeProgramIR', async () => {
-  const source = await Deno.readTextFile(FIXTURE);
+test('canonical serialized corpus normalizes to one immutable RuntimeProgramIR', async () => {
+  const source = await readFile(FIXTURE, 'utf8');
   const compiled = compileElementProgram(source, '/project/app/islands/counter.tsx').program;
-  const golden = JSON.parse(await Deno.readTextFile(GOLDEN));
-  assertEquals(compiled, golden);
-  assertEquals(JSON.stringify(compiled), JSON.stringify(golden));
+  const golden = JSON.parse(await readFile(GOLDEN, 'utf8'));
+  expect(compiled).toEqual(golden);
+  expect(JSON.stringify(compiled)).toEqual(JSON.stringify(golden));
   validatePartProgram(golden);
   const ir = normalizePartProgram(golden);
-  assertNotStrictEquals(ir, golden);
-  assertEquals(ir, golden);
-  assertEquals(Object.isFrozen(ir), true);
-  assertEquals(Object.isFrozen(ir.parts), true);
+  expect(ir).not.toBe(golden);
+  expect(ir).toEqual(golden);
+  expect(Object.isFrozen(ir)).toEqual(true);
+  expect(Object.isFrozen(ir.parts)).toEqual(true);
   // Memoized by program object identity: re-normalizing the same program
   // object returns the one frozen IR instead of re-running the pipeline.
-  assertStrictEquals(normalizePartProgram(golden), ir);
+  expect(normalizePartProgram(golden)).toBe(ir);
 });
 
-Deno.test('wire programs without compile-time sourceMap provenance validate and normalize', async () => {
-  const golden = JSON.parse(await Deno.readTextFile(GOLDEN));
+test('wire programs without compile-time sourceMap provenance validate and normalize', async () => {
+  const golden = JSON.parse(await readFile(GOLDEN, 'utf8'));
   // The serialized module payload omits sourceMap (no runtime consumer); a
   // program that still carries it must keep passing (covered above), and one
   // without it must pass too.
   const { sourceMap: _provenance, ...wireGolden } = golden;
   validatePartProgram(wireGolden);
   const ir = normalizePartProgram(wireGolden);
-  assertEquals(ir, wireGolden);
-  assertEquals(Object.isFrozen(ir), true);
+  expect(ir).toEqual(wireGolden);
+  expect(Object.isFrozen(ir)).toEqual(true);
 });
 
-Deno.test('the canonical Part Program validator fails closed across the artifact surface', async () => {
-  const source = await Deno.readTextFile(FIXTURE);
+test('the canonical Part Program validator fails closed across the artifact surface', async () => {
+  const source = await readFile(FIXTURE, 'utf8');
   const valid = compileElementProgram(source, '/project/app/islands/counter.tsx').program;
   validatePartProgram(valid);
 
   for (const fault of faults) {
     const candidate = structuredClone(valid);
     setPath(candidate, fault.path, fault.value);
-    assertThrows(
+    assertThrowsIncludes(
       () => validatePartProgram(candidate),
       Error,
       undefined,
@@ -314,7 +316,7 @@ Deno.test('the canonical Part Program validator fails closed across the artifact
   }
 });
 
-Deno.test('Part Program sink validation rejects corrupted class, style, bool, html, ref and attr records', () => {
+test('Part Program sink validation rejects corrupted class, style, bool, html, ref and attr records', () => {
   const source = `
     import { element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';
     @element('oe-sink-matrix')
@@ -385,7 +387,7 @@ Deno.test('Part Program sink validation rejects corrupted class, style, bool, ht
       for (const validate of PART_PROGRAM_VALIDATORS) {
         const candidate = structuredClone(valid);
         setPath(candidate, fault.path, fault.value);
-        assertThrows(() => validate(candidate), Error, undefined, fault.label);
+        assertThrowsIncludes(() => validate(candidate), Error, undefined, fault.label);
       }
     }
   }
@@ -398,12 +400,12 @@ Deno.test('Part Program sink validation rejects corrupted class, style, bool, ht
     [{ k: 'text', value: 'occupied' }],
   );
   for (const validate of PART_PROGRAM_VALIDATORS) {
-    assertThrows(() => validate(occupiedHtmlTarget), Error, 'childless');
+    assertThrowsIncludes(() => validate(occupiedHtmlTarget), Error, 'childless');
   }
   if (htmlIndex < 0) throw new Error('fixture did not emit html');
 });
 
-Deno.test('Part Program event-action and item-slot grammars fail closed', () => {
+test('Part Program event-action and item-slot grammars fail closed', () => {
   const source = `
     import { element, OpenElement, property } from '@openelement/element';
     @element('oe-action-matrix')
@@ -452,7 +454,12 @@ Deno.test('Part Program event-action and item-slot grammars fail closed', () => 
     for (const validate of PART_PROGRAM_VALIDATORS) {
       const candidate = structuredClone(valid);
       setPath(candidate, ['parts', index, 'action'], action);
-      assertThrows(() => validate(candidate), Error, undefined, `event action fault ${position}`);
+      assertThrowsIncludes(
+        () => validate(candidate),
+        Error,
+        undefined,
+        `event action fault ${position}`,
+      );
     }
   }
 
@@ -496,13 +503,13 @@ Deno.test('Part Program event-action and item-slot grammars fail closed', () => 
     for (const validate of PART_PROGRAM_VALIDATORS) {
       const candidate = structuredClone(valid);
       setPath(candidate, fault.path, fault.value);
-      assertThrows(() => validate(candidate), Error, undefined, fault.label);
+      assertThrowsIncludes(() => validate(candidate), Error, undefined, fault.label);
     }
   }
 });
 
-Deno.test('Part Program ownership tables reject duplicate, missing, and misplaced records', async () => {
-  const source = await Deno.readTextFile(FIXTURE);
+test('Part Program ownership tables reject duplicate, missing, and misplaced records', async () => {
+  const source = await readFile(FIXTURE, 'utf8');
   const valid = compileElementProgram(source, '/project/app/islands/counter.tsx').program;
   const candidates: Array<{ label: string; mutate(value: typeof valid): void }> = [
     {
@@ -604,7 +611,7 @@ Deno.test('Part Program ownership tables reject duplicate, missing, and misplace
     for (const validate of PART_PROGRAM_VALIDATORS) {
       const corrupted = structuredClone(valid);
       candidate.mutate(corrupted);
-      assertThrows(() => validate(corrupted), Error, undefined, candidate.label);
+      assertThrowsIncludes(() => validate(corrupted), Error, undefined, candidate.label);
     }
   }
 });

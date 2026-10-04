@@ -94,8 +94,8 @@ export function pageSeo(
  * route descriptor head, serialized at SSG time), so there is no site-wide
  * default description left in the output to reconcile against. Per-page
  * description presence/length stays asserted by findSeoFailures; locale
- * honesty of the copy is guarded by the route-locale gates in
- * check-site-truth.ts and the i18n e2e suites.
+ * honesty of the copy is guarded by the i18n e2e suites (i18n-locale,
+ * seo-meta).
  */
 export function findCrossPageSeoFailures(pages: readonly BuiltPageSeo[]): LinkFailure[] {
   const failures: LinkFailure[] = [];

@@ -1,7 +1,7 @@
 import { definePage } from '@openelement/router';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { localizePath } from '@openelement/site-ui/link.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
+import { localizePath } from '#site-ui/link.ts';
 import PageHome from '../../components/page-home.tsx';
 import { homeStrings } from '../../site-ui/chrome-strings.ts';
 import {
@@ -45,9 +45,7 @@ const content = {
     specDeps: 'Framework deps',
     specOutput: 'Server output',
     begin: 'Begin.',
-    beginNote: `${alphaLineNote(
-      'en',
-    )} --minimum-dependency-age 0 keeps same-day compatible patches installable despite Deno's default ~24h minimumDependencyAge.`,
+    beginNote: `${alphaLineNote('en')}`,
     facts: 'Facts behind the feeling',
     continueComposition: 'Continue the composition.',
     referenceCopy:
@@ -83,9 +81,7 @@ const content = {
     specDeps: '框架依赖',
     specOutput: '服务端输出',
     begin: '开始。',
-    beginNote: `${alphaLineNote(
-      'zh',
-    )} --minimum-dependency-age 0 可绕过 Deno 默认约 24 小时的 minimumDependencyAge，使当天发布的兼容补丁仍可安装。`,
+    beginNote: `${alphaLineNote('zh')}`,
     facts: '感觉背后的事实',
     continueComposition: '继续这场组合。',
     referenceCopy: '本页每个数字与声称都取自仓库的发布与基准真值。',

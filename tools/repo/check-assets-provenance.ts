@@ -14,7 +14,9 @@
  * are one manifest record while still hashing every file individually.
  */
 
-import { walkSync } from '@std/fs/walk';
+import { readdirSync, statSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 
 export const ASSETS_DIR = 'www/public/assets';
 export const MANIFEST_PATH = `${ASSETS_DIR}/manifest.json`;
@@ -84,7 +86,7 @@ export function toHex(bytes: Uint8Array): string {
 }
 
 export async function sha256File(path: string | URL): Promise<string> {
-  const bytes = await Deno.readFile(path);
+  const bytes = await readFile(path);
   return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)));
 }
 
@@ -318,14 +320,16 @@ export function checkAssetsProvenance(
 
 /** Load the repository manifest/notices and verify the real asset tree. */
 export async function scanAssetsProvenance(): Promise<string[]> {
-  const manifest = JSON.parse(await Deno.readTextFile(MANIFEST_PATH));
-  const notices = await Deno.readTextFile(NOTICES_PATH);
+  const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
+  const notices = await readFile(NOTICES_PATH, 'utf8');
   const files: AssetFile[] = [];
-  for (const entry of walkSync(ASSETS_DIR, { includeDirs: false })) {
-    const path = entry.path.slice(ASSETS_DIR.length + 1);
+  for (const entry of readdirSync(ASSETS_DIR, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory()) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const path = entryPath.slice(ASSETS_DIR.length + 1);
     if (path === 'manifest.json') continue;
-    const { size } = Deno.statSync(entry.path);
-    files.push({ path, bytes: size ?? 0, sha256: await sha256File(entry.path) });
+    const { size } = statSync(entryPath);
+    files.push({ path, bytes: size ?? 0, sha256: await sha256File(entryPath) });
   }
   return checkAssetsProvenance(manifest, files, notices);
 }
@@ -335,7 +339,7 @@ if (import.meta.main) {
   if (failures.length > 0) {
     console.error('Asset provenance check failed:');
     for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log('Asset provenance check passed.');
 }

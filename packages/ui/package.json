@@ -1,0 +1,46 @@
+{
+  "name": "@openelement/ui",
+  "version": "1.0.0-alpha.7",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./manifest": "./src/manifest.ts",
+    "./open-button": "./src/open-button.tsx",
+    "./open-card": "./src/open-card.tsx",
+    "./open-input": "./src/open-input.tsx",
+    "./open-code-block": "./src/open-code-block.tsx",
+    "./open-badge": "./src/open-badge.tsx",
+    "./open-theme-toggle": "./src/open-theme-toggle.tsx",
+    "./open-dialog": "./src/open-dialog.tsx",
+    "./open-callout": "./src/open-callout.tsx",
+    "./open-dropdown": "./src/open-dropdown.tsx",
+    "./open-tabs": "./src/open-tabs.tsx",
+    "./instance-state": "./src/instance-state.ts",
+    "./open-props-tokens": "./src/open-props-tokens.ts",
+    "./open-props-tokens.js": "./src/open-props-tokens.ts"
+  },
+  "files": [
+    "src/**",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. --project ui",
+    "lint": "oxlint src __tests__",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "generate:ui-tokens": "node tools/generate-ui-tokens.ts",
+    "ui-tokens:check": "node tools/generate-ui-tokens.ts --check",
+    "generate:ui-manifest": "node tools/generate-ui-manifest.ts",
+    "ui-manifest:check": "node tools/generate-ui-manifest.ts --check"
+  },
+  "dependencies": {
+    "@openelement/element": "workspace:*",
+    "open-props": "1.7.23",
+    "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.5.0"
+  }
+}

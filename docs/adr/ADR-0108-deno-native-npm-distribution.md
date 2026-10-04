@@ -1,6 +1,10 @@
 # ADR-0108: npm distribution via `deno pack`
 
-- Status: ACCEPTED
+- Status: SUPERSEDED by [ADR-0161](./ADR-0161-node-pnpm-consumer-surface.md)
+  (the Deno-native repository toolchain and the Deno consumer requirement are
+  retired; the npm-only publishing half stands and is restated there). The
+  `deno pack` tarball generator named below was itself replaced by `vp pack`
+  in the alpha7 toolchain train.
 
 ## Context
 

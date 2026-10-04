@@ -13,7 +13,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { getCustomElementTags } from './helpers.js';
+import { getLeakedMarkupText, getShadowRootCount } from './helpers.js';
 import { deepQueryAllInPage } from '../../tools/lib/shadow-walker.ts';
 
 test.describe('DSD Layers', () => {
@@ -36,14 +36,8 @@ test.describe('DSD Layers', () => {
   test('custom elements have shadow roots after DSD parsing', async ({ page }) => {
     // After DSD parsing, custom elements should have shadow roots.
     // The browser processes <template shadowrootmode="open"> into real ShadowRoot.
-    const hasShadowRoots = await page.evaluate(() => {
-      const allElements = document.querySelectorAll('*');
-      for (const el of allElements) {
-        if (el.shadowRoot) return true;
-      }
-      return false;
-    });
-    expect(hasShadowRoots).toBe(true);
+    const shadowRootCount = await getShadowRootCount(page);
+    expect(shadowRootCount).toBeGreaterThan(0);
   });
 
   test('default output relies on native DSD without an inline fallback', async ({ page }) => {
@@ -65,30 +59,7 @@ test.describe('DSD Layers', () => {
   test('DSD content is not exposed as raw text', async ({ page }) => {
     // Intentional code examples may mention DSD syntax. Only fail when raw DSD
     // markup leaks into ordinary page text outside code and inert containers.
-    const leakedDsdText = await page.evaluate(() => {
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-      const leaked: string[] = [];
-
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        const parent = node.parentElement;
-        if (!parent || parent.closest('code, pre, style, script, template')) {
-          continue;
-        }
-
-        const text = node.textContent ?? '';
-        if (/<template\s+shadowrootmode/i.test(text)) {
-          leaked.push(text.trim());
-        }
-      }
-
-      return leaked;
-    });
-
+    const leakedDsdText = await getLeakedMarkupText(page, /<template\s+shadowrootmode/);
     expect(leakedDsdText).toEqual([]);
-  });
-
-  test('custom elements are discovered in the page', async ({ page }) => {
-    const tags = await getCustomElementTags(page);
-    expect(tags.length).toBeGreaterThan(0);
   });
 });

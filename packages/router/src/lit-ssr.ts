@@ -1,5 +1,5 @@
 /**
- * @openelement/router/lit-ssr - Server-only Lit page rendering (Beta.2.2, #1339).
+ * @openelement/router/lit-ssr - Server-only Lit page rendering (#1339).
  *
  * renderLitPageToHtml() is the lit-mode replacement for the native compiled
  * __ssr/renderDsd page render: it renders one registered LitElement page class
@@ -10,8 +10,7 @@
  * import side effect and must never be reachable from a client bundle. It is
  * deliberately NOT re-exported from the @openelement/router root barrel.
  *
- * Spike-verified contract (Deno 2.9.0 + Node 24.18.0, lit 3.3.3,
- * @lit-labs/ssr 4.1.0):
+ * Verified contract (lit 3.3.3, @lit-labs/ssr 4.1.0):
  * - '@lit-labs/ssr/lib/install-global-dom-shim.js' is a SIDE-EFFECT module
  *   (no exports); it must evaluate before any 'lit' import.
  * - DSD output is `<template shadowroot="open" shadowrootmode="open">` and

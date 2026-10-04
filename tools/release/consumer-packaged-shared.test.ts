@@ -1,7 +1,7 @@
-import { assert, assertEquals, assertFalse } from '@std/assert';
+import { expect, test } from 'vitest';
 import { DECLARATION_LEAK_PATTERN, declarationTypeEdges } from './consumer-packaged-shared.ts';
 
-Deno.test('declarationTypeEdges follows type-bearing edges and skips side-effect-only imports', () => {
+test('declarationTypeEdges follows type-bearing edges and skips side-effect-only imports', () => {
   const edges = declarationTypeEdges(
     'import "@lit-labs/ssr/lib/install-global-dom-shim.js";\n' +
       'import { render } from "@lit-labs/ssr";\n' +
@@ -10,10 +10,10 @@ Deno.test('declarationTypeEdges follows type-bearing edges and skips side-effect
       'export * from "./star.js";\n' +
       'export declare const x: number;\n',
   );
-  assertEquals(edges.sort(), ['./config.js', './star.js', './thing.js', '@lit-labs/ssr']);
+  expect(edges.sort()).toEqual(['./config.js', './star.js', './thing.js', '@lit-labs/ssr']);
 });
 
-Deno.test('declaration leak pattern catches real router/cli tooling edges', () => {
+test('declaration leak pattern catches real router/cli tooling edges', () => {
   for (const specifier of [
     '@openelement/router/cli',
     '@openelement/router/cli/build',
@@ -27,11 +27,11 @@ Deno.test('declaration leak pattern catches real router/cli tooling edges', () =
     'node:fs',
     'workspace:router',
   ]) {
-    assert(DECLARATION_LEAK_PATTERN.test(specifier), `expected leak: ${specifier}`);
+    expect(DECLARATION_LEAK_PATTERN.test(specifier), `expected leak: ${specifier}`).toBeTruthy();
   }
 });
 
-Deno.test('declaration leak pattern ignores lookalike module names', () => {
+test('declaration leak pattern ignores lookalike module names', () => {
   for (const specifier of [
     // The 1.0.0-alpha.1 SPA-mode edge that tripped the unanchored pattern:
     // "router/cli" is a substring of "router/client-router".
@@ -40,6 +40,6 @@ Deno.test('declaration leak pattern ignores lookalike module names', () => {
     'router/client.js',
     './internal/router/clients/index.js',
   ]) {
-    assertFalse(DECLARATION_LEAK_PATTERN.test(specifier), `unexpected leak: ${specifier}`);
+    expect(DECLARATION_LEAK_PATTERN.test(specifier), `unexpected leak: ${specifier}`).toBeFalsy();
   }
 });

@@ -1,4 +1,5 @@
-import { assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import {
   createDeferredDsdExecutor,
   type DeferredDsdManifest,
@@ -41,7 +42,12 @@ Object.assign(Page, {
   styles: { cssRules: [{ cssText: 'p { color: red; }' }] },
 });
 
-async function manifestFor(selectedProgram: PartProgramV1 = program): Promise<DeferredDsdManifest> {
+async function manifestFor(
+  selectedProgram: PartProgramV1 = program,
+  fields: DeferredDsdManifest['fields'] = [
+    { field: 'title', signal: 'title', owners: [{ kind: 'part', index: 0 }] },
+  ],
+): Promise<DeferredDsdManifest> {
   const { sourceMap: _sourceMap, ...wireProgram } = selectedProgram;
   const hash = await crypto.subtle.digest(
     'SHA-256',
@@ -53,11 +59,11 @@ async function manifestFor(selectedProgram: PartProgramV1 = program): Promise<De
       tag: selectedProgram.tag,
       sha256: [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join(''),
     },
-    fields: [{ field: 'title', signal: 'title', owners: [{ kind: 'part', index: 0 }] }],
+    fields,
   };
 }
 
-Deno.test('deferred DSD bridge shares renderDsd property seeding and Part serialization', async () => {
+test('deferred DSD bridge shares renderDsd property seeding and Part serialization', async () => {
   const manifest = await manifestFor();
   const props = { count: 'not-a-number' } as Record<string, unknown>;
   Object.defineProperty(props, 'title', {
@@ -71,28 +77,26 @@ Deno.test('deferred DSD bridge shares renderDsd property seeding and Part serial
     manifest,
     instanceId: 'request-instance',
   });
-  assertStringIncludes(bridge.shell, '<oe-deferred-bridge>');
-  assertEquals(bridge.shell.includes('count='), false);
-  assertStringIncludes(
-    bridge.shell,
+  expect(bridge.shell).toContain('<oe-deferred-bridge>');
+  expect(bridge.shell.includes('count=')).toEqual(false);
+  expect(bridge.shell).toContain(
     '<template shadowrootmode="open"><style data-oe-static-styles>p { color: red; }\n</style>',
   );
-  assertEquals(bridge.serializeResolved('title', 42), ['42']);
+  expect(bridge.serializeResolved('title', 42)).toEqual(['42']);
   const rendered = renderDsd('oe-deferred-bridge', {
     componentClass: Page as unknown as CustomElementConstructor,
     props: { count: 'not-a-number' },
   }).html;
-  assertStringIncludes(rendered, '<oe-deferred-bridge>');
-  assertEquals(rendered.includes('count='), false);
-  assertStringIncludes(
-    rendered,
+  expect(rendered).toContain('<oe-deferred-bridge>');
+  expect(rendered.includes('count=')).toEqual(false);
+  expect(rendered).toContain(
     '<template shadowrootmode="open"><style data-oe-static-styles>p { color: red; }\n</style>',
   );
-  assertStringIncludes(rendered, '<p><!--oe:p0-->default</p>');
-  assertStringIncludes(bridge.shell, '<p><!--oe:p0--><!--oe:/p0--></p>');
+  expect(rendered).toContain('<p><!--oe:p0-->default</p>');
+  expect(bridge.shell).toContain('<p><!--oe:p0--><!--oe:/p0--></p>');
 });
 
-Deno.test('deferred DSD bridge rejects a manifest for a changed compiled program', async () => {
+test('deferred DSD bridge rejects a manifest for a changed compiled program', async () => {
   const manifest = await manifestFor();
   const changedProgram = structuredClone(program);
   const rootElement = changedProgram.template[0];
@@ -103,7 +107,7 @@ Deno.test('deferred DSD bridge rejects a manifest for a changed compiled program
     __partProgram: changedProgram,
     __compiledProperties: changedProgram.metadata.properties,
   });
-  await assertRejects(
+  await assertRejectsIncludes(
     () =>
       createDeferredDsdExecutor({
         componentClass: ChangedPage as unknown as CustomElementConstructor,
@@ -115,7 +119,7 @@ Deno.test('deferred DSD bridge rejects a manifest for a changed compiled program
   );
 });
 
-Deno.test('deferred DSD bridge never reads pending properties and follows compiled root mode', async () => {
+test('deferred DSD bridge never reads pending properties and follows compiled root mode', async () => {
   const lightProgram = testProgram({
     tag: 'oe-deferred-light',
     rootMode: 'light',
@@ -142,12 +146,12 @@ Deno.test('deferred DSD bridge never reads pending properties and follows compil
     manifest: await manifestFor(lightProgram),
     instanceId: 'light-instance',
   });
-  assertStringIncludes(bridge.shell, '<oe-deferred-light data-oe-light>');
-  assertStringIncludes(bridge.shell, '<!--oe:p0--><!--oe:/p0-->');
-  assertEquals(bridge.serializeResolved('title', 'settled'), ['settled']);
+  expect(bridge.shell).toContain('<oe-deferred-light data-oe-light>');
+  expect(bridge.shell).toContain('<!--oe:p0--><!--oe:/p0-->');
+  expect(bridge.serializeResolved('title', 'settled')).toEqual(['settled']);
 });
 
-Deno.test('deferred host owns stream identity and typed pending/resolved seed', async () => {
+test('deferred host owns stream identity and typed pending/resolved seed', async () => {
   const bridge = await createDeferredDsdExecutor({
     componentClass: Page as unknown as CustomElementConstructor,
     props: { count: 7 },
@@ -155,17 +159,17 @@ Deno.test('deferred host owns stream identity and typed pending/resolved seed', 
     instanceId: 'instance-1',
     documentToken: 'request-1',
   });
-  assertStringIncludes(bridge.shell, 'data-oe-stream-request="request-1"');
-  assertStringIncludes(bridge.shell, 'data-oe-stream-instance="instance-1"');
-  assertStringIncludes(bridge.shell, 'data-oe-stream-program="1:');
-  assertEquals(bridge.seed.title, { state: 'pending', type: 'string' });
-  assertEquals(bridge.seed.count, { state: 'resolved', type: 'number', value: 7 });
-  assertEquals(bridge.resolvedValue('title', '<safe>'), '<safe>');
-  assertEquals(bridge.resolvedValue('title', null), null);
-  assertEquals(bridge.serializeResolved('title', null), ['null']);
+  expect(bridge.shell).toContain('data-oe-stream-request="request-1"');
+  expect(bridge.shell).toContain('data-oe-stream-instance="instance-1"');
+  expect(bridge.shell).toContain('data-oe-stream-program="1:');
+  expect(bridge.seed.title).toEqual({ state: 'pending', type: 'string' });
+  expect(bridge.seed.count).toEqual({ state: 'resolved', type: 'number', value: 7 });
+  expect(bridge.resolvedValue('title', '<safe>')).toEqual('<safe>');
+  expect(bridge.resolvedValue('title', null)).toEqual(null);
+  expect(bridge.serializeResolved('title', null)).toEqual(['null']);
 });
 
-Deno.test('deferred seed distinguishes absent default, explicit null, and pending', async () => {
+test('deferred seed distinguishes absent default, explicit null, and pending', async () => {
   const missingProgram = testProgram({
     tag: 'oe-deferred-missing',
     rootMode: 'light',
@@ -209,12 +213,12 @@ Deno.test('deferred seed distinguishes absent default, explicit null, and pendin
     manifest: await manifestFor(missingProgram),
     instanceId: 'missing-instance',
   });
-  assertEquals(bridge.seed.title, { state: 'pending', type: 'string' });
-  assertEquals(bridge.seed.optional, { state: 'missing', type: 'string' });
-  assertEquals(bridge.seed.nullable, { state: 'resolved', type: 'string', value: null });
+  expect(bridge.seed.title).toEqual({ state: 'pending', type: 'string' });
+  expect(bridge.seed.optional).toEqual({ state: 'missing', type: 'string' });
+  expect(bridge.seed.nullable).toEqual({ state: 'resolved', type: 'string', value: null });
 });
 
-Deno.test('deferred seed enforces the browser 64-property budget fail-loud at seed construction', async () => {
+test('deferred seed enforces the browser 64-property budget fail-loud at seed construction', async () => {
   const propProgram = (count: number): PartProgramV1 =>
     testProgram({
       tag: 'oe-deferred-seed-budget',
@@ -230,23 +234,6 @@ Deno.test('deferred seed enforces the browser 64-property budget fail-loud at se
         default: '',
       })),
     }) as PartProgramV1;
-  const manifestForField = async (selectedProgram: PartProgramV1): Promise<DeferredDsdManifest> => {
-    const { sourceMap: _sourceMap, ...wireProgram } = selectedProgram;
-    const hash = await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(JSON.stringify(wireProgram)),
-    );
-    return {
-      program: {
-        version: selectedProgram.version,
-        tag: selectedProgram.tag,
-        sha256: [...new Uint8Array(hash)]
-          .map((byte) => byte.toString(16).padStart(2, '0'))
-          .join(''),
-      },
-      fields: [{ field: 'p0', signal: 'p0', owners: [{ kind: 'part', index: 0 }] }],
-    };
-  };
   const classFor = (selectedProgram: PartProgramV1) => {
     class BudgetPage {}
     Object.assign(BudgetPage, {
@@ -255,23 +242,24 @@ Deno.test('deferred seed enforces the browser 64-property budget fail-loud at se
     });
     return BudgetPage as unknown as CustomElementConstructor;
   };
+  const p0PartFields = [{ field: 'p0', signal: 'p0', owners: [{ kind: 'part', index: 0 }] }];
 
   // Boundary: exactly 64 seed properties pass and produce a full seed.
   const atLimit = await createDeferredDsdExecutor({
     componentClass: classFor(propProgram(64)),
-    manifest: await manifestForField(propProgram(64)),
+    manifest: await manifestFor(propProgram(64), p0PartFields),
     instanceId: 'seed-budget-64',
   });
-  assertEquals(Object.keys(atLimit.seed).length, 64);
+  expect(Object.keys(atLimit.seed).length).toEqual(64);
 
   // Over budget: the 65th property must fail loud server-side, not be
   // silently dropped whole by the browser seed contract at hydration.
-  await assertRejects(
+  await assertRejectsIncludes(
     async () => {
       const over = propProgram(65);
       await createDeferredDsdExecutor({
         componentClass: classFor(over),
-        manifest: await manifestForField(over),
+        manifest: await manifestFor(over, p0PartFields),
         instanceId: 'seed-budget-65',
       });
     },
@@ -280,7 +268,7 @@ Deno.test('deferred seed enforces the browser 64-property budget fail-loud at se
   );
 });
 
-Deno.test('deferred bridge applies the streamed-frame policy to hand-written manifest regions', async () => {
+test('deferred bridge applies the streamed-frame policy to hand-written manifest regions', async () => {
   const whenProgram = (on: TestNodeSpec[]): PartProgramV1 =>
     testProgram({
       tag: 'oe-deferred-policy',
@@ -317,31 +305,18 @@ Deno.test('deferred bridge applies the streamed-frame policy to hand-written man
   };
   const reject = async (on: TestNodeSpec[], message: string) => {
     const program = whenProgram(on);
-    const { sourceMap: _sourceMap, ...wireProgram } = program;
-    const hash = await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(JSON.stringify(wireProgram)),
-    );
-    await assertRejects(
+    const manifest = await manifestFor(program, [
+      {
+        field: 'enabled',
+        signal: 'enabled',
+        owners: [{ kind: 'region', index: 0 }],
+      },
+    ]);
+    await assertRejectsIncludes(
       () =>
         createDeferredDsdExecutor({
           componentClass: classFor(program),
-          manifest: {
-            program: {
-              version: program.version,
-              tag: program.tag,
-              sha256: [...new Uint8Array(hash)]
-                .map((byte) => byte.toString(16).padStart(2, '0'))
-                .join(''),
-            },
-            fields: [
-              {
-                field: 'enabled',
-                signal: 'enabled',
-                owners: [{ kind: 'region', index: 0 }],
-              },
-            ],
-          },
+          manifest,
           instanceId: 'policy-instance',
         }),
       CompiledProgramValidationError,
@@ -456,7 +431,7 @@ Deno.test('deferred bridge applies the streamed-frame policy to hand-written man
   );
 });
 
-Deno.test('deferred bridge enforces the build-aligned field/owner budget on hand-written manifests', async () => {
+test('deferred bridge enforces the build-aligned field/owner budget on hand-written manifests', async () => {
   const classFor = (selectedProgram: PartProgramV1) => {
     class BudgetPage {}
     Object.assign(BudgetPage, {
@@ -481,24 +456,6 @@ Deno.test('deferred bridge enforces the build-aligned field/owner budget on hand
     reflect: false,
     default: '',
   });
-  const manifestFor = (
-    selectedProgram: PartProgramV1,
-    fields: DeferredDsdManifest['fields'],
-  ): Promise<DeferredDsdManifest> => {
-    const { sourceMap: _sourceMap, ...wireProgram } = selectedProgram;
-    return crypto.subtle
-      .digest('SHA-256', new TextEncoder().encode(JSON.stringify(wireProgram)))
-      .then((hash) => ({
-        program: {
-          version: selectedProgram.version,
-          tag: selectedProgram.tag,
-          sha256: [...new Uint8Array(hash)]
-            .map((byte) => byte.toString(16).padStart(2, '0'))
-            .join(''),
-        },
-        fields,
-      }));
-  };
 
   // Negative: 33 deferred fields are rejected at the public boundary.
   const fields33 = testProgram({
@@ -512,7 +469,7 @@ Deno.test('deferred bridge enforces the build-aligned field/owner budget on hand
     })),
     properties: Array.from({ length: 33 }, (_, index) => stringProperty(`p${index}`)),
   }) as PartProgramV1;
-  await assertRejects(
+  await assertRejectsIncludes(
     async () => {
       await createDeferredDsdExecutor({
         componentClass: classFor(fields33),
@@ -543,7 +500,7 @@ Deno.test('deferred bridge enforces the build-aligned field/owner budget on hand
     })),
     properties: [stringProperty('p0')],
   }) as PartProgramV1;
-  await assertRejects(
+  await assertRejectsIncludes(
     async () => {
       await createDeferredDsdExecutor({
         componentClass: classFor(owners65),
@@ -588,5 +545,5 @@ Deno.test('deferred bridge enforces the build-aligned field/owner budget on hand
     ),
     instanceId: 'pair-budget-32',
   });
-  assertEquals(Object.keys(boundary.seed).length, 32);
+  expect(Object.keys(boundary.seed).length).toEqual(32);
 });

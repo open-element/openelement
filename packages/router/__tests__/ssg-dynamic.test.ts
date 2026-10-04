@@ -1,5 +1,8 @@
-import { assertEquals, assertRejects } from '@std/assert';
-import { join } from '@std/path';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../tests/lib/vitest-asserts.ts';
+import { join } from 'node:path';
 import { expandDynamicRoutes, expandI18nLocales } from '../src/vite/internal/ssg/ssg-dynamic.ts';
 import type { SsgPageOutput } from '../src/vite/internal/protocol/ssg.ts';
 
@@ -37,15 +40,15 @@ const blogRoute = {
 
 async function exists(path: string): Promise<boolean> {
   try {
-    await Deno.stat(path);
+    await stat(path);
     return true;
   } catch {
     return false;
   }
 }
 
-Deno.test('expandI18nLocales skips the default locale output', async () => {
-  const root = await Deno.makeTempDir();
+test('expandI18nLocales skips the default locale output', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   const calls: string[] = [];
   try {
     await expandI18nLocales(
@@ -65,23 +68,23 @@ Deno.test('expandI18nLocales skips the default locale output', async () => {
       root,
       'dist',
     );
-    assertEquals(calls, ['zh']);
+    expect(calls).toEqual(['zh']);
     let defaultOutputExists = true;
     try {
-      await Deno.stat(join(root, 'dist', 'en', 'guide', 'index.html'));
+      await stat(join(root, 'dist', 'en', 'guide', 'index.html'));
     } catch {
       defaultOutputExists = false;
     }
-    assertEquals(defaultOutputExists, false);
+    expect(defaultOutputExists).toEqual(false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
 // ─── alpha.18 R2-H3: 500 contract wiring (dynamic routes) ──────
 
-Deno.test('expandDynamicRoutes - renderRoute receives no forced global title (#968)', async () => {
-  const root = await Deno.makeTempDir();
+test('expandDynamicRoutes - renderRoute receives no forced global title (#968)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     let seenOptions: Record<string, unknown> | undefined;
     await expandDynamicRoutes(
@@ -98,17 +101,17 @@ Deno.test('expandDynamicRoutes - renderRoute receives no forced global title (#9
       root,
       'dist',
     );
-    assertEquals(seenOptions !== undefined, true);
-    assertEquals(seenOptions!.title, undefined);
+    expect(seenOptions !== undefined).toEqual(true);
+    expect(seenOptions!.title).toEqual(undefined);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('expandDynamicRoutes - defined 500 output fails the build by default and writes nothing', async () => {
-  const root = await Deno.makeTempDir();
+test('expandDynamicRoutes - defined 500 output fails the build by default and writes nothing', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await assertRejects(
+    await assertRejectsIncludes(
       () =>
         expandDynamicRoutes(
           [blogRoute],
@@ -121,14 +124,14 @@ Deno.test('expandDynamicRoutes - defined 500 output fails the build by default a
       Error,
       '/blog/a',
     );
-    assertEquals(await exists(join(root, 'dist', 'blog', 'a', 'index.html')), false);
+    expect(await exists(join(root, 'dist', 'blog', 'a', 'index.html'))).toEqual(false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('expandDynamicRoutes - defined 500 output in warn mode skips the page and keeps it out of the ISR map', async () => {
-  const root = await Deno.makeTempDir();
+test('expandDynamicRoutes - defined 500 output in warn mode skips the page and keeps it out of the ISR map', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const map = await expandDynamicRoutes(
       [blogRoute],
@@ -138,15 +141,15 @@ Deno.test('expandDynamicRoutes - defined 500 output in warn mode skips the page 
       root,
       'dist',
     );
-    assertEquals(await exists(join(root, 'dist', 'blog', 'a', 'index.html')), false);
-    assertEquals(map.get('/blog/:slug') ?? [], []);
+    expect(await exists(join(root, 'dist', 'blog', 'a', 'index.html'))).toEqual(false);
+    expect(map.get('/blog/:slug') ?? []).toEqual([]);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('expandDynamicRoutes - mixed params register only successful renders in the ISR map (warn mode)', async () => {
-  const root = await Deno.makeTempDir();
+test('expandDynamicRoutes - mixed params register only successful renders in the ISR map (warn mode)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const map = await expandDynamicRoutes(
       [blogRoute],
@@ -159,16 +162,16 @@ Deno.test('expandDynamicRoutes - mixed params register only successful renders i
       root,
       'dist',
     );
-    assertEquals(map.get('/blog/:slug'), [{ slug: 'a' }]);
-    assertEquals(await exists(join(root, 'dist', 'blog', 'a', 'index.html')), true);
-    assertEquals(await exists(join(root, 'dist', 'blog', 'b', 'index.html')), false);
+    expect(map.get('/blog/:slug')).toEqual([{ slug: 'a' }]);
+    expect(await exists(join(root, 'dist', 'blog', 'a', 'index.html'))).toEqual(true);
+    expect(await exists(join(root, 'dist', 'blog', 'b', 'index.html'))).toEqual(false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('expandDynamicRoutes - redirect result is not written as a 200 page', async () => {
-  const root = await Deno.makeTempDir();
+test('expandDynamicRoutes - redirect result is not written as a 200 page', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const redirectOutput: SsgPageOutput = {
       ...okOutput('<html><body>Redirecting</body></html>'),
@@ -183,15 +186,15 @@ Deno.test('expandDynamicRoutes - redirect result is not written as a 200 page', 
       root,
       'dist',
     );
-    assertEquals(await exists(join(root, 'dist', 'blog', 'a', 'index.html')), false);
-    assertEquals(map.get('/blog/:slug') ?? [], []);
+    expect(await exists(join(root, 'dist', 'blog', 'a', 'index.html'))).toEqual(false);
+    expect(map.get('/blog/:slug') ?? []).toEqual([]);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('expandDynamicRoutes - notFound result is not written as a 200 page', async () => {
-  const root = await Deno.makeTempDir();
+test('expandDynamicRoutes - notFound result is not written as a 200 page', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const notFoundOutput: SsgPageOutput = {
       ...okOutput('<html><body>404 Not Found</body></html>'),
@@ -206,17 +209,17 @@ Deno.test('expandDynamicRoutes - notFound result is not written as a 200 page', 
       root,
       'dist',
     );
-    assertEquals(await exists(join(root, 'dist', 'blog', 'a', 'index.html')), false);
-    assertEquals(map.get('/blog/:slug') ?? [], []);
+    expect(await exists(join(root, 'dist', 'blog', 'a', 'index.html'))).toEqual(false);
+    expect(map.get('/blog/:slug') ?? []).toEqual([]);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('expandDynamicRoutes - renderRoute throw fails the build by default', async () => {
-  const root = await Deno.makeTempDir();
+test('expandDynamicRoutes - renderRoute throw fails the build by default', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await assertRejects(
+    await assertRejectsIncludes(
       () =>
         expandDynamicRoutes(
           [blogRoute],
@@ -229,14 +232,14 @@ Deno.test('expandDynamicRoutes - renderRoute throw fails the build by default', 
       Error,
       'render exploded',
     );
-    assertEquals(await exists(join(root, 'dist', 'blog', 'a', 'index.html')), false);
+    expect(await exists(join(root, 'dist', 'blog', 'a', 'index.html'))).toEqual(false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('expandDynamicRoutes - renderRoute throw in warn mode skips the page', async () => {
-  const root = await Deno.makeTempDir();
+test('expandDynamicRoutes - renderRoute throw in warn mode skips the page', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const map = await expandDynamicRoutes(
       [blogRoute],
@@ -246,19 +249,19 @@ Deno.test('expandDynamicRoutes - renderRoute throw in warn mode skips the page',
       root,
       'dist',
     );
-    assertEquals(await exists(join(root, 'dist', 'blog', 'a', 'index.html')), false);
-    assertEquals(map.get('/blog/:slug') ?? [], []);
+    expect(await exists(join(root, 'dist', 'blog', 'a', 'index.html'))).toEqual(false);
+    expect(map.get('/blog/:slug') ?? []).toEqual([]);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
 // ─── #672: getStaticPaths failures follow the dynamicRouteFailure policy ───
 
-Deno.test('expandDynamicRoutes - getStaticPaths throw fails the build by default', async () => {
-  const root = await Deno.makeTempDir();
+test('expandDynamicRoutes - getStaticPaths throw fails the build by default', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await assertRejects(
+    await assertRejectsIncludes(
       () =>
         expandDynamicRoutes(
           [blogRoute],
@@ -272,12 +275,12 @@ Deno.test('expandDynamicRoutes - getStaticPaths throw fails the build by default
       'getStaticPaths',
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('expandDynamicRoutes - getStaticPaths throw in warn mode skips the route', async () => {
-  const root = await Deno.makeTempDir();
+test('expandDynamicRoutes - getStaticPaths throw in warn mode skips the route', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const map = await expandDynamicRoutes(
       [blogRoute],
@@ -287,16 +290,16 @@ Deno.test('expandDynamicRoutes - getStaticPaths throw in warn mode skips the rou
       root,
       'dist',
     );
-    assertEquals(map.get('/blog/:slug') ?? [], []);
+    expect(map.get('/blog/:slug') ?? []).toEqual([]);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('expandI18nLocales - getStaticPaths throw fails the build by default', async () => {
-  const root = await Deno.makeTempDir();
+test('expandI18nLocales - getStaticPaths throw fails the build by default', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await assertRejects(
+    await assertRejectsIncludes(
       () =>
         expandI18nLocales(
           { i18nOptions: { locales: ['en', 'zh'], defaultLocale: 'en' } },
@@ -310,14 +313,14 @@ Deno.test('expandI18nLocales - getStaticPaths throw fails the build by default',
       Error,
       'getStaticPaths',
     );
-    assertEquals(await exists(join(root, 'dist', 'zh', 'blog', 'a', 'index.html')), false);
+    expect(await exists(join(root, 'dist', 'zh', 'blog', 'a', 'index.html'))).toEqual(false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('expandI18nLocales - getStaticPaths throw in warn mode skips the route', async () => {
-  const root = await Deno.makeTempDir();
+test('expandI18nLocales - getStaticPaths throw in warn mode skips the route', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await expandI18nLocales(
       { i18nOptions: { locales: ['en', 'zh'], defaultLocale: 'en' } },
@@ -328,8 +331,8 @@ Deno.test('expandI18nLocales - getStaticPaths throw in warn mode skips the route
       root,
       'dist',
     );
-    assertEquals(await exists(join(root, 'dist', 'zh', 'blog', 'a', 'index.html')), false);
+    expect(await exists(join(root, 'dist', 'zh', 'blog', 'a', 'index.html'))).toEqual(false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });

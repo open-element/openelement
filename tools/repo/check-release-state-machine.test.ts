@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   commonStableVersion,
   type RegistryEvidence,
@@ -63,62 +63,57 @@ function evidence(): RegistryEvidence {
   };
 }
 
-Deno.test('release state: the pinned per-package model validates offline', () => {
-  assertEquals(validateReleaseState(PINNED_STATE, VERSIONS, SITE_SOURCE), []);
+test('release state: the pinned per-package model validates offline', () => {
+  expect(validateReleaseState(PINNED_STATE, VERSIONS, SITE_SOURCE)).toEqual([]);
 });
 
-Deno.test('release state: the legacy shared-version schema is rejected', () => {
+test('release state: the legacy shared-version schema is rejected', () => {
   const legacy = { ...PINNED_STATE, schemaVersion: 2 } as unknown as ReleaseStateV3;
   const failures = validateReleaseState(legacy, VERSIONS, SITE_SOURCE);
-  assertEquals(failures.includes('unsupported release-state schema'), true);
+  expect(failures.includes('unsupported release-state schema')).toEqual(true);
 });
 
-Deno.test('release state: Site copy must not reintroduce a common version', () => {
+test('release state: Site copy must not reintroduce a common version', () => {
   const reintroduced = SITE_SOURCE.replace(
     'COMMON_PUBLISHED_VERSION: string | null = null',
     "COMMON_PUBLISHED_VERSION: string | null = 'v0.43.3'",
   );
   const failures = validateReleaseState(PINNED_STATE, VERSIONS, reintroduced);
-  assertEquals(
-    failures.some((f) => f.includes('COMMON_PUBLISHED_VERSION must be null')),
-    true,
-  );
+  expect(failures.some((f) => f.includes('COMMON_PUBLISHED_VERSION must be null'))).toEqual(true);
 });
 
-Deno.test('release state: per-package Site latest must match the tracked dist-tags', () => {
+test('release state: per-package Site latest must match the tracked dist-tags', () => {
   const drifted = SITE_SOURCE.replace(
     "'@openelement/router': 'v0.41.0-alpha.6'",
     "'@openelement/router': 'v0.43.3'",
   );
   const failures = validateReleaseState(PINNED_STATE, VERSIONS, drifted);
-  assertEquals(
+  expect(
     failures.some((f) =>
       f.includes('PUBLISHED_LATEST must record @openelement/router v0.41.0-alpha.6'),
     ),
-    true,
-  );
+  ).toEqual(true);
 });
 
-Deno.test('registry drift: the per-package model matches live evidence', () => {
-  assertEquals(validateRegistryEvidence(PINNED_STATE, evidence()), []);
+test('registry drift: the per-package model matches live evidence', () => {
+  expect(validateRegistryEvidence(PINNED_STATE, evidence())).toEqual([]);
 });
 
-Deno.test('registry drift: three-package 0.43.3 is not a common complete version', () => {
+test('registry drift: three-package 0.43.3 is not a common complete version', () => {
   // Router lacks 0.43.3, so the live four-package stable intersection is none.
   const wrong = structuredClone(PINNED_STATE);
   wrong.commonCompleteVersion = '0.43.3';
   const failures = validateRegistryEvidence(wrong, evidence());
-  assertEquals(
+  expect(
     failures.some((f) =>
       f.includes(
         'commonCompleteVersion: tracked 0.43.3, registry four-package stable intersection null',
       ),
     ),
-    true,
-  );
+  ).toEqual(true);
 });
 
-Deno.test('registry drift: only three packages containing the target fails', () => {
+test('registry drift: only three packages containing the target fails', () => {
   const threeOfFour = evidence();
   threeOfFour.versions['@openelement/element'] = ['0.43.3'];
   threeOfFour.versions['@openelement/create'] = ['0.43.3'];
@@ -127,14 +122,11 @@ Deno.test('registry drift: only three packages containing the target fails', () 
   const wrong = structuredClone(PINNED_STATE);
   wrong.commonCompleteVersion = '0.43.3';
   const failures = validateRegistryEvidence(wrong, threeOfFour);
-  assertEquals(
-    failures.some((f) => f.includes('commonCompleteVersion')),
-    true,
-  );
+  expect(failures.some((f) => f.includes('commonCompleteVersion'))).toEqual(true);
 });
 
-Deno.test('commonStableVersion computes the four-package stable intersection', () => {
-  assertEquals(
+test('commonStableVersion computes the four-package stable intersection', () => {
+  expect(
     commonStableVersion(
       {
         a: ['0.43.2', '0.43.3'],
@@ -144,59 +136,47 @@ Deno.test('commonStableVersion computes the four-package stable intersection', (
       },
       ['a', 'b', 'c', 'd'],
     ),
-    '0.43.2',
-  );
-  assertEquals(
+  ).toEqual('0.43.2');
+  expect(
     commonStableVersion({ a: ['0.43.3'], b: ['0.43.3'], c: ['0.43.3'], d: [] }, [
       'a',
       'b',
       'c',
       'd',
     ]),
-    null,
-  );
+  ).toEqual(null);
   // Prereleases never count as a common complete version.
-  assertEquals(
+  expect(
     commonStableVersion(
       { a: ['1.0.0-alpha.1'], b: ['1.0.0-alpha.1'], c: ['1.0.0-alpha.1'], d: ['1.0.0-alpha.1'] },
       ['a', 'b', 'c', 'd'],
     ),
-    null,
-  );
+  ).toEqual(null);
 });
 
-Deno.test('registry drift: a moved dist-tag fails closed', () => {
+test('registry drift: a moved dist-tag fails closed', () => {
   const moved = evidence();
   moved.distTags['@openelement/element'].beta = '0.44.0-beta.2.1';
   const failures = validateRegistryEvidence(PINNED_STATE, moved);
-  assertEquals(
-    failures.some((f) => f.includes('dist-tag beta')),
-    true,
-  );
+  expect(failures.some((f) => f.includes('dist-tag beta'))).toEqual(true);
 });
 
-Deno.test('registry drift: Router absent at the prerelease is accepted', () => {
+test('registry drift: Router absent at the prerelease is accepted', () => {
   const failures = validateRegistryEvidence(PINNED_STATE, evidence());
-  assertEquals(failures, []);
+  expect(failures).toEqual([]);
 });
 
-Deno.test('registry drift: a tracked-but-absent latest fails', () => {
+test('registry drift: a tracked-but-absent latest fails', () => {
   const absent = evidence();
   absent.versions['@openelement/router'] = ['0.41.0-alpha.8'];
   const failures = validateRegistryEvidence(PINNED_STATE, absent);
-  assertEquals(
-    failures.some((f) => f.includes('recorded latest 0.41.0-alpha.6')),
-    true,
-  );
+  expect(failures.some((f) => f.includes('recorded latest 0.41.0-alpha.6'))).toEqual(true);
 });
 
-Deno.test('registry drift: a claimed-but-absent package fails closed', () => {
+test('registry drift: a claimed-but-absent package fails closed', () => {
   const absent = evidence();
   absent.versions['@openelement/element'] = ['0.43.3'];
   absent.distTags['@openelement/element'] = { latest: '0.43.3', beta: '0.44.0-beta.2.2' };
   const failures = validateRegistryEvidence(PINNED_STATE, absent);
-  assertEquals(
-    failures.some((f) => f.includes('recorded as published')),
-    true,
-  );
+  expect(failures.some((f) => f.includes('recorded as published'))).toEqual(true);
 });

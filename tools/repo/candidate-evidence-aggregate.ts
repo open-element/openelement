@@ -17,7 +17,10 @@
  * extraction had left in place is gone — no module cycle remains.
  */
 
-import { dirname, join, relative } from '@std/path';
+import { dirname, join, relative } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import process from 'node:process';
 import { CANDIDATE_EVIDENCE_SCHEMA_VERSION, JOB_NAMES } from './candidate-steps.ts';
 import { carryPackedTarballs, sha256Bytes } from './candidate-evidence-tarballs.ts';
 import {
@@ -87,14 +90,14 @@ async function loadJobs(inputDir: string): Promise<LoadedJob[]> {
     const dir = join(inputDir, jobName);
     let raw: string;
     try {
-      raw = await Deno.readTextFile(join(dir, 'result.json'));
+      raw = await readFile(join(dir, 'result.json'), 'utf8');
     } catch {
       continue;
     }
     jobs.push({
       job: JSON.parse(raw) as JobResult,
       dir,
-      read: (path) => Deno.readFile(join(dir, path)).catch(() => null),
+      read: (path) => readFile(join(dir, path)).catch(() => null),
     });
   }
   return jobs;
@@ -111,7 +114,7 @@ export async function aggregate(inputDir: string, output: string): Promise<void>
   const failures = await collectJobFailures(jobs, expected, headTree);
   if (failures.length > 0) {
     console.error(`candidate aggregation FAILED:\n${failures.join('\n')}`);
-    Deno.exit(1);
+    process.exit(1);
   }
 
   const packed = jobs.find(({ job }) => job.job === 'packed') as LoadedJob;
@@ -133,10 +136,10 @@ export async function aggregate(inputDir: string, output: string): Promise<void>
   );
   if (rollupFailures.length > 0) {
     console.error(`candidate aggregation FAILED:\n${rollupFailures.join('\n')}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   const outDir = dirname(output);
-  await Deno.mkdir(outDir, { recursive: true });
+  await mkdir(outDir, { recursive: true });
 
   // Aggregator owns composition: carry the shipped archives from the
   // downloaded packed evidence only — never readPackages(), tarballPath(),
@@ -149,8 +152,8 @@ export async function aggregate(inputDir: string, output: string): Promise<void>
 
   const writeManifest = async (name: string, value: unknown): Promise<string> => {
     const path = join(outDir, name);
-    await Deno.writeTextFile(path, JSON.stringify(value, null, 2) + '\n');
-    return await sha256Bytes(Deno.readFileSync(path));
+    await writeFile(path, JSON.stringify(value, null, 2) + '\n', 'utf8');
+    return await sha256Bytes(readFileSync(path));
   };
   const tarballManifestSha = await writeManifest('tarball-manifest.json', tarballs);
   const packDiagnosticsSha = await writeManifest(
@@ -184,7 +187,7 @@ export async function aggregate(inputDir: string, output: string): Promise<void>
   const assemblyFailures = await collectBundleFailures(evidence, {
     expectedSha: expected,
     expectedTree: headTree,
-    read: (path) => Deno.readFile(join(outDir, path)).catch(() => null),
+    read: (path) => readFile(join(outDir, path)).catch(() => null),
   });
   if (assemblyFailures.length > 0) {
     console.error(
@@ -192,9 +195,9 @@ export async function aggregate(inputDir: string, output: string): Promise<void>
         '\n',
       )}`,
     );
-    Deno.exit(1);
+    process.exit(1);
   }
   evidence.requiredOk = true;
-  await Deno.writeTextFile(output, JSON.stringify(evidence, null, 2) + '\n');
+  await writeFile(output, JSON.stringify(evidence, null, 2) + '\n', 'utf8');
   console.log(`candidate evidence aggregated: ${output}`);
 }

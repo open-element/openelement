@@ -92,10 +92,10 @@ export type URLPatternConstructor = new (
   init: RoutePatternComponents & { pathname: string },
 ) => RoutePattern;
 /**
- * Native Web Standard URLPattern. All Alpha targets (Deno 2.9, Node 24,
- * current Chromium/Firefox/WebKit) ship it, so there is no polyfill fallback:
- * a missing implementation fails closed with a locatable diagnostic instead
- * of silently diverging in route matching.
+ * Native Web Standard URLPattern. All supported targets (current Node and the
+ * current Chromium/Firefox/WebKit releases) ship it, so there is no polyfill
+ * fallback: a missing implementation fails closed with a locatable diagnostic
+ * instead of silently diverging in route matching.
  */
 const runtimeURLPattern = (): URLPatternConstructor => {
   const Pattern = globalThis.URLPattern as unknown as URLPatternConstructor | undefined;

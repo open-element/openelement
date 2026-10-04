@@ -11,16 +11,34 @@ import { isSiteLocale, SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../../site-conf
 import { normalizeLocalePath } from './i18n.ts';
 
 /**
+ * The one locale-prefixing rule every site link helper shares: a path that is
+ * not site-root-relative (external URL, mailto:/tel: link, anchor, relative
+ * reference) passes through unchanged; the default locale keeps canonical
+ * unprefixed paths; every other site locale gets a `/<locale>` prefix.
+ * Callers must pre-check `isSafeLayoutUrl` before handing arbitrary strings
+ * here — like every passthrough, this helper does not filter schemes.
+ */
+export function localizePathIn(
+  path: string,
+  locale: string,
+  locales: readonly string[],
+  defaultLocale: string,
+): string {
+  if (!path.startsWith('/')) return path;
+  if (locale === defaultLocale) return path;
+  return normalizeLocalePath(`/${locale}${path === '/' ? '' : path}`, {
+    locales: [...locales],
+    defaultLocale,
+  }).localizedPath;
+}
+
+/**
  * Prefix an internal absolute path with the locale unless it is the default
  * locale. External URLs, anchors, and unknown locales pass through unchanged.
  */
 export function localizePath(path: string, locale: string): string {
-  if (!path.startsWith('/')) return path;
   if (!isSiteLocale(locale)) return path;
-  return normalizeLocalePath(`/${locale}${path === '/' ? '' : path}`, {
-    locales: [...SITE_LOCALES],
-    defaultLocale: SITE_DEFAULT_LOCALE,
-  }).localizedPath;
+  return localizePathIn(path, locale, SITE_LOCALES, SITE_DEFAULT_LOCALE);
 }
 
 /**

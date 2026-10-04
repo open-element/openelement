@@ -1,6 +1,6 @@
 /**
- * Part Program v1 assembly for the compiled grammar (#1473 split — the
- * program stage of the former compile facade): metadata, source-provenance
+ * Part Program v1 assembly for the compiled grammar (#1473 split): metadata,
+ * source-provenance
  * records, path-safety and wire validation, plus the serialized payloads the
  * module emission embeds.
  */

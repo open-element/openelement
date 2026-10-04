@@ -6,19 +6,22 @@
  * script only keeps the port preference + findPort retry the Playwright
  * webServer needs.
  *
- * Usage (scoped permissions, never -A):
- *   deno run --allow-read --allow-net --allow-env --deny-ffi --no-prompt e2e/static-server.ts --port 4281 --dir ../dist
+ * Usage:
+ *   node e2e/static-server.ts --port 4281 --dir ../dist
  */
 
+import process from 'node:process';
 import { findPort, serveStatic } from '../../../../tools/lib/static-server.ts';
 
 const args: Record<string, string> = {};
-for (let i = 0; i < Deno.args.length; i += 2) {
-  if (Deno.args[i].startsWith('--')) args[Deno.args[i].slice(2)] = Deno.args[i + 1] ?? '';
+const cliArgs = process.argv.slice(2);
+for (let i = 0; i < cliArgs.length; i += 2) {
+  if (cliArgs[i].startsWith('--')) args[cliArgs[i].slice(2)] = cliArgs[i + 1] ?? '';
 }
 
 const PORT = Number(args.port ?? '4281');
 const ROOT = args.dir ?? '../dist';
 
-const server = serveStatic(ROOT, { port: findPort(PORT) });
+const port = await findPort(PORT);
+const server = serveStatic(ROOT, { port });
 console.log(`site-light-probe fixture static server listening on ${server.origin}`);

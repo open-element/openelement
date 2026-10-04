@@ -8,9 +8,9 @@
  * tarball output + monorepo framework sources.
  *
  * Prerequisites:
- *   deno task --cwd tests/e2e/starter-smoke setup
+ *   pnpm --dir tests/e2e/starter-smoke run setup
  *
- * Run: deno task --cwd tests/e2e/starter-smoke test
+ * Run: pnpm --dir tests/e2e/starter-smoke run test
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';
@@ -80,7 +80,9 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `exec deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt ../../../../../packages/router/src/cli/start.ts`,
+    // B5 (ADR-0161): the starter's own `start` script IS the documented
+    // production surface — serve it exactly as an adopter would.
+    command: 'exec pnpm run start',
     cwd: new URL('./work/my-blog', import.meta.url).pathname,
     url: baseURL,
     reuseExistingServer: false,

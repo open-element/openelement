@@ -1,12 +1,6 @@
 /** Discover compiled static components reachable from local route imports. */
-import {
-  dirname,
-  extname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-} from '../../../internal/host-path.ts';
+import { readFile, stat } from 'node:fs/promises';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'pathe';
 import type { RouteEntry } from '../protocol/framework.ts';
 import type { StaticComponentDecl } from '../protocol/ssg.ts';
 import { normalizeSeparators } from '@openelement/element/build-utils';
@@ -22,8 +16,8 @@ function inside(root: string, candidate: string): boolean {
 
 async function sourceFile(candidate: string): Promise<string | undefined> {
   try {
-    const stat = await Deno.stat(candidate);
-    return stat.isFile ? candidate : undefined;
+    const fileStat = await stat(candidate);
+    return fileStat.isFile() ? candidate : undefined;
   } catch {
     return undefined;
   }
@@ -75,7 +69,7 @@ export async function scanStaticComponents(
     seen.add(file);
     let source: string;
     try {
-      source = await Deno.readTextFile(file);
+      source = await readFile(file, 'utf8');
     } catch {
       continue;
     }

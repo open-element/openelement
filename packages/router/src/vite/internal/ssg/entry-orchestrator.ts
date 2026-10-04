@@ -180,7 +180,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   // The admission plan, shell plan, and locale declaration are per-project
   // build data (the descriptor's own values — there is no importable source
   // for them), so they stay generated data handed to the factory.
-  lines.push('// v0.17.4: SSR admission plan');
+  lines.push('// SSR admission plan');
   lines.push(
     `export const ssrAdmissionPlan = ${quoteGeneratedJavaScriptValue(ssrAdmissionPlan, 2)};`,
   );
@@ -191,8 +191,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   // unconditionally, so a project without headExtras would otherwise render
   // every static page into a 500 (latent until the request-time fixture hit it).
   if (desc.isSSG) {
-    lines.push('// SSG: headExtras injected via Vite define (Phase A)');
-    lines.push('// Replaces the old .openElement/head-extras.html runtime file read');
+    lines.push('// SSG: headExtras injected via Vite define');
     lines.push('const __headExtras = __HEAD_EXTRAS__ || "";');
     lines.push('');
   }
@@ -408,7 +407,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     renderMiddleware(lines, mw);
   }
 
-  // --- Middleware scopes (v0.3.0: _middleware.ts files) ---
+  // --- Middleware scopes: _middleware.ts files ---
   // Authors export the dialect-free WinterCG shape (request, next) =>
   // Promise<Response>; the entry adapts it into the Hono chain in place.
   for (const mwScope of desc.middlewareScopes) {

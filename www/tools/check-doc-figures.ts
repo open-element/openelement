@@ -5,13 +5,20 @@
  * Both sides derive — figure expectations come from regexing the two doc
  * files (never a hand list here), actuals from dist (html count, sitemap
  * locs, manifests, pagefind entry, chunk raw+gzip bytes, per-route
- * payloads). Byte-size totals from `du` are deliberately NOT gated:
+ * payloads). A route payload is the eager download closure: the route's
+ * manifest chunk set plus `client.js`, closed over the static-import edges
+ * the client build records in dist/client/.vite/manifest.json — so shared
+ * chunks that ride along on every page are counted no matter which chunk
+ * file hosts them. Byte-size totals from `du` are deliberately NOT gated:
  * platform du accounting differs between macOS and Linux runners.
  */
-import { walk } from '@std/fs/walk';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readdir, readFile, stat } from 'node:fs/promises';
+import process from 'node:process';
+import { commandOutput } from '../../tools/repo/node-command.ts';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const dist = join(repoRoot, 'www/dist');
 const docs = [
   join(repoRoot, 'www/content/docs/architecture/comparison.md'),
@@ -38,29 +45,33 @@ function check(name: string, expected: number, actual: number, tolerance = 0): v
 async function gzipSize(file: string): Promise<number> {
   // Must be gzip -9: the doc figures are measured that way and
   // CompressionStream would produce different bytes.
-  const child = new Deno.Command('gzip', {
+  const child = await commandOutput('gzip', {
     args: ['-9', '-c', file],
     stdin: 'null',
     stdout: 'piped',
     stderr: 'null',
   });
-  const { code, stdout } = await child.output();
+  const { code, stdout } = child;
   if (code !== 0) throw new Error(`gzip -9 failed for ${file}`);
   return stdout.length;
 }
 
 const distFiles = new Map<string, string>();
-for await (const entry of walk(dist, { includeDirs: false })) {
-  distFiles.set(entry.path.slice(dist.length + 1), entry.path);
+for (const entry of await readdir(dist, { recursive: true, withFileTypes: true })) {
+  if (entry.isDirectory()) continue;
+  distFiles.set(
+    `${entry.parentPath}/${entry.name}`.slice(dist.length + 1),
+    `${entry.parentPath}/${entry.name}`,
+  );
 }
 const distHtml = [...distFiles.keys()].filter((path) => path.endsWith('.html'));
-const sitemap = await Deno.readTextFile(join(dist, 'sitemap.xml'));
+const sitemap = await readFile(join(dist, 'sitemap.xml'), 'utf8');
 const sitemapLocs = (sitemap.match(/<loc>/g) ?? []).length;
 const manifestPaths = [...distFiles.keys()].filter(
   (path) => path.startsWith('island-manifests/') && path.endsWith('.json'),
 );
 const manifests = await Promise.all(
-  manifestPaths.map(async (path) => JSON.parse(await Deno.readTextFile(join(dist, path)))),
+  manifestPaths.map(async (path) => JSON.parse(await readFile(join(dist, path), 'utf8'))),
 );
 const tagCounts = new Map<string, number>();
 let manifestEntries = 0;
@@ -70,7 +81,7 @@ for (const manifest of manifests) {
     manifestEntries++;
   }
 }
-const entryJson = JSON.parse(await Deno.readTextFile(join(dist, 'pagefind/pagefind-entry.json')));
+const entryJson = JSON.parse(await readFile(join(dist, 'pagefind/pagefind-entry.json'), 'utf8'));
 const fragmentFiles = [...distFiles.keys()].filter((path) => path.startsWith('pagefind/fragment/'));
 
 const chunkSize = new Map<string, { raw: number; gzip: number }>();
@@ -78,7 +89,7 @@ for (const [rel, abs] of distFiles) {
   const match = /^client\/islands\/(.+)\.js$/.exec(rel);
   if (match) {
     chunkSize.set(match[1], {
-      raw: (await Deno.stat(abs)).size,
+      raw: (await stat(abs)).size,
       gzip: await gzipSize(abs),
     });
   }
@@ -92,28 +103,89 @@ function chunkStem(docName: string): string {
   }
   return hits[0] ?? docName;
 }
-function routePayload(route: string): { bytes: number; chunks: number } {
+
+/**
+ * The client build's Vite manifest (dist/client/.vite/manifest.json), read as
+ * a static-import graph over site-absolute chunk URLs. `client.js` and the
+ * island chunks carry static imports (shared runtime chunks, chunk-level
+ * de-duplication), so a route's real download is its manifest chunk set plus
+ * everything those files eagerly import — measured as the closure, the number
+ * stays honest no matter which chunk file the bundler hosts shared code in.
+ * Dynamic imports are deliberately not followed: the strategy loader's
+ * dynamic edges are exactly the manifest chunkUrls, already seeds here.
+ */
+interface ViteManifestEntry {
+  file?: string;
+  imports?: string[];
+}
+const eagerImports = new Map<string, string[]>();
+{
+  const manifestPath = join(dist, 'client/.vite/manifest.json');
+  let parsed: Record<string, ViteManifestEntry>;
+  try {
+    parsed = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, ViteManifestEntry>;
+  } catch (cause) {
+    failures.push(
+      `client build manifest unreadable: ${manifestPath} (${(cause as Error).message})`,
+    );
+    parsed = {};
+  }
+  const urlByKey = new Map<string, string>();
+  for (const [key, entry] of Object.entries(parsed)) {
+    if (entry.file) urlByKey.set(key, `/client/${entry.file}`);
+  }
+  for (const [key, entry] of Object.entries(parsed)) {
+    const url = urlByKey.get(key);
+    if (!url) continue;
+    const deps: string[] = [];
+    for (const dep of entry.imports ?? []) {
+      const depUrl = urlByKey.get(dep);
+      if (!depUrl) {
+        failures.push(`client manifest import target missing: ${key} -> ${dep}`);
+        continue;
+      }
+      deps.push(depUrl);
+    }
+    eagerImports.set(url, deps);
+  }
+}
+function eagerClosure(seeds: string[]): Set<string> {
+  const closure = new Set<string>(seeds);
+  const queue = [...closure];
+  while (queue.length > 0) {
+    for (const dep of eagerImports.get(queue.pop() ?? '') ?? []) {
+      if (!closure.has(dep)) {
+        closure.add(dep);
+        queue.push(dep);
+      }
+    }
+  }
+  return closure;
+}
+async function routePayload(route: string): Promise<{ bytes: number; chunks: number }> {
   const manifest = manifests.find((item) => item.route === route);
   if (!manifest) {
     failures.push(`no island manifest for route ${route}`);
     return { bytes: -1, chunks: -1 };
   }
-  const urls = new Set<string>([
+  const urls = eagerClosure([
     ...(manifest.islands as Array<{ chunkUrl: string }>).map((island) => island.chunkUrl),
     '/client/islands/client.js',
   ]);
   let bytes = 0;
   for (const url of urls) {
-    const stem = url.split('/').at(-1)?.replace(/\.js$/, '') ?? '';
-    const sizes = chunkSize.get(stem);
-    if (!sizes) failures.push(`chunk file missing for ${url}`);
-    else bytes += sizes.raw;
+    const abs = distFiles.get(url.replace(/^\//, ''));
+    if (!abs) {
+      failures.push(`chunk file missing for ${url}`);
+      continue;
+    }
+    bytes += (await stat(abs)).size;
   }
   return { bytes, chunks: urls.size };
 }
 
 for (const docPath of docs) {
-  const text = await Deno.readTextFile(docPath);
+  const text = await readFile(docPath, 'utf8');
   const short = docPath.slice(repoRoot.length).replace(/^\//, '');
   const scope = `${short}: `;
   const zh = docPath.endsWith('.zh.md');
@@ -187,7 +259,7 @@ for (const docPath of docs) {
     check(scope + `chunk ${name} gzip`, Number(row[3].replaceAll(',', '')), sizes.gzip, 0.03);
   }
   for (const row of text.matchAll(/\|\s*`([^`]+)`\s*\|\s*([\d,]+) B\s*\|\s*(\d+)\s*\|/g)) {
-    const payload = routePayload(row[1]);
+    const payload = await routePayload(row[1]);
     check(scope + `payload ${row[1]}`, Number(row[2].replaceAll(',', '')), payload.bytes, 0.01);
     check(scope + `chunks ${row[1]}`, Number(row[3]), payload.chunks);
   }
@@ -196,6 +268,6 @@ for (const docPath of docs) {
 if (failures.length > 0) {
   console.error('doc figures check failed:');
   for (const failure of failures) console.error(`- ${failure}`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log('doc figures check passed.');

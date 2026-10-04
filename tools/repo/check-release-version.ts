@@ -9,32 +9,34 @@
  * release-line contract in tools/lib/version.ts, and any mismatch or absent
  * version fails closed with a non-zero exit.
  *
- * Usage: deno run --allow-read tools/repo/check-release-version.ts <version>
+ * Usage: node tools/repo/check-release-version.ts <version>
  */
 
-import { join } from '@std/path';
+import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 import { parseLineVersion } from '../lib/version.ts';
 import { PACKAGE_CONFIGS, readConfigVersion } from './version-bump.ts';
 
 const repoRoot = new URL('../..', import.meta.url).pathname;
 
-const expected = Deno.args[0];
+const expected = process.argv[2];
 if (!expected) {
   console.error('usage: check-release-version.ts <version>');
-  Deno.exit(1);
+  process.exit(1);
 }
 try {
   parseLineVersion(expected);
 } catch {
   console.error(`release version "${expected}" is not a valid release-line version`);
-  Deno.exit(1);
+  process.exit(1);
 }
 
 const failures: string[] = [];
 for (const config of PACKAGE_CONFIGS) {
   let actual: string | null;
   try {
-    actual = readConfigVersion(await Deno.readTextFile(join(repoRoot, config)));
+    actual = readConfigVersion(await readFile(join(repoRoot, config), 'utf8'));
   } catch {
     failures.push(`${config}: manifest is unreadable`);
     continue;
@@ -57,7 +59,7 @@ for (const config of PACKAGE_CONFIGS) {
 if (failures.length > 0) {
   console.error(`release version check failed (${failures.length}):`);
   for (const failure of failures) console.error(`  ${failure}`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log(
   `release version check: all ${PACKAGE_CONFIGS.length} package manifests carry ${expected}`,

@@ -1,13 +1,19 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys
+#!/usr/bin/env node
 /** Ephemeral T1 structure snapshot proof, not a production adapter or tier grant. */
-import { assertEquals, assertStringIncludes } from '@std/assert';
-import { dirname, fromFileUrl, join } from '@std/path';
+import { strict as assert } from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import process from 'node:process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { formatJson } from '@openelement/element/build-utils';
 import { serveStatic } from '../../../tools/lib/static-server.ts';
 import { prepareFixtureApp } from './qualify.ts';
 
-const fixtureDir = dirname(fromFileUrl(import.meta.url));
+const fixtureDir = dirname(fileURLToPath(import.meta.url));
 const tag = 'wc-lit-counter';
 const label = 'Snapshot label';
 
@@ -17,10 +23,10 @@ async function sha256(data: string | Uint8Array): Promise<string> {
   return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-async function oneClientChunk(dist: string): Promise<string> {
+function oneClientChunk(dist: string): string {
   const names: string[] = [];
-  for await (const entry of Deno.readDir(join(dist, 'client', 'islands'))) {
-    if (entry.isFile && /^wc-client-[\w-]+\.js$/.test(entry.name)) {
+  for (const entry of readdirSync(join(dist, 'client', 'islands'), { withFileTypes: true })) {
+    if (entry.isFile() && /^wc-client-[\w-]+\.js$/.test(entry.name)) {
       names.push(entry.name);
     }
   }
@@ -52,37 +58,37 @@ interface SnapshotRecord {
  */
 async function readSnapshotRecord(path: string): Promise<SnapshotRecord | undefined> {
   try {
-    return JSON.parse(await Deno.readTextFile(path)) as SnapshotRecord;
+    return JSON.parse(await readFile(path, 'utf8')) as SnapshotRecord;
   } catch (error) {
-    if (error instanceof Deno.errors.NotFound) return undefined;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw error;
   }
 }
 
 async function main(): Promise<void> {
-  const root = await Deno.makeTempDir({ prefix: 'openelement-lit-snapshot-' });
-  const keep = Deno.env.get('OPEN_ELEMENT_KEEP_T1_PROTOTYPE') === '1';
+  const root = await mkdtemp(join(tmpdir(), 'openelement-lit-snapshot-'));
+  const keep = process.env.OPEN_ELEMENT_KEEP_T1_PROTOTYPE === '1';
   let server: ReturnType<typeof serveStatic> | undefined;
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     const app = await prepareFixtureApp(root);
     const dist = join(app, 'dist');
     const chunk = await oneClientChunk(dist);
-    const config = JSON.parse(await Deno.readTextFile(join(app, 'deno.json'))) as {
-      imports: Record<string, string>;
+    const manifest = JSON.parse(await readFile(join(app, 'package.json'), 'utf8')) as {
+      dependencies: Record<string, string>;
     };
-    const resolvedPackage = config.imports.lit;
-    if (!/^npm:lit@\d+\.\d+\.\d+$/.test(resolvedPackage)) {
+    const resolvedPackage = manifest.dependencies.lit;
+    if (!/^\d+\.\d+\.\d+$/.test(resolvedPackage)) {
       throw new Error(`T1 fixture must pin an exact Lit version: ${resolvedPackage}`);
     }
     const sourceDir = join(dist, 'lit-snapshot-source');
-    await Deno.mkdir(sourceDir, { recursive: true });
-    await Deno.writeTextFile(
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(
       join(sourceDir, 'index.html'),
       `<!doctype html><html><body><${tag} label="Snapshot"><span slot="label">${label}</span></${tag}>` +
         `<script type="module" src="/client/islands/${chunk}"></script></body></html>`,
     );
-    server = serveStatic(dist);
+    server = await serveStatic(dist);
     browser = await chromium.launch();
     const capture = async (): Promise<string> => {
       const page = await browser!.newPage();
@@ -123,25 +129,25 @@ async function main(): Promise<void> {
     };
     const first = await capture();
     const second = await capture();
-    assertEquals(first, second, 'independent browser captures must agree structurally');
-    assertStringIncludes(first, 'Snapshot:');
+    assert.deepStrictEqual(first, second, 'independent browser captures must agree structurally');
+    assert.ok(first.includes('Snapshot:'), 'snapshot must carry its header');
     const inputs = {
       tag,
       resolvedPackage,
-      chunkSha256: await sha256(await Deno.readFile(join(dist, 'client', 'islands', chunk))),
-      toolSha256: await sha256(await Deno.readFile(fromFileUrl(import.meta.url))),
+      chunkSha256: await sha256(await readFile(join(dist, 'client', 'islands', chunk))),
+      toolSha256: await sha256(await readFile(fileURLToPath(import.meta.url))),
       fixtureSha256: await sha256(
-        await Deno.readFile(join(fixtureDir, 'app', 'client', 'wc-client.ts')),
+        await readFile(join(fixtureDir, 'app', 'client', 'wc-client.ts')),
       ),
       browser: browser.version(),
-      deno: Deno.version.deno,
+      node: process.version,
       props: { label: 'Snapshot', count: 0 },
       slot: label,
       mode: 'structure-only',
     };
     const key = await sha256(JSON.stringify(inputs));
     const cache = join(root, 'cache');
-    await Deno.mkdir(cache);
+    await mkdir(cache);
     const path = join(cache, `${key}.json`);
     // First lookup: an empty cache must MISS, or the ephemeral-cache premise of
     // this prototype is false.
@@ -149,8 +155,8 @@ async function main(): Promise<void> {
     if (!initialMiss) throw new Error('prototype cache unexpectedly existed');
 
     const demoDir = join(dist, 'lit-snapshot');
-    await Deno.mkdir(demoDir, { recursive: true });
-    await Deno.writeTextFile(
+    await mkdir(demoDir, { recursive: true });
+    await writeFile(
       join(demoDir, 'index.html'),
       `<!doctype html><html><body><${tag} label="Snapshot">` +
         `<template shadowrootmode="open">${first}</template>` +
@@ -164,13 +170,13 @@ async function main(): Promise<void> {
       const button = await page.locator(`${tag} #lit-button`).textContent();
       const slot = await page.locator(`${tag} span[slot="label"]`).textContent();
       zeroJsVisible = button?.includes('Snapshot:') === true && slot === label;
-      assertEquals(zeroJsVisible, true, 'DSD demo must be readable with JavaScript disabled');
+      assert.strictEqual(zeroJsVisible, true, 'DSD demo must be readable with JavaScript disabled');
     } finally {
       await noJs.close();
     }
     const upgradeDir = join(dist, 'lit-snapshot-upgrade');
-    await Deno.mkdir(upgradeDir);
-    await Deno.writeTextFile(
+    await mkdir(upgradeDir);
+    await writeFile(
       join(upgradeDir, 'index.html'),
       `<!doctype html><html><body><${tag} label="Snapshot">` +
         `<template shadowrootmode="open">${first}</template>` +
@@ -234,20 +240,20 @@ async function main(): Promise<void> {
         upgradePreservedFocus,
       },
     };
-    await Deno.writeTextFile(path, formatJson(record));
+    await writeFile(path, formatJson(record));
     // Second lookup of the same key: this is the cache HIT the report claims.
     // The record read back is the stored artifact, so every assertion below
     // validates what a later run would receive from the cache.
     const cached = await readSnapshotRecord(path);
     const verifiedCacheHit = cached !== undefined;
-    assertEquals(verifiedCacheHit, true, 'a written snapshot must be readable by key');
-    assertEquals(cached!.key, await sha256(JSON.stringify(cached!.inputs)));
-    assertEquals(cached!.snapshotSha256, await sha256(cached!.shadowHtml));
-    assertEquals(cached!.qualification, record.qualification);
-    assertEquals(cached!.inputs, inputs);
+    assert.strictEqual(verifiedCacheHit, true, 'a written snapshot must be readable by key');
+    assert.strictEqual(cached!.key, await sha256(JSON.stringify(cached!.inputs)));
+    assert.strictEqual(cached!.snapshotSha256, await sha256(cached!.shadowHtml));
+    assert.deepStrictEqual(cached!.qualification, record.qualification);
+    assert.deepStrictEqual(cached!.inputs, inputs);
     // A different input set must address a different key, and that key must
     // still MISS — the hit above is key-addressed, not "any file exists".
-    const bumpedInputs = { ...inputs, resolvedPackage: 'npm:lit@3.3.4' };
+    const bumpedInputs = { ...inputs, resolvedPackage: '3.3.4' };
     const bumpedKey = await sha256(JSON.stringify(bumpedInputs));
     const versionBumpCacheMiss =
       bumpedKey !== key &&
@@ -281,17 +287,17 @@ async function main(): Promise<void> {
       versionBumpCacheMiss,
       demo: keep ? join(demoDir, 'index.html') : 'ephemeral build artifact',
     };
-    const reportPath = Deno.env.get('OPEN_ELEMENT_T1_PROTOTYPE_REPORT');
+    const reportPath = process.env.OPEN_ELEMENT_T1_PROTOTYPE_REPORT;
     if (reportPath) {
-      await Deno.mkdir(dirname(reportPath), { recursive: true });
-      await Deno.writeTextFile(reportPath, formatJson(report));
+      await mkdir(dirname(reportPath), { recursive: true });
+      await writeFile(reportPath, formatJson(report));
     }
     console.log(JSON.stringify(report, null, 2));
   } finally {
     await browser?.close();
     await server?.close();
     if (keep) console.log(`Keeping T1 prototype fixture at ${root}`);
-    else await Deno.remove(root, { recursive: true });
+    else await rm(root, { recursive: true });
   }
 }
 

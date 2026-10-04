@@ -23,7 +23,7 @@
  * The DOM harness installs browser globals before the package is imported.
  */
 
-import { assert, assertEquals, assertStrictEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   FacadeEvent,
   installFacadeDom,
@@ -31,73 +31,19 @@ import {
   toHtml,
 } from './compiled-runtime/facade-dom.ts';
 import { testProgram } from './compiled-runtime/test-program.ts';
+import { defineLightCounter, makeUniqueTag } from './compiled-runtime/light-counter-harness.ts';
 
 const dom = installFacadeDom();
 
 const { OpenElement, renderDsd } = await import('@openelement/element');
 const { PartProgramClaimError } = await import('../src/internal/compiled/runtime.ts');
 
-// oxlint-disable-next-line no-explicit-any
-type AnyElement = any;
+const uniqueTag = makeUniqueTag('bounded');
+const lightCounterDeps = { OpenElement, testProgram, registry: dom.registry };
 
-let tagCounter = 0;
-function uniqueTag(prefix: string): string {
-  return `oe-bounded-${prefix}-${++tagCounter}`;
-}
-
-const LIGHT_PROGRAM = {
-  template: [
-    {
-      k: 'el' as const,
-      tag: 'button',
-      attrs: [['type', 'button']] as Array<[string, string]>,
-      children: [
-        { k: 'text' as const, value: 'count: ' },
-        { k: 'part' as const, index: 0 },
-      ],
-    },
-  ],
-  parts: [
-    { k: 'text' as const, index: 0, signal: 'count' },
-    {
-      k: 'event' as const,
-      index: 1,
-      event: 'click',
-      handler: 'increment',
-      action: { kind: 'method' as const, name: 'increment' },
-      path: [0],
-    },
-  ],
-  properties: [
-    {
-      name: 'count',
-      attribute: 'count',
-      type: 'number' as const,
-      converter: 'number' as const,
-      reflect: true,
-      default: 0,
-    },
-  ],
-};
-
-function defineLightCounter(tag: string): CustomElementConstructor {
-  const program = testProgram({ tag, rootMode: 'light', ...LIGHT_PROGRAM });
-  const ctor = class extends OpenElement {
-    increment(this: AnyElement): void {
-      this.count++;
-    }
-  } as unknown as CustomElementConstructor & Record<string, unknown>;
-  ctor.__partProgram = program;
-  ctor.__compiledProperties = program.metadata.properties;
-  ctor.__elementMetadata = program.metadata;
-  ctor.observedAttributes = program.metadata.observedAttributes;
-  dom.registry.define(tag, ctor);
-  return ctor;
-}
-
-Deno.test('#1381: a light root holding only a formatting newline mounts fresh', () => {
+test('#1381: a light root holding only a formatting newline mounts fresh', () => {
   const tag = uniqueTag('newline');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   void ctor;
 
   const el = dom.document.createElement(tag) as AnyElement;
@@ -108,35 +54,32 @@ Deno.test('#1381: a light root holding only a formatting newline mounts fresh', 
   // The upgrade must not throw, and it must not leave the formatting newline
   // in front of the rendered tree.
   dom.document.body.appendChild(el);
-  assertEquals(
-    toHtml(el),
+  expect(toHtml(el)).toEqual(
     `<${tag} count="2"><button type="button">count: <!--oe:p0-->2</button></${tag}>`,
   );
-  assert(
+  expect(
     (el.childNodes[0] as AnyElement).tagName?.toLowerCase() === 'button',
     'the rendered button is the first child',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('#1381: indentation, tabs and mixed whitespace are all formatting', () => {
+test('#1381: indentation, tabs and mixed whitespace are all formatting', () => {
   const whitespace = ['', ' ', '\n', '\t', '\n\t  \n   ', '   \r\n '];
   for (const text of whitespace) {
     const tag = uniqueTag('ws');
-    defineLightCounter(tag);
+    defineLightCounter(lightCounterDeps, tag);
     const el = dom.document.createElement(tag) as AnyElement;
     el.appendChild(dom.document.createTextNode(text));
     dom.document.body.appendChild(el);
-    assertEquals(
-      toHtml(el),
+    expect(toHtml(el), `whitespace ${JSON.stringify(text)} must be treated as formatting`).toEqual(
       `<${tag}><button type="button">count: <!--oe:p0-->0</button></${tag}>`,
-      `whitespace ${JSON.stringify(text)} must be treated as formatting`,
     );
   }
 });
 
-Deno.test('#1381: an element in the light root still fails closed as a claim mismatch', () => {
+test('#1381: an element in the light root still fails closed as a claim mismatch', () => {
   const tag = uniqueTag('element-drift');
-  defineLightCounter(tag);
+  defineLightCounter(lightCounterDeps, tag);
   const el = dom.document.createElement(tag) as AnyElement;
   // Real content that the compiled template cannot match: the template's root
   // is a <button>, so a <div> is structural drift, not formatting.
@@ -148,13 +91,16 @@ Deno.test('#1381: an element in the light root still fails closed as a claim mis
   } catch (error) {
     thrown = error;
   }
-  assert(thrown instanceof PartProgramClaimError, 'real content must still fail closed');
-  assertStringIncludes((thrown as Error).message, '[compiled-claim]');
+  expect(
+    thrown instanceof PartProgramClaimError,
+    'real content must still fail closed',
+  ).toBeTruthy();
+  expect((thrown as Error).message).toContain('[compiled-claim]');
 });
 
-Deno.test('#1381: a serializer anchor comment still fails closed', () => {
+test('#1381: a serializer anchor comment still fails closed', () => {
   const tag = uniqueTag('comment-drift');
-  defineLightCounter(tag);
+  defineLightCounter(lightCounterDeps, tag);
   const el = dom.document.createElement(tag) as AnyElement;
   // The serializer's dynamic anchors are comments, so a comment IS content.
   // A stray one is drift the claim must report, never formatting to drop.
@@ -166,12 +112,12 @@ Deno.test('#1381: a serializer anchor comment still fails closed', () => {
   } catch (error) {
     thrown = error;
   }
-  assert(thrown instanceof PartProgramClaimError, 'an anchor comment is content');
+  expect(thrown instanceof PartProgramClaimError, 'an anchor comment is content').toBeTruthy();
 });
 
-Deno.test('#1381: visible authored text still fails closed', () => {
+test('#1381: visible authored text still fails closed', () => {
   const tag = uniqueTag('text-drift');
-  defineLightCounter(tag);
+  defineLightCounter(lightCounterDeps, tag);
   const el = dom.document.createElement(tag) as AnyElement;
   el.appendChild(dom.document.createTextNode('stray prose'));
 
@@ -181,12 +127,15 @@ Deno.test('#1381: visible authored text still fails closed', () => {
   } catch (error) {
     thrown = error;
   }
-  assert(thrown instanceof PartProgramClaimError, 'visible text is content, not formatting');
+  expect(
+    thrown instanceof PartProgramClaimError,
+    'visible text is content, not formatting',
+  ).toBeTruthy();
 });
 
-Deno.test('#1381: whitespace before real content does not rescue the claim', () => {
+test('#1381: whitespace before real content does not rescue the claim', () => {
   const tag = uniqueTag('mixed-drift');
-  defineLightCounter(tag);
+  defineLightCounter(lightCounterDeps, tag);
   const el = dom.document.createElement(tag) as AnyElement;
   // The exact shape the fix must not over-permit: formatting whitespace AND
   // real content. The whitespace is not stripped here, because the root
@@ -200,12 +149,15 @@ Deno.test('#1381: whitespace before real content does not rescue the claim', () 
   } catch (error) {
     thrown = error;
   }
-  assert(thrown instanceof PartProgramClaimError, 'whitespace must not mask real drift');
+  expect(
+    thrown instanceof PartProgramClaimError,
+    'whitespace must not mask real drift',
+  ).toBeTruthy();
 });
 
-Deno.test('#1381: a serialized light host still claims in place (no regression)', () => {
+test('#1381: a serialized light host still claims in place (no regression)', () => {
   const tag = uniqueTag('ssr');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   const html = renderDsd(tag, { componentClass: ctor, props: { count: 3 } }).html;
 
   let button: AnyElement | undefined;
@@ -218,10 +170,10 @@ Deno.test('#1381: a serialized light host still claims in place (no regression)'
   // The content-aware decision must not turn a real claim into a fresh mount:
   // server node identity survives, so activation stays O(claimed) rather than
   // discarding and rebuilding the whole subtree.
-  assertStrictEquals(el.childNodes[0], button, 'the SSR button is claimed, not replaced');
-  assertStrictEquals(button.childNodes[2], countText, 'the SSR text node is claimed');
-  assertEquals(el.count, 3);
+  expect(el.childNodes[0], 'the SSR button is claimed, not replaced').toBe(button);
+  expect(button.childNodes[2], 'the SSR text node is claimed').toBe(countText);
+  expect(el.count).toEqual(3);
   button.dispatchEvent(new FacadeEvent('click'));
-  assertEquals(el.count, 4);
-  assertEquals(countText.data, '4');
+  expect(el.count).toEqual(4);
+  expect(countText.data).toEqual('4');
 });

@@ -1,7 +1,7 @@
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { parseGateStep, runGate } from './gate.ts';
 
-Deno.test('gate: green steps all pass with per-step results', async () => {
+test('gate: green steps all pass with per-step results', async () => {
   const seen: string[] = [];
   const lines: string[] = [];
   const { ok, results } = await runGate(
@@ -12,19 +12,16 @@ Deno.test('gate: green steps all pass with per-step results', async () => {
     },
     (line) => lines.push(line),
   );
-  assert(ok);
-  assertEquals(seen, ['a', 'b']);
-  assertEquals(
-    results.map((r) => r.name),
-    ['a', 'b'],
-  );
-  assert(results.every((r) => r.ok));
-  assert(lines.some((l) => l.startsWith('PASS a')));
-  assert(lines.some((l) => l.startsWith('PASS b')));
-  assert(lines.some((l) => l.includes('gate ok: 2 step(s)')));
+  expect(ok).toBeTruthy();
+  expect(seen).toEqual(['a', 'b']);
+  expect(results.map((r) => r.name)).toEqual(['a', 'b']);
+  expect(results.every((r) => r.ok)).toBeTruthy();
+  expect(lines.some((l) => l.startsWith('PASS a'))).toBeTruthy();
+  expect(lines.some((l) => l.startsWith('PASS b'))).toBeTruthy();
+  expect(lines.some((l) => l.includes('gate ok: 2 step(s)'))).toBeTruthy();
 });
 
-Deno.test('gate: first failure stops the gate fail-closed', async () => {
+test('gate: first failure stops the gate fail-closed', async () => {
   const seen: string[] = [];
   const lines: string[] = [];
   const { ok, results } = await runGate(
@@ -35,26 +32,29 @@ Deno.test('gate: first failure stops the gate fail-closed', async () => {
     },
     (line) => lines.push(line),
   );
-  assert(!ok);
-  assertEquals(seen, ['a', 'failing']);
-  assertEquals(results.length, 2);
-  assert(lines.some((l) => l.startsWith('FAIL failing')));
-  assert(lines.some((l) => l.includes('gate stopped')));
+  expect(!ok).toBeTruthy();
+  expect(seen).toEqual(['a', 'failing']);
+  expect(results.length).toEqual(2);
+  expect(lines.some((l) => l.startsWith('FAIL failing'))).toBeTruthy();
+  expect(lines.some((l) => l.includes('gate stopped'))).toBeTruthy();
 });
 
-Deno.test('gate: parseGateStep accepts a root task', () => {
-  const { dir, task } = parseGateStep('typecheck');
-  assertEquals(dir, null);
-  assertEquals(task, 'typecheck');
+test('gate: parseGateStep accepts a root task', () => {
+  const { pkg, task } = parseGateStep('typecheck');
+  expect(pkg).toEqual(null);
+  expect(task).toEqual('typecheck');
 });
 
-Deno.test('gate: parseGateStep accepts a workspace DIR#TASK step', () => {
-  const { dir, task } = parseGateStep('www#build');
-  assertEquals(dir, 'www');
-  assertEquals(task, 'build');
+test('gate: parseGateStep accepts a package-qualified step', () => {
+  const { pkg, task } = parseGateStep('@openelement/www#build');
+  expect(pkg).toEqual('@openelement/www');
+  expect(task).toEqual('build');
+  const unscoped = parseGateStep('fixture#build');
+  expect(unscoped.pkg).toEqual('fixture');
+  expect(unscoped.task).toEqual('build');
 });
 
-Deno.test('gate: parseGateStep rejects escapes and shell composition', () => {
+test('gate: parseGateStep rejects escapes, shell composition, and path selectors', () => {
   const bad = [
     '',
     '#build',
@@ -62,6 +62,10 @@ Deno.test('gate: parseGateStep rejects escapes and shell composition', () => {
     '../evil#build',
     'apps/../evil#build',
     '/abs#build',
+    // The dir#task path form silently no-ops under vp run: it is a parse
+    // error, never a dispatchable step.
+    'tools/repo#generate:all',
+    'www/build#task',
     'www#build && rm -rf /',
     'www#build;evil',
     'a b#c',
@@ -74,6 +78,6 @@ Deno.test('gate: parseGateStep rejects escapes and shell composition', () => {
     } catch {
       threw = true;
     }
-    assert(threw, `expected parseGateStep to reject '${step}'`);
+    expect(threw, `expected parseGateStep to reject '${step}'`).toBeTruthy();
   }
 });

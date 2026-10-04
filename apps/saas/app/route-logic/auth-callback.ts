@@ -1,5 +1,5 @@
 /**
- * /auth/callback route logic (v0.44): plain module so Deno tests never
+ * /auth/callback route logic (v0.44): plain module so vitest tests never
  * evaluate the compiled page class. The route module
  * (app/routes/auth/callback.tsx) is the thin wrapper.
  */

@@ -3,19 +3,17 @@
  *
  * Uses compileElementModule — the exact function the open:compiled-element
  * Vite plugin's transform hook calls (packages/element/src/internal/
- * compiler/plugin.ts) — so WTR consumes the same ESM the official build path
- * produces, including the embedded Source Map v3 back to the authored .tsx.
- * No second TSX transform is introduced: the emitted module keeps its TS
- * annotations, and the WTR dev server lowers them with esbuild, mirroring how
- * Vite's builtin TS/JSX lowering runs after the plugin in a real build.
+ * compiler/plugin.ts) — so the vitest browser suite consumes the same ESM the
+ * official build path produces, including the embedded Source Map v3 back to
+ * the authored .tsx. No second TSX transform is introduced: the emitted module
+ * keeps its TS annotations, and Vite's oxc transform lowers them at serve
+ * time, mirroring what the plugin-plus-Vite pipeline does in a real build.
  *
- * Run through the package task (scoped permissions, never -A):
- *   deno task --cwd packages/element browser:compile
+ * Run through the package task:
+ *   pnpm --dir packages/element run browser:compile
  */
-// NOTE: __wtr__/package.json makes Deno treat this directory as outside the
-// repo workspace, so no workspace import-map specifiers (@std/*) here —
-// plain relative paths only. The compiler's own imports still resolve through
-// the element workspace member map.
+// NOTE: plain relative paths only — this directory sits outside the pnpm
+// workspace import resolution, so no workspace specifiers are used here.
 import { compileElementModule } from '../../src/internal/compiler/plugin.ts';
 
 const here = import.meta.dirname!; // packages/element/__wtr__/tools
@@ -55,8 +53,9 @@ const fixtures: FixtureSpec[] = [
   {
     // packages/ui production overlay components (#1339 slice): compiled through
     // the same official path; their './component-recipes.ts' /
-    // './instance-state.ts' imports are served from packages/ui/src by the
-    // ui-source plugin in web-test-runner.config.js (no copies committed).
+    // './instance-state.ts' imports resolve to packages/ui/src at vitest
+    // serve time through the element-browser project's aliases (no copies
+    // committed).
     source: join(elementPkg, '../ui/src/open-dialog.tsx'),
     id: 'open-dialog.tsx',
     out: 'open-dialog.ts',
@@ -69,16 +68,18 @@ const fixtures: FixtureSpec[] = [
 ];
 
 const outDir = join(suite, 'generated');
-await Deno.mkdir(outDir, { recursive: true });
+await import('node:fs/promises').then((fs) => fs.mkdir(outDir, { recursive: true }));
 
 for (const fixture of fixtures) {
-  const code = await Deno.readTextFile(fixture.source);
+    const code = await import('node:fs/promises').then((fs) =>
+    fs.readFile(fixture.source, 'utf8')
+  );
   const result = compileElementModule(code, fixture.id);
   if (!result) {
     throw new Error(`compiler returned null for ${fixture.id} (decorator admission failed)`);
   }
   const outPath = join(outDir, fixture.out);
-  await Deno.writeTextFile(outPath, result.code);
+    await import('node:fs/promises').then((fs) => fs.writeFile(outPath, result.code));
 
   // Provenance check: the embedded v3 map must decode and point back at the
   // authored .tsx, or the debugging story silently degrades.

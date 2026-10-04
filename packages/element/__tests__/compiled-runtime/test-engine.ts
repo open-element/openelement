@@ -1,7 +1,7 @@
 /**
  * Small protocol-only SignalEngine used by the conformance tests. This lives
  * in the test tree on purpose: it is not part of the shipped package, and
- * @preact/signals-core stays the only engine supported by 1.0.0-alpha.1.
+ * @preact/signals-core stays the only engine the package supports.
  *
  * It intentionally differs from the default Preact adapter in two observable
  * ways allowed by the protocol: subscriptions are lazy (no initial callback),

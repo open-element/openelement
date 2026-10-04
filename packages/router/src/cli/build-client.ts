@@ -6,20 +6,20 @@
  * the client asset manifest (#1471) — compile-time island identity joined
  * with the build manifest and Rollup module metadata.
  *
- * This module exports buildClient() only - it is called from
- * closeBundle() in open:build plugin. No longer a standalone CLI entry.
- * ctx parameter is required (no globalThis fallback).
- *
- * Usage:
- *   deno task build  (unified entry - runs all 3 phases)
+ * Library module: exports buildClient(), invoked from closeBundle() in the
+ * open:build plugin (the `pnpm build` task of a generated project runs the
+ * unified multi-phase build). ctx parameter is required (no globalThis
+ * fallback).
  */
 
-import { existsSync } from '../internal/host-path.ts';
-import { type Alias, build as viteBuild, type InlineConfig } from 'vite';
-import { dirname, isAbsolute, join, relative, resolve } from '../internal/host-path.ts';
-import { fromFileUrl } from '../internal/host-path.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import process from 'node:process';
+import { build as viteBuild, type InlineConfig } from 'vite';
+import { dirname, isAbsolute, join, relative, resolve } from 'pathe';
 import { extractCustomElementTags, generateClientEntry } from '../vite/internal/ssg/index.ts';
-import { findWorkspaceRoot } from '../vite/workspace-alias.ts';
+import { runtimeModulePath } from '../vite/internal/runtime-module-path.ts';
+import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
 import {
   type ClientIslandDeliveryEntry,
@@ -36,19 +36,14 @@ import {
   createClientAssetManifest,
   packageIslandChunkName,
 } from '../vite/client-asset-manifest.ts';
-import {
-  convertImportMapTarget,
-  createDenoImportMapResolvePlugin,
-  lookupInDenoJson,
-} from '../vite/deno-import-map.ts';
-import { createNpmSpecifierPlugin } from '../vite/npm-specifier-plugin.ts';
 import { analyzeModuleSemantics, compiledElementPlugin } from '@openelement/element/compiler';
 import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
 import { ROUTER_MODULE_VOCABULARY } from '../vite/internal/protocol/module-vocabulary.ts';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
-import { resolveThroughAliases, sortAliasEntries } from '../vite/alias-utils.ts';
+import { sortAliasEntries } from '../vite/alias-utils.ts';
 import { formatError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
+import { buildError, ClientBuildErrorCode } from '../internal/error-codes.ts';
 import {
   CHUNK_SIZE_WARNING_LIMIT_KB,
   DEFAULT_ISLANDS_DIR,
@@ -79,6 +74,30 @@ function deliveryTagsForPackage(island: IslandDecl): string[] {
   );
 }
 
+/**
+ * The chunk-grouping identity for one declared package island: the module id
+ * the client build's identity pass resolved for the island's declared
+ * specifier — the same id the asset manifest joins on. Every admitted
+ * specifier is resolved before chunk grouping runs, so a missing id here is
+ * an internal ordering bug and fails with a coded build error instead of
+ * grouping chunks on the raw specifier.
+ */
+export function packageIslandIdentity(
+  island: IslandDecl,
+  islandModuleIds: ReadonlyMap<string, string>,
+): { tagName: string; identity: string } {
+  const identity = islandModuleIds.get(island.modulePath);
+  if (!identity) {
+    throw buildError(
+      ClientBuildErrorCode.PACKAGE_IDENTITY_UNRESOLVED,
+      `[openElement] Package island "${island.tagName}" declared specifier ` +
+        `"${island.modulePath}" was never resolved by the client build's identity pass — ` +
+        `refusing to group chunks on an unresolved identity`,
+    );
+  }
+  return { tagName: island.tagName, identity };
+}
+
 const SOURCE_EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 
 function sourceCandidates(base: string): string[] {
@@ -106,7 +125,7 @@ function existingSourceFile(candidates: readonly string[]): string | null {
   for (const candidate of candidates) {
     if (!existsSync(candidate)) continue;
     try {
-      Deno.readTextFileSync(candidate);
+      readFileSync(candidate, 'utf8');
       return candidate;
     } catch {
       // A directory or unreadable path is not a source graph node.
@@ -172,7 +191,7 @@ export function findReachableIslandTags(
     visitedSourceFiles.add(normalizedPath);
     let source: string;
     try {
-      source = Deno.readTextFileSync(normalizedPath);
+      source = readFileSync(normalizedPath, 'utf8');
     } catch {
       return;
     }
@@ -201,7 +220,7 @@ export function findReachableIslandTags(
   };
 
   for (const entry of walkHtmlFileEntries(resolve(root, outDir))) {
-    recordSource(Deno.readTextFileSync(entry.absolutePath));
+    recordSource(readFileSync(entry.absolutePath, 'utf8'));
   }
 
   const routesDir = ctx.phase3.routesDir || 'app/routes';
@@ -227,19 +246,15 @@ export function findReachableIslandTags(
 }
 
 async function removeClientDeliveryArtifacts(root: string, outDir: string): Promise<void> {
-  await Deno.remove(resolve(root, outDir, 'client'), { recursive: true }).catch(() => {});
-  await Deno.remove(resolve(root, outDir, 'island-manifests'), { recursive: true }).catch(() => {});
+  await rm(resolve(root, outDir, 'client'), { recursive: true, force: true }).catch(() => {});
+  await rm(resolve(root, outDir, 'island-manifests'), { recursive: true, force: true }).catch(
+    () => {},
+  );
 }
 
 // #868: the browser runtimes are real modules bundled through virtual
-// specifiers. Development resolves the TypeScript source; the packed payload
-// ships no raw TypeScript, so an installed tarball must instead resolve the
-// staged JavaScript counterpart.
-function runtimeModulePath(relativeSource: string): string {
-  const sourcePath = fromFileUrl(new URL(relativeSource, import.meta.url));
-  if (existsSync(sourcePath)) return sourcePath;
-  return sourcePath.replace(/\.(?:[cm]?ts|tsx)$/, '.js');
-}
+// specifiers — resolved by the shared runtimeModulePath helper
+// (vite/internal/runtime-module-path.ts).
 
 type ViteBuildOptionsWithManifest = NonNullable<InlineConfig['build']> & {
   manifest?: boolean;
@@ -249,35 +264,8 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
   build?: ViteBuildOptionsWithManifest;
 };
 
-/**
- * The real module path a package-side island's declared specifier resolves
- * to, through the same resolution chain the build's resolver uses (#1471):
- * the deno.json import map (enforce:'pre' runs ahead of the alias plugin),
- * then the Vite alias table the build ships as `resolve.alias` — workspace
- * packages have no import-map entry and resolve purely through those
- * aliases. A specifier with no file target (npm/jsr packages) returns null
- * and keeps the declared specifier as the island's module identity — joined
- * by the exact-match rule in client-asset-manifest.ts, never a substring
- * first-hit.
- */
-function packageIslandSourcePath(
-  root: string,
-  modulePath: string,
-  aliases: ReadonlyArray<Alias>,
-): string | null {
-  if (modulePath.startsWith('/') || modulePath.startsWith('.')) {
-    return resolve(root, modulePath);
-  }
-  const mapped = lookupInDenoJson(modulePath, root);
-  if (mapped) {
-    const converted = convertImportMapTarget(mapped.target, mapped.denoJsonDir);
-    if (converted) return converted;
-  }
-  return resolveThroughAliases(aliases, modulePath);
-}
-
 async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetManifest | null> {
-  const root = ctx.phase3.root || Deno.cwd();
+  const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const islandsDir = ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR;
   const localIslands = ctx.phase1.islandTagNames || [];
@@ -390,26 +378,21 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     upgradeStrategy: ctx.phase3.upgradeStrategy,
   });
 
-  // #1471: compile-time island identity for the client asset manifest — the
-  // same list the entry was generated from. Local islands carry the absolute
-  // source path buildClientIslandEntries resolved. Package and compiler
-  // islands resolve their declared module specifier to the real module path
-  // through the same import map the build's resolver uses; specifiers with
-  // no file target (npm/jsr) keep the declared specifier as identity. Both
-  // the chunk grouping and the asset manifest join on this one identity —
-  // exact segment matching, never a substring first-hit.
-  const packageSideEntries = islandEntries.slice(selectedLocalTags.length);
-  const islandSourcePathCache = new Map<string, string | null>();
-  const islandSourcePath = (modulePath: string): string | null => {
-    const cached = islandSourcePathCache.get(modulePath);
-    if (cached !== undefined) return cached;
-    const resolved = packageIslandSourcePath(root, modulePath, serializedAlias);
-    islandSourcePathCache.set(modulePath, resolved);
-    return resolved;
-  };
-  const packageSideSourcePaths = packageSideEntries.map((entry) =>
-    islandSourcePath(entry.modulePath),
-  );
+  // #1471: island identity comes from this build's own resolver. Each
+  // admitted island's declared module specifier — local islands, package
+  // islands and compiler behavior islands alike — is resolved ONCE through
+  // the client build (the identity plugin's buildStart `this.resolve`, the
+  // same plugin container, alias table and node_modules layout the generated
+  // client entry's dynamic imports resolve through), and the resulting
+  // module ids feed both the chunk grouping and the asset manifest join.
+  // The map is ephemeral output of this build — not a registry and not a
+  // second resolution source. Fail-closed: a specifier this build cannot
+  // resolve fails here, and a resolved id the emitted module graph does not
+  // carry fails the manifest join; neither path falls back to guessing a
+  // different same-named module.
+  const islandModuleIds = new Map<string, string>();
+  const declaredIslandSpecifiers = [...new Set(islandEntries.map((entry) => entry.modulePath))];
+
   const clientAssetIslands: ClientAssetIslandInput[] = [
     ...selectedLocalTags.map((tagName, index) => ({
       entry: islandEntries[index],
@@ -420,18 +403,23 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
           : `${islandsDir}/${tagName}.ts`,
       ),
     })),
-    ...packageSideEntries.map((entry, index) => ({
+    // Package-side islands keep their declared specifier as the identity the
+    // manifest join resolves: the identity pass above pins each specifier to
+    // the actual module id, and the join confirms that id against the emitted
+    // graph before any island is attributed.
+    ...islandEntries.slice(selectedLocalTags.length).map((entry) => ({
       entry,
-      sourceFile: packageSideSourcePaths[index],
+      sourceFile: null,
     })),
   ];
 
   // The chunk-grouping identities for the declared package islands — the
-  // same strings the asset manifest resolves against.
-  const packageDeclIdentities = selectedPackageDecls.map((island) => ({
-    tagName: island.tagName,
-    identity: islandSourcePath(island.modulePath) ?? island.modulePath,
-  }));
+  // actual module ids the identity pass resolved, the same ids the asset
+  // manifest joins on. Every admitted package island was resolved or the
+  // build already failed, so a missing id here is an internal ordering bug
+  // and fails instead of grouping on the raw specifier.
+  const packageDeclIdentities = () =>
+    selectedPackageDecls.map((island) => packageIslandIdentity(island, islandModuleIds));
 
   const clientEntryCode = generateClientEntry(islandEntries, {
     enhancedForms,
@@ -511,10 +499,10 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
                           const match = id.match(/\/([^/]+)\.(ts|tsx|js|jsx)$/);
                           if (match) return `island-${match[1]}`;
                         }
-                        // #1471: package islands group by the exact module
-                        // identity the asset manifest joins on — zero matches
-                        // and ambiguous matches fail the build.
-                        return packageIslandChunkName(id, packageDeclIdentities);
+                        // #1471: package islands group by the actual module id
+                        // the asset manifest joins on — zero matches and
+                        // ambiguous matches fail the build.
+                        return packageIslandChunkName(id, packageDeclIdentities());
                       },
                     },
                   ],
@@ -531,22 +519,30 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
                     return 'preact';
                   }
                   if (id.includes(`/${islandsDir}/`)) {
-                    // Extensions mirror resolve.extensions below and scanIslands
-                    // (ts/tsx/js/jsx). Previously missing tsx/jsx meant .tsx
-                    // islands skipped manualChunks and lost the `island-` prefix.
+                    // Extension list contract: mirrors resolve.extensions below
+                    // and scanIslands (ts/tsx/js/jsx), so every island module id
+                    // matches and gets the `island-` prefix.
                     const match = id.match(/\/([^/]+)\.(ts|tsx|js|jsx)$/);
                     if (match) return `island-${match[1]}`;
                   }
-                  // #1471: package islands group by the exact module identity the
-                  // asset manifest joins on — zero matches and ambiguous matches
-                  // fail the build, never a substring first-hit.
-                  return packageIslandChunkName(id, packageDeclIdentities);
+                  // #1471: package islands group by the actual module id the
+                  // asset manifest joins on — zero matches and ambiguous
+                  // matches fail the build, never a substring first-hit.
+                  return packageIslandChunkName(id, packageDeclIdentities());
                 },
               },
       },
     },
     resolve: {
       ...(serializedAlias.length > 0 ? { alias: serializedAlias } : {}),
+      // The browser-client resolve policy the outer resolved config carries
+      // (captured in the open plugin's configResolved). Empty conditions and
+      // an unset preserveSymlinks mean "nothing to override" and this build
+      // supplies Vite's own client defaults.
+      ...(ctx.phase1.clientResolveConditions.length > 0
+        ? { conditions: [...ctx.phase1.clientResolveConditions] }
+        : {}),
+      ...(ctx.phase1.clientPreserveSymlinks ? { preserveSymlinks: true } : {}),
       extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
       dedupe: ['preact'],
     },
@@ -562,12 +558,11 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       compiledElementPlugin({
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
-        workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+        workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
         // Island modules carry the island delivery policy statement; the
         // compiler admits it only through the injected descriptor.
         staticSidecars: [ISLAND_ADMISSION],
       }),
-      createNpmSpecifierPlugin(),
       {
         name: 'open:exclude-preact-rts',
         resolveId(id: string) {
@@ -590,10 +585,10 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
           // #868: the client runtimes resolve to their real source modules,
           // so they typecheck, bundle and minify like any other module.
           if (id === VIRTUAL_RUNTIME_SPECIFIERS.scheduler) {
-            return runtimeModulePath('../vite/internal/ssg/island-scheduler.ts');
+            return runtimeModulePath('./ssg/island-scheduler.ts');
           }
           if (id === VIRTUAL_RUNTIME_SPECIFIERS.enhance) {
-            return runtimeModulePath('../vite/internal/ssg/enhance-client.ts');
+            return runtimeModulePath('./ssg/enhance-client.ts');
           }
           return null;
         },
@@ -601,7 +596,32 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
           if (id === RESOLVED_CLIENT_ENTRY_ID) return clientEntryCode;
         },
       },
-      createDenoImportMapResolvePlugin(root),
+      {
+        name: 'open:island-identity-resolution',
+        buildStart: {
+          async handler() {
+            // Resolve each admitted island's declared specifier once, through
+            // this build's own resolver — the same plugin container, alias
+            // table and node_modules layout the generated client entry's
+            // dynamic imports go through (the virtual entry module is the
+            // importer, exactly as for the entry's own imports). The result
+            // is the island identity the chunk grouping and the asset
+            // manifest join consume; no other mechanism resolves island
+            // specifiers.
+            for (const specifier of declaredIslandSpecifiers) {
+              const resolved = await this.resolve(specifier, RESOLVED_CLIENT_ENTRY_ID);
+              if (!resolved) {
+                this.error(
+                  `Admitted island "${specifier}" does not resolve in the client build ` +
+                    `(importer: ${VIRTUAL_CLIENT_ENTRY_ID}) — an island must resolve to a real ` +
+                    `module, not stay a bare declaration`,
+                );
+              }
+              islandModuleIds.set(specifier, resolved.id);
+            }
+          },
+        },
+      },
     ],
   };
 
@@ -612,15 +632,20 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     // #1471: the client asset manifest — compile-time island identity joined
     // with the build manifest and Rollup module metadata (never output file
     // names). Stored on ctx so closeBundle's post-processing and the
-    // request-time artifact consume the same record. Fails closed: a
-    // missing/corrupted manifest, a missing client entry, or an island that
-    // cannot be attributed to exactly one emitted module fails Phase 2.
+    // request-time artifact consume the same record. The island identities
+    // travel with it: the map this build's identity pass resolved — declared
+    // specifier to actual module id — is what the manifest joins on, and a
+    // resolved id the emitted module graph does not carry fails the build.
+    // Fails closed: a missing/corrupted manifest, a missing client entry, or
+    // an island that cannot be attributed to exactly one emitted module fails
+    // Phase 2.
     ctx.clientAssetManifest = await createClientAssetManifest({
       root,
       base: clientBase,
       islands: clientAssetIslands,
       manifestPath: join(clientOutDir, '.vite', 'manifest.json'),
       buildResult: outputs,
+      resolvedIslandModuleIds: islandModuleIds,
     });
 
     const { printBuildManifest } = await import('../vite/build-manifest.ts');

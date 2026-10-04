@@ -1,7 +1,7 @@
 /**
  * types.ts - Public type exports and runtime helpers.
  *
- * Signal protocol types are owned by ../protocol/index.ts and re-exported here.
+ * Signal protocol types are owned by ../protocol/signal.ts and re-exported here.
  * Runtime helpers (isSignalLike, unwrapSignalLike) remain in this package.
  */
 

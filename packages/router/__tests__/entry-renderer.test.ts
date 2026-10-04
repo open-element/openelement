@@ -1,5 +1,5 @@
 /**
- * @openelement/router - Entry renderer snapshot tests (Deno)
+ * @openelement/router - Entry renderer snapshot tests
  *
  * Snapshot tests for renderEntry output covering:
  * - CSP middleware (with/without nonce)
@@ -9,7 +9,7 @@
 // Code structure validation
  */
 
-import { assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { resetCorsOriginWarningForTests } from '../src/vite/internal/ssg/entry-server-codegen.ts';
 import { createAppShellRuntime } from '../src/vite/internal/server-runtime/document-runtime.ts';
@@ -58,7 +58,7 @@ const withSpecialRoutes: RouteEntry[] = [
 
 // Section
 
-Deno.test('renderEntry: CSP without nonce generates header middleware', () => {
+test('renderEntry: CSP without nonce generates header middleware', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       csp: {
@@ -68,27 +68,27 @@ Deno.test('renderEntry: CSP without nonce generates header middleware', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'Content-Security-Policy');
-  assertStringIncludes(code, "default-src 'self'; script-src 'self'");
+  expect(code).toContain('Content-Security-Policy');
+  expect(code).toContain("default-src 'self'; script-src 'self'");
   // No nonce middleware when not configured - c.get('cspNonce') returns undefined
-  assertEquals(code.includes('crypto.randomUUID()'), false);
+  expect(code.includes('crypto.randomUUID()')).toEqual(false);
   // cspNonce is always passed to wrapInDocument but will be undefined
   // when no CSP nonce middleware is configured
-  assertStringIncludes(code, "cspNonce: c.get('cspNonce')");
+  expect(code).toContain("cspNonce: c.get('cspNonce')");
 });
 
-Deno.test('renderEntry: does not emit the retired duplicate /_data loader protocol (#987)', () => {
+test('renderEntry: does not emit the retired duplicate /_data loader protocol (#987)', () => {
   const code = renderEntry(buildEntryDescriptor(basicRoutes, {}));
 
   // No second generated loader endpoint (/_data, __dataRouteMap): it had no
   // consumer and lost params/headers/control flow (#987). Request-time
   // navigation uses the canonical page route; RouteConfig carries no loader —
   // client-side data fetching is not a second loader protocol.
-  assertFalse(code.includes('/_data'));
-  assertFalse(code.includes('__dataRouteMap'));
+  expect(code.includes('/_data')).toBeFalsy();
+  expect(code.includes('__dataRouteMap')).toBeFalsy();
 });
 
-Deno.test('buildEntryDescriptor: catch-all param names come from the scanner, not the path pattern (#1022)', () => {
+test('buildEntryDescriptor: catch-all param names come from the scanner, not the path pattern (#1022)', () => {
   const catchAllRoutes: RouteEntry[] = [
     {
       path: '/docs/:path{.+}',
@@ -100,16 +100,16 @@ Deno.test('buildEntryDescriptor: catch-all param names come from the scanner, no
   ];
   const desc = buildEntryDescriptor(catchAllRoutes, {});
   const route = desc.pageRoutes[0];
-  assertEquals(route.paramNames, ['path']);
+  expect(route.paramNames).toEqual(['path']);
 
   // Hand-built descriptors without scanner params fall back to derivation
   // that strips the regex body instead of capturing it.
   const { params: _scannerParams, ...withoutParams } = catchAllRoutes[0];
   const fallback = buildEntryDescriptor([withoutParams], {});
-  assertEquals(fallback.pageRoutes[0].paramNames, ['path']);
+  expect(fallback.pageRoutes[0].paramNames).toEqual(['path']);
 });
 
-Deno.test('renderEntry: CSP with nonce generates per-request nonce', () => {
+test('renderEntry: CSP with nonce generates per-request nonce', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       csp: {
@@ -127,21 +127,19 @@ Deno.test('renderEntry: CSP with nonce generates per-request nonce', () => {
   // binds no nonce — static bytes cannot be per-request — so binding is
   // gated on __ssgPrerenderPass(c.env) and both the context variable and
   // the CSP header only materialize for request-time dispatches.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     'const nonce = __ssgPrerenderPass(c.env) ? undefined : __cspCreateNonce()',
   );
-  assertStringIncludes(code, "if (nonce) c.set('cspNonce', nonce)");
-  assertStringIncludes(code, "if (policy) c.header('Content-Security-Policy', policy)");
+  expect(code).toContain("if (nonce) c.set('cspNonce', nonce)");
+  expect(code).toContain("if (policy) c.header('Content-Security-Policy', policy)");
   // v0.3.1: NONCE_PLACEHOLDER template approach (fixes missing closing quote bug)
-  assertStringIncludes(code, 'NONCE_PLACEHOLDER');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('NONCE_PLACEHOLDER');
+  expect(code).toContain(
     `const policy = nonce ? __cspApplyNonce("default-src 'self'; script-src 'nonce-NONCE_PLACEHOLDER'", nonce) : undefined`,
   );
 });
 
-Deno.test('renderEntry: CSP report-only mode', () => {
+test('renderEntry: CSP report-only mode', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       csp: {
@@ -152,11 +150,11 @@ Deno.test('renderEntry: CSP report-only mode', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'Content-Security-Policy-Report-Only');
-  assertEquals(code.includes('Content-Security-Policy"'), false);
+  expect(code).toContain('Content-Security-Policy-Report-Only');
+  expect(code.includes('Content-Security-Policy"')).toEqual(false);
 });
 
-Deno.test('buildEntryDescriptor: CSP config is serialized into descriptor', () => {
+test('buildEntryDescriptor: CSP config is serialized into descriptor', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       csp: {
@@ -167,88 +165,87 @@ Deno.test('buildEntryDescriptor: CSP config is serialized into descriptor', () =
   });
 
   const cspMw = desc.middleware.find((m) => m.kind === 'csp');
-  assertExists(cspMw);
-  assertEquals(cspMw.config?.csp?.policy, "default-src 'self'; script-src 'self'");
-  assertEquals(cspMw.config?.csp?.nonce, true);
+  expect(cspMw).toEqual(expect.anything());
+  expect(cspMw.config?.csp?.policy).toEqual("default-src 'self'; script-src 'self'");
+  expect(cspMw.config?.csp?.nonce).toEqual(true);
 });
 
 // Section
 
-Deno.test('renderEntry: _renderer.ts generates wrap call', () => {
+test('renderEntry: _renderer.ts generates wrap call', () => {
   const desc = buildEntryDescriptor(withSpecialRoutes);
   const code = renderEntry(desc);
 
   // Renderers should appear in descriptor
-  assertEquals(desc.renderers.length >= 2, true);
+  expect(desc.renderers.length >= 2).toEqual(true);
   // Generated code should reference renderer variable names
-  assertStringIncludes(code, '$specialRenderer');
-  assertStringIncludes(code, '$guideRenderer');
+  expect(code).toContain('$specialRenderer');
+  expect(code).toContain('$guideRenderer');
   // Renderer wrap call receives the rendered page HTML and c (Hono context)
-  assertStringIncludes(code, '.default.wrap(__content, c)');
+  expect(code).toContain('.default.wrap(__content, c)');
 });
 
-Deno.test('renderEntry: _middleware.ts generates an app.use scope with the WinterCG adapter', () => {
+test('renderEntry: _middleware.ts generates an app.use scope with the WinterCG adapter', () => {
   const desc = buildEntryDescriptor(withSpecialRoutes);
   const code = renderEntry(desc);
 
   // Middleware scopes should appear in descriptor
-  assertEquals(desc.middlewareScopes.length >= 1, true);
+  expect(desc.middlewareScopes.length >= 1).toEqual(true);
   // Generated code should reference middleware variable name
-  assertStringIncludes(code, '$apiMiddleware');
-  assertStringIncludes(code, 'app.use(');
+  expect(code).toContain('$apiMiddleware');
+  expect(code).toContain('app.use(');
   // The author-facing contract is the WinterCG shape (request, next); the
   // entry adapts it into the Hono chain in place.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     'app.use("/api/*", (c, next) => $apiMiddleware.default(c.req.raw, async () => { await next(); return c.res; }))',
   );
 });
 
-Deno.test('buildEntryDescriptor: special routes are separated from page/api', () => {
+test('buildEntryDescriptor: special routes are separated from page/api', () => {
   const desc = buildEntryDescriptor(withSpecialRoutes);
 
   // Special routes should NOT be in apiRoutes or pageRoutes; they go to renderers/middlewareScopes
-  assertEquals(desc.apiRoutes.length > 0, true);
-  assertEquals(desc.pageRoutes.length > 0, true);
+  expect(desc.apiRoutes.length > 0).toEqual(true);
+  expect(desc.pageRoutes.length > 0).toEqual(true);
 
   // They should appear as renderers and middlewareScopes instead
-  assertEquals(desc.renderers.length + desc.middlewareScopes.length >= 3, true); // _renderer x2 + _middleware x1
+  expect(desc.renderers.length + desc.middlewareScopes.length >= 3).toEqual(true); // _renderer x2 + _middleware x1
 });
 
 // Island upgrade strategy tests
 
-Deno.test('buildEntryDescriptor: upgradeStrategy is recorded (load)', () => {
+test('buildEntryDescriptor: upgradeStrategy is recorded (load)', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     islandTagNames: ['my-counter'],
     upgradeStrategy: 'load',
   });
 
-  assertEquals(desc.upgradeStrategy, 'load');
+  expect(desc.upgradeStrategy).toEqual('load');
 });
 
-Deno.test('buildEntryDescriptor: upgradeStrategy is recorded (visible)', () => {
+test('buildEntryDescriptor: upgradeStrategy is recorded (visible)', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     islandTagNames: ['idle-image'],
     upgradeStrategy: 'visible',
   });
 
-  assertEquals(desc.upgradeStrategy, 'visible');
+  expect(desc.upgradeStrategy).toEqual('visible');
 });
 
-Deno.test('buildEntryDescriptor: default upgradeStrategy is idle', () => {
+test('buildEntryDescriptor: default upgradeStrategy is idle', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     islandTagNames: ['my-counter'],
   });
 
   // Default should be 'idle'
-  assertEquals(desc.upgradeStrategy, 'idle');
+  expect(desc.upgradeStrategy).toEqual('idle');
 });
 
 // Package islands
 
 // Package islands
 
-Deno.test('renderEntry: package islands are included in island upgrade entry', () => {
+test('renderEntry: package islands are included in island upgrade entry', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     packageManifests: [
       {
@@ -272,12 +269,12 @@ Deno.test('renderEntry: package islands are included in island upgrade entry', (
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'open-layout');
-  assertStringIncludes(code, 'open-button');
-  assertStringIncludes(code, '@acme/components');
+  expect(code).toContain('open-layout');
+  expect(code).toContain('open-button');
+  expect(code).toContain('@acme/components');
 });
 
-Deno.test('renderEntry: package islands are not imported by SSR entry', () => {
+test('renderEntry: package islands are not imported by SSR entry', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     packageManifests: [
       {
@@ -301,19 +298,19 @@ Deno.test('renderEntry: package islands are not imported by SSR entry', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, '"open-layout": "@acme/components/open-layout"');
-  assertFalse(
+  expect(code).toContain('"open-layout": "@acme/components/open-layout"');
+  expect(
     code.includes("import * as __island_kiss_layout from '@acme/components/open-layout'"),
-  );
-  assertFalse(code.includes('__kiss_get_default_export'));
-  assertFalse(code.includes("customElements.define('open-layout'"));
-  assertFalse(code.includes('__island_kiss_layout.default'));
-  assertFalse(code.includes('__island_kiss_button.default'));
+  ).toBeFalsy();
+  expect(code.includes('__kiss_get_default_export')).toBeFalsy();
+  expect(code.includes("customElements.define('open-layout'")).toBeFalsy();
+  expect(code.includes('__island_kiss_layout.default')).toBeFalsy();
+  expect(code.includes('__island_kiss_button.default')).toBeFalsy();
 });
 
 // Code structure validation
 
-Deno.test('renderEntry: no bare process.env references', () => {
+test('renderEntry: no bare process.env references', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: { corsOrigin: 'https://example.com' },
   });
@@ -322,55 +319,53 @@ Deno.test('renderEntry: no bare process.env references', () => {
   const codeLines = code
     .split('\n')
     .filter((l) => !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*'));
-  assertFalse(
+  expect(
     codeLines.some((l) => l.includes('process.env')),
     'Generated code must not contain process.env calls',
-  );
+  ).toBeFalsy();
 });
 
-Deno.test('renderEntry: API routes support method-keyed WinterCG handlers and direct functions', () => {
+test('renderEntry: API routes support method-keyed WinterCG handlers and direct functions', () => {
   const desc = buildEntryDescriptor(basicRoutes);
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'app.all("/api/hello"');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('app.all("/api/hello"');
+  expect(code).toContain(
     '__apiRouteRecords.push({ id: "api/hello.ts", path: "/api/hello", handlers: $apiHello.default })',
   );
-  assertStringIncludes(code, 'request: c.req.raw');
-  assertEquals(code.includes('app.route("/api/hello"'), false);
-  assertEquals(code.includes('app.get("/api/hello"'), false);
+  expect(code).toContain('request: c.req.raw');
+  expect(code.includes('app.route("/api/hello"')).toEqual(false);
+  expect(code.includes('app.get("/api/hello"')).toEqual(false);
 });
 
-Deno.test('renderEntry: exports default app', () => {
+test('renderEntry: exports default app', () => {
   const desc = buildEntryDescriptor(basicRoutes);
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'export default app');
+  expect(code).toContain('export default app');
 });
 
-Deno.test('renderEntry: imports DSD renderer; Hono assembly is the factory (#1470 block e)', () => {
+test('renderEntry: imports DSD renderer; Hono assembly is the factory (#1470 block e)', () => {
   const desc = buildEntryDescriptor(basicRoutes);
   const code = renderEntry(desc);
 
   // ADR-0160 rule a: `new Hono()` moved into createGeneratedApp — the entry
   // no longer imports Hono or builds the app itself.
-  assertFalse(code.includes("from 'hono'"));
-  assertStringIncludes(code, 'const __app = createGeneratedApp({');
-  assertStringIncludes(code, 'export default app');
+  expect(code.includes("from 'hono'")).toBeFalsy();
+  expect(code).toContain('const __app = createGeneratedApp({');
+  expect(code).toContain('export default app');
   // v0.5.0: DSD renderer replaces @lit-labs/ssr; v0.44: the compiled sync
   // renderDsd is the only serializer — no runtime JSX or tree renderer.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { createDeferredDsdExecutor, renderDsd, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
   );
-  assertFalse(code.includes('renderDsdTree'));
-  assertFalse(code.includes("import { jsx } from '@openelement/element'"));
+  expect(code.includes('renderDsdTree')).toBeFalsy();
+  expect(code.includes("import { jsx } from '@openelement/element'")).toBeFalsy();
   // Element owns document/head/body semantics; generated entries only call it.
-  assertFalse(code.includes('function wrapInDocument(html, options = {}) {'));
+  expect(code.includes('function wrapInDocument(html, options = {}) {')).toBeFalsy();
 });
 
-Deno.test('renderEntry: app shell composes the page host through the compiled serializer', () => {
+test('renderEntry: app shell composes the page host through the compiled serializer', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     ssg: true,
     appShell: { tagName: 'open-layout', import: '@acme/components/open-layout', props: {} },
@@ -380,9 +375,9 @@ Deno.test('renderEntry: app shell composes the page host through the compiled se
   // The shell composition is typed runtime code; the entry pins the plan data
   // in the factory config and the factory binds the runtime (ADR-0160 rule a,
   // #1470 block e — the wiring line moved into createGeneratedApp).
-  assertStringIncludes(code, '"tagName": "open-layout"');
-  assertStringIncludes(code, 'import * as __shell_0 from "@acme/components/open-layout";');
-  assertStringIncludes(code, 'appShellPlan: {');
+  expect(code).toContain('"tagName": "open-layout"');
+  expect(code).toContain('import * as __shell_0 from "@acme/components/open-layout";');
+  expect(code).toContain('appShellPlan: {');
   // The slot claim contract stays pinned on the shipped runtime: the shell
   // renders through the page renderer with the content as trusted slot HTML.
   const { runtime, ssrCalls } = loadLayoutRuntime({
@@ -390,8 +385,8 @@ Deno.test('renderEntry: app shell composes the page host through the compiled se
     layouts: {},
   });
   const composed = runtime.renderAppShell('<page></page>', '/guide');
-  assertEquals(composed, '<shell>open-layout</shell>');
-  assertEquals(ssrCalls, [
+  expect(composed).toEqual('<shell>open-layout</shell>');
+  expect(ssrCalls).toEqual([
     {
       tag: 'open-layout',
       props: {
@@ -408,33 +403,33 @@ Deno.test('renderEntry: app shell composes the page host through the compiled se
       route: '/guide',
     },
   ]);
-  assertFalse(code.includes('layoutHtml.slice'));
+  expect(code.includes('layoutHtml.slice')).toBeFalsy();
 });
 
-Deno.test('renderEntry: unconfigured appShell defaults to false (no import)', () => {
+test('renderEntry: unconfigured appShell defaults to false (no import)', () => {
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true });
   const code = renderEntry(desc);
 
-  assertFalse(code.includes('import "@acme/components/open-layout";'));
-  assertStringIncludes(code, '"default": false');
+  expect(code.includes('import "@acme/components/open-layout";')).toBeFalsy();
+  expect(code).toContain('"default": false');
   // An unresolved shell returns route content unchanged (shipped runtime).
   const { runtime, ssrCalls } = loadLayoutRuntime({ default: false, layouts: {} });
-  assertEquals(runtime.renderAppShell('<page></page>', '/'), '<page></page>');
-  assertEquals(ssrCalls, []);
+  expect(runtime.renderAppShell('<page></page>', '/')).toEqual('<page></page>');
+  expect(ssrCalls).toEqual([]);
 });
 
-Deno.test('renderEntry: appShell false renders route content without default layout import', () => {
+test('renderEntry: appShell false renders route content without default layout import', () => {
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true, appShell: false });
   const code = renderEntry(desc);
 
-  assertFalse(code.includes('import "@acme/components/open-layout";'));
-  assertStringIncludes(code, '"default": false');
+  expect(code.includes('import "@acme/components/open-layout";')).toBeFalsy();
+  expect(code).toContain('"default": false');
   const { runtime, ssrCalls } = loadLayoutRuntime({ default: false, layouts: {} });
-  assertEquals(runtime.renderAppShell('<page></page>', '/'), '<page></page>');
-  assertEquals(ssrCalls, []);
+  expect(runtime.renderAppShell('<page></page>', '/')).toEqual('<page></page>');
+  expect(ssrCalls).toEqual([]);
 });
 
-Deno.test('renderEntry: custom appShell import and props are generated from config', () => {
+test('renderEntry: custom appShell import and props are generated from config', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     ssg: true,
     appShell: {
@@ -445,12 +440,12 @@ Deno.test('renderEntry: custom appShell import and props are generated from conf
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'import * as __shell_0 from "/app/components/blog-layout.tsx";');
-  assertStringIncludes(code, '"tagName": "blog-layout"');
-  assertStringIncludes(code, '"siteName": "Field Notes"');
+  expect(code).toContain('import * as __shell_0 from "/app/components/blog-layout.tsx";');
+  expect(code).toContain('"tagName": "blog-layout"');
+  expect(code).toContain('"siteName": "Field Notes"');
 });
 
-Deno.test('renderEntry: route meta layout can select named layouts', () => {
+test('renderEntry: route meta layout can select named layouts', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     ssg: true,
     layouts: {
@@ -463,12 +458,12 @@ Deno.test('renderEntry: route meta layout can select named layouts', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'import * as __shell_0 from "/app/components/post-layout.tsx";');
+  expect(code).toContain('import * as __shell_0 from "/app/components/post-layout.tsx";');
   // The named-layout lookup lives in the typed app-shell runtime; the entry
   // pins the plan data in the factory config (ADR-0160 rule a, #1470 block e).
-  assertStringIncludes(code, '"post-layout"');
-  assertStringIncludes(code, 'appShellPlan: {');
-  assertStringIncludes(code, 'module: $pageIndex');
+  expect(code).toContain('"post-layout"');
+  expect(code).toContain('appShellPlan: {');
+  expect(code).toContain('module: $pageIndex');
 });
 
 // Behavior-level proof for the named-layout wiring: execute the shipped typed
@@ -503,7 +498,7 @@ function pageModule(layout: string | false | undefined): unknown {
   };
 }
 
-Deno.test('routeMeta surfaces route.layout and resolveAppShell selects the named layout', () => {
+test('routeMeta surfaces route.layout and resolveAppShell selects the named layout', () => {
   const defaultShell = { tagName: 'main-shell' };
   const postShell = { tagName: 'post-layout' };
   const { runtime } = loadLayoutRuntime({
@@ -511,33 +506,32 @@ Deno.test('routeMeta surfaces route.layout and resolveAppShell selects the named
     layouts: { post: postShell },
   });
   const meta = routeMeta(pageModule('post'));
-  assertEquals(meta.layout, 'post');
-  assertEquals<unknown>(runtime.resolveAppShell(meta), { tagName: 'post-layout' });
+  expect(meta.layout).toEqual('post');
+  expect(runtime.resolveAppShell(meta)).toEqual({ tagName: 'post-layout' });
 });
 
-Deno.test('resolveAppShell: layout false disables the shell, unknown names fall back to default', () => {
+test('resolveAppShell: layout false disables the shell, unknown names fall back to default', () => {
   const defaultShell = { tagName: 'main-shell' };
   const { runtime } = loadLayoutRuntime({
     default: defaultShell,
     layouts: { post: { tagName: 'post-layout' } },
   });
-  assertEquals<unknown>(runtime.resolveAppShell(routeMeta(pageModule(false))), false);
-  assertEquals<unknown>(runtime.resolveAppShell(routeMeta(pageModule('no-such-layout'))), {
+  expect(runtime.resolveAppShell(routeMeta(pageModule(false)))).toEqual(false);
+  expect(runtime.resolveAppShell(routeMeta(pageModule('no-such-layout')))).toEqual({
     tagName: 'main-shell',
   });
   // Unset layout: no layout key in the meta, default shell applies.
   const meta = routeMeta(pageModule(undefined));
-  assertEquals('layout' in meta, false);
-  assertEquals<unknown>(runtime.resolveAppShell(meta), { tagName: 'main-shell' });
+  expect('layout' in meta).toEqual(false);
+  expect(runtime.resolveAppShell(meta)).toEqual({ tagName: 'main-shell' });
 });
 
-Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', () => {
+test('renderEntry: definePage descriptor feeds load and metadata wiring', () => {
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'let __page = __pageDefinition($pageIndex)');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('let __page = __pageDefinition($pageIndex)');
+  expect(code).toContain(
     'const __data = typeof $pageIndex.loader === "function" ? await $pageIndex.loader(__loadContext) : undefined',
   );
   // v0.44 (ADR-0143): request-scoped data reaches the compiled page ONLY
@@ -546,80 +540,71 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
   // host-prop channel is gone (the #1129/#1130 guarantee is structural).
   // #1326: the request-scoped context is built once and feeds both the props
   // projector and the resolved-Document seam.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     'const __pageContext = { data: __data, actionData: undefined, params: __params, request: c.req.raw, locale: __localeFromPath(__locales, c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };',
   );
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     'const __doc = __resolvePageDocument(__page.head, __pageContext, __clientScriptDescriptors());',
   );
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { resolvePageDocument as __resolvePageDocument } from '@openelement/router/document'",
   );
-  assertStringIncludes(code, '__ssr(__tag, __pageProps($pageIndex, __pageContext)');
-  assertFalse(code.includes('__openElementData'));
-  assertEquals(code.includes('module?.meta'), false);
+  expect(code).toContain('__ssr(__tag, __pageProps($pageIndex, __pageContext)');
+  expect(code.includes('__openElementData')).toBeFalsy();
+  expect(code.includes('module?.meta')).toEqual(false);
   // Named layouts (ADR-0123): the descriptor's route.layout is the producer
   // for the routeMeta.layout the app-shell resolver reads. The extractor is
   // imported runtime (ADR-0160 rule a); the entry pins the import binding.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { routeMeta as __routeMeta } from '@openelement/router/server-runtime'",
   );
-  assertStringIncludes(code, 'title: __doc.title || "openElement"');
-  assertStringIncludes(code, 'meta: { description: __doc.description, tags: __doc.meta },');
-  assertStringIncludes(code, 'links: __doc.links,');
-  assertStringIncludes(code, 'structuredData: __doc.structuredData || [],');
-  assertStringIncludes(code, 'dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],');
+  expect(code).toContain('title: __doc.title || "openElement"');
+  expect(code).toContain('meta: { description: __doc.description, tags: __doc.meta },');
+  expect(code).toContain('links: __doc.links,');
+  expect(code).toContain('structuredData: __doc.structuredData || [],');
+  expect(code).toContain('dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],');
   // The page-definition extractor is imported runtime (ADR-0160 rule a):
   // the entry pins the binding, not a local function body.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { pageDefinition as __pageDefinition } from '@openelement/router/server-runtime'",
   );
   // The lifecycle guards stay the authoring imports; the action protocol
   // constants and classifier moved into the server-runtime action module
   // (ADR-0160 rule a, #1470 block c).
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound } from '@openelement/router';",
   );
-  assertFalse(code.includes('function __isOpenElementRedirect(error) {'));
-  assertFalse(code.includes('function __isOpenElementNotFound(error) {'));
-  assertStringIncludes(
-    code,
+  expect(code.includes('function __isOpenElementRedirect(error) {')).toBeFalsy();
+  expect(code.includes('function __isOpenElementNotFound(error) {')).toBeFalsy();
+  expect(code).toContain(
     'data = typeof info.module.loader === "function" ? await info.module.loader(loadContext) : undefined;',
   );
-  assertStringIncludes(code, '__pageProps(info.module, __pageContext)');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('__pageProps(info.module, __pageContext)');
+  expect(code).toContain(
     'const __doc = __resolvePageDocument(page.head, __pageContext, __clientScriptDescriptors());',
   );
-  assertStringIncludes(code, 'filePath: "index.ts"');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('filePath: "index.ts"');
+  expect(code).toContain(
     'rendering: (__pageDefinition($pageIndex).renderIntent?.mode || "static")',
   );
-  assertStringIncludes(code, 'title: title || __doc.title || "openElement"');
+  expect(code).toContain('title: title || __doc.title || "openElement"');
   // #1217: ISR semantics were removed in v0.44 — generated route metadata
   // must not carry a revalidate field.
-  assertFalse(code.includes('revalidate'));
+  expect(code.includes('revalidate')).toBeFalsy();
 });
 
-Deno.test('renderEntry: lifecycle control produces redirect and not-found responses', () => {
+test('renderEntry: lifecycle control produces redirect and not-found responses', () => {
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'return c.redirect(err.location, err.status)');
-  assertStringIncludes(code, '__statusHtml("404 Not Found", err.message || "Not Found")');
-  assertStringIncludes(code, 'redirect: { location: error.location, status: error.status }');
-  assertStringIncludes(code, 'notFound: true');
-  assertStringIncludes(code, '__pageErrorProps($pageIndex, err,');
+  expect(code).toContain('return c.redirect(err.location, err.status)');
+  expect(code).toContain('__statusHtml("404 Not Found", err.message || "Not Found")');
+  expect(code).toContain('redirect: { location: error.location, status: error.status }');
+  expect(code).toContain('notFound: true');
+  expect(code).toContain('__pageErrorProps($pageIndex, err,');
 });
 
-Deno.test('renderEntry: SSG renderRoute renders the page error component on failure', () => {
+test('renderEntry: SSG renderRoute renders the page error component on failure', () => {
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true });
   const code = renderEntry(desc);
 
@@ -627,21 +612,20 @@ Deno.test('renderEntry: SSG renderRoute renders the page error component on fail
   // component renders it with __openElementError inside the SSG renderRoute
   // catch, and the failure still surfaces as a 500 result carrying the
   // RenderError (no silent normal-page write).
-  assertStringIncludes(code, 'if (typeof page.error === "function") {');
-  assertStringIncludes(code, '__pageErrorProps(info.module, error,');
-  assertStringIncludes(code, '__renderAppShell(__ssr(info.tagName,');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('if (typeof page.error === "function") {');
+  expect(code).toContain('__pageErrorProps(info.module, error,');
+  expect(code).toContain('__renderAppShell(__ssr(info.tagName,');
+  expect(code).toContain(
     'return { html: errorHtml, status: 500, errors: [renderError], componentCount: errorComponentCount, renderTimeMs };',
   );
   // A failing error renderer falls back to the plain 500 status page.
-  assertStringIncludes(code, "'[openElement] Route error renderer failed for ' + routePath + ':'");
-  assertStringIncludes(code, '__statusHtml("500 Internal Server Error", detail)');
+  expect(code).toContain("'[openElement] Route error renderer failed for ' + routePath + ':'");
+  expect(code).toContain('__statusHtml("500 Internal Server Error", detail)');
   // The routeInfo emission no longer carries the dead streaming contract.
-  assertFalse(code.includes('renderIntent?.streaming'));
+  expect(code.includes('renderIntent?.streaming')).toBeFalsy();
 });
 
-Deno.test('renderEntry: uses descriptor SSR admission plan without recomputing it', () => {
+test('renderEntry: uses descriptor SSR admission plan without recomputing it', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     ssg: true,
     islandTagNames: ['planned-widget'],
@@ -653,22 +637,22 @@ Deno.test('renderEntry: uses descriptor SSR admission plan without recomputing i
 
   const code = renderEntry(desc);
 
-  assertFalse(code.includes('import * as __island_planned_widget from'));
-  assertFalse(code.includes("customElements.define('planned-widget'"));
-  assertStringIncludes(code, '"clientOnlyTags": [\n    "planned-widget"\n  ]');
+  expect(code.includes('import * as __island_planned_widget from')).toBeFalsy();
+  expect(code.includes("customElements.define('planned-widget'")).toBeFalsy();
+  expect(code).toContain('"clientOnlyTags": [\n    "planned-widget"\n  ]');
 });
 
-Deno.test('renderEntry: SSG mode includes no DOM shim (DSD renderer)', () => {
+test('renderEntry: SSG mode includes no DOM shim (DSD renderer)', () => {
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true });
   const code = renderEntry(desc);
 
   // v0.5.0: DSD renderer doesn't need DOM shim - pure string concatenation
-  assertEquals(code.includes('install-global-dom-shim'), false);
+  expect(code.includes('install-global-dom-shim')).toEqual(false);
 });
 
 // Section
 
-Deno.test('renderEntry: CSP flows through full pipeline', () => {
+test('renderEntry: CSP flows through full pipeline', () => {
   const code = renderEntry(
     buildEntryDescriptor(basicRoutes, {
       middleware: {
@@ -680,12 +664,12 @@ Deno.test('renderEntry: CSP flows through full pipeline', () => {
     }),
   );
 
-  assertStringIncludes(code, 'Content-Security-Policy');
-  assertStringIncludes(code, "default-src 'self'");
-  assertStringIncludes(code, 'export default app');
+  expect(code).toContain('Content-Security-Policy');
+  expect(code).toContain("default-src 'self'");
+  expect(code).toContain('export default app');
 });
 
-Deno.test('renderEntry: complex scenario with all features', () => {
+test('renderEntry: complex scenario with all features', () => {
   const code = renderEntry(
     buildEntryDescriptor(withSpecialRoutes, {
       routesDir: 'app/routes',
@@ -717,23 +701,23 @@ Deno.test('renderEntry: complex scenario with all features', () => {
   );
 
   // All features present
-  assertStringIncludes(code, 'Content-Security-Policy');
-  assertStringIncludes(code, '__cspCreateNonce()');
-  assertStringIncludes(code, '"https://example.com"');
-  assertStringIncludes(code, '_renderer');
-  assertStringIncludes(code, '_middleware');
-  assertStringIncludes(code, 'open-layout');
-  assertStringIncludes(code, 'lang: "zh-CN"');
-  assertStringIncludes(code, 'openElement');
-  assertStringIncludes(code, '/styles.css');
+  expect(code).toContain('Content-Security-Policy');
+  expect(code).toContain('__cspCreateNonce()');
+  expect(code).toContain('"https://example.com"');
+  expect(code).toContain('_renderer');
+  expect(code).toContain('_middleware');
+  expect(code).toContain('open-layout');
+  expect(code).toContain('lang: "zh-CN"');
+  expect(code).toContain('openElement');
+  expect(code).toContain('/styles.css');
   // No process.env
   const codeLines = code.split('\n').filter((l) => !l.trimStart().startsWith('//'));
-  assertFalse(codeLines.some((l) => l.includes('process.env')));
+  expect(codeLines.some((l) => l.includes('process.env'))).toBeFalsy();
 });
 
 // Section
 
-Deno.test('renderEntry: CSP nonce with existing script-src in policy', () => {
+test('renderEntry: CSP nonce with existing script-src in policy', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       csp: {
@@ -745,11 +729,11 @@ Deno.test('renderEntry: CSP nonce with existing script-src in policy', () => {
   const code = renderEntry(desc);
 
   // When script-src already exists, nonce is injected into existing directive
-  assertStringIncludes(code, 'NONCE_PLACEHOLDER');
-  assertStringIncludes(code, "script-src 'nonce-NONCE_PLACEHOLDER'");
+  expect(code).toContain('NONCE_PLACEHOLDER');
+  expect(code).toContain("script-src 'nonce-NONCE_PLACEHOLDER'");
 });
 
-Deno.test('renderEntry: CSP nonce without existing script-src', () => {
+test('renderEntry: CSP nonce without existing script-src', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       csp: {
@@ -761,11 +745,11 @@ Deno.test('renderEntry: CSP nonce without existing script-src', () => {
   const code = renderEntry(desc);
 
   // When no script-src, one is appended
-  assertStringIncludes(code, 'NONCE_PLACEHOLDER');
-  assertStringIncludes(code, "script-src 'nonce-NONCE_PLACEHOLDER'");
+  expect(code).toContain('NONCE_PLACEHOLDER');
+  expect(code).toContain("script-src 'nonce-NONCE_PLACEHOLDER'");
 });
 
-Deno.test('renderEntry: CORS with array origins', () => {
+test('renderEntry: CORS with array origins', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       corsOrigin: ['http://localhost:3000', 'http://localhost:3001'],
@@ -773,11 +757,11 @@ Deno.test('renderEntry: CORS with array origins', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'cors');
-  assertStringIncludes(code, 'localhost:3000');
+  expect(code).toContain('cors');
+  expect(code).toContain('localhost:3000');
 });
 
-Deno.test('renderEntry: CORS default (no corsOrigin) generates localhost regex', () => {
+test('renderEntry: CORS default (no corsOrigin) generates localhost regex', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       cors: true,
@@ -785,11 +769,11 @@ Deno.test('renderEntry: CORS default (no corsOrigin) generates localhost regex',
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'cors');
-  assertStringIncludes(code, 'localhost');
+  expect(code).toContain('cors');
+  expect(code).toContain('localhost');
 });
 
-Deno.test('renderEntry: default CORS warns with config entry and security impact', () => {
+test('renderEntry: default CORS warns with config entry and security impact', () => {
   resetCorsOriginWarningForTests();
   const warnings: string[] = [];
   const originalWarn = console.warn;
@@ -800,11 +784,11 @@ Deno.test('renderEntry: default CORS warns with config entry and security impact
   } finally {
     console.warn = originalWarn;
   }
-  assertStringIncludes(warnings.join('\n'), 'middleware.corsOrigin');
-  assertStringIncludes(warnings.join('\n'), 'production');
+  expect(warnings.join('\n')).toContain('middleware.corsOrigin');
+  expect(warnings.join('\n')).toContain('production');
 });
 
-Deno.test('renderEntry: explicit CORS config is silent', () => {
+test('renderEntry: explicit CORS config is silent', () => {
   resetCorsOriginWarningForTests();
   const warnings: string[] = [];
   const originalWarn = console.warn;
@@ -817,10 +801,10 @@ Deno.test('renderEntry: explicit CORS config is silent', () => {
   } finally {
     console.warn = originalWarn;
   }
-  assertEquals(warnings, []);
+  expect(warnings).toEqual([]);
 });
 
-Deno.test('renderEntry: securityHeaders middleware', () => {
+test('renderEntry: securityHeaders middleware', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       securityHeaders: true,
@@ -828,10 +812,10 @@ Deno.test('renderEntry: securityHeaders middleware', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'secureHeaders');
+  expect(code).toContain('secureHeaders');
 });
 
-Deno.test('renderEntry: requestId middleware', () => {
+test('renderEntry: requestId middleware', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       requestId: true,
@@ -839,10 +823,10 @@ Deno.test('renderEntry: requestId middleware', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'requestId');
+  expect(code).toContain('requestId');
 });
 
-Deno.test('renderEntry: logger middleware', () => {
+test('renderEntry: logger middleware', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       logger: true,
@@ -850,10 +834,10 @@ Deno.test('renderEntry: logger middleware', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'honoLogger');
+  expect(code).toContain('honoLogger');
 });
 
-Deno.test('renderEntry: no middleware generates clean app', () => {
+test('renderEntry: no middleware generates clean app', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       requestId: false,
@@ -864,22 +848,22 @@ Deno.test('renderEntry: no middleware generates clean app', () => {
   });
   const code = renderEntry(desc);
 
-  assertEquals(code.includes('cors'), false);
-  assertEquals(code.includes('secureHeaders'), false);
-  assertEquals(code.includes('requestId'), false);
-  assertEquals(code.includes('honoLogger'), false);
+  expect(code.includes('cors')).toEqual(false);
+  expect(code.includes('secureHeaders')).toEqual(false);
+  expect(code.includes('requestId')).toEqual(false);
+  expect(code.includes('honoLogger')).toEqual(false);
 });
 
-Deno.test('renderEntry: SSG mode disabled by default', () => {
+test('renderEntry: SSG mode disabled by default', () => {
   const desc = buildEntryDescriptor(basicRoutes);
   const code = renderEntry(desc);
 
-  assertEquals(code.includes('install-global-dom-shim'), false);
+  expect(code.includes('install-global-dom-shim')).toEqual(false);
 });
 
 // Section
 
-Deno.test('renderEntry: local island with ssr===true is registered in SSR', () => {
+test('renderEntry: local island with ssr===true is registered in SSR', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     ssg: true,
     islandTagNames: ['my-counter'],
@@ -890,10 +874,10 @@ Deno.test('renderEntry: local island with ssr===true is registered in SSR', () =
   const code = renderEntry(desc);
 
   // SSR registration should happen (#952: via the ownership-tracked helper)
-  assertStringIncludes(code, '__registerSsrComponent("my-counter"');
+  expect(code).toContain('__registerSsrComponent("my-counter"');
 });
 
-Deno.test('renderEntry: local island with ssr===false is excluded from SSR registration', () => {
+test('renderEntry: local island with ssr===false is excluded from SSR registration', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     ssg: true,
     islandTagNames: ['client-only-widget'],
@@ -905,13 +889,13 @@ Deno.test('renderEntry: local island with ssr===false is excluded from SSR regis
   const code = renderEntry(desc);
 
   // SSR registration should NOT happen for ssr:false islands
-  assertFalse(code.includes('__registerSsrComponent("client-only-widget"'));
-  assertFalse(code.includes('import * as __island_client_only_widget from'));
+  expect(code.includes('__registerSsrComponent("client-only-widget"')).toBeFalsy();
+  expect(code.includes('import * as __island_client_only_widget from')).toBeFalsy();
   // But it should still be in the island map for client-side upgrade
-  assertStringIncludes(code, 'client-only-widget');
+  expect(code).toContain('client-only-widget');
 });
 
-Deno.test('renderEntry: package island with ssr===false excluded from SSR but in island map', () => {
+test('renderEntry: package island with ssr===false excluded from SSR but in island map', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     ssg: true,
     packageManifests: [
@@ -938,15 +922,15 @@ Deno.test('renderEntry: package island with ssr===false excluded from SSR but in
 
   // v0.17.4: Package islands with ssr:true are now SSR-registered
   // (#952: via the ownership-tracked helper)
-  assertStringIncludes(code, '__registerSsrComponent("open-layout"');
+  expect(code).toContain('__registerSsrComponent("open-layout"');
   // Package islands with ssr:false remain client-only
-  assertFalse(code.includes('__registerSsrComponent("open-widget"'));
+  expect(code.includes('__registerSsrComponent("open-widget"')).toBeFalsy();
   // But both should be in the island map
-  assertStringIncludes(code, '"open-layout": "@acme/components/open-layout"');
-  assertStringIncludes(code, '"open-widget": "@acme/components/open-widget"');
+  expect(code).toContain('"open-layout": "@acme/components/open-layout"');
+  expect(code).toContain('"open-widget": "@acme/components/open-widget"');
 });
 
-Deno.test('buildEntryDescriptor: ssr field is extracted from manifest declarations', () => {
+test('buildEntryDescriptor: ssr field is extracted from manifest declarations', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     packageManifests: [
       {
@@ -978,9 +962,9 @@ Deno.test('buildEntryDescriptor: ssr field is extracted from manifest declaratio
   const clientOnly = desc.islands.find((i) => i.tagName === 'client-only-component');
   const defaultComp = desc.islands.find((i) => i.tagName === 'default-component');
 
-  assertEquals(ssrComp?.ssr, true);
-  assertEquals(clientOnly?.ssr, false);
-  assertEquals(defaultComp?.ssr, undefined); // no ssr field in manifest -> undefined
+  expect(ssrComp?.ssr).toEqual(true);
+  expect(clientOnly?.ssr).toEqual(false);
+  expect(defaultComp?.ssr).toEqual(undefined); // no ssr field in manifest -> undefined
 });
 
 // ─── 0.42.0-alpha.2 (ADR-0120): action protocol wiring ─────────────────────
@@ -994,23 +978,22 @@ Deno.test('buildEntryDescriptor: ssr field is extracted from manifest declaratio
 // WIRING: the import bindings, the middleware composition, and the
 // action-before-loader revalidation order.
 
-Deno.test('renderEntry: action POST wiring follows the ADR-0120 protocol', () => {
+test('renderEntry: action POST wiring follows the ADR-0120 protocol', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
   // The protocol runner is the imported runtime module, bound once.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { runActionProtocol as __runActionProtocol } from '@openelement/router/server-runtime'",
   );
-  assertFalse(code.includes('async function __runActionProtocol'));
+  expect(code.includes('async function __runActionProtocol')).toBeFalsy();
 
   // The action runs before the loader (revalidation invariant): a mutation
   // never renders stale loader data.
   const actionIndex = code.indexOf('const __actionExecution = await __runActionProtocol(');
   const loaderIndex = code.indexOf('const __data =', actionIndex);
-  assertEquals(actionIndex > 0, true, 'action execution must be emitted');
-  assertEquals(loaderIndex > actionIndex, true, 'loader must run after the action on POST');
+  expect(actionIndex > 0, 'action execution must be emitted').toEqual(true);
+  expect(loaderIndex > actionIndex, 'loader must run after the action on POST').toEqual(true);
 
   // The POST handler composes the default body-limit middleware ahead of the
   // handler through the Hono↔WinterCG bridge; the limit value is the
@@ -1018,27 +1001,25 @@ Deno.test('renderEntry: action POST wiring follows the ADR-0120 protocol', () =>
   // #1470 block e the factory imports it from the kernel-free /authoring
   // leaf and binds the middleware itself, so the entry carries neither the
   // serialized number nor the binding line (only the destructured middleware).
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     '__pageHandlers["/"].POST = [__asFetchMiddleware(__actionBodyLimit), __asFetchHandler(async (c, __route) => {',
   );
-  assertFalse(code.includes('__maxActionBodyBytes'));
-  assertFalse(code.includes('createActionBodyLimit'));
-  assertStringIncludes(code, 'actionBodyLimit: __actionBodyLimit,');
+  expect(code.includes('__maxActionBodyBytes')).toBeFalsy();
+  expect(code.includes('createActionBodyLimit')).toBeFalsy();
+  expect(code).toContain('actionBodyLimit: __actionBodyLimit,');
   // The Vary negotiation header rides the shared wire constant, never a
   // literal (#743).
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { ACTION_FETCH_HEADER as __actionFetchHeader } from '@openelement/router/server-runtime'",
   );
-  assertStringIncludes(code, "c.header('Vary', __actionFetchHeader);");
+  expect(code).toContain("c.header('Vary', __actionFetchHeader);");
   // The 422 re-render renders at the author's fail() status.
-  assertStringIncludes(code, ', __actionStatus)');
+  expect(code).toContain(', __actionStatus)');
 });
 
 // ─── 0.42.0-alpha.5 (ADR-0121): protocol hardening wiring ──────────────────
 
-Deno.test('renderEntry: ADR-0121 hardening wiring is present in the action codegen', () => {
+test('renderEntry: ADR-0121 hardening wiring is present in the action codegen', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
@@ -1046,32 +1027,30 @@ Deno.test('renderEntry: ADR-0121 hardening wiring is present in the action codeg
   // and the problem+json error bodies are behavior of the imported module
   // (server-runtime-action-runtime.test.ts). The entry-level pins are the
   // response-negotiation wiring and the middleware registration.
-  assertStringIncludes(code, "c.header('Cache-Control', 'no-store');");
+  expect(code).toContain("c.header('Cache-Control', 'no-store');");
   // #550: request-time responses are never cacheable; POST is negotiated.
-  assertStringIncludes(code, "c.header('Vary', __actionFetchHeader);");
+  expect(code).toContain("c.header('Vary', __actionFetchHeader);");
   // #943: successful GET pages relax to private,no-cache (bfcache/scroll
   // restoration); the no-store baseline above still guards every other kind.
-  assertStringIncludes(code, "c.header('Cache-Control', 'private, no-cache');");
+  expect(code).toContain("c.header('Cache-Control', 'private, no-cache');");
   // #572: non-GET/POST methods on page routes are a defined 405.
-  assertStringIncludes(code, 'const __routeMiddleware = __createRouteMiddleware([');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('const __routeMiddleware = __createRouteMiddleware([');
+  expect(code).toContain(
     "app.all('*', (c, next) => { __honoContexts.set(c.req.raw, c); return __routeMiddleware(c.req.raw,",
   );
   // The Hono↔WinterCG bridge is the factory's own bridge, destructured once
   // (ADR-0160 rule a, #1470 block e — the bridge creation moved into
   // createGeneratedApp; the 405 responder is the factory-bound dispatch
   // module).
-  assertStringIncludes(code, 'methodNotAllowed: __methodNotAllowed,');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('methodNotAllowed: __methodNotAllowed,');
+  expect(code).toContain(
     'const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = __app.hono;',
   );
-  assertFalse(code.includes('const __honoContexts = new WeakMap();'));
-  assertFalse(code.includes('createHonoBridge'));
+  expect(code.includes('const __honoContexts = new WeakMap();')).toBeFalsy();
+  expect(code.includes('createHonoBridge')).toBeFalsy();
 });
 
-Deno.test('renderEntry: the action error/redirect channels are imported runtime calls', () => {
+test('renderEntry: the action error/redirect channels are imported runtime calls', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
@@ -1080,23 +1059,20 @@ Deno.test('renderEntry: the action error/redirect channels are imported runtime 
   // catch block keeps only the call sites. The `import.meta.env.PROD`
   // argument stays emitted at the call site so the bundler define keeps
   // owning the production flag.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { actionRedirectResponse as __actionRedirectResponse } from '@openelement/router/server-runtime'",
   );
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { actionErrorResponse as __actionErrorResponse } from '@openelement/router/server-runtime'",
   );
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     'return __actionRedirectResponse(c, err.location, __actionState.isFetch);',
   );
-  assertStringIncludes(code, 'return __actionErrorResponse(c, "/", err, import.meta.env.PROD);');
-  assertFalse(code.includes("title: 'Internal Server Error'"));
+  expect(code).toContain('return __actionErrorResponse(c, "/", err, import.meta.env.PROD);');
+  expect(code.includes("title: 'Internal Server Error'")).toBeFalsy();
 });
 
-Deno.test('renderEntry: the action protocol wiring is emitted once for many routes (#1098)', () => {
+test('renderEntry: the action protocol wiring is emitted once for many routes (#1098)', () => {
   const routes: RouteEntry[] = Array.from({ length: 30 }, (_, index) => ({
     path: `/page-${index}`,
     filePath: `page-${index}.ts`,
@@ -1104,12 +1080,12 @@ Deno.test('renderEntry: the action protocol wiring is emitted once for many rout
     varName: `page${index}`,
   }));
   const code = renderEntry(buildEntryDescriptor(routes));
-  assertEquals(code.match(/import { runActionProtocol as __runActionProtocol }/g)?.length, 1);
-  assertEquals(code.match(/actionBodyLimit: __actionBodyLimit,/g)?.length, 1);
-  assertEquals(code.match(/await __runActionProtocol\(/g)?.length, routes.length);
+  expect(code.match(/import { runActionProtocol as __runActionProtocol }/g)?.length).toEqual(1);
+  expect(code.match(/actionBodyLimit: __actionBodyLimit,/g)?.length).toEqual(1);
+  expect(code.match(/await __runActionProtocol\(/g)?.length).toEqual(routes.length);
 });
 
-Deno.test('renderEntry: private,no-cache is emitted only after a successful render (#943 amendment)', () => {
+test('renderEntry: private,no-cache is emitted only after a successful render (#943 amendment)', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
@@ -1119,12 +1095,12 @@ Deno.test('renderEntry: private,no-cache is emitted only after a successful rend
   const renderIndex = code.indexOf('__renderAppShell(__content,');
   const relaxIndex = code.indexOf("c.header('Cache-Control', 'private, no-cache');");
   const returnIndex = code.indexOf('return c.html(wrapInDocument(content, {', relaxIndex);
-  assertEquals(renderIndex > 0, true, 'shell render must be emitted');
-  assertEquals(relaxIndex > renderIndex, true, 'private,no-cache must follow the shell render');
-  assertEquals(returnIndex > relaxIndex, true, 'private,no-cache must precede the 200 return');
+  expect(renderIndex > 0, 'shell render must be emitted').toEqual(true);
+  expect(relaxIndex > renderIndex, 'private,no-cache must follow the shell render').toEqual(true);
+  expect(returnIndex > relaxIndex, 'private,no-cache must precede the 200 return').toEqual(true);
 });
 
-Deno.test('renderEntry: island client script descriptors also cover notFound/error HTML responses (#1067)', () => {
+test('renderEntry: island client script descriptors also cover notFound/error HTML responses (#1067)', () => {
   const routes: RouteEntry[] = [
     ...basicRoutes,
     { path: '/404', filePath: '404.ts', type: 'page', varName: 'page404' },
@@ -1137,18 +1113,16 @@ Deno.test('renderEntry: island client script descriptors also cover notFound/err
   // must pass the same descriptors as the successful GET page — one
   // serialization point (wrapInDocument) attaches the CSP nonce to all of
   // them.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     'return c.html(wrapInDocument(__statusHtml("404 Not Found", err.message || "Not Found"), {',
   );
-  assertStringIncludes(code, 'return c.html(wrapInDocument(errorContent, {');
+  expect(code).toContain('return c.html(wrapInDocument(errorContent, {');
   const notFoundBody = code.slice(code.indexOf('app.notFound('));
-  assertStringIncludes(notFoundBody, 'return c.html(wrapInDocument(content, {');
-  assertStringIncludes(
-    notFoundBody,
+  expect(notFoundBody).toContain('return c.html(wrapInDocument(content, {');
+  expect(notFoundBody).toContain(
     'return c.html(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), {',
   );
-  assertEquals(code.includes('__withDevClientScript'), false);
+  expect(code.includes('__withDevClientScript')).toEqual(false);
   // #951/#1471: the document wraps read the resolved document's clientScripts
   // (`scripts: __doc.clientScripts || []` — GET+POST success and error
   // boundary per page route, plus the app.notFound success wrap). The direct
@@ -1156,43 +1130,40 @@ Deno.test('renderEntry: island client script descriptors also cover notFound/err
   // 404 catch per page route (GET + POST) and the app.notFound catch — same
   // list, same tags, one serialization point.
   const pageRouteCount = routes.filter((r) => r.type === 'page').length;
-  assertEquals(
-    code.match(/scripts: __clientScriptDescriptors\(\)/g)?.length,
+  expect(code.match(/scripts: __clientScriptDescriptors\(\)/g)?.length).toEqual(
     pageRouteCount * 2 + 1,
   );
-  assertEquals(
-    code.match(/scripts: __doc\.clientScripts \|\| \[\]/g)?.length,
+  expect(code.match(/scripts: __doc\.clientScripts \|\| \[\]/g)?.length).toEqual(
     pageRouteCount * 4 + 1,
   );
 });
 
-Deno.test('renderEntry: hasAction codegen covers named `actions` exports (#539)', () => {
+test('renderEntry: hasAction codegen covers named `actions` exports (#539)', () => {
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true });
   const code = renderEntry(desc);
 
   // The routeInfo hasAction flag must be true for a route exporting ONLY a
   // named `actions` map — otherwise the prerender hard rule is bypassable.
-  assertStringIncludes(code, 'hasAction: (typeof');
-  assertStringIncludes(code, '.actions === "object" &&');
+  expect(code).toContain('hasAction: (typeof');
+  expect(code).toContain('.actions === "object" &&');
 });
 
-Deno.test('renderEntry: GET catch keeps the author redirect status while POST coerces to 303', () => {
+test('renderEntry: GET catch keeps the author redirect status while POST coerces to 303', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
   // The GET handler keeps the author's status; the POST handler delegates to
   // the imported 303-coercion helper (ADR-0121; behavior covered by
   // server-runtime-action-runtime.test.ts and the request-time-parity oracle).
-  assertStringIncludes(code, 'return c.redirect(err.location, err.status)');
-  assertStringIncludes(
-    code,
+  expect(code).toContain('return c.redirect(err.location, err.status)');
+  expect(code).toContain(
     'return __actionRedirectResponse(c, err.location, __actionState.isFetch);',
   );
 });
 
 // Fetch middleware contract (ADR-0123 item 2, #858)
 
-Deno.test('renderEntry: middleware.use composes imported module defaults at the handler boundary (#858)', () => {
+test('renderEntry: middleware.use composes imported module defaults at the handler boundary (#858)', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
       use: ['./app/middleware/outer.ts', './app/middleware/inner.ts'],
@@ -1204,44 +1175,44 @@ Deno.test('renderEntry: middleware.use composes imported module defaults at the 
   // export handed to the factory — order preserved (use[0] outermost), no
   // source inlining. The onion composition itself is the typed factory
   // (#1470 block e): the entry no longer imports composeFetchMiddleware.
-  assertStringIncludes(code, 'import * as __mw_0 from "/app/middleware/outer.ts"');
-  assertStringIncludes(code, 'import * as __mw_1 from "/app/middleware/inner.ts"');
-  assertStringIncludes(code, 'fetchMiddleware: [');
-  assertStringIncludes(code, '__mw_0.default,');
-  assertStringIncludes(code, '__mw_1.default,');
-  assertFalse(code.includes('composeFetchMiddleware'));
+  expect(code).toContain('import * as __mw_0 from "/app/middleware/outer.ts"');
+  expect(code).toContain('import * as __mw_1 from "/app/middleware/inner.ts"');
+  expect(code).toContain('fetchMiddleware: [');
+  expect(code).toContain('__mw_0.default,');
+  expect(code).toContain('__mw_1.default,');
+  expect(code.includes('composeFetchMiddleware')).toBeFalsy();
   // The composed handler is the factory result under the same export name.
-  assertStringIncludes(code, 'export const openElementHandler = __app.handler;');
+  expect(code).toContain('export const openElementHandler = __app.handler;');
   // Dev-server boundary export (@hono/vite-dev-server reads it via the
   // `export` option when middleware.use is configured).
-  assertStringIncludes(code, 'export const openElementDevFetch = __app.devFetch;');
+  expect(code).toContain('export const openElementDevFetch = __app.devFetch;');
   // The raw Hono app stays the default export — SSG prerender is unchanged.
-  assertStringIncludes(code, 'export default app');
+  expect(code).toContain('export default app');
 });
 
-Deno.test('renderEntry: middleware.corsOriginModule is imported and referenced, never inlined', () => {
+test('renderEntry: middleware.corsOriginModule is imported and referenced, never inlined', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: { corsOriginModule: './app/cors-origin.ts' },
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'import * as __cors_origin_module from "/app/cors-origin.ts";');
-  assertStringIncludes(code, "app.use('*', cors({ origin: __cors_origin_module.default,");
+  expect(code).toContain('import * as __cors_origin_module from "/app/cors-origin.ts";');
+  expect(code).toContain("app.use('*', cors({ origin: __cors_origin_module.default,");
 });
 
-Deno.test('renderEntry: no middleware.use keeps the single composed handler export', () => {
+test('renderEntry: no middleware.use keeps the single composed handler export', () => {
   const desc = buildEntryDescriptor(basicRoutes);
   const code = renderEntry(desc);
 
   // The handler export exists in both shapes since #1470 block e — without
   // middleware.use the factory composes nothing around app.fetch, and no
   // dev-server export is emitted.
-  assertFalse(code.includes('composeFetchMiddleware'));
-  assertFalse(code.includes('openElementDevFetch'));
-  assertStringIncludes(code, 'export const openElementHandler = __app.handler;');
+  expect(code.includes('composeFetchMiddleware')).toBeFalsy();
+  expect(code.includes('openElementDevFetch')).toBeFalsy();
+  expect(code).toContain('export const openElementHandler = __app.handler;');
 });
 
-Deno.test('renderEntry: corsOrigin warning is emitted once per process (#925)', () => {
+test('renderEntry: corsOrigin warning is emitted once per process (#925)', () => {
   resetCorsOriginWarningForTests();
   const desc = buildEntryDescriptor(basicRoutes);
   const calls: string[] = [];
@@ -1254,14 +1225,13 @@ Deno.test('renderEntry: corsOrigin warning is emitted once per process (#925)', 
     console.warn = originalWarn;
   }
   const warnings = calls.filter((c) => c.includes('middleware.corsOrigin is not configured'));
-  assertEquals(
+  expect(
     warnings.length,
-    1,
     'configResolved + buildStart both render the entry; warning must dedupe',
-  );
+  ).toEqual(1);
 });
 
-Deno.test('renderEntry: island client script is descriptor-driven (dev URL + request-time setter)', () => {
+test('renderEntry: island client script is descriptor-driven (dev URL + request-time setter)', () => {
   const code = renderEntry(
     buildEntryDescriptor(basicRoutes, {
       islandTagNames: ['live-counter'],
@@ -1275,46 +1245,43 @@ Deno.test('renderEntry: island client script is descriptor-driven (dev URL + req
   // serializes the tag — the only place a CSP nonce is attached. (#1470
   // block e: the setter/descriptor machinery moved into createGeneratedApp;
   // the entry re-exports the setter and binds the descriptor list.)
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "devClientScriptSrc: import.meta.env.DEV && true ? import.meta.env.BASE_URL + 'client/islands/client.js' : null,",
   );
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     'export const __setRequestTimeClientScript = __app.setRequestTimeClientScript;',
   );
-  assertStringIncludes(code, 'clientScriptDescriptors: __clientScriptDescriptors,');
+  expect(code).toContain('clientScriptDescriptors: __clientScriptDescriptors,');
   // No HTML string-splicing survives in the generated entry.
-  assertEquals(code.includes('insertBeforeBodyClose'), false);
-  assertEquals(code.includes('__withDevClientScript'), false);
+  expect(code.includes('insertBeforeBodyClose')).toEqual(false);
+  expect(code.includes('__withDevClientScript')).toEqual(false);
 });
 
-Deno.test('renderEntry: no islands and no enhanced forms yields no dev client script', () => {
+test('renderEntry: no islands and no enhanced forms yields no dev client script', () => {
   const code = renderEntry(buildEntryDescriptor(basicRoutes));
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "devClientScriptSrc: import.meta.env.DEV && false ? import.meta.env.BASE_URL + 'client/islands/client.js' : null,",
   );
 });
 
-Deno.test('renderEntry: /404 page route emits the styled notFound fallback (#923)', () => {
+test('renderEntry: /404 page route emits the styled notFound fallback (#923)', () => {
   const routes: RouteEntry[] = [
     { path: '/', filePath: 'index.ts', type: 'page', varName: 'pageIndex' },
     { path: '/404', filePath: '404.tsx', type: 'page', varName: 'page404' },
   ];
   const code = renderEntry(buildEntryDescriptor(routes));
-  assertStringIncludes(code, 'app.notFound(async (c) => {');
-  assertStringIncludes(code, '// Styled 404 (#923)');
-  assertStringIncludes(code, 'page404.loader === "function"');
-  assertStringIncludes(code, '__renderAppShell(__content, c.req.path || "/404",');
+  expect(code).toContain('app.notFound(async (c) => {');
+  expect(code).toContain('// Styled 404 (#923)');
+  expect(code).toContain('page404.loader === "function"');
+  expect(code).toContain('__renderAppShell(__content, c.req.path || "/404",');
   // Fallback renders with a forced 404 status and degrades to the plain
   // status page on failure — never a 500 from the fallback itself.
-  assertStringIncludes(code, 'wrapInDocument(content, {');
-  assertStringIncludes(code, '}), 404)');
-  assertStringIncludes(code, '__statusHtml("404 Not Found", "Not Found")');
+  expect(code).toContain('wrapInDocument(content, {');
+  expect(code).toContain('}), 404)');
+  expect(code).toContain('__statusHtml("404 Not Found", "Not Found")');
 });
 
-Deno.test('renderEntry: no /404 route keeps the bare 404 fallback (#923)', () => {
+test('renderEntry: no /404 route keeps the bare 404 fallback (#923)', () => {
   const code = renderEntry(buildEntryDescriptor(basicRoutes));
-  assertFalse(code.includes('app.notFound('));
+  expect(code.includes('app.notFound(')).toBeFalsy();
 });

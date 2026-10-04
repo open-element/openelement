@@ -38,6 +38,7 @@ import {
   isFixedPart,
   isText,
   itemAttrValue,
+  itemTemplateFields,
   itemValue,
   NO_ITEM,
   removeNodes,
@@ -197,24 +198,6 @@ function regionClaimOwner(
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/** Item fields referenced by an each Region's template (ival + iattr slots). */
-function itemTemplateFields(
-  nodes: readonly ProgramTreeNode[],
-  out = new Set<string>(),
-): Set<string> {
-  for (const node of nodes) {
-    if (node.k === 'ival') {
-      if (node.field !== undefined) out.add(node.field);
-      continue;
-    }
-    if (node.k === 'el') {
-      for (const [, field] of node.iattrs ?? []) out.add(field);
-      itemTemplateFields(node.children, out);
-    }
-  }
-  return out;
 }
 
 /**

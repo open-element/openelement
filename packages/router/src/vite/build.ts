@@ -1,22 +1,22 @@
 /**
  * @openelement/router - Build plugin
- * openElement Architecture (K·I·S·S): Knowledge · Isolated · Semantic · Static
- * Build produces only static files (K+S), Islands are the only JS (I).
- * API Routes (S - Serverless extension) deploy separately.
+ * Build produces only static files; islands are the only JS. API routes
+ * deploy separately.
  *
  * closeBundle writes metadata to ctx, then triggers Phase 2 (client) and
  * Phase 3 (SSG), in that order (#1471).
  * No globalThis bridge - ctx stays in createOpenPlugin() closure scope throughout.
  */
 
-import { existsSync } from '../internal/host-path.ts';
+import { existsSync, writeFileSync } from 'node:fs';
+import process from 'node:process';
 import type { Plugin, ResolvedConfig } from 'vite';
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
 import type { ClientAssetManifest } from './internal/protocol/client-assets.ts';
 import { serializeClientAssetsModule } from './internal/protocol/client-assets.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
-import { join } from '../internal/host-path.ts';
+import { join } from 'pathe';
 import { createLogger } from '@openelement/element';
 import { cleanSsrArtifacts, postProcessClientIslandBuild } from './internal/ssg/index.ts';
 import {
@@ -55,13 +55,14 @@ export function writeRequestTimeClientAssets(
   ctx: OpenElementBuildContext,
   manifest: ClientAssetManifest,
 ): void {
-  const root = ctx.phase3.root || Deno.cwd();
+  const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const serverIndex = join(root, outDir, 'server', 'index.js');
   if (!existsSync(serverIndex)) return;
-  Deno.writeTextFileSync(
+  writeFileSync(
     join(root, outDir, 'server', 'client-assets.js'),
     serializeClientAssetsModule(manifest),
+    'utf8',
   );
   log.info(`Request-time client assets recorded: ${manifest.entry}`);
 }
@@ -162,7 +163,7 @@ export function buildPlugin(
       // the SSG render wrote. The asset URLs come from the Phase 2 client
       // asset manifest (#1471), keyed by compile-time island identity. The
       // script tags themselves needed no post-processing — the Phase 3
-      // render pass embedded them at document time (S4b).
+      // render pass embedded them at document time.
       if (ctx.isComplete(2)) {
         try {
           const manifest = ctx.clientAssetManifest;
@@ -181,7 +182,7 @@ export function buildPlugin(
         log.info('No Phase 2 - island manifests and client assets skipped');
       }
 
-      // -- Clean Phase 1 SSR artifacts from public dist (v0.14.10) --
+      // -- Clean Phase 1 SSR artifacts from public dist --
       try {
         await cleanSsrArtifacts(ctx);
       } catch (error) {

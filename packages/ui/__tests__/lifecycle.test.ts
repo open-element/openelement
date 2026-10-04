@@ -21,7 +21,7 @@
  * dialog states) and www/e2e/theme-system.spec.ts (theme init/toggle/
  * persistence/multi-toggle on the shipped page).
  */
-import { assertEquals, assertNotEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   dialogWith,
   fakeDialog,
@@ -38,7 +38,7 @@ type AnyComponent = any;
 
 // ─── instance-state: the per-host foundation every lifecycle guard builds on ─
 
-Deno.test('instance-state: slots are per-host — writes never leak across instances', () => {
+test('instance-state: slots are per-host — writes never leak across instances', () => {
   const hostA = {};
   const hostB = {};
   let inits = 0;
@@ -47,22 +47,13 @@ Deno.test('instance-state: slots are per-host — writes never leak across insta
     return 'a-value';
   });
   // The initializer runs exactly once per host.
-  assertEquals(
-    readInstanceState(hostA, 'key', () => 'other'),
-    'a-value',
-  );
-  assertEquals(inits, 1);
+  expect(readInstanceState(hostA, 'key', () => 'other')).toEqual('a-value');
+  expect(inits).toEqual(1);
   // A second host gets its own slot, initialized independently.
   writeInstanceState(hostB, 'key', 'b-value');
-  assertEquals(
-    readInstanceState(hostA, 'key', () => 'other'),
-    'a-value',
-  );
-  assertEquals(first, 'a-value');
-  assertEquals(
-    readInstanceState(hostB, 'key', () => 'other'),
-    'b-value',
-  );
+  expect(readInstanceState(hostA, 'key', () => 'other')).toEqual('a-value');
+  expect(first).toEqual('a-value');
+  expect(readInstanceState(hostB, 'key', () => 'other')).toEqual('b-value');
 });
 
 // ─── open-theme-toggle: multi-instance / dual-state / reconnect / dispose (L4) ─
@@ -72,7 +63,7 @@ async function newToggle() {
   return new (OpenThemeToggle as unknown as new () => AnyComponent)();
 }
 
-Deno.test('open-theme-toggle: two instances on one page resolve independently from their own priority chains', async () => {
+test('open-theme-toggle: two instances on one page resolve independently from their own priority chains', async () => {
   const harness = themeHarness({ savedTheme: 'dark', mediaLight: false });
   installThemeGlobals(harness);
 
@@ -88,29 +79,29 @@ Deno.test('open-theme-toggle: two instances on one page resolve independently fr
 
   // Per-instance resolution: storage said dark for one, the attribute light
   // for the other; neither read the other's instance state.
-  assertEquals(fromStorage.theme, 'dark');
-  assertEquals(withAttr.theme, 'light');
+  expect(fromStorage.theme).toEqual('dark');
+  expect(withAttr.theme).toEqual('light');
   // Each instance writes only its own host attribute.
-  assertEquals(fromStorage.getAttribute('data-theme'), 'dark');
-  assertEquals(withAttr.getAttribute('data-theme'), 'light');
+  expect(fromStorage.getAttribute('data-theme')).toEqual('dark');
+  expect(withAttr.getAttribute('data-theme')).toEqual('light');
   // The shared document reflects each application in order (last writer wins)
   // — instances converge through the document channel, never by sharing state.
-  assertEquals(harness.docAttributes, [
+  expect(harness.docAttributes).toEqual([
     ['data-theme', 'dark'],
     ['data-theme', 'light'],
   ]);
   // Each instance propagated its own resolution exactly once.
-  assertEquals(harness.dispatched, ['open:theme-change', 'open:theme-change']);
-  assertEquals(harness.writes, [], 'init must not persist');
+  expect(harness.dispatched).toEqual(['open:theme-change', 'open:theme-change']);
+  expect(harness.writes, 'init must not persist').toEqual([]);
 });
 
-Deno.test('open-theme-toggle: a later-initializing instance converges to the live document theme', async () => {
+test('open-theme-toggle: a later-initializing instance converges to the live document theme', async () => {
   const harness = themeHarness({ savedTheme: 'dark' });
   installThemeGlobals(harness);
   const first = await newToggle();
   first.setAttribute('theme', 'light');
   first.initTheme();
-  assertEquals(first.theme, 'light');
+  expect(first.theme).toEqual('light');
 
   // The first instance's application wrote data-theme to the document; a
   // second instance initializing now follows the DOCUMENT (the page's live
@@ -118,70 +109,74 @@ Deno.test('open-theme-toggle: a later-initializing instance converges to the liv
   // page agree instead of fighting.
   const second = await newToggle();
   second.initTheme();
-  assertEquals(second.theme, 'light');
-  assertEquals(harness.dispatched, ['open:theme-change', 'open:theme-change']);
-  assertEquals(harness.writes, []);
+  expect(second.theme).toEqual('light');
+  expect(harness.dispatched).toEqual(['open:theme-change', 'open:theme-change']);
+  expect(harness.writes).toEqual([]);
 });
 
-Deno.test("open-theme-toggle: one instance's toggle never disturbs another instance's state", async () => {
+test("open-theme-toggle: one instance's toggle never disturbs another instance's state", async () => {
   const harness = themeHarness({ savedTheme: 'dark' });
   installThemeGlobals(harness);
   const first = await newToggle();
   const second = await newToggle();
   first.initTheme();
   second.initTheme();
-  assertEquals(first.theme, 'dark');
-  assertEquals(second.theme, 'dark');
+  expect(first.theme).toEqual('dark');
+  expect(second.theme).toEqual('dark');
   harness.dispatched.length = 0;
   harness.docAttributes.length = 0;
 
   first.handleToggle();
 
-  assertEquals(first.theme, 'light');
-  assertEquals(first.getAttribute('data-theme'), 'light');
+  expect(first.theme).toEqual('light');
+  expect(first.getAttribute('data-theme')).toEqual('light');
   // The second instance's resolved state, host attribute and propagation
   // bookkeeping are untouched — no shared static leaks between instances.
-  assertEquals(second.theme, 'dark');
-  assertEquals(second.getAttribute('data-theme'), 'dark');
-  assertEquals(harness.dispatched, ['open:theme-change']);
-  assertEquals(harness.writes, ['light']);
+  expect(second.theme).toEqual('dark');
+  expect(second.getAttribute('data-theme')).toEqual('dark');
+  expect(harness.dispatched).toEqual(['open:theme-change']);
+  expect(harness.writes).toEqual(['light']);
 
   // The second instance still toggles from ITS OWN state, not the first's.
   second.handleToggle();
-  assertEquals(second.theme, 'light');
-  assertEquals(harness.writes, ['light', 'light']);
-  assertEquals(harness.dispatched, ['open:theme-change', 'open:theme-change']);
+  expect(second.theme).toEqual('light');
+  expect(harness.writes).toEqual(['light', 'light']);
+  expect(harness.dispatched).toEqual(['open:theme-change', 'open:theme-change']);
 });
 
-Deno.test('open-theme-toggle: dual-state transitions re-apply host attribute, document and colorScheme per change', async () => {
+test('open-theme-toggle: dual-state transitions re-apply host attribute, document and colorScheme per change', async () => {
   const harness = themeHarness({});
   installThemeGlobals(harness);
   const el = await newToggle();
   el.initTheme();
-  assertEquals(el.theme, 'dark');
+  expect(el.theme).toEqual('dark');
 
   el.handleToggle();
-  assertEquals(el.theme, 'light');
+  expect(el.theme).toEqual('light');
   el.handleToggle();
-  assertEquals(el.theme, 'dark');
+  expect(el.theme).toEqual('dark');
 
   // Every actual transition is observable on all three channels.
-  assertEquals(harness.docAttributes, [
+  expect(harness.docAttributes).toEqual([
     ['data-theme', 'dark'],
     ['data-theme', 'light'],
     ['data-theme', 'dark'],
   ]);
-  assertEquals(harness.colorSchemes, ['dark', 'light', 'dark']);
-  assertEquals(harness.dispatched, ['open:theme-change', 'open:theme-change', 'open:theme-change']);
-  assertEquals(el.getAttribute('data-theme'), 'dark');
+  expect(harness.colorSchemes).toEqual(['dark', 'light', 'dark']);
+  expect(harness.dispatched).toEqual([
+    'open:theme-change',
+    'open:theme-change',
+    'open:theme-change',
+  ]);
+  expect(el.getAttribute('data-theme')).toEqual('dark');
 });
 
-Deno.test('open-theme-toggle: re-applying the current theme dispatches nothing and persists nothing', async () => {
+test('open-theme-toggle: re-applying the current theme dispatches nothing and persists nothing', async () => {
   const harness = themeHarness({});
   installThemeGlobals(harness);
   const el = await newToggle();
   el.initTheme();
-  assertEquals(harness.dispatched, ['open:theme-change']);
+  expect(harness.dispatched).toEqual(['open:theme-change']);
 
   // The attribute echo of the already-resolved theme (old === val) is a no-op.
   el.attributeChangedCallback('theme', 'dark', 'dark');
@@ -189,19 +184,19 @@ Deno.test('open-theme-toggle: re-applying the current theme dispatches nothing a
   // re-apply a theme that never changed.
   el.applyTheme('dark');
 
-  assertEquals(harness.dispatched, ['open:theme-change']);
-  assertEquals(harness.writes, []);
-  assertEquals(el.theme, 'dark');
+  expect(harness.dispatched).toEqual(['open:theme-change']);
+  expect(harness.writes).toEqual([]);
+  expect(el.theme).toEqual('dark');
 });
 
-Deno.test('open-theme-toggle: reconnect re-runs initTheme zero times — resolution, writes and dispatch happen exactly once per instance', async () => {
+test('open-theme-toggle: reconnect re-runs initTheme zero times — resolution, writes and dispatch happen exactly once per instance', async () => {
   const harness = themeHarness({ savedTheme: 'dark' });
   installThemeGlobals(harness);
   const el = await newToggle();
   el.initTheme();
-  assertEquals(el.theme, 'dark');
-  assertEquals(harness.dispatched, ['open:theme-change']);
-  assertEquals(harness.docAttributes, [['data-theme', 'dark']]);
+  expect(el.theme).toEqual('dark');
+  expect(harness.dispatched).toEqual(['open:theme-change']);
+  expect(harness.docAttributes).toEqual([['data-theme', 'dark']]);
 
   // While "disconnected", every resolution source changes: a reconnect must
   // NOT re-resolve — the instance keeps the theme it resolved and propagated.
@@ -215,25 +210,25 @@ Deno.test('open-theme-toggle: reconnect re-runs initTheme zero times — resolut
   el.initTheme();
   el.initTheme();
 
-  assertEquals(el.theme, 'dark', 'reconnect must not re-resolve from changed sources');
-  assertEquals(harness.dispatched, ['open:theme-change'], 'no re-dispatch on reconnect');
-  assertEquals(harness.docAttributes, [['data-theme', 'dark']], 'no re-write on reconnect');
-  assertEquals(harness.writes, [], 'reconnect never persists');
+  expect(el.theme, 'reconnect must not re-resolve from changed sources').toEqual('dark');
+  expect(harness.dispatched, 'no re-dispatch on reconnect').toEqual(['open:theme-change']);
+  expect(harness.docAttributes, 'no re-write on reconnect').toEqual([['data-theme', 'dark']]);
+  expect(harness.writes, 'reconnect never persists').toEqual([]);
 });
 
-Deno.test('open-theme-toggle: dispose is teardown-free and a replacement instance initializes fresh', async () => {
+test('open-theme-toggle: dispose is teardown-free and a replacement instance initializes fresh', async () => {
   const harness = themeHarness({ savedTheme: 'dark' });
   installThemeGlobals(harness);
   const first = await newToggle();
   first.initTheme();
-  assertEquals(harness.dispatched, ['open:theme-change']);
+  expect(harness.dispatched).toEqual(['open:theme-change']);
 
   // The component registers no listeners or effects of its own (the compiled
   // click sink is kernel-owned), so dispose has nothing to clean: the base
   // teardown must be a safe no-op and the instance stays inert afterwards.
   first.disconnectedCallback();
   first.initTheme();
-  assertEquals(harness.dispatched, ['open:theme-change'], 'disposed instance does not re-init');
+  expect(harness.dispatched, 'disposed instance does not re-init').toEqual(['open:theme-change']);
 
   // Instance state is keyed by host (WeakMap): the replacement instance on
   // the same page initializes fully and independently. The first instance
@@ -242,68 +237,67 @@ Deno.test('open-theme-toggle: dispose is teardown-free and a replacement instanc
   harness.savedTheme = 'light';
   const second = await newToggle();
   second.initTheme();
-  assertEquals(second.theme, 'dark');
-  assertEquals(harness.dispatched, ['open:theme-change', 'open:theme-change']);
-  assertEquals(first.theme, 'dark');
-  assertEquals(harness.writes, []);
+  expect(second.theme).toEqual('dark');
+  expect(harness.dispatched).toEqual(['open:theme-change', 'open:theme-change']);
+  expect(first.theme).toEqual('dark');
+  expect(harness.writes).toEqual([]);
 });
 
-Deno.test('open-theme-toggle: an attribute-driven change applies but never persists (#804 complement)', async () => {
+test('open-theme-toggle: an attribute-driven change applies but never persists (#804 complement)', async () => {
   const harness = themeHarness({});
   installThemeGlobals(harness);
   const el = await newToggle();
   el.attributeChangedCallback('theme', null, 'light');
-  assertEquals(el.theme, 'light');
-  assertEquals(el.getAttribute('data-theme'), 'light');
-  assertEquals(harness.dispatched, ['open:theme-change']);
+  expect(el.theme).toEqual('light');
+  expect(el.getAttribute('data-theme')).toEqual('light');
+  expect(harness.dispatched).toEqual(['open:theme-change']);
   // Persistence is exclusive to the explicit user toggle (handleToggle).
-  assertEquals(harness.writes, []);
+  expect(harness.writes).toEqual([]);
   // A non-light value resolves to dark (the only two states).
   el.attributeChangedCallback('theme', 'light', 'blue');
-  assertEquals(el.theme, 'dark');
-  assertEquals(harness.writes, []);
+  expect(el.theme).toEqual('dark');
+  expect(harness.writes).toEqual([]);
 });
 
 // ─── open-dialog: session lifecycle + dispose ────────────────────────────────
 
-Deno.test('open-dialog: each open session enters the top layer exactly once; reopen re-enters', async () => {
+test('open-dialog: each open session enters the top layer exactly once; reopen re-enters', async () => {
   const fake = fakeDialog();
   const el = await dialogWith(fake);
   el.open = true;
   el.onDsdHydrated();
-  assertEquals(fake.calls, ['showModal']);
+  expect(fake.calls).toEqual(['showModal']);
   // A repeated sync inside the same open session must not re-enter (the
   // modalActive guard), or showModal() would throw InvalidStateError.
   el.syncDialogElement();
-  assertEquals(fake.calls, ['showModal']);
+  expect(fake.calls).toEqual(['showModal']);
 
   el.open = false;
   el.syncDialogElement();
-  assertEquals(fake.calls, ['showModal', 'close']);
+  expect(fake.calls).toEqual(['showModal', 'close']);
 
   // A new session re-enters the top layer exactly once.
   el.open = true;
   el.syncDialogElement();
-  assertEquals(fake.calls, ['showModal', 'close', 'showModal']);
+  expect(fake.calls).toEqual(['showModal', 'close', 'showModal']);
 });
 
-Deno.test('open-dialog: dispose tears the open effect down exactly once; reconnect re-establishes it', async () => {
+test('open-dialog: dispose tears the open effect down exactly once; reconnect re-establishes it', async () => {
   const el = await dialogWith(fakeDialog());
   el.onCsrRendered();
-  assertEquals(typeof readInstanceState(el, 'openEffect', () => undefined), 'function');
+  expect(typeof readInstanceState(el, 'openEffect', () => undefined)).toEqual('function');
 
   el.disconnectedCallback();
-  assertEquals(
+  expect(
     readInstanceState(el, 'openEffect', () => 'missing'),
-    undefined,
     'the effect teardown must run and the slot must be cleared',
-  );
+  ).toEqual(undefined);
   // Double dispose is safe (the cleared slot yields no second teardown call).
   el.disconnectedCallback();
 
   // Reconnect re-subscribes the compiled-signal effect for the new session.
   el.onCsrRendered();
-  assertEquals(typeof readInstanceState(el, 'openEffect', () => undefined), 'function');
+  expect(typeof readInstanceState(el, 'openEffect', () => undefined)).toEqual('function');
 });
 
 // ─── open-tabs: decoration wiring across activation, dispose and reconnect ───
@@ -369,50 +363,44 @@ function tabsHost(tabCount: number, panelCount: number) {
   })();
 }
 
-Deno.test('open-tabs: activation decorates the WAI-ARIA wiring; selection re-decorates', async () => {
+test('open-tabs: activation decorates the WAI-ARIA wiring; selection re-decorates', async () => {
   const { el, tabs, panels } = await tabsHost(3, 3);
   el.onCsrRendered();
-  assertNotEquals(el.tabsId, '');
+  expect(el.tabsId).not.toEqual('');
 
-  assertEquals(tabs[0].attrs.get('role'), 'tab');
-  assertEquals(tabs[0].attrs.get('aria-selected'), 'true');
-  assertEquals(tabs[0].attrs.get('tabindex'), '0');
-  assertEquals(tabs[1].attrs.get('aria-selected'), 'false');
-  assertEquals(tabs[1].attrs.get('tabindex'), '-1');
+  expect(tabs[0].attrs.get('role')).toEqual('tab');
+  expect(tabs[0].attrs.get('aria-selected')).toEqual('true');
+  expect(tabs[0].attrs.get('tabindex')).toEqual('0');
+  expect(tabs[1].attrs.get('aria-selected')).toEqual('false');
+  expect(tabs[1].attrs.get('tabindex')).toEqual('-1');
   // id/aria-controls and aria-labelledby pair tabs with panels per instance.
-  assertEquals(tabs[1].attrs.get('aria-controls'), `${el.tabsId}-panel-1`);
-  assertEquals(panels[1].attrs.get('aria-labelledby'), `${el.tabsId}-tab-1`);
-  assertEquals(panels[0].attrs.has('hidden'), false);
-  assertEquals(panels[1].attrs.get('hidden'), '');
+  expect(tabs[1].attrs.get('aria-controls')).toEqual(`${el.tabsId}-panel-1`);
+  expect(panels[1].attrs.get('aria-labelledby')).toEqual(`${el.tabsId}-tab-1`);
+  expect(panels[0].attrs.has('hidden')).toEqual(false);
+  expect(panels[1].attrs.get('hidden')).toEqual('');
 
   // Selecting a tab re-decorates the wiring (uncompiled, the compiled-signal
   // effect does not re-run — decorate() is the effect body, called directly).
   el.select(2);
   el.decorate();
-  assertEquals(tabs[2].attrs.get('aria-selected'), 'true');
-  assertEquals(tabs[0].attrs.get('aria-selected'), 'false');
-  assertEquals(panels[2].attrs.has('hidden'), false);
-  assertEquals(panels[0].attrs.get('hidden'), '');
+  expect(tabs[2].attrs.get('aria-selected')).toEqual('true');
+  expect(tabs[0].attrs.get('aria-selected')).toEqual('false');
+  expect(panels[2].attrs.has('hidden')).toEqual(false);
+  expect(panels[0].attrs.get('hidden')).toEqual('');
 });
 
-Deno.test('open-tabs: click wiring attaches once per tab across dispose/reconnect; reconnect re-syncs stale ARIA', async () => {
+test('open-tabs: click wiring attaches once per tab across dispose/reconnect; reconnect re-syncs stale ARIA', async () => {
   const { el, tabs } = await tabsHost(2, 2);
   el.onCsrRendered();
-  assertEquals(
-    tabs.map((t) => t.clickListeners.length),
-    [1, 1],
-  );
+  expect(tabs.map((t) => t.clickListeners.length)).toEqual([1, 1]);
 
   // Click selection goes through the wired listener exactly once per click.
   tabs[1].click();
-  assertEquals(el.active, 1);
+  expect(el.active).toEqual(1);
 
   // Dispose: the decorate effect is torn down and its slot cleared.
   el.disconnectedCallback();
-  assertEquals(
-    readInstanceState(el, 'decorateEffect', () => 'missing'),
-    undefined,
-  );
+  expect(readInstanceState(el, 'decorateEffect', () => 'missing')).toEqual(undefined);
 
   // While detached, external markup drifts stale (browser-level analog:
   // ui-dogfood ui-tabs.spec.ts reconnect test observes exactly this).
@@ -422,35 +410,32 @@ Deno.test('open-tabs: click wiring attaches once per tab across dispose/reconnec
   // Reconnect: a fresh effect re-runs decorate once — stale ARIA is corrected,
   // and the WeakSet wiring guard keeps click listeners at one per tab.
   el.onCsrRendered();
-  assertEquals(typeof readInstanceState(el, 'decorateEffect', () => undefined), 'function');
-  assertEquals(
-    tabs.map((t) => t.clickListeners.length),
-    [1, 1],
-  );
-  assertEquals(tabs[0].attrs.get('aria-selected'), 'true');
-  assertEquals(tabs[1].attrs.get('aria-selected'), 'false');
+  expect(typeof readInstanceState(el, 'decorateEffect', () => undefined)).toEqual('function');
+  expect(tabs.map((t) => t.clickListeners.length)).toEqual([1, 1]);
+  expect(tabs[0].attrs.get('aria-selected')).toEqual('true');
+  expect(tabs[1].attrs.get('aria-selected')).toEqual('false');
 });
 
-Deno.test('open-tabs: two instances on one page get independent id prefixes and selection state', async () => {
+test('open-tabs: two instances on one page get independent id prefixes and selection state', async () => {
   const first = await tabsHost(2, 2);
   const second = await tabsHost(2, 2);
   first.el.onCsrRendered();
   second.el.onCsrRendered();
-  assertNotEquals(first.el.tabsId, second.el.tabsId);
+  expect(first.el.tabsId).not.toEqual(second.el.tabsId);
 
   first.el.select(1);
   first.el.decorate();
   second.el.decorate();
-  assertEquals(first.tabs[1].attrs.get('aria-selected'), 'true');
+  expect(first.tabs[1].attrs.get('aria-selected')).toEqual('true');
   // The second instance's decoration is untouched by the first's selection.
-  assertEquals(second.tabs[0].attrs.get('aria-selected'), 'true');
-  assertEquals(second.tabs[1].attrs.get('aria-selected'), 'false');
-  assertEquals(second.el.active, 0);
+  expect(second.tabs[0].attrs.get('aria-selected')).toEqual('true');
+  expect(second.tabs[1].attrs.get('aria-selected')).toEqual('false');
+  expect(second.el.active).toEqual(0);
 });
 
 // ─── open-dropdown: activation wiring is reconnect-safe ──────────────────────
 
-Deno.test('open-dropdown: focus-return wiring attaches once across dispose/reconnect; anchor name stays stable', async () => {
+test('open-dropdown: focus-return wiring attaches once across dispose/reconnect; anchor name stays stable', async () => {
   const { OpenDropdown } = await import('../src/open-dropdown.tsx');
   const el = new (OpenDropdown as unknown as new () => AnyComponent)();
   const listenerCounts: Record<string, number> = {};
@@ -464,33 +449,33 @@ Deno.test('open-dropdown: focus-return wiring attaches once across dispose/recon
   el.shadowRoot = { querySelector: (sel: string) => (sel === '.content' ? content : null) };
 
   el.onCsrRendered();
-  assertEquals(listenerCounts, { focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(listenerCounts).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
   const anchor = el.anchorName;
-  assertNotEquals(anchor, '');
+  expect(anchor).not.toEqual('');
 
   // Reconnect: the focusWired guard keeps the listeners at one each, and the
   // realm-unique anchor name is NOT re-assigned (both halves must keep the
   // name the SSR/CSR activation paired).
   el.disconnectedCallback();
   el.onCsrRendered();
-  assertEquals(listenerCounts, { focusin: 1, beforetoggle: 1, toggle: 1 });
-  assertEquals(el.anchorName, anchor);
+  expect(listenerCounts).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(el.anchorName).toEqual(anchor);
 });
 
 // ─── open-input: activation id stability + focus/blur events ─────────────────
 
-Deno.test('open-input: activation assigns the control id once — reconnect keeps it', async () => {
+test('open-input: activation assigns the control id once — reconnect keeps it', async () => {
   const { OpenInput } = await import('../src/open-input.tsx');
   const el = new (OpenInput as unknown as new () => AnyComponent)();
   el.onCsrRendered();
   const id = el.inputId;
-  assertNotEquals(id, '');
+  expect(id).not.toEqual('');
   el.disconnectedCallback();
   el.onCsrRendered();
-  assertEquals(el.inputId, id, 're-activation must not re-assign the realm-unique id');
+  expect(el.inputId, 're-activation must not re-assign the realm-unique id').toEqual(id);
 });
 
-Deno.test('open-input: focus and blur dispatch composed open-focus/open-blur events', async () => {
+test('open-input: focus and blur dispatch composed open-focus/open-blur events', async () => {
   const { OpenInput } = await import('../src/open-input.tsx');
   const el = new (OpenInput as unknown as new () => AnyComponent)();
   const seen: Array<{ type: string; bubbles: boolean; composed: boolean }> = [];
@@ -502,7 +487,7 @@ Deno.test('open-input: focus and blur dispatch composed open-focus/open-blur eve
   });
   el.handleFocus();
   el.handleBlur();
-  assertEquals(seen, [
+  expect(seen).toEqual([
     { type: 'open-focus', bubbles: true, composed: true },
     { type: 'open-blur', bubbles: true, composed: true },
   ]);

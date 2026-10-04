@@ -9,49 +9,84 @@ order: 110
 The generated project wires a single fast signal against the real framework types:
 
 ```bash
-deno task check   # deno check --config deno.json app/ vite.config.ts openelement.config.ts
+pnpm check   # tsc --noEmit over the tsconfig include: app/ + vite.config.ts + openelement.config.ts
 ```
 
 It type-checks every route and component source with the actual `@openelement/*` declarations, so a wrong option on `definePage`, a `props` projector that does not match its loader's data, an unsupported decorator option or a broken import fails here — before any build runs and without a browser.
 
-Loaders and actions are plain functions, which makes them cheap to test directly. Import the route module in a `deno test` file, call the loader with a `Request` or the action with a `FormData`, and assert on the returned value: a success object, an `OpenElementActionFailure` from `fail()` (its `status` and `data` fields), or a thrown `redirect()`/`notFound()`.
+Loaders and actions are plain functions, which makes them cheap to test directly. One boundary shapes where they live: `pnpm test` runs Node's built-in runner, which loads `.ts` modules by type stripping but cannot load `.tsx` at all — JSX compiles at build time, and every route module's import graph ends in a `.tsx` page component. So keep the loader/action logic you want to unit-test in a `.ts` module under `app/lib/` (a `.ts` file under `app/routes/` would itself be admitted as a route), and re-export it from the route:
 
 ```ts
-import { assertEquals } from '@std/assert';
-import { action } from '../app/routes/guestbook.tsx';
+// app/lib/guestbook.ts — plain TypeScript; nothing JSX-shaped imports here
+import { fail, redirect, type OpenElementActionFailure } from '@openelement/router';
 
-Deno.test('an empty message fails validation', () => {
-  const formData = new FormData();
-  formData.set('message', '');
-  const failure = action({ formData });
-  assertEquals(failure.status, 422);
-});
+export interface GuestbookData {
+  error?: string;
+  note?: string;
+}
+
+export function saveNote(ctx: {
+  formData: FormData;
+}): OpenElementActionFailure<GuestbookData> {
+  const note = String(ctx.formData.get('note') ?? '').trim();
+  if (!note) return fail(422, { error: 'a note is required', note });
+  throw redirect(`/guestbook?saved=${encodeURIComponent(note)}`);
+}
+
+export async function listEntries(): Promise<{ entries: string[] }> {
+  return { entries: [] };
+}
 ```
 
-Nothing in that path needs a server, a DOM or the framework runtime: the validation, the echo and the PRG target are all decided by the function's return value.
+```ts
+// app/routes/guestbook.ts — the route re-exports the tested functions
+import { definePage } from '@openelement/router';
+import GuestbookPage from '../components/page-guestbook.tsx';
+import { listEntries, saveNote } from '../lib/guestbook.ts';
+
+export { listEntries as loader, saveNote as action };
+
+export default definePage(GuestbookPage, { renderIntent: { mode: 'dynamic' } });
+```
+
+The test file imports only the `.ts` module — the validation, the PRG target and the returned data are all decided by plain return values and throws, so nothing in that path needs a server, a DOM or the framework runtime:
+
+```ts
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { saveNote } from '../app/lib/guestbook.ts';
+
+test('an empty message fails validation', () => {
+  const formData = new FormData();
+  formData.set('message', '');
+  const failure = saveNote({ formData });
+  assert.equal(failure.status, 422);
+});
+```
 
 ### Redirects throw
 
 Success does not return — it throws an `OpenElementRedirect` carrying the target and status (the default 302 is coerced to 303 at POST dispatch, PRG), so the test asserts the throw, not a value:
 
 ```ts
-import { assertEquals } from '@std/assert';
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import { OpenElementRedirect } from '@openelement/router';
-import { action } from '../app/routes/guestbook.tsx';
+import { saveNote } from '../app/lib/guestbook.ts';
 
-Deno.test('a valid message redirects to the echo', () => {
+test('a valid message redirects to the echo', () => {
   const formData = new FormData();
   formData.set('message', 'hello');
   let thrown: unknown;
   try {
-    action({ formData });
+    saveNote({ formData });
   } catch (error) {
     thrown = error;
   }
   if (!(thrown instanceof OpenElementRedirect)) {
     throw new Error('a valid message must redirect');
   }
-  assertEquals(thrown.location, '/guestbook?echoed=hello');
+  assert.equal(thrown.location, '/guestbook?echoed=hello');
 });
 ```
 
@@ -60,12 +95,13 @@ Deno.test('a valid message redirects to the echo', () => {
 A loader is the same shape — a plain async function, called directly:
 
 ```ts
-import { assertEquals } from '@std/assert';
-import { loader } from '../app/routes/guestbook.tsx';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { listEntries } from '../app/lib/guestbook.ts';
 
-Deno.test('the loader returns the entry list', async () => {
-  const data = await loader();
-  assertEquals(Array.isArray(data.entries), true);
+test('the loader returns the entry list', async () => {
+  const data = await listEntries();
+  assert.equal(Array.isArray(data.entries), true);
 });
 ```
 
@@ -74,15 +110,15 @@ Deno.test('the loader returns the entry list', async () => {
 The build is the second gate, and it is the only place some contracts can be checked — prerendering, route discovery, static-path expansion and the request-time output all happen there:
 
 ```bash
-deno task build
-deno task start   # serves dist/; dispatch to dist/server when it exists
+pnpm build
+pnpm start   # serves dist/; dispatch to dist/server when it exists
 ```
 
-Inspect the output rather than trusting the log. A pure-static project should produce HTML for every route and no `dist/server` directory at all; a project with a `'dynamic'` route or an action should produce `dist/server/index.js` (the portable `fetch(Request) -> Response` handler) and `dist/server/server-manifest.json` listing the request-time routes. `deno task start` prints which mode it found, and serves exactly what was built, so a page that looks right in `deno task dev` but wrong here has a build-time cause.
+Inspect the output rather than trusting the log. A pure-static project should produce HTML for every route and no `dist/server` directory at all; a project with a `'dynamic'` route or an action should produce `dist/server/index.js` (the portable `fetch(Request) -> Response` handler) and `dist/server/server-manifest.json` listing the request-time routes. `pnpm start` prints which mode it found, and serves exactly what was built, so a page that looks right in `pnpm dev` but wrong here has a build-time cause.
 
 ## Visual checks
 
-Layout, DSD layers and hydration are browser facts. Serve a build (`deno task start`) and point a browser automation run at it — Playwright and Web Test Runner both drive the built output directly — then assert on the rendered DOM instead of the HTML source: a shadow root's contents are only queryable once the page has parsed, and an upgrade only happens once the island's chunk has loaded.
+Layout, DSD layers and hydration are browser facts. Serve a build (`pnpm start`) and point a browser automation run at it — Playwright and Web Test Runner both drive the built output directly — then assert on the rendered DOM instead of the HTML source: a shadow root's contents are only queryable once the page has parsed, and an upgrade only happens once the island's chunk has loaded.
 
 Two assertions are worth having for any interactive component: the document is complete and styled before the island's module runs (the static-first contract), and after upgrade the component still responds to real user input. The repository's own site suite follows that shape — its end-to-end specs cover DSD layers, hydration behavior, island reactivity and navigation against the built output.
 

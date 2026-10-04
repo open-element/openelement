@@ -8,11 +8,9 @@
  * creation/application.
  *
  * Generated entries import this module and call it; the codegen templates
- * keep call sites, never function bodies. The one
- * historical exception — the generated helpers inside the entry template —
- * moved here verbatim, so behavior is governed by this module and pinned by
- * the read-only oracles (request-time-parity, stream-manifest) plus the
- * unit tests beside it.
+ * keep call sites, never function bodies. Behavior is governed by this module
+ * and pinned by the read-only oracles (request-time-parity, stream-manifest)
+ * plus the unit tests beside it.
  *
  * Behavior contract:
  * - `mergeChannelHeaders` appends every channel entry into a copy of the

@@ -1,4 +1,5 @@
-import { assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isOpenElementRedirect } from '@openelement/router';
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
 // compiled page class (decorators are compile-time-only input).
@@ -15,21 +16,20 @@ function context(query: string) {
   };
 }
 
-Deno.test('callback rejects missing and expired codes without reflecting details', async () => {
+test('callback rejects missing and expired codes without reflecting details', async () => {
   const missing = await createCallbackLoader(client())(context(''));
-  assertEquals(missing.error?.includes('Authentication could not'), true);
+  expect(missing.error?.includes('Authentication could not')).toEqual(true);
   const expired = await createCallbackLoader(client({ message: 'expired code private-123' }))(
     context('?code=private-123'),
   );
-  assertEquals(JSON.stringify(expired).includes('private-123'), false);
+  expect(JSON.stringify(expired).includes('private-123')).toEqual(false);
 });
-Deno.test('callback success rejects an encoded external next and redirects internally', async () => {
-  const thrown = await assertRejects(() =>
+test('callback success rejects an encoded external next and redirects internally', async () => {
+  const thrown = await assertRejectsIncludes(() =>
     createCallbackLoader(client())(context('?code=ok&next=%252F%252Fevil.example')),
   );
-  assertEquals(isOpenElementRedirect(thrown), true);
-  assertEquals(
-    (thrown as { location?: string }).location?.includes('evil.example') ?? false,
+  expect(isOpenElementRedirect(thrown)).toEqual(true);
+  expect((thrown as { location?: string }).location?.includes('evil.example') ?? false).toEqual(
     false,
   );
 });

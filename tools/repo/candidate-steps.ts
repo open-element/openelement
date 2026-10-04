@@ -1,5 +1,9 @@
 /**
- * Canonical candidate job/step contract (schema v2).
+ * Canonical candidate job/step contract (schema v4 — the vp task-dispatch
+ * surface; v3 was the direct pnpm invocation surface, v2 the Deno task
+ * graph). A v3 or older record names a different execution contract, so the
+ * version bump makes legacy evidence fail validation instead of passing as
+ * equivalent.
  *
  * One source of truth for what each candidate job must run and from which
  * directory. The producers (candidate-evidence-record.ts for the workspace
@@ -9,15 +13,19 @@
  * step name can never be paired with a different command, and a fresh-clone
  * step can never claim a directory it did not run in.
  *
- * Matching normalizes exactly two operationally irrelevant details:
- *   - an absolute executable path whose basename is `deno` or `git`;
+ * Every gate/generator task dispatches through vp (tools/repo/vp-dispatch.ts
+ * builds the argv, so producer and validator cannot drift). Matching
+ * normalizes exactly two operationally irrelevant details:
+ *   - an absolute executable path whose basename is `node`, `vp`, or `git`;
  *   - absolute workspace/clone/temp paths, which are recorded under the shared
  *     roles `$SOURCE`, `$CLONE`, and `$TEMP` via one mapping.
  * Every other argv element, flag, task name, cwd, and argument position is
  * compared byte-for-byte.
  */
 
-export const CANDIDATE_EVIDENCE_SCHEMA_VERSION = 2;
+import { vpTaskArgv } from './vp-dispatch.ts';
+
+export const CANDIDATE_EVIDENCE_SCHEMA_VERSION = 4;
 
 export type JobName = 'fast-checks' | 'source-matrix' | 'packed' | 'fresh-clone';
 
@@ -79,11 +87,11 @@ export interface StepContract {
   match: (argv: readonly string[], context: StepMatchContext) => string | null;
 }
 
-/** Normalize an absolute deno/git executable path to its pinned basename. */
+/** Normalize an absolute node/vp/git executable path to its pinned basename. */
 export function normalizeArgv(argv: readonly string[]): string[] {
   if (argv.length === 0) return [];
   const basename = argv[0].split('/').pop() ?? argv[0];
-  const executable = basename === 'deno' || basename === 'git' ? basename : argv[0];
+  const executable = ['node', 'vp', 'git'].includes(basename) ? basename : argv[0];
   return [executable, ...argv.slice(1)];
 }
 
@@ -113,21 +121,7 @@ function exact(expected: readonly string[]): ArgvMatcher {
 
 /** `clean-proof.ts` invocation that binds a job to a clean exact SHA/tree. */
 export function cleanProofArgv(sha: string, tree: string, phase: 'before' | 'after'): string[] {
-  return [
-    'deno',
-    'run',
-    '--allow-read',
-    '--allow-run=git',
-    '--deny-ffi',
-    '--no-prompt',
-    'tools/repo/clean-proof.ts',
-    '--sha',
-    sha,
-    '--tree',
-    tree,
-    '--phase',
-    phase,
-  ];
+  return ['node', 'tools/repo/clean-proof.ts', '--sha', sha, '--tree', tree, '--phase', phase];
 }
 
 /** Canonical line a clean-proof log must contain for that phase. */
@@ -146,30 +140,43 @@ function cleanProof(phase: 'before' | 'after', cwd: EvidenceRole): StepContract 
   };
 }
 
-/** Static job commands (producer argv; validator normalizes the executable). */
+/**
+ * Static job commands: every workspace lane runs its steps through the vp
+ * dispatch (package-qualified, fail-closed, no cache). `pnpm` appears only
+ * where pnpm is the tool under test — the fresh-clone `install`, which proves
+ * the workspace installs with one frozen lockfile.
+ */
 export const STATIC_JOB_STEPS: Record<
   Exclude<JobName, 'fresh-clone'>,
   readonly { name: string; command: readonly string[] }[]
 > = {
   'fast-checks': [
-    { name: 'fmt-check', command: ['deno', 'task', 'fmt:check'] },
-    { name: 'lint', command: ['deno', 'task', 'lint'] },
-    { name: 'markdown', command: ['deno', 'task', '--cwd', 'tools/repo', 'lint:markdown'] },
-    { name: 'typecheck', command: ['deno', 'task', 'typecheck'] },
+    { name: 'fmt-check', command: vpTaskArgv('openelement', 'fmt:check') },
+    { name: 'lint', command: vpTaskArgv('openelement', 'lint') },
+    { name: 'markdown', command: vpTaskArgv('@openelement/tools-repo', 'lint:markdown') },
+    { name: 'typecheck', command: vpTaskArgv('openelement', 'typecheck') },
   ],
   'source-matrix': [
-    { name: 'gate-source', command: ['deno', 'task', '--cwd', 'tools/repo', 'gate:source'] },
+    { name: 'gate-source', command: vpTaskArgv('@openelement/tools-repo', 'gate:source') },
   ],
   packed: [
-    { name: 'gate-packed', command: ['deno', 'task', '--cwd', 'tools/release', 'gate:packed'] },
+    {
+      name: 'gate-packed',
+      command: vpTaskArgv('@openelement/tools-release', 'gate:packed'),
+    },
     {
       name: 'publish-npm-dry-run',
-      command: ['deno', 'task', '--cwd', 'tools/release', 'publish:npm:dry-run'],
+      command: vpTaskArgv('@openelement/tools-release', 'publish:npm:dry-run'),
     },
   ],
 };
 
-/** Fresh-clone argv builders using shared roles; the producer maps paths. */
+/**
+ * Fresh-clone argv builders using shared roles; the producer maps paths. The
+ * clone's own installed vp shim (`$CLONE/node_modules/.bin/vp`, materialized
+ * at spawn time) dispatches its tasks, so the recorded executable normalizes
+ * to `vp` exactly like the workspace lanes.
+ */
 export const freshCloneCommands = {
   clone: (): string[] => [
     'git',
@@ -179,25 +186,18 @@ export const freshCloneCommands = {
     EVIDENCE_ROLES.clone,
   ],
   checkout: (sha: string): string[] => ['git', '-C', EVIDENCE_ROLES.clone, 'checkout', sha],
-  install: (denoExe: string): string[] => [denoExe, 'install'],
-  check: (denoExe: string): string[] => [denoExe, 'task', 'check'],
-  gateSource: (denoExe: string): string[] => [
-    denoExe,
-    'task',
-    '--cwd',
-    'tools/repo',
-    'gate:source',
-  ],
-  gatePacked: (denoExe: string): string[] => [
-    denoExe,
-    'task',
-    '--cwd',
-    'tools/release',
-    'gate:packed',
-  ],
-  siteBuild: (denoExe: string): string[] => [denoExe, 'task', 'site:build'],
-  siteE2e: (denoExe: string): string[] => [denoExe, 'task', '--cwd', 'www', 'e2e:browsers'],
+  install: (): string[] => ['pnpm', 'install', '--frozen-lockfile'],
+  check: (): string[] => cloneVpTask('openelement', 'check'),
+  gateSource: (): string[] => cloneVpTask('@openelement/tools-repo', 'gate:source'),
+  gatePacked: (): string[] => cloneVpTask('@openelement/tools-release', 'gate:packed'),
+  siteBuild: (): string[] => cloneVpTask('openelement', 'site:build'),
+  siteE2e: (): string[] => cloneVpTask('@openelement/www', 'e2e:browsers'),
 } as const;
+
+/** The clone's installed vp shim dispatched against one of its tasks. */
+function cloneVpTask(pkg: string, task: string): string[] {
+  return [`${EVIDENCE_ROLES.clone}/node_modules/.bin/vp`, ...vpTaskArgv(pkg, task).slice(1)];
+}
 
 export const FRESH_CLONE_STEPS: readonly StepContract[] = [
   {
@@ -233,20 +233,31 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
     },
   },
   cleanProof('before', EVIDENCE_ROLES.clone),
-  { name: 'install', cwd: EVIDENCE_ROLES.clone, match: exact(['deno', 'install']) },
-  { name: 'task-check', cwd: EVIDENCE_ROLES.clone, match: exact(['deno', 'task', 'check']) },
+  {
+    name: 'install',
+    cwd: EVIDENCE_ROLES.clone,
+    match: exact(['pnpm', 'install', '--frozen-lockfile']),
+  },
+  // The task contracts are the freshCloneCommands builders themselves
+  // (normalized to the recorded executable basename), so a dispatch change
+  // cannot update one side and leave the other behind.
+  {
+    name: 'task-check',
+    cwd: EVIDENCE_ROLES.clone,
+    match: exact(normalizeArgv(freshCloneCommands.check())),
+  },
   {
     name: 'task-gate-source',
     cwd: EVIDENCE_ROLES.clone,
-    match: exact(['deno', 'task', '--cwd', 'tools/repo', 'gate:source']),
+    match: exact(normalizeArgv(freshCloneCommands.gateSource())),
   },
   {
     // The fresh clone proves the source gate and, separately, the packed gate
-    // with cold Deno/npm caches. Source must not nest packed qualification.
+    // with cold pnpm/npm caches. Source must not nest packed qualification.
     // The release train still belongs to release:check.
     name: 'task-gate-packed',
     cwd: EVIDENCE_ROLES.clone,
-    match: exact(['deno', 'task', '--cwd', 'tools/release', 'gate:packed']),
+    match: exact(normalizeArgv(freshCloneCommands.gatePacked())),
   },
   // Site E2E owns the candidate's Site proof (the trimmed source gate no
   // longer runs it), so the lane that records the sidecar must run the real
@@ -256,12 +267,12 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
   {
     name: 'task-site-build',
     cwd: EVIDENCE_ROLES.clone,
-    match: exact(['deno', 'task', 'site:build']),
+    match: exact(normalizeArgv(freshCloneCommands.siteBuild())),
   },
   {
     name: 'task-site-e2e',
     cwd: EVIDENCE_ROLES.clone,
-    match: exact(['deno', 'task', '--cwd', 'www', 'e2e:browsers']),
+    match: exact(normalizeArgv(freshCloneCommands.siteE2e())),
   },
   cleanProof('after', EVIDENCE_ROLES.clone),
 ];
@@ -341,7 +352,7 @@ export function auditStep(
 export const FRESH_CLONE_ISOLATION = {
   sourceRepo: EVIDENCE_ROLES.source,
   cloneDir: EVIDENCE_ROLES.clone,
-  denoDir: `${EVIDENCE_ROLES.temp}/deno-dir`,
+  pnpmStore: `${EVIDENCE_ROLES.temp}/pnpm-store`,
   npmCache: `${EVIDENCE_ROLES.temp}/npm-cache`,
   copiedFromWorkspace: 'none (no node_modules, dist, tgz, coverage, or .artifacts)',
   sharedBrowserCache: 'HOME Playwright browser binaries only (no module resolution impact)',
@@ -370,10 +381,10 @@ export function auditFreshCloneIsolation(value: unknown): string[] {
 
 /** Canonical toolchain shape shared by the bundle and every job. */
 export interface EvidenceToolVersions {
-  deno: string;
+  node: string;
+  pnpm: string;
   v8: string;
   typescript: string;
-  node: string;
   npm: string;
   os: string;
   playwrightBrowsers: Record<string, string>;
@@ -385,10 +396,10 @@ export function auditToolVersions(value: unknown, label: string): string[] {
   }
   const record = value as Record<string, unknown>;
   const failures: string[] = [];
-  for (const key of ['deno', 'v8', 'typescript', 'node', 'npm', 'os', 'playwrightBrowsers']) {
+  for (const key of ['node', 'pnpm', 'v8', 'typescript', 'npm', 'os', 'playwrightBrowsers']) {
     if (!(key in record)) failures.push(`${label}: toolVersions missing ${key}`);
   }
-  for (const key of ['deno', 'v8', 'typescript', 'node', 'npm', 'os']) {
+  for (const key of ['node', 'pnpm', 'v8', 'typescript', 'npm', 'os']) {
     const entry = record[key];
     if (typeof entry !== 'string' || entry === '') {
       failures.push(`${label}: toolVersions.${key} must be a non-empty string`);

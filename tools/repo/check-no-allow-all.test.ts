@@ -1,40 +1,38 @@
 /**
  * check-no-allow-all.test.ts — first-party broad-permission tripwire.
  *
- * check-task-permissions.test.ts only scans deno.json task maps. This test
+ * check-task-permissions.test.ts audits first-party package.json task
+ * scripts and the create template. This test
  * scans every tracked first-party text file (tasks, TS string args,
- * Deno.Command argv, shell commands, fixtures, templates, workflows,
+ * subprocess argv, shell commands, fixtures, templates, workflows,
  * READMEs, docs, site content, generated data) for the broad Deno run flags
  * and fails on any occurrence. Bypass shapes that only the task-map scanner
  * would miss are covered too:
- *   - quoted argv elements ('-A' / "-A" in Deno.Command arrays)
+ *   - quoted argv elements ('-A' / "-A" in subprocess argv arrays)
  *   - split/concatenated construction ('-' + 'A', ['-', 'A']) in code files,
  *     detected on a quotes-and-separators-stripped normalization
  *   - shell indirection (exec deno run … in Playwright webServer commands)
  *
- * Docs and comments get no exemption, with ONE ruled exception: the consumer
- * scaffold command. A historical explanation must be reworded (never a
- * copy-pasteable command), so prose matches fail the same as executable
- * matches. Machine-generated integrity hashes are the only other exclusion
- * (deno.lock, package lockfiles). This file excludes itself by path (its
- * matcher is assembled from character codes); the ruled exception below
- * necessarily carries its literal lines, so the self-exclusion also keeps them
- * out of its own scan result.
- *
- * The consumer-scaffold exception (owner ruling 2026-09-21, alpha3):
- * `deno run -A npm:@openelement/create@<tag> <dir>` is a command a developer
- * runs to scaffold THEIR OWN project — consumer-side, not first-party repo
- * code — and the owner ruled the short form wins on optics ("越短越好").
- * That ruling overturns 2ccc41a96 for exactly these documented lines and
- * nothing else: every first-party invocation stays scoped, and the exception
- * is an exact (path, line) table with no pattern or substring relaxation.
- * The table covers the doc copies AND the two surfaces that must DISPLAY the
- * same command (the homepage copy and its e2e assertion); the scope test
- * asserts the exact path list, so adding a surface is an explicit edit.
+ * Docs and comments get no exemption. The ONE former exception — the consumer
+ * scaffold command (`deno run -A npm:@openelement/create@<tag> <dir>`, owner
+ * ruling 2026-09-21, alpha3) — retired with the Deno bootstrap itself: owner
+ * ruling 2026-10-03 (ADR-0161 amendment) removed the documented `deno run`
+ * command from every README, and the replacement bootstrap is a plain Node
+ * command (`npm exec @openelement/create@<tag> -- <dir>`) that carries no
+ * broad flag. The exemption table below is therefore EMPTY; it is kept as a
+ * structure (not deleted) so the scope test's completeness checks — every
+ * entry must be the strict scaffold shape and must exist in its file — stay
+ * in force if a future ruling ever re-adds an entry. Machine-generated
+ * integrity hashes are the only other exclusion (deno.lock, package
+ * lockfiles). This file excludes itself by path (its matcher is assembled
+ * from character codes); its own historical comments accordingly carry no
+ * literal broad-flag token.
  */
 
-import { assertEquals } from '@std/assert';
-import { dirname, join } from '@std/path';
+import { expect, test } from 'vitest';
+import { dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { commandOutputSync } from './node-command.ts';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
@@ -74,12 +72,12 @@ const EXCLUDED_PATHS = new Set([
 const EXCLUDED_SUFFIXES = ['deno.lock', 'package-lock.json', 'npm-shrinkwrap.json'];
 
 function trackedFiles(): string[] {
-  const output = new Deno.Command('git', {
+  const output = commandOutputSync('git', {
     args: ['ls-files', '-z'],
     cwd: repoRoot,
     stdout: 'piped',
     stderr: 'piped',
-  }).outputSync();
+  });
   if (!output.success) {
     throw new Error('check-no-allow-all: git ls-files failed (tests must run inside the repo)');
   }
@@ -97,29 +95,16 @@ function extensionOf(path: string): string {
 /**
  * The ruled consumer-scaffold lines, as an exact (path, line) table. Entries
  * are matched by full-line equality after trimming, so a variant (another
- * tool, another flag, an extra argument) is NOT exempt. Scope:
- * tools/repo/check-no-allow-all.scope.test.ts asserts every entry conforms to
- * {@link CONSUMER_SCAFFOLD_PATTERN} and that a loose entry would be rejected,
- * so widening this table into a general flag allowance fails a test.
+ * tool, another flag, an extra argument) is NOT exempt.
+ *
+ * RETIRED (owner ruling 2026-10-03, ADR-0161 amendment): the documented
+ * consumer scaffold was a `deno run` invocation; the READMEs now document the
+ * plain Node bootstrap, so no line qualifies and the table is empty. The
+ * scope test (tools/repo/check-no-allow-all.scope.test.ts) asserts the empty
+ * state AND keeps the completeness machinery — strict-shape validation and
+ * exact existence per entry — in force for any future entry.
  */
-export const CONSUMER_SCAFFOLD_EXEMPT_LINES: ReadonlyArray<{ path: string; line: string }> = [
-  { path: 'README.md', line: 'deno run -A npm:@openelement/create@alpha my-app' },
-  {
-    path: 'packages/create/README.md',
-    line: 'deno run -A npm:@openelement/create@1.0.0-alpha.7 my-app',
-  },
-  { path: 'packages/create/README.md', line: 'deno run -A npm:@openelement/create@0.43 my-app' },
-  {
-    path: 'benchmarks/jfb/harness/swap-repeat-probe.ts',
-    line: '*   deno run -A benchmarks/jfb/harness/swap-repeat-probe.ts \\',
-  },
-
-  { path: 'README.zh.md', line: 'deno run -A npm:@openelement/create@alpha my-app' },
-  { path: 'packages/create/README.md', line: 'deno run -A npm:@openelement/create@alpha my-app' },
-  // Display surfaces: the homepage command block and the e2e assertion that
-  // pins the visible text. They must show the SAME command as the docs, or the
-  // site would advertise a different install line than the guide.
-];
+export const CONSUMER_SCAFFOLD_EXEMPT_LINES: ReadonlyArray<{ path: string; line: string }> = [];
 
 /**
  * The only shape an exemption entry may take: the consumer scaffold command
@@ -127,15 +112,21 @@ export const CONSUMER_SCAFFOLD_EXEMPT_LINES: ReadonlyArray<{ path: string; line:
  * optional surrounding quote/comma admits the one code surface that must carry
  * the command as a string literal. Anything looser (a bare flag, another tool,
  * a wildcard tag, an extra argument) must not be representable.
+ *
+ * The shape is the RETIRED `deno run` command on purpose: the validator exists
+ * so a loosened entry can be demonstrated to fail it (scope test), and a
+ * future re-ruled entry must look exactly like the command the exemption once
+ * covered — not invent a new loose shape.
  */
 export const CONSUMER_SCAFFOLD_PATTERN =
   // Ruled consumer-scaffold shapes (owner 2026-09-21, widened #1424):
-  //   1. the create command — `deno run -A npm:@openelement/create@<tag> <arg>`
-  //      optionally wrapped in single quotes with a trailing comma (a code
-  //      example inside a spec), with nothing after it (a trailing flag or
-  //      second word loosens it);
-  //   2. jfb harness usage-note lines: `* deno run -A benchmarks/jfb... \`.
-  /^(?:\*+\s+)?(?:'deno run -A (?:npm:@openelement\/create@[A-Za-z0-9][^\s']* \S+)',|deno run -A npm:@openelement\/create@[A-Za-z0-9][^\s]* \S+|deno run -A benchmarks\/jfb\S* \\)\s*$/u;
+  //   the create command — `deno run -A npm:@openelement/create@<tag> <arg>`
+  //   optionally wrapped in single quotes with a trailing comma (a code
+  //   example inside a spec), with nothing after it (a trailing flag or
+  //   second word loosens it). The benchmark-harness usage-note shape that
+  //   the pattern once carried retired with the removed in-repo benchmark
+  //   surface (owner ruling 2026-10-03).
+  /^(?:'deno run -A (?:npm:@openelement\/create@[A-Za-z0-9][^\s']* \S+)',|deno run -A npm:@openelement\/create@[A-Za-z0-9][^\s]* \S+)\s*$/u;
 
 /** True when (path, line) is exactly one of the ruled exempt lines. */
 export function isConsumerScaffoldExempt(path: string, line: string): boolean {
@@ -153,7 +144,8 @@ export function isConsumerScaffoldExempt(path: string, line: string): boolean {
  * --allow-read), which is a false green on a security tripwire.
  */
 export function shouldSkipUnreadableFile(error: unknown): boolean {
-  return error instanceof Deno.errors.NotFound;
+  // node:fs signals "path does not exist" with ENOENT (pre-port: NotFound).
+  return (error as { code?: string }).code === 'ENOENT';
 }
 
 export interface LineVerdict {
@@ -197,7 +189,7 @@ function splitHit(line: string): boolean {
   return stripped.includes(BROAD_LONG);
 }
 
-Deno.test('permissions: no broad Deno flags in any tracked first-party text', () => {
+test('permissions: no broad Deno flags in any tracked first-party text', () => {
   const violations: string[] = [];
   for (const path of trackedFiles()) {
     if (EXCLUDED_PATHS.has(path)) continue;
@@ -208,7 +200,7 @@ Deno.test('permissions: no broad Deno flags in any tracked first-party text', ()
     if (!isCode && !isProse) continue;
     let text: string;
     try {
-      text = Deno.readTextFileSync(join(repoRoot, path));
+      text = readFileSync(join(repoRoot, path), 'utf8');
     } catch (error) {
       if (shouldSkipUnreadableFile(error)) continue;
       // Unreadable is NOT clean: failing closed keeps a permission/IO problem
@@ -224,5 +216,7 @@ Deno.test('permissions: no broad Deno flags in any tracked first-party text', ()
       }
     }
   }
-  assertEquals(violations, [], `broad Deno permissions in tracked text:\n${violations.join('\n')}`);
+  expect(violations, `broad Deno permissions in tracked text:\n${violations.join('\n')}`).toEqual(
+    [],
+  );
 });

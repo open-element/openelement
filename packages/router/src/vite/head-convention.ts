@@ -1,5 +1,5 @@
 /**
- * @openelement/router — the `app/head.tsx` convention loader (alpha.4).
+ * @openelement/router — the `app/head.tsx` convention loader.
  *
  * `app/head.tsx` is the structural document-head module: font preloads, icon
  * and feed links, inline critical CSS, and site-wide meta tags — the head
@@ -14,25 +14,24 @@
  * module compiled by Vite rather than a value read by the config loader.
  *
  * Resolution boundary: project-local files are compiled and inlined, while
- * BARE specifiers are externalized and left to the host import map — the same
- * contract the config file itself has (it imports `@openelement/router` by its
- * bare name). Bundling package sources would drag decompiled-without-compiler
- * component code into a data module, so the nested build deliberately does not
- * inherit the app's workspace aliases.
+ * BARE specifiers are externalized and left to the package manager's
+ * node_modules resolution — the same contract the config file itself has (it
+ * imports `@openelement/router` by its bare name). Bundling package sources
+ * would drag decompiled-without-compiler component code into a data module, so
+ * the nested build deliberately does not inherit the app's workspace aliases.
  *
- * The module must not use host APIs (no Deno, no Node): it is evaluated during
- * the build and its output is data, so a runtime read would make the document
- * depend on the machine that built it.
+ * The module must not use host APIs: it is evaluated during the build and its
+ * output is data, so a runtime read would make the document depend on the
+ * machine that built it.
  *
  * The emitted value is validated and serialized by head-channel.ts: attribute
  * names, URL protocols and inline CSS all pass the same fail-closed checks as
  * every other head fragment.
  */
 
-import { existsSync } from '../internal/host-path.ts';
-import { isAbsolute } from '../internal/host-path.ts';
-import { join } from '../internal/host-path.ts';
-import { toFileUrl } from '../internal/host-path.ts';
+import { existsSync } from 'node:fs';
+import { isAbsolute, join } from 'pathe';
+import { pathToFileURL } from 'node:url';
 import { OpenElementError } from '@openelement/element/authoring';
 import { OPEN_ELEMENT_DIR } from './internal/paths.ts';
 import { resolveHeadConventionExport, serializeHeadConvention } from './head-channel.ts';
@@ -79,12 +78,12 @@ export async function resolveHeadConvention(input: HeadConventionInput): Promise
         emptyOutDir: true,
         rollupOptions: {
           input: { head: file },
-          // Bare specifiers stay EXTERNAL (the host import map resolves them,
-          // exactly as it resolves the config file's own `@openelement/router`
-          // import); project-local files and Vite's own virtual/`?inline`
-          // modules are compiled and inlined. Bundling a package's sources
-          // would drag component code — which needs the compiled-element
-          // transform — into a data module.
+          // Bare specifiers stay EXTERNAL (the host resolves them through
+          // node_modules, exactly as it resolves the config file's own
+          // `@openelement/router` import); project-local files and Vite's own
+          // virtual/`?inline` modules are compiled and inlined. Bundling a
+          // package's sources would drag component code — which needs the
+          // compiled-element transform — into a data module.
           external: (id: string) =>
             !id.startsWith('.') && !id.startsWith('/') && !id.startsWith('\0') && !isAbsolute(id),
           output: { format: 'esm', entryFileNames: '[name].js' },
@@ -114,7 +113,9 @@ export async function resolveHeadConvention(input: HeadConventionInput): Promise
 
   let module: { default?: unknown };
   try {
-    module = (await import(`${toFileUrl(emitted)}?t=${Date.now()}`)) as { default?: unknown };
+    module = (await import(`${pathToFileURL(emitted).href}?t=${Date.now()}`)) as {
+      default?: unknown;
+    };
   } catch (error) {
     throw new OpenElementError(
       `[openElement] ${relativePath} could not be evaluated: ${

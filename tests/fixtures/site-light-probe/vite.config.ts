@@ -7,8 +7,8 @@
  * light-root island, real public package exports) without any Site shell,
  * navigation, or content collections.
  *
- * Build: deno task --cwd tests/fixtures/site-light-probe build
- * E2E:   deno task --cwd tests/fixtures/site-light-probe e2e:browsers
+ * Build: pnpm --dir tests/fixtures/site-light-probe run build
+ * E2E:   pnpm --dir tests/fixtures/site-light-probe run e2e:browsers
  */
 import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';

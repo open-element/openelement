@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   checkoutConfiguration,
   checkoutIntegrationSuffix,
@@ -14,49 +14,46 @@ const env = {
   STRIPE_LIVEMODE: 'false',
 };
 
-Deno.test('Checkout configuration requires an exact application origin', () => {
-  assertEquals(checkoutConfiguration(env).appOrigin, 'https://app.test');
+test('Checkout configuration requires an exact application origin', () => {
+  expect(checkoutConfiguration(env).appOrigin).toEqual('https://app.test');
   for (const origin of [
     'https://app.test/path',
     'http://app.test',
     'https://app.test/',
     'ftp://localhost',
   ]) {
-    assertThrows(() => checkoutConfiguration({ ...env, APP_ORIGIN: origin }));
+    expect(() => checkoutConfiguration({ ...env, APP_ORIGIN: origin })).toThrow();
   }
-  assertThrows(() => checkoutConfiguration({ ...env, STRIPE_SECRET_KEY: 'sk_live_wrong' }));
-  assertEquals(
+  expect(() => checkoutConfiguration({ ...env, STRIPE_SECRET_KEY: 'sk_live_wrong' })).toThrow();
+  expect(
     checkoutConfiguration({ ...env, STRIPE_SECRET_KEY: 'rk_test_restricted' }).livemode,
-    false,
-  );
-  assertEquals(
+  ).toEqual(false);
+  expect(
     checkoutConfiguration({
       ...env,
       STRIPE_LIVEMODE: 'true',
       STRIPE_SECRET_KEY: 'rk_live_restricted',
     }).livemode,
-    true,
-  );
-  assertThrows(() => checkoutConfiguration({ ...env, STRIPE_CHECKOUT_HOST: 'evil.example/path' }));
+  ).toEqual(true);
+  expect(() =>
+    checkoutConfiguration({ ...env, STRIPE_CHECKOUT_HOST: 'evil.example/path' }),
+  ).toThrow();
 });
 
-Deno.test('Checkout request uses dynamic methods and remains webhook-correlated', () => {
+test('Checkout request uses dynamic methods and remains webhook-correlated', () => {
   const body = checkoutSessionBody(checkoutConfiguration(env), 'order-1', 'abcdefgh');
-  assertEquals(body.get('mode'), 'payment');
-  assertEquals(
-    [...body.keys()].some((key) => key.startsWith('payment_method_types')),
-    false,
-  );
-  assertEquals(body.has('managed_payments[enabled]'), false);
-  assertEquals(body.get('integration_identifier'), 'openelement_reference_abcdefgh');
-  assertEquals(body.get('line_items[0][price]'), 'price_fixed');
-  assertEquals(body.get('metadata[order_id]'), 'order-1');
-  assertEquals(body.get('payment_intent_data[metadata][order_id]'), 'order-1');
-  assertEquals(body.get('success_url'), 'https://app.test/checkout?result=success');
-  assertEquals(STRIPE_API_VERSION, '2026-07-29.dahlia');
+  expect(body.get('mode')).toEqual('payment');
+  expect([...body.keys()].some((key) => key.startsWith('payment_method_types'))).toEqual(false);
+  expect(body.has('managed_payments[enabled]')).toEqual(false);
+  expect(body.get('integration_identifier')).toEqual('openelement_reference_abcdefgh');
+  expect(body.get('line_items[0][price]')).toEqual('price_fixed');
+  expect(body.get('metadata[order_id]')).toEqual('order-1');
+  expect(body.get('payment_intent_data[metadata][order_id]')).toEqual('order-1');
+  expect(body.get('success_url')).toEqual('https://app.test/checkout?result=success');
+  expect(STRIPE_API_VERSION).toEqual('2026-07-29.dahlia');
 });
 
-Deno.test('Checkout retries serialize an identical body for one persisted attempt', () => {
+test('Checkout retries serialize an identical body for one persisted attempt', () => {
   const config = checkoutConfiguration(env);
   const attemptId = '123e4567-e89b-42d3-a456-426614174000';
   const suffix = checkoutIntegrationSuffix(attemptId);
@@ -66,17 +63,18 @@ Deno.test('Checkout retries serialize an identical body for one persisted attemp
     'order-1',
     checkoutIntegrationSuffix(attemptId),
   ).toString();
-  assertEquals(/^[a-z]{8}$/.test(suffix), true);
-  assertEquals(second, first);
-  assertEquals(checkoutIntegrationSuffix('123e4567-e89b-42d3-a456-426614174001') === suffix, false);
+  expect(/^[a-z]{8}$/.test(suffix)).toEqual(true);
+  expect(second).toEqual(first);
+  expect(checkoutIntegrationSuffix('123e4567-e89b-42d3-a456-426614174001') === suffix).toEqual(
+    false,
+  );
 });
 
-Deno.test('Checkout redirect accepts only the configured HTTPS host', () => {
-  assertEquals(
+test('Checkout redirect accepts only the configured HTTPS host', () => {
+  expect(
     verifiedCheckoutUrl('https://checkout.stripe.com/c/pay/test', 'checkout.stripe.com'),
-    'https://checkout.stripe.com/c/pay/test',
-  );
+  ).toEqual('https://checkout.stripe.com/c/pay/test');
   for (const url of ['http://checkout.stripe.com/x', 'https://evil.example/x', 'not-a-url']) {
-    assertThrows(() => verifiedCheckoutUrl(url, 'checkout.stripe.com'));
+    expect(() => verifiedCheckoutUrl(url, 'checkout.stripe.com')).toThrow();
   }
 });

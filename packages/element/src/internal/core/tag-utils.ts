@@ -13,16 +13,11 @@
 
 import { AuthoringErrorCode, ERROR_PREFIX, OpenElementError } from './errors.ts';
 
-/**
- * Convert a camelCase prop/attribute name to kebab-case.
- *
- * This is the single casing rule for custom-element attribute names used by
- * compiled metadata and server/client attribute handling, so
- * `<x-el itemCount={5}>` round-trips as `item-count`.
- */
-export function camelToKebab(str: string): string {
-  return str.replace(/([A-Z])/g, '-$1').toLowerCase();
-}
+// The single casing rule for custom-element attribute names is owned by the
+// import-free protocol base (`../protocol/forbidden-sinks.ts`) so the compiler
+// semantic core shares it without crossing its bundler-neutral import
+// boundary; re-exported here for the core/authoring consumers.
+export { camelToKebab } from '../protocol/forbidden-sinks.ts';
 
 /** Reserved custom element names per the HTML specification. */
 const RESERVED_CUSTOM_ELEMENT_NAMES = new Set([

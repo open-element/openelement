@@ -1,0 +1,55 @@
+{
+  "name": "@openelement/element",
+  "version": "1.0.0-alpha.7",
+  "type": "module",
+  "//": "ADR-0155 (docs/adr/ADR-0155-client-only-entry-subpath.md) governs the \"./client-only\" export below: it is the full public surface minus the compiled claim executor, pinned to the same publicShapeSha256 as \".\", and is deletable as one unit when its written retirement condition is met. Recorded as a JSON annotation key rather than a `//` comment because the package-graph reader (tools/lib/package-graph.ts) fails loud on JSONC.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./jsx-runtime": "./src/jsx-runtime.ts",
+    "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
+    "./authoring": "./src/authoring.ts",
+    "./html": "./src/html.ts",
+    "./logger": "./src/logger.ts",
+    "./build-utils": "./src/build-utils.ts",
+    "./compiler": "./src/compiler.ts",
+    "./client-only": "./src/client-only.ts",
+    "./vite": "./src/vite.ts"
+  },
+  "files": [
+    "src/**",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint src __tests__",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. --project element",
+    "test:ci": "vitest run --root ../.. --project element --coverage",
+    "browser:compile": "node __wtr__/tools/compile-fixtures.ts",
+    "browser:install": "node ../../tools/repo/run-in.ts --root __wtr__ --env PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 -- npm ci --no-audit --no-fund",
+    "browser:test": "pnpm run browser:compile && vitest run --root ../.. --project element-browser",
+    "browser:negative": "node __wtr__/tools/negative-proofs.ts",
+    "browser:gate": "pnpm run browser:install && pnpm run browser:test && pnpm run browser:negative",
+    "browser:gate:full": "pnpm run browser:install && OE_BROWSER_MATRIX=full pnpm run browser:test && OE_BROWSER_MATRIX=full pnpm run browser:negative"
+  },
+  "peerDependencies": {
+    "vite": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@jridgewell/trace-mapping": "0.3.31",
+    "@lit/context": "1.1.6",
+    "@preact/signals-core": "^1.12.1",
+    "@types/node": "26.5.0",
+    "lit": "3.3.3",
+    "vite": "8.0.16"
+  }
+}

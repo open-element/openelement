@@ -113,3 +113,25 @@ existence and removal are ADR-level decisions only. Qualification is enforced co
 contract in `src/lit-ssr.ts` is the version matrix to consult when bumping lit or @lit-labs/ssr.
 No periodic re-signing rituals, no consumer counting, and no adoption-based retirement triggers
 apply; pre-release zero-consumption readings are void by construction.
+
+## Amendment (2026-10-04, alpha8 review follow-up)
+
+Two statements above are superseded by the ADR-0161 amendment of 2026-10-03
+(the "完全去除 deno" owner ruling): the repository develops, tests, builds,
+packs, publishes, and qualifies on Node with pnpm, and nothing requires a
+Deno install.
+
+- The 2026-09-13 amendment's closing clause — "release qualification must
+  install `deno pack` tarballs, never relative internal source paths" — is
+  superseded. Release qualification still requires packed artifacts and never
+  relative internal source paths; the tarballs are packed and installed on
+  Node (`vp pack`, pnpm scripts), and no `deno pack` step exists in any
+  release or qualification path.
+- Admission item 3's scope list "required Node, Deno, Bun, Nitro, and Workers
+  scopes" is superseded: Deno is not a required scope. The admission gate
+  runs the retained Node, Nitro, and Workers scopes plus the browser matrix;
+  there is no Deno leg to qualify.
+
+The decisions those statements carried — fresh verification against packed
+artifacts rather than workspace-relative source paths — stand unchanged; only
+their Deno carriage is retired.

@@ -1,22 +1,23 @@
 /**
  * Alias a scaffolded app to the monorepo workspace sources (#1472).
  *
- * applyWorkspaceAliases is the qualify-fixture variant: it merges caller npm
- * imports into the app's import map, points every @openelement/* entry at
- * the package's source exports (file: URLs from tools/lib/package-aliases.ts,
- * the same mapping packages/create documents), rewires the app's `build` task
- * to the in-repo Router build CLI, and injects the matching resolve.alias
- * block into vite.config.ts. workspaceSourceAliases exposes the same mapping
- * as absolute source paths for consumers that need a different target shape
- * (the starter smoke rewires to repo-relative paths so the packed starter's
- * transitive package manifests keep resolving).
+ * applyWorkspaceAliases is the qualify-fixture variant: it merges caller
+ * dependency pins into the app's package.json, points every @openelement/*
+ * dependency at the workspace package directory (link:), rewires the app's
+ * `build` script to the in-repo Router build CLI, and injects the matching
+ * resolve.alias block into vite.config.ts. workspaceSourceAliases exposes the
+ * alias mapping as absolute source paths for consumers that need a different
+ * target shape (the starter smoke rewires to packed tarballs instead so the
+ * packed starter's transitive package manifests keep resolving).
  */
 
-import { fromFileUrl, join } from '@std/path';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { allPackageAliases } from '../../../tools/lib/package-aliases.ts';
 import { runStep } from './command-run.ts';
-import { jsonText, readJson } from './json-file.ts';
-import { routerBuildTask } from './build-router.ts';
+import { readJson } from './json-file.ts';
+import { routerBuildScript } from './build-router.ts';
 
 export interface WorkspaceSourceAlias {
   specifier: string;
@@ -28,17 +29,20 @@ export interface WorkspaceSourceAlias {
 export function workspaceSourceAliases(repoRoot: string): WorkspaceSourceAlias[] {
   return [...allPackageAliases(repoRoot)].map(([specifier, url]) => ({
     specifier,
-    sourcePath: fromFileUrl(url),
+    sourcePath: fileURLToPath(url),
   }));
 }
 
 export interface ApplyWorkspaceAliasesOptions {
   repoRoot: string;
-  /** Extra import-map entries merged ahead of the workspace aliases. */
+  /**
+   * Extra dependency pins merged into the app manifest as plain package.json
+   * ranges (`'lit': '3.3.3'`), consumed verbatim — no import-map shapes here.
+   */
   extraImports?: Record<string, string>;
   /**
-   * Specifiers resolved from the app's own node_modules (installed by Deno)
-   * and therefore aliased as app-local paths in vite.config.ts.
+   * Specifiers resolved from the app's own node_modules and therefore aliased
+   * as app-local paths in vite.config.ts (each must appear in dependencies).
    */
   externalViteAliases?: readonly string[];
   /** Final text transform applied to vite.config.ts after the alias injection. */
@@ -46,29 +50,44 @@ export interface ApplyWorkspaceAliasesOptions {
 }
 
 /**
- * Patch the scaffolded app's deno.json import map, build task, and vite
- * config so the temporary app builds against workspace SOURCE artifacts.
+ * Patch the scaffolded app's package.json and vite config so the temporary
+ * app builds against workspace SOURCE artifacts on the node host.
  */
 export async function applyWorkspaceAliases(
   appDir: string,
   options: ApplyWorkspaceAliasesOptions,
 ): Promise<void> {
-  const denoJsonPath = join(appDir, 'deno.json');
-  const denoJson = await readJson<{
-    imports?: Record<string, string>;
-    tasks?: Record<string, string>;
-  }>(denoJsonPath);
-  const imports = (denoJson.imports ??= {});
-  Object.assign(imports, options.extraImports);
-  for (const [specifier, url] of allPackageAliases(options.repoRoot)) {
-    imports[specifier] = url;
+  const manifestPath = join(appDir, 'package.json');
+  const manifest = await readJson<{
+    dependencies: Record<string, string>;
+    devDependencies?: Record<string, string>;
+    scripts: Record<string, string>;
+  }>(manifestPath);
+  const dependencies = (manifest.dependencies ??= {});
+  // Workspace SOURCE contract: the vite alias block below points every
+  // @openelement/* import at the package's source exports, so the manifest
+  // entries only need to link the package directory — no registry fetch of a
+  // second copy that could shadow the source mapping.
+  for (const [specifier] of allPackageAliases(options.repoRoot)) {
+    const pkgName = specifier
+      .split('/')
+      .slice(0, specifier.startsWith('@') ? 2 : 1)
+      .join('/');
+    const pkgDir = join(options.repoRoot, 'packages', pkgName.replace('@openelement/', ''));
+    dependencies[pkgName] = `link:${pkgDir}`;
   }
-  const tasks = (denoJson.tasks ??= {});
-  tasks.build = routerBuildTask(options.repoRoot);
-  await Deno.writeTextFile(denoJsonPath, jsonText(denoJson));
+  // Fixture-specific pins (extraImports) install the third-party sources the
+  // fixture's own islands import (and anything an externalViteAliases entry
+  // points at); the workspace build source (Router CLI/vite plugin, element
+  // signal engine) resolves its imports from the repository's node_modules
+  // relative to the source files the aliases point at. Values are plain
+  // package.json ranges, applied verbatim.
+  Object.assign(dependencies, options.extraImports ?? {});
+  manifest.scripts.build = routerBuildScript(options.repoRoot);
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
   const viteConfigPath = join(appDir, 'vite.config.ts');
-  let viteText = await Deno.readTextFile(viteConfigPath);
+  let viteText = await readFile(viteConfigPath, 'utf8');
   if (!viteText.includes('resolve:')) {
     const aliases = [
       ...workspaceSourceAliases(options.repoRoot).map(({ specifier, sourcePath }) => {
@@ -92,31 +111,21 @@ export async function applyWorkspaceAliases(
     );
   }
   if (options.transformViteConfig) viteText = options.transformViteConfig(viteText);
-  await Deno.writeTextFile(viteConfigPath, viteText);
+  await writeFile(viteConfigPath, viteText);
 }
 
 /**
- * Prime the app's npm dependencies: Deno installs node_modules on first
- * resolution, so importing one pinned specifier under the app's own config
- * materializes the packages an app-local vite alias points at. The script
- * rides on stdin (`deno run -`) instead of `deno eval`, which would run with
- * implicit --all permissions.
+ * Install the app's npm dependencies with pnpm. The generated pnpm-workspace
+ * file keeps the temp app its OWN workspace root: the repository's
+ * pnpm-workspace.yaml (membership globs, minimumReleaseAge policy,
+ * allowBuilds allowlist, root lockfile) governs THIS checkout, not a consumer
+ * project that merely sits inside it — the same contract the starter smoke
+ * documents for its clean-machine simulation.
  */
-export async function primeAppNodeModules(appDir: string, specifier: string): Promise<void> {
-  await runStep(
-    Deno.execPath(),
-    [
-      'run',
-      '--config',
-      'deno.json',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--allow-sys',
-      '--no-prompt',
-      '-',
-    ],
-    { cwd: appDir, stdin: `import ${JSON.stringify(specifier)};` },
+export async function installAppDependencies(appDir: string): Promise<void> {
+  await writeFile(
+    join(appDir, 'pnpm-workspace.yaml'),
+    'packages: []\nallowBuilds:\n  esbuild: true\n',
   );
+  await runStep('pnpm', ['install'], { cwd: appDir });
 }

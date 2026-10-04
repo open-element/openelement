@@ -9,12 +9,13 @@
  *   - entries sorted by path (stable across platforms)
  *   - fixed uid/gid 0, mtime 0, normalized 0644/0755 modes
  *   - POSIX ustar headers, 512-byte blocks, two zero end blocks
- *   - gzip via the Web `CompressionStream('gzip')` (mtime 0, pure-Rust
- *     deflate in Deno — identical output on every platform)
+ *   - gzip via the Web `CompressionStream('gzip')` (mtime 0, identical
+ *     output on every platform)
  *
  * Reading still uses the platform tar for extraction; boundaries are stable
  * because reading never defines the shipped bytes.
  */
+import { readFileSync, readdirSync } from 'node:fs';
 
 export interface TarFileEntry {
   /** Archive path, `/`-separated, no leading slash or `..`. */
@@ -141,7 +142,12 @@ export function createDeterministicTar(
 /** Deterministic gzip wrapper (Web Standard, mtime 0, fixed OS byte). */
 export async function gzipDeterministic(data: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([data as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  // Normalize the gzip OS byte to 255 (unknown): the deterministic contract
+  // pins the header regardless of the host zlib's own OS value. mtime stays
+  // zero from the stream itself.
+  bytes[9] = 0xff;
+  return bytes;
 }
 
 /** Deterministic final npm tarball: sorted ustar members in a fixed gzip. */
@@ -159,13 +165,13 @@ export async function createDeterministicTarGz(
 export function readTreeEntries(root: string): TarFileEntry[] {
   const entries: TarFileEntry[] = [];
   const visit = (dir: string, archivePrefix: string): void => {
-    for (const entry of Deno.readDirSync(dir)) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const diskPath = `${dir}/${entry.name}`;
       const archivePath = archivePrefix ? `${archivePrefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory) {
+      if (entry.isDirectory()) {
         visit(diskPath, archivePath);
-      } else if (entry.isFile) {
-        entries.push({ path: archivePath, data: Deno.readFileSync(diskPath) });
+      } else if (entry.isFile()) {
+        entries.push({ path: archivePath, data: readFileSync(diskPath) });
       }
     }
   };

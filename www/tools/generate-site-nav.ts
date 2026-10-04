@@ -31,14 +31,16 @@
  * `--check` regenerates in memory and fails on drift. The module is generated
  * (gitignored) and rebuilt before the site build.
  */
-import { walk } from '@std/fs/walk';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { loadCollectionData } from '../lib/content.ts';
 import { fileToRoutePath } from '../lib/route-path.ts';
 import { articleCollections } from '../content-collections.ts';
 import { FALLBACK_SECTION, SECTION_MAP } from '../app/site-ui/open-layout-navigation.ts';
 
-const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
+const siteRoot = fileURLToPath(new URL('../../www/', import.meta.url));
 const routesDir = join(siteRoot, 'app/routes');
 const outFile = join(siteRoot, 'app/data/_generated-nav-data.ts');
 
@@ -175,13 +177,15 @@ async function collect(
 ): Promise<{ routes: string[]; sections: Map<string, NavItem[]> }> {
   const routes: string[] = [];
   const sections = new Map<string, NavItem[]>();
-  for await (const entry of walk(routesDir, { exts: ['.tsx'], includeDirs: false })) {
-    const relativePath = entry.path.slice(routesDir.length + 1);
+  for (const entry of await readdir(routesDir, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory() || !entry.name.endsWith('.tsx')) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const relativePath = entryPath.slice(routesDir.length + 1);
     const path = fileToRoutePath(relativePath);
     if (!path) continue;
     routes.push(path);
     const fromContent = contentNav.get(path);
-    const meta = fromContent ?? parseMeta(await Deno.readTextFile(entry.path));
+    const meta = fromContent ?? parseMeta(await readFile(entryPath, 'utf8'));
     if (!meta) continue;
     const labelZh = fromContent ? fromContent.labelZh : ROUTE_LABEL_ZH[path];
     const list = sections.get(meta.section) ?? [];
@@ -266,7 +270,7 @@ if (uncovered.size > 0) {
   );
   for (const entry of [...uncovered].sort()) console.error(`  ${entry}`);
   console.error('add the section to its basePath list, or the page sidebar drops it.');
-  Deno.exit(1);
+  process.exit(1);
 }
 
 // Static-map drift guard: a zh label for a route that left the nav (renamed
@@ -278,21 +282,23 @@ if (staleZhKeys.length > 0) {
 }
 
 const generated = render(sections, routes);
-const check = Deno.args.includes('--check');
+const check = process.argv.slice(2).includes('--check');
 
 if (check) {
   let current = '';
   try {
-    current = await Deno.readTextFile(outFile);
+    current = await readFile(outFile, 'utf8');
   } catch {
     // Missing file is drift; fall through to the mismatch path.
   }
   if (current !== generated) {
-    console.error('site nav drift: regenerate with deno task --cwd www generate:nav');
-    Deno.exit(1);
+    console.error(
+      'site nav drift: regenerate with pnpm --filter @openelement/www run generate:nav',
+    );
+    process.exit(1);
   }
   console.log('site nav check passed.');
 } else {
-  await Deno.writeTextFile(outFile, generated);
+  await writeFile(outFile, generated);
   console.log(`site nav written: ${routes.length} routes, ${sections.size} sections.`);
 }

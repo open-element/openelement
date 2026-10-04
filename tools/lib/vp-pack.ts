@@ -1,28 +1,24 @@
 /**
- * vp pack staging: the npm payload generator (A1 toolchain swap).
+ * vp pack staging: the npm payload generator.
  *
  * `vp pack` (vite-plus 1.0.0 / tsdown unbundle) is the sole code and
- * declaration generator for the packed npm tarballs. The previous generator,
- * `deno pack`, was replaced wholesale: same tarball paths, same raw manifest
- * shape (name/version/type/main/types and exports with types+import+default
- * over `src/*.js`/`src/*.d.ts`), same coordinator post-processing contract
+ * declaration generator for the packed npm tarballs. Its contract: the
+ * tarball paths, the raw manifest shape (name/version/type/main/types and
+ * exports with types+import+default over `src/*.js`/`src/*.d.ts`), and the
+ * coordinator post-processing contract
  * (docs/maintainers/pack-post-processing.md).
  *
  * The vp toolchain is staged per pack run in a temp workspace and never
- * enters the repository tree or the deno dependency graph:
- *   - the workspace root carries one deno-installed `node_modules` with the
- *     pinned vite-plus toolchain, `vite` aliased to
- *     `@voidzero-dev/vite-plus-core` (a vp pack hard requirement — it refuses
- *     to run against real vite);
+ * enters the repository tree:
+ *   - the staging root carries one `node_modules` with the pinned vite-plus
+ *     toolchain, `vite` aliased to `@voidzero-dev/vite-plus-core` (a vp pack
+ *     hard requirement — it refuses to run against real vite);
  *   - each staged package carries a manifest whose `dependencies` mirror the
  *     published derivation, so tsdown externalizes exactly the specifiers the
  *     published manifest declares (self-references included — published
  *     modules keep bare `@openelement/*` self-imports);
  *   - workspace members are symlinked under `node_modules/@openelement/` so
- *     declaration emit resolves cross-package types from source, exactly like
- *     the deno workspace does;
- *   - the deno root tree stays vp-free: the "Deno project — no npm lockfiles"
- *     stance and the root `node_modules` are untouched.
+ *     declaration emit resolves cross-package types from source.
  *
  * The verified pack recipe (G0.5 probe, .zcode/workflow-drafts/g0-half-report.md):
  *   - the 8 client-runtime modules are explicit entries: no package-internal
@@ -38,9 +34,19 @@
  *     assets, matching the `import ... with { type: "json" }` contract.
  */
 
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { mkdtemp, rm } from 'node:fs/promises';
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { formatJson } from '@openelement/element/build-utils';
 import { runWithOutput } from './process.ts';
-import { parseNpmSpec, publishRange } from '../release/npm-manifest.ts';
 import type { PackageInfo } from './package-graph.ts';
 
 /** Pinned vp toolchain. Bump the core alias together with the CLI. */
@@ -149,11 +155,10 @@ export default {
 }
 
 /**
- * The raw packed manifest, shape-compatible with what `deno pack` used to
- * generate: name/version/type/main/types and an exports map whose every
- * subpath carries types+import+default over `src/*.d.ts`/`src/*.js`. The
- * coordinator's approved mutations (metadata, dependencies, peers) are
- * applied on top of exactly this object, and
+ * The raw packed manifest: name/version/type/main/types and an exports map
+ * whose every subpath carries types+import+default over
+ * `src/*.d.ts`/`src/*.js`. The coordinator's approved mutations (metadata,
+ * dependencies, peers) are applied on top of exactly this object, and
  * `assertOnlyApprovedManifestChanges` guards the delta.
  */
 export function synthesizedPackedManifest(pkg: PackageInfo): Record<string, unknown> {
@@ -184,38 +189,20 @@ export function synthesizedPackedManifest(pkg: PackageInfo): Record<string, unkn
 
 /**
  * The staged per-package manifest. `dependencies` mirror the published
- * derivation plus the package's own name — tsdown externalizes
- * `dependencies`/`peerDependencies`, which is what keeps bare specifiers
- * (self-imports included) in the emitted modules. Peers come from the
- * package `deno.json` (`npm:` specs are unwrapped into package.json form).
+ * derivation plus the package's own name — tsdown externalizes `dependencies`,
+ * which is what keeps bare specifiers (self-imports included) in the emitted
+ * modules. Peers are not staged: they never resolve in the shared install, and
+ * the published manifest applies them in the coordinator's post-processing.
  */
 export function stagingPackageJsonFor(
   pkg: PackageInfo,
   dependencies: Record<string, string>,
-  sourceManifest: {
-    peerDependencies?: Record<string, string>;
-    peerDependenciesMeta?: Record<string, { optional?: boolean }>;
-  } = {},
 ): Record<string, unknown> {
-  const peerDependencies: Record<string, string> = {};
-  for (const [name, value] of Object.entries(sourceManifest.peerDependencies ?? {})) {
-    const parsed = parseNpmSpec(value, `${pkg.name} staging peer dependency`);
-    if (!parsed) {
-      throw new Error(`[vp-pack] ${pkg.name}: invalid staging peer dependency ${name}=${value}`);
-    }
-    peerDependencies[name] = publishRange(parsed);
-  }
-  const hasPeers = Object.keys(peerDependencies).length > 0;
-  const hasPeerMeta =
-    sourceManifest.peerDependenciesMeta !== undefined &&
-    Object.keys(sourceManifest.peerDependenciesMeta).length > 0;
   return {
     name: pkg.name,
     version: pkg.version,
     type: 'module',
     dependencies: { ...dependencies, [pkg.name]: pkg.version },
-    ...(hasPeers ? { peerDependencies } : {}),
-    ...(hasPeerMeta ? { peerDependenciesMeta: sourceManifest.peerDependenciesMeta } : {}),
     devDependencies: {
       vite: VITE_ALIAS_SPEC,
       'vite-plus': VP_TOOLCHAIN.vitePlus,
@@ -229,7 +216,7 @@ export function stagingPackageJsonFor(
  * dev-dependencies (the aliased `vite` among them). Workspace members are
  * excluded — they resolve through the `node_modules/@openelement/` symlinks,
  * never the registry (their pinned in-tree versions do not exist on npm
- * until the release publishes, and the minimum-dependency-age policy would
+ * until the release publishes, and the minimumReleaseAge policy would
  * block them anyway). Registry peers that no member declares as dependencies
  * (lit, marked, ...) are deliberately absent too: tsdown keeps declared peers
  * external without resolving them.
@@ -311,10 +298,9 @@ export function classifyVpPackLog(
 }
 
 /**
- * Package-relative files deno's publisher treats as present-and-not-ignored:
- * tracked files plus untracked-but-not-gitignored ones. The assembled payload
- * keeps that selection semantics (gitignored scratch like `.mimosa/` never
- * ships), exactly as `deno pack` did.
+ * Package-relative payload candidates: tracked files plus
+ * untracked-but-not-gitignored ones, so gitignored scratch like `.mimosa/`
+ * never ships.
  */
 export async function notIgnoredFiles(dir: string): Promise<Set<string>> {
   const result = await runWithOutput('git', ['-C', dir, 'ls-files', '-co', '--exclude-standard']);
@@ -330,7 +316,7 @@ export async function notIgnoredFiles(dir: string): Promise<Set<string>> {
 }
 
 /**
- * Deno-glob publish pattern -> anchored RegExp for package-relative paths.
+ * npm-files publish glob -> anchored RegExp for package-relative paths.
  * Supports the dialect the workspace manifests use: a double-asterisk slash
  * (any depth, including zero directories), a trailing double-asterisk
  * (everything below), a single asterisk (one segment), a question mark, and
@@ -380,22 +366,16 @@ function publishScopePredicate(
 }
 
 /** Files synthesized by the staging itself — never payload. */
-const STAGING_SYNTHESIZED = new Set([
-  'deno.json',
-  'package.json',
-  'vite.config.ts',
-  'tsconfig.json',
-  'deno.lock',
-]);
+const STAGING_SYNTHESIZED = new Set(['package.json', 'vite.config.ts', 'tsconfig.json']);
 
 /** Walk helper: package-relative paths of every file under a directory root. */
 function walkFiles(root: string, prefix = ''): string[] {
   const found: string[] = [];
-  for (const entry of Deno.readDirSync(root)) {
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
     const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory) {
+    if (entry.isDirectory()) {
       found.push(...walkFiles(`${root}/${entry.name}`, relative));
-    } else if (entry.isFile) {
+    } else if (entry.isFile()) {
       found.push(relative);
     }
   }
@@ -404,8 +384,8 @@ function walkFiles(root: string, prefix = ''): string[] {
 
 function copyFile(from: string, to: string): void {
   const parent = to.slice(0, Math.max(to.lastIndexOf('/'), 0));
-  Deno.mkdirSync(parent, { recursive: true });
-  Deno.writeFileSync(to, Deno.readFileSync(from));
+  mkdirSync(parent, { recursive: true });
+  writeFileSync(to, readFileSync(from));
 }
 
 export interface AssembleVpPackageTreeOptions {
@@ -475,14 +455,7 @@ export function assembleVpPackageTree(options: AssembleVpPackageTreeOptions): vo
   }
 
   // 4. manifest.
-  Deno.writeTextFileSync(`${outDir}/package.json`, formatJson(manifest));
-}
-
-/** Deno.json fields the vp staging consumes. */
-export interface VpStagingSourceManifest {
-  peerDependencies?: Record<string, string>;
-  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
-  compilerOptions?: Record<string, unknown>;
+  writeFileSync(`${outDir}/package.json`, formatJson(manifest));
 }
 
 export interface VpStagedWorkspace {
@@ -500,23 +473,20 @@ export interface PrepareVpStagingOptions {
   /** pkg plus every workspace member its sources import. */
   members: readonly PackageInfo[];
   dependencyMap: ReadonlyMap<string, Record<string, string>>;
-  sourceManifest: VpStagingSourceManifest;
 }
 
 /**
  * Materialize the staged vp workspace files (no network): member copies,
- * workspace root manifest, per-member manifests, the pack config and — when
- * the package carries compiler options (ui's JSX settings) — a tsconfig.json
- * so the transpiler sees the same compiler contract deno.json declares.
+ * workspace root manifest, per-member manifests and the pack config.
  */
 export async function prepareVpStagingFiles(
   options: PrepareVpStagingOptions,
 ): Promise<VpStagedWorkspace> {
-  const { pkg, members, dependencyMap, sourceManifest } = options;
-  const stagingRoot = await Deno.makeTempDir({ prefix: 'openelement-vp-pack-' });
-  const cleanup = () => Deno.remove(stagingRoot, { recursive: true }).catch(() => undefined);
+  const { pkg, members, dependencyMap } = options;
+  const stagingRoot = await mkdtemp(join(tmpdir(), 'openelement-vp-pack-'));
+  const cleanup = () => rm(stagingRoot, { recursive: true }).catch(() => undefined);
   try {
-    Deno.writeTextFileSync(
+    writeFileSync(
       `${stagingRoot}/package.json`,
       formatJson(rootStagingPackageJsonFor(members, dependencyMap)),
     );
@@ -524,19 +494,13 @@ export async function prepareVpStagingFiles(
       const base = member.dir.split('/').pop()!;
       const memberDir = `${stagingRoot}/${base}`;
       copyPackageDir(member.dir, memberDir);
-      Deno.writeTextFileSync(
+      writeFileSync(
         `${memberDir}/package.json`,
         formatJson(stagingPackageJsonFor(member, dependencyMap.get(member.name) ?? {})),
       );
     }
     const packDir = `${stagingRoot}/${pkg.dir.split('/').pop()!}`;
-    Deno.writeTextFileSync(`${packDir}/vite.config.ts`, vpPackConfigFile(vpPackEntries(pkg)));
-    if (sourceManifest.compilerOptions) {
-      Deno.writeTextFileSync(
-        `${packDir}/tsconfig.json`,
-        JSON.stringify({ compilerOptions: sourceManifest.compilerOptions }, null, 2) + '\n',
-      );
-    }
+    writeFileSync(`${packDir}/vite.config.ts`, vpPackConfigFile(vpPackEntries(pkg)));
     return { stagingRoot, packDir, distDir: `${packDir}/dist`, cleanup };
   } catch (error) {
     await cleanup();
@@ -544,46 +508,54 @@ export async function prepareVpStagingFiles(
   }
 }
 
-const STAGING_COPY_SKIP = new Set(['node_modules', 'dist', 'deno.json', 'package.json']);
+const STAGING_COPY_SKIP = new Set(['node_modules', 'dist', 'package.json']);
 
 function copyPackageDir(src: string, dest: string): void {
-  Deno.mkdirSync(dest, { recursive: true });
-  for (const entry of Deno.readDirSync(src)) {
+  mkdirSync(dest, { recursive: true });
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
     if (STAGING_COPY_SKIP.has(entry.name)) continue;
-    if (entry.isFile && entry.name.endsWith('.tgz')) continue;
+    if (entry.isFile() && entry.name.endsWith('.tgz')) continue;
     const from = `${src}/${entry.name}`;
     const to = `${dest}/${entry.name}`;
-    if (entry.isDirectory) copyPackageDir(from, to);
-    else if (entry.isFile) Deno.copyFileSync(from, to);
+    if (entry.isDirectory()) copyPackageDir(from, to);
+    else if (entry.isFile()) copyFileSync(from, to);
   }
 }
 
 /**
- * Complete the staging: `deno install` the shared node_modules, then symlink
- * every workspace member under `node_modules/@openelement/` so declaration
- * emit resolves cross-package types from source.
+ * Complete the staging: npm-install the shared node_modules (lifecycle
+ * scripts off — the staged deps ship their platform binaries as optional
+ * dependencies), then symlink every workspace member under
+ * `node_modules/@openelement/` so declaration emit resolves cross-package
+ * types from source.
  */
 export async function installVpStagingWorkspace(
   staged: VpStagedWorkspace,
   members: readonly PackageInfo[],
 ): Promise<void> {
-  const install = await runWithOutput(Deno.execPath(), ['install'], { cwd: staged.stagingRoot });
+  const install = await runWithOutput(
+    'npm',
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
+    {
+      cwd: staged.stagingRoot,
+    },
+  );
   if (!install.success) {
     throw new Error(
-      `[vp-pack] deno install failed in the vp staging workspace:\n${install.stdout}\n${install.stderr}`,
+      `[vp-pack] npm install failed in the vp staging workspace:\n${install.stdout}\n${install.stderr}`,
     );
   }
   const scopeDir = `${staged.stagingRoot}/node_modules/@openelement`;
-  Deno.mkdirSync(scopeDir, { recursive: true });
+  mkdirSync(scopeDir, { recursive: true });
   for (const member of members) {
     if (!member.name.startsWith('@openelement/')) continue;
     const short = member.name.slice('@openelement/'.length);
     const link = `${scopeDir}/${short}`;
     try {
       // Resolved relative to the link's own directory (node_modules/@openelement/).
-      Deno.symlinkSync(`../../${member.dir.split('/').pop()!}`, link, { type: 'dir' });
+      symlinkSync(`../../${member.dir.split('/').pop()!}`, link);
     } catch (error) {
-      if (!(error instanceof Deno.errors.AlreadyExists)) throw error;
+      if ((error as NodeJS.ErrnoException)?.code !== 'EEXIST') throw error;
     }
   }
 }

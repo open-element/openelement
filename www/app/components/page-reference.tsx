@@ -7,7 +7,7 @@
  * browser creation and existing-DOM claim share one identity model.
  */
 import { element, OpenElement, property } from '@openelement/element';
-import '@openelement/site-ui/open-reading-shell.tsx';
+import '#site-ui/open-reading-shell.tsx';
 import '../site-ui/open-section-frame.tsx';
 import '../islands/open-page-rail.tsx';
 import { pageReferenceStyles } from './page-reference-styles.ts';
@@ -259,7 +259,7 @@ export default class ReferencePage extends OpenElement {
                 <p>{this.footnote}</p>
                 <p>
                   {this.footnoteCheckPre}
-                  <code>deno task package-surface:check</code>
+                  <code>pnpm --dir tools/repo run interface:snapshot</code>
                   {this.footnoteCheckPost}
                 </p>
               </footer>

@@ -14,10 +14,10 @@
  * covered directly instead: every generated searchRecord anchor must exist as
  * an id in the built /reference documents (both locales) below.
  */
-import { walk } from '@std/fs/walk';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../site-config.ts';
-import { normalize as posixNormalize } from '@std/path/posix';
+import { normalize as posixNormalize } from 'node:path/posix';
 import {
   anchorsFragment,
   extractBuiltLinks,
@@ -30,25 +30,31 @@ import {
 import { apiReference } from '../app/data/_generated-api-reference.ts';
 import { stripHtmlToText } from '../app/site-ui/article-body.ts';
 import { currentContentTitles, retiredContentTitles } from './lib/site-retired.ts';
+import { readdir, readFile } from 'node:fs/promises';
+import process from 'node:process';
 
 export const SITE_DIST = 'www/dist';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 export async function checkBuiltLinks(dist = join(repoRoot, SITE_DIST)): Promise<LinkFailure[]> {
   const failures: LinkFailure[] = [];
   const files = new Set<string>();
   const htmlFiles: string[] = [];
-  for await (const entry of walk(dist, { includeDirs: false, skip: [/(^|\/)pagefind(\/|$)/] })) {
-    files.add(entry.path.slice(dist.length + 1));
-    if (entry.path.endsWith('.html')) htmlFiles.push(entry.path);
+  for (const entry of await readdir(dist, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory()) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const rel = entryPath.slice(dist.length + 1);
+    if (rel.split('/').includes('pagefind')) continue;
+    files.add(rel);
+    if (entryPath.endsWith('.html')) htmlFiles.push(entryPath);
   }
   const exists = (file: string) => files.has(file);
   const htmlCache = new Map<string, string>();
   const readHtml = async (file: string): Promise<string> => {
     const cached = htmlCache.get(file);
     if (cached !== undefined) return cached;
-    const text = await Deno.readTextFile(join(dist, file));
+    const text = await readFile(join(dist, file), 'utf8');
     htmlCache.set(file, text);
     return text;
   };
@@ -89,7 +95,7 @@ export async function checkBuiltLinks(dist = join(repoRoot, SITE_DIST)): Promise
 
   // Sitemap URLs must resolve to built pages.
   if (exists('sitemap.xml')) {
-    const sitemap = await Deno.readTextFile(join(dist, 'sitemap.xml'));
+    const sitemap = await readFile(join(dist, 'sitemap.xml'), 'utf8');
     for (const match of sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)) {
       const url = match[1];
       const path = new URL(url).pathname;
@@ -109,7 +115,7 @@ export async function checkBuiltLinks(dist = join(repoRoot, SITE_DIST)): Promise
   // and any #fragment must anchor there — a redirect to a 404 is a second
   // broken link wearing a 301.
   if (exists('_redirects')) {
-    const redirects = await Deno.readTextFile(join(dist, '_redirects'));
+    const redirects = await readFile(join(dist, '_redirects'), 'utf8');
     for (const [index, line] of redirects.split('\n').entries()) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
@@ -202,7 +208,7 @@ if (import.meta.main) {
     for (const failure of failures) {
       console.error(`- ${failure.file}: ${failure.message}`);
     }
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(`Built-output link check passed (${SITE_DIST}).`);
 }

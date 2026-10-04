@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import {
   admitsRelease,
   cdnAvailabilityDecision,
@@ -16,41 +17,39 @@ import {
   VITE_SMOKE_SOURCE,
 } from './published-consumer-qualification.ts';
 
-Deno.test('published-consumer qualification defaults to the current published package line', () => {
-  assertEquals(
+test('published-consumer qualification defaults to the current published package line', () => {
+  expect(
     parseQualificationOptions([], { OPEN_ELEMENT_PUBLISHED_VERSION: '0.41.0-alpha.14' }),
-    {
-      mode: 'all',
-      reportPath: 'published-consumer-report.json',
-      version: '0.41.0-alpha.14',
-    },
-  );
+  ).toEqual({
+    mode: 'all',
+    reportPath: 'published-consumer-report.json',
+    version: '0.41.0-alpha.14',
+  });
 });
 
-Deno.test('published-consumer qualification accepts an explicit version and isolated mode', () => {
-  assertEquals(
+test('published-consumer qualification accepts an explicit version and isolated mode', () => {
+  expect(
     parseQualificationOptions(
       ['--mode', 'starter', '--version', '0.41.0-alpha.15', '--report', 'artifacts/report.json'],
       {},
     ),
-    {
-      mode: 'starter',
-      reportPath: 'artifacts/report.json',
-      version: '0.41.0-alpha.15',
-    },
-  );
+  ).toEqual({
+    mode: 'starter',
+    reportPath: 'artifacts/report.json',
+    version: '0.41.0-alpha.15',
+  });
 });
 
-Deno.test('published-consumer qualification rejects an unknown mode', () => {
-  assertThrows(
+test('published-consumer qualification rejects an unknown mode', () => {
+  assertThrowsIncludes(
     () => parseQualificationOptions(['--mode', 'browser'], {}),
     Error,
     '--mode must be starter, runtime, or all',
   );
 });
 
-Deno.test('consumer-smoke options: --local smokes the workspace with no CDN or Nitro probes', () => {
-  assertEquals(parseConsumerSmokeOptions(['--smoke', '--local'], '1.0.0-alpha.1'), {
+test('consumer-smoke options: --local smokes the workspace with no CDN or Nitro probes', () => {
+  expect(parseConsumerSmokeOptions(['--smoke', '--local'], '1.0.0-alpha.1')).toEqual({
     local: true,
     version: '1.0.0-alpha.1',
     versionProvided: false,
@@ -59,30 +58,29 @@ Deno.test('consumer-smoke options: --local smokes the workspace with no CDN or N
   });
 });
 
-Deno.test('consumer-smoke options: an explicit version enables CDN and Nitro probes unless local', () => {
-  assertEquals(parseConsumerSmokeOptions(['--smoke', '--version', '1.0.0-alpha.1'], '0.0.0'), {
+test('consumer-smoke options: an explicit version enables CDN and Nitro probes unless local', () => {
+  expect(parseConsumerSmokeOptions(['--smoke', '--version', '1.0.0-alpha.1'], '0.0.0')).toEqual({
     local: false,
     version: '1.0.0-alpha.1',
     versionProvided: true,
     runJsDelivr: true,
     runNitro: true,
   });
-  assertEquals(
+  expect(
     parseConsumerSmokeOptions(['--smoke', '--local', '--version', '1.0.0-alpha.1'], '0.0.0'),
-    {
-      local: true,
-      version: '1.0.0-alpha.1',
-      versionProvided: true,
-      runJsDelivr: false,
-      runNitro: false,
-    },
-  );
+  ).toEqual({
+    local: true,
+    version: '1.0.0-alpha.1',
+    versionProvided: true,
+    runJsDelivr: false,
+    runNitro: false,
+  });
 });
 
-Deno.test('consumer-smoke options: an empty --version falls back to the workspace version', () => {
+test('consumer-smoke options: an empty --version falls back to the workspace version', () => {
   // Unset workflow inputs arrive as an empty string and must not count as an
   // explicit npm version.
-  assertEquals(parseConsumerSmokeOptions(['--smoke', '--version', ''], '1.0.0-alpha.1'), {
+  expect(parseConsumerSmokeOptions(['--smoke', '--version', ''], '1.0.0-alpha.1')).toEqual({
     local: false,
     version: '1.0.0-alpha.1',
     versionProvided: false,
@@ -90,51 +88,49 @@ Deno.test('consumer-smoke options: an empty --version falls back to the workspac
     runNitro: false,
   });
   // Explicit probe flags still apply without a version.
-  assertEquals(
+  expect(
     parseConsumerSmokeOptions(['--smoke', '--version', '', '--jsdelivr'], '1.0.0-alpha.1')
       .runJsDelivr,
-    true,
-  );
+  ).toEqual(true);
 });
 
-// Canonical release-gate verdict contract tests (#1216, A10.8), formerly
-// tools/gate-verdict.test.ts. Only PASS admits a release; UNKNOWN (infra
-// uncertainty) and FAIL always fail closed; SKIP_ALLOWED admits only when
-// release policy explicitly allows a skip.
+// Canonical release-gate verdict contract tests (#1216, A10.8). Only PASS
+// admits a release; UNKNOWN (infra uncertainty) and FAIL always fail closed;
+// SKIP_ALLOWED admits only when release policy explicitly allows a skip.
 
-Deno.test('gate-verdict: only PASS admits a release by default', () => {
-  assertEquals(admitsRelease(pass('confirmed')), true);
-  assertEquals(admitsRelease(fail('confirmed absence')), false);
-  assertEquals(admitsRelease(unknown('registry timeout')), false);
-  assertEquals(admitsRelease(skipAllowed('infra absent locally')), false);
+test('gate-verdict: only PASS admits a release by default', () => {
+  expect(admitsRelease(pass('confirmed'))).toEqual(true);
+  expect(admitsRelease(fail('confirmed absence'))).toEqual(false);
+  expect(admitsRelease(unknown('registry timeout'))).toEqual(false);
+  expect(admitsRelease(skipAllowed('infra absent locally'))).toEqual(false);
 });
 
-Deno.test('gate-verdict: SKIP_ALLOWED admits only when release policy explicitly allows skips', () => {
+test('gate-verdict: SKIP_ALLOWED admits only when release policy explicitly allows skips', () => {
   const skip = skipAllowed('policy-sanctioned skip');
-  assertEquals(admitsRelease(skip, { allowSkip: false }), false);
-  assertEquals(admitsRelease(skip, { allowSkip: true }), true);
+  expect(admitsRelease(skip, { allowSkip: false })).toEqual(false);
+  expect(admitsRelease(skip, { allowSkip: true })).toEqual(true);
   // Policy never rescues FAIL or UNKNOWN.
-  assertEquals(admitsRelease(fail('x'), { allowSkip: true }), false);
-  assertEquals(admitsRelease(unknown('x'), { allowSkip: true }), false);
+  expect(admitsRelease(fail('x'), { allowSkip: true })).toEqual(false);
+  expect(admitsRelease(unknown('x'), { allowSkip: true })).toEqual(false);
 });
 
-Deno.test('gate-verdict: exit code is 0 only for admitted verdicts', () => {
-  assertEquals(releaseGateExitCode(pass('ok')), 0);
-  assertEquals(releaseGateExitCode(fail('no')), 1);
-  assertEquals(releaseGateExitCode(unknown('timeout')), 1);
-  assertEquals(releaseGateExitCode(skipAllowed('skip')), 1);
-  assertEquals(releaseGateExitCode(skipAllowed('skip'), { allowSkip: true }), 0);
+test('gate-verdict: exit code is 0 only for admitted verdicts', () => {
+  expect(releaseGateExitCode(pass('ok'))).toEqual(0);
+  expect(releaseGateExitCode(fail('no'))).toEqual(1);
+  expect(releaseGateExitCode(unknown('timeout'))).toEqual(1);
+  expect(releaseGateExitCode(skipAllowed('skip'))).toEqual(1);
+  expect(releaseGateExitCode(skipAllowed('skip'), { allowSkip: true })).toEqual(0);
 });
 
-Deno.test('gate-verdict: decisions carry a human-readable reason', () => {
-  assertEquals(pass('p').reason, 'p');
-  assertEquals(fail('f').reason, 'f');
-  assertEquals(unknown('u').reason, 'u');
-  assertEquals(skipAllowed('s').reason, 's');
+test('gate-verdict: decisions carry a human-readable reason', () => {
+  expect(pass('p').reason).toEqual('p');
+  expect(fail('f').reason).toEqual('f');
+  expect(unknown('u').reason).toEqual('u');
+  expect(skipAllowed('s').reason).toEqual('s');
 });
 
-// Hostile decision-logic tests for the consumer smoke (#1216, A10.8 / H6),
-// formerly tools/consumer-smoke.test.ts. Only a CONFIRMED registry 200 whose
+// Hostile decision-logic tests for the consumer smoke (#1216, A10.8 / H6).
+// Only a CONFIRMED registry 200 whose
 // body confirms the exact version may admit the release. Confirmed absence
 // (404) is FAIL; every infra uncertainty — timeout, DNS/network exception,
 // 5xx, redirect, malformed or inconsistent payload — is UNKNOWN and fails
@@ -152,121 +148,120 @@ function fetcherThrowing(error: Error): RegistryFetcher {
   return () => Promise.reject(error);
 }
 
-Deno.test('consumer-smoke registry probe: confirmed 200 with matching version is the only PASS', async () => {
+test('consumer-smoke registry probe: confirmed 200 with matching version is the only PASS', async () => {
   const decision = await npmAvailabilityDecision(
     NAME,
     VERSION,
     fetcherReturning(200, JSON.stringify({ name: NAME, version: VERSION })),
   );
-  assertEquals(decision.verdict, 'PASS');
-  assertEquals(admitsRelease(decision), true);
-  assertEquals(releaseGateExitCode(decision), 0);
+  expect(decision.verdict).toEqual('PASS');
+  expect(admitsRelease(decision)).toEqual(true);
+  expect(releaseGateExitCode(decision)).toEqual(0);
 });
 
-Deno.test('consumer-smoke registry probe: confirmed 404 is FAIL (not a silent skip)', async () => {
+test('consumer-smoke registry probe: confirmed 404 is FAIL (not a silent skip)', async () => {
   const decision = await npmAvailabilityDecision(NAME, VERSION, fetcherReturning(404, '{}'));
-  assertEquals(decision.verdict, 'FAIL');
-  assertEquals(releaseGateExitCode(decision), 1);
+  expect(decision.verdict).toEqual('FAIL');
+  expect(releaseGateExitCode(decision)).toEqual(1);
 });
 
-Deno.test('consumer-smoke registry probe: 5xx is UNKNOWN and fails closed', async () => {
+test('consumer-smoke registry probe: 5xx is UNKNOWN and fails closed', async () => {
   for (const status of [500, 502, 503]) {
     const decision = await npmAvailabilityDecision(
       NAME,
       VERSION,
       fetcherReturning(status, 'upstream error'),
     );
-    assertEquals(decision.verdict, 'UNKNOWN', `status ${status}`);
-    assertEquals(releaseGateExitCode(decision), 1);
+    expect(decision.verdict, `status ${status}`).toEqual('UNKNOWN');
+    expect(releaseGateExitCode(decision)).toEqual(1);
   }
 });
 
-Deno.test('consumer-smoke registry probe: redirects and other statuses are UNKNOWN', async () => {
+test('consumer-smoke registry probe: redirects and other statuses are UNKNOWN', async () => {
   for (const status of [301, 403, 418]) {
     const decision = await npmAvailabilityDecision(NAME, VERSION, fetcherReturning(status, ''));
-    assertEquals(decision.verdict, 'UNKNOWN', `status ${status}`);
-    assertEquals(admitsRelease(decision), false);
+    expect(decision.verdict, `status ${status}`).toEqual('UNKNOWN');
+    expect(admitsRelease(decision)).toEqual(false);
   }
 });
 
-Deno.test('consumer-smoke registry probe: DNS/network exception is UNKNOWN and fails closed', async () => {
+test('consumer-smoke registry probe: DNS/network exception is UNKNOWN and fails closed', async () => {
   const decision = await npmAvailabilityDecision(
     NAME,
     VERSION,
     fetcherThrowing(new TypeError('getaddrinfo ENOTFOUND registry.npmjs.org')),
   );
-  assertEquals(decision.verdict, 'UNKNOWN');
-  assertEquals(releaseGateExitCode(decision), 1);
+  expect(decision.verdict).toEqual('UNKNOWN');
+  expect(releaseGateExitCode(decision)).toEqual(1);
 });
 
-Deno.test('consumer-smoke registry probe: timeout is UNKNOWN and fails closed', async () => {
+test('consumer-smoke registry probe: timeout is UNKNOWN and fails closed', async () => {
   const decision = await npmAvailabilityDecision(
     NAME,
     VERSION,
     fetcherThrowing(new DOMException('The operation timed out', 'TimeoutError')),
   );
-  assertEquals(decision.verdict, 'UNKNOWN');
-  assertEquals(releaseGateExitCode(decision), 1);
+  expect(decision.verdict).toEqual('UNKNOWN');
+  expect(releaseGateExitCode(decision)).toEqual(1);
 });
 
-Deno.test('consumer-smoke registry probe: malformed JSON on 200 is UNKNOWN, never PASS', async () => {
+test('consumer-smoke registry probe: malformed JSON on 200 is UNKNOWN, never PASS', async () => {
   const decision = await npmAvailabilityDecision(
     NAME,
     VERSION,
     fetcherReturning(200, '<!DOCTYPE html><title>proxy error</title>'),
   );
-  assertEquals(decision.verdict, 'UNKNOWN');
-  assertEquals(releaseGateExitCode(decision), 1);
+  expect(decision.verdict).toEqual('UNKNOWN');
+  expect(releaseGateExitCode(decision)).toEqual(1);
 });
 
-Deno.test('consumer-smoke registry probe: 200 whose payload does not confirm the version is UNKNOWN', async () => {
+test('consumer-smoke registry probe: 200 whose payload does not confirm the version is UNKNOWN', async () => {
   for (const body of ['{}', JSON.stringify({ version: '0.0.0-other' }), '[]', '"ok"', '42']) {
     const decision = await npmAvailabilityDecision(NAME, VERSION, fetcherReturning(200, body));
-    assertEquals(decision.verdict, 'UNKNOWN', `body ${body}`);
-    assertEquals(admitsRelease(decision), false);
+    expect(decision.verdict, `body ${body}`).toEqual('UNKNOWN');
+    expect(admitsRelease(decision)).toEqual(false);
   }
 });
 
-Deno.test('consumer-smoke registry classification: pure classifier mirrors the probe verdicts', () => {
-  assertEquals(
+test('consumer-smoke registry classification: pure classifier mirrors the probe verdicts', () => {
+  expect(
     classifyRegistryResponse(NAME, VERSION, 200, JSON.stringify({ version: VERSION })).verdict,
-    'PASS',
-  );
-  assertEquals(classifyRegistryResponse(NAME, VERSION, 404, '{}').verdict, 'FAIL');
-  assertEquals(classifyRegistryResponse(NAME, VERSION, 500, '').verdict, 'UNKNOWN');
-  assertEquals(classifyRegistryResponse(NAME, VERSION, 200, 'not json').verdict, 'UNKNOWN');
+  ).toEqual('PASS');
+  expect(classifyRegistryResponse(NAME, VERSION, 404, '{}').verdict).toEqual('FAIL');
+  expect(classifyRegistryResponse(NAME, VERSION, 500, '').verdict).toEqual('UNKNOWN');
+  expect(classifyRegistryResponse(NAME, VERSION, 200, 'not json').verdict).toEqual('UNKNOWN');
 });
 
-Deno.test('consumer-smoke CDN probe: package published but CDN artifact missing is FAIL', async () => {
+test('consumer-smoke CDN probe: package published but CDN artifact missing is FAIL', async () => {
   const decision = await cdnAvailabilityDecision(VERSION, fetcherReturning(404, 'Not found'));
-  assertEquals(decision.verdict, 'FAIL');
-  assertEquals(releaseGateExitCode(decision), 1);
+  expect(decision.verdict).toEqual('FAIL');
+  expect(releaseGateExitCode(decision)).toEqual(1);
 });
 
-Deno.test('consumer-smoke CDN probe: CDN 5xx / network failure is UNKNOWN and fails closed', async () => {
+test('consumer-smoke CDN probe: CDN 5xx / network failure is UNKNOWN and fails closed', async () => {
   const serverError = await cdnAvailabilityDecision(VERSION, fetcherReturning(503, ''));
-  assertEquals(serverError.verdict, 'UNKNOWN');
-  assertEquals(releaseGateExitCode(serverError), 1);
+  expect(serverError.verdict).toEqual('UNKNOWN');
+  expect(releaseGateExitCode(serverError)).toEqual(1);
 
   const networkError = await cdnAvailabilityDecision(
     VERSION,
     fetcherThrowing(new TypeError('network unreachable')),
   );
-  assertEquals(networkError.verdict, 'UNKNOWN');
-  assertEquals(releaseGateExitCode(networkError), 1);
+  expect(networkError.verdict).toEqual('UNKNOWN');
+  expect(releaseGateExitCode(networkError)).toEqual(1);
 });
 
-Deno.test('consumer-smoke CDN probe: confirmed 200 with a non-empty export is PASS; empty body is FAIL', async () => {
+test('consumer-smoke CDN probe: confirmed 200 with a non-empty export is PASS; empty body is FAIL', async () => {
   const ok = await cdnAvailabilityDecision(VERSION, fetcherReturning(200, 'export{/* esm */};'));
-  assertEquals(ok.verdict, 'PASS');
-  assertEquals(releaseGateExitCode(ok), 0);
+  expect(ok.verdict).toEqual('PASS');
+  expect(releaseGateExitCode(ok)).toEqual(0);
 
   const empty = await cdnAvailabilityDecision(VERSION, fetcherReturning(200, '   \n '));
-  assertEquals(empty.verdict, 'FAIL');
-  assertEquals(releaseGateExitCode(empty), 1);
+  expect(empty.verdict).toEqual('FAIL');
+  expect(releaseGateExitCode(empty)).toEqual(1);
 });
 
-Deno.test('consumer-smoke: no hostile registry input maps to PASS or SKIP — every uncertainty exits non-zero', async () => {
+test('consumer-smoke: no hostile registry input maps to PASS or SKIP — every uncertainty exits non-zero', async () => {
   const hostile: Array<[string, RegistryFetcher]> = [
     ['404', fetcherReturning(404, '{}')],
     ['500', fetcherReturning(500, '')],
@@ -277,12 +272,14 @@ Deno.test('consumer-smoke: no hostile registry input maps to PASS or SKIP — ev
   ];
   for (const [label, fetcher] of hostile) {
     const registry = await npmAvailabilityDecision(NAME, VERSION, fetcher);
-    assertEquals(registry.verdict === 'PASS' || registry.verdict === 'SKIP_ALLOWED', false, label);
-    assertEquals(releaseGateExitCode(registry), 1, label);
+    expect(registry.verdict === 'PASS' || registry.verdict === 'SKIP_ALLOWED', label).toEqual(
+      false,
+    );
+    expect(releaseGateExitCode(registry), label).toEqual(1);
   }
 });
 
-Deno.test('consumer-smoke: no hostile CDN input maps to PASS or SKIP — every uncertainty exits non-zero', async () => {
+test('consumer-smoke: no hostile CDN input maps to PASS or SKIP — every uncertainty exits non-zero', async () => {
   // The CDN serves JS text, not JSON: body shape is not evidence. Only status,
   // non-emptiness and probe success classify the verdict.
   const hostile: Array<[string, RegistryFetcher]> = [
@@ -294,23 +291,27 @@ Deno.test('consumer-smoke: no hostile CDN input maps to PASS or SKIP — every u
   ];
   for (const [label, fetcher] of hostile) {
     const cdn = await cdnAvailabilityDecision(VERSION, fetcher);
-    assertEquals(cdn.verdict === 'PASS' || cdn.verdict === 'SKIP_ALLOWED', false, label);
-    assertEquals(releaseGateExitCode(cdn), 1, label);
+    expect(cdn.verdict === 'PASS' || cdn.verdict === 'SKIP_ALLOWED', label).toEqual(false);
+    expect(releaseGateExitCode(cdn), label).toEqual(1);
   }
 });
 
-Deno.test('node runtime smoke stays on the plain-Node core surface', () => {
-  // `@openelement/router/vite` is Deno-toolchain surface (module top levels
-  // assume the Deno global): importing it from plain node fails, so the node
-  // smoke must never reference it — only the Deno smoke may.
-  assert(!NODE_RUNTIME_SMOKE_SOURCE.includes('router/vite'), 'node smoke imports router/vite');
-  assert(!NODE_RUNTIME_SMOKE_SOURCE.includes('Deno'), 'node smoke references Deno');
-  assert(
+test('node runtime smoke stays on the plain-Node core surface', () => {
+  // The plain-Node smoke covers the framework core only; the `router/vite`
+  // build entry has its own smoke surface (vite-entry.mjs, run on the same
+  // node host) and must not be pulled in here — and no node-side smoke may
+  // reference the Deno global.
+  expect(
+    !NODE_RUNTIME_SMOKE_SOURCE.includes('router/vite'),
+    'node smoke imports router/vite',
+  ).toBeTruthy();
+  expect(!NODE_RUNTIME_SMOKE_SOURCE.includes('Deno'), 'node smoke references Deno').toBeTruthy();
+  expect(
     NODE_RUNTIME_SMOKE_SOURCE.includes("from '@openelement/router'"),
     'node smoke covers the router core',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     VITE_SMOKE_SOURCE.includes("from '@openelement/router/vite'"),
-    'deno smoke covers the vite entry',
-  );
+    'vite smoke covers the vite entry',
+  ).toBeTruthy();
 });

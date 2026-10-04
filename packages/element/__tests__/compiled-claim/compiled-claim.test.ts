@@ -1,10 +1,6 @@
-import {
-  assert,
-  assertEquals,
-  assertStrictEquals,
-  assertStringIncludes,
-  assertThrows,
-} from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import {
   claimExistingDom as claimExistingDomCanonical,
   PartProgramClaimError,
@@ -361,10 +357,10 @@ const CONTENT_URL = new URL(
 );
 
 async function loadProgram(): Promise<unknown> {
-  return JSON.parse(await Deno.readTextFile(PROGRAM_URL));
+  return JSON.parse(await readFile(PROGRAM_URL, 'utf8'));
 }
 
-Deno.test('alpha.3 claim preserves identity, live state, and one pre-upgrade event replay', async () => {
+test('alpha.3 claim preserves identity, live state, and one pre-upgrade event replay', async () => {
   const program = await loadProgram();
   const doc = new TestDocument();
   const dom = makeSsrDom(doc);
@@ -386,34 +382,34 @@ Deno.test('alpha.3 claim preserves identity, live state, and one pre-upgrade eve
 
   // The claim itself allocates nothing; the one extra element/text is the
   // legitimate conditional Region update caused by replaying the click.
-  assertEquals(counters.createdElements, initialElements + 1);
-  assertEquals(counters.createdTexts, initialTexts + 1);
-  assertEquals(counters.createdComments, initialComments);
-  assertEquals(counters.valueWrites, 0);
-  assertEquals(dom.input.value, 'typed before upgrade');
-  assertStrictEquals(doc.activeElement, dom.input);
-  assertEquals(dom.input.selectionStart, 3);
-  assertEquals(dom.input.selectionEnd, 8);
-  assertEquals(count.value, 1);
-  assertEquals(dom.h1Value.data, '1');
-  assertEquals(replayPreUpgradeEvents(dom.root as unknown as Node, capture.events), 0);
+  expect(counters.createdElements).toEqual(initialElements + 1);
+  expect(counters.createdTexts).toEqual(initialTexts + 1);
+  expect(counters.createdComments).toEqual(initialComments);
+  expect(counters.valueWrites).toEqual(0);
+  expect(dom.input.value).toEqual('typed before upgrade');
+  expect(doc.activeElement).toBe(dom.input);
+  expect(dom.input.selectionStart).toEqual(3);
+  expect(dom.input.selectionEnd).toEqual(8);
+  expect(count.value).toEqual(1);
+  expect(dom.h1Value.data).toEqual('1');
+  expect(replayPreUpgradeEvents(dom.root as unknown as Node, capture.events)).toEqual(0);
 
   dom.button.dispatchEvent(new TestEvent('click'));
-  assertEquals(count.value, 2);
-  assertEquals(dom.h1Value.data, '2');
+  expect(count.value).toEqual(2);
+  expect(dom.h1Value.data).toEqual('2');
   label.value = 'after claim';
-  assertEquals(dom.input.value, 'after claim');
+  expect(dom.input.value).toEqual('after claim');
 
   const claimedInput = dom.div.childNodes[1] as TestElement;
   const claimedH1Value = dom.h1.childNodes[2] as TestText;
-  assertStrictEquals(claimedInput, dom.input);
-  assertStrictEquals(claimedH1Value, dom.h1Value);
+  expect(claimedInput).toBe(dom.input);
+  expect(claimedH1Value).toBe(dom.h1Value);
   instance.dispose();
   count.value = 9;
-  assertEquals(dom.h1Value.data, '2');
+  expect(dom.h1Value.data).toEqual('2');
 });
 
-Deno.test('alpha.3 claim resolves fixed sinks across expanded dynamic anchors', () => {
+test('alpha.3 claim resolves fixed sinks across expanded dynamic anchors', () => {
   // The fixed sinks follow a static wrapper whose dynamic text Part expands at
   // runtime; the unified path-safety rule keeps sink paths statically indexed,
   // and the claim walk still crosses the expanded anchor before the sinks.
@@ -458,17 +454,17 @@ Deno.test('alpha.3 claim resolves fixed sinks across expanded dynamic anchors', 
   const controls = makeHost(doc.counters);
 
   const instance = claimExistingDom(program, controls.host, root as unknown as Node);
-  assertStrictEquals(section.childNodes[1] as TestElement, input);
-  assertEquals(input.value, 'typed before claim');
+  expect(section.childNodes[1] as TestElement).toBe(input);
+  expect(input.value).toEqual('typed before claim');
   controls.label.value = 'after claim';
-  assertEquals(labelText.data, 'after claim');
-  assertEquals(input.value, 'after claim');
+  expect(labelText.data).toEqual('after claim');
+  expect(input.value).toEqual('after claim');
   input.dispatchEvent(new TestEvent('click'));
-  assertEquals(controls.clicks, 1);
+  expect(controls.clicks).toEqual(1);
   instance.dispose();
 });
 
-Deno.test('alpha.3 claim reads the owned fixture and server content without a second renderer', async () => {
+test('alpha.3 claim reads the owned fixture and server content without a second renderer', async () => {
   const program = await loadProgram();
   const counters: Counters = {
     createdElements: 0,
@@ -479,11 +475,11 @@ Deno.test('alpha.3 claim reads the owned fixture and server content without a se
     valueWrites: 0,
   };
   const { host } = makeHost(counters);
-  const expected = (await Deno.readTextFile(CONTENT_URL)).trimEnd();
-  assertEquals(serializeProgramContent(program, host), expected);
+  const expected = (await readFile(CONTENT_URL, 'utf8')).trimEnd();
+  expect(serializeProgramContent(program, host)).toEqual(expected);
 });
 
-Deno.test('alpha.3 claim stages validation before resources and reports a structured mismatch', async () => {
+test('alpha.3 claim stages validation before resources and reports a structured mismatch', async () => {
   const program = await loadProgram();
   const doc = new TestDocument();
   const dom = makeSsrDom(doc);
@@ -492,19 +488,19 @@ Deno.test('alpha.3 claim stages validation before resources and reports a struct
   const beforeElements = doc.counters.createdElements;
   const counters = doc.counters;
   const { host } = makeHost(counters);
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () => claimExistingDom(program, host, dom.root as unknown as Node),
     PartProgramClaimError,
   );
-  assertEquals(error.code, 'OPEN_ELEMENT_COMPILED_CLAIM_MISMATCH');
-  assertStringIncludes(error.message, 'template[0].children[0].children[0]');
-  assertEquals(error.ownerKind, 'root');
-  assertEquals(counters.subscriptions, 0);
-  assertEquals(counters.listenerAdds, 0);
-  assertEquals(doc.counters.createdElements, beforeElements);
+  expect(error.code).toEqual('OPEN_ELEMENT_COMPILED_CLAIM_MISMATCH');
+  expect(error.message).toContain('template[0].children[0].children[0]');
+  expect(error.ownerKind).toEqual('root');
+  expect(counters.subscriptions).toEqual(0);
+  expect(counters.listenerAdds).toEqual(0);
+  expect(doc.counters.createdElements).toEqual(beforeElements);
 });
 
-Deno.test('alpha.3 failed claim stops a live pre-upgrade capture', async () => {
+test('alpha.3 failed claim stops a live pre-upgrade capture', async () => {
   const program = await loadProgram();
   const doc = new TestDocument();
   const dom = makeSsrDom(doc);
@@ -513,7 +509,7 @@ Deno.test('alpha.3 failed claim stops a live pre-upgrade capture', async () => {
   const { host } = makeHost(doc.counters);
   const capture = capturePreUpgradeEvents(dom.root as unknown as EventTarget, ['click']);
 
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       claimExistingDom(program, host, dom.root as unknown as Node, {
         preUpgradeEvents: capture,
@@ -521,10 +517,10 @@ Deno.test('alpha.3 failed claim stops a live pre-upgrade capture', async () => {
     PartProgramClaimError,
   );
   dom.button.dispatchEvent(new TestEvent('click'));
-  assertEquals(capture.events.length, 0);
+  expect(capture.events.length).toEqual(0);
 
   const invalidCapture = capturePreUpgradeEvents(dom.root as unknown as EventTarget, ['click']);
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       claimExistingDom({ version: 2 }, host, dom.root as unknown as Node, {
         preUpgradeEvents: invalidCapture,
@@ -532,10 +528,10 @@ Deno.test('alpha.3 failed claim stops a live pre-upgrade capture', async () => {
     Error,
   );
   dom.button.dispatchEvent(new TestEvent('click'));
-  assertEquals(invalidCapture.events.length, 0);
+  expect(invalidCapture.events.length).toEqual(0);
 });
 
-Deno.test('replay pins a first-activation cutoff: morph reconnect never re-handles live clicks', () => {
+test('replay pins a first-activation cutoff: morph reconnect never re-handles live clicks', () => {
   const doc = new TestDocument();
   const root = doc.createElement('div');
   const button = doc.createElement('button');
@@ -545,32 +541,32 @@ Deno.test('replay pins a first-activation cutoff: morph reconnect never re-handl
 
   // Pre-upgrade interaction: no live listener yet, only the capture observes.
   button.dispatchEvent(new TestEvent('click'));
-  assertEquals(capture.events.length, 1);
+  expect(capture.events.length).toEqual(1);
 
   // Activation attaches the live listener, replays the captured click once,
   // and releases this root's records (facade connectedCallback contract).
   button.addEventListener('click', () => {
     handled++;
   });
-  assertEquals(replayPreUpgradeEvents(root as unknown as Node, capture.events), 1);
-  assertEquals(handled, 1);
+  expect(replayPreUpgradeEvents(root as unknown as Node, capture.events)).toEqual(1);
+  expect(handled).toEqual(1);
   releasePreUpgradeEvents(root as unknown as Node, capture.events);
-  assertEquals(capture.events.length, 0);
+  expect(capture.events.length).toEqual(0);
 
   // Live interactions run the handler directly while the page-lifetime
   // capture keeps observing (latest record per target/type).
   button.dispatchEvent(new TestEvent('click'));
   button.dispatchEvent(new TestEvent('click'));
   button.dispatchEvent(new TestEvent('click'));
-  assertEquals(handled, 4);
+  expect(handled).toEqual(4);
 
   // A morph reconnect reuses the cached claim activation and replays again:
   // post-activation records must not re-handle (still 4, never 5).
-  assertEquals(replayPreUpgradeEvents(root as unknown as Node, capture.events), 0);
-  assertEquals(handled, 4);
+  expect(replayPreUpgradeEvents(root as unknown as Node, capture.events)).toEqual(0);
+  expect(handled).toEqual(4);
 });
 
-Deno.test('replay cutoffs are per-root: a pending sibling still receives its pre-upgrade click', () => {
+test('replay cutoffs are per-root: a pending sibling still receives its pre-upgrade click', () => {
   const doc = new TestDocument();
   const scope = doc.createElement('div');
   const first = doc.createElement('div');
@@ -592,26 +588,26 @@ Deno.test('replay cutoffs are per-root: a pending sibling still receives its pre
   const capture = capturePreUpgradeEvents(scope as unknown as EventTarget, ['click']);
 
   // The first island activates with nothing captured yet.
-  assertEquals(replayPreUpgradeEvents(first as unknown as Node, capture.events), 0);
+  expect(replayPreUpgradeEvents(first as unknown as Node, capture.events)).toEqual(0);
 
   // A live click on the active island plus a pre-upgrade click on the
   // still-pending sibling.
   firstButton.dispatchEvent(new TestEvent('click'));
   secondButton.dispatchEvent(new TestEvent('click'));
-  assertEquals(firstHandled, 1);
-  assertEquals(secondHandled, 1);
+  expect(firstHandled).toEqual(1);
+  expect(secondHandled).toEqual(1);
 
   // The pending sibling replays its own pre-upgrade click exactly once ...
-  assertEquals(replayPreUpgradeEvents(second as unknown as Node, capture.events), 1);
-  assertEquals(secondHandled, 2);
+  expect(replayPreUpgradeEvents(second as unknown as Node, capture.events)).toEqual(1);
+  expect(secondHandled).toEqual(2);
   // ... while the already-active sibling never re-handles its live click.
-  assertEquals(replayPreUpgradeEvents(first as unknown as Node, capture.events), 0);
-  assertEquals(firstHandled, 1);
-  assertEquals(replayPreUpgradeEvents(second as unknown as Node, capture.events), 0);
-  assertEquals(secondHandled, 2);
+  expect(replayPreUpgradeEvents(first as unknown as Node, capture.events)).toEqual(0);
+  expect(firstHandled).toEqual(1);
+  expect(replayPreUpgradeEvents(second as unknown as Node, capture.events)).toEqual(0);
+  expect(secondHandled).toEqual(2);
 });
 
-Deno.test('replay accepts hand-built records without a capture sequence', () => {
+test('replay accepts hand-built records without a capture sequence', () => {
   const doc = new TestDocument();
   const root = doc.createElement('div');
   const button = doc.createElement('button');
@@ -628,13 +624,13 @@ Deno.test('replay accepts hand-built records without a capture sequence', () => 
       event: new TestEvent('click') as unknown as Event,
     },
   ];
-  assertEquals(replayPreUpgradeEvents(root as unknown as Node, records), 1);
-  assertEquals(handled, 1);
-  assertEquals(replayPreUpgradeEvents(root as unknown as Node, records), 0);
-  assertEquals(handled, 1);
+  expect(replayPreUpgradeEvents(root as unknown as Node, records)).toEqual(1);
+  expect(handled).toEqual(1);
+  expect(replayPreUpgradeEvents(root as unknown as Node, records)).toEqual(0);
+  expect(handled).toEqual(1);
 });
 
-Deno.test('alpha.3 owning recovery replaces only a bounded Region range', async () => {
+test('alpha.3 owning recovery replaces only a bounded Region range', async () => {
   const program = await loadProgram();
   const doc = new TestDocument();
   const dom = makeSsrDom(doc);
@@ -648,20 +644,20 @@ Deno.test('alpha.3 owning recovery replaces only a bounded Region range', async 
     recovery: 'owning',
     onMismatch: (error) => mismatches.push(error),
   });
-  assertEquals(mismatches.length, 1);
-  assertEquals(mismatches[0].ownerKind, 'region');
-  assertStrictEquals(dom.input, surroundingInput);
-  assertStrictEquals(dom.ul, surroundingList);
+  expect(mismatches.length).toEqual(1);
+  expect(mismatches[0].ownerKind).toEqual('region');
+  expect(dom.input).toBe(surroundingInput);
+  expect(dom.ul).toBe(surroundingList);
   const replacementParity = dom.div.childNodes[4] as TestElement;
-  assertEquals((replacementParity.childNodes[0] as TestText).data, 'zero');
-  assertEquals(counters.createdElements, 10);
-  assertEquals(counters.createdTexts, 7);
+  expect((replacementParity.childNodes[0] as TestText).data).toEqual('zero');
+  expect(counters.createdElements).toEqual(10);
+  expect(counters.createdTexts).toEqual(7);
   count.value = 1;
   const replacement = dom.div.childNodes[4] as TestElement;
-  assertEquals((replacement.childNodes[0] as TestText).data, 'positive');
+  expect((replacement.childNodes[0] as TestText).data).toEqual('positive');
 });
 
-Deno.test('alpha.3 detached Region anchors stop updates at the owning boundary', async () => {
+test('alpha.3 detached Region anchors stop updates at the owning boundary', async () => {
   const program = await loadProgram();
   const doc = new TestDocument();
   const dom = makeSsrDom(doc);
@@ -673,21 +669,21 @@ Deno.test('alpha.3 detached Region anchors stop updates at the owning boundary',
   const parity = dom.parity;
   const beforeWhenElements = doc.counters.createdElements;
   count.value = 1;
-  assertStrictEquals(dom.div.childNodes[3], parity);
-  assertEquals((parity.childNodes[0] as TestText).data, 'zero');
-  assertEquals(doc.counters.createdElements, beforeWhenElements);
+  expect(dom.div.childNodes[3]).toBe(parity);
+  expect((parity.childNodes[0] as TestText).data).toEqual('zero');
+  expect(doc.counters.createdElements).toEqual(beforeWhenElements);
 
   const listAnchor = dom.ul.childNodes[0];
   dom.ul.removeChild(listAnchor);
   const initialItems = [...dom.items];
   items.value = [{ id: 'c', text: 'gamma' }];
-  assertEquals(dom.ul.childNodes.length, 3);
-  assertStrictEquals(dom.ul.childNodes[0], initialItems[0]);
-  assertStrictEquals(dom.ul.childNodes[1], initialItems[1]);
+  expect(dom.ul.childNodes.length).toEqual(3);
+  expect(dom.ul.childNodes[0]).toBe(initialItems[0]);
+  expect(dom.ul.childNodes[1]).toBe(initialItems[1]);
   instance.dispose();
 });
 
-Deno.test('alpha.3 owning recovery can replace only the root owner after root drift', async () => {
+test('alpha.3 owning recovery can replace only the root owner after root drift', async () => {
   const program = await loadProgram();
   const doc = new TestDocument();
   const dom = makeSsrDom(doc);
@@ -700,27 +696,30 @@ Deno.test('alpha.3 owning recovery can replace only the root owner after root dr
     onMismatch: (error) => mismatches.push(error),
   });
 
-  assertEquals(mismatches.length, 1);
-  assertEquals(mismatches[0].ownerKind, 'root');
+  expect(mismatches.length).toEqual(1);
+  expect(mismatches[0].ownerKind).toEqual('root');
   const recoveredDiv = dom.root.childNodes[0] as TestElement;
-  assert(recoveredDiv !== oldDiv);
-  assertEquals(recoveredDiv.getAttribute('class'), 'demo');
-  assertEquals((recoveredDiv.childNodes[1] as TestElement).value, 'ready');
+  expect(recoveredDiv !== oldDiv).toBeTruthy();
+  expect(recoveredDiv.getAttribute('class')).toEqual('demo');
+  expect((recoveredDiv.childNodes[1] as TestElement).value).toEqual('ready');
   (recoveredDiv.childNodes[2] as TestElement).dispatchEvent(new TestEvent('click'));
-  assertEquals(count.value, 1);
+  expect(count.value).toEqual(1);
   instance.dispose();
 });
 
-Deno.test('alpha.3 fail-closed validation rejects executable program attributes', async () => {
+test('alpha.3 fail-closed validation rejects executable program attributes', async () => {
   const program = (await loadProgram()) as {
     template: Array<{ attrs: Array<[string, string]> }>;
   };
   program.template[0].attrs = [['onclick', 'alert(1)']];
-  const error = assertThrows(() => serializeProgramContent(program, { signals: {} }), Error);
-  assertStringIncludes(error.message, 'unsafe name');
+  const error = assertThrowsIncludes(
+    () => serializeProgramContent(program, { signals: {} }),
+    Error,
+  );
+  expect(error.message).toContain('unsafe name');
 });
 
-Deno.test('alpha.3 claim rejects duplicate keyed Region data before attaching', async () => {
+test('alpha.3 claim rejects duplicate keyed Region data before attaching', async () => {
   const program = await loadProgram();
   const doc = new TestDocument();
   const dom = makeSsrDom(doc);
@@ -730,17 +729,17 @@ Deno.test('alpha.3 claim rejects duplicate keyed Region data before attaching', 
     { id: 'a', text: 'alpha' },
     { id: 'a', text: 'again' },
   ];
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () => claimExistingDom(program, host, dom.root as unknown as Node),
     PartProgramClaimError,
   );
-  assertEquals(error.ownerKind, 'region');
-  assertStringIncludes(error.message, 'duplicate key');
-  assertEquals(counters.subscriptions, 0);
-  assertEquals(counters.listenerAdds, 0);
+  expect(error.ownerKind).toEqual('region');
+  expect(error.message).toContain('duplicate key');
+  expect(counters.subscriptions).toEqual(0);
+  expect(counters.listenerAdds).toEqual(0);
 });
 
-Deno.test('alpha.3 claim rejects inherited keyed Region fields before attaching', async () => {
+test('alpha.3 claim rejects inherited keyed Region fields before attaching', async () => {
   const program = await loadProgram();
   const doc = new TestDocument();
   const dom = makeSsrDom(doc);
@@ -749,17 +748,17 @@ Deno.test('alpha.3 claim rejects inherited keyed Region fields before attaching'
   const inherited = Object.create({ id: 'a', text: 'alpha' }) as { id: string; text: string };
   controls.items.value = [inherited];
 
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () => claimExistingDom(program, controls.host, dom.root as unknown as Node),
     PartProgramClaimError,
   );
-  assertEquals(error.ownerKind, 'region');
-  assertStringIncludes(error.message, 'item needs');
-  assertEquals(counters.subscriptions, 0);
-  assertEquals(counters.listenerAdds, 0);
+  expect(error.ownerKind).toEqual('region');
+  expect(error.message).toContain('item needs');
+  expect(counters.subscriptions).toEqual(0);
+  expect(counters.listenerAdds).toEqual(0);
 });
 
-Deno.test('alpha.3 keyed Region moves, reuses, updates, and removes only owned entries', async () => {
+test('alpha.3 keyed Region moves, reuses, updates, and removes only owned entries', async () => {
   const program = await loadProgram();
   const doc = new TestDocument();
   const dom = makeSsrDom(doc);
@@ -776,12 +775,12 @@ Deno.test('alpha.3 keyed Region moves, reuses, updates, and removes only owned e
   const firstPass = dom.ul.childNodes.filter(
     (node): node is TestElement => node instanceof TestElement,
   );
-  assertEquals(firstPass.length, 3);
-  assertStrictEquals(firstPass[0], initialB);
-  assertStrictEquals(firstPass[2], initialA);
-  assertEquals((firstPass[0].childNodes[0] as TestText).data, 'BETA');
-  assertEquals((firstPass[2].childNodes[0] as TestText).data, 'ALPHA');
-  assertEquals((firstPass[1].childNodes[0] as TestText).data, 'gamma');
+  expect(firstPass.length).toEqual(3);
+  expect(firstPass[0]).toBe(initialB);
+  expect(firstPass[2]).toBe(initialA);
+  expect((firstPass[0].childNodes[0] as TestText).data).toEqual('BETA');
+  expect((firstPass[2].childNodes[0] as TestText).data).toEqual('ALPHA');
+  expect((firstPass[1].childNodes[0] as TestText).data).toEqual('gamma');
 
   items.value = [
     { id: 'a', text: 'alpha again' },
@@ -790,16 +789,16 @@ Deno.test('alpha.3 keyed Region moves, reuses, updates, and removes only owned e
   const secondPass = dom.ul.childNodes.filter(
     (node): node is TestElement => node instanceof TestElement,
   );
-  assertEquals(secondPass.length, 2);
-  assertStrictEquals(secondPass[0], initialA);
-  assertStrictEquals(secondPass[1], firstPass[1]);
-  assertEquals((secondPass[0].childNodes[0] as TestText).data, 'alpha again');
-  assertEquals((secondPass[1].childNodes[0] as TestText).data, 'gamma again');
-  assertEquals(initialB.parentNode, null);
+  expect(secondPass.length).toEqual(2);
+  expect(secondPass[0]).toBe(initialA);
+  expect(secondPass[1]).toBe(firstPass[1]);
+  expect((secondPass[0].childNodes[0] as TestText).data).toEqual('alpha again');
+  expect((secondPass[1].childNodes[0] as TestText).data).toEqual('gamma again');
+  expect(initialB.parentNode).toEqual(null);
   instance.dispose();
 });
 
-Deno.test('alpha.3 claim preserves nested custom-element node identity without entering its internals', () => {
+test('alpha.3 claim preserves nested custom-element node identity without entering its internals', () => {
   const program = testProgram({
     tag: 'oe-demo-nested',
     template: [
@@ -827,13 +826,13 @@ Deno.test('alpha.3 claim preserves nested custom-element node identity without e
   shell.appendChild(foreign);
   root.appendChild(shell);
   const claimed = claimExistingDom(program, { signals: {}, handlers: {} }, root as unknown as Node);
-  assertStrictEquals(root.childNodes[0], shell);
-  assertStrictEquals(shell.childNodes[0], foreign);
+  expect(root.childNodes[0]).toBe(shell);
+  expect(shell.childNodes[0]).toBe(foreign);
   claimed.dispose();
-  assert(true);
+  expect(true).toBeTruthy();
 });
 
-Deno.test('claim leaves an independently SSG-expanded empty custom host to its own program', () => {
+test('claim leaves an independently SSG-expanded empty custom host to its own program', () => {
   const program = testProgram({
     tag: 'oe-parent',
     template: [
@@ -859,12 +858,12 @@ Deno.test('claim leaves an independently SSG-expanded empty custom host to its o
   root.appendChild(child);
 
   const claimed = claimExistingDom(program, { signals: {}, handlers: {} }, root as unknown as Node);
-  assertStrictEquals(root.childNodes[0], child);
-  assertStrictEquals(child.childNodes[1], heading);
+  expect(root.childNodes[0]).toBe(child);
+  expect(child.childNodes[1]).toBe(heading);
   claimed.dispose();
 });
 
-Deno.test('claim preserves externally projected route content inside an empty slot', () => {
+test('claim preserves externally projected route content inside an empty slot', () => {
   const program = testProgram({
     tag: 'oe-shell',
     template: [
@@ -888,11 +887,11 @@ Deno.test('claim preserves externally projected route content inside an empty sl
   root.appendChild(main);
 
   const claimed = claimExistingDom(program, { signals: {}, handlers: {} }, root as unknown as Node);
-  assertStrictEquals((main.childNodes[0] as TestElement).childNodes[0], route);
+  expect((main.childNodes[0] as TestElement).childNodes[0]).toBe(route);
   claimed.dispose();
 });
 
-Deno.test('compiled claim requires TrustedHtml before accepting an opaque html Part', () => {
+test('compiled claim requires TrustedHtml before accepting an opaque html Part', () => {
   const program = testProgram({
     tag: 'oe-claim-html',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [] }],
@@ -912,21 +911,21 @@ Deno.test('compiled claim requires TrustedHtml before accepting an opaque html P
     root as unknown as Node,
   );
   body.value = trustedHtml('<em>updated</em>');
-  assertEquals(div.innerHTML, '<em>updated</em>');
-  assertThrows(
+  expect(div.innerHTML).toEqual('<em>updated</em>');
+  assertThrowsIncludes(
     () => {
       body.value = '<img src=x onerror=alert(1)>';
     },
     Error,
     'requires a value created by trustedHtml()',
   );
-  assertEquals(div.innerHTML, '<em>updated</em>');
+  expect(div.innerHTML).toEqual('<em>updated</em>');
   claimed.dispose();
 
   const unsafeDoc = new TestDocument();
   const unsafeRoot = element(unsafeDoc, 'host');
   unsafeRoot.appendChild(element(unsafeDoc, 'div'));
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       claimExistingDom(
         program,

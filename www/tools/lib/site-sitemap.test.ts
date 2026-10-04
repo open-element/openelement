@@ -1,13 +1,15 @@
 /** Route-catalog sitemap enumeration unit tests (Beta.2.2, #1327). */
-import { assert, assertEquals } from '@std/assert';
-import { join } from '@std/path';
+import { expect, test } from 'vitest';
+import { join } from 'node:path';
 import { SITE_LOCALES, type SiteLocale } from '../../site-config.ts';
 import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './site-sitemap.ts';
 import { articleLastmodByRoute } from './site-lastmod.ts';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 const LOCALES: readonly SiteLocale[] = SITE_LOCALES;
 
-Deno.test('enumeratePublicRoutes: static catalog + blog enumeration, both locales', () => {
+test('enumeratePublicRoutes: static catalog + blog enumeration, both locales', () => {
   const { routes, failures } = enumeratePublicRoutes({
     routes: [
       { path: '/', type: 'page' },
@@ -21,8 +23,8 @@ Deno.test('enumeratePublicRoutes: static catalog + blog enumeration, both locale
     locales: LOCALES,
     defaultLocale: 'en',
   });
-  assertEquals(failures, []);
-  assertEquals(routes, [
+  expect(failures).toEqual([]);
+  expect(routes).toEqual([
     '/',
     '/blog/a',
     '/blog/b',
@@ -34,19 +36,19 @@ Deno.test('enumeratePublicRoutes: static catalog + blog enumeration, both locale
   ]);
 });
 
-Deno.test('enumeratePublicRoutes: unenumerated dynamic route fails closed', () => {
+test('enumeratePublicRoutes: unenumerated dynamic route fails closed', () => {
   const { routes, failures } = enumeratePublicRoutes({
     routes: [{ path: '/shop/:id', type: 'page' }],
     blogPostRoutes: [],
     locales: LOCALES,
     defaultLocale: 'en',
   });
-  assertEquals(routes, []);
-  assertEquals(failures.length, 1);
-  assert(failures[0].includes('/shop/:id'));
+  expect(routes).toEqual([]);
+  expect(failures.length).toEqual(1);
+  expect(failures[0].includes('/shop/:id')).toBeTruthy();
 });
 
-Deno.test('enumeratePublicRoutes: duplicate localized route fails closed', () => {
+test('enumeratePublicRoutes: duplicate localized route fails closed', () => {
   const { failures } = enumeratePublicRoutes({
     routes: [
       { path: '/docs', type: 'page' },
@@ -56,35 +58,36 @@ Deno.test('enumeratePublicRoutes: duplicate localized route fails closed', () =>
     locales: LOCALES,
     defaultLocale: 'en',
   });
-  assert(failures.some((failure) => failure.includes("duplicate sitemap route '/docs'")));
+  expect(
+    failures.some((failure) => failure.includes("duplicate sitemap route '/docs'")),
+  ).toBeTruthy();
 });
 
-Deno.test('renderSitemapXml: stable schema, home priority, per-route lastmod', () => {
+test('renderSitemapXml: stable schema, home priority, per-route lastmod', () => {
   const xml = renderSitemapXml(['/', '/docs', '/guide/getting-started'], {
     lastmod: new Map([['/guide/getting-started', '2026-09-18']]),
   });
-  assert(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>'));
-  assert(xml.includes('<loc>https://openelement.org/</loc>'));
-  assert(xml.includes('<lastmod>2026-09-18</lastmod>'));
-  assert(xml.includes('<priority>1.0</priority>'));
-  assert(xml.includes('<loc>https://openelement.org/docs</loc>'));
-  assert(xml.includes('<priority>0.7</priority>'));
-  assert(xml.includes('<changefreq>weekly</changefreq>'));
+  expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBeTruthy();
+  expect(xml.includes('<loc>https://openelement.org/</loc>')).toBeTruthy();
+  expect(xml.includes('<lastmod>2026-09-18</lastmod>')).toBeTruthy();
+  expect(xml.includes('<priority>1.0</priority>')).toBeTruthy();
+  expect(xml.includes('<loc>https://openelement.org/docs</loc>')).toBeTruthy();
+  expect(xml.includes('<priority>0.7</priority>')).toBeTruthy();
+  expect(xml.includes('<changefreq>weekly</changefreq>')).toBeTruthy();
   // Routes without a known source date omit <lastmod> entirely instead of
   // falling back to the build clock.
   const docsBlock = xml.split('<loc>https://openelement.org/docs</loc>')[1].split('</url>')[0];
-  assertEquals(docsBlock.includes('<lastmod>'), false);
-  assertEquals(xml.match(/<lastmod>/g)?.length, 1);
+  expect(docsBlock.includes('<lastmod>')).toEqual(false);
+  expect(xml.match(/<lastmod>/g)?.length).toEqual(1);
 });
 
-Deno.test('renderRobotsTxt: allow all plus sitemap pointer', () => {
-  assertEquals(
-    renderRobotsTxt(),
+test('renderRobotsTxt: allow all plus sitemap pointer', () => {
+  expect(renderRobotsTxt()).toEqual(
     'User-agent: *\nAllow: /\n\nSitemap: https://openelement.org/sitemap.xml\n',
   );
 });
 
-Deno.test('enumeratePublicRoutes: the default locale is explicit, not array order', () => {
+test('enumeratePublicRoutes: the default locale is explicit, not array order', () => {
   // 'zh' first but 'en' default: unprefixed paths stay English, and the
   // Chinese tree gets the /zh prefix.
   const { routes, failures } = enumeratePublicRoutes({
@@ -96,11 +99,11 @@ Deno.test('enumeratePublicRoutes: the default locale is explicit, not array orde
     locales: ['zh', 'en'],
     defaultLocale: 'en',
   });
-  assertEquals(failures, []);
-  assertEquals(routes, ['/', '/guide', '/zh', '/zh/guide']);
+  expect(failures).toEqual([]);
+  expect(routes).toEqual(['/', '/guide', '/zh', '/zh/guide']);
 });
 
-Deno.test('enumeratePublicRoutes: invalid locale configuration fails closed', () => {
+test('enumeratePublicRoutes: invalid locale configuration fails closed', () => {
   const base = { routes: [], blogPostRoutes: [] } as const;
   const cases: Array<[string, { locales: string[]; defaultLocale: string }]> = [
     ['no locales', { locales: [], defaultLocale: 'en' }],
@@ -109,16 +112,16 @@ Deno.test('enumeratePublicRoutes: invalid locale configuration fails closed', ()
   ];
   for (const [label, config] of cases) {
     const { routes, failures } = enumeratePublicRoutes({ ...base, ...config });
-    assertEquals(failures.length > 0, true, `${label}: must fail closed`);
-    assertEquals(routes, [], label);
+    expect(failures.length > 0, `${label}: must fail closed`).toEqual(true);
+    expect(routes, label).toEqual([]);
   }
 });
 
-Deno.test('articleLastmodByRoute: source dates per locale, unknown routes omitted', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'site-lastmod-fixture-' });
+test('articleLastmodByRoute: source dates per locale, unknown routes omitted', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'site-lastmod-fixture-'));
   try {
     const manifest = join(dir, 'content-dates.json');
-    await Deno.writeTextFile(
+    await writeFile(
       manifest,
       JSON.stringify({
         articles: {
@@ -138,13 +141,13 @@ Deno.test('articleLastmodByRoute: source dates per locale, unknown routes omitte
       ],
       manifest,
     );
-    assertEquals(map.get('/guide/getting-started'), '2026-09-18');
-    assertEquals(map.get('/zh/guide/getting-started'), '2026-09-17');
-    assertEquals(map.get('/architecture'), '2026-09-16');
-    assertEquals(map.has('/zh/architecture'), false); // 'uncommitted' is hidden
-    assertEquals(map.has('/'), false);
-    assertEquals(map.has('/blog/hello'), false);
+    expect(map.get('/guide/getting-started')).toEqual('2026-09-18');
+    expect(map.get('/zh/guide/getting-started')).toEqual('2026-09-17');
+    expect(map.get('/architecture')).toEqual('2026-09-16');
+    expect(map.has('/zh/architecture')).toEqual(false); // 'uncommitted' is hidden
+    expect(map.has('/')).toEqual(false);
+    expect(map.has('/blog/hello')).toEqual(false);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await rm(dir, { recursive: true });
   }
 });

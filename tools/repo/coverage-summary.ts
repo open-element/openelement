@@ -1,4 +1,5 @@
-import { walk } from '@std/fs/walk';
+import { readdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import ts from 'typescript';
 import { parseTypeScript } from '../lib/typescript-ast.ts';
 
@@ -124,7 +125,7 @@ export function isCoverageTreeExcluded(path: string): boolean {
 
 /**
  * Enumerate every in-scope source file under `root` so files that no test
- * ever loads still enter the coverage denominator (Deno coverage only
+ * ever loads still enter the coverage denominator (the lcov report only
  * profiles modules that were actually imported during the test run).
  */
 export async function enumerateCoverageFiles(
@@ -132,8 +133,11 @@ export async function enumerateCoverageFiles(
   include: (path: string) => boolean,
 ): Promise<string[]> {
   const files: string[] = [];
-  for await (const entry of walk(root, { exts: ['.ts', '.tsx'], includeDirs: false })) {
-    const path = entry.path;
+  for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory() || (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx'))) {
+      continue;
+    }
+    const path = `${entry.parentPath}/${entry.name}`;
     if (
       path.includes('/node_modules/') ||
       path.includes('/vendor/') ||
@@ -146,6 +150,28 @@ export async function enumerateCoverageFiles(
     files.push(path);
   }
   return files.sort();
+}
+
+/**
+ * Normalize an lcov report's `SF:` paths to absolute form against `root`.
+ *
+ * The vitest lcov reporter writes paths relative to the vitest root, while
+ * every consumer here (lcovFilePaths membership, parseLcov's scope
+ * predicates) matches absolute paths; feeding the raw report through them
+ * would leave every file unmatched, the whole denominator in the "never
+ * loaded" bucket and every scope at 0%. Run this once at the read boundary,
+ * before the report reaches those consumers.
+ */
+export function normalizeLcovSourcePaths(lcov: string, root: string): string {
+  return lcov
+    .split('\n')
+    .map((line) => {
+      if (!line.startsWith('SF:')) return line;
+      const sourcePath = line.slice(3);
+      if (sourcePath.startsWith('/') || sourcePath.includes('://')) return line;
+      return `SF:${resolve(root, sourcePath)}`;
+    })
+    .join('\n');
 }
 
 /** Absolute paths of every file present in an LCOV report. */
@@ -168,7 +194,7 @@ function hasDeclareModifier(node: ts.Node): boolean {
  * Estimate the coverable lines/branches/functions of a source file via the
  * TypeScript AST. Used only for files missing from LCOV, where every
  * coverable element is by definition uncovered. Approximation contract
- * (calibrated against `deno coverage` output): each decision point (if,
+ * (matching the lcov branch-slot accounting): each decision point (if,
  * ternary, loop, catch, `&&`/`||`/`??`) yields two branch slots, each
  * case/default clause one; type-only constructs (interfaces, type aliases,
  * `import type`, `declare`) yield nothing.
@@ -257,7 +283,7 @@ function extendMetric(base: CoverageMetric, extraTotal: number): CoverageMetric 
 /**
  * Fold files that no test loaded into the summary as fully uncovered, so the
  * gate denominator covers the whole source tree instead of only the modules
- * Deno happened to profile.
+ * the lcov report happens to profile.
  */
 export function addUncoveredFiles(
   base: CoverageSummary,

@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 import { renderDsd } from '@openelement/element';
 
@@ -36,7 +37,7 @@ function credentials(email = 'user@example.com', password = 'password') {
   return data;
 }
 
-Deno.test('login rejects a Cloudflare rate-limit denial before auth', async () => {
+test('login rejects a Cloudflare rate-limit denial before auth', async () => {
   let called = false;
   const action = createLoginAction(() => {
     called = true;
@@ -47,29 +48,31 @@ Deno.test('login rejects a Cloudflare rate-limit denial before auth', async () =
       AUTH_RATE_LIMITER: { limit: () => Promise.resolve({ success: false }) },
     }),
   );
-  assert(isActionFailure(result));
-  assertEquals(result.status, 429);
-  assertEquals(called, false);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(429);
+  expect(called).toEqual(false);
 });
-Deno.test('login rejects missing credentials', async () => {
+test('login rejects missing credentials', async () => {
   const result = await createLoginAction(client())(context());
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
 });
-Deno.test('login sanitizes provider failures', async () => {
+test('login sanitizes provider failures', async () => {
   const result = await createLoginAction(
     client({ message: 'private provider diagnostic eyJsecret' }),
   )(context(credentials()));
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
-  assertEquals(JSON.stringify(result.data).includes('eyJsecret'), false);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
+  expect(JSON.stringify(result.data).includes('eyJsecret')).toEqual(false);
 });
-Deno.test('login success redirects with PRG', async () => {
-  const error = await assertRejects(() => createLoginAction(client())(context(credentials())));
-  assert(isOpenElementRedirect(error));
+test('login success redirects with PRG', async () => {
+  const error = await assertRejectsIncludes(() =>
+    createLoginAction(client())(context(credentials())),
+  );
+  expect(isOpenElementRedirect(error)).toBeTruthy();
 });
 
-Deno.test('login SSR includes the action error mount point contract', async () => {
+test('login SSR includes the action error mount point contract', async () => {
   const LoginPage = await compileComponentClass('../components/page-login.tsx');
   const out = renderDsd('login-page', {
     componentClass: LoginPage,
@@ -81,9 +84,9 @@ Deno.test('login SSR includes the action error mount point contract', async () =
       meta: {},
     }),
   });
-  assertEquals(out.errors, []);
-  assert(out.html.includes("id='error'") || out.html.includes('id="error"'), out.html);
-  assert(out.html.includes('>x<'), out.html);
+  expect(out.errors).toEqual([]);
+  expect(out.html.includes("id='error'") || out.html.includes('id="error"'), out.html).toBeTruthy();
+  expect(out.html.includes('>x<'), out.html).toBeTruthy();
 });
 
 function oauthClient(
@@ -103,32 +106,31 @@ function oauthClient(
   });
 }
 
-Deno.test('oauth providers are configured only by an explicit true flag', () => {
-  assertEquals(configuredOAuthProviders({}), []);
-  assertEquals(configuredOAuthProviders({ SUPABASE_OAUTH_GOOGLE_ENABLED: 'false' }), []);
-  assertEquals(configuredOAuthProviders({ SUPABASE_OAUTH_GOOGLE_ENABLED: '1' }), []);
-  assertEquals(configuredOAuthProviders({ SUPABASE_OAUTH_GOOGLE_ENABLED: 'true' }), [
+test('oauth providers are configured only by an explicit true flag', () => {
+  expect(configuredOAuthProviders({})).toEqual([]);
+  expect(configuredOAuthProviders({ SUPABASE_OAUTH_GOOGLE_ENABLED: 'false' })).toEqual([]);
+  expect(configuredOAuthProviders({ SUPABASE_OAUTH_GOOGLE_ENABLED: '1' })).toEqual([]);
+  expect(configuredOAuthProviders({ SUPABASE_OAUTH_GOOGLE_ENABLED: 'true' })).toEqual([
     { id: 'google', label: 'Google' },
   ]);
-  assertEquals(
+  expect(
     configuredOAuthProviders({
       SUPABASE_OAUTH_GOOGLE_ENABLED: 'true',
       SUPABASE_OAUTH_GITHUB_ENABLED: 'true',
     }),
-    [
-      { id: 'google', label: 'Google' },
-      { id: 'github', label: 'GitHub' },
-    ],
-  );
+  ).toEqual([
+    { id: 'google', label: 'Google' },
+    { id: 'github', label: 'GitHub' },
+  ]);
 });
 
-Deno.test('login loader exposes only the configured oauth providers', async () => {
-  assertEquals(await createLoginLoader()({ env: { SUPABASE_OAUTH_GITHUB_ENABLED: 'true' } }), {
+test('login loader exposes only the configured oauth providers', async () => {
+  expect(await createLoginLoader()({ env: { SUPABASE_OAUTH_GITHUB_ENABLED: 'true' } })).toEqual({
     oauthProviders: [{ id: 'github', label: 'GitHub' }],
   });
 });
 
-Deno.test('login projects the not-configured placeholder without any provider flag', () => {
+test('login projects the not-configured placeholder without any provider flag', () => {
   const props = loginPageProps({
     data: { oauthProviders: [] },
     actionData: undefined,
@@ -136,12 +138,12 @@ Deno.test('login projects the not-configured placeholder without any provider fl
     route: { path: '/login' },
     meta: {},
   });
-  assertEquals(props.oauthNone, 1);
-  assertEquals(props.oauthGoogle, 0);
-  assertEquals(props.oauthGithub, 0);
+  expect(props.oauthNone).toEqual(1);
+  expect(props.oauthGoogle).toEqual(0);
+  expect(props.oauthGithub).toEqual(0);
 });
 
-Deno.test('login projects one flag per configured provider instead of the placeholder', () => {
+test('login projects one flag per configured provider instead of the placeholder', () => {
   const props = loginPageProps({
     data: {
       oauthProviders: [
@@ -154,20 +156,20 @@ Deno.test('login projects one flag per configured provider instead of the placeh
     route: { path: '/login' },
     meta: {},
   });
-  assertEquals(props.oauthGoogle, 1);
-  assertEquals(props.oauthGithub, 1);
-  assertEquals(props.oauthNone, 0);
+  expect(props.oauthGoogle).toEqual(1);
+  expect(props.oauthGithub).toEqual(1);
+  expect(props.oauthNone).toEqual(0);
 });
 
-Deno.test('login SSR renders the provider branches and placeholder from the projection', async () => {
+test('login SSR renders the provider branches and placeholder from the projection', async () => {
   const LoginPage = await compileComponentClass('../components/page-login.tsx');
   const base = { actionData: undefined, params: {}, route: { path: '/login' }, meta: {} };
   const none = renderDsd('login-page', {
     componentClass: LoginPage,
     props: loginPageProps({ ...base, data: { oauthProviders: [] } }),
   });
-  assert(none.html.includes('OAuth providers: not configured'), none.html);
-  assert(!none.html.includes('Continue with'), none.html);
+  expect(none.html.includes('OAuth providers: not configured'), none.html).toBeTruthy();
+  expect(!none.html.includes('Continue with'), none.html).toBeTruthy();
   const both = renderDsd('login-page', {
     componentClass: LoginPage,
     props: loginPageProps({
@@ -180,12 +182,12 @@ Deno.test('login SSR renders the provider branches and placeholder from the proj
       },
     }),
   });
-  assert(both.html.includes('Continue with Google'), both.html);
-  assert(both.html.includes('Continue with GitHub'), both.html);
-  assert(!both.html.includes('not configured'), both.html);
+  expect(both.html.includes('Continue with Google'), both.html).toBeTruthy();
+  expect(both.html.includes('Continue with GitHub'), both.html).toBeTruthy();
+  expect(!both.html.includes('not configured'), both.html).toBeTruthy();
 });
 
-Deno.test('oauth action fails closed without 500 when the provider is not configured', async () => {
+test('oauth action fails closed without 500 when the provider is not configured', async () => {
   let called = false;
   const action = createOAuthAction(() => {
     called = true;
@@ -194,26 +196,25 @@ Deno.test('oauth action fails closed without 500 when the provider is not config
   const data = new FormData();
   data.set('provider', 'google');
   const result = await action(context(data));
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
-  assertEquals(called, false);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
+  expect(called).toEqual(false);
 });
 
-Deno.test('oauth action redirects to the provider url when configured', async () => {
+test('oauth action redirects to the provider url when configured', async () => {
   const calls: { provider: string; redirectTo: string }[] = [];
   const data = new FormData();
   data.set('provider', 'google');
-  const thrown = await assertRejects(() =>
+  const thrown = await assertRejectsIncludes(() =>
     createOAuthAction(
       oauthClient({ url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1' }, calls),
     )(context(data, { SUPABASE_OAUTH_GOOGLE_ENABLED: 'true' })),
   );
-  assert(isOpenElementRedirect(thrown));
-  assertEquals(
-    (thrown as { location?: string }).location,
+  expect(isOpenElementRedirect(thrown)).toBeTruthy();
+  expect((thrown as { location?: string }).location).toEqual(
     'https://accounts.google.com/o/oauth2/v2/auth?x=1',
   );
-  assertEquals(calls, [
+  expect(calls).toEqual([
     {
       provider: 'google',
       redirectTo: 'https://app.test/auth/callback',
@@ -221,22 +222,22 @@ Deno.test('oauth action redirects to the provider url when configured', async ()
   ]);
 });
 
-Deno.test('oauth action sanitizes provider failures and missing urls', async () => {
+test('oauth action sanitizes provider failures and missing urls', async () => {
   const data = new FormData();
   data.set('provider', 'github');
   const env = { SUPABASE_OAUTH_GITHUB_ENABLED: 'true' };
   const errored = await createOAuthAction(
     oauthClient({ url: null, error: { message: 'provider diagnostic eyJsecret' } }),
   )(context(data, env));
-  assert(isActionFailure(errored));
-  assertEquals(errored.status, 422);
-  assertEquals(JSON.stringify(errored.data).includes('eyJsecret'), false);
+  expect(isActionFailure(errored)).toBeTruthy();
+  expect(errored.status).toEqual(422);
+  expect(JSON.stringify(errored.data).includes('eyJsecret')).toEqual(false);
   const noUrl = await createOAuthAction(oauthClient({ url: null }))(context(data, env));
-  assert(isActionFailure(noUrl));
-  assertEquals(noUrl.status, 422);
+  expect(isActionFailure(noUrl)).toBeTruthy();
+  expect(noUrl.status).toEqual(422);
 });
 
-Deno.test('oauth action rejects a Cloudflare rate-limit denial before auth', async () => {
+test('oauth action rejects a Cloudflare rate-limit denial before auth', async () => {
   let called = false;
   const action = createOAuthAction(() => {
     called = true;
@@ -250,7 +251,7 @@ Deno.test('oauth action rejects a Cloudflare rate-limit denial before auth', asy
       AUTH_RATE_LIMITER: { limit: () => Promise.resolve({ success: false }) },
     }),
   );
-  assert(isActionFailure(result));
-  assertEquals(result.status, 429);
-  assertEquals(called, false);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(429);
+  expect(called).toEqual(false);
 });

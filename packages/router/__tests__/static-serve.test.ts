@@ -5,8 +5,11 @@
  * cli/start.ts and the request-time fixture server cannot drift apart again.
  */
 
-import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
-import { join } from '@std/path';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
+import { join } from 'node:path';
 import {
   contentTypeFor,
   dispatchRequest,
@@ -15,11 +18,11 @@ import {
   tryStatic,
 } from '../src/vite/internal/static-serve.ts';
 
-Deno.test('dispatchRequest shares mutating and styled-fallback production semantics (#1100)', async () => {
-  const root = await Deno.makeTempDir();
+test('dispatchRequest shares mutating and styled-fallback production semantics (#1100)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   const seen: string[] = [];
   try {
-    await Deno.writeTextFile(join(root, 'index.html'), '<h1>static home</h1>');
+    await writeFile(join(root, 'index.html'), '<h1>static home</h1>');
     const serverMod = {
       isRequestTimePath: (pathname: string) => pathname === '/live',
       default: ({ req }: { req: Request }) => {
@@ -43,191 +46,191 @@ Deno.test('dispatchRequest shares mutating and styled-fallback production semant
       distDir: root,
       serverMod,
     });
-    assertEquals(await home.text(), '<h1>static home</h1>');
+    expect(await home.text()).toEqual('<h1>static home</h1>');
 
     const mutation = await dispatchRequest(
       new Request('http://example.test/form', { method: 'PUT', body: 'x=1' }),
       { distDir: root, serverMod },
     );
-    assertEquals(mutation.status, 405);
+    expect(mutation.status).toEqual(405);
 
     const missing = await dispatchRequest(new Request('http://example.test/missing'), {
       distDir: root,
       serverMod,
     });
-    assertEquals(missing.status, 404);
-    assertEquals(missing.statusText, 'Styled Not Found');
-    assertStringIncludes(await missing.text(), 'styled not found');
-    assertEquals(seen, ['PUT /form', 'GET /missing']);
+    expect(missing.status).toEqual(404);
+    expect(missing.statusText).toEqual('Styled Not Found');
+    expect(await missing.text()).toContain('styled not found');
+    expect(seen).toEqual(['PUT /form', 'GET /missing']);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('contentTypeFor uses the maintained mime database (#732)', () => {
-  assertEquals(contentTypeFor('/d/index.html'), 'text/html; charset=UTF-8');
-  assertEquals(contentTypeFor('/d/app.js'), 'text/javascript; charset=UTF-8');
+test('contentTypeFor uses the maintained mime database (#732)', () => {
+  expect(contentTypeFor('/d/index.html')).toEqual('text/html; charset=UTF-8');
+  expect(contentTypeFor('/d/app.js')).toEqual('text/javascript; charset=UTF-8');
   // Added to close the drift: start.ts lacked these three.
-  assertEquals(contentTypeFor('/d/app.mjs'), 'text/javascript; charset=UTF-8');
-  assertEquals(contentTypeFor('/d/favicon.ico'), 'image/vnd.microsoft.icon');
-  assertEquals(contentTypeFor('/d/sitemap.xml'), 'application/xml');
-  assertEquals(contentTypeFor('/d/unknown.bin'), 'application/octet-stream');
+  expect(contentTypeFor('/d/app.mjs')).toEqual('text/javascript; charset=UTF-8');
+  expect(contentTypeFor('/d/favicon.ico')).toEqual('image/vnd.microsoft.icon');
+  expect(contentTypeFor('/d/sitemap.xml')).toEqual('application/xml');
+  expect(contentTypeFor('/d/unknown.bin')).toEqual('application/octet-stream');
 });
 
-Deno.test('staticFileCandidates: exact, /index.html, then .html', () => {
-  assertEquals(staticFileCandidates('/'), ['index.html', 'index.html/index.html']);
-  assertEquals(staticFileCandidates('/about'), ['about', 'about/index.html', 'about.html']);
-  assertEquals(staticFileCandidates('/about/'), ['about/', 'about/index.html']);
-  assertEquals(staticFileCandidates('/a.html'), ['a.html', 'a.html/index.html']);
-  assertEquals(staticFileCandidates('/x y'), ['x y', 'x y/index.html', 'x y.html']);
+test('staticFileCandidates: exact, /index.html, then .html', () => {
+  expect(staticFileCandidates('/')).toEqual(['index.html', 'index.html/index.html']);
+  expect(staticFileCandidates('/about')).toEqual(['about', 'about/index.html', 'about.html']);
+  expect(staticFileCandidates('/about/')).toEqual(['about/', 'about/index.html']);
+  expect(staticFileCandidates('/a.html')).toEqual(['a.html', 'a.html/index.html']);
+  expect(staticFileCandidates('/x y')).toEqual(['x y', 'x y/index.html', 'x y.html']);
 });
 
-Deno.test('tryStatic serves files and refuses path escape', async () => {
-  const root = await Deno.makeTempDir();
+test('tryStatic serves files and refuses path escape', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await Deno.writeTextFile(join(root, 'index.html'), '<h1>home</h1>');
-    await Deno.mkdir(join(root, 'about'));
-    await Deno.writeTextFile(join(root, 'about', 'index.html'), '<h1>about</h1>');
-    await Deno.writeTextFile(join(root, 'contact.html'), '<h1>contact</h1>');
-    await Deno.writeTextFile(join(root, 'feed.xml'), '<rss/>');
+    await writeFile(join(root, 'index.html'), '<h1>home</h1>');
+    await mkdir(join(root, 'about'));
+    await writeFile(join(root, 'about', 'index.html'), '<h1>about</h1>');
+    await writeFile(join(root, 'contact.html'), '<h1>contact</h1>');
+    await writeFile(join(root, 'feed.xml'), '<rss/>');
 
     const home = tryStatic(root, '/');
-    assert(home);
-    assertEquals(await home.text(), '<h1>home</h1>');
+    expect(home).toBeTruthy();
+    expect(await home.text()).toEqual('<h1>home</h1>');
 
     const about = tryStatic(root, '/about');
-    assert(about);
-    assertEquals(await about.text(), '<h1>about</h1>');
+    expect(about).toBeTruthy();
+    expect(await about.text()).toEqual('<h1>about</h1>');
 
     const contact = tryStatic(root, '/contact');
-    assert(contact);
-    assertEquals(await contact.text(), '<h1>contact</h1>');
+    expect(contact).toBeTruthy();
+    expect(await contact.text()).toEqual('<h1>contact</h1>');
 
     const feed = tryStatic(root, '/feed.xml');
-    assert(feed);
-    assertEquals(feed.headers.get('content-type'), 'application/xml');
+    expect(feed).toBeTruthy();
+    expect(feed.headers.get('content-type')).toEqual('application/xml');
 
-    assertEquals(tryStatic(root, '/missing'), null);
+    expect(tryStatic(root, '/missing')).toEqual(null);
     // Path escape outside the static root must never be served.
-    assertEquals(tryStatic(root, '/../secret.txt'), null);
+    expect(tryStatic(root, '/../secret.txt')).toEqual(null);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('tryStatic refuses symlink escape but allows in-root symlinks', async () => {
-  const root = await Deno.makeTempDir();
-  const outside = await Deno.makeTempDir();
+test('tryStatic refuses symlink escape but allows in-root symlinks', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  const outside = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await Deno.writeTextFile(join(outside, 'secret.txt'), 'TOP-SECRET');
-    await Deno.writeTextFile(join(root, 'real.html'), '<h1>real</h1>');
-    await Deno.symlink(join(outside, 'secret.txt'), join(root, 'leak.txt'));
-    await Deno.symlink(join(root, 'real.html'), join(root, 'linked.html'));
+    await writeFile(join(outside, 'secret.txt'), 'TOP-SECRET');
+    await writeFile(join(root, 'real.html'), '<h1>real</h1>');
+    await symlink(join(outside, 'secret.txt'), join(root, 'leak.txt'));
+    await symlink(join(root, 'real.html'), join(root, 'linked.html'));
 
     // A symlink resolving outside the static root must never be served.
-    assertEquals(tryStatic(root, '/leak.txt'), null);
+    expect(tryStatic(root, '/leak.txt')).toEqual(null);
     // A symlink resolving back inside the root is ordinary static content.
     const linked = tryStatic(root, '/linked.html');
-    assert(linked);
-    assertEquals(await linked.text(), '<h1>real</h1>');
+    expect(linked).toBeTruthy();
+    expect(await linked.text()).toEqual('<h1>real</h1>');
   } finally {
-    await Deno.remove(root, { recursive: true });
-    await Deno.remove(outside, { recursive: true });
+    await rm(root, { recursive: true });
+    await rm(outside, { recursive: true });
   }
 });
 
-Deno.test('tryStatic treats a directory at a candidate path as a miss (#1281, CodeQL file-system-race)', async () => {
+test('tryStatic treats a directory at a candidate path as a miss (#1281, CodeQL file-system-race)', async () => {
   // The candidate check is read-and-fallback instead of existsSync/statSync
   // guard-then-read (check-then-act TOCTOU): a directory named like a file
   // candidate must fall through exactly like a missing file.
-  const root = await Deno.makeTempDir();
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await Deno.mkdir(join(root, 'dir.html'));
-    await Deno.writeTextFile(join(root, 'real.html'), '<h1>real</h1>');
-    assertEquals(tryStatic(root, '/dir.html'), null);
+    await mkdir(join(root, 'dir.html'));
+    await writeFile(join(root, 'real.html'), '<h1>real</h1>');
+    expect(tryStatic(root, '/dir.html')).toEqual(null);
     const real = tryStatic(root, '/real.html');
-    assert(real);
-    assertEquals(await real.text(), '<h1>real</h1>');
+    expect(real).toBeTruthy();
+    expect(await real.text()).toEqual('<h1>real</h1>');
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('malformed percent-encoding is a defined 400, never a crash (#823)', async () => {
+test('malformed percent-encoding is a defined 400, never a crash (#823)', async () => {
   // decodeURIComponent throws URIError on input like /%zz; the serving layer
   // converts it to a 400 so `start` and the fixture server stay alive.
-  const err = assertThrows(() => staticFileCandidates('/%zz'), URIError);
-  assert(isMalformedUrlError(err));
-  assert(!isMalformedUrlError(new Error('nope')));
+  const err = assertThrowsIncludes(() => staticFileCandidates('/%zz'), URIError);
+  expect(isMalformedUrlError(err)).toBeTruthy();
+  expect(!isMalformedUrlError(new Error('nope'))).toBeTruthy();
 
-  const root = await Deno.makeTempDir();
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const response = tryStatic(root, '/%zz');
-    assert(response);
-    assertEquals(response.status, 400);
-    assertEquals(await response.text(), 'Bad Request');
+    expect(response).toBeTruthy();
+    expect(response.status).toEqual(400);
+    expect(await response.text()).toEqual('Bad Request');
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('tryStatic cache-control: content-hashed assets immutable, HTML rechecked on deploy (#1039)', async () => {
-  const root = await Deno.makeTempDir();
+test('tryStatic cache-control: content-hashed assets immutable, HTML rechecked on deploy (#1039)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await Deno.mkdir(join(root, 'assets'));
-    await Deno.writeTextFile(join(root, 'assets', 'index-Dq2gH8fM.js'), 'console.log(1)');
-    await Deno.writeTextFile(join(root, 'index.html'), '<h1>home</h1>');
-    await Deno.writeTextFile(join(root, 'favicon.ico'), 'ico');
+    await mkdir(join(root, 'assets'));
+    await writeFile(join(root, 'assets', 'index-Dq2gH8fM.js'), 'console.log(1)');
+    await writeFile(join(root, 'index.html'), '<h1>home</h1>');
+    await writeFile(join(root, 'favicon.ico'), 'ico');
 
     const asset = tryStatic(root, '/assets/index-Dq2gH8fM.js');
-    assert(asset);
-    assertEquals(asset.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    expect(asset).toBeTruthy();
+    expect(asset.headers.get('cache-control')).toEqual('public, max-age=31536000, immutable');
 
     const html = tryStatic(root, '/');
-    assert(html);
-    assertEquals(html.headers.get('cache-control'), 'no-cache');
+    expect(html).toBeTruthy();
+    expect(html.headers.get('cache-control')).toEqual('no-cache');
 
     // Unhashed static files fall back to no-cache: the same URL can serve
     // different bytes after a redeploy, so caches must revalidate.
     const icon = tryStatic(root, '/favicon.ico');
-    assert(icon);
-    assertEquals(icon.headers.get('cache-control'), 'no-cache');
+    expect(icon).toBeTruthy();
+    expect(icon.headers.get('cache-control')).toEqual('no-cache');
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('tryStatic cache-control: unhashed framework client runtime revalidates', async () => {
+test('tryStatic cache-control: unhashed framework client runtime revalidates', async () => {
   // The framework-owned /client/islands/client.js is not content-hashed;
   // without an explicit header its cache semantics were undefined.
-  const root = await Deno.makeTempDir();
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await Deno.mkdir(join(root, 'client', 'islands'), { recursive: true });
-    await Deno.writeTextFile(join(root, 'client', 'islands', 'client.js'), 'export {}');
+    await mkdir(join(root, 'client', 'islands'), { recursive: true });
+    await writeFile(join(root, 'client', 'islands', 'client.js'), 'export {}');
 
     const client = tryStatic(root, '/client/islands/client.js');
-    assert(client);
-    assertEquals(client.headers.get('cache-control'), 'no-cache');
-    assertEquals(client.headers.get('content-type'), 'text/javascript; charset=UTF-8');
+    expect(client).toBeTruthy();
+    expect(client.headers.get('cache-control')).toEqual('no-cache');
+    expect(client.headers.get('content-type')).toEqual('text/javascript; charset=UTF-8');
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('dispatchRequest: pure-static (serverMod=null) answers mutating methods 405', async () => {
-  const root = await Deno.makeTempDir();
+test('dispatchRequest: pure-static (serverMod=null) answers mutating methods 405', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await Deno.mkdir(join(root, 'about'));
-    await Deno.writeTextFile(join(root, 'about', 'index.html'), '<h1>about</h1>');
+    await mkdir(join(root, 'about'));
+    await writeFile(join(root, 'about', 'index.html'), '<h1>about</h1>');
 
     for (const method of ['POST', 'PUT']) {
       const response = await dispatchRequest(
         new Request('http://example.test/about', { method, body: 'x=1' }),
         { distDir: root, serverMod: null },
       );
-      assertEquals(response.status, 405, `${method} /about status`);
-      assertEquals(response.headers.get('allow'), 'GET, HEAD', `${method} /about Allow`);
-      assertEquals(await response.text(), 'Method Not Allowed');
+      expect(response.status, `${method} /about status`).toEqual(405);
+      expect(response.headers.get('allow'), `${method} /about Allow`).toEqual('GET, HEAD');
+      expect(await response.text()).toEqual('Method Not Allowed');
     }
 
     // GET/HEAD keep the pure-static page contract.
@@ -235,14 +238,14 @@ Deno.test('dispatchRequest: pure-static (serverMod=null) answers mutating method
       distDir: root,
       serverMod: null,
     });
-    assertEquals(get.status, 200);
-    assertEquals(await get.text(), '<h1>about</h1>');
+    expect(get.status).toEqual(200);
+    expect(await get.text()).toEqual('<h1>about</h1>');
     const head = await dispatchRequest(
       new Request('http://example.test/about', { method: 'HEAD' }),
       { distDir: root, serverMod: null },
     );
-    assertEquals(head.status, 200);
+    expect(head.status).toEqual(200);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });

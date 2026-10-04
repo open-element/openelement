@@ -13,8 +13,11 @@
  * so the check resolves `@openelement/element` exactly as a consumer's
  * `tsconfig` would.
  */
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
-import { fromFileUrl, join, resolve } from '@std/path';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
+import { readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
 import {
   type EmittedModuleDiagnostic,
@@ -23,7 +26,7 @@ import {
 import { typeCheckEmittedModule as typeCheckFromSubpath } from '../src/compiler.ts';
 import { readPackage } from '../../../tools/lib/package-graph.ts';
 
-const REPO_ROOT = fromFileUrl(new URL('../../../', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 /**
  * The workspace module resolution map: every package's declared `exports`, in
@@ -33,17 +36,17 @@ const REPO_ROOT = fromFileUrl(new URL('../../../', import.meta.url));
  *
  * The walk is anchored at `REPO_ROOT` rather than `readPackages()`: that helper
  * reads `packages` relative to the process CWD, because every caller of it is a
- * root task. This suite is a package task, and `gate.ts` runs a package task as
- * `deno task --cwd packages/<name> <task>` — under which a relative walk throws
- * before a single test runs. Resolving each manifest path from this file's own
+ * root task. This suite is a package task (`gate.ts` runs it with the package
+ * directory as CWD), under which a relative walk would resolve against the
+ * wrong base. Resolving each manifest path from this file's own
  * URL keeps the map identical under both invocation forms.
  */
 async function workspacePaths(): Promise<Record<string, string[]>> {
   const packagesDir = join(REPO_ROOT, 'packages');
   const paths: Record<string, string[]> = {};
   const entries = [];
-  for await (const entry of Deno.readDir(packagesDir)) {
-    if (entry.isDirectory) entries.push(entry.name);
+  for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
+    if (entry.isDirectory()) entries.push(entry.name);
   }
   for (const name of entries.sort()) {
     const pkg = await readPackage(join(packagesDir, name));
@@ -65,21 +68,21 @@ function emittedDiagnostics(source: string, id: string): EmittedModuleDiagnostic
   return typeCheckEmittedModule(code, id, { paths: PATHS });
 }
 
-Deno.test('#1386: the compiled module for the canonical counter fixture type-checks', async () => {
-  const source = await Deno.readTextFile(
+test('#1386: the compiled module for the canonical counter fixture type-checks', async () => {
+  const source = await readFile(
     join(REPO_ROOT, 'packages/element/__fixtures__/compiled-element-v1/counter.tsx'),
+    'utf8',
   );
   const diagnostics = emittedDiagnostics(source, '/project/app/islands/counter.tsx');
-  assertEquals(
+  expect(
     diagnostics,
-    [],
     `the emitted module must type-check; got:\n${diagnostics
       .map((d) => `${d.line}:${d.character} TS${d.code} ${d.message}`)
       .join('\n')}`,
-  );
+  ).toEqual([]);
 });
 
-Deno.test('#1386: the emitted module type-checks across the authoring grammar', () => {
+test('#1386: the emitted module type-checks across the authoring grammar', () => {
   // One case per construct the emitter synthesizes around: a property with a
   // converter, a computed field, an event handler reference, a keyed list, a
   // conditional Region, and a styles annotation. These are exactly the sites
@@ -128,17 +131,16 @@ Deno.test('#1386: the emitted module type-checks across the authoring grammar', 
   ];
   for (const [name, source] of sources) {
     const diagnostics = emittedDiagnostics(source, `/project/app/islands/${name}.tsx`);
-    assertEquals(
+    expect(
       diagnostics,
-      [],
       `${name} must emit a type-checking module; got:\n${diagnostics
         .map((d) => `${d.line}:${d.character} TS${d.code} ${d.message}`)
         .join('\n')}`,
-    );
+    ).toEqual([]);
   }
 });
 
-Deno.test('#1386: the check reports a real diagnostic instead of passing vacuously', () => {
+test('#1386: the check reports a real diagnostic instead of passing vacuously', () => {
   // The negative control: an emitted module whose program is fine but whose
   // surrounding text is not. This proves the checker runs a real program
   // rather than returning an empty array for whatever text it is handed.
@@ -152,14 +154,13 @@ Deno.test('#1386: the check reports a real diagnostic instead of passing vacuous
   const diagnostics = typeCheckEmittedModule(broken, '/project/app/islands/broken.tsx', {
     paths: PATHS,
   });
-  assert(diagnostics.length > 0, 'a type error must be reported');
-  assertStringIncludes(
-    diagnostics.map((d) => `${d.code} ${d.message}`).join('\n'),
+  expect(diagnostics.length > 0, 'a type error must be reported').toBeTruthy();
+  expect(diagnostics.map((d) => `${d.code} ${d.message}`).join('\n')).toContain(
     'is not assignable',
   );
 });
 
-Deno.test('#1386: the check is a pure function of its inputs (ADR-0148)', () => {
+test('#1386: the check is a pure function of its inputs (ADR-0148)', () => {
   const source = [
     "import { element, OpenElement, property } from '@openelement/element';",
     "@element('oe-check-pure')",
@@ -176,18 +177,18 @@ Deno.test('#1386: the check is a pure function of its inputs (ADR-0148)', () => 
     paths: PATHS,
   });
   // Two runs over identical inputs agree: no clock, no ambient state, no cache.
-  assertEquals(first, second);
-  assertEquals(first, []);
+  expect(first).toEqual(second);
+  expect(first).toEqual([]);
 });
 
-Deno.test('#1386: the check is reachable from the /compiler subpath a consumer imports', () => {
+test('#1386: the check is reachable from the /compiler subpath a consumer imports', () => {
   // The public entry and the semantic core must be the same implementation:
   // a consumer verifies its own components through the subpath, and the gate
   // above must not be checking a different function.
-  assertEquals(typeCheckFromSubpath, typeCheckEmittedModule);
+  expect(typeCheckFromSubpath).toEqual(typeCheckEmittedModule);
 });
 
-Deno.test('#1386: the Vite plugin gates a build on the emitted module when asked', async () => {
+test('#1386: the Vite plugin gates a build on the emitted module when asked', async () => {
   const { compiledElementPlugin } = await import('../src/internal/compiler/plugin.ts');
   const source = [
     "import { element, OpenElement, property } from '@openelement/element';",
@@ -215,7 +216,7 @@ Deno.test('#1386: the Vite plugin gates a build on the emitted module when asked
   const plain = runTransform(compiledElementPlugin(), (error) => {
     throw error;
   });
-  assert(typeof plain === 'string', 'the default hook emits the compiled module');
+  expect(typeof plain === 'string', 'the default hook emits the compiled module').toBeTruthy();
 
   // Opt-in build behaviour on a module that DOES type-check: the gate runs and
   // the emitted bytes are unchanged. (That the gate fires on a module which
@@ -230,6 +231,6 @@ Deno.test('#1386: the Vite plugin gates a build on the emitted module when asked
       throw error;
     },
   );
-  assertEquals(errors, [], 'a type-checking emitted module must not fail the gate');
-  assertEquals(gated, plain, 'the check must not change emitted bytes');
+  expect(errors, 'a type-checking emitted module must not fail the gate').toEqual([]);
+  expect(gated, 'the check must not change emitted bytes').toEqual(plain);
 });

@@ -7,9 +7,9 @@
  * the Document seam, the `.mdx` pipeline, the route/island scanners, the
  * dynamic prerender, and the generated entry's server runtime carries a
  * stable code, a phase and a severity, exactly like the element package's
- * `OpenElementError` contract (decision 0053). Before this module those
- * throws were bare `Error`s, so a host could not classify a failure, and the
- * CLI could not decide what to show without pattern-matching message text.
+ * `OpenElementError` contract (decision 0053): a host classifies any failure
+ * by its code and the CLI decides what to show without pattern-matching
+ * message text.
  *
  * Phase follows the surface that raises the code: `validation` for the
  * authoring descriptors and the Document head contract (each one rejects an
@@ -119,6 +119,22 @@ export const SsgRenderErrorCode = {
   APP_MISSING: 'OE_SSG_APP_MISSING',
   /** Prerendered static page routes returned non-200 and were not written. */
   STATIC_NON_200: 'OE_SSG_STATIC_NON_200',
+} as const;
+
+/**
+ * Stable codes for the client island build (`cli/build-client.ts`). Phase
+ * `build`: these fire while the client build turns the admitted island set
+ * into chunks — the identity pass pins every admitted island's declared
+ * specifier to its actual module id, and the chunk grouping groups on those
+ * ids only.
+ */
+export const ClientBuildErrorCode = {
+  /**
+   * A package island's declared specifier has no module id from the client
+   * build's identity pass when chunk grouping runs — an internal ordering
+   * bug; the build fails instead of grouping chunks on the raw specifier.
+   */
+  PACKAGE_IDENTITY_UNRESOLVED: 'OE_CLIENT_BUILD_PACKAGE_IDENTITY_UNRESOLVED',
 } as const;
 
 /**

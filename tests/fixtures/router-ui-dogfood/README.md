@@ -8,8 +8,6 @@ prerendered, so each page exercises the real compile → SSR/DSD → serve →
 hydrate path; interactive evidence lives in `e2e/*.spec.ts`.
 
 ```bash
-deno task --cwd tests/fixtures/router-ui-dogfood build
-deno task --cwd tests/fixtures/router-ui-dogfood gate    # build + e2e
+pnpm --dir tests/fixtures/router-ui-dogfood run build
+pnpm --dir tests/fixtures/router-ui-dogfood run gate    # build + e2e
 ```
-
-`deno.lock` is generated — see `tests/fixtures/README.md`.

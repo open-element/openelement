@@ -2,13 +2,15 @@
  * Generate/check the deterministic retained-package public-interface baseline.
  *
  * Cross-package `@openelement/*` imports are pinned to workspace sources via
- * `ts.CompilerOptions.paths` built from each package's deno.json exports, so
- * the snapshot depends only on the checked-out sources — never on whatever
+ * `ts.CompilerOptions.paths` built from each package's package.json `exports`,
+ * so the snapshot depends only on the checked-out sources — never on whatever
  * `node_modules/@openelement/*` layout the generating machine happens to have.
  */
 import { formatJson } from '@openelement/element/build-utils';
 import ts from 'typescript';
-import { resolve } from '@std/path';
+import { resolve } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';
 
 const SNAPSHOT = 'docs/release/public-interface-snapshot.json';
@@ -19,7 +21,8 @@ const TYPE_FLAGS =
 
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return new Uint8Array(digest).toHex();
+  // Node 24 has no Uint8Array.prototype.toHex (a Deno API): hex-encode by hand.
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function resolveAlias(checker: ts.TypeChecker, symbol: ts.Symbol): ts.Symbol {
@@ -320,7 +323,7 @@ export async function publicInterfaceShape(
 }
 
 async function main(): Promise<void> {
-  const write = Deno.args.includes('--write');
+  const write = process.argv.slice(2).includes('--write');
   const packages = releasePublishOrder(await readPackages());
   const paths = workspacePaths(packages);
   const degraded: string[] = [];
@@ -363,9 +366,11 @@ async function main(): Promise<void> {
             .join('\n  ')}`,
       );
     }
-    await Deno.writeTextFile(SNAPSHOT, text);
-  } else if ((await Deno.readTextFile(SNAPSHOT)) !== text) {
-    throw new Error(`${SNAPSHOT} drifted; run deno task interface:snapshot:write`);
+    await writeFile(SNAPSHOT, text, 'utf8');
+  } else if ((await readFile(SNAPSHOT, 'utf8')) !== text) {
+    throw new Error(
+      `${SNAPSHOT} drifted; run pnpm --filter @openelement/tools-repo run interface:snapshot:write`,
+    );
   }
   console.log(
     `Public interface snapshot ${write ? 'written' : 'matches'} (${packages.length} packages).`,

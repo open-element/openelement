@@ -13,7 +13,7 @@
  */
 
 import { ProgramErrorCode, raiseFrameworkError } from './errors.ts';
-import { forbiddenSinkReason } from './forbidden-sinks.ts';
+import { forbiddenSinkReason, isSafeAttributeName } from './forbidden-sinks.ts';
 import { VOID_TAGS } from './void-tags.ts';
 
 export { VOID_TAGS };
@@ -396,7 +396,7 @@ export function partAnchorEndMarker(index: number): string {
 
 /**
  * The one `<style>` element the server serializer emits as the first DSD
- * template child when the class carries static styles (legacy renderDsd
+ * template child when the class carries static styles (renderDsd
  * parity — pages never upgrade, so their styles must ship in the payload).
  * The claim path skips exactly this marked node; a marked node on a
  * style-less class is claim drift and fails closed.
@@ -450,13 +450,12 @@ function isIdentifier(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value);
 }
 
-function isAttributeName(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(value) &&
-    !/^on/i.test(value) &&
-    forbiddenSinkReason('attr', value) === null
-  );
+/**
+ * The wire-validator face of the one canonical attribute-name predicate
+ * (delegates to `./forbidden-sinks.ts`); exported for parity tests.
+ */
+export function isAttributeName(value: unknown): value is string {
+  return typeof value === 'string' && isSafeAttributeName(value);
 }
 
 function samePath(left: unknown, right: number[]): boolean {

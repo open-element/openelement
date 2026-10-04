@@ -6,10 +6,11 @@
  * exports are inert no-ops, and the Part Program is produced exclusively by
  * the adapter's open:compiled-element transform from the AUTHORED .tsx
  * source. A pack that transpiles authored .tsx without the element compiler
- * erases the decorator applications — the deno-pack generator did exactly
- * that (TC39 decorator lowering, applyDecs2203R) — so a tarball packed from
- * authored sources can never be admitted by the consumer-side compiler, and
- * packageIslands SSR fails closed with OE_PROGRAM_MISSING.
+ * erases the decorator applications, so a tarball packed from authored
+ * sources can never be admitted by the consumer-side compiler, and
+ * packageIslands SSR fails closed with OE_PROGRAM_MISSING. The pack pipeline
+ * never exposes the generator to that input: opted-in modules reach the
+ * `vp pack` generator only as `compilePackageElementModules` output (below).
  *
  * The repair keeps the admission contract unchanged and runs the SAME
  * intrinsic transform in the pack pipeline: `compilePackageElementModules`
@@ -25,8 +26,8 @@
  * instead of being silently absorbed.
  */
 
-import { walkSync } from '@std/fs/walk';
-import { basename, join, relative } from '@std/path';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { basename, join, relative } from 'node:path';
 import { compileElementModule, stripInlineSourceMapComment } from '@openelement/element/compiler';
 
 export interface CompiledModuleOutput {
@@ -46,16 +47,19 @@ export function compilePackageElementModules(pkgDir: string): CompiledModuleOutp
   const outputs: CompiledModuleOutput[] = [];
   const srcDir = join(pkgDir, 'src');
   try {
-    if (!Deno.statSync(srcDir).isDirectory) return [];
+    if (!statSync(srcDir).isDirectory()) return [];
   } catch {
     return []; // no src dir
   }
-  for (const entry of walkSync(srcDir, { includeDirs: false, exts: ['.tsx'] })) {
-    const source = Deno.readTextFileSync(entry.path);
-    const result = compileElementModule(source, basename(entry.path));
+  const entries = readdirSync(srcDir, { recursive: true, withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory() || !entry.name.endsWith('.tsx')) continue;
+    const entryPath = join(entry.parentPath, entry.name);
+    const source = readFileSync(entryPath, 'utf8');
+    const result = compileElementModule(source, basename(entryPath));
     if (!result) continue;
     outputs.push({
-      relativePath: relative(pkgDir, entry.path),
+      relativePath: relative(pkgDir, entryPath),
       code: stripInlineSourceMapComment(result.code) + '\n',
     });
   }

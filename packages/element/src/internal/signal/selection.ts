@@ -2,7 +2,7 @@
  * selection.ts - The signal-engine seam.
  *
  * @preact/signals-core (through the built-in adapter in preact-engine.ts) is
- * the only engine supported and verified in 1.0.0-alpha.1. This internal seam
+ * the only engine supported and verified by the package. This internal seam
  * returns that adapter instance so the framework intrinsics
  * (framework.ts) and the host signals handed to the compiled runtime share
  * one engine.

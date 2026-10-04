@@ -10,7 +10,8 @@
  * claims on one screen.
  */
 
-import { join } from '@std/path';
+import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 
 /** The subset of the release-state shape the anchor audit needs. */
 export interface AnchorReleaseState {
@@ -90,15 +91,15 @@ export async function wwwReleaseAnchorDrift(root: string): Promise<string[]> {
   let state: AnchorReleaseState;
   try {
     state = JSON.parse(
-      await Deno.readTextFile(join(root, 'docs/release/release-state.json')),
+      await readFile(join(root, 'docs/release/release-state.json'), 'utf8'),
     ) as AnchorReleaseState;
   } catch {
     return ['docs/release/release-state.json: missing or unreadable'];
   }
-  const siteVersionSource = await Deno.readTextFile(join(root, VERSION_SOURCE_WWW)).catch(
+  const siteVersionSource = await readFile(join(root, VERSION_SOURCE_WWW), 'utf8').catch(
     () => null,
   );
-  const releaseLineSource = await Deno.readTextFile(join(root, RELEASE_LINE_GENERATED)).catch(
+  const releaseLineSource = await readFile(join(root, RELEASE_LINE_GENERATED), 'utf8').catch(
     () => null,
   );
   if (siteVersionSource === null || releaseLineSource === null) {

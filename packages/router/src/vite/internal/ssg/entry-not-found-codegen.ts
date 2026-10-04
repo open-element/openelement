@@ -1,4 +1,10 @@
-/** Styled 404 route emission. */
+/**
+ * Styled 404 route emission.
+ *
+ * Generate the Hono notFound fallback (#923): unmatched paths render the
+ * /404 page with a 404 status. Any failure inside the fallback degrades to
+ * the plain status page — the fallback itself never 500s.
+ */
 import type { PageRouteDecl, RendererDecl } from '../protocol/ssg.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {

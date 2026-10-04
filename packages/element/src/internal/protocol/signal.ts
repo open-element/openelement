@@ -37,7 +37,7 @@ export type Signal<T> = WritableSignal<T> | ReadonlySignal<T>;
  * the framework layer talks to signals only through this narrow interface so
  * its call sites stay implementation-agnostic.
  *
- * 1.0.0-alpha.1 ships and verifies exactly one engine implementation
+ * The package ships and verifies exactly one engine implementation
  * (`preact-engine`, backed by `@preact/signals-core`). Preact's own API is not
  * Element public API, and arbitrary third-party engines are not promised;
  * any future engine would be added behind this protocol rather than inline

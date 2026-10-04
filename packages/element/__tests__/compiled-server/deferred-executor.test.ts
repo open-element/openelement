@@ -1,4 +1,5 @@
-import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import {
   createDeferredServerExecutor,
   type DeferredServerOwner,
@@ -75,7 +76,7 @@ function owner(p: PartProgramV1 = program, instanceId = 'instance-1'): DeferredS
   return { program: p, version: 1, instanceId };
 }
 
-Deno.test('deferred server mode reads only fast signals and preserves regular SSR bytes', () => {
+test('deferred server mode reads only fast signals and preserves regular SSR bytes', () => {
   const fast = {
     signals: {
       title: signal(values.title),
@@ -100,23 +101,19 @@ Deno.test('deferred server mode reads only fast signals and preserves regular SS
     { owner: identity, pendingParts: [1, 2] },
     { mode: 'light' },
   );
-  assertEquals(
-    executor.shell,
+  expect(executor.shell).toEqual(
     '<oe-stream-page data-oe-light><main>Before <!--oe:p0-->&lt;hello &amp; "world"&gt;<section><!--oe:p1--><!--oe:/p1--></section><!--oe:p2--><!--oe:/p2--> After</main></oe-stream-page>',
   );
-  assertEquals(
-    executor.serializeResolved(identity, 1, true),
+  expect(executor.serializeResolved(identity, 1, true)).toEqual(
     '<strong title="a&amp;&quot;">Ready &lt;&amp;&gt;</strong>',
   );
-  assertEquals(
-    executor.serializeResolved(identity, 2, values.items),
+  expect(executor.serializeResolved(identity, 2, values.items)).toEqual(
     '<a href="/next?x=1&amp;y=2" title="A&lt;&amp;&quot;&#39;">A&lt;&amp;"\'</a>',
   );
-  assertEquals(
-    serializeCompiledProgram(program, resolvedHost, { mode: 'light' }),
+  expect(serializeCompiledProgram(program, resolvedHost, { mode: 'light' })).toEqual(
     '<oe-stream-page data-oe-light><main>Before <!--oe:p0-->&lt;hello &amp; "world"&gt;<section><!--oe:p1--><strong title="a&amp;&quot;">Ready &lt;&amp;&gt;</strong><!--oe:/p1--></section><!--oe:p2--><a href="/next?x=1&amp;y=2" title="A&lt;&amp;&quot;&#39;">A&lt;&amp;"\'</a><!--oe:/p2--> After</main></oe-stream-page>',
   );
-  assertEquals(
+  expect(
     createDeferredServerExecutor(
       program,
       resolvedHost,
@@ -126,11 +123,10 @@ Deno.test('deferred server mode reads only fast signals and preserves regular SS
       },
       { mode: 'light' },
     ).shell,
-    serializeCompiledProgram(program, resolvedHost, { mode: 'light' }),
-  );
+  ).toEqual(serializeCompiledProgram(program, resolvedHost, { mode: 'light' }));
 });
 
-Deno.test('pending text has an end anchor only in the opt-in shell and resolves with canonical escaping', () => {
+test('pending text has an end anchor only in the opt-in shell and resolves with canonical escaping', () => {
   const pendingHost = {
     signals: {
       ...resolvedHost.signals,
@@ -147,40 +143,50 @@ Deno.test('pending text has an end anchor only in the opt-in shell and resolves 
     owner: identity,
     pendingParts: [0],
   });
-  assertStringIncludes(executor.shell, 'Before <!--oe:p0--><!--oe:/p0--><section>');
-  assertEquals(
-    executor.serializeResolved(identity, 0, values.title),
+  expect(executor.shell).toContain('Before <!--oe:p0--><!--oe:/p0--><section>');
+  expect(executor.serializeResolved(identity, 0, values.title)).toEqual(
     '&lt;hello &amp; "world"&gt;',
   );
-  assertStringIncludes(
-    serializeCompiledProgram(program, resolvedHost),
+  expect(serializeCompiledProgram(program, resolvedHost)).toContain(
     'Before <!--oe:p0-->&lt;hello &amp; "world"&gt;<section>',
   );
-  assertThrows(() => executor.serializeResolved(identity, 1, true), Error, 'non-pending Part');
+  assertThrowsIncludes(
+    () => executor.serializeResolved(identity, 1, true),
+    Error,
+    'non-pending Part',
+  );
 });
 
-Deno.test('deferred executor rejects unknown, duplicate, ineligible and foreign owners', () => {
+test('deferred executor rejects unknown, duplicate, ineligible and foreign owners', () => {
   const identity = owner();
   const selection = (indices: number[]) => ({ owner: identity, pendingParts: indices });
-  assertThrows(
+  assertThrowsIncludes(
     () => createDeferredServerExecutor(program, resolvedHost, selection([4])),
     Error,
     'unknown Part',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () => createDeferredServerExecutor(program, resolvedHost, selection([0, 0])),
     Error,
     'duplicate Part',
   );
   const executor = createDeferredServerExecutor(program, resolvedHost, selection([0]));
-  assertThrows(
+  assertThrowsIncludes(
     () => executor.serializeResolved(owner(), 0, 'forged'),
     Error,
     'wrong deferred Part owner',
   );
-  assertThrows(() => executor.serializeResolved(identity, 1, true), Error, 'non-pending Part');
-  assertThrows(() => executor.serializeResolved(identity, 999, 'x'), Error, 'non-pending Part');
-  assertThrows(
+  assertThrowsIncludes(
+    () => executor.serializeResolved(identity, 1, true),
+    Error,
+    'non-pending Part',
+  );
+  assertThrowsIncludes(
+    () => executor.serializeResolved(identity, 999, 'x'),
+    Error,
+    'non-pending Part',
+  );
+  assertThrowsIncludes(
     () =>
       createDeferredServerExecutor(program, resolvedHost, {
         owner: owner(structuredClone(program)),
@@ -189,7 +195,7 @@ Deno.test('deferred executor rejects unknown, duplicate, ineligible and foreign 
     Error,
     'wrong program',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       createDeferredServerExecutor(program, resolvedHost, {
         owner: { ...identity, version: 2 },
@@ -200,7 +206,7 @@ Deno.test('deferred executor rejects unknown, duplicate, ineligible and foreign 
   );
   const wrongVersion = structuredClone(program);
   (wrongVersion as { version: number }).version = 2;
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       createDeferredServerExecutor(wrongVersion, resolvedHost, {
         owner: { program: wrongVersion, version: 2, instanceId: 'instance-1' },
@@ -209,7 +215,7 @@ Deno.test('deferred executor rejects unknown, duplicate, ineligible and foreign 
     Error,
     'version',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () => createDeferredServerExecutor(program, resolvedHost, selection([0]), { mode: 'closed' }),
     Error,
     'accessible roots',
@@ -219,7 +225,7 @@ Deno.test('deferred executor rejects unknown, duplicate, ineligible and foreign 
     template: [{ k: 'el', tag: 'p', attrs: [], children: [] }],
     parts: [{ k: 'attr', index: 0, signal: 'title', name: 'title', path: [0] }],
   });
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       createDeferredServerExecutor(ineligible, resolvedHost, {
         owner: owner(ineligible),
@@ -246,7 +252,7 @@ Deno.test('deferred executor rejects unknown, duplicate, ineligible and foreign 
       { k: 'text', index: 1, signal: 'title' },
     ],
   });
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       createDeferredServerExecutor(mixed, resolvedHost, {
         owner: owner(mixed),
@@ -269,7 +275,7 @@ Deno.test('deferred executor rejects unknown, duplicate, ineligible and foreign 
       },
     ],
   });
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       createDeferredServerExecutor(opaque, resolvedHost, {
         owner: owner(opaque),
@@ -280,7 +286,7 @@ Deno.test('deferred executor rejects unknown, duplicate, ineligible and foreign 
   );
 });
 
-Deno.test('nested instances with the same Part index have distinct owners', () => {
+test('nested instances with the same Part index have distinct owners', () => {
   const child = testProgram({
     tag: 'oe-child',
     template: [{ k: 'part', index: 0 }],
@@ -301,16 +307,13 @@ Deno.test('nested instances with the same Part index have distinct owners', () =
     },
     { mode: 'light' },
   );
-  assertStringIncludes(
-    nested.shell,
-    '<oe-child data-oe-light><!--oe:p0--><!--oe:/p0--></oe-child>',
-  );
-  assertThrows(
+  expect(nested.shell).toContain('<oe-child data-oe-light><!--oe:p0--><!--oe:/p0--></oe-child>');
+  assertThrowsIncludes(
     () => outer.serializeResolved(childOwner, 0, 'wrong'),
     Error,
     'wrong deferred Part owner',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () => nested.serializeResolved(outerOwner, 0, 'wrong'),
     Error,
     'wrong deferred Part owner',

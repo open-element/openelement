@@ -10,79 +10,81 @@
  * chunks, so the server bundle subdirectory must not stay publicly served).
  *
  * `--root` is resolved against the caller's working directory: member tasks
- * invoked through `deno task --cwd <app>` pass `--root .`.
+ * invoked through `pnpm --dir <app> run ...` pass `--root .`.
  *
  * Usage:
- *   deno run --allow-read --allow-write --allow-run --allow-env --allow-net \
- *     tools/release/nitro-build.ts --root . --preset cloudflare_module \
+ *   node tools/release/nitro-build.ts --root . --preset cloudflare_module \
  *     --out .output-workers --prune-public server
  */
-import { parseArgs } from '@std/cli/parse-args';
-import { exists } from '@std/fs';
+import { commandStatus } from '../repo/node-command.ts';
+import { rename, rm } from 'node:fs/promises';
+import { access } from 'node:fs/promises';
+import { parseArgs } from 'node:util';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
 
-const args = parseArgs(Deno.args, {
-  string: ['root', 'preset', 'out', 'prune-public'],
+// strict mode (the default) fails closed on undeclared flags; no positionals.
+const { values } = parseArgs({
+  args: process.argv.slice(2),
+  options: {
+    root: { type: 'string' },
+    preset: { type: 'string' },
+    out: { type: 'string' },
+    'prune-public': { type: 'string' },
+  },
 });
 
-const root = args.root ?? '.';
-const preset = args.preset ?? '';
-const out = args.out ?? '.output';
-const prunePublic = args['prune-public'];
+const root = values.root ?? '.';
+const preset = values.preset ?? '';
+const out = values.out ?? '.output';
+const prunePublic = values['prune-public'];
 
 if (!preset) {
   console.error(
     'tools/release/nitro-build.ts requires --preset (e.g. node-server, cloudflare_module)',
   );
-  Deno.exit(2);
+  process.exit(2);
 }
 
 async function removeIfExists(path: string): Promise<void> {
   try {
-    await Deno.remove(path, { recursive: true });
+    await rm(path, { recursive: true });
   } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error;
   }
 }
 
 async function runNitro(): Promise<void> {
-  const command = new Deno.Command('deno', {
-    args: [
-      'run',
-      '--node-modules-dir=auto',
-      '--allow-read',
-      '--allow-write',
-      '--allow-run',
-      '--allow-env',
-      '--allow-net',
-      '--allow-sys',
-      // Rolldown loads its native binding through FFI under Deno.
-      '--allow-ffi',
-      `npm:nitro@${NITRO_VERSION}`,
-      'build',
-      '--dir',
-      root,
-      '--preset',
-      preset,
-    ],
+  // The pinned nitro CLI runs through npx on the node host (Rolldown loads
+  // its native binding directly).
+  const { code } = await commandStatus('npx', {
+    args: ['--yes', `nitro@${NITRO_VERSION}`, 'build', '--dir', root, '--preset', preset],
+    stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',
   });
-  const { code } = await command.output();
-  if (code !== 0) Deno.exit(code);
+  if (code !== 0) process.exit(code);
 }
 
 await removeIfExists(`${root}/.output`);
 await removeIfExists(`${root}/${out}`);
 await runNitro();
 if (out !== '.output') {
-  await Deno.rename(`${root}/.output`, `${root}/${out}`);
+  await rename(`${root}/.output`, `${root}/${out}`);
 }
 if (prunePublic) {
   await removeIfExists(`${root}/${out}/public/${prunePublic}`);
 }
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 if (!(await exists(`${root}/${out}/nitro.json`))) {
   console.error(`Nitro build produced no manifest at ${root}/${out}/nitro.json`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log(`nitro build ok: preset=${preset} out=${root}/${out}`);

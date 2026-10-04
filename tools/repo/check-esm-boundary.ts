@@ -17,16 +17,16 @@
  * scans for them (a scanner testing scanners). No other exemption exists.
  *
  * Exemptions (documented, narrow):
- * - `packages/element/__wtr__/*.config.js`: runs under Node via the WTR
- *   runner, covered by the local ESM package boundary (`type: module`);
- *   still ESM syntax, only the host is Node
  * - `vendor/`, `node_modules/`, build output (`dist/`, Nitro `.output`
  *   trees, `.nitro/`), and dependency lockfiles: third-party territory
  *
- * Usage: deno run --allow-read --allow-run tools/repo/check-esm-boundary.ts
+ * Usage: node tools/repo/check-esm-boundary.ts
  */
 
 import { readPackages } from '../lib/package-graph.ts';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
+import { commandOutput } from './node-command.ts';
 
 /** Non-package source roots covered by the pure-ESM boundary. Package src
  * trees are discovered from the workspace (readPackages) so a new package is
@@ -89,12 +89,12 @@ export function scanExportsConditions(
 }
 
 async function trackedFiles(): Promise<string[]> {
-  const command = new Deno.Command('git', {
+  const command = await commandOutput('git', {
     args: ['ls-files'],
     stdout: 'piped',
     stderr: 'null',
   });
-  const { code, stdout } = await command.output();
+  const { code, stdout } = command;
   if (code !== 0) throw new Error('git ls-files failed');
   return new TextDecoder()
     .decode(stdout)
@@ -135,14 +135,14 @@ if (import.meta.main) {
       path.endsWith('.mjs')
     ) {
       try {
-        syntaxFiles.push({ path, text: await Deno.readTextFile(path) });
+        syntaxFiles.push({ path, text: await readFile(path, 'utf8') });
       } catch {
         // removed between ls-files and read; ignore
       }
     }
-    if (path.endsWith('/deno.json') || path.endsWith('/package.json')) {
+    if (path.endsWith('/package.json')) {
       try {
-        const manifest = JSON.parse(await Deno.readTextFile(path)) as { exports?: unknown };
+        const manifest = JSON.parse(await readFile(path, 'utf8')) as { exports?: unknown };
         exportRecords.push({ path, exports: manifest.exports });
       } catch {
         // unparseable manifest; other gates own that
@@ -156,7 +156,7 @@ if (import.meta.main) {
       console.error(`FAIL ${violation.where}: ${violation.message}`);
     }
     console.error(`${violations.length} esm-boundary violation(s)`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(`esm-boundary ok (${syntaxFiles.length} first-party modules scanned)`);
 }

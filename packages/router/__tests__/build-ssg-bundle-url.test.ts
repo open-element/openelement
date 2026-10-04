@@ -8,28 +8,43 @@
  * internal/static-serve.ts).
  */
 
-import { assertEquals } from '@std/assert';
-import { join } from '@std/path';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import process from 'node:process';
+import { expect, test } from 'vitest';
+import { join } from 'node:path';
 import { ssrBundleImportUrl } from '../src/cli/build-ssg.ts';
 
-Deno.test('build-ssg: SSR bundle import URL survives spaces, #, ? and non-ASCII in the path', async () => {
-  const base = await Deno.makeTempDir({ prefix: 'oe-ssg-hostile-' });
+test('build-ssg: SSR bundle import URL survives spaces, #, ? and non-ASCII in the path', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'oe-ssg-hostile-'));
   const dir = join(base, 'oe ssg #hostile? é');
-  await Deno.mkdir(dir);
+  await mkdir(dir);
   try {
     const entryPath = join(dir, 'entry.js');
-    await Deno.writeTextFile(entryPath, 'export default 42;');
-    const module = (await import(ssrBundleImportUrl(entryPath))) as { default: unknown };
-    assertEquals(module.default, 42);
+    await writeFile(entryPath, 'export default 42;');
+    // The SUT is node's native dynamic import of the product's file-URL
+    // builder. vitest rewrites in-process dynamic imports through its module
+    // runner (which mishandles hostile-path URLs), so the probe runs in a
+    // clean node subprocess — the same host the build-ssg pipeline imports in.
+    const probe = spawnSync(process.execPath, [
+      '--input-type=module',
+      '--eval',
+      `const m = await import(${JSON.stringify(ssrBundleImportUrl(entryPath))}); console.log(m.default);`,
+    ]);
+    expect(probe.status, `hostile-path import failed:\n${probe.stdout}\n${probe.stderr}`).toEqual(
+      0,
+    );
+    expect(probe.stdout.toString().trim()).toEqual('42');
   } finally {
-    await Deno.remove(base, { recursive: true });
+    await rm(base, { recursive: true });
   }
 });
 
-Deno.test('build-ssg: SSR bundle import URL is a percent-encoded file URL', () => {
+test('build-ssg: SSR bundle import URL is a percent-encoded file URL', () => {
   const url = ssrBundleImportUrl('/tmp/oe ssg #x/entry.js');
-  assertEquals(url.startsWith('file://'), true);
-  assertEquals(url.includes(' '), false, 'space must be percent-encoded');
-  assertEquals(url.includes('#'), false, 'fragment marker must be percent-encoded');
-  assertEquals(url, 'file:///tmp/oe%20ssg%20%23x/entry.js');
+  expect(url.startsWith('file://')).toEqual(true);
+  expect(url.includes(' '), 'space must be percent-encoded').toEqual(false);
+  expect(url.includes('#'), 'fragment marker must be percent-encoded').toEqual(false);
+  expect(url).toEqual('file:///tmp/oe%20ssg%20%23x/entry.js');
 });

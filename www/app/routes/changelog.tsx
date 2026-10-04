@@ -1,14 +1,27 @@
 /** Changelog route: request projection and build-time Markdown loading. */
 import { definePage } from '@openelement/router';
 import { trustedHtml } from '@openelement/element';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { localizePath } from '@openelement/site-ui/link.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
+import { localizePath } from '#site-ui/link.ts';
 import { marked } from 'marked';
 import PageChangelog from '../components/page-changelog.tsx';
-import { COMMON_PUBLISHED_LABEL, REGISTRY_NOTE } from '../data/version.ts';
+import { COMMON_PUBLISHED_LABEL, PUBLISHED_LATEST, REGISTRY_NOTE } from '../data/version.ts';
+import { readFileSync, statSync } from 'node:fs';
 
 export const meta = { section: '', label: 'Changelog', order: 20 };
+
+// Registry-derived prose constants: PUBLISHED_LATEST is the per-package npm
+// `latest` dist-tag truth (kept in sync with docs/release/release-state.json),
+// so the prose below cannot drift from the register rendered beside it. The
+// display `v` is stripped so the sentences keep their bare-number form.
+function registryVersion(name: string): string {
+  return (PUBLISHED_LATEST[name] ?? '').replace(/^v/, '');
+}
+const STABLE_LINE = registryVersion('@openelement/element');
+const STABLE_LINE_MAJOR_MINOR = STABLE_LINE.split('.').slice(0, 2).join('.');
+const ROUTER_LATEST = registryVersion('@openelement/router');
+const ROUTER_LATEST_BASE = ROUTER_LATEST.split('-')[0];
 
 const content = {
   en: {
@@ -24,11 +37,9 @@ const content = {
     publishedIntro:
       'The project follows Keep a Changelog and SemVer. Historical entries preserve older names where they describe older releases; current docs use the openElement contract.',
     stampCurrent: 'Current',
-    regCurrentSummary:
-      "There is no common complete version: element, create, and ui are on 0.43.3 while router's latest is the 0.41.0-alpha.6 prerelease.",
+    regCurrentSummary: `There is no common complete version: element, create, and ui are on ${STABLE_LINE} while router's latest is the ${ROUTER_LATEST} prerelease.`,
     stableHeading: 'Stable line',
-    stableBody:
-      'The stable maintenance line covers @openelement/element, @openelement/create, and @openelement/ui only. @openelement/router has no 0.43.x; its npm latest is a 0.41.0 prerelease. No single stable version is published for all four packages. The static, request-time, and Universal WC SSR contracts remain frozen under ADR-0119, ADR-0122, and ADR-0135; ADR-0140 admits compatible patches without scheduling a 0.44 feature train.',
+    stableBody: `The stable maintenance line covers @openelement/element, @openelement/create, and @openelement/ui only. @openelement/router has no ${STABLE_LINE_MAJOR_MINOR}.x; its npm latest is a ${ROUTER_LATEST_BASE} prerelease. No single stable version is published for all four packages. The static, request-time, and Universal WC SSR contracts remain frozen under ADR-0119, ADR-0122, and ADR-0135; ADR-0140 admits compatible patches without scheduling a 0.44 feature train.`,
     withdrawnHeading: 'Withdrawn partial artifacts',
     withdrawnBody:
       'The npm 0.41.0-era beta.1–beta.3 artifacts — published under the 0.41 line before its stable cut — are withdrawn partial releases: never a supported product line, never an upgrade path. The v0.44.0-beta.2.2 prerelease on dist-tag beta is also partial: element, create, and ui published; Router never did, so it is not a four-package release.',
@@ -55,11 +66,9 @@ const content = {
     publishedIntro:
       '本项目遵循 Keep a Changelog 与 SemVer。历史条目在描述旧版本时保留旧名称；当前文档使用 openElement 契约。',
     stampCurrent: '当前',
-    regCurrentSummary:
-      '不存在共同完整版本：element、create、ui 在 0.43.3，而 router 的 latest 是 0.41.0-alpha.6 预发布。',
+    regCurrentSummary: `不存在共同完整版本：element、create、ui 在 ${STABLE_LINE}，而 router 的 latest 是 ${ROUTER_LATEST} 预发布。`,
     stableHeading: '稳定线',
-    stableBody:
-      '稳定维护线仅覆盖 @openelement/element、@openelement/create、@openelement/ui。@openelement/router 没有 0.43.x；其 npm latest 是 0.41.0 预发布。没有任何单一稳定版本覆盖全部四个包。静态、请求时与 Universal WC SSR 契约继续受 ADR-0119、ADR-0122 和 ADR-0135 冻结；ADR-0140 允许兼容 patch，但不预排 0.44 功能列车。',
+    stableBody: `稳定维护线仅覆盖 @openelement/element、@openelement/create、@openelement/ui。@openelement/router 没有 ${STABLE_LINE_MAJOR_MINOR}.x；其 npm latest 是 ${ROUTER_LATEST_BASE} 预发布。没有任何单一稳定版本覆盖全部四个包。静态、请求时与 Universal WC SSR 契约继续受 ADR-0119、ADR-0122 和 ADR-0135 冻结；ADR-0140 允许兼容 patch，但不预排 0.44 功能列车。`,
     withdrawnHeading: '已撤回的残缺产物',
     withdrawnBody:
       'npm 上 0.41.0 时代的 beta.1–beta.3 产物——在 0.41 线正式版之前发布——是已撤回的残缺发布：既非受支持的产品线，也不构成升级路径。dist-tag beta 上的 v0.44.0-beta.2.2 预发布同样是残缺发布：element、create、ui 已发布，Router 从未发布，因此它不是四包版本。',
@@ -85,7 +94,7 @@ function loadChangelogHtml(copy: {
   for (let depth = 0; depth < 8 && !changelogPath; depth++) {
     const candidate = new URL('CHANGELOG.md', cursor);
     try {
-      Deno.statSync(candidate);
+      statSync(candidate);
       changelogPath = candidate;
     } catch {
       cursor = new URL('../', cursor);
@@ -93,7 +102,7 @@ function loadChangelogHtml(copy: {
   }
   try {
     if (!changelogPath) throw new Error('CHANGELOG.md not found');
-    const markdown = Deno.readTextFileSync(changelogPath)
+    const markdown = readFileSync(changelogPath, 'utf8')
       .replace(/^#\s+Changelog\s*\n/, '')
       // CHANGELOG.md links are repository-relative so they resolve on GitHub;
       // on the built site they would 404 (#1159 link truth), so project them

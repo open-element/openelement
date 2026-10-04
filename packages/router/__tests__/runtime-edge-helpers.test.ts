@@ -1,4 +1,7 @@
-import { assertEquals } from '@std/assert';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
+import { readdirSync } from 'node:fs';
 import {
   cleanSsrArtifacts,
   postProcessClientIslandBuild,
@@ -6,7 +9,7 @@ import {
 import { createIslandLifecycle } from '../src/vite/internal/ssg/island-lifecycle.ts';
 import { createMorphFocusRestore } from '../src/vite/internal/ssg/morph-focus-restore.ts';
 import { createMorphWebkitFix } from '../src/vite/internal/ssg/morph-webkit-fix.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 
 interface FakeAttr {
   name: string;
@@ -45,11 +48,11 @@ class FakeElement extends FakeNode {
   }
 }
 
-Deno.test('island lifecycle compares normalized light DOM and keeps the scheduler hook', () => {
+test('island lifecycle compares normalized light DOM and keeps the scheduler hook', () => {
   let observed = 0;
   const lifecycle = createIslandLifecycle({ observeVisible: () => observed++ });
   lifecycle.observeVisible();
-  assertEquals(observed, 1);
+  expect(observed).toEqual(1);
 
   const template = new FakeElement('TEMPLATE', { shadowrootmode: 'open' });
   const oldTree = new FakeElement('X-ISLAND', { mode: 'ready' }, [
@@ -60,37 +63,32 @@ Deno.test('island lifecycle compares normalized light DOM and keeps the schedule
     template,
     new FakeElement('SPAN', { title: 'same' }, [new FakeText('value')]),
   ]);
-  assertEquals(
+  expect(
     lifecycle.islandIntact(oldTree as unknown as Element, newTree as unknown as Element),
-    true,
-  );
+  ).toEqual(true);
 
   oldTree.shadowRoot = null;
-  assertEquals(
+  expect(
     lifecycle.islandIntact(oldTree as unknown as Element, newTree as unknown as Element),
-    false,
-  );
+  ).toEqual(false);
   oldTree.shadowRoot = {};
 
   const changedAttr = new FakeElement('X-ISLAND', { mode: 'changed' }, newTree.childNodes);
-  assertEquals(
+  expect(
     lifecycle.islandIntact(oldTree as unknown as Element, changedAttr as unknown as Element),
-    false,
-  );
+  ).toEqual(false);
   const changedText = new FakeElement('X-ISLAND', { mode: 'ready' }, [
     new FakeElement('SPAN', { title: 'same' }, [new FakeText('changed')]),
   ]);
-  assertEquals(
+  expect(
     lifecycle.islandIntact(oldTree as unknown as Element, changedText as unknown as Element),
-    false,
-  );
+  ).toEqual(false);
   const changedTag = new FakeElement('X-ISLAND', { mode: 'ready' }, [
     new FakeElement('STRONG', { title: 'same' }, [new FakeText('value')]),
   ]);
-  assertEquals(
+  expect(
     lifecycle.islandIntact(oldTree as unknown as Element, changedTag as unknown as Element),
-    false,
-  );
+  ).toEqual(false);
 });
 
 interface FocusElement {
@@ -103,7 +101,7 @@ interface FocusElement {
   setSelectionRange?(start: number, end: number): void;
 }
 
-Deno.test('focus restore follows shadow focus and restores a same-id replacement selection', () => {
+test('focus restore follows shadow focus and restores a same-id replacement selection', () => {
   const calls: unknown[] = [];
   const body: FocusElement = { id: '', isConnected: true, focus() {} };
   const original: FocusElement = {
@@ -144,7 +142,7 @@ Deno.test('focus restore follows shadow focus and restores a same-id replacement
   const snapshot = focus.captureFocus();
   doc.activeElement = body;
   focus.restoreFocus(snapshot);
-  assertEquals(calls, ['replacement', [2, 5]]);
+  expect(calls).toEqual(['replacement', [2, 5]]);
 
   // A connected original is preferred, and a surviving focused node is a no-op.
   original.isConnected = true;
@@ -152,15 +150,15 @@ Deno.test('focus restore follows shadow focus and restores a same-id replacement
   const connected = focus.captureFocus();
   doc.activeElement = body;
   focus.restoreFocus(connected);
-  assertEquals(calls.at(-1), 'original');
+  expect(calls.at(-1)).toEqual('original');
   doc.activeElement = host;
   focus.restoreFocus(connected);
   focus.restoreFocus(null);
   doc.activeElement = body;
-  assertEquals(focus.captureFocus(), null);
+  expect(focus.captureFocus()).toEqual(null);
 });
 
-Deno.test('WebKit morph helpers instantiate nested DSD and repair skipped custom elements', () => {
+test('WebKit morph helpers instantiate nested DSD and repair skipped custom elements', () => {
   const created: unknown[] = [];
   const shadowRoot = {
     nodeType: 11,
@@ -206,56 +204,52 @@ Deno.test('WebKit morph helpers instantiate nested DSD and repair skipped custom
 
   webkit.instantiateDsd({ nodeType: 3 } as Node, created as ShadowRoot[]);
   webkit.instantiateDsd(fragment as unknown as Node, created as ShadowRoot[]);
-  assertEquals(shadowRoot.appended, [template.content]);
-  assertEquals(created.includes('removed'), true);
+  expect(shadowRoot.appended).toEqual([template.content]);
+  expect(created.includes('removed')).toEqual(true);
   webkit.repairShadowUpgrades([root as unknown as ShadowRoot]);
-  assertEquals(repaired, ['removed', [skipped, 'next']]);
+  expect(repaired).toEqual(['removed', [skipped, 'next']]);
 });
 
-Deno.test('SSR artifact cleanup removes server-only chunks and preserves client assets', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'oe-clean-ssr-' });
+test('SSR artifact cleanup removes server-only chunks and preserves client assets', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-clean-ssr-'));
   try {
     const assets = join(root, 'dist', 'assets');
-    await Deno.mkdir(assets, { recursive: true });
+    await mkdir(assets, { recursive: true });
     const removed = [
       '_virtual_open-hono-entry-abc.js',
       '_virtual_open-hono-entry-abc.js.map',
       'src-server-abc.js',
     ];
     const kept = ['src-client-abc.js', 'app.js'];
-    for (const file of [...removed, ...kept]) await Deno.writeTextFile(join(assets, file), file);
+    for (const file of [...removed, ...kept]) await writeFile(join(assets, file), file);
     await cleanSsrArtifacts({
       phase3: { root, outDir: 'dist', base: '/', upgradeStrategy: 'idle' },
       phase1: { islandTagNames: [], packageIslandDecls: [], islandMeta: {} },
     });
     for (const file of removed) {
-      assertEquals(
-        await Deno.stat(join(assets, file))
+      expect(
+        await stat(join(assets, file))
           .then(() => true)
           .catch(() => false),
-        false,
-      );
+      ).toEqual(false);
     }
-    for (const file of kept) assertEquals((await Deno.stat(join(assets, file))).isFile, true);
+    for (const file of kept) expect((await stat(join(assets, file))).isFile()).toEqual(true);
 
     await cleanSsrArtifacts({
       phase3: { root, outDir: 'missing', base: '/', upgradeStrategy: 'idle' },
       phase1: { islandTagNames: [], packageIslandDecls: [], islandMeta: {} },
     });
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('client-island postprocess handles a static page with no islands', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'oe-postprocess-' });
+test('client-island postprocess handles a static page with no islands', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-postprocess-'));
   try {
     const dist = join(root, 'dist');
-    await Deno.mkdir(dist, { recursive: true });
-    await Deno.writeTextFile(
-      join(dist, 'index.html'),
-      '<!doctype html><html><body>static</body></html>',
-    );
+    await mkdir(dist, { recursive: true });
+    await writeFile(join(dist, 'index.html'), '<!doctype html><html><body>static</body></html>');
     await postProcessClientIslandBuild({
       phase3: { root, outDir: 'dist', base: '/', upgradeStrategy: 'idle' },
       phase1: { islandTagNames: [], packageIslandDecls: [], islandMeta: {} },
@@ -270,14 +264,16 @@ Deno.test('client-island postprocess handles a static page with no islands', asy
     // #1471/S4b: no post-build script surgery — the document renderer
     // embedded the script tags at render time, so the pass leaves the HTML
     // byte-identical and only records the per-page island manifests.
-    const html = await Deno.readTextFile(join(dist, 'index.html'));
-    assertEquals(html.includes('/client/islands/client.js'), false);
-    assertEquals(html, '<!doctype html><html><body>static</body></html>');
+    const html = await readFile(join(dist, 'index.html'), 'utf8');
+    expect(html.includes('/client/islands/client.js')).toEqual(false);
+    expect(html).toEqual('<!doctype html><html><body>static</body></html>');
     const manifestDir = join(dist, 'island-manifests');
-    const [manifestFile] = [...Deno.readDirSync(manifestDir)].map((entry) => entry.name);
-    const manifest = JSON.parse(await Deno.readTextFile(join(manifestDir, manifestFile)));
-    assertEquals(manifest.islands, []);
+    const [manifestFile] = readdirSync(manifestDir, { withFileTypes: true }).map(
+      (entry) => entry.name,
+    );
+    const manifest = JSON.parse(await readFile(join(manifestDir, manifestFile), 'utf8'));
+    expect(manifest.islands).toEqual([]);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });

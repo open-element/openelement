@@ -50,4 +50,4 @@ The same default-export contract applies at every depth: `app/routes/api/items/[
 
 - [Routing and Data](/guide/routing-and-data) — the page-side contract these handlers sit beside.
 - [Security](/guide/security) — CSRF, CORS and CSP defaults around custom routes.
-- [Testing](/guide/testing) — calling handlers directly from `deno test`.
+- [Testing](/guide/testing) — calling handlers directly from `pnpm test`.

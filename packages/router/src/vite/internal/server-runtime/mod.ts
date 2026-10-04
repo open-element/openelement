@@ -12,9 +12,9 @@
  * projection, the app-shell composition, the status-page/locale resolution,
  * the action protocol, and the streaming pump (request scope, deferred-field
  * front gate, bounded queue, timeout/cancellation, Part backfill frames, and
- * the browser bootstrap string) — live in the modules re-exported here, so
- * the logic is visible to `deno check` and directly unit-testable instead of
- * hiding inside codegen template strings. The bundler inlines the import into
+ * the browser bootstrap string) — live in the modules re-exported here,
+ * directly unit-testable instead of hiding inside codegen template strings.
+ * The bundler inlines the import into
  * every generated entry (dev, SSG prerender, Nitro production). The modules
  * never import the Element runtime barrel: the entry injects its Element
  * functions and its serialized build data (admitted tag list, shell plan) at

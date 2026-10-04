@@ -1,11 +1,12 @@
 /** Dynamic blog route; all request data is projected into a compiled page. */
 import { definePage } from '@openelement/router';
 import { trustedHtml } from '@openelement/element';
-import { getPostBySlug, posts } from '@openelement/generated/blog-data';
-import { prepareArticle } from '@openelement/site-ui/article-body.ts';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { localizePath } from '@openelement/site-ui/link.ts';
+import { getPostBySlug, posts } from '#generated/blog-data';
+import { prepareArticle } from '#site-ui/article-body.ts';
+import { visibleBlogPosts } from '#site-ui/blog-stream.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
+import { localizePath } from '#site-ui/link.ts';
 import PageBlogPost from '../../components/page-blog-post.tsx';
 
 export function getStaticPaths(): Array<Record<string, string>> {
@@ -86,9 +87,8 @@ export default definePage(PageBlogPost, {
           ? 'This dispatch is published in Chinese (中文原文).'
           : '本文以英文原文发布（English original）。';
     const article = prepareArticle(post.html, resolved);
-    const visiblePosts = posts
-      .filter((candidate) => candidate.frontmatter.type !== 'adr')
-      .sort((a, b) => b.frontmatter.date.localeCompare(a.frontmatter.date));
+    // Same list the dispatch index renders: ADR posts excluded, newest first.
+    const visiblePosts = visibleBlogPosts();
     const index = visiblePosts.findIndex((candidate) => candidate.slug === post.slug);
     const previous = index >= 0 ? visiblePosts[index + 1] : undefined;
     const next = index > 0 ? visiblePosts[index - 1] : undefined;

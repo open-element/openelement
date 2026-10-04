@@ -3,11 +3,11 @@
  *
  * `transform` compiles @element modules during the build; `handleHotUpdate`
  * decides between ordinary module HMR and a full reload by comparing Part
- * Program shapes. Moved out of plugin.ts verbatim: the per-plugin-instance
- * shape map stays an instance-local closure, so no program can leak between
- * Vite builds, and hook behavior is unchanged.
+ * Program shapes. The per-plugin-instance shape map stays an instance-local
+ * closure, so no program can leak between Vite builds.
  */
 
+import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'vite';
 import {
   compileElementModule,
@@ -67,7 +67,7 @@ export function createCompilerHooks(
       if (!/\.tsx$/.test(hmr.file)) return;
       let source: string;
       try {
-        source = await Deno.readTextFile(hmr.file);
+        source = await readFile(hmr.file, 'utf8');
       } catch {
         compiledProgramShapes.delete(hmr.file);
         return;

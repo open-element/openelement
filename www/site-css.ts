@@ -14,7 +14,10 @@
  * this module is the site's designated home for them (the site style layer the
  * gate's own doctrine names).
  */
-import { openPropsTokenSheet } from '@openelement/ui';
+// The token sheet subpath, not the package root: the root export pulls every
+// component module (.tsx), which the node-host build-time head evaluation
+// cannot load; the token sheet is pure .ts.
+import { openPropsTokenSheet } from '@openelement/ui/open-props-tokens';
 
 /**
  * Central viewport tier scale (px). Every bare-number @media width/height

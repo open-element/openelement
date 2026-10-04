@@ -7,7 +7,8 @@
  * matching shadow mode. The package README must state the same contract, so
  * the documentation and implementation cannot silently diverge again.
  */
-import { assert, assertEquals } from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
 import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
 
 function compile(option: string): string {
@@ -21,23 +22,23 @@ export default class RootModeProbe extends OpenElement {
     .kind;
 }
 
-Deno.test('root mode: no option compiles to the light default', () => {
-  assertEquals(compile(''), 'light');
+test('root mode: no option compiles to the light default', () => {
+  expect(compile('')).toEqual('light');
 });
 
-Deno.test('root mode: shadow-open and shadow-closed are explicit selections', () => {
-  assertEquals(compile(", { root: 'shadow-open' }"), 'shadow-open');
-  assertEquals(compile(", { root: 'shadow-closed' }"), 'shadow-closed');
+test('root mode: shadow-open and shadow-closed are explicit selections', () => {
+  expect(compile(", { root: 'shadow-open' }")).toEqual('shadow-open');
+  expect(compile(", { root: 'shadow-closed' }")).toEqual('shadow-closed');
 });
 
-Deno.test('root mode: the package README documents the same contract', async () => {
-  const readme = await Deno.readTextFile(new URL('../README.md', import.meta.url));
-  assert(
+test('root mode: the package README documents the same contract', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  expect(
     readme.includes('Light DOM is the current compiled default'),
     'README must document light DOM as the current default',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     /Shadow\/DSD is a first-class mode selected explicitly/.test(readme),
     'README must document Shadow/DSD as an explicit first-class mode',
-  );
+  ).toBeTruthy();
 });

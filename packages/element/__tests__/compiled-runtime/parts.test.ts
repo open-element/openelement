@@ -1,4 +1,5 @@
-import { assertEquals, assertStrictEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import {
   claimExistingDom,
   type CompiledRuntimeHost,
@@ -73,11 +74,10 @@ function fixedRoot(root: TestElement): TestElement {
   return root.childNodes[0] as TestElement;
 }
 
-Deno.test('fixed Parts share normalized commits across fresh and claim paths', () => {
+test('fixed Parts share normalized commits across fresh and claim paths', () => {
   const initial = fixedHost();
   const html = serializeToHtml(FIXED_PROGRAM, initial.host);
-  assertEquals(
-    html,
+  expect(html).toEqual(
     '<div data-static="yes" title="initial" class="active selected" style="color:red;display:block">' +
       '<input value="ready">' +
       '<button>go</button>' +
@@ -90,26 +90,26 @@ Deno.test('fixed Parts share normalized commits across fresh and claim paths', (
   const freshDiv = fixedRoot(freshRoot);
   const input = freshDiv.childNodes[0] as TestElement;
   const button = freshDiv.childNodes[1] as TestElement;
-  assertEquals(toHtml(freshRoot), `<host>${html}</host>`);
-  assertEquals(initial.refs, ['INPUT']);
+  expect(toHtml(freshRoot)).toEqual(`<host>${html}</host>`);
+  expect(initial.refs).toEqual(['INPUT']);
   freshDoc.resetCounts();
 
   initial.classes.value = { active: true, selected: true };
-  assertEquals(freshDoc.counts.attributes, 0, 'equivalent normalized class is a no-op');
+  expect(freshDoc.counts.attributes, 'equivalent normalized class is a no-op').toEqual(0);
   initial.title.value = 'updated';
-  assertEquals(freshDiv.getAttribute('title'), 'updated');
+  expect(freshDiv.getAttribute('title')).toEqual('updated');
   initial.value.value = 'changed';
-  assertEquals(input.value, 'changed');
-  assertEquals(freshDoc.counts.valueWrites, 1);
+  expect(input.value).toEqual('changed');
+  expect(freshDoc.counts.valueWrites).toEqual(1);
   initial.disabled.value = true;
-  assertEquals(input.getAttribute('disabled'), '');
-  assertEquals((input as unknown as { disabled: boolean }).disabled, true);
+  expect(input.getAttribute('disabled')).toEqual('');
+  expect((input as unknown as { disabled: boolean }).disabled).toEqual(true);
   initial.styles.value = { color: 'blue', display: 'none' };
-  assertEquals(freshDiv.getAttribute('style'), 'color:blue;display:none');
+  expect(freshDiv.getAttribute('style')).toEqual('color:blue;display:none');
 
   button.dispatch('click');
   button.dispatch('click');
-  assertEquals(initial.clicks, ['click', 'click'], 'the fixed handler runs for each event');
+  expect(initial.clicks, 'the fixed handler runs for each event').toEqual(['click', 'click']);
 
   const claimDoc = new TestDocument();
   const claimRoot = parseHtml(claimDoc, html);
@@ -118,24 +118,24 @@ Deno.test('fixed Parts share normalized commits across fresh and claim paths', (
   claimInput.simulateUserInput('typed before claim');
   claimDoc.resetCounts();
   const claimed = claimExistingDom(FIXED_PROGRAM, claimHost.host, asNode(claimRoot));
-  assertStrictEquals(fixedRoot(claimRoot).childNodes[0] as TestElement, claimInput);
-  assertEquals(claimInput.value, 'typed before claim');
-  assertEquals(claimDoc.counts.valueWrites, 0, 'claim never performs initial property writes');
-  assertEquals(claimHost.refs, ['INPUT']);
+  expect(fixedRoot(claimRoot).childNodes[0] as TestElement).toBe(claimInput);
+  expect(claimInput.value).toEqual('typed before claim');
+  expect(claimDoc.counts.valueWrites, 'claim never performs initial property writes').toEqual(0);
+  expect(claimHost.refs).toEqual(['INPUT']);
 
   claimHost.title.value = 'claimed update';
-  assertEquals(fixedRoot(claimRoot).getAttribute('title'), 'claimed update');
+  expect(fixedRoot(claimRoot).getAttribute('title')).toEqual('claimed update');
   claimed.dispose();
   claimHost.title.value = 'after dispose';
-  assertEquals(fixedRoot(claimRoot).getAttribute('title'), 'claimed update');
-  assertEquals(claimHost.refs, ['INPUT', null]);
+  expect(fixedRoot(claimRoot).getAttribute('title')).toEqual('claimed update');
+  expect(claimHost.refs).toEqual(['INPUT', null]);
   fresh.dispose();
-  assertEquals(initial.refs, ['INPUT', null]);
+  expect(initial.refs).toEqual(['INPUT', null]);
   button.dispatch('click');
-  assertEquals(initial.clicks, ['click', 'click'], 'dispose removes the fixed handler');
+  expect(initial.clicks, 'dispose removes the fixed handler').toEqual(['click', 'click']);
 });
 
-Deno.test('TrustedHtml is required across serialization, fresh DOM, claim, and updates', () => {
+test('TrustedHtml is required across serialization, fresh DOM, claim, and updates', () => {
   const program = testProgram({
     tag: 'oe-trusted-html',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [] }],
@@ -144,22 +144,22 @@ Deno.test('TrustedHtml is required across serialization, fresh DOM, claim, and u
   const body = signal<unknown>(trustedHtml('<strong>safe</strong>'));
   const host = { signals: { body }, handlers: {} } as CompiledRuntimeHost;
   const html = serializeToHtml(program, host);
-  assertEquals(html, '<div><strong>safe</strong></div>');
+  expect(html).toEqual('<div><strong>safe</strong></div>');
 
   const freshDocument = new TestDocument();
   const freshRoot = freshDocument.createElement('host');
   const fresh = createFreshDom(program, host, asNode(freshRoot));
-  assertEquals(toHtml(freshRoot), `<host>${html}</host>`);
+  expect(toHtml(freshRoot)).toEqual(`<host>${html}</host>`);
   body.value = trustedHtml('<em>updated</em>');
-  assertEquals(toHtml(freshRoot), '<host><div><em>updated</em></div></host>');
-  assertThrows(
+  expect(toHtml(freshRoot)).toEqual('<host><div><em>updated</em></div></host>');
+  assertThrowsIncludes(
     () => {
       body.value = '<img src=x onerror=alert(1)>';
     },
     Error,
     'requires a value created by trustedHtml()',
   );
-  assertEquals(toHtml(freshRoot), '<host><div><em>updated</em></div></host>');
+  expect(toHtml(freshRoot)).toEqual('<host><div><em>updated</em></div></host>');
   fresh.dispose();
 
   const claimDocument = new TestDocument();
@@ -171,40 +171,40 @@ Deno.test('TrustedHtml is required across serialization, fresh DOM, claim, and u
     asNode(claimRoot),
   );
   claimedBody.value = trustedHtml('<i>claimed update</i>');
-  assertEquals(toHtml(claimRoot), '<host><div><i>claimed update</i></div></host>');
+  expect(toHtml(claimRoot)).toEqual('<host><div><i>claimed update</i></div></host>');
   claimed.dispose();
 
   const plain = {
     signals: { body: signal<unknown>('<b>unsafe</b>') },
     handlers: {},
   } as CompiledRuntimeHost;
-  assertThrows(
+  assertThrowsIncludes(
     () => serializeToHtml(program, plain),
     Error,
     'requires a value created by trustedHtml()',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () => createFreshDom(program, plain, asNode(new TestDocument().createElement('host'))),
     Error,
     'requires a value created by trustedHtml()',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () => claimExistingDom(program, plain, asNode(parseHtml(new TestDocument(), html))),
     Error,
     'requires a value created by trustedHtml()',
   );
 });
 
-Deno.test('TrustedHtml capability is identity-bound and deliberately lost on serialization', () => {
+test('TrustedHtml capability is identity-bound and deliberately lost on serialization', () => {
   const value = trustedHtml('<b>safe</b>');
-  assertEquals(Object.isFrozen(value), true);
+  expect(Object.isFrozen(value)).toEqual(true);
   const clone = structuredClone(value);
   const program = testProgram({
     tag: 'oe-trusted-html-clone',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [] }],
     parts: [{ k: 'html', index: 0, signal: 'body', path: [0] }],
   });
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       serializeToHtml(program, {
         signals: { body: signal<unknown>(clone) },
@@ -215,7 +215,7 @@ Deno.test('TrustedHtml capability is identity-bound and deliberately lost on ser
   );
 });
 
-Deno.test('fixed Part errors are explicit and unsupported claim shapes fail closed', () => {
+test('fixed Part errors are explicit and unsupported claim shapes fail closed', () => {
   const host = fixedHost();
   const missingHandlerProgram = {
     ...FIXED_PROGRAM,
@@ -226,7 +226,7 @@ Deno.test('fixed Part errors are explicit and unsupported claim shapes fail clos
     ),
   };
   validatePartProgram(missingHandlerProgram);
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       createFreshDom(
         missingHandlerProgram,
@@ -241,11 +241,14 @@ Deno.test('fixed Part errors are explicit and unsupported claim shapes fail clos
   const doc = new TestDocument();
   const root = parseHtml(doc, html);
   (fixedRoot(root).childNodes[1] as TestElement).setAttribute('extra', 'unsafe');
-  const error = assertThrows(() => claimExistingDom(FIXED_PROGRAM, host.host, asNode(root)), Error);
-  assertStringIncludes(error.message, 'unexpected attribute');
+  const error = assertThrowsIncludes(
+    () => claimExistingDom(FIXED_PROGRAM, host.host, asNode(root)),
+    Error,
+  );
+  expect(error.message).toContain('unexpected attribute');
 });
 
-Deno.test('a fixed-Part path of [0] targets the sole template root; an empty path fails closed', () => {
+test('a fixed-Part path of [0] targets the sole template root; an empty path fails closed', () => {
   const title = signal('initial');
   const program = testProgram({
     tag: 'oe-root-path',
@@ -254,27 +257,27 @@ Deno.test('a fixed-Part path of [0] targets the sole template root; an empty pat
   });
   const host = { signals: { title }, handlers: {} } as unknown as CompiledRuntimeHost;
   const html = serializeToHtml(program, host);
-  assertEquals(html, '<div title="initial"></div>');
+  expect(html).toEqual('<div title="initial"></div>');
   const doc = new TestDocument();
   const root = doc.createElement('host');
 
   createFreshDom(program, host, asNode(root));
   const div = root.childNodes[0] as TestElement;
-  assertEquals(div.getAttribute('title'), 'initial');
-  assertEquals(root.getAttribute('title'), null);
+  expect(div.getAttribute('title')).toEqual('initial');
+  expect(root.getAttribute('title')).toEqual(null);
 
   title.value = 'updated';
-  assertEquals(div.getAttribute('title'), 'updated');
-  assertEquals(root.getAttribute('title'), null);
+  expect(div.getAttribute('title')).toEqual('updated');
+  expect(root.getAttribute('title')).toEqual(null);
 
   const claimDoc = new TestDocument();
   const claimRoot = parseHtml(claimDoc, html);
   const claimed = claimExistingDom(program, host, asNode(claimRoot));
   const claimedDiv = claimRoot.childNodes[0] as TestElement;
-  assertEquals(claimedDiv.getAttribute('title'), 'initial');
-  assertEquals(claimRoot.getAttribute('title'), null);
+  expect(claimedDiv.getAttribute('title')).toEqual('initial');
+  expect(claimRoot.getAttribute('title')).toEqual(null);
   title.value = 'claimed update';
-  assertEquals(claimedDiv.getAttribute('title'), 'claimed update');
+  expect(claimedDiv.getAttribute('title')).toEqual('claimed update');
   claimed.dispose();
 
   const emptyPath = {
@@ -284,10 +287,10 @@ Deno.test('a fixed-Part path of [0] targets the sole template root; an empty pat
       location.kind === 'sink' ? { ...location, path: [] } : location,
     ),
   };
-  assertThrows(() => validatePartProgram(emptyPath), Error, 'path must target an element');
+  assertThrowsIncludes(() => validatePartProgram(emptyPath), Error, 'path must target an element');
 });
 
-Deno.test('style Parts normalize vendor-prefixed and custom declarations', () => {
+test('style Parts normalize vendor-prefixed and custom declarations', () => {
   const styles = signal<unknown>({
     WebkitTransform: 'scale(1)',
     msTransition: 'opacity',
@@ -303,8 +306,7 @@ Deno.test('style Parts normalize vendor-prefixed and custom declarations', () =>
   const root = doc.createElement('host');
   createFreshDom(program, host, asNode(root));
 
-  assertEquals(
-    (root.childNodes[0] as TestElement).getAttribute('style'),
+  expect((root.childNodes[0] as TestElement).getAttribute('style')).toEqual(
     '--accent:red;-webkit-transform:scale(1);-ms-transition:opacity',
   );
 });

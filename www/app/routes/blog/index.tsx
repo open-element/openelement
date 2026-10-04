@@ -6,10 +6,11 @@
  * only the markup and declared properties (ADR-0143/ADR-0148).
  */
 import { definePage } from '@openelement/router';
-import { posts } from '@openelement/generated/blog-data';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { localizePath } from '@openelement/site-ui/link.ts';
+import { posts } from '#generated/blog-data';
+import { visibleBlogPosts } from '#site-ui/blog-stream.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
+import { localizePath } from '#site-ui/link.ts';
 import BlogIndexPage from '../../components/page-blog-index.tsx';
 
 // Blog, changelog, roadmap and contributing are the project's own pages, not
@@ -65,9 +66,7 @@ const content = {
 
 // Keep the dispatch index and blog-post prev/next ordering aligned: ADR posts
 // are decision records, not public dispatches, and the newest date leads.
-const visiblePosts = posts
-  .filter((post) => post.frontmatter.type !== 'adr')
-  .sort((a, b) => b.frontmatter.date.localeCompare(a.frontmatter.date));
+const visiblePosts = visibleBlogPosts();
 
 function postTags(post: (typeof posts)[number]): string[] {
   return post.frontmatter.tags ?? [];

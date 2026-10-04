@@ -1,6 +1,6 @@
 /**
- * JSX → Part Program lowering for the compiled grammar (#1473 split — the
- * lower stage of the former compile facade): the {@link Lowering} walk turns
+ * JSX → Part Program lowering for the compiled grammar (#1473 split): the
+ * {@link Lowering} walk turns
  * the analyzed render() tree into fixed Parts, Regions, locations and source
  * records with stable compiler-owned paths.
  */
@@ -188,13 +188,11 @@ export class Lowering {
   readonly methodNames: Set<string>;
   readonly computedNames: Set<string>;
   readonly fieldTypes: Map<string, PropertyValueType>;
+  private readonly sf: ts.SourceFile;
   private elementSerial = 0;
 
-  constructor(
-    private readonly sf: ts.SourceFile,
-    fields: CompiledField[],
-    methodNames: string[],
-  ) {
+  constructor(sf: ts.SourceFile, fields: CompiledField[], methodNames: string[]) {
+    this.sf = sf;
     this.fieldNames = new Set(fields.map((field) => field.name));
     this.methodNames = new Set(methodNames);
     this.computedNames = new Set(

@@ -15,8 +15,11 @@
  * from a different angle: the tag maps through the manifest record, and the
  * document renderer emits the final script tag at render time.
  */
-import { assert, assertEquals, assertExists, assertStringIncludes } from '@std/assert';
-import { join } from '@std/path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { wrapInDocument } from '@openelement/element';
 import { resolvePageDocument } from '../src/document.ts';
 import type { PagePropsContext } from '../src/index.ts';
@@ -102,30 +105,32 @@ function renderDocument(doc: ReturnType<typeof resolvePageDocument>): string {
 
 /** The generated wiring both renderer adapters emit (asserted per mode). */
 function assertDocumentTimeInjection(code: string): void {
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     'const __doc = __resolvePageDocument(__page.head, __pageContext, __clientScriptDescriptors());',
   );
-  assertStringIncludes(code, 'scripts: __doc.clientScripts || [],');
+  expect(code).toContain('scripts: __doc.clientScripts || [],');
   // No post-build script surgery may reappear.
-  assert(!code.includes('insertBeforeBodyClose'), 'no HTML surgery in generated entries');
+  expect(
+    !code.includes('insertBeforeBodyClose'),
+    'no HTML surgery in generated entries',
+  ).toBeTruthy();
 }
 
 /** One end-to-end document render carrying the manifest-driven script. */
 function assertScriptAtBodyEnd(html: string, src: string): void {
   const tag = `<script type="module" src="${src}"></script>`;
-  assertStringIncludes(html, tag);
+  expect(html).toContain(tag);
   // Correct position: the tag is the last markup before the body close —
   // the same slot the retired post-build injector spliced into.
-  assert(
+  expect(
     html.endsWith(`${tag}\n</body>\n</html>`),
     `script tag must sit immediately before </body>, got: ...${html.slice(-120)}`,
-  );
+  ).toBeTruthy();
 }
 
 // ─── 1. chunk hash 变 ─────────────────────────────────────────────────
 
-Deno.test('matrix 1 — a content-hash change re-keys the tag to the new asset, identity intact', () => {
+test('matrix 1 — a content-hash change re-keys the tag to the new asset, identity intact', () => {
   const modules = { [`${ROOT}/app/islands/counter.ts`]: {} };
   const before = manifest(
     [input()],
@@ -141,7 +146,7 @@ Deno.test('matrix 1 — a content-hash change re-keys the tag to the new asset, 
       },
     ],
   );
-  assertEquals(before.islands['open-counter'].file, '/client/islands/island-counter-Ab12cd.js');
+  expect(before.islands['open-counter'].file).toEqual('/client/islands/island-counter-Ab12cd.js');
 
   // The next build rehashes the chunk (content changed). Same module id,
   // different output name — the tag follows the module, not the name.
@@ -159,8 +164,8 @@ Deno.test('matrix 1 — a content-hash change re-keys the tag to the new asset, 
       },
     ],
   );
-  assertEquals(after.islands['open-counter'].file, '/client/islands/island-counter-Xy98wa.js');
-  assertEquals(after.islands['open-counter'].strategy, 'idle');
+  expect(after.islands['open-counter'].file).toEqual('/client/islands/island-counter-Xy98wa.js');
+  expect(after.islands['open-counter'].strategy).toEqual('idle');
 
   // The rendered document carries the fresh address at render time.
   const doc = resolvePageDocument(undefined, ctx(), [{ type: 'module', src: after.entry }]);
@@ -169,7 +174,7 @@ Deno.test('matrix 1 — a content-hash change re-keys the tag to the new asset, 
 
 // ─── 2. chunk 文件名变（身份不随文件名漂移 —— 本段的立段之本） ──────────
 
-Deno.test('matrix 2a — Rolldown default naming: a full rename cannot move the tag identity', () => {
+test('matrix 2a — Rolldown default naming: a full rename cannot move the tag identity', () => {
   // Rolldown names the chunk after the source basename; the build then
   // renames it (chunk grouping change) to a name sharing NOTHING with the
   // tag. The retired filename-prefix matcher would have dropped or
@@ -189,14 +194,14 @@ Deno.test('matrix 2a — Rolldown default naming: a full rename cannot move the 
       },
     ],
   );
-  assertEquals(renamed.islands['open-counter'].file, '/client/islands/chunk-9f3e2a.js');
+  expect(renamed.islands['open-counter'].file).toEqual('/client/islands/chunk-9f3e2a.js');
 
   // The per-page island manifest (strategy/layer pass) reads the same record.
   const chunkMap = islandChunkMapFromAssetManifest(renamed, ['open-counter']);
-  assertEquals(chunkMap, { 'open-counter': '/client/islands/chunk-9f3e2a.js' });
+  expect(chunkMap).toEqual({ 'open-counter': '/client/islands/chunk-9f3e2a.js' });
 });
 
-Deno.test('matrix 2b — manualChunks naming: renaming across naming schemes keeps the identity', () => {
+test('matrix 2b — manualChunks naming: renaming across naming schemes keeps the identity', () => {
   // manualChunks names the chunk island-<tag>; a later build moves the
   // module into a shared-manual chunk. Same module id, two naming schemes —
   // the tag maps correctly in both, and never picks up the other name's
@@ -216,7 +221,9 @@ Deno.test('matrix 2b — manualChunks naming: renaming across naming schemes kee
       },
     ],
   );
-  assertEquals(manual.islands['open-counter'].file, '/client/islands/island-open-counter-Qq77.js');
+  expect(manual.islands['open-counter'].file).toEqual(
+    '/client/islands/island-open-counter-Qq77.js',
+  );
 
   const shared = manifest(
     [input()],
@@ -232,12 +239,12 @@ Deno.test('matrix 2b — manualChunks naming: renaming across naming schemes kee
       },
     ],
   );
-  assertEquals(shared.islands['open-counter'].file, '/client/islands/vendor-common-Ww22.js');
+  expect(shared.islands['open-counter'].file).toEqual('/client/islands/vendor-common-Ww22.js');
 });
 
 // ─── 3. manualChunks 关 ───────────────────────────────────────────────
 
-Deno.test('matrix 3 — manualChunks off: default chunk naming keys through facade/module metadata', () => {
+test('matrix 3 — manualChunks off: default chunk naming keys through facade/module metadata', () => {
   // With manualChunks off, Rolldown's default names the chunk <basename>-<hash>
   // and the facade module id — not any naming convention — carries identity.
   const modules = { [`${ROOT}/app/islands/counter.ts`]: {} };
@@ -260,14 +267,14 @@ Deno.test('matrix 3 — manualChunks off: default chunk naming keys through faca
       },
     ],
   );
-  assertEquals(result.islands['open-gadget'].file, '/client/islands/gadget-Dd55.js');
-  assertEquals(result.entry, '/client/islands/client.js');
-  assertEquals(result.shared, []);
+  expect(result.islands['open-gadget'].file).toEqual('/client/islands/gadget-Dd55.js');
+  expect(result.entry).toEqual('/client/islands/client.js');
+  expect(result.shared).toEqual([]);
 });
 
 // ─── 4. 新增共享 chunk ────────────────────────────────────────────────
 
-Deno.test('matrix 4 — a new shared chunk lands in shared[] and leaves island mappings untouched', () => {
+test('matrix 4 — a new shared chunk lands in shared[] and leaves island mappings untouched', () => {
   const modules = { [`${ROOT}/app/islands/counter.ts`]: {} };
   const before = manifest(
     [input()],
@@ -290,7 +297,7 @@ Deno.test('matrix 4 — a new shared chunk lands in shared[] and leaves island m
     {
       ...Object.fromEntries([ENTRY_RECORD]),
       'app/islands/counter.ts': { file: 'islands/island-counter-Ab12.js' },
-      'node_modules/.deno/flexsearch@0.8/dist.js': { file: 'islands/flexsearch-Cc33.js' },
+      'node_modules/.pnpm/flexsearch@0.8/dist.js': { file: 'islands/flexsearch-Cc33.js' },
     },
     [
       {
@@ -300,29 +307,29 @@ Deno.test('matrix 4 — a new shared chunk lands in shared[] and leaves island m
       },
     ],
   );
-  assertEquals(after.islands, before.islands);
-  assertEquals(after.shared, ['/client/islands/flexsearch-Cc33.js']);
+  expect(after.islands).toEqual(before.islands);
+  expect(after.shared).toEqual(['/client/islands/flexsearch-Cc33.js']);
 });
 
 // ─── 5. island 无独立 chunk（走 client.js 兜底） ──────────────────────
 
-Deno.test('matrix 5 — an island without its own chunk rides the client entry fallback', () => {
+test('matrix 5 — an island without its own chunk rides the client entry fallback', () => {
   const result = manifest([input()], { ...Object.fromEntries([ENTRY_RECORD]) }, [
     { fileName: 'islands/client.js', modules: {} },
   ]);
-  assertEquals(result.islands['open-counter'].file, '/client/islands/client.js');
+  expect(result.islands['open-counter'].file).toEqual('/client/islands/client.js');
 
   // The document and the island manifest both resolve to the fallback URL.
   const doc = resolvePageDocument(undefined, ctx(), [{ type: 'module', src: result.entry }]);
   assertScriptAtBodyEnd(renderDocument(doc), '/client/islands/client.js');
-  assertEquals(islandChunkMapFromAssetManifest(result, ['open-counter']), {
+  expect(islandChunkMapFromAssetManifest(result, ['open-counter'])).toEqual({
     'open-counter': '/client/islands/client.js',
   });
 });
 
 // ─── 6. 多 island 共 chunk ────────────────────────────────────────────
 
-Deno.test('matrix 6 — islands sharing one chunk keep distinct identities', () => {
+test('matrix 6 — islands sharing one chunk keep distinct identities', () => {
   // One chunk carries both modules: each delivery tag maps to the same file
   // through its own module id — no name parsing could tell them apart.
   const sharedChunk = {
@@ -347,11 +354,11 @@ Deno.test('matrix 6 — islands sharing one chunk keep distinct identities', () 
     },
     [sharedChunk, { fileName: 'islands/client.js', modules: {} }],
   );
-  assertEquals(result.islands['open-counter'].file, '/client/islands/pair-Ee66.js');
-  assertEquals(result.islands['open-theme'].file, '/client/islands/pair-Ee66.js');
-  assertEquals(result.islands['open-counter'], result.islands['open-theme']);
+  expect(result.islands['open-counter'].file).toEqual('/client/islands/pair-Ee66.js');
+  expect(result.islands['open-theme'].file).toEqual('/client/islands/pair-Ee66.js');
+  expect(result.islands['open-counter']).toEqual(result.islands['open-theme']);
   // Shared: the chunk is island-dedicated, so it is not double-listed.
-  assertEquals(result.shared, []);
+  expect(result.shared).toEqual([]);
 });
 
 // ─── 7/8. native / lit ────────────────────────────────────────────────
@@ -360,7 +367,7 @@ const pageRoute: RouteEntry[] = [
   { path: '/', filePath: 'index.ts', type: 'page', varName: 'pageIndex' },
 ];
 
-Deno.test('matrix 7 — native: every document channel renders the script tag at document time', () => {
+test('matrix 7 — native: every document channel renders the script tag at document time', () => {
   const nativeEntry = renderEntry(
     buildEntryDescriptor(pageRoute, { ssg: true, renderer: 'native' }),
   );
@@ -374,7 +381,7 @@ Deno.test('matrix 7 — native: every document channel renders the script tag at
   assertScriptAtBodyEnd(renderDocument(doc), '/client/islands/client.js');
 });
 
-Deno.test('matrix 8 — lit: same document-time injection over the lit adapter and package islands', () => {
+test('matrix 8 — lit: same document-time injection over the lit adapter and package islands', () => {
   const litEntry = renderEntry(buildEntryDescriptor(pageRoute, { ssg: true, renderer: 'lit' }));
   assertDocumentTimeInjection(litEntry);
 
@@ -396,7 +403,9 @@ Deno.test('matrix 8 — lit: same document-time injection over the lit adapter a
       },
     ],
   );
-  assertEquals(result.islands['open-callout'].file, '/client/islands/island-open-callout-Bb44.js');
+  expect(result.islands['open-callout'].file).toEqual(
+    '/client/islands/island-open-callout-Bb44.js',
+  );
 
   const doc = resolvePageDocument(undefined, ctx(), [{ type: 'module', src: result.entry }]);
   assertScriptAtBodyEnd(renderDocument(doc), '/client/islands/client.js');
@@ -404,32 +413,32 @@ Deno.test('matrix 8 — lit: same document-time injection over the lit adapter a
 
 // ─── 9. 无 island + enhanced-forms-only ───────────────────────────────
 
-Deno.test('matrix 9 — zero islands, enhanced-forms-only: the entry script still reaches the document', () => {
+test('matrix 9 — zero islands, enhanced-forms-only: the entry script still reaches the document', () => {
   // Phase 2 runs for enhanced forms too (#569), so the manifest carries an
   // entry and no island records; the document embeds the entry so the
   // enhance runtime can attach.
   const result = manifest([], { ...Object.fromEntries([ENTRY_RECORD]) }, [
     { fileName: 'islands/client.js', modules: {} },
   ]);
-  assertEquals(result.entry, '/client/islands/client.js');
-  assertEquals(result.islands, {});
+  expect(result.entry).toEqual('/client/islands/client.js');
+  expect(result.islands).toEqual({});
 
   const doc = resolvePageDocument(undefined, ctx(), [{ type: 'module', src: result.entry }]);
   assertScriptAtBodyEnd(renderDocument(doc), '/client/islands/client.js');
 
   // The island-manifest pass records no islands for the page, without warning.
   const chunkMap = islandChunkMapFromAssetManifest(result, []);
-  assertEquals(chunkMap, {});
+  expect(chunkMap).toEqual({});
 });
 
 // ─── End-to-end: the SSG post-processing pass on a rendered tree ──────
 
-Deno.test('matrix — postProcessClientIslandBuild honors the manifest on a real temp tree', async () => {
-  const tmp = await Deno.makeTempDir({ prefix: 'open-matrix-' });
+test('matrix — postProcessClientIslandBuild honors the manifest on a real temp tree', async () => {
+  const tmp = await mkdtemp(join(tmpdir(), 'open-matrix-'));
   try {
     const dist = join(tmp, 'dist');
-    Deno.mkdirSync(dist, { recursive: true });
-    Deno.writeTextFileSync(
+    mkdirSync(dist, { recursive: true });
+    writeFileSync(
       join(dist, 'index.html'),
       '<html><body><open-counter></open-counter></body></html>',
     );
@@ -451,26 +460,27 @@ Deno.test('matrix — postProcessClientIslandBuild honors the manifest on a real
       },
       clientAssetManifest: manifestRecord,
     });
-    const files = [...Deno.readDirSync(join(dist, 'island-manifests'))].map((e) => e.name);
-    assertEquals(files.length, 1);
+    const files = readdirSync(join(dist, 'island-manifests'), { withFileTypes: true }).map(
+      (e) => e.name,
+    );
+    expect(files.length).toEqual(1);
     const pageManifest = JSON.parse(
-      Deno.readTextFileSync(join(dist, 'island-manifests', files[0])),
+      readFileSync(join(dist, 'island-manifests', files[0]), 'utf8'),
     ) as { islands: Array<{ tagName: string; chunkUrl: string }> };
-    assertEquals(pageManifest.islands[0].tagName, 'open-counter');
-    assertEquals(pageManifest.islands[0].chunkUrl, '/client/islands/chunk-9f3e2a.js');
+    expect(pageManifest.islands[0].tagName).toEqual('open-counter');
+    expect(pageManifest.islands[0].chunkUrl).toEqual('/client/islands/chunk-9f3e2a.js');
     // HTML untouched: scripts were embedded at render time, not spliced here.
-    assertEquals(
-      Deno.readTextFileSync(join(dist, 'index.html')),
+    expect(readFileSync(join(dist, 'index.html'), 'utf8')).toEqual(
       '<html><body><open-counter></open-counter></body></html>',
     );
   } finally {
-    await Deno.remove(tmp, { recursive: true });
+    await rm(tmp, { recursive: true });
   }
 });
 
 // ─── Document-seam validation for the descriptor channel ──────────────
 
-Deno.test('matrix — clientScripts validation: malformed wiring fails loudly, empty lists omit the field', () => {
+test('matrix — clientScripts validation: malformed wiring fails loudly, empty lists omit the field', () => {
   // Framework wiring bugs must fail the render, not silently drop scripts.
   for (const bad of [
     [{}, 'must carry a src or an inline code body'],
@@ -484,7 +494,7 @@ Deno.test('matrix — clientScripts validation: malformed wiring fails loudly, e
   }
   // An empty descriptor list is meaningless presence: the field is omitted
   // so the resolved document keeps its exact script-free shape.
-  assertEquals(resolvePageDocument(undefined, ctx(), []), { links: [] });
+  expect(resolvePageDocument(undefined, ctx(), [])).toEqual({ links: [] });
 });
 
 function assertThrowsClientScripts(bad: unknown): void {
@@ -494,9 +504,11 @@ function assertThrowsClientScripts(bad: unknown): void {
   } catch (error) {
     threw = error;
   }
-  assertExists(threw, `expected clientScripts ${JSON.stringify(bad)} to fail resolution`);
-  assert(
+  expect(threw, `expected clientScripts ${JSON.stringify(bad)} to fail resolution`).toEqual(
+    expect.anything(),
+  );
+  expect(
     String((threw as Error).message).includes('[openElement] resolvePageDocument:'),
     `unexpected error text: ${(threw as Error).message}`,
-  );
+  ).toBeTruthy();
 }

@@ -1,6 +1,6 @@
 // Current source line. Derived from the generated release-line module below —
 // the committed projection of docs/release/release-state.json (regenerate with
-// `deno task --cwd www generate:content`) — so the site can never show two
+// `pnpm --dir www run generate:content`) — so the site can never show two
 // different "current version" claims on one screen. The derivation is
 // cross-asserted by release:state-machine:check and the version-bump anchor
 // audit. Prose that claims a published line must not use this constant

@@ -14,9 +14,11 @@
  * cli/start.ts again.
  *
  * Usage:
- *   deno run --allow-read --allow-env --allow-net server.ts --port 4280 --dir ../dist
+ *   node server.ts --port 4280 --dir ../dist
  */
 
+import { serve } from '@hono/node-server';
+import process from 'node:process';
 import { join, resolve } from 'node:path';
 import {
   dispatchRequest,
@@ -24,12 +26,13 @@ import {
 } from '../../../../packages/router/src/vite/internal/static-serve.ts';
 
 const args: Record<string, string> = {};
-for (let i = 0; i < Deno.args.length; i += 2) {
-  if (Deno.args[i].startsWith('--')) args[Deno.args[i].slice(2)] = Deno.args[i + 1] ?? '';
+const cliArgs = process.argv.slice(2);
+for (let i = 0; i < cliArgs.length; i += 2) {
+  if (cliArgs[i].startsWith('--')) args[cliArgs[i].slice(2)] = cliArgs[i + 1] ?? '';
 }
 
 const PORT = Number(args.port ?? '4280');
-const ROOT = resolve(Deno.cwd(), args.dir ?? '../dist');
+const ROOT = resolve(process.cwd(), args.dir ?? '../dist');
 
 const serverEntry = await importRequestTimeServer(join(ROOT, 'server/index.js'));
 
@@ -45,31 +48,35 @@ let lastSubmission: {
   rawBody: string;
 } | null = null;
 
-Deno.serve({ port: PORT, hostname: '127.0.0.1' }, async (request) => {
-  const url = new URL(request.url);
-  if (url.pathname === '/__wire/last') {
-    return Response.json({ last: lastSubmission });
-  }
-  if (url.pathname === '/__wire/reset') {
-    lastSubmission = null;
-    return new Response('ok');
-  }
-  if (request.method === 'POST' && url.pathname.startsWith('/tuple-probes')) {
-    const rawBody = await request.clone().text();
-    lastSubmission = {
-      method: request.method,
-      url: request.url,
-      contentType: request.headers.get('content-type') ?? '',
-      actionHeader: request.headers.get('x-openelement-action'),
-      rawBody,
-    };
-  }
-  return dispatchRequest(request, {
-    distDir: ROOT,
-    serverMod: serverEntry,
-    env: Deno.env.toObject(),
-    onHandlerError: (error) => console.error('[fixture server] handler error:', error),
-  });
+serve({
+  port: PORT,
+  hostname: '127.0.0.1',
+  fetch: async (request) => {
+    const url = new URL(request.url);
+    if (url.pathname === '/__wire/last') {
+      return Response.json({ last: lastSubmission });
+    }
+    if (url.pathname === '/__wire/reset') {
+      lastSubmission = null;
+      return new Response('ok');
+    }
+    if (request.method === 'POST' && url.pathname.startsWith('/tuple-probes')) {
+      const rawBody = await request.clone().text();
+      lastSubmission = {
+        method: request.method,
+        url: request.url,
+        contentType: request.headers.get('content-type') ?? '',
+        actionHeader: request.headers.get('x-openelement-action'),
+        rawBody,
+      };
+    }
+    return dispatchRequest(request, {
+      distDir: ROOT,
+      serverMod: serverEntry,
+      env: process.env,
+      onHandlerError: (error) => console.error('[fixture server] handler error:', error),
+    });
+  },
 });
 
 console.log(`app-flow-native fixture server -> http://127.0.0.1:${PORT} (root: ${ROOT})`);

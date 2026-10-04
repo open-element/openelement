@@ -1,0 +1,23 @@
+{
+  "name": "@openelement/fixture-router-native-framework",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../../tools/repo/clean.ts dist && node ../../../packages/router/src/cli/build.ts",
+    "e2e": "playwright test --config e2e/playwright.config.ts --project=chromium",
+    "e2e:browsers": "playwright test --config e2e/playwright.config.ts",
+    "gate": "node ../../../tools/repo/gate.ts @openelement/fixture-router-native-framework#build @openelement/fixture-router-native-framework#e2e:browsers"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.1",
+    "@openelement/element": "workspace:*",
+    "@openelement/router": "workspace:*",
+    "hono": "^4.12",
+    "lit": "3.3.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "vite": "8.0.16"
+  }
+}

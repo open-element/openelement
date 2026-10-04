@@ -5,17 +5,18 @@
 OpenElement 是一个 Web Platform 优先、只围绕两个核心产品构建的仓库：**Element** 与 **Router**。
 Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用于服务端序列化、创建新 DOM 与复用现有 DOM。Router 负责路由选择、HTTP 语义、导航、loader/action，以及 Native 与 Lit Framework Mode 共享的应用协议。
 
-源码目前是 Element 与 Router 的全新公开基线 `1.0.0-alpha.5`。它不是从历史 0.x API 到 1.x 的兼容迁移。npm `latest` 是按包独立的：element、create、ui 继续指向 0.43 稳定线，而 Router 的 `latest` 是 0.41.0-alpha.6 预发布。在单独准入发布之前，没有任何单一版本同时覆盖全部四个包。
+源码目前是 Element 与 Router 的全新公开基线 `1.0.0-alpha.7`。它不是从历史 0.x API 到 1.x 的兼容迁移。npm `latest` 是按包独立的：element、create、ui 继续指向 0.43 稳定线，而 Router 的 `latest` 是 0.41.0-alpha.6 预发布。在单独准入发布之前，没有任何单一版本同时覆盖全部四个包。
 
 ## 快速开始
 
-需要 **Deno 2.9+**。创建、运行、构建：
+需要 **Node.js 24.2+** 与 pnpm。创建、安装、运行、构建：
 
 ```bash
-deno run -A npm:@openelement/create@alpha my-app
+npm exec @openelement/create@alpha -- my-app
 cd my-app
-deno task dev
-deno task build
+pnpm install
+pnpm dev
+pnpm build
 ```
 
 加一个页面——一个编译后的 element，加一条路由记录：
@@ -46,9 +47,9 @@ export default definePage(HelloPage, {
 });
 ```
 
-重新跑 `deno task dev`，打开 Vite 打印的 URL 并加上 `/hello`，`deno task build` 会产出 static-first 的 `dist/`。完整教程：<https://openelement.org/zh/guide/getting-started>。
+重新跑 `pnpm dev`，打开 Vite 打印的 URL 并加上 `/hello`，`pnpm build` 会产出 static-first 的 `dist/`。完整教程：<https://openelement.org/zh/guide/getting-started>。
 
-**构建期宿主说明：** `@openelement/router` 的工具子路径（`./vite`、`./cli/*`）直接调用 Deno API，因此在**构建期**需要 Deno 宿主——在纯 Node 的 `vite.config.ts` 中调用会以 `Deno is not defined` 报错。请求期产物保持 WinterCG 纯净，可部署到任意目标。这是一条临时性约束：移除它的 portable-host 工具迁移是 deferred 路线图项（[#1387](https://github.com/open-element/openelement/issues/1387)）。
+**构建期宿主说明：** Framework Mode 的开发与构建运行在 Node.js 24.2+ 上，经 pnpm 脚本驱动（ADR-0161，取代 ADR-0108 的 Deno-native 决策）：`@openelement/router` 的工具子路径（`./vite`、`./cli/*`）作为普通 Node 程序经 starter 自己的依赖钉扎消费。请求期产物使用标准 ESM 与 Web `Request`/`Response`；部署支持以资格矩阵实际覆盖的运行时与 Nitro 目标为准，而非所有能加载 ESM 的运行时。Element 仍可在纯 npm 项目中独立消费。
 
 ## 特性
 
@@ -73,15 +74,15 @@ Element 与 Router 是公共框架核心。UI 是 experimental 产品；Site 是
 
 ## 开发
 
-源码仓库使用 Deno；发布到 npm 的产物在一次性外部 npm 项目中独立验证。
+源码仓库是 Node 上的 pnpm workspace（`.node-version` 钉住开发线 24.18）；发布到 npm 的产物在一次性外部 npm 项目中独立验证。
 
 ```sh
-deno install
-deno task fmt:check
-deno task lint
-deno task typecheck
-deno task test
-deno task build
+pnpm install
+pnpm run fmt:check
+pnpm run lint
+pnpm run typecheck
+pnpm test
+pnpm run build
 ```
 
 ## 文档

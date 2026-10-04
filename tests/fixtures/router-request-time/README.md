@@ -8,10 +8,10 @@ not a fixture workaround), so islands hydrate here exactly like on prerendered
 pages.
 
 ```bash
-deno task --cwd tests/fixtures/router-request-time build   # build
-deno task --cwd tests/fixtures/router-request-time gate    # build + e2e
+pnpm --dir tests/fixtures/router-request-time run build   # build
+pnpm --dir tests/fixtures/router-request-time run gate    # build + e2e
 ```
 
-`deno.lock` is generated and shares its universe with `router-native-framework`
-byte for byte — see `tests/fixtures/README.md`. The fixture also carries the
-ADR-0123 fetch-middleware proof (`app/middleware/`).
+Dependencies are declared in this fixture's own `package.json` and resolved by
+the workspace root `pnpm-lock.yaml` — see `tests/fixtures/README.md`. The
+fixture also carries the ADR-0123 fetch-middleware proof (`app/middleware/`).

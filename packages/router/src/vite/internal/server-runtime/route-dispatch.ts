@@ -4,9 +4,8 @@
  * The generated entry's dispatch-table assembly: the
  * startup stream-route assertions, the per-path page handler table, and the
  * 405 responder the WinterCG route middleware invokes for non-GET/POST page
- * requests. Migrated verbatim from the generated-entry strings
- * (entry-orchestrator.ts) so the dispatch seam is visible to `deno check`
- * and directly unit-testable (#1470 block e).
+ * requests. The dispatch seam lives in this real module rather than inside a
+ * codegen template string, so it is directly unit-testable (#1470 block e).
  */
 
 import { ACTION_FETCH_HEADER } from './action-runtime.ts';
@@ -17,8 +16,7 @@ import type { PageRouteModule, StreamRouteManifestLike } from './types.ts';
 /**
  * Startup guard for a page route under a renderer without compiled-stream
  * support (the lit fork): a route declaring `renderIntent.stream` fails the
- * build loudly instead of silently rendering static. Moved verbatim from the
- * emitted `__assertLitStreamRoute` body.
+ * build loudly instead of silently rendering static.
  */
 export function assertLitStreamRoute(module: unknown, route: string, file: string): void {
   const stream = readStreamIntent(module);
@@ -83,8 +81,7 @@ function readPartProgram(module: unknown): { version: unknown; tag: unknown } | 
 /**
  * Creates the per-path page handler table the generated GET/POST wiring
  * populates: one mutable method record per page path, keyed by the route
- * path literal the wiring emits. (Previously emitted inline as
- * `Object.fromEntries([...].map(path => [path, {}]))`.)
+ * path literal the wiring emits.
  */
 export function createPageHandlerTable(
   paths: readonly string[],

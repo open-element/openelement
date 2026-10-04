@@ -8,9 +8,8 @@
  * the POST/Redirect/GET flow (#548), the default body limit (#568) bound to
  * the policy constant, the redirect coercion, and the internal
  * Hono↔WinterCG bridge every generated page handler composes through.
- * Migrated verbatim from the generated-entry strings (entry-action-runtime.ts,
- * entry-codegen.ts, entry-orchestrator.ts) so the protocol is visible to
- * `deno check` and directly unit-testable.
+ * The protocol lives in this real module rather than inside codegen template
+ * strings, so it is directly unit-testable.
  *
  * Behavior contract: a validation failure RETURNs
  * `fail(status, data)` and the no-JS channel re-renders the form at that
@@ -330,7 +329,7 @@ export function actionErrorResponse(
       status: 500,
       detail: production
         ? 'Internal Server Error'
-        : // Same scrub expression the emitted handler carried: a truthy
+        : // Scrub contract: a truthy
           // `message` property wins verbatim, anything else degrades to the
           // thrown value itself.
           String(

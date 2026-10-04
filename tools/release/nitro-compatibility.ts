@@ -3,7 +3,7 @@ export const NITRO_COMPATIBILITY_DATE = '2026-06-12';
 
 /**
  * Single-source Nitro version for every first-party consumer (fixture
- * proofs, packed-consumer harnesses, root import map). The pinned line
+ * proofs, packed-consumer harnesses). The pinned line
  * formally supports the Alpha Vite major in its peer metadata, so no
  * `--legacy-peer-deps` workaround is needed anywhere.
  */

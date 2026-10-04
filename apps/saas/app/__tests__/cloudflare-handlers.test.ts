@@ -1,9 +1,9 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { createCloudflareHandlers } from '../../lib/cloudflare-handlers.ts';
 
 const env = {} as never;
 
-Deno.test('custom Cloudflare entry preserves the Nitro fetch response exactly', async () => {
+test('custom Cloudflare entry preserves the Nitro fetch response exactly', async () => {
   const expected = new Response('nitro', { status: 207, headers: { 'x-owner': 'nitro' } });
   const handlers = createCloudflareHandlers(
     { fetch: () => expected },
@@ -18,11 +18,11 @@ Deno.test('custom Cloudflare entry preserves the Nitro fetch response exactly', 
   const response = await handlers.fetch(new Request('https://app.test/notes'), env, {
     waitUntil: () => {},
   });
-  assertEquals(response, expected);
-  assertEquals(response.headers.get('x-owner'), 'nitro');
+  expect(response).toEqual(expected);
+  expect(response.headers.get('x-owner')).toEqual('nitro');
 });
 
-Deno.test('scheduled and queue events use application lifecycle hooks', async () => {
+test('scheduled and queue events use application lifecycle hooks', async () => {
   const calls: string[] = [];
   const waits: Promise<unknown>[] = [];
   const handlers = createCloudflareHandlers(
@@ -56,5 +56,5 @@ Deno.test('scheduled and queue events use application lifecycle hooks', async ()
   await handlers.queue({ queue: 'openelement-payment-events', messages: [] }, env);
   await handlers.queue({ queue: 'openelement-payment-events-dlq', messages: [] }, env);
   await Promise.all(waits);
-  assertEquals(calls, ['scheduled', 'queue', 'dlq', 'payment', 'payment-dlq']);
+  expect(calls).toEqual(['scheduled', 'queue', 'dlq', 'payment', 'payment-dlq']);
 });

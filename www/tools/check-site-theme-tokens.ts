@@ -3,7 +3,7 @@
  * tokens (packages/ui/src/semantic-tokens.css + its generated module) and the site alias layer
  * (www/vite.config.ts), never from hardcoded literals.
  *
- * Rules for sources under www/app/ and www/islands/:
+ * Rules for sources under www/app/ (routes, islands, components):
  *  1. No hex color literals. 6/8-digit forms always fail; 3/4-digit forms
  *     fail only on lines carrying a CSS property keyword, so issue
  *     references like `#390` in prose stay legal.
@@ -15,11 +15,13 @@
  * packages/ui/src/semantic-tokens.css (source of truth) as carried by the generated module.
  */
 
-import { walk } from '@std/fs/walk';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SITE_BREAKPOINT_TIERS } from '../site-css.ts';
+import { readdir, readFile } from 'node:fs/promises';
+import process from 'node:process';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const SCAN_ROOTS = [join(repoRoot, 'www/app')];
 const SOURCE = /\.(ts|tsx)$/;
 const HEX_LONG = /#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
@@ -82,12 +84,16 @@ export function findBreakpointFailures(file: string, lines: string[]): ThemeToke
 async function main(): Promise<void> {
   const failures: ThemeTokenFailure[] = [];
   for (const root of SCAN_ROOTS) {
-    for await (const entry of walk(root, { exts: ['.ts', '.tsx'] })) {
-      if (!SOURCE.test(entry.path)) continue;
-      if (entry.path.includes('/data/_generated-')) continue;
-      const text = await Deno.readTextFile(entry.path);
-      failures.push(...findThemeTokenFailures(entry.path, text.split('\n')));
-      failures.push(...findBreakpointFailures(entry.path, text.split('\n')));
+    for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
+      if (entry.isDirectory() || (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx'))) {
+        continue;
+      }
+      const entryPath = `${entry.parentPath}/${entry.name}`;
+      if (!SOURCE.test(entryPath)) continue;
+      if (entryPath.includes('/data/_generated-')) continue;
+      const text = await readFile(entryPath, 'utf8');
+      failures.push(...findThemeTokenFailures(entryPath, text.split('\n')));
+      failures.push(...findBreakpointFailures(entryPath, text.split('\n')));
     }
   }
   if (failures.length > 0) {
@@ -98,7 +104,7 @@ async function main(): Promise<void> {
     console.error(
       'Theme values must come from open-props tokens or the www/vite.config.ts alias layer.',
     );
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log('site theme token check passed.');
 }

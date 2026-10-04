@@ -10,8 +10,12 @@
  *      of disappearing.
  */
 
-import { assertEquals, assertRejects, assertThrows } from '@std/assert';
-import { join } from '@std/path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
+import { join } from 'node:path';
 import {
   assertValidHeadConvention,
   headScriptsToInject,
@@ -22,33 +26,32 @@ import {
 import { resolveHeadConvention } from '../src/vite/head-convention.ts';
 import { assertValidUserConfig } from '../src/config.ts';
 
-Deno.test('head channel: stylesheets pass through the structured channel unchanged', () => {
-  assertEquals(headStylesheetsToInject(undefined), undefined);
-  assertEquals(headStylesheetsToInject([]), undefined);
-  assertEquals(headStylesheetsToInject(['/a.css', 'https://cdn.example.com/b.css']), [
+test('head channel: stylesheets pass through the structured channel unchanged', () => {
+  expect(headStylesheetsToInject(undefined)).toEqual(undefined);
+  expect(headStylesheetsToInject([])).toEqual(undefined);
+  expect(headStylesheetsToInject(['/a.css', 'https://cdn.example.com/b.css'])).toEqual([
     '/a.css',
     'https://cdn.example.com/b.css',
   ]);
 });
 
-Deno.test('head channel: scripts map onto the framework inject.scripts shape', () => {
-  assertEquals(headScriptsToInject(undefined), undefined);
-  assertEquals(headScriptsToInject([]), undefined);
-  assertEquals(headScriptsToInject([{ src: '/theme-init.js' }]), [{ src: '/theme-init.js' }]);
-  assertEquals(
+test('head channel: scripts map onto the framework inject.scripts shape', () => {
+  expect(headScriptsToInject(undefined)).toEqual(undefined);
+  expect(headScriptsToInject([])).toEqual(undefined);
+  expect(headScriptsToInject([{ src: '/theme-init.js' }])).toEqual([{ src: '/theme-init.js' }]);
+  expect(
     headScriptsToInject([
       { src: '/p.js', defer: true, integrity: 'sha384-x', crossOrigin: 'anonymous' },
     ]),
-    [{ src: '/p.js', defer: true, integrity: 'sha384-x', crossorigin: 'anonymous' }],
-  );
+  ).toEqual([{ src: '/p.js', defer: true, integrity: 'sha384-x', crossorigin: 'anonymous' }]);
   // `defer: false` is a real choice (parser-blocking external script) and must
   // survive, not be dropped as falsy.
-  assertEquals(headScriptsToInject([{ src: '/x.js', defer: false }]), [
+  expect(headScriptsToInject([{ src: '/x.js', defer: false }])).toEqual([
     { src: '/x.js', defer: false },
   ]);
 });
 
-Deno.test('head channel: an invalid script descriptor fails closed', () => {
+test('head channel: an invalid script descriptor fails closed', () => {
   const cases: Array<[unknown, string]> = [
     [{ src: '' }, 'src'],
     [{ defer: true }, 'src'],
@@ -59,7 +62,7 @@ Deno.test('head channel: an invalid script descriptor fails closed', () => {
     ['/a.js', 'object'],
   ];
   for (const [value, expected] of cases) {
-    assertThrows(
+    assertThrowsIncludes(
       () => headScriptsToInject([value as never]),
       Error,
       expected,
@@ -68,77 +71,78 @@ Deno.test('head channel: an invalid script descriptor fails closed', () => {
   }
 });
 
-Deno.test('head channel: the convention accepts meta, link and style entries', () => {
+test('head channel: the convention accepts meta, link and style entries', () => {
   const entries = [
     { meta: { property: 'og:type', content: 'website' } },
     { link: { rel: 'alternate', type: 'application/rss+xml', href: '/blog/rss.xml' } },
     { style: 'html{visibility:visible}' },
   ];
   assertValidHeadConvention(entries);
-  assertEquals(serializeHeadConvention(entries), [
+  expect(serializeHeadConvention(entries)).toEqual([
     '<meta property="og:type" content="website">',
     '<link rel="alternate" type="application/rss+xml" href="/blog/rss.xml" />',
     '<style>html{visibility:visible}</style>',
   ]);
 });
 
-Deno.test('head channel: attribute order is the record order (author controls bytes)', () => {
-  assertEquals(
+test('head channel: attribute order is the record order (author controls bytes)', () => {
+  expect(
     serializeHeadConvention([{ link: { href: '/x.svg', rel: 'icon', type: 'image/svg+xml' } }]),
-    ['<link href="/x.svg" rel="icon" type="image/svg+xml" />'],
-  );
+  ).toEqual(['<link href="/x.svg" rel="icon" type="image/svg+xml" />']);
 });
 
-Deno.test('head channel: attribute values are escaped, never interpreted as markup', () => {
-  assertEquals(
+test('head channel: attribute values are escaped, never interpreted as markup', () => {
+  expect(
     serializeHeadConvention([
       { meta: { name: 'description', content: '<script>alert(1)</script>' } },
     ]),
-    ['<meta name="description" content="&lt;script&gt;alert(1)&lt;/script&gt;">'],
-  );
+  ).toEqual(['<meta name="description" content="&lt;script&gt;alert(1)&lt;/script&gt;">']);
 });
 
-Deno.test('head channel: an unsafe attribute name fails closed', () => {
-  assertThrows(
+test('head channel: an unsafe attribute name fails closed', () => {
+  assertThrowsIncludes(
     () => serializeHeadConvention([{ meta: { 'on click': 'x' } }]),
     Error,
     'unsafe attribute name',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () => serializeHeadConvention([{ link: { rel: 'icon', href: '/x', onerror: 'a()' } }]),
     Error,
     'unsafe attribute name',
   );
 });
 
-Deno.test('head channel: a javascript: URL fails closed on link and style', () => {
-  assertThrows(
+test('head channel: a javascript: URL fails closed on link and style', () => {
+  assertThrowsIncludes(
     () => serializeHeadConvention([{ link: { rel: 'icon', href: 'javascript:alert(1)' } }]),
     Error,
     'javascript:',
   );
   // The tab-obfuscated form must not slip past the protocol check.
-  assertThrows(
+  assertThrowsIncludes(
     () => serializeHeadConvention([{ link: { rel: 'icon', href: 'java\tscript:alert(1)' } }]),
     Error,
     'javascript:',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () => serializeHeadConvention([{ style: '@import url("javascript:alert(1)")' }]),
     Error,
   );
 });
 
-Deno.test('head channel: a <link> without rel or href fails closed', () => {
-  assertThrows(() => serializeHeadConvention([{ link: { rel: 'icon' } }]), Error, 'href');
-  assertThrows(() => serializeHeadConvention([{ link: { href: '/x.svg' } }]), Error, 'rel');
+test('head channel: a <link> without rel or href fails closed', () => {
+  assertThrowsIncludes(() => serializeHeadConvention([{ link: { rel: 'icon' } }]), Error, 'href');
+  assertThrowsIncludes(() => serializeHeadConvention([{ link: { href: '/x.svg' } }]), Error, 'rel');
 });
 
-Deno.test('head channel: a <style> entry cannot close the element or inject a handler', () => {
-  assertThrows(() => serializeHeadConvention([{ style: '</style><script>x</script>' }]), Error);
+test('head channel: a <style> entry cannot close the element or inject a handler', () => {
+  assertThrowsIncludes(
+    () => serializeHeadConvention([{ style: '</style><script>x</script>' }]),
+    Error,
+  );
 });
 
-Deno.test('head channel: unknown entry shapes and keys fail closed', () => {
+test('head channel: unknown entry shapes and keys fail closed', () => {
   const cases: Array<[unknown, string]> = [
     [[{}], 'no keys'],
     [[{ script: { src: '/x.js' } }], 'script'],
@@ -149,7 +153,7 @@ Deno.test('head channel: unknown entry shapes and keys fail closed', () => {
     [[{ meta: { name: 42 } }], 'must be a string'],
   ];
   for (const [value, expected] of cases) {
-    assertThrows(
+    assertThrowsIncludes(
       () => assertValidHeadConvention(value),
       Error,
       expected,
@@ -158,15 +162,15 @@ Deno.test('head channel: unknown entry shapes and keys fail closed', () => {
   }
 });
 
-Deno.test('head channel: a function export resolves (the page.head resolver idiom)', () => {
+test('head channel: a function export resolves (the page.head resolver idiom)', () => {
   const resolved = resolveHeadConventionExport(
     () => [{ meta: { name: 'x', content: 'y' } }],
     'app/head.tsx',
   );
-  assertEquals(resolved, [{ meta: { name: 'x', content: 'y' } }]);
+  expect(resolved).toEqual([{ meta: { name: 'x', content: 'y' } }]);
   // A function returning a bad shape is still rejected, and the message names
   // the convention file it came from.
-  assertThrows(
+  assertThrowsIncludes(
     () => resolveHeadConventionExport(() => ({ nope: true }), 'app/head.tsx'),
     Error,
     'app/head.tsx',
@@ -185,22 +189,22 @@ interface TempApp {
 }
 
 async function withApp(fn: (app: TempApp) => Promise<void>): Promise<void> {
-  const root = await Deno.makeTempDir({ prefix: 'oe-head-convention-' });
+  const root = await mkdtemp(join(tmpdir(), 'oe-head-convention-'));
   try {
     await fn({
       root,
       write(relativePath, content) {
         const path = join(root, relativePath);
-        Deno.mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
-        Deno.writeTextFileSync(path, content);
+        mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
+        writeFileSync(path, content);
       },
     });
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 }
 
-Deno.test('head convention: app/head.tsx compiles and serializes its entries', async () => {
+test('head convention: app/head.tsx compiles and serializes its entries', async () => {
   await withApp(async (app) => {
     app.write(
       'app/head.tsx',
@@ -216,7 +220,7 @@ Deno.test('head convention: app/head.tsx compiles and serializes its entries', a
       root: app.root,
       relativePath: 'app/head.tsx',
     });
-    assertEquals(fragments, [
+    expect(fragments).toEqual([
       '<meta property="og:site_name" content="OpenElement">',
       '<link rel="alternate" type="application/rss+xml" href="/blog/rss.xml" />',
       '<link rel="preload" href="/assets/inter.woff2" as="font" type="font/woff2" crossorigin="anonymous" />',
@@ -225,7 +229,7 @@ Deno.test('head convention: app/head.tsx compiles and serializes its entries', a
   });
 });
 
-Deno.test('head convention: a ?inline CSS import resolves (the reason it is compiled)', async () => {
+test('head convention: a ?inline CSS import resolves (the reason it is compiled)', async () => {
   await withApp(async (app) => {
     app.write('app/head.css', '.from-css{color:red}');
     app.write(
@@ -237,11 +241,11 @@ Deno.test('head convention: a ?inline CSS import resolves (the reason it is comp
       root: app.root,
       relativePath: 'app/head.tsx',
     });
-    assertEquals(fragments, ['<style>.from-css{color:red}</style>']);
+    expect(fragments).toEqual(['<style>.from-css{color:red}</style>']);
   });
 });
 
-Deno.test('head convention: a function export resolves at build time', async () => {
+test('head convention: a function export resolves at build time', async () => {
   await withApp(async (app) => {
     app.write(
       'app/head.tsx',
@@ -252,14 +256,14 @@ Deno.test('head convention: a function export resolves at build time', async () 
       root: app.root,
       relativePath: 'app/head.tsx',
     });
-    assertEquals(fragments, ['<meta property="og:site_name" content="openElement">']);
+    expect(fragments).toEqual(['<meta property="og:site_name" content="openElement">']);
   });
 });
 
-Deno.test('head convention: a module with no default export fails the build', async () => {
+test('head convention: a module with no default export fails the build', async () => {
   await withApp(async (app) => {
     app.write('app/head.tsx', 'export const head = [];');
-    await assertRejects(
+    await assertRejectsIncludes(
       () => resolveHeadConvention({ root: app.root, relativePath: 'app/head.tsx' }),
       Error,
       'must default-export',
@@ -267,10 +271,10 @@ Deno.test('head convention: a module with no default export fails the build', as
   });
 });
 
-Deno.test('head convention: an invalid entry fails the build with the file named', async () => {
+test('head convention: an invalid entry fails the build with the file named', async () => {
   await withApp(async (app) => {
     app.write('app/head.tsx', `export default [{ meta: { name: 'description', content: 42 } }];`);
-    await assertRejects(
+    await assertRejectsIncludes(
       () => resolveHeadConvention({ root: app.root, relativePath: 'app/head.tsx' }),
       Error,
       'app/head.tsx',
@@ -278,10 +282,10 @@ Deno.test('head convention: an invalid entry fails the build with the file named
   });
 });
 
-Deno.test('head convention: a module that throws while evaluating fails the build', async () => {
+test('head convention: a module that throws while evaluating fails the build', async () => {
   await withApp(async (app) => {
     app.write('app/head.tsx', 'throw new Error("boom in head");');
-    await assertRejects(
+    await assertRejectsIncludes(
       () => resolveHeadConvention({ root: app.root, relativePath: 'app/head.tsx' }),
       Error,
       'app/head.tsx',
@@ -289,9 +293,9 @@ Deno.test('head convention: a module that throws while evaluating fails the buil
   });
 });
 
-Deno.test('head convention: a missing module fails the build rather than emitting no head', async () => {
+test('head convention: a missing module fails the build rather than emitting no head', async () => {
   await withApp(async (app) => {
-    await assertRejects(
+    await assertRejectsIncludes(
       () => resolveHeadConvention({ root: app.root, relativePath: 'app/head.tsx' }),
       Error,
       'app/head.tsx',
@@ -299,15 +303,15 @@ Deno.test('head convention: a missing module fails the build rather than emittin
   });
 });
 
-Deno.test('head convention: a non-boolean viewTransition/speculation is rejected by the schema', () => {
+test('head convention: a non-boolean viewTransition/speculation is rejected by the schema', () => {
   // A boolean-only key is the alpha.4 contract; the object form is a future
   // widening, and accepting it now would admit options no build reads.
-  assertThrows(
+  assertThrowsIncludes(
     () => assertValidUserConfig({ viewTransition: { types: ['fade'] } }),
     Error,
     'viewTransition',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () => assertValidUserConfig({ speculation: { eagerness: 'moderate' } }),
     Error,
     'speculation',

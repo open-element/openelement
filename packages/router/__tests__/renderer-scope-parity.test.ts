@@ -12,7 +12,7 @@
  * parity with the predicate for every (scope set, route path) pair.
  */
 
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   rendererScopeMatches,
   renderMatchingRenderersFn,
@@ -72,7 +72,7 @@ const ROUTE_PATHS: readonly string[] = [
   '/other',
 ];
 
-Deno.test('renderer scope parity: generated __matchingRenderers mirrors rendererScopeMatches', () => {
+test('renderer scope parity: generated __matchingRenderers mirrors rendererScopeMatches', () => {
   for (const scopes of SCOPE_SETS) {
     const renderers = rendererDecls(scopes);
     const generated = evaluateGeneratedMatcher(renderers);
@@ -82,24 +82,23 @@ Deno.test('renderer scope parity: generated __matchingRenderers mirrors renderer
         .filter(({ renderer }) => rendererScopeMatches(routePath, renderer.scope))
         .map(({ index }) => ({ marker: index }));
       const actual = generated(routePath);
-      assertEquals(
+      expect(
         actual,
-        expected,
         `scope mirror diverged for scopes=${JSON.stringify(scopes)} routePath=${JSON.stringify(
           routePath,
         )}`,
-      );
+      ).toEqual(expected);
     }
   }
 });
 
-Deno.test('renderer scope parity: boundary separators and case are significant', () => {
+test('renderer scope parity: boundary separators and case are significant', () => {
   // Pins the canonical predicate contract itself so a semantic change here
   // (not just a codegen/runtime skew) is a deliberate, reviewed act.
-  assertEquals(rendererScopeMatches('/docs', '/docs'), true);
-  assertEquals(rendererScopeMatches('/docs/api', '/docs'), true);
-  assertEquals(rendererScopeMatches('/docsify', '/docs'), false);
-  assertEquals(rendererScopeMatches('/Docs', '/docs'), false);
-  assertEquals(rendererScopeMatches('/anything', '/'), true);
-  assertEquals(rendererScopeMatches('/', '/'), true);
+  expect(rendererScopeMatches('/docs', '/docs')).toEqual(true);
+  expect(rendererScopeMatches('/docs/api', '/docs')).toEqual(true);
+  expect(rendererScopeMatches('/docsify', '/docs')).toEqual(false);
+  expect(rendererScopeMatches('/Docs', '/docs')).toEqual(false);
+  expect(rendererScopeMatches('/anything', '/')).toEqual(true);
+  expect(rendererScopeMatches('/', '/')).toEqual(true);
 });

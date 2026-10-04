@@ -20,14 +20,14 @@
  *   - successful claim replay is unchanged (integration)
  */
 
-import { assertEquals, assertStrictEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   type FacadeDom,
   FacadeElement,
-  FacadeEvent,
   type FacadeShadowRoot,
   installFacadeDom,
 } from './facade-dom.ts';
+import { cleanup, click } from './pre-upgrade-helpers.ts';
 
 // The facade captures its HTMLElement base at module evaluation time.
 const dom: FacadeDom = installFacadeDom();
@@ -43,25 +43,15 @@ const { capturePreUpgradeEvents, releasePreUpgradeEvents, replayPreUpgradeEvents
     replayPreUpgradeEvents: (root: Node, captured: readonly unknown[]) => number;
   };
 
-function click(): FacadeEvent {
-  return new FacadeEvent('click', { bubbles: true, composed: true });
-}
-
 function shadowButton(root: FacadeShadowRoot): FacadeElement {
   const button = new FacadeElement('button', dom.document);
   root.appendChild(button);
   return button;
 }
 
-function cleanup(...nodes: FacadeElement[]): void {
-  for (const node of nodes) {
-    if (node.parentNode) node.parentNode.removeChild(node);
-  }
-}
-
 // ─── Composed ownership: release from the host ───
 
-Deno.test('composed release: open shadow target is dropped when releasing from the host', () => {
+test('composed release: open shadow target is dropped when releasing from the host', () => {
   const host = new FacadeElement('oe-composed-open', dom.document);
   const shadow = host.attachShadow({ mode: 'open' });
   const button = shadowButton(shadow);
@@ -69,17 +59,17 @@ Deno.test('composed release: open shadow target is dropped when releasing from t
   const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget, ['click']);
   try {
     button.dispatchEvent(click());
-    assertEquals(capture.events.length, 1, 'the shadow-internal click is captured');
+    expect(capture.events.length, 'the shadow-internal click is captured').toEqual(1);
     // Failure fallback: kernel.root never established, release from the host.
     releasePreUpgradeEvents(host as unknown as Node, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 0, 'the host-owned shadow record is released');
+    expect(capture.events.length, 'the host-owned shadow record is released').toEqual(0);
   } finally {
     capture.stop();
     cleanup(host);
   }
 });
 
-Deno.test('composed release: a pending sibling keeps its record and replays once', () => {
+test('composed release: a pending sibling keeps its record and replays once', () => {
   const clicked = new FacadeElement('oe-composed-a', dom.document);
   const pending = new FacadeElement('oe-composed-b', dom.document);
   const clickedShadow = clicked.attachShadow({ mode: 'open' });
@@ -95,33 +85,32 @@ Deno.test('composed release: a pending sibling keeps its record and replays once
   try {
     clickedButton.dispatchEvent(click());
     pendingButton.dispatchEvent(click());
-    assertEquals(capture.events.length, 2);
+    expect(capture.events.length).toEqual(2);
 
     // Island A activates and fails before establishing its kernel root.
     releasePreUpgradeEvents(clicked as unknown as Node, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 1, "island A's record is released");
-    assertStrictEquals(capture.events[0].target as unknown, pendingButton as unknown);
+    expect(capture.events.length, "island A's record is released").toEqual(1);
+    expect(capture.events[0].target as unknown).toBe(pendingButton as unknown);
 
     // Island B still upgrades and replays exactly once.
     pendingButton.addEventListener('click', () => {
       pendingHandled++;
     });
-    assertEquals(
+    expect(
       replayPreUpgradeEvents(pending as unknown as Node, capture.events as readonly unknown[]),
-      1,
-    );
-    assertEquals(pendingHandled, 1, 'the sibling pre-upgrade click replays exactly once');
+    ).toEqual(1);
+    expect(pendingHandled, 'the sibling pre-upgrade click replays exactly once').toEqual(1);
     releasePreUpgradeEvents(pending as unknown as Node, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 0);
+    expect(capture.events.length).toEqual(0);
     clickedHandled = 0;
-    assertEquals(clickedHandled, 0, 'A never received the released record');
+    expect(clickedHandled, 'A never received the released record').toEqual(0);
   } finally {
     capture.stop();
     cleanup(clicked, pending);
   }
 });
 
-Deno.test('composed release: closed shadow target is host-owned without host.shadowRoot', () => {
+test('composed release: closed shadow target is host-owned without host.shadowRoot', () => {
   const host = new FacadeElement('oe-composed-closed', dom.document);
   // The framework holds the root returned by attachShadow; closed roots are
   // intentionally invisible through host.shadowRoot.
@@ -131,22 +120,22 @@ Deno.test('composed release: closed shadow target is host-owned without host.sha
   const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget, ['click']);
   try {
     button.dispatchEvent(click());
-    assertEquals(capture.events.length, 1);
-    assertStrictEquals(host.shadowRoot, null, 'a closed root is not re-readable');
+    expect(capture.events.length).toEqual(1);
+    expect(host.shadowRoot, 'a closed root is not re-readable').toBe(null);
     releasePreUpgradeEvents(host as unknown as Node, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 0, 'the host releases its closed-shadow record');
+    expect(capture.events.length, 'the host releases its closed-shadow record').toEqual(0);
 
     button.dispatchEvent(click());
-    assertEquals(capture.events.length, 1);
+    expect(capture.events.length).toEqual(1);
     releasePreUpgradeEvents(closed as unknown as Node, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 0, 'the framework-held root releases it too');
+    expect(capture.events.length, 'the framework-held root releases it too').toEqual(0);
   } finally {
     capture.stop();
     cleanup(host);
   }
 });
 
-Deno.test('composed release: ownership crosses nested shadow hosts', () => {
+test('composed release: ownership crosses nested shadow hosts', () => {
   const outer = new FacadeElement('oe-composed-outer', dom.document);
   const outerShadow = outer.attachShadow({ mode: 'open' });
   const inner = new FacadeElement('oe-composed-inner', dom.document);
@@ -157,21 +146,21 @@ Deno.test('composed release: ownership crosses nested shadow hosts', () => {
   const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget, ['click']);
   try {
     button.dispatchEvent(click());
-    assertEquals(capture.events.length, 1);
+    expect(capture.events.length).toEqual(1);
     releasePreUpgradeEvents(outer as unknown as Node, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 0, 'two ShadowRoot.host hops still reach the outer host');
+    expect(capture.events.length, 'two ShadowRoot.host hops still reach the outer host').toEqual(0);
 
     button.dispatchEvent(click());
-    assertEquals(capture.events.length, 1);
+    expect(capture.events.length).toEqual(1);
     releasePreUpgradeEvents(innerShadow as unknown as Node, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 0, 'the nested root owns its own subtree');
+    expect(capture.events.length, 'the nested root owns its own subtree').toEqual(0);
   } finally {
     capture.stop();
     cleanup(outer);
   }
 });
 
-Deno.test('composed release: an unrelated shadow tree is never judged as owned', () => {
+test('composed release: an unrelated shadow tree is never judged as owned', () => {
   const owner = new FacadeElement('oe-composed-owner', dom.document);
   const ownerShadow = owner.attachShadow({ mode: 'open' });
   const stranger = new FacadeElement('oe-composed-stranger', dom.document);
@@ -182,23 +171,22 @@ Deno.test('composed release: an unrelated shadow tree is never judged as owned',
   const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget, ['click']);
   try {
     strangerButton.dispatchEvent(click());
-    assertEquals(capture.events.length, 1);
+    expect(capture.events.length).toEqual(1);
     releasePreUpgradeEvents(ownerShadow as unknown as Node, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 1, "the stranger island's record survives");
-    assertEquals(
+    expect(capture.events.length, "the stranger island's record survives").toEqual(1);
+    expect(
       replayPreUpgradeEvents(owner as unknown as Node, capture.events as readonly unknown[]),
-      0,
       'the owner never replays a stranger record',
-    );
+    ).toEqual(0);
     releasePreUpgradeEvents(stranger as unknown as Node, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 0);
+    expect(capture.events.length).toEqual(0);
   } finally {
     capture.stop();
     cleanup(owner, stranger);
   }
 });
 
-Deno.test('composed release: a detached shadow target is swept and never replayed', () => {
+test('composed release: a detached shadow target is swept and never replayed', () => {
   const host = new FacadeElement('oe-composed-detached', dom.document);
   const shadow = host.attachShadow({ mode: 'open' });
   const button = shadowButton(shadow);
@@ -206,15 +194,14 @@ Deno.test('composed release: a detached shadow target is swept and never replaye
   const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget, ['click']);
   try {
     button.dispatchEvent(click());
-    assertEquals(capture.events.length, 1);
+    expect(capture.events.length).toEqual(1);
     shadow.removeChild(button);
     releasePreUpgradeEvents(host as unknown as Node, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 0, 'the detached record is swept by release');
-    assertEquals(
+    expect(capture.events.length, 'the detached record is swept by release').toEqual(0);
+    expect(
       replayPreUpgradeEvents(host as unknown as Node, capture.events as readonly unknown[]),
-      0,
       'nothing replays for a detached target',
-    );
+    ).toEqual(0);
   } finally {
     capture.stop();
     cleanup(host);
@@ -223,7 +210,7 @@ Deno.test('composed release: a detached shadow target is swept and never replaye
 
 // ─── Integration: failed activation before kernel.root ───
 
-Deno.test('failed activation before kernel.root releases shadow records via the host fallback', () => {
+test('failed activation before kernel.root releases shadow records via the host fallback', () => {
   // Facade fallback when the compiled kernel never established a root
   // (open-element-implementation.ts): `kernel.root ?? this`. The host is the
   // release root, and its declarative shadow content is host-owned.
@@ -234,12 +221,12 @@ Deno.test('failed activation before kernel.root releases shadow records via the 
   const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget, ['click']);
   try {
     button.dispatchEvent(click());
-    assertEquals(capture.events.length, 1, 'the DSD interaction is captured pre-upgrade');
+    expect(capture.events.length, 'the DSD interaction is captured pre-upgrade').toEqual(1);
 
     const kernelRoot: Node | undefined = undefined;
     const releaseRoot = kernelRoot ?? (host as unknown as Node);
     releasePreUpgradeEvents(releaseRoot, capture.events as readonly unknown[]);
-    assertEquals(capture.events.length, 0, 'retained=0 after the host-fallback release');
+    expect(capture.events.length, 'retained=0 after the host-fallback release').toEqual(0);
   } finally {
     capture.stop();
     cleanup(host);

@@ -5,9 +5,10 @@
  * browser DOM globals does not mutate the host global scope.
  */
 
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
+import { runEsmSubprocess } from './esm-subprocess.ts';
 
-Deno.test('importing @openelement/element in a no-DOM runtime does not create globalThis.HTMLElement', async () => {
+test('importing @openelement/element in a no-DOM runtime does not create globalThis.HTMLElement', async () => {
   const script = `
     import '@openelement/element';
     if (typeof globalThis.HTMLElement !== 'undefined') {
@@ -18,22 +19,13 @@ Deno.test('importing @openelement/element in a no-DOM runtime does not create gl
     }
     console.log('ok');
   `;
+  const { code, out, err } = await runEsmSubprocess(script);
 
-  const command = new Deno.Command(Deno.execPath(), {
-    args: ['eval', '--no-lock', script],
-    stdout: 'piped',
-    stderr: 'piped',
-  });
-
-  const { code, stdout, stderr } = await command.output();
-  const out = new TextDecoder().decode(stdout);
-  const err = new TextDecoder().decode(stderr);
-
-  assertEquals(code, 0, `no-DOM import should exit cleanly. stderr: ${err}`);
-  assertEquals(out.trim(), 'ok');
+  expect(code, `no-DOM import should exit cleanly. stderr: ${err}`).toEqual(0);
+  expect(out.trim()).toEqual('ok');
 });
 
-Deno.test('OpenElement connectedCallback guards document access in no-DOM runtime', async () => {
+test('OpenElement connectedCallback guards document access in no-DOM runtime', async () => {
   const script = `
     import { OpenElement } from '@openelement/element';
     class TestEl extends OpenElement {
@@ -43,22 +35,13 @@ Deno.test('OpenElement connectedCallback guards document access in no-DOM runtim
     // should not require browser globals at definition time.
     console.log(typeof TestEl);
   `;
+  const { code, out, err } = await runEsmSubprocess(script);
 
-  const command = new Deno.Command(Deno.execPath(), {
-    args: ['eval', '--no-lock', script],
-    stdout: 'piped',
-    stderr: 'piped',
-  });
-
-  const { code, stdout, stderr } = await command.output();
-  const out = new TextDecoder().decode(stdout);
-  const err = new TextDecoder().decode(stderr);
-
-  assertEquals(code, 0, `OpenElement subclass definition should not throw. stderr: ${err}`);
-  assertEquals(out.trim(), 'function');
+  expect(code, `OpenElement subclass definition should not throw. stderr: ${err}`).toEqual(0);
+  expect(out.trim()).toEqual('function');
 });
 
-Deno.test('OpenElement SSR stub fails loudly on unsupported DOM access (#1099)', async () => {
+test('OpenElement SSR stub fails loudly on unsupported DOM access (#1099)', async () => {
   const script = `
     import { OpenElement } from '@openelement/element';
     class TestEl extends OpenElement { render() { return null; } }
@@ -70,14 +53,8 @@ Deno.test('OpenElement SSR stub fails loudly on unsupported DOM access (#1099)',
       console.log(error.message);
     }
   `;
-  const command = new Deno.Command(Deno.execPath(), {
-    args: ['eval', '--no-lock', script],
-    stdout: 'piped',
-    stderr: 'piped',
-  });
-  const { code, stdout, stderr } = await command.output();
-  const out = new TextDecoder().decode(stdout);
-  const err = new TextDecoder().decode(stderr);
-  assertEquals(code, 0, `SSR DOM diagnostic should be typed. stderr: ${err}`);
-  assertEquals(out.includes('HTMLElement.querySelector() is unavailable during SSR'), true);
+  const { code, out, err } = await runEsmSubprocess(script);
+
+  expect(code, `SSR DOM diagnostic should be typed. stderr: ${err}`).toEqual(0);
+  expect(out.includes('HTMLElement.querySelector() is unavailable during SSR')).toEqual(true);
 });

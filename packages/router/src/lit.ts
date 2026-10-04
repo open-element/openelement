@@ -1,5 +1,5 @@
 /**
- * @openelement/router/lit - Lit page authoring entry (Beta.2.2, #1339).
+ * @openelement/router/lit - Lit page authoring entry (#1339).
  *
  * The Lit renderer counterpart to definePage(): a route module default-exports
  * defineLitPage(tag, PageClass, descriptor) where PageClass is a plain
