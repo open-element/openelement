@@ -3,7 +3,7 @@
   "schemaVersion": "1.0.0",
   "packageName": "@openelement/ui",
   "version": "1.0.0-alpha.8",
-  "description": "Open Props Web Component library for openElement",
+  "description": "Semantic Web Component library for openElement",
   "author": "openElement",
   "license": "MIT",
   "homepage": "https://openelement.org",
@@ -342,7 +342,7 @@
       "tagName": "open-badge",
       "className": "OpenBadge",
       "superclassName": "OpenElement",
-      "description": "Compact status badge backed by Open Props semantic tokens.",
+      "description": "Compact status badge backed by the semantic token layer.",
       "attributes": [
         {
           "name": "tone",

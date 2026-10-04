@@ -44,9 +44,8 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     'open-dialog': 'src/open-dialog.tsx',
     'open-dropdown': 'src/open-dropdown.tsx',
     'open-input': 'src/open-input.tsx',
-    'open-props-tokens': 'src/open-props-tokens.ts',
-    'open-props-tokens.js': 'src/open-props-tokens.ts',
     'open-tabs': 'src/open-tabs.tsx',
     'open-theme-toggle': 'src/open-theme-toggle.tsx',
+    'theme-tokens': 'src/theme-tokens.ts',
   },
 };

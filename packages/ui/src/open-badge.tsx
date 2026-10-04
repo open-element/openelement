@@ -1,7 +1,7 @@
 /**
  * @openelement/ui - open-badge
  *
- * Compact status badge backed by Open Props semantic tokens.
+ * Compact status badge backed by the semantic token layer.
  * Compiled authoring. Variant styling follows the
  * reflected `tone`/`size` host attributes (:host([...]) selectors).
  *

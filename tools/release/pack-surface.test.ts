@@ -93,7 +93,7 @@ test('pack surface: create declares a Node-floor engine and a cli side effect', 
 test('pack surface: repository-internal paths and ADR citations fail', () => {
   const cases: Array<[string, string]> = [
     ['comment', '// see packages/router/src/authoring.ts for the contract'],
-    ['task', 'Regenerate with: deno task --cwd packages/ui generate:ui-tokens'],
+    ['task', 'Regenerate with: deno task --cwd packages/ui generate:ui-manifest'],
     ['tools path', 'generator lives in tools/repo/generate-export-files.ts'],
     ['site path', 'wired in www/vite.config.ts'],
     ['adr id', 'compiled authoring (ADR-0143)'],
@@ -113,7 +113,7 @@ test('pack surface: ordinary prose and package-relative paths pass', () => {
     '/** Install the process-wide hook (replaceable for tests, HMR, multi-app pages). */',
     "import { OpenElement } from './internal/core/errors.js';",
     "import manifestData from './generated-manifest.json' with { type: 'json' };",
-    'deno task generate:ui-tokens',
+    'deno task generate:ui-manifest',
     'docs/ is where the consumer keeps their own files',
   ];
   for (const line of accepted) {

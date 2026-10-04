@@ -502,7 +502,7 @@ test('package artifacts: rejects a types target missing from the tarball', async
   );
 });
 
-const UI_NOTICE_FIXTURE = '## open-props 1.7.23\n\nCopyright (c) 2021 Adam Argyle\n\nMIT License\n';
+const UI_NOTICE_FIXTURE = '## retired inline token redistribution\n\nNo third-party work.\n';
 
 test('package artifacts: accepts an export with a matching declaration', async () => {
   await withExportsPackage(
@@ -519,21 +519,23 @@ test('package artifacts: accepts an export with a matching declaration', async (
   );
 });
 
-test('package artifacts: @openelement/ui must ship the open-props notice', async () => {
+test('package artifacts: @openelement/ui must not ship retired upstream token residue', async () => {
   await withExportsPackage(
     '@openelement/ui',
     { '.': { types: './src/index.d.ts', import: './src/index.js' } },
     {
       'src/index.js': 'export const version = 1;\n',
       'src/index.d.ts': 'export declare const version: number;\n',
+      'THIRD_PARTY_NOTICES.md': '## open-props 1.7.23\n\nCopyright (c) 2021 Adam Argyle\n',
+      'src/legacy.css': '--border-size-1: 1px; /* open-props verbatim */\n',
     },
     (root) => {
       const result = scanExtractedPackage('@openelement/ui', root);
+      const paths = result.violations.map((violation) => violation.path);
       expect(
-        result.violations.some(
-          (violation) => violation.path === '@openelement/ui/THIRD_PARTY_NOTICES.md',
-        ),
-        `expected a third-party notice violation, got: ${JSON.stringify(result.violations)}`,
+        paths.includes('@openelement/ui/THIRD_PARTY_NOTICES.md') &&
+          paths.includes('@openelement/ui/src/legacy.css'),
+        `expected residue violations on both files, got: ${JSON.stringify(result.violations)}`,
       ).toBeTruthy();
     },
   );

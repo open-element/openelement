@@ -150,6 +150,20 @@ const FORBIDDEN_LEGACY_SOURCE_PATTERNS: Record<string, ReadonlyArray<[RegExp, st
 };
 
 const SOURCE_SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs']);
+// Text surfaces that could carry a retired inline third-party redistribution
+// (#1504): code, declarations, docs, notices, styles, manifests.
+const UPSTREAM_RESIDUE_EXTENSIONS = new Set([
+  '.ts',
+  '.tsx',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.css',
+  '.json',
+  '.md',
+  '.txt',
+]);
+const UPSTREAM_RESIDUE_MARKERS = [/open[-_]?props/i, /argyle/i];
 const MODULE_SCAN_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.d.ts']);
 
 function isRawTypeScript(relative: string): boolean {
@@ -415,19 +429,21 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
     }
   }
 
-  // @openelement/ui redistributes open-props declarations verbatim, so the
-  // packed tarball itself — not just the repository root — must carry the
-  // upstream copyright and permission notice.
+  // @openelement/ui retired its inline Open Props redistribution (#1504): no
+  // upstream declarations or notices may ship. Fail closed on the upstream
+  // markers themselves, not on a file list, so any re-entry path (sources,
+  // docs, notices, manifest) is caught.
   if (packageName === '@openelement/ui') {
-    const notice = files.has('THIRD_PARTY_NOTICES.md')
-      ? readFileSync(`${packageRoot}/THIRD_PARTY_NOTICES.md`, 'utf8')
-      : '';
-    for (const required of ['open-props 1.7.23', 'Copyright (c) 2021 Adam Argyle', 'MIT License']) {
-      if (!notice.includes(required)) {
-        violations.push({
-          path: `${packageName}/THIRD_PARTY_NOTICES.md`,
-          message: `packed third-party notice must include '${required}'`,
-        });
+    for (const relative of files) {
+      if (!UPSTREAM_RESIDUE_EXTENSIONS.has(extension(relative))) continue;
+      const text = readFileSync(`${packageRoot}/${relative}`, 'utf8');
+      for (const marker of UPSTREAM_RESIDUE_MARKERS) {
+        if (marker.test(text)) {
+          violations.push({
+            path: `${packageName}/${relative}`,
+            message: `retired third-party redistribution marker ${marker} must not ship (#1504)`,
+          });
+        }
       }
     }
   }

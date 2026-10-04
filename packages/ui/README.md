@@ -19,7 +19,7 @@ separate application-framework promise.
 
 There is **no Linear compatibility layer**: the `open-*-linear` components and
 the `linear-token-sheet` token sheet are not part of the public surface. Use the
-canonical Open Props components and `@openelement/ui/open-props-tokens` instead.
+canonical components and `@openelement/ui/theme-tokens` instead.
 
 ## Install
 
@@ -47,8 +47,8 @@ npm install @openelement/ui
 Dependencies flow in one direction:
 
 ```text
-audited Open Props subset
-  -> semantic tokens
+@theme-derived token table (theme.css)
+  -> semantic alias layer (semantic-tokens.css)
     -> component recipes
       -> Web Component primitives
 ```
@@ -85,33 +85,34 @@ The reference site wires the same scripts through its Vite `inject` option.
 
 ## Design tokens
 
-`src/open-props-tokens.ts` is **generated — do not edit**. Regenerate from
-the package directory with:
+The token layer is hand-maintained — there is no generator. Two authored CSS
+sources, one carrier:
 
-```bash
-pnpm run generate:ui-tokens
-```
+- `src/theme.css` — **the single source of design roles** (P6: the only place
+  in the repository that defines them). shadcn-convention roles
+  (`--color-background`, `--color-primary`, …) seated on the Tailwind v4
+  default scale; the scale layer carries zero authored values (every value is
+  the verbatim Tailwind v4.1.16 default), roles reference only scale
+  variables, dark pairs follow the shadcn v4 convention with the selector
+  re-pointed at this repo's `[data-theme='dark']` mechanism, and a
+  forced-colors layer re-seats every role on a system color. When Tailwind is
+  installed (roadmap C2), this file's scale layer becomes the real `@theme`
+  block; role names are the migration contract.
+- `src/semantic-tokens.css` — the alias layer: retired token names
+  (`--brand`, `--size-*`, `--violet-*`, …) mapped onto the roles so the
+  component recipes keep rendering. It defines no roles and no color values.
+  It is deleted with no replacement once C3 renames the recipes onto the role
+  names.
+- `src/theme-tokens.ts` — the carrier: inlines both sources verbatim and
+  exports `themeTokenCss` (the deployable sheet text) plus `themeTokenSheet`
+  (a constructable sheet built from it). The token blocks select
+  `:root, :host`, so the same sheet serves document-level adoption and
+  shadow-root adoption (only the structural fallback is `:host`-only).
 
-The drift gate for the same task runs as `ui-tokens:check`.
-
-Sources:
-
-- Upstream [open-props](https://open-props.style) `1.7.23` (**MIT**,
-  © Adam Argyle) — only the tokens we carry verbatim: the gray ramp,
-  `--indigo-6`, two border sizes, font weights, and two line-heights, read
-  from the package's per-topic `src/props.*.js` files. The generator fails if
-  upstream renames one of them, so drift surfaces at generation time.
-- `src/semantic-tokens.css` (**ours**, hand-maintained) — everything else:
-  re-tuned scales (violet/green/red/orange, px spacing, radii, type sizes,
-  easings, shadows), semantic roles, both themes, the `:host` fallback, and
-  the CJK font stacks. Each divergence from upstream is commented where it
-  lives; do not "fix" tuned values by copying upstream.
-
-`openPropsTokenSheet` is the only token entry point: its token block
-selects `:root, :host`, so the same sheet serves document-level adoption
-and shadow-root adoption (only the structural fallback is `:host`-only).
-The token gates require `--surface-glass`,
-`--ui-control-bg`, `--focus-ring` and `--motion-standard`.
+`themeTokenSheet` is the only token entry point. The ui suite fails closed on
+carrier/source divergence, on token-contract regressions (`--surface-glass`,
+`--ui-control-bg`, `--focus-ring`, `--motion-standard`), and on WCAG floors
+(3:1 focus ring, 4.5:1 state inks on their background and their badge wash).
 `daisyClassSheet`, modal and step-card are retired and must not reappear in
 exports, manifests, docs or packed artifacts.
 
@@ -158,14 +159,10 @@ manifest; the per-component JSDoc is the source of truth for those.
 @openelement/ui/open-callout
 @openelement/ui/open-dropdown
 @openelement/ui/open-tabs
-@openelement/ui/open-props-tokens
-@openelement/ui/open-props-tokens.js   (legacy alias of the previous entry)
+@openelement/ui/theme-tokens           (token sheet text + constructable sheet; node-safe leaf)
 @openelement/ui/instance-state         (per-element instance state store; tree-shakeable leaf)
 @openelement/ui/manifest               (generated WC package manifest; node-safe leaf)
 ```
-
-The last entry is a compatibility alias kept for import maps written against the
-`.js` form; new code uses `@openelement/ui/open-props-tokens`.
 
 ## License
 

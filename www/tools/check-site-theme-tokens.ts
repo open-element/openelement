@@ -1,7 +1,8 @@
 /**
- * site theme-token gate: theme values in the site must come from open-props
- * tokens (packages/ui/src/semantic-tokens.css + its generated module) and the site alias layer
- * (www/vite.config.ts), never from hardcoded literals.
+ * site theme-token gate: theme values in the site must come from the
+ * @theme-derived token table (packages/ui/src/theme.css + the alias layer in
+ * packages/ui/src/semantic-tokens.css, carried by @openelement/ui/theme-tokens)
+ * or the site alias layer (www/site-css.ts), never from hardcoded literals.
  *
  * Rules for sources under www/app/ (routes, islands, components):
  *  1. No hex color literals. 6/8-digit forms always fail; 3/4-digit forms
@@ -11,8 +12,8 @@
  *  3. No `font-size` literals in px/rem/em outside var(); clamp() fluid
  *     typography is allowed.
  *
- * Token definitions belong in www/vite.config.ts (site aliases) or
- * packages/ui/src/semantic-tokens.css (source of truth) as carried by the generated module.
+ * Token definitions belong in packages/ui/src/theme.css (the single role
+ * source) or www/site-css.ts (site aliases) as carried by the token module.
  */
 
 import { join } from 'node:path';
@@ -102,7 +103,7 @@ async function main(): Promise<void> {
       console.error(`- ${failure.file}:${failure.line} [${failure.rule}] ${failure.text}`);
     }
     console.error(
-      'Theme values must come from open-props tokens or the www/vite.config.ts alias layer.',
+      'Theme values must come from the theme token table (packages/ui/src/theme.css) or the www/site-css.ts alias layer.',
     );
     process.exit(1);
   }
