@@ -10,9 +10,10 @@ to the lanes that own them.
 ## 1. Test registration — `Deno.test` — RESOLVED IN B3
 
 The B3 lane migrated every suite to vitest (runner decision: vitest 5.x on the
-node host; registration + `@std/assert` moved by the auditable codemods in
-`tools/repo/codemod-deno-test-to-vitest.ts` and `codemod-deno-runtime-to-node.ts`,
-with the special-construct helpers in `tests/lib/vitest-asserts.ts`). The root
+node host; registration + `@std/assert` moved through two auditable one-shot
+codemods — `codemod-deno-test-to-vitest.ts` and `codemod-deno-runtime-to-node.ts`,
+both deleted from `tools/repo/` after the cutover — while the special-construct
+helpers stayed in `tests/lib/vitest-asserts.ts`). The root
 `bench` script now runs the vitest benchmarks project (B3 补漏), and B4 moved
 the JFB harness itself onto node:\* (that in-repo JFB surface was then removed
 entirely on 2026-10-03, owner ruling — the upstream benchmark lane lives on
@@ -22,8 +23,8 @@ scripts now invoke vitest.
 
 Sub-residuals disclosed at the cutover:
 - **Sanitizer leak detection retired with the host**: the deno runner's
-  `--sanitizeOps/--sanitizeResources/--sanitizeExit` options (dropped by the
-  codemod from 11 registrations) and the `deny-ffi`/`no-prompt` non-interactive
+  `--sanitizeOps/--sanitizeResources/--sanitizeExit` options (dropped in the
+  codemod pass from 11 registrations) and the `deny-ffi`/`no-prompt` non-interactive
   flags had no node equivalent — leak detection and permission-prompt
   suppression are deno-host facilities. Node's own guards (unhandledRejection
   process traps in the ported suites) cover the rejection half.

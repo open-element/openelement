@@ -2,8 +2,8 @@
  * Vitest runner topology (B3 test migration, step 1 — infrastructure only).
  *
  * One project per existing `deno test` universe, so per-area filters
- * (`--project router`) and per-project settings stay possible after the
- * codemod (tools/repo/codemod-deno-test-to-vitest.ts) converts registration.
+ * (`--project router`) and per-project settings stay possible; test
+ * registration is vitest-native (`test`/`describe` imported from `vitest`).
  * The cutover has landed: vitest is the wired runner (root `test`, the
  * gate:source/fast-checks layers, and the release train all drive these
  * projects).

@@ -23,7 +23,8 @@
  * NOTE (assertEquals → toEqual deltas, verified empirically in B3 review):
  * ±0 std-equal/vitest-not, {a:undefined}-vs-{} and same-shape-cross-class
  * std-not/vitest-equal. No migrated call site hits these (repo grep at
- * cutover); details in codemod-deno-test-to-vitest.ts's mapping header.
+ * cutover); the mapping they diverge from is the 1:1
+ * assertEquals(a, b) → expect(a).toEqual(b) pair.
  */
 import { expect } from 'vitest';
 
