@@ -89,7 +89,7 @@ The reference site wires the same scripts through its Vite `inject` option.
 the package directory with:
 
 ```bash
-deno task generate:ui-tokens
+pnpm run generate:ui-tokens
 ```
 
 The drift gate for the same task runs as `ui-tokens:check`.
