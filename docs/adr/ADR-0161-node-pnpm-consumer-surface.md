@@ -36,7 +36,10 @@ make the framework the only reason a Node shop keeps a Deno install.
   remains the scaffold command shown in the README (a plain `deno run` of
   `npm:@openelement/create@alpha <name>`) — Deno resolves
   the published packages through `npm:` specifiers from the same registry
-  artifacts. No JSR identifier is published or supported.
+  artifacts. No JSR identifier is published or supported. (Superseded by the
+  2026-10-03 amendment below: the documented bootstrap is the plain Node
+  invocation `npm exec @openelement/create@alpha -- <name>`, and Deno is no
+  longer a documented or qualification-verified support surface.)
 - **Runtime floors are stated per verified fact.** Node.js 24.2+ is the
   consumer floor: it is what the packed package engines declare and what CI
   exercises (including the packed-consumer serve matrix). The point floor is

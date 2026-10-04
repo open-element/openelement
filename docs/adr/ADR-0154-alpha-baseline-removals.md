@@ -8,7 +8,10 @@
 
 The Alpha baseline rule is Web Standards first, then Deno/`@std/*`, then a
 mature third party, and first-party generic infrastructure only with a proven
-need. Three first-party pieces failed that test, and three ended experiments
+need. (Amended 2026-10-04: the Deno/`@std/*` tier is retired with the
+Deno-free alpha8 baseline — ADR-0161 and its 2026-10-03 amendment; the
+shipped tree carries no `@std/*` import — so the dependency hierarchy is Web
+Standards first, then a mature third party.) Three first-party pieces failed that test, and three ended experiments
 had no remaining consumer. 1.0 Alpha is a fresh baseline: no compatibility
 layers, no superseded implementations, no migration guide beyond the one-line
 new-baseline statement.
