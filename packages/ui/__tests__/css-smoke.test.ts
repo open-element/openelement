@@ -5,28 +5,82 @@ const themeCss = await readFile(new URL('../src/theme.css', import.meta.url), 'u
 const aliasCss = await readFile(new URL('../src/semantic-tokens.css', import.meta.url), 'utf8');
 const { themeTokenCss, themeTokenSheet } = await import('../src/theme-tokens.ts');
 
+// The installed Tailwind theme.css is the scale authority since the C2
+// handoff (#1505): the @theme source and the compiled twin reference the
+// default ramps by name, and the installed 4.3.x line owns their values.
+const tailwindScaleCss = await readFile(
+  new URL('../node_modules/tailwindcss/theme.css', import.meta.url),
+  'utf8',
+);
+
 // Token lookups run over comment-stripped code: doc comments legitimately
 // spell selectors like :root[data-theme='dark'], and the dark-block search
 // must land on the rule, not the prose.
 const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const themeCode = stripComments(themeCss);
 const aliasCode = stripComments(aliasCss);
+const twinCode = stripComments(themeTokenCss);
+const scaleCode = stripComments(tailwindScaleCss);
 
 const DARK_SELECTOR = ":root[data-theme='dark']";
 const themeDark = themeCode.indexOf(DARK_SELECTOR);
 const aliasDark = aliasCode.indexOf(DARK_SELECTOR);
+const twinDark = twinCode.indexOf(DARK_SELECTOR);
 
-test('the carrier carries the css sources verbatim', () => {
-  expect(themeTokenCss.includes(themeCss), 'theme.css text must be inlined byte-identical').toEqual(
-    true,
-  );
+/** Collect every `--name: value` declaration in a comment-stripped span. */
+const declarationsOf = (css: string, from = 0, to = css.length): Map<string, string> => {
+  const found = new Map<string, string>();
+  for (const match of css.slice(from, to).matchAll(/(--[a-zA-Z0-9-]+)\s*:\s*([^;]+);/g)) {
+    if (!found.has(match[1]!)) found.set(match[1]!, match[2]!.trim());
+  }
+  return found;
+};
+
+/** The @theme block's role declarations (the migration contract's source). */
+const themeRoleSpan = (): [number, number] => {
+  const start = themeCode.indexOf('@theme');
+  const open = themeCode.indexOf('{', start);
+  const close = themeCode.indexOf('}', open);
+  return [open + 1, close];
+};
+
+test('the @theme source and the compiled twin agree on the role contract', () => {
+  // C2 handoff: role names (and their values) are the migration contract
+  // between the real @theme source and the compiled plain-CSS twin — not the
+  // byte-identity that pre-C2 drift gate pinned, because the two forms now
+  // legitimately differ in selector shape (@theme vs :root,:host) and in the
+  // scale layer (the twin freezes the v4.1.16 evaluation for the OFF
+  // baseline; the @theme source rides the installed Tailwind defaults).
+  const sourceRoles = declarationsOf(themeCode, ...themeRoleSpan());
+  expect(sourceRoles.size).toBeGreaterThan(0);
+  const twinFirstRoot = twinCode.match(/:root,\s*:host\s*\{([^}]*)\}/)?.[1] ?? '';
+  const twinRoles = declarationsOf(twinFirstRoot);
+  for (const [name, value] of sourceRoles) {
+    expect(
+      twinRoles.get(name),
+      `@theme role ${name} must be declared identically in the compiled twin`,
+    ).toEqual(value);
+  }
+  // Dark pairs: both forms re-declare the same roles with the same values.
+  const sourceDark = declarationsOf(themeCode, themeDark);
+  const twinDarkRoles = declarationsOf(twinCode, twinDark);
+  expect(sourceDark.size).toBeGreaterThan(0);
+  for (const [name, value] of sourceDark) {
+    expect(
+      twinDarkRoles.get(name),
+      `dark pair ${name} must be declared identically in the compiled twin`,
+    ).toEqual(value);
+  }
+});
+
+test('the carrier carries the alias source verbatim', () => {
   expect(
     themeTokenCss.includes(aliasCss),
     'semantic-tokens.css text must be inlined byte-identical',
   ).toEqual(true);
   // The sources ride in template literals; metacharacters there would corrupt
   // the sheet (the retired generator enforced the same rule at write time).
-  expect(themeCss + aliasCss).toMatch(/^[^`$\\]*$/);
+  expect(aliasCss).toMatch(/^[^`$\\]*$/);
 });
 
 test('token layer exposes semantic component recipes', () => {
@@ -107,8 +161,15 @@ function oklchToRgb(LPercent: number, C: number, H: number): Rgb {
 type Rgb = [number, number, number];
 
 const parseColor = (value: string): Rgb | undefined => {
-  const oklch = /^oklch\((\d+(?:\.\d+)?)%\s+([\d.]+)\s+(-?[\d.]+)\)$/.exec(value);
-  if (oklch) return oklchToRgb(Number(oklch[1]), Number(oklch[2]), Number(oklch[3]));
+  // The installed 4.3.x line spells achromatic hues as `none` (zinc-50 …):
+  // chroma 0 makes the hue component moot, so treat `none` as 0.
+  const oklch = /^oklch\((\d+(?:\.\d+)?)%\s+([\d.]+)\s+(-?[\d.]+|none)\)$/.exec(value);
+  if (oklch)
+    return oklchToRgb(
+      Number(oklch[1]),
+      Number(oklch[2]),
+      oklch[3] === 'none' ? 0 : Number(oklch[3]),
+    );
   const hex = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(value);
   if (hex) {
     const [r, g, b] = [1, 2, 3].map((i) => Number.parseInt(hex[i]! + hex[i]!, 16) / 255);
@@ -133,15 +194,16 @@ const declaration = (css: string, name: string, from = 0): string | undefined =>
 
 /**
  * Follow a var() chain to a literal. Alias lookups come first (old names and
- * their dark pairs), then role lookups; a dark lookup reads the dark block
- * for roles and falls back to the base block, where the scale literals live
- * (custom properties inherit — the dark block only re-declares roles).
+ * their dark pairs), then role lookups over the @theme source (its dark block
+ * first), then the installed Tailwind scale — the ramps' value authority
+ * since the C2 handoff (the @theme source references them by name only).
  */
 const lookupToken = (name: string, dark: boolean): string | undefined =>
   (dark && aliasDark > 0 ? declaration(aliasCode, name, aliasDark) : undefined) ??
   declaration(aliasCode, name, 0) ??
   (dark && themeDark > 0 ? declaration(themeCode, name, themeDark) : undefined) ??
-  declaration(themeCode, name, 0);
+  declaration(themeCode, name, 0) ??
+  declaration(scaleCode, name, 0);
 
 const resolveToken = (name: string, dark: boolean): string => {
   let value = lookupToken(name, dark) ?? '';

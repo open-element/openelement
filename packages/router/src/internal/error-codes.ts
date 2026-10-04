@@ -277,6 +277,29 @@ export const RouteScanErrorCode = {
 } as const;
 
 /**
+ * Stable codes for the Tailwind preset seam (`vite/preset-tailwind.ts`).
+ * Phase `build`: the preset is an opt-in build-layer delivery (alpha9 C2,
+ * #1505) — it compiles the app's declared style sources through
+ * `@tailwindcss/vite` into one linked bundle and injects the DSD/head
+ * `<link>` emission, and every way that can fail carries a code.
+ */
+export const PresetErrorCode = {
+  /** The preset is enabled but `@tailwindcss/vite` is not resolvable. */
+  TAILWIND_UNRESOLVABLE: 'OE_PRESET_TAILWIND_UNRESOLVABLE',
+  /** The preset's bundle compile (an inner Vite build) failed. */
+  BUNDLE_COMPILE_FAILED: 'OE_PRESET_BUNDLE_COMPILE_FAILED',
+  /**
+   * The preset is enabled while a rendered page still fully inlines the
+   * global sheet as an inline `<style>` (the `styleText()` full-inline
+   * delivery). The preset's link-not-inline seam is the only global-sheet
+   * channel while it is active: the build fails closed instead of shipping
+   * both deliveries. Per-component `<style data-oe-static-styles>` emission
+   * is not a full-sheet inline and stays legal.
+   */
+  GLOBAL_SHEET_INLINE_FORBIDDEN: 'OE_PRESET_GLOBAL_SHEET_INLINE_FORBIDDEN',
+} as const;
+
+/**
  * Stable codes for the dynamic-route prerender pipeline
  * (`vite/internal/ssg/ssg-dynamic.ts`, with the route-parameter admission of
  * `vite/internal/ssg/ssg-helpers.ts`). Phase `build`: a failed dynamic page

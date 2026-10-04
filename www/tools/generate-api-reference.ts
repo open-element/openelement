@@ -569,6 +569,10 @@ export async function buildApiReference(): Promise<ApiReferenceBuild> {
         failures.push(`${info.name}: subpath '${subpath}' has no exports target`);
         continue;
       }
+      // Non-module targets (the CSS style assets the Tailwind preset and
+      // plain-CSS consumers import, #1505) declare no symbols: there is no
+      // export surface to enumerate, so they are skipped rather than failed.
+      if (!/\.(?:[cm]?tsx?)$/.test(target)) continue;
       const entryFile = `${info.dir}/${target.replace(/^\.\//, '')}`;
       let enumerated: ExportRecord[];
       try {

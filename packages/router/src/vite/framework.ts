@@ -37,6 +37,14 @@ export type FrameworkOptions = ElementFrameworkOptions & {
   criticalAssets?: CriticalAssetsOptions;
   critical?: CriticalAssetsOptions;
   i18n?: OpenElementI18nOptions;
+  /**
+   * Opt-in Tailwind preset (alpha9 C2, #1505). `true` or an options object
+   * enables the build-layer seams: the compiled `@layer theme, base,
+   * components, utilities` bundle asset and the DSD/head link-not-inline
+   * emission. Default (absent) keeps the build byte-identical to a
+   * preset-less pipeline.
+   */
+  tailwind?: boolean | import('./preset-tailwind.ts').TailwindPresetOptions;
 };
 
 /** Blog options stored in the adapter build context. */

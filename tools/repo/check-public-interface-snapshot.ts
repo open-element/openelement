@@ -41,6 +41,16 @@ function isInsidePackage(declaration: ts.Declaration, packageDir: string): boole
 }
 
 /**
+ * Whether an exports-map target is a TypeScript entry this gate enumerates.
+ * Non-module targets (the CSS style assets the Tailwind preset and plain-CSS
+ * consumers import, #1505) declare no symbols, so they are skipped instead of
+ * failing the load.
+ */
+function isTypeScriptEntry(source: unknown): boolean {
+  return typeof source === 'string' && /\.(?:[cm]?tsx?)$/.test(source);
+}
+
+/**
  * Exact `paths` mapping pinning every declared `@openelement/*` export
  * subpath to its workspace source entry, so `ts.createProgram` never falls
  * through to ambient `node_modules` copies for workspace packages.
@@ -50,6 +60,7 @@ function workspacePaths(packages: PackageInfo[]): Record<string, string[]> {
   for (const pkg of packages) {
     const exports = typeof pkg.exports === 'string' ? { '.': pkg.exports } : pkg.exports;
     for (const [subpath, source] of Object.entries(exports ?? {})) {
+      if (!isTypeScriptEntry(source)) continue;
       const specifier = subpath === '.' ? pkg.name : `${pkg.name}/${subpath.replace(/^\.\//, '')}`;
       paths[specifier] = [resolve(pkg.dir, String(source).replace(/^\.\//, ''))];
     }
@@ -333,20 +344,22 @@ async function main(): Promise<void> {
       packages.map(async (pkg) => {
         const exports = typeof pkg.exports === 'string' ? { '.': pkg.exports } : pkg.exports;
         const declarations = await Promise.all(
-          Object.entries(exports ?? {}).map(async ([path, source]) => {
-            const entry = resolve(pkg.dir, String(source).replace(/^\.\//, ''));
-            const shape = await publicInterfaceShape(entry, pkg.dir, paths);
-            for (const alias of shape.localAnyTypeAliases) {
-              degraded.push(`${pkg.name} ${path}: ${alias}`);
-            }
-            return [
-              path,
-              {
-                publicShapeSha256: shape.publicShapeSha256,
-                publicSymbols: shape.publicSymbols,
-              },
-            ] as const;
-          }),
+          Object.entries(exports ?? {})
+            .filter(([, source]) => isTypeScriptEntry(source))
+            .map(async ([path, source]) => {
+              const entry = resolve(pkg.dir, String(source).replace(/^\.\//, ''));
+              const shape = await publicInterfaceShape(entry, pkg.dir, paths);
+              for (const alias of shape.localAnyTypeAliases) {
+                degraded.push(`${pkg.name} ${path}: ${alias}`);
+              }
+              return [
+                path,
+                {
+                  publicShapeSha256: shape.publicShapeSha256,
+                  publicSymbols: shape.publicSymbols,
+                },
+              ] as const;
+            }),
         );
         return {
           name: pkg.name,

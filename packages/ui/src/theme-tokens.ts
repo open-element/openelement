@@ -1,19 +1,30 @@
 /**
  * @openelement/ui - theme token carrier (hand-maintained).
  *
- * The two authored sources live in CSS files; this module only carries their
- * verbatim text so the tokens reach every consumer as plain TypeScript:
- * npm/JSR consumers cannot import CSS from a dependency at runtime, and the
- * site build evaluates this module both under plain node (www/tools) and
- * inside the SSG bundle — an fs read or a bundler-only ?raw import would
- * break one of the two.
+ * The alias source lives in a CSS file; the role table lives in TWO
+ * maintained forms since the C2 handoff executed (#1504 draft, #1505):
  *
- *   src/theme.css             — the role table (single source of roles, P6)
+ *   src/theme.css             — the real @theme role source, compiled by the
+ *                               @openelement/router tailwind preset into the
+ *                               bundle's theme layer (Tailwind's own theme
+ *                               layer supplies the scales there).
+ *   THEME_CSS below           — the compiled plain-CSS twin of that @theme
+ *                               block: the scale layer + roles seated on
+ *                               `:root, :host` for adoption WITHOUT a
+ *                               Tailwind build (npm/JSR consumers cannot
+ *                               import CSS from a dependency at runtime, and
+ *                               the site build evaluates this module under
+ *                               plain node (www/tools) and inside the SSG
+ *                               bundle). Its bytes are the preset-OFF build
+ *                               baseline (C2 task 0) — the v4.1.16 scale
+ *                               evaluation stays frozen here until the
+ *                               baseline retires.
  *   src/semantic-tokens.css   — the alias layer (retired names → roles)
  *
- * THEME_CSS and ALIAS_CSS below are byte-identical copies of those files.
- * The ui suite fails closed on divergence (css-smoke drift test): edit the
- * .css files, then mirror the edit here.
+ * ALIAS_CSS is a byte-identical copy of its file; the ui suite fails closed
+ * on divergence (css-smoke drift test). THEME_CSS and src/theme.css are
+ * drift-gated on the migration contract instead — role names and dark pairs
+ * must match between the @theme source and the compiled twin.
  */
 
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';

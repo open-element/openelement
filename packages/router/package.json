@@ -44,7 +44,8 @@
     "@lit-labs/ssr-client": "^1.1.8",
     "vite": "^8.0.0",
     "@hono/vite-dev-server": "^0.25.3",
-    "marked": "^15.0.0"
+    "marked": "^15.0.0",
+    "@tailwindcss/vite": "^4.3.0"
   },
   "peerDependenciesMeta": {
     "lit": {
@@ -64,13 +65,18 @@
     },
     "marked": {
       "optional": true
+    },
+    "@tailwindcss/vite": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@jridgewell/trace-mapping": "0.3.31",
     "@lit-labs/ssr": "4.1.0",
     "@lit-labs/ssr-client": "1.1.8",
+    "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.5.0",
-    "lit": "3.3.3"
+    "lit": "3.3.3",
+    "tailwindcss": "4.3.3"
   }
 }
