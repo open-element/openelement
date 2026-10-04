@@ -1,5 +1,9 @@
 import { expect, test } from 'vitest';
-import { DECLARATION_LEAK_PATTERN, declarationTypeEdges } from './consumer-packaged-shared.ts';
+import {
+  DECLARATION_LEAK_PATTERN,
+  consumerPnpmOverridesYaml,
+  declarationTypeEdges,
+} from './consumer-packaged-shared.ts';
 
 test('declarationTypeEdges follows type-bearing edges and skips side-effect-only imports', () => {
   const edges = declarationTypeEdges(
@@ -41,5 +45,32 @@ test('declaration leak pattern ignores lookalike module names', () => {
     './internal/router/clients/index.js',
   ]) {
     expect(DECLARATION_LEAK_PATTERN.test(specifier), `unexpected leak: ${specifier}`).toBeFalsy();
+  }
+});
+
+test('consumerPnpmOverridesYaml seals every packed package to its file: tarball', () => {
+  const yaml = consumerPnpmOverridesYaml([
+    { name: '@openelement/element', path: '/tmp/packs/element.tgz' },
+    { name: '@openelement/router', path: '/tmp/packs/router.tgz' },
+    { name: '@openelement/ui', path: '/tmp/packs/ui.tgz' },
+  ]);
+  // The document must be an overrides-only pnpm-workspace.yaml: pnpm >= 10
+  // reads pnpm settings from this file (never package.json's `pnpm` field),
+  // and the bare form makes the scratch consumer its own workspace root.
+  expect(yaml).toBe(
+    'overrides:\n' +
+      "  '@openelement/element': 'file:/tmp/packs/element.tgz'\n" +
+      "  '@openelement/router': 'file:/tmp/packs/router.tgz'\n" +
+      "  '@openelement/ui': 'file:/tmp/packs/ui.tgz'\n",
+  );
+  // Every packed package maps its exact name to a file: spec — an override
+  // keyed to a different name (or a registry spec) would leave the packed
+  // proof resolving published code.
+  for (const { name, path } of [
+    { name: '@openelement/element', path: '/tmp/packs/element.tgz' },
+    { name: '@openelement/router', path: '/tmp/packs/router.tgz' },
+    { name: '@openelement/ui', path: '/tmp/packs/ui.tgz' },
+  ]) {
+    expect(yaml).toContain(`'${name}': 'file:${path}'`);
   }
 });

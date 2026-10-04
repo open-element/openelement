@@ -9,8 +9,8 @@ import {
 
 const PINNED_STATE: ReleaseStateV3 = {
   schemaVersion: 3,
-  sourceVersion: '1.0.0-alpha.7',
-  activeTarget: 'v1.0.0-alpha.7',
+  sourceVersion: '1.0.0-alpha.8',
+  activeTarget: 'v1.0.0-alpha.8',
   nextPlannedTrain: 'not scheduled',
   maturity: 'alpha',
   commonCompleteVersion: null,
@@ -40,10 +40,10 @@ export const COMMON_PUBLISHED_VERSION: string | null = null;
 `;
 
 const VERSIONS = new Map([
-  ['@openelement/element', '1.0.0-alpha.7'],
-  ['@openelement/router', '1.0.0-alpha.7'],
-  ['@openelement/create', '1.0.0-alpha.7'],
-  ['@openelement/ui', '1.0.0-alpha.7'],
+  ['@openelement/element', '1.0.0-alpha.8'],
+  ['@openelement/router', '1.0.0-alpha.8'],
+  ['@openelement/create', '1.0.0-alpha.8'],
+  ['@openelement/ui', '1.0.0-alpha.8'],
 ]);
 
 function evidence(): RegistryEvidence {

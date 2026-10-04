@@ -42,11 +42,23 @@ sites, and the per-fixture deno.lock sites are gone entirely:
    git diff --exit-code -- pnpm-lock.yaml || git add pnpm-lock.yaml
    ```
 
+   Then regenerate and commit the tracked generated outputs: `vp run
+   generate:all && git status --porcelain` must be clean apart from intended
+   release edits. The one that bit the alpha.8 stamp (2026-10-04, PR #1515):
+   `packages/ui/src/generated-manifest.json` embeds the package version and is
+   a TRACKED generator output — a stamp commit without it fails
+   `workspace-clean-after` in source-matrix/fresh-clone because gate:source
+   regenerates it mid-run. The five script-driven sites do not include it.
+
 3. **Release bookkeeping by hand** (unchanged by B2, deliberately NOT part of
    the script): `docs/release/release-state.json` `sourceVersion` /
    `activeTarget`, and the CHANGELOG entry. `check-package-graph` and
    `check-release-state-machine` cross-assert these against the package
-   versions, so skipping them fails the release train, not the bump.
+   versions, so skipping them fails the release train, not the bump. The
+   admission itself is also by hand: advance `ADMITTED_ACTIVE_TARGET` in
+   `tools/repo/check-release-state-machine.ts` together with its twin test
+   fixture — the state machine is code, and a train enters by a reviewed
+   change there, never by quietly editing release-state.json.
 
 4. **Verify.** `pnpm --dir tools/repo run version-bump <current-version>`
    (dry run against the just-written tree prints "tree already at …"; with no
