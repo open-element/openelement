@@ -43,6 +43,7 @@ import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admiss
 import { sortAliasEntries } from '../vite/alias-utils.ts';
 import { formatError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
+import { buildError, ClientBuildErrorCode } from '../internal/error-codes.ts';
 import {
   CHUNK_SIZE_WARNING_LIMIT_KB,
   DEFAULT_ISLANDS_DIR,
@@ -71,6 +72,30 @@ function deliveryTagsForPackage(island: IslandDecl): string[] {
     delivery.tagNames,
     island.tagName,
   );
+}
+
+/**
+ * The chunk-grouping identity for one declared package island: the module id
+ * the client build's identity pass resolved for the island's declared
+ * specifier — the same id the asset manifest joins on. Every admitted
+ * specifier is resolved before chunk grouping runs, so a missing id here is
+ * an internal ordering bug and fails with a coded build error instead of
+ * grouping chunks on the raw specifier.
+ */
+export function packageIslandIdentity(
+  island: IslandDecl,
+  islandModuleIds: ReadonlyMap<string, string>,
+): { tagName: string; identity: string } {
+  const identity = islandModuleIds.get(island.modulePath);
+  if (!identity) {
+    throw buildError(
+      ClientBuildErrorCode.PACKAGE_IDENTITY_UNRESOLVED,
+      `[openElement] Package island "${island.tagName}" declared specifier ` +
+        `"${island.modulePath}" was never resolved by the client build's identity pass — ` +
+        `refusing to group chunks on an unresolved identity`,
+    );
+  }
+  return { tagName: island.tagName, identity };
 }
 
 const SOURCE_EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
@@ -394,17 +419,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   // build already failed, so a missing id here is an internal ordering bug
   // and fails instead of grouping on the raw specifier.
   const packageDeclIdentities = () =>
-    selectedPackageDecls.map((island) => {
-      const identity = islandModuleIds.get(island.modulePath);
-      if (!identity) {
-        throw new Error(
-          `[openElement] Package island "${island.tagName}" declared specifier ` +
-            `"${island.modulePath}" was never resolved by the client build's identity pass — ` +
-            `refusing to group chunks on an unresolved identity`,
-        );
-      }
-      return { tagName: island.tagName, identity };
-    });
+    selectedPackageDecls.map((island) => packageIslandIdentity(island, islandModuleIds));
 
   const clientEntryCode = generateClientEntry(islandEntries, {
     enhancedForms,

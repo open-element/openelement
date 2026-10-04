@@ -122,6 +122,22 @@ export const SsgRenderErrorCode = {
 } as const;
 
 /**
+ * Stable codes for the client island build (`cli/build-client.ts`). Phase
+ * `build`: these fire while the client build turns the admitted island set
+ * into chunks — the identity pass pins every admitted island's declared
+ * specifier to its actual module id, and the chunk grouping groups on those
+ * ids only.
+ */
+export const ClientBuildErrorCode = {
+  /**
+   * A package island's declared specifier has no module id from the client
+   * build's identity pass when chunk grouping runs — an internal ordering
+   * bug; the build fails instead of grouping chunks on the raw specifier.
+   */
+  PACKAGE_IDENTITY_UNRESOLVED: 'OE_CLIENT_BUILD_PACKAGE_IDENTITY_UNRESOLVED',
+} as const;
+
+/**
  * Stable codes for the Phase 2 client asset manifest
  * (`vite/client-asset-manifest.ts`) and the SSG post-processor's
  * manifest-keyed island chunk join (`vite/internal/ssg/build-postprocess.ts`).

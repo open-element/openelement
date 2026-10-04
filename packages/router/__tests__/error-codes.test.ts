@@ -16,10 +16,12 @@ import { join } from 'node:path';
 import { OpenElementError } from '@openelement/element';
 import { resolvePageDocument } from '../src/document.ts';
 import type { PagePropsContext } from '../src/index.ts';
+import { packageIslandIdentity } from '../src/cli/build-client.ts';
 import {
   authoringError,
   buildError,
   ClientAssetErrorCode,
+  ClientBuildErrorCode,
   DeliveryErrorCode,
   DescriptorErrorCode,
   DispatchErrorCode,
@@ -72,6 +74,7 @@ const TABLES = {
   IslandEntryErrorCode,
   DescriptorErrorCode,
   ClientAssetErrorCode,
+  ClientBuildErrorCode,
   SsgRenderErrorCode,
   DocumentErrorCode,
   StreamErrorCode,
@@ -233,6 +236,19 @@ test('error codes: manifest entry cardinality and tag ownership report build-pha
   );
   expect(unmapped.code).toEqual(ClientAssetErrorCode.ISLAND_UNMAPPED);
   expect(unmapped.phase).toEqual('build');
+});
+
+test('error codes: the client island build reports build-phase codes', () => {
+  // A package island whose declared specifier the client build's identity
+  // pass never resolved fails chunk grouping instead of grouping on the raw
+  // specifier (OE_CLIENT_BUILD_PACKAGE_IDENTITY_UNRESOLVED).
+  const error = assertThrowsIncludes(
+    () => packageIslandIdentity({ tagName: 'pkg-el', modulePath: 'pkg/el.ts' }, new Map()),
+    OpenElementError,
+    'was never resolved by the client build',
+  );
+  expect(error.code).toEqual(ClientBuildErrorCode.PACKAGE_IDENTITY_UNRESOLVED);
+  expect(error.phase).toEqual('build');
 });
 
 /** The minimal delivery entry the raiser proofs above need. */
