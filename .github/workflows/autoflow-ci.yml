@@ -403,7 +403,9 @@ jobs:
         # lane also drives the official Site E2E suite (it owns the candidate's
         # Site proof); the browser binaries are reused from the preinstalled
         # HOME cache (disclosed in the fresh-clone manifest), while the clone's
-        # DENO_DIR and npm cache start empty.
+        # package state starts empty: its install/build runs with
+        # npm_config_store_dir and npm_config_cache pointed at fresh
+        # directories, sharing no store or cache with the workspace checkout.
         if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Fresh clone (install, check, source gate, packed gate, Site E2E)
@@ -555,19 +557,21 @@ jobs:
       - name: BFCache restore (Chrome channel, headed under xvfb)
         run: xvfb-run -a vp run --fail-if-no-match --filter @openelement/e2e-starter-smoke test:bfcache
 
-  # The packed deploy artifact must boot under plain Node, not just under
-  # the Deno CLI. The runtime floor is Node.js >= 24 (WHATWG URLPattern
-  # global): the matrix serves on 24 (lowest supported, required) and 26
-  # (Current, required). The below-floor clean-error behavior stays pinned by
-  # unit test (packages/router/__tests__/ssg-helpers.test.ts), not by an EOL
-  # Node job. Admission proof is packed-world: the harness installs the real
+  # The packed deploy artifact must boot under plain Node. The runtime floor
+  # is Node.js >= 24.2 (the shipped CLI entries gate on import.meta.main,
+  # added in 24.2; the WHATWG URLPattern global): the matrix serves on 24
+  # (lowest supported line, required) and 26 (Current, required). The
+  # below-floor clean-error behavior stays pinned by unit test
+  # (packages/router/__tests__/ssg-helpers.test.ts), not by an EOL Node job.
+  # Admission proof is packed-world: the harness installs the real
   # pack:dry-run tarballs into an isolated consumer (empty npm cache, no
   # workspace source on the resolution path), builds with the packed CLI, and
   # boots the Nitro server output built from the packed app under plain Node —
   # never a workspace build plus a hand-made shim. Local preview stays on
   # cli/start; the build generates no second production server. This proof
-  # lives in these smoke jobs — not in gate:packed — because the main gate
-  # job's default node is below the Node >= 24 floor by design.
+  # lives in these smoke jobs — not in gate:packed — because gate:packed runs
+  # on the pinned Node 24 line only, while this matrix also proves the
+  # plain-Node serve path on 26 (Current).
   node-serve-smoke:
     name: dist/server Node smoke (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
