@@ -46,7 +46,7 @@
  * artifact to exist before it reports a source.
  */
 
-import { join, resolve } from '@std/path';
+import { join, resolve } from 'node:path';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { JOB_NAMES, type JobName } from './candidate-steps.ts';
@@ -415,7 +415,6 @@ async function writeOutputs(
     console.log(lines.trimEnd());
     return;
   }
-  // Deno's writeTextFile(append+create) is node's appendFile.
   await appendFile(path, lines, 'utf8');
 }
 

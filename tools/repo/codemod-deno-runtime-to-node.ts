@@ -83,7 +83,7 @@ const EXCLUDED_DIRS = new Set([
   'custom-dist',
   '.output',
   'coverage',
-  'benchmarks', // stays on the deno host (root `bench` script), not in B3 scope
+  'benchmarks', // vitest `benchmarks` project (root `bench` script), not in B3 scope
 ]);
 const EXCLUDED_PATH_PATTERNS: Array<(rel: string) => boolean> = [
   (rel) => rel.startsWith('www/app/data/'), // generated content; string mentions masked anyway

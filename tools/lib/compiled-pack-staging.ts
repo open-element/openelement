@@ -25,9 +25,8 @@
  * instead of being silently absorbed.
  */
 
-import { readFileSync, statSync } from 'node:fs';
-import { walkSync } from '../../tools/lib/std-fs.ts';
-import { basename, join, relative } from '@std/path';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { basename, join, relative } from 'node:path';
 import { compileElementModule, stripInlineSourceMapComment } from '@openelement/element/compiler';
 
 export interface CompiledModuleOutput {
@@ -51,12 +50,15 @@ export function compilePackageElementModules(pkgDir: string): CompiledModuleOutp
   } catch {
     return []; // no src dir
   }
-  for (const entry of walkSync(srcDir, { includeDirs: false, exts: ['.tsx'] })) {
-    const source = readFileSync(entry.path, 'utf8');
-    const result = compileElementModule(source, basename(entry.path));
+  const entries = readdirSync(srcDir, { recursive: true, withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory() || !entry.name.endsWith('.tsx')) continue;
+    const entryPath = join(entry.parentPath, entry.name);
+    const source = readFileSync(entryPath, 'utf8');
+    const result = compileElementModule(source, basename(entryPath));
     if (!result) continue;
     outputs.push({
-      relativePath: relative(pkgDir, entry.path),
+      relativePath: relative(pkgDir, entryPath),
       code: stripInlineSourceMapComment(result.code) + '\n',
     });
   }

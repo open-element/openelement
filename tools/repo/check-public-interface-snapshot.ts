@@ -2,13 +2,13 @@
  * Generate/check the deterministic retained-package public-interface baseline.
  *
  * Cross-package `@openelement/*` imports are pinned to workspace sources via
- * `ts.CompilerOptions.paths` built from each package's deno.json exports, so
- * the snapshot depends only on the checked-out sources — never on whatever
+ * `ts.CompilerOptions.paths` built from each package's package.json `exports`,
+ * so the snapshot depends only on the checked-out sources — never on whatever
  * `node_modules/@openelement/*` layout the generating machine happens to have.
  */
 import { formatJson } from '@openelement/element/build-utils';
 import ts from 'typescript';
-import { resolve } from '@std/path';
+import { resolve } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';

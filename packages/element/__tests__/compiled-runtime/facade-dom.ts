@@ -1,7 +1,7 @@
 /**
  * facade-dom.ts — DOM harness for compiled-facade (public OpenElement) tests.
  *
- * Deno's test runner has no browser DOM. This harness installs just enough of
+ * The vitest node environment has no browser DOM. This harness installs just enough of
  * the platform — a custom-elements registry with define-time
  * observedAttributes snapshots, upgrade-through-construction
  * (`document.createElement(tag)` runs the real compiled class constructor),

@@ -6,8 +6,9 @@
  * rotted). This gate derives the route entry list from the framework's own
  * route scanner — the same module the dev server and SSG build enumerate with
  * — then type-checks the route modules with the workspace TypeScript compiler
- * under the compiler options the routes are written against (the former root
- * deno.json compilerOptions, restated here since the B2 manifest conversion).
+ * under the compiler options the routes are written against
+ * (allowImportingTsExtensions, strict, bundler resolution; see the flags
+ * passed to tsc below).
  * Derivation means a new route file joins the gate automatically.
  *
  * Fail-closed invariants:
@@ -22,12 +23,13 @@
  *   node www/tools/check-www-routes-types.ts
  */
 
-import { dirname, fromFileUrl, join, relative, resolve } from '@std/path';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { scanRoutes } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
 import process from 'node:process';
 import { commandOutput } from '../../tools/repo/node-command.ts';
 
-const repoRoot = fromFileUrl(new URL('../..', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const routesDir = join(repoRoot, 'www/app/routes');
 
 const entries = await scanRoutes(routesDir);
@@ -44,9 +46,9 @@ if (files.length === 0) {
 }
 
 /**
- * A missing generated module surfaces as TS2307. Deno reports the culprit
- * as an absolute file:// URL (or, rarely, the source-relative specifier);
- * normalize either to an absolute path. When git ignores it, it is a
+ * A missing generated module surfaces as TS2307. The compiler reports the
+ * culprit as an absolute file:// URL (or, rarely, the source-relative
+ * specifier); normalize either to an absolute path. When git ignores it, it is a
  * generated module that was never produced — say so, naming generate:all.
  * Returns the repo-relative path when that diagnosis fires, else null.
  */
@@ -55,7 +57,7 @@ async function generatedModuleHint(output: string, importerFile: string): Promis
   for (const match of output.matchAll(/Cannot find module '([^']+)'/g)) {
     const specifier = match[1];
     const abs = specifier.startsWith('file://')
-      ? fromFileUrl(specifier)
+      ? fileURLToPath(specifier)
       : specifier.startsWith('.')
         ? resolve(dirname(importerFile), specifier)
         : null;

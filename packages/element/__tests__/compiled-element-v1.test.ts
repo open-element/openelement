@@ -30,9 +30,9 @@ import type { StaticSidecarDescriptor } from '../src/internal/compiler/semantic-
 
 const FIXTURE_DIR = new URL('../__fixtures__/compiled-element-v1/', import.meta.url);
 
-// Module-level loads (top-level await): the suites below shared single loads
-// in their Deno parent bodies; vitest describe bodies are synchronous, so the
-// loads hoist here — identical semantics (one load, cached modules).
+// Module-level loads (top-level await): vitest describe bodies are
+// synchronous, so the loads hoist here — one load, cached modules, shared by
+// every suite below.
 const { compiledElementPlugin } = await loadPluginModule();
 const { compileElementProgram, CompiledElementError } =
   await import('../src/internal/compiler/semantic-core/compile.ts');
@@ -118,7 +118,7 @@ describe('compiled-element v1 - fixture transforms through the Vite hook', () =>
   const source = readFixtureSync('counter.tsx');
   const id = '/project/app/islands/counter.tsx';
 
-  // One shared emission across the steps (Deno parent scope): a single test
+  // One shared emission across the steps (module describe scope): a single test
   // produces it, later tests pin its properties in the same order.
   let emitted: string | null = null;
   test('transform returns generated code', () => {

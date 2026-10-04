@@ -84,7 +84,7 @@ browser/runtime entry points.
 `@openelement/element` does not own routing, Vite, Nitro, UI components,
 database, auth, or cache. It owns the framework-level signal API
 (`signal`/`computed`/`effect`) and a minimal internal `SignalEngine` protocol.
-The only engine supported and verified in 1.0.0-alpha.1 is the built-in
+The only engine supported and verified is the built-in
 `@preact/signals-core` adapter; Preact's own API is not Element public API,
 and arbitrary third-party engines are not promised.
 

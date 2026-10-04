@@ -1,10 +1,9 @@
 /**
  * Shared process/command helpers for openElement tooling.
  *
- * Since the B2 task-surface conversion these helpers run on node:* via
- * tools/repo/node-command.ts (works under both hosts); the exported shapes
- * (runCommand throwing on non-zero exit, runWithOutput capturing stdio,
- * runCaptured's error copy) are unchanged for the release-flow call sites.
+ * These helpers run on node:* via tools/repo/node-command.ts; the exported
+ * shapes (runCommand throwing on non-zero exit, runWithOutput capturing
+ * stdio, runCaptured's error copy) are shared by the release-flow call sites.
  */
 import { commandOutput, commandStatus } from '../repo/node-command.ts';
 import process from 'node:process';

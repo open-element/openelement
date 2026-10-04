@@ -1,10 +1,9 @@
 /**
- * foreign-tag-scanner.ts — #979 (0.43.0-alpha.2): foreign custom-element tag
- * discovery.
+ * foreign-tag-scanner.ts — #979: foreign custom-element tag discovery.
  *
- * The SSR admission plan historically only saw island declarations, so a
+ * The SSR admission plan sees only island declarations on its own; a
  * third-party Web Component consumed in JSX (<sl-button>, <md-switch>, a
- * bare-native element) never entered the scan at all. This module statically
+ * bare-native element) would never enter the scan. This module statically
  * scans page route and island module sources for custom-element tag usages
  * and reports the tags that are neither local islands, package-manifest
  * islands, nor openElement-authored elements (defineElement/

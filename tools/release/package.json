@@ -18,14 +18,10 @@
     "consumer:packaged-ui": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-ui.ts",
     "graph:check": "node ../repo/run-in.ts --root ../.. -- node tools/release/check-package-graph.ts",
     "consumer:packaged-app": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-native.ts && node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-lit.ts",
-    "gate:packed": "node ../repo/gate.ts tools/repo#generate:all tools/release#typecheck tools/release#pack:dry-run tools/release#package-artifacts:check:prepacked tools/release#pack-surface:check tools/release#consumer:packaged tools/release#consumer:packaged-app tools/release#consumer:packaged-router tools/release#consumer:packaged-element tools/release#consumer:packaged-ui tests/fixtures/third-party-web-components#smoke",
+    "gate:packed": "node ../repo/gate.ts @openelement/tools-repo#generate:all @openelement/tools-release#typecheck @openelement/tools-release#pack:dry-run @openelement/tools-release#package-artifacts:check:prepacked @openelement/tools-release#pack-surface:check @openelement/tools-release#consumer:packaged @openelement/tools-release#consumer:packaged-app @openelement/tools-release#consumer:packaged-router @openelement/tools-release#consumer:packaged-element @openelement/tools-release#consumer:packaged-ui @openelement/fixture-third-party-web-components#smoke",
     "typecheck": "node ../repo/run-in.ts --root ../.. -- tsc --noEmit -p tools/tsconfig.json"
   },
   "devDependencies": {
-    "@std/assert": "jsr:^1.0.0",
-    "@std/cli": "jsr:^1.0.0",
-    "@std/fs": "jsr:^1.0.0",
-    "@std/path": "jsr:^1.0.0",
     "@types/node": "26.5.0",
     "typescript": "6.0.3"
   }

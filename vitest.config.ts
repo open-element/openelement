@@ -51,6 +51,11 @@ const rootDir = fileURLToPath(new URL('.', import.meta.url));
 /**
  * Browser-instance matrix for the element-browser project.
  *   default | 'chromium' → [chromium]           (PR-layer subset)
+ *   'firefox' | 'webkit' → [that engine]        (single-engine attribution:
+ *                                        the browser:negative proofs drive
+ *                                        each engine separately in serial, so
+ *                                        one failing engine can never
+ *                                        masquerade as three proven engines)
  *   'full'               → [chromium, firefox, webkit]  (release matrix)
  * anything else → hard error (fail closed, never a silently smaller run)
  */
@@ -60,12 +65,30 @@ function matrixInstances(): Array<{ browser: string }> {
     case 'chromium':
     case '':
       return [{ browser: 'chromium' }];
+    case 'firefox':
+      return [{ browser: 'firefox' }];
+    case 'webkit':
+      return [{ browser: 'webkit' }];
     case 'full':
       return [{ browser: 'chromium' }, { browser: 'firefox' }, { browser: 'webkit' }];
     default:
       throw new Error(`unknown OE_BROWSER_MATRIX: ${matrix}`);
   }
 }
+
+/**
+ * Launch-failure negative seam (browser:negative only). When
+ * OE_BROWSER_LAUNCH_EXECUTABLE is set, the playwright provider is
+ * constructed with `launchOptions.executablePath` — the documented provider
+ * option (@vitest/browser-playwright exports playwright({ launchOptions });
+ * `resolveLaunchOptions` reads ONLY these call-site options, never
+ * `browser.providerOptions` from the config tree, so a CLI/`providerOptions`
+ * route cannot produce a genuine launch failure) — pointing the browser at
+ * the given (deliberately nonexistent) executable. Unset on every real
+ * lane: the provider is constructed exactly as before, so normal launch
+ * behavior is untouched.
+ */
+const launchExecutable = process.env.OE_BROWSER_LAUNCH_EXECUTABLE;
 
 export default defineConfig({
   test: {
@@ -166,7 +189,9 @@ export default defineConfig({
           browser: {
             enabled: true,
             headless: true,
-            provider: playwright(),
+            provider: playwright(
+              launchExecutable ? { launchOptions: { executablePath: launchExecutable } } : {},
+            ),
             instances: matrixInstances(),
           },
           // The wtr suites follow web-test-runner's injected-globals convention

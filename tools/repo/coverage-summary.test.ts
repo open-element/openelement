@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import {
   addUncoveredFiles,
   countCoverableElements,

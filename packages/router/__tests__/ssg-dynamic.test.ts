@@ -2,7 +2,7 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { expandDynamicRoutes, expandI18nLocales } from '../src/vite/internal/ssg/ssg-dynamic.ts';
 import type { SsgPageOutput } from '../src/vite/internal/protocol/ssg.ts';
 

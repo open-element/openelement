@@ -45,14 +45,14 @@
  * fails the gate.
  */
 import ts from 'typescript';
-import { fromFileUrl, join } from '@std/path';
-import { walk } from '../../tools/lib/std-fs.ts';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readPackages } from '../../tools/lib/package-graph.ts';
 import { apiReference } from '../app/data/_generated-api-reference.ts';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 /** The maintained authoring surface; blog is excluded deliberately (header). */
 const CHECKED_CONTENT_DIRS = ['www/content/docs/guide', 'www/content/docs/architecture'];
@@ -291,14 +291,18 @@ export async function checkContent(): Promise<ContentGateResult> {
   // One walk over the whole content tree: import validation applies to every
   // fence anywhere under www/content; type-checking applies to the
   // maintained authoring surface only.
-  for await (const entry of walk(join(repoRoot, 'www/content'), {
-    includeDirs: false,
-    exts: ['.md', '.mdx'],
+  for (const entry of await readdir(join(repoRoot, 'www/content'), {
+    recursive: true,
+    withFileTypes: true,
   })) {
-    const markdown = await readFile(entry.path, 'utf8');
-    importFailures.push(...validateFrameworkImports(entry.path, markdown, inventory));
-    if (!CHECKED_CONTENT_DIRS.some((dir) => entry.path.startsWith(join(repoRoot, dir)))) continue;
-    for (const example of extractExamples(entry.path, markdown)) {
+    if (entry.isDirectory() || (!entry.name.endsWith('.md') && !entry.name.endsWith('.mdx'))) {
+      continue;
+    }
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const markdown = await readFile(entryPath, 'utf8');
+    importFailures.push(...validateFrameworkImports(entryPath, markdown, inventory));
+    if (!CHECKED_CONTENT_DIRS.some((dir) => entryPath.startsWith(join(repoRoot, dir)))) continue;
+    for (const example of extractExamples(entryPath, markdown)) {
       // en/zh translations carry identical code — check each block once.
       if (seen.has(example.code)) continue;
       seen.add(example.code);

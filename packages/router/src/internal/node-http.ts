@@ -8,9 +8,9 @@
  * IncomingMessage into a fetch Request (streaming the request body for
  * methods that carry one) and a fetch Response into the ServerResponse
  * (streaming the response body, so prerendered/streaming responses flush
- * incrementally, as the previous Deno-host server did).
+ * incrementally).
  *
- * Error containment mirrors that server's: a malformed request line answers
+ * Error containment: a malformed request line answers
  * 400 and an escaping handler failure answers 500; the fetch handler itself
  * owns the user-facing error copy.
  *
@@ -48,9 +48,8 @@ function requestFromIncoming(
   const method = req.method ?? 'GET';
   const init: RequestInit & { duplex?: 'half' } = { method, headers, signal };
   if (method !== 'GET' && method !== 'HEAD') {
-    // Stream the request body (the Deno-host server did the same); the
-    // generated request-time handlers consume it through
-    // request.json()/text()/formData().
+    // Stream the request body; the generated request-time handlers consume
+    // it through request.json()/text()/formData().
     init.body = Readable.toWeb(req) as unknown as ReadableStream<Uint8Array>;
     init.duplex = 'half';
   }
@@ -86,9 +85,7 @@ function sendResponse(res: ServerResponse, response: Response, method: string): 
 
 /**
  * Start an HTTP server on `hostname:port` that dispatches to the fetch
- * handler. The call returns immediately (the server keeps the process alive),
- * matching the shape of the previous Deno-host `serve({ hostname, port },
- * handler)` call.
+ * handler. The call returns immediately (the server keeps the process alive).
  */
 export function serveFetch(options: {
   hostname: string;
@@ -113,11 +110,12 @@ export function serveFetch(options: {
       }
       const onAborted = () => abort.abort();
       const onReqClose = () => {
-        // IncomingMessage 'close' also fires after a fully answered exchange
-        // (measured: it follows ServerResponse 'finish', with the response
-        // already flushed); only a response that never finished means the
-        // client disconnected mid-exchange.
-        if (!res.writableFinished) abort.abort();
+        // Request-side 'close' is not a disconnect by itself: it also fires
+        // when the message completes (body fully received, before the
+        // handler consumes it). Only an incomplete request — a torn upload
+        // — aborts here; any disconnect after completion is caught by the
+        // res 'close' listener below.
+        if (!req.complete && !res.writableFinished) abort.abort();
       };
       const detach = () => {
         req.off('aborted', onAborted);
@@ -136,8 +134,11 @@ export function serveFetch(options: {
       req.on('aborted', onAborted);
       req.on('close', onReqClose);
       res.on('close', onResClose);
-      // A disconnect that already landed before the listeners attached.
-      if (req.destroyed && !res.writableFinished) abort.abort();
+      // A disconnect that already landed before the listeners attached. Only
+      // an incomplete request counts: `complete`, not `destroyed`, separates
+      // a torn upload from a request whose body arrived whole (a consumed
+      // stream can report destroyed too).
+      if (req.destroyed && !req.complete) abort.abort();
       let response: Response;
       try {
         response = await options.handler(request);

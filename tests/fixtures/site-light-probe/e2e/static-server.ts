@@ -6,7 +6,7 @@
  * script only keeps the port preference + findPort retry the Playwright
  * webServer needs.
  *
- * Usage (scoped permissions, never -A):
+ * Usage:
  *   node e2e/static-server.ts --port 4281 --dir ../dist
  */
 

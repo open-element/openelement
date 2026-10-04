@@ -4,9 +4,8 @@
  * The status-page HTML channel, shell-href localization, and the app-shell
  * runtime (the `__resolveAppShell` plan lookup plus the `__renderAppShell`
  * composition that projects the rendered route content into the shell's
- * default slot). Migrated verbatim from the generated-entry helpers
- * (entry-render-runtime.ts) so the logic is visible to `deno check` and
- * directly unit-testable.
+ * default slot). The logic lives in this real module rather than inside a
+ * codegen template string, so it is directly unit-testable.
  *
  * Element functions are injected, never imported, so the module stays free of
  * any @openelement/element edge (the LIT entry's import graph must never

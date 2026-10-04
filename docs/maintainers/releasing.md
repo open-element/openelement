@@ -36,7 +36,8 @@ publish; a missing environment fails the job closed instead of publishing:
   step passes `--provenance` only under `GITHUB_ACTIONS=true`, so local runs
   can never mint registry attestations.
 - `publish:npm` runs only after `release:check` (the release train
-  `tools/repo#gate:release`, packed qualification, `publish:npm:dry-run`, and
+  `@openelement/tools-repo#gate:release`, packed qualification,
+  `publish:npm:dry-run`, and
   the read-only registry-state check) on the exact
   `candidate_sha`, and re-verifies `git rev-parse HEAD == candidate_sha` after
   checkout.
@@ -58,7 +59,8 @@ publish; a missing environment fails the job closed instead of publishing:
   governed `apps/saas` application are not part of every PR run; use their
   explicit local tasks or dedicated qualification runs when changing those
   surfaces. The SaaS application remains decoupled from the candidate:
-  neither `tools/repo#gate:source` nor `tools/repo#gate:release` nor candidate
+  neither `@openelement/tools-repo#gate:source` nor
+  `@openelement/tools-repo#gate:release` nor candidate
   evidence contains a SaaS step. Scope is explicit at the task level:
   `pnpm run verify:core` is the
   Element/Router Alpha candidate verification, `pnpm run verify` is the full
@@ -71,15 +73,17 @@ publish; a missing environment fails the job closed instead of publishing:
 The candidate gate is split so a pull request gets fast, honest feedback
 without giving up any release-time proof.
 
-- `tools/repo#gate:source` — the PR source layer (ten steps): `generate:all`,
+- `@openelement/tools-repo#gate:source` — the PR source layer (ten steps):
+  `generate:all`,
   `typecheck`, the dependency-age quarantine check, the Element and Router
   unit suites, markdown lint, the
   content-dates manifest check, the public-interface snapshot, the
   request-time fixture gate, and the Element browser gate (Chromium). The
-  separate packed producer owns `tools/release#gate:packed`; the independent
+  separate packed producer owns `@openelement/tools-release#gate:packed`; the
+  independent
   fresh-clone lane runs source and packed once each with cold pnpm/npm caches.
   A green `pnpm run verify:core` runs source plus packed locally.
-- `tools/repo#gate:release` — the release train: Site build and every `www`
+- `@openelement/tools-repo#gate:release` — the release train: Site build and every `www`
   check, coverage, all deploy/framework fixture gates, the boundary and
   provenance scans, the generator/floor/classification gates, the
   three-engine Site E2E suite and the full three-engine Element browser

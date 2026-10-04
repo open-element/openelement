@@ -5,11 +5,17 @@
  * comes from the root pnpm-workspace.yaml `packages` globs and the generator
  * set from each workspace's `generate:*` package.json scripts. Adding a
  * generator script enrolls it here automatically — there is no list to keep.
+ * This module is only the discovery-to-dispatch bridge: each generator task
+ * runs as one vp-dispatched task (tools/repo/vp-dispatch.ts), serially, and
+ * the first failure stops the run. Classification (--check wiring, emitter
+ * rules, orphan detection) stays in check-generator-gates.ts; nothing here
+ * re-resolves workspaces or tasks beyond what discovery already produced.
  */
 import { fileURLToPath } from 'node:url';
-import { commandStatus } from './node-command.ts';
 import process from 'node:process';
+import { commandStatus } from './node-command.ts';
 import { generatorEntries, readWorkspaces } from './workspace-tasks.ts';
+import { vpExecutable, vpTaskArgv } from './vp-dispatch.ts';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const workspaces = await readWorkspaces(repoRoot);
@@ -22,31 +28,28 @@ if (entries.length === 0) {
   process.exit(1);
 }
 
-/**
- * Same launcher discipline as gate.ts: prefer the running pnpm's own JS
- * entry (set by pnpm as npm_execpath) over a PATH lookup of the shim.
- */
-function pnpmLauncher(): { command: string; extraArgs: string[] } {
-  const execpath = process.env.npm_execpath;
-  if (execpath && execpath.endsWith('.cjs')) {
-    return { command: process.execPath, extraArgs: [execpath] };
-  }
-  return { command: 'pnpm', extraArgs: [] };
-}
+const executable = vpExecutable(repoRoot);
 
 for (const { workspace, taskKey } of entries) {
   const ws = workspaces.find((candidate) => candidate.workspace === workspace);
   if (!ws) throw new Error(`generate:all: unknown workspace ${workspace}`);
-  const { command, extraArgs } = pnpmLauncher();
-  const { code } = await commandStatus(command, {
-    args: [...extraArgs, '--dir', ws.dir, 'run', taskKey],
+  // vp dispatches by exact package name; a nameless workspace member cannot
+  // dispatch, so it stops the run instead of being skipped.
+  if (!ws.name) {
+    throw new Error(
+      `generate:all: workspace '${workspace}' has no package name; ` +
+        `vp dispatch requires exact package names.`,
+    );
+  }
+  const { code } = await commandStatus(executable, {
+    args: vpTaskArgv(ws.name, taskKey).slice(1),
     cwd: repoRoot,
     stdin: 'null',
     stdout: 'inherit',
     stderr: 'inherit',
   });
   if (code !== 0) {
-    throw new Error(`generate:all: ${workspace}#${taskKey} exited ${code}`);
+    throw new Error(`generate:all: ${ws.name}#${taskKey} exited ${code}`);
   }
 }
 console.log(

@@ -3,7 +3,7 @@
  *
  * Element owns the framework-level signal API (signal/computed/effect) and a
  * minimal internal SignalEngine protocol. @preact/signals-core is the ONLY
- * engine supported and fully verified in 1.0.0-alpha.1; it is the built-in
+ * engine supported and fully verified by the package; it is the built-in
  * default adapter, but Preact API is not Element public API and arbitrary
  * third-party engines are not promised.
  */
@@ -88,7 +88,7 @@ test('public entry points never import the Preact adapter or test engine', async
   }
 });
 
-test('1.0.0-alpha.1 declares exactly one shipped engine adapter', () => {
+test('the package declares exactly one shipped engine adapter', () => {
   const entries: string[] = [];
   for (const entry of readdirSync(SIGNAL_SRC_DIR, { withFileTypes: true })) {
     if (entry.isFile()) entries.push(entry.name);
@@ -124,7 +124,8 @@ test('the test engine is not part of the publish surface', async () => {
       `publish include must not cover the test tree: ${pattern}`,
     ).toBeFalsy();
   }
-  // Deno.errors.NotFound ≡ node fs ENOENT: same fail-closed contract, errno shape
+  // node fs miss surfaces err.code 'ENOENT': the same fail-closed contract,
+  // asserted through the errno shape.
   await expect(
     stat(new URL('../src/internal/signal/test-engine.ts', import.meta.url)),
   ).rejects.toMatchObject({ code: 'ENOENT' });

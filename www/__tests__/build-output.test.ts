@@ -6,12 +6,10 @@
  * (must run after `pnpm run site:build`)
  */
 import { expect, test } from 'vitest';
-import { existsSync } from 'node:fs';
-import { walkSync } from '../../tools/lib/std-fs.ts';
 
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { SITE_BUDGET } from '../site-budget.ts';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 
@@ -42,7 +40,9 @@ test('build output: client island JS stays within core budget and ships no showc
     'island-reactive-showcase',
     'island-scroll-reveal',
   ];
-  const files = [...walkSync(clientDir, { includeDirs: false })].map((entry) => entry.path);
+  const files = readdirSync(clientDir, { recursive: true, withFileTypes: true })
+    .filter((entry) => !entry.isDirectory())
+    .map((entry) => `${entry.parentPath}/${entry.name}`);
   let coreBytes = 0;
   const emittedShowcase: string[] = [];
   const oversizedIslands: string[] = [];
@@ -121,8 +121,10 @@ test('build output: zh pages keep in-content links inside the zh tree (#1031)', 
   const targets = [join(zhDir, 'blog', 'index.html'), join(zhDir, 'docs', 'index.html')];
   const guideDir = join(zhDir, 'guide');
   if (existsSync(guideDir)) {
-    for (const entry of walkSync(guideDir, { includeDirs: false, exts: ['.html'] })) {
-      targets.push(entry.path);
+    for (const entry of readdirSync(guideDir, { recursive: true, withFileTypes: true })) {
+      if (!entry.isDirectory() && entry.name.endsWith('.html')) {
+        targets.push(`${entry.parentPath}/${entry.name}`);
+      }
     }
   }
 

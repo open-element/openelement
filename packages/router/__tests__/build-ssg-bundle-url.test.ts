@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { ssrBundleImportUrl } from '../src/cli/build-ssg.ts';
 
 test('build-ssg: SSR bundle import URL survives spaces, #, ? and non-ASCII in the path', async () => {

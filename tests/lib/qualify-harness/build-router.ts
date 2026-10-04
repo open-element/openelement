@@ -9,7 +9,7 @@
 
 import { stat } from 'node:fs/promises';
 import { readdirSync } from 'node:fs';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { runStep } from './command-run.ts';
 
 /** Absolute path of a Router CLI subcommand source file in the repository. */

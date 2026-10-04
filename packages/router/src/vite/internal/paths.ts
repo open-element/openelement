@@ -1,8 +1,8 @@
 /**
  * Shared output-path constants for the adapter build pipeline.
  *
- * 'dist' and '.openElement' were previously repeated as magic strings across
- * the pipeline (Q-F1); route every default through these two names.
+ * Every default directory name ('dist', '.openElement') routes through these
+ * constants — the pipeline carries no magic-string copies.
  */
 
 /** Default build output directory name (relative to the app root). */

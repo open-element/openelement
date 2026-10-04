@@ -9,7 +9,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 
 test('scanRoutes discovers .mdx page routes (#954)', async () => {

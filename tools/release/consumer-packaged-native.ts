@@ -8,7 +8,7 @@
  * @openelement/element + the jsx-runtime via jsxImportSource). Marker strings
  * are renamed so the harness log is attributable to the packed consumer, not
  * the fixtures. All process/server/temp-project lifecycle, the cell
- * framework, and the probes live in tools/consumer-packaged-shared.ts; the
+ * framework, and the probes live in tools/release/consumer-packaged-shared.ts; the
  * renderer-specific continuation claim (the compiled kernel claims the island
  * DSD, node identity survives interaction, no full reload) is asserted by the
  * generated Playwright probe that module runs with `native`.
@@ -235,8 +235,8 @@ export default definePage(NoteNewPage, {
   props(context: PagePropsContext) {
     const actionData = context.actionData as NewActionData | undefined;
     return {
-      // Named titleText (not title): a field named 'title' would shadow
-      // HTMLElement.title and trip Deno's default noImplicitOverride.
+      // Named titleText (not title): a class field named 'title' would shadow
+      // HTMLElement.title on the custom element.
       titleText: actionData?.title ?? '',
       hasError: actionData?.error ? 1 : 0,
       intentText: \`intent=\${noteStore.lastIntent()}\`,

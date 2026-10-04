@@ -41,9 +41,6 @@
     "typescript": "6.0.3"
   },
   "devDependencies": {
-    "@std/assert": "jsr:^1.0.0",
-    "@std/fs": "jsr:^1.0.0",
-    "@std/path": "jsr:^1.0.0",
     "@types/node": "26.5.0"
   }
 }

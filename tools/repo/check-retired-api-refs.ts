@@ -14,7 +14,7 @@
  * stays only for packages/subpaths and for symbols that never reached a
  * release tag (e.g. toRootCss, added and removed inside this PR).
  */
-import { walk } from '../../tools/lib/std-fs.ts';
+import { readdir } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { commandOutput } from './node-command.ts';
@@ -54,15 +54,26 @@ const collect = (file: string) => {
   seen.add(file);
   files.push(file);
 };
+const WALK_EXTS = ['.md', '.mdx', '.ts', '.tsx', '.tmpl'];
 for (const dir of SCAN_DIRS) {
-  for await (const entry of walk(dir, { exts: ['.md', '.mdx', '.ts', '.tsx', '.tmpl'] })) {
-    collect(entry.path);
+  for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory() || !WALK_EXTS.some((ext) => entry.name.endsWith(ext))) continue;
+    collect(`${entry.parentPath}/${entry.name}`);
   }
 }
 // Every package README teaches the current public surface; packages/ui is
-// already walked above and deduped.
-for await (const entry of walk('packages', { maxDepth: 2, exts: ['.md'] })) {
-  if (entry.path.endsWith('/README.md')) collect(entry.path);
+// already walked above and deduped. Two-level cap mirrors the former walk's
+// maxDepth: `<pkg>/README.md` only, never nested docs.
+for (const entry of await readdir('packages', { recursive: true, withFileTypes: true })) {
+  const entryPath = `${entry.parentPath}/${entry.name}`;
+  if (
+    !entry.isDirectory() &&
+    entry.name.endsWith('.md') &&
+    entryPath.slice('packages/'.length).split('/').length <= 2 &&
+    entryPath.endsWith('/README.md')
+  ) {
+    collect(entryPath);
+  }
 }
 
 // ─── Derived retired symbols (release snapshot diff) ────────────────────

@@ -3,9 +3,8 @@
  *
  * `transform` compiles @element modules during the build; `handleHotUpdate`
  * decides between ordinary module HMR and a full reload by comparing Part
- * Program shapes. Moved out of plugin.ts verbatim: the per-plugin-instance
- * shape map stays an instance-local closure, so no program can leak between
- * Vite builds, and hook behavior is unchanged.
+ * Program shapes. The per-plugin-instance shape map stays an instance-local
+ * closure, so no program can leak between Vite builds.
  */
 
 import { readFile } from 'node:fs/promises';

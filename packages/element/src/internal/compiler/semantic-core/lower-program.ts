@@ -1,6 +1,6 @@
 /**
- * JSX → Part Program lowering for the compiled grammar (#1473 split — the
- * lower stage of the former compile facade): the {@link Lowering} walk turns
+ * JSX → Part Program lowering for the compiled grammar (#1473 split): the
+ * {@link Lowering} walk turns
  * the analyzed render() tree into fixed Parts, Regions, locations and source
  * records with stable compiler-owned paths.
  */

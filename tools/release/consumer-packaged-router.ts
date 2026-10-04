@@ -15,10 +15,10 @@
  * version assumption.
  */
 import { tmpdir } from 'node:os';
-import { commandOutput } from '../repo/node-command.ts';
+import { runProcess } from './consumer-packaged-shared.ts';
+import { existsSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { existsSync } from '../lib/std-fs.ts';
-import { join, resolve } from '@std/path';
+import { join, resolve } from 'node:path';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
@@ -37,15 +37,9 @@ for (const tarball of [routerTarball, elementTarball]) {
 }
 
 async function run(command: string, args: string[], cwd: string): Promise<string> {
-  const result = await commandOutput(command, {
-    args,
-    cwd,
-    stdout: 'piped',
-    stderr: 'piped',
-  });
-  const output = new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr);
-  if (!result.success) throw new Error(`${command} ${args.join(' ')} failed:\n${output}`);
-  return output;
+  const result = await runProcess(command, args, cwd);
+  if (!result.success) throw new Error(`${command} ${args.join(' ')} failed:\n${result.output}`);
+  return result.output;
 }
 
 const STRICT_TSCONFIG = {

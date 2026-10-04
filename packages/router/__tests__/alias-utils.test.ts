@@ -60,9 +60,9 @@ test('normalizeViteAliases keeps explicit retained subpath aliases authoritative
 });
 
 // #733: the subpath table derives from generated-export-files.ts (itself
-// generated from each package's deno.json "exports"), so dropped export
-// entries must not reappear here.
-test('normalizeViteAliases drops subpaths removed from deno.json exports', () => {
+// generated from each workspace package manifest's "exports" field), so
+// dropped export entries must not reappear here.
+test('normalizeViteAliases drops subpaths removed from the package manifest exports', () => {
   const aliases =
     normalizeViteAliases(
       {

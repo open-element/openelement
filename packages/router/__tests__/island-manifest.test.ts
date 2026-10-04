@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { existsSync } from 'node:fs';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import {
   extractCustomElementTags,
   generateIslandManifests,

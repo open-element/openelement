@@ -1,7 +1,8 @@
 /**
  * check-no-allow-all.test.ts — first-party broad-permission tripwire.
  *
- * check-task-permissions.test.ts only scans deno.json task maps. This test
+ * check-task-permissions.test.ts audits first-party package.json task
+ * scripts and the create template. This test
  * scans every tracked first-party text file (tasks, TS string args,
  * subprocess argv, shell commands, fixtures, templates, workflows,
  * READMEs, docs, site content, generated data) for the broad Deno run flags
@@ -29,7 +30,7 @@
  */
 
 import { expect, test } from 'vitest';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { commandOutputSync } from './node-command.ts';
 

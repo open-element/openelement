@@ -6,15 +6,14 @@
  * matching matrix against the current checker.
  *
  * The layered TypeScript strategy this gate enforces/observes:
- * - Deno source keeps using Deno's supported checker (deno task typecheck).
  * - The Element compiler and every other AST consumer keep using the classic
- *   TypeScript compiler API, resolved through the import-map name
- *   "typescript" -> npm:typescript@6.0.3. The packed Element dependency owns
+ *   TypeScript compiler API from the workspace's TypeScript 6 dependency.
+ *   The packed Element dependency owns
  *   that classic compiler API; the disposable consumer root owns TS7 only.
  * - The TS7 tsc CLI is exercised here, and only here, against the Node/npm
  *   consumer contract: the tools/release#pack:dry-run tarballs installed into a disposable
  *   consumer OUTSIDE the workspace (same observational rule as
- *   tools/consumer-packaged-shared.ts — qualify the packed artifact, never the
+ *   tools/release/consumer-packaged-shared.ts — qualify the packed artifact, never the
  *   workspace source).
  *
  * Cells (every cell prints PASS/FAIL; any TS7 checker error fails the run —
@@ -41,8 +40,8 @@
  * the matrix is reproducible locally and in CI.
  */
 
-import { existsSync } from '../../tools/lib/std-fs.ts';
-import { join, resolve } from '@std/path';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
@@ -195,10 +194,7 @@ try {
   await cell('pack', [], async () => {
     // Task invocations go through the pnpm run face, the repo's node-port
     // convention (gate.ts and candidate-steps.ts spawn `pnpm --dir <pkg>
-    // run <task>` the same way). The former `process.execPath + ['task',
-    // '--cwd', …]` pair was the Deno-era `deno task` shape left behind by
-    // the port: under node it asks node to execute a module literally named
-    // `task`, which can never run.
+    // run <task>` the same way).
     const packed = await run(
       'pnpm',
       ['--dir', 'tools/release', 'run', 'pack:dry-run'],

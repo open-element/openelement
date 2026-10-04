@@ -19,6 +19,7 @@
 
 import { createLogger } from './logger.ts';
 import { AuthoringErrorCode, formatError, OpenElementError } from './errors.ts';
+import { isSafeAttributeName as protocolIsSafeAttributeName } from '../protocol/forbidden-sinks.ts';
 
 /** Object prototype keys that must never be injected from untrusted props. */
 export const DANGEROUS_KEYS: ReadonlySet<string> = new Set([
@@ -52,15 +53,17 @@ export function isDangerousKey(key: string): boolean {
 }
 
 /**
- * Shared safe-attribute-name predicate (#1033). Attribute *names* are not
- * escaped on any render path, so a name must be a valid HTML attribute name
- * (blocks quote/space injection, #602) and must not be an event handler
- * (`on*`, case-insensitive). render-ir.ts (silent skip) and Router tooling
- * head-injection.ts (throw) enforce the same rule with different failure
- * strategies; both delegate here so the boundary cannot diverge.
+ * Shared safe-attribute-name predicate (#1033): the SSR face of the one
+ * canonical predicate in `../protocol/forbidden-sinks.ts`. A name must be
+ * valid HTML attribute-name grammar (blocks quote/space injection, #602),
+ * must not be an event handler (`on*`, case-insensitive), and must not be a
+ * forbidden sink (`innerhtml`/`srcdoc`). The compiler, protocol validator,
+ * and server serializer enforce the same predicate with their own failure
+ * strategies; every path delegates to the single implementation, so the
+ * boundary cannot diverge.
  */
 export function isSafeAttributeName(name: string): boolean {
-  return /^[a-zA-Z_:][\w:.-]*$/.test(name) && !/^on/i.test(name);
+  return protocolIsSafeAttributeName(name);
 }
 
 /**

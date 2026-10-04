@@ -3,17 +3,15 @@
 /**
  * Release gate: verify packed npm artifacts stay ESM-only and keep host APIs
  * out of all four published packages — runtime-free element/router/ui bar
- * Node AND Deno APIs, the node-hosted create CLI (B1a port) bars Deno APIs,
+ * Node AND Deno APIs, the node-hosted create CLI bars Deno APIs,
  * and every packed module is checked for CJS syntax, undeclared imports, and
  * the JSR bridge.
  */
 
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
-import { readFileSync, statSync } from 'node:fs';
-import { walkSync } from '../lib/std-fs.ts';
-import { dirname } from '@std/path';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { stripComments } from '../lib/text.ts';
 import { runCommand } from '../lib/process.ts';
 import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';
@@ -30,13 +28,10 @@ const RUNTIME_FREE_PACKAGES = new Set([
 ]);
 
 /**
- * Shipped-but-Deno-hosted packages: the packed artifact may use Deno APIs
- * (the create CLI runs under Deno) but must stay free of Node APIs, the same
- * `node:*`/process/Buffer bar every packed artifact carries.
+ * The node-hosted create CLI: its packed artifact bars the Deno API surface
+ * (unlike the runtime-free trio above, which also bars `node:*` /
+ * process / Buffer).
  */
-// create is a node-host CLI since the B1a port: its packed artifact bars the
-// Deno API surface (the former node-free policy predates the port and banned
-// the node globals the CLI legitimately runs on).
 const NODE_FREE_PACKAGES = new Set(['@openelement/create']);
 
 /**
@@ -125,11 +120,10 @@ const DENO_PATTERNS: Array<[RegExp, string]> = [[/\bDeno\.[A-Za-z_]/, 'Deno API'
 
 const HOST_PATTERNS: Array<[RegExp, string]> = [...NODE_PATTERNS, ...DENO_PATTERNS];
 
-// #1273 / B2.13 (stage #1288 risk #8): dead v0.43 renderer/binding/hydration
-// residue must not silently reappear in PUBLISHED artifacts (the packages
-// ship src/**, so a removed module that comes back would go straight to
-// npm). Paths are relative to the extracted package root; the audit table in
-// the B2.13 PR records the dead-code proof for each entry.
+// #1273: dead v0.43 renderer/binding/hydration residue must not silently
+// reappear in PUBLISHED artifacts (the packages ship src/**, so a removed
+// module that comes back would go straight to npm). Paths are relative to
+// the extracted package root.
 const FORBIDDEN_LEGACY_PATHS: Record<string, ReadonlyArray<string>> = {
   '@openelement/element': [
     // Legacy ElementDefinition / runtime-renderer typing (VNode model).
@@ -215,10 +209,14 @@ function manifestImportViolations(
     ...Object.keys((packageJson.optionalDependencies as Record<string, string>) ?? {}),
   ]);
   const violations: ArtifactViolation[] = [];
-  for (const entry of walkSync(packageRoot, { includeDirs: false, skip: [/^node_modules$/] })) {
-    const relative = entry.path.slice(packageRoot.length + 1);
+  for (const entry of readdirSync(packageRoot, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory()) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const relative = entryPath.slice(packageRoot.length + 1);
+    // Prune installed dependency trees inside the extracted package.
+    if (relative.split('/').includes('node_modules')) continue;
     if (!isModuleScanPath(relative)) continue;
-    const source = readFileSync(entry.path, 'utf8');
+    const source = readFileSync(entryPath, 'utf8');
     for (const { value, line } of extractStaticModuleSpecifiers(source, relative)) {
       if (isForbiddenBridgeSpecifier(value)) {
         violations.push({
@@ -359,11 +357,11 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   const forbiddenPaths = FORBIDDEN_LEGACY_PATHS[packageName] ?? [];
   const forbiddenSourcePatterns = FORBIDDEN_LEGACY_SOURCE_PATTERNS[packageName] ?? [];
   const files = new Set<string>();
-  for (const entry of walkSync(packageRoot, {
-    includeDirs: false,
-    skip: [/^node_modules$/],
-  })) {
-    const relative = entry.path.slice(packageRoot.length + 1);
+  for (const entry of readdirSync(packageRoot, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory()) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const relative = entryPath.slice(packageRoot.length + 1);
+    if (relative.split('/').includes('node_modules')) continue;
     files.add(relative);
     if (isRawTypeScript(relative)) {
       violations.push({
@@ -375,11 +373,11 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
     if (forbiddenPaths.includes(relative)) {
       violations.push({
         path: `${packageName}/${relative}`,
-        message: 'dead v0.43 residue must not be published (#1273/B2.13)',
+        message: 'dead v0.43 residue must not be published (#1273)',
       });
     }
-    if (forbiddenSourcePatterns.length > 0 && SOURCE_SCAN_EXTENSIONS.has(extension(entry.path))) {
-      const text = stripComments(readFileSync(entry.path, 'utf8'));
+    if (forbiddenSourcePatterns.length > 0 && SOURCE_SCAN_EXTENSIONS.has(extension(entryPath))) {
+      const text = stripComments(readFileSync(entryPath, 'utf8'));
       for (const [pattern, message] of forbiddenSourcePatterns) {
         if (pattern.test(text)) {
           violations.push({ path: `${packageName}/${relative}`, message });
@@ -400,14 +398,9 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
         message: 'internal test and fixture files must not be published',
       });
     }
-    if (!RUNTIME_EXTENSIONS.has(extension(entry.path))) continue;
+    if (!RUNTIME_EXTENSIONS.has(extension(entryPath))) continue;
     violations.push(
-      ...scanRuntimeFile(
-        packageRoot,
-        entry.path,
-        packageName,
-        hostPolicyFor(packageName, relative),
-      ),
+      ...scanRuntimeFile(packageRoot, entryPath, packageName, hostPolicyFor(packageName, relative)),
     );
   }
 
@@ -478,7 +471,7 @@ async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
   await stat(tarball);
 
   // publint/ATTW are pure-JS verifiers, run through npx at their pinned
-  // versions (the same resolution `deno run npm:` provided pre-port).
+  // versions.
   await runCommand('npx', ['--yes', `publint@${PUBLINT_VERSION}`, 'run', tarball, '--strict']);
   await runCommand('npx', [
     '--yes',
@@ -491,8 +484,9 @@ async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
   const packageRoot = await extractTarball(tarball);
   try {
     let unpackedBytes = 0;
-    for (const entry of walkSync(packageRoot, { includeDirs: false })) {
-      unpackedBytes += statSync(entry.path).size;
+    for (const entry of readdirSync(packageRoot, { recursive: true, withFileTypes: true })) {
+      if (entry.isDirectory()) continue;
+      unpackedBytes += statSync(`${entry.parentPath}/${entry.name}`).size;
     }
     const packedBytes = (await stat(tarball)).size;
     console.log(`[artifact-size] ${pkg.name}: packed=${packedBytes}B unpacked=${unpackedBytes}B`);

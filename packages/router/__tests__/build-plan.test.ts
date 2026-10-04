@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { OpenElementBuildContext } from '../src/vite/build-context.ts';
 import {
   collectBuildArtifacts,
@@ -53,8 +53,8 @@ test('production BuildPlan returns typed failure evidence for a missing output',
   const result = collectBuildArtifacts(createProductionBuildPlan(ctx));
   expect(result.success).toEqual(false);
   expect(result.errors.length).toEqual(1);
-  // Deno's native ENOENT wording is version-dependent (2.9 capitalizes and
-  // appends the os error); match the stable core case-insensitively.
+  // Node's ENOENT wording appends the failing syscall and path; match the
+  // stable core case-insensitively.
   expect(result.errors[0]).toMatch(/no such file or directory/i);
   expect(result.errors[0]).toContain('/definitely/missing/openelement-build/dist');
 });
@@ -126,9 +126,9 @@ test('writeBuildEvidence creates the evidence dir on a clean tree (#741)', async
 });
 
 test('build-plan defaults the output root to the current working directory', async () => {
-  // Build runs on Deno; the output root defaults to Deno.cwd(). There is no
-  // Node fallback: first-party build code must not use Node-only APIs such
-  // as process.cwd().
+  // The output root defaults to the process working directory (build-plan.ts
+  // reads process.cwd() when the plan carries no root), so the test chdirs
+  // into a fresh temp dir to pin the default.
   const originalCwd = process.cwd();
   const root = await mkdtemp(join(tmpdir(), 'oe-build-plan-cwd-'));
   try {

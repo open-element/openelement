@@ -17,13 +17,12 @@
  * - Machine state lives here (a WeakMap keyed by host), because compiled
  *   classes may only carry @property fields + methods.
  * - Visuals consume Open Props scale values through --oe-* semantic tokens
- *   (mirroring third-party component package/src/semantic-tokens.css conventions), injected
+ *   (mirroring the @openelement/ui semantic-tokens.css conventions), injected
  *   by the islands as a compiled static <style> node.
  *
- * Zag dependencies resolve through the ROOT deno.json import map — every
- * fixture gate (build, dev SSR, e2e) runs with the root config, and Vite
- * finds the packages in the root node_modules materialized by `deno install`.
- * No published package manifest references them.
+ * Zag dependencies resolve from this fixture's own package.json (`@zag-js/*`
+ * pins) through the workspace node_modules; no published openElement package
+ * manifest references them.
  */
 
 import * as combobox from '@zag-js/combobox';
@@ -240,7 +239,7 @@ export function zagComboboxSnapshot(host: HTMLElement): ZagComboboxSnapshot | nu
 
 /**
  * Open Props scale subset + --oe-* semantic tokens (values mirror
- * third-party component package/src/semantic-tokens.css). Built here (a non-compiled module)
+ * @openelement/ui's semantic-tokens.css). Built here (a non-compiled module)
  * because compiled classes ban runtime top-level statements; the islands
  * reference the sheets through `static styles` — adoptedStyleSheets on the
  * shadow island, the document-head compiled-style sink on the light island

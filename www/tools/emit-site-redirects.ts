@@ -7,13 +7,14 @@
  * mirrors. Reads the same table check-retired-urls.ts validates; locale
  * prefixes expand from SITE_LOCALES (never written in the table).
  */
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SITE_LOCALES } from '../site-config.ts';
 import { loadRedirectTable } from './lib/site-retired.ts';
 import { writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const outFile = join(repoRoot, 'www/dist/_redirects');
 
 const mappings = await loadRedirectTable();

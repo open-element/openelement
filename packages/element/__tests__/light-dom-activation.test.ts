@@ -26,73 +26,19 @@ import {
   toHtml,
 } from './compiled-runtime/facade-dom.ts';
 import { testProgram } from './compiled-runtime/test-program.ts';
+import { defineLightCounter, makeUniqueTag } from './compiled-runtime/light-counter-harness.ts';
 
 const dom = installFacadeDom();
 
 const { OpenElement, renderDsd } = await import('@openelement/element');
 const { PartProgramClaimError } = await import('../src/internal/compiled/runtime.ts');
 
-// oxlint-disable-next-line no-explicit-any
-type AnyElement = any;
-
-let tagCounter = 0;
-function uniqueTag(prefix: string): string {
-  return `oe-light-${prefix}-${++tagCounter}`;
-}
-
-const LIGHT_PROGRAM = {
-  template: [
-    {
-      k: 'el' as const,
-      tag: 'button',
-      attrs: [['type', 'button']] as Array<[string, string]>,
-      children: [
-        { k: 'text' as const, value: 'count: ' },
-        { k: 'part' as const, index: 0 },
-      ],
-    },
-  ],
-  parts: [
-    { k: 'text' as const, index: 0, signal: 'count' },
-    {
-      k: 'event' as const,
-      index: 1,
-      event: 'click',
-      handler: 'increment',
-      action: { kind: 'method' as const, name: 'increment' },
-      path: [0],
-    },
-  ],
-  properties: [
-    {
-      name: 'count',
-      attribute: 'count',
-      type: 'number' as const,
-      converter: 'number' as const,
-      reflect: true,
-      default: 0,
-    },
-  ],
-};
-
-function defineLightCounter(tag: string): CustomElementConstructor {
-  const program = testProgram({ tag, rootMode: 'light', ...LIGHT_PROGRAM });
-  const ctor = class extends OpenElement {
-    increment(this: AnyElement): void {
-      this.count++;
-    }
-  } as unknown as CustomElementConstructor & Record<string, unknown>;
-  ctor.__partProgram = program;
-  ctor.__compiledProperties = program.metadata.properties;
-  ctor.__elementMetadata = program.metadata;
-  ctor.observedAttributes = program.metadata.observedAttributes;
-  dom.registry.define(tag, ctor);
-  return ctor;
-}
+const uniqueTag = makeUniqueTag('light');
+const lightCounterDeps = { OpenElement, testProgram, registry: dom.registry };
 
 test('light activation claims the serialized subtree in place (node identity kept)', () => {
   const tag = uniqueTag('claim');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   const html = renderDsd(tag, { componentClass: ctor, props: { count: 2 } }).html;
   expect(html).toContain(`<${tag} count="2"`);
 
@@ -116,7 +62,7 @@ test('light activation claims the serialized subtree in place (node identity kep
 
 test('light activation drift fails closed with a structured claim mismatch', () => {
   const tag = uniqueTag('drift');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   void ctor;
 
   const el = dom.document.createElement(tag) as AnyElement;
@@ -143,7 +89,7 @@ test('light activation drift fails closed with a structured claim mismatch', () 
 
 test('light host without serialized content renders fresh (empty root)', () => {
   const tag = uniqueTag('fresh');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   void ctor;
   const el = dom.document.createElement(tag) as AnyElement;
   dom.document.body.appendChild(el);
@@ -154,7 +100,7 @@ test('light host without serialized content renders fresh (empty root)', () => {
 
 test('light reconnect re-activates in place without duplicate listeners', () => {
   const tag = uniqueTag('reconnect');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   const html = renderDsd(tag, { componentClass: ctor, props: { count: 1 } }).html;
 
   let button: AnyElement | undefined;

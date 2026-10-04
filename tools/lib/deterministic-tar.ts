@@ -9,8 +9,8 @@
  *   - entries sorted by path (stable across platforms)
  *   - fixed uid/gid 0, mtime 0, normalized 0644/0755 modes
  *   - POSIX ustar headers, 512-byte blocks, two zero end blocks
- *   - gzip via the Web `CompressionStream('gzip')` (mtime 0, pure-Rust
- *     deflate in Deno — identical output on every platform)
+ *   - gzip via the Web `CompressionStream('gzip')` (mtime 0, identical
+ *     output on every platform)
  *
  * Reading still uses the platform tar for extraction; boundaries are stable
  * because reading never defines the shipped bytes.
@@ -144,9 +144,8 @@ export async function gzipDeterministic(data: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([data as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'));
   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
   // Normalize the gzip OS byte to 255 (unknown): the deterministic contract
-  // pins the header regardless of the host zlib's own OS value (deno wrote
-  // 255 natively; node writes its platform id). mtime stays zero from the
-  // stream itself.
+  // pins the header regardless of the host zlib's own OS value. mtime stays
+  // zero from the stream itself.
   bytes[9] = 0xff;
   return bytes;
 }

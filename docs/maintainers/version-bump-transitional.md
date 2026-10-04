@@ -1,9 +1,10 @@
-# Transitional version bump (B2 → B5)
+# Transitional version bump (B2 → alpha9 C5)
 
 > **Status: SUPERSEDED-BY-SCHEDULE.** This manual covers the window after the
 > B2 manifest conversion (package.json workspaces, single pnpm lock) and
-> before the B5 task rewrite lands a new version-bump surface. The moment the
-> B5 version-bump task ships, delete this file and follow that task's
+> before the alpha9 C5 task rewrite lands a new version-bump surface (the
+> rewrite was originally scheduled for B5 and moved to alpha9 C5). The moment
+> the C5 version-bump task ships, delete this file and follow that task's
 > documentation instead. The checks in `tools/repo/version-bump.ts` still
 > work and are the fastest path; this manual exists so a release is never
 > blocked on remembering which of the former six sites survived.
@@ -62,7 +63,7 @@ sites, and the per-fixture deno.lock sites are gone entirely:
 
 ## Why this manual exists
 
-B5 owns the version-bump task rewrite (its real scope: what the bump surface
-should be once `deno.json`-shaped package truth is gone for good and the
-release train is re-plumbed). Until that lands, this file is the checklist of
-record. Delete it in the B5 commit.
+alpha9 C5 owns the version-bump task rewrite (its real scope: what the bump
+surface should be once `deno.json`-shaped package truth is gone for good and
+the release train is re-plumbed). Until that lands, this file is the
+checklist of record. Delete it in the C5 commit.

@@ -20,7 +20,8 @@
  * `--check` regenerates in memory and fails on drift.
  */
 
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { Gray, Indigo } from 'open-props/src/props.colors.js';
@@ -30,8 +31,8 @@ import { parseOpenPropsVersion } from './open-props-version.ts';
 
 const ANCHOR = '/* @upstream-tokens */';
 
-// fromFileUrl, not .pathname: paths with spaces or %-escapes break otherwise.
-const repoRoot = fromFileUrl(new URL('../../../', import.meta.url));
+// fileURLToPath, not .pathname: paths with spaces or %-escapes break otherwise.
+const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
 // The package.json dependency declaration is the canonical dependency
 // declaration; the generated provenance header must never disagree with what

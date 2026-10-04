@@ -9,11 +9,10 @@
  *
  * Usage: node tests/fixtures/router-nitro/proof.ts <node|workers>
  */
-import { readFile, realpath, rename, rm, stat } from 'node:fs/promises';
+import { readdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
-import { walkSync } from '../../../tools/lib/std-fs.ts';
 import { assertCompatibilityDate } from '../../../tools/lib/compatibility-date.ts';
 import { runWithOutput } from '../../../tools/lib/process.ts';
 import {
@@ -84,9 +83,10 @@ function assertNotIncludes(text: string, unexpected: string, label: string): voi
 
 async function readTextFiles(dir: URL, suffix: string): Promise<string> {
   let content = '';
-  for (const entry of walkSync(dir.pathname, { includeDirs: false })) {
-    if (!entry.name.endsWith(suffix)) continue;
-    content += await readFile(entry.path, 'utf8');
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory() || !entry.name.endsWith(suffix)) continue;
+    content += await readFile(`${entry.parentPath}/${entry.name}`, 'utf8');
   }
   return content;
 }

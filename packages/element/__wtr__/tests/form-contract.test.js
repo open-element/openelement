@@ -18,6 +18,7 @@
  */
 import { assert } from 'chai';
 import { WtrField } from '../generated/wtr-field.ts';
+import { formDataForSubmitter, typeInto } from './helpers.js';
 
 customElements.define('wtr-field', WtrField);
 await customElements.whenDefined('wtr-field');
@@ -35,21 +36,6 @@ function setup() {
   form.append(field, submitter);
   document.body.appendChild(form);
   return { form, field, submitter };
-}
-
-/** Simulate typing: set the inner control's value and dispatch input. */
-function typeInto(field, value) {
-  const input = field.shadowRoot.querySelector('input');
-  input.value = value;
-  input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-  return input;
-}
-
-/** Exercise the browser-standard FormData(form, submitter) overload.
- * Reflect.construct keeps CodeQL's Node-only FormData model from treating the
- * browser overload as a superfluous argument. */
-function formDataForSubmitter(form, submitter) {
-  return Reflect.construct(FormData, [form, submitter]);
 }
 
 describe('compiled FACE form contract', () => {

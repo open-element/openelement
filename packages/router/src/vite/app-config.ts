@@ -113,8 +113,8 @@ export function detectAppConfigFile(root: string): string | null {
 }
 
 /**
- * Import the config file through the host runtime (Deno's native TS support in
- * both the repo and the starter). The cache-busting query makes a dev-server
+ * Import the config file through the host runtime (Node's native TypeScript
+ * import — zero new dependencies). The cache-busting query makes a dev-server
  * edit observable; the Vite plugin path uses Vite's loader instead, which does
  * its own invalidation.
  */

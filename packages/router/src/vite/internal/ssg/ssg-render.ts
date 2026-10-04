@@ -131,13 +131,13 @@ export async function ssgRender(
     );
   }
 
-  // alpha.18 (R2-H3): hono/ssg's defaultPlugin silently drops every non-200
-  // response, so static-route 404/500/redirect pages used to vanish without a
-  // trace. Record them through a request wrapper (the afterResponseHook does
-  // not receive the request path) and surface them in the build summary.
+  // hono/ssg's defaultPlugin silently drops every non-200 response, so
+  // static-route 404/500/redirect pages would vanish without a trace. Record
+  // them through a request wrapper (the afterResponseHook does not receive the
+  // request path) and surface them in the build summary.
   const staticNon200: Array<{ path: string; status: number }> = [];
   const warnings: string[] = [];
-  // Beta.2.1 (#1325): the unified entry serves pages behind a single
+  // #1325: the unified entry serves pages behind a single
   // app.all('*', dispatcher), so app.routes no longer enumerates pages and
   // hono/ssg discovers nothing. Project eligible static pages from canonical
   // routeInfo for DISCOVERY ONLY — matching/rendering still runs through the

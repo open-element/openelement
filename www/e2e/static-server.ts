@@ -183,5 +183,32 @@ for (let i = 0; i < argv.length; i++) {
 const PORT = Number(args.port ?? '4174');
 const ROOT = args.dir ?? 'www/dist';
 
+// Orphan self-reaping: Playwright owns this server as its child and kills it
+// on teardown, but a hard kill of Playwright (or of the whole gate process
+// tree) orphans the server with nobody left to reap it. Because the
+// Playwright config pins a deterministic port with `reuseExistingServer:
+// false`, such an orphan fails every later run closed with "port is already
+// used" (seen 2026-10-04: a server orphaned at 03:05 wedged the 16:44 gate
+// on port 4174). So poll the parent PID: an orphaned POSIX process is
+// reparented to init/launchd (PID 1) — comparing against that sentinel,
+// rather than a parent PID captured at startup, also catches a parent that
+// dies while this module's imports are still evaluating. The same contract
+// applies to a manually started server: its shell dying ends it, which is
+// the right lifetime for a test server.
+const PARENT_POLL_MS = 1_000;
+
 const server = await serveStatic(ROOT, { port: await findPort(PORT) });
 console.log(`E2E static server listening on ${server.origin}`);
+
+const orphanWatch = setInterval(() => {
+  if (process.ppid !== 1) return;
+  console.log('E2E static server: orphaned (parent exited) — shutting down');
+  clearInterval(orphanWatch);
+  // The wrapper's close() already ends the raw server and all its
+  // connections (see StaticServer above).
+  void server.close();
+  // Never hang on a slow close or an open keep-alive socket.
+  setTimeout(() => process.exit(0), 1_000).unref();
+}, PARENT_POLL_MS);
+// The listening server keeps the event loop alive; the watch itself must not.
+orphanWatch.unref();

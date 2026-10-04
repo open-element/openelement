@@ -85,7 +85,7 @@ What we measure, and the commands that reproduce each row.
 
 ### Output size
 
-Numbers measured on 2026-10-03 from the docs site's own build (`www/dist`, built with `pnpm run site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. The figures moved twice since alpha6: the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160), and the alpha8 B2 manifest conversion (pnpm workspaces, no `deno.json` workspace marker) re-cut the app-side island chunks — the three app islands now ship as plain `open-<tag>-<hash>.js` dependency chunks — while the train's client-runtime work grew the compiled island payloads.
+Numbers measured on 2026-10-04 from the docs site's own build (`www/dist`, built with `pnpm run site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. The figures moved three times since alpha6: the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160); the alpha8 B2 manifest conversion (pnpm workspaces, no `deno.json` workspace marker) re-cut the app-side island chunks; and the alpha8 client build now resolves each package island's declared identity to its real module id before chunk grouping (#1471 fail-closed), so every island chunk is named `island-open-<tag>-<hash>.js` and the shared compiled-element runtime ships as one chunk that `client.js` loads eagerly on every island page. Route payloads below are measured as the eager import closure of the route's manifest chunk set, so they stay honest no matter which chunk file hosts shared code.
 
 | Metric                 | Value                                              |
 | ---------------------- | -------------------------------------------------- |
@@ -93,7 +93,7 @@ Numbers measured on 2026-10-03 from the docs site's own build (`www/dist`, built
 | URLs in `sitemap.xml`  | 68                                                 |
 | Total static output    | 8.9 MB                                             |
 | Island manifests       | 70 — one per page                                  |
-| Search index           | 34 pages per locale (en, zh), 68 fragments, 1.6 MB |
+| Search index           | 34 pages per locale (en, zh), 68 fragments, 1.4 MB |
 
 ```bash
 pnpm run site:build                         # regenerate everything below first
@@ -110,29 +110,29 @@ The docs site is a normal openElement app, islands included, so its client outpu
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `island-open-layout`           | 101,825   | 17,633  |
-| `island-open-cinematic-scroll` | 90,692    | 28,699  |
-| `open-button`                  | 16,312    | 3,122   |
-| `island-open-dragon-live-gaze` | 14,153    | 5,164   |
-| `island-open-page-rail`        | 9,676     | 2,740   |
-| `open-code-block`              | 8,463     | 2,806   |
-| `island-open-hero-polish`      | 4,428     | 1,845   |
-| `open-badge`                   | 4,002     | 1,131   |
+| `island-open-layout`           | 100,208   | 17,211  |
+| `island-open-badge`            | 88,566    | 27,515  |
+| `island-open-button`           | 16,279    | 3,121   |
+| `island-open-dragon-live-gaze` | 14,198    | 5,181   |
+| `island-open-page-rail`        | 9,721     | 2,754   |
+| `island-open-code-block`       | 8,476     | 2,816   |
+| `island-open-cinematic-scroll` | 7,843     | 3,099   |
+| `island-open-hero-polish`      | 4,478     | 1,862   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
 gzip -9 -c www/dist/client/islands/client.js | wc -c
 ```
 
-The shared entry (`client.js`, ~7 KB) is deliberately not pinned: its island import factories and error strings follow the admitted island set, so its bytes move with that set rather than holding a fixed shape. Per-chunk raw rows tolerate ±1% and gzip rows ±3% for the same class of cross-platform byte variance, route payloads below tolerate ±1%, and chunk counts stay exact.
+The shared entry (`client.js`, ~7 KB) is deliberately not pinned: its island import factories and error strings follow the admitted island set, so its bytes move with that set rather than holding a fixed shape. The `island-open-badge-<hash>.js` row is not the badge component's size either: chunk grouping hosts the shared compiled-element runtime in the chunk named after the `open-badge` island identity, and `client.js` plus every island chunk statically import that chunk, so its bytes ride along on every island page regardless of route. Per-chunk raw rows tolerate ±1% and gzip rows ±3% for the same class of cross-platform byte variance, route payloads below tolerate ±1%, and chunk counts stay exact.
 
-What a page actually downloads follows from its island manifest, not from the total:
+What a page actually downloads follows from its island manifest plus the entry's eager (static) imports — the payload rows are measured as that import closure, so they do not depend on which chunk file hosts shared code:
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 126,761 B            | 4               |
-| `/guide/getting-started` | 126,761 B            | 4               |
-| `/`                      | 226,358 B            | 6               |
+| `/guide/mdx`             | 221,689 B            | 6               |
+| `/guide/getting-started` | 221,689 B            | 6               |
+| `/`                      | 230,644 B            | 7               |
 
 Across all 70 page manifests the site declares 10 island tags in 334 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 60, `open-code-block` on 48, and the remaining tags on a handful of pages each.
 

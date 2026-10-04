@@ -24,10 +24,10 @@ import { expect, test } from 'vitest';
 import {
   type FacadeDom,
   FacadeElement,
-  FacadeEvent,
   type FacadeShadowRoot,
   installFacadeDom,
 } from './facade-dom.ts';
+import { cleanup, click } from './pre-upgrade-helpers.ts';
 
 // The facade captures its HTMLElement base at module evaluation time.
 const dom: FacadeDom = installFacadeDom();
@@ -43,20 +43,10 @@ const { capturePreUpgradeEvents, releasePreUpgradeEvents, replayPreUpgradeEvents
     replayPreUpgradeEvents: (root: Node, captured: readonly unknown[]) => number;
   };
 
-function click(): FacadeEvent {
-  return new FacadeEvent('click', { bubbles: true, composed: true });
-}
-
 function shadowButton(root: FacadeShadowRoot): FacadeElement {
   const button = new FacadeElement('button', dom.document);
   root.appendChild(button);
   return button;
-}
-
-function cleanup(...nodes: FacadeElement[]): void {
-  for (const node of nodes) {
-    if (node.parentNode) node.parentNode.removeChild(node);
-  }
 }
 
 // ─── Composed ownership: release from the host ───

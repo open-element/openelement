@@ -1,7 +1,7 @@
 /**
  * Minimal standard-mechanism replacement for Node's EventEmitter in the dev
- * rescan tests (section 17 rule 2: Deno-run tests use EventTarget or a
- * minimal standard mechanism, never `node:events`). It covers exactly the
+ * rescan tests (the dev rescan tests use EventTarget or a minimal standard
+ * mechanism, never `node:events`). It covers exactly the
  * Vite FSWatcher surface the core plugin touches: `on`/`off` for
  * `add`/`change`/`unlink`, `add`, and a test-only `emit`.
  */

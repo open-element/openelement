@@ -14,9 +14,10 @@
  * check-generator-gates.ts (enforces the per-class wiring rules). This
  * module is neutral: it reads files, never exits.
  */
-import { join, relative, resolve } from '@std/path';
-import { walk } from '../../tools/lib/std-fs.ts';
+import { join, relative, resolve } from 'node:path';
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
+import fastGlob from 'fast-glob';
+import { parse } from 'yaml';
 
 export interface WorkspaceTasks {
   /** Canonical repository-relative workspace path (e.g. 'www'). */
@@ -41,11 +42,11 @@ interface WorkspaceGlobs {
 }
 
 /**
- * Read the `packages` globs from pnpm-workspace.yaml. The file is
- * intentionally author-restricted to the shape pnpm documents for workspace
- * globs: a top-level `packages:` list of `- '<glob>'` items. Anything else
- * fails closed — a silently unparsed glob would make every downstream
- * consumer miss the same workspaces.
+ * Read the `packages` globs from pnpm-workspace.yaml. Parsing uses the same
+ * authoritative YAML grammar pnpm applies to this file; the fail-closed
+ * validation on top is ours: a top-level `packages:` list of string globs
+ * must exist, because a silently missing membership list would make every
+ * downstream consumer miss the same workspaces.
  */
 export async function readWorkspaceGlobs(repoRoot: string): Promise<WorkspaceGlobs> {
   const rootDir = resolve(repoRoot);
@@ -58,25 +59,30 @@ export async function readWorkspaceGlobs(repoRoot: string): Promise<WorkspaceGlo
       cause,
     });
   }
-  const lines = text.split('\n');
-  const startIndex = lines.findIndex((line) => line.trimEnd() === 'packages:');
-  if (startIndex < 0) {
+  let document: unknown;
+  try {
+    document = parse(text);
+  } catch (cause) {
+    throw new Error(`${shown}: not valid YAML`, { cause });
+  }
+  if (document === null || typeof document !== 'object' || Array.isArray(document)) {
+    throw new Error(`${shown}: must contain a YAML mapping with a 'packages:' list`);
+  }
+  const raw = (document as Record<string, unknown>).packages;
+  if (raw === undefined) {
     throw new Error(`${shown}: missing a top-level 'packages:' list`);
+  }
+  if (!Array.isArray(raw)) {
+    throw new Error(`${shown}: 'packages:' must be a list of globs`);
   }
   const include: string[] = [];
   const exclude: string[] = [];
-  for (let index = startIndex + 1; index < lines.length; index++) {
-    const line = lines[index];
-    const trimmed = line.trim();
-    if (trimmed === '' || trimmed.startsWith('#')) continue;
-    if (!/^\s+-\s/.test(line)) break; // Next top-level key: packages list ended.
-    const raw = line
-      .replace(/^\s+-\s+/, '')
-      .trim()
-      .replace(/^['"]|['"]$/g, '');
-    if (raw === '') throw new Error(`${shown}: empty entry in the packages list`);
-    if (raw.startsWith('!')) exclude.push(raw.slice(1));
-    else include.push(raw);
+  for (const entry of raw) {
+    if (typeof entry !== 'string' || entry.trim() === '') {
+      throw new Error(`${shown}: every packages entry must be a non-empty string glob`);
+    }
+    if (entry.startsWith('!')) exclude.push(entry.slice(1));
+    else include.push(entry);
   }
   if (include.length === 0) {
     throw new Error(`${shown}: 'packages:' must list at least one glob`);
@@ -84,44 +90,26 @@ export async function readWorkspaceGlobs(repoRoot: string): Promise<WorkspaceGlo
   return { include, exclude };
 }
 
-/** Expand one workspace glob ('packages/*', 'www', ...) against the root. */
+/**
+ * Expand one workspace glob ('packages/*', 'www', ...) against the root with
+ * fast-glob, the matcher pnpm's own workspace finder uses. Directory-only,
+ * dot-entries never match (packages/.DS_Store is a file, not a workspace) —
+ * the pnpm workspace-glob conventions.
+ */
 async function expandGlob(rootDir: string, glob: string): Promise<string[]> {
-  if (glob.includes('*')) {
-    const segments = glob.split('/');
-    if (glob.includes('**') || segments.filter((part) => part.includes('*')).length !== 1) {
-      throw new Error(`workspace glob '${glob}': only single-level '*' globs are supported`);
-    }
-    // Single-level star: the '*' lives in the LAST segment ('tests/fixtures/*').
-    const slash = glob.lastIndexOf('/');
-    const parentDir = slash < 0 ? rootDir : resolve(rootDir, glob.slice(0, slash));
-    const stem = slash < 0 ? glob : glob.slice(slash + 1); // e.g. '*'
-    const prefix = stem.slice(0, stem.indexOf('*'));
-    const suffix = stem.slice(stem.indexOf('*') + 1);
-    let names: import('node:fs').Dirent[];
-    try {
-      names = await readdir(parentDir, { withFileTypes: true });
-    } catch (cause) {
-      throw new Error(`workspace glob '${glob}': cannot read ${relative(rootDir, parentDir)}`, {
-        cause,
-      });
-    }
-    return (
-      names
-        // Glob-star convention: a '*' segment never matches dot-entries
-        // (packages/.DS_Store is a file, not a workspace), and pnpm workspace
-        // globs only ever match directories.
-        .filter(
-          (entry) =>
-            entry.isDirectory() &&
-            !entry.name.startsWith('.') &&
-            entry.name.startsWith(prefix) &&
-            entry.name.endsWith(suffix),
-        )
-        .map((entry) => (slash < 0 ? entry.name : `${glob.slice(0, slash)}/${entry.name}`))
-        .sort()
-    );
+  // The workspace manifest stays restricted to the documented shape: plain
+  // paths or single-level '*' globs ('**' would sweep unmanaged trees).
+  if (!glob.includes('*')) {
+    // A literal member is returned unverified: the per-member stat below
+    // turns a missing directory into a diagnostic naming that member.
+    return [glob];
   }
-  return [glob];
+  const segments = glob.split('/');
+  if (glob.includes('**') || segments.filter((part) => part.includes('*')).length !== 1) {
+    throw new Error(`workspace glob '${glob}': only single-level '*' globs are supported`);
+  }
+  const hits = await fastGlob(glob, { cwd: rootDir, onlyDirectories: true, dot: false });
+  return hits.sort();
 }
 
 /** Read every workspace's script graph from the canonical workspace list.
@@ -132,7 +120,7 @@ async function expandGlob(rootDir: string, glob: string): Promise<string[]> {
  * failure category instead of degrading to an empty or partial list.
  */
 export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]> {
-  // Callers pass repoRoot from fromFileUrl (trailing slash) or makeTempDir;
+  // Callers pass repoRoot from fileURLToPath (trailing slash) or makeTempDir;
   // normalize so the containment check compares like with like.
   const rootDir = resolve(repoRoot);
   const display = (path: string) => relative(rootDir, path) || '.';
@@ -302,16 +290,18 @@ export async function discoverScriptFiles(
       } catch {
         continue;
       }
-      for await (const entry of walk(dir, {
-        includeDirs: false,
-        exts: ['.ts'],
-        maxDepth: index === 0 ? 1 : Infinity,
-      })) {
+      // The package dir itself is scanned one level deep (its own scripts),
+      // a tools/ subdirectory recursively.
+      const maxDepth = index === 0 ? 1 : Infinity;
+      for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
+        if (entry.isDirectory() || !entry.name.endsWith('.ts')) continue;
+        const entryPath = `${entry.parentPath}/${entry.name}`;
+        if (entryPath.slice(dir.length + 1).split('/').length > maxDepth) continue;
         if (!isCandidate(entry.name)) continue;
         out.push({
           workspace: ws.workspace,
-          script: entry.path.slice(ws.dir.length + 1),
-          abs: entry.path,
+          script: entryPath.slice(ws.dir.length + 1),
+          abs: entryPath,
         });
       }
     }

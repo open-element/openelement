@@ -45,7 +45,7 @@ Event `processing_state` values: `received`, `processing`, `completed`,
 Use the Stripe CLI against the local server; test-mode keys only:
 
 ```sh
-deno task start   # local server on http://localhost:4173
+pnpm --dir apps/saas run start   # local server on http://localhost:4173
 stripe listen --forward-to http://localhost:4173/api/stripe-webhook
 stripe trigger checkout.session.completed
 ```

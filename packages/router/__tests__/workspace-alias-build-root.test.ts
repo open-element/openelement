@@ -3,20 +3,18 @@
  * build-side workspace anchor (stable module ids, source-map anchors,
  * route-scan anchors).
  *
- * Since the B2 manifest conversion this repository is a pnpm workspace: no
- * deno.json workspace marker exists, so the Deno-consumer discovery
- * (findWorkspaceRoot, kept for the #1415 hijack guard) returns null here and
- * build identities lost their anchor — absolute build-machine paths leaked
- * into shipped island error copy until findBuildWorkspaceRoot learned the
- * pnpm-workspace.yaml marker.
+ * The anchor is a pure pnpm-workspace.yaml ancestor discovery: it exists so
+ * build identities stay machine-independent, not to synthesize aliases or
+ * resolve packages — those belong to the package manager and the consumer's
+ * own vite config.
  */
 
 import { mkdtemp, rm } from 'node:fs/promises';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
-import { findBuildWorkspaceRoot, findWorkspaceRoot } from '../src/vite/workspace-alias.ts';
+import { join } from 'node:path';
+import { findBuildWorkspaceRoot } from '../src/vite/workspace-alias.ts';
 
 interface TempTree {
   root: string;
@@ -53,30 +51,20 @@ test('build root: a pnpm workspace marker anchors nested modules', async () => {
   });
 });
 
-test('build root: a deno.json workspace still anchors, and wins in a hybrid tree', async () => {
+test('build root: no pnpm-workspace.yaml marker means no anchor', async () => {
   await withTree((tree) => {
+    // A deno.json — even a workspace-shaped one — is not the anchor: the
+    // supported consumer surface is Node/pnpm.
     tree.write('deno.json', JSON.stringify({ workspace: ['./packages/element'] }));
-    expect(findBuildWorkspaceRoot(tree.path('packages'))).toEqual(tree.root);
-    // Hybrid tree: both manifest kinds in one directory — the Deno anchor
-    // keeps its pre-B2 precedence.
-    tree.write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
-    expect(findBuildWorkspaceRoot(tree.root)).toEqual(tree.root);
-  });
-});
-
-test('build root: no marker of either kind means no anchor', async () => {
-  await withTree((tree) => {
     tree.write('app/islands/island.tsx', 'export default () => {};\n');
     expect(findBuildWorkspaceRoot(tree.path('app/islands'))).toEqual(null);
+    expect(findBuildWorkspaceRoot(tree.root)).toEqual(null);
   });
 });
 
 test('build root: the real repository anchors on its pnpm-workspace.yaml', () => {
   const repoRoot = join(import.meta.dirname!, '..', '..', '..');
-  // The fix: this used to be null after the B2 conversion (no deno.json
-  // workspace marker), which unanchored every build identity.
+  // The fix: this used to be null after the B2 conversion dropped the
+  // workspace marker, which unanchored every build identity.
   expect(findBuildWorkspaceRoot(repoRoot)).toEqual(repoRoot);
-  // The Deno-consumer discovery stays deliberately inert on this tree; the
-  // hijack guard test pins the same null.
-  expect(findWorkspaceRoot(repoRoot)).toEqual(null);
 });

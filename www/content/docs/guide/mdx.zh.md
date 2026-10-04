@@ -10,17 +10,13 @@ routes 目录下的 `.mdx` 文件与其他路由一样是路由：`app/routes/ab
 
 构建会先把该文件降级为编译页面模块，再运行 compiled-element transform，因此 MDX 页面与手写的 `.tsx` 页面走完全相同的 Part Program 管线；元素标签由路由相对路径派生，以保证生成入口注册的标签与程序声明的标签一致。Markdown 的任何部分都不会到达浏览器：输出是普通 HTML，页面内容位于宿主的 shadow root 中。
 
-Markdown 解析是这条路径唯一的依赖，而它是 `@openelement/router` 的可选 peer——只有真正有 `.mdx` 文件进入构建时才会解析它。把它加进应用的 import map：
+Markdown 解析是这条路径唯一的依赖，而它是 `@openelement/router` 的可选 peer——只有真正有 `.mdx` 文件进入构建时才会解析它。把它安装为应用依赖：
 
-```json
-{
-  "imports": {
-    "marked": "npm:marked@^15.0.0"
-  }
-}
+```sh
+pnpm add marked@^15.0.0
 ```
 
-如果存在 `.mdx` 路由却没有该解析结果，构建会带着安装指引失败，而不是产出一个坏页面。
+如果存在 `.mdx` 路由却没有该依赖，构建会带着安装指引失败，而不是产出一个坏页面。
 
 ## 组件
 

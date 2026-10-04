@@ -14,10 +14,10 @@
  * covered directly instead: every generated searchRecord anchor must exist as
  * an id in the built /reference documents (both locales) below.
  */
-import { walk } from '../../tools/lib/std-fs.ts';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../site-config.ts';
-import { normalize as posixNormalize } from '@std/path/posix';
+import { normalize as posixNormalize } from 'node:path/posix';
 import {
   anchorsFragment,
   extractBuiltLinks,
@@ -30,20 +30,24 @@ import {
 import { apiReference } from '../app/data/_generated-api-reference.ts';
 import { stripHtmlToText } from '../app/site-ui/article-body.ts';
 import { currentContentTitles, retiredContentTitles } from './lib/site-retired.ts';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import process from 'node:process';
 
 export const SITE_DIST = 'www/dist';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 export async function checkBuiltLinks(dist = join(repoRoot, SITE_DIST)): Promise<LinkFailure[]> {
   const failures: LinkFailure[] = [];
   const files = new Set<string>();
   const htmlFiles: string[] = [];
-  for await (const entry of walk(dist, { includeDirs: false, skip: [/(^|\/)pagefind(\/|$)/] })) {
-    files.add(entry.path.slice(dist.length + 1));
-    if (entry.path.endsWith('.html')) htmlFiles.push(entry.path);
+  for (const entry of await readdir(dist, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory()) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const rel = entryPath.slice(dist.length + 1);
+    if (rel.split('/').includes('pagefind')) continue;
+    files.add(rel);
+    if (entryPath.endsWith('.html')) htmlFiles.push(entryPath);
   }
   const exists = (file: string) => files.has(file);
   const htmlCache = new Map<string, string>();

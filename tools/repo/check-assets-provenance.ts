@@ -14,8 +14,7 @@
  * are one manifest record while still hashing every file individually.
  */
 
-import { walkSync } from '../../tools/lib/std-fs.ts';
-import { statSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 
@@ -324,11 +323,13 @@ export async function scanAssetsProvenance(): Promise<string[]> {
   const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
   const notices = await readFile(NOTICES_PATH, 'utf8');
   const files: AssetFile[] = [];
-  for (const entry of walkSync(ASSETS_DIR, { includeDirs: false })) {
-    const path = entry.path.slice(ASSETS_DIR.length + 1);
+  for (const entry of readdirSync(ASSETS_DIR, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory()) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const path = entryPath.slice(ASSETS_DIR.length + 1);
     if (path === 'manifest.json') continue;
-    const { size } = statSync(entry.path);
-    files.push({ path, bytes: size ?? 0, sha256: await sha256File(entry.path) });
+    const { size } = statSync(entryPath);
+    files.push({ path, bytes: size ?? 0, sha256: await sha256File(entryPath) });
   }
   return checkAssetsProvenance(manifest, files, notices);
 }

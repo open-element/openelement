@@ -18,10 +18,8 @@
  *    not about the program.
  * 4. Both entries export the same names (the surface cannot drift).
  */
-import { spawn } from 'node:child_process';
-import { join } from 'node:path';
 import { expect, test } from 'vitest';
-import process from 'node:process';
+import { runEsmSubprocess } from './esm-subprocess.ts';
 import * as defaultEntry from '../src/index.ts';
 import * as clientOnlyEntry from '../src/client-only.ts';
 
@@ -31,26 +29,7 @@ const FULL_ENTRY_SPECIFIER = `${ELEMENT_SRC}index.ts`;
 const CLIENT_ONLY_ENTRY_SPECIFIER = `${ELEMENT_SRC}client-only.ts`;
 const TEST_PROGRAM_SPECIFIER = new URL('./compiled-runtime/test-program.ts', import.meta.url).href;
 
-async function runInSubprocess(
-  script: string,
-): Promise<{ code: number; out: string; err: string }> {
-  // node --input-type=module -e: ESM eval resolving the workspace imports
-  // from the element package root (cwd matters for bare-specifier lookup)
-  const child = spawn(process.execPath, ['--input-type=module', '--eval', script], {
-    cwd: join(import.meta.dirname!, '../..'),
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const [stdout, stderr] = await Promise.all([
-    Array.fromAsync(child.stdout!),
-    Array.fromAsync(child.stderr!),
-  ]);
-  const code = await new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1)));
-  return {
-    code,
-    out: Buffer.concat(stdout).toString(),
-    err: Buffer.concat(stderr).toString(),
-  };
-}
+const runInSubprocess = runEsmSubprocess;
 
 const DOM_SHIM = `
   const doc = {

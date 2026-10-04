@@ -29,7 +29,8 @@
  * cannot pass by extracting less.
  */
 import { formatJson } from '@openelement/element/build-utils';
-import { fromFileUrl, join, relative, resolve } from '@std/path';
+import { join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import {
   IslandErrorCode,
@@ -42,7 +43,7 @@ import process from 'node:process';
 
 export const ERROR_REFERENCE_ARTIFACT = 'www/app/data/_generated-error-reference.ts';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 /**
  * Sources whose diagnostic literals define the compiler half of the table —

@@ -213,7 +213,8 @@ function removeIdAttribute(attrs: string): string {
  * leftover angle bracket. A single `<[^>]+>` pass can leave a `<script`
  * fragment with no closing `>` behind (CodeQL
  * js/incomplete-multi-character-sanitization); the trailing bracket strip
- * closes that hole the same way prepareArticle's label pipeline does.
+ * closes that hole. prepareArticle's rail-outline labels run through this
+ * same function, so a heading can never carry a partial tag into the outline.
  */
 export function stripHtmlToText(html: string): string {
   let out = html;
@@ -279,18 +280,11 @@ export function prepareArticle(
       return segment.replace(
         /<h([23])((?:"[^"]*"|'[^']*'|[^>"'])*)>([\s\S]*?)<\/h\1>/gi,
         (_match, depth, attrs, body) => {
-          // Strip tags to a fixed point, then any angle bracket the tag pattern
-          // could not match (e.g. a `<script` fragment with no closing `>`), so
-          // the plain-text label can never carry a partial tag into the rail
+          // stripHtmlToText reduces the heading body to plain text (tags to a
+          // fixed point, then any angle bracket the tag pattern could not
+          // match), so the label can never carry a partial tag into the rail
           // outline (issue 1281).
-          let label = String(body);
-          for (;;) {
-            const stripped = label.replace(/<[^>]+>/g, '');
-            if (stripped === label) break;
-            label = stripped;
-          }
-          label = label
-            .replace(/[<>]/g, '')
+          const label = stripHtmlToText(String(body))
             .replace(/&[^;]+;/g, ' ')
             .trim();
           const id = slugifyHeadingId(label, usedIds);

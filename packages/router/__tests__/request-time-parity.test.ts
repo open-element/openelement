@@ -27,7 +27,8 @@ import { spawnSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { join, toFileUrl } from '@std/path';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createServer as createNodeServer } from 'node:http';
 
 const fixtureDir = join(import.meta.dirname!, '../../../tests/fixtures/router-request-time');
@@ -36,7 +37,7 @@ const serverEntryPath = join(fixtureDir, 'dist/server/index.js');
 type ServerHandle = { base: string; close: () => Promise<void> };
 
 async function bootBuildServer(): Promise<ServerHandle> {
-  const entry = await import(toFileUrl(serverEntryPath).href);
+  const entry = await import(pathToFileURL(serverEntryPath).href);
   const handle = entry.default as (event: { req: Request }) => Promise<Response>;
   // The same node:http ↔ fetch adapter the start CLI uses in production
   // (packages/router/src/internal/node-http.ts) — the oracle pins semantic
@@ -62,12 +63,12 @@ async function bootBuildServer(): Promise<ServerHandle> {
 
 async function bootDevServer(): Promise<ServerHandle> {
   // The dev (hono) SSR entry imports the ADR-0044 customElements polyfill as
-  // its first module (plugin.ts virtual:open-ssr-polyfill, fixed in alpha.5 —
-  // dev SSR previously crashed with "customElements is not defined" on every
-  // route, reproducible via `deno task dev` on www).
+  // its first module (plugin.ts virtual:open-ssr-polyfill) so the dev SSR
+  // runtime always has customElements defined on every route.
   const { createServer } = await import('vite');
   // The plugin scans routes relative to the process cwd, so boot from the
-  // fixture directory (same shape as `deno task dev`, which cds into www).
+  // fixture directory — the dev command runs from the app root, and the tests
+  // mirror that shape.
   const previousCwd = process.cwd();
   process.chdir(fixtureDir);
   let server;

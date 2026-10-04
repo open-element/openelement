@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "npm-local runtime deps for the element browser conformance suite, which vitest browser mode runs (packages/element#browser:test). Not a workspace member; see README.md for the per-dependency rationale.",
+  "description": "npm-local runtime deps for the element browser conformance suite, which vitest browser mode runs (@openelement/element#browser:test). Not a workspace member; see README.md for the per-dependency rationale.",
   "dependencies": {
     "chai": "6.2.2",
     "lit": "3.3.3"

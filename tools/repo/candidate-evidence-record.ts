@@ -12,16 +12,14 @@
  * (candidate-evidence-fresh-clone.ts); the audit lanes
  * (candidate-evidence-aggregate.ts / candidate-evidence-validate.ts) import
  * the shapes and primitives from here read-only, so consuming recorded
- * evidence never imports the CLI shell. Moved out of candidate-evidence.ts
- * verbatim (alpha6 architecture-debt lane): shapes, failure texts, and
- * behavior are unchanged.
+ * evidence never imports the CLI shell.
  *
  * Every recorded path is normalized to the shared roles (`$SOURCE`, `$CLONE`,
  * `$TEMP`) via the candidate-steps mapping, so real machine locations stay
  * private and the validator only ever sees the roles.
  */
 
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { readPackages } from '../lib/package-graph.ts';
@@ -50,9 +48,10 @@ export const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '
 export const nodeExe = process.execPath;
 
 /**
- * The pre-port build identifiers spelled 'windows'/'aarch64'/'x86_64'; node
- * spells them 'win32'/'arm64'/'x64'. The evidence record strings must stay
- * byte-identical across the port, so translate instead of rewording.
+ * Evidence records use the canonical build-identifier spellings
+ * 'windows'/'aarch64'/'x86_64'; translate node's 'win32'/'arm64'/'x64'
+ * instead of recording them raw, so the record strings stay byte-identical
+ * across producer machines.
  */
 function evidenceOs(): string {
   return process.platform === 'win32' ? 'windows' : process.platform;
@@ -193,11 +192,9 @@ async function playwrightBrowserVersions(): Promise<Record<string, string>> {
 /**
  * The workspace TypeScript version, taken from the installed dependency —
  * `node_modules/typescript/package.json` — the exact copy the workspace gates
- * typechecked with. `process.versions.typescript` was the Deno-era source
- * (Deno ships its own TypeScript); Node's `process.versions` has no such
- * field, so under the Node surface the key silently serialised away and the
- * validator rejected every producer record. A registry probe or a constant
- * would record a version the gates never ran, so this fails closed instead.
+ * typechecked with. `process.versions` carries no TypeScript field, and a
+ * registry probe or a constant would record a version the gates never ran,
+ * so this fails closed instead.
  */
 export async function workspaceTypescriptVersion(root: string): Promise<string> {
   const manifestPath = join(root, 'node_modules', 'typescript', 'package.json');
@@ -232,12 +229,11 @@ export async function workspaceTypescriptVersion(root: string): Promise<string> 
 }
 
 export async function toolVersions(): Promise<EvidenceToolVersions> {
-  const [node, npm, pnpm, typescript] = await Promise.all([
-    required('node', ['--version']).catch(() => 'unavailable'),
-    required('npm', ['--version']).catch(() => 'unavailable'),
-    required('pnpm', ['--version']).catch(() => 'unavailable'),
-    workspaceTypescriptVersion(repoRoot),
-  ]);
+  // Sequential by the session serial rule: no concurrent subprocess fan-out.
+  const node = await required('node', ['--version']).catch(() => 'unavailable');
+  const npm = await required('npm', ['--version']).catch(() => 'unavailable');
+  const pnpm = await required('pnpm', ['--version']).catch(() => 'unavailable');
+  const typescript = await workspaceTypescriptVersion(repoRoot);
   return {
     node,
     pnpm,
@@ -281,7 +277,13 @@ async function runStep(
   };
 }
 
-const PACKED_CONSUMER_STEP = /^PASS ((?:tools|apps|tests)\/[^\s(]+#(?:consumer:[^\s(]+|smoke))\b/m;
+/**
+ * Gate step lines are the coordinator's own report (`PASS <name> (N.Ns)`,
+ * one per step, names now package-qualified). Consumers are the packed
+ * consumer tasks; the prepacked artifact check is pinned to the exact step
+ * gate:packed runs (the standalone scanner is contractually forbidden there).
+ */
+const PACKED_CONSUMER_STEP = /^PASS (\S+#(?:consumer:\S+|smoke))\b/m;
 
 /** Derive packed-gate facts from the real gate log, never from a summary. */
 export function packedRollupFromLog(logText: string): {
@@ -292,7 +294,9 @@ export function packedRollupFromLog(logText: string): {
     ...stripAnsi(logText).matchAll(new RegExp(PACKED_CONSUMER_STEP.source, 'gm')),
   ].map((match) => match[1]);
   return {
-    artifactCheck: /^PASS tools\/release#package-artifacts:check\b/m.test(stripAnsi(logText)),
+    artifactCheck: /^PASS @openelement\/tools-release#package-artifacts:check:prepacked\b/m.test(
+      stripAnsi(logText),
+    ),
     consumers: [...new Set(consumers)].sort(),
   };
 }

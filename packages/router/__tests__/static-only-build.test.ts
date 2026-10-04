@@ -19,7 +19,7 @@ import { createServer } from 'node:net';
 import { stat, readFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 
 const fixtureDir = join(import.meta.dirname!, '../../../tests/fixtures/router-static-only');
 const distDir = join(fixtureDir, 'dist');
@@ -128,8 +128,9 @@ test('static-only build: preview mode serves the output (#953)', async () => {
         setTimeout(resolve, 5000).unref();
       });
     }
-    // Preview delegates to a scoped-permission `npm:vite preview` grandchild;
+    // Preview delegates to a `node <app-vite-bin>/vite.js preview` grandchild
+    // (start.ts runPreview spawns process.execPath + the vite bin path);
     // kill it by its unique port argument so no server leaks.
-    spawnSync('pkill', ['-f', `npm:vite preview --port ${freePort}`]);
+    spawnSync('pkill', ['-f', `vite.js preview --port ${freePort}`]);
   }
 });

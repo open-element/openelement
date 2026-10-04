@@ -13,7 +13,7 @@
  * texts are unchanged.
  */
 
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { npmTarballName } from '../lib/npm-tarball.ts';
 import { auditTarballPackage } from './tarball-inspect.ts';
@@ -235,15 +235,10 @@ export async function carryPackedTarballs(
   await mkdir(join(outDir, 'tarballs'), { recursive: true });
   for (const packageName of REQUIRED_PACKAGE_TARBALLS) {
     const sourcePath = carried[packageName];
-    if (
-      typeof sourcePath !== 'string' ||
-      sourcePath === '' ||
-      sourcePath.startsWith('/') ||
-      sourcePath.includes('\\') ||
-      sourcePath.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
-    ) {
+    const pathFailures = auditSafeRelativePath(sourcePath);
+    if (pathFailures.length > 0) {
       throw new Error(
-        `packed job: tarballFiles.${packageName} path must be a safe relative POSIX path, got ${JSON.stringify(
+        `packed job: tarballFiles.${packageName} ${pathFailures.join('; ')}, got ${JSON.stringify(
           sourcePath,
         )}`,
       );

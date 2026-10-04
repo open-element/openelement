@@ -302,7 +302,7 @@ export function generateClientEntry(
 // Zero DOM interaction - safe with DSD rendering.
 //
 // #606: island-scheduler.ts is the single owner of strategy scheduling
-// (defineIsland() registers on module evaluation). #868: both runtimes are
+// (island modules register on evaluation). #868: both runtimes are
 // real modules bundled via the virtual:open-client-runtime specifiers — the
 // entry only wires them, there is no inline string copy.`;
 

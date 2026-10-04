@@ -16,7 +16,7 @@
 
 import { expect, test } from 'vitest';
 import { existsSync } from 'node:fs';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');

@@ -46,8 +46,8 @@ Reset a disposable local database (destroys local data only):
 supabase db reset
 ```
 
-Local route/unit tests (`deno task test`) run against stubs and do not require
-a hosted project.
+Local route/unit tests (`pnpm --dir apps/saas run test`) run against stubs and
+do not require a hosted project.
 
 ## 3. Hosted project (operator, external pending)
 

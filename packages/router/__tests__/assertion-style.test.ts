@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { readFileSync, readdirSync, type Dirent } from 'node:fs';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 
 /**
  * Audit gate: boolean expressions must not be passed to assertExists.
@@ -17,9 +17,9 @@ import { dirname, join } from '@std/path';
  * whose callback uses predicates — are legitimate and not flagged.
  *
  * The package root is derived from this file's own URL, never from the
- * process cwd: `deno task --cwd packages/router test` runs with the cwd set to
- * packages/router, where `join(cwd, 'packages')` is a directory that does not
- * exist (the scan crashed) — or, worse, whatever stray `packages/` happens to
+ * process cwd: the test runner's cwd depends on how the suite was invoked,
+ * and `join(cwd, 'packages')` can be a directory that does not exist (the
+ * scan would crash) — or, worse, whatever stray `packages/` happens to
  * be there, which would silently scan the wrong tree and pass vacuously.
  */
 

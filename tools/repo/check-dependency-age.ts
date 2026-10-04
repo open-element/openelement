@@ -5,10 +5,16 @@
  * Every package resolved in `pnpm-lock.yaml` must have been published at
  * least `MIN_AGE_DAYS` days ago: a freshly published dependency or version
  * cannot enter the lockfile on day one. Publish time is the registry
- * packument's `time[version]`, falling back to `time.created`. Registry and
- * network failures fail closed — an unverifiable package is a red, never a
- * silent pass. Successful lookups are cached in `.artifacts/`
- * (publish times are immutable) so repeat runs avoid re-querying.
+ * packument's `time[<exact locked version>]` and nothing else — missing or
+ * non-string metadata is a red, never substituted by another field
+ * (`time.created` dates the package, not the locked version, and would
+ * smuggle a day-one version past the window). Registry and network
+ * failures fail closed — an unverifiable package is a red, never a silent
+ * pass. Successful lookups are cached in `.artifacts/` (publish times are
+ * immutable) so repeat runs avoid re-querying; the on-disk format is
+ * versioned and any earlier-shape cache is discarded wholesale, so entries
+ * written before the exact-version rule can never survive as a second
+ * authority.
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
@@ -16,6 +22,8 @@ import process from 'node:process';
 const MIN_AGE_DAYS = 3;
 const DAY_MS = 86_400_000;
 const CACHE_PATH = '.artifacts/dep-age-cache.json';
+/** Cache format version; bumped whenever the writer's semantics change. */
+const CACHE_VERSION = 2;
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
 const FETCH_TIMEOUT_MS = 60_000;
 const FETCH_ATTEMPTS = 2;
@@ -114,6 +122,33 @@ export function ageFailure(publishIso: string, now: Date, key: string): string |
   return undefined;
 }
 
+/**
+ * Read a cache document, or reject anything that is not the current
+ * version. The pre-versioning cache was a flat `key → time` map written
+ * while `time.created` fallbacks were still accepted, so its entries are
+ * indistinguishable from exact-version times — every non-v2 shape
+ * (including that flat map) and unparsable text is discarded wholesale and
+ * the affected packages are re-fetched from the registry, the only
+ * authority.
+ */
+export function parseCache(text: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== 'object' || parsed === null) return {};
+  if ((parsed as { version?: unknown }).version !== CACHE_VERSION) return {};
+  const publish = (parsed as { publish?: unknown }).publish;
+  if (typeof publish !== 'object' || publish === null) return {};
+  const entries: Record<string, string> = {};
+  for (const [key, value] of Object.entries(publish)) {
+    if (typeof value === 'string') entries[key] = value;
+  }
+  return entries;
+}
+
 /** Resolve the publish time, or a `${pkg.key}: …` failure message (fail-closed). */
 export async function fetchPublishTime(pkg: LockPackage): Promise<string> {
   let reason = 'no attempt';
@@ -142,10 +177,16 @@ export async function fetchPublishTime(pkg: LockPackage): Promise<string> {
       if (!response.ok)
         return `${pkg.key}: registry ${pkg.registry} returned HTTP ${response.status} — failing closed`;
       const packument = await response.json();
-      const time = (packument as { time?: Record<string, string> }).time;
-      const publish = time?.[pkg.version] ?? time?.created;
+      const time: unknown = (packument as { time?: unknown }).time;
+      // Only the exact locked version's entry counts. A missing or
+      // non-string value is a red — no other field (notably `time.created`,
+      // which dates the package, not this version) may stand in for it.
+      const publish =
+        typeof time === 'object' && time !== null
+          ? (time as Record<string, unknown>)[pkg.version]
+          : undefined;
       if (typeof publish !== 'string') {
-        return `${pkg.key}: registry metadata has no publish time — failing closed`;
+        return `${pkg.key}: registry metadata has no publish time for ${pkg.version} — failing closed`;
       }
       return publish;
     } catch (error) {
@@ -158,9 +199,7 @@ export async function fetchPublishTime(pkg: LockPackage): Promise<string> {
 if (import.meta.main) {
   const now = new Date();
   const packages = parseLockPackages(await readFile('pnpm-lock.yaml', 'utf8'));
-  const cache: Record<string, string> = JSON.parse(
-    await readFile(CACHE_PATH, 'utf8').catch(() => '{}'),
-  );
+  const cache = parseCache(await readFile(CACHE_PATH, 'utf8').catch(() => ''));
   const pending = packages.filter((pkg) => cache[pkg.key] === undefined);
   const failures: string[] = [];
   const queue = [...pending];
@@ -186,7 +225,10 @@ if (import.meta.main) {
   }
   const sorted = Object.fromEntries(Object.entries(cache).sort(([a], [b]) => (a < b ? -1 : 1)));
   await mkdir('.artifacts', { recursive: true });
-  await writeFile(CACHE_PATH, `${JSON.stringify(sorted, null, '\t')}\n`);
+  await writeFile(
+    CACHE_PATH,
+    `${JSON.stringify({ version: CACHE_VERSION, publish: sorted }, null, '\t')}\n`,
+  );
   if (failures.length > 0) {
     console.error(`Dependency age check failed (${failures.length}/${packages.length}):`);
     for (const failure of failures) console.error(`- ${failure}`);

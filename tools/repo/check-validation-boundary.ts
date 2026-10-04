@@ -5,8 +5,7 @@
  * docs/integrations/validation.md.
  */
 
-import { walkSync } from '../../tools/lib/std-fs.ts';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import process from 'node:process';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
@@ -29,9 +28,12 @@ export function findValidationLibraryImports(source: string, path = 'source.ts')
 export function scanValidationBoundary(roots: string[] = SOURCE_ROOTS): string[] {
   const failures: string[] = [];
   for (const root of roots) {
-    for (const entry of walkSync(root, { includeDirs: false })) {
-      if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue;
-      failures.push(...findValidationLibraryImports(readFileSync(entry.path, 'utf8'), entry.path));
+    for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
+      if (entry.isDirectory() || (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx'))) {
+        continue;
+      }
+      const entryPath = `${entry.parentPath}/${entry.name}`;
+      failures.push(...findValidationLibraryImports(readFileSync(entryPath, 'utf8'), entryPath));
     }
   }
   return failures;

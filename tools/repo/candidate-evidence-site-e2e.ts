@@ -10,7 +10,7 @@
  * and failure texts are unchanged.
  */
 
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import {
   auditSiteE2e,

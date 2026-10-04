@@ -3,6 +3,7 @@ import {
   ageFailure,
   fetchPublishTime,
   packumentUrl,
+  parseCache,
   parseLockPackages,
   type LockPackage,
 } from './check-dependency-age.ts';
@@ -82,6 +83,76 @@ test('ageFailure fails closed on unparsable and quarantine-window publish times'
     'inside the 3-day quarantine window',
   );
   expect(ageFailure('2026-09-01T00:00:00.000Z', now, 'foo@1.0.0')).toBeUndefined();
+});
+
+test('fetchPublishTime fails closed when the exact version has no publish time, even with time.created', async () => {
+  // The pre-fix fallback answered `time.created` here — the package's
+  // creation date, which for an established package sits far outside the
+  // quarantine window and turned a day-one version into a silent pass.
+  vi.stubGlobal('fetch', () =>
+    Promise.resolve(
+      new Response(JSON.stringify({ time: { created: '2020-01-01T00:00:00.000Z' } }), {
+        headers: { 'content-type': 'application/json' },
+      }),
+    ),
+  );
+  try {
+    const reason = await fetchPublishTime(lockPackage());
+    expect(reason).toContain('foo@1.0.0:');
+    expect(reason).toContain('no publish time for 1.0.0');
+    expect(reason).toContain('failing closed');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test('fetchPublishTime fails closed on wrong-type publish-time metadata', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ time: { '1.0.0': 12345 } }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ time: '2020-01-01T00:00:00.000Z' }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+  );
+  try {
+    const nonString = await fetchPublishTime(lockPackage());
+    expect(nonString).toContain('foo@1.0.0:');
+    expect(nonString).toContain('no publish time for 1.0.0');
+    expect(nonString).toContain('failing closed');
+    const nonObject = await fetchPublishTime(lockPackage());
+    expect(nonObject).toContain('foo@1.0.0:');
+    expect(nonObject).toContain('failing closed');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test('parseCache discards caches that predate the versioned format', () => {
+  // The flat shape is the pre-versioning cache, whose values may be
+  // `time.created` fallback dates: none of its entries may survive as a
+  // second authority — every unrecognized shape re-fetches from the
+  // registry.
+  const fallbackDate = '2020-01-01T00:00:00.000Z';
+  expect(parseCache(JSON.stringify({ 'foo@1.0.0': fallbackDate }))).toEqual({});
+  expect(
+    parseCache(JSON.stringify({ version: 1, publish: { 'foo@1.0.0': fallbackDate } })),
+  ).toEqual({});
+  expect(parseCache(JSON.stringify({ version: 2 }))).toEqual({});
+  expect(parseCache(JSON.stringify({ version: 2, publish: 'not-a-map' }))).toEqual({});
+  expect(parseCache('not json at all')).toEqual({});
+  // The current format round-trips, dropping non-string entries.
+  expect(
+    parseCache(JSON.stringify({ version: 2, publish: { 'foo@1.0.0': fallbackDate } })),
+  ).toEqual({ 'foo@1.0.0': fallbackDate });
+  expect(parseCache(JSON.stringify({ version: 2, publish: { 'foo@1.0.0': 12345 } }))).toEqual({});
 });
 
 test('parseLockPackages resolves quoted, bare and peer-suffixed keys with their registry', () => {

@@ -12,12 +12,12 @@
  * leak through them, and decoding them as text produces replacement bytes
  * that coincidentally match drive-path markers.
  */
-import { walk } from '../../tools/lib/std-fs.ts';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import process from 'node:process';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const dist = join(repoRoot, 'www/dist');
 
 export const MACHINE_PATH_MARKERS: Array<[RegExp, string]> = [
@@ -96,12 +96,14 @@ async function main(): Promise<void> {
   let scanned = 0;
   let skippedBinary = 0;
   for (const root of roots) {
-    for await (const entry of walk(root, { includeDirs: false })) {
-      const bytes = await readFile(entry.path);
+    for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
+      if (entry.isDirectory()) continue;
+      const entryPath = `${entry.parentPath}/${entry.name}`;
+      const bytes = await readFile(entryPath);
       // Cheap pre-filter: decoding megabytes of media wastes the gate budget.
       // Oversize files are listed, never silently skipped.
       if (bytes.length > 4_000_000) {
-        oversize.push(`${entry.path.slice(root.length + 1)} (${bytes.length}B)`);
+        oversize.push(`${entryPath.slice(root.length + 1)} (${bytes.length}B)`);
         continue;
       }
       if (!isTextArtifact(bytes)) {

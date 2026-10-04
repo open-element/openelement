@@ -1,7 +1,6 @@
 import { expect, test } from 'vitest';
 import { chromium, firefox, webkit } from '@playwright/test';
 import { createServer } from 'vite';
-import { generateWorkspaceAliases } from '../src/vite/workspace-alias.ts';
 
 test('Navigation API: three-browser push/replace/traversal and stale guard regression', async function fn() {
   const root = new URL('../../../', import.meta.url).pathname.replace(/\/$/, '');
@@ -17,7 +16,6 @@ test('Navigation API: three-browser push/replace/traversal and stale guard regre
     configFile: false,
     optimizeDeps: { noDiscovery: true, include: [] },
     logLevel: 'error',
-    resolve: { alias: generateWorkspaceAliases(root) },
     server: { host: '127.0.0.1', port: 0 },
     plugins: [
       {
@@ -143,7 +141,6 @@ test('Navigation API: native POST / fragment / reload stay browser-owned (three 
     configFile: false,
     optimizeDeps: { noDiscovery: true, include: [] },
     logLevel: 'error',
-    resolve: { alias: generateWorkspaceAliases(root) },
     server: { host: '127.0.0.1', port: 0 },
     plugins: [
       {

@@ -11,7 +11,7 @@ import { createServer, type AddressInfo } from 'node:net';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { OpenElementError } from '@openelement/element/authoring';
 import { extractServeMode } from '../src/internal/serve-mode.ts';
 import { ServeErrorCode } from '../src/internal/error-codes.ts';

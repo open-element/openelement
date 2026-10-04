@@ -23,7 +23,8 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
-import { dirname, fromFileUrl, join, resolve } from '@std/path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type {
   CustomElementDeclaration,
   CustomElementField,
@@ -38,7 +39,7 @@ import {
 } from '../../lib/qualify-harness/build-router.ts';
 import { launchQualifyBrowser } from '../../lib/qualify-harness/drive-chromium.ts';
 import { jsonText, readJson } from '../../lib/qualify-harness/json-file.ts';
-import { scaffoldApp } from '../../lib/qualify-harness/scaffold-app.ts';
+import { pathFromRoot, scaffoldApp } from '../../lib/qualify-harness/scaffold-app.ts';
 import {
   applyWorkspaceAliases,
   installAppDependencies,
@@ -53,7 +54,7 @@ import { escapeRegExp } from '../../../tools/lib/text.ts';
  */
 export type InteropCemManifest = CemPackage & { $schema?: string };
 
-const repoRoot = resolve(dirname(fromFileUrl(import.meta.url)), '..', '..', '..');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const defaultFixtureRoot = new URL('./', import.meta.url);
 const requiredFrameworks = ['native', 'lit', 'fast', 'stencil'] as const;
 const requiredProbes = [
@@ -190,10 +191,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringField(value: Record<string, unknown>, key: string): string | undefined {
   return typeof value[key] === 'string' ? (value[key] as string) : undefined;
-}
-
-function pathFromRoot(root: URL | string, relativePath: string): string {
-  return root instanceof URL ? fromFileUrl(new URL(relativePath, root)) : join(root, relativePath);
 }
 
 function equalArrays(left: readonly unknown[], right: readonly unknown[]): boolean {

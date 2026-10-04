@@ -12,7 +12,7 @@ test('esm gate accepts pure ESM modules', () => {
     ]),
   ).toEqual([]);
   expect(
-    scanExportsConditions([{ path: 'p/deno.json', exports: { '.': './src/index.ts' } }]),
+    scanExportsConditions([{ path: 'p/package.json', exports: { '.': './src/index.ts' } }]),
   ).toEqual([]);
 });
 

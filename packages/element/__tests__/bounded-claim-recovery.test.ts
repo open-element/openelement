@@ -31,73 +31,19 @@ import {
   toHtml,
 } from './compiled-runtime/facade-dom.ts';
 import { testProgram } from './compiled-runtime/test-program.ts';
+import { defineLightCounter, makeUniqueTag } from './compiled-runtime/light-counter-harness.ts';
 
 const dom = installFacadeDom();
 
 const { OpenElement, renderDsd } = await import('@openelement/element');
 const { PartProgramClaimError } = await import('../src/internal/compiled/runtime.ts');
 
-// oxlint-disable-next-line no-explicit-any
-type AnyElement = any;
-
-let tagCounter = 0;
-function uniqueTag(prefix: string): string {
-  return `oe-bounded-${prefix}-${++tagCounter}`;
-}
-
-const LIGHT_PROGRAM = {
-  template: [
-    {
-      k: 'el' as const,
-      tag: 'button',
-      attrs: [['type', 'button']] as Array<[string, string]>,
-      children: [
-        { k: 'text' as const, value: 'count: ' },
-        { k: 'part' as const, index: 0 },
-      ],
-    },
-  ],
-  parts: [
-    { k: 'text' as const, index: 0, signal: 'count' },
-    {
-      k: 'event' as const,
-      index: 1,
-      event: 'click',
-      handler: 'increment',
-      action: { kind: 'method' as const, name: 'increment' },
-      path: [0],
-    },
-  ],
-  properties: [
-    {
-      name: 'count',
-      attribute: 'count',
-      type: 'number' as const,
-      converter: 'number' as const,
-      reflect: true,
-      default: 0,
-    },
-  ],
-};
-
-function defineLightCounter(tag: string): CustomElementConstructor {
-  const program = testProgram({ tag, rootMode: 'light', ...LIGHT_PROGRAM });
-  const ctor = class extends OpenElement {
-    increment(this: AnyElement): void {
-      this.count++;
-    }
-  } as unknown as CustomElementConstructor & Record<string, unknown>;
-  ctor.__partProgram = program;
-  ctor.__compiledProperties = program.metadata.properties;
-  ctor.__elementMetadata = program.metadata;
-  ctor.observedAttributes = program.metadata.observedAttributes;
-  dom.registry.define(tag, ctor);
-  return ctor;
-}
+const uniqueTag = makeUniqueTag('bounded');
+const lightCounterDeps = { OpenElement, testProgram, registry: dom.registry };
 
 test('#1381: a light root holding only a formatting newline mounts fresh', () => {
   const tag = uniqueTag('newline');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   void ctor;
 
   const el = dom.document.createElement(tag) as AnyElement;
@@ -121,7 +67,7 @@ test('#1381: indentation, tabs and mixed whitespace are all formatting', () => {
   const whitespace = ['', ' ', '\n', '\t', '\n\t  \n   ', '   \r\n '];
   for (const text of whitespace) {
     const tag = uniqueTag('ws');
-    defineLightCounter(tag);
+    defineLightCounter(lightCounterDeps, tag);
     const el = dom.document.createElement(tag) as AnyElement;
     el.appendChild(dom.document.createTextNode(text));
     dom.document.body.appendChild(el);
@@ -133,7 +79,7 @@ test('#1381: indentation, tabs and mixed whitespace are all formatting', () => {
 
 test('#1381: an element in the light root still fails closed as a claim mismatch', () => {
   const tag = uniqueTag('element-drift');
-  defineLightCounter(tag);
+  defineLightCounter(lightCounterDeps, tag);
   const el = dom.document.createElement(tag) as AnyElement;
   // Real content that the compiled template cannot match: the template's root
   // is a <button>, so a <div> is structural drift, not formatting.
@@ -154,7 +100,7 @@ test('#1381: an element in the light root still fails closed as a claim mismatch
 
 test('#1381: a serializer anchor comment still fails closed', () => {
   const tag = uniqueTag('comment-drift');
-  defineLightCounter(tag);
+  defineLightCounter(lightCounterDeps, tag);
   const el = dom.document.createElement(tag) as AnyElement;
   // The serializer's dynamic anchors are comments, so a comment IS content.
   // A stray one is drift the claim must report, never formatting to drop.
@@ -171,7 +117,7 @@ test('#1381: a serializer anchor comment still fails closed', () => {
 
 test('#1381: visible authored text still fails closed', () => {
   const tag = uniqueTag('text-drift');
-  defineLightCounter(tag);
+  defineLightCounter(lightCounterDeps, tag);
   const el = dom.document.createElement(tag) as AnyElement;
   el.appendChild(dom.document.createTextNode('stray prose'));
 
@@ -189,7 +135,7 @@ test('#1381: visible authored text still fails closed', () => {
 
 test('#1381: whitespace before real content does not rescue the claim', () => {
   const tag = uniqueTag('mixed-drift');
-  defineLightCounter(tag);
+  defineLightCounter(lightCounterDeps, tag);
   const el = dom.document.createElement(tag) as AnyElement;
   // The exact shape the fix must not over-permit: formatting whitespace AND
   // real content. The whitespace is not stripped here, because the root
@@ -211,7 +157,7 @@ test('#1381: whitespace before real content does not rescue the claim', () => {
 
 test('#1381: a serialized light host still claims in place (no regression)', () => {
   const tag = uniqueTag('ssr');
-  const ctor = defineLightCounter(tag);
+  const ctor = defineLightCounter(lightCounterDeps, tag);
   const html = renderDsd(tag, { componentClass: ctor, props: { count: 3 } }).html;
 
   let button: AnyElement | undefined;

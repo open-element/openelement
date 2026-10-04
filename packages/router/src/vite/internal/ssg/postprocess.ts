@@ -4,8 +4,6 @@
  * Pure Node.js fs operations for SSG output post-processing.
  * No Vite dependency - these functions only read/write files.
  *
- * URLPattern is used for route matching per WHATWG section7.2.
- *
  * Post-processing pipeline (called after SSG rendering):
  * 1. injectViewTransitionMeta() - enable cross-page View Transitions
  * 2. injectSpeculationRules() - prefetch/prerender for navigation performance
@@ -32,7 +30,7 @@ const log = createLogger('postprocess');
 
 /** Insert content immediately after <head> opening tag (handles attributes) */
 function insertAfterHead(html: string, content: string): string {
-  // M-11 fix: Use [^>]* instead of [\s\S]*? to prevent backtracking
+  // [^>]* instead of [\s\S]*?: the bounded match prevents backtracking
   const headMatch = html.match(/<head(\s[^>]*)?>/i);
   if (!headMatch) {
     return html.startsWith('<!') || html.startsWith('<html')

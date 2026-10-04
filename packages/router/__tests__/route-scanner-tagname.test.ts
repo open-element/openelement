@@ -11,7 +11,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { expect, test } from 'vitest';
-import { join, relative } from '@std/path';
+import { join, relative } from 'node:path';
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 
 /** Run fn with console.debug captured; returns the captured messages. */

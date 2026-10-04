@@ -40,18 +40,21 @@ test('gate: first failure stops the gate fail-closed', async () => {
 });
 
 test('gate: parseGateStep accepts a root task', () => {
-  const { dir, task } = parseGateStep('typecheck');
-  expect(dir).toEqual(null);
+  const { pkg, task } = parseGateStep('typecheck');
+  expect(pkg).toEqual(null);
   expect(task).toEqual('typecheck');
 });
 
-test('gate: parseGateStep accepts a workspace DIR#TASK step', () => {
-  const { dir, task } = parseGateStep('www#build');
-  expect(dir).toEqual('www');
+test('gate: parseGateStep accepts a package-qualified step', () => {
+  const { pkg, task } = parseGateStep('@openelement/www#build');
+  expect(pkg).toEqual('@openelement/www');
   expect(task).toEqual('build');
+  const unscoped = parseGateStep('fixture#build');
+  expect(unscoped.pkg).toEqual('fixture');
+  expect(unscoped.task).toEqual('build');
 });
 
-test('gate: parseGateStep rejects escapes and shell composition', () => {
+test('gate: parseGateStep rejects escapes, shell composition, and path selectors', () => {
   const bad = [
     '',
     '#build',
@@ -59,6 +62,10 @@ test('gate: parseGateStep rejects escapes and shell composition', () => {
     '../evil#build',
     'apps/../evil#build',
     '/abs#build',
+    // The dir#task path form silently no-ops under vp run: it is a parse
+    // error, never a dispatchable step.
+    'tools/repo#generate:all',
+    'www/build#task',
     'www#build && rm -rf /',
     'www#build;evil',
     'a b#c',

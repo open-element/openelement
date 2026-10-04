@@ -27,7 +27,7 @@ order: 40
 
 claim 对已经存在的 DOM 重放编译后的 Part Program：模板声明过的处理器被绑定，`@property` 字段由宿主 attribute 填充，`pure-island` 首次渲染。未被触及的节点从不重渲染，没有按字符串查找的绑定发现，也不会从 `data-*` attribute 合成事件。
 
-策略决定 chunk 何时被拉取——`load`、`idle`、`visible` 或 `only`。在它到达之前，元素保留服务端标记与样式：页面从不依赖任何 island 已经加载，而永远到不了的 island 除了自己的 chunk 之外不付出任何代价。
+策略决定 chunk 何时被拉取——`load`、`idle`、`visible`、`media` 或 `only`。`media` island 在 island 的 `media` 字段声明查询，chunk 只在该查询匹配期间拉取。在它到达之前，元素保留服务端标记与样式：页面从不依赖任何 island 已经加载，而永远到不了的 island 除了自己的 chunk 之外不付出任何代价。
 
 ## 升级模型
 
@@ -51,7 +51,7 @@ openElement 使用浏览器的 Custom Element upgrade 机制。SSG 先写出 HTM
 
 ### 第 4 层 — `light-dom` — 无 shadow 边界
 
-声明了 light root 的组件把内容渲染进 light DOM，没有 DSD 封装，因此文档级样式直接生效。编译默认值保持 shadow-open；light DOM 按组件选择进入。这类 island 仍适用 hydration 策略。
+声明了 light root 的组件把内容渲染进 light DOM，没有 DSD 封装，因此文档级样式直接生效。编译默认值是 light root；shadow root 按组件选择进入。这类 island 仍适用 hydration 策略。
 
 ## 策略
 

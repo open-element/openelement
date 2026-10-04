@@ -11,7 +11,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { mdxPlugin } from '../src/vite/plugin-mdx.ts';
 import { mdxToCompiledPageSource } from '../src/vite/plugin-mdx-lower.ts';
 import { compiledElementPlugin } from '@openelement/element/compiler';

@@ -1,6 +1,6 @@
 /**
- * Generated-module emission for the compiled grammar (#1473 split — the emit
- * stage of the former compile facade): renders the compiled module text with
+ * Generated-module emission for the compiled grammar (#1473 split): renders
+ * the compiled module text with
  * verbatim copies, synthesized statics and forwarding handlers, each mapped
  * through a real Source Map v3 segment.
  */
@@ -230,7 +230,7 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
     // and is carried by the copied imports above.
     if (rewritten !== null) pushVerbatim(rewritten, statement);
   }
-  // Native pack fast-check types the generated __computedFields through
+  // The consumer:packaged gate types the generated __computedFields through
   // ReadonlySignal: reuse the source's local binding (possibly aliased), or
   // add a type-only import when the source never bound it. The specifier is
   // fixed: computed factories already require the canonical element import.
@@ -314,7 +314,7 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
   }class ${className} extends ${openElementLocalName} {`;
   push(classLine);
   mapLineAt(codeLines.length, classLine.indexOf(className), classNode.name!, className);
-  // Native pack fast-check: every generated static carries an explicit type.
+  // Consumer:packaged gate: every generated static carries an explicit type.
   // Module-local constants use typeof (exact, no API growth); synthesized
   // boolean flags use boolean with override (the base declares them); styles
   // keeps the authored annotation with override (the base declares styles).
@@ -335,7 +335,7 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
     // over the instance's plain property signals (facade + renderDsd run the
     // same factories, so server output and client claim read one value set).
     // The outer annotation gives every factory an explicit function type
-    // (native pack fast-check): the return is the authored field type, the
+    // (consumer:packaged gate): the return is the authored field type, the
     // signal record is keyed per dependency with its own signal value type.
     // Inner factories stay textually unchanged and contextually typed.
     const plainFieldByName = new Map(

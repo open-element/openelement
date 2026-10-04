@@ -6,7 +6,8 @@
  * and never from a hand-synced index.
  * Fails closed: an unenumerable dynamic route or a duplicate fails the build.
  */
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../site-config.ts';
 import { loadCollectionData } from '../lib/content.ts';
 import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
@@ -19,7 +20,7 @@ import process from 'node:process';
 export const SITE_DIST = 'www/dist';
 const SITE_ROUTES = 'www/app/routes';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const siteRoot = join(repoRoot, 'www', '');
 
 export async function generateSiteSitemap(dist = join(repoRoot, SITE_DIST)): Promise<string[]> {

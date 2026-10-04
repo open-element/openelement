@@ -23,7 +23,8 @@
  */
 
 import { expect, test } from 'vitest';
-import { type FacadeDom, FacadeElement, FacadeEvent, installFacadeDom } from './facade-dom.ts';
+import { type FacadeDom, FacadeElement, installFacadeDom } from './facade-dom.ts';
+import { cleanup, click, pendingHost } from './pre-upgrade-helpers.ts';
 import { testProgram } from './test-program.ts';
 
 // The facade captures its HTMLElement base at module evaluation time.
@@ -43,25 +44,6 @@ const { OpenElement, ensurePreHydrationClickCapture, renderDsd } =
 // oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
-function click(): FacadeEvent {
-  return new FacadeEvent('click', { bubbles: true, composed: true });
-}
-
-/** A connected dash-tagged host with one button child. */
-function pendingHost(tag: string): { host: FacadeElement; button: AnyElement } {
-  const host = new FacadeElement(tag, dom.document);
-  const button = new FacadeElement('button', dom.document);
-  host.appendChild(button);
-  dom.document.body.appendChild(host);
-  return { host, button };
-}
-
-function cleanup(...hosts: FacadeElement[]): void {
-  for (const host of hosts) {
-    if (host.parentNode) host.parentNode.removeChild(host);
-  }
-}
-
 // ─── Filter: pending captures, background and live traffic do not ───
 
 test('bounded: pending island clicks capture, background clicks do not', () => {
@@ -69,7 +51,7 @@ test('bounded: pending island clicks capture, background clicks do not', () => {
     accept: acceptPendingIslandEvent,
   });
   try {
-    const { host, button } = pendingHost('oe-bounded-pending');
+    const { host, button } = pendingHost(dom, 'oe-bounded-pending');
     const plain = new FacadeElement('div', dom.document);
     const plainButton = new FacadeElement('button', dom.document);
     plain.appendChild(plainButton);
@@ -92,7 +74,7 @@ test('bounded: settled-island traffic adds nothing (same target and many targets
     accept: acceptPendingIslandEvent,
   });
   try {
-    const { host, button } = pendingHost('oe-bounded-settled');
+    const { host, button } = pendingHost(dom, 'oe-bounded-settled');
     try {
       markPreUpgradeIslandSettled(host as unknown as object);
       for (let i = 0; i < 10; i++) button.dispatchEvent(click());
@@ -144,8 +126,8 @@ test('bounded: detached targets are swept on release', () => {
     accept: acceptPendingIslandEvent,
   });
   try {
-    const first = pendingHost('oe-bounded-gone-a');
-    const second = pendingHost('oe-bounded-gone-b');
+    const first = pendingHost(dom, 'oe-bounded-gone-a');
+    const second = pendingHost(dom, 'oe-bounded-gone-b');
     first.button.dispatchEvent(click());
     second.button.dispatchEvent(click());
     expect(capture.events.length).toEqual(2);
@@ -177,7 +159,7 @@ test('bounded: the capacity cap fails closed without evicting pending replays', 
     const over = MAX_PRE_UPGRADE_CAPTURED_EVENTS + 10;
     let firstButton: unknown;
     for (let i = 0; i < over; i++) {
-      const { host, button } = pendingHost(`oe-bounded-cap-${i}`);
+      const { host, button } = pendingHost(dom, `oe-bounded-cap-${i}`);
       hosts.push(host);
       if (i === 0) firstButton = button;
       button.dispatchEvent(click());
@@ -358,7 +340,7 @@ test('declared: 64 undeclared third-party targets add nothing, the declared isla
       capture.events.length,
       'undeclared third-party custom elements must never enter the pending queue',
     ).toEqual(0);
-    const { host, button } = pendingHost('oe-declared-real');
+    const { host, button } = pendingHost(dom, 'oe-declared-real');
     try {
       button.dispatchEvent(click());
       expect(capture.events.length, 'the declared delayed island still captures').toEqual(1);

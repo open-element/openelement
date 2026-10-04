@@ -6,9 +6,9 @@
  * gate, the shell commitment with its typed seed attribute, the bounded
  * wake/queue pump behind a `highWaterMark: 0` ReadableStream, the
  * cancellation/timeout sweep, the Part backfill frames with their terminal
- * error frames, and the no-JS tail. Migrated verbatim from the
- * generated-entry template strings (entry-stream-runtime.ts, #1470 block d)
- * so the pump is visible to `deno check` and directly unit-testable.
+ * error frames, and the no-JS tail. The pump lives in this real module rather
+ * than inside a codegen template string, so it is directly unit-testable
+ * (#1470 block d).
  *
  * The per-route shell gate (`__createDeferredPageShell`) is the typed
  * {@linkcode createDeferredPageShell} factory (Amendment 1): the
@@ -526,7 +526,7 @@ export function createDeferredPageShell(
     }
     // `return await` (not a bare return) keeps this an async function in the
     // linter's eyes, so the fail-closed check above rejects instead of
-    // throwing synchronously — the emitted original was async too.
+    // throwing synchronously.
     return await createDeferredDsdExecutor({
       componentClass: Cls,
       props,

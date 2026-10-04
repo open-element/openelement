@@ -15,13 +15,14 @@
  * among the verified runner spellings (npm exec / npx / pnpm dlx) while the
  * package and dist-tag stay the CLI's.
  */
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createInstallCommand } from '../../packages/create/src/install-command.ts';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
 export const INSTALL_COMMAND_ARTIFACT = 'www/app/data/_generated-install-command.ts';
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 /**
  * Files that display the install command to a reader. Each must either use the

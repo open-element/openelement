@@ -17,7 +17,7 @@
  * extraction had left in place is gone — no module cycle remains.
  */
 
-import { dirname, join, relative } from '@std/path';
+import { dirname, join, relative } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import process from 'node:process';

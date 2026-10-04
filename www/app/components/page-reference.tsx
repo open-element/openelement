@@ -259,7 +259,7 @@ export default class ReferencePage extends OpenElement {
                 <p>{this.footnote}</p>
                 <p>
                   {this.footnoteCheckPre}
-                  <code>deno task package-surface:check</code>
+                  <code>pnpm --dir tools/repo run interface:snapshot</code>
                   {this.footnoteCheckPost}
                 </p>
               </footer>

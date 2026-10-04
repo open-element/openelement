@@ -10,17 +10,13 @@ An `.mdx` file in the routes directory is a route like any other: `app/routes/ab
 
 The build lowers the file to a compiled page module before the compiled-element transform runs, so an MDX page ends up in exactly the same Part Program pipeline as an authored `.tsx` page; the element tag is derived from the route-relative file path so the generated entry registers the tag the program declares. Nothing about Markdown reaches the browser: the output is ordinary HTML with the page content in the host's shadow root.
 
-Markdown parsing is the one dependency this path adds, and it is an optional peer of `@openelement/router` — it is only resolved when an `.mdx` file actually enters the build. Add it to the app's import map:
+Markdown parsing is the one dependency this path adds, and it is an optional peer of `@openelement/router` — it is only resolved when an `.mdx` file actually enters the build. Install it in the app:
 
-```json
-{
-  "imports": {
-    "marked": "npm:marked@^15.0.0"
-  }
-}
+```sh
+pnpm add marked@^15.0.0
 ```
 
-If an `.mdx` route exists without that resolution, the build fails with install guidance instead of emitting a broken page.
+If an `.mdx` route exists without that dependency, the build fails with install guidance instead of emitting a broken page.
 
 ## Components
 

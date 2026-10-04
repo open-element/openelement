@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { openElement } from '../src/vite/app-vite.ts';
 
 // ─── Plugin structure ──────────────────────────────────────────

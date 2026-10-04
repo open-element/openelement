@@ -7,7 +7,7 @@
  * the codegen template strings invisibly:
  *
  *   a) the generated source parses as a standalone module (TypeScript parse
- *      diagnostics must be empty — the bundler-facing "deno check" floor);
+ *      diagnostics must be empty — the bundler-facing parse floor);
  *   b) the entry carries NO runtime helper function bodies: every function
  *      DECLARATION in the emitted source must be an allowlisted name (since
  *      Amendment 1 the request-time section allows none — the deferred-shell
@@ -25,7 +25,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import ts from 'typescript';
 import { expect, test } from 'vitest';
-import { dirname, resolve } from '@std/path';
+import { dirname, resolve } from 'node:path';
 import { DANGEROUS_KEYS } from '../../element/src/internal/core/security.ts';
 import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codegen.ts';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';

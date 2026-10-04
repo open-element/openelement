@@ -167,8 +167,8 @@ export default definePage(BlogPostPage, {
 ### lib/blog.ts —— 语法高亮配方（可选）
 
 ```ts
-import { marked } from 'npm:marked@^15';
-import hljs from 'npm:highlight.js@^11';
+import { marked } from 'marked';
+import hljs from 'highlight.js';
 import type { CollectionOptions } from '../lib/content.ts';
 
 // Default marked behavior + hljs token spans. hljs output only adds class

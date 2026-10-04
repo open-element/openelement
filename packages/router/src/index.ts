@@ -48,9 +48,8 @@ export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/eleme
 //     shape inline (createNitroRequestContext) because generated Nitro server
 //     output must stay free of unresolved bare package imports; the type-only
 //     import in nitro-mount pins it to this contract.
-// The historical Hono driver bridge (createHonoRequestContext) was removed:
-// it had zero production consumers and left the "official default request
-// driver bridge" API as an empty shell (🟡-F).
+// There is no request-driver-bridge export: each adapter owns its own
+// request-event -> RequestContext construction.
 export { createRequestContext } from './model.ts';
 export type { CreateRequestContextOptions, OpenElementRequestContext } from './model.ts';
 

@@ -25,8 +25,9 @@ Deno-native distribution decision in ADR-0108).
   `tools/repo` evidence machinery, www site tooling, and the SaaS app lose
   every `Deno.*` API in favor of `node:fs`, `node:process`,
   `node:child_process`, and friends; the ports-and-adapters bridge and its
-  gate are deleted outright. A node-porting residuals inventory records what
-  deliberately stays Deno-hosted (release/qualify tooling, #1387).
+  gate are deleted outright. A node-porting residuals inventory tracks what
+  the port left behind and each residue's expiry path (release/qualify
+  tooling, #1387).
 - **One workspace, one lockfile (B2).** All 19 `deno.json` manifests become
   `package.json` members of a single pnpm workspace (`pnpm-workspace.yaml`,
   one `pnpm-lock.yaml`); all 7 `deno.lock` files and the vendor/
@@ -48,12 +49,11 @@ Deno-native distribution decision in ADR-0108).
   lifecycle scripts in `package.json` (the Deno import map and its task
   surface retire), a generated `tsconfig.json` behind `pnpm check`, and
   `node --test` as the starter test runner. The documented create bootstrap
-  stays the `deno run … npm:@openelement/create@alpha` invocation — Deno
-  consumers resolve the packages through `npm:` specifiers; nothing else in
-  the consumer path needs a Deno install. Runtime floors are stated per
-  verified fact: Node.js
-  24+ for generated projects (the packed engines' floor, CI-exercised),
-  Deno 2.9+ only for the bootstrap command. The packed-starter consumer
+  is the `npm exec @openelement/create@alpha` invocation — the Deno consumer
+  surface retired with the host, so nothing in the consumer path needs a
+  Deno install. Runtime floors are stated per verified fact: Node.js
+  24+ for generated projects (the packed engines' floor, CI-exercised).
+  The packed-starter consumer
   qualifications and the starter smoke drive the starter's own pnpm scripts
   (dev/check/test/build/start/preview), the preview CLI spawns the app's own
   vite on a Node host, and the guides' install/build commands (README,

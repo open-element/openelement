@@ -58,7 +58,7 @@ qualification is external pending; see
 
 ## Prerequisites
 
-- Deno (workspace tasks), Node (Nitro `node` preset run),
+- Node.js 24.2+ and pnpm (all workspace tasks),
 - Supabase CLI + Docker (local emulator; migrations), or a hosted project,
 - Cloudflare account for deployment (wrangler; see
   [`docs/runbooks/payment-events.md`](../../docs/runbooks/payment-events.md)
@@ -70,11 +70,12 @@ qualification is external pending; see
 ## Tasks
 
 ```sh
-deno task build        # OpenElement build (dist/, request-time server entry)
-deno task nitro:build  # Nitro build (OPEN_ELEMENT_NITRO_PRESET=cloudflare_module → .output-workers/)
-deno task start        # local run of the built server (http://localhost:4173)
-deno task check        # type-check routes, islands, shell, lib
-deno task test         # unit smoke for route logic (stubbed Supabase client)
+pnpm --dir apps/saas run build               # OpenElement build (dist/, request-time server entry)
+pnpm --dir apps/saas run nitro:build         # Nitro build, node-server preset → .output-node/
+pnpm --dir apps/saas run nitro:build-workers # Nitro build, cloudflare_module preset → .output-workers/
+pnpm --dir apps/saas run start               # local run of the built server (http://localhost:4173)
+pnpm --dir apps/saas run check               # type-check routes, islands, shell, lib
+pnpm --dir apps/saas run test                # unit smoke for route logic (stubbed Supabase client)
 ```
 
 ## Migrations

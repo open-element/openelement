@@ -1,16 +1,15 @@
 /**
  * Task-wiring tripwire for release scripts.
  *
- * Deno 2.9 rejects a repeated `--allow-run=<name>` flag ("cannot be used
- * multiple times"), so a script that spells two programs as separate
- * `--allow-run=x --allow-run=y` flags starts nothing and silently fails the
- * whole `release:check` chain. These tests read the real script definitions
- * (the package.json task surface since the B2 manifest conversion), not
- * internal functions, and fail if a duplicated flag or a bypassed script is
- * reintroduced.
+ * First-party package.json scripts run on the node host: there is no Deno
+ * binary on PATH to invoke and no permission model to scope, so a
+ * `--allow-run` flag or a deno invocation in any task file is a script that
+ * cannot run. These tests read the real script definitions, not internal
+ * functions, and fail if either shape is reintroduced — the flag-free task
+ * surface stays a pinned invariant instead of a vacuous pass.
  */
 import { expect, test } from 'vitest';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import { REQUIRED_PACKED_CONSUMERS } from './candidate-evidence.ts';
 import { readFile } from 'node:fs/promises';
 import { commandOutput } from './node-command.ts';
@@ -36,22 +35,19 @@ const TASK_FILES = [
   'www/package.json',
 ];
 
-test('task wiring: no single deno invocation repeats a --allow-run flag', async () => {
+test('task wiring: task scripts carry no --allow-run flag and no deno invocation', async () => {
   for (const path of TASK_FILES) {
     for (const [name, command] of Object.entries(await tasks(path))) {
-      // Scripts chain `deno run <outer flags> run-in.ts -- deno run <inner
-      // flags>` (sometimes with `&&`); a repeated flag is only fatal within
-      // one invocation, so count per deno invocation.
-      for (const subCommand of command.split('&&')) {
-        for (const part of subCommand.split(/\s--\s/)) {
-          const repeats = [...part.matchAll(/--allow-run(?:\s|=|$)/g)].length;
-          expect(
-            repeats <= 1,
-            `${path}#${name}: --allow-run appears ${repeats} times in one invocation; ` +
-              `Deno 2.9 rejects repeated flags (combine programs as --allow-run=a,b)`,
-          ).toBeTruthy();
-        }
-      }
+      expect(
+        /--allow-run(?:\s|=|$)/.test(command),
+        `${path}#${name}: task scripts run on the node host with no permission ` +
+          `model — remove the --allow-run flag: ${command.slice(0, 160)}`,
+      ).toBeFalsy();
+      expect(
+        /\bdeno\b/.test(command),
+        `${path}#${name}: task scripts must not spawn the deno binary ` +
+          `(no deno host in this workspace): ${command.slice(0, 160)}`,
+      ).toBeFalsy();
     }
   }
 });
@@ -82,7 +78,7 @@ test('task wiring: release:check invokes the registry task, not an internal scri
   const command = (await tasks('package.json'))['release:check'];
   expect(command, 'release:check must exist').toBeTruthy();
   expect(
-    command.includes('tools/repo#release:registry-check'),
+    command.includes('@openelement/tools-repo#release:registry-check'),
     'release:check must call the release:registry-check task',
   ).toBeTruthy();
   expect(
@@ -90,8 +86,8 @@ test('task wiring: release:check invokes the registry task, not an internal scri
     'release:check must not bypass the task by calling the internal script',
   ).toBeTruthy();
   expect(
-    command.includes('tools/release#gate:packed') &&
-      command.includes('tools/release#publish:npm:dry-run'),
+    command.includes('@openelement/tools-release#gate:packed') &&
+      command.includes('@openelement/tools-release#publish:npm:dry-run'),
     'release:check must still run the packed gate and publish dry-run',
   ).toBeTruthy();
 });
@@ -99,8 +95,8 @@ test('task wiring: release:check invokes the registry task, not an internal scri
 test('task wiring: release:check generates site data before the registry check', async () => {
   const releaseCheck = (await tasks('package.json'))['release:check'];
   expect(releaseCheck, 'release:check must exist').toBeTruthy();
-  const generate = releaseCheck.indexOf('tools/repo#generate:all');
-  const registry = releaseCheck.indexOf('tools/repo#release:registry-check');
+  const generate = releaseCheck.indexOf('@openelement/tools-repo#generate:all');
+  const registry = releaseCheck.indexOf('@openelement/tools-repo#release:registry-check');
   expect(generate !== -1, 'release:check must run the generators (generate:all)').toBeTruthy();
   expect(
     registry !== -1,
@@ -125,8 +121,8 @@ test('task wiring: gate:source generates site data before typecheck', async () =
   // reference and site content data the typecheck imports); pinning the
   // individual task names here would re-introduce the hand-maintained
   // coupling generate:all exists to delete.
-  const generate = gateSource.indexOf('tools/repo#generate:all');
-  const typecheck = gateSource.indexOf('tools/repo#typecheck');
+  const generate = gateSource.indexOf('@openelement/tools-repo#generate:all');
+  const typecheck = gateSource.indexOf('@openelement/tools-repo#typecheck');
   expect(generate !== -1, 'gate:source must run the generators (generate:all)').toBeTruthy();
   expect(typecheck !== -1, 'gate:source must typecheck').toBeTruthy();
   expect(
@@ -139,11 +135,15 @@ test('task wiring: gate:source generates site data before typecheck', async () =
 test('task wiring: gate:release generates site data before its own consumers', async () => {
   const gateRelease = (await tasks('tools/repo/package.json'))['gate:release'];
   expect(gateRelease, 'gate:release must exist').toBeTruthy();
-  const generate = gateRelease.indexOf('tools/repo#generate:all');
+  const generate = gateRelease.indexOf('@openelement/tools-repo#generate:all');
   expect(generate !== -1, 'gate:release must run the generators (generate:all)').toBeTruthy();
   // Each generator --check in the release train reads the output of
   // generate:all, so the generators must come first there too.
-  for (const consumer of ['www#check:api-reference', 'www#check:content-data', 'site:build']) {
+  for (const consumer of [
+    '@openelement/www#check:api-reference',
+    '@openelement/www#check:content-data',
+    'site:build',
+  ]) {
     const index = gateRelease.indexOf(consumer);
     expect(index !== -1, `gate:release must run ${consumer}`).toBeTruthy();
     expect(

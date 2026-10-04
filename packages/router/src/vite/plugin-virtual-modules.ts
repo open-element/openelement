@@ -3,8 +3,7 @@
  *
  * `open:virtual-entry` resolves the three virtual ids the pipeline owns — the
  * SSR entry, the Rollup build trigger, and the dev SSR polyfill — and renders
- * each from the shared plugin state. Moved out of plugin.ts verbatim: hook
- * behavior and plugin names are unchanged, and plugin.ts only composes hooks.
+ * each from the shared plugin state; plugin.ts only composes hooks.
  */
 
 import type { Plugin } from 'vite';

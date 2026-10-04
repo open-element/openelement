@@ -1,5 +1,6 @@
 /**
- * candidate-evidence adversarial tests (schema v2).
+ * candidate-evidence adversarial tests (schema v4 — the vp task-dispatch
+ * surface).
  *
  * The validator is the release trust boundary: this suite builds one fully
  * valid bundle, proves it is accepted, and then mutates every contract field —
@@ -10,7 +11,7 @@
  */
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../tests/lib/vitest-asserts.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import {
   carryPackedTarballs,
   collectBundleFailures,
@@ -46,6 +47,7 @@ import {
   materializeEvidencePath,
   normalizeEvidencePath,
 } from './candidate-steps.ts';
+import { vpTaskArgv } from './vp-dispatch.ts';
 import { repoRoot, toolVersions, workspaceTypescriptVersion } from './candidate-evidence-record.ts';
 import { createDeterministicTarGz } from '../lib/deterministic-tar.ts';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -103,17 +105,17 @@ function stepArgv(job: string, name: string): string[] {
   }
   const staticTable: Record<string, Record<string, string[]>> = {
     'fast-checks': {
-      'fmt-check': ['pnpm', 'run', 'fmt:check'],
-      lint: ['pnpm', 'run', 'lint'],
-      markdown: ['pnpm', '--dir', 'tools/repo', 'run', 'lint:markdown'],
-      typecheck: ['pnpm', 'run', 'typecheck'],
+      'fmt-check': vpTaskArgv('openelement', 'fmt:check'),
+      lint: vpTaskArgv('openelement', 'lint'),
+      markdown: vpTaskArgv('@openelement/tools-repo', 'lint:markdown'),
+      typecheck: vpTaskArgv('openelement', 'typecheck'),
     },
     'source-matrix': {
-      'gate-source': ['pnpm', '--dir', 'tools/repo', 'run', 'gate:source'],
+      'gate-source': vpTaskArgv('@openelement/tools-repo', 'gate:source'),
     },
     packed: {
-      'gate-packed': ['pnpm', '--dir', 'tools/release', 'run', 'gate:packed'],
-      'publish-npm-dry-run': ['pnpm', '--dir', 'tools/release', 'run', 'publish:npm:dry-run'],
+      'gate-packed': vpTaskArgv('@openelement/tools-release', 'gate:packed'),
+      'publish-npm-dry-run': vpTaskArgv('@openelement/tools-release', 'publish:npm:dry-run'),
     },
   };
   const command = staticTable[job]?.[name];
@@ -372,8 +374,7 @@ test('packed tarballs travel with job evidence and are hash-checked on aggregati
     const carried = `${recorded}/${first.files['@openelement/example']}`;
     const second = await stageTarballEvidence(packages, () => carried, aggregated, first.hashes);
     expect(second).toEqual(first);
-    // node readFile returns a Buffer; compare as a plain Uint8Array like the
-    // pre-port Deno.readFile result.
+    // node readFile returns a Buffer; compare as a plain Uint8Array.
     expect(
       new Uint8Array(await readFile(`${aggregated}/${second.files['@openelement/example']}`)),
     ).toEqual(encoder.encode('release archive bytes'));
@@ -425,9 +426,8 @@ test('valid packed evidence capsule validates and carries without the workspace'
   expect(await collectPackedTarballFailures(extras, { read })).toEqual([]);
   const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
-    // ponytail: the guard simulates an aggregate runner with no producer
-    // workspace — any packages/* fallback throws (upgrade: prove it with the
-    // real aggregate CLI after deleting packages tgz files).
+    // The guard simulates an aggregate runner with no producer
+    // workspace — any packages/* fallback throws.
     const guarded = (path: string) => {
       if (!path.startsWith('tarballs/')) throw new Error(`workspace fallback: ${path}`);
       return read(path);
@@ -634,7 +634,7 @@ async function shared(): Promise<Fixture> {
   return cached;
 }
 
-test('valid schema-v2 bundle and jobs pass the strict contract', async () => {
+test('valid schema-v4 bundle and jobs pass the strict contract', async () => {
   const f = await shared();
   expect(await failuresFor(clone(f.bundle), f)).toEqual([]);
   expect(
@@ -1099,7 +1099,10 @@ test('step argv, cwd, timing, and logs are strict', async () => {
     [
       'command-wrong-task',
       (b) => {
-        bundleStep(b, 'fresh-clone', 'task-gate-source').command = ['pnpm', 'run', 'check'];
+        bundleStep(b, 'fresh-clone', 'task-gate-source').command = vpTaskArgv(
+          'openelement',
+          'check',
+        );
       },
       'task-gate-source',
     ],
@@ -1934,13 +1937,15 @@ test('bundle validation recomputes the site e2e sidecar from the staged raw repo
 
 test('packedRollupFromLog derives the artifact scan and consumers from the gate log', () => {
   const healthy = [
-    'PASS tools/release#package-artifacts:check (13.7s)',
+    'PASS @openelement/tools-release#package-artifacts:check:prepacked (13.7s)',
     ...REQUIRED_PACKED_CONSUMERS.map((consumer) => `PASS ${consumer} (40.8s)`),
   ].join('\n');
   const parsed = packedRollupFromLog(healthy);
   expect(parsed.artifactCheck).toEqual(true);
   expect(parsed.consumers.length).toEqual(REQUIRED_PACKED_CONSUMERS.length);
-  expect(packedRollupFromLog('PASS tools/release#pack:dry-run').artifactCheck).toEqual(false);
+  expect(packedRollupFromLog('PASS @openelement/tools-release#pack:dry-run').artifactCheck).toEqual(
+    false,
+  );
 });
 
 test('toolVersions takes TypeScript from the installed workspace, failing closed otherwise', async () => {

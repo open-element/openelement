@@ -20,7 +20,7 @@
  * from candidate-evidence-record.ts.
  */
 
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';

@@ -2,13 +2,12 @@
 import { tmpdir } from 'node:os';
 import { commandOutput } from '../repo/node-command.ts';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { readFileSync, statSync } from 'node:fs';
-import { assert, assertEquals } from '@std/assert';
-import { join, resolve } from '@std/path';
+import { strict as assert } from 'node:assert/strict';
+import { join, resolve } from 'node:path';
 import { chromium, firefox, webkit } from '@playwright/test';
 import ts from 'typescript';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
-import { declarationTypeEdges } from './consumer-packaged-shared.ts';
+import { walkPackedDeclarations } from './consumer-packaged-shared.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 
 const root = resolve(import.meta.dirname!, '../..');
@@ -80,53 +79,20 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
     'Router must not be installed',
   );
   await run(['node', 'node_modules/vite/bin/vite.js', 'build']);
-  // Follow local and external declaration edges from the browser entry, rather than
-  // rejecting separate supported tooling declarations elsewhere in the package.
-  const seen = new Set<string>();
-  const declarations = async (path: string): Promise<void> => {
-    if (seen.has(path)) return;
-    seen.add(path);
-    const text = await readFile(path, 'utf8');
-    for (const { fileName } of ts.preProcessFile(text).importedFiles) {
-      assert(
-        !/compiler|router\/src\/(?:vite|cli)|\bvite\b|^node:|workspace:/.test(fileName),
-        `Browser declaration leak: ${path} -> ${fileName}`,
-      );
-    }
-    // Resolution follows type-bearing edges only (see declarationTypeEdges in
-    // consumer-packaged-shared.ts): the vp generator emits side-effect-only
-    // imports into .d.ts that the previous generator dropped, and they carry
-    // no consumer type surface.
-    for (const fileName of declarationTypeEdges(text)) {
-      const resolved = ts.resolveModuleName(
-        fileName,
-        path,
-        {
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          module: ts.ModuleKind.ESNext,
-        },
-        {
-          fileExists: (name) => {
-            try {
-              return statSync(name).isFile();
-            } catch {
-              return false;
-            }
-          },
-          readFile: (name) => {
-            try {
-              return readFileSync(name, 'utf8');
-            } catch {
-              return undefined;
-            }
-          },
-        },
-      ).resolvedModule;
-      assert(resolved, `Unresolved browser declaration: ${path} -> ${fileName}`);
-      await declarations(resolved.resolvedFileName);
-    }
-  };
-  await declarations(join(author, 'node_modules/@openelement/element/src/index.d.ts'));
+  // Follow local and external declaration edges from the browser entry through
+  // the shared packed-declaration walker, rather than rejecting separate
+  // supported tooling declarations elsewhere in the package: every specifier
+  // is leak-scanned and every type-bearing edge must resolve to a packed
+  // declaration (side-effect-only imports carry no type surface and stay out
+  // of the resolution walk, exactly as in the router/ui legs).
+  const declarationWalk = walkPackedDeclarations({
+    entries: [join(author, 'node_modules/@openelement/element/src/index.d.ts')],
+  });
+  if (declarationWalk.problems.length > 0) {
+    throw new Error(
+      `Packed element declaration graph violations:\n${declarationWalk.problems.join('\n')}`,
+    );
+  }
   const map = JSON.parse(await readFile(join(author, 'dist/counter.js.map'), 'utf8'));
   assert(
     map.sources.some((s: string) => s.endsWith('counter.tsx')),
@@ -146,8 +112,7 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
     join(consumer, 'index.html'),
     '<!doctype html><proof-counter></proof-counter><script type="module" src="/counter.js"></script>',
   );
-  // Qualification server on node:http via the shared fetch adapter
-  // (the deno-host Deno.serve call retired with the B2 host move).
+  // Qualification server on node:http via the shared fetch adapter.
   let serverOrigin = '';
   const serve = await import('../../packages/router/src/internal/node-http.ts');
   const server: import('node:http').Server = serve.serveFetch({
@@ -171,12 +136,12 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
         await page.goto(serverOrigin);
         const button = page.locator('proof-counter button');
         await button.waitFor();
-        assertEquals(await button.textContent(), 'Count: 0');
-        assertEquals(await button.getAttribute('title'), '0');
+        assert.strictEqual(await button.textContent(), 'Count: 0');
+        assert.strictEqual(await button.getAttribute('title'), '0');
         await button.click();
         await page.waitForFunction('document.querySelector("proof-counter").count === 1');
-        assertEquals(await button.textContent(), 'Count: 1');
-        assertEquals(await button.getAttribute('title'), '1');
+        assert.strictEqual(await button.textContent(), 'Count: 1');
+        assert.strictEqual(await button.getAttribute('title'), '1');
         console.log(
           `PASS ${type.name()} ${browser.version()}: packed Element registration, attribute and event update`,
         );
@@ -191,7 +156,7 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
     server?.closeAllConnections();
   }
   console.log(
-    `PASS: Router absent, browser module graph clean, ${seen.size} declaration modules checked, source map retained`,
+    `PASS: Router absent, browser module graph clean, ${declarationWalk.modules} declaration modules checked, source map retained`,
   );
 } finally {
   await rm(author, { recursive: true });

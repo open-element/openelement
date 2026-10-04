@@ -43,13 +43,11 @@ export interface LocalIslandMeta {
 export type StoredIslandMeta = LocalIslandMeta & Partial<IslandDecl>;
 
 /**
- * Single source of truth for island render directives (alpha.17 B1).
- *
- * Previously the `hydrate === 'only' ? false : meta?.ssr` coercion and the
- * `hydrate || upgradeStrategy || 'idle'` fallback were copied across
- * plugin.ts, entry-descriptor.ts, island-scanner.ts and build-client.ts,
- * and the copies had diverged (package islands in plugin.ts skipped the
- * upgrade-strategy fallback).
+ * Single source of truth for island render directives: the
+ * `hydrate === 'only' ? false : meta?.ssr` coercion and the
+ * `hydrate || upgradeStrategy || 'idle'` fallback are defined here once, and
+ * every consumer (plugin.ts, entry-descriptor.ts, island-scanner.ts,
+ * build-client.ts) resolves through them.
  */
 
 /** Coerce ssr/dsd for client:only islands: hydrate 'only' forces both off. */
@@ -535,7 +533,7 @@ export async function scanPackageManifests(
   const allManifests: OpenElementPackageManifest[] = [];
 
   for (const pkg of packageNames) {
-    // @vite-ignore suppresses unanalyzable-dynamic-import JSR warning.
+    // @vite-ignore suppresses Vite's unanalyzable-dynamic-import warning.
     // The `./manifest` subpath is preferred when a package declares one: it
     // loads only the manifest module, so a node-host build-time scan never
     // pulls the package's component modules (.tsx), which node cannot load.
@@ -594,8 +592,8 @@ export async function scanPackageManifests(
 }
 
 /**
- * v0.25: AST-verified — error message classification, regex is the appropriate tool
- * for matching runtime error strings from failed dynamic imports.
+ * Error message classification: regex is the appropriate tool for matching
+ * runtime error strings from failed dynamic imports.
  */
 function isBrowserOnlyPackageImportError(error: unknown): boolean {
   const message = formatError(error);

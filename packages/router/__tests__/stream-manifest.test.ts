@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import ts from 'typescript';
 import { createDeferredDsdExecutor } from '@openelement/element';
 import { compileElementProgram } from '@openelement/element/compiler';

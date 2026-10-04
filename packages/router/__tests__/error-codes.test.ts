@@ -12,7 +12,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { OpenElementError } from '@openelement/element';
 import { resolvePageDocument } from '../src/document.ts';
 import type { PagePropsContext } from '../src/index.ts';

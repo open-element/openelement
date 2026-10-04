@@ -7,7 +7,7 @@
  *     is not proof, and an unexpected extra project means the suite was run
  *     with a different config;
  *   - per-browser `passed >= SITE_E2E_MIN_PASSED_PER_PROJECT` — the floor
- *     tracks the real suite size (currently 231 tests per browser, 693
+ *     tracks the real suite size (currently 243 tests per browser, 729
  *     total) and MUST be raised when the suite grows, never lowered to force
  *     a pass, so a `--grep`-shrunk run cannot look green;
  *   - `expected` (Playwright `stats.expected`) plus `flaky` is a safe integer
@@ -58,8 +58,8 @@
 export const SITE_E2E_PROJECTS = ['chromium', 'firefox', 'webkit'] as const;
 
 /**
- * Minimum passed tests per browser. The real suite is currently 234 per
- * browser (702 total); 200 is deliberately conservative. Raise this when the
+ * Minimum passed tests per browser. The real suite is currently 243 per
+ * browser (729 total); 200 is deliberately conservative. Raise this when the
  * suite grows — see the header contract.
  */
 export const SITE_E2E_MIN_PASSED_PER_PROJECT = 200;

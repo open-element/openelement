@@ -23,8 +23,8 @@ export type { SafeHtml, UnsafeHtml };
 
 /**
  * Escape a string for safe HTML text content insertion.
- * Uses single-pass replacement for performance (P-01 fix).
- * Branded types are compile-time only - removed dead runtime branches (M-01 fix).
+ * Uses single-pass replacement for performance. The Safe/Unsafe brands are
+ * compile-time only; this runtime escaping is the enforcement point.
  */
 const ESCAPE_MAP: Record<string, string> = {
   '&': '&amp;',
@@ -135,7 +135,7 @@ export function documentStreamParts(options: DocumentWrapOptions = {}): {
     cspNonce,
     streamBootstrap,
   } = options;
-  // v0.14.5: CSP nonce format validation per CSP spec (base64 value)
+  // CSP nonce format validation per the CSP spec (base64 value)
   const NONCE_RE = /^[A-Za-z0-9+/=_-]+$/;
   const validNonce = cspNonce && NONCE_RE.test(cspNonce) ? cspNonce : undefined;
   if (cspNonce && !validNonce) {
@@ -258,9 +258,9 @@ function buildStructuredDataTags(
 }
 
 /**
- * v0.14.8: C-02 fix - Runtime enforcement for headExtras.
- * If headExtras contains <script> tags and allowHeadExtrasScripts is false,
- * strip them to prevent XSS. Developer should use inject.scripts for safe injection.
+ * Runtime enforcement for headExtras: if headExtras contains <script> tags
+ * and allowHeadExtrasScripts is false, strip them to prevent XSS. Use
+ * inject.scripts for safe script injection.
  */
 function sanitizeHeadExtras(
   headExtras: string,
@@ -313,9 +313,9 @@ function sanitizeHeadExtras(
 }
 
 /**
- * v0.14.3: Basic HTML tag balance validation for headExtras.
- * Checks that opening and closing tag counts match for major HTML elements.
- * This catches obviously malformed HTML (e.g., unclosed <!-- comments).
+ * Basic HTML tag balance validation for headExtras: opening and closing tag
+ * counts must match for major HTML elements. This catches obviously
+ * malformed HTML (e.g., unclosed <!-- comments).
  */
 function validateHeadExtrasBalance(headExtras: string): void {
   if (!headExtras) return;
@@ -338,9 +338,11 @@ function validateHeadExtrasBalance(headExtras: string): void {
  * Tag keys are attribute *names*, not values: `escapeAttr` neutralizes value
  * characters (`&<>"'`) but not name grammar (spaces, `=`), so a key like
  * `"foo onload=alert(1)"` would otherwise inject attributes into the emitted
- * `<meta>` element. Every key is therefore validated against the canonical
- * `isSafeAttributeName` (#1033) — the same predicate the server serializer and
- * head-injection paths enforce — and a violation throws (P4 fail-closed):
+ * `<meta>` element. Every key is therefore validated against the one
+ * canonical `isSafeAttributeName` predicate (`../protocol/forbidden-sinks.ts`,
+ * #1033) — the same predicate the compiler, the Part Program validator, the
+ * server serializer, and the router head-injection paths enforce — and a
+ * violation throws (fail-closed):
  * `meta.tags` is not a documented dangerous channel, so CMS-fed metadata must
  * fail the render instead of being skipped (#1373).
  */

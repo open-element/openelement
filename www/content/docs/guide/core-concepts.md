@@ -69,7 +69,7 @@ import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
 ```
 
-`hydrate` selects when the browser imports the module — `'load'` for controls needed at first paint such as navigation and theme, `'idle'` for everything else that can wait, `'visible'` for components that only matter as they scroll into view, and `'only'` for browser-only components that skip SSR. The build records which islands belong to which page, so a page references only the chunks it can use and an island that is never reached is never fetched.
+`hydrate` selects when the browser imports the module — `'load'` for controls needed at first paint such as navigation and theme, `'idle'` for everything else that can wait, `'visible'` for components that only matter as they scroll into view, `'media'` for capability-gated weight (the chunk loads only while the query declared in the island's `media` field matches), and `'only'` for browser-only components that skip SSR. The build records which islands belong to which page, so a page references only the chunks it can use and an island that is never reached is never fetched.
 
 ## Conditional regions and the grammar bound
 

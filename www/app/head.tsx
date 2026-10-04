@@ -3,10 +3,8 @@
  *
  * `app/head.tsx` is compiled into the Site's own module graph, so it may import
  * CSS by URL and the Site's own modules — which is exactly why the Prism theme
- * is an import here instead of a build-time file read (a pre-port
- * `readTextFileSync`
- * in the config would have made the document depend on a host API the module is
- * not allowed to use).
+ * is an import here instead of a file read: the head module's output is a
+ * build artifact, so it must not depend on host filesystem access.
  *
  * The import suffix is `?raw`, deliberately: `?inline` runs the stylesheet
  * through Vite's CSS pipeline, which rewrites the vendored Prism theme (drops

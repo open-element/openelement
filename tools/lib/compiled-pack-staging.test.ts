@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { compilePackageElementModules } from './compiled-pack-staging.ts';
 
 const COMPILED_COMPONENT = `import { element, OpenElement, property } from '@openelement/element';

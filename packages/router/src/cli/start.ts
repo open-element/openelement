@@ -18,7 +18,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import process from 'node:process';
 import { dirname, join } from 'pathe';
@@ -116,44 +116,10 @@ function renderCliFailure(error: unknown, debug: boolean): string {
 }
 
 /**
- * Nearest enclosing deno.json that declares a Deno workspace, walking up
- * from cwd. The preview subprocess (`deno run npm:vite preview`) must reuse
- * it as `--config`: Vite externalizes workspace bare imports
- * (`@openelement/*`) when bundling vite.config.ts and the Deno runtime
- * resolves them through the active config. A tasks-only fixture deno.json
- * (no workspace/imports) would leave them unresolvable and float the Vite
- * version. npm consumers have no workspace root, so resolution falls back
- * to their node_modules exactly as before.
+ * Preview spawns the app's OWN vite install (a devDependency resolved through
+ * the app's package.json) — no runtime registry hop and no host CLI in the
+ * consumer's path.
  */
-function findWorkspaceConfig(from: string): string | null {
-  let dir = from;
-  for (;;) {
-    const candidate = join(dir, 'deno.json');
-    if (existsSync(candidate)) {
-      try {
-        const parsed = JSON.parse(readFileSync(candidate, 'utf8')) as {
-          workspace?: unknown;
-        };
-        if (Array.isArray(parsed.workspace)) return candidate;
-      } catch {
-        // Unreadable config: keep walking up.
-      }
-    }
-    const parent = join(dir, '..');
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-
-/**
- * B5: the generated starter is a plain Node/pnpm project, so on a
- * Node host preview spawns the app's OWN vite install (a devDependency) —
- * no runtime registry hop and no host CLI in the consumer's path. The Deno
- * host keeps the `deno run npm:vite` form for in-workspace flows.
- */
-function isDenoHost(): boolean {
-  return Boolean((process.versions as Record<string, string | undefined>).deno);
-}
 
 /** The app-local vite JS entry, resolved through the app's own package.json. */
 function nodeViteBin(root: string): string {
@@ -171,40 +137,10 @@ async function runPreview(viteArgs: string[]): Promise<void> {
     );
     process.exit(1);
   }
-  if (!isDenoHost()) {
-    const code = await new Promise<number>((resolveCode, rejectSpawn) => {
-      const child = spawn(process.execPath, [nodeViteBin(root), 'preview', ...viteArgs], {
-        stdio: 'inherit',
-      });
-      child.on('error', rejectSpawn);
-      child.on('close', (closedCode) => resolveCode(closedCode ?? 1));
-    });
-    process.exit(code);
-  }
-  const workspaceConfig = findWorkspaceConfig(root);
-  const configArgs = workspaceConfig === null ? [] : ['--config', workspaceConfig];
-  // Preview shells to the Vite native binding: scoped build-host permissions
-  // with prompts off (least privilege — never -A).
   const code = await new Promise<number>((resolveCode, rejectSpawn) => {
-    const child = spawn(
-      'deno',
-      [
-        'run',
-        ...configArgs,
-        '--allow-read',
-        '--allow-write',
-        '--allow-env',
-        '--allow-net',
-        '--allow-run',
-        '--allow-sys',
-        '--allow-ffi',
-        '--no-prompt',
-        'npm:vite',
-        'preview',
-        ...viteArgs,
-      ],
-      { stdio: 'inherit' },
-    );
+    const child = spawn(process.execPath, [nodeViteBin(root), 'preview', ...viteArgs], {
+      stdio: 'inherit',
+    });
     child.on('error', rejectSpawn);
     child.on('close', (closedCode) => resolveCode(closedCode ?? 1));
   });

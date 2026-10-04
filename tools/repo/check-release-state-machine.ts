@@ -17,7 +17,7 @@
  * fallback is ever accepted. The checker never publishes or moves a dist-tag.
  */
 
-import { compare, parse } from '@std/semver';
+import { compare } from 'semver';
 import { readdir, readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { wwwReleaseAnchorFailures } from './www-release-anchor.ts';
@@ -151,7 +151,9 @@ export function commonStableVersion(
     (version) => STABLE_VERSION.test(version) && rest.every((set) => set.has(version)),
   );
   if (intersection.length === 0) return null;
-  intersection.sort((a, b) => compare(parse(b), parse(a)));
+  // compare() parses its string operands; STABLE_VERSION above already
+  // guaranteed plain x.y.z shapes, so an invalid version cannot reach here.
+  intersection.sort((a, b) => compare(b, a));
   return intersection[0];
 }
 

@@ -1,16 +1,16 @@
 /**
- * E2E: View Transitions & Speculation Rules (v0.9.2)
+ * E2E: View Transitions & Speculation Rules
  *
  * Verifies that the SSG post-processing pipeline correctly injects
  * View Transitions meta tag and Speculation Rules script tag into
  * all built HTML pages.
  *
- * These are v0.9.2 features - critical to validate in e2e.
+ * Core SSG output contract — critical to validate in e2e.
  */
 
 import { expect, test } from '@playwright/test';
 
-test.describe('View Transitions (v0.9.2)', () => {
+test.describe('View Transitions', () => {
   const pages = ['/', '/guide/getting-started', '/architecture', '/blog', '/changelog'];
 
   for (const path of pages) {
@@ -43,7 +43,7 @@ test.describe('View Transitions (v0.9.2)', () => {
   });
 });
 
-test.describe('Speculation Rules (v0.9.2)', () => {
+test.describe('Speculation Rules', () => {
   test('homepage has <script type="speculationrules">', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');

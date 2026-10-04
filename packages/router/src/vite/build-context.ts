@@ -1,11 +1,10 @@
 /**
  * @openelement/router - openElement Build Context
  *
- * Shared mutable state for all openElement Vite plugins.
- * Replaces the closure-captured variables (scannedIslandTagNames, etc.)
- * with a single object that's explicitly passed around.
+ * Shared mutable state for all openElement Vite plugins: one object that's
+ * explicitly passed around, replacing scattered per-phase state.
  *
- * Also replaces the .openElement/ temp directory as IPC between build phases:
+ * It is the IPC surface between build phases:
  * - Phase 1 (open:build) writes metadata -> ctx fields
  * - Phase 2 (build-client) reads metadata -> ctx fields
  * - Phase 3 (build-ssg) reads metadata -> ctx fields
@@ -66,7 +65,7 @@ class Phase1Meta {
   /** Local island metadata indexed by tag name. */
   islandMeta: Record<string, Partial<IslandDecl>> = {};
 
-  /** Package manifests discovered from npm/JSR packages */
+  /** Package manifests discovered from npm packages */
   packageManifests: OpenElementPackageManifest[] = [];
 
   /** Package island declarations extracted from manifests */
@@ -75,17 +74,30 @@ class Phase1Meta {
   /** SSR admission plan produced before SSR entry generation. */
   ssrAdmissionPlan: SsrAdmissionPlan | null = null;
 
-  /** v0.18.0: CEM-derived compatibility classifications from the classifier. */
+  /** CEM-derived compatibility classifications from the classifier. */
   cemClassifications: CompatibilityClassification[] = [];
 
   /**
-   * #979 (0.43.0-alpha.2): foreign custom-element tags discovered in
+   * #979: foreign custom-element tags discovered in
    * page/island JSX (visibility-only admission entries; no behavior change).
    */
   foreignTags: string[] = [];
 
   /** User-provided resolve.alias in its original format */
   userResolveAlias: Record<string, string> | Alias[] | null = null;
+
+  /**
+   * The browser-client resolve policy the resolved Vite config actually
+   * carries, captured by the open plugin's `configResolved` hook: the
+   * effective `resolve.conditions` list when it differs from Vite's client
+   * defaults (empty otherwise — the client build then supplies its own client
+   * defaults) and the `resolve.preserveSymlinks` choice. Read from the
+   * client-scoped resolve options only, so SSR-only conditions can never
+   * leak into browser resolution. The Phase 2 client build applies both
+   * verbatim.
+   */
+  clientResolveConditions: string[] = [];
+  clientPreserveSymlinks: boolean | undefined = undefined;
 }
 
 class Phase3Meta {
@@ -291,11 +303,18 @@ export class OpenElementBuildContext {
     this.buildArtifacts = null;
 
     const userResolveAlias = this.phase1.userResolveAlias;
+    const clientResolveConditions = this.phase1.clientResolveConditions;
+    const clientPreserveSymlinks = this.phase1.clientPreserveSymlinks;
     const i18nOptions = this.plugins.i18nOptions;
-    // NOTE: userResolveAlias is NOT reset - it's user configuration, not
-    // build state. It's set in config()/configResolved() and must persist
-    // through buildStart() for Phase 2 and 3 to use.
-    Object.assign(this.phase1, new Phase1Meta(), { userResolveAlias });
+    // NOTE: userResolveAlias and the captured client resolve policy are NOT
+    // reset - they are configuration captured from the resolved Vite config,
+    // not build state. They're set in config()/configResolved() and must
+    // persist through buildStart() for Phase 2 and 3 to use.
+    Object.assign(this.phase1, new Phase1Meta(), {
+      userResolveAlias,
+      clientResolveConditions,
+      clientPreserveSymlinks,
+    });
     Object.assign(this.phase3, new Phase3Meta());
     Object.assign(this.plugins, {
       blogOptions: null,

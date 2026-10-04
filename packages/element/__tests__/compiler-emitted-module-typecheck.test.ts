@@ -16,7 +16,8 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 import { readdirSync } from 'node:fs';
-import { fromFileUrl, join, resolve } from '@std/path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
 import {
   type EmittedModuleDiagnostic,
@@ -25,7 +26,7 @@ import {
 import { typeCheckEmittedModule as typeCheckFromSubpath } from '../src/compiler.ts';
 import { readPackage } from '../../../tools/lib/package-graph.ts';
 
-const REPO_ROOT = fromFileUrl(new URL('../../../', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 /**
  * The workspace module resolution map: every package's declared `exports`, in
@@ -35,9 +36,9 @@ const REPO_ROOT = fromFileUrl(new URL('../../../', import.meta.url));
  *
  * The walk is anchored at `REPO_ROOT` rather than `readPackages()`: that helper
  * reads `packages` relative to the process CWD, because every caller of it is a
- * root task. This suite is a package task, and `gate.ts` runs a package task as
- * `deno task --cwd packages/<name> <task>` — under which a relative walk throws
- * before a single test runs. Resolving each manifest path from this file's own
+ * root task. This suite is a package task (`gate.ts` runs it with the package
+ * directory as CWD), under which a relative walk would resolve against the
+ * wrong base. Resolving each manifest path from this file's own
  * URL keeps the map identical under both invocation forms.
  */
 async function workspacePaths(): Promise<Record<string, string[]>> {

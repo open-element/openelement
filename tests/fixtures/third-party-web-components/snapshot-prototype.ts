@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 /** Ephemeral T1 structure snapshot proof, not a production adapter or tier grant. */
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { strict as assert } from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
-import { dirname, fromFileUrl, join } from '@std/path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { formatJson } from '@openelement/element/build-utils';
 import { serveStatic } from '../../../tools/lib/static-server.ts';
 import { prepareFixtureApp } from './qualify.ts';
 
-const fixtureDir = dirname(fromFileUrl(import.meta.url));
+const fixtureDir = dirname(fileURLToPath(import.meta.url));
 const tag = 'wc-lit-counter';
 const label = 'Snapshot label';
 
@@ -128,13 +129,13 @@ async function main(): Promise<void> {
     };
     const first = await capture();
     const second = await capture();
-    assertEquals(first, second, 'independent browser captures must agree structurally');
-    assertStringIncludes(first, 'Snapshot:');
+    assert.deepStrictEqual(first, second, 'independent browser captures must agree structurally');
+    assert.ok(first.includes('Snapshot:'), 'snapshot must carry its header');
     const inputs = {
       tag,
       resolvedPackage,
       chunkSha256: await sha256(await readFile(join(dist, 'client', 'islands', chunk))),
-      toolSha256: await sha256(await readFile(fromFileUrl(import.meta.url))),
+      toolSha256: await sha256(await readFile(fileURLToPath(import.meta.url))),
       fixtureSha256: await sha256(
         await readFile(join(fixtureDir, 'app', 'client', 'wc-client.ts')),
       ),
@@ -169,7 +170,7 @@ async function main(): Promise<void> {
       const button = await page.locator(`${tag} #lit-button`).textContent();
       const slot = await page.locator(`${tag} span[slot="label"]`).textContent();
       zeroJsVisible = button?.includes('Snapshot:') === true && slot === label;
-      assertEquals(zeroJsVisible, true, 'DSD demo must be readable with JavaScript disabled');
+      assert.strictEqual(zeroJsVisible, true, 'DSD demo must be readable with JavaScript disabled');
     } finally {
       await noJs.close();
     }
@@ -245,11 +246,11 @@ async function main(): Promise<void> {
     // validates what a later run would receive from the cache.
     const cached = await readSnapshotRecord(path);
     const verifiedCacheHit = cached !== undefined;
-    assertEquals(verifiedCacheHit, true, 'a written snapshot must be readable by key');
-    assertEquals(cached!.key, await sha256(JSON.stringify(cached!.inputs)));
-    assertEquals(cached!.snapshotSha256, await sha256(cached!.shadowHtml));
-    assertEquals(cached!.qualification, record.qualification);
-    assertEquals(cached!.inputs, inputs);
+    assert.strictEqual(verifiedCacheHit, true, 'a written snapshot must be readable by key');
+    assert.strictEqual(cached!.key, await sha256(JSON.stringify(cached!.inputs)));
+    assert.strictEqual(cached!.snapshotSha256, await sha256(cached!.shadowHtml));
+    assert.deepStrictEqual(cached!.qualification, record.qualification);
+    assert.deepStrictEqual(cached!.inputs, inputs);
     // A different input set must address a different key, and that key must
     // still MISS — the hit above is key-addressed, not "any file exists".
     const bumpedInputs = { ...inputs, resolvedPackage: '3.3.4' };

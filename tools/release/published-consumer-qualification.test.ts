@@ -94,10 +94,9 @@ test('consumer-smoke options: an empty --version falls back to the workspace ver
   ).toEqual(true);
 });
 
-// Canonical release-gate verdict contract tests (#1216, A10.8), formerly
-// tools/gate-verdict.test.ts. Only PASS admits a release; UNKNOWN (infra
-// uncertainty) and FAIL always fail closed; SKIP_ALLOWED admits only when
-// release policy explicitly allows a skip.
+// Canonical release-gate verdict contract tests (#1216, A10.8). Only PASS
+// admits a release; UNKNOWN (infra uncertainty) and FAIL always fail closed;
+// SKIP_ALLOWED admits only when release policy explicitly allows a skip.
 
 test('gate-verdict: only PASS admits a release by default', () => {
   expect(admitsRelease(pass('confirmed'))).toEqual(true);
@@ -130,8 +129,8 @@ test('gate-verdict: decisions carry a human-readable reason', () => {
   expect(skipAllowed('s').reason).toEqual('s');
 });
 
-// Hostile decision-logic tests for the consumer smoke (#1216, A10.8 / H6),
-// formerly tools/consumer-smoke.test.ts. Only a CONFIRMED registry 200 whose
+// Hostile decision-logic tests for the consumer smoke (#1216, A10.8 / H6).
+// Only a CONFIRMED registry 200 whose
 // body confirms the exact version may admit the release. Confirmed absence
 // (404) is FAIL; every infra uncertainty — timeout, DNS/network exception,
 // 5xx, redirect, malformed or inconsistent payload — is UNKNOWN and fails
@@ -298,9 +297,10 @@ test('consumer-smoke: no hostile CDN input maps to PASS or SKIP — every uncert
 });
 
 test('node runtime smoke stays on the plain-Node core surface', () => {
-  // `@openelement/router/vite` is Deno-toolchain surface (module top levels
-  // assume the Deno global): importing it from plain node fails, so the node
-  // smoke must never reference it — only the Deno smoke may.
+  // The plain-Node smoke covers the framework core only; the `router/vite`
+  // build entry has its own smoke surface (vite-entry.mjs, run on the same
+  // node host) and must not be pulled in here — and no node-side smoke may
+  // reference the Deno global.
   expect(
     !NODE_RUNTIME_SMOKE_SOURCE.includes('router/vite'),
     'node smoke imports router/vite',
@@ -312,6 +312,6 @@ test('node runtime smoke stays on the plain-Node core surface', () => {
   ).toBeTruthy();
   expect(
     VITE_SMOKE_SOURCE.includes("from '@openelement/router/vite'"),
-    'deno smoke covers the vite entry',
+    'vite smoke covers the vite entry',
   ).toBeTruthy();
 });

@@ -51,8 +51,8 @@ test('npm publish tag follows alpha, beta and rc prerelease names', () => {
 });
 
 test('deriveDependencies includes an external npm dependency with a version', () => {
-  // Since the B2 conversion the derivation is source-driven against the
-  // workspace resolution set: the declared dependency exists to resolve it.
+  // The derivation is source-driven against the workspace resolution set:
+  // the declared dependency exists to resolve it.
   const localIo: DeriveDepsIo = {
     ...io,
     readRootJson: () => ({ imports: { react: 'npm:react@^18.2.0' } }),
@@ -78,9 +78,8 @@ test('deriveDependencies pins the maintained matching fork exactly (#1324)', () 
 });
 
 test('deriveDependencies skips declared-but-unused externals', () => {
-  // A dependency the source never imports does not ship (the pre-B2
-  // imports-map loop materialized declarations blindly; the ui package
-  // regression that motivated the source-driven rule).
+  // A dependency the source never imports does not ship: only imported
+  // specifiers are derived.
   const localIo: DeriveDepsIo = {
     ...io,
     readRootJson: () => ({ imports: { react: 'npm:react@^18.2.0' } }),
@@ -331,7 +330,7 @@ test('publishPackage propagates an E403 when the version is not actually publish
   expect(logs, 'no misleading already-published line').toEqual([]);
 });
 
-// npm release verification tests (formerly tools/lib/npm-release-verifier.test.ts).
+// npm release verification tests.
 
 const VERSIONS_FIELD = (versions: string[]) => JSON.stringify(versions);
 

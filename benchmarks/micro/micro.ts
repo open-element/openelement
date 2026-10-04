@@ -6,9 +6,9 @@
  * counting fake DOM in ./counting-dom.ts. The fake DOM
  * contributes no layout/paint cost, so these numbers isolate kernel/region
  * algorithmic behavior — the upstream js-framework-benchmark lane (on the
- * fork, since the in-repo harness was removed 2026-10-03) owns
- * layout-inclusive numbers. SSR serialization uses the CANONICAL server serializer
- * (serializeCompiledProgram); the test-only serializeToHtml in runtime.ts
+ * fork) owns layout-inclusive numbers. SSR serialization uses the CANONICAL
+ * server serializer (serializeCompiledProgram); the test-only serializeToHtml
+ * in runtime.ts
  * diverges for multi-field each Regions (serializes ival slots as
  * "[object Object]") and is deliberately not used — see the packet report.
  *
@@ -29,8 +29,13 @@
  * deterministic self-checks in micro.test.ts;
  * standalone evidence runs use the import.meta.main entry below.
  */
+import { execFile as execFileCallback } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const execFile = promisify(execFileCallback);
 import { compileElementProgram } from '../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 import {
   claimExistingDom,
@@ -94,7 +99,8 @@ export interface MicroReport {
   recordedAt: string;
   provenance: {
     openElementSha: string;
-    deno: string;
+    /** Host runtime version — Node (the only supported host). */
+    node: string;
     note: string;
   };
   granularity: {
@@ -443,10 +449,8 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
     recordedAt: new Date().toISOString(),
     provenance: {
       openElementSha: options.openElementSha ?? 'unknown',
-      // host runtime version: a node version when the deterministic
-      // self-checks record under vitest, a Deno version for standalone
-      // evidence runs through the import.meta.main entry below
-      deno: typeof Deno !== 'undefined' ? Deno.version.deno : process.version,
+      // host runtime version — Node, the only supported host
+      node: process.version,
       note:
         'fake-DOM kernel/region numbers isolate algorithmic behavior (no layout/paint); ' +
         'browser-inclusive numbers come from the upstream js-framework-benchmark ' +
@@ -499,18 +503,11 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
 }
 
 if (import.meta.main) {
-  const sha = await (async () => {
-    const result = await new Deno.Command('git', {
-      args: ['rev-parse', 'HEAD'],
-      stdout: 'piped',
-      stderr: 'piped',
-    }).output();
-    return new TextDecoder().decode(result.stdout).trim();
-  })();
+  const sha = (await execFile('git', ['rev-parse', 'HEAD'])).stdout.trim();
   const { report } = runMicroSuite({ openElementSha: sha });
-  if (Deno.args.includes('--write')) {
-    const out = new URL('./micro-evidence.json', import.meta.url).pathname;
-    await Deno.writeTextFile(out, `${JSON.stringify(report, null, 2)}\n`);
+  if (process.argv.includes('--write')) {
+    const out = fileURLToPath(new URL('./micro-evidence.json', import.meta.url));
+    await writeFile(out, `${JSON.stringify(report, null, 2)}\n`);
     console.log(`wrote ${out}`);
   } else {
     console.log(JSON.stringify(report, null, 2));

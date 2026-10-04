@@ -23,8 +23,8 @@
  * after the site build).
  */
 
-import { walk } from '../tools/lib/std-fs.ts';
-import { join, relative } from '@std/path';
+import { readdir } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 import { close, createIndex } from 'pagefind';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import process from 'node:process';
@@ -42,10 +42,12 @@ function unwrapTemplates(html: string): string {
 async function stageDist(): Promise<number> {
   await rm(STAGE_DIR, { recursive: true }).catch(() => {});
   let count = 0;
-  for await (const entry of walk(DIST_DIR, { exts: ['.html'], includeDirs: false })) {
-    const html = await readFile(entry.path, 'utf8');
+  for (const entry of await readdir(DIST_DIR, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory() || !entry.name.endsWith('.html')) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const html = await readFile(entryPath, 'utf8');
     const staged = unwrapTemplates(html);
-    const outPath = join(STAGE_DIR, relative(DIST_DIR, entry.path));
+    const outPath = join(STAGE_DIR, relative(DIST_DIR, entryPath));
     await mkdir(join(outPath, '..'), { recursive: true });
     await writeFile(outPath, staged);
     count++;

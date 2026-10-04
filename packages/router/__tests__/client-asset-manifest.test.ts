@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import {
   buildClientAssetManifest,
   collectClientBuildChunks,
@@ -30,6 +30,9 @@ function island(overrides: Partial<ClientIslandDeliveryEntry> = {}): ClientIslan
 
 const ROOT = '/proj';
 const MANIFEST_PATH = '/proj/dist/client/.vite/manifest.json';
+const ENTRY_MANIFEST = {
+  'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+};
 
 test('findClientEntryFile reads the virtual client entry from the build manifest', () => {
   expect(
@@ -475,8 +478,8 @@ test('buildClientAssetManifest lists shared chunks sorted, excluding entry and i
     viteManifest: {
       'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
       'app/islands/counter.ts': { file: 'islands/island-counter-BB22.js' },
-      'node_modules/.deno/preact@10/dist.js': { file: 'islands/preact-CC33.js' },
-      'node_modules/.deno/lit@3/core.js': { file: 'islands/lit-runtime-DD44.js' },
+      'node_modules/.pnpm/preact@10/dist.js': { file: 'islands/preact-CC33.js' },
+      'node_modules/.pnpm/lit@3/core.js': { file: 'islands/lit-runtime-DD44.js' },
       'app/styles.css': { file: 'assets/styles-EE55.css' },
     },
     chunks: [
@@ -705,6 +708,153 @@ test('moduleIdentityMatches is segment-exact and extension-insensitive', () => {
   ).toBeTruthy();
   // Query suffixes never leak into the comparison.
   expect(matches('/proj/src/counter.ts?commonjs-exports', 'counter.ts')).toBeTruthy();
+});
+
+// ─── Identity from the build's own resolution pass (#1471) ──────────────
+//
+// The client build resolves every admitted island's declared specifier
+// through its own resolver and hands the builder a declared-specifier →
+// module-id map. These tests pin the join contract around that map: a
+// resolved id present in the emitted graph IS the island's module, a
+// resolved id absent from the graph fails closed (even when a lookalike
+// module exists), and the exact identity rule still covers direct callers
+// that have no build-side resolution pass.
+
+test('a build-resolved module id present in the emitted graph satisfies the join', () => {
+  const resolved = new Map([['@oe/widget', '/proj/store/widget-pkg/dist/widget.mjs']]);
+  const manifest = buildClientAssetManifest({
+    root: ROOT,
+    base: '/',
+    islands: [
+      {
+        entry: island({ tagName: 'open-widget', modulePath: '@oe/widget', isPackage: true }),
+        sourceFile: null,
+      },
+    ],
+    viteManifest: ENTRY_MANIFEST,
+    chunks: [
+      {
+        fileName: 'islands/island-open-widget-Zz00.js',
+        modules: { '/proj/store/widget-pkg/dist/widget.mjs': {} },
+      },
+      { fileName: 'islands/client.js', modules: {} },
+    ],
+    manifestPath: MANIFEST_PATH,
+    resolvedIslandModuleIds: resolved,
+  });
+  expect(manifest.islands['open-widget'].file).toEqual(
+    '/client/islands/island-open-widget-Zz00.js',
+  );
+});
+
+test('a build-resolved id absent from the emitted graph fails closed, not to a lookalike', () => {
+  // The build resolved the specifier to the import-condition target, but the
+  // graph emitted only a suffix-matching lookalike (here: the require-condition
+  // file of the same package). Joining the lookalike would ship a module the
+  // island's declared specifier never named — the build fails instead.
+  const error = assertThrowsIncludes(
+    () =>
+      buildClientAssetManifest({
+        root: ROOT,
+        base: '/',
+        islands: [
+          {
+            entry: island({
+              tagName: 'open-widget',
+              modulePath: '@oe/widget-pkg/widget',
+              isPackage: true,
+            }),
+            sourceFile: null,
+          },
+        ],
+        viteManifest: ENTRY_MANIFEST,
+        chunks: [
+          {
+            fileName: 'islands/island-open-widget-Zz00.js',
+            modules: { '/proj/node_modules/@oe/widget-pkg/dist/widget.cjs': {} },
+          },
+          { fileName: 'islands/client.js', modules: {} },
+        ],
+        manifestPath: MANIFEST_PATH,
+        resolvedIslandModuleIds: new Map([
+          ['@oe/widget-pkg/widget', '/proj/node_modules/@oe/widget-pkg/dist/widget.mjs'],
+        ]),
+      }),
+    OpenElementError,
+  );
+  expect(error.code).toEqual(ClientAssetErrorCode.ISLAND_UNMAPPED);
+  expect(
+    error.message.includes('@oe/widget-pkg/widget') &&
+      error.message.includes('/proj/node_modules/@oe/widget-pkg/dist/widget.mjs'),
+    `error carries the declared identity and the unresolved id: ${error.message}`,
+  ).toBeTruthy();
+});
+
+test('a build-resolved id is matched after query-suffix and separator normalization', () => {
+  // Plugin pipelines can hang query suffixes on module ids; the join compares
+  // normalized ids, so the resolved id matches the emitted key.
+  const manifest = buildClientAssetManifest({
+    root: ROOT,
+    base: '/',
+    islands: [
+      {
+        entry: island({ tagName: 'open-widget', modulePath: '@oe/widget', isPackage: true }),
+        sourceFile: null,
+      },
+    ],
+    viteManifest: ENTRY_MANIFEST,
+    chunks: [
+      {
+        fileName: 'islands/island-open-widget-Zz00.js',
+        modules: { '/proj/store/widget-pkg/dist/widget.mjs': {} },
+      },
+      { fileName: 'islands/client.js', modules: {} },
+    ],
+    manifestPath: MANIFEST_PATH,
+    resolvedIslandModuleIds: new Map([
+      ['@oe/widget', '/proj/store/widget-pkg/dist/widget.mjs?commonjs-entry'],
+    ]),
+  });
+  expect(manifest.islands['open-widget'].file).toEqual(
+    '/client/islands/island-open-widget-Zz00.js',
+  );
+});
+
+test('distinct declared specifiers that the build resolved to one module share the chunk', () => {
+  // Two delivery entries, one capability module: each specifier resolves to
+  // the same actual id, so the ambiguous-suffix scan can never falsely reject
+  // the pair — both islands attribute to the same emitted module.
+  const resolvedId = '/proj/store/widget-pkg/dist/capability.mjs';
+  const manifest = buildClientAssetManifest({
+    root: ROOT,
+    base: '/',
+    islands: [
+      {
+        entry: island({ tagName: 'open-widget', modulePath: '@oe/widget', isPackage: true }),
+        sourceFile: null,
+      },
+      {
+        entry: island({
+          tagName: 'open-widget-panel',
+          modulePath: '@oe/widget/panel',
+          isPackage: true,
+          strategy: 'visible',
+        }),
+        sourceFile: null,
+      },
+    ],
+    viteManifest: ENTRY_MANIFEST,
+    chunks: [
+      { fileName: 'islands/island-open-widget-Zz00.js', modules: { [resolvedId]: {} } },
+      { fileName: 'islands/client.js', modules: {} },
+    ],
+    manifestPath: MANIFEST_PATH,
+    resolvedIslandModuleIds: new Map([
+      ['@oe/widget', resolvedId],
+      ['@oe/widget/panel', resolvedId],
+    ]),
+  });
+  expect(manifest.islands['open-widget'].file).toEqual(manifest.islands['open-widget-panel'].file);
 });
 
 test('serializeClientAssetsModule emits pure structured data', () => {

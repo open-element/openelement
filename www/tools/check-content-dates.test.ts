@@ -8,7 +8,7 @@
  * calendar date — while accepting per-locale differences and the
  * 'uncommitted' sentinel. Tests call the exported core directly and use a
  * fake directory reader, so they need no filesystem permission; the real
- * tree is covered by `deno task --cwd www check:content-dates`.
+ * tree is covered by the www#check:content-dates task.
  */
 import { expect, test } from 'vitest';
 import {

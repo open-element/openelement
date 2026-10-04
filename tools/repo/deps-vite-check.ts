@@ -144,13 +144,13 @@ export function checkLockfileVite(specifiers: Record<string, string>): ViteViola
     const match = key.match(/^npm:vite@(\^|~)?(\d+)\.(\d+)\.(\d+)/);
     if (!match) continue;
     if (Number(match[2]) !== 8) {
-      violations.push({ where: `deno.lock ${key}`, message: 'lockfile vite major must be 8' });
+      violations.push({ where: `pnpm-lock.yaml ${key}`, message: 'lockfile vite major must be 8' });
     }
     seen.add(specifiers[key]);
   }
   if (seen.size > 1) {
     violations.push({
-      where: 'deno.lock',
+      where: 'pnpm-lock.yaml',
       message: `lockfile resolves vite to multiple instances: ${[...seen].sort().join(', ')}`,
     });
   }
@@ -175,7 +175,7 @@ export function checkBundlerImports(files: { path: string; text: string }[]): Vi
 
 /**
  * The starter template's raw text must carry no literal vite pin anywhere
- * (import map AND task commands): every occurrence goes through the
+ * (the manifest and its script commands): every occurrence goes through the
  * ${v.vite} token fed by the embedded VITE_STARTER_PIN.
  */
 export function checkTemplateViteText(path: string, text: string): ViteViolation[] {

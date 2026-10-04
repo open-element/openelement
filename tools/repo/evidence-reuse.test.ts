@@ -314,7 +314,7 @@ async function claim(
 
 test('reuse claim: stamps a record that binds this tree and source', async () => {
   const record = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     job: 'packed',
     sha: SOURCE_SHA,
     tree: TREE,
@@ -338,7 +338,7 @@ test('reuse claim: a chained package is accepted on its PRODUCER tree', async ()
   // resolved source. Tree identity is what licenses the reuse, so this must
   // stamp, and the producer commit must survive as the stamp's audit field.
   const record = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     job: 'packed',
     sha: ORIGIN_SHA,
     tree: TREE,

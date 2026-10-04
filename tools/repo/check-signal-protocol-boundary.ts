@@ -3,11 +3,11 @@
  * signal implementation, kept in the packed npm `dependencies` (see
  * tools/release/npm-manifest.ts). This gate does not remove it — it hides it:
  * product source outside `internal/signal/` must not import it directly, and
- * the two core packages must not list it in their `deno.json` import maps, so
- * a future implementation can replace the engine without touching product
+ * the two core packages must not list it in their package.json `dependencies`,
+ * so a future implementation can replace the engine without touching product
  * source.
  */
-import { walkSync } from '../../tools/lib/std-fs.ts';
+import { readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
@@ -31,12 +31,15 @@ export function findSignalBoundaryImports(source: string, path = 'source.ts'): s
 async function main(): Promise<void> {
   const failures: Failure[] = [];
   for (const root of SOURCE_ROOTS) {
-    for (const entry of walkSync(root, { includeDirs: false })) {
-      if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue;
-      if (entry.path.includes('/internal/signal/')) continue;
-      for (const dep of findSignalBoundaryImports(await readFile(entry.path, 'utf8'), entry.path)) {
+    for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
+      if (entry.isDirectory() || (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx'))) {
+        continue;
+      }
+      const entryPath = `${entry.parentPath}/${entry.name}`;
+      if (entryPath.includes('/internal/signal/')) continue;
+      for (const dep of findSignalBoundaryImports(await readFile(entryPath, 'utf8'), entryPath)) {
         failures.push({
-          file: entry.path,
+          file: entryPath,
           message: `${dep} must not be imported directly outside Element's internal signal engine`,
         });
       }

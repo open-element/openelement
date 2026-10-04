@@ -1,6 +1,6 @@
 /**
- * Browser-context shadow-DOM walker, single-sourced for both the site e2e
- * helpers (www/e2e/helpers.ts) and repo smoke tooling (tools/visual-smoke.ts).
+ * Browser-context shadow-DOM walker shared by the e2e helpers that reach
+ * inside open shadow roots (www/e2e, the router-ui-dogfood fixture).
  *
  * Consumers serialize these functions with Function.prototype.toString() and
  * run them inside the page via Playwright string evaluation, so they must

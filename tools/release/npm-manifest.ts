@@ -99,8 +99,8 @@ const SIDE_EFFECTS: Record<string, false | string[]> = {
 
 /**
  * The single description source for published metadata (#1412): the packed
- * `description` is written from here, never from a package `deno.json`, so one
- * artifact has one description.
+ * `description` is written from here and only here, so one artifact has one
+ * description.
  */
 const PACKAGE_DESCRIPTIONS: Record<string, string> = {
   '@openelement/router':
@@ -254,11 +254,11 @@ export interface DeriveDepsIo {
 
 /**
  * Project a package.json dependency record into the `imports`-shaped
- * `npm:<name>@<version>` form the derivation consumes. The B2 manifest
- * conversion moved dependency truth from deno.json import maps here.
+ * `npm:<name>@<version>` form the derivation consumes (dependency truth
+ * lives in package.json `dependencies`).
  * `workspace:` values are internal (the source-import loop resolves them);
- * `jsr:` values are skipped exactly as the old `jsr:` import-map values were
- * — packed modules must carry no JSR bridge (check-package-artifacts).
+ * `jsr:` values are skipped — packed modules must carry no JSR bridge
+ * (check-package-artifacts).
  */
 export function importsShapeFromPackageJson(
   manifest: Record<string, unknown>,
@@ -282,10 +282,9 @@ export function importsShapeFromPackageJson(
 /**
  * The workspace-wide specifier resolution set: the root manifest's dev
  * dependencies plus every member's dependencies and dev dependencies. This
- * mirrors how a bare specifier resolves inside the workspace since the B2
- * conversion (the former root deno.json import map was the pre-B2 form of
- * this set), so source-driven materialization derives the same published
- * dependencies it did against the import maps.
+ * mirrors how a bare specifier resolves inside the pnpm workspace, so
+ * source-driven materialization derives the published dependencies from the
+ * source scan alone.
  */
 function workspaceResolutionImports(): Record<string, string> {
   const read = (path: string): Record<string, unknown> => {
@@ -390,8 +389,7 @@ export function deriveDependencies(
 
   // Internal workspace dependencies from source imports. External npm
   // dependencies are materialized source-driven from the workspace-wide
-  // resolution set (loop below) — the pre-B2 imports-map declaration loop is
-  // gone with the import maps; the four retained packages derive byte-identical
+  // resolution set (loop below): the four retained packages derive their
   // dependencies from the source scan alone (verified against the published
   // 1.0.0-alpha.7 manifests). Workspace members are resolved internally; the
   // maintained url-pattern-list fork shares the @openelement scope but is
@@ -430,9 +428,10 @@ export function deriveDependencies(
   return deps;
 }
 
-// Import-map aliases keep their bare key in emitted source, so packed
-// artifacts retain that key. Direct package names (such as TypeScript) need
-// no alias and are installed under their published name.
+// A bare source specifier that resolves to a differently named published
+// package keeps its bare key in emitted source, so packed artifacts retain
+// the name the source imports. Direct package names (such as TypeScript)
+// resolve to themselves and are installed under their published name.
 function dependencyKey(key: string, spec: { name: string }): string {
   return !key.includes(':') && key !== spec.name ? key : spec.name;
 }

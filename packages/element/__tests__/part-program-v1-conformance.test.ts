@@ -20,7 +20,7 @@
  * The runtime module is loaded via dynamic import so a RED run proves the
  * harness works while the new vertical behavior is absent. The minimal fake
  * DOM below implements only the standard DOM surface the compiled runtime is
- * allowed to touch (Deno's runner provides no browser DOM).
+ * allowed to touch (the vitest node environment provides no browser DOM).
  */
 
 import { readFile } from 'node:fs/promises';
@@ -449,9 +449,9 @@ test('compiled part program v1 - harness sanity', async () => {
   );
 });
 
-// Module-level loads (top-level await): the Deno parent body loaded these
-// once for every step below; vitest describe bodies are synchronous, so the
-// loads hoist here with identical semantics.
+// Module-level loads (top-level await): vitest describe bodies are
+// synchronous, so the loads hoist here — evaluated once and cached for every
+// step below.
 const runtime = await loadProgramRuntime();
 const programJson = await readFile(PROGRAM_URL, 'utf8');
 const program = JSON.parse(programJson);

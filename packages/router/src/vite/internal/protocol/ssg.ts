@@ -205,7 +205,7 @@ export interface SsrAdmissionPlan {
   decisions: SsrAdmissionDecision[];
   cemClassifications?: CompatibilityClassification[];
   /**
-   * #979 (0.43.0-alpha.2): foreign custom-element tags discovered in page /
+   * #979: foreign custom-element tags discovered in page /
    * island JSX that are neither local islands, package-manifest islands, nor
    * openElement-authored elements. Visibility only — each tag also carries a
    * source:'foreign' decision (renderPath 'client-only') and the SSR/behavior
@@ -250,7 +250,7 @@ export interface AppShellPlan {
 export interface EntryDescriptor {
   isSSG: boolean;
   /**
-   * Page renderer selection (Beta.2.2, #1339). Absent/'native' keeps the
+   * Page renderer selection (#1339). Absent/'native' keeps the
    * compiled renderDsd page path byte-identical; 'lit' forks page tag
    * resolution, page SSR and the client entry onto @lit-labs/ssr.
    * Loader/action/protocol codegen never forks.
@@ -335,7 +335,7 @@ export interface RouteInfoEntry {
   module?: unknown;
   isDynamic: boolean;
   paramNames: string[];
-  /** Rendering mode declared via renderIntent.mode ("static" when unset; the former "auto" alias was removed in alpha.13, #609). */
+  /** Rendering mode declared via renderIntent.mode ("static" when unset; the "auto" alias is rejected, #609). */
   rendering?: string;
   /** True when the route module exports an action (request-time form POST). */
   hasAction?: boolean;

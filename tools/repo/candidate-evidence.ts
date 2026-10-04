@@ -47,7 +47,7 @@
  * All commands run with stdin closed (non-interactive invariant).
  */
 
-import { join } from '@std/path';
+import { join } from 'node:path';
 import process from 'node:process';
 import { JOB_NAMES, type JobName } from './candidate-steps.ts';
 import { aggregate } from './candidate-evidence-aggregate.ts';

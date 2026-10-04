@@ -4,13 +4,19 @@
  *
  * This module owns the shared {@linkcode OpenPluginState}: the resolved
  * options, the serialized head channel, the config-file resolution, and the
- * plugin-creation-time workspace-alias setup. The other plugin-*.ts modules
- * read and mutate this state through their hooks; plugin.ts only composes.
- * Moved out of plugin.ts verbatim: hook behavior is unchanged.
+ * plugin-creation-time workspace-anchor discovery. The other plugin-*.ts
+ * modules read and mutate this state through their hooks; plugin.ts only
+ * composes.
  */
 
 import process from 'node:process';
-import { type Alias, type ConfigEnv, loadConfigFromFile, type Plugin } from 'vite';
+import {
+  type Alias,
+  type ConfigEnv,
+  defaultClientConditions,
+  loadConfigFromFile,
+  type Plugin,
+} from 'vite';
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
 
@@ -35,12 +41,7 @@ import { OpenElementBuildContext } from './build-context.ts';
 import type { EntryDescriptor } from './internal/ssg/index.ts';
 import { generateEntry } from './plugin-scanners.ts';
 import { VIRTUAL_BUILD_TRIGGER_ID } from './plugin-virtual-modules.ts';
-import {
-  detectWorkspaceAliasHijack,
-  findBuildWorkspaceRoot,
-  generateWorkspaceAliases,
-  workspaceAliasHijackError,
-} from './workspace-alias.ts';
+import { findBuildWorkspaceRoot } from './workspace-alias.ts';
 
 const log = createLogger('router-vite');
 
@@ -150,11 +151,9 @@ export interface OpenPluginState {
   // instead, matching the packed staging compiler's basename identity.
   viteRoot: string | undefined;
   workspaceRoot: string | undefined;
-  // alpha.17 B1: the entry descriptor is instantiated once per buildStart and
+  // The entry descriptor is instantiated once per buildStart and
   // shared between the emitted virtual entry code (renderEntry) and
-  // ctx.phase1.ssrAdmissionPlan. Previously the descriptor was built twice
-  // with divergent options (the plan saw CEM classifications, the emitted
-  // entry did not).
+  // ctx.phase1.ssrAdmissionPlan, so both carry the same options.
   entryDescriptor: EntryDescriptor | null;
 }
 
@@ -176,9 +175,10 @@ function applyResolvedOptions(state: OpenPluginState, merged: FrameworkOptions):
 
 /**
  * #1411: `openelement.config.ts` is the framework options' single home. The
- * file is loaded through Vite's own TS config loader (native Deno import —
- * zero new dependencies), so dev, `cli/build` and the SSG phases read one
- * options object, and an edit to it re-resolves the build.
+ * file is loaded through Vite's own config loader in its native mode (Node's
+ * native TypeScript import — zero new dependencies), so dev, `cli/build` and
+ * the SSG phases read one options object, and an edit to it re-resolves the
+ * build.
  */
 function appConfigPath(root: string): string | null {
   return detectAppConfigFile(root);
@@ -249,7 +249,7 @@ async function resolveAndApplyAppConfig(
 /**
  * Build the shared plugin state for one {@linkcode createOpenPlugin} call:
  * the resolved options, the serialized head channel, the build context, and
- * the plugin-creation-time workspace-alias setup. Runs the exact setup
+ * the plugin-creation-time workspace-anchor discovery. Runs the exact setup
  * sequence createOpenPlugin always ran, in the same order.
  */
 export function createOpenPluginState(
@@ -279,30 +279,17 @@ export function createOpenPluginState(
 
   const ctx = externalCtx || new OpenElementBuildContext(resolvedOptions);
 
-  // #1415 Finding A: an app scaffolded inside a framework checkout declares
-  // registry versions that the workspace aliases below would silently replace
-  // with the checkout's sources — a build that reports success while resolving
-  // a different framework version. Refuse before any alias is generated.
-  const hijack = detectWorkspaceAliasHijack(process.cwd());
-  if (hijack) throw workspaceAliasHijackError(hijack);
-
-  // Pre-generate workspace aliases (sync, once, cached in ctx).
-  // Phase 1 config, Phase 2 client build, and Phase 3 SSG build
-  // all read ctx.phase1.userResolveAlias - zero redundant generation.
+  // The workspace anchor for machine-independent identities (stable module
+  // ids in HMR error copy, source maps, route-scan anchors). Ancestor
+  // discovery of the pnpm-workspace.yaml marker only — no alias synthesis:
+  // workspace packages resolve through the package manager's node_modules
+  // layout, and a consumer that needs an alias declares it in its own vite
+  // config.
   let workspaceRoot: string | undefined;
   try {
-    const wsRoot = findBuildWorkspaceRoot(process.cwd());
-    workspaceRoot = wsRoot ?? undefined;
-    if (wsRoot) {
-      ctx.phase1.userResolveAlias = generateWorkspaceAliases(wsRoot);
-      log.info(
-        `Auto-generated ${
-          (ctx.phase1.userResolveAlias as Array<unknown>).length
-        } resolve alias(es) from workspace`,
-      );
-    }
+    workspaceRoot = findBuildWorkspaceRoot(process.cwd()) ?? undefined;
   } catch (e) {
-    log.debug('Workspace not available - aliases stay null', e);
+    log.debug('Workspace not available - identities stay unanchored', e);
   }
 
   return {
@@ -387,10 +374,33 @@ export function createConfigHooks(
 
     configResolved(cfg) {
       state.viteRoot = cfg.root;
-      if (cfg.resolve?.alias && !state.ctx.phase1.userResolveAlias) {
+      // The resolved config's alias table is the ACTUAL one — the user config
+      // merged with every plugin's `config` hook output and normalized by
+      // Vite. Save it unconditionally: an earlier partial state (only what
+      // this plugin saw in its own `config` hook) must never shadow what the
+      // build really resolves through.
+      if (cfg.resolve?.alias) {
         state.ctx.phase1.userResolveAlias = cfg.resolve.alias;
       }
-      // v0.14.6: Generate placeholder entry code with empty routes in configResolved.
+      // The browser-client resolve policy the outer resolved config actually
+      // carries. The Phase 2 client build runs with configFile:false (it owns
+      // its plugin list), so nothing else carries this policy into it: the
+      // user's effective `resolve.conditions` list and `preserveSymlinks`
+      // choice are captured here and the client build applies them verbatim.
+      // Only the client-scoped `cfg.resolve` is read — SSR conditions live in
+      // the ssr environment's own resolve options and are never consulted, so
+      // no SSR-only default can leak into browser resolution. When the
+      // effective list is Vite's client default, nothing is stored: the
+      // client build supplies its own client defaults.
+      const resolvedConditions = cfg.resolve?.conditions ?? [];
+      const isClientDefault =
+        resolvedConditions.length === defaultClientConditions.length &&
+        resolvedConditions.every(
+          (condition, index) => condition === defaultClientConditions[index],
+        );
+      state.ctx.phase1.clientResolveConditions = isClientDefault ? [] : [...resolvedConditions];
+      state.ctx.phase1.clientPreserveSymlinks = cfg.resolve?.preserveSymlinks || undefined;
+      // Generate placeholder entry code with empty routes in configResolved.
       // This is a Vite requirement - the virtual entry must exist before buildStart().
       // The real entry with actual routes is generated in buildStart() which runs later.
       // The returned code string is discarded: the call's job is to populate

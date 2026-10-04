@@ -18,9 +18,9 @@
  *   pnpm run clean:deep                 # + installed dependency trees
  *   node tools/repo/clean.ts <pattern>  # allowlisted pattern(s)
  */
-import { expandGlob } from '../../tools/lib/std-fs.ts';
-import { fromFileUrl, isAbsolute, join, relative, resolve, SEPARATOR } from '@std/path';
-import { lstat, realpath, rm } from 'node:fs/promises';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { glob, lstat, realpath, rm } from 'node:fs/promises';
 import type { Stats } from 'node:fs';
 import process from 'node:process';
 
@@ -98,7 +98,7 @@ export function assertSafeTarget(target: string): void {
 
 /** Fails closed unless `resolved` is a strict descendant of `root`. */
 function assertWithinRoot(root: string, target: string, resolved: string): void {
-  const rootWithSep = root.endsWith(SEPARATOR) ? root : `${root}${SEPARATOR}`;
+  const rootWithSep = root.endsWith(sep) ? root : `${root}${sep}`;
   if (resolved === root || !resolved.startsWith(rootWithSep)) {
     throw new Error(`clean: '${target}' resolves outside the repo root (${resolved})`);
   }
@@ -172,8 +172,11 @@ export async function cleanTargets(
   };
   for (const target of targets) {
     if (target.includes('*')) {
-      for await (const entry of expandGlob(target, { root: resolvedRoot })) {
-        const absolute = resolve(entry.path);
+      // Single-level `*` segments only (assertSafeTarget rejects '**'); the
+      // default dot:false keeps dot-directories unexpanded, matching the
+      // former allowlist expansion.
+      for await (const entryPath of glob(target, { cwd: resolvedRoot })) {
+        const absolute = resolve(resolvedRoot, entryPath);
         await remove(absolute, relative(resolvedRoot, absolute));
       }
       continue;
@@ -189,7 +192,7 @@ if (import.meta.main) {
     console.log(`clean --deep targets (${targets.length}):`);
     for (const target of targets) console.log(`  ${target}`);
   }
-  const root = fromFileUrl(new URL('../..', import.meta.url));
+  const root = fileURLToPath(new URL('../..', import.meta.url));
   const removed = await cleanTargets(root, targets);
   console.log(`clean ok: removed ${removed} path(s)`);
 }

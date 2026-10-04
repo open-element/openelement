@@ -104,7 +104,7 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           OPEN_ELEMENT_TIER_REPORT: ${{ github.workspace }}/.artifacts/wc-tier-report.json
-        run: vp run --fail-if-no-match @openelement/fixture-third-party-web-components#smoke
+        run: vp run --fail-if-no-match --filter @openelement/fixture-third-party-web-components smoke
       - name: Upload Web Component tier report
         if: always()
         # v7.0.1
@@ -118,7 +118,7 @@ jobs:
         continue-on-error: true
         env:
           OPEN_ELEMENT_T1_PROTOTYPE_REPORT: ${{ github.workspace }}/.artifacts/lit-snapshot-prototype.json
-        run: vp run --fail-if-no-match @openelement/fixture-third-party-web-components#snapshot:prototype
+        run: vp run --fail-if-no-match --filter @openelement/fixture-third-party-web-components snapshot:prototype
       - name: Upload Lit snapshot prototype report
         if: always()
         # v7.0.1
@@ -134,7 +134,7 @@ jobs:
         run: vp run release:check
       - name: Publish retained packages
         if: inputs.publish
-        run: vp run --fail-if-no-match @openelement/tools-release#publish:npm
+        run: vp run --fail-if-no-match --filter @openelement/tools-release publish:npm
       # Recovery record, not a success proof: publish:npm always writes the
       # receipt (successful, partial, or failed) at .artifacts/release-receipt.json.
       # Upload it even when the publish step failed so a partial publish can be

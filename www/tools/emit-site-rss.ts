@@ -7,7 +7,8 @@
  * Fails closed: a post that cannot carry a permalink or an RFC 822 date stops
  * the build instead of dropping out of the feed.
  */
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadCollectionData } from '../lib/content.ts';
 import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
 import { feedFailures, renderBlogFeedXml, SITE_FEED_PATH } from './lib/site-rss.ts';
@@ -16,7 +17,7 @@ import process from 'node:process';
 
 export const SITE_DIST = 'www/dist';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const siteRoot = join(repoRoot, 'www', '');
 
 export async function generateSiteRss(dist = join(repoRoot, SITE_DIST)): Promise<string> {

@@ -12,7 +12,7 @@
  * Usage: node tools/repo/check-release-version.ts <version>
  */
 
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { parseLineVersion } from '../lib/version.ts';

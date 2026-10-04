@@ -13,10 +13,9 @@
  *        missing or stale. Wired into `gate:release` as ui-manifest:check.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
-import { walkSync } from '../../../tools/lib/std-fs.ts';
 import type {
   OpenElementAttribute,
   OpenElementCssPart,
@@ -341,9 +340,11 @@ function buildMeta(file: string, source: string): ComponentMeta {
 
 function readComponentSources(): ComponentMeta[] {
   const metas: ComponentMeta[] = [];
-  for (const entry of walkSync(UI_SRC_DIR, { includeDirs: false })) {
-    if (!entry.isFile || !entry.name.startsWith('open-') || !entry.name.endsWith('.tsx')) continue;
-    const source = readFileSync(entry.path, 'utf8');
+  for (const entry of readdirSync(UI_SRC_DIR, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory() || !entry.name.startsWith('open-') || !entry.name.endsWith('.tsx')) {
+      continue;
+    }
+    const source = readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8');
     if (!source.includes('extends OpenElement')) continue;
     metas.push(buildMeta(entry.name, source));
   }

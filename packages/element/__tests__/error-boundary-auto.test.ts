@@ -20,6 +20,7 @@
 import { expect, test } from 'vitest';
 import { installFacadeDom, parseHtml } from './compiled-runtime/facade-dom.ts';
 import { testProgram, type TestProgramSpec } from './compiled-runtime/test-program.ts';
+import { makeUniqueTag } from './compiled-runtime/light-counter-harness.ts';
 
 const dom = installFacadeDom();
 
@@ -30,10 +31,7 @@ const { renderDsd } = await import('@openelement/element');
 type AnyElement = any;
 type BoundaryInstance = InstanceType<typeof ErrorBoundary>;
 
-let tagCounter = 0;
-function uniqueTag(prefix: string): string {
-  return `oe-boundary-${prefix}-${++tagCounter}`;
-}
+const uniqueTag = makeUniqueTag('boundary');
 
 const COUNTER_SPEC: Omit<TestProgramSpec, 'tag'> = {
   template: [

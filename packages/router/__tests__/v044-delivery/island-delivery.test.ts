@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { buildCriticalHeadExtras } from '../../src/vite/internal/ssg/critical-assets.ts';
 import { compiledElementPlugin, compileElementModule } from '@openelement/element/compiler';
 import { generateClientEntry } from '../../src/vite/internal/ssg/entry-client-codegen.ts';

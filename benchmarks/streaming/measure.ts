@@ -8,7 +8,8 @@
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { chromium } from '@playwright/test';
-import { dirname, fromFileUrl } from '@std/path';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { commandOutput } from '../../tools/repo/node-command.ts';
 import { serveFetch } from '../../packages/router/src/internal/node-http.ts';
 import {
@@ -79,7 +80,7 @@ if (
 ) {
   throw new Error('pass --out <path>, --samples 2..100 and --delay 5..100');
 }
-await stat(fromFileUrl(serverEntry));
+await stat(fileURLToPath(serverEntry));
 
 // One serving socket owns the port for the whole measurement. The previous
 // shape bound port 0, read the port, closed the listener and hoped the
@@ -91,8 +92,8 @@ await stat(fromFileUrl(serverEntry));
 // Requests reach the fixture's built output through the shared static and
 // request-time adapter the fixture's own e2e/server.ts wraps, so the measured
 // artifact is still dist/ + dist/server.
-const distRoot = fromFileUrl(distDir);
-const serverMod = await importRequestTimeServer(fromFileUrl(serverEntry));
+const distRoot = fileURLToPath(distDir);
+const serverMod = await importRequestTimeServer(fileURLToPath(serverEntry));
 const server = serveFetch({
   hostname: '127.0.0.1',
   port: 0,

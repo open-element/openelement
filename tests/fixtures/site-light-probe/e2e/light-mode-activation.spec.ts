@@ -33,7 +33,7 @@
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
-import { assertEquals } from '@std/assert';
+import { strict as assert } from 'node:assert/strict';
 import { expect, test } from '@playwright/test';
 
 // The island chunk hash changes with every build; match by prefix. client.js
@@ -59,12 +59,12 @@ test('fixture build: the probe chunk stays a dynamic import', () => {
   const carrier = files.find((name) => name.startsWith('island-light-probe-runtime-carrier-'));
   if (!probe || !carrier) throw new Error('fixture island chunks missing; build first');
   const client = readFileSync(new URL('client.js', islandsDir), 'utf8');
-  assertEquals(
+  assert.strictEqual(
     client.includes(`from"./${probe}"`),
     false,
     'client.js must not statically import the probe chunk',
   );
-  assertEquals(
+  assert.strictEqual(
     client.includes(`from"./${carrier}"`),
     true,
     'client.js must statically import the shared-runtime carrier chunk',

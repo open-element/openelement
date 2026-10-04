@@ -1,6 +1,9 @@
 /**
- * Canonical candidate job/step contract (schema v3 — the B4 Node/pnpm task
- * surface; v2 was the Deno task graph).
+ * Canonical candidate job/step contract (schema v4 — the vp task-dispatch
+ * surface; v3 was the direct pnpm invocation surface, v2 the Deno task
+ * graph). A v3 or older record names a different execution contract, so the
+ * version bump makes legacy evidence fail validation instead of passing as
+ * equivalent.
  *
  * One source of truth for what each candidate job must run and from which
  * directory. The producers (candidate-evidence-record.ts for the workspace
@@ -10,15 +13,19 @@
  * step name can never be paired with a different command, and a fresh-clone
  * step can never claim a directory it did not run in.
  *
- * Matching normalizes exactly two operationally irrelevant details:
- *   - an absolute executable path whose basename is `node`, `pnpm`, or `git`;
+ * Every gate/generator task dispatches through vp (tools/repo/vp-dispatch.ts
+ * builds the argv, so producer and validator cannot drift). Matching
+ * normalizes exactly two operationally irrelevant details:
+ *   - an absolute executable path whose basename is `node`, `vp`, or `git`;
  *   - absolute workspace/clone/temp paths, which are recorded under the shared
  *     roles `$SOURCE`, `$CLONE`, and `$TEMP` via one mapping.
  * Every other argv element, flag, task name, cwd, and argument position is
  * compared byte-for-byte.
  */
 
-export const CANDIDATE_EVIDENCE_SCHEMA_VERSION = 3;
+import { vpTaskArgv } from './vp-dispatch.ts';
+
+export const CANDIDATE_EVIDENCE_SCHEMA_VERSION = 4;
 
 export type JobName = 'fast-checks' | 'source-matrix' | 'packed' | 'fresh-clone';
 
@@ -80,11 +87,11 @@ export interface StepContract {
   match: (argv: readonly string[], context: StepMatchContext) => string | null;
 }
 
-/** Normalize an absolute node/pnpm/git executable path to its pinned basename. */
+/** Normalize an absolute node/vp/git executable path to its pinned basename. */
 export function normalizeArgv(argv: readonly string[]): string[] {
   if (argv.length === 0) return [];
   const basename = argv[0].split('/').pop() ?? argv[0];
-  const executable = ['node', 'pnpm', 'git'].includes(basename) ? basename : argv[0];
+  const executable = ['node', 'vp', 'git'].includes(basename) ? basename : argv[0];
   return [executable, ...argv.slice(1)];
 }
 
@@ -133,33 +140,43 @@ function cleanProof(phase: 'before' | 'after', cwd: EvidenceRole): StepContract 
   };
 }
 
-/** Static job commands (producer argv; validator normalizes the executable). */
+/**
+ * Static job commands: every workspace lane runs its steps through the vp
+ * dispatch (package-qualified, fail-closed, no cache). `pnpm` appears only
+ * where pnpm is the tool under test — the fresh-clone `install`, which proves
+ * the workspace installs with one frozen lockfile.
+ */
 export const STATIC_JOB_STEPS: Record<
   Exclude<JobName, 'fresh-clone'>,
   readonly { name: string; command: readonly string[] }[]
 > = {
   'fast-checks': [
-    { name: 'fmt-check', command: ['pnpm', 'run', 'fmt:check'] },
-    { name: 'lint', command: ['pnpm', 'run', 'lint'] },
-    { name: 'markdown', command: ['pnpm', '--dir', 'tools/repo', 'run', 'lint:markdown'] },
-    { name: 'typecheck', command: ['pnpm', 'run', 'typecheck'] },
+    { name: 'fmt-check', command: vpTaskArgv('openelement', 'fmt:check') },
+    { name: 'lint', command: vpTaskArgv('openelement', 'lint') },
+    { name: 'markdown', command: vpTaskArgv('@openelement/tools-repo', 'lint:markdown') },
+    { name: 'typecheck', command: vpTaskArgv('openelement', 'typecheck') },
   ],
   'source-matrix': [
-    { name: 'gate-source', command: ['pnpm', '--dir', 'tools/repo', 'run', 'gate:source'] },
+    { name: 'gate-source', command: vpTaskArgv('@openelement/tools-repo', 'gate:source') },
   ],
   packed: [
     {
       name: 'gate-packed',
-      command: ['pnpm', '--dir', 'tools/release', 'run', 'gate:packed'],
+      command: vpTaskArgv('@openelement/tools-release', 'gate:packed'),
     },
     {
       name: 'publish-npm-dry-run',
-      command: ['pnpm', '--dir', 'tools/release', 'run', 'publish:npm:dry-run'],
+      command: vpTaskArgv('@openelement/tools-release', 'publish:npm:dry-run'),
     },
   ],
 };
 
-/** Fresh-clone argv builders using shared roles; the producer maps paths. */
+/**
+ * Fresh-clone argv builders using shared roles; the producer maps paths. The
+ * clone's own installed vp shim (`$CLONE/node_modules/.bin/vp`, materialized
+ * at spawn time) dispatches its tasks, so the recorded executable normalizes
+ * to `vp` exactly like the workspace lanes.
+ */
 export const freshCloneCommands = {
   clone: (): string[] => [
     'git',
@@ -170,12 +187,17 @@ export const freshCloneCommands = {
   ],
   checkout: (sha: string): string[] => ['git', '-C', EVIDENCE_ROLES.clone, 'checkout', sha],
   install: (): string[] => ['pnpm', 'install', '--frozen-lockfile'],
-  check: (): string[] => ['pnpm', 'run', 'check'],
-  gateSource: (): string[] => ['pnpm', '--dir', 'tools/repo', 'run', 'gate:source'],
-  gatePacked: (): string[] => ['pnpm', '--dir', 'tools/release', 'run', 'gate:packed'],
-  siteBuild: (): string[] => ['pnpm', 'run', 'site:build'],
-  siteE2e: (): string[] => ['pnpm', '--dir', 'www', 'run', 'e2e:browsers'],
+  check: (): string[] => cloneVpTask('openelement', 'check'),
+  gateSource: (): string[] => cloneVpTask('@openelement/tools-repo', 'gate:source'),
+  gatePacked: (): string[] => cloneVpTask('@openelement/tools-release', 'gate:packed'),
+  siteBuild: (): string[] => cloneVpTask('openelement', 'site:build'),
+  siteE2e: (): string[] => cloneVpTask('@openelement/www', 'e2e:browsers'),
 } as const;
+
+/** The clone's installed vp shim dispatched against one of its tasks. */
+function cloneVpTask(pkg: string, task: string): string[] {
+  return [`${EVIDENCE_ROLES.clone}/node_modules/.bin/vp`, ...vpTaskArgv(pkg, task).slice(1)];
+}
 
 export const FRESH_CLONE_STEPS: readonly StepContract[] = [
   {
@@ -216,11 +238,18 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
     cwd: EVIDENCE_ROLES.clone,
     match: exact(['pnpm', 'install', '--frozen-lockfile']),
   },
-  { name: 'task-check', cwd: EVIDENCE_ROLES.clone, match: exact(['pnpm', 'run', 'check']) },
+  // The task contracts are the freshCloneCommands builders themselves
+  // (normalized to the recorded executable basename), so a dispatch change
+  // cannot update one side and leave the other behind.
+  {
+    name: 'task-check',
+    cwd: EVIDENCE_ROLES.clone,
+    match: exact(normalizeArgv(freshCloneCommands.check())),
+  },
   {
     name: 'task-gate-source',
     cwd: EVIDENCE_ROLES.clone,
-    match: exact(['pnpm', '--dir', 'tools/repo', 'run', 'gate:source']),
+    match: exact(normalizeArgv(freshCloneCommands.gateSource())),
   },
   {
     // The fresh clone proves the source gate and, separately, the packed gate
@@ -228,7 +257,7 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
     // The release train still belongs to release:check.
     name: 'task-gate-packed',
     cwd: EVIDENCE_ROLES.clone,
-    match: exact(['pnpm', '--dir', 'tools/release', 'run', 'gate:packed']),
+    match: exact(normalizeArgv(freshCloneCommands.gatePacked())),
   },
   // Site E2E owns the candidate's Site proof (the trimmed source gate no
   // longer runs it), so the lane that records the sidecar must run the real
@@ -238,12 +267,12 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
   {
     name: 'task-site-build',
     cwd: EVIDENCE_ROLES.clone,
-    match: exact(['pnpm', 'run', 'site:build']),
+    match: exact(normalizeArgv(freshCloneCommands.siteBuild())),
   },
   {
     name: 'task-site-e2e',
     cwd: EVIDENCE_ROLES.clone,
-    match: exact(['pnpm', '--dir', 'www', 'run', 'e2e:browsers']),
+    match: exact(normalizeArgv(freshCloneCommands.siteE2e())),
   },
   cleanProof('after', EVIDENCE_ROLES.clone),
 ];

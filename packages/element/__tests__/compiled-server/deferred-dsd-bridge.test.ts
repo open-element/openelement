@@ -42,7 +42,12 @@ Object.assign(Page, {
   styles: { cssRules: [{ cssText: 'p { color: red; }' }] },
 });
 
-async function manifestFor(selectedProgram: PartProgramV1 = program): Promise<DeferredDsdManifest> {
+async function manifestFor(
+  selectedProgram: PartProgramV1 = program,
+  fields: DeferredDsdManifest['fields'] = [
+    { field: 'title', signal: 'title', owners: [{ kind: 'part', index: 0 }] },
+  ],
+): Promise<DeferredDsdManifest> {
   const { sourceMap: _sourceMap, ...wireProgram } = selectedProgram;
   const hash = await crypto.subtle.digest(
     'SHA-256',
@@ -54,7 +59,7 @@ async function manifestFor(selectedProgram: PartProgramV1 = program): Promise<De
       tag: selectedProgram.tag,
       sha256: [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join(''),
     },
-    fields: [{ field: 'title', signal: 'title', owners: [{ kind: 'part', index: 0 }] }],
+    fields,
   };
 }
 
@@ -229,23 +234,6 @@ test('deferred seed enforces the browser 64-property budget fail-loud at seed co
         default: '',
       })),
     }) as PartProgramV1;
-  const manifestForField = async (selectedProgram: PartProgramV1): Promise<DeferredDsdManifest> => {
-    const { sourceMap: _sourceMap, ...wireProgram } = selectedProgram;
-    const hash = await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(JSON.stringify(wireProgram)),
-    );
-    return {
-      program: {
-        version: selectedProgram.version,
-        tag: selectedProgram.tag,
-        sha256: [...new Uint8Array(hash)]
-          .map((byte) => byte.toString(16).padStart(2, '0'))
-          .join(''),
-      },
-      fields: [{ field: 'p0', signal: 'p0', owners: [{ kind: 'part', index: 0 }] }],
-    };
-  };
   const classFor = (selectedProgram: PartProgramV1) => {
     class BudgetPage {}
     Object.assign(BudgetPage, {
@@ -254,11 +242,12 @@ test('deferred seed enforces the browser 64-property budget fail-loud at seed co
     });
     return BudgetPage as unknown as CustomElementConstructor;
   };
+  const p0PartFields = [{ field: 'p0', signal: 'p0', owners: [{ kind: 'part', index: 0 }] }];
 
   // Boundary: exactly 64 seed properties pass and produce a full seed.
   const atLimit = await createDeferredDsdExecutor({
     componentClass: classFor(propProgram(64)),
-    manifest: await manifestForField(propProgram(64)),
+    manifest: await manifestFor(propProgram(64), p0PartFields),
     instanceId: 'seed-budget-64',
   });
   expect(Object.keys(atLimit.seed).length).toEqual(64);
@@ -270,7 +259,7 @@ test('deferred seed enforces the browser 64-property budget fail-loud at seed co
       const over = propProgram(65);
       await createDeferredDsdExecutor({
         componentClass: classFor(over),
-        manifest: await manifestForField(over),
+        manifest: await manifestFor(over, p0PartFields),
         instanceId: 'seed-budget-65',
       });
     },
@@ -316,31 +305,18 @@ test('deferred bridge applies the streamed-frame policy to hand-written manifest
   };
   const reject = async (on: TestNodeSpec[], message: string) => {
     const program = whenProgram(on);
-    const { sourceMap: _sourceMap, ...wireProgram } = program;
-    const hash = await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(JSON.stringify(wireProgram)),
-    );
+    const manifest = await manifestFor(program, [
+      {
+        field: 'enabled',
+        signal: 'enabled',
+        owners: [{ kind: 'region', index: 0 }],
+      },
+    ]);
     await assertRejectsIncludes(
       () =>
         createDeferredDsdExecutor({
           componentClass: classFor(program),
-          manifest: {
-            program: {
-              version: program.version,
-              tag: program.tag,
-              sha256: [...new Uint8Array(hash)]
-                .map((byte) => byte.toString(16).padStart(2, '0'))
-                .join(''),
-            },
-            fields: [
-              {
-                field: 'enabled',
-                signal: 'enabled',
-                owners: [{ kind: 'region', index: 0 }],
-              },
-            ],
-          },
+          manifest,
           instanceId: 'policy-instance',
         }),
       CompiledProgramValidationError,
@@ -480,24 +456,6 @@ test('deferred bridge enforces the build-aligned field/owner budget on hand-writ
     reflect: false,
     default: '',
   });
-  const manifestFor = (
-    selectedProgram: PartProgramV1,
-    fields: DeferredDsdManifest['fields'],
-  ): Promise<DeferredDsdManifest> => {
-    const { sourceMap: _sourceMap, ...wireProgram } = selectedProgram;
-    return crypto.subtle
-      .digest('SHA-256', new TextEncoder().encode(JSON.stringify(wireProgram)))
-      .then((hash) => ({
-        program: {
-          version: selectedProgram.version,
-          tag: selectedProgram.tag,
-          sha256: [...new Uint8Array(hash)]
-            .map((byte) => byte.toString(16).padStart(2, '0'))
-            .join(''),
-        },
-        fields,
-      }));
-  };
 
   // Negative: 33 deferred fields are rejected at the public boundary.
   const fields33 = testProgram({

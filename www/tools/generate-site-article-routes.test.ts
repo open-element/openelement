@@ -10,7 +10,8 @@
  */
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   type ArticleRoute,
   managedDirectories,
@@ -22,7 +23,7 @@ import {
 } from './generate-site-article-routes.ts';
 import { readFile, stat } from 'node:fs/promises';
 
-const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
+const siteRoot = fileURLToPath(new URL('../../www/', import.meta.url));
 const entry = (slug: string, order: number, locale?: string) => ({
   slug,
   ...(locale ? { locale } : {}),

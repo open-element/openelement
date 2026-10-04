@@ -2,8 +2,8 @@
  * Shared harness for packed-artifact consumer qualification of Framework Mode
  * applications (Beta.2.2, #1339 §11): prove that the pack:dry-run tarballs —
  * not the workspace source — support the complete notes-app flow on one
- * renderer. The two renderer harnesses (tools/consumer-packaged-native.ts and
- * tools/consumer-packaged-lit.ts) each supply a PackedAppLegSpec (app sources,
+ * renderer. The two renderer harnesses (tools/release/consumer-packaged-native.ts
+ * and tools/release/consumer-packaged-lit.ts) each supply a PackedAppLegSpec (app sources,
  * probes, dev-feedback edits); this module owns everything both worlds share:
  * process/server/temp-project lifecycle, the cell framework, the HTTP and
  * form probes, the dev-feedback session, the Playwright continuation probes,
@@ -67,13 +67,11 @@
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { walkSync } from '../lib/std-fs.ts';
 import { tmpdir } from 'node:os';
 import { commandOutput } from '../repo/node-command.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { existsSync } from '../lib/std-fs.ts';
-import { dirname, join, resolve } from '@std/path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { formatJson } from '@openelement/element/build-utils';
 import { formatError } from '@openelement/element';
 import ts from 'typescript';
@@ -106,21 +104,22 @@ const BROWSER_TIMEOUT_MS = 5 * 60_000;
 const BOUNDARY_ID_PATTERN = /compiler|router(?:\/src)?\/vite|router\/cli(?:[/.]|$)|node:/;
 const BOUNDARY_SPECIFIER_PATTERN =
   /compiler|router(?:\/src)?\/vite|router\/cli(?:[/.]|$)|^node:|workspace:/;
-// The router\/cli alternative is anchored ((?:[/.]|$)) so a legitimate module
+// The vite/cli alternatives are anchored ((?:[/.]|$)) so a legitimate module
 // name like ./internal/router/client-router.js — whose path carries the
-// substring "router/cli" — is not flagged as a router/cli tooling edge.
+// substring "router/cli" — is not flagged as a router/cli tooling edge. The
+// anchored `router(?:\/src)?\/(?:vite|cli)` form covers both the router/src
+// and plain router spellings of the vite plugins and the CLI.
 export const DECLARATION_LEAK_PATTERN =
-  /compiler|router(?:\/src)?\/vite|router\/cli(?:[/.]|$)|\bvite\b|^node:|workspace:/;
+  /compiler|router(?:\/src)?\/(?:vite|cli)(?:[/.]|$)|\bvite\b|^node:|workspace:/;
 
 /**
  * Type-bearing module specifiers of one declaration file: `import ... from`
  * and `export ... from` edges. Side-effect-only imports (no import clause)
- * are excluded — they carry no consumer type surface, and the vp generator
- * emits them faithfully into `.d.ts` where the previous generator (deno pack)
- * dropped them, so a packed declaration graph may now reference an optional
- * peer (e.g. `@lit-labs/ssr/lib/install-global-dom-shim.js`) purely for
- * module-order fidelity. Leak scans must still see every specifier; only the
- * resolution walk uses this edge set.
+ * are excluded — they carry no consumer type surface. The vp generator emits
+ * them faithfully into `.d.ts` for module-order fidelity, so a packed
+ * declaration graph may reference an optional peer (e.g.
+ * `@lit-labs/ssr/lib/install-global-dom-shim.js`); leak scans must still see
+ * every specifier, and only the resolution walk uses this edge set.
  */
 export function declarationTypeEdges(text: string): string[] {
   const source = ts.createSourceFile(
@@ -151,14 +150,32 @@ export function declarationTypeEdges(text: string): string[] {
   return edges;
 }
 
-async function run(
+export interface ProcessRunResult {
+  success: boolean;
+  output: string;
+}
+
+export interface ProcessRunOptions {
+  /** Abort (SIGTERM) the child after this many ms and report the timeout. */
+  timeoutMs?: number;
+  /** Merged over the parent environment (node-command semantics). */
+  env?: Record<string, string>;
+}
+
+/**
+ * The one timeout/AbortSignal subprocess runner for the packed-consumer
+ * harnesses (app legs, starter, node-serve, router, ui all delegate here).
+ * commandOutput resolves — not rejects — when the abort signal kills the
+ * subprocess, so the timeout is tracked explicitly to report it instead of
+ * an empty failure.
+ */
+export async function runProcess(
   command: string,
   args: string[],
   cwd: string,
-  timeoutMs?: number,
-): Promise<{ success: boolean; output: string }> {
-  // Deno.Command resolves (not rejects) when the signal kills the subprocess,
-  // so track the timeout explicitly to report it instead of an empty failure.
+  options: ProcessRunOptions = {},
+): Promise<ProcessRunResult> {
+  const { timeoutMs, env } = options;
   const controller = new AbortController();
   let timedOut = false;
   const timeoutId =
@@ -174,6 +191,7 @@ async function run(
       cwd,
       stdout: 'piped',
       stderr: 'piped',
+      env,
       ...(timeoutMs === undefined ? {} : { signal: controller.signal }),
     });
     const decoder = new TextDecoder();
@@ -764,11 +782,11 @@ async function runBrowserContinuationProbe(
   const passed: string[] = [];
   const failures: string[] = [];
   for (const browserName of PACKED_BROWSERS) {
-    const probe = await run(
+    const probe = await runProcess(
       process.execPath,
       [join(tmp, 'pw-continuation-probe.ts'), baseUrl, leg, browserName],
       tmp,
-      BROWSER_TIMEOUT_MS,
+      { timeoutMs: BROWSER_TIMEOUT_MS },
     );
     const marker = `BROWSER-CONTINUATION-OK ${leg} ${browserName}`;
     if (probe.success && probe.output.includes(marker)) {
@@ -794,11 +812,11 @@ async function runBrowserContinuationProbe(
  * to the island lifecycle — a false product defect.
  */
 async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: PackedAppRenderer) {
-  const probe = await run(
+  const probe = await runProcess(
     process.execPath,
     [join(tmp, 'pw-dev-warmup-probe.ts'), baseUrl, leg],
     tmp,
-    BROWSER_TIMEOUT_MS,
+    { timeoutMs: BROWSER_TIMEOUT_MS },
   );
   if (!probe.success || !probe.output.includes(`DEV-WARMUP-OK ${leg}`)) {
     throw new Error(`Dev warm-up probe failed:\n${probe.output}`);
@@ -972,24 +990,29 @@ function combineFormOutcomes(label: string, outcome: PackedAppOutcome | undefine
 
 // ─── Declaration graph walker (boundary cell) ───────────────────────────────
 //
-// Follows .d.ts import edges from the published @openelement/router entries
-// (index/lit/lit-ssr/document) exactly like consumer-packaged-element.ts walks
-// @openelement/element. Every edge must resolve to a declaration file, and no
-// edge may name the compiler, router-internal tooling, vite, a host builtin or
-// a workspace specifier. Missing declarations (the suspected deno pack defect:
-// pack silently drops some modules' types) are reported module-by-module and
-// FAIL the cell — never silently weakened.
+// The one packed-artifact declaration walker: consumer-packaged-element,
+// consumer-packaged-ui and the router leg below all walk with it. The leak
+// scan sees every specifier in the graph (including side-effect-only
+// imports); the resolution walk follows type-bearing edges only
+// (declarationTypeEdges) — a packed graph may reference an optional peer that
+// the consumer has not installed, and such a side-effect-only import carries
+// no type surface to resolve. Missing declarations (pack dropped them) are
+// reported module-by-module; any problem fails the caller's cell.
 
-function walkRouterDeclarations(tmp: string): string {
-  const routerSrc = join(tmp, 'node_modules', '@openelement', 'router', 'src');
-  const entries = ['index.d.ts', 'lit.d.ts', 'lit-ssr.d.ts', 'document.d.ts'];
-  const missingEntries = entries.filter((entry) => !existsSync(join(routerSrc, entry)));
-  if (missingEntries.length > 0) {
-    throw new Error(
-      'Packed @openelement/router tarball lacks declaration entries ' +
-        `(deno pack dropped them): ${missingEntries.join(', ')}`,
-    );
-  }
+export interface PackedDeclarationWalk {
+  /** Distinct declaration modules visited. */
+  modules: number;
+  /** Leak, unresolved-edge, and missing-declaration violations. */
+  problems: string[];
+}
+
+export function walkPackedDeclarations(options: {
+  /** Absolute entry declaration files to walk from (callers pre-verify them). */
+  entries: readonly string[];
+  /** Defaults to DECLARATION_LEAK_PATTERN. */
+  leakPattern?: RegExp;
+}): PackedDeclarationWalk {
+  const leakPattern = options.leakPattern ?? DECLARATION_LEAK_PATTERN;
   const host = {
     fileExists: (name: string): boolean => {
       try {
@@ -1016,7 +1039,7 @@ function walkRouterDeclarations(tmp: string): string {
     const text = readFileSync(path, 'utf8');
     // Leak scan sees every specifier, including side-effect-only imports.
     for (const { fileName } of ts.preProcessFile(text).importedFiles) {
-      if (DECLARATION_LEAK_PATTERN.test(fileName)) leaks.push(`${path} -> ${fileName}`);
+      if (leakPattern.test(fileName)) leaks.push(`${path} -> ${fileName}`);
     }
     // Resolution walk follows type-bearing edges only (see declarationTypeEdges).
     for (const fileName of declarationTypeEdges(text)) {
@@ -1043,7 +1066,7 @@ function walkRouterDeclarations(tmp: string): string {
       walk(resolved.resolvedFileName);
     }
   };
-  for (const entry of entries) walk(join(routerSrc, entry));
+  for (const entry of options.entries) walk(entry);
   const problems: string[] = [];
   if (leaks.length > 0) problems.push(`leaky declaration edges:\n${leaks.join('\n')}`);
   if (unresolved.length > 0) {
@@ -1052,12 +1075,35 @@ function walkRouterDeclarations(tmp: string): string {
   if (missingDeclarations.length > 0) {
     problems.push(`modules lacking packed declarations:\n${missingDeclarations.join('\n')}`);
   }
+  return { modules: seen.size, problems };
+}
+
+/**
+ * Router-leg boundary cell: follow .d.ts import edges from the published
+ * @openelement/router entries (index/lit/lit-ssr/document) through the
+ * shared walker. Every edge must resolve to a declaration file, and no edge
+ * may name the compiler, router-internal tooling, vite, a host builtin or a
+ * workspace specifier.
+ */
+function walkRouterDeclarations(tmp: string): string {
+  const routerSrc = join(tmp, 'node_modules', '@openelement', 'router', 'src');
+  const entries = ['index.d.ts', 'lit.d.ts', 'lit-ssr.d.ts', 'document.d.ts'];
+  const missingEntries = entries.filter((entry) => !existsSync(join(routerSrc, entry)));
+  if (missingEntries.length > 0) {
+    throw new Error(
+      'Packed @openelement/router tarball lacks declaration entries ' +
+        `(vp pack dropped them): ${missingEntries.join(', ')}`,
+    );
+  }
+  const { modules, problems } = walkPackedDeclarations({
+    entries: entries.map((entry) => join(routerSrc, entry)),
+  });
   if (problems.length > 0) {
     throw new Error(
       `Packed @openelement/router declaration graph violations:\n${problems.join('\n')}`,
     );
   }
-  return `${seen.size} declaration modules resolved clean from index/lit/lit-ssr/document`;
+  return `${modules} declaration modules resolved clean from index/lit/lit-ssr/document`;
 }
 
 // ─── Packed element-leaf module graph (boundary cell) ───────────────────────
@@ -1234,11 +1280,11 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       );
       writeFileSync(join(tmp, 'tsconfig.json'), formatJson(consumerTsConfig(spec)));
 
-      const install = await run(
+      const install = await runProcess(
         'npm',
         ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
         tmp,
-        BUILD_TIMEOUT_MS,
+        { timeoutMs: BUILD_TIMEOUT_MS },
       );
       if (!install.success) {
         throw new Error(`Packed package installation failed:\n${install.output}`);
@@ -1279,7 +1325,9 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
     });
 
     await cell(leg, 'types', ['install'], async () => {
-      const check = await run('pnpm', ['run', 'check'], tmp, TYPES_TIMEOUT_MS);
+      const check = await runProcess('pnpm', ['run', 'check'], tmp, {
+        timeoutMs: TYPES_TIMEOUT_MS,
+      });
       if (!check.success) {
         throw new Error(`Packed consumer typecheck failed:\n${check.output}`);
       }
@@ -1295,7 +1343,9 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
     });
 
     await cell(leg, 'build', ['install'], async () => {
-      const build = await run('pnpm', ['run', 'build'], tmp, BUILD_TIMEOUT_MS);
+      const build = await runProcess('pnpm', ['run', 'build'], tmp, {
+        timeoutMs: BUILD_TIMEOUT_MS,
+      });
       if (!build.success) {
         throw new Error(`Packed app consumer SSG build failed:\n${build.output}`);
       }
@@ -1361,9 +1411,9 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
           `No dist/client browser bundle (build cell failed); declaration graph: ${declarationSummary}`,
         );
       }
-      const assets = [...walkSync(clientDir, { includeDirs: false })].filter((entry) =>
-        entry.name.endsWith('.js'),
-      );
+      const assets = readdirSync(clientDir, { recursive: true, withFileTypes: true })
+        .filter((entry) => !entry.isDirectory() && entry.name.endsWith('.js'))
+        .map((entry) => ({ path: join(entry.parentPath, entry.name), name: entry.name }));
       if (assets.length === 0) {
         throw new Error('dist/client contains no JS assets to scan');
       }

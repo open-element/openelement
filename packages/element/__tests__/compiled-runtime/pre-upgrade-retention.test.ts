@@ -16,7 +16,8 @@
  */
 
 import { expect, test } from 'vitest';
-import { type FacadeDom, FacadeElement, FacadeEvent, installFacadeDom } from './facade-dom.ts';
+import { type FacadeDom, FacadeElement, installFacadeDom } from './facade-dom.ts';
+import { cleanup, click, pendingHost } from './pre-upgrade-helpers.ts';
 
 // The facade captures its HTMLElement base at module evaluation time.
 const dom: FacadeDom = installFacadeDom();
@@ -28,35 +29,13 @@ const {
   replayPreUpgradeCaptures,
 } = await import('../../src/internal/compiled/runtime/pre-upgrade-events.ts');
 
-// oxlint-disable-next-line no-explicit-any
-type AnyElement = any;
-
-function click(): FacadeEvent {
-  return new FacadeEvent('click', { bubbles: true, composed: true });
-}
-
-/** A connected dash-tagged pending host with one button child. */
-function pendingHost(tag: string): { host: FacadeElement; button: AnyElement } {
-  const host = new FacadeElement(tag, dom.document);
-  const button = new FacadeElement('button', dom.document);
-  host.appendChild(button);
-  dom.document.body.appendChild(host);
-  return { host, button };
-}
-
-function cleanup(...hosts: FacadeElement[]): void {
-  for (const host of hosts) {
-    if (host.parentNode) host.parentNode.removeChild(host);
-  }
-}
-
 function asNode(host: FacadeElement): Node {
   return host as unknown as Node;
 }
 
 test('retention: release empties the root bucket and replay is a no-op', () => {
   ensurePreHydrationClickCapture();
-  const { host, button } = pendingHost('oe-retention-claimed');
+  const { host, button } = pendingHost(dom, 'oe-retention-claimed');
   button.dispatchEvent(click());
   expect(
     preUpgradeRetainedRecordCount(asNode(host)),
@@ -85,7 +64,7 @@ test('retention: release empties the root bucket and replay is a no-op', () => {
 
 test('retention: release without replay drops the unconsumed record (replay is a no-op)', () => {
   ensurePreHydrationClickCapture();
-  const { host, button } = pendingHost('oe-retention-cancelled');
+  const { host, button } = pendingHost(dom, 'oe-retention-cancelled');
   button.dispatchEvent(click());
 
   // Cancelled before activation: the disconnect path releases the root's
@@ -107,8 +86,8 @@ test('retention: release without replay drops the unconsumed record (replay is a
 
 test('retention: a root release never touches another pending root share', () => {
   ensurePreHydrationClickCapture();
-  const a = pendingHost('oe-retention-a');
-  const b = pendingHost('oe-retention-b');
+  const a = pendingHost(dom, 'oe-retention-a');
+  const b = pendingHost(dom, 'oe-retention-b');
   a.button.dispatchEvent(click());
   b.button.dispatchEvent(click());
 

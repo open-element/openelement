@@ -14,29 +14,28 @@ const content = {
   en: {
     headTitle: 'Contributing',
     headDescription:
-      'A precise, Deno-first contributor workflow for the openElement Web Standards Lab: setup, PR checklist and where to help.',
+      'A precise, Node-first contributor workflow for the openElement Web Standards Lab: setup, PR checklist and where to help.',
     eyebrow: 'Contributing — Join the lab',
     monoLine: 'BUILD IT',
     serifLine: 'with us.',
-    lede: 'A precise, Deno-first contributor workflow for the Web Standards Lab.',
+    lede: 'A precise, Node-first contributor workflow for the Web Standards Lab.',
     setupAriaLabel: 'Development setup',
     setupLabel: '§1 — Setup',
     setupCopyBefore:
-      'openElement core CLI, SSG, serverless API, tests, publishing, and docs site tasks all use Deno 2.9+ as the default runtime. Vite runs via ',
-    setupCopyVite:
-      'deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite',
-    setupCopyBetween: ' — no ',
+      'openElement core CLI, SSG, serverless API, tests, publishing, and docs site tasks all run on Node 24.2+ with pnpm as the package manager. Tasks go through ',
+    setupCopyVite: 'pnpm run <task>',
+    setupCopyBetween: ' or the vp task runner — no ',
     setupCopyNpm: 'npm',
     setupCopyAnd: ' or ',
     setupCopyNpx: 'npx',
-    setupCopyAfter: ' needed for the main workflow.',
+    setupCopyAfter: ' global installs in the main workflow.',
     releaseLabel: 'Release line',
     releaseItems: [
       {
         id: 'versions',
-        before: 'Update version numbers (',
-        code1: 'packages/*/deno.json',
-        middle1: ')',
+        before: 'Run ',
+        code1: 'pnpm --dir tools/repo run version-bump',
+        middle1: '',
         code2: '',
         middle2: '',
         code3: '',
@@ -55,7 +54,7 @@ const content = {
       {
         id: 'test',
         before: 'Run ',
-        code1: 'deno task test',
+        code1: 'pnpm test',
         middle1: '',
         code2: '',
         middle2: '',
@@ -65,11 +64,11 @@ const content = {
       {
         id: 'publish',
         before: 'Publish via ',
-        code1: 'deno task --cwd tools/release pack:dry-run',
+        code1: 'pnpm --dir tools/release run pack:dry-run',
         middle1: ', ',
-        code2: 'deno task release:check',
+        code2: 'pnpm run release:check',
         middle2: ', ',
-        code3: 'deno task --cwd tools/release publish:npm',
+        code3: 'pnpm --dir tools/release run publish:npm',
         after: '',
       },
       {
@@ -89,7 +88,7 @@ const content = {
         id: 'format',
         checkboxClass: 'checkbox',
         mark: '✓',
-        text: 'deno fmt + deno lint stay clean',
+        text: 'pnpm run fmt + pnpm run lint stay clean',
       },
       {
         id: 'commits',
@@ -101,7 +100,7 @@ const content = {
         id: 'gates',
         checkboxClass: 'checkbox',
         mark: '✓',
-        text: 'Gates green locally — deno task test before push',
+        text: 'Gates green locally — pnpm run check + pnpm test before push',
       },
       {
         id: 'adr',
@@ -145,29 +144,28 @@ const content = {
   zh: {
     headTitle: '贡献指南',
     headDescription:
-      '面向 openElement Web Standards Lab 的精确、Deno 优先的贡献者工作流：环境设置、PR 清单与入手方向。',
+      '面向 openElement Web Standards Lab 的精确、Node 优先的贡献者工作流：环境设置、PR 清单与入手方向。',
     eyebrow: '贡献 — 加入实验室',
     monoLine: '构建它',
     serifLine: '与我们一起。',
-    lede: '面向 Web Standards Lab 的精确、Deno 优先的贡献者工作流。',
+    lede: '面向 Web Standards Lab 的精确、Node 优先的贡献者工作流。',
     setupAriaLabel: '开发环境设置',
     setupLabel: '§1 — 环境设置',
     setupCopyBefore:
-      'openElement 核心 CLI、SSG、serverless API、测试、发布与文档站任务都以 Deno 2.9+ 作为默认运行时。Vite 通过 ',
-    setupCopyVite:
-      'deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite',
-    setupCopyBetween: ' 运行——主工作流不需要 ',
+      'openElement 核心 CLI、SSG、serverless API、测试、发布与文档站任务都运行在 Node 24.2+ 上，以 pnpm 作为包管理器。任务通过 ',
+    setupCopyVite: 'pnpm run <task>',
+    setupCopyBetween: ' 或 vp 任务器驱动——主工作流不需要 ',
     setupCopyNpm: 'npm',
     setupCopyAnd: ' 或 ',
     setupCopyNpx: 'npx',
-    setupCopyAfter: '。',
+    setupCopyAfter: ' 的全局安装。',
     releaseLabel: '发布线',
     releaseItems: [
       {
         id: 'versions',
-        before: '更新版本号（',
-        code1: 'packages/*/deno.json',
-        middle1: '）',
+        before: '运行 ',
+        code1: 'pnpm --dir tools/repo run version-bump',
+        middle1: '',
         code2: '',
         middle2: '',
         code3: '',
@@ -186,7 +184,7 @@ const content = {
       {
         id: 'test',
         before: '运行 ',
-        code1: 'deno task test',
+        code1: 'pnpm test',
         middle1: '',
         code2: '',
         middle2: '',
@@ -196,11 +194,11 @@ const content = {
       {
         id: 'publish',
         before: '通过 ',
-        code1: 'deno task --cwd tools/release pack:dry-run',
+        code1: 'pnpm --dir tools/release run pack:dry-run',
         middle1: '、',
-        code2: 'deno task release:check',
+        code2: 'pnpm run release:check',
         middle2: '、',
-        code3: 'deno task --cwd tools/release publish:npm',
+        code3: 'pnpm --dir tools/release run publish:npm',
         after: ' 发布',
       },
       {
@@ -220,7 +218,7 @@ const content = {
         id: 'format',
         checkboxClass: 'checkbox',
         mark: '✓',
-        text: 'deno fmt + deno lint 保持干净',
+        text: 'pnpm run fmt + pnpm run lint 保持干净',
       },
       {
         id: 'commits',
@@ -232,7 +230,7 @@ const content = {
         id: 'gates',
         checkboxClass: 'checkbox',
         mark: '✓',
-        text: '本地门禁全绿——推送前先跑 deno task test',
+        text: '本地门禁全绿——推送前先跑 pnpm run check 和 pnpm test',
       },
       {
         id: 'adr',

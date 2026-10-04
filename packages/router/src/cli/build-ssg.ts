@@ -6,12 +6,10 @@
  * then imports it to render all pages to static HTML, and post-processes
  * island paths.
  *
- * This module exports buildSSG() only - it is called from
- * closeBundle() in open:build plugin. No longer a standalone CLI entry.
- * ctx parameter is required (no globalThis fallback).
- *
- * Usage:
- *   deno task build  (unified entry - runs all 3 phases)
+ * Library module: exports buildSSG(), invoked from closeBundle() in the
+ * open:build plugin (the `pnpm build` task of a generated project runs the
+ * unified multi-phase build). ctx parameter is required (no globalThis
+ * fallback).
  */
 
 import { rm } from 'node:fs/promises';
@@ -47,8 +45,6 @@ import {
 import { SsrRenderError } from '@openelement/element/build-utils';
 import { createLogger, formatError } from '@openelement/element';
 import { createSsgRenderEvidence } from './ssg-render.ts';
-import { createNpmSpecifierPlugin } from '../vite/npm-specifier-plugin.ts';
-import { createDenoImportMapResolvePlugin } from '../vite/deno-import-map.ts';
 import { mdxPlugin } from '../vite/plugin-mdx.ts';
 import { quoteGeneratedJavaScriptValue } from '../vite/internal/ssg/codegen-literals.ts';
 import {
@@ -127,7 +123,7 @@ interface BuildSSGOptions {
   appShell?: FrameworkOptions['appShell'];
   layouts?: FrameworkOptions['layouts'];
   upgradeStrategy?: HydrationStrategy;
-  /** Page renderer (Beta.2.2, #1339). Defaults to ctx.options.renderer. */
+  /** Page renderer (#1339). Defaults to ctx.options.renderer. */
   renderer?: 'native' | 'lit';
   resolveAlias?: Record<string, string> | import('vite').Alias[];
   base?: string;
@@ -173,7 +169,7 @@ interface SsgEntryDescriptorInputs {
   upgradeStrategy: HydrationStrategy;
   appShell?: FrameworkOptions['appShell'];
   layouts?: FrameworkOptions['layouts'];
-  /** Page renderer (Beta.2.2, #1339) — threaded from FrameworkOptions. */
+  /** Page renderer (#1339) — threaded from FrameworkOptions. */
   renderer?: 'native' | 'lit';
   /** Declared project locales — threaded from the build context. */
   i18n?: { locales: string[]; defaultLocale: string };
@@ -182,16 +178,16 @@ interface SsgEntryDescriptorInputs {
 /**
  * Build the SSG entry descriptor and sync its SSR admission plan into ctx.
  *
- * Single descriptor instantiation (alpha.17 B1): the admission plan and the
- * emitted SSG entry code come from the same descriptor, and
+ * Single descriptor instantiation: the admission plan and the emitted SSG
+ * entry code come from the same descriptor, and
  * ctx.phase1.ssrAdmissionPlan is synced from it so the render evidence
  * (createSsgRenderEvidence) reads the same plan the SSG entry was generated
  * from.
  *
- * alpha.18 (R2-H2): inputs.cemClassifications must carry the Phase 1 CEM
- * classifications. Without them the SSG admission plan falls back to the
- * conservative package default (client-only) for CEM 'ssr-capable' islands,
- * diverging from the dev/SSR entry and corrupting the synced plan + evidence.
+ * inputs.cemClassifications must carry the Phase 1 CEM classifications.
+ * Without them the SSG admission plan falls back to the conservative package
+ * default (client-only) for CEM 'ssr-capable' islands, diverging from the
+ * dev/SSR entry and corrupting the synced plan + evidence.
  */
 export function buildSsgEntryDescriptor(
   inputs: SsgEntryDescriptorInputs,
@@ -260,7 +256,7 @@ async function buildSSG(
     options.routes ??
     (await scanRoutes(routesDir, '', {
       root,
-      workspaceRoot: findBuildWorkspaceRoot(process.cwd()) ?? undefined,
+      workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
     }));
   const staticComponents =
     options.staticComponents ??
@@ -278,12 +274,10 @@ async function buildSSG(
   const ssgIslandMeta: Record<string, Partial<IslandDecl>> = Object.keys(islandMeta).length > 0
     ? islandMeta
     : await scanIslandMeta(islandsRoot, ssgIslandFiles);
-  // Single descriptor instantiation (alpha.17 B1): the SSR admission plan and
-  // the emitted SSG entry code come from the same descriptor. Previously the
-  // plan was built without middleware/html/upgradeStrategy and diverged from
-  // the descriptor used for rendering.
-  // alpha.18 (R2-H2): cemClassifications come from Phase 1 (plugin.ts
-  // buildStart auto-detection) so the SSG plan matches the dev/SSR plan.
+  // Single descriptor instantiation: the SSR admission plan and the emitted
+  // SSG entry code come from the same descriptor, so they can never diverge.
+  // cemClassifications come from Phase 1 (plugin.ts buildStart auto-detection)
+  // so the SSG plan matches the dev/SSR plan.
   const ssgDescriptor = buildSsgEntryDescriptor(
     {
       routes,
@@ -297,7 +291,7 @@ async function buildSSG(
       packageManifests,
       cemClassifications: options.cemClassifications || ctx.phase1.cemClassifications || [],
       // #979: foreign tags come from the same Phase 1 scan so the SSG plan
-      // matches the dev/SSR plan (single descriptor instantiation, alpha.17 B1).
+      // matches the dev/SSR plan (single descriptor instantiation).
       foreignTags: options.foreignTags || ctx.phase1.foreignTags || [],
       headExtras: options.headExtras,
       allowHeadExtrasScripts: options.allowHeadExtrasScripts,
@@ -316,8 +310,10 @@ async function buildSSG(
   // CSSStyleSheet itself, so the lit entry needs no polyfill banner.
   const ssgEntryCode =
     (renderer === 'lit' ? '' : generateSsrPolyfillBanner() + '\n') + renderEntry(ssgDescriptor);
-  // Deno import map resolution handles bare specifiers (e.g. @acme/components/open-callout)
-  // via createDenoImportMapResolvePlugin() in the Phase 3 viteBuild plugins below.
+  // Bare specifiers resolve through the alias table this build ships —
+  // normalizeViteAliases over ctx.phase1.userResolveAlias, the outer resolved
+  // config's actual alias — and through the package manager's node_modules
+  // layout. There is no separate import map to consult.
 
   try {
     const { build: viteBuild } = await import('vite');
@@ -326,13 +322,13 @@ async function buildSSG(
     const alias = metadataResolveAlias;
     const viteResolveAlias = normalizeViteAliases(alias, root);
 
-    // Build the self-contained SSR bundle (Phase C)
-    // Replaces createServer() + ssrLoadModule() with viteBuild + import().
+    // Build the self-contained SSR bundle via viteBuild + import(): the entry
+    // is bundled, not loaded module-by-module.
     // noExternal ensures all dependencies are inlined into a single bundle,
-    // so module-level variables (Phase B) are shared across the entire graph.
+    // so module-level variables are shared across the entire graph.
     const ssrOutDir = join(root, outDir, 'server');
     log.info(`Building SSR bundle -> ${ssrOutDir}`);
-    // v0.21: client-only islands get stub modules — collect the normalized
+    // Client-only islands get stub modules — collect the normalized
     // module ids and the filePath -> tagName map in one pass (#847).
     const clientOnlyIslandIds = new Set<string>();
     const clientOnlyTagMap = new Map<string, string>();
@@ -345,7 +341,7 @@ async function buildSSG(
       clientOnlyTagMap.set(moduleId, tag);
     }
 
-    // v0.21 SOP-004: Conflict detection: same tag must not be both SSR and client:only.
+    // Conflict detection: same tag must not be both SSR and client:only.
     const ssrTags = new Set(
       Object.entries(ssgIslandMeta)
         .filter(([, meta]) => meta.ssr !== false)
@@ -394,13 +390,14 @@ async function buildSSG(
         },
       },
       // The generated SSR entry is a portable deployment artifact. Bundle all
-      // runtime dependencies so Node, Deno, Workers and Nitro never inherit
-      // the build machine's import map or `npm:` URL semantics.
+      // runtime dependencies so the deploy target (Node, Workers or Bun via
+      // the Nitro mount) never depends on the build machine's module
+      // resolution.
       ssr: { noExternal: true },
-      // Phase A: Inject headExtras via define instead of .openElement/head-extras.html
-      // The generated entry code uses __HEAD_EXTRAS__ which gets replaced
-      // at build time. This avoids the Vite SSR AsyncFunction syntax errors
-      // that large inline strings (with backticks/${}) cause.
+      // Inject headExtras via Vite define: the generated entry code uses
+      // __HEAD_EXTRAS__, replaced at build time. This avoids the Vite SSR
+      // AsyncFunction syntax errors that large inline strings (with
+      // backticks/${}) cause.
       define: options.headExtras
         ? { __HEAD_EXTRAS__: JSON.stringify(options.headExtras) }
         : { __HEAD_EXTRAS__: '""' },
@@ -429,13 +426,12 @@ async function buildSSG(
         compiledElementPlugin({
           // Linked workspace packages sit outside the project root; without the
           // workspace anchor their absolute ids would land in the source maps.
-          workspaceRoot: findBuildWorkspaceRoot(process.cwd()) ?? undefined,
+          workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
           // Route/island sources carry the island delivery policy statement;
           // the compiler admits it only through the injected descriptor.
           staticSidecars: [ISLAND_ADMISSION],
         }),
         // Virtual SSG entry module
-        // Replaces .openElement/.openElement-ssg-entry.ts file write
         {
           name: 'open:virtual-ssg-entry',
           resolveId(id) {
@@ -445,13 +441,6 @@ async function buildSSG(
             if (id === RESOLVED_SSG_ENTRY_ID) return ssgEntryCode;
           },
         },
-        createNpmSpecifierPlugin(),
-        // The project's import map is part of its build contract: specifiers
-        // Deno resolves at dev time must resolve here too. Without this, an app
-        // whose routes import a mapped alias (www's `@openelement/generated/*`,
-        // or a consumer's own alias) built its client bundle and then failed
-        // static generation with "Rolldown failed to resolve import".
-        createDenoImportMapResolvePlugin(root),
         {
           name: 'open:ssg-client-only-island-stubs',
           enforce: 'pre',
@@ -493,7 +482,7 @@ async function buildSSG(
       throw new SsrRenderError('virtual:open-ssg-entry', new Error('Failed to load Hono app'));
     }
 
-    // #1471 (S4b): the document renders the client scripts. Phase 2 ran
+    // #1471: the document renders the client scripts. Phase 2 ran
     // before Phase 3 (client-before-SSG build order), so the client asset
     // manifest's entry URL is final here. Hand it to the entry once — every
     // render channel (the SSG GET handlers, renderRoute, the styled 404)

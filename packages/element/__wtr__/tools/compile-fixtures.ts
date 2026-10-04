@@ -3,19 +3,17 @@
  *
  * Uses compileElementModule — the exact function the open:compiled-element
  * Vite plugin's transform hook calls (packages/element/src/internal/
- * compiler/plugin.ts) — so WTR consumes the same ESM the official build path
- * produces, including the embedded Source Map v3 back to the authored .tsx.
- * No second TSX transform is introduced: the emitted module keeps its TS
- * annotations, and the WTR dev server lowers them with esbuild, mirroring how
- * Vite's builtin TS/JSX lowering runs after the plugin in a real build.
+ * compiler/plugin.ts) — so the vitest browser suite consumes the same ESM the
+ * official build path produces, including the embedded Source Map v3 back to
+ * the authored .tsx. No second TSX transform is introduced: the emitted module
+ * keeps its TS annotations, and Vite's oxc transform lowers them at serve
+ * time, mirroring what the plugin-plus-Vite pipeline does in a real build.
  *
- * Run through the package task (scoped permissions, never -A):
- *   deno task --cwd packages/element browser:compile
+ * Run through the package task:
+ *   pnpm --dir packages/element run browser:compile
  */
-// NOTE: __wtr__/package.json makes Deno treat this directory as outside the
-// repo workspace, so no workspace import-map specifiers (@std/*) here —
-// plain relative paths only. The compiler's own imports still resolve through
-// the element workspace member map.
+// NOTE: plain relative paths only — this directory sits outside the pnpm
+// workspace import resolution, so no workspace specifiers are used here.
 import { compileElementModule } from '../../src/internal/compiler/plugin.ts';
 
 const here = import.meta.dirname!; // packages/element/__wtr__/tools

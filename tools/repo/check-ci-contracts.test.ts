@@ -6,7 +6,7 @@
  */
 
 import { expect, test } from 'vitest';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
@@ -262,15 +262,13 @@ test('ci contract: packed-consumer matrix pins the two release OSes', () => {
   ).toBeTruthy();
   expect(
     !/windows-latest/.test(block),
-    'Windows is out of scope for the candidate: deno pack drops the Router ./vite types condition there (upstream), and the deploy targets are Linux/Workers',
+    'Windows is out of scope for the candidate: the deploy targets are Linux/Workers',
   ).toBeTruthy();
 });
 
 test('ci contract: dependency updates stay human-authored, never auto-merged', () => {
-  // The dependency-audit workflow retired with the B2 manifest conversion
-  // (its deno outdated/audit surface read the deleted Deno workspace
-  // lockfile). The surviving contract: dependabot opens human PRs only, and
-  // nothing auto-merges them.
+  // The surviving contract: dependabot opens human PRs only, and nothing
+  // auto-merges them.
   const dependabot = readFileSync(join(repoRoot, '.github/dependabot.yml'), 'utf8');
   expect(
     !/gh pr merge|enableAutoMerge|auto_merge:/i.test(dependabot),
@@ -305,11 +303,11 @@ test('ci contract: BFCache runs a blocking Chrome-channel lane', async () => {
     await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8'),
   ) as { scripts: Record<string, string> };
   expect(
-    repoConfig.scripts['gate:release'].includes('www#e2e:browsers'),
+    repoConfig.scripts['gate:release'].includes('@openelement/www#e2e:browsers'),
     'gate:release must run the three-browser Site E2E matrix',
   ).toBeTruthy();
   expect(
-    !repoConfig.scripts['gate:source'].includes('www#e2e:browsers'),
+    !repoConfig.scripts['gate:source'].includes('@openelement/www#e2e:browsers'),
     'the PR layer must not run the three-browser Site matrix (it is a release-train step)',
   ).toBeTruthy();
   const freshClone = jobBlock(workflow, 'fresh-clone');
@@ -371,7 +369,14 @@ test('ci contract: SaaS is decoupled from the core candidate gate', async () => 
     await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8'),
   ) as { scripts: Record<string, string> };
   const gateSource = repoConfig.scripts['gate:source'];
-  for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
+  // SaaS steps are package-qualified under the vp dispatch surface, so the
+  // guard names the exact selectors that would wire them into a gate.
+  for (const token of [
+    '@openelement/saas#',
+    '@openelement/tools-repo#workers:boundary-check',
+    'saas:verify',
+    'saas:workers',
+  ]) {
     expect(
       !gateSource.includes(token),
       `gate:source must not include SaaS step ${token}`,
@@ -382,8 +387,8 @@ test('ci contract: SaaS is decoupled from the core candidate gate', async () => 
   // be in neither gate.
   const gateRelease = repoConfig.scripts['gate:release'];
   for (const step of [
-    'tests/fixtures/router-nitro#proof:workers',
-    'tests/fixtures/router-nitro#proof:node',
+    '@openelement/fixture-router-nitro#proof:workers',
+    '@openelement/fixture-router-nitro#proof:node',
   ]) {
     expect(
       gateRelease.includes(step),
@@ -395,7 +400,12 @@ test('ci contract: SaaS is decoupled from the core candidate gate', async () => 
     ).toBeTruthy();
   }
   for (const gate of [gateSource, gateRelease]) {
-    for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
+    for (const token of [
+      '@openelement/saas#',
+      '@openelement/tools-repo#workers:boundary-check',
+      'saas:verify',
+      'saas:workers',
+    ]) {
       expect(
         !gate.includes(token),
         `no candidate gate may include SaaS step ${token}`,

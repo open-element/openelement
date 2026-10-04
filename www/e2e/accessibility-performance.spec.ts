@@ -32,51 +32,44 @@ function isNonCriticalExternalUrl(value: string): boolean {
   }
 }
 
+/**
+ * WCAG 2.x contrast ratio of an element's computed color against its computed
+ * background. Self-contained: page.evaluate() serializes this function into
+ * the browser, so it cannot close over spec scope.
+ */
+const computedContrast = (element: Element): number => {
+  const luminance = (value: string): number => {
+    const rgb = value
+      .match(/[\d.]+/g)
+      ?.slice(0, 3)
+      .map(Number) ?? [0, 0, 0];
+    const scale = value.startsWith('color(srgb ') ? 1 : 255;
+    const linear = rgb.map((channel) => {
+      const c = channel / scale;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+  };
+  const style = getComputedStyle(element);
+  const fg = luminance(style.color);
+  const bg = luminance(style.backgroundColor);
+  return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+};
+
 test.describe('Accessibility', () => {
   test('shared prose and mobile rail color pairs meet WCAG AA', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/guide/getting-started');
-    const contrast = (element: Element): number => {
-      const luminance = (value: string): number => {
-        const rgb = value
-          .match(/[\d.]+/g)
-          ?.slice(0, 3)
-          .map(Number) ?? [0, 0, 0];
-        const scale = value.startsWith('color(srgb ') ? 1 : 255;
-        const linear = rgb.map((channel) => {
-          const c = channel / scale;
-          return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-        });
-        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-      };
-      const style = getComputedStyle(element);
-      const fg = luminance(style.color);
-      const bg = luminance(style.backgroundColor);
-      return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
-    };
-    const codeRatio = await page.locator('open-reading-shell code').first().evaluate(contrast);
-    const summaryRatio = await page.locator('open-page-rail summary').evaluate((summary) => {
-      const luminance = (value: string): number => {
-        const rgb = value
-          .match(/[\d.]+/g)
-          ?.slice(0, 3)
-          .map(Number) ?? [0, 0, 0];
-        const scale = value.startsWith('color(srgb ') ? 1 : 255;
-        const linear = rgb.map((channel) => {
-          const c = channel / scale;
-          return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-        });
-        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-      };
-      const fg = luminance(getComputedStyle(summary).color);
-      const details = summary.closest('details');
-      if (!details) throw new Error('mobile page rail summary must belong to details');
-      // The disclosure surface lives on the summary itself now; the details
-      // box is transparent by design, so the pairing to verify is summary
-      // text against summary background.
-      const bg = luminance(getComputedStyle(summary).backgroundColor);
-      return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
-    });
+    const codeRatio = await page
+      .locator('open-reading-shell code')
+      .first()
+      .evaluate(computedContrast);
+    const summary = page.locator('open-page-rail summary');
+    // The disclosure surface lives on the summary itself now; the details
+    // box is transparent by design, so the pairing to verify is summary
+    // text against summary background.
+    expect(await summary.evaluate((el) => el.closest('details') !== null)).toBe(true);
+    const summaryRatio = await summary.evaluate(computedContrast);
     expect(codeRatio).toBeGreaterThanOrEqual(4.5);
     expect(summaryRatio).toBeGreaterThanOrEqual(4.5);
   });

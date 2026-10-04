@@ -1,2 +1,2 @@
-# Enforce LF line endings — CI runs on Linux, deno fmt requires LF
+# Enforce LF line endings — CI runs on Linux, oxfmt requires LF
 * text=auto eol=lf

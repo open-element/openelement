@@ -1,6 +1,6 @@
 /**
- * Portable `cd` + env replacement for `deno task` strings (1.0 Alpha baseline,
- * subprocesses via node:child_process since B1b).
+ * Portable `cd` + env replacement for package.json task strings; subprocesses
+ * run through node:child_process.
  *
  * Root tasks must not `cd` (Windows cmd has no `cd ... &&` composition that
  * behaves like POSIX sh, and directory-hopping inside task strings hides the
@@ -9,7 +9,7 @@
  * exactly as if it had been started there:
  *
  * Usage:
- *   deno run --allow-run tools/repo/run-in.ts --root <dir> [--env K=V ...] -- <cmd> [args...]
+ *   node tools/repo/run-in.ts --root <dir> [--env K=V ...] -- <cmd> [args...]
  *
  * The child exit code passes through; a spawn failure exits 127.
  */
@@ -52,8 +52,8 @@ export function parseRunInArgs(args: string[]): RunInOptions {
 export async function execute(options: RunInOptions): Promise<number> {
   const [command, ...commandArgs] = options.command;
   try {
-    // Deno.Command merges `env` over the parent environment; node's raw env
-    // option would replace it and drop PATH, so commandStatus merges too.
+    // node's raw env option replaces the parent environment (dropping PATH),
+    // so commandStatus merges `env` over the parent instead.
     const status = await commandStatus(command, {
       args: commandArgs,
       cwd: options.root,

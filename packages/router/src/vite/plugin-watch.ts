@@ -4,9 +4,7 @@
  *
  * `configureServer` watches the routes/islands dirs and the resolved
  * openelement.config.ts, serializes descriptor rescans behind one debounced
- * queue, and invalidates the virtual entries on source changes. Moved out of
- * plugin.ts verbatim: watcher wiring, debounce timing and log lines are
- * unchanged.
+ * queue, and invalidates the virtual entries on source changes.
  */
 
 import process from 'node:process';
@@ -151,7 +149,9 @@ export function createConfigureServerHook(state: OpenPluginState): Pick<Plugin, 
         }
         // No restart hook (older Vite): surface the need instead of serving
         // stale options.
-        log.warn('Restart `deno task dev` to apply the new openelement.config.ts options.');
+        log.warn(
+          'Restart the dev server (`pnpm dev` / `npm run dev`) to apply the new openelement.config.ts options.',
+        );
       };
       if (state.resolvedConfigFile !== null) server.watcher.add(state.resolvedConfigFile);
       server.watcher.on('change', onAppConfigChanged);

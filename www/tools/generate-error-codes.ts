@@ -19,11 +19,11 @@
  * module is generated (gitignored) and rebuilt before test/site:build.
  */
 import { formatJson } from '@openelement/element/build-utils';
-import { walk } from '../../tools/lib/std-fs.ts';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { readPackages, releasePublishOrder } from '../../tools/lib/package-graph.ts';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
 export const ERROR_CODES_ARTIFACT = 'www/app/data/_generated-error-codes.ts';
@@ -31,7 +31,7 @@ export const ERROR_CODES_ARTIFACT = 'www/app/data/_generated-error-codes.ts';
 const ERROR_CODES_PAGE = 'www/app/components/page-errors.tsx';
 /** The route that projects the generated inventory onto the page. */
 const ERROR_CODES_ROUTE = 'www/app/routes/errors.tsx';
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 /** The single declaration site of the runtime ErrorCode constants. */
 const RUNTIME_CODES_SOURCE = 'packages/element/src/internal/protocol/errors.ts';
 
@@ -222,12 +222,16 @@ export async function buildErrorCodes(): Promise<ErrorCodesBuild> {
   const occurrences = new Map<string, CodeOccurrence[]>();
 
   for (const info of packages) {
-    for await (const entry of walk(join(info.dir, 'src'), {
-      includeDirs: false,
-      exts: ['.ts', '.tsx'],
+    for (const entry of await readdir(join(info.dir, 'src'), {
+      recursive: true,
+      withFileTypes: true,
     })) {
-      const path = entry.path.slice(repoRoot.length).replace(/^\//, '');
-      const text = await readFile(entry.path, 'utf8');
+      if (entry.isDirectory() || (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx'))) {
+        continue;
+      }
+      const entryPath = `${entry.parentPath}/${entry.name}`;
+      const path = entryPath.slice(repoRoot.length).replace(/^\//, '');
+      const text = await readFile(entryPath, 'utf8');
       const source = ts.createSourceFile(
         path,
         text,

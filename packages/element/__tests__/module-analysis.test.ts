@@ -148,7 +148,7 @@ const semanticCases: SemanticCase[] = [
     },
   },
   {
-    name: 'recognizes defineElement aliases from both packages',
+    name: 'recognizes injected router defineElement; element package exposes no factory',
     vocabulary: ROUTER_VOCABULARY,
     source: `
       import { defineElement as appElement } from '@openelement/router';
@@ -157,11 +157,14 @@ const semanticCases: SemanticCase[] = [
       elementElement('oe-element-element', {});
     `,
     expected: {
-      definedCustomElementTags: ['oe-app-element', 'oe-element-element'],
+      // The element package has no defineElement factory: compiled
+      // registration is the @element decorator, so its namesake import only
+      // resolves through host-injected vocabulary and fails closed here.
+      definedCustomElementTags: ['oe-app-element'],
     },
   },
   {
-    name: 'default scan knows only the element defineElement — defineIsland is retired vocabulary',
+    name: 'default scan knows no registration factories — retired names fail closed',
     source: `
       import {
         defineElement as elementElement,
@@ -178,9 +181,9 @@ const semanticCases: SemanticCase[] = [
     `,
     expected: {
       // The default scan fails closed on every retired or foreign factory:
-      // defineIsland left both packages' authoring surface in v0.44, and the
-      // router's defineElement rides host-injected vocabulary only.
-      definedCustomElementTags: ['oe-element-element'],
+      // neither package's defineElement nor defineIsland is core vocabulary,
+      // and the router's live factories ride host-injected vocabulary only.
+      definedCustomElementTags: [],
     },
   },
   {

@@ -1,7 +1,7 @@
 /** Blog feed render unit tests (#1441). */
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { fromFileUrl } from '@std/path';
+import { fileURLToPath } from 'node:url';
 import { blogCollection, blogCollectionSchema, prepareBlogPosts } from '../../lib/blog.ts';
 import {
   type CollectionEntry,
@@ -157,7 +157,7 @@ test('feedFailures: unpublishable dates, duplicate and empty slugs fail closed',
 });
 
 test('site feed: the real blog collection renders one item per published post', async () => {
-  const contentDir = fromFileUrl(new URL('../../content/blog', import.meta.url));
+  const contentDir = fileURLToPath(new URL('../../content/blog', import.meta.url));
   const posts = prepareBlogPosts(
     await loadCollectionData('blog', { ...blogCollection, contentDir }),
   );

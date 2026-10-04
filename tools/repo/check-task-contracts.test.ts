@@ -18,7 +18,7 @@
  */
 
 import { expect, test } from 'vitest';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
@@ -67,7 +67,7 @@ test('task contract: verify:core stays the source gate plus the packed gate', ()
   expect(
     coreSteps,
     'verify:core is the CI-equivalent core; changing its step set requires updating this contract',
-  ).toEqual(['tools/repo#gate:source', 'tools/release#gate:packed']);
+  ).toEqual(['@openelement/tools-repo#gate:source', '@openelement/tools-release#gate:packed']);
 });
 
 test('task contract: verify runs every verify:core step', () => {
@@ -95,37 +95,37 @@ test('task contract: gate:source is the fast PR-layer step set', () => {
     repoSplitSteps('gate:source'),
     'gate:source is what every pull request runs; adding a step to the PR layer needs this contract updated (and a reason it cannot wait for the release train)',
   ).toEqual([
-    'tools/repo#generate:all',
-    'tools/repo#typecheck',
+    '@openelement/tools-repo#generate:all',
+    '@openelement/tools-repo#typecheck',
     'check:dep-age',
-    'packages/element#test',
-    'packages/router#test',
-    'tools/repo#lint:markdown',
-    'www#check:content-dates',
-    'tools/repo#interface:snapshot',
-    'tests/fixtures/router-request-time#gate',
-    'packages/element#browser:gate',
+    '@openelement/element#test',
+    '@openelement/router#test',
+    '@openelement/tools-repo#lint:markdown',
+    '@openelement/www#check:content-dates',
+    '@openelement/tools-repo#interface:snapshot',
+    '@openelement/fixture-router-request-time#gate',
+    '@openelement/element#browser:gate',
   ]);
 });
 
 test('task contract: packed qualification runs separately from the source gate', () => {
   expect(
-    !repoSplitSteps('gate:source').includes('tools/release#gate:packed'),
+    !repoSplitSteps('gate:source').includes('@openelement/tools-release#gate:packed'),
     'the source producer must not duplicate the independent packed producer',
   ).toBeTruthy();
   expect(
-    coreSteps.includes('tools/release#gate:packed'),
+    coreSteps.includes('@openelement/tools-release#gate:packed'),
     'the local CI equivalent must retain packed qualification',
   ).toBeTruthy();
 });
 
 test('task contract: artifact scan consumes the packed gate tarballs exactly once', () => {
   const packed = releaseConfig.scripts['gate:packed'].split(/\s+/);
-  const packIndex = packed.indexOf('tools/release#pack:dry-run');
-  const scanIndex = packed.indexOf('tools/release#package-artifacts:check:prepacked');
+  const packIndex = packed.indexOf('@openelement/tools-release#pack:dry-run');
+  const scanIndex = packed.indexOf('@openelement/tools-release#package-artifacts:check:prepacked');
   expect(packIndex >= 0 && scanIndex === packIndex + 1).toBeTruthy();
   expect(
-    !packed.includes('tools/release#package-artifacts:check'),
+    !packed.includes('@openelement/tools-release#package-artifacts:check'),
     'the standalone scanner repacks and must not run inside gate:packed',
   ).toBeTruthy();
   expect(
@@ -151,48 +151,48 @@ test('task contract: gate:release carries the steps trimmed out of the PR layer'
     // (which stays in the PR layer: it is cheap and catches an article added
     // without a manifest entry).
     'site:build',
-    'www#check:api-reference',
-    'www#check:errors',
-    'www#check:error-codes',
-    'www#check:install-command',
-    'www#check:content-data',
-    'www#check:article-routes',
-    'www#check:nav',
-    'www#check:links',
-    'www#check:machine-paths',
-    'www#check:doc-figures',
-    'www#check:theme-tokens',
-    'www#check:content',
-    'www#check:retired-url',
-    'www#e2e:browsers',
+    '@openelement/www#check:api-reference',
+    '@openelement/www#check:errors',
+    '@openelement/www#check:error-codes',
+    '@openelement/www#check:install-command',
+    '@openelement/www#check:content-data',
+    '@openelement/www#check:article-routes',
+    '@openelement/www#check:nav',
+    '@openelement/www#check:links',
+    '@openelement/www#check:machine-paths',
+    '@openelement/www#check:doc-figures',
+    '@openelement/www#check:theme-tokens',
+    '@openelement/www#check:content',
+    '@openelement/www#check:retired-url',
+    '@openelement/www#e2e:browsers',
     // Coverage.
-    'tools/repo#test:coverage:check',
+    '@openelement/tools-repo#test:coverage:check',
     // Every fixture gate.
-    'tests/fixtures/router-static-only#build',
-    'tests/fixtures/router-native-framework#gate',
-    'tests/fixtures/router-lit-framework#gate',
-    'tests/fixtures/router-ui-dogfood#gate',
-    'tests/fixtures/site-light-probe#gate',
-    'tests/fixtures/web-component-interop#test',
-    'tests/e2e/starter-smoke#gate',
-    'tests/fixtures/router-nitro#proof:node',
-    'tests/fixtures/router-nitro#proof:workers',
+    '@openelement/fixture-router-static-only#build',
+    '@openelement/fixture-router-native-framework#gate',
+    '@openelement/fixture-router-lit-framework#gate',
+    '@openelement/fixture-router-ui-dogfood#gate',
+    '@openelement/fixture-site-light-probe#gate',
+    '@openelement/fixture-web-component-interop#test',
+    '@openelement/e2e-starter-smoke#gate',
+    '@openelement/fixture-router-nitro#proof:node',
+    '@openelement/fixture-router-nitro#proof:workers',
     // Boundary/provenance scans. (The former fixtures:locks:check retired
     // with the B2 manifest conversion: one pnpm lock replaced the per-fixture
     // Deno lock universes it guarded.)
-    'tools/repo#esm:boundary-check',
-    'tools/repo#validation:boundary-check',
-    'tools/repo#signals:check-protocol-boundary',
-    'tools/repo#assets:check-provenance',
-    'tools/repo#workspace:links:check',
-    'tools/repo#url-pattern-list:provenance',
+    '@openelement/tools-repo#esm:boundary-check',
+    '@openelement/tools-repo#validation:boundary-check',
+    '@openelement/tools-repo#signals:check-protocol-boundary',
+    '@openelement/tools-repo#assets:check-provenance',
+    '@openelement/tools-repo#workspace:links:check',
+    '@openelement/tools-repo#url-pattern-list:provenance',
     // Retired-api, classification and generator gates.
-    'tools/repo#retired-api:check',
-    'tools/repo#product:classification:check',
-    'tools/repo#generator-gates:check',
+    '@openelement/tools-repo#retired-api:check',
+    '@openelement/tools-repo#product:classification:check',
+    '@openelement/tools-repo#generator-gates:check',
     // The release train keeps the FULL element browser matrix; the PR layer
     // runs the Chromium subset under the same step name's gate.
-    'packages/element#browser:gate:full',
+    '@openelement/element#browser:gate:full',
   ];
   for (const step of required) {
     expect(
@@ -204,7 +204,7 @@ test('task contract: gate:release carries the steps trimmed out of the PR layer'
     // Both layers generate first: gate:release's www checks import the
     // generated data, so the generator entrypoint is the one documented
     // shared step — everything else must stay in exactly one layer.
-    if (step === 'tools/repo#generate:all') continue;
+    if (step === '@openelement/tools-repo#generate:all') continue;
     expect(
       !source.includes(step),
       `'${step}' appears in both gates; the PR layer must stay the fast subset`,
@@ -224,11 +224,11 @@ test('task contract: release:check is the release train plus the packed gate', (
     // (check-release-state-machine.ts), which only generate:all
     // materializes on a clean checkout — the release workflow starts from
     // one, so generating later (or not first) fails the run pre-publish.
-    'tools/repo#generate:all',
-    'tools/repo#release:registry-check',
-    'tools/repo#gate:release',
-    'tools/release#gate:packed',
-    'tools/release#publish:npm:dry-run',
+    '@openelement/tools-repo#generate:all',
+    '@openelement/tools-repo#release:registry-check',
+    '@openelement/tools-repo#gate:release',
+    '@openelement/tools-release#gate:packed',
+    '@openelement/tools-release#publish:npm:dry-run',
   ]);
 });
 

@@ -13,16 +13,9 @@
  * @openelement/router root entry.
  * This package only contains Vite-specific build orchestration.
  *
- * For the unified openElement() entry, use @openelement/router/vite.
- *
- * v0.22 (SOP-004): Decomposed into focused modules:
- *   head-injection.ts      - HTML fragment validation & serialization
- *   plugin.ts              - Internal plugin factory (used by openPipeline)
- *   deno-import-map.ts     - Import-map resolution for app/site aliases
- *                            (e.g. @openelement/generated/*)
- *
- * This file is now a re-export hub with the openPipeline()/buildApp() entry
- * points (~100 lines).
+ * Module layout: head-injection.ts (HTML fragment validation & serialization)
+ * and plugin.ts (internal plugin factory used by openPipeline) carry the
+ * implementation; this file is the openPipeline()/buildApp() entry.
  */
 
 // Primary public API

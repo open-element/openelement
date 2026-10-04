@@ -69,7 +69,7 @@ import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
 ```
 
-`hydrate` 决定浏览器何时 import 该模块——`'load'` 用于导航、主题这类首屏就需要的控件，`'idle'` 留给其余可以等待的，`'visible'` 给随着滚动进入视口才重要的组件，`'only'` 给跳过 SSR 的浏览器专用组件。构建会记录哪些 island 属于哪个页面，因此页面只引用它能用到的 chunk，永远到不了的 island 永远不会被拉取。
+`hydrate` 决定浏览器何时 import 该模块——`'load'` 用于导航、主题这类首屏就需要的控件，`'idle'` 留给其余可以等待的，`'visible'` 给随着滚动进入视口才重要的组件，`'media'` 给按能力门控的重模块（chunk 只在 island `media` 字段声明的查询匹配期间拉取），`'only'` 给跳过 SSR 的浏览器专用组件。构建会记录哪些 island 属于哪个页面，因此页面只引用它能用到的 chunk，永远到不了的 island 永远不会被拉取。
 
 ## 条件区域与语法边界
 

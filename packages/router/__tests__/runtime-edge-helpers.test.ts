@@ -9,7 +9,7 @@ import {
 import { createIslandLifecycle } from '../src/vite/internal/ssg/island-lifecycle.ts';
 import { createMorphFocusRestore } from '../src/vite/internal/ssg/morph-focus-restore.ts';
 import { createMorphWebkitFix } from '../src/vite/internal/ssg/morph-webkit-fix.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 
 interface FakeAttr {
   name: string;

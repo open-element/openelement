@@ -23,7 +23,7 @@ function scriptedRunner(codes: number[]): {
 
 test('classifyTestExit separates real failures from native crashes (#1278)', () => {
   expect(classifyTestExit(0)).toEqual('ok');
-  // deno test reports assertion failures as exit code 1; usage and spawn
+  // vitest reports assertion failures as exit code 1; usage and spawn
   // errors stay below the 128 + signal floor. None of these may be retried.
   expect(classifyTestExit(1)).toEqual('test-failure');
   expect(classifyTestExit(2)).toEqual('test-failure');

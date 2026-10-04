@@ -1,18 +1,17 @@
 /**
  * Deliberate root-facade implementation boundary. Not a package subpath.
  *
- * This facade re-exports only modules that survived the compiled
- * Part Program reentry. The legacy VNode renderer, runtime JSX factories,
- * hydration-scope runtime, island registration and client-runtime helpers
- * were removed; the server-render entry (`renderDsd`) and the pre-upgrade
- * capture bootstrap are reimplemented over the compiled serializer and the
- * compiled claim capture/replay seam.
+ * This facade exposes the server-render entry (`renderDsd`, implemented over
+ * the compiled Part Program serializer) and the pre-upgrade capture bootstrap
+ * (implemented over the compiled claim capture/replay seam), alongside the
+ * shared core/protocol/signal surface re-exported below.
  */
 import {
   createDeferredServerExecutor,
   type DeferredServerOwner,
   serializeCompiledProgram,
 } from './internal/compiled/server/index.ts';
+import { convertToAttribute } from './internal/compiled/facade-host.ts';
 import { scopeCompiledLightCss } from './internal/compiled/style.ts';
 import type {
   CompiledElementMetadata,
@@ -108,7 +107,7 @@ interface CompiledComponentConstructor extends CustomElementConstructor {
 
 /**
  * Collect a compiled class's static styles as CSS text for the DSD template
- * (legacy collectStyleCss parity): the serializer inlines the result as one
+ * (DSD template contract): the serializer inlines the result as one
  * marked <style> element so never-upgrading hosts (pages) still ship their
  * component styles in the SSR payload.
  */
@@ -123,7 +122,7 @@ function collectStaticStyleCss(ctor: CompiledComponentConstructor): string | und
     try {
       for (const rule of Array.from(rules)) css += rule.cssText + '\n';
     } catch {
-      // Cross-origin or otherwise unreadable sheets are skipped (legacy parity).
+      // Cross-origin or otherwise unreadable sheets are skipped.
     }
   }
   return css === '' ? undefined : css;
@@ -163,14 +162,6 @@ function failUncompiled(ctor: object, tag: string): never {
       'renderDsd only serializes classes produced by the OpenElement compiler ' +
       '(@openelement/element/compiler open:compiled-element transform).',
   );
-}
-
-/** Serialize one compiled property value for a host attribute. */
-function serializePropertyValue(record: CompiledPropertyMetadata, value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (record.type === 'boolean') return value ? '' : null;
-  if (record.type === 'array' || record.type === 'object') return JSON.stringify(value);
-  return String(value);
 }
 
 /** Coerce a JS-side prop value per the compiled converter record. */
@@ -244,8 +235,8 @@ function seedCompiledProperties(
       : record.default;
     signals[record.name] = signal(value);
     if (record.attribute !== null) {
-      const serialized = serializePropertyValue(record, value);
-      if (serialized !== serializePropertyValue(record, record.default) && serialized !== null) {
+      const serialized = convertToAttribute(record, value);
+      if (serialized !== convertToAttribute(record, record.default) && serialized !== null) {
         hostAttrs.push([record.attribute, serialized] as const);
       }
     }

@@ -1,5 +1,5 @@
 /**
- * @openelement/router - build-manifest.ts tests (Deno)
+ * @openelement/router - build-manifest.ts tests
  *
  * Tests build manifest scanning and formatting using temp directories.
  */
@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { printBuildManifest, scanClientBuild, scanSSGOutput } from '../src/vite/build-manifest.ts';
 
-import { join } from '@std/path';
+import { join } from 'node:path';
 
 function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), 'open-test-'));

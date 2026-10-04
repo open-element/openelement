@@ -10,11 +10,12 @@
  * source date are absent from the map so the renderer omits <lastmod>
  * instead of guessing.
  */
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../../site-config.ts';
 import { readFile } from 'node:fs/promises';
 
-const repoRoot = fromFileUrl(new URL('../../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
 interface ContentDatesManifest {
   articles: Record<string, { en: string; zh: string }>;

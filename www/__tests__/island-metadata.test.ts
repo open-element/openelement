@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   fileToTagName,
   scanIslandMeta,
@@ -7,7 +8,7 @@ import {
 } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
 import { generateClientEntry } from '../../packages/router/src/vite/internal/ssg/entry-client-codegen.ts';
 
-const REPO_ROOT = fromFileUrl(new URL('../..', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const SITE_ISLANDS_DIR = join(REPO_ROOT, 'www', 'app', 'islands');
 
 const REQUIRED_LOCAL_ISLANDS = {

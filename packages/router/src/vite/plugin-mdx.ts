@@ -47,9 +47,8 @@ function loadLower(): Promise<LowerModule> {
       throw buildError(
         MdxErrorCode.OPTIONAL_PEER_MISSING,
         '[openElement] MDX routes require the optional peer dependency "marked" ' +
-          '(declared by @openelement/router). Install it into your app: add ' +
-          '"marked": "npm:marked@^15.0.0" to the deno.json imports ' +
-          '(npm consumers: `npm install --save-dev marked`).',
+          '(declared by @openelement/router). Install it into your app: ' +
+          '`npm install --save-dev marked` (or add "marked" to your dependencies).',
         { cause },
       );
     }

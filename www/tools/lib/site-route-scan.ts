@@ -6,7 +6,7 @@
  * maps to its directory, [param].tsx maps to :param, every route file is a
  * page; dynamic enumeration stays fail-closed in enumeratePublicRoutes.
  */
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { readdir } from 'node:fs/promises';
 import type { SiteRouteCatalogEntry } from './site-sitemap.ts';
 

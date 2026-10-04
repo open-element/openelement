@@ -46,7 +46,6 @@ test('no ISR surface remains in element public entry points', async () => {
     'packages/element/src/public-surface.ts',
     'packages/element/src/client-only.ts',
     'packages/element/src/public-contracts.ts',
-    'packages/element/src/public-build-runtime.ts',
     'packages/element/src/build-utils.ts',
     'packages/element/src/internal/core/index.ts',
     'packages/element/src/internal/protocol/framework.ts',

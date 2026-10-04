@@ -24,6 +24,7 @@
  */
 
 import { SITE_ORIGIN } from '../../app/site-ui/head.ts';
+import { escapeXml } from './xml-escape.ts';
 
 export interface SitemapUrlEntry {
   loc: string;
@@ -121,15 +122,6 @@ export function enumeratePublicRoutes(options: EnumeratePublicRoutesOptions): {
   }
   localized.sort();
   return { routes: localized, failures };
-}
-
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
 }
 
 /** Render sitemap.xml from enumerated public routes (deterministic order). */

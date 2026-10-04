@@ -7,9 +7,9 @@
  * the Document seam, the `.mdx` pipeline, the route/island scanners, the
  * dynamic prerender, and the generated entry's server runtime carries a
  * stable code, a phase and a severity, exactly like the element package's
- * `OpenElementError` contract (decision 0053). Before this module those
- * throws were bare `Error`s, so a host could not classify a failure, and the
- * CLI could not decide what to show without pattern-matching message text.
+ * `OpenElementError` contract (decision 0053): a host classifies any failure
+ * by its code and the CLI decides what to show without pattern-matching
+ * message text.
  *
  * Phase follows the surface that raises the code: `validation` for the
  * authoring descriptors and the Document head contract (each one rejects an

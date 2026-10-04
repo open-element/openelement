@@ -87,10 +87,11 @@ interface OpenElementSourceSubpaths {
 }
 
 /**
- * Derived from OPENELEMENT_EXPORT_FILES (generated from each package's
- * deno.json "exports") so this table cannot drift from the real export maps
- * again (#733: the hand-written table still listed app's deleted hono entry
- * and element's removed open-element-render/open-element-hydration subpaths).
+ * Derived from OPENELEMENT_EXPORT_FILES (generated from each workspace
+ * package manifest's "exports" field) so this table cannot drift from the
+ * real export maps again (#733: the hand-written table still listed app's
+ * deleted hono entry and element's removed
+ * open-element-render/open-element-hydration subpaths).
  *
  * Keys are the full package names ('@openelement/element'); `files` maps each
  * public subpath to its source file relative to the package's src/ directory,

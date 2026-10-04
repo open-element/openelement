@@ -12,7 +12,8 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { allPackageAliases } from '../../../tools/lib/package-aliases.ts';
 import { runStep } from './command-run.ts';
 import { readJson } from './json-file.ts';
@@ -28,17 +29,15 @@ export interface WorkspaceSourceAlias {
 export function workspaceSourceAliases(repoRoot: string): WorkspaceSourceAlias[] {
   return [...allPackageAliases(repoRoot)].map(([specifier, url]) => ({
     specifier,
-    sourcePath: fromFileUrl(url),
+    sourcePath: fileURLToPath(url),
   }));
 }
 
 export interface ApplyWorkspaceAliasesOptions {
   repoRoot: string;
   /**
-   * Extra dependency pins merged into the app manifest (`npm:`-prefixed
-   * import-map values are accepted and stripped; a trailing-slash key is an
-   * import-map prefix entry with no package.json equivalent and is dropped —
-   * the bare package pin covers its subpaths).
+   * Extra dependency pins merged into the app manifest as plain package.json
+   * ranges (`'lit': '3.3.3'`), consumed verbatim — no import-map shapes here.
    */
   extraImports?: Record<string, string>;
   /**
@@ -48,22 +47,6 @@ export interface ApplyWorkspaceAliasesOptions {
   externalViteAliases?: readonly string[];
   /** Final text transform applied to vite.config.ts after the alias injection. */
   transformViteConfig?: (text: string) => string;
-}
-
-/**
- * An `npm:<pkg>@<range>` import-map value as a plain package.json range for
- * the caller's specifier. A trailing slash marks an import-map PREFIX entry
- * ('@ionic/core/'): the bare package pin already covers its subpaths, so it
- * is dropped. An aliased shape (`npm:other-name@version` under a different
- * key) stays a full npm alias spec.
- */
-function dependencyPin(specifier: string, value: string): string | null {
-  if (!value.startsWith('npm:')) return null;
-  const spec = value.slice(4);
-  if (spec.endsWith('/')) return null;
-  const prefix = `${specifier}@`;
-  if (spec.startsWith(prefix)) return spec.slice(prefix.length);
-  return spec;
 }
 
 /**
@@ -97,11 +80,9 @@ export async function applyWorkspaceAliases(
   // fixture's own islands import (and anything an externalViteAliases entry
   // points at); the workspace build source (Router CLI/vite plugin, element
   // signal engine) resolves its imports from the repository's node_modules
-  // relative to the source files the aliases point at.
-  for (const [specifier, value] of Object.entries(options.extraImports ?? {})) {
-    const pin = dependencyPin(specifier, value);
-    if (pin !== null) dependencies[specifier] = pin;
-  }
+  // relative to the source files the aliases point at. Values are plain
+  // package.json ranges, applied verbatim.
+  Object.assign(dependencies, options.extraImports ?? {});
   manifest.scripts.build = routerBuildScript(options.repoRoot);
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 

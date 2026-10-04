@@ -15,7 +15,7 @@ Do not commit agent prompts, dispatch transcripts, copied CI logs, temporary evi
 
 Review every change against [docs/architecture/design-principles.md](./docs/architecture/design-principles.md): the four-question gate (P7) applies to ordinary pull requests, and deviations follow the comply-or-explain rule. Use an ADR only for a hard-to-reverse public API, package topology, architecture, security/trust, or explicit compatibility decision. Ordinary fixes do not need an ADR. Current architecture belongs in `docs/architecture`; retired decisions belong in Git history and the compact history index.
 
-Permission note (deliberate): the test suites run on the node host under vitest (B3), so there is no Deno permission surface to scope; subprocess-driving gates may still shell out to the Deno-hosted release/qualify tooling. Supply-chain hygiene (minimum dependency age, lockfiles, provenance checks) remains load-bearing.
+Permission note (deliberate): the test suites run on the node host under vitest (B3), and the whole toolchain is Node/pnpm end to end after the S2 release-lane port, so there is no Deno permission surface to scope. Supply-chain hygiene (minimum dependency age, lockfiles, provenance checks) remains load-bearing.
 
 ## Development
 
@@ -46,26 +46,28 @@ Use public package boundaries rather than private workspace imports. Prefer Web 
 
 ## Task map
 
-The root `package.json` scripts are the task surface (`pnpm run <task>`):
+The root `package.json` scripts are the task surface (`pnpm run <task>`); workspace tasks dispatch
+package-qualified through the vp CLI (`vp run <@scope/pkg>#<task>`), which resolves by exact
+package name:
 
 | Task                                          | Purpose                                                                                                   |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `check`                                       | `fmt:check` + `lint` + `typecheck` + markdown lint, run serially through `gate.ts`                        |
-| `test`                                        | Full vitest suite across every workspace project (see the permission note below)                          |
+| `test`                                        | Full vitest suite across every workspace project (see the Architecture review permission note)            |
 | `test:e2e`                                    | Site build plus browser end-to-end suites (www, router fixtures)                                          |
 | `build`                                       | Build the four public packages (element, router, create, ui)                                              |
-| `pack`                                        | Pack release tarballs through `tools/release`                                                             |
+| `vp run @openelement/tools-release#pack`      | Pack release tarballs through `tools/release`                                                             |
 | `verify`                                      | Full repository verification, including SaaS                                                              |
 | `verify:core`                                 | Element/Router Alpha candidate verification (no SaaS steps)                                               |
 | `release:check`                               | Registry check plus the release train (`gate:release`) plus packed qualification plus npm publish dry-run |
 | `site:build` / `site:verify`                  | Build / fully verify the documentation site                                                               |
-| `saas:build` / `saas:verify` / `saas:workers` | The independently governed SaaS application                                                               |
+| `saas:verify` / `saas:workers`                | The independently governed SaaS application (`vp run @openelement/saas#build` builds it)                  |
 | `clean` / `clean:deep`                        | Remove generated artifacts                                                                                |
 | `bench`                                       | Benchmark self-checks under `benchmarks/` (deterministic assertions, no browsers)                         |
 | `fmt` / `fmt:check` / `lint` / `typecheck`    | Format, lint, and type-check the workspace                                                                |
 | `gate:release`                                | Source gate's trimmed-out steps plus packed gate (the release train)                                      |
 
-The CI gate is split in two layers. `tools/repo#gate:source` (9 steps) is the
+The CI gate is split in two layers. `tools/repo#gate:source` (10 steps) is the
 fast PR layer and runs on every pull request; the steps that need a built
 Site, coverage, deploy fixtures, or three-engine browser matrices live in
 `tools/repo#gate:release` and run on the release train via `release:check`
@@ -91,7 +93,7 @@ Subtask areas: `tools/repo` (gates, release-state checks, coverage, hooks), `too
 node tools/repo/gate.ts <step...>
 ```
 
-A step is a root task name (`check`) or a directory-scoped task (`tools/repo#release:registry-check`). `parseGateStep` (`tools/repo/gate.ts`) rejects `..` segments and absolute paths, so steps can never escape the repository.
+A step is a root task name (`check`) or a package-qualified task (`@openelement/tools-repo#release:registry-check`); each step dispatches through `vp run --filter <package> <task>` with `--fail-if-no-match` and caching disabled, so a selector that names no package fails the gate instead of silently skipping. `parseGateStep` (`tools/repo/gate.ts`) rejects the path-shaped `dir#task` selector form (it cannot be dispatched), `..` segments and absolute paths, so steps can never escape the repository.
 
 ## Hooks
 

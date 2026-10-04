@@ -3,8 +3,8 @@
  *
  * The compiler emits the compiled module as TypeScript text and hands it to the
  * bundler, which lowers it. Until this module existed, nothing type-checked
- * that text: a compiler change could emit a program that fails `deno check`,
- * `tsc`, or a consumer's `tsgo` run, and the first evidence was a consumer's
+ * that text: a compiler change could emit a program that fails `tsc` or a
+ * consumer's `tsgo` run, and the first evidence was a consumer's
  * build — the reason the "strict emission" corpus in
  * `__tests__/compiled-element-v1.test.ts` had to pin individual `static`
  * annotations by string match.

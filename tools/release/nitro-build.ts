@@ -18,18 +18,25 @@
  */
 import { commandStatus } from '../repo/node-command.ts';
 import { rename, rm } from 'node:fs/promises';
-import { parseArgs } from '@std/cli/parse-args';
-import { exists } from '../lib/std-fs.ts';
+import { access } from 'node:fs/promises';
+import { parseArgs } from 'node:util';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
 
-const args = parseArgs(process.argv.slice(2), {
-  string: ['root', 'preset', 'out', 'prune-public'],
+// strict mode (the default) fails closed on undeclared flags; no positionals.
+const { values } = parseArgs({
+  args: process.argv.slice(2),
+  options: {
+    root: { type: 'string' },
+    preset: { type: 'string' },
+    out: { type: 'string' },
+    'prune-public': { type: 'string' },
+  },
 });
 
-const root = args.root ?? '.';
-const preset = args.preset ?? '';
-const out = args.out ?? '.output';
-const prunePublic = args['prune-public'];
+const root = values.root ?? '.';
+const preset = values.preset ?? '';
+const out = values.out ?? '.output';
+const prunePublic = values['prune-public'];
 
 if (!preset) {
   console.error(
@@ -48,7 +55,7 @@ async function removeIfExists(path: string): Promise<void> {
 
 async function runNitro(): Promise<void> {
   // The pinned nitro CLI runs through npx on the node host (Rolldown loads
-  // its native binding directly; node has no FFI permission concept).
+  // its native binding directly).
   const { code } = await commandStatus('npx', {
     args: ['--yes', `nitro@${NITRO_VERSION}`, 'build', '--dir', root, '--preset', preset],
     stdin: 'inherit',
@@ -67,6 +74,15 @@ if (out !== '.output') {
 if (prunePublic) {
   await removeIfExists(`${root}/${out}/public/${prunePublic}`);
 }
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 if (!(await exists(`${root}/${out}/nitro.json`))) {
   console.error(`Nitro build produced no manifest at ${root}/${out}/nitro.json`);
   process.exit(1);

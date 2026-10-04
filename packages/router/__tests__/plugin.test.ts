@@ -1,5 +1,5 @@
 /**
- * @openelement/router - plugin.ts tests (Deno)
+ * @openelement/router - plugin.ts tests
  *
  * Focused tests for the internal plugin factory (plugin.ts):
  * Tests the raw `createOpenPlugin()` function which is NOT part of the public API —
@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 
 type PluginOptions = Parameters<typeof createOpenPlugin>[0];

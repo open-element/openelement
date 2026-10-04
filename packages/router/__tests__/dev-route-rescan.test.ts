@@ -2,7 +2,7 @@
  * plugin.ts: dev route rescan (#1028).
  *
  * Route scanning used to happen only in buildStart(); a route file added
- * while `deno task dev` ran was never picked up (404 until restart). The core
+ * while the dev server ran was never picked up (404 until restart). The core
  * plugin's dev watcher must re-scan the routes dir, rebuild the cached entry
  * descriptor (virtualEntryPlugin.load() renders from it), invalidate the
  * virtual entry module, and full-reload.
@@ -10,7 +10,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 import { TestFileWatcher } from './test-watcher.ts';
 

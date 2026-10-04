@@ -4,13 +4,12 @@
  * The discovery feeds generate-all and the generator gate; a silently
  * skipped workspace would let both miss the same generators. Every malformed
  * shape must therefore throw with the offending path, never degrade to an
- * empty or partial workspace list. The B2 manifest conversion moved the
- * discovery source from the root deno.json workspace list to the
+ * empty or partial workspace list. The discovery source is the
  * pnpm-workspace.yaml globs + per-member package.json scripts.
  */
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../tests/lib/vitest-asserts.ts';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import { emitterEntries, generatorEntries, readWorkspaces } from './workspace-tasks.ts';
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

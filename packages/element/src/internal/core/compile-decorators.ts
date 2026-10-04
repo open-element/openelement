@@ -2,13 +2,13 @@
  * Runtime no-op stand-ins for the compile-time-only @element/@property
  * decorator intrinsics (#1209).
  *
- * The OpenElement compiler (the @openelement/router/vite
- * open:compiled-element transform) recognizes these decorators by binding
- * provenance — a runtime named import of `element`/`property` from
- * '@openelement/element', aliases followed — and erases the applications
- * from generated code (the bindings are stripped from generated imports, so
- * compiled output never calls them). They carry no runtime semantics and are
- * not a second recognizer.
+ * The OpenElement compiler (this package's open:compiled-element Vite
+ * transform, wired into router builds via @openelement/element/compiler)
+ * recognizes these decorators by binding provenance — a runtime named import
+ * of `element`/`property` from '@openelement/element', aliases followed —
+ * and erases the applications from generated code (the bindings are stripped
+ * from generated imports, so compiled output never calls them). They carry no
+ * runtime semantics and are not a second recognizer.
  *
  * Modules that are also evaluated WITHOUT the compiler (package unit tests,
  * config evaluation) import the same canonical bindings; these inert no-op

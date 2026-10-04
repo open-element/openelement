@@ -2,14 +2,11 @@
  * @openelement/router - Shared static-file + request-time server helpers.
  *
  * Content types come from the mature zero-dependency npm package `mime`
- * (IANA-derived DB, verified byte-identical to the previous source on every
- * pinned extension); this module only owns the static candidate rules, the
+ * (IANA-derived DB); this module only owns the static candidate rules, the
  * cache-control policy, and the generated request-time server module
- * contract. `@std/media-types` is deliberately not used: it would surface as
- * an `npm:@jsr/*` dependency in the packed tarball. Standard
- * fetch(Request): Response entry; local serving uses the node:http fetch
- * server (`internal/node-http.ts`), Node/Workers/Bun deploys use the Nitro
- * mount.
+ * contract. Standard fetch(Request): Response entry; local serving uses the
+ * node:http fetch server (`internal/node-http.ts`), Node/Workers/Bun deploys
+ * use the Nitro mount.
  */
 
 import { readFileSync, realpathSync } from 'node:fs';

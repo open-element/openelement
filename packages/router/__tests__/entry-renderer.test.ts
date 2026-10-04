@@ -1,5 +1,5 @@
 /**
- * @openelement/router - Entry renderer snapshot tests (Deno)
+ * @openelement/router - Entry renderer snapshot tests
  *
  * Snapshot tests for renderEntry output covering:
  * - CSP middleware (with/without nonce)

@@ -1,5 +1,5 @@
 /**
- * @openelement/router - head-injection.ts tests (Deno)
+ * @openelement/router - head-injection.ts tests
  *
  * Tests for HTML head injection safety: script tag validation,
  * URL safety checks, and headExtras serialization.

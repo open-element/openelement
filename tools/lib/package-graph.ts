@@ -1,15 +1,13 @@
 /**
  * Shared package graph utilities for openElement workspace tooling.
  *
- * Reads packages/<name>/package.json (the B2 manifest conversion moved
- * package truth from deno.json here), builds an internal dependency graph,
+ * Reads packages/<name>/package.json, builds an internal dependency graph,
  * and provides topological sorting / cycle detection used by graph:check and
  * release tasks.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
-import { walkSync } from './std-fs.ts';
 import { formatError } from '@openelement/element';
 import { extractStaticModuleSpecifiers } from './typescript-ast.ts';
 
@@ -77,12 +75,12 @@ function collectInternalDeps(dir: string, exports: unknown, self: string): strin
 
   // Scan src/ if present.
   try {
-    for (const entry of walkSync(srcDir, {
-      includeDirs: false,
-      skip: [/^node_modules$/, /^dist$/],
-    })) {
+    const entries = readdirSync(srcDir, { recursive: true, withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) continue;
       if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue;
-      const text = readFileSync(entry.path, 'utf8');
+      const entryPath = `${entry.parentPath}/${entry.name}`;
+      const text = readFileSync(entryPath, 'utf8');
       for (const specifier of extractOpenImports(text)) {
         const base = normalizeInternalDep(specifier, self);
         if (base) deps.add(base);
@@ -133,8 +131,8 @@ export async function readPackage(dir: string): Promise<PackageInfo | null> {
   const name = json.name;
   if (!name) return null;
   // The dependency declaration (dependencies + peers) is the manifest's
-  // import surface since the B2 conversion: workspace members declare
-  // `@openelement/*` here with `workspace:*`.
+  // import surface: workspace members declare `@openelement/*` here with
+  // `workspace:*`.
   const imports: Record<string, string> = { ...json.dependencies, ...json.peerDependencies };
   const declaredDeps = Object.keys(imports)
     .map((specifier) => normalizeInternalDep(specifier, name))

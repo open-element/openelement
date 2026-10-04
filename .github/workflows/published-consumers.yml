@@ -74,13 +74,13 @@ jobs:
           --report published-consumer-runtime-linux.json
       - name: Verify Nitro Node and Workers through nitro-mount
         run: |
-          vp run --fail-if-no-match @openelement/fixture-router-nitro#proof:node
-          vp run --fail-if-no-match @openelement/fixture-router-nitro#proof:workers
+          vp run --fail-if-no-match --filter @openelement/fixture-router-nitro proof:node
+          vp run --fail-if-no-match --filter @openelement/fixture-router-nitro proof:workers
       - name: Verify third-party Web Components and CDN consumption
         env:
           OPEN_ELEMENT_PUBLISHED_VERSION: ${{ inputs.version }}
         run: |
-          vp run --fail-if-no-match @openelement/fixture-third-party-web-components#smoke
+          vp run --fail-if-no-match --filter @openelement/fixture-third-party-web-components smoke
           node tools/release/published-consumer-qualification.ts --smoke --version "$OPEN_ELEMENT_PUBLISHED_VERSION" --jsdelivr
       - name: Archive published runtime diagnostics
         if: always()

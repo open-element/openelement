@@ -17,7 +17,7 @@ import {
 } from '../lib/version.ts';
 
 // ---------------------------------------------------------------------------
-// npm release verification (formerly tools/lib/npm-release-verifier.ts)
+// npm release verification
 //
 // Post-publish registry verification: exact-version and dist-tag checks with
 // a retry schedule, plus the same-line predecessor continuity invariant

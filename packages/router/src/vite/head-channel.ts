@@ -1,5 +1,5 @@
 /**
- * @openelement/router — the document-head channels (alpha.4 config schema).
+ * @openelement/router — the document-head channels (config schema).
  *
  * Two structured inputs feed one serialized head artifact:
  *

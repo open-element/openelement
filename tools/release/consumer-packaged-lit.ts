@@ -8,7 +8,7 @@
  * published @openelement/router/lit subpath, rendered server-side by
  * @lit-labs/ssr (DSD) and hydrated by @lit-labs/ssr-client. All
  * process/server/temp-project lifecycle, the cell framework, and the probes
- * live in tools/consumer-packaged-shared.ts; the renderer-specific continuation
+ * live in tools/release/consumer-packaged-shared.ts; the renderer-specific continuation
  * claim (hydrate-support lifts defer-hydration adopting the island DSD, node
  * identity survives interaction, no full reload) is asserted by the generated
  * Playwright probe that module runs with `lit`.

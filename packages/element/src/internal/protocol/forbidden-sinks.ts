@@ -5,10 +5,12 @@
  * validator (internal/compiled/server/shared.ts).
  *
  * This module is import-free and host-free by design (same base-of-graph
- * contract as void-tags.ts): all three consumers import it, so a new
+ * contract as void-tags.ts): all consumers import it, so a new
  * forbidden sink cannot be enforced on one boundary and missed on another.
- * Charset and `on*` prefix checks are a separate concern and stay with the
- * consumers; this module owns only the named-sink deny lists.
+ * This module owns the named-sink deny lists and the attribute-name policy
+ * built on them (the one shared safe-attribute-name predicate and the one
+ * camelCase→kebab-case casing rule); consumers delegate so the
+ * boundary cannot diverge.
  *
  * The lists are fail closed and case-insensitive (attribute and property
  * names are compared lowercase, matching the HTML parser's name folding):
@@ -62,4 +64,32 @@ export function forbiddenSinkReason(kind: ForbiddenSinkKind, name: string): stri
     default:
       return `unknown sink kind ${JSON.stringify(String(kind))}`;
   }
+}
+
+/**
+ * The one safe-attribute-name predicate (#1033, #602). Attribute *names* are
+ * not escaped on any render path, so a name must be valid HTML attribute-name
+ * grammar (blocks quote/space injection), must not be an event handler
+ * (`on*`, case-insensitive), and must not be a forbidden sink (`innerhtml`/
+ * `srcdoc` — case-insensitive). Every boundary that admits an attribute name
+ * — the compiler semantic core, the Part Program validator, the compiled
+ * server validator, and the SSR head/meta name checks — delegates here, so
+ * the rules cannot diverge per path.
+ */
+export function isSafeAttributeName(name: string): boolean {
+  return (
+    /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(name) &&
+    !/^on/i.test(name) &&
+    forbiddenSinkReason('attr', name) === null
+  );
+}
+
+/**
+ * The one camelCase → kebab-case casing rule for custom-element attribute
+ * names, so `<x-el itemCount={5}>` round-trips as `item-count` on every
+ * boundary that derives an attribute name from a prop name: the compiler's
+ * property metadata, the SSR serializer, and the client attribute handling.
+ */
+export function camelToKebab(str: string): string {
+  return str.replace(/([A-Z])/g, '-$1').toLowerCase();
 }

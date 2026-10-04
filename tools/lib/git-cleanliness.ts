@@ -1,10 +1,10 @@
-import { normalize } from '@std/path';
+import { normalize } from 'node:path';
 import { commandOutput } from '../repo/node-command.ts';
 
 const RELEASE_EVIDENCE_PATHS = Object.freeze({
   prefixes: ['docs/release/', 'vendor/', 'www/app/data/_generated-'],
-  // The release flow itself refreshes the workspace lockfile (the B2 single
-  // pnpm lock replaced the retired deno.lock here).
+  // The release flow itself refreshes the workspace lockfile, so it may
+  // legitimately differ here.
   exact: ['pnpm-lock.yaml'],
 });
 

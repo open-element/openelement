@@ -9,7 +9,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 
 const ROUTE_SOURCE = `import { definePage } from '@openelement/router';

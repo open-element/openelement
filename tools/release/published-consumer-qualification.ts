@@ -17,7 +17,7 @@
  *    jsDelivr CDN browser-safe export and the Nitro build output.
  *
  * This module also owns the canonical release-gate verdict contract (#1216,
- * A10.8; umbrella #1155; ADR-0151), formerly tools/gate-verdict.ts. A release
+ * A10.8; umbrella #1155; ADR-0151). A release
  * gate is production code. Ad-hoc boolean results collapse confirmed failure
  * and infrastructure uncertainty into the same value, which is how
  * `catch { return false }` once turned a registry outage into a silently
@@ -31,7 +31,7 @@
 
 import { tmpdir } from 'node:os';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import { formatError } from '@openelement/element';
 import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';

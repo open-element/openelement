@@ -10,7 +10,7 @@
  * claims on one screen.
  */
 
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 /** The subset of the release-state shape the anchor audit needs. */

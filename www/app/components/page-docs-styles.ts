@@ -1,5 +1,5 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
-import { mastheadStyles } from './page-styles.ts';
+import { eyebrowStyles, mastheadStyles } from './page-styles.ts';
 
 export const pageDocsStyles = [
   compiledStyle(`
@@ -20,36 +20,13 @@ export const pageDocsStyles = [
 
   /* ── masthead: serif "Read the" + mono "MANUAL." ── */
   ${mastheadStyles}
+  ${eyebrowStyles}
 
   .masthead-top {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: var(--size-4);
-  }
-
-  .eyebrow {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    color: var(--violet-8);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-00);
-    font-weight: var(--font-weight-8);
-    letter-spacing: 0.29em;
-    text-transform: uppercase;
-  }
-  /* Subject-side :lang — @scope'd sheets cannot match the html[lang] ancestor. */
-  .eyebrow:lang(zh) {
-    text-transform: none;
-    letter-spacing: 0.08em;
-  }
-
-  .eyebrow::before {
-    content: "";
-    width: 2rem;
-    height: 2px;
-    background: var(--brand);
   }
 
   .stamp {

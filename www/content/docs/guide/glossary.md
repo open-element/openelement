@@ -14,7 +14,7 @@ The browser's component contract: a class registered for a hyphenated tag name. 
 
 ### `@element`
 
-The class decorator that registers a Custom Element and declares its root mode (shadow-open today, light DOM where declared).
+The class decorator that registers a Custom Element and declares its root mode (light DOM by default, an explicit shadow root where declared).
 
 ### `@property`
 
@@ -54,7 +54,7 @@ The opt-in declared next to the component it exports (`{ hydrate, ssr, dsd }`). 
 
 ### Hydration strategy
 
-When an island's chunk is fetched: `load` (immediately, for first-paint controls), `idle` (browser idle), `visible` (near viewport), `only` (skip SSR — browser-only components).
+When an island's chunk is fetched: `load` (immediately, for first-paint controls), `idle` (browser idle), `visible` (near viewport), `media` (while the query declared in the island's `media` field matches), `only` (skip SSR — browser-only components).
 
 ### Component layer
 

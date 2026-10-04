@@ -126,7 +126,7 @@ export default class ErrorsPage extends OpenElement {
                 <p>{this.footnote}</p>
                 <p>
                   {this.footnoteCheckPre}
-                  <code>deno task --cwd www check:error-codes</code>
+                  <code>pnpm --dir www run check:error-codes</code>
                   {this.footnoteCheckPost}
                 </p>
               </footer>

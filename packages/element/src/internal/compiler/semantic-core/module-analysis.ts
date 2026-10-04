@@ -111,22 +111,14 @@ export interface ModuleSemanticsOptions {
 }
 
 /**
- * The core's own vocabulary: the element package's registration factories.
- * Every other package's factories — Router's page definition, the lit page
- * factory — ride host-injected descriptors; the default scan fails closed on
- * them.
+ * The core's own vocabulary: empty. The element package exposes no
+ * defineElement() factory — compiled registration is the @element decorator
+ * on an OpenElement subclass, which the scan recognizes directly. Every live
+ * registration factory — Router's page definition, the lit page factory —
+ * rides host-injected descriptors, and the retired factory names fail closed
+ * like any other unrecognized import.
  */
-const CORE_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [
-  {
-    moduleSpecifier: '@openelement/element',
-    exportName: 'defineElement',
-    kind: 'element-registration',
-  },
-  // `defineIsland` is deliberately absent: the element package retired the
-  // defineIsland() runtime (the router never exported the name; the absence
-  // is pinned by router authoring tests), so the scan fails closed on the
-  // unresolvable import instead of recognizing it.
-];
+const CORE_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [];
 
 /**
  * Intrinsics that exist only at compile time: the compiler erases the

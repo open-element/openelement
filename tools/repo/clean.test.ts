@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import {
   assertSafeTarget,
   cleanTargets,

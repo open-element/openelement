@@ -4,9 +4,8 @@
  * The request-time page semantics of the generated Hono entry: the canonical
  * page-definition/route-meta extractors, the page props projection seams
  * (#1214: every projection filters the canonical dangerous-key set), and the
- * path-derived locale resolution. Migrated verbatim from the generated-entry
- * helpers (entry-render-runtime.ts) so the logic is visible to `deno check`
- * and directly unit-testable.
+ * path-derived locale resolution. The logic lives in this real module rather
+ * than inside a codegen template string, so it is directly unit-testable.
  *
  * The dangerous-key set is injected, not imported: the narrow runtime reads
  * mirror the generated helpers exactly, and the caller binds the policy —

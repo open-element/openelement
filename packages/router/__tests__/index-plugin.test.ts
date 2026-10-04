@@ -1,5 +1,5 @@
 /**
- * @openelement/router - index.ts main entry tests (Deno)
+ * @openelement/router - index.ts main entry tests
  *
  * Tests that the internal plugin factory returns valid plugin arrays with correct
  * structure and re-exports.
@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 
 import { openPipeline } from '../src/vite/index.ts';

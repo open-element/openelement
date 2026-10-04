@@ -21,7 +21,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { describe, expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { Hono } from 'hono';
 import { createRouteMiddleware } from '../../router/src/http.ts';
 import { RouteTable } from '../../router/src/internal/router/route-table.ts';

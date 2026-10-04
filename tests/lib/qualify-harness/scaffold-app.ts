@@ -9,7 +9,8 @@
  */
 
 import { copyFile, mkdir } from 'node:fs/promises';
-import { dirname, fromFileUrl, join } from '@std/path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runStep } from './command-run.ts';
 
 export interface ScaffoldAppOptions {
@@ -19,7 +20,7 @@ export interface ScaffoldAppOptions {
   projectName: string;
   /** Entrypoint of the create CLI (source cli.ts or packed cli.js). */
   createCli: string;
-  /** Extra CLI arguments, e.g. a minimum-dependency-age override. */
+  /** Extra CLI arguments forwarded to the create CLI before the project name. */
   extraArgs?: readonly string[];
   /** Fixture sources copied verbatim into the app after scaffolding. */
   copySources?: {
@@ -32,7 +33,7 @@ export interface ScaffoldAppOptions {
 export function pathFromRoot(root: string | URL, relativePath: string): string {
   return typeof root === 'string'
     ? join(root, relativePath)
-    : fromFileUrl(new URL(relativePath, root));
+    : fileURLToPath(new URL(relativePath, root));
 }
 
 /**

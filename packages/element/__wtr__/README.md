@@ -53,17 +53,14 @@ Playwright cache) before the suite runs, so the gate stays hermetic.
 
 Dependencies are tiered by actual consumption:
 
-- `chai@6.2.2` — kept: five conformance test files import it explicitly
-  (the suites follow the retired web-test-runner's injected-globals
-  convention, which is also why the vitest project opts into
-  `globals: true`).
+- `chai@6.2.2` — kept: five conformance test files import its `assert`
+  explicitly (the injected-globals style the suites are written in, which is
+  also why the vitest project opts into `globals: true`).
 - `lit@3.3.3` — kept: `tests/lit-host.test.js` mounts a real LitElement
   against the compiled OE element (interop evidence, not Lit Framework
   Mode).
-- Everything else was retired with the web-test-runner runner
-  (`@web/test-runner`, `@web/test-runner-playwright`,
-  `@web/dev-server-esbuild`, `playwright`): the runner, its config, and its
-  negative-config fixtures are gone. The vitest side of the stack
+- Nothing else is installed at this level: the suite runs on vitest, and the
+  vitest side of the stack
   (`vitest`, `@vitest/browser`, `@vitest/browser-playwright`, `playwright`)
   resolves from the root workspace devDependencies — the tests import
   `vitest` and `vitest/browser` (`userEvent`), and the playwright provider
@@ -97,28 +94,46 @@ sources. `lit`/`chai` resolve from this directory's own `node_modules`.
 
 `browser:negative` runs `tools/negative-proofs.ts`, which drives the live
 vitest browser project over transient scratch suites written INSIDE the
-collected include (`tests/negative-scratch/`, removed on exit):
+collected include (`tests/negative-scratch/`, removed on exit). Five
+distinct contracts, each pinned to its own expected diagnostic:
 
 1. `failing-assertion` — a scratch test that fails must exit non-zero, the
    report must show the test, and the `AssertionError` must match;
 2. `broken-transform` — invalid code must collect, fail the file, and
    report the `SyntaxError`;
-3. `zero-tests` — a filter matching nothing must exit non-zero
-   (`passWithNoTests` stays false), and the report must say so.
+3. `no-matched-files` — a filter matching nothing must exit non-zero
+   (`passWithNoTests` stays false), and the report must say so;
+4. `collected-empty` — a collected file registering ZERO tests must exit
+   non-zero with `No test suite found in file`. Falsified against vitest
+   5.0.2 browser mode (2026-10-04): the runner fails such a file natively
+   (`passWithNoTests` defaults false), so no extra guard is needed — this
+   case pins that behavior so a future vitest upgrade that silently passes
+   empty suites breaks the gate instead of the suite's guarantees;
+5. `browser-launch-failure` — the browser pointed at a missing executable
+   (via the documented `playwright({ launchOptions: { executablePath } })`
+   provider seam, which `vitest.config.ts` forwards from
+   `OE_BROWSER_LAUNCH_EXECUTABLE`; the CLI `--browser.providerOptions`
+   route is a proven dead end — `resolveLaunchOptions` reads only the
+   provider call site) must exit non-zero with the
+   `browserType.launch: Failed to launch` diagnostic, echoing the injected
+   path. A `launch-sentinel` run (a passing scratch test under normal
+   config) precedes it per engine, proving the engine launches normally so
+   the failure is attributable to the injected executable alone.
 
 Every case additionally fails the smoke if the scratch suite was never
 collected ("No test files found") — that signature is the false-green
-vector the smoke exists to exclude. The scratch runs inherit
-`OE_BROWSER_MATRIX`, so the full gate proves the exit contract on all three
-engines.
+vector the smoke exists to exclude.
 
-Historical note: under the retired web-test-runner this contract was proven
-by `negative/*.config.js` fixtures plus a `zero-tests-guard` reporter,
-because stock WTR 1.0.0 reported success on a zero-test run. Both halves
-were deleted with the runner; vitest's own `passWithNoTests: false` default
-plus the script above hold the same line.
+Per-engine attribution: the proofs drive EACH engine separately in serial
+(each vitest spawn pins `OE_BROWSER_MATRIX` to one engine — the
+single-engine values `firefox`/`webkit` are part of `matrixInstances` in
+`vitest.config.ts`; unknown values fail closed both there and in the
+script), so one failing engine can never masquerade as three proven
+engines: `browser:gate` proves all five contracts on chromium,
+`browser:gate:full` on chromium, firefox AND webkit, with every proof line
+naming its engine.
 
-## Platform notes (engine truths recorded under WTR, still pinned by the tests)
+## Platform notes (engine truths, still pinned by the tests)
 
 - `requestSubmit(FACE host)` throws a `TypeError` in all three engines; the
   message text diverges (Chromium/WebKit: "The specified element is not a

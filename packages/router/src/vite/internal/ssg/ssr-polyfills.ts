@@ -5,8 +5,9 @@
  * - Entry code body (this module): CSSStyleSheet — needs `import { StyleSheet } from @openelement/element`
  * - Output banner (build-ssg.ts): HTMLElement + customElements — no import, runs before module evaluation
  *
- * Browser globals are provided for the Deno SSR runtime; the shipped
- * request-time output never depends on them being absent.
+ * Browser globals are provided for the Node SSR bundle and the dev-server
+ * virtual entries; the shipped request-time output never depends on them
+ * being absent.
  */
 
 import { SSR_REGISTRY_STUB_MARKER } from '../protocol/registry-markers.ts';

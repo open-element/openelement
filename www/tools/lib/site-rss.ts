@@ -21,6 +21,8 @@
 
 import { SITE_ORIGIN } from '../../app/site-ui/head.ts';
 import type { BlogPost } from '../../lib/content.ts';
+import { isCalendarDate } from './calendar-date.ts';
+import { escapeXml } from './xml-escape.ts';
 
 /** Public feed path, relative to the site root (dist artifact and head href). */
 export const SITE_FEED_PATH = '/blog/rss.xml';
@@ -33,38 +35,21 @@ const SITE_FEED_DESCRIPTION =
   'The openElement public audit trail: releases, architecture decisions and standards notes, ' +
   'published in their original language.';
 
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
 /**
- * Collection dates are `YYYY-MM-DD`; RSS pubDate is RFC 822 in GMT. Parsing
- * the date at UTC midnight keeps the rendered timestamp stable across
- * machines. Calendar validation is a UTC round-trip, not a NaN check:
- * `new Date` normalizes impossible days (2026-02-29 becomes 2026-03-01),
- * so a NaN-only guard would emit a pubDate that disagrees with the source
- * frontmatter. The failure gate (feedFailures) and the serializer share
- * this one function.
+ * Collection dates are `YYYY-MM-DD`; RSS pubDate is RFC 822 in GMT. Calendar
+ * validation delegates to isCalendarDate — the same UTC round-trip the
+ * content-dates manifest gate runs, so a stamp the gate accepts is exactly a
+ * stamp the feed renders. The failure gate (feedFailures) and the serializer
+ * share this one function.
  */
 function rssPubDate(date: string): string | undefined {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!match) return undefined;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  if (
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() + 1 !== month ||
-    parsed.getUTCDate() !== day
-  ) {
-    return undefined;
-  }
+  if (!isCalendarDate(date)) return undefined;
+  const [year, month, day] = date.split('-').map(Number);
+  // setUTCFullYear (not the Date constructor) matches the validator: years
+  // below 100 stay literal instead of mapping into the 1900s.
+  const parsed = new Date(0);
+  parsed.setUTCFullYear(year, month - 1, day);
+  parsed.setUTCHours(0, 0, 0, 0);
   return parsed.toUTCString();
 }
 

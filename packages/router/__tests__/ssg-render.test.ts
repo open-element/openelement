@@ -489,7 +489,8 @@ test('ssgRender - pure-static projects emit no server artifacts', async () => {
 
 test('request-time server entry serves the SSR bundle at request time', async () => {
   const { renderRequestTimeServerModule } = await import('../src/vite/internal/ssg/ssg-helpers.ts');
-  const { join, toFileUrl } = await import('@std/path');
+  const { join } = await import('node:path');
+  const { pathToFileURL } = await import('node:url');
 
   const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
@@ -521,7 +522,7 @@ export default app;
       `export const clientAssets = { entry: '', islands: {}, shared: [] };\n`,
     );
 
-    const mod = (await import(toFileUrl(join(dir, 'index.js')).href)) as {
+    const mod = (await import(pathToFileURL(join(dir, 'index.js')).href)) as {
       default: (event: { req: Request }) => Promise<Response>;
     };
     const response = await mod.default({ req: new Request('http://localhost/live?x=42') });
@@ -536,7 +537,8 @@ export default app;
 
 test('request-time server entry wires the island client script into the entry render', async () => {
   const { renderRequestTimeServerModule } = await import('../src/vite/internal/ssg/ssg-helpers.ts');
-  const { join, toFileUrl } = await import('@std/path');
+  const { join } = await import('node:path');
+  const { pathToFileURL } = await import('node:url');
 
   const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
@@ -563,7 +565,7 @@ export default app;
       `export const clientAssets = { entry: '/client/entry-abc123.js', islands: {}, shared: [] };\n`,
     );
 
-    const mod = (await import(toFileUrl(join(dir, 'index.js')).href + '?with-script')) as {
+    const mod = (await import(pathToFileURL(join(dir, 'index.js')).href + '?with-script')) as {
       default: (event: { req: Request }) => Promise<Response>;
     };
     const response = await mod.default({ req: new Request('http://localhost/live') });
@@ -579,7 +581,8 @@ export default app;
 
 test('request-time server entry isRequestTimePath admits request-time paths (#556, narrowed #1215)', async () => {
   const { renderRequestTimeServerModule } = await import('../src/vite/internal/ssg/ssg-helpers.ts');
-  const { join, toFileUrl } = await import('@std/path');
+  const { join } = await import('node:path');
+  const { pathToFileURL } = await import('node:url');
 
   const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
@@ -609,7 +612,7 @@ export default app;
       `export const clientAssets = { entry: '', islands: {}, shared: [] };\n`,
     );
 
-    const mod = (await import(toFileUrl(join(dir, 'index.js')).href + '?admission')) as {
+    const mod = (await import(pathToFileURL(join(dir, 'index.js')).href + '?admission')) as {
       isRequestTimePath: (pathname: string) => boolean;
     };
     // Admission is a boolean predicate — no winner, no params (#1215).

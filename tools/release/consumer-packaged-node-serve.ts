@@ -20,15 +20,15 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { commandOutput } from '../repo/node-command.ts';
 import { cp, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 
-import { join, resolve } from '@std/path';
+import { join, resolve } from 'node:path';
 import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
+import { runProcess } from './consumer-packaged-shared.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
@@ -40,43 +40,14 @@ if (runtime !== 'node' && runtime !== 'bun') {
   throw new Error('usage: consumer-packaged-node-serve.ts <node|bun>');
 }
 
-async function run(
+function run(
   command: string,
   args: string[],
   cwd: string,
   env: Record<string, string>,
   timeoutMs?: number,
 ): Promise<{ success: boolean; output: string }> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const timeoutId =
-    timeoutMs === undefined
-      ? undefined
-      : setTimeout(() => {
-          timedOut = true;
-          controller.abort();
-        }, timeoutMs);
-  try {
-    const result = await commandOutput(command, {
-      args,
-      cwd,
-      env,
-      stdout: 'piped',
-      stderr: 'piped',
-      ...(timeoutMs === undefined ? {} : { signal: controller.signal }),
-    });
-    const decoder = new TextDecoder();
-    const output = decoder.decode(result.stdout) + decoder.decode(result.stderr);
-    if (timedOut) {
-      return {
-        success: false,
-        output: `Timed out after ${timeoutMs}ms: ${command} ${args.join(' ')}\n${output}`,
-      };
-    }
-    return { success: result.success, output };
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  return runProcess(command, args, cwd, { timeoutMs, env });
 }
 
 const routerTarball = join(
@@ -120,7 +91,7 @@ try {
     }),
   );
   // The pinned Nitro line formally supports the Alpha Vite major in its
-  // peer metadata (see tools/nitro-compatibility.ts), so the install runs
+  // peer metadata (see tools/release/nitro-compatibility.ts), so the install runs
   // without --legacy-peer-deps; a peer conflict fails closed here.
   const install = await run(
     'npm',

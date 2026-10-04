@@ -42,7 +42,7 @@
  * being configurable — an unknown key is rejected with the accepted-key list.
  *
  * This module is part of the runtime/public surface: it imports no host APIs
- * (no Deno, no Node, no Vite) so an app config file can import `defineConfig`
+ * (no Node, no Vite) so an app config file can import `defineConfig`
  * from `@openelement/router` in any host. File reading and the actual loading
  * live in the host-tooling loader (src/vite/app-config.ts).
  */

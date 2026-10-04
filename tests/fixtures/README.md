@@ -7,15 +7,16 @@ its own `package.json`; dependency resolution is the workspace's single root
 
 Each fixture's `package.json` declares the dependency universe its sources
 plus build tasks invoke. `router-native-framework` and `router-request-time`
-declare identical universes on purpose — they are behavioral twins — so a
-dependency added to one must be added to the other.
+are behavioral twins in app flow, not in dependencies: both build on
+`@openelement/element` + `@openelement/router` + hono, while native pins `lit`
+and request-time pins the `@zag-js/*`/`valibot`/`zod` request-time stack.
 
 ## Layout
 
 | fixture                   | dependency universe                                                |
 | ------------------------- | ------------------------------------------------------------------ |
 | `router-native-framework` | app-flow source fixture: SSR, dynamic routes, islands              |
-| `router-request-time`     | request-time rendering source fixture (shares the native universe) |
+| `router-request-time`     | request-time rendering source fixture (native app-flow twin)       |
 | `router-lit-framework`    | Lit SSR integration (adds `lit`/`@lit-labs`)                       |
 | `router-ui-dogfood`       | UI dogfood (adds `@openelement/ui` subpaths)                       |
 | `router-nitro`            | real Nitro node-server + cloudflare_module proof                   |

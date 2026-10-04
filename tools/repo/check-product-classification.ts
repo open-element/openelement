@@ -16,8 +16,7 @@
  * word "core" (Element/Router statements are legal) and it never infers
  * ownership from filename or directory names.
  */
-import { walk } from '../../tools/lib/std-fs.ts';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import process from 'node:process';
 
 /** Documents that must exist and carry the product contract. */
@@ -212,8 +211,10 @@ export async function readProductDocs(repoRoot: string): Promise<ClassificationR
   const optional = new Set<string>([`${repoRoot}/CHANGELOG.md`, `${repoRoot}/apps/saas/README.md`]);
   for (const root of [`${repoRoot}/docs`, `${repoRoot}/packages`, `${repoRoot}/www/content`]) {
     try {
-      for await (const entry of walk(root, { exts: ['.md'], includeDirs: false })) {
-        optional.add(entry.path);
+      for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
+        if (!entry.isDirectory() && entry.name.endsWith('.md')) {
+          optional.add(`${entry.parentPath}/${entry.name}`);
+        }
       }
     } catch {
       // Optional discovery roots may be absent (e.g. a trimmed checkout).

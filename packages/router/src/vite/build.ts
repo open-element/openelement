@@ -1,8 +1,7 @@
 /**
  * @openelement/router - Build plugin
- * openElement Architecture (K·I·S·S): Knowledge · Isolated · Semantic · Static
- * Build produces only static files (K+S), Islands are the only JS (I).
- * API Routes (S - Serverless extension) deploy separately.
+ * Build produces only static files; islands are the only JS. API routes
+ * deploy separately.
  *
  * closeBundle writes metadata to ctx, then triggers Phase 2 (client) and
  * Phase 3 (SSG), in that order (#1471).
@@ -164,7 +163,7 @@ export function buildPlugin(
       // the SSG render wrote. The asset URLs come from the Phase 2 client
       // asset manifest (#1471), keyed by compile-time island identity. The
       // script tags themselves needed no post-processing — the Phase 3
-      // render pass embedded them at document time (S4b).
+      // render pass embedded them at document time.
       if (ctx.isComplete(2)) {
         try {
           const manifest = ctx.clientAssetManifest;
@@ -183,7 +182,7 @@ export function buildPlugin(
         log.info('No Phase 2 - island manifests and client assets skipped');
       }
 
-      // -- Clean Phase 1 SSR artifacts from public dist (v0.14.10) --
+      // -- Clean Phase 1 SSR artifacts from public dist --
       try {
         await cleanSsrArtifacts(ctx);
       } catch (error) {

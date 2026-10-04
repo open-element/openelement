@@ -1,6 +1,6 @@
 /** Route-catalog sitemap enumeration unit tests (Beta.2.2, #1327). */
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { SITE_LOCALES, type SiteLocale } from '../../site-config.ts';
 import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './site-sitemap.ts';
 import { articleLastmodByRoute } from './site-lastmod.ts';

@@ -5,7 +5,7 @@ import { expect, test } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { scanExtractedPackage } from './check-package-artifacts.ts';
 
 async function withPackage(
@@ -97,8 +97,8 @@ test('package artifacts: bars Node and Deno APIs in packed ui modules', async ()
 });
 
 test('package artifacts: create CLI is node-hosted, so it bars Deno APIs', async () => {
-  // B1a ported the create CLI to node:*; the B2 artifact policy flipped from
-  // node-free (bar Node APIs, the pre-port Deno-host CLI) to deno-free.
+  // The create CLI runs on node:*, so its packed artifact bars the Deno API
+  // surface only (the runtime-free trio bars the Node surface as well).
   await withPackage(
     '@openelement/create',
     {
@@ -313,7 +313,7 @@ test('package artifacts: rejects undeclared static and dynamic package imports',
   );
 });
 
-test('package artifacts: rejects dead v0.43 residue paths (#1273/B2.13)', async () => {
+test('package artifacts: rejects dead v0.43 residue paths (#1273)', async () => {
   await withPackage(
     '@openelement/element',
     {
@@ -329,9 +329,8 @@ test('package artifacts: rejects dead v0.43 residue paths (#1273/B2.13)', async 
         (v) => v.message,
       );
       expect(
-        messages.filter(
-          (message) => message === 'dead v0.43 residue must not be published (#1273/B2.13)',
-        ).length,
+        messages.filter((message) => message === 'dead v0.43 residue must not be published (#1273)')
+          .length,
       ).toEqual(5);
     },
   );

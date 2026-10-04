@@ -31,16 +31,16 @@
  * `--check` regenerates in memory and fails on drift. The module is generated
  * (gitignored) and rebuilt before the site build.
  */
-import { walk } from '../../tools/lib/std-fs.ts';
-import { fromFileUrl, join } from '@std/path';
-import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { loadCollectionData } from '../lib/content.ts';
 import { fileToRoutePath } from '../lib/route-path.ts';
 import { articleCollections } from '../content-collections.ts';
 import { FALLBACK_SECTION, SECTION_MAP } from '../app/site-ui/open-layout-navigation.ts';
 
-const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
+const siteRoot = fileURLToPath(new URL('../../www/', import.meta.url));
 const routesDir = join(siteRoot, 'app/routes');
 const outFile = join(siteRoot, 'app/data/_generated-nav-data.ts');
 
@@ -177,13 +177,15 @@ async function collect(
 ): Promise<{ routes: string[]; sections: Map<string, NavItem[]> }> {
   const routes: string[] = [];
   const sections = new Map<string, NavItem[]>();
-  for await (const entry of walk(routesDir, { exts: ['.tsx'], includeDirs: false })) {
-    const relativePath = entry.path.slice(routesDir.length + 1);
+  for (const entry of await readdir(routesDir, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory() || !entry.name.endsWith('.tsx')) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    const relativePath = entryPath.slice(routesDir.length + 1);
     const path = fileToRoutePath(relativePath);
     if (!path) continue;
     routes.push(path);
     const fromContent = contentNav.get(path);
-    const meta = fromContent ?? parseMeta(await readFile(entry.path, 'utf8'));
+    const meta = fromContent ?? parseMeta(await readFile(entryPath, 'utf8'));
     if (!meta) continue;
     const labelZh = fromContent ? fromContent.labelZh : ROUTE_LABEL_ZH[path];
     const list = sections.get(meta.section) ?? [];

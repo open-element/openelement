@@ -1,7 +1,7 @@
 /**
  * @openelement/element — open:compiled-element v1 plugin (#1160).
  *
- * Vite integration boundary for the alpha.0 TSX-to-Part Program compiler.
+ * Vite integration boundary for the TSX-to-Part Program compiler.
  * The hook activates only for .tsx modules that opt into the compiled model
  * with a canonically bound `@element(...)` decorator application on a class
  * declaration (#1209: the decorator identifier must resolve to a runtime
@@ -106,8 +106,8 @@ export function stripInlineSourceMapComment(code: string): string {
  * under e.g. `/srv/www/` must not fool the cut): the Vite project root first,
  * then the workspace root when the caller knows it (a module outside the
  * project root is typically a linked workspace package). Callers that hand
- * the compiler a path outside every known root (synthetic ids, non-Deno
- * projects without a Vite root) get the id back unchanged — there is no
+ * the compiler a path outside every known root (synthetic ids, projects
+ * without a Vite root) get the id back unchanged — there is no
  * correct relative form to invent, and the library boundary must not reject
  * paths it cannot anchor. This module stays runtime-neutral: resolving a
  * workspace root from disk is the caller's job.

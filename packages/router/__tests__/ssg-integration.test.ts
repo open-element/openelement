@@ -1,5 +1,5 @@
 /**
- * @openelement/router - SSG integration tests (Deno)
+ * @openelement/router - SSG integration tests
  *
  * Tests the SSG post-processing pipeline under the #1471/S4b contract:
  *   1. islandChunkMapFromAssetManifest - client asset manifest -> tagName -> chunk URL
@@ -18,7 +18,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { injectCspMeta, islandChunkMapFromAssetManifest } from '../src/vite/internal/ssg/index.ts';
 import type { ClientAssetManifest } from '../src/vite/internal/protocol/client-assets.ts';
 

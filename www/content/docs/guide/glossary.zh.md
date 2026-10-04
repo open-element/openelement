@@ -14,7 +14,7 @@ section: 'Core'
 
 ### `@element`
 
-注册 Custom Element 并声明其 root 模式的类装饰器（今日默认为 shadow-open，声明处可用 light DOM）。
+注册 Custom Element 并声明其 root 模式的类装饰器（默认 light DOM，声明处可用显式 shadow root）。
 
 ### `@property`
 
@@ -32,7 +32,7 @@ Custom Element 拥有的封装 DOM 子树。服务端输出把它装进 DSD 模�
 
 ### SSG
 
-静态站点生成：构建期把路由渲染成 HTML。openElement 静默优先；请求期渲染是例外，不是默认。
+静态站点生成：构建期把路由渲染成 HTML。openElement 静态优先；请求期渲染是例外，不是默认。
 
 ### Upgrade
 
@@ -54,7 +54,7 @@ Custom Element 拥有的封装 DOM 子树。服务端输出把它装进 DSD 模�
 
 ### Hydration 策略
 
-island 的 chunk 何时拉取：`load`（立即，用于首屏控件）、`idle`（浏览器空闲）、`visible`（接近视口）、`only`（跳过 SSR——纯浏览器组件）。
+island 的 chunk 何时拉取：`load`（立即，用于首屏控件）、`idle`（浏览器空闲）、`visible`（接近视口）、`media`（island `media` 字段声明的查询匹配期间）、`only`（跳过 SSR——纯浏览器组件）。
 
 ### 组件分层
 

@@ -19,7 +19,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { wrapInDocument } from '@openelement/element';
 import { resolvePageDocument } from '../src/document.ts';
 import type { PagePropsContext } from '../src/index.ts';
@@ -297,7 +297,7 @@ test('matrix 4 — a new shared chunk lands in shared[] and leaves island mappin
     {
       ...Object.fromEntries([ENTRY_RECORD]),
       'app/islands/counter.ts': { file: 'islands/island-counter-Ab12.js' },
-      'node_modules/.deno/flexsearch@0.8/dist.js': { file: 'islands/flexsearch-Cc33.js' },
+      'node_modules/.pnpm/flexsearch@0.8/dist.js': { file: 'islands/flexsearch-Cc33.js' },
     },
     [
       {

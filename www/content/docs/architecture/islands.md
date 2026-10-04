@@ -28,7 +28,7 @@ Because the manifest is emitted next to the HTML, the built output answers "whic
 
 The claim replays the compiled Part Program against DOM that is already present: the handlers the template declared are bound, `@property` fields are filled from host attributes, and a `pure-island` renders for the first time. Untouched nodes are never re-rendered, no binding is discovered by string lookup, and no event is synthesized from a `data-*` attribute.
 
-The strategy decides when the chunk is fetched — `load`, `idle`, `visible` or `only`. Until it arrives, the element keeps its server markup and its styling: the page never depends on an island having loaded, and an island that is never reached costs nothing beyond its own chunk.
+The strategy decides when the chunk is fetched — `load`, `idle`, `visible`, `media` or `only`. A `media` island declares its query in the island's `media` field, and the chunk loads only while that query matches. Until it arrives, the element keeps its server markup and its styling: the page never depends on an island having loaded, and an island that is never reached costs nothing beyond its own chunk.
 
 ## Upgrade Model
 
@@ -52,7 +52,7 @@ Browser-only components can opt out of SSR with the `only` strategy. The server 
 
 ### Layer 4 — `light-dom` — No shadow boundary
 
-A component that declares a light root renders its content into light DOM with no DSD encapsulation, so document-level styles apply directly. The compiled default stays shadow-open; light DOM is opt-in per component. Hydration strategies still apply to such islands.
+A component that declares a light root renders its content into light DOM with no DSD encapsulation, so document-level styles apply directly. The compiled default is a light root; a shadow root is opt-in per component. Hydration strategies still apply to such islands.
 
 ## Strategies
 

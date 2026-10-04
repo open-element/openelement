@@ -23,11 +23,11 @@ import { expect, test } from 'vitest';
 import {
   type FacadeDom,
   FacadeElement,
-  FacadeEvent,
   type FacadeShadowRoot,
   installFacadeDom,
   parseHtml,
 } from './facade-dom.ts';
+import { click as composedClick } from './pre-upgrade-helpers.ts';
 import { testProgram } from './test-program.ts';
 
 // The facade captures its HTMLElement base at module evaluation time.
@@ -141,10 +141,6 @@ function upgradeShadowInPlace(ssrHost: FacadeElement): ShadowCounterElement {
   dom.document.body.insertBefore(element as unknown as FacadeElement, ssrHost);
   dom.document.body.removeChild(ssrHost);
   return element;
-}
-
-function composedClick(): FacadeEvent {
-  return new FacadeEvent('click', { bubbles: true, composed: true });
 }
 
 function innerButton(ssrHost: FacadeElement): AnyElement {

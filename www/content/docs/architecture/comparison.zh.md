@@ -83,7 +83,7 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 
 ### 产物体积
 
-以下数字于 2026-10-03 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。alpha6 之后数字变动过两次：alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）；alpha8 的 B2 manifest 转换（pnpm workspaces，不再有 `deno.json` workspace 标记）重新切分了应用侧 island chunk——三个应用 island 现在以普通 `open-<tag>-<hash>.js` 依赖 chunk 形态产出——同时列车期间的客户端运行时工作增长了各 island 的编译产物。
+以下数字于 2026-10-04 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。alpha6 之后数字变动过三次：alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）；alpha8 的 B2 manifest 转换（pnpm workspaces，不再有 `deno.json` workspace 标记）重新切分了应用侧 island chunk；alpha8 的客户端构建现在会在 chunk 分组前把每个包 island 声明的身份解析到真实模块 id（#1471 fail-closed），因此每个 island chunk 都以 `island-open-<tag>-<hash>.js` 命名，而共享的编译元素运行时单独成块、由 `client.js` 在每个 island 页面上即时加载。下方的路由载荷按路由 manifest chunk 集合的即时导入闭包测量，因此无论共享代码落在哪个 chunk 文件里，数字都保持诚实。
 
 | 指标                 | 数值                                             |
 | -------------------- | ------------------------------------------------ |
@@ -91,7 +91,7 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 | `sitemap.xml` URL 数 | 68                                               |
 | 静态产物总量         | 8.9 MB                                           |
 | island manifest      | 70 份——每页一份                                  |
-| 搜索索引             | 每个语言 34 页（en、zh），68 个 fragment，1.6 MB |
+| 搜索索引             | 每个语言 34 页（en、zh），68 个 fragment，1.4 MB |
 
 ```bash
 pnpm run site:build                         # 先重新生成以下全部内容
@@ -108,29 +108,29 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `island-open-layout`           | 101,825  | 17,633  |
-| `island-open-cinematic-scroll` | 90,692   | 28,699  |
-| `open-button`                  | 16,312   | 3,122   |
-| `island-open-dragon-live-gaze` | 14,153   | 5,164   |
-| `island-open-page-rail`        | 9,676    | 2,740   |
-| `open-code-block`              | 8,463    | 2,806   |
-| `island-open-hero-polish`      | 4,428    | 1,845   |
-| `open-badge`                   | 4,002    | 1,131   |
+| `island-open-layout`           | 100,208  | 17,211  |
+| `island-open-badge`            | 88,566   | 27,515  |
+| `island-open-button`           | 16,279   | 3,121   |
+| `island-open-dragon-live-gaze` | 14,198   | 5,181   |
+| `island-open-page-rail`        | 9,721    | 2,754   |
+| `island-open-code-block`       | 8,476    | 2,816   |
+| `island-open-cinematic-scroll` | 7,843    | 3,099   |
+| `island-open-hero-polish`      | 4,478    | 1,862   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
 gzip -9 -c www/dist/client/islands/client.js | wc -c
 ```
 
-共享入口（`client.js`，约 7 KB）有意不定死：其中的 island import 工厂与错误串跟随被准入的 island 集合，字节随该集合变化。同一类跨平台字节方差下，逐 chunk 的原始字节行容忍 ±1%、gzip 行容忍 ±3%；下面的路由载荷容忍 ±1%；chunk 数量保持精确。
+共享入口（`client.js`，约 7 KB）有意不定死：其中的 island import 工厂与错误串跟随被准入的 island 集合，字节随该集合变化。`island-open-badge-<hash>.js` 这一行也不是 badge 组件的体积：chunk 分组把共享的编译元素运行时放在了以 `open-badge` island 身份命名的 chunk 里，`client.js` 与每个 island chunk 都静态导入该 chunk，所以无论路由是什么，这份字节都会随每个 island 页面一起下载。同一类跨平台字节方差下，逐 chunk 的原始字节行容忍 ±1%、gzip 行容忍 ±3%；下面的路由载荷容忍 ±1%；chunk 数量保持精确。
 
-页面实际下载什么，由它自己的 island manifest 决定，而不是由总量决定：
+页面实际下载什么，由它自己的 island manifest 加上入口的即时（静态）导入决定——载荷行按该导入闭包测量，不随共享代码所在的 chunk 文件变化：
 
 | 路由                     | 客户端载荷（原始） | 不同 chunk 数 |
 | ------------------------ | ------------------ | ------------- |
-| `/guide/mdx`             | 126,761 B          | 4             |
-| `/guide/getting-started` | 126,761 B          | 4             |
-| `/`                      | 226,358 B          | 6             |
+| `/guide/mdx`             | 221,689 B          | 6             |
+| `/guide/getting-started` | 221,689 B          | 6             |
+| `/`                      | 230,644 B          | 7             |
 
 70 份页面 manifest 合计声明了 10 个 island 标签、334 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 60 页，`open-code-block` 出现在 48 页，其余标签只在少数页面上。
 

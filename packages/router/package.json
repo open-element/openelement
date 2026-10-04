@@ -28,11 +28,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@hono/vite-dev-server": "^0.25.3",
     "@openelement/element": "workspace:*",
     "@openelement/url-pattern-list": "0.6.0",
-    "@hono/vite-dev-server": "^0.25.3",
     "hono": "^4.12",
-    "jsonc-parser": "^3.3.1",
     "marked": "^15.0.0",
     "mime": "^4.1.0",
     "pathe": "^2.0.3",
@@ -71,9 +70,6 @@
     "@jridgewell/trace-mapping": "0.3.31",
     "@lit-labs/ssr": "4.1.0",
     "@lit-labs/ssr-client": "1.1.8",
-    "@std/assert": "jsr:^1.0.0",
-    "@std/fs": "jsr:^1.0.0",
-    "@std/path": "jsr:^1.0.0",
     "@types/node": "26.5.0",
     "lit": "3.3.3"
   }

@@ -27,7 +27,8 @@
  * required browser executed the full suite with zero failures and zero
  * skips.
  */
-import { dirname, fromFileUrl, join, relative } from '@std/path';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { commandOutput } from './node-command.ts';
@@ -40,7 +41,7 @@ import {
   summarizePlaywrightReport,
 } from './site-e2e-result.ts';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const artifactsDir = join(repoRoot, '.artifacts');
 const reportPath = join(artifactsDir, 'site-e2e-report.json');
 const resultPath = join(artifactsDir, 'site-e2e-result.json');
@@ -119,8 +120,7 @@ async function main(): Promise<void> {
   }
   await mkdir(artifactsDir, { recursive: true });
   await rm(reportPath).catch(() => undefined);
-  // The Playwright CLI comes from the workspace install (www devDependencies)
-  // instead of the former npm: specifier through the deleted root config.
+  // The Playwright CLI comes from the workspace install (www devDependencies).
   const status = await commandOutput(join(repoRoot, 'node_modules', '.bin', 'playwright'), {
     args: [
       'test',

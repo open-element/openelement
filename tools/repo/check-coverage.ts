@@ -187,10 +187,9 @@ async function main(): Promise<void> {
   // assertion failures. Loud by design: every crash prints to stderr.
   const crashRetries = getNumberArg('--crash-retries', 2);
   // vitest's lcov reporter writes SF paths relative to the vitest root; the
-  // summarizer and scope predicates match absolute paths (the deno-coverage
-  // era wrote absolute SF lines). Normalize once at the read boundary —
-  // without it every in-scope file lands in the "never loaded" bucket and
-  // every scope reads 0%.
+  // summarizer and scope predicates match absolute paths. Normalize once at
+  // the read boundary — without it every in-scope file lands in the "never
+  // loaded" bucket and every scope reads 0%.
   const lcov = normalizeLcovSourcePaths(await runCoverage(crashRetries), process.cwd());
   const profiledFiles = lcovFilePaths(lcov);
 

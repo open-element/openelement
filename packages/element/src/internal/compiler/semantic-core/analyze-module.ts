@@ -1,6 +1,6 @@
 /**
- * Module/class-shape analysis for the compiled grammar (#1473 split — the
- * analyze stage of the former compile facade): the admitted statement shapes,
+ * Module/class-shape analysis for the compiled grammar (#1473 split): the
+ * admitted statement shapes,
  * the one `@element` class with its decorator options and canonical heritage,
  * and the `@property` field/method/render inventory the later lowering and
  * emission stages consume.
@@ -10,7 +10,10 @@ import ts from 'typescript';
 import { type CompilerFail } from './compiler-diagnostics.ts';
 import { type ModuleIntrinsicBindings } from './module-analysis.ts';
 import { type PropertyValueType, type SerializableValue } from '../../protocol/part-program.ts';
-import { forbiddenSinkReason } from '../../protocol/forbidden-sinks.ts';
+import {
+  camelToKebab,
+  isSafeAttributeName as canonicalIsSafeAttributeName,
+} from '../../protocol/forbidden-sinks.ts';
 
 export interface CompiledField {
   name: string;
@@ -34,16 +37,9 @@ export interface CompiledField {
   computed?: { deps: string[]; factoryText: string; body: ts.Expression };
 }
 
-function camelToKebab(value: string): string {
-  return value.replace(/([A-Z])/g, '-$1').toLowerCase();
-}
-
+/** The compiler face of the one canonical attribute-name predicate. */
 export function isSafeAttributeName(value: string): boolean {
-  return (
-    /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(value) &&
-    !/^on/i.test(value) &&
-    forbiddenSinkReason('attr', value) === null
-  );
+  return canonicalIsSafeAttributeName(value);
 }
 
 export function unwrapExpression(expr: ts.Expression): ts.Expression {
@@ -346,7 +342,7 @@ function propertyFields(
         }
         stylesText = member.initializer.getText(sf);
         stylesNode = member.initializer;
-        // Preserve the authored annotation (native pack fast-check requires
+        // Preserve the authored annotation (the consumer:packaged gate requires
         // an explicit static styles type; the generated class must not drop
         // it). Unannotated styles keep the legacy bare emission.
         stylesTypeText = member.type ? `: ${member.type.getText(sf)}` : undefined;
@@ -673,7 +669,7 @@ export interface AnalyzedModule {
 
 /**
  * Admit one parsed module to the compiled grammar and lift its shape
- * (#1473 split — moved verbatim from the compile facade): the top-level
+ * (#1473 split): the top-level
  * statement admission (OEC9008 fail-closed, island policy passthrough), the
  * exactly-one-`@element`-class rule with its decorator options and canonical
  * heritage provenance, and the {@link propertyFields} inventory.

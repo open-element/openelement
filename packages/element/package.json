@@ -29,11 +29,9 @@
     "browser:compile": "node __wtr__/tools/compile-fixtures.ts",
     "browser:install": "node ../../tools/repo/run-in.ts --root __wtr__ --env PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 -- npm ci --no-audit --no-fund",
     "browser:test": "pnpm run browser:compile && vitest run --root ../.. --project element-browser",
-    "browser:test:chromium": "pnpm run browser:compile && vitest run --root ../.. --project element-browser",
     "browser:negative": "node __wtr__/tools/negative-proofs.ts",
-    "browser:gate": "pnpm run browser:install && pnpm run browser:test:chromium && pnpm run browser:negative",
-    "browser:gate:full": "pnpm run browser:install && pnpm run browser:test:full && pnpm run browser:negative",
-    "browser:test:full": "pnpm run browser:compile && OE_BROWSER_MATRIX=full vitest run --root ../.. --project element-browser"
+    "browser:gate": "pnpm run browser:install && pnpm run browser:test && pnpm run browser:negative",
+    "browser:gate:full": "pnpm run browser:install && OE_BROWSER_MATRIX=full pnpm run browser:test && OE_BROWSER_MATRIX=full pnpm run browser:negative"
   },
   "peerDependencies": {
     "vite": "^8.0.0"
@@ -50,8 +48,6 @@
     "@jridgewell/trace-mapping": "0.3.31",
     "@lit/context": "1.1.6",
     "@preact/signals-core": "^1.12.1",
-    "@std/assert": "jsr:^1.0.0",
-    "@std/path": "jsr:^1.0.0",
     "@types/node": "26.5.0",
     "lit": "3.3.3",
     "vite": "8.0.16"

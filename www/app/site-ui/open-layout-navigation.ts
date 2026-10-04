@@ -1,3 +1,4 @@
+import { localizePathIn } from './link.ts';
 import { normalizeLocalePath } from './i18n.ts';
 
 const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:', 'sms:']);
@@ -92,12 +93,10 @@ export function localizeLayoutPath(
   locales: string[],
   defaultLocale: string,
 ): string {
-  if (isSafeLayoutUrl(path) && /^https?:/i.test(path)) return path;
-  if (locale === defaultLocale) return path;
-  return normalizeLocalePath(`/${locale}${path === '/' ? '' : path}`, {
-    locales,
-    defaultLocale,
-  }).localizedPath;
+  // Same rule as the in-content links (localizePathIn): non-site-root-relative
+  // targets — external URLs, mailto:/tel:, anchors — pass through unchanged.
+  // The chrome builders pre-check isSafeLayoutUrl before reaching here.
+  return localizePathIn(path, locale, locales, defaultLocale);
 }
 
 export function localeSwitchPath(

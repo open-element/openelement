@@ -16,8 +16,7 @@
  * `apps/saas#nitro:build-workers` (the root `saas:workers` task does).
  */
 
-import { walkSync } from '../../tools/lib/std-fs.ts';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import process from 'node:process';
 import ts from 'typescript';
 import { extractStaticModuleSpecifiers, parseTypeScript } from '../lib/typescript-ast.ts';
@@ -258,10 +257,12 @@ if (import.meta.main) {
   }
   const serverDir = `${outputRoot}/server`;
   const modules: WorkersModule[] = [];
-  for (const entry of walkSync(serverDir, { includeDirs: false, exts: ['.mjs'] })) {
+  for (const entry of await readdir(serverDir, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory() || !entry.name.endsWith('.mjs')) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
     modules.push({
-      path: normalize(entry.path.slice(serverDir.length + 1)),
-      text: await readFile(entry.path, 'utf8'),
+      path: normalize(entryPath.slice(serverDir.length + 1)),
+      text: await readFile(entryPath, 'utf8'),
     });
   }
   // Manifest serverEntry is relative to the output root (`server/index.mjs`).

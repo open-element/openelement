@@ -2,15 +2,15 @@
  * plugin.ts: dev island rescan (#1062).
  *
  * Island scanning used to happen only in buildStart(); an island file added
- * or removed while `deno task dev` ran never reached the cached descriptor
+ * or removed while the dev server ran never reached the cached descriptor
  * (SSR admission plan) or the dev island client map — the page rendered DSD
  * but the island never hydrated, with no hint why. The core plugin's dev
  * watcher must re-scan the islands dir, rebuild the cached entry descriptor,
  * invalidate BOTH the virtual SSR entry and the virtual island client entry,
  * and full-reload (same chain as the route rescan, #1028).
  *
- * The plugin resolves islandsDir against the process cwd (buildStart), so —
- * like `deno task dev`, which cds into the app — the tests chdir into the
+ * The plugin resolves islandsDir against the process cwd (buildStart) — the
+ * dev command runs from the app root — so the tests chdir into the
  * fixture dir and pass relative dir names.
  */
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -18,7 +18,7 @@ import { realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 import { OpenElementBuildContext } from '../src/vite/build-context.ts';
 import { TestFileWatcher } from './test-watcher.ts';

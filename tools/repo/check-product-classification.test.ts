@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import {
   readProductDocs,
   REQUIRED_PRODUCT_DOCS,

@@ -37,8 +37,8 @@ export default defineConfig({
   },
 
   webServer: {
-    // `exec` prevents the shell Playwright launches from orphaning Deno when
-    // the suite finishes or is interrupted.
+    // `exec` replaces the shell with the node server process, so the webServer
+    // child is killed (not orphaned) when the suite finishes or is interrupted.
     command: `exec node server.ts --port ${PORT} --dir ../dist`,
     url: baseURL,
     reuseExistingServer: false,

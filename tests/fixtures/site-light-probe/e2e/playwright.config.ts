@@ -35,8 +35,9 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  // Auto-start the fixture's static server. `exec` prevents the shell
-  // The webServer child is killed (not orphaned) when the suite finishes.
+  // Auto-start the fixture's static server. `exec` replaces the shell with
+  // the node server process, so the webServer child is killed (not orphaned)
+  // when the suite finishes.
   webServer: {
     command: `exec node static-server.ts --port ${PORT} --dir ../dist`,
     url: baseURL,

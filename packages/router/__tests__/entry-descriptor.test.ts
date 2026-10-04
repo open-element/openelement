@@ -1,5 +1,5 @@
 /**
- * @openelement/router - Entry descriptor + renderer tests (Deno)
+ * @openelement/router - Entry descriptor + renderer tests
  *
  * Tests the two-step entry pipeline:
  *   1. buildEntryDescriptor - produces structured data

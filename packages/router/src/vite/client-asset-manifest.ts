@@ -14,16 +14,18 @@
  * a silently dropped or mis-attributed island identity would ship pages
  * whose client scripts never load.
  *
- * Identity resolution has one source: the manifest
- * resolves package specifiers through island-resolution.ts over the same
- * sorted alias table the build ships as `resolve.alias` — never through a
- * second, parallel resolution mechanism. A resolved path is consumed only
- * when the emitted module graph confirms it.
+ * Identity resolution has one source: the client build itself. The build's
+ * identity plugin resolves each admitted island's declared specifier through
+ * its own resolver (the same plugin container, alias table and node_modules
+ * layout the generated client entry's imports go through) and hands the
+ * resulting declared-specifier → module-id map to this builder; the join
+ * consumes exactly that map and confirms every id against the emitted module
+ * graph. A resolved id the graph does not carry fails the build — it is never
+ * traded for another module that merely matches the declared specifier.
  */
 
 import { readFile } from 'node:fs/promises';
 import { join, relative } from 'pathe';
-import type { Alias } from 'vite';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, ClientAssetErrorCode } from '../internal/error-codes.ts';
 import type { ClientAssetManifest, ClientIslandAsset } from './internal/protocol/client-assets.ts';
@@ -31,7 +33,6 @@ import {
   type ClientIslandDeliveryEntry,
   resolveIslandDeliveryTags,
 } from './internal/ssg/delivery.ts';
-import { resolveIslandIdentityPath } from './island-resolution.ts';
 
 /** One dist/client/.vite/manifest.json entry (the fields the builder reads). */
 export interface ViteClientManifestEntry {
@@ -52,8 +53,9 @@ export interface ClientAssetIslandInput {
   /** The client entry generated for this island (identity + strategy). */
   entry: ClientIslandDeliveryEntry;
   /**
-   * Absolute source path (local islands and import-map-resolved package
-   * islands); null when only the declared module specifier is available.
+   * Absolute source path (local islands); null when the island's declared
+   * module specifier is its identity (package and compiler behavior islands —
+   * the join resolves it through the build's identity map).
    */
   sourceFile: string | null;
 }
@@ -171,26 +173,31 @@ export function moduleIdentityMatches(moduleId: string, identity: string): boole
 
 /**
  * Resolve one package island's module identity to the unique real module id
- * in the emitted graph. Zero matches and several matches both fail: a
- * silent first-hit would ship another package's file under this island's
- * identity, and a silent fallback would deliver a different module than the
- * declared specifier names. `resolvedIdentity` — the island specifier's
- * real module path from island-resolution.ts, resolved through the same
- * import map / alias table / import-condition chain the build used — is a
- * hint that must be confirmed by the emitted graph before it short-circuits
- * the scan: a resolution the build did not emit is a drift the join refuses
- * to ship, falling through to the exact identity rule below.
+ * in the emitted graph. When the build's identity pass resolved the declared
+ * specifier, its module id is the verdict and must appear in the emitted
+ * graph — an id the graph does not carry fails the build instead of being
+ * traded for another module that merely matches the declared specifier
+ * (a silently different module would ship code the island never declared).
+ * Without a build-side resolution (direct callers), the exact identity rule
+ * applies: zero matches and several matches both fail, a silent first-hit
+ * would ship another package's file under this island's identity.
  */
 export function resolveIslandModuleId(
   fileByModuleId: Map<string, string>,
   identity: string,
   islandLabel: string,
-  resolvedIdentity?: string,
+  resolvedId?: string,
 ): string {
-  // Node-host module ids are real paths: an identity resolved through the
-  // exports map IS a key of fileByModuleId, so return the identity itself
-  // (the module id), not the chunk file the caller looks up with it.
-  if (resolvedIdentity && fileByModuleId.has(resolvedIdentity)) return resolvedIdentity;
+  if (resolvedId !== undefined) {
+    const id = normalizeModuleId(resolvedId);
+    if (fileByModuleId.has(id)) return id;
+    throw buildError(
+      ClientAssetErrorCode.ISLAND_UNMAPPED,
+      `Admitted island "${islandLabel}" declares module identity "${identity}" which the client ` +
+        `build resolved to ${resolvedId}, but the emitted client graph carries no such module — ` +
+        `the Phase 2 build shipped no chunk containing the module the island resolves to`,
+    );
+  }
   const matches: string[] = [];
   for (const id of fileByModuleId.keys()) {
     if (moduleIdentityMatches(id, identity)) matches.push(id);
@@ -248,7 +255,7 @@ function resolveIslandChunkFile(
   fileByModuleId: Map<string, string>,
   fileByManifestKey: Map<string, string>,
   manifestPath: string,
-  resolvedIdentity?: string,
+  resolvedId?: string,
 ): string | null {
   if (island.sourceFile) {
     const direct = fileByModuleId.get(normalizeSeparators(island.sourceFile));
@@ -257,14 +264,16 @@ function resolveIslandChunkFile(
     // source path — the same compile-time identity, hash-agnostic.
     return fileByManifestKey.get(normalizeSeparators(relative(root, island.sourceFile))) ?? null;
   }
-  // Package islands declare a module specifier as identity — the same
-  // identity the client build's chunk grouping used. It must resolve to
-  // exactly one emitted module; zero and several matches both fail.
+  // Package islands declare a module specifier as identity. The build's
+  // identity pass resolved it to the actual module id (confirmed against the
+  // emitted graph, fail closed when absent); without that resolution the
+  // exact identity rule applies. Either way the identity must name exactly
+  // one emitted module.
   const id = resolveIslandModuleId(
     fileByModuleId,
     island.entry.modulePath,
     `${island.entry.tagName} (${island.entry.modulePath})`,
-    resolvedIdentity,
+    resolvedId,
   );
   const file = fileByModuleId.get(id);
   if (!file) {
@@ -291,16 +300,17 @@ export function buildClientAssetManifest(options: {
   /** The manifest's path, named in every failure this builder raises. */
   manifestPath: string;
   /**
-   * The build's sorted alias table — the same array shipped as
-   * `resolve.alias` (same source, same order). The identity resolution
-   * consumes it so the manifest join and the build resolve through one
-   * mechanism. Omitted only by direct callers
-   * without aliases; the join then stays on the import-map + fallback
-   * chain.
+   * The client build's identity map — declared island specifier to the actual
+   * module id the build's own resolver answered, one entry per admitted
+   * island. The join consumes it verbatim and confirms every id against the
+   * emitted module graph (fail closed when absent). Omitted only by direct
+   * callers without a build-side resolution pass; those joins stay on the
+   * exact identity rule.
    */
-  aliases?: ReadonlyArray<Alias>;
+  resolvedIslandModuleIds?: ReadonlyMap<string, string>;
 }): ClientAssetManifest {
   const { root, base, islands, viteManifest, chunks, manifestPath } = options;
+  const resolvedIds = options.resolvedIslandModuleIds;
   const assetUrl = (file: string) => `${base}client/${file}`;
 
   const entryFile = findClientEntryFile(viteManifest, manifestPath);
@@ -321,24 +331,6 @@ export function buildClientAssetManifest(options: {
     for (const rawId of ids) {
       const id = normalizeModuleId(rawId);
       if (!fileByModuleId.has(id)) fileByModuleId.set(id, chunk.fileName);
-    }
-  }
-
-  // Package-island identities are bare specifiers; resolve each one once
-  // through the same resolution chain the build used — the deno.json import
-  // map, then the SAME sorted alias table the build shipped as
-  // `resolve.alias`, then (only when both have no file target) the
-  // import-condition node_modules fallback. One source, one order: the
-  // answer that joins the manifest is the answer the build resolved, and
-  // the fallback is consumed only when the emitted graph confirms it (see
-  // resolveIslandModuleId).
-  const identityPaths = new Map<string, string>();
-  const aliases = options.aliases ?? [];
-  for (const island of islands) {
-    const identity = island.entry.modulePath;
-    if (identity && !identityPaths.has(identity)) {
-      const resolved = resolveIslandIdentityPath(root, identity, aliases);
-      if (resolved) identityPaths.set(identity, resolved);
     }
   }
 
@@ -365,7 +357,7 @@ export function buildClientAssetManifest(options: {
         fileByModuleId,
         fileByManifestKey,
         manifestPath,
-        identityPaths.get(island.entry.modulePath),
+        resolvedIds?.get(island.entry.modulePath),
       ) ??
       // An island without a chunk of its own rides the client entry chunk —
       // the same fallback the post-build chunk map applies.
@@ -420,8 +412,8 @@ export async function createClientAssetManifest(options: {
   islands: ClientAssetIslandInput[];
   manifestPath: string;
   buildResult: unknown;
-  /** The build's sorted alias table — see {@linkcode buildClientAssetManifest}. */
-  aliases?: ReadonlyArray<Alias>;
+  /** The client build's identity map — see {@linkcode buildClientAssetManifest}. */
+  resolvedIslandModuleIds?: ReadonlyMap<string, string>;
 }): Promise<ClientAssetManifest> {
   const viteManifest = await readViteClientManifest(join(options.manifestPath));
   return buildClientAssetManifest({
@@ -431,6 +423,6 @@ export async function createClientAssetManifest(options: {
     viteManifest,
     chunks: collectClientBuildChunks(options.buildResult),
     manifestPath: options.manifestPath,
-    aliases: options.aliases,
+    resolvedIslandModuleIds: options.resolvedIslandModuleIds,
   });
 }

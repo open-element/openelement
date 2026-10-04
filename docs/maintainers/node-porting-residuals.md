@@ -33,18 +33,19 @@ Sub-residuals disclosed at the cutover:
   provider — same fail-closed engine-list rule as the retired
   web-test-runner gate.
 
-## 2. Permission model (`--allow-*`) — no node equivalent
+## 2. Permission model (`--allow-*`) — RESOLVED IN S2 (owner ruling 2026-10-03)
 
-Deno gates fs/net/env/ffi even when access happens through `node:*` imports.
+Deno gated fs/net/env/ffi even when access happened through `node:*` imports.
 Probed during the port: `node:child_process` spawn calls
 `Deno.env.toObject()` internally on every spawn, so a script holding bare
-`--allow-run` fails with `NotCapable: Requires env access`. That is why every
-task whose first process is `run-in.ts`/`gate.ts` (and the spawning children:
-release-state-machine, retired-api, version-bump, export-files, clean-proof,
-check:doc-figures) now carries `--allow-env`. Current posture: flags stay on
-the `deno run` entries; there is no node-side replacement. Expiry: a Node-host
-migration removes the flags and, with them, the fail-closed prompt property —
-that loss is the cost of migration, not something B1b solved.
+`--allow-run` failed with `NotCapable: Requires env access`. That is why the
+port gave every task whose first process was `run-in.ts`/`gate.ts` (and the
+spawning children: release-state-machine, retired-api, version-bump,
+export-files, clean-proof, check:doc-figures) a `--allow-env` flag on its
+then-`deno run` entry. The S2 Node-host migration removed those entries and
+the flags with them — no workspace package.json carries `--allow-*` today —
+and with the flags went the fail-closed prompt property. That loss was the
+cost of migration, not something B1b solved.
 
 ## 3. Runtime entry and task graph
 
@@ -71,10 +72,13 @@ script races the real Supabase project and reads provider secrets), and the
 streaming measurement script moved onto the node-http shape (§5). What
 remains is dormant or textual, none of it an executed entry: the
 `benchmarks/micro` standalone `import.meta.main` blocks (`micro.ts`,
-`keyed-reorder.ts`) are still written against Deno host APIs and only run
-under a Deno host — the vitest benchmarks project never executes them — and
-a few `tools/repo` script headers (clean-proof, run-in, check-release-version,
-check-esm-boundary) still carry stale `deno run` usage prose.
+`keyed-reorder.ts`) are now ported onto `node:*` — standalone evidence runs
+go through `node benchmarks/micro/micro.ts --write` (and the
+`keyed-reorder.ts` equivalent), while the vitest benchmarks project still
+exercises only the deterministic self-checks in `micro.test.ts`, never a
+standalone entry — and a few `tools/repo` script headers (clean-proof,
+run-in, check-release-version, check-esm-boundary) still carry stale
+`deno run` usage prose.
 
 ## 4. Module resolution artifacts
 
@@ -82,8 +86,10 @@ RESOLVED IN B2: `deno.lock` (root + six fixture universes), `vendor: true`
 and `nodeModulesDir: "manual"` retired with the deno.json files; the
 repository carries a single `pnpm-lock.yaml` (per-fixture npm-shaped
 universes like url-pattern-list-audit keep their own committed lockfile).
-jsr: specifiers survive as pnpm `jsr:` dependencies resolved to `@jsr/*`
-registry mirrors. `check-fixture-locks.ts` was deleted with its gate step.
+The JSR specifier dependencies B2 still carried through the JSR npm-compat
+registry mirrors were retired in the alpha8 dependency lane: the lock holds
+no registry-mirror entries and the registry `.npmrc` bridge is deleted.
+`check-fixture-locks.ts` was deleted with its gate step.
 
 ## 5. `Deno.serve` — no node:\* one-liner; RESOLVED in the alpha8 residue sweep
 
@@ -112,8 +118,10 @@ Call sites are now errno-based: the tools/repo production classifiers check
 appears only in the test stub `check-no-allow-all.scope.test.ts:136` and in
 pre-B1a product code (`packages/create/src/cli.ts:33`).
 Residual: errors thrown by the Deno runtime itself (`NotCapable`, permission
-prompts) have no node shape and still surface as Deno classes. Expiry: they
-disappear only when the runtime stops being Deno.
+prompts) had no node shape and surfaced as Deno classes. Collected with S2:
+the expiry condition — the runtime stops being Deno — is satisfied, since
+every CI-reachable and production entry runs on node/pnpm (§3); no
+executable repository path can raise Deno runtime error classes anymore.
 
 ## 7. Subprocess semantics deltas — centralized, probed
 
@@ -137,10 +145,17 @@ can deploy there; any reintroduced Deno API would fail that boundary check.
 ## 9. Kept as-is on purpose
 
 - `@std/*` jsr dependencies (`@std/path`, `@std/fs/walk`, `@std/semver`,
-  `@std/assert`): Deno-ecosystem but runtime-portable; porting them bought
-  nothing.
-- `import.meta.main` as the entry-module idiom in CLI scripts (no node
-  equivalent; `import.meta.url` comparisons would be the substitute). Expiry:
-  same as the runtime entry, §3.
+  `@std/assert`): originally kept as Deno-ecosystem but runtime-portable.
+  That call was reversed in alpha8 — retirement is complete: every tooling
+  import now uses `node:path`/`node:url`/`node:assert/strict`/`node:util`,
+  the npm `semver` package replaces `@std/semver`, the homemade walk/glob/
+  YAML helpers are gone (node:fs recursion, fast-glob + yaml), the `.npmrc`
+  JSR registry bridge is deleted, and the lock carries zero `@jsr` entries.
+  The pack surface was already `@std`/`@jsr`/`jsr:`-free (see
+  pack-post-processing.md).
+- `import.meta.main` as the entry-module idiom in CLI scripts: supported on
+  Node 24.2+ — the repository floor (root `package.json` `engines` requires
+  `node >=24.2`, and `.node-version` pins the 24.18 development line, where
+  it is verified working) — so it stays with no substitute needed.
 - `@openelement/element/build-utils` and the TypeScript compiler API surfaces:
   already host-neutral.

@@ -1,5 +1,5 @@
 /**
- * @openelement/router - build / entry-generators tests (Deno)
+ * @openelement/router - build / entry-generators tests
  *
  * ADR 0011: closeBundle writes metadata to ctx, not .openElement/build-metadata.json.
  * Tests verify OpenElementBuildContext fields instead of filesystem.
@@ -164,7 +164,8 @@ describe('build - generateClientEntry', () => {
 // ADR 0011: closeBundle writes metadata to ctx fields, not .openElement/build-metadata.json.
 // Tests create a real OpenElementBuildContext and verify fields after closeBundle().
 // NOTE: Phase 2/3 (buildClient, buildSSG) require a real Vite project with
-// routes/islands - they are tested in ssg-smoke.test.ts instead.
+// routes/islands - they are exercised end to end by static-only-build.test.ts
+// and the SSG pipeline tests instead.
 
 test('buildPlugin - configResolved', () => {
   const plugin = buildPlugin();

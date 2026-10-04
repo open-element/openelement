@@ -4,9 +4,9 @@
  * in ./lib/site-retired.ts (shared with the redirects emitter and the
  * built-output link checker); this file owns only the CLI contract.
  *
- * Usage:
- *   deno run ... www/tools/check-retired-urls.ts              # offline check
- *   deno run ... www/tools/check-retired-urls.ts --refresh --base <ref>
+ * Usage (the www#check:retired-url / --refresh gate steps):
+ *   node www/tools/check-retired-urls.ts              # offline check
+ *   node www/tools/check-retired-urls.ts --refresh --base <ref>
  */
 import { collectRetiredUrlFailures, refreshBaseline } from './lib/site-retired.ts';
 import process from 'node:process';

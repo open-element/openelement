@@ -1,5 +1,5 @@
 /**
- * WTR overlay matrix (#1339 §5 case 8, Beta.2.2): the dialog/dropdown slice
+ * Overlay matrix (#1339 §5 case 8, Beta.2.2): the dialog/dropdown slice
  * of the alpha-maturation "First cases", run against the REAL production
  * packages/ui components compiled through the pilot's official fixture path
  * (tools/compile-fixtures.ts -> generated/open-dialog.ts /
@@ -23,6 +23,7 @@ import { assert } from 'chai';
 import { userEvent } from 'vitest/browser';
 import { OpenDialog } from '../generated/open-dialog.ts';
 import { OpenDropdown } from '../generated/open-dropdown.ts';
+import { waitFor } from './helpers.js';
 
 customElements.define('open-dialog', OpenDialog);
 customElements.define('open-dropdown', OpenDropdown);
@@ -30,16 +31,6 @@ await Promise.all([
   customElements.whenDefined('open-dialog'),
   customElements.whenDefined('open-dropdown'),
 ]);
-
-/** Poll a predicate on animation frames; fail with a label on timeout. */
-async function waitFor(predicate, label) {
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-  }
-  assert.fail(`timed out waiting for ${label}`);
-}
 
 /** The focused element across shadow-root boundaries. */
 function deepActive() {

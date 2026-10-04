@@ -167,8 +167,8 @@ The site-owned collection loader renders fenced blocks as `<pre><code class="lan
 ### lib/blog.ts — syntax highlighting recipe (optional)
 
 ```ts
-import { marked } from 'npm:marked@^15';
-import hljs from 'npm:highlight.js@^11';
+import { marked } from 'marked';
+import hljs from 'highlight.js';
 import type { CollectionOptions } from '../lib/content.ts';
 
 // Default marked behavior + hljs token spans. hljs output only adds class

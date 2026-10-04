@@ -48,9 +48,9 @@ const states = new WeakMap<SearchHost, SearchState>();
 /**
  * Dynamic search-time messages. Chrome copy (trigger label, placeholder, …)
  * is server-rendered by the island in the page locale via
- * searchChromeStrings — nothing here rewrites it at runtime.
- * English strings are pinned verbatim by www/e2e/search.spec.ts — do not
- * reword them without updating that spec.
+ * searchChromeStrings — nothing here rewrites it at runtime. The chrome
+ * placeholder is the string www/e2e/search.spec.ts pins; these messages are
+ * not e2e-pinned.
  */
 interface SearchCopy {
   noResults: (query: string) => string;
@@ -60,11 +60,11 @@ interface SearchCopy {
 const COPY: Record<SiteLocale, SearchCopy> = {
   en: {
     noResults: (query: string) => `No results found for “${query}”`,
-    indexMissing: 'Search index not found — run deno task build to generate it',
+    indexMissing: 'Search index not found — run pnpm --dir www run pagefind to generate it',
   },
   zh: {
     noResults: (query: string) => `未找到“${query}”的相关结果`,
-    indexMissing: '未找到搜索索引——请运行 deno task build 生成',
+    indexMissing: '未找到搜索索引——请运行 pnpm --dir www run pagefind 生成',
   },
 };
 

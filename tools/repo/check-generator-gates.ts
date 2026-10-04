@@ -17,7 +17,8 @@
  * workspace's script locations must be referenced by some task; an
  * unreferenced script is an unowned mechanism.
  */
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readFile, stat } from 'node:fs/promises';
 import process from 'node:process';
 import {
@@ -28,7 +29,7 @@ import {
   scriptInCommand,
 } from './workspace-tasks.ts';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const workspaces = await readWorkspaces(repoRoot);
 const repoTasks =
   (
@@ -47,8 +48,14 @@ const GATE_LAYERS = ['gate:source', 'gate:release'] as const;
 const gateSteps = new Map<string, Set<string>>(
   GATE_LAYERS.map((layer) => [layer, new Set(repoTasks[layer]?.split(/\s+/) ?? [])]),
 );
-const gateOf = (step: string): string | undefined =>
-  GATE_LAYERS.find((layer) => gateSteps.get(layer)!.has(step));
+/**
+ * Gate steps are package-qualified (`@openelement/www#check:content`), the
+ * exact form vp dispatches by, so wiring checks compare the workspace's
+ * package NAME, never its repo-relative path (the path form silently no-ops
+ * under vp run).
+ */
+const gateOf = (pkg: string, task: string): string | undefined =>
+  GATE_LAYERS.find((layer) => gateSteps.get(layer)!.has(`${pkg}#${task}`));
 for (const layer of GATE_LAYERS) {
   if (gateSteps.get(layer)!.size === 0) {
     console.error(
@@ -63,13 +70,16 @@ const failures: string[] = [];
 const rows: string[] = [];
 
 for (const ws of workspaces) {
+  // Dispatch identity: a workspace without a package name cannot be
+  // dispatched by vp, so it can never satisfy a gate wiring check either.
+  const pkg = ws.name ?? `(no package name: ${ws.workspace})`;
   const generators = generatorEntries([ws]);
   for (const entry of generators) {
     const checkTask =
       Object.keys(ws.tasks).find(
         (key) => ws.tasks[key].includes(entry.script) && ws.tasks[key].includes('--check'),
       ) ?? '(none)';
-    const inGate = checkTask === '(none)' ? undefined : gateOf(`${ws.workspace}#${checkTask}`);
+    const inGate = checkTask === '(none)' ? undefined : gateOf(pkg, checkTask);
     rows.push(`generate | ${ws.workspace} | ${entry.script} | ${checkTask} | ${inGate ?? 'NO'}`);
     if (checkTask === '(none)') {
       failures.push(`${ws.workspace}/${entry.script}: no --check task wired`);
@@ -83,7 +93,7 @@ for (const ws of workspaces) {
 
   for (const entry of emitterEntries([ws])) {
     const declaresCheck = ws.tasks[entry.taskKey].includes('--check');
-    const inGate = gateOf(`${ws.workspace}#${entry.taskKey}`);
+    const inGate = gateOf(pkg, entry.taskKey);
     rows.push(
       `emit | ${ws.workspace} | ${entry.script} | ${declaresCheck ? 'has --check' : '(none)'} | ${
         inGate ?? 'no'

@@ -1,7 +1,6 @@
 /**
  * Generates packages/router/src/vite/generated-export-files.ts from the
- * "exports" maps declared in each package package.json (the B2 manifest
- * conversion moved package truth here from deno.json).
+ * "exports" maps declared in each package package.json.
  *
  * OPENELEMENT_EXPORT_FILES used to be a
  * hand-maintained copy of those export maps, which drifted (e.g. content's
@@ -95,8 +94,8 @@ function render(map: Record<string, PackageExports>): string {
 }
 
 async function runFormatter(target: string): Promise<void> {
-  // oxfmt is the repository formatter (A2 engine swap); the binary comes
-  // from the deno-installed root node_modules (pinned in deno.json imports).
+  // oxfmt is the repository formatter; the binary comes from the
+  // pnpm-installed root node_modules.
   const oxfmt = new URL('../../node_modules/.bin/oxfmt', import.meta.url).pathname;
   const status = await commandOutput(oxfmt, { args: [target] });
   if (!status.success) {

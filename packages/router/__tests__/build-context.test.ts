@@ -1,5 +1,5 @@
 /**
- * @openelement/router - build-context.ts tests (Deno)
+ * @openelement/router - build-context.ts tests
  */
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';

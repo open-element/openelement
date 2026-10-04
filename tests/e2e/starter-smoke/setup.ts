@@ -4,9 +4,8 @@
  *
  * Builds the packed-starter verification surface on the B5 Node/pnpm consumer
  * surface (ADR-0161): packs the release tarballs through the release
- * toolchain (vp pack via publish-npm dry-run — `deno pack` retired with the
- * A1 toolchain swap and the package manifests no longer carry deno.json),
- * runs the packed create CLI under Node to generate a fresh starter, rewires
+ * toolchain (vp pack via publish-npm dry-run), runs the packed create CLI
+ * under Node to generate a fresh starter, rewires
  * the starter's @openelement/* dependencies to the same current-SHA tarballs,
  * installs the starter's own dependency surface with pnpm, then builds it.
  * The built dist/ + dist/server/ are served by the starter's own `start`
@@ -19,7 +18,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { join, resolve, toFileUrl } from '@std/path';
+import { join, resolve } from 'node:path';
 import { runStep } from '../../lib/qualify-harness/command-run.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '..', '..', '..');
@@ -73,7 +72,7 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
   // the homepage. Importing it in-process keeps this check independent of the
   // packed artifact it is comparing against (setup runs under Node, whose
   // type stripping loads the .ts source directly).
-  const installCommandUrl = toFileUrl(
+  const installCommandUrl = pathToFileURL(
     join(repoRoot, 'packages', 'create', 'src', 'install-command.ts'),
   ).href;
   const { createInstallCommand } = (await import(installCommandUrl)) as {
@@ -147,9 +146,7 @@ async function main(): Promise<void> {
   // Clean-machine simulation: the generated starter must install as its OWN
   // workspace root. The repository's pnpm-workspace.yaml (membership globs,
   // minimumReleaseAge policy, allowBuilds allowlist, root lockfile) governs
-  // THIS checkout, not a consumer project that merely sits inside it — the
-  // same reason the old flow rewired the deno.json import map instead of
-  // letting workspace resolution leak in.
+  // THIS checkout, not a consumer project that merely sits inside it.
   await writeFile(
     join(appDir, 'pnpm-workspace.yaml'),
     'packages: []\nallowBuilds:\n  esbuild: true\n',

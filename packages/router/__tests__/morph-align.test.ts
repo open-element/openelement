@@ -1,7 +1,7 @@
 /**
  * Unit tests for the morph tree alignment (morph-align.ts) — driven through
  * createMorphAlign with a minimal fake DOM, the same harness style as
- * enhance-client.test.ts (no browser/DOM library in the Deno test runtime).
+ * enhance-client.test.ts (no browser/DOM library in the test runtime).
  */
 import { expect, test } from 'vitest';
 import { createMorphAlign } from '../src/vite/internal/ssg/morph-align.ts';

@@ -17,11 +17,8 @@
  * __clientScriptDescriptors).
  */
 
-import { existsSync } from 'node:fs';
 import process from 'node:process';
 import type { Plugin } from 'vite';
-
-import { fileURLToPath } from 'node:url';
 
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
@@ -31,6 +28,7 @@ import { buildClientIslandEntries } from './internal/ssg/client-island-entries.t
 import { VIRTUAL_RUNTIME_SPECIFIERS } from './internal/ssg/entry-generators.ts';
 import { DEFAULT_ISLANDS_DIR } from './internal/paths.ts';
 import { compilerBehaviorDeclarations } from './internal/ssg/client-admission.ts';
+import { runtimeModulePath } from './internal/runtime-module-path.ts';
 
 const VIRTUAL_CLIENT_ENTRY_ID = 'virtual:open-client-entry';
 // Exported for plugin.ts: the dev watcher invalidates this module when the
@@ -38,15 +36,8 @@ const VIRTUAL_CLIENT_ENTRY_ID = 'virtual:open-client-entry';
 export const RESOLVED_CLIENT_ENTRY_ID = '\0' + VIRTUAL_CLIENT_ENTRY_ID;
 const CLIENT_ENTRY_PUBLIC_PATH = 'client/islands/client.js';
 
-// Same packed-world rule as runtimeModulePath in cli/build-client.ts:
-// workspace dev resolves the TypeScript source; the packed payload ships no
-// raw TypeScript, so an installed tarball resolves the staged
-// JavaScript counterpart instead.
-function devRuntimeModulePath(relativeSource: string): string {
-  const sourcePath = fileURLToPath(new URL(relativeSource, import.meta.url));
-  if (existsSync(sourcePath)) return sourcePath;
-  return sourcePath.replace(/\.(?:[cm]?ts|tsx)$/, '.js');
-}
+// Runtime module paths resolve through the shared runtimeModulePath helper
+// (internal/runtime-module-path.ts).
 
 export function devIslandClientPlugin(
   options: FrameworkOptions,
@@ -78,10 +69,10 @@ export function devIslandClientPlugin(
       // #868: the client runtimes resolve to their real source modules (same
       // mapping as build-client.ts) so they transform like any other module.
       if (id === VIRTUAL_RUNTIME_SPECIFIERS.scheduler) {
-        return devRuntimeModulePath('./internal/ssg/island-scheduler.ts');
+        return runtimeModulePath('./ssg/island-scheduler.ts');
       }
       if (id === VIRTUAL_RUNTIME_SPECIFIERS.enhance) {
-        return devRuntimeModulePath('./internal/ssg/enhance-client.ts');
+        return runtimeModulePath('./ssg/enhance-client.ts');
       }
       return null;
     },

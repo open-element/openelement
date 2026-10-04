@@ -1,5 +1,5 @@
 /**
- * @openelement/router - ssg-postprocess.ts tests (Deno)
+ * @openelement/router - ssg-postprocess.ts tests
  *
  * Tests the SSG post-processing functions using temp directories.
  *
@@ -32,7 +32,7 @@ import { stableHash } from '../src/vite/internal/ssg/ssg-helpers.ts';
 import type { ClientAssetManifest } from '../src/vite/internal/protocol/client-assets.ts';
 import type { IslandDecl } from '../src/vite/internal/protocol/ssg.ts';
 
-import { join } from '@std/path';
+import { join } from 'node:path';
 
 function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), 'open-test-'));

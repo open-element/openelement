@@ -9,7 +9,7 @@
  */
 
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { wwwReleaseAnchorDrift, wwwReleaseAnchorFailures } from './www-release-anchor.ts';
 
 const repoRoot = join(import.meta.dirname!, '..', '..');

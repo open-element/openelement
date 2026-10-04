@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { loadCollectionData } from '../lib/content.ts';
-import { fromFileUrl } from '@std/path';
+import { fileURLToPath } from 'node:url';
 import { articleCollections } from '../content-collections.ts';
 import { projectArticlePage } from '../app/site-ui/article-page-model.ts';
 // The route table is generated from the same content this file loads
@@ -25,7 +25,7 @@ type ArticleContentPage = {
   content: string;
   html: string;
 };
-const siteRoot = fromFileUrl(new URL('../', import.meta.url));
+const siteRoot = fileURLToPath(new URL('../', import.meta.url));
 const loadContentPages = (collection: ArticleCollection) =>
   loadCollectionData(collection, {
     ...articleCollections[collection],

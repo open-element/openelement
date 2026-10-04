@@ -27,7 +27,8 @@
  *   line (merged from the former standalone package-config verification)
  */
 
-import { readFile, stat, stat as statPath } from 'node:fs/promises';
+import { readdirSync } from 'node:fs';
+import { readdir, readFile, stat, stat as statPath } from 'node:fs/promises';
 import {
   PACKAGE_COUNT,
   PACKAGE_VERSION,
@@ -44,8 +45,7 @@ import {
   releasePublishOrder,
   topologicalSort,
 } from '../lib/package-graph.ts';
-import { walk, walkSync } from '../lib/std-fs.ts';
-import { basename, dirname, join } from '@std/path';
+import { basename, dirname, join } from 'node:path';
 import { formatError } from '@openelement/element';
 
 async function readJson(path: string): Promise<unknown> {
@@ -76,12 +76,15 @@ async function collectTsFiles(dir: string): Promise<string[]> {
   const files: string[] = [];
 
   try {
-    for await (const { path } of walk(dir, {
-      includeDirs: false,
-      skip: [/(^|\/)node_modules(\/|$)/, /(^|\/)dist(\/|$)/],
-      exts: ['ts'],
-    })) {
-      files.push(path);
+    const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() || !entry.name.endsWith('.ts')) continue;
+      const entryPath = `${entry.parentPath}/${entry.name}`;
+      const relative = entryPath.slice(dir.length + 1);
+      if (relative.split('/').includes('node_modules') || relative.split('/').includes('dist')) {
+        continue;
+      }
+      files.push(entryPath);
     }
   } catch {
     // Packages without src are allowed.
@@ -191,7 +194,10 @@ function exportTargets(exports: unknown): string[] {
 
 function surfaceSourceFiles(root: string): string[] {
   try {
-    return [...walkSync(root, { includeDirs: false, exts: ['.ts', '.tsx'] })].map((e) => e.path);
+    return readdirSync(root, { recursive: true, withFileTypes: true })
+      .filter((entry) => !entry.isDirectory())
+      .filter((entry) => entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
+      .map((entry) => `${entry.parentPath}/${entry.name}`);
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return [];
     throw error;
@@ -276,9 +282,8 @@ async function validatePackageConfigs(packages: PackageInfo[], failures: string[
   failures.push(...createVersionFailures(await readFile('packages/create/src/version.ts', 'utf8')));
 
   for (const pkg of packages) {
-    // The B2 manifest conversion moved package truth to package.json; the
-    // publish surface is its `files` allowlist (npm), never a deno publish
-    // config — JSR is not a release channel (ADR-0108).
+    // The publish surface is the package.json `files` allowlist (npm) —
+    // JSR is not a release channel (ADR-0108).
     const configPath = join(pkg.dir, 'package.json');
     const config = (await readJson(configPath)) as {
       name?: unknown;

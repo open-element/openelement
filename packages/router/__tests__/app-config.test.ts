@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { OpenElementError } from '@openelement/element';
 import { openElement } from '../src/vite/app-vite.ts';
 import { buildHeadExtras } from '../src/vite/head-injection.ts';

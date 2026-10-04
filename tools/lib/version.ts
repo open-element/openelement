@@ -7,11 +7,11 @@
  * surrounding whitespace; publication and npm verification import from here
  * instead of re-rolling parse/compare logic.
  *
- * Generic SemVer grammar comes from @std/semver; this module adds only the
- * strict release-line boundary, the lossless identifier list, and the
- * prerelease channel/predecessor helpers the npm lane needs.
+ * Generic SemVer grammar comes from the npm `semver` package; this module
+ * adds only the strict release-line boundary, the lossless identifier list,
+ * and the prerelease channel/predecessor helpers the npm lane needs.
  */
-import { parse } from '@std/semver';
+import { parse } from 'semver';
 
 export interface LineVersion {
   major: number;
@@ -33,8 +33,9 @@ export interface LineVersion {
 }
 
 /**
- * Strict line-version parser. @std/semver tolerates `v` prefixes, build
- * metadata and surrounding whitespace; the release-line contract does not.
+ * Strict line-version parser. The underlying semver parser tolerates `v`
+ * prefixes, build metadata and surrounding whitespace; the release-line
+ * contract does not.
  */
 export function parseLineVersion(version: string): LineVersion {
   if (
@@ -45,10 +46,8 @@ export function parseLineVersion(version: string): LineVersion {
   ) {
     throw new Error(`Invalid semver version: ${version}`);
   }
-  let semver;
-  try {
-    semver = parse(version);
-  } catch {
+  const semver = parse(version);
+  if (semver === null) {
     throw new Error(`Invalid semver version: ${version}`);
   }
   const identifiers = (semver.prerelease ?? []).map((identifier) => String(identifier));

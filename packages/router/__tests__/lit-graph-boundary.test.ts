@@ -19,7 +19,7 @@
 
 import { readFileSync, statSync } from 'node:fs';
 import { expect, test } from 'vitest';
-import { dirname, resolve } from '@std/path';
+import { dirname, resolve } from 'node:path';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { OPENELEMENT_EXPORT_FILES } from '../src/vite/generated-export-files.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';

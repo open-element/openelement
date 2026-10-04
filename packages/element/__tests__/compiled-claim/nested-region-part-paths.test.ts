@@ -24,144 +24,29 @@
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { validatePartProgram } from '../../src/internal/protocol/part-program.ts';
-import {
-  claimExistingDom,
-  createFreshDom,
-  PartProgramClaimError,
-  serializeToHtml,
-} from '../../src/internal/compiled/runtime.ts';
-import { serializeProgramContent } from '../../src/internal/compiled/server/index.ts';
+import { PartProgramClaimError } from '../../src/internal/compiled/runtime.ts';
 import { testProgram } from '../compiled-runtime/test-program.ts';
 import { parseHtml, TestDocument, TestElement, TestText } from '../compiled-runtime/test-dom.ts';
+import {
+  claimExisting,
+  createFresh,
+  eachHost,
+  eachSiblingProgram as buildEachSiblingProgram,
+  serializeSeed,
+  serializeServer,
+  Sig,
+  whenHost,
+  whenSiblingProgram as buildWhenSiblingProgram,
+} from './claim-harness.ts';
 
-/** Structural signal matching the runtime's SignalLike contract. */
-class Sig<T> {
-  #value: T;
-  readonly #listeners = new Set<(value: T) => void>();
-
-  constructor(value: T) {
-    this.#value = value;
-  }
-
-  get value(): T {
-    return this.#value;
-  }
-
-  set value(next: T) {
-    this.#value = next;
-    for (const listener of [...this.#listeners]) listener(next);
-  }
-
-  subscribe(listener: (value: T) => void): () => void {
-    this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
-  }
-}
-
-interface WhenHost {
-  signals: { title: Sig<string>; count: Sig<number> };
-}
-
-interface EachHost {
-  signals: { title: Sig<string>; items: Sig<Array<{ id: string; label: string }>> };
-}
-
-function whenHost(): WhenHost {
-  return { signals: { title: new Sig('DYN'), count: new Sig(5) } };
-}
-
-function eachHost(): EachHost {
-  return {
-    signals: {
-      title: new Sig('DYN'),
-      items: new Sig([
-        { id: 'a', label: 'alpha' },
-        { id: 'b', label: 'beta' },
-      ]),
-    },
-  };
-}
-
-/** The executor entry points viewed through their wire-level shape. */
-const serializeServer = serializeProgramContent as unknown as (
-  program: unknown,
-  host: unknown,
-) => string;
-const serializeSeed = serializeToHtml as unknown as (program: unknown, host: unknown) => string;
-const createFresh = createFreshDom as unknown as (
-  program: unknown,
-  host: unknown,
-  root: Node,
-) => { dispose(): void };
-const claimExisting = claimExistingDom as unknown as (
-  program: unknown,
-  host: unknown,
-  root: Node,
-) => { dispose(): void };
+const TAG_PREFIX = 'oe-a104';
+const whenSiblingProgram = () => buildWhenSiblingProgram(TAG_PREFIX);
+const eachSiblingProgram = () => buildEachSiblingProgram(TAG_PREFIX);
 
 interface RawProgram {
   template: unknown[];
   parts: Array<Record<string, unknown>>;
   locations: Array<Record<string, unknown>>;
-}
-
-/**
- * `element(dynamic attr)` immediately followed by `when └ element` — the
- * valid shape closest to the audit suspicion: the branch element's
- * Region-relative position collides with the sibling sink's canonical path
- * [0] if the claim/serialize recursion ever resets the path.
- */
-function whenSiblingProgram(): unknown {
-  return testProgram({
-    tag: 'oe-a104-when-sibling',
-    template: [
-      { k: 'el', tag: 'div', attrs: [], children: [] },
-      { k: 'part', index: 1 },
-    ],
-    parts: [
-      { k: 'attr', index: 0, signal: 'title', name: 'title', path: [0] },
-      {
-        k: 'when',
-        index: 1,
-        signal: 'count',
-        test: { signal: 'count', op: 'greater-than', value: 0 },
-        on: [{ k: 'el', tag: 'span', attrs: [['title', 'static-on']], children: [] }],
-        off: [{ k: 'el', tag: 'span', attrs: [['title', 'static-off']], children: [] }],
-      },
-    ],
-  });
-}
-
-/**
- * `element(dynamic attr)` followed by `each └ element(item attr)` — the only
- * dynamic-attribute form valid INSIDE a Region: per-item attribute slots.
- */
-function eachSiblingProgram(): unknown {
-  return testProgram({
-    tag: 'oe-a104-each-sibling',
-    template: [
-      { k: 'el', tag: 'div', attrs: [], children: [] },
-      { k: 'part', index: 1 },
-    ],
-    parts: [
-      { k: 'attr', index: 0, signal: 'title', name: 'title', path: [0] },
-      {
-        k: 'each',
-        index: 1,
-        signal: 'items',
-        key: 'id',
-        item: [
-          {
-            k: 'el',
-            tag: 'li',
-            attrs: [['title', 'item-static']],
-            iattrs: [['data-label', 'label']],
-            children: [],
-          },
-        ],
-      },
-    ],
-  });
 }
 
 /** #1374 fixture: an each Region keyed by a field holding mixed value types,

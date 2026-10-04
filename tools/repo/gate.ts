@@ -3,23 +3,32 @@
  *
  * Root `gate:*` scripts must not be single-line `&&` chains of dozens of
  * sub-scripts: failures hide mid-chain and no per-step report exists. Gates
- * delegate here with the same member scripts; each member runs as
- * `pnpm run <name>` from the repository root with inherited stdio, and the
+ * delegate here with the same member scripts; each member runs as one
+ * vp-dispatched task (S3 unified entry) with inherited stdio, and the
  * coordinator prints one PASS/FAIL line with the duration per step. The
  * first failure stops the gate and the process exits 1 (fail-closed); a
  * fully green gate prints the step count and exits 0. This coordinator owns
- * no test logic — it only sequences formal tasks.
+ * no test logic and no workspace/task resolution of its own — the dispatch
+ * argv and executable come from tools/repo/vp-dispatch.ts, and vp resolves
+ * the task against the package.json scripts.
  *
  * Usage:
  *   node tools/repo/gate.ts <step> [<step> ...]
  *
- * A step is either a root script (`typecheck`) or a workspace script
- * (`<dir>#<script>`, e.g. `www#build`): the latter runs as
- * `pnpm --dir <dir> run <script>` from the repository root. `<dir>` must
- * stay inside the repo (no `..`, no absolute paths) and both parts are
- * restricted to task-name characters, so a gate definition cannot smuggle
- * shell composition past review.
+ * A step is either a root script (`typecheck`) or a package-qualified task
+ * (`@openelement/www#build`). Bare steps dispatch against the root workspace
+ * package; qualified steps must use the exact package NAME — vp resolves by
+ * name, and the path-shaped `dir#task` selector form silently no-ops, so
+ * parseGateStep rejects it up front. Both parts are restricted to
+ * package/task-name characters, so a gate definition cannot smuggle shell
+ * composition past review.
  */
+
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import process from 'node:process';
+import { commandStatus } from './node-command.ts';
+import { vpExecutable, vpTaskArgv } from './vp-dispatch.ts';
 
 export interface GateStepResult {
   name: string;
@@ -30,32 +39,59 @@ export interface GateStepResult {
 export type GateSpawn = (task: string) => Promise<number>;
 
 export interface GateStep {
-  dir: string | null;
+  /** Exact package name the task dispatches against; null = root package. */
+  pkg: string | null;
   task: string;
 }
 
-import { commandStatus } from './node-command.ts';
-import process from 'node:process';
-
 const STEP_CHARS = /^[A-Za-z0-9:_-]+$/;
-const DIR_CHARS = /^[A-Za-z0-9_./-]+$/;
+const PKG_CHARS = /^[A-Za-z0-9@/._-]+$/;
 
 export function parseGateStep(step: string): GateStep {
   const hash = step.indexOf('#');
   if (hash < 0) {
     if (!STEP_CHARS.test(step)) throw new Error(`gate: invalid task name '${step}'`);
-    return { dir: null, task: step };
+    return { pkg: null, task: step };
   }
-  const dir = step.slice(0, hash);
+  const pkg = step.slice(0, hash);
   const task = step.slice(hash + 1);
-  if (!dir || !DIR_CHARS.test(dir) || dir.startsWith('/') || dir.split('/').includes('..')) {
-    throw new Error(`gate: dir must stay inside the repo, got '${dir}'`);
+  if (!pkg || !PKG_CHARS.test(pkg) || pkg.startsWith('/') || pkg.split('/').includes('..')) {
+    throw new Error(`gate: package selector must be an exact package name, got '${pkg}'`);
+  }
+  if (pkg.includes('/') && !pkg.startsWith('@')) {
+    // The path-shaped `dir#task` selector form silently no-ops under vp run:
+    // only exact package names are dispatchable, so reject it at parse time
+    // instead of letting the gate report a step that never ran.
+    throw new Error(
+      `gate: '${step}' is a path selector; use the package name form '@scope/name#${task}'`,
+    );
   }
   if (!task || !STEP_CHARS.test(task)) throw new Error(`gate: invalid task name '${task}'`);
-  return { dir, task };
+  return { pkg, task };
 }
 
 const repoRoot = new URL('../..', import.meta.url).pathname;
+
+let rootPackage: string | undefined;
+
+/** The root workspace package name a bare step dispatches against. */
+function rootPackageName(): string {
+  if (rootPackage === undefined) {
+    let parsed: { name?: unknown };
+    try {
+      parsed = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+    } catch (cause) {
+      throw new Error('gate: the root package.json is unreadable; bare steps cannot dispatch', {
+        cause,
+      });
+    }
+    if (typeof parsed.name !== 'string' || parsed.name === '') {
+      throw new Error('gate: the root package.json carries no name; bare steps cannot dispatch');
+    }
+    rootPackage = parsed.name;
+  }
+  return rootPackage;
+}
 
 export async function runGate(
   steps: string[],
@@ -78,21 +114,6 @@ export async function runGate(
   return { ok: true, results };
 }
 
-/**
- * The pnpm entry used for every spawned step. When gate.ts itself is run
- * through a pnpm script (the normal path), `npm_execpath` names the running
- * pnpm JS entry — spawning it with the current `process.execPath` avoids
- * PATH/shebang surprises. A direct `node gate.ts` invocation falls back to
- * the `pnpm` on PATH.
- */
-function pnpmLauncher(): { command: string; extraArgs: string[] } {
-  const execpath = process.env.npm_execpath;
-  if (execpath && execpath.endsWith('.cjs')) {
-    return { command: process.execPath, extraArgs: [execpath] };
-  }
-  return { command: 'pnpm', extraArgs: [] };
-}
-
 async function defaultSpawn(step: string): Promise<number> {
   let parsed: GateStep;
   try {
@@ -101,21 +122,25 @@ async function defaultSpawn(step: string): Promise<number> {
     console.error((error as Error).message);
     return 127;
   }
-  const { command, extraArgs } = pnpmLauncher();
-  const args = [
-    ...extraArgs,
-    ...(parsed.dir === null ? ['run', parsed.task] : ['--dir', parsed.dir, 'run', parsed.task]),
-  ];
-  const status = await commandStatus(command, {
-    args,
-    cwd: repoRoot,
-    // Gates never interact: stdin stays closed so an unexpected prompt fails
-    // closed instead of hanging (non-interactive invariant).
-    stdin: 'null',
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  return status.code;
+  try {
+    const executable = vpExecutable(repoRoot);
+    const args = vpTaskArgv(parsed.pkg ?? rootPackageName(), parsed.task).slice(1);
+    const status = await commandStatus(executable, {
+      args,
+      cwd: repoRoot,
+      // Gates never interact: stdin stays closed so an unexpected prompt fails
+      // closed instead of hanging (non-interactive invariant).
+      stdin: 'null',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+    return status.code;
+  } catch (error) {
+    // A spawn failure (missing binary) is a failed step, not a crash: the
+    // gate reports FAIL and stops, exactly like a non-zero task exit.
+    console.error(`gate: could not dispatch '${step}': ${(error as Error).message}`);
+    return 127;
+  }
 }
 
 if (import.meta.main) {

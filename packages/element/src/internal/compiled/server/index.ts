@@ -1,5 +1,5 @@
 /**
- * Server execution for the alpha.3 compiled Part Program.
+ * Server execution for the compiled Part Program.
  *
  * The serializer is a pure projection of one validated program and one host
  * snapshot. It never subscribes, creates a DOM, discovers bindings, or invokes
@@ -8,8 +8,8 @@
  * module contributes the server seams (host signal access, sink emissions,
  * item admission) and the host-artifact wrapping. `serializeCompiledProgram()`
  * is the host-shaped server artifact; `serializeProgramContent()` is the same
- * artifact's root content and matches the alpha.0 seed serializer's
- * inner-output contract.
+ * artifact's root content and matches the seed serializer's inner-output
+ * contract.
  */
 
 import {
@@ -50,6 +50,10 @@ import {
 import { escapeAttr } from '../../core/html-escape.ts';
 // Canonical each-Region item-key derivation (#1374): single source shared
 // with the runtime executors; do not reintroduce a private copy.
+import { itemTemplateFields } from '../runtime/program-kernel.ts';
+// The one facade-domain root-mode union, owned by the runtime kernel and
+// re-exported below for the server options surface.
+import type { CompiledRootMode } from '../runtime/kernel.ts';
 import { eachItemKey, EachKeyError } from '../each-key.ts';
 // Canonical when-Region condition evaluation (#1372): single source shared
 // with the runtime executors; do not reintroduce a private comparison.
@@ -65,8 +69,7 @@ import {
 
 export type { CompiledProgramHost, CompiledSignalLike } from './shared.ts';
 export { assertCompiledProgram, CompiledProgramValidationError } from './shared.ts';
-
-export type CompiledRootMode = 'light' | 'open' | 'closed';
+export type { CompiledRootMode };
 
 export interface CompiledDsdOptions {
   delegatesFocus?: boolean;
@@ -87,7 +90,7 @@ export interface CompiledNestedElement {
 }
 
 // The serializer emits the component's static styles as the first child of
-// the DSD template (legacy renderDsd parity): never-upgrading hosts (pages)
+// the DSD template (renderDsd parity): never-upgrading hosts (pages)
 // need their styles in the SSR payload. The claim path skips exactly this
 // marked element; the client style scope still adopts the live sheets.
 export { STATIC_STYLES_MARKER } from '../../protocol/part-program.ts';
@@ -205,24 +208,6 @@ function serializeDsdAttributes(options: CompiledDsdOptions | undefined): string
   if (options.slotAssignment === 'manual') parts.push(' shadowrootslotassignment="manual"');
   if (options.customElementRegistry) parts.push(' shadowrootcustomelementregistry');
   return parts.join('');
-}
-
-/** Item fields referenced by an each Region's template (ival + iattr slots). */
-function itemTemplateFields(
-  nodes: readonly ProgramTreeNode[],
-  out = new Set<string>(),
-): Set<string> {
-  for (const node of nodes) {
-    if (node.k === 'ival') {
-      if (node.field !== undefined) out.add(node.field);
-      continue;
-    }
-    if (node.k === 'el') {
-      for (const [, field] of node.iattrs ?? []) out.add(field);
-      itemTemplateFields(node.children, out);
-    }
-  }
-  return out;
 }
 
 function itemsFor(part: ProgramEachPart, value: unknown): Array<Record<string, unknown>> {

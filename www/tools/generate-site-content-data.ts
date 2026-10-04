@@ -20,12 +20,13 @@ import {
   writeCollectionDataModule,
 } from '../lib/content.ts';
 import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { articleCollections } from '../content-collections.ts';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
-const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
+const siteRoot = fileURLToPath(new URL('../../www/', import.meta.url));
 
 const outputs = new Map<string, string>();
 for (const name of ['guide', 'architecture'] as const) {

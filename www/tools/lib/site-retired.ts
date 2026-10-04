@@ -22,7 +22,8 @@
  * emitter, and the built-output link checker. This file must not import any
  * check-* module or exit the process.
  */
-import { fromFileUrl, join } from '@std/path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { scanRoutes } from '../../../packages/router/src/vite/internal/ssg/route-scanner.ts';
 import { fileToRoutePath } from '../../lib/route-path.ts';
 import { slugifyHeadingId, stripHtmlToText } from '../../app/site-ui/article-body.ts';
@@ -31,7 +32,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { commandOutput } from '../../../tools/repo/node-command.ts';
 
-const repoRoot = fromFileUrl(new URL('../../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const routesRel = 'www/app/routes';
 const tablePath = join(repoRoot, 'www/tools/site-redirects.json');
 const baselinePath = join(repoRoot, 'www/tools/site-baseline-routes.json');

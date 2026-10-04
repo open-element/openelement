@@ -77,8 +77,8 @@
  *     calls Deno.serve/Deno.listen/Deno.connect/Deno.listenTls/Deno.
  *     upgradeWebSocket is transformed AND flagged into the manual list for
  *     the node:http adaptation.
- *   - benchmarks/ (outside the walked roots) — stays on `deno test` (root
- *     `bench` script).
+ *   - benchmarks/ (outside the walked roots) — already runs on the vitest
+ *     `benchmarks` project (root `bench` script).
  *   - www/app/data/** (generated content), *.spec.* (Playwright universes),
  *     tools/release/consumer-packaged-* (templates shipped into consumer
  *     sandboxes that have no vitest), snapshot-prototype.ts (a `deno run`

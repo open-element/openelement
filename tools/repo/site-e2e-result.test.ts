@@ -17,7 +17,7 @@ import {
 } from './site-e2e-result.ts';
 import { checkRunnerArgs } from './site-e2e-run.ts';
 
-const PASSED_PER_BROWSER = 231;
+const PASSED_PER_BROWSER = 243;
 const TOTAL = PASSED_PER_BROWSER * SITE_E2E_PROJECTS.length;
 
 function healthy(): SiteE2eResult {
@@ -63,11 +63,12 @@ test('site e2e audit accepts the exact floor', () => {
 });
 
 test('site e2e audit accepts a retry-cleared run and records the retries', () => {
-  // The shape that a `--retries 1` run produces when two tests time out and
-  // pass on the retry: Playwright exits 0 with `unexpected: 0, flaky: 2`, so
-  // `stats.expected` counts 712 of the 714 executed tests and the two
-  // retry-cleared ones are the difference. The proof must accept it (the
-  // runner allowlists `--retries 1`) while keeping the retry visible.
+  // The shape that a `--retries 1` run produces when one test per browser
+  // times out and passes on the retry: Playwright exits 0 with
+  // `unexpected: 0, flaky: 3`, so `stats.expected` counts 726 of the 729
+  // executed tests and the three retry-cleared ones are the difference. The
+  // proof must accept it (the runner allowlists `--retries 1`) while keeping
+  // the retry visible.
   const flakyPerBrowser = 1;
   const result = healthy();
   for (const browser of SITE_E2E_PROJECTS) {
@@ -84,10 +85,10 @@ test('site e2e audit accepts a retry-cleared run and records the retries', () =>
 
   // A retry cannot inflate the pass count: `flaky` is a subset of `passed`.
   const inflated = healthy();
-  inflated.projects.chromium = { passed: 231, failed: 0, skipped: 0, flaky: 232 };
-  inflated.flaky = 232;
+  inflated.projects.chromium = { passed: 243, failed: 0, skipped: 0, flaky: 244 };
+  inflated.flaky = 244;
   expect(
-    auditSiteE2e(inflated).some((f) => f.includes('chromium flaky=232 > passed=231')),
+    auditSiteE2e(inflated).some((f) => f.includes('chromium flaky=244 > passed=243')),
   ).toBeTruthy();
 
   // ...and the executed-count binding moves with it, so a summary that hides
@@ -159,7 +160,7 @@ test('site e2e audit rejects a missing browser, a single-browser run, and ran=fa
 test('site e2e audit rejects an unexpected extra project', () => {
   const result = healthy();
   (result.projects as Record<string, unknown>).opera = {
-    passed: 231,
+    passed: 243,
     failed: 0,
     skipped: 0,
     flaky: 0,
@@ -276,7 +277,7 @@ test('site e2e audit rejects inconsistent totals', () => {
 });
 
 test('site e2e audit rejects non-integer, negative, string, and NaN values', () => {
-  for (const bad of [-1, 1.5, '231', Number.NaN, null, undefined]) {
+  for (const bad of [-1, 1.5, '243', Number.NaN, null, undefined]) {
     const result = healthy() as unknown as { projects: Record<string, { passed: unknown }> };
     result.projects.chromium.passed = bad;
     expect(
@@ -287,7 +288,7 @@ test('site e2e audit rejects non-integer, negative, string, and NaN values', () 
     ).toBeTruthy();
   }
   const badTotal = healthy() as unknown as Record<string, unknown>;
-  badTotal.passed = '693';
+  badTotal.passed = '729';
   expect(
     auditSiteE2e(badTotal as unknown as SiteE2eResult).some((f) => f.includes('total passed')),
   ).toBeTruthy();

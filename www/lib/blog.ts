@@ -6,10 +6,8 @@
  * architecture collections with a different frontmatter schema and slug
  * convention, plus one ordering rule: newest first.
  *
- * The specifier `@openelement/generated/blog-data` used to be a Vite virtual
- * module built at dev/build time, with a checked-in `.d.ts` stub supplying
- * types for `deno check`. Virtual modules are gone, so the module is now a real
- * generated file — `www/app/data/_generated-blog-data.ts` — written by
+ * The `#generated/blog-data` subpath import (www/package.json) resolves to the
+ * generated module `www/app/data/_generated-blog-data.ts`, written by
  * `pnpm --dir www run generate:content` alongside the article collections.
  */
 

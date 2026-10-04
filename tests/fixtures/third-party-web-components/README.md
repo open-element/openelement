@@ -11,9 +11,9 @@ The human-readable interop contract lives at [using-third-party-web-components.m
 
 This fixture consumes workspace **source** artifacts: `qualify.ts` generates a
 fresh app with `packages/create` into a temp directory, aliases every
-workspace package to its in-repo source (file: URLs in the app import map and
-Vite config), copies the fixture sources from `./app` in, and builds with the
-in-repo Router build CLI. The third-party libraries (Lit, Shoelace, Material
+workspace package to its in-repo source (`link:` entries in the app
+package.json plus a `resolve.alias` block in the Vite config), copies the
+fixture sources from `./app` in, and builds with the in-repo Router build CLI. The third-party libraries (Lit, Shoelace, Material
 Web, FAST, Ionic/Stencil) are consumed as pinned npm packages, exactly as a
 real application would consume them.
 

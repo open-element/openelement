@@ -58,7 +58,7 @@ export interface SsrAdmissionDecision {
    */
   modulePath: string;
   /**
-   * 'foreign' (#979, 0.43.0-alpha.2): a third-party WC tag discovered by the
+   * 'foreign' (#979): a third-party WC tag discovered by the
    * foreign-tag scanner in page/island JSX — recorded for visibility only;
    * SSR still treats it as an opaque passthrough (renderPath 'client-only').
    */

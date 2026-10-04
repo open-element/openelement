@@ -8,7 +8,5 @@
     "proof:node": "node proof.ts node",
     "proof:workers": "node proof.ts workers"
   },
-  "devDependencies": {
-    "@std/fs": "jsr:^1.0.0"
-  }
+  "devDependencies": {}
 }

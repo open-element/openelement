@@ -12,7 +12,7 @@
  *
  * B2 note: node-host scripts carry no permission flags at all (the Deno
  * permission model retired with the manifest conversion), so the audit
- * surface is the remaining deno-run scripts plus the template.
+ * surface is first-party package.json scripts plus the create template.
  *
  * Token note: this file deliberately carries no literal broad-flag token —
  * the repo-wide check-no-allow-all scanner covers every tracked file
@@ -20,7 +20,7 @@
  */
 
 import { expect, test } from 'vitest';
-import { dirname, join } from '@std/path';
+import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
@@ -143,8 +143,7 @@ test('task permissions: unit suites run on vitest — the deno permission surfac
   // B3 cutover moves those tasks to vitest on the node host, where no deno
   // permission model exists — the flags have nothing to attach to. The
   // invariant that REMAINS: the migrated tasks must not spawn the deno
-  // test runner (which would silently drop the flag audit), and the
-  // still-deno-hosted scripts stay audited below.
+  // test runner (which would silently drop the flag audit).
   for (const [path, name] of [
     ['packages/element/package.json', 'test'],
     ['packages/ui/package.json', 'test'],

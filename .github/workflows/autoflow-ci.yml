@@ -96,7 +96,7 @@ jobs:
         # the aggregate's single-tree identity check, but refusing it here is
         # the honest reading of "the same evidence package").
         run: |
-          vp run --fail-if-no-match @openelement/tools-repo#candidate:evidence:reuse:resolve \
+          vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:reuse:resolve \
             --github-output "$GITHUB_OUTPUT"
 
   fast-checks:
@@ -185,7 +185,7 @@ jobs:
         if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: vp run --fail-if-no-match @openelement/tools-repo#candidate:evidence:fast
+        run: vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:fast
       # The site's media lives on the R2 custom domain, so the runner's view of
       # that edge is part of the candidate surface. Non-blocking: this only
       # prints what the runner's egress POP actually sees (the e2e suite is the
@@ -286,7 +286,7 @@ jobs:
         if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: vp run --fail-if-no-match @openelement/tools-repo#candidate:evidence:source
+        run: vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:source
       - name: Upload source-matrix evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -346,7 +346,7 @@ jobs:
         if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: vp run --fail-if-no-match @openelement/tools-repo#candidate:evidence:packed
+        run: vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:packed
       - name: Upload packed evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -410,7 +410,7 @@ jobs:
         if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: vp run --fail-if-no-match @openelement/tools-repo#candidate:evidence:fresh
+        run: vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:fresh
       - name: Upload fresh-clone evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -444,7 +444,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
       - name: TS7 shadow gate (typescript@7 CLI vs pinned TS6 baseline)
-        run: vp run --fail-if-no-match @openelement/tools-repo#gate:ts7:shadow
+        run: vp run --fail-if-no-match --filter @openelement/tools-repo gate:ts7:shadow
 
   # Candidate evidence aggregation: reads the four job artifacts, verifies one
   # commit/tree, recomputes every log hash from real bytes, and publishes the
@@ -513,8 +513,8 @@ jobs:
             echo "  replayed from run ${REUSE_RUN_ID} (commit ${REUSE_SHA})"
             echo "  checked-out tree: ${REUSE_TREE}"
           fi
-          vp run --fail-if-no-match @openelement/tools-repo#candidate:evidence:aggregate
-          vp run --fail-if-no-match @openelement/tools-repo#candidate:evidence:validate
+          vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:aggregate
+          vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:validate
       - name: Upload candidate evidence
         # v7.0.1
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -551,9 +551,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb
       - name: Build the packed starter
-        run: vp run --fail-if-no-match @openelement/e2e-starter-smoke#setup
+        run: vp run --fail-if-no-match --filter @openelement/e2e-starter-smoke setup
       - name: BFCache restore (Chrome channel, headed under xvfb)
-        run: xvfb-run -a vp run --fail-if-no-match @openelement/e2e-starter-smoke#test:bfcache
+        run: xvfb-run -a vp run --fail-if-no-match --filter @openelement/e2e-starter-smoke test:bfcache
 
   # The packed deploy artifact must boot under plain Node, not just under
   # the Deno CLI. The runtime floor is Node.js >= 24 (WHATWG URLPattern
@@ -589,7 +589,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Pack the release tarballs
-        run: vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
+        run: vp run --fail-if-no-match --filter @openelement/tools-release pack:dry-run
       - name: Packed serve proof under Node ${{ matrix.node }}
         run: node tools/release/consumer-packaged-node-serve.ts node
 
@@ -632,6 +632,6 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo ./node_modules/.bin/playwright install-deps chromium firefox webkit
       - name: Pack the release tarballs
-        run: vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
+        run: vp run --fail-if-no-match --filter @openelement/tools-release pack:dry-run
       - name: Fresh packed-starter consumer proof
-        run: vp run --fail-if-no-match @openelement/tools-release#consumer:packaged
+        run: vp run --fail-if-no-match --filter @openelement/tools-release consumer:packaged

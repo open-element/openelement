@@ -3,7 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
-import { dirname, fromFileUrl, isAbsolute, join, relative, resolve } from '@std/path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import {
   assembleVpPackageTree,
@@ -109,24 +110,20 @@ test('synthesizedPackedManifest preserves the published exports shape', () => {
   });
 });
 
-test('stagingPackageJsonFor declares self-name, unwraps npm: peers, pins the toolchain', () => {
-  const staged = stagingPackageJsonFor(
-    pkg('@openelement/element', ELEMENT_EXPORTS),
-    { typescript: '6.0.3', '@preact/signals-core': '^1.12.1' },
-    {
-      peerDependencies: { vite: 'npm:vite@^8.0.0' },
-      peerDependenciesMeta: { vite: { optional: true } },
-    },
-  ) as {
+test('stagingPackageJsonFor declares self-name and pins the toolchain', () => {
+  const staged = stagingPackageJsonFor(pkg('@openelement/element', ELEMENT_EXPORTS), {
+    typescript: '6.0.3',
+    '@preact/signals-core': '^1.12.1',
+  }) as {
     dependencies: Record<string, string>;
-    peerDependencies: Record<string, string>;
-    peerDependenciesMeta: Record<string, unknown>;
+    peerDependencies: Record<string, string> | undefined;
     devDependencies: Record<string, string>;
   };
   expect(staged.dependencies['@openelement/element']).toEqual('1.0.0-test');
   expect(staged.dependencies['typescript']).toEqual('6.0.3');
-  expect(staged.peerDependencies).toEqual({ vite: '^8.0.0' });
-  expect(staged.peerDependenciesMeta).toEqual({ vite: { optional: true } });
+  // Peers are not staged: they never resolve in the shared install, and the
+  // published manifest applies them in the coordinator's post-processing.
+  expect(staged.peerDependencies).toEqual(undefined);
   expect(staged.devDependencies).toEqual({
     vite: VITE_ALIAS_SPEC,
     'vite-plus': VP_TOOLCHAIN.vitePlus,
@@ -190,7 +187,6 @@ test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on un
     writeFileSync(join(staged, 'src', 'unreachable', 'orphan.ts'), 'export const z = 3;\n');
     writeFileSync(join(staged, 'README.md'), 'readme\n');
     writeFileSync(join(staged, 'src', 'tokens.css'), ':root {}\n');
-    writeFileSync(join(staged, 'deno.json'), '{"name":"x"}\n');
     writeFileSync(join(staged, 'vite.config.ts'), 'export default {};\n');
 
     assembleVpPackageTree({
@@ -204,7 +200,6 @@ test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on un
         'src/internal/helper.ts',
         'src/tokens.css',
         'README.md',
-        'deno.json',
       ]),
       publishInclude: ['src/**', 'README.md'],
       publishExclude: [],
@@ -221,16 +216,8 @@ test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on un
     expect(statSync(join(out, 'src', 'index.d.ts')).isFile()).toBeTruthy();
     expect(statSync(join(out, 'src', 'internal', 'helper.js')).isFile).toBeTruthy();
     expect(statSync(join(out, 'src', 'tokens.css')).isFile).toBeTruthy();
-    // deno.json and the synthesized vite.config.ts never ship.
+    // The synthesized vite.config.ts never ships.
     let leaked = false;
-    try {
-      statSync(join(out, 'deno.json'));
-      leaked = true;
-    } catch {
-      /* expected absent */
-    }
-    expect(leaked).toEqual(false);
-    leaked = false;
     try {
       statSync(join(out, 'vite.config.ts'));
       leaked = true;
@@ -271,7 +258,7 @@ test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on un
   }
 });
 
-test('prepareVpStagingFiles stages manifests, config and optional tsconfig without network', async () => {
+test('prepareVpStagingFiles stages manifests and config without network', async () => {
   const root = await mkdtemp(join(tmpdir(), 'vp-pack-prepare-'));
   try {
     const pkgDir = join(root, 'element');
@@ -290,7 +277,6 @@ test('prepareVpStagingFiles stages manifests, config and optional tsconfig witho
         ['@openelement/element', { typescript: '6.0.3' }],
         ['@openelement/router', {}],
       ]),
-      sourceManifest: { compilerOptions: { jsx: 'react-jsx' } },
     });
     try {
       expect(staged.packDir).toEqual(join(staged.stagingRoot, 'router'));
@@ -306,24 +292,12 @@ test('prepareVpStagingFiles stages manifests, config and optional tsconfig witho
         readFileSync(join(staged.stagingRoot, 'element', 'package.json')),
       ) as { dependencies: Record<string, string> };
       expect(memberManifest.dependencies['@openelement/element']).toEqual('1.0.0-test');
-      // Pack config lands in the pack dir; tsconfig only with compilerOptions.
+      // Pack config lands in the pack dir.
       expect(statSync(join(staged.packDir, 'vite.config.ts')).isFile).toBeTruthy();
-      const tsconfig = JSON.parse(readFileSync(join(staged.packDir, 'tsconfig.json'))) as {
-        compilerOptions: Record<string, string>;
-      };
-      expect(tsconfig.compilerOptions.jsx).toEqual('react-jsx');
-      // The member copy must not drag deno.json/package.json along.
+      // The member copy must not drag package.json along.
       expect(readFileSync(join(staged.stagingRoot, 'element', 'src', 'index.ts'), 'utf8')).toEqual(
         'export {};\n',
       );
-      let leaked = false;
-      try {
-        statSync(join(staged.stagingRoot, 'element', 'deno.json'));
-        leaked = true;
-      } catch {
-        /* expected absent */
-      }
-      expect(leaked).toEqual(false);
     } finally {
       await staged.cleanup();
     }
@@ -340,10 +314,10 @@ test('prepareVpStagingFiles stages manifests, config and optional tsconfig witho
   }
 });
 
-// ─── ROUTER_CLIENT_RUNTIME_ENTRIES drift guard (P6: single source, no parallel
+// ─── ROUTER_CLIENT_RUNTIME_ENTRIES drift guard (single source, no parallel
 // mechanism) ────────────────────────────────────────────────────────────────
 
-const ROUTER_PACKAGE_DIR = fromFileUrl(new URL('../../packages/router', import.meta.url));
+const ROUTER_PACKAGE_DIR = fileURLToPath(new URL('../../packages/router', import.meta.url));
 
 /** The file exists and is not a directory. */
 function isFile(path: string): boolean {
@@ -441,10 +415,31 @@ interface RuntimeExtraction {
  * add nothing). This mirrors the vp-pack.ts header's definition of the entry
  * list: the two roots resolved directly, the siblings riding along as value
  * imports (G0.5 §2).
+ *
+ * Literal arguments resolve the way the shared helper resolves them:
+ * relative to runtime-module-path.ts's own directory (src/vite/internal/),
+ * not relative to the call site — build-client.ts and dev-island-client.ts
+ * both pass './ssg/...' for that reason.
  */
 function consumerPathConsumedModules(packageDir: string): RuntimeExtraction {
   const problems: string[] = [];
   const entry = join(packageDir, 'src', 'cli', 'build-client.ts');
+  const runtimeModulePathModule = join(
+    packageDir,
+    'src',
+    'vite',
+    'internal',
+    'runtime-module-path.ts',
+  );
+  if (!isFile(runtimeModulePathModule)) {
+    return {
+      modules: new Set(),
+      problems: [
+        `runtime-module-path.ts not found at src/vite/internal/ — the literal ` +
+          'resolution base moved; update this guard to the helper\u2019s new directory',
+      ],
+    };
+  }
   const source = readFileSync(entry, 'utf8');
   const literalArgs = [...source.matchAll(/runtimeModulePath\(\s*(['"])(.*?)\1\s*\)/g)].map(
     (match) => match[2],
@@ -463,7 +458,7 @@ function consumerPathConsumedModules(packageDir: string): RuntimeExtraction {
   const modules = new Set<string>();
   const queue: string[] = [];
   for (const argument of literalArgs) {
-    const resolved = resolve(dirname(entry), argument.split(/[?#]/, 1)[0]);
+    const resolved = resolve(dirname(runtimeModulePathModule), argument.split(/[?#]/, 1)[0]);
     if (!isWithin(resolved, packageDir) || !isFile(resolved)) {
       problems.push(`runtimeModulePath('${argument}') does not resolve to a file in the package`);
       continue;
@@ -512,14 +507,19 @@ test('runtime extraction captures a ninth value-consumed module and skips type-o
   const root = await mkdtemp(join(tmpdir(), 'vp-pack-drift-capture-'));
   try {
     const cli = join(root, 'src', 'cli');
-    const ssg = join(root, 'src', 'vite', 'internal', 'ssg');
+    const internal = join(root, 'src', 'vite', 'internal');
+    const ssg = join(internal, 'ssg');
     mkdirSync(cli, { recursive: true });
     mkdirSync(ssg, { recursive: true });
     writeFileSync(
+      join(internal, 'runtime-module-path.ts'),
+      'export const runtimeModulePath = (p: string): string => p;\n',
+    );
+    writeFileSync(
       join(cli, 'build-client.ts'),
       [
-        "export const first = runtimeModulePath('../vite/internal/ssg/root-a.ts');",
-        "export const second = runtimeModulePath('../vite/internal/ssg/root-b.ts');",
+        "export const first = runtimeModulePath('./ssg/root-a.ts');",
+        "export const second = runtimeModulePath('./ssg/root-b.ts');",
       ].join('\n'),
     );
     writeFileSync(join(ssg, 'root-a.ts'), 'export const rootA = 1;\n');
@@ -558,7 +558,13 @@ test('runtime extraction fails closed on a non-literal runtimeModulePath argumen
   const root = await mkdtemp(join(tmpdir(), 'vp-pack-drift-failclosed-'));
   try {
     const cli = join(root, 'src', 'cli');
+    const internal = join(root, 'src', 'vite', 'internal');
     mkdirSync(cli, { recursive: true });
+    mkdirSync(internal, { recursive: true });
+    writeFileSync(
+      join(internal, 'runtime-module-path.ts'),
+      'export const runtimeModulePath = (p: string): string => p;\n',
+    );
     writeFileSync(
       join(cli, 'build-client.ts'),
       'export const mapped = runtimeModulePath(dynamicArgument);\n',
@@ -567,6 +573,24 @@ test('runtime extraction fails closed on a non-literal runtimeModulePath argumen
     expect(modules.size).toEqual(0);
     expect(problems.length).toEqual(1);
     expect(problems[0]).toContain('literal string argument');
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('runtime extraction fails closed when the runtimeModulePath helper is missing', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vp-pack-drift-helper-'));
+  try {
+    const cli = join(root, 'src', 'cli');
+    mkdirSync(cli, { recursive: true });
+    writeFileSync(
+      join(cli, 'build-client.ts'),
+      "export const mapped = runtimeModulePath('./ssg/island-scheduler.ts');\n",
+    );
+    const { modules, problems } = consumerPathConsumedModules(root);
+    expect(modules.size).toEqual(0);
+    expect(problems.length).toEqual(1);
+    expect(problems[0]).toContain('runtime-module-path.ts');
   } finally {
     await rm(root, { recursive: true });
   }

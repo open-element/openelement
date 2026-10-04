@@ -158,10 +158,9 @@ export function findAbsoluteFileUrlPayload(packageRoot: string): string[] {
 }
 
 /**
- * The package.json projection of the former deno.json source manifest:
- * `peerDependencies` values are restated in the `npm:<name>@<range>` form the
- * downstream parseNpmSpec consumers expect, and the npm `files` allowlist
- * (with its `!` exclusions) becomes the publish include/exclude glob pair.
+ * The publish-relevant slice of a package's package.json: `peerDependencies`
+ * (plain ranges, passed through verbatim) and the npm `files` allowlist
+ * (with its `!` exclusions) as the publish include/exclude glob pair.
  */
 function readPackageSourceManifest(dir: string): {
   peerDependencies?: Record<string, string>;
@@ -173,10 +172,6 @@ function readPackageSourceManifest(dir: string): {
     peerDependenciesMeta?: Record<string, { optional?: boolean }>;
     files?: string[];
   };
-  const peerDependencies: Record<string, string> = {};
-  for (const [name, value] of Object.entries(manifest.peerDependencies ?? {})) {
-    peerDependencies[name] = `npm:${name}@${value}`;
-  }
   const include: string[] = [];
   const exclude: string[] = [];
   for (const entry of manifest.files ?? []) {
@@ -184,7 +179,7 @@ function readPackageSourceManifest(dir: string): {
     else include.push(entry);
   }
   return {
-    ...(Object.keys(peerDependencies).length > 0 ? { peerDependencies } : {}),
+    ...(manifest.peerDependencies ? { peerDependencies: manifest.peerDependencies } : {}),
     ...(manifest.peerDependenciesMeta
       ? { peerDependenciesMeta: manifest.peerDependenciesMeta }
       : {}),
@@ -222,7 +217,6 @@ export async function packPackage(
     pkg,
     members,
     dependencyMap,
-    sourceManifest,
   });
   try {
     if (compiledModules.length > 0) {
@@ -320,7 +314,9 @@ export async function packPackage(
       }
       applyPackageJsonOverrides(pkg, pkgJson);
       for (const [name, value] of Object.entries(sourceManifest.peerDependencies ?? {})) {
-        const parsed = parseNpmSpec(value, `${pkg.name} peer dependency`);
+        // Plain package.json ranges; validated and normalized through the
+        // same parser the published derivation uses.
+        const parsed = parseNpmSpec(`npm:${name}@${value}`, `${pkg.name} peer dependency`);
         if (!parsed) {
           throw new Error(`Invalid npm peer dependency ${name}=${value}`);
         }

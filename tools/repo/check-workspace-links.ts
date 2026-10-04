@@ -2,27 +2,20 @@
  * Workspace-shadow gate: node_modules must link workspace members, never
  * replace them.
  *
- * Deno materializes a workspace member into node_modules as a relative symlink
- * (`node_modules/@probe/b -> ../../pkgs/b`, measured). A real directory at that
- * path can therefore only come from outside the workspace — a packed tarball
- * installed by hand, a stray `npm install` of local artifacts, a copied release
- * tree. That copy silently wins module resolution for anything that resolves
- * through node_modules before the Deno workspace (esbuild bundling of a
- * `vite.config.ts`, for instance), so a run tests a build of the past while
- * reporting on the working tree.
- *
- * Observed cost: on 2026-09-17 a packed copy of @openelement/router built
- * 8 hours before `1ae65fc5` (the `c.req.raw` wrapper in the generated dev
- * entry) shadowed the workspace source, and the request-time parity suite
- * failed all 25 dev-channel steps locally while CI stayed green — the
- * divergence had no visible cause from inside the repo.
+ * The package manager materializes a workspace member into node_modules as a
+ * symlink. A real directory at that path can therefore only come from outside
+ * the workspace — a packed tarball installed by hand, a stray `npm install` of
+ * local artifacts, a copied release tree. That copy silently wins module
+ * resolution for anything that resolves through node_modules before the
+ * workspace source (esbuild bundling of a `vite.config.ts`, for instance), so
+ * a run tests a build of the past while reporting on the working tree.
  *
  * The fix belongs here rather than in each config: the gate names the shadowed
  * member and the command that clears it, so the state cannot be entered
  * silently again.
  */
 
-import { isAbsolute, relative, resolve } from '@std/path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { lstat, realpath } from 'node:fs/promises';
 import type { Stats } from 'node:fs';
 import process from 'node:process';
@@ -108,7 +101,7 @@ export async function readNodeModulesEntry(name: string, root = '.'): Promise<No
   try {
     stats = await lstat(path);
   } catch (error) {
-    // node:fs signals "path does not exist" with ENOENT (Deno: NotFound).
+    // node:fs signals "path does not exist" with ENOENT.
     if ((error as { code?: string }).code === 'ENOENT') return { path: name, kind: 'missing' };
     throw error;
   }

@@ -73,7 +73,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
 
   // --- renderRoute ---
   lines.push('/**');
-  lines.push(' * Render a route to structured output with diagnostics (v0.15.3).');
+  lines.push(' * Render a route to structured output with diagnostics.');
   lines.push(' * Returns { html, errors, componentCount, renderTimeMs } on success.');
   lines.push(' * Loader/render failures produce a defined result instead of throwing:');
   lines.push(' * redirect (3xx), not-found (404) or a 500 page with the caught error');

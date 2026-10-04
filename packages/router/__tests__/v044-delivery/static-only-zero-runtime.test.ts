@@ -14,15 +14,15 @@
  *
  * The fixture dist is gitignored. The test rebuilds from a clean dist and
  * removes it afterwards, so repeated runs are deterministic and the worktree
- * ends clean. Run it through the package suite (scoped permissions):
- *   deno task --cwd packages/router test
+ * ends clean. Run it through the package-qualified suite task:
+ *   pnpm --dir packages/router test   (or: vp run --fail-if-no-match @openelement/router#test)
  */
 
 import { spawn } from 'node:child_process';
 import { readFile, rm, stat } from 'node:fs/promises';
 import process from 'node:process';
 import { expect, test } from 'vitest';
-import { join } from '@std/path';
+import { join } from 'node:path';
 
 const fixtureDir = join(import.meta.dirname!, '../../../../tests/fixtures/router-static-only');
 const distDir = join(fixtureDir, 'dist');

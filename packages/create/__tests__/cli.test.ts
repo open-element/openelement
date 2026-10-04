@@ -5,7 +5,7 @@ import process from 'node:process';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { existsSync } from 'node:fs';
-import { join } from '@std/path';
+import { join } from 'node:path';
 import { OPEN_ELEMENT_CONFIG_KEYS } from '../../router/src/config.ts';
 import { CREATE_VERSION, VITE_STARTER_PIN } from '../src/version.ts';
 import {

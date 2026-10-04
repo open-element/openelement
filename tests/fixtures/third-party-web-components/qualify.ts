@@ -4,8 +4,9 @@
  *
  * Artifact consumption: this fixture consumes workspace SOURCE artifacts. The
  * runner generates a fresh app with packages/create into a temp directory,
- * aliases every workspace package to its in-repo source (file: URLs in the
- * app import map and Vite config), copies the fixture sources from ./app in,
+ * aliases every workspace package to its in-repo source (`link:` entries in
+ * the app package.json plus a `resolve.alias` block in the Vite config),
+ * copies the fixture sources from ./app in,
  * and builds with the in-repo Router build CLI. The third-party libraries
  * (Shoelace, Material Web, FAST, Ionic/Stencil, Lit) are consumed as pinned
  * npm packages, exactly as a real application would consume them.
@@ -38,7 +39,8 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
-import { dirname, fromFileUrl, join } from '@std/path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { Page } from '@playwright/test';
 import { formatJson } from '@openelement/element/build-utils';
@@ -52,19 +54,19 @@ import {
   installAppDependencies,
 } from '../../lib/qualify-harness/workspace-alias.ts';
 
-const repoRoot = dirname(dirname(dirname(dirname(fromFileUrl(import.meta.url)))));
-const fixtureDir = dirname(fromFileUrl(import.meta.url));
+const repoRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
+const fixtureDir = dirname(fileURLToPath(import.meta.url));
 const PROJECT_NAME = 'third-party-web-components-app';
 
+// Plain package.json ranges for the scaffolded app's dependencies (the
+// import-map prefix shapes of the Deno era are gone: the bare package pin
+// covers every subpath).
 const THIRD_PARTY_IMPORTS = {
-  lit: 'npm:lit@3.3.3',
-  '@shoelace-style/shoelace': 'npm:@shoelace-style/shoelace@2.20.1',
-  '@shoelace-style/shoelace/': 'npm:@shoelace-style/shoelace@2.20.1/',
-  '@material/web': 'npm:@material/web@2.4.1',
-  '@material/web/': 'npm:@material/web@2.4.1/',
-  '@microsoft/fast-element': 'npm:@microsoft/fast-element@3.0.2',
-  '@ionic/core': 'npm:@ionic/core@8.8.18',
-  '@ionic/core/': 'npm:@ionic/core@8.8.18/',
+  lit: '3.3.3',
+  '@shoelace-style/shoelace': '2.20.1',
+  '@material/web': '2.4.1',
+  '@microsoft/fast-element': '3.0.2',
+  '@ionic/core': '8.8.18',
 };
 
 async function readEventCount(page: Page): Promise<number> {

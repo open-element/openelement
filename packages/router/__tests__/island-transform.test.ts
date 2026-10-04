@@ -1,5 +1,5 @@
 /**
- * @openelement/router - island-transform.ts tests (Deno)
+ * @openelement/router - island-transform.ts tests
  */
 import { describe, expect, test } from 'vitest';
 import { islandTransformPlugin } from '../src/vite/island-transform.ts';

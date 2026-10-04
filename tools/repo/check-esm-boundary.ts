@@ -20,7 +20,7 @@
  * - `vendor/`, `node_modules/`, build output (`dist/`, Nitro `.output`
  *   trees, `.nitro/`), and dependency lockfiles: third-party territory
  *
- * Usage: deno run --allow-read --allow-run tools/repo/check-esm-boundary.ts
+ * Usage: node tools/repo/check-esm-boundary.ts
  */
 
 import { readPackages } from '../lib/package-graph.ts';
@@ -140,7 +140,7 @@ if (import.meta.main) {
         // removed between ls-files and read; ignore
       }
     }
-    if (path.endsWith('/deno.json') || path.endsWith('/package.json')) {
+    if (path.endsWith('/package.json')) {
       try {
         const manifest = JSON.parse(await readFile(path, 'utf8')) as { exports?: unknown };
         exportRecords.push({ path, exports: manifest.exports });

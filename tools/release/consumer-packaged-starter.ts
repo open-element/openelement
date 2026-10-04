@@ -1,5 +1,5 @@
 /**
- * Packed-artifact starter consumer walkthrough (#1228, B2.5).
+ * Packed-artifact starter consumer walkthrough.
  *
  * The observational rule for packaging defects: qualify the PACKED artifact,
  * never the workspace source. This tool installs the five pack:dry-run
@@ -41,11 +41,10 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { commandOutput } from '../repo/node-command.ts';
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
-import { readdirSync } from 'node:fs';
-import { existsSync } from '../lib/std-fs.ts';
-import { join, resolve } from '@std/path';
+import { existsSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { runProcess } from './consumer-packaged-shared.ts';
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constants.ts';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
@@ -65,49 +64,18 @@ const BROWSER_TIMEOUT_MS = 5 * 60_000;
 // One browser per probe invocation so every starter x browser pair is an
 // individually identifiable PASS/FAIL unit in the gate output.
 const PACKED_BROWSERS = ['chromium', 'firefox', 'webkit'] as const;
-// Cold-cache vite dev under Deno can take well over a minute before the
-// first SSR response; dev/start/deploy legs share this readiness ceiling.
+// Cold-cache vite dev can take well over a minute before the first SSR
+// response; the dev/start/browser legs share this readiness ceiling.
 const SERVER_READY_TIMEOUT_MS = 3 * 60_000;
 
-async function run(
+function run(
   command: string,
   args: string[],
   cwd: string,
   timeoutMs?: number,
   env?: Record<string, string>,
 ): Promise<{ success: boolean; output: string }> {
-  // Deno.Command resolves (not rejects) when the signal kills the subprocess,
-  // so track the timeout explicitly to report it instead of an empty failure.
-  const controller = new AbortController();
-  let timedOut = false;
-  const timeoutId =
-    timeoutMs === undefined
-      ? undefined
-      : setTimeout(() => {
-          timedOut = true;
-          controller.abort();
-        }, timeoutMs);
-  try {
-    const result = await commandOutput(command, {
-      args,
-      cwd,
-      stdout: 'piped',
-      stderr: 'piped',
-      env,
-      ...(timeoutMs === undefined ? {} : { signal: controller.signal }),
-    });
-    const decoder = new TextDecoder();
-    const output = decoder.decode(result.stdout) + decoder.decode(result.stderr);
-    if (timedOut) {
-      return {
-        success: false,
-        output: `Timed out after ${timeoutMs}ms: ${command} ${args.join(' ')}\n${output}`,
-      };
-    }
-    return { success: result.success, output };
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  return runProcess(command, args, cwd, { timeoutMs, env });
 }
 
 async function assertConsumerDoesNotResolveIntoRepository(nodeModules: string): Promise<void> {
@@ -152,9 +120,7 @@ function reservePort(): Promise<number> {
 // The packed starter must resolve exclusively through its package.json
 // dependency surface: any @openelement/* bare specifier surviving in the
 // built SSR bundle outside that surface would only resolve through workspace
-// aliases a real consumer does not have. Ported from the retired
-// local-source consumer's --packaged-import-map-check leg (B5 renamed the
-// universe from the deno.json import map to package.json dependencies).
+// aliases a real consumer does not have.
 
 function isBareSpecifier(specifier: string): boolean {
   return (
@@ -187,12 +153,6 @@ function findMissingGeneratedImports(
     .sort();
 }
 
-/**
- * Boot one long-running lifecycle server (dev/start/deploy), wait for it to
- * answer HTTP, assert every [path, marker] probe over the wire, then stop it.
- * A green exit alone is not lifecycle evidence: the packed artifacts must
- * actually serve the documented routes.
- */
 // ─── Packed three-browser matrix (starter island hydration + continuation) ─
 //
 // The probe is written INSIDE the generated starter and resolves
@@ -350,6 +310,12 @@ async function runStarterBrowserMatrix(starter: string): Promise<void> {
   }
 }
 
+/**
+ * Boot one long-running lifecycle server (dev/start), wait for it to answer
+ * HTTP, assert every [path, marker] probe over the wire, then stop it. A
+ * green exit alone is not lifecycle evidence: the packed artifacts must
+ * actually serve the documented routes.
+ */
 async function exerciseServer(
   label: string,
   command: string,
@@ -591,7 +557,7 @@ try {
   // A green exit alone is not enough: the packed adapter must actually emit the
   // request-time server entry. The starter's /contact route renders
   // request-time, so a build that skips the server bundle would silently drop
-  // it (this regression once slipped through when only `task check` ran here).
+  // it.
   const serverEntry = join(starter, 'dist', 'server', 'index.js');
   if (!existsSync(serverEntry)) {
     throw new Error(

@@ -1,5 +1,5 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
-import { mastheadStyles } from './page-styles.ts';
+import { eyebrowStyles, mastheadStyles } from './page-styles.ts';
 
 export const pageContributingStyles = [
   compiledStyle(`
@@ -23,30 +23,7 @@ export const pageContributingStyles = [
 
   /* ── masthead: mono "BUILD IT" + serif "with us." ── */
   ${mastheadStyles}
-
-  .eyebrow {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    color: var(--violet-8);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-00);
-    font-weight: var(--font-weight-8);
-    letter-spacing: 0.29em;
-    text-transform: uppercase;
-  }
-  /* Subject-side :lang — @scope'd sheets cannot match the html[lang] ancestor. */
-  .eyebrow:lang(zh) {
-    text-transform: none;
-    letter-spacing: 0.08em;
-  }
-
-  .eyebrow::before {
-    content: "";
-    width: 2rem;
-    height: 2px;
-    background: var(--brand);
-  }
+  ${eyebrowStyles}
 
   h1 {
     margin-block-start: clamp(1.5rem, 4vh, 3rem);

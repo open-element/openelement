@@ -7,9 +7,6 @@
  *   1-4. packages/{element,router,create,ui}/package.json `version`
  *   5.    packages/create/src/version.ts `CREATE_VERSION`
  *
- * (The former sixth point — the per-fixture deno.lock files — retired with
- * the B2 manifest conversion: the workspace carries a single pnpm lock.)
- *
  * Usage:
  *   pnpm --dir tools/repo run version-bump 1.0.0-alpha.4              # dry run (default)
  *   pnpm --dir tools/repo run version-bump 1.0.0-alpha.4 --write      # apply
@@ -33,10 +30,9 @@
  *     release-state.json
  */
 
-import { parse } from '@std/semver';
-import { walk } from '../../tools/lib/std-fs.ts';
-import { join, relative } from '@std/path';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { parse } from 'semver';
+import { join, relative } from 'node:path';
+import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { wwwReleaseAnchorDrift } from './www-release-anchor.ts';
 
@@ -112,12 +108,18 @@ export async function historicalReleaseNameFindings(
     } catch {
       continue; // root absent — nothing to scan
     }
-    for await (const entry of walk(walkRoot, { includeDirs: false })) {
-      const path = relative(root, entry.path);
+    // Pre-order recursive scan; directory entries are skipped the way the
+    // former files-only walker never yielded them. Findings sort by path
+    // below, so enumeration order is not load-bearing.
+    const entries = await readdir(walkRoot, { recursive: true, withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) continue;
+      const entryPath = join(entry.parentPath, entry.name);
+      const path = relative(root, entryPath);
       if (SHIPPED_SCAN_ALLOWLIST.some((pattern) => shippedScanAllowlisted(pattern, path))) {
         continue;
       }
-      const lines = (await readFile(entry.path, 'utf8')).split('\n');
+      const lines = (await readFile(entryPath, 'utf8')).split('\n');
       for (let index = 0; index < lines.length; index++) {
         if (HISTORICAL_RELEASE_NAME.test(lines[index])) {
           findings.push({ path, line: index + 1, text: lines[index].trim() });
@@ -148,9 +150,7 @@ export interface VersionBumpPlan {
 
 /** Validate the requested release version. Returns an error message or null. */
 export function validateVersion(version: string): string | null {
-  try {
-    parse(version);
-  } catch {
+  if (parse(version) === null) {
     return `"${version}" is not a valid semver version (expected e.g. 1.0.0-alpha.4).`;
   }
   if (!/^\d+\.\d+\.\d+/.test(version)) {
@@ -191,7 +191,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Build the six-point plan without touching the filesystem beyond reads. */
+/** Build the five-point plan without touching the filesystem beyond reads. */
 export async function planVersionBump(
   root: string,
   targetVersion: string,
@@ -226,7 +226,7 @@ export async function planVersionBump(
 }
 
 /**
- * The six points after a bump must all carry one version, and the www
+ * The five points after a bump must all carry one version, and the www
  * source-line anchor must stay derived from release bookkeeping truth (the
  * anchor audit rides the same cross-assertion). Returns one message per point
  * that does not (empty when the tree is consistent).
