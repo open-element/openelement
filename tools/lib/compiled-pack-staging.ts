@@ -6,10 +6,11 @@
  * exports are inert no-ops, and the Part Program is produced exclusively by
  * the adapter's open:compiled-element transform from the AUTHORED .tsx
  * source. A pack that transpiles authored .tsx without the element compiler
- * erases the decorator applications — the deno-pack generator did exactly
- * that (TC39 decorator lowering, applyDecs2203R) — so a tarball packed from
- * authored sources can never be admitted by the consumer-side compiler, and
- * packageIslands SSR fails closed with OE_PROGRAM_MISSING.
+ * erases the decorator applications, so a tarball packed from authored
+ * sources can never be admitted by the consumer-side compiler, and
+ * packageIslands SSR fails closed with OE_PROGRAM_MISSING. The pack pipeline
+ * never exposes the generator to that input: opted-in modules reach the
+ * `vp pack` generator only as `compilePackageElementModules` output (below).
  *
  * The repair keeps the admission contract unchanged and runs the SAME
  * intrinsic transform in the pack pipeline: `compilePackageElementModules`

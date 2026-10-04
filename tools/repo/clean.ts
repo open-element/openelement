@@ -63,6 +63,8 @@ export const DEFAULT_TARGETS: readonly string[] = [
 
 /** Opt-in extras: reinstallable dependency trees, never touched by default. */
 export const DEEP_TARGETS: readonly string[] = [
+  // Removes the .deno cache directory left over from the old Deno toolchain;
+  // no current tool reads its contents.
   '.deno',
   'node_modules',
   'apps/saas/node_modules',

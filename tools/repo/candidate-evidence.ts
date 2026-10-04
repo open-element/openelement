@@ -25,8 +25,9 @@
  *   source-matrix-> gate:source (the fast PR-layer gate) + permission/FFI scans
  *   packed       -> gate:packed + publish:npm:dry-run + tarball hashes +
  *                   structured pack diagnostics
- *   fresh-clone  -> clean clone, empty DENO_DIR/npm cache, install, check,
- *                   source gate, packed gate, Site build + official Site E2E
+ *   fresh-clone  -> clean clone, isolated pnpm store/npm cache, install,
+ *                   check, source gate, packed gate, Site build + official
+ *                   Site E2E
  *
  * Each `--job` run writes `<out>/result.json` plus `<out>/logs/*.log`; the
  * result records command, exit code, result, log path, and the log SHA-256.

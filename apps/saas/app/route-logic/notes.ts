@@ -1,6 +1,6 @@
 /**
  * /notes route logic (v0.44) — RLS-protected resource (reference starter,
- * #983). Plain module so Deno tests never evaluate the compiled page class.
+ * #983). Plain module so vitest tests never evaluate the compiled page class.
  *
  * The loader reads the session from the request cookies (via @supabase/ssr)
  * and queries the notes table with the user's JWT — RLS scopes the rows

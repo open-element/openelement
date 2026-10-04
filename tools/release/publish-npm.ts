@@ -205,7 +205,7 @@ export async function packPackage(
   // replaces module contents with the same compiler output a consumer's own
   // build would produce from workspace source.
   const compiledModules = compilePackageElementModules(pkg.dir);
-  // The staged workspace mirrors the deno workspace 1:1: every package is
+  // The staged workspace mirrors the pnpm workspace 1:1: every package is
   // staged and symlinked under node_modules/@openelement/, so cross-package
   // declaration emit resolves types from source exactly like the real
   // workspace, and the shared install carries the union of every member's

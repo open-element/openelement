@@ -1,8 +1,8 @@
 /**
  * Test helper: run the real element compiler over a page/island component
  * source (through the public `@openelement/element/compiler` entry) and
- * import the emitted module, so Deno tests exercise the actual compiled
- * class (Part Program + facade) instead of a hand-built double. Deno tests
+ * import the emitted module, so vitest tests exercise the actual compiled
+ * class (Part Program + facade) instead of a hand-built double. vitest tests
  * must never import the authoring .tsx modules directly — the ambient
  * @element/@property decorators are compile-time-only input and throw at
  * module evaluation outside the adapter transform.

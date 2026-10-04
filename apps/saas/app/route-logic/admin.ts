@@ -1,5 +1,5 @@
 /**
- * /admin route logic (v0.44): plain module so Deno tests never evaluate the
+ * /admin route logic (v0.44): plain module so vitest tests never evaluate the
  * compiled page class. The browser receives no service-role material — these
  * calls use the signed-in user's JWT; SQL independently requires
  * issuer-controlled app_metadata.admin.

@@ -1,6 +1,6 @@
 /**
  * /upload route logic (v0.44) — Supabase Storage upload with authorization
- * (reference starter, #983). Plain module so Deno tests never evaluate the
+ * (reference starter, #983). Plain module so vitest tests never evaluate the
  * compiled page class.
  *
  * A no-JS-capable multipart form posts to the named action `upload`. The
