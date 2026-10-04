@@ -258,6 +258,8 @@ export const PackageIslandErrorCode = {
   MEDIA_WITHOUT_DELIVERY: 'OE_PACKAGE_ISLAND_MEDIA_WITHOUT_DELIVERY',
   /** The declaration carries a media query but does not use media delivery. */
   DELIVERY_WITHOUT_MEDIA: 'OE_PACKAGE_ISLAND_DELIVERY_WITHOUT_MEDIA',
+  /** A package on the scan list is not installed (its import misses entirely). */
+  PACKAGE_MISSING: 'OE_PACKAGE_ISLAND_PACKAGE_MISSING',
 } as const;
 
 /**

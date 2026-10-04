@@ -176,10 +176,32 @@ async function runStart(): Promise<void> {
     env: processEnvRecord(),
   });
 
-  serveFetch({ hostname, port, handler });
-  console.log(
-    `[openElement start] http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`,
-  );
+  const server = serveFetch({ hostname, port, handler });
+  // The bind outcome is asynchronous (serveFetch returns before listen
+  // settles), so the success line waits for 'listening' and a failed bind
+  // answers with one actionable line (#1413 style, no raw stack) instead of
+  // the unhandled 'error' crash serveFetch's embedder default would raise.
+  server.once('listening', () => {
+    console.log(
+      `[openElement start] http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`,
+    );
+  });
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error?.code === 'EADDRINUSE') {
+      console.error(
+        `[openElement start] port ${port} on ${hostname} is already in use (EADDRINUSE) — ` +
+          'stop the process using it or choose another port (OPEN_ELEMENT_PORT / PORT).',
+      );
+    } else if (error?.code === 'EACCES') {
+      console.error(
+        `[openElement start] port ${port} on ${hostname} is not permitted for this user (EACCES) — ` +
+          'choose another port (OPEN_ELEMENT_PORT / PORT).',
+      );
+    } else {
+      console.error(renderCliFailure(error, cliDebug));
+    }
+    process.exit(1);
+  });
 }
 
 function processEnvRecord(): Record<string, string> {

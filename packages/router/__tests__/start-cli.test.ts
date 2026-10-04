@@ -140,6 +140,36 @@ test('start cli: start mode rejects an invalid port with a clear error (#1067)',
   }
 });
 
+test('start cli: an occupied port answers one actionable line and exits 1', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'start-cli-'));
+  const occupier = createServer();
+  await new Promise<void>((resolve) => occupier.listen(0, '127.0.0.1', resolve));
+  const { port } = occupier.address() as AddressInfo;
+  try {
+    await mkdir(join(dir, 'dist'), { recursive: true });
+    await writeFile(join(dir, 'dist', 'index.html'), '<h1>port busy</h1>\n');
+
+    const { code, output } = await runCli(dir, [], {
+      OPEN_ELEMENT_PORT: String(port),
+      OPEN_ELEMENT_HOST: '127.0.0.1',
+    });
+    expect(code).toEqual(1);
+    expect(output).toContain('already in use (EADDRINUSE)');
+    expect(output).toContain(`port ${port}`);
+    expect(output).toContain('OPEN_ELEMENT_PORT');
+    // The success line waits for 'listening' (#1413 bar): a failed bind
+    // must not print the serving URL, and no raw stack may follow.
+    expect(output).not.toContain(`http://127.0.0.1:${port}`);
+    expect(
+      !/\n\s+at .*:\d+:\d+/.test(output),
+      `occupied-port failure must not print a raw stack, got:\n${output}`,
+    ).toBeTruthy();
+  } finally {
+    await new Promise<void>((resolve) => occupier.close(() => resolve()));
+    await rm(dir, { recursive: true });
+  }
+});
+
 /** A path that fails at import time: the loader throws with a real stack. */
 async function makeFailingServerEntry(dir: string): Promise<void> {
   await mkdir(join(dir, 'dist', 'server'), { recursive: true });

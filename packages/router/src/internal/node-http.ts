@@ -69,6 +69,13 @@ function sendResponse(res: ServerResponse, response: Response, method: string): 
   if (setCookies.length > 0) res.setHeader('set-cookie', setCookies);
 
   if (method === 'HEAD' || response.status === 204 || response.status === 304) {
+    // These answers carry no body on the wire, but the fetch Response can
+    // still hold one (a HEAD request answered with a constructed Response;
+    // 204/304-with-body is unreachable through the Response constructor yet
+    // kept symmetric). Leaving it unconsumed parks the stream forever, so it
+    // is cancelled here. cancel() is async: a rejection is swallowed because
+    // the answer is already committed and no channel remains to report it.
+    void response.body?.cancel().catch(() => {});
     res.end();
     return;
   }
@@ -86,6 +93,12 @@ function sendResponse(res: ServerResponse, response: Response, method: string): 
 /**
  * Start an HTTP server on `hostname:port` that dispatches to the fetch
  * handler. The call returns immediately (the server keeps the process alive).
+ *
+ * Listen failures are not contained here: they surface on the returned
+ * Server's 'error' event with node's default (no listener attached means the
+ * error throws), so an embedder keeps wiring its own handler. The start CLI
+ * (`src/cli/start.ts`) attaches one that answers EADDRINUSE/EACCES with an
+ * actionable line.
  */
 export function serveFetch(options: {
   hostname: string;
