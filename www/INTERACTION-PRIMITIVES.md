@@ -43,6 +43,20 @@ do not relitigate per feature.
   navigate natively, and Enter walks the machine's default `navigate`
   (`clickIfLink`) — one navigation path, shared.
 
+### Search positioner — the style dual-write contract
+
+Zag writes the popup positioner's style twice into one `style` attribute:
+the static shell arrives through `getPositionerProps()`, while `@zag-js/popper`
+writes `--x`, `--y`, `--reference-width` and `--z-index` imperatively — and
+some of those writes are memoized one-shots a later sync never replays. A
+wholesale style replacement (the `setAttribute` path `spreadProps` takes)
+erases the imperative half for good — this was the production positioner
+defect. The rule that follows: a machine-positioned node never accepts a
+wholesale style write. The shell lands per declaration instead — the sync
+splits the style string out of the spread props and applies each
+`;`-separated declaration with `style.setProperty`, so both writers' values
+coexist. Reference implementation: `open-search-combobox.ts` (`sync()`).
+
 ### Focus management — native-first
 
 - **Site-wide `:focus-visible` baseline** (site-css.ts): one ring shape —

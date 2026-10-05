@@ -40,9 +40,9 @@
  * asset and the `<link>` tags the SSG output carries.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
-import { join } from 'pathe';
+import { basename, join } from 'pathe';
 import type { Plugin, ResolvedConfig } from 'vite';
 import { PresetErrorCode, buildError } from '../internal/error-codes.ts';
 import { createLogger } from '@openelement/element';
@@ -205,6 +205,70 @@ function joinBase(base: string, asset: string): string {
   return `${cleanBase}assets/${asset}`;
 }
 
+/** Url targets that never name an emitted asset file (the #1535 guard's exemptions). */
+const NON_FILE_URL = /^(?:data:|#|https?:\/\/|\/\/)/;
+
+/** `url(...)` occurrences, split into the quote and the target path. */
+const URL_PATTERN = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+
+interface EmittedFile {
+  type: string;
+  fileName: string;
+}
+
+/**
+ * Copy the compile's emitted assets (everything but the entry chunk and the
+ * bundle itself) into the build's `assets/` directory under their emitted
+ * `assets/[name]-[hash][extname]` names, and return the reference map the
+ * url() rewrite keys on: the staged reference form and the bare file name
+ * both resolve to the shipped name.
+ */
+function shipEmittedAssets(
+  emitted: readonly EmittedFile[],
+  stagingDir: string,
+  assetsDir: string,
+): Map<string, string> {
+  const shipped = new Map<string, string>();
+  for (const entry of emitted) {
+    if (entry.type !== 'asset' || entry.fileName === TAILWIND_BUNDLE_ASSET) continue;
+    const finalName = basename(entry.fileName);
+    copyFileSync(join(stagingDir, entry.fileName), join(assetsDir, finalName));
+    shipped.set(finalName, finalName);
+    shipped.set(entry.fileName, finalName);
+  }
+  return shipped;
+}
+
+/** Rewrite the bundle's url() references to the shipped asset file names. */
+function rewriteUrlTargets(css: string, shipped: ReadonlyMap<string, string>): string {
+  return css.replace(URL_PATTERN, (match, quote: string, target: string) => {
+    const finalName = shipped.get(target) ?? shipped.get(target.replace(/^\/+/, ''));
+    return finalName === undefined ? match : `url(${quote}${finalName}${quote})`;
+  });
+}
+
+/**
+ * The #1535 drift guard: after the copy and rewrite, every file url the
+ * shipped CSS carries must resolve to a file in the shipped assets directory
+ * (or be a data URI, a fragment reference, or an absolute http(s) url). A
+ * compile-emitted reference that the copy missed means a silently missing
+ * font or background at the consumer — fail the build instead.
+ */
+function assertAllUrlsShipped(css: string, assetsDir: string): void {
+  for (const match of css.matchAll(URL_PATTERN)) {
+    const target = match[2];
+    if (NON_FILE_URL.test(target)) continue;
+    if (existsSync(join(assetsDir, target.replace(/^\/+/, '')))) continue;
+    throw buildError(
+      PresetErrorCode.BUNDLE_COMPILE_FAILED,
+      `[tailwind-preset] the compiled bundle references "${target}" but the build's ` +
+        'assets/ directory does not contain that file — the url() asset the declared ' +
+        'sources reference would silently drop from the delivered preset. The compile ' +
+        'must emit every url() asset and the preset must copy it next to the bundle.',
+    );
+  }
+}
+
 /**
  * Compile the preset bundle through a dedicated inner Vite build whose CSS
  * pipeline carries the `@tailwindcss/vite` plugin, and write the compiled
@@ -225,8 +289,9 @@ export async function buildTailwindPresetBundle(
 
   const plugins = await tailwindPresetPlugins();
   const { build: viteBuild } = await import('vite');
+  let built: Awaited<ReturnType<typeof viteBuild>>;
   try {
-    await viteBuild({
+    built = await viteBuild({
       configFile: false,
       root,
       logLevel: 'error',
@@ -242,9 +307,17 @@ export async function buildTailwindPresetBundle(
           input: { 'open-tailwind': entryPath },
           output: {
             // Deterministic asset names: the seam's link emission and the
-            // byte-verification both read these exact paths.
+            // byte-verification both read these exact paths. The bundle keeps
+            // its fixed name; every other emitted asset (the url() files the
+            // declared sources reference, #1535) takes the standard hashed
+            // name under assets/ — a fixed name here would collide with the
+            // bundle's and silently rename one of the two.
             entryFileNames: 'open-tailwind.js',
-            assetFileNames: TAILWIND_BUNDLE_ASSET,
+            assetFileNames(assetInfo) {
+              return assetInfo.names.includes(TAILWIND_BUNDLE_ASSET)
+                ? TAILWIND_BUNDLE_ASSET
+                : 'assets/[name]-[hash][extname]';
+            },
           },
         },
       },
@@ -257,6 +330,15 @@ export async function buildTailwindPresetBundle(
       { cause: error },
     );
   }
+  // The build runs with watch off, so the watcher arm of vite's return type
+  // is unreachable — fail loudly rather than skip the asset delivery below.
+  if (!('output' in built)) {
+    throw buildError(
+      PresetErrorCode.BUNDLE_COMPILE_FAILED,
+      '[tailwind-preset] the bundle compile returned a watcher instead of build output',
+    );
+  }
+  const emitted = built.output;
 
   const bundlePath = join(stagingDir, TAILWIND_BUNDLE_ASSET);
   if (!existsSync(bundlePath)) {
@@ -265,11 +347,26 @@ export async function buildTailwindPresetBundle(
       `[tailwind-preset] the compile emitted no ${TAILWIND_BUNDLE_ASSET} asset`,
     );
   }
+
+  // The compile emitted every url() asset the declared sources reference
+  // (fonts, SVG backgrounds) next to the bundle. Ship them into the build's
+  // assets/ directory and rewrite the bundle's url() references to the
+  // shipped names — the sibling-relative form resolves against the asset's
+  // own URL, so it survives any `base`. Without this copy the references
+  // would name build-time-only staging files (#1535). The copy is a guarded
+  // one (P6): the assertion below fails the build when the shipped CSS still
+  // names a file the copy did not deliver. (Retiring the staging round-trip
+  // altogether is ADR-0163's structural lane, not this repair.)
+  const assetsDir = join(outDir, 'assets');
+  mkdirSync(assetsDir, { recursive: true });
+  const shipped = shipEmittedAssets(emitted, stagingDir, assetsDir);
+
   // The compile consumes the entry's explicit layer-order statement and emits
   // the layers as ordered blocks instead. The seam's contract keeps the
   // declaration in the artifact — prepending it re-asserts the same order the
   // blocks below establish (idempotent for the cascade).
-  const bundleCss = `${TAILWIND_LAYER_ORDER}\n${readFileSync(bundlePath, 'utf8')}`;
+  const bundleCss = `${TAILWIND_LAYER_ORDER}\n${rewriteUrlTargets(readFileSync(bundlePath, 'utf8'), shipped)}`;
+  assertAllUrlsShipped(bundleCss, assetsDir);
 
   // The components layer text feeds the @scope face. Extract it from the
   // compiled output: everything the compile placed inside
@@ -277,8 +374,7 @@ export async function buildTailwindPresetBundle(
   // component sources there).
   const componentsCss = extractLayerComponents(bundleCss);
 
-  mkdirSync(join(outDir, 'assets'), { recursive: true });
-  writeFileSync(join(outDir, 'assets', TAILWIND_BUNDLE_ASSET), bundleCss, 'utf8');
+  writeFileSync(join(assetsDir, TAILWIND_BUNDLE_ASSET), bundleCss, 'utf8');
 
   let scopePath: string | undefined;
   let scopeHref: string | undefined;
@@ -308,7 +404,19 @@ export function extractLayerComponents(css: string): string {
   const marker = '@layer components';
   const start = css.indexOf(marker);
   if (start === -1) return '';
-  const open = css.indexOf('{', start);
+  // A bare layer statement (`@layer components;` — what the compile emits
+  // when no component source exists, #1536) never opens a block. Stop at the
+  // first `;` or `@` after the marker; otherwise the brace scan below falls
+  // into the next layer's opening brace and returns that body as components.
+  let open = -1;
+  for (let index = start + marker.length; index < css.length; index++) {
+    const char = css[index];
+    if (char === '{') {
+      open = index;
+      break;
+    }
+    if (char === ';' || char === '@') return '';
+  }
   if (open === -1) return '';
   let depth = 0;
   let quote: '"' | "'" | undefined;

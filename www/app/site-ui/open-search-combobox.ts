@@ -209,6 +209,17 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
 
   const unsubscribe = machine.subscribe(() => scheduleSync());
 
+  /**
+   * The standard property keys this runtime last wrote onto the positioner
+   * from the shell style. The shell key set varies with the machine state
+   * (e.g. `pointer-events` appears only in the unpositioned string —
+   * toStyleString skips undefined values), and a per-declaration write never
+   * removes a key, so the diff in sync() clears the vanished ones. `--*`
+   * custom properties are never tracked: they belong to @zag-js/popper's
+   * imperative writes into the same style attribute.
+   */
+  let positionerShell: { node: Element; keys: Set<string> } | null = null;
+
   const sync = (): void => {
     const api = combobox.connect(machine.service, normalizeProps);
     const apply = (key: string, selector: string, props: Record<string, unknown>) => {
@@ -219,6 +230,7 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
       }
       cleanups.get(key)?.();
       cleanups.set(key, spreadProps(node, props, MACHINE_SCOPE));
+      return node;
     };
     apply('control', `#${IDS.control}`, api.getControlProps());
     // The DOM input owns its value: the machine's inputValue lags one
@@ -230,7 +242,39 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
     const inputProps: Record<string, unknown> = { ...api.getInputProps() };
     delete inputProps.value;
     apply('input', `#${IDS.input}`, inputProps);
-    apply('positioner', `#${IDS.positioner}`, api.getPositionerProps());
+    // Zag double-writes the positioner's style: the static shell comes in via
+    // getPositionerProps() while @zag-js/popper writes --x/--y/--reference-width/
+    // --z-index imperatively into the same style attribute — some of those
+    // writes are memoized one-shots. A wholesale style replacement (the
+    // setAttribute path spreadProps uses) erases them for good, so the shell
+    // lands per declaration and both writers' values coexist.
+    const positionerProps: Record<string, unknown> = { ...api.getPositionerProps() };
+    const positionerStyle = positionerProps.style;
+    delete positionerProps.style;
+    const positioner = apply('positioner', `#${IDS.positioner}`, positionerProps);
+    // HTMLElement narrowing: the style declarations below need CSSStyleDeclaration.
+    if (positioner instanceof HTMLElement && typeof positionerStyle === 'string') {
+      if (positionerShell?.node !== positioner) {
+        positionerShell = { node: positioner, keys: new Set() };
+      }
+      const shellKeys = positionerShell.keys;
+      const written = new Set<string>();
+      for (const declaration of positionerStyle.split(';')) {
+        const separator = declaration.indexOf(':');
+        if (separator === -1) continue;
+        const property = declaration.slice(0, separator).trim();
+        positioner.style.setProperty(property, declaration.slice(separator + 1).trim());
+        written.add(property);
+      }
+      // The shell's ownership covers keys it stopped emitting: a standard
+      // property absent from the current shell string was written by an
+      // earlier sync and must go. Custom properties are popper's — untouched.
+      for (const key of shellKeys) {
+        if (!written.has(key) && !key.startsWith('--')) positioner.style.removeProperty(key);
+      }
+      shellKeys.clear();
+      for (const key of written) shellKeys.add(key);
+    }
     apply('content', `#${IDS.content}`, api.getContentProps());
     apply('label', `#${IDS.label}`, api.getLabelProps());
     // Per-hit option props: the anchors are declaratively rendered by the

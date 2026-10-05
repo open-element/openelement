@@ -146,7 +146,8 @@ type checker, the filesystem, a Playwright report, a packed tarball — the
 repository must not grow a second source of truth beside it. No registries,
 scanners, or hand-maintained copies of what a canonical mechanism already
 knows. Unavoidable copies ship with a drift guard, and the guard is temporary
-by intent.
+by intent. P8 extends this rule from copies to writers: a boundary with two
+writers is a second source of truth in motion.
 
 This principle is repo-internal case law, established during the Alpha.1
 closure: diverged deny lists were the root cause of a real security gap; a
@@ -180,6 +181,31 @@ fidelity), [Astro's islands architecture][islands] (selective hydration),
 and [WinterTC][wintertc] (server contract). A difference from prior art that
 cannot be articulated is design drift and is sent back.
 
+## P8 — Seam single ownership
+
+Every seam — a boundary where one system writes what another system reads —
+names exactly one owner. What crosses a seam is derived from the owner's
+truth, never maintained as a second copy. Every seam carries a standing
+consumer-form test: a test written the way the downstream side consumes the
+boundary, which fails when the two sides drift.
+
+This principle is repo-internal case law, established after the alpha.9
+post-release audit ([ADR-0163][adr-0163]): eight defects, every one rooted
+at a boundary with ambiguous ownership — two style writers on one attribute,
+two color truths, two build stages, template-versus-repository knowledge,
+task-versus-root scope, two lifecycle handoffs. The first two clauses extend
+P6 from sources of truth to writers of truth; the third is new
+institutional surface.
+
+In this repository: the seams registry ([seams.md][seams]) lists each live
+seam with its owner, direction, crossing artifacts, and guard test. Where a
+crossing artifact cannot yet be derived, the emergency form is a drift guard
+over the copy with a written retirement condition (P5); the guard is
+temporary by intent, as in P6.
+
+Litmus: _Does this boundary have exactly one writer, and would its
+consumer-form test catch a second?_
+
 ## Platform catch-up review
 
 Once per release cycle the maintainers list framework code that the platform
@@ -203,6 +229,8 @@ same ruler at each review and must justify their surface or be retired.
 - [htmx essays][htmx]
 - [tef — Write code that is easy to delete][tef]
 
+[adr-0163]: ../adr/ADR-0163-seam-single-ownership.md
+[seams]: seams.md
 [ewm]: https://github.com/extensibleweb/manifesto
 [tag-dp]: https://w3ctag.github.io/design-principles/
 [html-dp]: https://www.w3.org/TR/html-design-principles/

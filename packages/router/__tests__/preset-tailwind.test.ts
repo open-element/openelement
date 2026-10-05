@@ -3,10 +3,13 @@
  *
  * Covers the opt-in contract at the unit level: option resolution, the
  * generated entry (declared layer order + layer(components) wrapping), the
- * @scope light-DOM face, the DSD/head link injection, and the full-inline
- * prohibition. The two-state byte verification itself lives in
- * .artifacts/c2/ (gitignored evidence, C2 task 0/5).
+ * @scope light-DOM face, the DSD/head link injection, the full-inline
+ * prohibition, and the bundle compile's asset delivery (#1535) and
+ * empty-layer extraction (#1536). The two-state byte verification itself
+ * lives in .artifacts/c2/ (gitignored evidence, C2 task 0/5).
  */
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { OpenElementError } from '@openelement/element/authoring';
 import { PresetErrorCode } from '../src/internal/error-codes.ts';
@@ -15,6 +18,7 @@ import {
   TAILWIND_LAYER_ORDER,
   TAILWIND_SCOPE_ASSET,
   assertNoGlobalSheetInline,
+  buildTailwindPresetBundle,
   extractLayerComponents,
   injectPresetLinks,
   renderTailwindPresetEntry,
@@ -95,6 +99,123 @@ test('extractLayerComponents isolates the components block body', () => {
   expect(body.includes('--c: 3')).toEqual(true);
   expect(body.includes('--a: 1')).toEqual(false);
   expect(body.includes('.x')).toEqual(false);
+});
+
+test('a bare empty-layer statement extracts no components body (#1536)', () => {
+  const css = [
+    TAILWIND_LAYER_ORDER,
+    '@layer theme { :root { --a: 1; } }',
+    '@layer components;',
+    '@layer utilities { .x { color: red; } }',
+  ].join('\n');
+  expect(extractLayerComponents(css)).toEqual('');
+  // The dogfood hit shape: scopeTags configured while the components layer is
+  // empty. The utilities body must not be re-seated under the host tag — the
+  // scope face stays empty.
+  expect(
+    renderTailwindScopeFace({ scopeTags: ['open-card'] }, extractLayerComponents(css)),
+  ).toEqual('');
+});
+
+// ─── Bundle compile (the #1535/#1536 delivery shapes) ──────────
+
+/**
+ * Writes the #1535 fixture root: a theme source carrying a url() font and a
+ * components source carrying a url() background. Both payloads sit above the
+ * default 4KB inline limit — smaller files compile to data URIs and would
+ * never exercise the asset copy. Declared source paths resolve relative to
+ * the staged entry (`.openElement/tailwind-preset/entry.css`), hence `../..`.
+ */
+function writeUrlAssetFixture(name: string): string {
+  const root = join(import.meta.dirname!, `../__test_fixtures__/${name}`);
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+  writeFileSync(
+    join(root, 'theme.css'),
+    '@font-face { font-family: "Preset Fixture"; src: url("./fixture-font.woff2") format("woff2"); }',
+    'utf8',
+  );
+  writeFileSync(
+    join(root, 'components.css'),
+    '.fixture-bg { background-image: url("./fixture-bg.svg"); }',
+    'utf8',
+  );
+  writeFileSync(join(root, 'fixture-font.woff2'), Buffer.alloc(8192, 7));
+  writeFileSync(
+    join(root, 'fixture-bg.svg'),
+    `<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><!--${'x'.repeat(8192)}--></svg>`,
+    'utf8',
+  );
+  return root;
+}
+
+test('url() assets referenced by the declared sources ship next to the bundle (#1535)', async () => {
+  const root = writeUrlAssetFixture('tailwind-preset-assets');
+  const outDir = join(root, 'dist');
+  const result = await buildTailwindPresetBundle({
+    root,
+    outDir,
+    options: {
+      theme: ['../../theme.css'],
+      components: ['../../components.css'],
+      scopeTags: ['open-card'],
+    },
+    base: '/',
+  });
+
+  // The bundle is the compiled stylesheet, not a url() payload renamed onto
+  // the bundle's fixed name (the pre-fix name collision shipped the SVG as
+  // the bundle).
+  expect(result.bundleCss).toContain('@layer');
+  expect(result.bundleCss).toContain('Preset Fixture');
+
+  // Every file url the shipped CSS references exists in the shipped assets
+  // directory, under its deterministic hashed name.
+  const shipped = new Set(readdirSync(join(outDir, 'assets')));
+  const referenced = [...result.bundleCss.matchAll(/url\(\s*['"]?([^'")]+)['"]?\s*\)/g)]
+    .map((match) => match[1])
+    .filter((target) => !/^(?:data:|#|https?:\/\/|\/\/)/.test(target));
+  expect(referenced.length).toBeGreaterThanOrEqual(2);
+  for (const target of referenced) {
+    expect(shipped.has(target.replace(/^\/+/, '')), `shipped ${target}`).toEqual(true);
+    expect(target).not.toContain(TAILWIND_BUNDLE_ASSET);
+  }
+
+  // The @scope face, carved from the same rewritten components layer,
+  // references shipped names only. (The font lives in the theme layer, so the
+  // face carries the components layer's background reference, not the font.)
+  expect(result.scopePath).toBeDefined();
+  const scope = readFileSync(result.scopePath!, 'utf8');
+  expect(scope).toContain('@scope (open-card)');
+  const scopeRefs = [...scope.matchAll(/url\(\s*['"]?([^'")]+)['"]?\s*\)/g)].map(
+    (match) => match[1],
+  );
+  expect(scopeRefs.length).toBeGreaterThanOrEqual(1);
+  for (const target of scopeRefs) {
+    expect(shipped.has(target), `shipped ${target}`).toEqual(true);
+  }
+});
+
+test('no components source with scopeTags emits no scope face and leaves the bundle unscoped (#1536)', async () => {
+  const root = join(import.meta.dirname!, '../__test_fixtures__/tailwind-preset-no-components');
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+  const result = await buildTailwindPresetBundle({
+    root,
+    outDir: join(root, 'dist'),
+    options: { scopeTags: ['open-card'] },
+    base: '/',
+  });
+  // The dogfood hit shape end to end: an empty components layer (the compile
+  // emits it as a bare layer statement — grouped, `@layer components,
+  // utilities;`, in the 4.3.x line — never as a block) must not let the brace
+  // scan fall into the next layer and wrap the whole bundle into the host-tag
+  // scope face.
+  expect(result.bundleCss).toMatch(/@layer[^{};]*\bcomponents\b[^{};]*;/);
+  expect(extractLayerComponents(result.bundleCss)).toEqual('');
+  expect(result.scopePath).toBeUndefined();
+  expect(result.scopeHref).toBeUndefined();
+  expect(result.bundleCss).not.toContain('@scope');
 });
 
 // ─── Link injection (seam 2: DSD link-not-inline) ──────────────

@@ -23,6 +23,9 @@
  *         members (www, tools/*, apps/saas) ride the same train as the
  *         published packages and must never fall behind (#1524). Members on
  *         a non-release-line version (the test fixtures' `0.0.0`) stay put.
+ *         The workspace root's own manifest joins the same walk (#1534): no
+ *         `packages:` glob names it, so the enumeration appends it
+ *         explicitly — the root lagged three trains on alpha.10 before that.
  *   +     packages/ui/src/generated-manifest.json (a TRACKED generator output
  *         embedding the package version) and the www release-line module are
  *         refreshed by running the generate:all face after the text points.
@@ -107,6 +110,14 @@ const RELEASE_LINE_CONFIGS: ReadonlySet<string> = new Set(PACKAGE_CONFIGS);
 export const WORKSPACE_MANIFEST = 'pnpm-workspace.yaml';
 
 /**
+ * The workspace root's own manifest (#1534). It rides the same release train
+ * as the members but is named by no `packages:` glob, so the member walk
+ * appends it explicitly under the same fail-soft contract (a tree without a
+ * root manifest has no root stamp).
+ */
+export const WORKSPACE_ROOT_CONFIG = 'package.json';
+
+/**
  * True when `version` sits on the release line's shape: same
  * major.minor.patch base as the line and riding a prerelease train. The test
  * fixtures' `0.0.0` is a different base without a prerelease — never
@@ -137,13 +148,13 @@ export interface MemberStamp {
 }
 
 /**
- * Expand the pnpm-workspace.yaml globs to member package.json paths. Mirrors
- * the workspace manifest's documented shape (single-level globs + `!`
- * exclusions) with the same fail-soft contract as the shipped-source scan: a
- * tree without the manifest (a test fixture) has no member stamps; a
- * malformed manifest propagates, because silently stamping zero members on
- * the live tree is exactly the "no straggler" failure this walk exists to
- * prevent.
+ * Expand the pnpm-workspace.yaml globs to member package.json paths, plus the
+ * workspace root's own manifest (#1534 — no glob names it). Mirrors the
+ * workspace manifest's documented shape (single-level globs + `!` exclusions)
+ * with the same fail-soft contract as the shipped-source scan: a tree without
+ * the manifest (a test fixture) has no member stamps; a malformed manifest
+ * propagates, because silently stamping zero members on the live tree is
+ * exactly the "no straggler" failure this walk exists to prevent.
  */
 export async function workspaceMemberConfigPaths(root: string): Promise<string[]> {
   try {
@@ -171,6 +182,14 @@ export async function workspaceMemberConfigPaths(root: string): Promise<string[]
     }
   }
   const paths: string[] = [];
+  // The root manifest is never a glob hit and never on the published roster,
+  // so appending it here cannot double-edit a release-line point.
+  try {
+    await stat(join(root, WORKSPACE_ROOT_CONFIG));
+    paths.push(WORKSPACE_ROOT_CONFIG);
+  } catch {
+    // no root manifest — nothing to stamp at the workspace root
+  }
   for (const member of matched) {
     if (excluded.has(member)) continue;
     const path = `${member.replace(/\/+$/, '')}/package.json`;
@@ -186,10 +205,11 @@ export async function workspaceMemberConfigPaths(root: string): Promise<string[]
 }
 
 /**
- * Classify every non-release-line workspace member against the stamp target:
- * `stamped` (lags the line on the same train — gets an edit), `current`
- * (already at the target), or `skipped` (a non-release-line version, e.g. a
- * fixture's `0.0.0`, or a manifest without a version field).
+ * Classify every non-release-line workspace member (the workspace root
+ * included, #1534) against the stamp target: `stamped` (lags the line on the
+ * same train — gets an edit), `current` (already at the target), or
+ * `skipped` (a non-release-line version, e.g. a fixture's `0.0.0`, or a
+ * manifest without a version field).
  */
 export async function workspaceMemberStamps(
   root: string,

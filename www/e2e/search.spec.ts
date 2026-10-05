@@ -157,6 +157,58 @@ test.describe('Search', () => {
     expect(Math.abs(overlay.width - overlay.viewportWidth)).toBeLessThanOrEqual(1);
   });
 
+  test('search positioner anchors below the input at matching width', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.waitForFunction(() => customElements.get('open-search'));
+
+    await page.getByRole('button', { name: 'Search' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Search' });
+    const input = page.getByRole('combobox', { name: 'Search documentation' });
+    await expect(dialog).toBeVisible();
+    await expect(input).toBeFocused();
+    // The positioner props are re-spread when the results render, and that
+    // re-sync must not disturb the placement floating-ui already computed —
+    // the open-only popup never exercises that path, so the search runs first.
+    await input.pressSequentially('routing');
+    const firstResult = page
+      .getByRole('listbox', { name: 'Search results' })
+      .getByRole('option')
+      .first();
+    // First search pays the Pagefind wasm/index load; allow extra time —
+    // the full-suite run shares the static server and workers with every
+    // other spec, so the wasm/index round can take far longer than solo.
+    await expect(firstResult).toBeVisible({ timeout: 30_000 });
+
+    // Placement lands asynchronously (floating-ui positions after the popup
+    // renders), so the geometry contract is retried via toPass, not sampled
+    // once; both rects are read in one evaluate for a same-frame measurement.
+    await expect(async () => {
+      const geometry = await page.evaluate(() => {
+        const panel = document.getElementById('open-search-positioner');
+        const field = document.getElementById('open-search-input');
+        if (!panel || !field) return null;
+        const panelBox = panel.getBoundingClientRect();
+        const fieldBox = field.getBoundingClientRect();
+        return {
+          xDelta: Math.abs(panelBox.x - fieldBox.x),
+          topGap: panelBox.y - fieldBox.bottom,
+          widthDelta: Math.abs(panelBox.width - fieldBox.width),
+        };
+      });
+      expect(geometry).not.toBeNull();
+      // bottom-start: the panel's left edge tracks the input's left edge.
+      expect(geometry!.xDelta).toBeLessThanOrEqual(2);
+      // The panel sits below the input's bottom edge at the configured
+      // mainAxis offset (6px); 12px leaves room for rounding.
+      expect(geometry!.topGap).toBeGreaterThanOrEqual(0);
+      expect(geometry!.topGap).toBeLessThanOrEqual(12);
+      // sameWidth: the panel spans the input's width.
+      expect(geometry!.widthDelta).toBeLessThanOrEqual(2);
+    }).toPass({ timeout: 10_000 });
+  });
+
   test('search initial HTML does not stringify computed signals', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
@@ -257,7 +309,13 @@ test.describe('Search', () => {
  *     hits/skeleton/message into the newer state, whether its bytes arrive
  *     (served) or its fetch would have failed;
  *   - an index load finishing after a close may cache the module but must
- *     not start a search for the closed dialog.
+ *     not start a search for the closed dialog;
+ *   - a reinstall racing the same in-flight import must publish a runtime
+ *     whose pipeline is alive — a search lands, it does not die silently on
+ *     the pipeline-identity guard (#1531);
+ *   - while the runtime chunk is still loading, Tab is not trapped: focus
+ *     can leave the background trigger and reach the open dialog's input
+ *     (#1533).
  */
 test.describe('Search session races', () => {
   /** Open the page and wait for the island upgrade — no networkidle. */
@@ -354,6 +412,89 @@ test.describe('Search session races', () => {
     await expect(dialog).toBeVisible();
     await expect(input).toBeFocused();
     await expect(overlay).toBeVisible();
+  });
+
+  test('a reconnect racing the in-flight chunk import publishes a runtime that actually searches (#1531)', async ({
+    page,
+  }) => {
+    const { dialog, input, results } = locators(page);
+    await gotoHome(page);
+    const chunk = deferred();
+    let requested = false;
+    await page.route(COMBOBOX_CHUNK, async (route) => {
+      requested = true;
+      await chunk.promise;
+      await route.continue();
+    });
+
+    // First open starts the import (held): the stale install's connect
+    // continuation now hangs on the import promise.
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect.poll(() => requested).toBe(true);
+
+    // Remove + reinsert the island host on the SAME element: the install is
+    // torn down and a fresh state takes over the same host — while the same
+    // import is still in flight.
+    await page.locator('open-search').evaluate((host) => {
+      const parent = host.parentNode;
+      const next = host.nextSibling;
+      host.remove();
+      parent?.insertBefore(host, next);
+    });
+
+    // Reopen before the import resolves: the fresh install's connect
+    // continuation queues behind the stale one on the same import promise.
+    await page.getByRole('button', { name: 'Search' }).click();
+    chunk.release();
+    await expect(dialog).toBeVisible();
+    await expect(input).toBeFocused();
+
+    // The discriminating assertion: the stale continuation must not have
+    // created a pipeline whose deletion by its own teardown leaves the
+    // published runtime dead (every query silently no-ops on the
+    // pipeline-identity guard). A real query must land.
+    await input.pressSequentially('ro');
+    await expect(results.getByRole('option').first()).toBeVisible({ timeout: 30_000 });
+  });
+
+  test('Tab reaches the open dialog while the runtime chunk is still loading (#1533)', async ({
+    page,
+  }) => {
+    const { dialog } = locators(page);
+    // The combobox role/aria wiring only lands with the Zag runtime chunk;
+    // this test asserts inside the not-ready window, so the input is located
+    // by the SSR id (IDS.input in open-search-shared.ts) instead of by role.
+    const ssrInput = page.locator('#open-search-input');
+    const trigger = page.getByRole('button', { name: 'Search' });
+    await gotoHome(page);
+    const chunk = deferred();
+    let requested = false;
+    await page.route(COMBOBOX_CHUNK, async (route) => {
+      requested = true;
+      await chunk.promise;
+      await route.continue();
+    });
+
+    await trigger.click();
+    await expect.poll(() => requested).toBe(true);
+    await expect(dialog).toBeVisible();
+    // The not-ready window is about focus resting on the background trigger;
+    // pin the starting point explicitly (click focus is not portable across
+    // engines — WebKit leaves the button unfocused).
+    await trigger.focus();
+
+    // The trap must not engage before the runtime exists: nothing in the
+    // dialog owns focus yet, so Tab follows the natural order into the
+    // dialog's input instead of being swallowed on the trigger.
+    await page.keyboard.press('Tab');
+    await expect(ssrInput).toBeFocused();
+
+    // The runtime lands, the session completes, and the full modal trap is
+    // back: Tab can no longer fall through.
+    chunk.release();
+    await expect(ssrInput).toBeFocused({ timeout: 10_000 });
+    await page.keyboard.press('Tab');
+    await expect(ssrInput).toBeFocused();
   });
 
   test('a transient first-open chunk failure closes the session cleanly and leaks no errors', async ({

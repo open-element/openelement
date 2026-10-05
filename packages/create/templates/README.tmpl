@@ -5,6 +5,13 @@ A file-based openElement app: page routes live in `app/routes/`, compiled page
 elements and shared style sheets in `app/components/`, and client islands
 (including the `app-shell` layout island) in `app/islands/`.
 
+One directory is generated rather than source: `.openElement/` at the project
+root holds the build's internal state. The router compiles the `app/head.tsx`
+head convention there (build-plan bookkeeping and Tailwind preset staging land
+alongside); `pnpm dev` and `pnpm build` write it as needed. The starter's
+`.gitignore` excludes it, and deleting it is safe — the next dev run or build
+recreates it.
+
 This starter pins the exact `@openelement/element` and `@openelement/router`
 versions it was generated from (`${v.element}`) in `package.json`; update both
 there when moving to a new release.
