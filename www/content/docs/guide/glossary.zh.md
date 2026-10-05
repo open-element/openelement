@@ -28,7 +28,7 @@ Custom Element 拥有的封装 DOM 子树。服务端输出把它装进 DSD 模�
 
 ### Declarative Shadow DOM（DSD）
 
-经 `<template shadowrootmode>` 携带 shadow root 的 HTML。默认的服务端表示：首屏不需要 JavaScript。
+经 `<template shadowrootmode>` 携带 shadow root 的 HTML。声明了显式 shadow 模式的组件的服务端表示（当前编译默认是 light DOM）：DSD 内容先于任何脚本完成绘制与可读；handler 与 signal 在 upgrade 后绑定。
 
 ### SSG
 

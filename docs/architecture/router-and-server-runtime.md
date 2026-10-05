@@ -1,9 +1,10 @@
 # Router and server runtime
 
-App owns pages, routes, loaders, actions, and request orchestration. The Vite adapter
+The application layer (`@openelement/router`) owns pages, routes, loaders, actions,
+and request orchestration. The Vite adapter
 owns compilation and build integration; Nitro owns the supported Node and Workers
-server output path. Element-local rendering mechanics do not leak into App's public
-contract.
+server output path. Element-local rendering mechanics do not leak into the
+application layer's public contract.
 
 ## Precedents and deliberate differences
 

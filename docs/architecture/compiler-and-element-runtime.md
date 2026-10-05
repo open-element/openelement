@@ -7,8 +7,9 @@ it does not fall back to a runtime virtual-DOM path.
 
 ## Toolchain decisions
 
-One production compiler frontend: the classic TypeScript compiler API, reached through
-the import-map name `typescript` (exact `npm:typescript@6.0.3`). A second parser is
+One production compiler frontend: the classic TypeScript compiler API, imported
+directly from the Node workspace's pinned `typescript` dependency (exact
+`typescript@6.0.3`). A second parser is
 admitted only with an independent benchmark and a semantic-equivalence proposal.
 Generic parsing may move upstream; Part Program semantics, OpenElement component
 semantics, reactivity semantics, and the generated artifact contract never do.

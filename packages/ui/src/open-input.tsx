@@ -1,11 +1,12 @@
 /**
  * @openelement/ui - open-input
  *
- * Minimal input field following Swiss International Style.
- * Clean borders, subtle focus states.
+ * Form-associated text input with a label, an inline error slot, and native
+ * constraint validation (required → valueMissing via setValidity).
  *
- * Experimental (owner ruling C1, #1468): no compatibility promise — may
- * change or be removed before 1.0.
+ * Experimental (owner ruling C1, #1468): internal implementation may change
+ * or be removed before 1.0; the declared `::part` names follow the
+ * CUSTOMIZATION.md contract (`::part` names never shrink).
  *
  * Compiled authoring. Attribute-backed properties drive the
  * compiled sinks (type/placeholder/label/name/value/disabled/required/error);

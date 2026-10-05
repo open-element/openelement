@@ -3,8 +3,9 @@
  *
  * Imports the tracked, generated manifest JSON (a reviewed package contract,
  * not a build cache). Generator: the ui manifest task; regenerate
- * with `deno task generate:ui-manifest`, drift gate with
- * `deno task ui-manifest:check` (wired into the source gate).
+ * with `pnpm --dir packages/ui run generate:ui-manifest`, drift gate with
+ * `pnpm --dir packages/ui run ui-manifest:check` (wired into the
+ * gate:release chain).
  */
 
 import type { OpenElementPackageManifest } from '@openelement/element';

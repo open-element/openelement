@@ -81,12 +81,12 @@ The 1.0 router ships routing, locale/render context, the SSG descriptor and Docu
 pnpm --dir www run generate:content   # site:build runs this before the router build
 ```
 
-Generated modules are consumed through the site's own import-map alias — there is no framework virtual module:
+Generated modules are consumed through the site's own package import — the `imports` field of the site's `package.json` — there is no framework virtual module:
 
 ```json
 {
   "imports": {
-    "@openelement/generated/blog-data": "./app/data/_generated-blog-data.ts"
+    "#generated/blog-data": "./app/data/_generated-blog-data.ts"
   }
 }
 ```
@@ -141,7 +141,7 @@ export default class BlogPostPage extends OpenElement {
 ```ts
 // app/routes/blog/[slug].tsx — the route module the scanner discovers
 import { definePage, notFound } from '@openelement/router';
-import { getPostBySlug, posts } from '@openelement/generated/blog-data';
+import { getPostBySlug, posts } from '#generated/blog-data';
 import BlogPostPage from '../../components/page-blog-post.tsx';
 
 export function getStaticPaths(): Array<Record<string, string>> {

@@ -1,8 +1,13 @@
 /**
  * @openelement/ui - open-theme-toggle
  *
- * Theme toggle Reactive DSD component for Dark/Light mode switching.
- * Swiss International Style: minimal, violet brand accent.
+ * Theme toggle button for dark/light mode: reads and flips the document's
+ * `data-theme` (with an initialization priority chain) and persists the
+ * choice; icon visibility follows the current theme attribute.
+ *
+ * Experimental (owner ruling C1, #1468): internal implementation may change
+ * or be removed before 1.0; the declared `::part` names follow the
+ * CUSTOMIZATION.md contract (`::part` names never shrink).
  *
  * Compiled authoring. The `theme` property drives the
  * compiled `data-theme` attribute sink on the toggle button; CSS selectors

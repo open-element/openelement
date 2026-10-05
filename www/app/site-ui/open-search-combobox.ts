@@ -81,6 +81,13 @@ interface PipelineState {
   pagefind: PagefindModule | null;
   loaded: boolean;
   searchSequence: number;
+  /**
+   * How many times the Pagefind entry has been imported. Each retry imports
+   * a fresh URL: a failed dynamic import stays failed in the module map for
+   * its exact specifier, so only a cache-busting query turns the next open
+   * into a real network retry instead of a memoized rejection.
+   */
+  loadAttempts: number;
 }
 
 const pipelines = new WeakMap<SearchHost, PipelineState>();
@@ -132,9 +139,16 @@ function toHit(hit: { url: string; meta?: { title?: string }; excerpt?: string }
 export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbacks): SearchRuntime {
   let pipeline = pipelines.get(host);
   if (!pipeline) {
-    pipeline = { pagefind: null, loaded: false, searchSequence: 0 };
+    pipeline = { pagefind: null, loaded: false, searchSequence: 0, loadAttempts: 0 };
     pipelines.set(host, pipeline);
   }
+  const ownedPipeline = pipeline;
+  /**
+   * Set by teardown. Every async continuation (query rounds, the Pagefind
+   * import, queued syncs) checks it before touching the DOM, so work
+   * scheduled by a removed runtime can never act on a reconnected host.
+   */
+  let disposed = false;
 
   const machine = new VanillaMachine(combobox.machine, () => ({
     id: MACHINE_SCOPE,
@@ -182,10 +196,13 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
   /** Coalesce machine ticks into one microtask prop application. */
   let syncQueued = false;
   const scheduleSync = (): void => {
-    if (syncQueued) return;
+    if (syncQueued || disposed) return;
     syncQueued = true;
     queueMicrotask(() => {
       syncQueued = false;
+      // The flush can land after teardown removed the machine's listeners;
+      // a post-teardown flush must not re-apply attributes.
+      if (disposed) return;
       sync();
     });
   };
@@ -245,27 +262,46 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
 
   async function loadIndex(nextHost: SearchHost): Promise<void> {
     const state = pipelines.get(nextHost);
-    if (!state || state.loaded) return;
+    if (!state || state !== ownedPipeline || disposed || state.loaded) return;
     state.loaded = true;
     try {
-      const pagefindUrl = '/pagefind/pagefind.js';
+      const attempt = ++state.loadAttempts;
+      const pagefindUrl =
+        attempt === 1 ? '/pagefind/pagefind.js' : `/pagefind/pagefind.js?retry=${attempt}`;
       const module = (await import(/* @vite-ignore */ pagefindUrl)) as PagefindModule;
       // The index is segmented per language (pagefind-entry.json lists en and
       // zh separately). Pagefind's init() selects the segment from
       // document.documentElement.lang — the same source the copy above uses —
       // so a zh page searches the zh segment with no extra filtering here.
       await module.init?.();
+      // The load outlives dialog closes; it must still belong to THIS
+      // runtime's pipeline. A teardown deleted the pipeline and a reconnect
+      // created a fresh one — the stale module never writes into the new
+      // install (the new install runs its own import; the browser cache
+      // dedupes the bytes).
+      const current = pipelines.get(nextHost);
+      if (disposed || current !== ownedPipeline) return;
       state.pagefind = module;
+      // A close between the load starting and finishing invalidates the
+      // session that requested it: cache the module, but do not start a
+      // search for a closed dialog (the next open re-drives it).
+      if (overlay(nextHost)?.hidden !== false) return;
       runtime.runSearch(nextHost);
     } catch {
+      // Only this pipeline's failure path may reset its own flag and message;
+      // a teardown mid-load leaves the dead object alone.
+      if (disposed || pipelines.get(nextHost) !== ownedPipeline) return;
       state.loaded = false;
+      // The dialog may have closed while the fetch was failing — a closed
+      // dialog must not receive the message either.
+      if (overlay(nextHost)?.hidden !== false) return;
       showMessage(nextHost, copy().indexMissing);
     }
   }
 
   function runSearch(nextHost: SearchHost): void {
     const state = pipelines.get(nextHost);
-    if (!state) return;
+    if (!state || state !== ownedPipeline || disposed) return;
     const query = input(nextHost)?.value.trim() ?? '';
     if (query.length < 2) {
       // Bump the sequence even on this early return: an in-flight request
@@ -288,7 +324,16 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
       .search(query)
       .then((response) => Promise.all(response.results.slice(0, 10).map((result) => result.data())))
       .then((hits) => {
-        if (sequence !== state.searchSequence) return;
+        // Stale round (a newer query superseded it, or a close/reopen moved
+        // the sequence) or a torn-down runtime: drop the result instead of
+        // writing it.
+        if (
+          sequence !== state.searchSequence ||
+          disposed ||
+          pipelines.get(nextHost) !== ownedPipeline
+        ) {
+          return;
+        }
         nextHost.searching = false;
         if (hits.length === 0) {
           showMessage(nextHost, copy().noResults(query));
@@ -300,7 +345,17 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
         runtime.syncHits(nextHost, nextHost.hits);
       })
       .catch(() => {
-        // Keep the previous result list when a Pagefind chunk fails.
+        // A failed round keeps whatever the newest round owns: the CURRENT
+        // round's failure keeps the previous result list and only clears its
+        // own skeleton; a superseded round's failure must not clear a newer
+        // round's skeleton.
+        if (
+          sequence !== state.searchSequence ||
+          disposed ||
+          pipelines.get(nextHost) !== ownedPipeline
+        ) {
+          return;
+        }
         nextHost.searching = false;
       });
   }
@@ -311,6 +366,9 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
       sync();
     },
     close() {
+      // Invalidate every in-flight round FIRST: any result landing after this
+      // point is stale and must not re-fill the closed dialog.
+      ownedPipeline.searchSequence++;
       const api = combobox.connect(machine.service, normalizeProps);
       if (api.open) api.setOpen(false, 'script');
       api.setInputValue('', 'script');
@@ -326,6 +384,14 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
       scheduleSync();
     },
     teardown() {
+      // From here on no continuation of this runtime acts: queries drop,
+      // queued syncs flush no-ops, and the host's pipeline goes away so a
+      // reconnect builds a fresh one (stale index completions compare
+      // against the captured pipeline and are dropped — they cannot
+      // pollute the new install).
+      disposed = true;
+      ownedPipeline.searchSequence++;
+      if (pipelines.get(host) === ownedPipeline) pipelines.delete(host);
       unsubscribe();
       for (const cleanup of cleanups.values()) cleanup();
       cleanups.clear();

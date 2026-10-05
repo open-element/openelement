@@ -18,8 +18,8 @@ import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, dsd: true });
 ```
 
-- `load` — first-paint controls: navigation, search, theme. Imported immediately after parse; blocking paint is the point.
-- `idle` — everything interactive but non-critical: counters, forms, tabs. Upgrades when the browser is idle and never blocks paint.
+- `load` — first-screen controls: navigation, search, theme. Imported and upgraded as early as possible.
+- `idle` — everything interactive but non-critical: counters, forms, tabs. Scheduled into idle opportunities; the actual timing depends on the scheduler's fallback (idle callback, animation frame, or a fixed timeout).
 - `visible` — below-the-fold weight: comments, charts, embeds. An IntersectionObserver gates the fetch until scroll-in.
 - `media` — capability-gated weight: declare the media query in the island's `media` field and the chunk loads only while it matches.
 - `only` — browser-only components that cannot produce reliable DSD (canvas, media, WebGL). The server emits the host tag and serialized props; SSR is skipped.
@@ -27,8 +27,8 @@ export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, d
 ## Worked choices
 
 - **Theme toggle** → `load`. It must answer the first click; a late toggle flashes the wrong theme.
-- **Docs search** → `load`. Same reason: the header control is first-paint chrome.
-- **Code-block copy buttons** → `idle`. Useful, but nobody copies code in the first 50ms.
+- **Docs search** → `load`. Same reason: the header control is first-screen chrome.
+- **Code-block copy buttons** → `idle`. Useful, but nothing a reader needs in the first moments on the page.
 - **Comment thread under an article** → `visible`. Heavy, far down the page, often never reached.
 - **Live cursor follower on the hero** → `only`. It cannot SSR meaningfully and must never delay the document.
 

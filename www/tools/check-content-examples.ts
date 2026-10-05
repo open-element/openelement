@@ -87,6 +87,45 @@ const FENCE_PATTERN = /```(ts|tsx|typescript|javascript|js)\n([\s\S]*?)```/g;
 /** Fence discovery for import validation; language label is optional. */
 const ANY_FENCE = /```(?:ts|tsx|js|javascript|typescript)?[^\S\n]*\n([\s\S]*?)```/g;
 
+/**
+ * Authoring-pattern tripwires (#1522 C1): two teaching-example shapes that
+ * regress real framework behavior are banned outright in the maintained
+ * authoring surface. (1) A `render()` body that declares a local before its
+ * return — compiled render methods are a single return expression; derived
+ * values belong in `computed()` fields or module scope. (2) A hand-rolled
+ * `.replace('{placeholder}', …)` over a message pattern — plural/select
+ * rules live inside the ICU pattern, and only a real formatter
+ * (intl-messageformat, paraglide, …) can apply them.
+ */
+const RENDER_LOCAL_DECLARATION =
+  /render\s*\(\s*\)\s*(?::[^{=;]*)?\{(?:(?!\breturn\b)[^}])*\b(?:const|let)\s/;
+const ICU_MANUAL_REPLACE = /\.\s*replace\s*\(\s*(['"`])\s*\{/;
+
+/** Scan one document's type-checked fences for the banned authoring shapes. */
+export function validateAuthoringPatterns(file: string, markdown: string): ExampleFailure[] {
+  const failures: ExampleFailure[] = [];
+  for (const fence of markdown.matchAll(FENCE_PATTERN)) {
+    const code = fence[2];
+    if (RENDER_LOCAL_DECLARATION.test(code)) {
+      failures.push({
+        file,
+        message:
+          'render() declares a local before its return — keep render() a single return ' +
+          'expression; derive values with computed() fields or module scope',
+      });
+    }
+    if (ICU_MANUAL_REPLACE.test(code)) {
+      failures.push({
+        file,
+        message:
+          "a .replace('{…}') unpacks a message pattern by hand — pass the pattern and its " +
+          'arguments to a real formatter (intl-messageformat, paraglide, …)',
+      });
+    }
+  }
+  return failures;
+}
+
 const NAMED_IMPORT =
   /import\s+(?:type\s+)?(?:[A-Za-z_$][\w$]*\s*,\s*)?\{([^}]*)\}\s*from\s*['"](@openelement\/[^'"]+)['"]/g;
 
@@ -281,16 +320,18 @@ export function suppressElidedDiagnostic(
 export interface ContentGateResult {
   importFailures: ExampleFailure[];
   exampleFailures: ExampleFailure[];
+  patternFailures: ExampleFailure[];
 }
 
 export async function checkContent(): Promise<ContentGateResult> {
   const inventory = frameworkImportInventory();
   const importFailures: ExampleFailure[] = [];
+  const patternFailures: ExampleFailure[] = [];
   const seen = new Set<string>();
   const examples: ContentExample[] = [];
   // One walk over the whole content tree: import validation applies to every
-  // fence anywhere under www/content; type-checking applies to the
-  // maintained authoring surface only.
+  // fence anywhere under www/content; type-checking and the authoring-pattern
+  // tripwires apply to the maintained authoring surface only.
   for (const entry of await readdir(join(repoRoot, 'www/content'), {
     recursive: true,
     withFileTypes: true,
@@ -302,6 +343,7 @@ export async function checkContent(): Promise<ContentGateResult> {
     const markdown = await readFile(entryPath, 'utf8');
     importFailures.push(...validateFrameworkImports(entryPath, markdown, inventory));
     if (!CHECKED_CONTENT_DIRS.some((dir) => entryPath.startsWith(join(repoRoot, dir)))) continue;
+    patternFailures.push(...validateAuthoringPatterns(entryPath, markdown));
     for (const example of extractExamples(entryPath, markdown)) {
       // en/zh translations carry identical code — check each block once.
       if (seen.has(example.code)) continue;
@@ -309,14 +351,24 @@ export async function checkContent(): Promise<ContentGateResult> {
       examples.push(example);
     }
   }
-  return { importFailures, exampleFailures: await typeCheckExamples(examples) };
+  return {
+    importFailures,
+    patternFailures,
+    exampleFailures: await typeCheckExamples(examples),
+  };
 }
 
 if (import.meta.main) {
-  const { importFailures, exampleFailures } = await checkContent();
+  const { importFailures, patternFailures, exampleFailures } = await checkContent();
   if (importFailures.length > 0) {
     console.error('Content import check failed:');
     for (const failure of importFailures) {
+      console.error(`- ${failure.file}: ${failure.message}`);
+    }
+  }
+  if (patternFailures.length > 0) {
+    console.error('Content authoring-pattern check failed:');
+    for (const failure of patternFailures) {
       console.error(`- ${failure.file}: ${failure.message}`);
     }
   }
@@ -326,6 +378,10 @@ if (import.meta.main) {
       console.error(`- ${failure.file}: ${failure.message}`);
     }
   }
-  if (importFailures.length > 0 || exampleFailures.length > 0) process.exit(1);
-  console.log('Content gate passed (imports resolved, examples type-checked).');
+  if (importFailures.length > 0 || patternFailures.length > 0 || exampleFailures.length > 0) {
+    process.exit(1);
+  }
+  console.log(
+    'Content gate passed (imports resolved, authoring patterns clean, examples type-checked).',
+  );
 }

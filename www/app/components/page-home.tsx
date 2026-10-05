@@ -256,7 +256,7 @@ export class OpenCounter extends OpenElement {
 }
 
 // SSR: <open-counter count="0"> + DSD shadow root.
-// No JavaScript required for first paint.`}</code>
+// Markup paints and reads with no JavaScript.`}</code>
               </pre>
             </open-code-block>
           </div>
@@ -291,8 +291,8 @@ export class OpenCounter extends OpenElement {
               <small>{this.floodBrowser}</small>
               <span class='shadow-outline'>#shadow-root (open)</span>
               <code>
-                {`└─ <button> → signal bound
-   first paint = interactive`}
+                {`└─ <button> → markup available/readable
+   upgrade → signals/handlers bound`}
               </code>
             </div>
           </div>

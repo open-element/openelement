@@ -138,7 +138,7 @@ const content = {
     proveCopy: 'Use CI, build checks, and docs scans as release evidence before expanding claims.',
     freezeLabel: 'Freeze',
     freezeCopy:
-      'Move toward v1.0 after the WC fullstack framework and Basic Element line is stable, readable, and boring to verify.',
+      'Move toward v1.0 after the element, application and build contracts are stable, readable, and boring to verify.',
     visualIndex: '04 / system visual',
     visualTitle: 'The package graph is part of the release artifact.',
     visualCopy:
@@ -149,10 +149,10 @@ const content = {
     v10PostureMeta: 'v1.0 posture',
     noDriftLabel: 'No drift',
     noDriftCopy: 'Marketing language, docs, package exports, and CI gates must agree.',
-    noGhostsLabel: 'No ghosts',
+    noGhostsLabel: 'Retired stays retired',
     noGhostsCopy:
-      'Archived Hub-era promises and No webpack-era shortcuts stay out of the current public product line.',
-    noFogLabel: 'No fog',
+      'Archived Hub-era promises and webpack-era shortcuts stay out of the current public product line.',
+    noFogLabel: 'Scope in the open',
     noFogCopy:
       'Users should understand what is shipped, current, planned, and explicitly out of scope.',
     changelog: 'Changelog',
@@ -219,7 +219,8 @@ const content = {
     proveLabel: 'Prove',
     proveCopy: '在扩大宣称之前，以 CI、构建检查与文档扫描作为发布证据。',
     freezeLabel: 'Freeze',
-    freezeCopy: '当 WC 全栈框架与 Basic Element 线稳定、可读、验证起来平淡无奇之后，再迈向 v1.0。',
+    freezeCopy:
+      '当 element、application 与 build 三层契约稳定、可读、验证起来平淡无奇之后，再迈向 v1.0。',
     visualIndex: '04 / 系统图示',
     visualTitle: '包图是发布产物的一部分。',
     visualCopy: '已发布的包归属与公开架构必须保持机械一致。',
@@ -229,9 +230,9 @@ const content = {
     v10PostureMeta: 'v1.0 姿态',
     noDriftLabel: '不漂移',
     noDriftCopy: '营销语言、文档、包导出与 CI 门禁必须一致。',
-    noGhostsLabel: '无幽灵',
+    noGhostsLabel: '退役不再回来',
     noGhostsCopy: '已归档的 Hub 时代承诺与 webpack 时代的捷径，一律留在当前公开产品线之外。',
-    noFogLabel: '无迷雾',
+    noFogLabel: '边界公开',
     noFogCopy: '用户应能看懂什么是已发布、当前、规划中，以及明确排除在范围之外的。',
     changelog: '更新日志',
     deployment: '部署',

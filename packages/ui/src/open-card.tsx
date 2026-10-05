@@ -1,11 +1,12 @@
 /**
  * @openelement/ui - open-card
  *
- * Minimal card container with optional header and footer.
- * Swiss International Style: borders are whispers, not shouts.
+ * Card container with optional `header`/`footer` slots and a themed body
+ * region; the `variant` attribute picks the surface treatment.
  *
- * Experimental (owner ruling C1, #1468): no compatibility promise — may
- * change or be removed before 1.0.
+ * Experimental (owner ruling C1, #1468): internal implementation may change
+ * or be removed before 1.0; the declared `::part` names follow the
+ * CUSTOMIZATION.md contract (`::part` names never shrink).
  *
  * Compiled authoring. The `variant` attribute styles the
  * host directly (:host([variant=...])) — the card's render is fully static.

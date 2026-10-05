@@ -39,7 +39,7 @@ order: 20
 ## Three groups, three different questions
 
 - **Lit / FAST / Stencil** are component layers, not the same application contract. They author or compile Custom Elements and deliberately leave routing, data and the application loop outside their model; openElement builds its application contract on the same standard, so these compose with it rather than compete.
-- **Astro / Fresh / Enhance** are static-first or HTML-first baselines with a different durable component model — framework-specific component formats or framework-tied islands. In openElement the durable model is the standard Custom Element itself, with DSD as the default server representation.
+- **Astro / Fresh / Enhance** are static-first or HTML-first baselines with a different durable component model — framework-specific component formats or framework-tied islands. In openElement the durable model is the standard Custom Element itself, with DSD as the server expression of an explicitly declared shadow mode (light DOM is the current compiled default).
 - **Next / Remix / Nuxt / SvelteKit** are broader framework-specific fullstack ecosystems. openElement does not claim generic parity with them; its fullstack story is an explicit, evidence-backed composition with external providers.
 
 ## Decision criteria
@@ -52,20 +52,20 @@ order: 20
 
 ## The official composition path
 
-OpenElement × Supabase × Cloudflare is the verified fullstack delivery path, with explicit ownership boundaries: OpenElement owns the application UX; Supabase owns data, Auth, RLS, Storage and Realtime; Cloudflare owns edge delivery, security, cache and async execution. Supabase and Cloudflare are composed providers — never built-in framework features — and the package-graph boundary gate keeps provider code out of the framework packages.
+OpenElement × Supabase × Cloudflare is the first-party fullstack delivery path, with explicit ownership boundaries: OpenElement owns the application UX; Supabase owns data, Auth, RLS, Storage and Realtime; Cloudflare owns edge delivery, security, cache and async execution. Supabase and Cloudflare are composed providers — never built-in framework features — and the package-graph boundary gate keeps provider code out of the framework packages.
 
 First shipped on the 0.43 line together with Universal WC SSR and carried by the current compiled line. Framework-owned
 production-runtime recovery and cache semantics remain outside the current
 contract and have no assigned release version.
 
-- [Verified SaaS consumer](https://github.com/open-element/openelement/tree/main/apps/saas)
+- [First-party SaaS consumer](https://github.com/open-element/openelement/tree/main/apps/saas)
 
 ## Evidence behind the position
 
 - Custom Elements as the durable application contract — the static surface and the request-time application loop are described by the current architecture. [Current architecture](https://github.com/open-element/openelement/tree/main/docs/architecture)
 - DSD-first SSR with selective upgrade, and explicit foreign-WC admission — the corpus pins the observed SSR form and admission of each third-party library kind as machine-readable evidence. [Third-party WC interop corpus](https://github.com/open-element/openelement/blob/main/tests/fixtures/web-component-interop/corpus.json)
 - Browser and packaged-artifact qualification — candidate releases prove Chromium, Firefox and WebKit, and consumers build from packed public artifacts. [Release procedure](https://github.com/open-element/openelement/blob/main/docs/maintainers/releasing.md)
-- A composable provider stack instead of framework-owned Auth or database packages — verified end to end by the first-party SaaS consumer. [Supabase × Cloudflare SaaS](https://github.com/open-element/openelement/tree/main/apps/saas)
+- A composable provider stack instead of framework-owned Auth or database packages — implemented and unit-tested by the first-party SaaS consumer; hosted and deployed qualification is external pending, and the consumer's README records that qualification status. [Supabase × Cloudflare SaaS](https://github.com/open-element/openelement/tree/main/apps/saas)
 
 ## Sources and review scope
 

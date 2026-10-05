@@ -18,8 +18,8 @@ import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, dsd: true });
 ```
 
-- `load`——首屏控件：导航、搜索、主题。解析后立即导入；阻塞绘制就是它的工作。
-- `idle`——交互但非关键：计数器、表单、选项卡。浏览器空闲时升级，永不阻塞绘制。
+- `load`——首屏关键控件：导航、搜索、主题。尽早导入并升级。
+- `idle`——交互但非关键：计数器、表单、选项卡。调度到空闲时机执行；实际时机受调度器的 fallback 影响（idle 回调、动画帧或固定超时）。
 - `visible`——首屏之下的分量：评论、图表、嵌入。IntersectionObserver 到视口附近才放行拉取。
 - `media`——按能力开关的分量：在 island 的 `media` 字段声明媒体查询，查询命中时才拉取。
 - `only`——无法产出可靠 DSD 的纯浏览器组件（canvas、媒体、WebGL）。服务端只输出宿主标签与序列化 props；跳过 SSR。
@@ -28,7 +28,7 @@ export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, d
 
 - **主题切换** → `load`。它必须响应第一次点击；来晚了会闪错主题。
 - **文档搜索** → `load`。同理：头部控件是首屏 chrome。
-- **代码块复制按钮** → `idle`。有用，但没人会在前 50ms 复制代码。
+- **代码块复制按钮** → `idle`。有用，但读者在进页面的最初一刻用不上它。
 - **文章下的评论区** → `visible`。重、在页面深处、经常到不了。
 - **hero 上的实时光标跟随** → `only`。它无法有意义地 SSR，也绝不能拖慢文档。
 

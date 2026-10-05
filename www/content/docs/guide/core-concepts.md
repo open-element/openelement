@@ -55,7 +55,7 @@ A state change re-renders only the Parts that read the changed value. Event hand
 
 ## DSD
 
-Server output is Declarative Shadow DOM: component markup travels inside `<template shadowrootmode="open">` and the browser parses it natively, without script. The document is styled and readable on first paint — before any client module is fetched. Styles declared in a component's `static styles` are inlined; for a light root the server scopes them in a `@scope(<tag>)` block so page rules cannot leak into the rest of the document.
+Light DOM is the current compiled default. A component that declares an explicit shadow mode is served as Declarative Shadow DOM: component markup travels inside `<template shadowrootmode="open">` and the browser parses it natively, without script. Either way the DSD/light content can paint and be read first — before any client module is fetched; handlers and signals bind when the element upgrades. Styles declared in a component's `static styles` are inlined; for a light root the server scopes them in a `@scope(<tag>)` block so page rules cannot leak into the rest of the document.
 
 Interactivity arrives through the platform's own Custom Element upgrade: when the generated client entry defines the class, it claims the DOM that is already there, binds the handlers the compiled template declared, and fills `@property` fields from host attributes. Host attributes restore fields — they never invent events. An element whose class never loads still renders its markup, which is why a JS failure degrades to a static page instead of an empty one.
 
@@ -69,7 +69,7 @@ import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
 ```
 
-`hydrate` selects when the browser imports the module — `'load'` for controls needed at first paint such as navigation and theme, `'idle'` for everything else that can wait, `'visible'` for components that only matter as they scroll into view, `'media'` for capability-gated weight (the chunk loads only while the query declared in the island's `media` field matches), and `'only'` for browser-only components that skip SSR. The build records which islands belong to which page, so a page references only the chunks it can use and an island that is never reached is never fetched.
+`hydrate` selects when the browser imports the module — `'load'` for first-screen controls such as navigation and theme, imported and upgraded as early as possible, `'idle'` for everything else that can wait, `'visible'` for components that only matter as they scroll into view, `'media'` for capability-gated weight (the chunk loads only while the query declared in the island's `media` field matches), and `'only'` for browser-only components that skip SSR. The build records which islands belong to which page, so a page references only the chunks it can use and an island that is never reached is never fetched.
 
 ## Conditional regions and the grammar bound
 

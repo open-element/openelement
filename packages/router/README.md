@@ -118,20 +118,22 @@ In a generated project the same commands are the package scripts
 `pnpm build` and `pnpm start` (plus `pnpm dev` for the Vite dev server and
 `pnpm preview` for static-only preview).
 
-The build executes in a fixed phase order — SSG (Phase 3) runs before the client
-bundle (Phase 2), because client chunk hashes do not affect HTML content and
-script injection is a post-processing step:
+The build executes in a fixed phase order — the client bundle (Phase 2) runs
+before the SSG render (Phase 3), because the SSG pages inject their client
+assets from the Phase 2 build manifest (#1471):
 
 ```text
 Phase 1: route, API, middleware, and island scan
-Phase 3: SSR bundle, Hono toSSG(), HTML post-processing
 Phase 2: client island entry and browser chunks
+Phase 3: SSR bundle, Hono toSSG(), HTML post-processing
 ```
 
 ## Nitro deploy mount
 
-Nitro is the first-party production deployment target proven by the Node and
-Workers fixtures. Import the mount from the explicit subpath:
+Nitro is the first-party production deployment target; the supported runtimes
+and Nitro presets are the ones the release qualification matrix covers (the
+Node and Workers fixtures), not every runtime that can load ESM. Import the
+mount from the explicit subpath:
 
 ```ts
 import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';

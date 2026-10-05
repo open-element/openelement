@@ -32,7 +32,7 @@ use it.
 
 The measurement that motivated the change is recorded in PR #1423: on the JFB
 keyed-table harness, the full graph bundled to **77,639 B** and the same page
-from the new entry to **68,630 B** (**−8,927 B, −11.5%**), with the claim
+from the new entry to **68,630 B** (**−9,009 B, −11.6%**), with the claim
 diagnostic strings (`compiled-claim`, `attribute drift on`, `unexpected
 trailing nodes`) absent from the reduced bundle. Re-measured in this ADR's
 session at `de8c9c265` (see Verification): **78,702 B** full entry vs

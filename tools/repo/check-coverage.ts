@@ -216,11 +216,9 @@ async function main(): Promise<void> {
   //     functions 70.31%; thresholds 72/82/69. RE-BASELINED 2026-10-03
   //     (same cause): measured lines 78.36%, branches 62.99%, functions
   //     75.00%; floors one point under (77/61/74).
-  //   www/tools/lib: measured at the 1.0.0-alpha.1 candidate (same
-  //     full-denominator logic): lines 62.16%, branches 96.70%, functions
-  //     63.41%; thresholds 61/95/62. RE-BASELINED 2026-10-03 (same cause):
-  //     measured lines 60.42%, branches 70.52%, functions 60.00%; floors one
-  //     point under (59/69/59).
+  //   www/tools/lib: measured 2026-10-03 (full-denominator logic, after the
+  //     vitest-era lcov path fix): lines 60.42%, branches 70.52%, functions
+  //     60.00%; floors one point under (59/69/59).
   const scopes: Array<{
     label: string;
     include: (path: string) => boolean;
@@ -246,20 +244,18 @@ async function main(): Promise<void> {
     },
     {
       // Site tooling moved out of tools/lib; it carries its own scope so
-      // neither directory's threshold is diluted by the other. Measured at
-      // the 1.0.0-alpha.1 candidate (same full-denominator logic): lines
-      // 62.16%, branches 96.70%, functions 63.41%; thresholds 61/95/62 sit
-      // one point under. (An older 2026-09-18 measurement — 60.85/96.47/62.16
-      // — is superseded and intentionally not retained here.) The IO-bound
-      // half of the site-retired library is exercised by the gate runs, not
-      // unit tests, which is why the line/function floors differ from
-      // tools/lib.
+      // neither directory's threshold is diluted by the other. Baseline:
+      // measured 2026-10-03 (full-denominator logic, after the vitest-era
+      // lcov path fix) at lines 60.42%, branches 70.52%, functions 60.00% —
+      // thresholds 59/69/59 sit one point under. The IO-bound half of the
+      // site-retired library is exercised by the gate runs, not unit tests,
+      // which is why the line/function floors differ from tools/lib.
       label: 'www/tools/lib',
       include: isWwwToolsSource,
       thresholds: {
-        // Floors sit one point under the measured values (62.16 / 96.70 /
-        // 63.41 at the 1.0.0-alpha.1 candidate); raise them when the measured
-        // values rise, never lower them to make a red run pass.
+        // Floors sit one point under the measured values (60.42 / 70.52 /
+        // 60.00, 2026-10-03); raise them when the measured values rise,
+        // never lower them to make a red run pass.
         lines: getNumberArg('--site-tools-threshold', 59),
         branches: getNumberArg('--site-tools-branch-threshold', 69),
         functions: getNumberArg('--site-tools-function-threshold', 59),

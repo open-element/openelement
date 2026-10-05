@@ -1,8 +1,13 @@
 /**
  * @openelement/ui - open-button
  *
- * Minimal button component following Swiss International Style.
- * Violet brand accents with subtle hover states.
+ * Button or link control: an `href` property switches the compiled anchor
+ * branch (no-JS navigation survives SSR), `variant`/`size` pick the styled
+ * surface, and the disabled state follows the reflected host attribute.
+ *
+ * Experimental (owner ruling C1, #1468): internal implementation may change
+ * or be removed before 1.0; the declared `::part` names follow the
+ * CUSTOMIZATION.md contract (`::part` names never shrink).
  *
  * Compiled authoring. The anchor/button switch is compiled
  * as two sibling controls, exactly one visible: `linkMode`/`buttonMode`

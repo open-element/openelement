@@ -96,7 +96,7 @@ const strategies = {
       glyph: 'L',
       name: 'load',
       tag: '',
-      copy: 'Critical interactivity, hydrated immediately after parse.',
+      copy: 'First-screen controls: imported and upgraded as early as possible.',
       uses: 'nav · search · theme',
     },
     {
@@ -105,7 +105,7 @@ const strategies = {
       glyph: 'I',
       name: 'idle',
       tag: 'DEFAULT',
-      copy: 'Upgrades when the browser is idle — never blocks paint.',
+      copy: 'Non-critical interaction, scheduled into idle opportunities; actual timing depends on the scheduler fallback.',
       uses: 'counters · forms',
     },
     {
@@ -134,7 +134,7 @@ const strategies = {
       glyph: 'L',
       name: 'load',
       tag: '',
-      copy: '关键交互，解析完成后立即 hydrate。',
+      copy: '首屏关键控件，尽早导入并升级。',
       uses: '导航 · 搜索 · 主题',
     },
     {
@@ -143,7 +143,7 @@ const strategies = {
       glyph: 'I',
       name: 'idle',
       tag: '默认',
-      copy: '浏览器空闲时升级——绝不阻塞绘制。',
+      copy: '非关键交互，调度到空闲时机；实际时机受调度 fallback 影响。',
       uses: '计数器 · 表单',
     },
     {
