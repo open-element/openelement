@@ -9,7 +9,7 @@ export const pageHomeStyles = [
 
   /* ── hero: mascot-first — the dragon is the interface ── */
   .hero { position:relative; overflow:clip; background:var(--color-background); isolation:isolate; }
-  .hero-main { position:relative; min-height:calc(100svh - var(--nav-height)); display:grid; grid-template-rows:auto minmax(0,1fr) auto; justify-items:center; text-align:center; background:var(--hero-ink); color:var(--hero-paper); }
+  .hero-main { position:relative; min-height:calc(100svh - var(--nav-height)); display:grid; grid-template-rows:auto minmax(0,1fr) auto; background:var(--hero-ink); color:var(--hero-paper); }
   /* Scrim: the lede/actions band (73–88% of the hero) is where the mascot
      photograph runs brightest, so the lower third is held at 0.66–0.88 black. */
   .hero-main::before { content:""; position:absolute; inset:0; z-index:1; background:radial-gradient(60% 60% at 50% 42%, rgba(6,6,12,.55), transparent 70%), linear-gradient(to bottom, rgba(0,0,0,.6), transparent 30%, transparent 46%, rgba(0,0,0,.66) 64%, rgba(0,0,0,.76) 78%, rgba(0,0,0,.88)), radial-gradient(115% 88% at 50% 44%, transparent 56%, rgba(0,0,0,.52)); pointer-events:none; }
@@ -52,7 +52,10 @@ export const pageHomeStyles = [
   .hero-foot .action.link { border-color:transparent; padding-inline:calc(var(--spacing) * 1); color:var(--hero-gold-muted); text-decoration:underline; text-decoration-color:color-mix(in srgb,currentColor 45%,transparent); text-underline-offset:calc(var(--spacing) * 1); }
   .hero-foot .action.link:hover { border-color:transparent; color:var(--hero-gold); text-decoration-color:currentColor; }
   .lede { max-width:36rem; margin:0; color:rgba(244,241,234,.92); font-size:clamp(1rem,1.2vw,1.1rem); line-height:1.75; text-shadow:0 1px 18px rgba(0,0,0,.6); }
-  .actions { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 3); margin:calc(var(--spacing) * 6) 0 clamp(2rem,6vh,4rem); }
+  /* Static layout declarations that the page-layer utilities express 1:1 live
+     in the markup (C4 #1507); the unlayered sheet would beat the layered
+     utilities, so a converted declaration is removed here, not kept twice. */
+  .actions { margin:calc(var(--spacing) * 6) 0 clamp(2rem,6vh,4rem); }
   .action { display:inline-flex; align-items:center; padding:calc(var(--spacing) * 2) calc(var(--spacing) * 5); border:calc(var(--spacing) * 0.25) solid var(--border-strong); border-radius:var(--radius-md); color:var(--color-foreground); font-weight:var(--font-weight-bold); text-decoration:none; transition:border-color .15s ease,background .15s ease; }
   .action:hover { border-color:var(--color-primary); }
   .action.primary { background:var(--color-primary); border-color:var(--color-primary); color:var(--color-primary-foreground); }
@@ -104,7 +107,7 @@ export const pageHomeStyles = [
   .scene-figure svg { display:block; height:88px; width:auto; }
   .scene-outlined { position:absolute; top:clamp(1rem,4vh,3rem); left:clamp(-.5rem,-.4vw,0rem); z-index:-1; font-family:var(--font-mono); font-size:clamp(9rem,18vw,16rem); font-weight:800; line-height:1; color:transparent; -webkit-text-stroke:1.5px color-mix(in srgb,var(--color-ring) 55%,transparent); user-select:none; pointer-events:none; }
   .scene-split { display:grid; grid-template-columns:minmax(0,.9fr) minmax(320px,1.1fr); gap:clamp(2rem,6vw,6rem); align-items:center; }
-  .badges { display:flex; gap:calc(var(--spacing) * 2); margin-block-start:calc(var(--spacing) * 5); }
+  .badges { margin-block-start:calc(var(--spacing) * 5); }
   .badge { padding:2px calc(var(--spacing) * 2); border:calc(var(--spacing) * 0.25) solid var(--border-strong); border-radius:var(--radius-md); color:var(--color-primary); font-size:var(--text-xs); font-weight:var(--font-weight-bold); letter-spacing:.06em; }
 
   /* ── §2 DSD: violet flood ──
@@ -170,14 +173,14 @@ export const pageHomeStyles = [
   /* The command box paints --surface-code (= --bg-code, dark in both themes),
      so its text must use the theme-stable --code-text: light --text-primary is
      near-black, i.e. 1.24:1 on that surface. */
-  .begin .command { display:inline-flex; align-items:center; gap:calc(var(--spacing) * 4); margin-block-start:calc(var(--spacing) * 6); padding:calc(var(--spacing) * 3) calc(var(--spacing) * 5); border:calc(var(--spacing) * 0.25) solid var(--color-border); border-radius:var(--radius-lg); background:var(--surface-code); color:var(--color-zinc-200); font-size:var(--text-sm); }
+  .begin .command { margin-block-start:calc(var(--spacing) * 6); padding:calc(var(--spacing) * 3) calc(var(--spacing) * 5); border:calc(var(--spacing) * 0.25) solid var(--color-border); border-radius:var(--radius-lg); background:var(--surface-code); color:var(--color-zinc-200); font-size:var(--text-sm); }
   .begin .command code { color:var(--color-success); }
   .begin .command-note { max-width:32rem; margin:calc(var(--spacing) * 3) auto 0; color:var(--color-muted-foreground); font-size:var(--text-xs); line-height:1.6; }
   .begin .actions { justify-content:center; margin-block-end:0; }
 
   /* ── reference links ── */
   .reference { padding:clamp(3rem,8vh,6rem) clamp(1.5rem,5vw,4.5rem); border-block-start:1px solid var(--color-border); }
-  .reference header { display:flex; justify-content:space-between; gap:2rem; align-items:end; margin-block-end:calc(var(--spacing) * 6); }
+  .reference header { margin-block-end:calc(var(--spacing) * 6); }
   .reference h2 { font-size:clamp(2rem,4vw,4rem); letter-spacing:-.04em; line-height:1; }
   .reference header p { max-width:30rem; color:var(--color-muted-foreground); line-height:1.5; }
   .links { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid var(--color-border); }

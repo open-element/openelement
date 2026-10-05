@@ -108,35 +108,45 @@ export default class OpenSearch extends OpenElement {
 
         <div class='overlay' hidden data-pagefind-ignore onClick={this.closeSearchOnBackdrop}>
           <div class='panel' role='dialog' aria-modal='true' aria-label={this.dialogLabel}>
-            <input
-              type='text'
-              class='search-input'
-              aria-label={this.inputLabel}
-              placeholder={this.placeholder}
-              onInput={this.searchFromInput}
-            />
-            <div
-              class='results'
-              role='region'
-              aria-label={this.resultsLabel}
-              aria-live='polite'
-              onClick={this.closeSearchFromResults}
-            >
-              <div class='empty' hidden={this.hideEmpty}>
-                {this.message}
+            {/* The combobox state machine (Zag, open-search-controller.ts) owns
+                the ARIA graph: role=combobox on the input, role=listbox on the
+                results, aria-activedescendant across them. The static markup
+                carries only the chrome (ids, labels, classes); everything the
+                machine drives is applied at hydration and never SSR'd — the
+                Region branches below stay static (OEC9012). The visually
+                hidden label names the listbox through the machine's
+                aria-labelledby wiring. */}
+            <label id='open-search-results-label' class='results-label' for='open-search-input'>
+              {this.resultsLabel}
+            </label>
+            <div id='open-search-control' class='control'>
+              <input
+                type='text'
+                id='open-search-input'
+                class='search-input'
+                aria-label={this.inputLabel}
+                placeholder={this.placeholder}
+                onInput={this.searchFromInput}
+              />
+            </div>
+            <div id='open-search-positioner' class='results-positioner'>
+              <div id='open-search-results' class='results' onClick={this.closeSearchFromResults}>
+                <div class='empty' hidden={this.hideEmpty}>
+                  {this.message}
+                </div>
+                <div class='skeleton' hidden={this.hideSkeleton} aria-hidden='true'>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                {this.hits.map((hit) => (
+                  <a class='result item' href={hit.href} key={hit.key}>
+                    <div class='item-section'>{hit.section}</div>
+                    <div class='item-title'>{hit.title}</div>
+                    <div class='item-text'>{hit.text}</div>
+                  </a>
+                ))}
               </div>
-              <div class='skeleton' hidden={this.hideSkeleton} aria-hidden='true'>
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              {this.hits.map((hit) => (
-                <a class='result item' href={hit.href} key={hit.key}>
-                  <div class='item-section'>{hit.section}</div>
-                  <div class='item-title'>{hit.title}</div>
-                  <div class='item-text'>{hit.text}</div>
-                </a>
-              ))}
             </div>
           </div>
         </div>

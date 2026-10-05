@@ -321,7 +321,12 @@ export function articleContentStyles(scope: string): string {
     ${scope} .heading-anchor::after { content: "#"; }
     ${scope} h2:hover .heading-anchor, ${scope} h3:hover .heading-anchor, ${scope} .heading-anchor:focus-visible { opacity: 1; color: var(--color-primary); }
     ${scope} p { margin: calc(var(--spacing) * 4) 0; }
+    /* list-style-type is re-declared on purpose: the preset bundle's base
+       layer (Tailwind preflight, since C4 enabled it — #1507) resets lists to
+       none, and this unlayered sheet must win the markers back for prose. */
     ${scope} ul, ${scope} ol { padding-left: calc(var(--spacing) * 6); margin: calc(var(--spacing) * 4) 0; }
+    ${scope} ul { list-style-type: disc; }
+    ${scope} ol { list-style-type: decimal; }
     ${scope} li { margin: 0.375rem 0; }
     ${scope} strong { color: var(--color-foreground); }
     ${scope} code { background: var(--color-muted); color: var(--color-foreground); padding: 0.125rem 0.375rem; border-radius: var(--radius-md); font-size: var(--text-sm); font-family: var(--font-mono); }
@@ -339,6 +344,9 @@ export function articleContentStyles(scope: string): string {
     ${scope} th { background: var(--color-muted); color: var(--color-muted-foreground); font-weight: var(--font-weight-semibold); font-size: var(--font-size-overline); text-transform: uppercase; letter-spacing: var(--tracking-normal); }
     ${scope} a { color: var(--color-primary); text-decoration: none; }
     ${scope} a:hover { text-decoration: underline; }
+    /* Keyboard focus indicator on the ring role — the sheet is unlayered, so
+       it wins over the preset bundle's base layer like every rule here. */
+    ${scope} a:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
     ${scope} hr { border: none; border-top: 0.5px solid var(--color-border); margin: calc(var(--spacing) * 8) 0; }
     ${scope} blockquote { margin: calc(var(--spacing) * 8) 0; padding: calc(var(--spacing) * 6) calc(var(--spacing) * 4); border: 0; border-block: 1.5px solid color-mix(in srgb, var(--color-ring) 55%, transparent); color: var(--color-primary); font-family: var(--font-serif); font-style: italic; font-size: clamp(1.5rem, 3vw, 2.2rem); line-height: 1.35; text-align: center; }
     ${scope} blockquote p { margin: 0; }

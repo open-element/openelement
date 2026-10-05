@@ -37,7 +37,7 @@ export const pageReferenceStyles = [
   .pkg-copy { margin-block-start: calc(var(--spacing) * 3); color: var(--color-muted-foreground); font-size: var(--text-sm); line-height: var(--leading-normal); }
   .pkg-note { display: block; margin-block-start: calc(var(--spacing) * 2); color: var(--color-muted-foreground); font-size: var(--text-xs); line-height: var(--leading-normal); }
   .pkg-note:empty, .chip:empty { display: none; }
-  .pkg-chips { display: flex; flex-wrap: wrap; gap: calc(var(--spacing) * 2); }
+  /* (.pkg-chips layout lives as utilities in the markup — C4 #1507.) */
   .chip {
     padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
     border-radius: var(--radius-md);

@@ -162,7 +162,7 @@ export default class PageHome extends OpenElement {
         <open-cinematic-scroll></open-cinematic-scroll>
         <open-hero-polish></open-hero-polish>
         <section class='hero'>
-          <div class='hero-main'>
+          <div class='hero-main justify-items-center text-center'>
             <div class='hero-copy'>
               <p class='eyebrow'>{this.eyebrow}</p>
               <h1>
@@ -175,7 +175,7 @@ export default class PageHome extends OpenElement {
             </div>
             <div class='hero-foot'>
               <p class='lede'>{this.lede}</p>
-              <div class='actions'>
+              <div class='actions flex flex-wrap gap-3'>
                 <a class='action primary' href={this.startBuildingHref}>
                   {this.startBuilding}
                 </a>
@@ -233,7 +233,7 @@ export default class PageHome extends OpenElement {
               <span class='accent'>{this.sceneElementAccent}</span>
             </h2>
             <p>{this.sceneElementCopy}</p>
-            <div class='badges'>
+            <div class='badges flex gap-2'>
               <span class='badge'>{this.badgeRuntime}</span>
               <span class='badge'>{this.badgeAuthoring}</span>
             </div>
@@ -352,12 +352,12 @@ export class OpenCounter extends OpenElement {
         <section class='scene begin'>
           <p class='scene-index'>{this.sceneBeginIndex}</p>
           <h2>{this.begin}</h2>
-          <div class='command'>
+          <div class='command inline-flex items-center gap-4'>
             <code>$</code>
             <span>{this.beginCommand}</span>
           </div>
           <p class='command-note'>{this.beginNote}</p>
-          <div class='actions'>
+          <div class='actions flex flex-wrap gap-3'>
             <a class='action primary' href={this.getStartedHref}>
               {this.getStarted}
             </a>
@@ -368,7 +368,7 @@ export class OpenCounter extends OpenElement {
         </section>
 
         <section class='reference'>
-          <header>
+          <header class='flex items-end justify-between gap-8'>
             <div>
               <p class='scene-index'>{this.facts}</p>
               <h2>{this.continueComposition}</h2>

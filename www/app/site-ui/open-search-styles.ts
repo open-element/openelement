@@ -62,31 +62,57 @@ export const openSearchStyles = [
     box-sizing: border-box;
   }
   .overlay[hidden] { display: none; }
+  /* The panel is the input card; the results live in the combobox popup
+     (Zag positioning channel → Floating UI), anchored under the control row
+     at the same width. */
   .panel {
     width: 100%;
     max-width: 560px;
-    max-height: 70vh;
     margin: 0 calc(var(--spacing) * 4);
     background: var(--color-background);
     border: calc(var(--spacing) * 0.25) solid var(--color-border);
     border-radius: var(--radius-2xl);
     box-shadow: 0 calc(var(--spacing) * 4) calc(var(--spacing) * 16) color-mix(in srgb, var(--color-primary) 18%, transparent);
-    display: flex;
-    flex-direction: column;
     overflow: hidden;
   }
+  .results-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip-path: inset(50%);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .control { display: block; }
   .search-input {
+    display: block;
     width: 100%;
     padding: calc(var(--spacing) * 3) calc(var(--spacing) * 3);
     border: none;
     border-bottom: 0.5px solid var(--color-zinc-200);
+    border-radius: 0;
     background: transparent;
     color: var(--color-zinc-900);
     font-size: var(--text-base);
     box-sizing: border-box;
     font-family: inherit;
   }
-  .results { flex: 1; overflow-y: auto; padding: calc(var(--spacing) * 3) 0; }
+  /* The positioner is Floating UI's coordinate box: clicks pass through it so
+     the backdrop outside the listbox card still dismisses the dialog. */
+  .results-positioner { z-index: 1; pointer-events: none; }
+  .results { pointer-events: auto; }
+  .results {
+    overflow-y: auto;
+    max-height: min(50vh, 26rem);
+    padding: calc(var(--spacing) * 3) 0;
+    background: var(--color-popover);
+    border: calc(var(--spacing) * 0.25) solid var(--color-border);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 calc(var(--spacing) * 4) calc(var(--spacing) * 16) color-mix(in srgb, var(--color-primary) 18%, transparent);
+  }
   .item {
     display: block;
     padding: calc(var(--spacing) * 3) calc(var(--spacing) * 3);
@@ -95,7 +121,9 @@ export const openSearchStyles = [
     transition: background var(--ease-in-out) var(--default-transition-duration);
     cursor: pointer;
   }
-  .item:hover { background: var(--color-muted); }
+  /* Pointer hover and keyboard highlight share one surface tone (the accent
+     role, per the shadcn command pattern). */
+  .item:hover, .item[data-highlighted] { background: var(--color-accent); }
   .item-section {
     font-size: var(--text-xs);
     text-transform: uppercase;

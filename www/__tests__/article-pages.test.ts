@@ -212,12 +212,14 @@ test('getting-started leads with copyable commands', async () => {
   const en = pages.find((p) => p.slug === 'getting-started' && p.locale === 'en');
   expect(en).toEqual(expect.anything());
   // The page's primary job: a fenced, copyable install command — not prose.
-  // The pinned shape is the install command's specifier-plus-tag, the same
-  // invariant the install-command gate compares on (www/tools/generate-install-command.ts):
-  // runner and flags are the docs' choice, package and tag are the CLI's —
-  // the retired Deno `npm:`-specifier spelling stays retired (ADR-0161).
+  // The pinned shape is the install command's scope-plus-tag (the canonical
+  // `npm create @openelement@<tag>` alias, which npm resolves to
+  // @openelement/create at that tag), the same invariant the install-command
+  // gate compares on (www/tools/generate-install-command.ts): runner and
+  // flags are the docs' choice, package and tag are the CLI's — the retired
+  // Deno `npm:`-specifier spelling stays retired (ADR-0161).
   expect(en.html).toContain('<pre><code class="language-bash">');
-  expect(en.html).toContain('@openelement/create@alpha');
+  expect(en.html).toContain('@openelement@alpha');
 });
 
 // The security page deep-links the configuration anchor; the configuration

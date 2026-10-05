@@ -74,6 +74,17 @@ export interface TailwindPresetOptions {
    * face. Package-island apps derive this from the package manifest.
    */
   scopeTags?: string[];
+  /**
+   * Whether the bundle link is also injected into every DSD shadow template
+   * (seam 2's shadow adoption). Default `true` — the C2 seam behavior. Set
+   * `false` when the app's compiled elements claim their SSR shadow DOM
+   * exactly (the @openelement/element compiled-claim walk requires the
+   * shadow root's children to equal the Part Program's own nodes, so any
+   * injected node fails the claim): the head link alone still reaches every
+   * shadow tree, because CSS custom properties — the theme layer's entire
+   * delivery — inherit across the shadow boundary.
+   */
+  injectDsdLinks?: boolean;
 }
 
 /** Normalize `tailwind: true` / object / undefined into resolved options. */
@@ -331,21 +342,72 @@ export function extractLayerComponents(css: string): string {
   return '';
 }
 
-const DSD_TEMPLATE_OPEN = /<template\s+shadowrootmode=(?:"open"|"closed")[^>]*>/g;
-
 /**
  * Inject the preset's `<link rel="stylesheet">` emission into one rendered
- * page (seam 2): one link in `<head>` (document adoption) and one link as
- * the first child of every DSD shadow template (shadow adoption, deduped by
- * the browser cache across every page and shadow root).
+ * page (seam 2): one link in `<head>` (document adoption) and — unless the
+ * app opts out via {@linkcode TailwindPresetOptions.injectDsdLinks} — one
+ * link inside every DSD shadow template's content (shadow adoption, deduped
+ * by the browser cache across every page and shadow root).
+ *
+ * The placement is a contract, not a style choice: the compiled element
+ * runtime's existing-DOM claim (@openelement/element claim.ts) walks the
+ * shadow template's children exactly as the Part Program lists them —
+ * leading, interposed, AND trailing extras are structural drift (the walk
+ * ends in an exact `consumed === childNodes.length` check). The DSD-template
+ * link is therefore OPT-OUT per app (`injectDsdLinks: false`): the theme
+ * layer is custom properties, which inherit across the shadow boundary from
+ * the head link, so a claiming site loses nothing by skipping the shadow
+ * injection (surfaced by the first real preset-on site, alpha9 C4 #1507; the
+ * dogfood fixture never ran its e2e in the ON state).
  */
-export function injectPresetLinks(html: string, bundleHref: string, scopeHref?: string): string {
+export function injectPresetLinks(
+  html: string,
+  bundleHref: string,
+  scopeHref?: string,
+  injectDsdLinks = true,
+): string {
   const links = [`<link rel="stylesheet" href="${bundleHref}" />`];
   if (scopeHref) links.push(`<link rel="stylesheet" href="${scopeHref}" />`);
   const linkHtml = links.join('');
   let output = html;
-  // DSD templates first, so the head link lands outside any template.
-  output = output.replace(DSD_TEMPLATE_OPEN, (match) => `${match}${linkHtml}`);
+  if (injectDsdLinks) {
+    // DSD templates first, so the head link lands outside any template. Every
+    // template open (DSD or not) is stacked in document order, and each close
+    // pops its own open: a DSD template's close takes the link right before
+    // it, so nested shadow hosts each carry their own (cache-deduped) link.
+    let built = '';
+    let cursor = 0;
+    interface TemplateEvent {
+      position: number;
+      kind: 'open' | 'close';
+      dsd: boolean;
+    }
+    const events: TemplateEvent[] = [];
+    for (const match of html.matchAll(/<template\b[^>]*>/gi)) {
+      events.push({
+        position: match.index,
+        kind: 'open',
+        dsd: /shadowrootmode=(?:"open"|"closed")/i.test(match[0]),
+      });
+    }
+    for (const match of html.matchAll(/<\/template\s*>/gi)) {
+      events.push({ position: match.index, kind: 'close', dsd: false });
+    }
+    events.sort((left, right) => left.position - right.position);
+    const dsdStack: boolean[] = [];
+    for (const event of events) {
+      if (event.kind === 'open') {
+        dsdStack.push(event.dsd);
+        continue;
+      }
+      if (dsdStack.pop()) {
+        built += html.slice(cursor, event.position) + linkHtml;
+        cursor = event.position;
+      }
+    }
+    built += html.slice(cursor);
+    output = built;
+  }
   const headMatch = output.match(/<head(\s[^>]*)?>/i);
   if (headMatch && headMatch.index !== undefined) {
     const headEnd = headMatch.index + headMatch[0].length;
@@ -410,10 +472,16 @@ export async function applyTailwindPreset(
   visitHtmlFiles(outDir, (html, fullPath) => {
     visited++;
     assertNoGlobalSheetInline(html, result.bundleCss, fullPath);
-    return injectPresetLinks(html, result.bundleHref, result.scopeHref);
+    return injectPresetLinks(
+      html,
+      result.bundleHref,
+      result.scopeHref,
+      options.injectDsdLinks !== false,
+    );
   });
   log.info(
     `tailwind preset: bundle linked into ${visited} page(s)` +
+      (options.injectDsdLinks === false ? ' (head only)' : '') +
       (result.scopeHref ? ` (+@scope face ${TAILWIND_SCOPE_ASSET})` : ''),
   );
   return result;

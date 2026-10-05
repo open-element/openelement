@@ -69,6 +69,36 @@ test('vpPackEntries rejects non-src targets and missing root entry', () => {
   );
 });
 
+test('asset export targets ship verbatim: no compile entry, default-only export shape', () => {
+  const ui = pkg('@openelement/ui', {
+    '.': './src/index.ts',
+    './theme-tokens': './src/theme-tokens.ts',
+    './theme.css': './src/theme.css',
+  });
+  // The CSS target is not a compile entry — it ships through the staged-tree
+  // copy (assembleVpPackageTree), like every publish-scoped non-module file.
+  expect(vpPackEntries(ui)).toEqual(['src/index.ts', 'src/theme-tokens.ts']);
+  const manifest = synthesizedPackedManifest(ui) as {
+    exports: Record<string, Record<string, string>>;
+  };
+  // Verbatim asset: no types, no module shapes — one default condition.
+  expect(manifest.exports['./theme.css']).toEqual({ default: './src/theme.css' });
+  expect(manifest.exports['./theme-tokens']).toEqual({
+    types: './src/theme-tokens.d.ts',
+    import: './src/theme-tokens.js',
+    default: './src/theme-tokens.js',
+  });
+  // Assets must live under src/ — anything else fails closed.
+  assertThrowsIncludes(
+    () =>
+      synthesizedPackedManifest(
+        pkg('@openelement/ui', { '.': './src/index.ts', './x.css': './assets/x.css' }),
+      ),
+    Error,
+    'must live under src/',
+  );
+});
+
 test('vpPackConfigFile pins the verified recipe', () => {
   const file = vpPackConfigFile(['src/index.ts']);
   expect(file).toContain('dts: true');

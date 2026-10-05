@@ -87,3 +87,13 @@ this ADR documented, and supersedes the bullets above where they conflict:
   and the published/packed consumer qualifications run on Node via pnpm
   scripts; the portable-host migration (#1387) is complete for this surface.
   The engines floor for every retained package is `node >=24.2`.
+
+## Amendment (2026-10-05, quick-start canonicalization #1507)
+
+The canonical bootstrap spelling evolves from `npm exec
+@openelement/create@alpha -- <name>` to `npm create @openelement@alpha
+<name>`: npm's initializer alias resolves a bare `@scope` (optionally
+`@scope@<tag>`) to `@scope/create` at the same tag, so the canonical command
+names the scope and never repeats the `/create` suffix. Package, tag, and the
+verified alternates (`npx` short form, explicit-bin `pnpm dlx`) are unchanged;
+the single source remains `packages/create/src/install-command.ts`.

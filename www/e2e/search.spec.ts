@@ -21,21 +21,64 @@ test.describe('Search', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForFunction(() => customElements.get('open-search'));
     await page.keyboard.press('Control+K');
-    const searchField = page.getByRole('textbox', { name: 'Search documentation' });
+    const searchField = page.getByRole('combobox', { name: 'Search documentation' });
     await expect(searchField).toBeVisible();
     await searchField.pressSequentially('routing');
-    // First search pays the Pagefind wasm/index load; allow extra time.
+    // First search pays the Pagefind wasm/index load; allow extra time —
+    // the full-suite run shares the static server and workers with every
+    // other spec, so the wasm/index round can take far longer than solo.
     const firstResult = page
-      .getByRole('region', { name: 'Search results' })
-      .getByRole('link')
+      .getByRole('listbox', { name: 'Search results' })
+      .getByRole('option')
       .first();
-    await expect(firstResult).toBeVisible({ timeout: 15_000 });
+    await expect(firstResult).toBeVisible({ timeout: 30_000 });
 
     const href = await firstResult.getAttribute('href');
     expect(href).toBeTruthy();
     expect(href).not.toBe('/guide/routing');
     const res = await request.get(href!);
     expect(res.ok()).toBe(true);
+  });
+
+  test('arrow keys move aria-activedescendant and Enter navigates to the highlighted hit', async ({
+    page,
+  }) => {
+    // The combobox state machine (Zag) owns the keyboard: this is the
+    // traversal contract — ArrowDown highlights, aria-activedescendant tracks
+    // it on the input, Enter activates the highlighted anchor.
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.waitForFunction(() => customElements.get('open-search'));
+    await page.keyboard.press('Control+K');
+
+    const searchField = page.getByRole('combobox', { name: 'Search documentation' });
+    await expect(searchField).toBeFocused();
+    await searchField.pressSequentially('guide');
+    const listbox = page.getByRole('listbox', { name: 'Search results' });
+    await expect(listbox.getByRole('option').first()).toBeVisible({ timeout: 15_000 });
+    await expect(searchField).toHaveAttribute('aria-expanded', 'true');
+    await expect(searchField).toHaveAttribute('aria-controls', 'open-search-results');
+
+    await page.keyboard.press('ArrowDown');
+    const firstOption = listbox.getByRole('option').first();
+    await expect(searchField).toHaveAttribute(
+      'aria-activedescendant',
+      (await firstOption.getAttribute('id'))!,
+    );
+    const firstHref = await firstOption.getAttribute('href');
+
+    await page.keyboard.press('ArrowDown');
+    const secondOption = listbox.getByRole('option').nth(1);
+    await expect(searchField).toHaveAttribute(
+      'aria-activedescendant',
+      (await secondOption.getAttribute('id'))!,
+    );
+    const secondHref = await secondOption.getAttribute('href');
+    expect(secondHref).not.toEqual(firstHref);
+
+    await page.keyboard.press('Enter');
+    await page.waitForURL((url) => url.pathname === secondHref);
+    expect(page.url()).toContain(secondHref!);
   });
 
   test('search trigger focuses input and accepts real keyboard typing', async ({ page }) => {
@@ -45,18 +88,18 @@ test.describe('Search', () => {
 
     await page.getByRole('button', { name: 'Search' }).click();
 
-    const input = page.getByRole('textbox', { name: 'Search documentation' });
+    const input = page.getByRole('combobox', { name: 'Search documentation' });
     await expect(input).toBeFocused();
 
     await page.keyboard.type('routing');
     await expect(input).toHaveValue('routing');
 
     const firstResult = page
-      .getByRole('region', { name: 'Search results' })
-      .getByRole('link')
+      .getByRole('listbox', { name: 'Search results' })
+      .getByRole('option')
       .first();
     // First search pays the Pagefind wasm/index load; allow extra time.
-    await expect(firstResult).toBeVisible({ timeout: 15_000 });
+    await expect(firstResult).toBeVisible({ timeout: 30_000 });
     const firstHref = await firstResult.getAttribute('href');
     expect(firstHref).toBeTruthy();
     expect(firstHref).not.toBe('/guide/routing');
@@ -98,10 +141,10 @@ test.describe('Search', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForFunction(() => customElements.get('open-search'));
 
-    // The results region lives inside the closed overlay — it enters the
+    // The results listbox lives inside the closed overlay — it enters the
     // accessibility tree once the user opens the search.
     await page.getByRole('button', { name: 'Search' }).click();
-    const results = page.getByRole('region', { name: 'Search results' });
+    const results = page.getByRole('listbox', { name: 'Search results' });
     await expect(results).toBeVisible();
     const text = await results.evaluate((el) => el.textContent ?? '');
     expect(text).not.toContain('[object Object]');

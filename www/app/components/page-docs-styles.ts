@@ -22,12 +22,11 @@ export const pageDocsStyles = [
   ${mastheadStyles}
   ${eyebrowStyles}
 
-  .masthead-top {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: calc(var(--spacing) * 4);
-  }
+  /* Static layout lives as utilities in the markup (page-layer utility
+     freedom, C4 #1507); the sheet keeps only what utilities cannot express
+     (clamp measures, role-tuned type). The sheet is unlayered and the preset
+     bundle's utilities are layered, so a declaration kept on BOTH sides would
+     let the sheet win — converted declarations are removed from here. */
 
   .stamp {
     color: var(--color-muted-foreground);
@@ -86,10 +85,7 @@ export const pageDocsStyles = [
   }
 
   /* ── entrance rows: outlined numbers, hairlines, hover ── */
-  .entrances {
-    display: grid;
-    border-block-start: 1px solid var(--color-border);
-  }
+  /* (.entrances: display/border-top carried by utilities in the markup) */
 
   .entrance {
     display: grid;

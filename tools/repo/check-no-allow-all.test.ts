@@ -18,8 +18,9 @@
  * ruling 2026-09-21, alpha3) — retired with the Deno bootstrap itself: owner
  * ruling 2026-10-03 (ADR-0161 amendment) removed the documented `deno run`
  * command from every README, and the replacement bootstrap is a plain Node
- * command (`npm exec @openelement/create@<tag> -- <dir>`) that carries no
- * broad flag. The exemption table below is therefore EMPTY; it is kept as a
+ * command (canonical `npm create @openelement@<tag> <dir>`, #1507 revision)
+ * that carries no broad flag. The exemption table below is therefore EMPTY;
+ * it is kept as a
  * structure (not deleted) so the scope test's completeness checks — every
  * entry must be the strict scaffold shape and must exist in its file — stay
  * in force if a future ruling ever re-adds an entry. Machine-generated

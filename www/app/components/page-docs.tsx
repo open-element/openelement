@@ -57,7 +57,7 @@ export default class PageDocs extends OpenElement {
           <span class='sidenote' aria-hidden='true'>
             {this.sidenote}
           </span>
-          <div class='masthead-top'>
+          <div class='masthead-top flex items-baseline justify-between gap-4'>
             <p class='eyebrow'>{this.eyebrow}</p>
             <span class='stamp'>{this.version}</span>
           </div>
@@ -67,7 +67,7 @@ export default class PageDocs extends OpenElement {
           </h1>
           <p class='lede'>{this.lede}</p>
         </header>
-        <nav class='entrances' aria-label={this.navLabel}>
+        <nav class='entrances grid border-t border-border' aria-label={this.navLabel}>
           <a class='entrance' href={this.entrance1Href}>
             <span class='entrance-index' aria-hidden='true'>
               {'01'}

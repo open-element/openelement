@@ -10,14 +10,18 @@
  * command that differs from what the CLI prints fails `--check`, which
  * gate:release (the release train) runs.
  *
- * The assertion compares the command's specifier-plus-tag (`…create@<tag>`)
- * so a documentation example may name its own project (`my-app`) and choose
- * among the verified runner spellings (npm exec / npx / pnpm dlx) while the
- * package and dist-tag stay the CLI's.
+ * The assertion compares the command's specifier-plus-tag (`…create@<tag>`,
+ * with the canonical `npm create @openelement@<tag>` alias normalized onto the
+ * same package) so a documentation example may name its own project (`my-app`)
+ * and choose among the verified spellings (npm create / npm exec / npx /
+ * pnpm dlx) while the package and dist-tag stay the CLI's.
  */
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createInstallCommand } from '../../packages/create/src/install-command.ts';
+import {
+  CREATE_PACKAGE_SPECIFIER,
+  createInstallCommand,
+} from '../../packages/create/src/install-command.ts';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
@@ -47,13 +51,16 @@ const DISPLAY_FILES: readonly string[] = [
 ];
 
 /**
- * A documented install command: a Node runner (npm exec / npx / pnpm dlx,
- * including the pnpm form's explicit `--package=` + bin — the packed package
- * ships two bins, so a bare `pnpm dlx` cannot resolve one) invoking the
- * create package with an explicit tag. The match ends at the specifier — the
- * project name that follows is a free example.
+ * A documented install command: either the canonical `npm create @openelement@<tag>`
+ * spelling (npm's `@scope` initializer alias resolves it to the create package)
+ * or a Node runner (npm exec / npx / pnpm dlx, including the pnpm form's
+ * explicit `--package=` + bin — the packed package ships two bins, so a bare
+ * `pnpm dlx` cannot resolve one) invoking the create package with an explicit
+ * tag. The match ends at the specifier — the project name that follows is a
+ * free example.
  */
-const DOCUMENTED_COMMAND = /(?:npm exec|npx|pnpm dlx)\b[^`\n]*?@openelement\/create@[^\s`]+/g;
+const DOCUMENTED_COMMAND =
+  /(?:npm exec|npx|pnpm dlx)\b[^`\n]*?@openelement\/create@[^\s`]+|npm create\s+@openelement@[^\s`]+/g;
 
 const DOCUMENTED_SPECIFIER = /@openelement\/create@[^\s`]+/;
 
@@ -61,12 +68,21 @@ const DOCUMENTED_SPECIFIER = /@openelement\/create@[^\s`]+/;
  * The comparable shape of an install command: its package specifier with the
  * dist-tag normalized, so a deliberately pinned version is compared on the
  * package alone (`@<tag>`). Runner and flags are the docs' choice among the
- * verified spellings; package and tag are the CLI's.
+ * verified spellings; package and tag are the CLI's. The canonical
+ * `npm create @openelement@<tag>` spelling normalizes through npm's
+ * `@scope` → `@scope/create` initializer alias, so every verified form compares
+ * equal on the same package+tag.
  */
 function commandShape(command: string): string {
-  const match = command.match(DOCUMENTED_SPECIFIER)?.[0];
-  if (!match) return '';
-  return match.replace(/@[^\s`]+$/, '@<tag>');
+  const direct = command.match(DOCUMENTED_SPECIFIER)?.[0];
+  // Anchor the tag strip on the final `@<tag>` segment (no `@` inside it), so
+  // the package name survives the normalization.
+  if (direct) return direct.replace(/@[^@\s`]+$/, '@<tag>');
+  // `npm create @openelement@<tag>`: the alias form carries the scope, not the
+  // package name — normalize it to the package it resolves to.
+  const alias = command.match(/@openelement@[^\s`]+/)?.[0];
+  if (alias) return `${CREATE_PACKAGE_SPECIFIER}@<tag>`;
+  return '';
 }
 
 const canonicalCommand = createInstallCommand('my-app');

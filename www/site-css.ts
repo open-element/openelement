@@ -7,19 +7,23 @@
  * subject-side `:lang(zh)`) belong in the component sheets instead.
  *
  * `documentStyle` is the same layer one step further out: the site's
- * @font-face faces plus the @theme-derived token table (packages/ui/src/
- * theme.css, carried by the pure-.ts theme-tokens module), composed with
- * `siteCSS` into the single inline <style> the document head carries. It
- * lives here rather than in app/head.tsx because
- * check-site-theme-tokens.ts scans www/app for hardcoded theme values; font
- * faces and token bodies are definitions, and this module is the site's
- * designated home for them (the site style layer the gate's own doctrine
- * names).
+ * @font-face faces plus the body baseline, composed with `siteCSS` into the
+ * single inline <style> the document head carries. It lives here rather than
+ * in app/head.tsx because check-site-theme-tokens.ts scans www/app for
+ * hardcoded theme values; font faces are definitions, and this module is the
+ * site's designated home for them (the site style layer the gate's own
+ * doctrine names).
+ *
+ * Token delivery (alpha9 C4, #1507): the site build enables the router's
+ * Tailwind preset (see vite.config.ts), so the @theme role table
+ * (packages/ui/src/theme.css) ships through the preset's linked,
+ * layer-ordered bundle — NOT as an inline copy here. The compiled twin
+ * (@openelement/ui/theme-tokens) that preset-less consumers read stayed a
+ * site inline sheet only while the site was preset-less (the C2 OFF state);
+ * carrying both would duplicate the token table and trip the preset's
+ * full-inline prohibition (assertNoGlobalSheetInline). When the preset turns
+ * off, the twin returns here ahead of the body baseline.
  */
-// The token module subpath, not the package root: the root export pulls every
-// component module (.tsx), which the node-host build-time head evaluation
-// cannot load; theme-tokens is pure .ts.
-import { themeTokenCss } from '@openelement/ui/theme-tokens';
 
 /**
  * Central viewport tier scale (px). Every bare-number @media width/height
@@ -116,6 +120,15 @@ body {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
   color: var(--color-foreground);
 }
+/* Site-wide keyboard-focus baseline (light DOM). Every island that renders
+   light roots — the layout shell, the search island — and every bare document
+   link gets one ring shape; shadow components carry their own (page-styles
+   already seats the same pair on each page tag). The ring role keeps the
+   indicator on the token table in both themes; forced-colors remaps below. */
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
 /* User-preference adaptations (document-level: custom properties inherit
    into every shadow tree, so one rule covers components too). */
 @media (forced-colors: active) {
@@ -178,11 +191,10 @@ body {
   }
 }`;
 
-// Make token variables available to document-level elements while shadow trees
-// continue to inherit them from the document root. The token blocks select
-// `:root, :host` (packages/ui/src/theme.css), so this module only consumes the
-// finished text — there is no transform.
-const rootTokens = themeTokenCss;
+// Token note (see the module doc): the theme layer comes from the preset's
+// linked bundle asset, so nothing here re-declares it. Shadow trees keep
+// inheriting the variables from the document root the same as before — the
+// delivery changed, the inheritance contract did not.
 
 /**
  * The site's font faces. Three faces, deliberately: the two text faces (prose
@@ -193,7 +205,9 @@ const fontFaces = `@font-face{font-family:'JetBrains Mono';font-style:normal;fon
 
 /**
  * The complete document-level style body: faces first (so the preloaded files
- * are usable at first paint), then the theme token table, then the body
- * baseline and the site rules. app/head.tsx wraps this in one <style> entry.
+ * are usable at first paint), then the body baseline and the site rules. The
+ * theme token table is not part of this body — the preset's linked bundle
+ * carries it (see the module doc). app/head.tsx wraps this in one <style>
+ * entry.
  */
-export const documentStyle = `${fontFaces}${rootTokens}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;
+export const documentStyle = `${fontFaces}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;
