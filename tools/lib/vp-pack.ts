@@ -113,8 +113,27 @@ function requireSrcModule(pkg: PackageInfo, subpath: string, target: string): st
 }
 
 /**
- * The pack entry list: every exports target (the public surface) plus, for
- * the router, the path-delivered client-runtime modules. Order-stable and
+ * Non-TypeScript export targets the pack ships as verbatim assets (copied
+ * through assembleVpPackageTree's publish-scoped payload pass, no compile
+ * step). The first consumer is `@openelement/ui`'s `./theme.css` — the real
+ * @theme role source the C2 handoff seated (imported by consumer Tailwind
+ * builds; nothing to transpile).
+ */
+function isAssetExportTarget(pkg: PackageInfo, subpath: string, target: string): boolean {
+  const relative = target.replace(/^\.\//, '');
+  if (!/\.[^.]+$/.test(relative) || /\.(?:ts|tsx)$/.test(relative)) return false;
+  if (!/^src\/.+/.test(relative)) {
+    throw new Error(
+      `[vp-pack] ${pkg.name}: asset export '${subpath}' target '${target}' must live under src/`,
+    );
+  }
+  return true;
+}
+
+/**
+ * The pack entry list: every TypeScript exports target (the compiled public
+ * surface) plus, for the router, the path-delivered client-runtime modules.
+ * Asset export targets are not compile entries. Order-stable and
  * deduplicated.
  */
 export function vpPackEntries(pkg: PackageInfo): string[] {
@@ -127,6 +146,7 @@ export function vpPackEntries(pkg: PackageInfo): string[] {
     if (!entries.includes(entry)) entries.push(entry);
   };
   for (const [subpath, target] of Object.entries(map)) {
+    if (isAssetExportTarget(pkg, subpath, target)) continue;
     push(requireSrcModule(pkg, subpath, target));
   }
   if (pkg.name === '@openelement/router') {
@@ -168,6 +188,11 @@ export function synthesizedPackedManifest(pkg: PackageInfo): Record<string, unkn
   }
   const exports: Record<string, unknown> = {};
   for (const [subpath, target] of Object.entries(map)) {
+    if (isAssetExportTarget(pkg, subpath, target)) {
+      // Verbatim asset: no types, no module shapes — one default condition.
+      exports[subpath] = { default: target };
+      continue;
+    }
     const modulePath = requireSrcModule(pkg, subpath, target);
     const stem = modulePath.replace(/\.(?:ts|tsx)$/, '');
     exports[subpath] = {
@@ -528,6 +553,14 @@ function copyPackageDir(src: string, dest: string): void {
  * dependencies), then symlink every workspace member under
  * `node_modules/@openelement/` so declaration emit resolves cross-package
  * types from source.
+ *
+ * `--legacy-peer-deps` is part of the recipe, not an escape hatch: the
+ * staging's `vite` is the vite-plus ALIAS (VITE_ALIAS_SPEC), and npm checks
+ * engine peer ranges (e.g. `@tailwindcss/vite`'s `^5.2 || ^6 || ^7 || ^8`)
+ * against the alias target's own VERSION number (`1.0.0`) — a numbering
+ * artifact of the alias, not a real incompatibility. Without the flag, any
+ * staged package whose source reaches a vite-engine peer (the router's
+ * tailwind preset since C2) cannot resolve at all.
  */
 export async function installVpStagingWorkspace(
   staged: VpStagedWorkspace,
@@ -535,7 +568,7 @@ export async function installVpStagingWorkspace(
 ): Promise<void> {
   const install = await runWithOutput(
     'npm',
-    ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--legacy-peer-deps'],
     {
       cwd: staged.stagingRoot,
     },

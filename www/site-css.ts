@@ -7,17 +7,24 @@
  * subject-side `:lang(zh)`) belong in the component sheets instead.
  *
  * `documentStyle` is the same layer one step further out: the site's
- * @font-face faces plus the open-props token sheet, composed with `siteCSS`
- * into the single inline <style> the document head carries. It lives here
- * rather than in app/head.tsx because check-site-theme-tokens.ts scans www/app
- * for hardcoded theme values; font faces and token bodies are definitions, and
- * this module is the site's designated home for them (the site style layer the
- * gate's own doctrine names).
+ * @font-face faces plus the body baseline, composed with `siteCSS` into the
+ * single inline <style> the document head carries. It lives here rather than
+ * in app/head.tsx because check-site-theme-tokens.ts scans www/app for
+ * hardcoded theme values; font faces are definitions, and this module is the
+ * site's designated home for them (the site style layer the gate's own
+ * doctrine names).
+ *
+ * Token delivery (alpha9 C4, #1507; twin retired alpha9 C5): the site build
+ * enables the router's Tailwind preset (see vite.config.ts), so the @theme
+ * role table (packages/ui/src/theme.css) ships through the preset's linked,
+ * layer-ordered bundle — NOT as an inline copy here. The ui package carries
+ * no scale values of its own (the compiled theme-tokens twin is deleted), so
+ * there is no fallback sheet to inline: if the preset ever turns off, the
+ * site must supply its own role table first (the OFF contract,
+ * packages/ui/CUSTOMIZATION.md "Value delivery") — carrying a duplicated
+ * table inline would also trip the preset's full-inline prohibition
+ * (assertNoGlobalSheetInline).
  */
-// The token sheet subpath, not the package root: the root export pulls every
-// component module (.tsx), which the node-host build-time head evaluation
-// cannot load; the token sheet is pure .ts.
-import { openPropsTokenSheet } from '@openelement/ui/open-props-tokens';
 
 /**
  * Central viewport tier scale (px). Every bare-number @media width/height
@@ -35,17 +42,17 @@ export const siteCSS = `
 html[data-theme="light"],
 :host([data-theme="light"]),
 :root[data-theme="light"] {
-  --surface-1: var(--bg-elevated);
-  --surface-code: var(--bg-code);
-  --edge-highlight: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  --border-strong: color-mix(in srgb, var(--border) 68%, var(--text-primary));
-  --nav-bg: var(--bg-base);
-  --nav-height: var(--size-16);
-  --nav-link-color: var(--text-primary);
-  --nav-link-hover: var(--brand-deep);
-  --font-size-button: var(--font-size-0);
-  --font-size-body-sm: var(--font-size-0);
-  --font-size-caption: var(--font-size-00);
+  --surface-1: var(--color-popover);
+  --surface-code: var(--color-zinc-950);
+  --edge-highlight: color-mix(in srgb, var(--color-foreground) 10%, transparent);
+  --border-strong: color-mix(in srgb, var(--color-border) 68%, var(--color-foreground));
+  --nav-bg: var(--color-background);
+  --nav-height: calc(var(--spacing) * 16);
+  --nav-link-color: var(--color-foreground);
+  --nav-link-hover: color-mix(in srgb, var(--color-primary) 50%, var(--color-foreground));
+  --font-size-button: var(--text-sm);
+  --font-size-body-sm: var(--text-sm);
+  --font-size-caption: var(--text-xs);
   --font-size-micro: 0.625rem;
   --font-size-tiny: 0.85rem;
   --font-size-lede: 1.1rem;
@@ -54,10 +61,25 @@ html[data-theme="light"],
   --font-size-display-sm: 1.75rem;
   --font-size-display-md: 2.125rem;
   --font-size-display-lg: 2.625rem;
-  --font-weight-medium: var(--font-weight-5);
-  --font-weight-semibold: var(--font-weight-7);
+  /* --font-weight-medium is NOT re-aliased here: it is a real scale variable
+     (--font-weight-medium: 500), and aliasing it to itself through the scale
+     would create a cycle that invalidates both. --font-weight-semibold stays
+     an override: the scale ships 600, the site's semibold voice is 700, and
+     --font-weight-bold carries exactly that. */
+  --font-weight-semibold: var(--font-weight-bold);
+  /* Site identity faces, re-homed from the retired ui sheet (#1504): the
+     token table ships TW4 defaults only, so the brand stacks live here where
+     their @font-face declarations live too. Mono covers code, labels,
+     eyebrows and nav; serif covers the zh italic accents. */
+  --font-mono: 'JetBrains Mono', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace;
+  --font-serif: 'Instrument Serif', 'Songti SC', 'Noto Serif CJK SC', serif;
+  /* Site layout constants, re-homed from the retired ui sheet: page-level
+     measures, not component tokens. rem-exact values of the retired px. */
+  --site-container: 70rem; /* 1120px */
+  --site-container-wide: 77.5rem; /* 1240px */
+  --site-container-reading: 47.5rem; /* 760px */
   /* Cinematic hero palette: the homepage hero is always dark, independent of
-     the site theme. Defined once here (the alias layer) so components never
+     the site theme. Defined once here (this layer) so components never
      carry raw hex literals (site theme-token gate). */
   --hero-ink: #000;
   --hero-paper: #f4f1ea;
@@ -73,31 +95,40 @@ html[data-theme="light"],
 html[data-theme="dark"],
 :host([data-theme="dark"]),
 :root[data-theme="dark"] {
-  --surface-1: var(--bg-elevated);
-  --surface-code: var(--bg-code);
-  --edge-highlight: color-mix(in srgb, var(--text-primary) 14%, transparent);
-  --border-strong: color-mix(in srgb, var(--border) 72%, var(--text-primary));
-  --nav-bg: var(--bg-base);
-  --nav-height: var(--size-16);
+  --surface-1: var(--color-popover);
+  --surface-code: var(--color-zinc-950);
+  --edge-highlight: color-mix(in srgb, var(--color-foreground) 14%, transparent);
+  --border-strong: color-mix(in srgb, var(--color-border) 72%, var(--color-foreground));
+  --nav-bg: var(--color-background);
+  --nav-height: calc(var(--spacing) * 16);
 }
 body {
   margin: 0;
   background:
-    radial-gradient(circle at 50% -12%, color-mix(in srgb, var(--violet-5) 24%, transparent), transparent 42%),
-    linear-gradient(115deg, color-mix(in srgb, var(--violet-1) 38%, transparent), transparent 46%),
-    linear-gradient(color-mix(in srgb, var(--border) 34%, transparent) var(--border-size-1), transparent var(--border-size-1)),
-    linear-gradient(90deg, color-mix(in srgb, var(--border) 30%, transparent) var(--border-size-1), transparent var(--border-size-1)),
-    var(--bg-base);
+    radial-gradient(circle at 50% -12%, color-mix(in srgb, var(--color-ring) 24%, transparent), transparent 42%),
+    linear-gradient(115deg, color-mix(in srgb, var(--color-secondary) 38%, transparent), transparent 46%),
+    linear-gradient(color-mix(in srgb, var(--color-border) 34%, transparent) calc(var(--spacing) * 0.25), transparent calc(var(--spacing) * 0.25)),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-border) 30%, transparent) calc(var(--spacing) * 0.25), transparent calc(var(--spacing) * 0.25)),
+    var(--color-background);
   background-size: auto, auto, 220px 128px, 220px 128px, auto;
-  color: var(--text-primary);
+  color: var(--color-foreground);
   font-family: var(--font-sans);
   line-height: 1.7;
 }
 ::view-transition-old(open-brand-mark),
-::view-transition-new(open-brand-mark) { animation-duration: 320ms; animation-timing-function: var(--motion-standard); }
+::view-transition-new(open-brand-mark) { animation-duration: 320ms; animation-timing-function: var(--ease-out); }
 ::selection {
-  background: var(--brand-subtle);
-  color: var(--text-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-foreground);
+}
+/* Site-wide keyboard-focus baseline (light DOM). Every island that renders
+   light roots — the layout shell, the search island — and every bare document
+   link gets one ring shape; shadow components carry their own (page-styles
+   already seats the same pair on each page tag). The ring role keeps the
+   indicator on the token table in both themes; forced-colors remaps below. */
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
 }
 /* User-preference adaptations (document-level: custom properties inherit
    into every shadow tree, so one rule covers components too). */
@@ -110,13 +141,6 @@ body {
   a { text-decoration: underline !important; }
   :focus-visible { outline: 2px solid Highlight; }
 }
-@media (prefers-contrast: more) {
-  /* Collapse the muted step onto secondary ink. The dark token sets its own
-     --text-muted on :root[data-theme='dark'] (specificity 0,2,0), so the
-     plain :root rule (0,1,0) is a light-mode no-op fix in dark — repeat the
-     assignment at equal specificity to stay theme-aware both ways. */
-  :root, :root[data-theme='dark'] { --text-muted: var(--text-secondary); }
-}
 /* Reading-page print: chrome goes away, ink goes black on white, and content
    links carry their target so the paper copy stays navigable. Token
    remapping (not selector enumeration) carries the whole prose surface —
@@ -124,8 +148,9 @@ body {
    would otherwise vanish on paper. */
 @media print {
   :root, :root[data-theme='dark'] {
-    --text-primary: #000; --text-secondary: #000; --text-muted: #000;
-    --bg-base: #fff; --bg-muted: #fff; --bg-card: #fff; --bg-elevated: #fff;
+    --color-foreground: #000; --color-muted-foreground: #000;
+    --color-background: #fff; --color-muted: #fff; --color-card: #fff;
+    --color-popover: #fff;
   }
   .app-header,
   .docs-sidebar,
@@ -167,11 +192,10 @@ body {
   }
 }`;
 
-// Make token variables available to document-level elements while shadow trees
-// continue to inherit them from the document root. The sheet's token block
-// selects `:root, :host` (packages/ui/tools/generate-ui-tokens.ts), so this
-// module only consumes the finished sheet — there is no transform.
-const rootTokens = [...openPropsTokenSheet.cssRules].map((rule) => rule.cssText).join('\n');
+// Token note (see the module doc): the theme layer comes from the preset's
+// linked bundle asset, so nothing here re-declares it. Shadow trees keep
+// inheriting the variables from the document root the same as before — the
+// delivery changed, the inheritance contract did not.
 
 /**
  * The site's font faces. Three faces, deliberately: the two text faces (prose
@@ -182,7 +206,9 @@ const fontFaces = `@font-face{font-family:'JetBrains Mono';font-style:normal;fon
 
 /**
  * The complete document-level style body: faces first (so the preloaded files
- * are usable at first paint), then the open-props tokens, then the body
- * baseline and the site rules. app/head.tsx wraps this in one <style> entry.
+ * are usable at first paint), then the body baseline and the site rules. The
+ * theme token table is not part of this body — the preset's linked bundle
+ * carries it (see the module doc). app/head.tsx wraps this in one <style>
+ * entry.
  */
-export const documentStyle = `${fontFaces}${rootTokens}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;
+export const documentStyle = `${fontFaces}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;

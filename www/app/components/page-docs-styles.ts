@@ -5,8 +5,8 @@ export const pageDocsStyles = [
   compiledStyle(`
   :host {
     display: block;
-    color: var(--text-primary);
-    background: var(--bg-base);
+    color: var(--color-foreground);
+    background: var(--color-background);
   }
 
   * {
@@ -22,17 +22,16 @@ export const pageDocsStyles = [
   ${mastheadStyles}
   ${eyebrowStyles}
 
-  .masthead-top {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--size-4);
-  }
+  /* Static layout lives as utilities in the markup (page-layer utility
+     freedom, C4 #1507); the sheet keeps only what utilities cannot express
+     (clamp measures, role-tuned type). The sheet is unlayered and the preset
+     bundle's utilities are layered, so a declaration kept on BOTH sides would
+     let the sheet win — converted declarations are removed from here. */
 
   .stamp {
-    color: var(--text-muted);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -49,7 +48,7 @@ export const pageDocsStyles = [
     font-weight: 400;
     font-size: clamp(3.4rem, 9vw, 8rem);
     letter-spacing: -0.02em;
-    color: var(--violet-8);
+    color: var(--color-primary);
   }
 
   h1 .mono-line {
@@ -58,13 +57,13 @@ export const pageDocsStyles = [
     font-weight: 800;
     font-size: clamp(3rem, 8vw, 7rem);
     letter-spacing: -0.05em;
-    color: var(--text-primary);
+    color: var(--color-foreground);
   }
 
   .lede {
     max-width: 34rem;
     margin-block-start: clamp(1.25rem, 3vh, 2rem);
-    color: var(--text-secondary);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
     font-size: clamp(1rem, 1.2vw, 1.1rem);
     line-height: 1.75;
@@ -77,7 +76,7 @@ export const pageDocsStyles = [
     right: clamp(0.5rem, 1.5vw, 1.5rem);
     bottom: clamp(1rem, 4vh, 2.5rem);
     writing-mode: vertical-rl;
-    color: var(--text-muted);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
     font-size: var(--font-size-micro);
     letter-spacing: 0.2em;
@@ -86,10 +85,7 @@ export const pageDocsStyles = [
   }
 
   /* ── entrance rows: outlined numbers, hairlines, hover ── */
-  .entrances {
-    display: grid;
-    border-block-start: 1px solid var(--border);
-  }
+  /* (.entrances: display/border-top carried by utilities in the markup) */
 
   .entrance {
     display: grid;
@@ -97,14 +93,14 @@ export const pageDocsStyles = [
     gap: clamp(1rem, 4vw, 4rem);
     align-items: center;
     padding: clamp(1.25rem, 3.5vh, 2.5rem) clamp(1.5rem, 5vw, 4.5rem);
-    border-block-end: 1px solid var(--border);
+    border-block-end: 1px solid var(--color-border);
     color: inherit;
     text-decoration: none;
     transition: background 0.15s ease;
   }
 
   .entrance:hover {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 8%, transparent), transparent);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent);
   }
 
   .entrance-index {
@@ -113,12 +109,12 @@ export const pageDocsStyles = [
     font-weight: 800;
     line-height: 1;
     color: transparent;
-    -webkit-text-stroke: 1.5px color-mix(in srgb, var(--violet-5) 55%, transparent);
+    -webkit-text-stroke: 1.5px color-mix(in srgb, var(--color-ring) 55%, transparent);
     transition: -webkit-text-stroke-color 0.15s ease;
   }
 
   .entrance:hover .entrance-index {
-    -webkit-text-stroke-color: var(--violet-8);
+    -webkit-text-stroke-color: var(--color-primary);
   }
 
   .entrance-title {
@@ -128,32 +124,32 @@ export const pageDocsStyles = [
     font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1.05;
-    color: var(--text-primary);
+    color: var(--color-foreground);
     transition: color 0.15s ease;
   }
 
   .entrance:hover .entrance-title {
-    color: var(--violet-8);
+    color: var(--color-primary);
   }
 
   .entrance-copy {
-    margin-block-start: var(--size-2);
-    color: var(--text-secondary);
+    margin-block-start: calc(var(--spacing) * 2);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
+    font-size: var(--text-xs);
     line-height: 1.6;
   }
 
   .entrance-arrow {
     font-family: var(--font-mono);
-    font-size: var(--font-size-5);
-    color: var(--violet-5);
+    font-size: var(--text-5xl);
+    color: var(--color-ring);
     transition: transform 0.15s ease, color 0.15s ease;
   }
 
   .entrance:hover .entrance-arrow {
-    color: var(--violet-8);
-    transform: translateX(var(--size-2));
+    color: var(--color-primary);
+    transform: translateX(calc(var(--spacing) * 2));
   }
 
   @media (max-width: 720px) {

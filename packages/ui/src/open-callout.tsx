@@ -3,8 +3,9 @@
  *
  * Callout/notice box for inline documentation alerts.
  * Supports 4 types: info, warning, danger, tip.
- * Colors use semantic tokens and respond to theme changes; the light-theme
- * warn/danger/tip backgrounds use tuned rgba tints on top of them.
+ * Colors read the shadcn role table directly (C3 #1506) and respond to theme
+ * changes through the roles' dark pairs; each type's wash is a 10% color-mix
+ * of its own border ink.
  *
  * Experimental (owner ruling C1, #1468): no compatibility promise — may
  * change or be removed before 1.0.
@@ -40,28 +41,25 @@ export class OpenCallout extends OpenElement {
     recipe(`
     :host { display: block; }
     .callout {
-      padding: var(--size-3) var(--size-4);
-      margin: var(--size-3) 0;
-      border-left: var(--border-size-2) solid var(--brand);
-      background: var(--brand-subtle);
-      border-radius: 0 var(--radius-2) var(--radius-2) 0;
+      padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+      margin: calc(var(--spacing) * 3) 0;
+      border-left: calc(var(--spacing) * 0.5) solid var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+      border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
     }
-    :host([type='warning']) .callout { border-left-color: var(--warning); background: var(--warning-subtle); }
-    :host([type='danger']) .callout { border-left-color: var(--error); background: var(--error-subtle); }
-    :host([type='tip']) .callout { border-left-color: var(--success); background: var(--success-subtle); }
-    :host([data-theme='light'][type='warning']) .callout { background: rgba(245,158,11,0.06); }
-    :host([data-theme='light'][type='danger']) .callout { background: rgba(239,68,68,0.06); }
-    :host([data-theme='light'][type='tip']) .callout { background: rgba(34,197,94,0.06); }
+    :host([type='warning']) .callout { border-left-color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
+    :host([type='danger']) .callout { border-left-color: var(--color-destructive); background: color-mix(in srgb, var(--color-destructive) 10%, transparent); }
+    :host([type='tip']) .callout { border-left-color: var(--color-success); background: color-mix(in srgb, var(--color-success) 10%, transparent); }
     .callout-header {
-      display: flex; align-items: center; gap: var(--size-1); margin-bottom: var(--size-1);
+      display: flex; align-items: center; gap: calc(var(--spacing) * 1); margin-bottom: calc(var(--spacing) * 1);
     }
     .callout-header[hidden] { display: none; }
-    .callout-icon { font-size: var(--font-size-0); line-height: 1; flex-shrink: 0; }
+    .callout-icon { font-size: var(--text-sm); line-height: 1; flex-shrink: 0; }
     .callout-title {
-      font-size: var(--font-size-0); font-weight: var(--font-weight-6); color: var(--text-primary);
+      font-size: var(--text-sm); font-weight: var(--font-weight-semibold); color: var(--color-foreground);
     }
     .callout-body {
-      font-size: var(--font-size-1); line-height: var(--font-lineheight-4); color: var(--text-secondary);
+      font-size: var(--text-base); line-height: var(--leading-relaxed); color: var(--color-muted-foreground);
     }
     .callout-body ::slotted(p) { margin: 0; }
   `),

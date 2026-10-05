@@ -258,6 +258,8 @@ export const PackageIslandErrorCode = {
   MEDIA_WITHOUT_DELIVERY: 'OE_PACKAGE_ISLAND_MEDIA_WITHOUT_DELIVERY',
   /** The declaration carries a media query but does not use media delivery. */
   DELIVERY_WITHOUT_MEDIA: 'OE_PACKAGE_ISLAND_DELIVERY_WITHOUT_MEDIA',
+  /** A package on the scan list is not installed (its import misses entirely). */
+  PACKAGE_MISSING: 'OE_PACKAGE_ISLAND_PACKAGE_MISSING',
 } as const;
 
 /**
@@ -272,6 +274,29 @@ export const RouteScanErrorCode = {
   EQUIVALENT_FILES: 'OE_ROUTE_SCAN_EQUIVALENT_FILES',
   /** Two route files fold to the same generated identifier (#1029). */
   VAR_NAME_COLLISION: 'OE_ROUTE_SCAN_VAR_NAME_COLLISION',
+} as const;
+
+/**
+ * Stable codes for the Tailwind preset seam (`vite/preset-tailwind.ts`).
+ * Phase `build`: the preset is an opt-in build-layer delivery (alpha9 C2,
+ * #1505) — it compiles the app's declared style sources through
+ * `@tailwindcss/vite` into one linked bundle and injects the DSD/head
+ * `<link>` emission, and every way that can fail carries a code.
+ */
+export const PresetErrorCode = {
+  /** The preset is enabled but `@tailwindcss/vite` is not resolvable. */
+  TAILWIND_UNRESOLVABLE: 'OE_PRESET_TAILWIND_UNRESOLVABLE',
+  /** The preset's bundle compile (an inner Vite build) failed. */
+  BUNDLE_COMPILE_FAILED: 'OE_PRESET_BUNDLE_COMPILE_FAILED',
+  /**
+   * The preset is enabled while a rendered page still fully inlines the
+   * global sheet as an inline `<style>` (the `styleText()` full-inline
+   * delivery). The preset's link-not-inline seam is the only global-sheet
+   * channel while it is active: the build fails closed instead of shipping
+   * both deliveries. Per-component `<style data-oe-static-styles>` emission
+   * is not a full-sheet inline and stays legal.
+   */
+  GLOBAL_SHEET_INLINE_FORBIDDEN: 'OE_PRESET_GLOBAL_SHEET_INLINE_FORBIDDEN',
 } as const;
 
 /**

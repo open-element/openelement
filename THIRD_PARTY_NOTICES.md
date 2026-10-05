@@ -53,11 +53,10 @@ THE SOFTWARE.
 ## Package-level notices
 
 Dependencies redistributed inside a published package carry their notices in
-that package (a tarball cannot reach repository-root files). The full open-props
-MIT text lives in
-[`packages/ui/THIRD_PARTY_NOTICES.md`](./packages/ui/THIRD_PARTY_NOTICES.md)
-and ships inside the `@openelement/ui` tarball; a packed-artifact test keeps
-that true.
+that package (a tarball cannot reach repository-root files). No package
+currently redistributes third-party work inline: `@openelement/ui` retired its
+inline token redistribution in #1504, and its packed-artifact scan fails closed
+if those upstream markers reappear in the tarball.
 
 ## Fonts
 

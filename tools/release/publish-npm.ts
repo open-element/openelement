@@ -358,17 +358,35 @@ export async function packPackage(
         }
       }
       // Declaration integrity proof: every public types target exists and the
-      // relative declaration edges close inside the package root.
+      // relative declaration edges close inside the package root. Verbatim
+      // asset exports (e.g. @openelement/ui's ./theme.css — the C2 @theme
+      // source) carry no types by nature; the proof checks the asset file
+      // exists instead and keeps them out of the declaration graph.
       const packedExports = (pkgJson.exports ?? {}) as Record<string, unknown>;
       const typeRoots: string[] = [];
       let publicDeclarations = 0;
       for (const [subpath, conditions] of Object.entries(packedExports)) {
         const types = (conditions as { types?: unknown } | null)?.types;
         if (typeof types !== 'string' || !types.startsWith('./')) {
-          throw new Error(
-            `[npm] ${pkg.name}: export '${subpath}' has no native types condition (failing closed).` +
-              `\npacked conditions: ${JSON.stringify(conditions)}`,
-          );
+          const defaultTarget = (conditions as { default?: unknown } | null)?.default;
+          const isVerbatimAsset =
+            typeof defaultTarget === 'string' &&
+            defaultTarget.startsWith('./') &&
+            !/\.(?:js|mjs|cjs)$/.test(defaultTarget);
+          if (!isVerbatimAsset) {
+            throw new Error(
+              `[npm] ${pkg.name}: export '${subpath}' has no native types condition (failing closed).` +
+                `\npacked conditions: ${JSON.stringify(conditions)}`,
+            );
+          }
+          try {
+            await stat(`${pkgRoot}/${defaultTarget.slice(2)}`);
+          } catch {
+            throw new Error(
+              `[npm] ${pkg.name}: export '${subpath}' asset file missing at ${defaultTarget} (failing closed).`,
+            );
+          }
+          continue;
         }
         try {
           await stat(`${pkgRoot}/${types.slice(2)}`);

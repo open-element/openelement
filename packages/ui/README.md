@@ -19,7 +19,8 @@ separate application-framework promise.
 
 There is **no Linear compatibility layer**: the `open-*-linear` components and
 the `linear-token-sheet` token sheet are not part of the public surface. Use the
-canonical Open Props components and `@openelement/ui/open-props-tokens` instead.
+canonical components and the `@theme` role table in
+[`src/theme.css`](./src/theme.css) instead.
 
 ## Install
 
@@ -47,10 +48,9 @@ npm install @openelement/ui
 Dependencies flow in one direction:
 
 ```text
-audited Open Props subset
-  -> semantic tokens
-    -> component recipes
-      -> Web Component primitives
+@theme-derived token table (theme.css)
+  -> component recipes (role names, direct)
+    -> Web Component primitives
 ```
 
 Tokens contain shared style values and classes and import no components.
@@ -85,35 +85,38 @@ The reference site wires the same scripts through its Vite `inject` option.
 
 ## Design tokens
 
-`src/open-props-tokens.ts` is **generated — do not edit**. Regenerate from
-the package directory with:
+The token layer is hand-maintained — there is no generator. One authored CSS
+source, no shipped values:
 
-```bash
-pnpm run generate:ui-tokens
-```
+- `src/theme.css` — **the single source of design roles** (P6: the only place
+  in the repository that defines them). shadcn-convention roles
+  (`--color-background`, `--color-primary`, …) seated on the Tailwind v4
+  default scale; roles reference only scale variables, dark pairs follow the
+  shadcn v4 convention with the selector re-pointed at this repo's
+  `[data-theme='dark']` mechanism, and a forced-colors layer re-seats every
+  role on a system color. Since alpha9 C2 the scale layer is the real
+  `@theme` block; role names are the migration contract. Since C3 (#1506) the
+  component recipes read these role names directly — the C1 alias layer
+  (`semantic-tokens.css`) was deleted under its own DELETION CONDITION, and
+  three non-shadcn status roles (`--color-success/-warning/-info`) joined the
+  table with the same forced-colors and dark-pair discipline.
 
-The drift gate for the same task runs as `ui-tokens:check`.
+**The package ships no token values.** The compiled `theme-tokens` twin
+(`themeTokenCss` / `themeTokenSheet`) was deleted in alpha9 C5 — the role
+names, dark pairs and forced-colors tier are the contract; the values come
+from the `@openelement/router` Tailwind preset (ON) or a table the consumer
+writes itself (OFF). See [CUSTOMIZATION.md](./CUSTOMIZATION.md),
+"Value delivery".
 
-Sources:
+The ui suite fails closed on the role contract (dark
+pairs, forced-colors totality), on recipes consuming undeclared variables,
+and on WCAG floors (3:1 focus ring, 4.5:1 status inks on the background and
+their 10% recipe washes). `daisyClassSheet`, modal and step-card are retired
+and must not reappear in exports, manifests, docs or packed artifacts.
 
-- Upstream [open-props](https://open-props.style) `1.7.23` (**MIT**,
-  © Adam Argyle) — only the tokens we carry verbatim: the gray ramp,
-  `--indigo-6`, two border sizes, font weights, and two line-heights, read
-  from the package's per-topic `src/props.*.js` files. The generator fails if
-  upstream renames one of them, so drift surfaces at generation time.
-- `src/semantic-tokens.css` (**ours**, hand-maintained) — everything else:
-  re-tuned scales (violet/green/red/orange, px spacing, radii, type sizes,
-  easings, shadows), semantic roles, both themes, the `:host` fallback, and
-  the CJK font stacks. Each divergence from upstream is commented where it
-  lives; do not "fix" tuned values by copying upstream.
-
-`openPropsTokenSheet` is the only token entry point: its token block
-selects `:root, :host`, so the same sheet serves document-level adoption
-and shadow-root adoption (only the structural fallback is `:host`-only).
-The token gates require `--surface-glass`,
-`--ui-control-bg`, `--focus-ring` and `--motion-standard`.
-`daisyClassSheet`, modal and step-card are retired and must not reappear in
-exports, manifests, docs or packed artifacts.
+The per-component customization surface (`::part` names, consumed variables,
+the alpha8 alias→role rename map) is declared in
+[CUSTOMIZATION.md](./CUSTOMIZATION.md) and pinned by test.
 
 Existing per-component imports remain stable across this layering change.
 
@@ -158,14 +161,10 @@ manifest; the per-component JSDoc is the source of truth for those.
 @openelement/ui/open-callout
 @openelement/ui/open-dropdown
 @openelement/ui/open-tabs
-@openelement/ui/open-props-tokens
-@openelement/ui/open-props-tokens.js   (legacy alias of the previous entry)
+@openelement/ui/theme.css              (the @theme role source; compiled through the router preset)
 @openelement/ui/instance-state         (per-element instance state store; tree-shakeable leaf)
 @openelement/ui/manifest               (generated WC package manifest; node-safe leaf)
 ```
-
-The last entry is a compatibility alias kept for import maps written against the
-`.js` form; new code uses `@openelement/ui/open-props-tokens`.
 
 ## License
 

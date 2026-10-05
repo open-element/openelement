@@ -35,8 +35,8 @@ import { readInstanceState, writeInstanceState } from './instance-state.ts';
  * #708090 is 3.6:1 on its own #f5f2f0 background (under AA), but that pairing
  * never renders — the vendor only paints it through pre[class*=language-] and
  * site fences carry the language class on code, not pre. A host site that
- * pins its code surface to --bg-code/#0d0f12 (pre[class*=language-] override)
- * measures 4.7:1 there.
+ * pins its code surface to the same static zinc-950 the recipes paint
+ * (pre[class*=language-] override) measures 4.7:1 there.
  */
 @element('open-code-block', { root: 'shadow-open' })
 export class OpenCodeBlock extends OpenElement {
@@ -49,76 +49,76 @@ export class OpenCodeBlock extends OpenElement {
 
     pre {
       margin: 0;
-      padding: var(--size-5);
-      /* Clear the copy chip (top var(--size-2) + ~25px tall) so the first line
+      padding: calc(var(--spacing) * 5);
+      /* Clear the copy chip (top calc(var(--spacing) * 2) + ~25px tall) so the first line
          never runs underneath it. */
-      padding-block-start: calc(var(--size-5) + var(--size-4));
-      background: var(--bg-code);
-      border: var(--border-size-1) solid var(--code-border);
-      border-radius: var(--radius-2);
+      padding-block-start: calc(var(--spacing) * 9);
+      background: var(--color-zinc-950);
+      border: calc(var(--spacing) * 0.25) solid var(--color-zinc-700);
+      border-radius: var(--radius-lg);
       overflow-x: auto;
       font-family: var(--font-mono);
-      font-size: var(--font-size-0);
-      line-height: var(--font-lineheight-4);
-      color: var(--code-text);
+      font-size: var(--text-sm);
+      line-height: var(--leading-relaxed);
+      color: var(--color-zinc-200);
       scrollbar-width: thin;
-      scrollbar-color: var(--brand-subtle) transparent;
+      scrollbar-color: color-mix(in srgb, var(--color-primary) 14%, transparent) transparent;
       white-space: pre-wrap;
       word-break: break-word;
     }
 
     ::slotted(pre) {
       margin: 0;
-      padding: var(--size-5);
-      padding-block-start: calc(var(--size-5) + var(--size-4));
-      background: var(--bg-code);
-      border: var(--border-size-1) solid var(--code-border);
-      border-radius: var(--radius-2);
+      padding: calc(var(--spacing) * 5);
+      padding-block-start: calc(var(--spacing) * 9);
+      background: var(--color-zinc-950);
+      border: calc(var(--spacing) * 0.25) solid var(--color-zinc-700);
+      border-radius: var(--radius-lg);
       overflow-x: auto;
       font-family: var(--font-mono);
-      font-size: var(--font-size-0);
-      line-height: var(--font-lineheight-4);
-      color: var(--code-text);
+      font-size: var(--text-sm);
+      line-height: var(--leading-relaxed);
+      color: var(--color-zinc-200);
       scrollbar-width: thin;
-      scrollbar-color: var(--brand-subtle) transparent;
+      scrollbar-color: color-mix(in srgb, var(--color-primary) 14%, transparent) transparent;
     }
 
     .lang-badge {
       position: absolute;
-      top: var(--size-2);
-      left: var(--size-3);
-      font-size: var(--font-size-00);
-      font-weight: var(--font-weight-7);
+      top: calc(var(--spacing) * 2);
+      left: calc(var(--spacing) * 3);
+      font-size: var(--text-xs);
+      font-weight: var(--font-weight-bold);
       text-transform: uppercase;
-      letter-spacing: var(--font-letterspacing-5);
-      color: var(--code-text);
+      letter-spacing: var(--tracking-widest);
+      color: var(--color-zinc-200);
       pointer-events: none;
     }
 
     .copy-btn {
       position: absolute;
-      top: var(--size-2);
-      right: var(--size-2);
-      background: var(--brand-subtle);
-      color: var(--code-text);
-      padding: var(--size-1) var(--size-3);
-      font-size: var(--font-size-00);
+      top: calc(var(--spacing) * 2);
+      right: calc(var(--spacing) * 2);
+      background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+      color: var(--color-zinc-200);
+      padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+      font-size: var(--text-xs);
       font-family: var(--font-sans);
-      font-weight: var(--font-weight-6);
+      font-weight: var(--font-weight-semibold);
       border: 0.5px solid transparent;
       cursor: pointer;
-      border-radius: var(--radius-1);
-      transition: all var(--ease-2) var(--duration-2);
+      border-radius: var(--radius-md);
+      transition: all var(--ease-in-out) var(--default-transition-duration);
       z-index: 1;
-      letter-spacing: var(--font-letterspacing-4);
+      letter-spacing: var(--tracking-wider);
     }
 
-    /* No ink override on hover: --on-brand is the ink for a brand *fill*, and
-       this chip's hover surface is a translucent brand tint instead, so the
-       chip keeps the code surface's --code-text ink. */
+    /* No ink override on hover: the primary-foreground ink belongs to a brand
+       *fill*, and this chip's hover surface is a translucent brand tint
+       instead, so the chip keeps the code surface's zinc-200 ink. */
     .copy-btn:hover {
-      background: var(--brand-glow);
-      border-color: var(--brand);
+      background: color-mix(in srgb, var(--color-primary) 23%, transparent);
+      border-color: var(--color-primary);
     }
 
     :host(:state(copied)) .copy-btn {
@@ -128,11 +128,12 @@ export class OpenCodeBlock extends OpenElement {
     }
 
     :host(:state(failed)) .copy-btn {
-      color: var(--error);
-      border-color: var(--error);
+      color: var(--color-destructive);
+      border-color: var(--color-destructive);
     }
 
-    /* Comment gray: #7d8590 (5.2:1 on --bg-code) — #6a737d was 4.0:1. */
+    /* Comment gray: #7d8590 (5.2:1 on the static zinc-950 code surface) —
+       #6a737d was 4.0:1. */
     .token.cdata, .token.comment, .token.doctype, .token.prolog { color: #7d8590; }
     .token.punctuation { color: #8b949e; }
     .token.namespace { opacity: 0.7; }

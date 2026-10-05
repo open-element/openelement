@@ -109,10 +109,13 @@ test('embedded CLI version matches its package manifest', () => {
 test('Alpha README never emits an untagged create install command', () => {
   const readme = readFileSync(join(packageDir, 'README.md'), 'utf8');
   // The documented bootstrap is a plain Node runner invoking the create
-  // package (npm exec / npx / pnpm dlx — owner ruling 2026-10-03, the
-  // `deno run` bootstrap is retired with the Deno consumer surface).
+  // package (npm create via the @scope alias / npm exec / npx / pnpm dlx —
+  // owner rulings 2026-10-03 and 2026-10-05; the `deno run` bootstrap is
+  // retired with the Deno consumer surface).
   const installs = [
-    ...readme.matchAll(/(?:npm exec|npx|pnpm dlx)[^\n`]*@openelement\/create(@([^\s`]+))?/g),
+    ...readme.matchAll(
+      /(?:(?:npm exec|npx|pnpm dlx)[^\n`]*@openelement\/create|npm create @openelement)(@([^\s`]+))?/g,
+    ),
   ];
   expect(installs.length > 0, 'README must document at least one install command').toBeTruthy();
   for (const [command, tag] of installs) {
@@ -120,7 +123,7 @@ test('Alpha README never emits an untagged create install command', () => {
     expect(tag, `install command must carry an explicit tag or version: ${command}`).toBeTruthy();
   }
   expect(
-    readme.includes('npm exec @openelement/create@alpha -- my-app'),
+    readme.includes('npm create @openelement@alpha my-app'),
     'the primary Alpha install path must use the canonical @alpha command',
   ).toBeTruthy();
   // The exact-version pin is bound to registry truth (release-state.json), not
@@ -133,8 +136,15 @@ test('Alpha README never emits an untagged create install command', () => {
     (p: { name: string }) => p.name === '@openelement/create',
   ).registry;
   const isPublished = Object.values(createRegistry).includes(CREATE_VERSION);
+  // The exact version may be pinned in either documented spelling: the full
+  // package specifier (`@openelement/create@<v>`, the npx/pnpm alternates) or
+  // the canonical alias form (`npm create @openelement@<v>`, which npm resolves
+  // to the same package at that version).
+  const documentsExactVersion =
+    readme.includes(`@openelement/create@${CREATE_VERSION}`) ||
+    readme.includes(`@openelement@${CREATE_VERSION}`);
   expect(
-    readme.includes(`@openelement/create@${CREATE_VERSION}`) === isPublished,
+    documentsExactVersion === isPublished,
     isPublished
       ? `README must document the exact Alpha version @${CREATE_VERSION}`
       : `README must not pin the unpublished version @${CREATE_VERSION}`,

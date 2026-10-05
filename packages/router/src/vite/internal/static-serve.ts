@@ -182,8 +182,11 @@ export interface FetchHandlerOptions {
 }
 
 /**
- * Standard fetch handler for `cli/start` and the generated server entry.
- * An escaping dispatch failure is contained as a 500 response.
+ * Standard fetch handler consumed by the `cli/start` node:http server
+ * (`internal/node-http.ts`) — its only product consumer. The generated
+ * dist/server entry is not a consumer here: it is the request-time module
+ * `dispatchRequest` invokes through `serverMod`. An escaping dispatch
+ * failure is contained as a 500 response.
  */
 export function createFetchHandler(
   options: FetchHandlerOptions,

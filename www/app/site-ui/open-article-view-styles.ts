@@ -6,18 +6,18 @@ const articleExtras = `
   .is-hidden { display: none; }
   .nf-code {
     font-family: var(--font-mono);
-    font-size: var(--font-size-6);
-    color: var(--text-muted);
+    font-size: var(--text-6xl);
+    color: var(--color-muted-foreground);
   }
   .article-content blockquote {
-    margin: var(--size-4) 0;
-    padding: var(--size-1) var(--size-4);
+    margin: calc(var(--spacing) * 4) 0;
+    padding: calc(var(--spacing) * 1) calc(var(--spacing) * 4);
     border: 0;
-    border-inline-start: var(--border-size-2) solid var(--violet-8);
-    color: var(--text-muted);
+    border-inline-start: calc(var(--spacing) * 0.5) solid var(--color-primary);
+    color: var(--color-muted-foreground);
     font-family: var(--font-sans);
     font-style: normal;
-    font-size: var(--font-size-0);
+    font-size: var(--text-sm);
     line-height: 1.7;
     text-align: start;
   }

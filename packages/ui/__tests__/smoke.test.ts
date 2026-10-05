@@ -63,10 +63,3 @@ test('open-ui - every component module exports its class', async () => {
     expect(mod[exportName], `${name} should export ${exportName}`).toEqual(expect.anything());
   }
 });
-
-test('open-ui - open-props-tokens exports openPropsTokenSheet', async () => {
-  const mod = await import('../src/open-props-tokens.ts');
-  expect(mod.openPropsTokenSheet, 'openPropsTokenSheet should be exported').toEqual(
-    expect.anything(),
-  );
-});

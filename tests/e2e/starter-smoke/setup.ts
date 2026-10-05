@@ -83,7 +83,10 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
   const stdout = (await runStep('node', [createCli], { cwd: workDir, allowFailure: true })).stdout;
   const printed = stdout
     .split('\n')
-    .find((line) => line.includes('@openelement/create@'))
+    // The usage line carries the package's identity in either documented
+    // shape: the canonical `npm create @openelement@<tag>` alias or a
+    // runner spelling of `@openelement/create@<tag>`.
+    .find((line) => line.includes('@openelement@'))
     ?.replace(/^Usage \(Alpha\): /, '')
     .trim();
   if (printed !== expected) {

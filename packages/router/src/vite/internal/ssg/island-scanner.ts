@@ -543,8 +543,31 @@ export async function scanPackageManifests(
       mod = (await import(/* @vite-ignore */ `${pkg}/manifest`)) as Record<string, unknown>;
     } catch (subpathError) {
       const code = (subpathError as NodeJS.ErrnoException)?.code ?? '';
-      if (code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED' && code !== 'ERR_MODULE_NOT_FOUND') {
+      const message = (subpathError as Error)?.message ?? '';
+      // A ./manifest miss has two environment shapes: native node raises
+      // ERR_PACKAGE_PATH_NOT_EXPORTED (or ERR_MODULE_NOT_FOUND for a package
+      // without an exports map), while a module-runner host re-wraps the
+      // same failure with no errno code and a `"./manifest" is not exported`
+      // message. Both mean "no ./manifest subpath export" — the root-entry
+      // fallback below is the answer — anything else fails loud.
+      const isMissingSubpathExport =
+        code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' ||
+        code === 'ERR_MODULE_NOT_FOUND' ||
+        message.includes('"./manifest" is not exported');
+      if (!isMissingSubpathExport) {
         throw subpathError;
+      }
+      // ERR_MODULE_NOT_FOUND is ambiguous between "the package is not
+      // installed" and "the package is installed but carries no ./manifest
+      // file (no exports map)". The message separates them (see
+      // isMissingPackageImportError): a missing package fails here, before
+      // the root-entry fallback can run and bury the real cause under a
+      // second, unrelated-looking import failure.
+      if (isMissingPackageImportError(subpathError, pkg)) {
+        throw buildError(
+          PackageIslandErrorCode.PACKAGE_MISSING,
+          `Package "${pkg}" is not installed: install it or remove it from the package-island list`,
+        );
       }
       try {
         mod = (await import(/* @vite-ignore */ pkg)) as Record<string, unknown>;
@@ -561,6 +584,7 @@ export async function scanPackageManifests(
             code: 'PACKAGE_SCAN_ERROR',
             statusCode: 500,
             recoverable: false,
+            cause: e instanceof Error ? e : undefined,
           },
         );
       }
@@ -599,5 +623,22 @@ function isBrowserOnlyPackageImportError(error: unknown): boolean {
   const message = formatError(error);
   return /\b(window|document|HTMLElement|customElements|navigator)\b.*\bis not defined\b/i.test(
     message,
+  );
+}
+
+/**
+ * The import missed the package itself, not a file inside it: both reporter
+ * shapes quote exactly the specifier this scan asked for — native node the
+ * bare package ("Cannot find package '<pkg>'"), a module-runner host the
+ * full subpath ("Cannot find package '<pkg>/manifest'"). A missing file
+ * inside an installed package quotes a resolved path instead, where neither
+ * quoted shape appears, so an installed package cannot false-positive.
+ */
+function isMissingPackageImportError(error: unknown, pkg: string): boolean {
+  if ((error as NodeJS.ErrnoException)?.code !== 'ERR_MODULE_NOT_FOUND') return false;
+  const message = (error as Error)?.message ?? '';
+  return (
+    message.includes(`Cannot find package '${pkg}'`) ||
+    message.includes(`Cannot find package '${pkg}/manifest'`)
   );
 }

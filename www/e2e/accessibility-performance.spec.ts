@@ -36,24 +36,39 @@ function isNonCriticalExternalUrl(value: string): boolean {
  * WCAG 2.x contrast ratio of an element's computed color against its computed
  * background. Self-contained: page.evaluate() serializes this function into
  * the browser, so it cannot close over spec scope.
+ *
+ * The sRGB read goes through a 1×1 canvas: computed colors are returned in
+ * whatever modern function the engine normalized them to (oklch since the
+ * @theme token table, C3), and only the canvas path resolves every supported
+ * function into the sRGB channels WCAG contrast is defined over. A fully
+ * transparent background composites over the page paper (white).
  */
 const computedContrast = (element: Element): number => {
-  const luminance = (value: string): number => {
-    const rgb = value
-      .match(/[\d.]+/g)
-      ?.slice(0, 3)
-      .map(Number) ?? [0, 0, 0];
-    const scale = value.startsWith('color(srgb ') ? 1 : 255;
+  const srgb = (value: string): [number, number, number] | null => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext('2d', { colorSpace: 'srgb' });
+    if (!context) return null;
+    context.fillStyle = value;
+    context.fillRect(0, 0, 1, 1);
+    const { data } = context.getImageData(0, 0, 1, 1);
+    if (data[3] === 0) return null;
+    return [data[0] / 255, data[1] / 255, data[2] / 255];
+  };
+  const luminance = (rgb: [number, number, number]): number => {
     const linear = rgb.map((channel) => {
-      const c = channel / scale;
+      const c = channel;
       return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
     });
     return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
   };
   const style = getComputedStyle(element);
-  const fg = luminance(style.color);
-  const bg = luminance(style.backgroundColor);
-  return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+  const fg = srgb(style.color);
+  const bg = srgb(style.backgroundColor);
+  const fgLuminance = fg ? luminance(fg) : 0;
+  const bgLuminance = bg ? luminance(bg) : luminance([1, 1, 1]);
+  return (Math.max(fgLuminance, bgLuminance) + 0.05) / (Math.min(fgLuminance, bgLuminance) + 0.05);
 };
 
 test.describe('Accessibility', () => {

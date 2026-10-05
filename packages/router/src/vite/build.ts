@@ -19,6 +19,7 @@ import type { OpenElementBuildContext } from './build-context.ts';
 import { join } from 'pathe';
 import { createLogger } from '@openelement/element';
 import { cleanSsrArtifacts, postProcessClientIslandBuild } from './internal/ssg/index.ts';
+import { applyTailwindPreset, resolveTailwindPresetOptions } from './preset-tailwind.ts';
 import {
   collectBuildArtifacts,
   createProductionBuildPlan,
@@ -187,6 +188,24 @@ export function buildPlugin(
         await cleanSsrArtifacts(ctx);
       } catch (error) {
         log.warn(`Failed to clean SSR artifacts: ${error}`);
+      }
+
+      // -- Tailwind preset (alpha9 C2 #1505, opt-in) --
+      // Runs last so the bundle compiles and the link emission sees the final
+      // rendered pages. OFF (the default) skips this whole block: the build
+      // stays byte-identical to a preset-less pipeline.
+      const tailwindOptions = resolveTailwindPresetOptions(options.tailwind);
+      if (tailwindOptions) {
+        try {
+          const presetOutDir = join(
+            config.root ?? process.cwd(),
+            config.build.outDir || DEFAULT_OUT_DIR,
+          );
+          await applyTailwindPreset(tailwindOptions, config, presetOutDir);
+        } catch (error) {
+          log.error(`Tailwind preset FAILED: ${error}`);
+          throw error;
+        }
       }
 
       log.info('Build complete.');

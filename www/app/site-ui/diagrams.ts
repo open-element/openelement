@@ -5,7 +5,7 @@
  * Voice contract — every diagram obeys it, so the set reads as one family:
  * - inline SVG, strokes only (`fill="none" stroke="currentColor"`), round
  *   caps; the figure's CSS `color` sets the ink (adapts to light/dark).
- * - exactly ONE accent: a `<g style="color:var(--brand)">` group. No other
+ * - exactly ONE accent: a `<g style="color:var(--color-primary)">` group. No other
  *   color may appear (currentColor inheritance keeps the CSS at zero).
  * - NO text: no `<text>`, no letters-as-paths. Diagrams stay locale-free —
  *   the same markup ships in en and zh.
@@ -20,7 +20,7 @@
 
 const open =
   '<svg viewBox="0 0 144 88" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
-const accentOpen = '<g style="color:var(--brand)">';
+const accentOpen = '<g style="color:var(--color-primary)">';
 const close = '</g></svg>';
 
 const dot = (cx: number, cy: number): string =>

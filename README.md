@@ -12,7 +12,7 @@ The source tree is `1.0.0-alpha.8`, a new public baseline for Element and Router
 Requires **Node.js 24.2+** and pnpm. Create, install, run, and build:
 
 ```bash
-npm exec @openelement/create@alpha -- my-app
+npm create @openelement@alpha my-app
 cd my-app
 pnpm install
 pnpm dev

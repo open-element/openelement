@@ -16,6 +16,14 @@
 /** The npm specifier the generator is published under. */
 export const CREATE_PACKAGE_SPECIFIER = '@openelement/create';
 
+/**
+ * The scope `npm create` resolves to {@linkcode CREATE_PACKAGE_SPECIFIER}:
+ * npm's initializer alias maps a bare `@scope` (optionally `@scope@<tag>`) to
+ * `@scope/create` at the same tag, so the canonical spelling never repeats the
+ * `/create` suffix (owner-verified against npm's init alias rules).
+ */
+export const CREATE_NPM_CREATE_SCOPE = '@openelement';
+
 /** The dist-tag the documented install resolves; the exact version is registry truth. */
 export const CREATE_INSTALL_TAG = 'alpha';
 
@@ -26,7 +34,10 @@ export const CREATE_PROJECT_PLACEHOLDER = '<project-name>';
  * The documented install command shapes, all verified against the published
  * two-bin artifact (bins `openelement-create` and `create-openelement`, both
  * `src/cli.js`; npm 11 / pnpm 12):
- *   - canonical: `npm exec <pkg>@<tag> -- <name>`
+ *   - canonical: `npm create @openelement@<tag> <name>` — npm's `@scope`
+ *     initializer alias resolves it to `@openelement/create@<tag>` (#1507
+ *     revision, 2026-10-05; the former canonical `npm exec <pkg>@<tag> -- <name>`
+ *     remains a verified spelling through the same artifact)
  *   - short form: `npx <pkg>@<tag> <name>`
  *   - pnpm: `pnpm dlx --package=<pkg>@<tag> openelement-create <name>` — the
  *     explicit `--package` plus bin is required because the packed package
@@ -42,5 +53,5 @@ export function createInstallCommand(
   options: { tag?: string } = {},
 ): string {
   const tag = options.tag ?? CREATE_INSTALL_TAG;
-  return `npm exec ${CREATE_PACKAGE_SPECIFIER}@${tag} -- ${projectName}`;
+  return `npm create ${CREATE_NPM_CREATE_SCOPE}@${tag} ${projectName}`;
 }

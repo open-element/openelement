@@ -64,14 +64,14 @@ export class OpenInput extends OpenElement {
     .input-wrapper {
       display: flex;
       flex-direction: column;
-      gap: var(--size-2);
+      gap: calc(var(--spacing) * 2);
     }
 
     label {
-      font-size: var(--font-size-0);
-      font-weight: var(--font-weight-5);
-      color: var(--text-secondary);
-      letter-spacing: var(--font-letterspacing-2);
+      font-size: var(--text-sm);
+      font-weight: var(--font-weight-medium);
+      color: var(--color-muted-foreground);
+      letter-spacing: var(--tracking-normal);
     }
 
     label[hidden] {
@@ -80,53 +80,53 @@ export class OpenInput extends OpenElement {
 
     .input {
       width: 100%;
-      padding: var(--size-2) var(--size-3);
+      padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
       font-family: var(--font-sans);
-      font-size: var(--font-size-1);
-      color: var(--ui-control-text);
-      background: var(--ui-control-bg);
-      border: var(--border-size-1) solid var(--ui-control-border);
-      border-radius: var(--ui-control-radius);
+      font-size: var(--text-base);
+      color: var(--color-foreground);
+      background: color-mix(in srgb, var(--color-popover) 78%, transparent);
+      border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
+      border-radius: var(--radius-md);
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
       outline: none;
     }
 
     .input::placeholder {
-      color: var(--text-muted);
+      color: var(--color-muted-foreground);
     }
 
     .input:hover {
-      border-color: var(--ui-control-border-hover);
+      border-color: color-mix(in srgb, var(--color-violet-400) 74%, var(--color-border));
     }
 
     .input:focus {
-      border-color: var(--brand, var(--indigo-6));
-      box-shadow: 0 0 0 1px var(--brand, var(--indigo-6));
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 1px var(--color-primary);
     }
 
     .input:disabled {
       opacity: 0.5;
       cursor: not-allowed;
-      background: var(--bg-muted);
+      background: var(--color-muted);
     }
 
     .input--error {
-      border-color: var(--error);
+      border-color: var(--color-destructive);
     }
 
     :host(:state(disabled)) .input {
       opacity: 0.5;
       cursor: not-allowed;
-      background: var(--bg-muted);
+      background: var(--color-muted);
     }
 
     :host(:state(invalid)) .input {
-      border-color: var(--error);
+      border-color: var(--color-destructive);
     }
 
     .error-message {
-      font-size: var(--font-size-00);
-      color: var(--error);
+      font-size: var(--text-xs);
+      color: var(--color-destructive);
     }
 
     .error-message[hidden] {

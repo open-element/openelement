@@ -11,5 +11,5 @@
     "types": ["node"]
   },
   "include": ["repo/**/*.ts", "lib/**/*.ts", "release/**/*.ts"],
-  "exclude": ["**/*.test.ts"]
+  "exclude": ["**/node_modules/**"]
 }

@@ -93,5 +93,18 @@ export type { HeadExtrasResult } from './head-injection.ts';
 export { mdxPlugin } from './plugin-mdx.ts';
 export type { OpenMdxPluginOptions } from './plugin-mdx.ts';
 
+// Tailwind preset (alpha9 C2 #1505): opt-in build-layer seams
+export {
+  TAILWIND_BUNDLE_ASSET,
+  TAILWIND_LAYER_ORDER,
+  TAILWIND_SCOPE_ASSET,
+  applyTailwindPreset,
+  renderTailwindPresetEntry,
+  renderTailwindScopeFace,
+  resolveTailwindPresetOptions,
+  scopePresetComponentCss,
+} from './preset-tailwind.ts';
+export type { TailwindBundleResult, TailwindPresetOptions } from './preset-tailwind.ts';
+
 // Default export
 export { openPipeline as default };

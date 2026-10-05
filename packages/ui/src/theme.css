@@ -1,0 +1,205 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   The real @theme role source — shadcn semantic roles on the Tailwind
+   default scale (#1504 draft, #1505 C2 handoff executed).
+
+   C2 handoff (executed): with Tailwind 4.x installed (4.3.3, @tailwindcss/
+   vite — the v3-lts line is forbidden), this file's hand-carried scale
+   layer is replaced by the real @theme mechanism: the Tailwind build's own
+   theme layer provides every scale variable (--spacing, the color ramps,
+   the type/motion scales) from the INSTALLED tailwindcss theme.css, and the
+   role declarations below moved into the @theme block verbatim. Role names
+   are the migration contract, not this file's selector shape.
+
+   Version note (4.3.3 vs the v4.1.16 text the retired hand-carried scale
+   layer was evaluated against): the installed 4.3.3 defaults prevail per
+   the C2 handoff. Differences touching this package's vocabulary:
+   - --color-zinc-50: oklch(98.5% 0 0) → oklch(98.5% 0 none) (achromatic
+     ramps spell the hue component `none`; visually identical at chroma 0).
+   - --font-sans: the default system stack grew (-apple-system,
+     BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans',
+     Arial now precede sans-serif).
+   No carried ramp step other than zinc-50 changed value between the two
+   versions. With the alpha9 C5 twin removal this file has no compiled
+   shadow form: the installed Tailwind defaults are the only scale
+   evaluation, reached exclusively through the preset's build.
+
+   Rules the roles obey (umbrella rulings, do not relitigate):
+
+   - Role values are expressed with Tailwind default theme variables
+     (var(--color-<ramp>-<step>)); no role carries a color literal.
+   - Dark pairs follow the shadcn v4 convention; the '.dark' selector is
+     re-pointed at this repo's theme mechanism
+     (:root[data-theme='dark'], :host([data-theme='dark'])) — the preset's
+     Tailwind build compiles no @custom-variant here yet.
+   - One deliberate divergence from the shadcn default palette: light
+     --color-destructive sits on red-700, not red-600 — red-600 clears 4.5:1
+     on the background but drops to ~3.8:1 on the 10% badge wash of itself
+     that open-badge paints; red-700 clears both (measured in the ui suite).
+   - Three non-shadcn status roles (--color-success/-warning/-info) joined
+     the table in C3 (#1506): the components' status tones need theme-aware
+     inks and the alias layer that used to carry them is deleted. Their light
+     steps are the AA-tuned ones the alias layer measured (same floor rule as
+     destructive above); forced-colors re-seats them on CanvasText like
+     destructive — high-contrast palettes own hue, so status is carried by
+     the label and the border, not by color.
+
+   Consumption: the @openelement/router tailwind preset compiles this file
+   into the bundle's theme layer (`tailwind: { theme: [...] }`). The ui
+   package emits no values itself (the theme-tokens twin is deleted): a
+   consumer without the preset writes its own table using these role names
+   — the OFF contract in CUSTOMIZATION.md ("Value delivery").
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── shadcn semantic roles (light), over the TW4 default scale.
+     Violet-anchored roles (the brand reads violet); neutral surfaces stay
+     zinc so the page base keeps its near-neutral paper feel. ── */
+
+  --color-background: var(--color-white);
+  --color-foreground: var(--color-zinc-950);
+
+  --color-card: var(--color-white);
+  --color-card-foreground: var(--color-zinc-950);
+
+  --color-popover: var(--color-white);
+  --color-popover-foreground: var(--color-zinc-950);
+
+  --color-primary: var(--color-violet-700);
+  --color-primary-foreground: var(--color-violet-50);
+
+  --color-secondary: var(--color-violet-100);
+  --color-secondary-foreground: var(--color-violet-900);
+
+  --color-muted: var(--color-zinc-100);
+  --color-muted-foreground: var(--color-zinc-600);
+
+  --color-accent: var(--color-violet-100);
+  --color-accent-foreground: var(--color-violet-900);
+
+  --color-destructive: var(--color-red-700);
+  --color-destructive-foreground: var(--color-white);
+
+  /* Status inks (non-shadcn addition — see the header note). */
+  --color-success: var(--color-green-800);
+  --color-warning: var(--color-amber-800);
+  --color-info: var(--color-blue-700);
+
+  --color-border: var(--color-violet-200);
+  --color-input: var(--color-violet-200);
+  --color-ring: var(--color-violet-500);
+
+  --color-chart-1: var(--color-violet-500);
+  --color-chart-2: var(--color-sky-500);
+  --color-chart-3: var(--color-emerald-500);
+  --color-chart-4: var(--color-amber-500);
+  --color-chart-5: var(--color-rose-500);
+}
+
+/* Dark pairs (shadcn v4 convention, selector re-pointed — see header). */
+:root[data-theme='dark'],
+:host([data-theme='dark']) {
+  --color-background: var(--color-zinc-950);
+  --color-foreground: var(--color-zinc-50);
+
+  --color-card: var(--color-zinc-900);
+  --color-card-foreground: var(--color-zinc-50);
+
+  --color-popover: var(--color-zinc-900);
+  --color-popover-foreground: var(--color-zinc-50);
+
+  --color-primary: var(--color-violet-400);
+  --color-primary-foreground: var(--color-violet-950);
+
+  --color-secondary: var(--color-zinc-800);
+  --color-secondary-foreground: var(--color-zinc-100);
+
+  --color-muted: var(--color-zinc-800);
+  --color-muted-foreground: var(--color-zinc-400);
+
+  --color-accent: var(--color-zinc-800);
+  --color-accent-foreground: var(--color-zinc-100);
+
+  --color-destructive: var(--color-red-400);
+  --color-destructive-foreground: var(--color-red-950);
+
+  --color-success: var(--color-green-400);
+  --color-warning: var(--color-amber-400);
+  --color-info: var(--color-blue-400);
+
+  --color-border: var(--color-zinc-800);
+  --color-input: var(--color-zinc-800);
+  --color-ring: var(--color-violet-400);
+
+  --color-chart-1: var(--color-violet-400);
+  --color-chart-2: var(--color-sky-400);
+  --color-chart-3: var(--color-emerald-400);
+  --color-chart-4: var(--color-amber-400);
+  --color-chart-5: var(--color-rose-400);
+}
+
+/* Forced-colors layer: every role re-seats on a system color. The mapping is
+   theme-independent (the UA owns the palette in forced-colors mode); the
+   duplicate dark pair exists so both selectors stay total if a UA applies
+   author dark resolution before forcing. Values are system keywords — no
+   author color survives the forcing. */
+@media (forced-colors: active) {
+  :root {
+    --color-background: Canvas;
+    --color-foreground: CanvasText;
+    --color-card: Canvas;
+    --color-card-foreground: CanvasText;
+    --color-popover: Canvas;
+    --color-popover-foreground: CanvasText;
+    --color-primary: ButtonText;
+    --color-primary-foreground: Canvas;
+    --color-secondary: ButtonFace;
+    --color-secondary-foreground: ButtonText;
+    --color-muted: Canvas;
+    --color-muted-foreground: GrayText;
+    --color-accent: ButtonFace;
+    --color-accent-foreground: ButtonText;
+    --color-destructive: CanvasText;
+    --color-destructive-foreground: Canvas;
+    --color-success: CanvasText;
+    --color-warning: CanvasText;
+    --color-info: CanvasText;
+    --color-border: CanvasText;
+    --color-input: CanvasText;
+    --color-ring: Highlight;
+    --color-chart-1: LinkText;
+    --color-chart-2: Mark;
+    --color-chart-3: GrayText;
+    --color-chart-4: Highlight;
+    --color-chart-5: CanvasText;
+  }
+  :root[data-theme='dark'],
+  :host([data-theme='dark']) {
+    --color-background: Canvas;
+    --color-foreground: CanvasText;
+    --color-card: Canvas;
+    --color-card-foreground: CanvasText;
+    --color-popover: Canvas;
+    --color-popover-foreground: CanvasText;
+    --color-primary: ButtonText;
+    --color-primary-foreground: Canvas;
+    --color-secondary: ButtonFace;
+    --color-secondary-foreground: ButtonText;
+    --color-muted: Canvas;
+    --color-muted-foreground: GrayText;
+    --color-accent: ButtonFace;
+    --color-accent-foreground: ButtonText;
+    --color-destructive: CanvasText;
+    --color-destructive-foreground: Canvas;
+    --color-success: CanvasText;
+    --color-warning: CanvasText;
+    --color-info: CanvasText;
+    --color-border: CanvasText;
+    --color-input: CanvasText;
+    --color-ring: Highlight;
+    --color-chart-1: LinkText;
+    --color-chart-2: Mark;
+    --color-chart-3: GrayText;
+    --color-chart-4: Highlight;
+    --color-chart-5: CanvasText;
+  }
+}

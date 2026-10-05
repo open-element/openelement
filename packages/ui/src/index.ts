@@ -9,7 +9,7 @@
  * - open-card: Card container with optional header/footer
  * - open-input: Input field with label and error states
  * - open-code-block: Code block with copy button
- * - open-badge: Open Props status badge
+ * - open-badge: semantic status badge
  * - open-theme-toggle: Theme toggle Island (Dark/Light)
  * - open-dialog: Dialog component using native <dialog>
  * - open-callout: Callout/notice box (info/warning/danger/tip)
@@ -28,9 +28,6 @@
  *
  * @module @openelement/ui
  */
-
-// Design tokens (CSSStyleSheet, zero Lit dependency)
-export { openPropsTokenSheet } from './open-props-tokens.ts';
 
 // Per-instance mutable state for compiled classes (host-scoped, garbage-
 // collected with the host; a side-effect-free module — import the

@@ -69,6 +69,36 @@ test('vpPackEntries rejects non-src targets and missing root entry', () => {
   );
 });
 
+test('asset export targets ship verbatim: no compile entry, default-only export shape', () => {
+  const ui = pkg('@openelement/ui', {
+    '.': './src/index.ts',
+    './instance-state': './src/instance-state.ts',
+    './theme.css': './src/theme.css',
+  });
+  // The CSS target is not a compile entry — it ships through the staged-tree
+  // copy (assembleVpPackageTree), like every publish-scoped non-module file.
+  expect(vpPackEntries(ui)).toEqual(['src/index.ts', 'src/instance-state.ts']);
+  const manifest = synthesizedPackedManifest(ui) as {
+    exports: Record<string, Record<string, string>>;
+  };
+  // Verbatim asset: no types, no module shapes — one default condition.
+  expect(manifest.exports['./theme.css']).toEqual({ default: './src/theme.css' });
+  expect(manifest.exports['./instance-state']).toEqual({
+    types: './src/instance-state.d.ts',
+    import: './src/instance-state.js',
+    default: './src/instance-state.js',
+  });
+  // Assets must live under src/ — anything else fails closed.
+  assertThrowsIncludes(
+    () =>
+      synthesizedPackedManifest(
+        pkg('@openelement/ui', { '.': './src/index.ts', './x.css': './assets/x.css' }),
+      ),
+    Error,
+    'must live under src/',
+  );
+});
+
 test('vpPackConfigFile pins the verified recipe', () => {
   const file = vpPackConfigFile(['src/index.ts']);
   expect(file).toContain('dts: true');
@@ -83,7 +113,7 @@ test('synthesizedPackedManifest preserves the published exports shape', () => {
   const manifest = synthesizedPackedManifest(
     pkg('@openelement/element', {
       '.': './src/index.ts',
-      './open-props-tokens.js': './src/open-props-tokens.ts',
+      './tokens.js': './src/tokens.ts',
     }),
   ) as {
     name: string;
@@ -103,10 +133,10 @@ test('synthesizedPackedManifest preserves the published exports shape', () => {
     import: './src/index.js',
     default: './src/index.js',
   });
-  expect(manifest.exports['./open-props-tokens.js']).toEqual({
-    types: './src/open-props-tokens.d.ts',
-    import: './src/open-props-tokens.js',
-    default: './src/open-props-tokens.js',
+  expect(manifest.exports['./tokens.js']).toEqual({
+    types: './src/tokens.d.ts',
+    import: './src/tokens.js',
+    default: './src/tokens.js',
   });
 });
 
@@ -214,8 +244,8 @@ test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on un
     ).toEqual(new Set(['package.json', 'src', 'README.md']));
     expect(statSync(join(out, 'src', 'index.js')).isFile()).toBeTruthy();
     expect(statSync(join(out, 'src', 'index.d.ts')).isFile()).toBeTruthy();
-    expect(statSync(join(out, 'src', 'internal', 'helper.js')).isFile).toBeTruthy();
-    expect(statSync(join(out, 'src', 'tokens.css')).isFile).toBeTruthy();
+    expect(statSync(join(out, 'src', 'internal', 'helper.js')).isFile()).toBeTruthy();
+    expect(statSync(join(out, 'src', 'tokens.css')).isFile()).toBeTruthy();
     // The synthesized vite.config.ts never ships.
     let leaked = false;
     try {
@@ -281,7 +311,9 @@ test('prepareVpStagingFiles stages manifests and config without network', async 
     try {
       expect(staged.packDir).toEqual(join(staged.stagingRoot, 'router'));
       // Root manifest unions member deps and pins the toolchain.
-      const rootManifest = JSON.parse(readFileSync(join(staged.stagingRoot, 'package.json'))) as {
+      const rootManifest = JSON.parse(
+        readFileSync(join(staged.stagingRoot, 'package.json'), 'utf8'),
+      ) as {
         dependencies: Record<string, string>;
         devDependencies: Record<string, string>;
       };
@@ -289,11 +321,11 @@ test('prepareVpStagingFiles stages manifests and config without network', async 
       expect(rootManifest.devDependencies['vite-plus']).toEqual('1.0.0');
       // Each member carries a staging manifest with its self-name.
       const memberManifest = JSON.parse(
-        readFileSync(join(staged.stagingRoot, 'element', 'package.json')),
+        readFileSync(join(staged.stagingRoot, 'element', 'package.json'), 'utf8'),
       ) as { dependencies: Record<string, string> };
       expect(memberManifest.dependencies['@openelement/element']).toEqual('1.0.0-test');
       // Pack config lands in the pack dir.
-      expect(statSync(join(staged.packDir, 'vite.config.ts')).isFile).toBeTruthy();
+      expect(statSync(join(staged.packDir, 'vite.config.ts')).isFile()).toBeTruthy();
       // The member copy must not drag package.json along.
       expect(readFileSync(join(staged.stagingRoot, 'element', 'src', 'index.ts'), 'utf8')).toEqual(
         'export {};\n',
@@ -322,7 +354,7 @@ const ROUTER_PACKAGE_DIR = fileURLToPath(new URL('../../packages/router', import
 /** The file exists and is not a directory. */
 function isFile(path: string): boolean {
   try {
-    return statSync(path).isFile;
+    return statSync(path).isFile();
   } catch {
     return false;
   }

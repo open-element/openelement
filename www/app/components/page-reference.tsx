@@ -245,7 +245,7 @@ export default class ReferencePage extends OpenElement {
                     <span class='pkg-note'>{pkg.note2}</span>
                     <span class='pkg-note'>{pkg.note3}</span>
                   </div>
-                  <div class='pkg-chips'>
+                  <div class='pkg-chips flex flex-wrap gap-2'>
                     <span class='chip'>{pkg.export1}</span>
                     <span class='chip'>{pkg.export2}</span>
                     <span class='chip'>{pkg.export3}</span>

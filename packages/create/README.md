@@ -16,20 +16,23 @@ pages. The generated project is a plain Node/pnpm project.
 ## Usage (1.0 Alpha)
 
 ```bash
-npm exec @openelement/create@alpha -- my-app
+npm create @openelement@alpha my-app
 cd my-app
 pnpm install
 pnpm dev
 ```
 
-The version `@alpha` resolves to is registered in
-`the tracked release-state manifest` (currently `1.0.0-alpha.7`, a new baseline —
+`npm create @openelement@alpha` rides npm's initializer alias: a bare `@scope`
+resolves to `@scope/create` at the same tag, so the canonical spelling names
+the scope, and npm runs this package's generator. The version `@alpha` resolves
+to is registered in
+`the tracked release-state manifest` (currently `1.0.0-alpha.8`, a new baseline —
 not a 0.x upgrade, with no migration path from 0.x). Pin that exact version
 when reproducibility matters (verify against the live registry with
 `npm view @openelement/create dist-tags.alpha`):
 
 ```bash
-npm exec @openelement/create@1.0.0-alpha.7 -- my-app
+npm create @openelement@1.0.0-alpha.8 my-app
 ```
 
 The generated starter pins the exact `@openelement/*` versions it was built
@@ -39,10 +42,10 @@ The canonical install command is exported from `@openelement/create/install-comm
 
 ## The bootstrap is a plain npm invocation; the generated project is Node
 
-The documented bootstrap runs the generator through `npm exec` (or the `npx`
-short form, or `pnpm dlx`) — plain Node tooling, no second runtime. Node.js
-24.2+ is the only host requirement for both the bootstrap and the generated
-project. The packed package ships two equivalent npm bins
+The documented bootstrap runs the generator through `npm create` (or the
+`npx` short form, or `pnpm dlx`) — plain Node tooling, no second runtime.
+Node.js 24.2+ is the only host requirement for both the bootstrap and the
+generated project. The packed package ships two equivalent npm bins
 (`openelement-create`, `create-openelement`, both the same entry), so the pnpm
 form must name one explicitly:
 
@@ -61,7 +64,7 @@ A versionless install resolves the npm `latest` dist-tag to it; pin the line
 explicitly instead:
 
 ```bash
-npm exec @openelement/create@0.43 -- my-app
+npm create @openelement@0.43 my-app
 ```
 
 ## Requirements

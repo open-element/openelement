@@ -16,7 +16,17 @@
  *     remediation.
  *   - The total includes self-hosted Prism (~40 KiB) and all islands (~285
  *     KiB); the prior 200 KiB default and 600/700 KiB soft values contradicted
- *     each other, so this file is now the only budget.
+ *     each other, so this file is now the only budget. C4 (#1507) raised it
+ *     to 400 KiB to admit the search island's interaction runtime — the
+ *     Zag combobox state machine + Floating UI positioning (~98 KiB
+ *     uncompressed, a dynamic chunk fetched on the first search open, so no
+ *     byte of it reaches first paint).
+ *   - islandKB moved 100 → 102 in the same lane: the app-shell chunk carried
+ *     the search dialog's always-shipped shell (shortcut handler, modal focus
+ *     trap, dismissal, and the combobox graph's static markup) and measured
+ *     99.5 KiB against the old value BEFORE C4 — 0.5 KiB of headroom. The
+ *     always-shipped search shell added ~1 KiB; the widget runtime itself
+ *     stays out of the island payload (the dynamic chunk above).
  *
  * Exceeding either value fails the official-Site build test; the build
  * manifest reports against the same numbers. Lowering these values is the
@@ -25,6 +35,6 @@
  * that never fail), so it is not part of this enforced SLO.
  */
 export const SITE_BUDGET = {
-  islandKB: 100,
-  totalJsKB: 300,
+  islandKB: 102,
+  totalJsKB: 400,
 } as const;
