@@ -14,6 +14,7 @@ import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { createFreshDom, serializeToHtml } from '../../src/internal/compiled/runtime.ts';
 import type { CompiledRuntimeHost } from '../../src/internal/compiled/runtime.ts';
+import { RUNTIME_MESSAGES_ENABLED } from '../../src/internal/protocol/errors.ts';
 import { signal } from '../../src/internal/signal/framework.ts';
 import { TestDocument } from './test-dom.ts';
 import { testProgram } from './test-program.ts';
@@ -114,6 +115,15 @@ test('#1413 runtime messages: a non-object list item names the key field', () =>
   // field must exist, not which part index raised it.
   expect(error.message).toContain('keyed list must be an object');
   expect(error.message).toContain('"id"');
+});
+
+test('#1546 the message seam defaults to full prose wherever no define reaches the source', () => {
+  // Source execution — this suite, dev SSR, node consumers — never injects
+  // OE_RUNTIME_MESSAGES, so the typeof guard must resolve to the full-message
+  // default without tripping an undeclared global. The production strip is
+  // the client build's injection, guarded on the router side
+  // (element-error-messages.test.ts).
+  expect(RUNTIME_MESSAGES_ENABLED).toBe(true);
 });
 
 test('#1413 runtime messages: fresh-DOM mount and SSR report identically', () => {

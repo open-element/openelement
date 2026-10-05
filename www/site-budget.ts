@@ -27,6 +27,12 @@
  *     99.5 KiB against the old value BEFORE C4 — 0.5 KiB of headroom. The
  *     always-shipped search shell added ~1 KiB; the widget runtime itself
  *     stays out of the island payload (the dynamic chunk above).
+ *   - Re-measured 2026-10-06 after the alpha10 train (#1543 minified island
+ *     CSS, #1544 the element runtime on its own shared chunk): the largest
+ *     `island-*` chunk is open-layout at ~96.5 KiB and total client JS is
+ *     ~346 KiB — both caps keep their headroom, values unchanged. (The
+ *     ~99 KiB combobox runtime is not an `island-*` chunk, so islandKB does
+ *     not apply to it; totalJsKB still counts it.)
  *
  * Exceeding either value fails the official-Site build test; the build
  * manifest reports against the same numbers. Lowering these values is the

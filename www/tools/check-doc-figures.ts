@@ -248,7 +248,7 @@ for (const docPath of docs) {
     /\|\s*`([^`(|]+?)`(?:\([^)]*\))?\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|/g,
   )) {
     const name = row[1].trim();
-    if (!/^(client\.js|island-|open-)/.test(name)) continue;
+    if (!/^(client\.js|element-runtime|island-|open-)/.test(name)) continue;
     // client.js embeds checkout-absolute island paths in its error strings,
     // so its raw bytes vary by checkout depth. The doc carries it as prose,
     // not a pinned figure; payloads below tolerate the same variance.

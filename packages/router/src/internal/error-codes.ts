@@ -135,6 +135,20 @@ export const ClientBuildErrorCode = {
    * bug; the build fails instead of grouping chunks on the raw specifier.
    */
   PACKAGE_IDENTITY_UNRESOLVED: 'OE_CLIENT_BUILD_PACKAGE_IDENTITY_UNRESOLVED',
+  /**
+   * The client build resolved the element runtime entry, but no ancestor of
+   * the resolved module id carries a package.json naming the package
+   * (#1544) — the shared runtime chunk would have to group by guessing, so
+   * the build fails instead.
+   */
+  ELEMENT_RUNTIME_IDENTITY_UNRESOLVED: 'OE_CLIENT_BUILD_ELEMENT_RUNTIME_IDENTITY_UNRESOLVED',
+  /**
+   * The native generated client entry statically imports the element
+   * runtime, yet the emitted client build groups no module under the
+   * resolved package root (#1544) — the shared element-runtime chunk never
+   * fired and per-island runtime copies would ship silently.
+   */
+  ELEMENT_RUNTIME_CHUNK_MISSING: 'OE_CLIENT_BUILD_ELEMENT_RUNTIME_CHUNK_MISSING',
 } as const;
 
 /**

@@ -3,7 +3,7 @@
  *
  * Scans build output directories after each phase and prints a structured
  * summary table. This gives developers visibility into:
- *   - Per-island chunk sizes (Phase 2)
+ *   - Per-chunk raw and gzip sizes, with totals (Phase 2 size receipt)
  *   - Total JS/CSS bundle budgets (Phase 3)
  *   - HTML page counts and compression potential
  *   - headExtras injection size
@@ -15,7 +15,8 @@
  *   - cli/build-ssg.ts    (after Phase 3: HTML + post-process complete)
  */
 
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { basename, join, resolve } from 'pathe';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';
@@ -30,6 +31,9 @@ export interface ArtifactInfo {
   path: string;
   sizeBytes: number;
   sizeKB: string;
+  /** gzip -9 bytes; only computed for JS chunks, not HTML pages. */
+  gzipBytes?: number;
+  gzipKB?: string;
 }
 
 /** Full build manifest summary */
@@ -38,8 +42,16 @@ export interface BuildManifest {
   timestamp: string;
   islands: ArtifactInfo[];
   clientEntry: ArtifactInfo | null;
+  /**
+   * JS chunks that are neither an island chunk nor the client entry: the
+   * shared runtime chunks every island page eagerly imports, and dynamically
+   * fetched chunks like the search combobox.
+   */
+  sharedChunks: ArtifactInfo[];
   htmlPages: ArtifactInfo[];
   totalJsBytes: number;
+  /** Sum of per-file gzip sizes over every scanned JS chunk. */
+  totalJsGzipBytes: number;
   totalHtmlBytes: number;
   headExtrasSize: number;
   /** Budget warnings (files > threshold) */
@@ -88,16 +100,34 @@ function collectFiles(dir: string, extension: string): ArtifactInfo[] {
 }
 
 /**
+ * gzip -9 size of one file, mirroring the receipt convention the site's
+ * doc-figures gate measures with (`gzip -9 -c` over the same chunks). zlib
+ * and the CLI gzip differ by a few bytes of header variance; the doc gate's
+ * per-row tolerances absorb that class of difference.
+ */
+function gzipSize(file: string): number {
+  return gzipSync(readFileSync(file), { level: 9 }).length;
+}
+
+/**
  * Scan client build output (dist/client/) for island chunks.
  */
 export function scanClientBuild(
   root: string,
   outDir: string = DEFAULT_OUT_DIR,
-): { islands: ArtifactInfo[]; clientEntry: ArtifactInfo | null; totalJsBytes: number } {
+): {
+  islands: ArtifactInfo[];
+  clientEntry: ArtifactInfo | null;
+  sharedChunks: ArtifactInfo[];
+  totalJsBytes: number;
+  totalJsGzipBytes: number;
+} {
   const clientDir = resolve(root, outDir, 'client');
   const islands: ArtifactInfo[] = [];
+  const sharedChunks: ArtifactInfo[] = [];
   let clientEntry: ArtifactInfo | null = null;
   let totalJsBytes = 0;
+  let totalJsGzipBytes = 0;
 
   // Scan islands/ subdirectory (single pass - avoid redundant directory scans)
   const islandsDir = join(clientDir, 'islands');
@@ -108,35 +138,37 @@ export function scanClientBuild(
       const fullPath = join(islandsDir, file);
       try {
         const fileStat = statSync(fullPath);
+        const gzip = gzipSize(fullPath);
+        const info: ArtifactInfo = {
+          name: file,
+          path: `islands/${file}`,
+          sizeBytes: fileStat.size,
+          sizeKB: formatSize(fileStat.size),
+          gzipBytes: gzip,
+          gzipKB: formatSize(gzip),
+        };
         if (file === 'client.js') {
           // Client entry (shared island upgrade runtime)
-          clientEntry = {
-            name: 'client.js',
-            path: 'islands/client.js',
-            sizeBytes: fileStat.size,
-            sizeKB: formatSize(fileStat.size),
-          };
+          clientEntry = info;
         } else {
           // Suffix charset matches postprocess.ts ISLAND_CHUNK_SUFFIX_RE:
           // Rolldown/Vite content hashes are base64url and may contain `-`/`_`.
           const isIslandChunk = /^island-(.+?)-[A-Za-z0-9_-]+\.js$/.test(file);
           if (isIslandChunk) {
-            islands.push({
-              name: file,
-              path: `islands/${file}`,
-              sizeBytes: fileStat.size,
-              sizeKB: formatSize(fileStat.size),
-            });
+            islands.push(info);
+          } else {
+            sharedChunks.push(info);
           }
         }
         totalJsBytes += fileStat.size;
+        totalJsGzipBytes += gzip;
       } catch (e) {
         log.warn(`Cannot stat ${file}: ${(e as Error).message}`);
       }
     }
   }
 
-  return { islands, clientEntry, totalJsBytes };
+  return { islands, clientEntry, sharedChunks, totalJsBytes, totalJsGzipBytes };
 }
 
 /**
@@ -145,6 +177,12 @@ export function scanClientBuild(
 export function scanSSGOutput(root: string, outDir: string = DEFAULT_OUT_DIR): ArtifactInfo[] {
   const distDir = resolve(root, outDir);
   return collectFiles(distDir, '.html');
+}
+
+/** One receipt row: name (truncated), raw size, gzip size. */
+function printChunkRow(info: ArtifactInfo, displayName: string = info.name): void {
+  const name = displayName.length > 30 ? displayName.slice(0, 27) + '...' : displayName;
+  console.info(`  ${name.padEnd(26)}   ${info.sizeKB.padEnd(10)}   ${info.gzipKB ?? '-'}`);
 }
 
 /**
@@ -207,8 +245,10 @@ export function printBuildManifest(options: {
     timestamp,
     islands: clientData.islands,
     clientEntry: clientData.clientEntry,
+    sharedChunks: clientData.sharedChunks,
     htmlPages,
     totalJsBytes: clientData.totalJsBytes,
+    totalJsGzipBytes: clientData.totalJsGzipBytes,
     totalHtmlBytes: htmlPages.reduce((sum, p) => sum + p.sizeBytes, 0),
     headExtrasSize,
     warnings,
@@ -218,24 +258,29 @@ export function printBuildManifest(options: {
   console.info('');
   console.info(`== openElement Build Manifest - Phase ${phase} @ ${timestamp.slice(11, 19)} ==`);
 
-  if (manifest.islands.length > 0 || manifest.clientEntry) {
+  if (manifest.islands.length > 0 || manifest.sharedChunks.length > 0 || manifest.clientEntry) {
     console.info('\n  Client Islands:');
-    console.info('  File                         Size');
-    console.info('  --------------------------   --------');
+    console.info('  File                         Raw         gzip -9');
+    console.info('  --------------------------   ---------   ---------');
 
     for (const island of manifest.islands) {
-      const displayName = island.name.length > 30 ? island.name.slice(0, 27) + '...' : island.name;
-      console.info(`  ${displayName.padEnd(26)}   ${island.sizeKB.padEnd(8)}`);
+      printChunkRow(island);
     }
 
     if (manifest.clientEntry) {
-      console.info(
-        `  ${'client.js (entry)'.padEnd(26)}   ${manifest.clientEntry.sizeKB.padEnd(8)}`,
-      );
+      printChunkRow(manifest.clientEntry, 'client.js (entry)');
     }
 
-    console.info('  --------------------------   --------');
-    console.info(`  ${'TOTAL JS'.padEnd(26)}   ${formatSize(manifest.totalJsBytes).padEnd(8)}`);
+    for (const chunk of manifest.sharedChunks) {
+      printChunkRow(chunk);
+    }
+
+    console.info('  --------------------------   ---------   ---------');
+    console.info(
+      `  ${'TOTAL JS'.padEnd(26)}   ${formatSize(manifest.totalJsBytes).padEnd(10)}   ${formatSize(
+        manifest.totalJsGzipBytes,
+      )}`,
+    );
   } else {
     console.info('\n  Client Islands: none - zero client JS');
   }

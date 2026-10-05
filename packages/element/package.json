@@ -15,6 +15,11 @@
     "./client-only": "./src/client-only.ts",
     "./vite": "./src/vite.ts"
   },
+  "//sideEffects": "The two paths name one edge (#1425): the default entry is flagged as the importer — a side-effect-free module loses its bare `import './internal/compiled/runtime/claim-install.ts'` — and claim-install.ts as the installer (`installClaimExecutor(...)` at module scope), so a tree-shaking bundler cannot drop server-DOM hydration. Everything else in src/ evaluates pure and stays tree-shakeable. The packed artifact mirrors this pair with compiled .js paths in the release manifest (tools/release/npm-manifest.ts SIDE_EFFECTS) — change the two together; the guard is packages/element/__tests__/side-effects-declaration.test.ts.",
+  "sideEffects": [
+    "./src/index.ts",
+    "./src/internal/compiled/runtime/claim-install.ts"
+  ],
   "files": [
     "src/**",
     "README.md",
