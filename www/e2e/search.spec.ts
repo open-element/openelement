@@ -460,7 +460,11 @@ test.describe('Search session races', () => {
   test('Tab reaches the open dialog while the runtime chunk is still loading (#1533)', async ({
     page,
   }) => {
-    const { dialog, input } = locators(page);
+    const { dialog } = locators(page);
+    // The combobox role/aria wiring only lands with the Zag runtime chunk;
+    // this test asserts inside the not-ready window, so the input is located
+    // by the SSR id (IDS.input in open-search-shared.ts) instead of by role.
+    const ssrInput = page.locator('#open-search-input');
     const trigger = page.getByRole('button', { name: 'Search' });
     await gotoHome(page);
     const chunk = deferred();
@@ -483,14 +487,14 @@ test.describe('Search session races', () => {
     // dialog owns focus yet, so Tab follows the natural order into the
     // dialog's input instead of being swallowed on the trigger.
     await page.keyboard.press('Tab');
-    await expect(input).toBeFocused();
+    await expect(ssrInput).toBeFocused();
 
     // The runtime lands, the session completes, and the full modal trap is
     // back: Tab can no longer fall through.
     chunk.release();
-    await expect(input).toBeFocused({ timeout: 10_000 });
+    await expect(ssrInput).toBeFocused({ timeout: 10_000 });
     await page.keyboard.press('Tab');
-    await expect(input).toBeFocused();
+    await expect(ssrInput).toBeFocused();
   });
 
   test('a transient first-open chunk failure closes the session cleanly and leaks no errors', async ({
