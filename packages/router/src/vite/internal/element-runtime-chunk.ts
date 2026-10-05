@@ -48,8 +48,9 @@ export interface ElementRuntimeIdentity {
  * Derive the element package root from a module id the client build's
  * resolver answered for {@linkcode ELEMENT_RUNTIME_ENTRY_SPECIFIER}. The
  * walk reads package.json upward until the named package anchors the root —
- * the same realpath for workspace-linked builds (`packages/element`) and
- * installed ones (`node_modules/@openelement/element`) — and fails closed
+ * the same realpath for workspace-linked builds (the in-repo element
+ * package) and installed ones (`node_modules/@openelement/element`) — and
+ * fails closed
  * when no ancestor names the package: a layout the walk cannot anchor would
  * make every later match a guess.
  */
