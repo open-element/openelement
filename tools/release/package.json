@@ -1,7 +1,7 @@
 {
   "name": "@openelement/tools-release",
   "private": true,
-  "version": "1.0.0-alpha.7",
+  "version": "1.0.0-alpha.9",
   "type": "module",
   "//": "The release toolchain is node-hosted end to end (owner ruling 2026-10-03): scripts enter through node with type stripping, no Deno host required.",
   "scripts": {
