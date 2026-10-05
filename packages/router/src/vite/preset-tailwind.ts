@@ -10,7 +10,7 @@
  * wrapping, no links. Since the C5 twin removal, OFF also means no ui value
  * emission anywhere: @openelement/ui carries no embedded scale values (its
  * theme-tokens twin is deleted), so a preset-less consumer supplies its own
- * role table (packages/ui/CUSTOMIZATION.md, "Value delivery").
+ * role table (@openelement/ui's CUSTOMIZATION.md, "Value delivery").
  *
  * Two seams, both active ONLY while the preset is enabled (issue #1505):
  *

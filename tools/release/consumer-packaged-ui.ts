@@ -5,6 +5,7 @@ import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { formatJson } from '@openelement/element/build-utils';
+import { cssExportSubpaths } from './check-package-artifacts.ts';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
@@ -128,7 +129,12 @@ if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI m
   const pkgJson = JSON.parse(readFileSync(join(uiDir, 'package.json'), 'utf8'));
   const problems: string[] = [];
   const entryPaths: string[] = [];
+  // Pure-CSS asset exports ship verbatim for consumer Tailwind @theme builds
+  // and carry no declarations by nature — the same carve-out the artifact
+  // scan and attw run apply (check-package-artifacts.ts cssExportSubpaths).
+  const cssSubpaths = new Set(cssExportSubpaths(pkgJson.exports));
   for (const [subpath, conditions] of Object.entries(pkgJson.exports ?? {})) {
+    if (cssSubpaths.has(subpath)) continue;
     const cond = conditions as Record<string, string>;
     const typesTarget = cond.types;
     if (typeof typesTarget !== 'string') {
