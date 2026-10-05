@@ -157,6 +157,58 @@ test.describe('Search', () => {
     expect(Math.abs(overlay.width - overlay.viewportWidth)).toBeLessThanOrEqual(1);
   });
 
+  test('search positioner anchors below the input at matching width', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.waitForFunction(() => customElements.get('open-search'));
+
+    await page.getByRole('button', { name: 'Search' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Search' });
+    const input = page.getByRole('combobox', { name: 'Search documentation' });
+    await expect(dialog).toBeVisible();
+    await expect(input).toBeFocused();
+    // The positioner props are re-spread when the results render, and that
+    // re-sync must not disturb the placement floating-ui already computed —
+    // the open-only popup never exercises that path, so the search runs first.
+    await input.pressSequentially('routing');
+    const firstResult = page
+      .getByRole('listbox', { name: 'Search results' })
+      .getByRole('option')
+      .first();
+    // First search pays the Pagefind wasm/index load; allow extra time —
+    // the full-suite run shares the static server and workers with every
+    // other spec, so the wasm/index round can take far longer than solo.
+    await expect(firstResult).toBeVisible({ timeout: 30_000 });
+
+    // Placement lands asynchronously (floating-ui positions after the popup
+    // renders), so the geometry contract is retried via toPass, not sampled
+    // once; both rects are read in one evaluate for a same-frame measurement.
+    await expect(async () => {
+      const geometry = await page.evaluate(() => {
+        const panel = document.getElementById('open-search-positioner');
+        const field = document.getElementById('open-search-input');
+        if (!panel || !field) return null;
+        const panelBox = panel.getBoundingClientRect();
+        const fieldBox = field.getBoundingClientRect();
+        return {
+          xDelta: Math.abs(panelBox.x - fieldBox.x),
+          topGap: panelBox.y - fieldBox.bottom,
+          widthDelta: Math.abs(panelBox.width - fieldBox.width),
+        };
+      });
+      expect(geometry).not.toBeNull();
+      // bottom-start: the panel's left edge tracks the input's left edge.
+      expect(geometry!.xDelta).toBeLessThanOrEqual(2);
+      // The panel sits below the input's bottom edge at the configured
+      // mainAxis offset (6px); 12px leaves room for rounding.
+      expect(geometry!.topGap).toBeGreaterThanOrEqual(0);
+      expect(geometry!.topGap).toBeLessThanOrEqual(12);
+      // sameWidth: the panel spans the input's width.
+      expect(geometry!.widthDelta).toBeLessThanOrEqual(2);
+    }).toPass({ timeout: 10_000 });
+  });
+
   test('search initial HTML does not stringify computed signals', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');

@@ -219,6 +219,7 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
       }
       cleanups.get(key)?.();
       cleanups.set(key, spreadProps(node, props, MACHINE_SCOPE));
+      return node;
     };
     apply('control', `#${IDS.control}`, api.getControlProps());
     // The DOM input owns its value: the machine's inputValue lags one
@@ -230,7 +231,26 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
     const inputProps: Record<string, unknown> = { ...api.getInputProps() };
     delete inputProps.value;
     apply('input', `#${IDS.input}`, inputProps);
-    apply('positioner', `#${IDS.positioner}`, api.getPositionerProps());
+    // Zag double-writes the positioner's style: the static shell comes in via
+    // getPositionerProps() while @zag-js/popper writes --x/--y/--reference-width/
+    // --z-index imperatively into the same style attribute — some of those
+    // writes are memoized one-shots. A wholesale style replacement (the
+    // setAttribute path spreadProps uses) erases them for good, so the shell
+    // lands per declaration and both writers' values coexist.
+    const positionerProps: Record<string, unknown> = { ...api.getPositionerProps() };
+    const positionerStyle = positionerProps.style;
+    delete positionerProps.style;
+    const positioner = apply('positioner', `#${IDS.positioner}`, positionerProps);
+    if (positioner && typeof positionerStyle === 'string') {
+      for (const declaration of positionerStyle.split(';')) {
+        const separator = declaration.indexOf(':');
+        if (separator === -1) continue;
+        positioner.style.setProperty(
+          declaration.slice(0, separator).trim(),
+          declaration.slice(separator + 1).trim(),
+        );
+      }
+    }
     apply('content', `#${IDS.content}`, api.getContentProps());
     apply('label', `#${IDS.label}`, api.getLabelProps());
     // Per-hit option props: the anchors are declaratively rendered by the
