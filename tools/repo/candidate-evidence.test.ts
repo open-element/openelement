@@ -486,7 +486,7 @@ test('packed validation fails when archive bytes are tampered', async () => {
   const victim = REQUIRED_PACKAGE_TARBALLS[0];
   const path = extras.tarballFiles[victim];
   const original = archives.get(path);
-  expect(original !== undefined).toBeTruthy();
+  if (original === undefined) throw new Error('packed store must contain the victim tarball');
   const tampered = new Uint8Array(original);
   tampered[0] ^= 0xff;
   const tamperedRead = (candidate: string) =>

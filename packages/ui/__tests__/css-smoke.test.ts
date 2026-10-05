@@ -455,3 +455,33 @@ test('status role inks clear the 4.5:1 AA floor on the background and their reci
     }
   }
 });
+
+test('open-dialog opens and exits through discrete transitions, not keyframes', async () => {
+  // The #536/#591 recipe: the closed state is the base rule, entry starts
+  // from @starting-style, and the display/overlay legs carry allow-discrete
+  // so the dialog stays rendered and in the top layer until the exit
+  // transition finishes. Textual assertions — the fake-DOM harness cannot
+  // run transitions.
+  const source = await readFile(new URL('../src/open-dialog.tsx', import.meta.url), 'utf8');
+  const code = stripComments(source);
+  expect(code.includes('allow-discrete'), 'the display/overlay legs must defer discretely');
+  expect(code.match(/allow-discrete/gu)?.length).toBeGreaterThanOrEqual(4);
+  expect(code.includes('@starting-style'), 'entry must start from the starting-style block');
+  expect(code.includes('transition-behavior: allow-discrete') || /allow-discrete/.test(code)).toBe(
+    true,
+  );
+  // The scrim fades both ways: closed backdrop is transparent, [open] carries
+  // the zinc-950 scrim.
+  expect(code.includes('backdrop-filter: blur(8px)')).toBe(true);
+  // The keyframe entry is retired wholesale — no dead channel may remain.
+  expect(code.includes('@keyframes'), 'the old keyframe entry must be gone').toBe(false);
+  expect(code.includes('animation:')).toBe(false);
+  // Graceful degradation: forced colors and reduced motion collapse the
+  // transitions so the dialog never fights the system-owned rendering.
+  expect(code.includes('@media (forced-colors: active)')).toBe(true);
+  expect(code.includes('@media (prefers-reduced-motion: reduce)')).toBe(true);
+  const forced = code.indexOf('@media (forced-colors: active)');
+  expect(code.slice(forced, code.indexOf('}', code.indexOf('transition: none', forced)))).toContain(
+    'transition: none',
+  );
+});

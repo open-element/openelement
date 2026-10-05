@@ -159,6 +159,10 @@ custom properties.
   `--text-xl`
 - Shares the overlay recipe (below); the backdrop composes the zinc-950
   scrim in both themes.
+- Entry and exit animate through `transition-behavior: allow-discrete` +
+  `@starting-style` (no keyframes, no JS timing); under
+  `forced-colors: active` and `prefers-reduced-motion: reduce` the
+  transitions collapse and the dialog opens/closes immediately.
 
 ### `open-dropdown`
 

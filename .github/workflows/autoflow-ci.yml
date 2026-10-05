@@ -40,9 +40,10 @@ jobs:
     # single API call, so ten minutes is generous for it and stops a stalled
     # action from holding a slot.
     timeout-minutes: 10
+    # Read-only: the action only fails on severity (no PR comments), so it
+    # needs no write scope.
     permissions:
       contents: read
-      pull-requests: write
     steps:
       # v5.0.0
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294

@@ -219,8 +219,8 @@ test('dragon consumers stay bound to the external provenance keys', async () => 
   };
   const frames = committed.assets.find((asset) => asset.path === 'dragon-frames/');
   const video = committed.assets.find((asset) => asset.path === 'dragon-idle.mp4');
-  expect(frames?.remote, 'dragon frame delivery must be declared').toBeTruthy();
-  expect(video?.remote, 'dragon video delivery must be declared').toBeTruthy();
+  if (!frames?.remote) throw new Error('dragon frame delivery must be declared');
+  if (!video?.remote) throw new Error('dragon video delivery must be declared');
 
   const frameBase = `${frames.remote.origin}/${frames.remote.key}`;
   const videoUrl = `${video.remote.origin}/${video.remote.key}`;

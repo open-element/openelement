@@ -244,8 +244,8 @@ test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on un
     ).toEqual(new Set(['package.json', 'src', 'README.md']));
     expect(statSync(join(out, 'src', 'index.js')).isFile()).toBeTruthy();
     expect(statSync(join(out, 'src', 'index.d.ts')).isFile()).toBeTruthy();
-    expect(statSync(join(out, 'src', 'internal', 'helper.js')).isFile).toBeTruthy();
-    expect(statSync(join(out, 'src', 'tokens.css')).isFile).toBeTruthy();
+    expect(statSync(join(out, 'src', 'internal', 'helper.js')).isFile()).toBeTruthy();
+    expect(statSync(join(out, 'src', 'tokens.css')).isFile()).toBeTruthy();
     // The synthesized vite.config.ts never ships.
     let leaked = false;
     try {
@@ -311,7 +311,9 @@ test('prepareVpStagingFiles stages manifests and config without network', async 
     try {
       expect(staged.packDir).toEqual(join(staged.stagingRoot, 'router'));
       // Root manifest unions member deps and pins the toolchain.
-      const rootManifest = JSON.parse(readFileSync(join(staged.stagingRoot, 'package.json'))) as {
+      const rootManifest = JSON.parse(
+        readFileSync(join(staged.stagingRoot, 'package.json'), 'utf8'),
+      ) as {
         dependencies: Record<string, string>;
         devDependencies: Record<string, string>;
       };
@@ -319,11 +321,11 @@ test('prepareVpStagingFiles stages manifests and config without network', async 
       expect(rootManifest.devDependencies['vite-plus']).toEqual('1.0.0');
       // Each member carries a staging manifest with its self-name.
       const memberManifest = JSON.parse(
-        readFileSync(join(staged.stagingRoot, 'element', 'package.json')),
+        readFileSync(join(staged.stagingRoot, 'element', 'package.json'), 'utf8'),
       ) as { dependencies: Record<string, string> };
       expect(memberManifest.dependencies['@openelement/element']).toEqual('1.0.0-test');
       // Pack config lands in the pack dir.
-      expect(statSync(join(staged.packDir, 'vite.config.ts')).isFile).toBeTruthy();
+      expect(statSync(join(staged.packDir, 'vite.config.ts')).isFile()).toBeTruthy();
       // The member copy must not drag package.json along.
       expect(readFileSync(join(staged.stagingRoot, 'element', 'src', 'index.ts'), 'utf8')).toEqual(
         'export {};\n',
@@ -352,7 +354,7 @@ const ROUTER_PACKAGE_DIR = fileURLToPath(new URL('../../packages/router', import
 /** The file exists and is not a directory. */
 function isFile(path: string): boolean {
   try {
-    return statSync(path).isFile;
+    return statSync(path).isFile();
   } catch {
     return false;
   }

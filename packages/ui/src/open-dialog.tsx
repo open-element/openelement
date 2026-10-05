@@ -19,6 +19,13 @@
  * @csspart body -The content area (<slot>)
  * @csspart footer -The optional footer slot
  *
+ * Entry/exit transitions ride `transition-behavior: allow-discrete` +
+ * `@starting-style` (open-props #536/#591 recipe), so open AND close animate
+ * while the display flip and top-layer membership wait for the exit
+ * transition. Under `forced-colors: active` (and `prefers-reduced-motion`)
+ * the transitions collapse: the dialog appears and dismisses immediately
+ * instead of fighting the system-owned rendering.
+ *
  * Usage:
  * ```html
  * <open-dialog label="Dialog title">
@@ -61,17 +68,69 @@ export class OpenDialog extends OpenElement {
     }
 
     dialog::backdrop {
-      background: color-mix(in srgb, var(--color-zinc-950) 68%, transparent);
+      /* Closed base: transparent. The [open] rule carries the zinc-950 scrim
+         and starts from transparent, so the scrim fades in on entry and back
+         out on exit instead of snapping. */
+      background: transparent;
       backdrop-filter: blur(8px);
+      /* Exit visibility: with allow-discrete the top-layer membership and the
+         display flip wait for the transition, so the scrim fades out instead
+         of snapping (open-props #536/#591 recipe; #591 remains open
+         upstream and does not gate this landing). */
+      transition:
+        background-color 0.2s ease-out,
+        overlay 0.2s ease-out allow-discrete,
+        display 0.2s ease-out allow-discrete;
+    }
+
+    dialog[open]::backdrop {
+      background: color-mix(in srgb, var(--color-zinc-950) 68%, transparent);
+      @starting-style {
+        background: transparent;
+      }
+    }
+
+    /* Entry AND exit: the closed state is the base rule (opacity 0, lifted);
+       opening transitions to the [open] values from the @starting-style
+       starting point, closing transitions back to the base — the display and
+       overlay legs carry allow-discrete so the dialog stays rendered and in
+       the top layer until the exit transition finishes. */
+    dialog {
+      opacity: 0;
+      transform: translateY(-8px);
+      transition:
+        opacity 0.2s ease-out,
+        transform 0.2s ease-out,
+        overlay 0.2s ease-out allow-discrete,
+        display 0.2s ease-out allow-discrete;
     }
 
     dialog[open] {
-      animation: dialogFadeIn 0.2s ease-out;
+      opacity: 1;
+      transform: translateY(0);
+      @starting-style {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
     }
 
-    @keyframes dialogFadeIn {
-      from { opacity: 0; transform: translateY(-8px); }
-      to { opacity: 1; transform: translateY(0); }
+    /* Forced colors: the system owns the palette, so half-opacity frames and
+       moving text would fight the forced rendering — the dialog appears and
+       dismisses immediately instead (the display leg loses its deferral with
+       the transition, which is the graceful degradation). Reduced motion
+       collapses the same way. */
+    @media (forced-colors: active) {
+      dialog,
+      dialog::backdrop {
+        transition: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      dialog,
+      dialog::backdrop {
+        transition-duration: 0s;
+      }
     }
 
     .dialog-header {

@@ -26,3 +26,4 @@ Evidence cited by an active ADR follows the same policy: ADR-0120's commissioned
 - [ADR-0159-part-backfill-and-late-claim.md](./ADR-0159-part-backfill-and-late-claim.md)
 - [ADR-0160-architecture-debt-repayment.md](./ADR-0160-architecture-debt-repayment.md)
 - [ADR-0161-node-pnpm-consumer-surface.md](./ADR-0161-node-pnpm-consumer-surface.md)
+- [ADR-0162-element-runtime-compiler-split-deferred.md](./ADR-0162-element-runtime-compiler-split-deferred.md)
