@@ -92,10 +92,12 @@ export const openSearchStyles = [
     width: 100%;
     padding: calc(var(--spacing) * 3) calc(var(--spacing) * 3);
     border: none;
-    border-bottom: 0.5px solid var(--color-zinc-200);
+    border-bottom: 0.5px solid var(--color-border);
     border-radius: 0;
     background: transparent;
-    color: var(--color-zinc-900);
+    /* Semantic role, not a bare zinc: the dark theme's popover token is also
+       zinc-900, so a raw zinc-900 pairing never flips and reads ~1:1 there. */
+    color: var(--color-foreground);
     font-size: var(--text-base);
     box-sizing: border-box;
     font-family: inherit;
@@ -134,7 +136,10 @@ export const openSearchStyles = [
   .item-title {
     font-size: var(--text-sm);
     font-weight: var(--font-weight-medium);
-    color: var(--color-zinc-900);
+    /* Popover-foreground pairs with the results card's popover background
+       (raw zinc-900 stayed zinc-900 in dark, where the popover also becomes
+       zinc-900 — 1:1, invisible). */
+    color: var(--color-popover-foreground);
     margin-bottom: calc(var(--spacing) * 1);
   }
   .item-text {

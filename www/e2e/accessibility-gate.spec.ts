@@ -102,4 +102,52 @@ test.describe('Accessibility gate (axe)', () => {
     }));
     expect(violations, JSON.stringify(report, null, 1)).toEqual([]);
   });
+
+  test('axe scan meets WCAG 2.1 A+AA on the open search dialog with rendered results (light and dark)', async ({
+    page,
+  }) => {
+    // The route scans above never open the search dialog, so its own
+    // contrast pairs were unscanned: hardcoded bare-zinc colors read 1:1
+    // against the dark popover and still passed every gate (#1532).
+    for (const theme of ['light', 'dark'] as const) {
+      await page.goto('/');
+      await page.waitForLoadState('networkidle');
+      await page.waitForFunction(() => !!customElements.get('open-search'));
+      // The same channel the theme toggle writes (html[data-theme] plus
+      // colorScheme, packages/ui/src/open-theme-toggle.tsx applyTheme):
+      // theme.css's token tables key off the attribute alone.
+      await page.evaluate((value) => {
+        document.documentElement.setAttribute('data-theme', value);
+        document.documentElement.style.colorScheme = value;
+      }, theme);
+
+      await page.getByRole('button', { name: 'Search' }).click();
+      const input = page.getByRole('combobox', { name: 'Search documentation' });
+      await expect(input).toBeFocused();
+      await input.pressSequentially('routing');
+      const firstResult = page
+        .getByRole('listbox', { name: 'Search results' })
+        .getByRole('option')
+        .first();
+      await expect(firstResult).toBeVisible({ timeout: 30_000 });
+
+      // Scoped to the island: the page behind the modal scrim is not this
+      // scan's subject, the open dialog is.
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa'])
+        .include('open-search')
+        .analyze();
+
+      const report = violations.map((violation) => ({
+        id: violation.id,
+        impact: violation.impact,
+        nodes: violation.nodes.slice(0, 4).map((node) => node.target.join(' ')),
+        help: violation.help,
+      }));
+      expect(
+        violations,
+        `axe found WCAG A/AA violations on the open search dialog (${theme} theme):\n${JSON.stringify(report, null, 1)}`,
+      ).toEqual([]);
+    }
+  });
 });

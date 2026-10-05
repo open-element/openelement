@@ -63,12 +63,23 @@ function ensureRuntime(host: SearchHost): Promise<SearchRuntime> {
   if (state.runtime) return Promise.resolve(state.runtime);
   state.connectPromise ??= import('./open-search-combobox.ts').then(
     async ({ connectSearchRuntime }) => {
+      // Ownership check BEFORE the connect: even awaiting a synchronous call
+      // yields a microtask, so two continuations of one in-flight import (a
+      // stale install and the reinstall that replaced it) interleave their
+      // connect segments — the stale one creates the shared pipeline, the
+      // fresh one adopts it, and the stale teardown then deletes it under the
+      // published runtime, whose every query silently no-ops on the
+      // pipeline-identity guard from then on. A stale continuation must bail
+      // before it can build anything.
+      if (states.get(host) !== state) {
+        throw new Error('open-search host was uninstalled before its import resolved');
+      }
       const runtime = await connectSearchRuntime(host, {
         onClose: closeSearch,
       });
       // Re-validate before publishing: an uninstall may have torn this state
-      // down (or a reinstall replaced it) while the import was in flight. The
-      // stale runtime must never wire itself into the new install.
+      // down (or a reinstall replaced it) while the connect ran. The stale
+      // runtime must never wire itself into the new install.
       if (states.get(host) !== state) {
         runtime.teardown();
         throw new Error('open-search host was uninstalled while connecting');
@@ -99,8 +110,14 @@ export function installSearch(host: SearchHost): void {
     } else if (event.key === 'Tab' && !overlay(host)?.hidden) {
       // Modal focus trap: the dialog's single focusable node is the combobox
       // input (the options are activedescendant targets, not stops), so Tab
-      // must not fall through to the page behind the modal.
-      event.preventDefault();
+      // must not fall through to the page behind the modal. The trap engages
+      // only once the runtime is wired: the overlay shows immediately while
+      // the input gains its focus behavior only after the runtime chunk
+      // import resolves, and trapping Tab in that window would strand the
+      // reader on the background trigger under an aria-modal dialog that owns
+      // no focus. There, Tab follows the natural order into the open dialog's
+      // input (or escapes to the page).
+      if (states.get(host)?.runtime) event.preventDefault();
     }
   };
   states.set(host, { keydown, runtime: null, connectPromise: null, openSequence: 0, epoch: 0 });
