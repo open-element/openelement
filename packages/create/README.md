@@ -26,13 +26,13 @@ pnpm dev
 resolves to `@scope/create` at the same tag, so the canonical spelling names
 the scope, and npm runs this package's generator. The version `@alpha` resolves
 to is registered in
-`the tracked release-state manifest` (currently `1.0.0-alpha.8`, a new baseline —
+`the tracked release-state manifest` (currently `1.0.0-alpha.9`, a new baseline —
 not a 0.x upgrade, with no migration path from 0.x). Pin that exact version
 when reproducibility matters (verify against the live registry with
 `npm view @openelement/create dist-tags.alpha`):
 
 ```bash
-npm create @openelement@1.0.0-alpha.8 my-app
+npm create @openelement@1.0.0-alpha.9 my-app
 ```
 
 The generated starter pins the exact `@openelement/*` versions it was built
