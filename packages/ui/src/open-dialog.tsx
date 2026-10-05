@@ -20,7 +20,8 @@
  * @csspart footer -The optional footer slot
  *
  * Entry/exit transitions ride `transition-behavior: allow-discrete` +
- * `@starting-style` (open-props #536/#591 recipe), so open AND close animate
+ * `@starting-style` (the allow-discrete dialog recipe, cf. upstream #591),
+ * so open AND close animate
  * while the display flip and top-layer membership wait for the exit
  * transition. Under `forced-colors: active` (and `prefers-reduced-motion`)
  * the transitions collapse: the dialog appears and dismisses immediately
@@ -75,8 +76,8 @@ export class OpenDialog extends OpenElement {
       backdrop-filter: blur(8px);
       /* Exit visibility: with allow-discrete the top-layer membership and the
          display flip wait for the transition, so the scrim fades out instead
-         of snapping (open-props #536/#591 recipe; #591 remains open
-         upstream and does not gate this landing). */
+         of snapping (the allow-discrete recipe, cf. upstream #591 — open
+         upstream, does not gate this landing). */
       transition:
         background-color 0.2s ease-out,
         overlay 0.2s ease-out allow-discrete,
