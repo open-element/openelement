@@ -289,6 +289,7 @@ test('version-bump: consistency check reports the points that lag', async () => 
   // #1524: an expected version ON the tree's train also reports the members
   // that do not carry it, in proportion to the live lagging set.
   const parts = prereleaseParts(current);
+  if (parts === undefined) throw new Error(`fixture version is not a prerelease: ${current}`);
   const next = `${parts.base}-${parts.name}.${parts.num + 1}`;
   const atNext = await inconsistencyFailures(repoRoot, next);
   const laggingAtNext = (await planVersionBump(repoRoot, next)).members.filter(
