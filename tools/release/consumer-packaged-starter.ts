@@ -6,7 +6,8 @@
  * tarballs into a scratch consumer OUTSIDE the repository (so the adapter's
  * workspace auto-alias in workspace-alias.ts cannot substitute workspace
  * source for the packed modules), scaffolds the canonical starter through the
- * packed @openelement/create CLI, installs the starter's own dependency
+ * packed @openelement/create CLI (non-interactive, so the Tailwind-ON
+ * default form, #1524), installs the starter's own dependency
  * surface through pnpm (the @openelement/* pins rewired to the same current-
  * SHA tarballs), and then exercises the full external consumer lifecycle
  * exactly as an adopter would on the B5 Node/pnpm surface (ADR-0161):
@@ -50,6 +51,10 @@ import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 import { CREATE_BIN } from './npm-manifest.ts';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
+// The Tailwind-ON scaffold pin (#1524) — the create CLI's embedded copy is
+// anchored to the router's dev pins by the create tests; this consumer reads
+// the same source module so a pin drift fails here, on the packed surface.
+import { TAILWIND_STARTER_PIN } from '../../packages/create/src/version.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
@@ -466,7 +471,9 @@ try {
   // dependency surface — no more, no less (a missing pin breaks the consumer;
   // an extra one would leak an internal alias into the public contract).
   // Subpaths (jsx-runtime, /vite, /nitro-mount) resolve through the packages'
-  // own exports maps and are never separate pins.
+  // own exports maps and are never separate pins. The Tailwind-ON scaffold
+  // (#1524) adds its pins to devDependencies (build-time only), so the
+  // product surface is unchanged.
   const productDependencies = [
     '@hono/vite-dev-server',
     '@openelement/element',
@@ -477,6 +484,26 @@ try {
     throw new Error(
       'Packed starter exposes an unsupported dependency surface:\n' +
         Object.keys(manifest.dependencies).sort().join('\n'),
+    );
+  }
+  // The CLI runs non-interactively here, so the scaffold must be the
+  // Tailwind-ON default form: exact build-time pins (tailwindcss +
+  // @tailwindcss/vite, the 4.3.x line) in devDependencies.
+  for (const [name, expected] of Object.entries({
+    '@tailwindcss/vite': TAILWIND_STARTER_PIN,
+    tailwindcss: TAILWIND_STARTER_PIN,
+  })) {
+    if (manifest.devDependencies[name] !== expected) {
+      throw new Error(
+        `Packed starter is not the Tailwind-ON default form: devDependency ` +
+          `${name}=${manifest.devDependencies[name] ?? '<missing>'}, expected ${expected}`,
+      );
+    }
+  }
+  if (!existsSync(join(starter, 'app', 'styles', 'theme.css'))) {
+    throw new Error(
+      'Packed starter is not the Tailwind-ON default form: app/styles/theme.css (the @theme ' +
+        'role sheet) is missing. Pass --no-tailwind explicitly for the minimal form.',
     );
   }
   const generatedDependencies = {
@@ -604,6 +631,19 @@ try {
     if (!indexHtml.includes(marker)) {
       throw new Error(`Packed starter dist/index.html missing marker: ${marker}`);
     }
+  }
+  // Tailwind-ON delivery (#1524): the compiled role-sheet bundle must exist as
+  // the linked asset and be referenced from the rendered pages — link, never
+  // an inline sheet (the preset's full-inline prohibition runs inside the
+  // build, so a surviving inline delivery would have failed the build leg).
+  const tailwindBundle = join(starter, 'dist', 'assets', 'open-tailwind.css');
+  if (!existsSync(tailwindBundle)) {
+    throw new Error(
+      'Packed starter (Tailwind-ON default) emitted no compiled Tailwind bundle: ' + tailwindBundle,
+    );
+  }
+  if (!indexHtml.includes('/assets/open-tailwind.css')) {
+    throw new Error('Packed starter dist/index.html does not link the compiled Tailwind bundle');
   }
   const freshnessHtmlPath = join(starter, 'dist', 'freshness', 'index.html');
   if (!existsSync(freshnessHtmlPath)) {

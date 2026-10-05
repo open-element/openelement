@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { CREATE_VERSION, VITE_STARTER_PIN } from './version.ts';
+import { CREATE_VERSION, TAILWIND_STARTER_PIN, VITE_STARTER_PIN } from './version.ts';
 
 // npm package-name ceiling (validate-npm-package-name); a generated project
 // directory must stay a legal package name so `npm init`-style flows and
@@ -108,6 +108,36 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['app/islands/only-ticker.tsx.tmpl', 'app/islands/only-ticker.tsx'],
 ];
 
+/**
+ * The Tailwind-ON overlay (#1524): the default scaffold replaces the plain
+ * vite config with the preset-wired one and adds the @theme role sheet. The
+ * overlay lives in templates/tailwind/ so the OFF form stays exactly the
+ * pre-#1524 minimal starter. theme.css carries no scaffold tokens (like
+ * tokens.css), so it ships as a plain payload file.
+ */
+const TAILWIND_TEMPLATE_FILES: readonly (readonly [string, string])[] = [
+  ['tailwind/vite.config.ts.tmpl', 'vite.config.ts'],
+  ['tailwind/theme.css', 'app/styles/theme.css'],
+];
+
+/** The README section token the Tailwind-ON prose replaces (OFF removes it). */
+export const TAILWIND_README_TOKEN = '${tailwind.section}';
+
+/** The devDependencies the Tailwind-ON scaffold adds (exact pins, no ranges). */
+export const TAILWIND_DEV_DEPENDENCIES: Readonly<Record<string, string>> = {
+  '@tailwindcss/vite': TAILWIND_STARTER_PIN,
+  tailwindcss: TAILWIND_STARTER_PIN,
+};
+
+/**
+ * The scaffold forms. `tailwind: true` (the default) ships the preset-wired
+ * vite config, the @theme role sheet, and the Tailwind dev pins; `false` is
+ * the pre-#1524 minimal starter, byte for byte.
+ */
+export interface ScaffoldOptions {
+  tailwind?: boolean;
+}
+
 function versionTokens(v: ProductVersions): Record<string, string> {
   return {
     ['$' + '{v.router}']: v.router,
@@ -118,10 +148,12 @@ function versionTokens(v: ProductVersions): Record<string, string> {
 export async function buildTemplates(
   v: ProductVersions,
   projectName: string,
+  options: ScaffoldOptions = {},
 ): Promise<Record<string, string>> {
   assertUnifiedProductVersions(v);
   const invalid = validateProjectName(projectName);
   if (invalid) throw new Error(`Invalid project name "${projectName}". ${invalid}`);
+  const tailwind = options.tailwind ?? true;
   const templatesBase = new URL('../templates/', import.meta.url);
   // The starter's Vite pin comes from the workspace-anchored VITE_STARTER_PIN
   // (deps:vite-check), not from the product release version.
@@ -129,22 +161,67 @@ export async function buildTemplates(
     ...versionTokens(v),
     ['$' + '{v.vite}']: VITE_STARTER_PIN,
     ['$' + '{name}']: projectName,
+    [TAILWIND_README_TOKEN]: tailwind ? tailwindReadmeSection() : '',
   };
+  const files = tailwind ? [...TEMPLATE_FILES, ...TAILWIND_TEMPLATE_FILES] : TEMPLATE_FILES;
   const entries = await Promise.all(
-    TEMPLATE_FILES.map(async ([source, target]) => {
+    files.map(async ([source, target]) => {
       let content = await readFile(new URL(source, templatesBase), 'utf8');
       for (const [token, value] of Object.entries(tokens)) {
         if (content.includes(token)) content = content.split(token).join(value);
       }
-      if (content.includes('${v.') || content.includes('${name}')) {
+      if (
+        content.includes('${v.') ||
+        content.includes('${name}') ||
+        content.includes('${tailwind.')
+      ) {
         throw new Error(`Unresolved scaffold token in starter template: ${source}`);
       }
       return [target, content] as const;
     }),
   );
+  // The overlay declares its targets after the base list, so the Tailwind
+  // vite config replaces the plain one by target name.
+  const byTarget = new Map(entries);
+  if (tailwind) {
+    const manifestPath = 'package.json';
+    const manifest = JSON.parse(byTarget.get(manifestPath)!) as Record<string, unknown>;
+    // Alphabetized like the template keeps its own dependency blocks.
+    manifest.devDependencies = Object.fromEntries(
+      Object.entries({
+        ...(manifest.devDependencies as Record<string, string>),
+        ...TAILWIND_DEV_DEPENDENCIES,
+      }).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    );
+    // The template's own shape: two-space JSON with a trailing newline.
+    byTarget.set(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  }
+  const out = Object.fromEntries(byTarget);
   // Code-unit comparison (not localeCompare): deterministic across host
   // locales and matches the test's toSorted() expectation, including
   // uppercase targets like README.md.
-  entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return Object.fromEntries(entries);
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+/**
+ * The README prose the Tailwind-ON scaffold injects (the OFF form removes the
+ * token line). One source here, so the generated README and the tests cannot
+ * drift apart. The leading/trailing newline keeps the injected heading
+ * blank-line separated in both replacements.
+ */
+function tailwindReadmeSection(): string {
+  return `
+## Tailwind and the @theme role sheet
+
+This project was scaffolded with Tailwind enabled (pass \`--no-tailwind\` to
+\`@openelement/create\` for a starter without it). \`app/styles/theme.css\` is
+the @theme role sheet: semantic roles (background, primary, muted, ...) over
+the Tailwind default scale, with dark pairs and a forced-colors layer. The
+router's Tailwind preset compiles the sheet into one linked bundle during
+\`pnpm build\` and references it from every rendered page; the custom
+properties inherit into every shadow root, so pages and islands can consume
+the roles directly. \`pnpm dev\` serves the tokens convention instead — the
+compiled bundle exists in the build output. Extend the sheet by adding role
+lines; \`@openelement/ui\`'s theme.css documents the same contract.
+`;
 }

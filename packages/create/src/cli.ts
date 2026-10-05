@@ -7,7 +7,11 @@
  * string, so the documented command cannot drift from the shipped flags.
  *
  * openElement Architecture: Keep It Simple, Stupid.
- * One template, zero prompts, instant start.
+ * One template, one question, instant start. The single question is the
+ * Tailwind form (#1524): the default (and every non-interactive run) ships
+ * the Tailwind-ON starter — preset-wired vite config, @theme role sheet, and
+ * the exact tailwindcss/@tailwindcss/vite pins; `--no-tailwind` keeps the
+ * pre-#1524 minimal template.
  *
  * L9: every failure mode exits 1 with one actionable message — never a
  * runtime stack trace.
@@ -15,6 +19,7 @@
 
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import process from 'node:process';
+import readline from 'node:readline/promises';
 import { buildTemplates, resolveVersions, validateProjectName } from './template-builder.ts';
 import { createInstallCommand } from './install-command.ts';
 
@@ -49,12 +54,56 @@ function dirnameOf(path: string): string {
   return path.slice(0, idx);
 }
 
+/** The CLI flags and the project-name positional, parsed without a library. */
+function parseArgs(argv: string[]): { name?: string; tailwind?: boolean } {
+  let name: string | undefined;
+  let tailwind: boolean | undefined;
+  for (const arg of argv) {
+    if (arg === '--tailwind') tailwind = true;
+    else if (arg === '--no-tailwind') tailwind = false;
+    else if (arg.startsWith('-')) continue; // --help/-h are handled by the caller
+    else if (name === undefined) name = arg;
+  }
+  return { name, tailwind };
+}
+
+/**
+ * Resolve the Tailwind form: a flag wins without prompting; otherwise a TTY
+ * asks the one scaffold question (default Y), and a non-TTY run (CI, packed
+ * consumers) takes the same default without prompting.
+ */
+async function resolveTailwindForm(flag: boolean | undefined): Promise<boolean> {
+  if (flag !== undefined) return flag;
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return true;
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    for (;;) {
+      const answer = (await rl.question('Enable Tailwind CSS + @theme role sheet? (Y/n) '))
+        .trim()
+        .toLowerCase();
+      if (answer === '' || answer === 'y' || answer === 'yes') return true;
+      if (answer === 'n' || answer === 'no') return false;
+      console.info('  please answer y (default) or n');
+    }
+  } finally {
+    rl.close();
+  }
+}
+
 async function main(): Promise<void> {
-  const name = process.argv[2];
+  const argv = process.argv.slice(2);
+  const { name: positionalName, tailwind: tailwindFlag } = parseArgs(argv);
+  const name = positionalName;
   if (!name || name === '--help' || name === '-h') {
     console.log(`Usage (Alpha): ${createInstallCommand()}`);
     console.log('(a versionless install resolves the stable 0.43 line)');
+    console.log('  --tailwind      ship the Tailwind-ON starter (default)');
+    console.log('  --no-tailwind   ship the minimal starter without Tailwind');
     process.exit(name ? 0 : 1);
+  }
+
+  if (argv.includes('--tailwind') && argv.includes('--no-tailwind')) {
+    fail('--tailwind and --no-tailwind are mutually exclusive.');
   }
 
   const invalid = validateProjectName(name);
@@ -86,11 +135,12 @@ async function main(): Promise<void> {
     }
   }
 
+  const tailwind = await resolveTailwindForm(tailwindFlag);
   const v = resolveVersions();
 
   try {
     await mkdir(targetDir, { recursive: true });
-    const TPL = await buildTemplates(v, name);
+    const TPL = await buildTemplates(v, name, { tailwind });
     for (const [path, content] of Object.entries(TPL)) {
       const fullPath = joinPosix(targetDir, path);
       await mkdir(dirnameOf(fullPath), { recursive: true });
@@ -108,6 +158,11 @@ async function main(): Promise<void> {
   }
 
   console.info(`\nopenElement project created at ./${relativeTarget}/`);
+  console.info(
+    tailwind
+      ? '  Tailwind: ON — app/styles/theme.css carries the @theme role sheet.'
+      : '  Tailwind: OFF — minimal starter, no Tailwind dependency surface.',
+  );
   console.info(`\n  cd ${relativeTarget}`);
   console.info('  pnpm install');
   console.info('  pnpm dev');

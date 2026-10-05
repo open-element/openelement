@@ -5,11 +5,12 @@
  * Builds the packed-starter verification surface on the B5 Node/pnpm consumer
  * surface (ADR-0161): packs the release tarballs through the release
  * toolchain (vp pack via publish-npm dry-run), runs the packed create CLI
- * under Node to generate a fresh starter, rewires
- * the starter's @openelement/* dependencies to the same current-SHA tarballs,
- * installs the starter's own dependency surface with pnpm, then builds it.
- * The built dist/ + dist/server/ are served by the starter's own `start`
- * script during the Playwright run.
+ * under Node to generate a fresh starter (the non-interactive default, the
+ * Tailwind-ON form, #1524 — plus a surface-only --no-tailwind variant check),
+ * rewires the starter's @openelement/* dependencies to the same current-SHA
+ * tarballs, installs the starter's own dependency surface with pnpm, then
+ * builds it. The built dist/ + dist/server/ are served by the starter's own
+ * `start` script during the Playwright run.
  *
  * Usage:
  *   pnpm --dir tests/e2e/starter-smoke run setup   (build everything into work/)
@@ -28,7 +29,6 @@ const appDir = join(workDir, 'my-blog');
 const depsDir = join(workDir, 'deps');
 
 const PACKAGES = ['element', 'router', 'create'] as const;
-
 /**
  * The release toolchain (vp pack) writes each packed tarball next to the
  * package sources under its logical artifact name. Returns the tarball path.
@@ -108,6 +108,69 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
  */
 const STARTER_FRAMEWORK_PACKAGES = ['element', 'router'] as const;
 
+/**
+ * The Tailwind-ON scaffold default (#1524): the packed CLI runs
+ * non-interactively here, so the generated starter must be the ON form — the
+ * exact build-time pins in devDependencies and the @theme role sheet on disk.
+ * The pin value comes from the create package's own source module (the same
+ * in-process import pattern as the canonical-command check above).
+ */
+async function assertTailwindOnStarter(manifestPath: string, starterDir: string): Promise<void> {
+  const versionUrl = pathToFileURL(join(repoRoot, 'packages', 'create', 'src', 'version.ts')).href;
+  const { TAILWIND_STARTER_PIN } = (await import(versionUrl)) as {
+    TAILWIND_STARTER_PIN: string;
+  };
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+    devDependencies: Record<string, string>;
+  };
+  for (const name of ['tailwindcss', '@tailwindcss/vite']) {
+    const pin = manifest.devDependencies[name];
+    if (pin !== TAILWIND_STARTER_PIN) {
+      throw new Error(
+        `[starter-smoke setup] the generated starter is not the Tailwind-ON default form: ` +
+          `devDependency ${name}=${pin ?? '<missing>'}, expected ${TAILWIND_STARTER_PIN} (#1524)`,
+      );
+    }
+  }
+  if (!existsSync(join(starterDir, 'app', 'styles', 'theme.css'))) {
+    throw new Error(
+      '[starter-smoke setup] the generated starter is missing the @theme role sheet ' +
+        '(app/styles/theme.css) of the Tailwind-ON default form (#1524)',
+    );
+  }
+  console.log('[starter-smoke setup] starter is the Tailwind-ON default form');
+}
+
+/**
+ * The --no-tailwind variant keeps one dedicated packed-surface check (#1524):
+ * the flag must still reach the PACKED template payload and produce the
+ * minimal form. Surface-only by design (no install, no build) — the full
+ * lifecycle legs above already qualify the ON form end to end, and the
+ * create package's template tests own the OFF-form depth.
+ */
+async function assertNoTailwindVariant(createCli: string): Promise<void> {
+  const variantDir = join(workDir, 'my-blog-plain');
+  if (existsSync(variantDir)) rmSync(variantDir, { recursive: true });
+  try {
+    await runStep('node', [createCli, 'my-blog-plain', '--no-tailwind'], { cwd: workDir });
+    const manifestText = await readFile(join(variantDir, 'package.json'), 'utf8');
+    if (manifestText.includes('tailwind')) {
+      throw new Error(
+        '[starter-smoke setup] the --no-tailwind variant carries a Tailwind dependency: ' +
+          'the flag did not reach the packed template payload (#1524)',
+      );
+    }
+    if (existsSync(join(variantDir, 'app', 'styles', 'theme.css'))) {
+      throw new Error(
+        '[starter-smoke setup] the --no-tailwind variant shipped the @theme role sheet',
+      );
+    }
+    console.log('[starter-smoke setup] --no-tailwind variant scaffolds the minimal form');
+  } finally {
+    if (existsSync(variantDir)) rmSync(variantDir, { recursive: true });
+  }
+}
+
 async function rewireToPackedTarballs(
   manifestPath: string,
   tarballs: Record<(typeof PACKAGES)[number], string>,
@@ -139,10 +202,13 @@ async function main(): Promise<void> {
   await assertPackedCliPrintsCanonicalCommand(createCli);
   // The packed CLI is node-hosted and prompt-free: a bare node spawn is the
   // whole contract (no host permission flags on the Node consumer surface).
+  // Non-interactive stdin takes the scaffold default (Tailwind ON, #1524).
   await runStep('node', [createCli, 'my-blog'], { cwd: workDir });
   if (!existsSync(appDir)) {
     throw new Error(`scaffolded starter missing at ${appDir}`);
   }
+  await assertTailwindOnStarter(join(appDir, 'package.json'), appDir);
+  await assertNoTailwindVariant(createCli);
 
   await rewireToPackedTarballs(join(appDir, 'package.json'), tarballs);
 

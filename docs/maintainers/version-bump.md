@@ -18,6 +18,25 @@ lessons that manual carried are folded in below.
 | 9 | `README.md` | the source-tree sentence |
 | 10 | `README.zh.md` | the 源码基线 sentence |
 
+## The workspace-member stamps (#1524)
+
+Beyond the ten points, the knob enumerates every `pnpm-workspace.yaml` member
+(canonical globs, `!` exclusions honored) and stamps the members whose
+`version` sits on the release line's shape — same major.minor.patch base as
+the line, riding a prerelease train. The private members (`www`,
+`tools/repo`, `tools/release`, `apps/saas`) ride the same train as the
+published packages and must never fall behind: a lagging member is rewritten
+from its own current version straight to the target. Members on a
+non-release-line version (the test fixtures' `0.0.0`) are never touched; the
+dry run still lists them with their skip reason, so the preview is a complete
+no-straggler audit.
+
+Shape is judged against the line's CURRENT version, so the stamps converge
+even across a base change. The post-write consistency face asserts every
+train-shaped member ended at the target. If a member is ever meant to keep an
+independent version deliberately, that is a recorded exception to own, not a
+silent gap.
+
 Plus the tracked generated outputs, refreshed by the same command through the
 `generate:all` face after the text points are written:
 
@@ -38,12 +57,17 @@ pnpm --dir tools/repo run version-bump 1.0.0-alpha.N --dry-run    # explicit dry
 pnpm --dir tools/repo run version-bump 1.0.0-alpha.N --write      # apply + generate:all
 ```
 
-1. **Review the dry run.** It prints the diff of all ten points plus the
-   generated-output preview, and fails closed if any anchor has drifted (for
-   example a hand-edited sentence the rewriter can no longer find).
-2. **Apply with `--write`.** The command writes the ten points, runs
-   `generate:all`, and re-checks the whole surface (including the www anchor)
-   before exiting. `pnpm install` afterwards normally produces NO lock diff:
+1. **Review the dry run.** It prints the diff of every pending point — the
+   ten release-line sites plus each lagging workspace member (#1524) — the
+   skipped-member audit, and the generated-output preview; it fails closed if
+   any anchor has drifted (for example a hand-edited sentence the rewriter
+   can no longer find). When the release line already sits at the target but
+   members lag, the dry run says so and previews exactly the member stamps a
+   `--write` would apply.
+2. **Apply with `--write`.** The command writes the pending points (line and
+   members), runs `generate:all`, and re-checks the whole surface (including
+   the www anchor and the member stamps) before exiting. `pnpm install`
+   afterwards normally produces NO lock diff:
    the workspace's single `pnpm-lock.yaml` records workspace links as
    `workspace:*` / `version: link:...`, which carry no version token. Run it
    once anyway and commit a diff if one appears.

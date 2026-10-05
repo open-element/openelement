@@ -7,7 +7,8 @@ import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { OPEN_ELEMENT_CONFIG_KEYS } from '../../router/src/config.ts';
-import { CREATE_VERSION, VITE_STARTER_PIN } from '../src/version.ts';
+import { CREATE_VERSION, TAILWIND_STARTER_PIN, VITE_STARTER_PIN } from '../src/version.ts';
+import { createInstallCommand } from '../src/install-command.ts';
 import {
   assertUnifiedProductVersions,
   buildTemplates,
@@ -25,8 +26,8 @@ function readTemplate(path: string): string {
   return readFileSync(existsSync(payloadPath) ? payloadPath : logicalPath, 'utf8');
 }
 
-async function runCreate(executable: string, cwd: string, name: string) {
-  const child = spawn(process.execPath, [executable, name], { cwd });
+async function runCreate(executable: string, cwd: string, name: string, ...extra: string[]) {
+  const child = spawn(process.execPath, [executable, name, ...extra], { cwd });
   const [out, err] = await Promise.all([
     Array.fromAsync(child.stdout!),
     Array.fromAsync(child.stderr!),
@@ -64,6 +65,8 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
     '@openelement/router',
     'hono',
   ]);
+  // The raw template is the --no-tailwind manifest (#1524): the Tailwind pins
+  // are injected by buildTemplates on the ON form, never hand-edited here.
   expect(Object.keys(manifest.devDependencies).sort()).toEqual([
     '@playwright/test',
     'typescript',
@@ -98,6 +101,107 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
   expect(tsconfig.compilerOptions.jsxImportSource).toEqual('@openelement/element');
   expect(tsconfig.compilerOptions.noEmit).toEqual(true);
   expect(tsconfig.include).toEqual(['app', 'vite.config.ts', 'openelement.config.ts']);
+});
+
+test('the default scaffold is the Tailwind-ON form (#1524)', async () => {
+  const on = await buildTemplates(resolveVersions(), 'sample-app');
+  const explicit = await buildTemplates(resolveVersions(), 'sample-app', { tailwind: true });
+  expect(on).toEqual(explicit);
+  // The manifest carries the exact Tailwind dev pins alongside the base three.
+  const pkg = JSON.parse(on['package.json']);
+  expect(Object.keys(pkg.devDependencies).sort()).toEqual([
+    '@playwright/test',
+    '@tailwindcss/vite',
+    'tailwindcss',
+    'typescript',
+    'vite',
+  ]);
+  expect(pkg.devDependencies['@tailwindcss/vite']).toEqual(TAILWIND_STARTER_PIN);
+  expect(pkg.devDependencies.tailwindcss).toEqual(TAILWIND_STARTER_PIN);
+  // The product dependency surface is untouched by the form.
+  expect(Object.keys(pkg.dependencies).sort()).toEqual([
+    '@hono/vite-dev-server',
+    '@openelement/element',
+    '@openelement/router',
+    'hono',
+  ]);
+  // The preset-wired vite config replaces the plain one; the role sheet joins
+  // the styles convention.
+  expect(on['vite.config.ts']).toContain('applyTailwindPreset');
+  expect(on['vite.config.ts']).toContain('openElement()');
+  expect(on['app/styles/theme.css']).toBeTruthy();
+  // The generated README explains the default form.
+  expect(on['README.md']).toContain('Tailwind and the @theme role sheet');
+  // The Tailwind line is aligned with the router's own dev pins (same anchor
+  // discipline deps:vite-check applies to VITE_STARTER_PIN).
+  const routerManifest = JSON.parse(
+    readFileSync(join(packageDir, '..', 'router', 'package.json'), 'utf8'),
+  );
+  expect(routerManifest.devDependencies['@tailwindcss/vite']).toEqual(TAILWIND_STARTER_PIN);
+  expect(routerManifest.devDependencies.tailwindcss).toEqual(TAILWIND_STARTER_PIN);
+});
+
+test('the --no-tailwind form is the pre-#1524 minimal starter', async () => {
+  const off = await buildTemplates(resolveVersions(), 'sample-app', { tailwind: false });
+  // No Tailwind surface anywhere: no role sheet, no pins, no preset wiring,
+  // no README section, no leftover scaffold token.
+  expect('app/styles/theme.css' in off).toBeFalsy();
+  const pkg = JSON.parse(off['package.json']);
+  expect(JSON.stringify(pkg).includes('tailwind')).toBeFalsy();
+  expect(off['vite.config.ts'].includes('applyTailwindPreset')).toBeFalsy();
+  expect(off['README.md'].includes('Tailwind and the @theme role sheet')).toBeFalsy();
+  expect(off['README.md'].includes('${tailwind.section}')).toBeFalsy();
+  // The file surface is exactly the base template set.
+  expect(Object.keys(off)).not.toContain('app/styles/theme.css');
+  // And the plain vite config stays the #1411 shape: no style strings.
+  expect(off['vite.config.ts']).toContain('plugins: [...openElement()]');
+});
+
+test('the Tailwind role sheet keeps the @theme contract: roles, no scale values', () => {
+  const raw = readTemplate('tailwind/theme.css');
+  // Same contract as packages/ui/src/theme.css: semantic roles expressed with
+  // Tailwind default theme variables — zero handwritten scale values.
+  expect(raw).toContain('@theme {');
+  expect(raw).toContain(":root[data-theme='dark']");
+  expect(raw).toContain('@media (forced-colors: active)');
+  // No color literals anywhere: hex, rgb(), hsl(), oklch() are all banned —
+  // role values are var(--color-*) references or forced-colors system
+  // keywords.
+  expect(/#[0-9a-fA-F]{3,8}\b/.test(raw), 'hex literal in theme.css').toBeFalsy();
+  expect(/(rgb|rgba|hsl|hsla|oklch|oklab|color-mix)\(/.test(raw), 'color function').toBeFalsy();
+  for (const match of raw.matchAll(/--color-[a-z0-9-]+:\s*([^;]+);/g)) {
+    const value = match[1].trim();
+    expect(
+      /^var\(--color-[a-z0-9-]+\)$/.test(value) || /^[A-Z][A-Za-z]+$/.test(value),
+      `role value must be a TW variable or system keyword: ${value}`,
+    ).toBeTruthy();
+  }
+  // The sheet teaches the role vocabulary the ui package owns.
+  for (const role of [
+    '--color-background',
+    '--color-foreground',
+    '--color-primary',
+    '--color-muted',
+    '--color-border',
+    '--color-ring',
+  ]) {
+    expect(raw.includes(role), role).toBeTruthy();
+  }
+});
+
+test('the Tailwind vite config wires the public preset face, not private options', () => {
+  const config = readTemplate('tailwind/vite.config.ts');
+  // The preset enters through the router's public applyTailwindPreset (the
+  // same face www uses), applied at the SSG-finished closeBundle stage.
+  expect(config.includes("from '@openelement/router/vite'"), config).toBeTruthy();
+  expect(config.includes('applyTailwindPreset'), config).toBeTruthy();
+  expect(config.includes("apply: 'build'"), config).toBeTruthy();
+  // The role sheet path is declared relative to the preset's staging entry.
+  expect(config.includes("'../../app/styles/theme.css'"), config).toBeTruthy();
+  // #1411 carries over: no style/CSS strings in vite.config, and no inline
+  // sheet delivery (the preset links the bundle).
+  expect(config.includes('headFragments'), config).toBeFalsy();
+  expect(config.includes('<style'), config).toBeFalsy();
 });
 
 test('embedded CLI version matches its package manifest', () => {
@@ -497,19 +601,96 @@ test('source CLI generates a complete, token-free starter', async () => {
     const manifest = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8'));
     expect(JSON.stringify(manifest).includes('${v.')).toBeFalsy();
     expect(existsSync(join(appDir, 'tsconfig.json'))).toBeTruthy();
+    // #1524: a non-interactive run defaults to the Tailwind-ON form — the
+    // role sheet and the preset wiring are on disk, the pins are exact.
+    expect(existsSync(join(appDir, 'app', 'styles', 'theme.css'))).toBeTruthy();
+    expect(
+      readFileSync(join(appDir, 'vite.config.ts'), 'utf8').includes('applyTailwindPreset'),
+    ).toBeTruthy();
+    expect(manifest.devDependencies.tailwindcss).toEqual(TAILWIND_STARTER_PIN);
     // Starter ships the compiled blog routes and a README explaining
     // scripts/conventions.
     expect(existsSync(join(appDir, 'README.md'))).toBeTruthy();
     expect(existsSync(join(appDir, 'app', 'routes', 'blog', 'index.tsx'))).toBeTruthy();
     expect(existsSync(join(appDir, 'app', 'routes', 'blog', 'welcome.tsx'))).toBeTruthy();
-    // Success output walks the documented pnpm lifecycle.
+    // Success output walks the documented pnpm lifecycle and names the form.
     expect(stdout.includes('pnpm install'), stdout).toBeTruthy();
     expect(stdout.includes('pnpm dev'), stdout).toBeTruthy();
-    // Success output points at the README for the full script list.
     expect(stdout.includes('README.md'), stdout).toBeTruthy();
+    expect(stdout.includes('Tailwind: ON'), stdout).toBeTruthy();
   } finally {
     rmSync(tmpRoot, { recursive: true });
   }
+});
+
+test('#1524: --no-tailwind scaffolds the minimal starter, --tailwind the preset one', async () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-forms-'));
+  try {
+    const executable = join(packageDir, 'src', 'cli.ts');
+    await runCreate(executable, tmpRoot, 'no-tw', '--no-tailwind');
+    await runCreate(executable, tmpRoot, 'with-tw', '--tailwind');
+    const off = JSON.parse(readFileSync(join(tmpRoot, 'no-tw', 'package.json'), 'utf8'));
+    const on = JSON.parse(readFileSync(join(tmpRoot, 'with-tw', 'package.json'), 'utf8'));
+    // Exactly one form-specific surface difference in the manifests.
+    expect('tailwindcss' in off.devDependencies).toBeFalsy();
+    expect('tailwindcss' in on.devDependencies).toBeTruthy();
+    expect(existsSync(join(tmpRoot, 'no-tw', 'app', 'styles', 'theme.css'))).toBeFalsy();
+    expect(existsSync(join(tmpRoot, 'with-tw', 'app', 'styles', 'theme.css'))).toBeTruthy();
+    expect(
+      readFileSync(join(tmpRoot, 'no-tw', 'vite.config.ts'), 'utf8').includes(
+        'applyTailwindPreset',
+      ),
+    ).toBeFalsy();
+    expect(
+      readFileSync(join(tmpRoot, 'with-tw', 'vite.config.ts'), 'utf8').includes(
+        'applyTailwindPreset',
+      ),
+    ).toBeTruthy();
+  } finally {
+    rmSync(tmpRoot, { recursive: true });
+  }
+});
+
+test('L9: contradictory Tailwind form flags fail with a clean actionable error', async () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-flags-'));
+  try {
+    const child = spawn(
+      process.execPath,
+      [join(packageDir, 'src', 'cli.ts'), 'sample-app', '--tailwind', '--no-tailwind'],
+      { cwd: tmpRoot },
+    );
+    const [, err] = await Promise.all([
+      Array.fromAsync(child.stdout!),
+      Array.fromAsync(child.stderr!),
+    ]);
+    const code = await new Promise<number>((resolve) =>
+      child.once('exit', (c) => resolve(c ?? -1)),
+    );
+    expect(code).toEqual(1);
+    const stderr = Buffer.concat(err).toString();
+    expect(stderr.includes('mutually exclusive'), stderr).toBeTruthy();
+    assertCleanError(stderr);
+    expect(existsSync(join(tmpRoot, 'sample-app'))).toBeFalsy();
+  } finally {
+    rmSync(tmpRoot, { recursive: true });
+  }
+});
+
+test('usage documents the Tailwind form flags beside the canonical install command', async () => {
+  const child = spawn(process.execPath, [join(packageDir, 'src', 'cli.ts')], { cwd: packageDir });
+  const [out, err] = await Promise.all([
+    Array.fromAsync(child.stdout!),
+    Array.fromAsync(child.stderr!),
+  ]);
+  await new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1)));
+  const stdout = Buffer.concat(out).toString();
+  expect(Buffer.concat(err).toString()).toEqual('');
+  // First line stays the canonical install command (the starter-smoke gate
+  // compares exactly that line against createInstallCommand()).
+  expect(stdout.startsWith(`Usage (Alpha): ${createInstallCommand()}`), stdout).toBeTruthy();
+  expect(stdout.includes('--tailwind'), stdout).toBeTruthy();
+  expect(stdout.includes('--no-tailwind'), stdout).toBeTruthy();
+  expect(stdout.includes('(default)'), stdout).toBeTruthy();
 });
 
 test('L11: project name validation enforces npm-name and traversal rules', () => {
