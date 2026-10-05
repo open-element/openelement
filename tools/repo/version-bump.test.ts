@@ -36,6 +36,7 @@ import {
   shippedScanAllowlisted,
   validateVersion,
   VERSION_SOURCE,
+  WORKSPACE_ROOT_CONFIG,
   workspaceMemberConfigPaths,
 } from './version-bump.ts';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -55,6 +56,7 @@ test('version-bump: the ten points are the named stamp sites', () => {
   expect(ADMITTED_TARGET_SOURCE).toEqual('tools/repo/check-release-state-machine.ts');
   expect(ADMITTED_TWIN_FIXTURE).toEqual('tools/repo/check-release-state-machine.test.ts');
   expect(GENERATED_MANIFEST).toEqual('packages/ui/src/generated-manifest.json');
+  expect(WORKSPACE_ROOT_CONFIG).toEqual('package.json');
   expect(README_SOURCE_LINES).toEqual([
     { path: 'README.md', anchor: 'The source tree is `' },
     { path: 'README.zh.md', anchor: '全新公开基线 `' },
@@ -205,6 +207,10 @@ test('version-bump: dry run reports every point against the live tree', async ()
   // one gets an edit; the member audit lists the skipped fixtures too.
   const memberPaths = plan.members.map((member) => member.path);
   expect(memberPaths.length).toEqual((await workspaceMemberConfigPaths(repoRoot)).length);
+  // #1534: the workspace root's own manifest is enumerated too — no
+  // `packages:` glob names it, so its presence here is the explicit append
+  // working on the live tree.
+  expect(memberPaths).toContain(WORKSPACE_ROOT_CONFIG);
   for (const member of plan.members) {
     expect(member.status === 'stamped' || member.status === 'skipped', member.path).toBeTruthy();
   }
@@ -449,6 +455,12 @@ test('version-bump: workspace members ride the stamp on a fixture tree (#1524)',
       join(root, 'pnpm-workspace.yaml'),
       'packages:\n  - www\n  - apps/*\n  - tests/fixtures/*\n  - "!apps/secret"\n',
     );
+    // The workspace root itself, lagging the same train (#1534): no glob
+    // names it, so only the explicit append can pick it up.
+    await writeFile(
+      join(root, 'package.json'),
+      `{\n  "name": "openelement",\n  "private": true,\n  "version": "${version}"\n}`,
+    );
     await mkdir(join(root, 'www'), { recursive: true });
     await writeFile(
       join(root, 'www/package.json'),
@@ -466,9 +478,11 @@ test('version-bump: workspace members ride the stamp on a fixture tree (#1524)',
     );
 
     const plan = await planVersionBump(root, next);
-    // Ten release-line points + the one lagging member.
+    // Ten release-line points + the lagging workspace root (#1534) + the one
+    // lagging member.
     expect(plan.edits.map((edit) => edit.path)).toEqual([
       ...PACKAGE_CONFIGS,
+      WORKSPACE_ROOT_CONFIG,
       'www/package.json',
       VERSION_SOURCE,
       RELEASE_STATE,
@@ -480,6 +494,12 @@ test('version-bump: workspace members ride the stamp on a fixture tree (#1524)',
     expect(wwwEdit.point).toEqual('workspace-member');
     expect(wwwEdit.before).toContain(`"version": "${version}"`);
     expect(wwwEdit.after).toContain(`"version": "${next}"`);
+    const rootEdit = plan.edits.find((edit) => edit.path === WORKSPACE_ROOT_CONFIG)!;
+    expect(rootEdit.point).toEqual('workspace-member');
+    expect(rootEdit.before).toContain(`"version": "${version}"`);
+    expect(rootEdit.after).toContain(`"version": "${next}"`);
+    const rootStamp = plan.members.find((member) => member.path === WORKSPACE_ROOT_CONFIG)!;
+    expect(rootStamp.status).toEqual('stamped');
     // The full member audit: stamped, skipped (fixture), excluded.
     const wwwStamp = plan.members.find((member) => member.path === 'www/package.json')!;
     expect(wwwStamp.status).toEqual('stamped');
@@ -506,7 +526,18 @@ test('version-bump: workspace members ride the stamp on a fixture tree (#1524)',
     ).toEqual([]);
     const converged = await planVersionBump(root, next);
     expect(converged.edits).toEqual([]);
-    expect(converged.members.map((member) => member.status)).toEqual(['skipped', 'current']);
+    // Sorted member paths: the root (#1534, now current), the skipped
+    // fixture, and the stamped-then-converged www member.
+    expect(converged.members.map((member) => member.path)).toEqual([
+      WORKSPACE_ROOT_CONFIG,
+      'tests/fixtures/thing/package.json',
+      'www/package.json',
+    ]);
+    expect(converged.members.map((member) => member.status)).toEqual([
+      'current',
+      'skipped',
+      'current',
+    ]);
   } finally {
     await rm(root, { recursive: true });
   }
