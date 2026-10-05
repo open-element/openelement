@@ -49,6 +49,25 @@ migration.
   retires. Dialog exit animation rides `allow-discrete` +
   `@starting-style`. The element runtime/compiler split is evaluated and
   DEFERRED to alpha10 with measured evidence (ADR-0162).
+- **Post-train audit consolidation (#1521/#1522).** The Tailwind preset's
+  DSD link injection becomes opt-in (default off — the compiled claim
+  requires template children to match the Part Program exactly; the head
+  link already delivers theme custom properties across shadow
+  boundaries), and the dogfood e2e now walks the preset-default path.
+  The site's open-search dialog gains session-epoch invalidation (close
+  during first load stays closed; in-flight Pagefind rounds cannot write
+  back; a failed first load retries). Doc claims align with reality:
+  the SaaS stack reads as qualification-pending, i18n examples are
+  runnable, build phase order and DSD/light-DOM defaults match the
+  implementation, absolute deployment/paint claims are qualified.
+- **Tailwind-on starter by default (#1524).** One Enter buys element
+  compile + router fullstack + Tailwind: the default scaffold pins
+  tailwindcss/@tailwindcss/vite, wires the router preset, and carries a
+  starter-local @theme role sheet (zero authored scale values).
+  --no-tailwind keeps the minimal form; both forms are standing,
+  machine-tested consumer worlds, and getting-started documents the
+  element-as-library path. The whole workspace stamps one version
+  (www and the tooling packages had drifted two releases behind).
 - **Router hardening (audit ride-alongs).** node-http cancels unconsumed
   bodies on HEAD/204/304; bind failures answer with actionable one-liners;
   package-scan errors separate "not installed" from "no ./manifest
