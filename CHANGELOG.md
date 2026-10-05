@@ -9,6 +9,51 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.9
+
+**The styling blood-swap: one @theme token source, opt-in Tailwind seams,
+components on shadcn roles, and an accessible site.** Open Props is removed
+entirely (ten linked sites, no compatibility layer); `@openelement/ui`
+guarantees the role table's SHAPE — role names, dark pairs, a forced-colors
+tier — and embeds no scale values at all: values come from the Router's
+Tailwind preset (ON) or the consumer's own sheet (OFF), per
+`CUSTOMIZATION.md` "Value delivery". An intentional pixel break, not a
+migration.
+
+- **@theme single source (#1504).** `@openelement/ui/theme.css`: 24
+  shadcn-convention roles seated on Tailwind v4 default scales (0 authored
+  scale values); the retired alias layer is deleted whole; the OP sweep
+  leaves only negative guards.
+- **Opt-in Tailwind preset + two seams (#1505).** `@tailwindcss/vite` 4.3.3
+  enters the Router Vite seam as an optional peer, default OFF
+  (preset-OFF builds are hash-proven byte-identical). When ON: component
+  styles compile into the declared `@layer theme, base, components,
+  utilities` order, and global style reaches the document and every DSD
+  shadow template as `<link>` — the full-inline `styleText()` delivery
+  fails closed with stable error codes.
+- **Components on roles (#1506).** All twelve ui components restyled on the
+  role sheet; the customization surface is a declared semver contract
+  (`CUSTOMIZATION.md` ships in the package) guarded to never shrink against
+  alpha.8 (parts) and never drift from what components consume.
+- **Accessible site + interaction (#1507).** The docs site's open-search
+  combobox runs on Zag (1.43.3) with Floating UI positioning (full keyboard
+  + ARIA e2e); an axe gate is a permanent resident of the site e2e chain;
+  focus skeleton and the per-primitive decision record
+  (`INTERACTION-PRIMITIVES.md`) land together. Static components gained no
+  mandatory client JavaScript.
+- **Canonical bootstrap.** `npm create @openelement@alpha <name>` becomes
+  the documented one-liner (npm's init alias maps the scope), canonized in
+  the single source, READMEs, generator, and an ADR-0161 note.
+- **Release engineering.** The version-bump task drives all ten stamp
+  points plus generated outputs in one command; the transitional manual
+  retires. Dialog exit animation rides `allow-discrete` +
+  `@starting-style`. The element runtime/compiler split is evaluated and
+  DEFERRED to alpha10 with measured evidence (ADR-0162).
+- **Router hardening (audit ride-alongs).** node-http cancels unconsumed
+  bodies on HEAD/204/304; bind failures answer with actionable one-liners;
+  package-scan errors separate "not installed" from "no ./manifest
+  subpath" (new `OE_PACKAGE_ISLAND_PACKAGE_MISSING`).
+
 ## 1.0.0-alpha.8
 
 **Platform train: the repository and its consumer surface move from the Deno
