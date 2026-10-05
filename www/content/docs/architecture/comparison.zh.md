@@ -83,7 +83,7 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 
 ### 产物体积
 
-以下数字于 2026-10-04 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。alpha6 之后数字变动过三次：alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）；alpha8 的 B2 manifest 转换（pnpm workspaces，不再有 `deno.json` workspace 标记）重新切分了应用侧 island chunk；alpha8 的客户端构建现在会在 chunk 分组前把每个包 island 声明的身份解析到真实模块 id（#1471 fail-closed），因此每个 island chunk 都以 `island-open-<tag>-<hash>.js` 命名，而共享的编译元素运行时单独成块、由 `client.js` 在每个 island 页面上即时加载。下方的路由载荷按路由 manifest chunk 集合的即时导入闭包测量，因此无论共享代码落在哪个 chunk 文件里，数字都保持诚实。
+以下数字于 2026-10-05 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。alpha6 之后数字变动过四次：alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）；alpha8 的 B2 manifest 转换（pnpm workspaces，不再有 `deno.json` workspace 标记）重新切分了应用侧 island chunk；alpha8 的客户端构建现在会在 chunk 分组前把每个包 island 声明的身份解析到真实模块 id（#1471 fail-closed）；alpha9 的样式列车让站点落座 @theme 角色表并接入 Zag 驱动的 open-search 岛（#1502），带动了下方 island chunk 与路由载荷的增长，因此每个 island chunk 都以 `island-open-<tag>-<hash>.js` 命名，而共享的编译元素运行时单独成块、由 `client.js` 在每个 island 页面上即时加载。下方的路由载荷按路由 manifest chunk 集合的即时导入闭包测量，因此无论共享代码落在哪个 chunk 文件里，数字都保持诚实。
 
 | 指标                 | 数值                                             |
 | -------------------- | ------------------------------------------------ |
@@ -108,12 +108,12 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `island-open-layout`           | 100,208  | 17,211  |
+| `island-open-layout`           | 102,800  | 17,211  |
 | `island-open-badge`            | 88,566   | 27,515  |
-| `island-open-button`           | 16,279   | 3,121   |
+| `island-open-button`           | 16,816   | 3,121   |
 | `island-open-dragon-live-gaze` | 14,198   | 5,181   |
-| `island-open-page-rail`        | 9,721    | 2,754   |
-| `island-open-code-block`       | 8,476    | 2,816   |
+| `island-open-page-rail`        | 9,882    | 2,754   |
+| `island-open-code-block`       | 8,834    | 2,816   |
 | `island-open-cinematic-scroll` | 7,843    | 3,099   |
 | `island-open-hero-polish`      | 4,478    | 1,862   |
 
@@ -128,9 +128,9 @@ gzip -9 -c www/dist/client/islands/client.js | wc -c
 
 | 路由                     | 客户端载荷（原始） | 不同 chunk 数 |
 | ------------------------ | ------------------ | ------------- |
-| `/guide/mdx`             | 221,689 B          | 6             |
-| `/guide/getting-started` | 221,689 B          | 6             |
-| `/`                      | 230,644 B          | 7             |
+| `/guide/mdx`             | 225,644 B          | 6             |
+| `/guide/getting-started` | 225,644 B          | 6             |
+| `/`                      | 234,438 B          | 7             |
 
 70 份页面 manifest 合计声明了 10 个 island 标签、334 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 60 页，`open-code-block` 出现在 48 页，其余标签只在少数页面上。
 
