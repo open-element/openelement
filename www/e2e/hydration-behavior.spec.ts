@@ -105,6 +105,73 @@ test.describe('compiled activation on shipped islands', () => {
       await ssrOverlay!.evaluate((node, candidate) => node === candidate, reconnectedOverlay),
     ).toBe(true);
   });
+
+  test('a runtime import pending across remove/reinsert does not open the reinstalled island', async ({
+    page,
+  }) => {
+    await waitForHydratedSearch(page);
+
+    // Hold the lazily imported runtime chunk so the first open's connect
+    // continuation is still pending when the host is torn down.
+    let chunkRequested = false;
+    let releaseChunk!: () => void;
+    const chunkGate = new Promise<void>((resolve) => {
+      releaseChunk = resolve;
+    });
+    await page.route('**/open-search-combobox-*.js', async (route) => {
+      chunkRequested = true;
+      await chunkGate;
+      await route.continue();
+    });
+
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect.poll(() => chunkRequested).toBe(true);
+    await expect(page.getByRole('dialog', { name: 'Search' })).toBeVisible();
+
+    // Same-turn remove + reinsert: uninstallSearch tears the install down and
+    // the reinstalled island gets a fresh state; the pending import from the
+    // removed install must publish nowhere and open nothing.
+    await page.locator('open-search').evaluate((host) => {
+      const parent = host.parentNode;
+      const next = host.nextSibling;
+      host.remove();
+      parent?.insertBefore(host, next);
+    });
+    releaseChunk();
+    await page.waitForTimeout(300);
+
+    await expect(page.getByRole('dialog', { name: 'Search' })).toBeHidden();
+
+    // The reinstalled island is fully functional on its own.
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(page.getByRole('dialog', { name: 'Search' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Search documentation' })).toBeFocused();
+  });
+
+  test('an open session does not survive a reconnect; the reinstalled island reopens cleanly', async ({
+    page,
+  }) => {
+    await waitForHydratedSearch(page);
+
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(page.getByRole('dialog', { name: 'Search' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Search documentation' })).toBeFocused();
+
+    // Remove + reinsert while the dialog is open: the old session closes and
+    // every machine-written attribute is stripped by teardown; the fresh
+    // install must be able to open again from the SSR markup.
+    await page.locator('open-search').evaluate((host) => {
+      const parent = host.parentNode;
+      const next = host.nextSibling;
+      host.remove();
+      parent?.insertBefore(host, next);
+    });
+    await expect(page.getByRole('dialog', { name: 'Search' })).toBeHidden();
+
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(page.getByRole('dialog', { name: 'Search' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Search documentation' })).toBeFocused();
+  });
 });
 
 test.describe('open-button form piercing', () => {

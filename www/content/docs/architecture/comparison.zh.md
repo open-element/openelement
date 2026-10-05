@@ -39,7 +39,7 @@ order: 20
 ## 三组框架，三个不同的问题
 
 - **Lit / FAST / Stencil** 是组件层，而不是同一个应用契约。它们编写或编译 Custom Elements，并刻意把路由、数据与应用闭环留在自身模型之外；openElement 在同一个标准之上构建应用契约，因此它们与之组合，而非竞争。
-- **Astro / Fresh / Enhance** 是 static-first 或 HTML-first 的基线，但持久组件模型不同——框架专有的组件格式或绑定框架的 island。在 openElement 中，持久模型就是标准 Custom Element 本身，DSD 是默认服务端表示。
+- **Astro / Fresh / Enhance** 是 static-first 或 HTML-first 的基线，但持久组件模型不同——框架专有的组件格式或绑定框架的 island。在 openElement 中，持久模型就是标准 Custom Element 本身，DSD 是显式声明的 shadow 模式的服务端表达（当前编译默认是 light DOM）。
 - **Next / Remix / Nuxt / SvelteKit** 是更宽泛的、框架专有的全栈生态。openElement 不宣称与它们的泛全栈对等；它的全栈故事是与外部服务提供方显式、有证据支撑的组合。
 
 ## 决策标准
@@ -52,18 +52,18 @@ order: 20
 
 ## 官方组合路径
 
-OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所有权边界明确：OpenElement 负责应用 UX；Supabase 负责数据、Auth、RLS、Storage 与 Realtime；Cloudflare 负责边缘交付、安全、缓存与异步执行。Supabase 与 Cloudflare 是被组合的服务提供方——绝不是框架内建功能——包图谱边界门禁保证服务提供方代码不进入框架包。
+OpenElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权边界明确：OpenElement 负责应用 UX；Supabase 负责数据、Auth、RLS、Storage 与 Realtime；Cloudflare 负责边缘交付、安全、缓存与异步执行。Supabase 与 Cloudflare 是被组合的服务提供方——绝不是框架内建功能——包图谱边界门禁保证服务提供方代码不进入框架包。
 
 最初随 0.43 线与 Universal WC SSR 一同交付，并由当前编译型版本线继承。框架自有的生产运行时恢复与缓存语义仍在当前契约之外，尚未分配发布版本。
 
-- [已验证的 SaaS 消费方](https://github.com/open-element/openelement/tree/main/apps/saas)
+- [第一方 SaaS 消费方](https://github.com/open-element/openelement/tree/main/apps/saas)
 
 ## 定位背后的证据
 
 - Custom Elements 作为持久的应用契约——静态面与请求时应用闭环由当前架构文档描述。[当前架构](https://github.com/open-element/openelement/tree/main/docs/architecture)
 - DSD-first SSR 与选择性升级，以及显式的外来 WC 准入——语料库把每个第三方库形态的观测 SSR 输出与准入钉为机器可读证据。[第三方 WC 互操作语料库](https://github.com/open-element/openelement/blob/main/tests/fixtures/web-component-interop/corpus.json)
 - 浏览器与打包产物验证——候选版本需要 Chromium、Firefox 与 WebKit 证明，消费方从打包的公开产物构建。[发布流程](https://github.com/open-element/openelement/blob/main/docs/maintainers/releasing.md)
-- 可组合的服务提供方栈，而不是框架自有的 Auth 或数据库包——由第一方 SaaS 消费方端到端验证。[Supabase × Cloudflare SaaS](https://github.com/open-element/openelement/tree/main/apps/saas)
+- 可组合的服务提供方栈，而不是框架自有的 Auth 或数据库包——由第一方 SaaS 消费方实现并通过单元测试；托管与部署的 qualification 仍待外部完成，消费方 README 记录着该 qualification 状态。[Supabase × Cloudflare SaaS](https://github.com/open-element/openelement/tree/main/apps/saas)
 
 ## 来源与评审范围
 

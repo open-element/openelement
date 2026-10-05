@@ -2,12 +2,12 @@
   "generatedFrom": "hand-maintained: last meaningful update per article and locale, validated against www/content/docs by check:content-dates",
   "articles": {
     "architecture/architecture": {
-      "en": "2026-09-19",
-      "zh": "2026-09-19"
+      "en": "2026-10-05",
+      "zh": "2026-10-05"
     },
     "architecture/comparison": {
-      "en": "2026-10-04",
-      "zh": "2026-10-04"
+      "en": "2026-10-05",
+      "zh": "2026-10-05"
     },
     "architecture/design-system": {
       "en": "2026-09-19",
@@ -30,12 +30,12 @@
       "zh": "2026-10-04"
     },
     "guide/configuration": {
-      "en": "2026-10-04",
-      "zh": "2026-10-04"
+      "en": "2026-10-05",
+      "zh": "2026-10-05"
     },
     "guide/core-concepts": {
-      "en": "2026-10-04",
-      "zh": "2026-10-04"
+      "en": "2026-10-05",
+      "zh": "2026-10-05"
     },
     "guide/deployment": {
       "en": "2026-10-04",
@@ -50,16 +50,16 @@
       "zh": "2026-10-04"
     },
     "guide/glossary": {
-      "en": "2026-10-04",
-      "zh": "2026-10-04"
+      "en": "2026-10-05",
+      "zh": "2026-10-05"
     },
     "guide/i18n": {
-      "en": "2026-10-04",
-      "zh": "2026-10-04"
+      "en": "2026-10-05",
+      "zh": "2026-10-05"
     },
     "guide/islands-and-ssr": {
-      "en": "2026-10-04",
-      "zh": "2026-10-04"
+      "en": "2026-10-05",
+      "zh": "2026-10-05"
     },
     "guide/mdx": {
       "en": "2026-10-04",
@@ -70,8 +70,8 @@
       "zh": "2026-09-19"
     },
     "guide/recipe-island-strategies": {
-      "en": "2026-09-19",
-      "zh": "2026-09-19"
+      "en": "2026-10-05",
+      "zh": "2026-10-05"
     },
     "guide/recipe-theming": {
       "en": "2026-09-19",

@@ -1,6 +1,6 @@
 ---
 title: 'Current Architecture'
-lede: 'OpenElement is a Web Components-native, static-first application framework. Custom Elements are the durable component contract; JSX and Basic Element are authoring modes; Vite and Nitro are the official build and output path.'
+lede: 'OpenElement is a Web Components-native, static-first application framework. Custom Elements are the durable component contract; compiled JSX classes (`@element`) are the authoring model; Vite and Nitro are the official build and output path.'
 navLabel: 'Architecture'
 order: 10
 ---
@@ -37,7 +37,7 @@ build-phase details stay internal until real variation proves a public seam.
 
 ## Web Components are the application architecture.
 
-The roadmap earns WC fullstack leadership through compatibility evidence,
+The roadmap extends the Web Components fullstack scope through compatibility evidence,
 complete application loops and portable operations—not a growing package count.
 
 ### WC SSR

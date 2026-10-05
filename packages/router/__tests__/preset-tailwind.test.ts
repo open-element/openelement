@@ -99,14 +99,38 @@ test('extractLayerComponents isolates the components block body', () => {
 
 // ─── Link injection (seam 2: DSD link-not-inline) ──────────────
 
-test('links land in head and as the last child of every DSD template', () => {
-  const html = [
-    '<!DOCTYPE html><html><head><title>t</title></head><body>',
-    '<open-page><template shadowrootmode="open"><main></main></template></open-page>',
-    '<open-closed><template shadowrootmode="closed"><p>x</p></template></open-closed>',
-    '</body></html>',
-  ].join('');
-  const out = injectPresetLinks(html, '/assets/open-tailwind.css');
+const DSD_PAGE = [
+  '<!DOCTYPE html><html><head><title>t</title></head><body>',
+  '<open-page><template shadowrootmode="open"><main></main></template></open-page>',
+  '<open-closed><template shadowrootmode="closed"><p>x</p></template></open-closed>',
+  '</body></html>',
+].join('');
+
+test('the default keeps DSD templates untouched: head link only', () => {
+  // The compiled-claim walk (element claim.ts) requires the shadow root's
+  // children to equal the Part Program's own nodes, so the default must not
+  // inject anything into a shadow template.
+  for (const out of [
+    injectPresetLinks(DSD_PAGE, '/assets/open-tailwind.css'),
+    injectPresetLinks(DSD_PAGE, '/assets/open-tailwind.css', undefined, false),
+  ]) {
+    expect(
+      out.match(/<link rel="stylesheet" href="\/assets\/open-tailwind.css" \/>/g)?.length,
+    ).toEqual(1);
+    expect(out).toEqual(
+      expect.stringContaining('<template shadowrootmode="open"><main></main></template>'),
+    );
+    expect(out).toEqual(
+      expect.stringContaining('<template shadowrootmode="closed"><p>x</p></template>'),
+    );
+  }
+  // The head link lands directly after the <head> open tag.
+  const out = injectPresetLinks(DSD_PAGE, '/assets/open-tailwind.css');
+  expect(out.startsWith('<!DOCTYPE html><html><head>\n  <link rel="stylesheet"')).toEqual(true);
+});
+
+test('links land in head and as the last child of every DSD template when opted in', () => {
+  const out = injectPresetLinks(DSD_PAGE, '/assets/open-tailwind.css', undefined, true);
   // head: exactly one bundle link; DSD: one per template (open and closed).
   expect(
     out.match(/<link rel="stylesheet" href="\/assets\/open-tailwind.css" \/>/g)?.length,
@@ -124,14 +148,12 @@ test('links land in head and as the last child of every DSD template', () => {
       '<p>x</p><link rel="stylesheet" href="/assets/open-tailwind.css" /></template>',
     ),
   );
-  // The head link lands directly after the <head> open tag.
-  expect(out.startsWith('<!DOCTYPE html><html><head>\n  <link rel="stylesheet"')).toEqual(true);
 });
 
-test('a link inside a nested DSD template joins every shadow root', () => {
+test('a link inside a nested DSD template joins every shadow root when opted in', () => {
   const html =
     '<open-outer><template shadowrootmode="open"><open-inner><template shadowrootmode="open"><b>deep</b></template></open-inner></template></open-outer>';
-  const out = injectPresetLinks(html, '/assets/open-tailwind.css');
+  const out = injectPresetLinks(html, '/assets/open-tailwind.css', undefined, true);
   // No <head> in this fragment: exactly the two shadow links, one per root.
   expect(
     out.match(/<link rel="stylesheet" href="\/assets\/open-tailwind.css" \/>/g)?.length,
@@ -146,22 +168,6 @@ test('a link inside a nested DSD template joins every shadow root', () => {
       '</open-inner><link rel="stylesheet" href="/assets/open-tailwind.css" /></template></open-outer>',
     ),
   ).toEqual(true);
-});
-
-test('injectDsdLinks: false keeps the head link and leaves shadow templates untouched', () => {
-  const html =
-    '<!DOCTYPE html><html><head><title>t</title></head><body>' +
-    '<open-page><template shadowrootmode="open"><main></main></template></open-page>' +
-    '</body></html>';
-  const out = injectPresetLinks(html, '/assets/open-tailwind.css', undefined, false);
-  // Head adoption only: the DSD template bytes are exactly as rendered, so a
-  // compiled-claim site (exact shadow children) hydrates untouched.
-  expect(
-    out.match(/<link rel="stylesheet" href="\/assets\/open-tailwind.css" \/>/g)?.length,
-  ).toEqual(1);
-  expect(out).toEqual(
-    expect.stringContaining('<template shadowrootmode="open"><main></main></template>'),
-  );
 });
 
 test('the scope-face link rides along only when emitted', () => {

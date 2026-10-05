@@ -55,7 +55,7 @@ export default class MyCounter extends OpenElement {
 
 ## DSD
 
-服务端输出是 Declarative Shadow DOM：组件标记装在 `<template shadowrootmode="open">` 里，由浏览器原生解析，不需要脚本。首屏即已样式化且可读——在任何客户端模块被拉取之前。组件 `static styles` 中声明的样式会被内联；对于 light root，服务端把它们包进 `@scope(<tag>)` 块，使页面规则不会泄漏到文档其余部分。
+light DOM 是当前编译默认。声明了显式 shadow 模式的组件以 Declarative Shadow DOM 交付：组件标记装在 `<template shadowrootmode="open">` 里，由浏览器原生解析，不需要脚本。无论哪种模式，DSD/light 内容都可以先绘制、先可读——在任何客户端模块被拉取之前；handler 与 signal 在元素 upgrade 之后才绑定。组件 `static styles` 中声明的样式会被内联；对于 light root，服务端把它们包进 `@scope(<tag>)` 块，使页面规则不会泄漏到文档其余部分。
 
 交互通过平台自身的 Custom Element upgrade 到达：生成的客户端入口定义该类后，它接管已经存在的 DOM，绑定编译模板声明过的处理器，并用宿主 attribute 填充 `@property` 字段。宿主 attribute 只还原字段——它们从不凭空造出事件。类始终没有加载的元素仍然渲染其标记，所以 JS 失败会退化为静态页面，而不是空白页面。
 
@@ -69,7 +69,7 @@ import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
 ```
 
-`hydrate` 决定浏览器何时 import 该模块——`'load'` 用于导航、主题这类首屏就需要的控件，`'idle'` 留给其余可以等待的，`'visible'` 给随着滚动进入视口才重要的组件，`'media'` 给按能力门控的重模块（chunk 只在 island `media` 字段声明的查询匹配期间拉取），`'only'` 给跳过 SSR 的浏览器专用组件。构建会记录哪些 island 属于哪个页面，因此页面只引用它能用到的 chunk，永远到不了的 island 永远不会被拉取。
+`hydrate` 决定浏览器何时 import 该模块——`'load'` 用于导航、主题这类首屏关键控件，尽早导入并升级，`'idle'` 留给其余可以等待的，`'visible'` 给随着滚动进入视口才重要的组件，`'media'` 给按能力门控的重模块（chunk 只在 island `media` 字段声明的查询匹配期间拉取），`'only'` 给跳过 SSR 的浏览器专用组件。构建会记录哪些 island 属于哪个页面，因此页面只引用它能用到的 chunk，永远到不了的 island 永远不会被拉取。
 
 ## 条件区域与语法边界
 

@@ -79,13 +79,14 @@ export interface TailwindPresetOptions {
   scopeTags?: string[];
   /**
    * Whether the bundle link is also injected into every DSD shadow template
-   * (seam 2's shadow adoption). Default `true` — the C2 seam behavior. Set
-   * `false` when the app's compiled elements claim their SSR shadow DOM
-   * exactly (the @openelement/element compiled-claim walk requires the
-   * shadow root's children to equal the Part Program's own nodes, so any
-   * injected node fails the claim): the head link alone still reaches every
-   * shadow tree, because CSS custom properties — the theme layer's entire
-   * delivery — inherit across the shadow boundary.
+   * (seam 2's shadow adoption). Default `false`: the compiled claim requires
+   * the DSD template's children to equal the Part Program's own nodes (the
+   * @openelement/element compiled-claim walk fails closed on any injected
+   * node), so the exact-claim default leaves the shadow templates untouched.
+   * The head link alone still reaches every shadow tree, because CSS custom
+   * properties — the theme layer's entire delivery — inherit across the
+   * shadow boundary. Set `true` only for consumers whose compiled elements
+   * do not claim their SSR shadow DOM exactly.
    */
   injectDsdLinks?: boolean;
 }
@@ -347,27 +348,27 @@ export function extractLayerComponents(css: string): string {
 
 /**
  * Inject the preset's `<link rel="stylesheet">` emission into one rendered
- * page (seam 2): one link in `<head>` (document adoption) and — unless the
- * app opts out via {@linkcode TailwindPresetOptions.injectDsdLinks} — one
- * link inside every DSD shadow template's content (shadow adoption, deduped
- * by the browser cache across every page and shadow root).
+ * page (seam 2): one link in `<head>` (document adoption) and — only when
+ * the app opts in via {@linkcode TailwindPresetOptions.injectDsdLinks} —
+ * one link inside every DSD shadow template's content (shadow adoption,
+ * deduped by the browser cache across every page and shadow root).
  *
  * The placement is a contract, not a style choice: the compiled element
  * runtime's existing-DOM claim (@openelement/element claim.ts) walks the
  * shadow template's children exactly as the Part Program lists them —
  * leading, interposed, AND trailing extras are structural drift (the walk
  * ends in an exact `consumed === childNodes.length` check). The DSD-template
- * link is therefore OPT-OUT per app (`injectDsdLinks: false`): the theme
- * layer is custom properties, which inherit across the shadow boundary from
- * the head link, so a claiming site loses nothing by skipping the shadow
- * injection (surfaced by the first real preset-on site, alpha9 C4 #1507; the
- * dogfood fixture never ran its e2e in the ON state).
+ * link is therefore OPT-IN (`injectDsdLinks: true`): the theme layer is
+ * custom properties, which inherit across the shadow boundary from the head
+ * link, so a claiming site — the default compiled surface — loses nothing
+ * by skipping the shadow injection (surfaced by the first real preset-on
+ * site, alpha9 C4 #1507, and now the preset's default).
  */
 export function injectPresetLinks(
   html: string,
   bundleHref: string,
   scopeHref?: string,
-  injectDsdLinks = true,
+  injectDsdLinks = false,
 ): string {
   const links = [`<link rel="stylesheet" href="${bundleHref}" />`];
   if (scopeHref) links.push(`<link rel="stylesheet" href="${scopeHref}" />`);
@@ -479,12 +480,12 @@ export async function applyTailwindPreset(
       html,
       result.bundleHref,
       result.scopeHref,
-      options.injectDsdLinks !== false,
+      options.injectDsdLinks === true,
     );
   });
   log.info(
     `tailwind preset: bundle linked into ${visited} page(s)` +
-      (options.injectDsdLinks === false ? ' (head only)' : '') +
+      (options.injectDsdLinks === true ? ' (+DSD shadow links)' : ' (head only)') +
       (result.scopeHref ? ` (+@scope face ${TAILWIND_SCOPE_ASSET})` : ''),
   );
   return result;

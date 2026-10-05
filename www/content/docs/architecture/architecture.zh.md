@@ -1,6 +1,6 @@
 ---
 title: '当前架构'
-lede: 'openElement 是一个 Web Components 原生、static-first 的应用框架。Custom Elements 是持久的组件契约；JSX 与 Basic Element 是创作模式；Vite 与 Nitro 是官方构建与输出路径。'
+lede: 'openElement 是一个 Web Components 原生、static-first 的应用框架。Custom Elements 是持久的组件契约；编译型 JSX 类（`@element`）是创作模型；Vite 与 Nitro 是官方构建与输出路径。'
 order: 10
 ---
 
@@ -36,8 +36,8 @@ order: 10
 
 ## Web Components 就是应用架构。
 
-路线图以兼容性证据、完整的应用闭环与可移植的运维能力赢得 WC
-全栈领导地位——而不是靠不断增长的包数量。
+路线图以兼容性证据、完整的应用闭环与可移植的运维能力扩展 WC
+全栈范围——而不是靠不断增长的包数量。
 
 ### WC SSR
 

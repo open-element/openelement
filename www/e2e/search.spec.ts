@@ -1,4 +1,25 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+/**
+ * The dynamically imported runtime chunk (Zag stack + Pagefind pipeline,
+ * open-search-combobox.ts). Gating exactly this request makes the first-open
+ * race deterministic; the hash changes across builds, the name prefix does
+ * not.
+ */
+const COMBOBOX_CHUNK = '**/open-search-combobox-*.js';
+
+interface Deferred {
+  promise: Promise<void>;
+  release: () => void;
+}
+
+function deferred(): Deferred {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
 
 test.describe('Search', () => {
   test('pagefind index is generated and non-empty', async ({ request }) => {
@@ -215,5 +236,354 @@ test.describe('Search', () => {
     await expect(trigger).toBeVisible();
     await trigger.click();
     await expect(page.getByRole('dialog').first()).toBeVisible();
+  });
+});
+
+/**
+ * Deterministic open/search session races (#1521 items 2–4).
+ *
+ * Every test gates exactly one network request with page.route — the lazy
+ * runtime chunk or a Pagefind resource — so the load/query continuations run
+ * on demand, in a fixed order, without networkidle or wall-clock sleeps. The
+ * contracts under test:
+ *
+ *   - a close invalidates every open/focus/load continuation captured by the
+ *     closed session (controller) and every in-flight query round (runtime);
+ *   - a close/reopen leaves only the newest session in charge;
+ *   - a transient chunk load failure closes the failed session and leaks no
+ *     error; an index load failure shows the missing-index message and the
+ *     next open retries with a fresh URL;
+ *   - a query round landing after its close must not write
+ *     hits/skeleton/message into the newer state, whether its bytes arrive
+ *     (served) or its fetch would have failed;
+ *   - an index load finishing after a close may cache the module but must
+ *     not start a search for the closed dialog.
+ */
+test.describe('Search session races', () => {
+  /** Open the page and wait for the island upgrade — no networkidle. */
+  async function gotoHome(page: Page): Promise<void> {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => !!customElements.get('open-search'));
+  }
+
+  /** The per-test locators (dialog, input, results, skeleton, overlay). */
+  function locators(page: Page) {
+    return {
+      dialog: page.getByRole('dialog', { name: 'Search' }),
+      input: page.getByRole('combobox', { name: 'Search documentation' }),
+      results: page.getByRole('listbox', { name: 'Search results' }),
+      skeleton: page.locator('#open-search-results .skeleton'),
+      empty: page.locator('#open-search-results .empty'),
+      overlay: page.locator('open-search .overlay'),
+    };
+  }
+
+  /** The island's session-owned view state, for equality snapshots. */
+  function hostState(page: Page): Promise<{
+    searching: boolean;
+    hasHits: boolean;
+    message: string;
+    hitCount: number;
+  }> {
+    return page.evaluate(() => {
+      const fields = document.querySelector('open-search') as unknown as {
+        searching: boolean;
+        hasHits: boolean;
+        message: string;
+        hits: unknown[];
+      };
+      return {
+        searching: fields.searching,
+        hasHits: fields.hasHits,
+        message: fields.message,
+        hitCount: fields.hits.length,
+      };
+    });
+  }
+
+  test('closing while the runtime chunk is still loading keeps the overlay closed and never steals focus', async ({
+    page,
+  }) => {
+    const { dialog } = locators(page);
+    await gotoHome(page);
+    const chunk = deferred();
+    let requested = false;
+    await page.route(COMBOBOX_CHUNK, async (route) => {
+      requested = true;
+      await chunk.promise;
+      await route.continue();
+    });
+
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect.poll(() => requested).toBe(true);
+    await expect(dialog).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    // Release the load: the stale open continuation must not reopen the
+    // dialog, focus the input, or touch the closed state.
+    chunk.release();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+    const focusedId = await page.evaluate(() => document.activeElement?.id ?? '');
+    expect(focusedId).not.toBe('open-search-input');
+  });
+
+  test('a close/reopen during the chunk load leaves the newest session open and focused', async ({
+    page,
+  }) => {
+    const { dialog, input, overlay } = locators(page);
+    await gotoHome(page);
+    const chunk = deferred();
+    let requested = false;
+    await page.route(COMBOBOX_CHUNK, async (route) => {
+      requested = true;
+      await chunk.promise;
+      await route.continue();
+    });
+
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect.poll(() => requested).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    // Reopen while the same import is still in flight: the newest session
+    // owns the outcome.
+    await page.getByRole('button', { name: 'Search' }).click();
+    chunk.release();
+    await expect(dialog).toBeVisible();
+    await expect(input).toBeFocused();
+    await expect(overlay).toBeVisible();
+  });
+
+  test('a transient first-open chunk failure closes the session cleanly and leaks no errors', async ({
+    page,
+  }) => {
+    const { dialog } = locators(page);
+    await gotoHome(page);
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(String(error)));
+    await page.evaluate(() => {
+      const state = globalThis as unknown as { __unhandledRejections?: string[] };
+      state.__unhandledRejections = [];
+      window.addEventListener('unhandledrejection', (event) => {
+        state.__unhandledRejections!.push(String(event.reason));
+      });
+    });
+
+    let attempts = 0;
+    await page.route(COMBOBOX_CHUNK, (route) => {
+      attempts++;
+      return route.abort('failed');
+    });
+
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect.poll(() => attempts).toBe(1);
+    // The failed session closes/resets instead of hanging open half-wired.
+    await expect(dialog).toBeHidden();
+
+    // The next open re-attempts the connect (the memoized rejection was
+    // cleared). The browser's module map fails the exact same specifier
+    // without a new network round, so the UI must fail fast and clean:
+    // never hang open, never crash, never leak an unhandled rejection.
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+    await page.waitForTimeout(300);
+    await expect(dialog).toBeHidden();
+
+    expect(pageErrors).toEqual([]);
+    const unhandled = await page.evaluate(
+      () => (globalThis as unknown as { __unhandledRejections?: string[] }).__unhandledRejections,
+    );
+    expect(unhandled).toEqual([]);
+  });
+
+  test('a query round landing after its close leaves closed-state fields and no stale results', async ({
+    page,
+  }) => {
+    const { dialog, input, results, skeleton, empty } = locators(page);
+    await gotoHome(page);
+    // Hold only the per-result fragment fetches (the round's data() calls);
+    // the pagefind entry, wasm and index files pass through untouched.
+    const fragments = deferred();
+    await page.route('**/pagefind/**', async (route) => {
+      if (!route.request().url().includes('/fragment/')) return route.continue();
+      await fragments.promise;
+      return route.continue();
+    });
+
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(input).toBeFocused();
+    await input.pressSequentially('routing');
+    await expect(results).toBeVisible();
+    await expect(skeleton).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    // Now release the held round: it is stale and must not re-fill anything.
+    fragments.release();
+    const state = await page.evaluate(() => {
+      const host = document.querySelector('open-search');
+      if (!host) return null;
+      const fields = host as unknown as {
+        searching: boolean;
+        hasHits: boolean;
+        hits: unknown[];
+        message: string;
+      };
+      return {
+        searching: fields.searching,
+        hasHits: fields.hasHits,
+        hits: fields.hits.length,
+        message: fields.message,
+      };
+    });
+    expect(state).toEqual({
+      searching: false,
+      hasHits: false,
+      hits: 0,
+      message: 'Type at least 2 characters to search',
+    });
+    await expect(results.getByRole('option')).toHaveCount(0);
+
+    // Reopening shows the fresh-session guidance, never the old results.
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(results.getByRole('option')).toHaveCount(0);
+    await expect(empty).toContainText('Type at least 2 characters to search');
+  });
+
+  test('a stale round landing beside the live round leaves only the live results', async ({
+    page,
+  }) => {
+    const { dialog, input, results } = locators(page);
+    await gotoHome(page);
+    // Every fragment fetch from both rounds is held behind one gate and
+    // released together. Pagefind serializes fragment loads on every engine,
+    // so no design can land a newer round while an older one hangs; the
+    // portable shape is: both rounds' bytes arrive together, and the stale
+    // round's landing must be dropped by sequence ownership while the live
+    // round's landing wins.
+    const gate = deferred();
+    await page.route('**/pagefind/**', async (route) => {
+      if (!route.request().url().includes('/fragment/')) return route.continue();
+      await gate.promise;
+      return route.continue();
+    });
+
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(input).toBeFocused();
+    await input.pressSequentially('ro');
+    // The stale round is genuinely in flight before the close invalidates it.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (document.querySelector('open-search') as unknown as { searching: boolean }).searching,
+        ),
+      )
+      .toBe(true);
+
+    // Close/reopen: the close invalidates the 'ro' round's session. The
+    // settle window absorbs the close/reopen's own machine churn so the
+    // newer session starts from a quiesced state.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(input).toBeFocused();
+    await page.waitForTimeout(300);
+    await input.pressSequentially('guide');
+
+    // Both rounds' bytes arrive together: the live round lands, the stale
+    // round's landing is dropped.
+    gate.release();
+    await expect(results.getByRole('option').first()).toBeVisible({ timeout: 30_000 });
+    const landed = await hostState(page);
+    expect(landed).toMatchObject({ searching: false, hasHits: true });
+    expect(landed.hitCount).toBeGreaterThan(0);
+    const hits = await results.getByRole('option').count();
+
+    // Settle: the stale round's late continuation must not rewrite anything
+    // the live round owns.
+    await page.waitForTimeout(500);
+    expect(await hostState(page)).toEqual(landed);
+    expect(await results.getByRole('option').count()).toBe(hits);
+  });
+
+  test('an index init completing after a close caches the module but does not search the closed dialog', async ({
+    page,
+  }) => {
+    const { dialog, input, results } = locators(page);
+    await gotoHome(page);
+    const entry = deferred();
+    // The trailing glob covers a cache-busted retry URL (?retry=N) too.
+    await page.route('**/pagefind/pagefind.js*', async (route) => {
+      await entry.promise;
+      await route.continue();
+    });
+
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(input).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    // The load completes into the closed dialog: cache it, start nothing.
+    entry.release();
+    await page.waitForTimeout(500);
+    const state = await page.evaluate(() => {
+      const fields = document.querySelector('open-search') as unknown as {
+        searching: boolean;
+        hasHits: boolean;
+        hits: unknown[];
+        message: string;
+      };
+      return {
+        searching: fields.searching,
+        hasHits: fields.hasHits,
+        hits: fields.hits.length,
+        message: fields.message,
+      };
+    });
+    expect(state).toEqual({
+      searching: false,
+      hasHits: false,
+      hits: 0,
+      message: 'Type at least 2 characters to search',
+    });
+
+    // The cached index serves the next session.
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(input).toBeFocused();
+    await input.pressSequentially('routing');
+    await expect(results.getByRole('option').first()).toBeVisible({ timeout: 30_000 });
+  });
+
+  test('an index init failure shows the missing-index message and the next open retries', async ({
+    page,
+  }) => {
+    const { dialog, input, results, empty } = locators(page);
+    await gotoHome(page);
+    let attempts = 0;
+    // The trailing glob covers the cache-busted retry URL (?retry=N): the
+    // retry must be a real network fetch — a failed dynamic import stays
+    // failed in the module map for its exact specifier.
+    await page.route('**/pagefind/pagefind.js*', (route) => {
+      attempts++;
+      if (attempts === 1) return route.abort('failed');
+      return route.continue();
+    });
+
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(input).toBeFocused();
+    await expect(empty).toContainText('Search index not found', { timeout: 15_000 });
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(input).toBeFocused();
+    await input.pressSequentially('routing');
+    await expect(results.getByRole('option').first()).toBeVisible({ timeout: 30_000 });
+    expect(attempts).toBeGreaterThanOrEqual(2);
   });
 });

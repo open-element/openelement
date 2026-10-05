@@ -1,8 +1,10 @@
 /**
  * @openelement/ui - openElement UI Component Library
  *
- * Swiss International Style: minimal, typography-driven, violet brand accent.
- * Zero Lit dependency - built on openElement (native HTMLElement).
+ * Minimal, typography-driven components with a violet brand accent, themed
+ * by the @theme role table (`theme.css`; see CUSTOMIZATION.md for the parts
+ * and value-delivery contracts). Zero Lit dependency - built on openElement
+ * (native HTMLElement).
  *
  * Components:
  * - open-button: Button with variants (default, primary, ghost, accent)

@@ -81,12 +81,12 @@ export default [
 pnpm --dir www run generate:content   # site:build 会在 router 构建前先运行
 ```
 
-生成模块通过站点自己的 import-map 别名消费——不存在框架虚拟模块：
+生成模块通过站点自己的 package import 消费——即站点 `package.json` 的 `imports` 字段，不存在框架虚拟模块：
 
 ```json
 {
   "imports": {
-    "@openelement/generated/blog-data": "./app/data/_generated-blog-data.ts"
+    "#generated/blog-data": "./app/data/_generated-blog-data.ts"
   }
 }
 ```
@@ -141,7 +141,7 @@ export default class BlogPostPage extends OpenElement {
 ```ts
 // app/routes/blog/[slug].tsx —— scanner 发现的路由模块
 import { definePage, notFound } from '@openelement/router';
-import { getPostBySlug, posts } from '@openelement/generated/blog-data';
+import { getPostBySlug, posts } from '#generated/blog-data';
 import BlogPostPage from '../../components/page-blog-post.tsx';
 
 export function getStaticPaths(): Array<Record<string, string>> {

@@ -13,7 +13,7 @@
       "tagName": "open-card",
       "className": "OpenCard",
       "superclassName": "OpenElement",
-      "description": "Minimal card container with optional header and footer.",
+      "description": "Card container with optional `header`/`footer` slots and a themed body",
       "attributes": [
         {
           "name": "variant",
@@ -106,7 +106,7 @@
       "tagName": "open-button",
       "className": "OpenButton",
       "superclassName": "OpenElement",
-      "description": "Minimal button component following Swiss International Style.",
+      "description": "Button or link control: an `href` property switches the compiled anchor",
       "attributes": [
         {
           "name": "variant",
@@ -173,7 +173,7 @@
       "tagName": "open-input",
       "className": "OpenInput",
       "superclassName": "OpenElement",
-      "description": "Minimal input field following Swiss International Style.",
+      "description": "Form-associated text input with a label, an inline error slot, and native",
       "attributes": [
         {
           "name": "type",
@@ -272,7 +272,7 @@
       "tagName": "open-theme-toggle",
       "className": "OpenThemeToggle",
       "superclassName": "OpenElement",
-      "description": "Theme toggle Reactive DSD component for Dark/Light mode switching.",
+      "description": "Theme toggle button for dark/light mode: reads and flips the document's",
       "attributes": [
         {
           "name": "theme",

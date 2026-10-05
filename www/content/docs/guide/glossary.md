@@ -28,7 +28,7 @@ The encapsulated DOM subtree a Custom Element owns. Server output carries it ins
 
 ### Declarative Shadow DOM (DSD)
 
-HTML-carried shadow roots via `<template shadowrootmode>`. The default server representation: first paint needs no JavaScript.
+HTML-carried shadow roots via `<template shadowrootmode>`. The server representation of a component that declares an explicit shadow mode (light DOM is the current compiled default): DSD content paints and reads before any script; handlers and signals bind at upgrade.
 
 ### SSG
 

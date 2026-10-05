@@ -277,9 +277,10 @@ export function writeCollectionDataModule(
 }
 
 /**
- * Serialize blog posts into the generated module behind
- * `@openelement/generated/blog-data`. Same contract as the article serializer:
- * a self-contained typed module with no import-time work.
+ * Serialize blog posts into the generated module behind the
+ * `#generated/blog-data` subpath import (www/package.json `imports`). Same
+ * contract as the article serializer: a self-contained typed module with no
+ * import-time work.
  */
 export function writeBlogDataModule(posts: BlogPost[]): string {
   return [
