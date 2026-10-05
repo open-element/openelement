@@ -29,9 +29,6 @@
  * @module @openelement/ui
  */
 
-// Design tokens (CSSStyleSheet, zero Lit dependency)
-export { themeTokenCss, themeTokenSheet } from './theme-tokens.ts';
-
 // Per-instance mutable state for compiled classes (host-scoped, garbage-
 // collected with the host; a side-effect-free module — import the
 // './instance-state' subpath from islands to keep chunks minimal).

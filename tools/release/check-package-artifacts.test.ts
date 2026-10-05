@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scanExtractedPackage } from './check-package-artifacts.ts';
+import { cssExportSubpaths, scanExtractedPackage } from './check-package-artifacts.ts';
 
 async function withPackage(
   packageName: string,
@@ -591,4 +591,30 @@ test('package artifacts: rejects @jsr dependencies in packed manifests', async (
       ).toBeTruthy();
     },
   );
+});
+
+test('package artifacts: css export subpaths feed the attw exclusion, and only those', () => {
+  // The #1518 attw exemption is scoped to pure-CSS targets: the plain string
+  // form the workspace manifests use and the condition-object `default` form
+  // the pack synthesizer emits. JS modules and other asset kinds stay checked.
+  expect(
+    cssExportSubpaths({
+      '.': './src/index.ts',
+      './theme.css': './src/theme.css',
+    }),
+  ).toEqual(['./theme.css']);
+  expect(
+    cssExportSubpaths({
+      '.': { types: './src/index.d.ts', import: './src/index.js', default: './src/index.js' },
+      './theme.css': { default: './src/theme.css' },
+    }),
+  ).toEqual(['./theme.css']);
+  // A non-CSS asset target borrows nothing: no subpath, no exclusion flag.
+  expect(
+    cssExportSubpaths({
+      './data.json': './src/data.json',
+      './theme': './src/theme.scss',
+    }),
+  ).toEqual([]);
+  expect(cssExportSubpaths(undefined)).toEqual([]);
 });

@@ -72,21 +72,21 @@ test('vpPackEntries rejects non-src targets and missing root entry', () => {
 test('asset export targets ship verbatim: no compile entry, default-only export shape', () => {
   const ui = pkg('@openelement/ui', {
     '.': './src/index.ts',
-    './theme-tokens': './src/theme-tokens.ts',
+    './instance-state': './src/instance-state.ts',
     './theme.css': './src/theme.css',
   });
   // The CSS target is not a compile entry — it ships through the staged-tree
   // copy (assembleVpPackageTree), like every publish-scoped non-module file.
-  expect(vpPackEntries(ui)).toEqual(['src/index.ts', 'src/theme-tokens.ts']);
+  expect(vpPackEntries(ui)).toEqual(['src/index.ts', 'src/instance-state.ts']);
   const manifest = synthesizedPackedManifest(ui) as {
     exports: Record<string, Record<string, string>>;
   };
   // Verbatim asset: no types, no module shapes — one default condition.
   expect(manifest.exports['./theme.css']).toEqual({ default: './src/theme.css' });
-  expect(manifest.exports['./theme-tokens']).toEqual({
-    types: './src/theme-tokens.d.ts',
-    import: './src/theme-tokens.js',
-    default: './src/theme-tokens.js',
+  expect(manifest.exports['./instance-state']).toEqual({
+    types: './src/instance-state.d.ts',
+    import: './src/instance-state.js',
+    default: './src/instance-state.js',
   });
   // Assets must live under src/ — anything else fails closed.
   assertThrowsIncludes(
@@ -113,7 +113,7 @@ test('synthesizedPackedManifest preserves the published exports shape', () => {
   const manifest = synthesizedPackedManifest(
     pkg('@openelement/element', {
       '.': './src/index.ts',
-      './theme-tokens.js': './src/theme-tokens.ts',
+      './tokens.js': './src/tokens.ts',
     }),
   ) as {
     name: string;
@@ -133,10 +133,10 @@ test('synthesizedPackedManifest preserves the published exports shape', () => {
     import: './src/index.js',
     default: './src/index.js',
   });
-  expect(manifest.exports['./theme-tokens.js']).toEqual({
-    types: './src/theme-tokens.d.ts',
-    import: './src/theme-tokens.js',
-    default: './src/theme-tokens.js',
+  expect(manifest.exports['./tokens.js']).toEqual({
+    types: './src/tokens.d.ts',
+    import: './src/tokens.js',
+    default: './src/tokens.js',
   });
 });
 

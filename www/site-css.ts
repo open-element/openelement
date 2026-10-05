@@ -14,15 +14,16 @@
  * site's designated home for them (the site style layer the gate's own
  * doctrine names).
  *
- * Token delivery (alpha9 C4, #1507): the site build enables the router's
- * Tailwind preset (see vite.config.ts), so the @theme role table
- * (packages/ui/src/theme.css) ships through the preset's linked,
- * layer-ordered bundle — NOT as an inline copy here. The compiled twin
- * (@openelement/ui/theme-tokens) that preset-less consumers read stayed a
- * site inline sheet only while the site was preset-less (the C2 OFF state);
- * carrying both would duplicate the token table and trip the preset's
- * full-inline prohibition (assertNoGlobalSheetInline). When the preset turns
- * off, the twin returns here ahead of the body baseline.
+ * Token delivery (alpha9 C4, #1507; twin retired alpha9 C5): the site build
+ * enables the router's Tailwind preset (see vite.config.ts), so the @theme
+ * role table (packages/ui/src/theme.css) ships through the preset's linked,
+ * layer-ordered bundle — NOT as an inline copy here. The ui package carries
+ * no scale values of its own (the compiled theme-tokens twin is deleted), so
+ * there is no fallback sheet to inline: if the preset ever turns off, the
+ * site must supply its own role table first (the OFF contract,
+ * packages/ui/CUSTOMIZATION.md "Value delivery") — carrying a duplicated
+ * table inline would also trip the preset's full-inline prohibition
+ * (assertNoGlobalSheetInline).
  */
 
 /**

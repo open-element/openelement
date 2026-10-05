@@ -2,11 +2,12 @@ import { readFile } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 
 const themeCss = await readFile(new URL('../src/theme.css', import.meta.url), 'utf8');
-const { themeTokenCss, themeTokenSheet } = await import('../src/theme-tokens.ts');
 
 // The installed Tailwind theme.css is the scale authority since the C2
-// handoff (#1505): the @theme source and the compiled twin reference the
-// default ramps by name, and the installed 4.3.x line owns their values.
+// handoff (#1505): the @theme source references the default ramps by name,
+// and the installed 4.3.x line owns their values. Since the C5 twin removal
+// this is also the ONLY scale source the package points at — the ui package
+// itself embeds no values (twin deleted).
 const tailwindScaleCss = await readFile(
   new URL('../node_modules/tailwindcss/theme.css', import.meta.url),
   'utf8',
@@ -17,12 +18,10 @@ const tailwindScaleCss = await readFile(
 // must land on the rule, not the prose.
 const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const themeCode = stripComments(themeCss);
-const twinCode = stripComments(themeTokenCss);
 const scaleCode = stripComments(tailwindScaleCss);
 
 const DARK_SELECTOR = ":root[data-theme='dark']";
 const themeDark = themeCode.indexOf(DARK_SELECTOR);
-const twinDark = twinCode.indexOf(DARK_SELECTOR);
 
 /** Collect every `--name: value` declaration in a comment-stripped span. */
 const declarationsOf = (css: string, from = 0, to = css.length): Map<string, string> => {
@@ -41,38 +40,21 @@ const themeRoleSpan = (): [number, number] => {
   return [open + 1, close];
 };
 
-test('the @theme source and the compiled twin agree on the role contract', () => {
-  // C2 handoff: role names (and their values) are the migration contract
-  // between the real @theme source and the compiled plain-CSS twin — not the
-  // byte-identity that pre-C2 drift gate pinned, because the two forms now
-  // legitimately differ in selector shape (@theme vs :root,:host) and in the
-  // scale layer (the twin freezes the v4.1.16 evaluation for the OFF
-  // baseline; the @theme source rides the installed Tailwind defaults).
+test('the @theme source declares the role contract (names + dark pairs)', () => {
+  // C5 twin removal: the contract is asserted directly on the @theme
+  // source — the role names, and a dark block that re-declares every one
+  // of them (values may differ light/dark; the pair itself is the contract).
   const sourceRoles = declarationsOf(themeCode, ...themeRoleSpan());
   expect(sourceRoles.size).toBeGreaterThan(0);
-  const twinFirstRoot = twinCode.match(/:root,\s*:host\s*\{([^}]*)\}/)?.[1] ?? '';
-  const twinRoles = declarationsOf(twinFirstRoot);
-  for (const [name, value] of sourceRoles) {
-    expect(
-      twinRoles.get(name),
-      `@theme role ${name} must be declared identically in the compiled twin`,
-    ).toEqual(value);
-  }
-  // Dark pairs: both forms re-declare the same roles with the same values.
-  const sourceDark = declarationsOf(themeCode, themeDark);
-  const twinDarkRoles = declarationsOf(twinCode, twinDark);
-  expect(sourceDark.size).toBeGreaterThan(0);
-  for (const [name, value] of sourceDark) {
-    expect(
-      twinDarkRoles.get(name),
-      `dark pair ${name} must be declared identically in the compiled twin`,
-    ).toEqual(value);
+  const darkRoles = declarationsOf(themeCode, themeDark);
+  expect(darkRoles.size).toBeGreaterThan(0);
+  for (const name of sourceRoles.keys()) {
+    expect(darkRoles.has(name), `dark pair must re-declare the @theme role ${name}`).toEqual(true);
   }
 });
 
-test('token layer exposes the shadcn role table (the C3 single sheet)', () => {
-  expect(themeTokenSheet).toEqual(expect.anything());
-  const css = themeTokenCss;
+test('the role table exposes the shadcn contract (the C3 single sheet)', () => {
+  const roles = [...declarationsOf(themeCode, ...themeRoleSpan()).keys()];
   for (const token of [
     '--color-background',
     '--color-primary',
@@ -80,20 +62,31 @@ test('token layer exposes the shadcn role table (the C3 single sheet)', () => {
     '--color-success',
     '--color-warning',
     '--color-info',
-    '--radius-md',
-    '--spacing',
   ]) {
-    expect(css.includes(token), `${token} must be part of the role contract`).toEqual(true);
+    expect(roles.includes(token), `${token} must be part of the role contract`).toEqual(true);
+  }
+  // Scale variables are NOT part of the package surface (no embedded values
+  // since the C5 twin removal): they must resolve from the installed
+  // Tailwind theme.css, the scale authority the preset's build reads.
+  for (const token of ['--radius-md', '--spacing']) {
+    expect(
+      scaleCode.includes(`${token}:`),
+      `${token} must exist in the Tailwind scale authority`,
+    ).toEqual(true);
   }
 });
 
 test('the C1 alias layer stays deleted — no retired name anywhere in the package', async () => {
   // C1's DELETION CONDITION (semantic-tokens.css header) fired in C3 #1506:
   // the file, its exports-map entry and every retired var() reference are
-  // gone. A re-introduction fails here before any consumer can regress.
+  // gone. The theme-tokens twin joined it in C5 (owner ruling: the package
+  // ships no values), so the retired carrier fails closed here too. A
+  // re-introduction fails before any consumer can regress.
   await expect(readFile(new URL('../src/semantic-tokens.css', import.meta.url))).rejects.toThrow();
+  await expect(readFile(new URL('../src/theme-tokens.ts', import.meta.url))).rejects.toThrow();
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   expect(pkg.exports['./semantic-tokens.css']).toBeUndefined();
+  expect(pkg.exports['./theme-tokens']).toBeUndefined();
   const retired = [
     '--bg-base',
     '--bg-surface',
@@ -121,9 +114,6 @@ test('the C1 alias layer stays deleted — no retired name anywhere in the packa
     '--violet-5',
     '--gray-11',
   ];
-  expect(themeTokenCss.includes('--brand:'), 'the carrier must not define alias names').toEqual(
-    false,
-  );
   for (const file of [
     '../src/component-recipes.ts',
     '../src/open-badge.tsx',
@@ -144,30 +134,28 @@ test('the C1 alias layer stays deleted — no retired name anywhere in the packa
   }
 });
 
-test('one token sheet serves document and shadow adoption', () => {
-  const css = themeTokenCss;
-  // The token blocks are dual: :root for document adoption, :host for shadow
-  // adoption. There is no separate transformed sheet and no transformer.
-  expect(/:root,\s+:host/.test(css), 'token blocks must select :root, :host').toEqual(true);
-  expect(css.includes(':root[data-theme='), 'dark block must select :root').toEqual(true);
-  expect(css.includes(":host([data-theme='dark'])"), 'dark block must select :host').toEqual(true);
-  const darkDecls = (css.split(':root[data-theme=')[1]?.match(/--[a-z0-9-]+\s*:/g) ?? []).length;
+test('one role table serves document and shadow adoption', () => {
+  // The dark pairs are dual: :root[data-theme='dark'] for document
+  // adoption, :host([data-theme='dark']) for shadow adoption — the same
+  // selectors the preset's compiled theme layer carries.
+  expect(themeCode.includes(':root[data-theme='), 'dark block must select :root').toEqual(true);
+  expect(themeCode.includes(":host([data-theme='dark'])"), 'dark block must select :host').toEqual(
+    true,
+  );
+  const darkDecls = (themeCode.split(':root[data-theme=')[1]?.match(/--[a-z0-9-]+\s*:/g) ?? [])
+    .length;
   expect(darkDecls > 0, 'the dark block must carry declarations').toEqual(true);
-  // The structural fallback (containment) is :host-exclusive: it must never
-  // be applied to the document root.
-  const rootRule = css.match(/:root,\s*:host\s*\{([^}]*)\}/)?.[1] ?? '';
-  expect(rootRule.includes('display: block')).toEqual(false);
-  expect(rootRule.includes('contain:')).toEqual(false);
 });
 
 test('retired token exports stay gone', async () => {
-  const mod = await import('../src/theme-tokens.ts');
-  expect('openPropsRootSheet' in mod).toBeFalsy();
-  expect('toRootCss' in mod).toBeFalsy();
-  expect('openPropsTokenSheet' in mod).toBeFalsy();
-  expect('ALIAS_CSS' in mod).toBeFalsy();
+  // The retired token modules must not reappear: the theme-tokens twin
+  // (deleted in C5) fails closed on file read, and the index carries none
+  // of the retired Open Props / twin exports.
+  await expect(readFile(new URL('../src/theme-tokens.ts', import.meta.url))).rejects.toThrow();
   const index = await import('../src/index.ts');
   expect('openPropsTokenSheet' in index).toBeFalsy();
+  expect('themeTokenCss' in index).toBeFalsy();
+  expect('themeTokenSheet' in index).toBeFalsy();
 });
 
 test('component recipes are valid constructable sheets', async () => {
@@ -248,7 +236,6 @@ test('every role has a light, dark and forced-colors seat (forced tier is total)
   expect(roles.length).toBeGreaterThan(20);
   const darkRoles = declarationsOf(themeCode, themeDark);
   const themeForced = forcedHalves(themeCode);
-  const twinForced = forcedHalves(twinCode);
   for (const role of roles) {
     expect(darkRoles.has(role), `dark block must re-declare ${role}`).toEqual(true);
     expect(themeForced.light.has(role), `forced-colors must re-seat ${role} (light block)`).toEqual(
@@ -266,14 +253,6 @@ test('every role has a light, dark and forced-colors seat (forced tier is total)
         `${role} forced ${half} value must be a system color, got ${value}`,
       ).toEqual(true);
     }
-    // The compiled twin mirrors the tier (preset-OFF consumers get the same
-    // forced-colors behavior).
-    expect(twinForced.light.get(role), `twin forced light must carry ${role}`).toEqual(
-      themeForced.light.get(role),
-    );
-    expect(twinForced.dark.get(role), `twin forced dark must carry ${role}`).toEqual(
-      themeForced.dark.get(role),
-    );
   }
 });
 

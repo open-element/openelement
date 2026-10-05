@@ -1,8 +1,8 @@
 /**
  * site theme-token gate: theme values in the site must come from the
- * @theme-derived token table (packages/ui/src/theme.css, carried by
- * @openelement/ui/theme-tokens) or the site alias layer (www/site-css.ts),
- * never from hardcoded literals.
+ * @theme role source (packages/ui/src/theme.css, delivered by the
+ * @openelement/router Tailwind preset) or the site alias layer
+ * (www/site-css.ts), never from hardcoded literals.
  *
  * Rules for sources under www/app/ (routes, islands, components):
  *  1. No hex color literals. 6/8-digit forms always fail; 3/4-digit forms
@@ -13,7 +13,9 @@
  *     typography is allowed.
  *
  * Token definitions belong in packages/ui/src/theme.css (the single role
- * source) or www/site-css.ts (site aliases) as carried by the token module.
+ * source, consumed through the preset) or www/site-css.ts (site aliases).
+ * The ui package itself emits no values — the retired theme-tokens twin is
+ * not an acceptance source.
  */
 
 import { join } from 'node:path';

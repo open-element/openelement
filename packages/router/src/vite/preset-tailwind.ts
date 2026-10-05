@@ -7,7 +7,10 @@
  * references that asset with `<link rel="stylesheet">` instead of inlining
  * the sheet. Default state is OFF: an app that never passes `tailwind` gets
  * byte-identical builds to a preset-less pipeline — no plugin, no layer
- * wrapping, no links.
+ * wrapping, no links. Since the C5 twin removal, OFF also means no ui value
+ * emission anywhere: @openelement/ui carries no embedded scale values (its
+ * theme-tokens twin is deleted), so a preset-less consumer supplies its own
+ * role table (packages/ui/CUSTOMIZATION.md, "Value delivery").
  *
  * Two seams, both active ONLY while the preset is enabled (issue #1505):
  *

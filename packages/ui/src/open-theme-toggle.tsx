@@ -26,10 +26,10 @@ import { readInstanceState, writeInstanceState } from './instance-state.ts';
 @element('open-theme-toggle', { root: 'shadow-open', delegatesFocus: true })
 export class OpenThemeToggle extends OpenElement {
   // Safari does not recompute adoptedStyleSheets when
-  // :host([data-theme]) changes. The token sheet (themeTokenSheet) and the
-  // rest of the token layer are already injected as page-level <style> by
-  // vite.config.ts — CSS custom properties cascade from :root naturally.
-  // Only adopt the component-specific sheet.
+  // :host([data-theme]) changes. The token layer (the preset's compiled
+  // theme bundle, or the host's own role table) arrives as page-level
+  // CSS from vite.config.ts — CSS custom properties cascade from :root
+  // naturally. Only adopt the component-specific sheet.
   static override styles: StyleSheetLike[] = [
     recipe(`
     :host {

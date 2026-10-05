@@ -451,8 +451,15 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   // Every object-form export that serves JavaScript must serve a matching
   // declaration file: publint/attw catch most of this, but an explicit
   // violation names the subpath instead of burying it in tool output.
+  // Pure-CSS asset subpaths (#1518) serve no JavaScript — they ship verbatim
+  // for consumer Tailwind @theme builds and carry no types by nature, the
+  // same carve-out the pack proof applies (publish-npm.ts). Only .css is
+  // exempt; every JS-serving subpath still needs its declarations. This
+  // stayed masked while attw threw on the same subpath before the scan ran.
   const exports = (packageJson.exports ?? {}) as Record<string, unknown>;
+  const cssSubpaths = new Set(cssExportSubpaths(exports));
   for (const [subpath, conditions] of Object.entries(exports)) {
+    if (cssSubpaths.has(subpath)) continue;
     if (!conditions || typeof conditions !== 'object') continue;
     const cond = conditions as Record<string, unknown>;
     const jsTarget = cond.import ?? cond.default;
@@ -476,6 +483,33 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   return { packageName, violations };
 }
 
+/**
+ * Export subpaths whose target is a pure stylesheet (`.css`). The target is
+ * either the plain string form or the condition object's `default` fallback —
+ * the same discriminator the pack synthesizer uses for verbatim assets
+ * (tools/lib/vp-pack.ts isAssetExportTarget) and the manifest proof uses
+ * (publish-npm.ts).
+ *
+ * Why these sit outside attw's domain (#1518): attw resolves every exports
+ * subpath as a TypeScript/JavaScript module, and a `.css` target is neither —
+ * TypeScript resolution fails under every resolution mode by construction
+ * (`./theme.css` reported "Resolution failed" on node16 AND bundler), with
+ * nothing to type-check since the file ships verbatim for consumer Tailwind
+ * `@theme` builds. Constraint: ONLY `.css` targets are exempt. Every other
+ * subpath — JS modules, JSON, anything else — stays under the full check; a
+ * non-CSS asset must not borrow this exclusion to hide a real resolution bug.
+ */
+export function cssExportSubpaths(exports: unknown): string[] {
+  if (!exports || typeof exports !== 'object') return [];
+  const subpaths: string[] = [];
+  for (const [subpath, target] of Object.entries(exports as Record<string, unknown>)) {
+    const resolved =
+      typeof target === 'string' ? target : (target as Record<string, unknown>)?.default;
+    if (typeof resolved === 'string' && resolved.endsWith('.css')) subpaths.push(subpath);
+  }
+  return subpaths;
+}
+
 async function extractTarball(tarball: string): Promise<string> {
   const tmp = await mkdtemp(join(tmpdir(), 'openelement-artifact-'));
   await runCommand('tar', ['-xzf', tarball, '-C', tmp], undefined);
@@ -489,12 +523,18 @@ async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
   // publint/ATTW are pure-JS verifiers, run through npx at their pinned
   // versions.
   await runCommand('npx', ['--yes', `publint@${PUBLINT_VERSION}`, 'run', tarball, '--strict']);
+  // Pure-CSS export subpaths are exempted from attw (cssExportSubpaths above).
+  // The flag must trail the tarball positional: --exclude-entrypoints is a
+  // commander variadic option that greedily consumes every following argument,
+  // so placing it first would swallow the tarball and default the file to ".".
+  // Packages without a CSS subpath get the original command shape unchanged.
   await runCommand('npx', [
     '--yes',
     `@arethetypeswrong/cli@${ATTW_VERSION}`,
     '--profile',
     'esm-only',
     tarball,
+    ...cssExportSubpaths(pkg.exports).flatMap((subpath) => ['--exclude-entrypoints', subpath]),
   ]);
 
   const packageRoot = await extractTarball(tarball);

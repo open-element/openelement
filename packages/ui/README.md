@@ -19,7 +19,8 @@ separate application-framework promise.
 
 There is **no Linear compatibility layer**: the `open-*-linear` components and
 the `linear-token-sheet` token sheet are not part of the public surface. Use the
-canonical components and `@openelement/ui/theme-tokens` instead.
+canonical components and the `@theme` role table in
+[`src/theme.css`](./src/theme.css) instead.
 
 ## Install
 
@@ -85,30 +86,29 @@ The reference site wires the same scripts through its Vite `inject` option.
 ## Design tokens
 
 The token layer is hand-maintained — there is no generator. One authored CSS
-source, one carrier:
+source, no shipped values:
 
 - `src/theme.css` — **the single source of design roles** (P6: the only place
   in the repository that defines them). shadcn-convention roles
   (`--color-background`, `--color-primary`, …) seated on the Tailwind v4
-  default scale; the scale layer carries zero authored values (every value is
-  the verbatim Tailwind v4.1.16 default), roles reference only scale
-  variables, dark pairs follow the shadcn v4 convention with the selector
-  re-pointed at this repo's `[data-theme='dark']` mechanism, and a
-  forced-colors layer re-seats every role on a system color. Since alpha9 C2
-  the scale layer is the real `@theme` block; role names are the migration
-  contract. Since C3 (#1506) the component recipes read these role names
-  directly — the C1 alias layer (`semantic-tokens.css`) was deleted under its
-  own DELETION CONDITION, and three non-shadcn status roles
-  (`--color-success/-warning/-info`) joined the table with the same
-  forced-colors and dark-pair discipline.
-- `src/theme-tokens.ts` — the carrier: inlines the source verbatim and
-  exports `themeTokenCss` (the deployable sheet text) plus `themeTokenSheet`
-  (a constructable sheet built from it). The token blocks select
-  `:root, :host`, so the same sheet serves document-level adoption and
-  shadow-root adoption (only the structural fallback is `:host`-only).
+  default scale; roles reference only scale variables, dark pairs follow the
+  shadcn v4 convention with the selector re-pointed at this repo's
+  `[data-theme='dark']` mechanism, and a forced-colors layer re-seats every
+  role on a system color. Since alpha9 C2 the scale layer is the real
+  `@theme` block; role names are the migration contract. Since C3 (#1506) the
+  component recipes read these role names directly — the C1 alias layer
+  (`semantic-tokens.css`) was deleted under its own DELETION CONDITION, and
+  three non-shadcn status roles (`--color-success/-warning/-info`) joined the
+  table with the same forced-colors and dark-pair discipline.
 
-`themeTokenSheet` is the only token entry point. The ui suite fails closed on
-carrier/source divergence, on the role contract (@theme ↔ compiled twin, dark
+**The package ships no token values.** The compiled `theme-tokens` twin
+(`themeTokenCss` / `themeTokenSheet`) was deleted in alpha9 C5 — the role
+names, dark pairs and forced-colors tier are the contract; the values come
+from the `@openelement/router` Tailwind preset (ON) or a table the consumer
+writes itself (OFF). See [CUSTOMIZATION.md](./CUSTOMIZATION.md),
+"Value delivery".
+
+The ui suite fails closed on the role contract (dark
 pairs, forced-colors totality), on recipes consuming undeclared variables,
 and on WCAG floors (3:1 focus ring, 4.5:1 status inks on the background and
 their 10% recipe washes). `daisyClassSheet`, modal and step-card are retired
@@ -161,7 +161,7 @@ manifest; the per-component JSDoc is the source of truth for those.
 @openelement/ui/open-callout
 @openelement/ui/open-dropdown
 @openelement/ui/open-tabs
-@openelement/ui/theme-tokens           (token sheet text + constructable sheet; node-safe leaf)
+@openelement/ui/theme.css              (the @theme role source; compiled through the router preset)
 @openelement/ui/instance-state         (per-element instance state store; tree-shakeable leaf)
 @openelement/ui/manifest               (generated WC package manifest; node-safe leaf)
 ```

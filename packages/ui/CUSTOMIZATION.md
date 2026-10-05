@@ -33,11 +33,62 @@ DELETION CONDITION.
   `Highlight`, `LinkText`, `Mark`) in both selector blocks. Every component
   therefore resolves fully under forced colors; hue carries no meaning there,
   so status is also encoded by border and label, never by color alone.
-- **Delivery**: Tailwind builds compile `theme.css` through the
-  `@openelement/router` preset (`tailwind.theme`). Plain-CSS consumers adopt
-  the compiled twin via `@openelement/ui/theme-tokens`
-  (`themeTokenCss` / `themeTokenSheet`; the blocks select `:root, :host`, so
-  one sheet serves document and shadow adoption).
+- **Delivery**: see the [Value delivery](#value-delivery) section below.
+
+## Value delivery
+
+**What the ui package guarantees is the role table's SHAPE, not its values.**
+The contract a consumer may rely on:
+
+- the role names declared in the `@theme` block of
+  [`src/theme.css`](./src/theme.css) (the full inventory below),
+- each role's `[data-theme='dark']` dark pair,
+- the `forced-colors: active` tier that re-seats every role on a system color.
+
+**The package carries no scale values of its own.** Since the alpha9 C5 twin
+removal, `@openelement/ui` embeds no compiled value table and exports no
+token module — the retired `@openelement/ui/theme-tokens`
+(`themeTokenCss` / `themeTokenSheet`) is gone. Component recipes reference
+`var(--color-*)` / `var(--spacing)` / etc.; until the host supplies those
+variables the recipes resolve to nothing. Values have exactly two suppliers:
+
+- **Preset ON**: a `@openelement/router` Tailwind build compiles
+  `theme.css` through the preset (`tailwind: { theme:
+  ['@openelement/ui/theme.css'] }`), emitting the roles plus Tailwind's own
+  scale layer. This is the first-party delivery (the www site and the
+  router-ui-dogfood fixture).
+- **Preset OFF**: the consumer writes its own table. The only requirement is
+  that it defines the role names (and any scale variables the recipes
+  consume, e.g. `--spacing`, `--radius-md`) under the same selectors.
+  Minimal shape, values illustrative:
+
+  ```css
+  /* OFF-state table — role names from src/theme.css are the contract;
+     the values are the consumer's own. */
+  :root,
+  :host {
+    --color-background: white;
+    --color-foreground: black;
+    --color-primary: rebeccapurple;
+    --color-primary-foreground: white;
+    /* …the remaining --color-* roles of src/theme.css… */
+    --spacing: 0.25rem;
+    --radius-md: 0.375rem;
+  }
+  :root[data-theme='dark'],
+  :host([data-theme='dark']) {
+    /* the same roles, dark-side values */
+  }
+  ```
+
+The full role-name inventory is the `@theme` block of
+[`src/theme.css`](./src/theme.css): `--color-background`, `--color-foreground`,
+`--color-card(-foreground)`, `--color-popover(-foreground)`,
+`--color-primary(-foreground)`, `--color-secondary(-foreground)`,
+`--color-muted(-foreground)`, `--color-accent(-foreground)`,
+`--color-destructive(-foreground)`, `--color-success`, `--color-warning`,
+`--color-info`, `--color-border`, `--color-input`, `--color-ring`, and
+`--color-chart-1` … `--color-chart-5`.
 
 ## alpha8 → C3 variable rename map
 

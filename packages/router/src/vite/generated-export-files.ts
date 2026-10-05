@@ -46,6 +46,6 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     'open-input': 'src/open-input.tsx',
     'open-tabs': 'src/open-tabs.tsx',
     'open-theme-toggle': 'src/open-theme-toggle.tsx',
-    'theme-tokens': 'src/theme-tokens.ts',
+    'theme.css': 'src/theme.css',
   },
 };

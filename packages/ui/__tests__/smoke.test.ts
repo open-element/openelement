@@ -63,8 +63,3 @@ test('open-ui - every component module exports its class', async () => {
     expect(mod[exportName], `${name} should export ${exportName}`).toEqual(expect.anything());
   }
 });
-
-test('open-ui - theme-tokens exports themeTokenSheet', async () => {
-  const mod = await import('../src/theme-tokens.ts');
-  expect(mod.themeTokenSheet, 'themeTokenSheet should be exported').toEqual(expect.anything());
-});

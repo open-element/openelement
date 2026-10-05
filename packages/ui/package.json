@@ -16,7 +16,6 @@
     "./open-dropdown": "./src/open-dropdown.tsx",
     "./open-tabs": "./src/open-tabs.tsx",
     "./instance-state": "./src/instance-state.ts",
-    "./theme-tokens": "./src/theme-tokens.ts",
     "./theme.css": "./src/theme.css"
   },
   "files": [

@@ -19,9 +19,9 @@
      BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans',
      Arial now precede sans-serif).
    No carried ramp step other than zinc-50 changed value between the two
-   versions. The plain-CSS twin of this file (the compiled :root,:host form
-   carried by theme-tokens.ts for no-Tailwind adoption) keeps the v4.1.16
-   evaluation — its bytes are the preset-OFF build baseline (C2 task 0).
+   versions. With the alpha9 C5 twin removal this file has no compiled
+   shadow form: the installed Tailwind defaults are the only scale
+   evaluation, reached exclusively through the preset's build.
 
    Rules the roles obey (umbrella rulings, do not relitigate):
 
@@ -44,9 +44,10 @@
      the label and the border, not by color.
 
    Consumption: the @openelement/router tailwind preset compiles this file
-   into the bundle's theme layer (`tailwind: { theme: [...] }`). Plain-CSS
-   consumers without the preset keep reading the compiled twin through
-   @openelement/ui/theme-tokens (themeTokenCss / themeTokenSheet).
+   into the bundle's theme layer (`tailwind: { theme: [...] }`). The ui
+   package emits no values itself (the theme-tokens twin is deleted): a
+   consumer without the preset writes its own table using these role names
+   — the OFF contract in CUSTOMIZATION.md ("Value delivery").
    ═══════════════════════════════════════════════════════════════════════ */
 
 @theme {
