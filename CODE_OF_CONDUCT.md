@@ -12,7 +12,7 @@ file a public issue or discussion.
 
 Conduct reports go to a dedicated private conduct channel. That channel is
 **external pending**: the concrete private address or GitHub team must come
-from the maintainers (tracked in [MAINTAINERS.md](./MAINTAINERS.md)) and must
+from the maintainers and must
 not be invented here. Until it is configured, there is no private project
 channel for conduct reports: report platform-level abuse through GitHub's
 [Report Abuse](https://github.com/contact/report-abuse) form, and do not file

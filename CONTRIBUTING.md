@@ -1,6 +1,6 @@
 # Contributing to OpenElement
 
-Read [SECURITY.md](./SECURITY.md), [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md), and [MAINTAINERS.md](./MAINTAINERS.md) before contributing.
+Read [SECURITY.md](./SECURITY.md) and [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) before contributing.
 
 ## Normal changes
 
