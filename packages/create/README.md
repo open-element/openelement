@@ -40,6 +40,26 @@ from in its `package.json` dependencies.
 
 The canonical install command is exported from `@openelement/create/install-command` (one builder, every documented copy derives from it).
 
+## Tailwind form (the one scaffold question)
+
+The scaffold ships the **Tailwind-ON starter by default**: a preset-wired
+`vite.config.ts` (the `@openelement/router` Tailwind preset), the
+`app/styles/theme.css` `@theme` role sheet (semantic roles over the Tailwind
+default scale), and exact `tailwindcss` / `@tailwindcss/vite` pins in
+`devDependencies`. Interactively the CLI asks exactly one question —
+`Enable Tailwind CSS + @theme role sheet? (Y/n)` — and every non-interactive
+run (CI, packed consumers) takes the same `Y` default. Pass a flag to skip the
+question; the flags reach the generator through the spellings that forward
+trailing arguments (`npx`, `pnpm dlx`, or a directly invoked bin):
+
+```bash
+npx @openelement/create@alpha my-app --no-tailwind   # the minimal starter
+npx @openelement/create@alpha my-app --tailwind      # explicit ON (the default)
+```
+
+`--no-tailwind` generates the pre-#1524 minimal starter: no Tailwind
+dependency surface, no preset wiring, no role sheet.
+
 ## The bootstrap is a plain npm invocation; the generated project is Node
 
 The documented bootstrap runs the generator through `npm create` (or the
@@ -78,11 +98,15 @@ npm create @openelement@0.43 my-app
 ## What It Creates
 
 - `package.json` - starter dependencies (exact `@openelement/*` release pins)
-  and the lifecycle scripts (`dev`/`check`/`test`/`build`/`start`/`preview`)
+  and the lifecycle scripts (`dev`/`check`/`test`/`build`/`start`/`preview`);
+  the default (Tailwind-ON) form adds the exact `tailwindcss` and
+  `@tailwindcss/vite` dev pins
 - `tsconfig.json` - the type-check surface for `pnpm check`: JSX authoring
   through the element import source, whole-`app/` coverage
-- `vite.config.ts` - Vite build configuration; the plugin call is plain
-  `openElement()`, because framework options have exactly one home:
+- `vite.config.ts` - Vite build configuration. On the default (Tailwind-ON)
+  form it also applies the router's public Tailwind preset so the role sheet
+  compiles into the linked bundle; framework options still have exactly one
+  home:
 - `openelement.config.ts` - the framework options. It is OPTIONAL and nearly
   empty by default; every option it omits comes from a file convention —
   design tokens from `app/styles/tokens.css`, the app shell from
@@ -90,7 +114,8 @@ npm create @openelement@0.43 my-app
   `app/head.tsx`, the site title from `package.json`. Passing framework
   options inline to `openElement()` while this file carries options is a hard
   error, and an unknown key fails the build with the accepted-key list.
-- `app/` - application directory with starter pages and islands
+- `app/` - application directory with starter pages and islands; the
+  Tailwind-ON form adds `app/styles/theme.css`, the `@theme` role sheet
 - `app/routes/blog/` - the sample blog as compiled page routes (`index` list
   and `welcome` post), prerendered at build time
 - `public/` - static assets

@@ -1,0 +1,108 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   The starter's @theme role sheet (scaffolded with Tailwind enabled).
+
+   Same contract as @openelement/ui's theme.css (the reference table): every
+   role is a shadcn-style semantic name expressed with Tailwind default theme
+   variables (var(--color-<ramp>-<step>)) — no role carries a handwritten
+   scale value. The installed tailwindcss build provides the scale variables
+   through the preset's compile (the router's Tailwind preset), the compiled
+   bundle links into every rendered page, and the custom properties inherit
+   into every shadow root, so compiled elements and islands read the roles
+   directly. Extend this table with new roles the same way — name on the
+   left, an existing Tailwind variable on the right — or override a role per
+   theme with the dark pairs below.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── semantic roles (light), over the TW4 default scale.
+     Violet-anchored roles (the starter brand reads violet); neutral
+     surfaces stay zinc so the page base keeps its near-neutral paper
+     feel. ── */
+
+  --color-background: var(--color-white);
+  --color-foreground: var(--color-zinc-950);
+
+  --color-card: var(--color-white);
+  --color-card-foreground: var(--color-zinc-950);
+
+  --color-popover: var(--color-white);
+  --color-popover-foreground: var(--color-zinc-950);
+
+  --color-primary: var(--color-violet-700);
+  --color-primary-foreground: var(--color-violet-50);
+
+  --color-secondary: var(--color-violet-100);
+  --color-secondary-foreground: var(--color-violet-900);
+
+  --color-muted: var(--color-zinc-100);
+  --color-muted-foreground: var(--color-zinc-600);
+
+  --color-accent: var(--color-violet-100);
+  --color-accent-foreground: var(--color-violet-900);
+
+  --color-destructive: var(--color-red-700);
+  --color-destructive-foreground: var(--color-white);
+
+  --color-border: var(--color-violet-200);
+  --color-input: var(--color-violet-200);
+  --color-ring: var(--color-violet-500);
+}
+
+/* Dark pairs (shadcn v4 convention; the selector matches the runtime theme
+   attribute the ui package documents). */
+:root[data-theme='dark'],
+:host([data-theme='dark']) {
+  --color-background: var(--color-zinc-950);
+  --color-foreground: var(--color-zinc-50);
+
+  --color-card: var(--color-zinc-900);
+  --color-card-foreground: var(--color-zinc-50);
+
+  --color-popover: var(--color-zinc-900);
+  --color-popover-foreground: var(--color-zinc-50);
+
+  --color-primary: var(--color-violet-400);
+  --color-primary-foreground: var(--color-violet-950);
+
+  --color-secondary: var(--color-zinc-800);
+  --color-secondary-foreground: var(--color-zinc-100);
+
+  --color-muted: var(--color-zinc-800);
+  --color-muted-foreground: var(--color-zinc-400);
+
+  --color-accent: var(--color-zinc-800);
+  --color-accent-foreground: var(--color-zinc-100);
+
+  --color-destructive: var(--color-red-400);
+  --color-destructive-foreground: var(--color-red-950);
+
+  --color-border: var(--color-zinc-800);
+  --color-input: var(--color-zinc-800);
+  --color-ring: var(--color-violet-400);
+}
+
+/* Forced-colors layer: every role re-seats on a system color. Values are
+   system keywords — no author color survives the forcing. */
+@media (forced-colors: active) {
+  :root {
+    --color-background: Canvas;
+    --color-foreground: CanvasText;
+    --color-card: Canvas;
+    --color-card-foreground: CanvasText;
+    --color-popover: Canvas;
+    --color-popover-foreground: CanvasText;
+    --color-primary: ButtonText;
+    --color-primary-foreground: Canvas;
+    --color-secondary: ButtonFace;
+    --color-secondary-foreground: ButtonText;
+    --color-muted: Canvas;
+    --color-muted-foreground: GrayText;
+    --color-accent: ButtonFace;
+    --color-accent-foreground: ButtonText;
+    --color-destructive: CanvasText;
+    --color-destructive-foreground: Canvas;
+    --color-border: CanvasText;
+    --color-input: CanvasText;
+    --color-ring: Highlight;
+  }
+}

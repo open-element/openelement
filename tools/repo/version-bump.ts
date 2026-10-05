@@ -1,11 +1,13 @@
 /**
  * One-knob release version bump (#1415; full stamp-surface rewrite in alpha9
  * C5, #1508 — the transitional manual is deleted with this rewrite and its
- * procedure lives in docs/maintainers/version-bump.md).
+ * procedure lives in docs/maintainers/version-bump.md; #1524 extends the
+ * stamp to every pnpm-workspace member).
  *
- * A version bump is TEN text points plus the tracked generated outputs, not
- * one, and hand-editing them burned two release rounds in alpha.2 and the
- * alpha.8 stamp (#1515 missed the tracked generated manifest):
+ * A version bump is the TEN release-line text points, the workspace-member
+ * version stamps, and the tracked generated outputs — not one file — and
+ * hand-editing them burned two release rounds in alpha.2 and the alpha.8
+ * stamp (#1515 missed the tracked generated manifest):
  *
  *   1-4.  packages/{element,router,create,ui}/package.json `version`
  *   5.    packages/create/src/version.ts `CREATE_VERSION`
@@ -15,6 +17,12 @@
  *   8.    its twin fixture tools/repo/check-release-state-machine.test.ts
  *         (`sourceVersion`, `activeTarget`, and the workspace-versions map)
  *   9-10. the root README.md / README.zh.md source-tree lines
+ *   +     every OTHER pnpm-workspace member whose `version` sits on the
+ *         release line's shape (same major.minor.patch base, prerelease
+ *         train) is stamped to the target from wherever it lags — the private
+ *         members (www, tools/*, apps/saas) ride the same train as the
+ *         published packages and must never fall behind (#1524). Members on
+ *         a non-release-line version (the test fixtures' `0.0.0`) stay put.
  *   +     packages/ui/src/generated-manifest.json (a TRACKED generator output
  *         embedding the package version) and the www release-line module are
  *         refreshed by running the generate:all face after the text points.
@@ -24,10 +32,12 @@
  *   pnpm --dir tools/repo run version-bump 1.0.0-alpha.9 --dry-run     # explicit dry run
  *   pnpm --dir tools/repo run version-bump 1.0.0-alpha.9 --write       # apply
  *
- * The dry run prints the diff for every text point plus the generated-output
- * preview so the stamp can be reviewed before anything is written. `--write`
- * performs the text edits, regenerates through generate:all, and fails when
- * the ten points do not end up carrying one version.
+ * The dry run prints the diff for every pending text point plus the
+ * generated-output preview so the stamp can be reviewed before anything is
+ * written; when the release line is already at the target but members lag,
+ * it says so and previews exactly the member stamps. `--write` performs the
+ * text edits, regenerates through generate:all, and fails when the stamp
+ * points do not end up carrying one version.
  *
  * What stays OUT of the knob (release bookkeeping that must not move at bump
  * time, with the reasons):
@@ -52,7 +62,9 @@ import { parse } from 'semver';
 import { join, relative } from 'node:path';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import process from 'node:process';
+import fastGlob from 'fast-glob';
 import { wwwReleaseAnchorDrift } from './www-release-anchor.ts';
+import { readWorkspaceGlobs } from './workspace-tasks.ts';
 import { commandStatus } from './node-command.ts';
 
 /** Packages whose package.json carries the release line version. */
@@ -83,6 +95,127 @@ export const README_SOURCE_LINES: readonly { path: string; anchor: string }[] = 
   { path: 'README.md', anchor: 'The source tree is `' },
   { path: 'README.zh.md', anchor: '全新公开基线 `' },
 ];
+
+/**
+ * Workspace members whose package.json already sits in the release-line
+ * roster (point 1-4). The member walk below covers every OTHER member, so
+ * the two surfaces never produce a double edit for one file.
+ */
+const RELEASE_LINE_CONFIGS: ReadonlySet<string> = new Set(PACKAGE_CONFIGS);
+
+/** The workspace manifest the member walk enumerates (fail-soft when absent). */
+export const WORKSPACE_MANIFEST = 'pnpm-workspace.yaml';
+
+/**
+ * True when `version` sits on the release line's shape: same
+ * major.minor.patch base as the line and riding a prerelease train. The test
+ * fixtures' `0.0.0` is a different base without a prerelease — never
+ * eligible, so scaffolding-internal versions stay untouched by the knob.
+ * The base compares against the line's CURRENT version, so a future base
+ * change still converges members that share the old base onto the new line.
+ */
+export function isReleaseLineShape(version: string, lineVersion: string): boolean {
+  const member = parse(version);
+  const line = parse(lineVersion);
+  if (member === null || line === null) return false;
+  if (member.prerelease.length === 0) return false;
+  return member.major === line.major && member.minor === line.minor && member.patch === line.patch;
+}
+
+/** How a workspace member's version relates to the stamp target. */
+export type MemberStampStatus = 'stamped' | 'current' | 'skipped';
+
+/** One workspace member's disposition in the stamp plan. */
+export interface MemberStamp {
+  /** Repo-relative package.json path. */
+  path: string;
+  /** The version the member carries now (null when it declares none). */
+  version: string | null;
+  status: MemberStampStatus;
+  /** Why a member was skipped (absent for stamped/current members). */
+  reason?: string;
+}
+
+/**
+ * Expand the pnpm-workspace.yaml globs to member package.json paths. Mirrors
+ * the workspace manifest's documented shape (single-level globs + `!`
+ * exclusions) with the same fail-soft contract as the shipped-source scan: a
+ * tree without the manifest (a test fixture) has no member stamps; a
+ * malformed manifest propagates, because silently stamping zero members on
+ * the live tree is exactly the "no straggler" failure this walk exists to
+ * prevent.
+ */
+export async function workspaceMemberConfigPaths(root: string): Promise<string[]> {
+  try {
+    await stat(join(root, WORKSPACE_MANIFEST));
+  } catch {
+    return []; // no workspace manifest — nothing to enumerate (fixture trees)
+  }
+  const globs = await readWorkspaceGlobs(root);
+  const matched: string[] = [];
+  for (const glob of globs.include) {
+    if (glob.includes('*')) {
+      matched.push(...(await fastGlob(glob, { cwd: root, onlyDirectories: true, dot: false })));
+    } else {
+      matched.push(glob); // literal member, unverified — the read below decides
+    }
+  }
+  const excluded = new Set<string>();
+  for (const glob of globs.exclude) {
+    if (glob.includes('*')) {
+      for (const hit of await fastGlob(glob, { cwd: root, onlyDirectories: true, dot: false })) {
+        excluded.add(hit);
+      }
+    } else {
+      excluded.add(glob);
+    }
+  }
+  const paths: string[] = [];
+  for (const member of matched) {
+    if (excluded.has(member)) continue;
+    const path = `${member.replace(/\/+$/, '')}/package.json`;
+    if (RELEASE_LINE_CONFIGS.has(path)) continue; // point 1-4 already owns it
+    try {
+      await stat(join(root, path));
+    } catch {
+      continue; // not a manifest-bearing member (pnpm ignores those too)
+    }
+    paths.push(path);
+  }
+  return paths.sort();
+}
+
+/**
+ * Classify every non-release-line workspace member against the stamp target:
+ * `stamped` (lags the line on the same train — gets an edit), `current`
+ * (already at the target), or `skipped` (a non-release-line version, e.g. a
+ * fixture's `0.0.0`, or a manifest without a version field).
+ */
+export async function workspaceMemberStamps(
+  root: string,
+  currentVersion: string,
+  targetVersion: string,
+): Promise<MemberStamp[]> {
+  const stamps: MemberStamp[] = [];
+  for (const path of await workspaceMemberConfigPaths(root)) {
+    const version = readConfigVersion(await readFile(join(root, path), 'utf8'));
+    if (version === null) {
+      stamps.push({ path, version: null, status: 'skipped', reason: 'declares no version field' });
+    } else if (!isReleaseLineShape(version, currentVersion)) {
+      stamps.push({
+        path,
+        version,
+        status: 'skipped',
+        reason: `not on the release line's shape (${currentVersion} base)`,
+      });
+    } else if (version === targetVersion) {
+      stamps.push({ path, version, status: 'current' });
+    } else {
+      stamps.push({ path, version, status: 'stamped' });
+    }
+  }
+  return stamps;
+}
 
 /** The published packages' source trees scanned for historical release names. */
 export const SHIPPED_SOURCE_ROOTS: readonly string[] = [
@@ -170,6 +303,7 @@ export async function historicalReleaseNameFindings(
 /** Which of the stamp points an edit belongs to. */
 export type StampPoint =
   | 'package-config'
+  | 'workspace-member'
   | 'create-anchor'
   | 'release-state'
   | 'admitted-target'
@@ -198,8 +332,13 @@ export interface VersionBumpPlan {
   /** Version the tree carries now (from packages/element/package.json). */
   currentVersion: string;
   targetVersion: string;
-  /** Text-point edits (points 1-10). */
+  /** Text-point edits (the ten release-line points + lagging member stamps). */
   edits: VersionEdit[];
+  /**
+   * Every non-release-line workspace member's disposition, stamped or not —
+   * the dry-run audit surface for the no-straggler rule.
+   */
+  members: MemberStamp[];
   /** Generated outputs refreshed through the generate:all face on --write. */
   generated: GeneratedOutputPreview[];
 }
@@ -342,6 +481,21 @@ export async function planVersionBump(
     );
   }
 
+  // Workspace members ride the same train: each laggard is rewritten from its
+  // OWN current version to the target (the line moved ahead of it), while
+  // non-release-line members (fixtures) are recorded as skipped, never edited.
+  const members = await workspaceMemberStamps(root, currentVersion, targetVersion);
+  for (const member of members) {
+    if (member.status !== 'stamped' || member.version === null) continue;
+    const before = await readFile(join(root, member.path), 'utf8');
+    pushEdit(
+      member.path,
+      'workspace-member',
+      before,
+      rewriteConfigVersion(before, member.version, targetVersion),
+    );
+  }
+
   const anchorBefore = await readFile(join(root, VERSION_SOURCE), 'utf8');
   pushEdit(
     VERSION_SOURCE,
@@ -392,15 +546,16 @@ export async function planVersionBump(
     generated.push({ path: GENERATED_MANIFEST, version: null });
   }
 
-  return { currentVersion, targetVersion, edits, generated };
+  return { currentVersion, targetVersion, edits, members, generated };
 }
 
 /**
- * The ten text points after a bump must all carry one version, the tracked
- * generated manifest must have been regenerated, and the www source-line
- * anchor must stay derived from release bookkeeping truth (the anchor audit
- * rides the same cross-assertion). Returns one message per point that does
- * not (empty when the tree is consistent).
+ * The stamp surface after a bump must all carry one version — the ten
+ * release-line points, every release-line-shaped workspace member, the
+ * tracked generated manifest — and the www source-line anchor must stay
+ * derived from release bookkeeping truth (the anchor audit rides the same
+ * cross-assertion). Returns one message per point that does not (empty when
+ * the tree is consistent).
  */
 export async function inconsistencyFailures(root: string, expected: string): Promise<string[]> {
   const failures: string[] = [];
@@ -408,6 +563,22 @@ export async function inconsistencyFailures(root: string, expected: string): Pro
     const version = readConfigVersion(await readFile(join(root, path), 'utf8'));
     if (version !== expected) {
       failures.push(`${path}: version ${String(version)} != ${expected}`);
+    }
+  }
+  // Members riding the tree's release train must be AT the expected version;
+  // non-release-line members (the fixtures' 0.0.0) stay exempt. The shape
+  // anchor is the tree's own line version, so the exemption is a property of
+  // the member, not of the expected value being probed.
+  const lineVersion = readConfigVersion(await readFile(join(root, PACKAGE_CONFIGS[0]), 'utf8'));
+  for (const member of await workspaceMemberConfigPaths(root)) {
+    const version = readConfigVersion(await readFile(join(root, member), 'utf8'));
+    if (
+      version !== null &&
+      lineVersion !== null &&
+      isReleaseLineShape(version, lineVersion) &&
+      version !== expected
+    ) {
+      failures.push(`${member}: version ${version} != ${expected}`);
     }
   }
   const anchor = await readFile(join(root, VERSION_SOURCE), 'utf8');
@@ -522,7 +693,7 @@ async function main(): Promise<void> {
   if (!target) {
     console.error(
       'usage: pnpm --dir tools/repo run version-bump <version> [--write]\n' +
-        '       (dry run by default; --write applies the ten-point update + generate:all)',
+        '       (dry run by default; --write applies the release-line + workspace-member stamp + generate:all)',
     );
     process.exit(2);
   }
@@ -545,20 +716,41 @@ async function main(): Promise<void> {
   }
 
   const plan = await planVersionBump(root, target);
-  if (plan.currentVersion === target) {
+  const memberStamps = plan.members.filter((member) => member.status === 'stamped');
+  if (plan.edits.length === 0) {
     console.log(`version-bump: tree already at ${target}; nothing to do.`);
     return;
   }
+  // The release line may already be at the target while private members lag
+  // it (the #1524 straggler state): a dry run against such a tree previews
+  // exactly the member stamps a --write would apply.
+  const lineLags = plan.currentVersion !== target;
 
-  console.log(`version-bump: ${plan.currentVersion} -> ${target} (${write ? 'WRITE' : 'dry run'})`);
+  console.log(
+    `version-bump: ${plan.currentVersion} -> ${target} (${write ? 'WRITE' : 'dry run'})` +
+      (lineLags
+        ? ''
+        : ` — release line already at ${target}; ${memberStamps.length} workspace member stamp(s) pending`),
+  );
   for (const edit of plan.edits) console.log(renderDiff(edit));
+  for (const member of plan.members) {
+    if (member.status === 'stamped') continue; // already rendered as a diff above
+    console.log(
+      `--- ${member.path} (workspace member, ${member.status})` +
+        ` version ${member.version ?? '<none>'}${member.reason ? `: ${member.reason}` : ''}`,
+    );
+  }
   for (const output of plan.generated) {
     console.log(
       `--- ${output.path} (generated; refreshed via generate:all on --write)\n` +
         `+++ version ${output.version ?? '<unreadable>'} -> ${target}`,
     );
   }
-  console.log(`\npoints: ${plan.edits.length} file(s) edited (ten stamp points)`);
+  console.log(
+    `\npoints: ${plan.edits.length} file(s) edited ` +
+      `(${plan.edits.filter((edit) => edit.point !== 'workspace-member').length} release-line points, ` +
+      `${memberStamps.length} workspace member stamps)`,
+  );
 
   if (!write) {
     console.log('\ndry run: nothing written. Apply with `--write`.');
@@ -580,7 +772,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   console.log(
-    `version-bump: ten stamp points + generated outputs consistent at ${target}. ` +
+    `version-bump: stamp points (release line + workspace members) + generated outputs ` +
+      `consistent at ${target}. ` +
       'Still by hand (release bookkeeping, not this knob): the CHANGELOG entry. ' +
       'Registry dist-tags, latestPrerelease, and the create README pinned example ' +
       'move only when the packages actually publish.',

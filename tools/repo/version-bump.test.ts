@@ -1,10 +1,11 @@
 /**
- * tools/repo/version-bump.test.ts — ten-point stamp contract (#1415, #1508).
+ * tools/repo/version-bump.test.ts — stamp contract (#1415, #1508, #1524).
  *
  * The dry run is the acceptance surface: it must report exactly the four
  * package manifests, the CREATE_VERSION anchor, the release-state bookkeeping
  * pair, the admitted-train constant and its twin fixture, and the two README
- * source-tree lines — plus the generated-output preview. `--write` is
+ * source-tree lines — plus every release-line-shaped workspace member that
+ * lags the train (#1524), and the generated-output preview. `--write` is
  * exercised against copies of the tree pieces the knob owns (never the live
  * repo).
  */
@@ -18,6 +19,7 @@ import {
   GENERATED_MANIFEST,
   historicalReleaseNameFindings,
   inconsistencyFailures,
+  isReleaseLineShape,
   PACKAGE_CONFIGS,
   planVersionBump,
   readConfigVersion,
@@ -34,6 +36,7 @@ import {
   shippedScanAllowlisted,
   validateVersion,
   VERSION_SOURCE,
+  workspaceMemberConfigPaths,
 } from './version-bump.ts';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -150,6 +153,17 @@ test('version-bump: generated manifest versions are read defensively', () => {
   expect(readGeneratedManifestVersion('not json')).toEqual(null);
 });
 
+test('version-bump: the release-line shape keys on base plus prerelease train', () => {
+  // Same base on a prerelease train — the stampable form.
+  expect(isReleaseLineShape('1.0.0-alpha.1', '1.0.0-alpha.9')).toEqual(true);
+  expect(isReleaseLineShape('1.0.0-alpha.9', '1.0.0-alpha.9')).toEqual(true);
+  // Not the line's shape: a different base, a stable version, or garbage.
+  expect(isReleaseLineShape('0.0.0', '1.0.0-alpha.9')).toEqual(false);
+  expect(isReleaseLineShape('1.0.0', '1.0.0-alpha.9')).toEqual(false);
+  expect(isReleaseLineShape('2.0.0-alpha.1', '1.0.0-alpha.9')).toEqual(false);
+  expect(isReleaseLineShape('workspace:*', '1.0.0-alpha.9')).toEqual(false);
+});
+
 test('version-bump: dry run reports every point against the live tree', async () => {
   // The dry-run target is derived from the live tree, not hardcoded: this test
   // once pinned `1.0.0-alpha.4` as the "next" version, which is exactly the
@@ -169,9 +183,11 @@ test('version-bump: dry run reports every point against the live tree', async ()
     readConfigVersion(await readFile(join(repoRoot, PACKAGE_CONFIGS[0]), 'utf8')),
   );
   expect(plan.currentVersion !== target).toBeTruthy();
-  // Points 1-10: four configs + anchor + release-state + admitted constant +
-  // twin fixture + two README lines.
-  expect(plan.edits.map((edit) => edit.path)).toEqual([
+  // The ten release-line points: four configs + anchor + release-state +
+  // admitted constant + twin fixture + two README lines.
+  expect(
+    plan.edits.filter((edit) => edit.point !== 'workspace-member').map((edit) => edit.path),
+  ).toEqual([
     ...PACKAGE_CONFIGS,
     VERSION_SOURCE,
     RELEASE_STATE,
@@ -185,26 +201,71 @@ test('version-bump: dry run reports every point against the live tree', async ()
   expect(plan.edits.filter((edit) => edit.point === 'admitted-target').length).toEqual(1);
   expect(plan.edits.filter((edit) => edit.point === 'admitted-twin').length).toEqual(1);
   expect(plan.edits.filter((edit) => edit.point === 'readme-line').length).toEqual(2);
+  // #1524: every release-line-shaped member lags the advanced target, so each
+  // one gets an edit; the member audit lists the skipped fixtures too.
+  const memberPaths = plan.members.map((member) => member.path);
+  expect(memberPaths.length).toEqual((await workspaceMemberConfigPaths(repoRoot)).length);
+  for (const member of plan.members) {
+    expect(member.status === 'stamped' || member.status === 'skipped', member.path).toBeTruthy();
+  }
+  const stampedPaths = plan.members
+    .filter((member) => member.status === 'stamped')
+    .map((member) => member.path);
+  expect(
+    plan.edits.filter((edit) => edit.point === 'workspace-member').map((edit) => edit.path),
+  ).toEqual(stampedPaths);
+  // The published roster must never reappear in the member walk (point 1-4
+  // owns those files).
+  for (const config of PACKAGE_CONFIGS) {
+    expect(memberPaths.includes(config), config).toBeFalsy();
+  }
   // The generated preview names the tracked manifest.
   expect(plan.generated).toEqual([{ path: GENERATED_MANIFEST, version: current }]);
 });
 
-test('version-bump: a plan against the current version is empty (already-at)', async () => {
+test('version-bump: a plan against the current version carries member stamps only', async () => {
   const current = readConfigVersion(await readFile(join(repoRoot, PACKAGE_CONFIGS[0]), 'utf8'))!;
   const plan = await planVersionBump(repoRoot, current);
-  expect(plan.edits).toEqual([]);
+  // The release line is converged by construction (it defines the current
+  // version); what may lag it is exactly the release-line-shaped member set.
+  expect(plan.edits.filter((edit) => edit.point !== 'workspace-member')).toEqual([]);
+  const lagging = plan.members.filter((member) => member.status === 'stamped');
+  expect(plan.edits.map((edit) => edit.path)).toEqual(lagging.map((member) => member.path));
+  for (const member of lagging) {
+    // A stamp edit moves the member's own current version to the target.
+    const edit = plan.edits.find((candidate) => candidate.path === member.path)!;
+    expect(edit.before).toContain(`"version": "${member.version}"`);
+    expect(edit.after).toContain(`"version": "${current}"`);
+  }
 });
 
 test('version-bump: consistency check reports the points that lag', async () => {
-  // The live tree is consistent with its own version.
+  // The live tree's release line is consistent with its own version; what may
+  // lag it is exactly the release-line-shaped member set (the #1524 straggler
+  // state, reported until a --write converges it).
   const current = readConfigVersion(await readFile(join(repoRoot, PACKAGE_CONFIGS[0]), 'utf8'))!;
-  expect(await inconsistencyFailures(repoRoot, current)).toEqual([]);
-  // A different expected version reports every stamp point (4 configs + anchor
+  const memberPaths = await workspaceMemberConfigPaths(repoRoot);
+  const atCurrent = await inconsistencyFailures(repoRoot, current);
+  expect(atCurrent.filter((line) => !memberPaths.some((path) => line.startsWith(path)))).toEqual(
+    [],
+  );
+  const laggingNow = (await planVersionBump(repoRoot, current)).members.filter(
+    (member) => member.status === 'stamped',
+  ).length;
+  expect(
+    atCurrent.filter((line) => memberPaths.some((path) => line.startsWith(path))).length,
+  ).toEqual(laggingNow);
+  // A different expected version reports every stamp point: 4 configs + anchor
   // + state sourceVersion/activeTarget + admitted + twin pair + two READMEs +
-  // generated manifest = 13; the www anchor audit is
-  // expected-version-independent, so it adds nothing here on a healthy tree).
+  // generated manifest = 13, plus every member riding the tree's train (the
+  // #1524 stamps — none can carry a 9.9.9 target); the www anchor audit is
+  // expected-version-independent, so it adds nothing here on a healthy tree.
+  const allMembers = await planVersionBump(repoRoot, '9.9.9');
+  const trainMembers = allMembers.members.filter((member) => member.status !== 'skipped').length;
   const failures = await inconsistencyFailures(repoRoot, '9.9.9');
-  expect(failures.length).toEqual(13);
+  expect(failures.length).toEqual(13 + trainMembers);
+  // The skipped (non-release-line) fixtures stay exempt from the stamp check.
+  expect(allMembers.members.some((member) => member.status === 'skipped')).toBeTruthy();
   expect(
     failures.some((line) => line.startsWith(VERSION_SOURCE)),
     failures.join('\n'),
@@ -225,6 +286,18 @@ test('version-bump: consistency check reports the points that lag', async () => 
     failures.some((line) => line.startsWith(GENERATED_MANIFEST)),
     failures.join('\n'),
   ).toBeTruthy();
+  // #1524: an expected version ON the tree's train also reports the members
+  // that do not carry it, in proportion to the live lagging set.
+  const parts = prereleaseParts(current);
+  if (parts === undefined) throw new Error(`fixture version is not a prerelease: ${current}`);
+  const next = `${parts.base}-${parts.name}.${parts.num + 1}`;
+  const atNext = await inconsistencyFailures(repoRoot, next);
+  const laggingAtNext = (await planVersionBump(repoRoot, next)).members.filter(
+    (member) => member.status === 'stamped',
+  ).length;
+  expect(atNext.filter((line) => memberPaths.some((path) => line.startsWith(path))).length).toEqual(
+    laggingAtNext,
+  );
 });
 
 test('version-bump: the allowlist matcher scopes the shipped-source scan', () => {
@@ -333,6 +406,107 @@ test('version-bump: a write against a fixture tree moves all ten points and rege
       failures.filter((line) => !line.includes('www/')),
       failures.join('\n'),
     ).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('version-bump: workspace members ride the stamp on a fixture tree (#1524)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'opx-test-'));
+  try {
+    const version = '1.0.0-alpha.2';
+    const next = '1.0.0-alpha.3';
+    // The release-line points, minimized to what the plan reads.
+    for (const path of PACKAGE_CONFIGS) {
+      await mkdir(join(root, path, '..'), { recursive: true });
+      await writeFile(join(root, path), `{\n  "name": "x",\n  "version": "${version}"\n}`);
+    }
+    await mkdir(join(root, 'packages/create/src'), { recursive: true });
+    await writeFile(join(root, VERSION_SOURCE), `export const CREATE_VERSION = '${version}';\n`);
+    await mkdir(join(root, 'docs/release'), { recursive: true });
+    await writeFile(
+      join(root, RELEASE_STATE),
+      `{\n  "sourceVersion": "${version}",\n  "activeTarget": "v${version}"\n}`,
+    );
+    await mkdir(join(root, 'tools/repo'), { recursive: true });
+    await writeFile(
+      join(root, ADMITTED_TARGET_SOURCE),
+      `const ADMITTED_ACTIVE_TARGET = 'v${version}';\n`,
+    );
+    await writeFile(
+      join(root, ADMITTED_TWIN_FIXTURE),
+      `const PINNED_STATE = { sourceVersion: '${version}', activeTarget: 'v${version}' };\n`,
+    );
+    await writeFile(join(root, 'README.md'), `The source tree is \`${version}\`, a baseline.\n`);
+    await writeFile(join(root, 'README.zh.md'), `源码目前是全新公开基线 \`${version}\`。\n`);
+    await mkdir(join(root, 'packages/ui/src'), { recursive: true });
+    await writeFile(join(root, GENERATED_MANIFEST), `{\n  "version": "${version}"\n}`);
+    // The workspace: one member lagging on the train, one already at the
+    // target, one fixture on a non-release-line version, and one excluded
+    // path. The published roster is absent entirely — the member walk must
+    // not invent it.
+    await writeFile(
+      join(root, 'pnpm-workspace.yaml'),
+      'packages:\n  - www\n  - apps/*\n  - tests/fixtures/*\n  - "!apps/secret"\n',
+    );
+    await mkdir(join(root, 'www'), { recursive: true });
+    await writeFile(
+      join(root, 'www/package.json'),
+      `{\n  "name": "@x/www",\n  "private": true,\n  "version": "${version}"\n}`,
+    );
+    await mkdir(join(root, 'tests/fixtures/thing'), { recursive: true });
+    await writeFile(
+      join(root, 'tests/fixtures/thing/package.json'),
+      '{\n  "name": "@x/fixture-thing",\n  "private": true,\n  "version": "0.0.0"\n}',
+    );
+    await mkdir(join(root, 'apps/secret'), { recursive: true });
+    await writeFile(
+      join(root, 'apps/secret/package.json'),
+      `{\n  "name": "@x/secret",\n  "private": true,\n  "version": "${version}"\n}`,
+    );
+
+    const plan = await planVersionBump(root, next);
+    // Ten release-line points + the one lagging member.
+    expect(plan.edits.map((edit) => edit.path)).toEqual([
+      ...PACKAGE_CONFIGS,
+      'www/package.json',
+      VERSION_SOURCE,
+      RELEASE_STATE,
+      ADMITTED_TARGET_SOURCE,
+      ADMITTED_TWIN_FIXTURE,
+      ...README_SOURCE_LINES.map((line) => line.path),
+    ]);
+    const wwwEdit = plan.edits.find((edit) => edit.path === 'www/package.json')!;
+    expect(wwwEdit.point).toEqual('workspace-member');
+    expect(wwwEdit.before).toContain(`"version": "${version}"`);
+    expect(wwwEdit.after).toContain(`"version": "${next}"`);
+    // The full member audit: stamped, skipped (fixture), excluded.
+    const wwwStamp = plan.members.find((member) => member.path === 'www/package.json')!;
+    expect(wwwStamp.status).toEqual('stamped');
+    const fixtureStamp = plan.members.find(
+      (member) => member.path === 'tests/fixtures/thing/package.json',
+    )!;
+    expect(fixtureStamp.status).toEqual('skipped');
+    expect(fixtureStamp.reason).toContain('not on the release line');
+    expect(plan.members.some((member) => member.path === 'apps/secret/package.json')).toBeFalsy();
+
+    // Applying the plan converges the tree: consistency is clean for the
+    // stamp points the fixture carries (the manifest is regenerated by hand
+    // to stand in for generate:all, and the www anchor audit is filtered —
+    // the fixture carries no www modules), and a plan against the NEW version
+    // is empty — the already-at state.
+    await writeFile(join(root, GENERATED_MANIFEST), `{\n  "version": "${next}"\n}`);
+    for (const edit of plan.edits) {
+      await writeFile(join(root, edit.path), edit.after, 'utf8');
+    }
+    const failures = await inconsistencyFailures(root, next);
+    expect(
+      failures.filter((line) => !line.includes('www/app/data/')),
+      failures.join('\n'),
+    ).toEqual([]);
+    const converged = await planVersionBump(root, next);
+    expect(converged.edits).toEqual([]);
+    expect(converged.members.map((member) => member.status)).toEqual(['skipped', 'current']);
   } finally {
     await rm(root, { recursive: true });
   }
