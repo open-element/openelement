@@ -8,16 +8,15 @@
  */
 import { expect, test } from 'vitest';
 
-import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { PAGEFIND_UI_SUITE_FILES, removeUiSuites, waitForUiCopy } from '../build-pagefind.ts';
 
 async function makeOutputDir(): Promise<string> {
-  const dir = join(tmpdir(), `pagefind-filter-${Math.random().toString(36).slice(2)}`);
-  await mkdir(dir, { recursive: true });
-  return dir;
+  return mkdtemp(join(tmpdir(), 'pagefind-filter-'));
 }
 
 async function touch(dir: string, name: string, bytes = 16): Promise<void> {
