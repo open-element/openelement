@@ -8,22 +8,25 @@
  * lines, the bulk of them sheet whitespace), which is why consumers had begun
  * hand-minifying sheets in source (open-page-rail, the hero cursor const).
  *
- * This module minifies those sheets at the client-build transform stage, in
- * two tiers:
+ * This module minifies those sheets at the client-build transform stage. The
+ * one admission channel is the compiled-element contract, in the two shapes
+ * the initializer takes: a `static styles` PropertyDefinition (the authored
+ * shape) and the compiler-emitted part-program module carrying the
+ * `__partProgram` ABI marker (the shape real builds ship — the @element
+ * decorator forces class-field lowering, and the compiler copies the
+ * initializer verbatim into that module, whose members are StyleSheetLike
+ * values, so the CSS reading is provable, not guessed). Everything else —
+ * interpolated templates, tagged templates the tag cooks, templates whose
+ * raw bytes carry a JS escape, class-external constants and business strings
+ * that merely resemble CSS — is left byte-identical.
  *
- * 1. Template literals inside a `static styles` initializer — CSS by the
- *    compiled-element contract (the compiler copies that initializer verbatim
- *    into the Part Program module; its members are StyleSheetLike values).
- * 2. Any other expression-less template literal that passes a strict
- *    stylesheet test — authored CSS constants outside a class body (the
- *    light-DOM cursor sheet pattern).
- *
- * Everything else is left byte-identical: interpolated templates, quoted
- * strings, non-CSS template content. The minifier itself is whitespace- and
- * comment-only, quote- and escape-aware, and drops a space only against a
- * delimiter that cannot continue the neighbouring token — so `calc(10px + 2px)`
- * and descendant selectors survive (folding `+`/`-` spacing like a general
- * CSS minifier would emit invalid calc grammar). Pure function of its input:
+ * The minifier itself is whitespace- and comment-only, quote- and
+ * escape-aware, and drops a space only against a delimiter that cannot
+ * continue the neighbouring token — so `calc(10px + 2px)`, descendant
+ * selectors, comment-joined compound selectors, and hex escapes with their
+ * terminator whitespace survive (folding `+`/`-` spacing like a general CSS
+ * minifier would emit invalid calc grammar; eating an escape terminator
+ * would merge a descendant into a compound). Pure function of its input:
  * deterministic bytes for the DETERMINISTIC_* build contracts.
  */
 
@@ -47,16 +50,24 @@ const DROP_SPACE_AFTER = new Set([';', ',', '{', '}', '(', ':']);
 /** Characters before which a preceding space is always droppable. */
 const DROP_SPACE_BEFORE = new Set([';', ',', '{', '}', ')']);
 
+const HEX_DIGIT = /[0-9a-fA-F]/;
+const WHITESPACE = /\s/;
+
 /**
  * Minify one stylesheet: strip comments, collapse whitespace runs to a single
  * space, and drop that space where a delimiter makes it provably redundant.
- * Quoted strings and backslash escapes are copied verbatim.
+ * Quoted strings and backslash escapes are copied verbatim; a CSS escape is
+ * one to six hex digits plus at most one whitespace terminator (the
+ * terminator joins the escape token — it never becomes folding whitespace),
+ * any other escaped character is the single character after the backslash.
+ * A comment contributes no whitespace of its own: only real adjacent
+ * whitespace folds, so a comment between two compound-selector parts never
+ * turns the compound into a descendant.
  */
 export function minifyStyleSheet(css: string): string {
   let out = '';
   let pendingSpace = false;
   let quote: string | null = null;
-  let escaped = false;
   let inComment = false;
 
   const flushSpace = (keepSpace: boolean): void => {
@@ -65,19 +76,18 @@ export function minifyStyleSheet(css: string): string {
     pendingSpace = false;
   };
 
-  for (let index = 0; index < css.length; index++) {
+  // Explicit index management (a for-loop update would skip the character
+  // after every multi-char token the branches consume).
+  let index = 0;
+  while (index < css.length) {
     const char = css[index];
     if (inComment) {
       if (char === '*' && css[index + 1] === '/') {
         inComment = false;
+        index += 2;
+      } else {
         index++;
-        pendingSpace = true;
       }
-      continue;
-    }
-    if (escaped) {
-      out += char;
-      escaped = false;
       continue;
     }
     if (char === '\\') {
@@ -85,53 +95,58 @@ export function minifyStyleSheet(css: string): string {
       // a descendant combinator, so it is never droppable.
       flushSpace(true);
       out += char;
-      escaped = true;
+      index++;
+      let hex = 0;
+      while (hex < 6 && index < css.length && HEX_DIGIT.test(css[index])) {
+        out += css[index];
+        index++;
+        hex++;
+      }
+      if (index < css.length && (hex === 0 || WHITESPACE.test(css[index]))) {
+        // Hex escape: the optional terminator belongs to the escape token;
+        // the next real whitespace still folds separately. Non-hex escape:
+        // the single character after the backslash.
+        out += css[index];
+        index++;
+      }
       continue;
     }
     if (quote) {
       if (char === quote) quote = null;
       out += char;
+      index++;
       continue;
     }
     if (char === '"' || char === "'") {
       flushSpace(true);
       quote = char;
       out += char;
+      index++;
       continue;
     }
     if (char === '/' && css[index + 1] === '*') {
       inComment = true;
-      index++;
+      index += 2;
       continue;
     }
-    if (/\s/.test(char)) {
+    if (WHITESPACE.test(char)) {
       pendingSpace = true;
+      index++;
       continue;
     }
     if (DROP_SPACE_BEFORE.has(char)) {
       pendingSpace = false;
       while (out.endsWith(' ')) out = out.slice(0, -1);
       out += char;
+      index++;
       continue;
     }
     const previous = out[out.length - 1] ?? '';
     flushSpace(!DROP_SPACE_AFTER.has(previous));
     out += char;
+    index++;
   }
   return out.trim();
-}
-
-/**
- * Tier-2 admission test: an expression-less template literal outside a
- * `static styles` initializer ships as a stylesheet only when it structurally
- * reads as CSS — at least one braced declaration block, and a residue outside
- * the braces that carries no markup characters (rejects HTML fragments and
- * prose whose braces never wrap `name: value` declarations).
- */
-function looksLikeStyleSheet(text: string): boolean {
-  if (!/\{[^{}]*:[^{}]*\}/.test(text)) return false;
-  const residue = text.replace(/\{[^{}]*\}/g, '');
-  return !/[<>]/.test(residue);
 }
 
 /** Whitespace/comment evidence that minifying can only shrink the text. */
@@ -145,6 +160,12 @@ function collectReplacements(
   inStyles: boolean,
   out: Replacement[],
 ): void {
+  if (node.type === 'TaggedTemplateExpression') {
+    // The tag cooks the template with its own escape processing, so the raw
+    // bytes between the backticks are not the runtime text; a rewrite would
+    // corrupt what the tag sees. Never descend into the quasi.
+    return;
+  }
   if (node.type === 'TemplateLiteral') {
     // A single quasi means no `${}` interpolation: the backtick range is
     // exactly [start, end) and the content is runtime data the JS minifier
@@ -160,7 +181,11 @@ function collectReplacements(
       node.quasis.length === 1
     ) {
       const content = code.slice(start + 1, end - 1);
-      const admitted = inStyles || looksLikeStyleSheet(content);
+      // The scan reads raw template source. A backslash begins a JS escape
+      // whose cooked form the runtime CSS will carry (a cooked quote opens a
+      // CSS string where the raw bytes saw an escape), so CSS quote rules on
+      // the raw text would misjudge string state. Fail open: byte-identical.
+      const admitted = inStyles && !content.includes('\\');
       if (admitted && hasMinifiableWhitespace(content)) {
         const minified = minifyStyleSheet(content);
         if (minified.length < content.length) {
@@ -210,7 +235,18 @@ export function minifyIslandCssModule(code: string): string | null {
     return null;
   }
   const replacements: Replacement[] = [];
-  collectReplacements(program, code, false, replacements);
+  // The contract channel's compiled shape: the element compiler copies the
+  // `static styles` initializer into a module carrying the compiled-module
+  // ABI marker `__partProgram` (element protocol/part-program.ts; the router
+  // references the same literal in its runtimes). Real builds never show the
+  // authored PropertyDefinition — the @element decorator forces class-field
+  // lowering, so the initializer rides `__publicField` module statements —
+  // and without this marker the channel would never fire outside unit tests.
+  // Inside a part-program module the whitespace-bearing templates are the
+  // copied stylesheets; the program object's own literals carry tag names
+  // and node ids, nothing minifiable, so the whitespace gate excludes them.
+  const contractChannel = code.includes('__partProgram');
+  collectReplacements(program, code, contractChannel, replacements);
   if (replacements.length === 0) return null;
   let result = code;
   for (const replacement of [...replacements].sort((a, b) => b.start - a.start)) {

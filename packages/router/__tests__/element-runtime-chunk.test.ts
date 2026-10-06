@@ -4,9 +4,10 @@
  * The shared element-runtime chunk's grouping identity: the package root is
  * anchored by a package.json-name walk from a module id the client build's
  * resolver answered, the group matches exactly the ids under that root
- * (segment boundary, query-stripped, separator-normalized), and the
- * native build's emitted-chunk guard fails closed on zero grouped runtime
- * modules — per-island runtime copies must never ship silently.
+ * (segment boundary, query-stripped, separator-normalized), and the native
+ * build's emitted-chunk guard fails closed on a wrong layout — zero grouped
+ * runtime modules, a runtime split across chunks, or a runtime homed inside
+ * an island chunk — per-island runtime copies must never ship silently.
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -180,6 +181,51 @@ test('requireElementRuntimeChunk fails closed on zero grouped runtime modules', 
     () => requireElementRuntimeChunk(islandsOnly, WORKSPACE_IDENTITY),
     OpenElementError,
     'shared element-runtime chunk never fired',
+  );
+  expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
+  expect(error.phase).toEqual('build');
+});
+
+test('requireElementRuntimeChunk rejects a runtime homed inside an island chunk', () => {
+  // The group never fired: the runtime modules homed in whichever island
+  // chunk their import reached first, so the one carrying chunk is island-
+  // named rather than the shared element-runtime identity.
+  const islandWithRuntime = [
+    {
+      fileName: 'islands/island-open-badge-9qf3dl.js',
+      facadeModuleId: '/site/app/islands/open-badge.ts',
+      modules: {
+        '/site/app/islands/open-badge.ts': {},
+        '/site/packages/element/src/index.ts': {},
+      },
+    },
+  ];
+  const error = assertThrowsIncludes(
+    () => requireElementRuntimeChunk(islandWithRuntime, WORKSPACE_IDENTITY),
+    OpenElementError,
+    'is not the shared element-runtime chunk',
+  );
+  expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
+  expect(error.phase).toEqual('build');
+});
+
+test('requireElementRuntimeChunk rejects a runtime split across chunks', () => {
+  const split = [
+    {
+      fileName: 'islands/element-runtime-Bh4sh.js',
+      facadeModuleId: null,
+      modules: { '/site/packages/element/src/index.ts': {} },
+    },
+    {
+      fileName: 'islands/island-open-badge-9qf3dl.js',
+      facadeModuleId: null,
+      modules: { '/site/packages/element/src/html.ts': {} },
+    },
+  ];
+  const error = assertThrowsIncludes(
+    () => requireElementRuntimeChunk(split, WORKSPACE_IDENTITY),
+    OpenElementError,
+    'across 2 chunks',
   );
   expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
   expect(error.phase).toEqual('build');

@@ -3,9 +3,14 @@
  *
  * The client-build stylesheet minifier: whitespace/comment-only folding that
  * never merges tokens a delimiter cannot join (calc +/- grammar, descendant
- * selectors), plus the module rewrite that locates stylesheet template
- * literals — `static styles` initializers by the compiled-element contract,
- * other templates only through the strict stylesheet test.
+ * selectors, comment-joined compounds, hex-escape terminators), plus the
+ * module rewrite that locates stylesheet template literals through the
+ * compiled-element contract channel — the authored `static styles`
+ * PropertyDefinition and the compiler's `__partProgram` part-program module
+ * (the shape decorators' class-field lowering actually ships). Anything
+ * whose raw bytes the CSS rules cannot judge — JS escapes in the template,
+ * tagged templates the tag cooks — and anything outside the contract
+ * channel fails open byte-identical.
  */
 import { expect, test } from 'vitest';
 import { minifyIslandCssModule, minifyStyleSheet } from '../src/vite/internal/island-css.ts';
@@ -29,6 +34,29 @@ test('minifyStyleSheet preserves calc +- spacing (dropping it emits invalid CSS)
 test('minifyStyleSheet preserves descendant combinators and a :hover gap', () => {
   expect(minifyStyleSheet('.wrap .inner * { color: red; }')).toBe('.wrap .inner *{color:red;}');
   expect(minifyStyleSheet('a :hover { fill: currentColor; }')).toBe('a :hover{fill:currentColor;}');
+});
+
+test('minifyStyleSheet keeps a comment-joined compound selector compound', () => {
+  // A comment contributes no whitespace: .a/**/.b is one compound selector
+  // and must not gain a descendant space.
+  expect(minifyStyleSheet('.a/**/.b { color: red; }')).toBe('.a.b{color:red;}');
+  // Real whitespace still folds to exactly one descendant space, with or
+  // without a comment riding in the gap.
+  expect(minifyStyleSheet('.a .b { color: red; }')).toBe('.a .b{color:red;}');
+  expect(minifyStyleSheet('.a /**/ .b { color: red; }')).toBe('.a .b{color:red;}');
+});
+
+test('minifyStyleSheet keeps hex escapes, their terminator space, and the descendant gap', () => {
+  // \31 escapes the digit 1; its one optional whitespace terminator belongs
+  // to the escape token, and the second space is the descendant combinator.
+  // Both must survive: one space would cook the minified sheet as the
+  // compound .x1.b instead of the descendant .x1 .b.
+  expect(minifyStyleSheet('.x\\31  .b { color: red; }')).toBe('.x\\31  .b{color:red;}');
+  // A terminator before a delimiter stays consumable — cooking still reads
+  // the same selector.
+  expect(minifyStyleSheet('.x\\31 { color: red; }')).toBe('.x\\31{color:red;}');
+  // Non-hex escapes still consume exactly one literal character.
+  expect(minifyStyleSheet('.x\\@media .b { color: red; }')).toBe('.x\\@media .b{color:red;}');
 });
 
 test('minifyStyleSheet keeps quoted content byte-identical', () => {
@@ -69,12 +97,78 @@ test('minifyIslandCssModule rewrites static styles template literals', () => {
   expect(rewritten).toContain('import { recipe } from "x";');
 });
 
-test('minifyIslandCssModule rewrites non-styles template literals only when they read as CSS', () => {
+test('minifyIslandCssModule rewrites the compiled part-program module real builds ship', () => {
+  // The real pipeline never shows a `static styles` PropertyDefinition: the
+  // @element decorator forces class-field lowering, so the initializer rides
+  // `__publicField(...)` module statements in the compiler's part-program
+  // module. The compiled-module ABI marker `__partProgram` is the provable
+  // contract channel there — only the element compiler emits it.
+  const partProgramModule = [
+    'import { compiledStyle } from "@openelement/element";',
+    'class OpenBadge extends OpenElement {}',
+    '__publicField(OpenBadge, "styles", [compiledStyle(`',
+    '  .control {',
+    '    color: red;',
+    '  }',
+    '`)]);',
+    'export const facade = {',
+    '  __elementMetadata: () => meta,',
+    '  __partProgram: () => program,',
+    '};',
+  ].join('\n');
+  const rewritten = minifyIslandCssModule(partProgramModule);
+  expect(rewritten).toContain('`.control{color:red;}`');
+  // The program object's own template literals (tag names, node ids) carry
+  // no minifiable whitespace and stay verbatim.
+  expect(rewritten).toContain('() => program,');
+});
+
+test('minifyIslandCssModule still refuses class-external templates in part-program-adjacent modules', () => {
+  // Same sheet constant, but the module is not compiler output (no
+  // `__partProgram`): the contract channel must not open for it.
+  const plainModule = [
+    'import { compiledStyle } from "@openelement/element";',
+    'export const SHEET = compiledStyle(`',
+    '  .control {',
+    '    color: red;',
+    '  }',
+    '`);',
+  ].join('\n');
+  expect(minifyIslandCssModule(plainModule)).toBe(null);
+});
+
+test('minifyIslandCssModule rewrites only static styles templates (admission is the contract channel)', () => {
+  // Tier-2 is gone: a template outside a `static styles` initializer is
+  // never rewritten, however CSS-like it reads — the light-DOM sheet const
+  // ships byte-identical again.
   const cssConst = 'export const HERO = `\n  .hero-main * { cursor: none !important; }\n`;';
-  expect(minifyIslandCssModule(cssConst)).toContain('`.hero-main *{cursor:none !important;}`');
-  // Markup residue (tags outside any brace block) is never admitted.
+  expect(minifyIslandCssModule(cssConst)).toBe(null);
+  // A plain business string carrying the brace-colon shape rides a real
+  // build byte-identical: the transform (the only stage that touches
+  // template-literal content) declines it.
+  const business = 'export const MSG = `\nHello { name:  customer }!\n`;';
+  expect(minifyIslandCssModule(business)).toBe(null);
+  // Markup residue is equally out of the contract channel.
   const htmlConst = 'export const T = `\n<div class="a">  keep   spacing </div>\n`;';
   expect(minifyIslandCssModule(htmlConst)).toBe(null);
+});
+
+test('minifyIslandCssModule skips templates whose raw content carries a JS escape', () => {
+  // The scan reads raw source between the backticks. The `\"` below cooks
+  // into a real quote, so the runtime CSS string opens where the raw bytes
+  // saw an escape — CSS quote rules on the raw text fold the string-interior
+  // double spaces. Fail open: the sheet ships byte-identical.
+  const module = [
+    'export class A {',
+    '  static styles = `a::before{content:\\"  spaced  \\";}`;',
+    '}',
+  ].join('\n');
+  expect(minifyIslandCssModule(module)).toBe(null);
+});
+
+test('minifyIslandCssModule never rewrites a tagged template (the tag cooks it)', () => {
+  const tagged = 'export const SHEET = css`\n  .a { color: red; }\n`;';
+  expect(minifyIslandCssModule(tagged)).toBe(null);
 });
 
 test('minifyIslandCssModule leaves interpolated templates and quoted strings untouched', () => {

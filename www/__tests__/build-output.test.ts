@@ -110,6 +110,46 @@ test('build output: the light-mode probe fixture stays out of the public Site (#
   ).toBeTruthy();
 });
 
+test('build output: the element runtime ships as the one shared chunk islands never embed (#1544)', () => {
+  expect(existsSync(DIST), `Build output is missing: ${DIST}`).toBeTruthy();
+  const islandsDir = join(DIST, 'client', 'islands');
+  expect(existsSync(islandsDir), `Client islands directory is missing: ${islandsDir}`).toBeTruthy();
+
+  // Exactly one shared element-runtime chunk — the layout the client build's
+  // grouping identity enforces (router vite/internal/element-runtime-chunk.ts).
+  const runtimeChunks = readdirSync(islandsDir).filter((f) => /^element-runtime-.+\.js$/.test(f));
+  expect(
+    runtimeChunks,
+    `Expected exactly one shared element-runtime chunk, got: ${runtimeChunks.join(', ') || 'none'}`,
+  ).toHaveLength(1);
+
+  // Island chunks must not embed the runtime: the runtime's DSD style
+  // contract attribute (element's open-element-styles.ts) may only appear in
+  // the shared chunk — a hit inside an island chunk means per-island runtime
+  // copies shipped.
+  const runtimeMarker = 'data-open-element-compiled-style';
+  const islandsEmbeddingRuntime = readdirSync(islandsDir)
+    .filter((f) => f.startsWith('island-') && f.endsWith('.js'))
+    .filter((f) => readFileSync(join(islandsDir, f), 'utf8').includes(runtimeMarker));
+  expect(
+    islandsEmbeddingRuntime,
+    `Island chunks must not embed the element runtime: ${islandsEmbeddingRuntime.join(', ')}`,
+  ).toEqual([]);
+
+  // The generated client entry statically imports the shared chunk (the
+  // import edge is recorded in the vite build manifest).
+  const manifest = JSON.parse(
+    readFileSync(join(DIST, 'client', '.vite', 'manifest.json'), 'utf8'),
+  ) as Record<string, { imports?: string[] }>;
+  const entry = manifest['virtual:open-client-entry'];
+  if (!entry) throw new Error('client entry missing from the vite build manifest');
+  const runtimeKey = `_${runtimeChunks[0]}`;
+  expect(
+    entry.imports ?? [],
+    `The client entry must statically import the shared element-runtime chunk (${runtimeKey})`,
+  ).toContain(runtimeKey);
+});
+
 test('build output: zh pages keep in-content links inside the zh tree (#1031)', () => {
   expect(existsSync(DIST), `Build output is missing: ${DIST}`).toBeTruthy();
   const zhDir = join(DIST, 'zh');

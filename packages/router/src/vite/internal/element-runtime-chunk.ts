@@ -102,34 +102,61 @@ export function elementRuntimeChunkName(
 /**
  * #1471's fail-closed posture applied to the shared runtime chunk: the
  * native generated entry statically imports the element runtime, so the
- * emitted graph must carry at least one runtime module — in the shared
- * chunk the group names. Zero grouped modules means the group never fired
- * (package-root drift, resolver regression) and per-island runtime copies
- * would ship silently. A null identity at this point is the same internal
- * ordering bug {@linkcode ClientBuildErrorCode.PACKAGE_IDENTITY_UNRESOLVED}
- * covers: the identity pass did not run before the verdict.
+ * emitted graph must home the runtime modules in exactly one chunk and that
+ * chunk must be the shared one the group names (the `element-runtime`
+ * identity, hash-appended by chunkFileNames). Zero grouped modules means the
+ * group never fired (package-root drift, resolver regression); more than one
+ * carrying chunk means the runtime split; a single carrying chunk that is
+ * not the `element-runtime` chunk means the runtime homed inside an island.
+ * All three layouts ship per-island runtime copies or move the runtime floor
+ * with an unrelated island, so each fails instead of shipping. A null
+ * identity at this point is the same internal ordering bug
+ * {@linkcode ClientBuildErrorCode.PACKAGE_IDENTITY_UNRESOLVED} covers: the
+ * identity pass did not run before the verdict.
  */
 export function requireElementRuntimeChunk(
   chunks: readonly ClientBuildChunk[],
   identity: ElementRuntimeIdentity | null,
 ): void {
-  if (identity) {
-    for (const chunk of chunks) {
-      const ids = [chunk.facadeModuleId ?? '', ...Object.keys(chunk.modules ?? {})];
-      if (ids.some((rawId) => rawId !== '' && elementRuntimeChunkName(rawId, identity))) {
-        return;
-      }
-    }
+  if (!identity) {
+    throw buildError(
+      ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
+      `The native client entry statically imports ${ELEMENT_RUNTIME_ENTRY_SPECIFIER}, but the ` +
+        `build's identity pass produced no element runtime identity — the shared ` +
+        `element-runtime chunk cannot be verified and the build fails instead of guessing`,
+    );
   }
-  throw buildError(
-    ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
-    identity
-      ? `The native client entry statically imports ${ELEMENT_RUNTIME_ENTRY_SPECIFIER}, but the ` +
-          `emitted client build groups no module under the resolved package root ` +
-          `${identity.packageRoot} — the shared element-runtime chunk never fired, so the build ` +
-          `would ship the runtime inline per island instead`
-      : `The native client entry statically imports ${ELEMENT_RUNTIME_ENTRY_SPECIFIER}, but the ` +
-          `build's identity pass produced no element runtime identity — the shared ` +
-          `element-runtime chunk cannot be verified and the build fails instead of guessing`,
+  const carrying = chunks.filter((chunk) =>
+    [chunk.facadeModuleId ?? '', ...Object.keys(chunk.modules ?? {})].some(
+      (rawId) => rawId !== '' && elementRuntimeChunkName(rawId, identity) !== undefined,
+    ),
   );
+  if (carrying.length === 0) {
+    throw buildError(
+      ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
+      `The native client entry statically imports ${ELEMENT_RUNTIME_ENTRY_SPECIFIER}, but the ` +
+        `emitted client build groups no module under the resolved package root ` +
+        `${identity.packageRoot} — the shared element-runtime chunk never fired, so the build ` +
+        `would ship the runtime inline per island instead`,
+    );
+  }
+  if (carrying.length > 1) {
+    throw buildError(
+      ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
+      `The emitted client build groups ${ELEMENT_RUNTIME_ENTRY_SPECIFIER} modules across ` +
+        `${carrying.length} chunks (${carrying.map((chunk) => chunk.fileName).join(', ')}) — ` +
+        `the element runtime must home in exactly one shared chunk, or per-island copies ship ` +
+        `and the runtime floor moves with an unrelated island`,
+    );
+  }
+  const shared = carrying[0];
+  const base = shared.fileName.slice(shared.fileName.lastIndexOf('/') + 1);
+  if (!base.startsWith(`${ELEMENT_RUNTIME_CHUNK_NAME}-`)) {
+    throw buildError(
+      ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
+      `The emitted client build groups the ${ELEMENT_RUNTIME_ENTRY_SPECIFIER} modules inside ` +
+        `${shared.fileName}, which is not the shared ${ELEMENT_RUNTIME_CHUNK_NAME} chunk — the ` +
+        `runtime floor rides an unrelated island chunk and moves with it instead`,
+    );
+  }
 }

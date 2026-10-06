@@ -108,14 +108,14 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `island-open-layout`           | 98,835   | 16,717  |
+| `island-open-layout`           | 100,721  | 17,444  |
 | `element-runtime`              | 82,137   | 25,734  |
 | `island-open-button`           | 15,776   | 2,923   |
 | `island-open-dragon-live-gaze` | 13,238   | 4,823   |
 | `island-open-page-rail`        | 9,915    | 2,781   |
-| `island-open-cinematic-scroll` | 7,755    | 3,074   |
+| `island-open-cinematic-scroll` | 7,857    | 3,101   |
 | `island-open-code-block`       | 7,737    | 2,609   |
-| `island-open-badge`            | 6,010    | 1,705   |
+| `island-open-badge`            | 6,221    | 1,751   |
 | `island-open-hero-polish`      | 4,520    | 1,881   |
 
 ```bash
@@ -129,9 +129,9 @@ gzip -9 -c www/dist/client/islands/client.js | wc -c
 
 | 路由                     | 客户端载荷（原始） | 不同 chunk 数 |
 | ------------------------ | ------------------ | ------------- |
-| `/guide/mdx`             | 219,549 B          | 8             |
-| `/guide/getting-started` | 219,549 B          | 8             |
-| `/`                      | 227,392 B          | 9             |
+| `/guide/mdx`             | 221,748 B          | 8             |
+| `/guide/getting-started` | 221,748 B          | 8             |
+| `/`                      | 229,591 B          | 9             |
 
 70 份页面 manifest 合计声明了 10 个 island 标签、334 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 60 页，`open-code-block` 出现在 48 页，其余标签只在少数页面上。
 
