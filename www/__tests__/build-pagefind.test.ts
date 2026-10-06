@@ -15,7 +15,7 @@ import { join } from 'node:path';
 
 import { PAGEFIND_UI_SUITE_FILES, removeUiSuites, waitForUiCopy } from '../build-pagefind.ts';
 
-async function makeOutputDir(): Promise<string> {
+function makeOutputDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'pagefind-filter-'));
 }
 
