@@ -116,7 +116,17 @@ export default defineConfig({
         },
       },
       {
-        test: { name: 'router', include: ['packages/router/__tests__/**/*.test.ts'] },
+        test: {
+          name: 'router',
+          include: ['packages/router/__tests__/**/*.test.ts'],
+          // Router suites spawn real subprocesses per test/hook — cli/start
+          // boots, fixture vite SSG builds, dev-server boots — so the 5s/10s
+          // defaults only hold on an idle machine (same class as the tools
+          // and benchmarks budgets below; observed timing out under a loaded
+          // dispatch even though every assertion was correct).
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
+        },
       },
       {
         test: { name: 'create', include: ['packages/create/__tests__/**/*.test.ts'] },

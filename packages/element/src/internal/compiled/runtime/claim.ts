@@ -17,6 +17,8 @@ import {
   STATIC_STYLES_MARKER,
 } from '../../protocol/part-program.ts';
 import { ClaimErrorCode, OpenElementError, RuntimeErrorCode } from '../../protocol/errors.ts';
+// The broadcast attribute's single writer names it; the claim only classifies it.
+import { THEME_ATTRIBUTE } from '../../../open-element-theme.ts';
 // Canonical each-Region item-key derivation (#1374) — single source shared
 // with the server serializer; do not reintroduce a private copy.
 import { eachItemKey } from '../each-key.ts';
@@ -165,6 +167,13 @@ function claimElementAttributes(
         element.getAttribute(DATA_OE_LIGHT) !== null
       )
         continue;
+      // The theme manager writes its broadcast attribute on a custom-element
+      // host at that host's own connect — which under chunked island loading
+      // can precede THIS claim (the parent upgrades after the child island's
+      // chunk). The attribute is runtime-managed state (THEME_ATTRIBUTE is the
+      // manager's own constant), not server-rendered drift; its authored
+      // value, when the program declares one, is still drift-checked above.
+      if (name === THEME_ATTRIBUTE && node.tag.includes('-')) continue;
       if (!expected.has(name)) claimFailure(path, `unexpected attribute "${name}"`, owner);
     }
     for (const name of expected) {

@@ -45,15 +45,23 @@ test.describe('DSD Layers', () => {
     expect(fallbackCount).toBe(0);
   });
 
-  test('shadow root content includes style elements', async ({ page }) => {
-    // Shadow roots should contain <style> elements (openElement component styles)
-    const hasStyles: boolean = await page.evaluate(
-      `(${deepQueryAllInPage.toString()})(document, '*').some((el) => {
-        const style = el.shadowRoot?.querySelector('style');
-        return !!style?.textContent?.trim();
-      })`,
+  test('static styles arrive via adoptedStyleSheets, not DSD style nodes', async ({ page }) => {
+    // Island style asset protocol (#1553, ADR-0164): the runtime claims the
+    // DSD <style data-oe-static-styles> node and deletes it only after the
+    // staged plan attaches, so after hydration the marked node must be gone
+    // and the kernel-applied adopted sheet is the remaining style channel.
+    const probe: { markedStyles: number; adoptedRoots: number } = await page.evaluate(
+      `(${deepQueryAllInPage.toString()})(document, '*').reduce(
+        (acc, el) => {
+          if (el.shadowRoot?.querySelector('style[data-oe-static-styles]')) acc.markedStyles++;
+          if ((el.shadowRoot?.adoptedStyleSheets?.length ?? 0) > 0) acc.adoptedRoots++;
+          return acc;
+        },
+        { markedStyles: 0, adoptedRoots: 0 },
+      )`,
     );
-    expect(hasStyles).toBe(true);
+    expect(probe.markedStyles).toBe(0);
+    expect(probe.adoptedRoots).toBeGreaterThan(0);
   });
 
   test('DSD content is not exposed as raw text', async ({ page }) => {
