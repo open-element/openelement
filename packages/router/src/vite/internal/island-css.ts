@@ -28,6 +28,10 @@
  * minifier would emit invalid calc grammar; eating an escape terminator
  * would merge a descendant into a compound). Pure function of its input:
  * deterministic bytes for the DETERMINISTIC_* build contracts.
+ *
+ * ADR-0164 (#1553) narrows the admission to the legacy verbatim path: island
+ * modules on the style asset protocol's extraction path carry no JS-embedded
+ * CSS, and this pass never sees them (see minifyIslandCssModule).
  */
 
 import { parseAst } from 'vite';
@@ -52,6 +56,13 @@ const DROP_SPACE_BEFORE = new Set([';', ',', '{', '}', ')']);
 
 const HEX_DIGIT = /[0-9a-fA-F]/;
 const WHITESPACE = /\s/;
+
+/**
+ * The style asset protocol's request marker (ADR-0164): a generated island
+ * module imports its sheet as a `*.oe-style.css` sibling. Its presence marks
+ * an extraction-path module — no JS-embedded CSS to minify.
+ */
+const STYLE_REQUEST_MARKER = '.oe-style.css';
 
 /**
  * Minify one stylesheet: strip comments, collapse whitespace runs to a single
@@ -225,8 +236,16 @@ function collectReplacements(
  * Rewrite one transformed module's stylesheet template literals. Returns the
  * rewritten code, or null when nothing changed (including unparseable input —
  * a minification pass fails open to today's output, never breaks the build).
+ *
+ * Narrowed by ADR-0164 (#1553): a module carrying the style asset protocol's
+ * request edge is on the extraction path — its stylesheet bytes left the JS
+ * graph for the emitted `.css` asset, and the only template literals left in
+ * it are Part Program payloads. The transform's admission is the legacy
+ * verbatim path alone; when the legacy path empties (every island riding
+ * extraction), this pass retires with it.
  */
 export function minifyIslandCssModule(code: string): string | null {
+  if (code.includes(STYLE_REQUEST_MARKER)) return null;
   if (!code.includes('`')) return null;
   let program: AstNode;
   try {

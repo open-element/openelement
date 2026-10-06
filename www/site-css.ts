@@ -6,13 +6,16 @@
  * component sheets. Component-local concerns (including language variants via
  * subject-side `:lang(zh)`) belong in the component sheets instead.
  *
- * `documentStyle` is the same layer one step further out: the site's
- * @font-face faces plus the body baseline, composed with `siteCSS` into the
- * single inline <style> the document head carries. It lives here rather than
- * in app/head.tsx because check-site-theme-tokens.ts scans www/app for
- * hardcoded theme values; font faces are definitions, and this module is the
- * site's designated home for them (the site style layer the gate's own
- * doctrine names).
+ * `documentStyle` is the same layer one step further out: the body baseline,
+ * composed with `siteCSS` into the single inline <style> the document head
+ * carries. It lives here rather than in app/head.tsx because
+ * check-site-theme-tokens.ts scans www/app for hardcoded theme values; this
+ * module is the site's designated style layer (the gate's own doctrine
+ * names it). The @font-face faces moved out of this body in #1554: they are
+ * delivered by the version-pinned fontsource stylesheets that app/head.tsx
+ * links (with SRI), so the family names in the stacks below must match
+ * fontsource's families ('Inter Variable', 'JetBrains Mono Variable',
+ * 'Instrument Serif').
  *
  * Token delivery (alpha9 C4, #1507; twin retired alpha9 C5): the site build
  * enables the router's Tailwind preset (see vite.config.ts), so the @theme
@@ -43,7 +46,8 @@ html[data-theme="light"],
 :host([data-theme="light"]),
 :root[data-theme="light"] {
   --surface-1: var(--color-popover);
-  --surface-code: var(--color-zinc-950);
+  --surface-code: var(--color-muted);
+  --surface-code-foreground: var(--color-zinc-800);
   --edge-highlight: color-mix(in srgb, var(--color-foreground) 10%, transparent);
   --border-strong: color-mix(in srgb, var(--color-border) 68%, var(--color-foreground));
   --nav-bg: var(--color-background);
@@ -68,10 +72,12 @@ html[data-theme="light"],
      --font-weight-bold carries exactly that. */
   --font-weight-semibold: var(--font-weight-bold);
   /* Site identity faces, re-homed from the retired ui sheet (#1504): the
-     token table ships TW4 defaults only, so the brand stacks live here where
-     their @font-face declarations live too. Mono covers code, labels,
-     eyebrows and nav; serif covers the zh italic accents. */
-  --font-mono: 'JetBrains Mono', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace;
+     token table ships TW4 defaults only, so the brand stacks live here; the
+     faces themselves are delivered by the fontsource stylesheets in
+     app/head.tsx (#1554), and the family names must match fontsource's.
+     Mono covers code, labels, eyebrows and nav; serif covers the zh italic
+     accents. */
+  --font-mono: 'JetBrains Mono Variable', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace;
   --font-serif: 'Instrument Serif', 'Songti SC', 'Noto Serif CJK SC', serif;
   /* Site layout constants, re-homed from the retired ui sheet: page-level
      measures, not component tokens. rem-exact values of the retired px. */
@@ -97,6 +103,7 @@ html[data-theme="dark"],
 :root[data-theme="dark"] {
   --surface-1: var(--color-popover);
   --surface-code: var(--color-zinc-950);
+  --surface-code-foreground: var(--color-zinc-200);
   --edge-highlight: color-mix(in srgb, var(--color-foreground) 14%, transparent);
   --border-strong: color-mix(in srgb, var(--color-border) 72%, var(--color-foreground));
   --nav-bg: var(--color-background);
@@ -120,6 +127,48 @@ body {
 ::selection {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
   color: var(--color-foreground);
+}
+/* Build-time syntax highlighting palette (www/lib/markdown.ts, issue #1552).
+   Shiki's css-variables theme emits token colors as var() references, so this
+   table is the single resolver: the values flip with data-theme and inherit
+   into every shadow tree — page prose renders inside page-component shadow
+   roots, where [data-theme] selectors cannot reach. Light values are the
+   bundled github-light palette; dark values are the bundled github-dark
+   palette except the comment gray, where the retired Prism chip styles'
+   measured #7d8590 (5.2:1 on the dark surface; #6a737d was 4.0:1) carries
+   over. The code surface stays site-owned: the theme's background and
+   foreground alias --surface-code / --surface-code-foreground. */
+:root {
+  --shiki-background: var(--surface-code);
+  --shiki-foreground: var(--surface-code-foreground);
+  --shiki-token-comment: #6a737d;
+  --shiki-token-punctuation: #24292e;
+  --shiki-token-constant: #005cc5;
+  --shiki-token-string: #032f62;
+  --shiki-token-string-expression: #032f62;
+  --shiki-token-keyword: #d73a49;
+  --shiki-token-function: #6f42c1;
+  --shiki-token-parameter: #e36209;
+  --shiki-token-link: #032f62;
+  --shiki-token-inserted: #22863a;
+  --shiki-token-deleted: #b31d28;
+  --shiki-token-changed: #e36209;
+}
+:root[data-theme='dark'] {
+  --shiki-background: var(--surface-code);
+  --shiki-foreground: var(--surface-code-foreground);
+  --shiki-token-comment: #7d8590;
+  --shiki-token-punctuation: #e1e4e8;
+  --shiki-token-constant: #79b8ff;
+  --shiki-token-string: #9ecbff;
+  --shiki-token-string-expression: #9ecbff;
+  --shiki-token-keyword: #f97583;
+  --shiki-token-function: #b392f0;
+  --shiki-token-parameter: #ffab70;
+  --shiki-token-link: #9ecbff;
+  --shiki-token-inserted: #aff5b1;
+  --shiki-token-deleted: #ffb1b1;
+  --shiki-token-changed: #ffab70;
 }
 /* Site-wide keyboard-focus baseline (light DOM). Every island that renders
    light roots — the layout shell, the search island — and every bare document
@@ -198,17 +247,12 @@ body {
 // delivery changed, the inheritance contract did not.
 
 /**
- * The site's font faces. Three faces, deliberately: the two text faces (prose
- * Inter, code JetBrains Mono) plus the Instrument Serif accent; the two text
- * faces are also preloaded in app/head.tsx (critical-path hardening, #1088).
+ * The complete document-level style body: the body baseline and the site
+ * rules. The @font-face faces are not part of this body — they arrive through
+ * the fontsource stylesheets app/head.tsx links (#1554), whose download
+ * starts before this inline style paints, so the preloaded font files
+ * (#1088) are usable at first paint. The theme token table is not part of
+ * this body either — the preset's linked bundle carries it (see the module
+ * doc). app/head.tsx wraps this in one <style> entry.
  */
-const fontFaces = `@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url('/assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-regular.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-italic.woff2') format('woff2')}@font-face{font-family:'Inter Variable';font-style:normal;font-weight:100 900;font-display:swap;src:url('/assets/fonts/inter-latin-variable.woff2') format('woff2')}`;
-
-/**
- * The complete document-level style body: faces first (so the preloaded files
- * are usable at first paint), then the body baseline and the site rules. The
- * theme token table is not part of this body — the preset's linked bundle
- * carries it (see the module doc). app/head.tsx wraps this in one <style>
- * entry.
- */
-export const documentStyle = `${fontFaces}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;
+export const documentStyle = `body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;

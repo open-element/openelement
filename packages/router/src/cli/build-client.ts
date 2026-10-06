@@ -44,9 +44,14 @@ import {
   requireElementRuntimeChunk,
   resolveElementRuntimeIdentity,
 } from '../vite/internal/element-runtime-chunk.ts';
-import { analyzeModuleSemantics, compiledElementPlugin } from '@openelement/element/compiler';
+import {
+  analyzeModuleSemantics,
+  clearStyleRequests,
+  compiledElementPlugin,
+} from '@openelement/element/compiler';
 import { ELEMENT_RUNTIME_MESSAGES_DEFINE } from '../vite/internal/element-error-messages.ts';
 import { minifyIslandCssModule } from '../vite/internal/island-css.ts';
+import { type StyleAssetRecord, clientStyleAssetPlugin } from '../vite/internal/style-assets.ts';
 import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
 import { ROUTER_MODULE_VOCABULARY } from '../vite/internal/protocol/module-vocabulary.ts';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
@@ -275,6 +280,11 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
 };
 
 async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetManifest | null> {
+  // ADR-0164: the style-request registry's bookkeeping is this build's
+  // lifetime — the SSR build clears and re-registers through its own
+  // transforms, and a stale entry from an earlier build in this process must
+  // never answer a request this build's graph did not produce.
+  clearStyleRequests();
   const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const islandsDir = ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR;
@@ -462,6 +472,12 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
 
   const clientOutDir = resolve(root, outDir, 'client');
   const clientBase = ctx.phase3.base || '/';
+
+  // ADR-0164: this build owns the island style asset protocol's `.css`
+  // artifacts. The emission records feed the manifest's `styles` field and
+  // the Phase 3 SSR read.
+  const styleAssetRecords = new Map<string, StyleAssetRecord>();
+
   const clientConfig: ViteInlineConfigWithManifest = {
     configFile: false,
     root,
@@ -608,6 +624,10 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       // The compiler is part of the official client build path. The outer
       // open:core hook covers normal Vite transforms; this inline build owns
       // its own plugin list and must use the same transform exactly once.
+      // styleAssetProtocol: the router build is the only host that can
+      // produce island modules (defineIslandConfig admission rides its
+      // injected sidecar descriptor), so it always activates — the ADR-0164
+      // transition ends here, not behind an option.
       compiledElementPlugin({
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
@@ -615,7 +635,12 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         // Island modules carry the island delivery policy statement; the
         // compiler admits it only through the injected descriptor.
         staticSidecars: [ISLAND_ADMISSION],
+        styleAssetProtocol: true,
       }),
+      // ADR-0164: intercepts the compiler's `.oe-style.css` requests before
+      // vite's CSS plugin, emits the real `.css` assets, and hands the sheet
+      // adapters back to the module graph.
+      clientStyleAssetPlugin(styleAssetRecords),
       {
         // #1543: the oxc JS minifier never touches template-literal content,
         // so component stylesheets shipped with their authored formatting.
@@ -746,7 +771,11 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       manifestPath: join(clientOutDir, '.vite', 'manifest.json'),
       buildResult: outputs,
       resolvedIslandModuleIds: islandModuleIds,
+      styleFileNames: [...styleAssetRecords.values()].map((record) => record.fileName),
     });
+    // ADR-0164: the emission records cross to Phase 3 here — the SSR build
+    // reads the same emitted assets (hash-checked) for the DSD text.
+    ctx.styleAssets = styleAssetRecords;
 
     const { printBuildManifest } = await import('../vite/build-manifest.ts');
     printBuildManifest({ root, outDir, phase: 2, budget: ctx.phase3.manifestBudget });

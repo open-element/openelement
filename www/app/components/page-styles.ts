@@ -219,20 +219,16 @@ export const pageStyles = `
     margin: calc(var(--spacing) * 10) 0;
   }
 
-  pre,
-  /* The vendored Prism sheet ships a light pre[class*=language-] background
-     that would win on specificity if a fence ever put the language class on
-     pre; pin the real code surface here so that pairing cannot render. */
-  pre[class*=language-] {
-    background: var(--color-zinc-950);
-    color: var(--color-zinc-200);
+  pre {
+    background: var(--surface-code);
+    color: var(--surface-code-foreground);
     padding: calc(var(--spacing) * 5) calc(var(--spacing) * 6);
     border-radius: var(--radius-lg);
     overflow-x: auto;
     font-size: var(--text-sm);
     line-height: 1.7;
     margin: calc(var(--spacing) * 4) 0;
-    border: calc(var(--spacing) * 0.25) solid var(--color-zinc-700);
+    border: calc(var(--spacing) * 0.25) solid var(--color-border);
     box-shadow: none;
   }
 

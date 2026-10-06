@@ -19,6 +19,19 @@
  * The transform only touches the throwaway staging copy; www/dist itself
  * is untouched apart from the emitted /pagefind directory.
  *
+ * UI-suite filtering (#1555): the pagefind service unconditionally copies
+ * three UI bundles (pagefind-ui, pagefind-modular-ui, pagefind-component-ui,
+ * each with its CSS) into the output. Verified against the 1.5.2 output: the
+ * core runtime (pagefind.js + pagefind-worker.js) fetches only
+ * pagefind-entry.json, pagefind.*.pf_meta, wasm.*.pagefind,
+ * index/*.pf_index, fragment/*.pf_fragment — and this site loads only
+ * /pagefind/pagefind.js (app/site-ui/open-search-combobox.ts). The UI
+ * suites are dead weight (~390 KB) and are removed after the write.
+ * Retirement condition: if a pagefind release stops emitting the suites or
+ * gains a CLI/JS-API option to skip them, this filter no-ops/vanishes —
+ * the removal list and the dist guard test (build-output.test.ts) are the
+ * only things to delete.
+ *
  * Usage: `pnpm --dir www run pagefind` (the root `site:build` gate runs it
  * after the site build).
  */
@@ -34,9 +47,53 @@ const DIST_DIR = join(WWW_ROOT, 'dist');
 const STAGE_DIR = join(WWW_ROOT, '.openElement', 'pagefind-stage');
 const OUTPUT_DIR = join(DIST_DIR, 'pagefind');
 
+/**
+ * The UI bundles the pagefind service copies but the core runtime never
+ * fetches. pagefind-component-ui.js doubles as the copy-phase anchor below
+ * because it is the last file the child process writes (observed as the
+ * 0-byte race this script already guards).
+ */
+export const PAGEFIND_UI_SUITE_FILES = [
+  'pagefind-ui.js',
+  'pagefind-ui.css',
+  'pagefind-modular-ui.js',
+  'pagefind-modular-ui.css',
+  'pagefind-component-ui.js',
+  'pagefind-component-ui.css',
+] as const;
+
 /** Unwrap every `<template>` so DSD prose becomes indexable text. */
 function unwrapTemplates(html: string): string {
   return html.replace(/<\/?template[^>]*>/g, '');
+}
+
+/**
+ * Remove the unreferenced UI suites from the written output, failing closed
+ * if any of them survives the removal (a pagefind rename would otherwise
+ * silently resurrect dead weight).
+ */
+export async function removeUiSuites(outputDir: string): Promise<void> {
+  for (const name of PAGEFIND_UI_SUITE_FILES) {
+    await rm(join(outputDir, name), { force: true });
+  }
+  const survivors: string[] = [];
+  for (const name of PAGEFIND_UI_SUITE_FILES) {
+    if (await exists(join(outputDir, name))) survivors.push(name);
+  }
+  if (survivors.length > 0) {
+    throw new Error(
+      `Pagefind: UI suite files survived removal (pagefind layout changed?): ${survivors.join(', ')}`,
+    );
+  }
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function stageDist(): Promise<number> {
@@ -55,51 +112,65 @@ async function stageDist(): Promise<number> {
   return count;
 }
 
-const staged = await stageDist();
-console.log(`Pagefind: staged ${staged} HTML file(s) from www/dist`);
-
-const { errors, index } = await createIndex();
-if (!index) {
-  console.error('Pagefind: failed to create index:', errors);
-  process.exit(1);
-}
-
-const { errors: addErrors, page_count } = await index.addDirectory({ path: STAGE_DIR });
-if (addErrors.length > 0 || page_count === 0) {
-  console.error(`Pagefind: indexing failed (page_count=${page_count}):`, addErrors);
-  process.exit(1);
-}
-
-const { errors: writeErrors, outputPath } = await index.writeFiles({ outputPath: OUTPUT_DIR });
-if (writeErrors.length > 0) {
-  console.error('Pagefind: failed to write index files:', writeErrors);
-  process.exit(1);
-}
-
-// pagefind copies its UI bundle through a child process; writeFiles can
-// resolve while pagefind-component-ui.js is still being written (observed as
-// a 0-byte file racing the static-output-freeze gate). Wait for it to land.
-const uiBundle = join(outputPath, 'pagefind-component-ui.js');
-for (let attempt = 0; attempt < 100; attempt++) {
-  try {
-    if ((await stat(uiBundle)).size > 0) break;
-  } catch {
-    // not there yet
+/**
+ * Wait until the pagefind child process has finished copying the UI suites.
+ * `writeFiles` resolves while the copies are still in flight, and removing a
+ * file the child is still writing fails on Windows — the copy must land
+ * first. A pagefind that no longer emits the suites skips the wait (the
+ * filter's retirement condition); a 0-byte file that never grows is still
+ * the broken copy the old freeze-gate race saw.
+ */
+export async function waitForUiCopy(
+  outputDir: string,
+  { attempts = 100, intervalMs = 100 }: { attempts?: number; intervalMs?: number } = {},
+): Promise<void> {
+  const anchor = join(outputDir, 'pagefind-component-ui.js');
+  let everSeen = false;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const info = await stat(anchor);
+      everSeen = true;
+      if (info.size > 0) return;
+    } catch {
+      // not there (yet)
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  if (!everSeen) return; // pagefind no longer emits the suites
+  throw new Error('Pagefind: UI bundle copy did not complete');
 }
-try {
-  const size = (await stat(uiBundle)).size;
-  if (size === 0) {
-    console.error('Pagefind: UI bundle copy did not complete');
+
+export async function main(): Promise<void> {
+  const staged = await stageDist();
+  console.log(`Pagefind: staged ${staged} HTML file(s) from www/dist`);
+
+  const { errors, index } = await createIndex();
+  if (!index) {
+    console.error('Pagefind: failed to create index:', errors);
     process.exit(1);
   }
-} catch {
-  console.error('Pagefind: UI bundle was never emitted');
-  process.exit(1);
+
+  const { errors: addErrors, page_count } = await index.addDirectory({ path: STAGE_DIR });
+  if (addErrors.length > 0 || page_count === 0) {
+    console.error(`Pagefind: indexing failed (page_count=${page_count}):`, addErrors);
+    process.exit(1);
+  }
+
+  const { errors: writeErrors, outputPath } = await index.writeFiles({ outputPath: OUTPUT_DIR });
+  if (writeErrors.length > 0) {
+    console.error('Pagefind: failed to write index files:', writeErrors);
+    process.exit(1);
+  }
+
+  await waitForUiCopy(outputPath);
+  await removeUiSuites(outputPath);
+
+  console.log(`Pagefind: indexed ${page_count} page(s) -> ${outputPath}`);
+  await index.deleteIndex();
+  await close();
+  await rm(STAGE_DIR, { recursive: true }).catch(() => {});
 }
 
-console.log(`Pagefind: indexed ${page_count} page(s) -> ${outputPath}`);
-await index.deleteIndex();
-await close();
-await rm(STAGE_DIR, { recursive: true }).catch(() => {});
+if (import.meta.main) {
+  await main();
+}

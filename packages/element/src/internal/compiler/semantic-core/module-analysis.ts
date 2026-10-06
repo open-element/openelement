@@ -80,6 +80,15 @@ export interface SemanticCoreOptions {
    * injects its descriptor.
    */
   readonly staticSidecars?: readonly StaticSidecarDescriptor[];
+  /**
+   * Activate the island style asset protocol (ADR-0164): island modules emit
+   * an OE-controlled `.oe-style.css` resource request per component instead
+   * of carrying stylesheet bytes, same-module style constants are admitted
+   * and erased, and dynamic style composition fails closed (OEC9028) — never
+   * a silent inline fallback. Non-island modules keep the legacy verbatim
+   * path regardless. Default off.
+   */
+  readonly styleAssetProtocol?: boolean;
 }
 
 /**

@@ -190,14 +190,15 @@ custom properties.
 ### `open-code-block`
 
 - Parts: `copy`
-- Variables: `--color-destructive`, `--color-primary`, `--color-zinc-200`,
-  `--color-zinc-700`, `--color-zinc-950`, `--default-transition-duration`,
-  `--ease-in-out`, `--font-mono`, `--font-sans`, `--font-weight-bold`,
-  `--font-weight-semibold`, `--leading-relaxed`, `--radius-lg`,
-  `--radius-md`, `--spacing`, `--text-sm`, `--text-xs`, `--tracking-wider`,
-  `--tracking-widest`
-- The Prism token palette is static (GitHub-dark-derived hexes measured on
-  the static zinc surface); it is deliberately not token-driven.
+- Variables: `--color-destructive`, `--color-foreground`, `--color-primary`,
+  `--default-transition-duration`, `--ease-in-out`, `--font-sans`,
+  `--font-weight-semibold`, `--radius-md`, `--spacing`, `--text-xs`,
+  `--tracking-wider`
+- Since #1552 the component owns the copy chip only: the code surface and the
+  token inks belong to the host's build-time highlight pipeline and its
+  stylesheet, so the former Prism-derived token palette and surface variables
+  left the pinned surface in the same deliberate edit (the chip ink follows
+  the theme-aware `--color-foreground` role).
 
 ### `open-dialog`
 

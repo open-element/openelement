@@ -66,6 +66,7 @@ test('islandChunkMapFromAssetManifest maps delivery tags to manifest asset URLs'
       },
     },
     shared: [],
+    styles: [],
   };
   const map = islandChunkMapFromAssetManifest(manifest, ['open-counter', 'open-theme-toggle']);
   expect(map).toEqual({
@@ -84,6 +85,7 @@ test('islandChunkMapFromAssetManifest follows a chunk rename through the manifes
       'open-counter': { file: '/client/islands/shared-bundle-Zz99.js', strategy: 'idle' },
     },
     shared: [],
+    styles: [],
   };
   expect(islandChunkMapFromAssetManifest(renamed, ['open-counter'])['open-counter']).toEqual(
     '/client/islands/shared-bundle-Zz99.js',
@@ -101,6 +103,7 @@ test('islandChunkMapFromAssetManifest fails closed on islands the manifest does 
           entry: '/client/islands/client.js',
           islands: { 'open-other': { file: '/client/islands/other.js', strategy: 'idle' } },
           shared: [],
+          styles: [],
         },
         ['open-ghost'],
       ),
@@ -166,6 +169,7 @@ test('postProcessClientIslandBuild writes per-page manifests with manifest-keyed
         'open-counter': { file: '/client/islands/island-counter-Ab12.js', strategy: 'idle' },
       },
       shared: [],
+      styles: [],
     };
     await postProcessClientIslandBuild(ctxView(manifest, tmp));
 
@@ -258,6 +262,7 @@ test('postProcessClientIslandBuild fails before writing when the manifest misses
         'open-counter': { file: '/client/islands/island-counter-Ab12.js', strategy: 'idle' },
       },
       shared: [],
+      styles: [],
     };
     const error = await assertRejectsIncludes(
       () =>
@@ -305,6 +310,7 @@ test('postProcessClientIslandBuild validates only the local metadata Phase 2 sel
         'open-counter': { file: '/client/islands/island-counter-Ab12.js', strategy: 'idle' },
       },
       shared: [],
+      styles: [],
     };
     await postProcessClientIslandBuild({
       phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' as const },

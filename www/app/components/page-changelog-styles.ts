@@ -26,7 +26,12 @@ export const pageChangelogStyles = [
   .changelog-content h2:first-child::after { content:"published history"; display:block; margin-top:calc(var(--spacing) * 2); color:var(--color-primary); font-family:var(--font-mono); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.08em; }
   .changelog-content h3 { font-size: var(--text-2xl); margin: calc(var(--spacing) * 6) 0 calc(var(--spacing) * 2); }
   .changelog-content code { font-family: var(--font-mono); background: var(--color-muted); padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2); border-radius: var(--radius-md); font-size: var(--text-xs); }
-  .changelog-content pre { background: var(--color-muted); padding: calc(var(--spacing) * 5) calc(var(--spacing) * 6); border-radius: var(--radius-lg); overflow-x: auto; }
+  .changelog-content pre { background: var(--surface-code); color: var(--surface-code-foreground); padding: calc(var(--spacing) * 5) calc(var(--spacing) * 6); border-radius: var(--radius-lg); overflow-x: auto; }
+  /* Fenced blocks compile to Shiki token spans (build-time, #1552): the chip
+     dressing above is for inline code only, and the fence's <code> must not
+     offset or recolor it. Token colors resolve via the --shiki-* palette
+     table (site-css.ts). */
+  .changelog-content pre code { background: none; color: inherit; padding: 0; border-radius: 0; font-size: var(--text-sm); line-height: 1.7; }
 `,
   ),
 ];

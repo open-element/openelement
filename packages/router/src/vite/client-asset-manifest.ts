@@ -308,6 +308,14 @@ export function buildClientAssetManifest(options: {
    * exact identity rule.
    */
   resolvedIslandModuleIds?: ReadonlyMap<string, string>;
+  /**
+   * The style assets the client build emitted (ADR-0164) — the `.css` file
+   * names the style-asset plugin recorded, dist/client-relative. Mapped to
+   * base-prefixed, sorted `styles` preload URLs; deduplicated (the emission
+   * records are already unique per style request, but the join owns the
+   * final URL set).
+   */
+  styleFileNames?: readonly string[];
 }): ClientAssetManifest {
   const { root, base, islands, viteManifest, chunks, manifestPath } = options;
   const resolvedIds = options.resolvedIslandModuleIds;
@@ -402,6 +410,7 @@ export function buildClientAssetManifest(options: {
     entry: assetUrl(entryFile),
     islands: islandAssets,
     shared: [...shared].sort(),
+    styles: [...new Set(options.styleFileNames ?? [])].sort().map(assetUrl),
   };
 }
 
@@ -414,6 +423,8 @@ export async function createClientAssetManifest(options: {
   buildResult: unknown;
   /** The client build's identity map — see {@linkcode buildClientAssetManifest}. */
   resolvedIslandModuleIds?: ReadonlyMap<string, string>;
+  /** The style asset file names — see {@linkcode buildClientAssetManifest}. */
+  styleFileNames?: readonly string[];
 }): Promise<ClientAssetManifest> {
   const viteManifest = await readViteClientManifest(join(options.manifestPath));
   return buildClientAssetManifest({
@@ -424,5 +435,6 @@ export async function createClientAssetManifest(options: {
     chunks: collectClientBuildChunks(options.buildResult),
     manifestPath: options.manifestPath,
     resolvedIslandModuleIds: options.resolvedIslandModuleIds,
+    styleFileNames: options.styleFileNames,
   });
 }

@@ -315,7 +315,7 @@
       "tagName": "open-code-block",
       "className": "OpenCodeBlock",
       "superclassName": "OpenElement",
-      "description": "Code block with copy button AND syntax highlighting via Prism.",
+      "description": "Code block with a copy button.",
       "slots": [
         {
           "name": "",

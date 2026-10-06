@@ -30,22 +30,13 @@ export default defineConfig({
   // meaning <title> should carry. Setting it here would additionally emit the
   // site-level og:title/og:site_name pair, which the page-level head owns.
   head: {
-    // All scripts are same-origin. Prism is vendored under
-    // public/assets/vendor/prism/ (pinned 1.29.0, SRI-verified against the
-    // former cdnjs hashes at vendor time — see #1088); theme-init is inlined
-    // instead of requested; goatcounter was removed (unreachable from CN
-    // networks, cost a console error + best-practices points on every page).
-    scripts: [
-      { src: '/theme-init.js' },
-      { src: '/assets/vendor/prism/prism.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-javascript.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-typescript.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-json.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-bash.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-css.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-markup.min.js', defer: true },
-      { src: '/prism-init.js', defer: true },
-    ],
+    // All scripts are same-origin. theme-init is inlined instead of requested;
+    // goatcounter was removed (unreachable from CN networks, cost a console
+    // error + best-practices points on every page). Code highlighting compiles
+    // into the page HTML at build time (www/lib/markdown.ts) — no highlighting
+    // script ships or runs in the browser (issue #1552 retired the vendored
+    // Prism runtime).
+    scripts: [{ src: '/theme-init.js' }],
   },
   // The shell's tag name (`open-layout`) is derived from the import's basename.
   appShell: {

@@ -2,7 +2,13 @@
  * Contributing page element. The route owns request/locale projection; this
  * module owns only the compiled page structure and its declared properties.
  */
-import { element, OpenElement, property } from '@openelement/element';
+import {
+  element,
+  OpenElement,
+  property,
+  trustedHtml,
+  type TrustedHtml,
+} from '@openelement/element';
 import '@openelement/ui/open-code-block';
 import '@openelement/ui/open-button';
 import { pageContributingStyles } from './page-contributing-styles.ts';
@@ -46,6 +52,12 @@ export default class PageContributing extends OpenElement {
   lede = '';
   @property({ reflect: false, attribute: false })
   setupAriaLabel = '';
+  /**
+   * The setup command sequence, pre-highlighted at generation time
+   * (app/data/_generated-page-code.ts — build-time Shiki, --shiki-* palette).
+   */
+  @property({ type: Object, reflect: false, attribute: false })
+  setupCodeHtml: TrustedHtml = trustedHtml('');
   @property({ reflect: false, attribute: false })
   setupLabel = '';
   @property({ reflect: false, attribute: false })
@@ -117,12 +129,7 @@ export default class PageContributing extends OpenElement {
           <div class='setup-col'>
             <p class='section-label'>{this.setupLabel}</p>
             <open-code-block>
-              <pre>
-                <code>{`git clone https://github.com/open-element/openelement.git
-cd openelement
-pnpm install
-pnpm test`}</code>
-              </pre>
+              <div innerHTML={this.setupCodeHtml} trustedHtml />
             </open-code-block>
             <p class='setup-copy'>
               {this.setupCopyBefore}

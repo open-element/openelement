@@ -577,6 +577,11 @@ export interface CompiledClaimOptions {
    * emits those styles as one marked `<style data-oe-static-styles>` element —
    * the first template child — so a claim skips exactly that node. A marked
    * style node on a style-less class is drift and fails closed.
+   *
+   * Claim-then-delete (ADR-0164 §5): the skipped node is removed only after
+   * the staged plan attaches (Parts bound, rootOffset=1 honored throughout) —
+   * a claim failure keeps it, so recovery and never-upgrade pages keep
+   * first-paint styling by construction.
    */
   expectStaticStyle?: boolean;
   /** Default is `throw`; `owning` enables one bounded recovery attempt. */
@@ -597,6 +602,20 @@ export function isStaticStyleNode(node: Node | undefined): boolean {
     node.tagName.toLowerCase() === 'style' &&
     node.hasAttribute(STATIC_STYLES_MARKER)
   );
+}
+
+/**
+ * Claim-then-delete (ADR-0164 §5): remove the marked DSD style node this
+ * claim skipped at index 0. Called only after the staged plan has attached —
+ * removal must not precede claim because Part paths resolve against
+ * rootOffset=1 — so the node served first paint and anchored the scan, and
+ * the shared adopted sheet the kernel applied is the one remaining channel.
+ * A failed claim never reaches the caller, leaving the node in place for
+ * recovery and for pages that never upgrade.
+ */
+function removeClaimedStaticStyle(root: Node): void {
+  const node = root.childNodes[0];
+  if (isStaticStyleNode(node)) root.removeChild(node);
 }
 
 /**
@@ -746,6 +765,10 @@ export function claimExistingDom(
       // recovery never contains fixed-Part targets, so `claim` mode stands.
       attachFixedParts(ctx, root, rootRebuilt ? 'fresh' : 'claim', cursorStart);
       replayPreUpgradeEvents(root, capturedEvents);
+      // Part binding completed: the DSD style node's double application
+      // retires (no-op when the claim ran from cursor 0). On the recovery
+      // path this is "recovery completed" from the ADR-0164 scenario table.
+      if (cursorStart === 1) removeClaimedStaticStyle(root);
       const claimed = instance(ctx);
       if (!stream || stream.ranges.size === 0) return claimed;
       let disposed = false;

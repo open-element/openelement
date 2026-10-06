@@ -181,3 +181,37 @@ test('minifyIslandCssModule leaves interpolated templates and quoted strings unt
 test('minifyIslandCssModule fails open on unparseable input', () => {
   expect(minifyIslandCssModule('this is not `java\nscript`')).toBe(null);
 });
+
+test('minifyIslandCssModule skips extraction-path modules (ADR-0164 narrowing)', () => {
+  // The style asset protocol's extraction path removes the sheet bytes from
+  // the module; the request import edge marks it. Whatever templates remain
+  // are Part Program payloads, never component CSS — the transform's
+  // admission is the legacy verbatim path alone, so an extraction-path
+  // module returns null even when it still looks like #1543's channel.
+  const extractionPathModule = [
+    "import __oeStyle from './open-badge.oe-style.css';",
+    'class OpenBadge extends OpenElement {}',
+    '__publicField(OpenBadge, "styles", [__oeStyle]);',
+    'export const facade = {',
+    '  __elementMetadata: () => meta,',
+    '  __partProgram: () => program,',
+    '};',
+  ].join('\n');
+  expect(minifyIslandCssModule(extractionPathModule)).toBe(null);
+  // The same module WITH an inlined legacy sheet shape is not enough to
+  // escape the narrowing — the marker, not the shape, decides.
+  const legacyModule = [
+    'import { compiledStyle } from "@openelement/element";',
+    'class OpenBadge extends OpenElement {}',
+    '__publicField(OpenBadge, "styles", [compiledStyle(`',
+    '  .control {',
+    '    color: red;',
+    '  }',
+    '`)]);',
+    'export const facade = {',
+    '  __elementMetadata: () => meta,',
+    '  __partProgram: () => program,',
+    '};',
+  ].join('\n');
+  expect(minifyIslandCssModule(legacyModule)).toContain('`.control{color:red;}`');
+});

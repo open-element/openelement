@@ -71,7 +71,7 @@ export default [
 ];
 ```
 
-Each entry is a `{ meta }` record, a `{ link }` record (`rel` and `href` required) or a `{ style }` CSS string, emitted in the order written. Attribute names, URL protocols and inline CSS all pass the same fail-closed checks as every other head fragment: an unsafe attribute name, a `javascript:` URL, an `@import` or a `</style>` that closes the block early fails the build instead of being dropped. Import CSS with `?raw` when the file must reach the document byte-for-byte (`?inline` runs it through Vite's CSS pipeline) — this site's pinned Prism theme is imported that way.
+Each entry is a `{ meta }` record, a `{ link }` record (`rel` and `href` required) or a `{ style }` CSS string, emitted in the order written. Attribute names, URL protocols and inline CSS all pass the same fail-closed checks as every other head fragment: an unsafe attribute name, a `javascript:` URL, an `@import` or a `</style>` that closes the block early fails the build instead of being dropped. Import CSS with `?raw` when the file must reach the document byte-for-byte (`?inline` runs it through Vite's CSS pipeline).
 
 ## Content collections are site-owned
 
@@ -160,27 +160,41 @@ export default definePage(BlogPostPage, {
 
 `getStaticPaths()` pre-renders every slug; `innerHTML` + `trustedHtml` is the explicit trust boundary for markdown HTML.
 
-## Code-block highlighting (optional)
+## Code-block highlighting (build-time)
 
-The site-owned collection loader renders fenced blocks as `<pre><code class="language-x">` with no token-level colors. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content, and hljs spans only add `class` attributes. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it highlights via a global Prism that your page must load (core + language grammars, e.g. the vendored same-origin scripts this site vendors under `public/assets/vendor/prism/` and declares in `www/openelement.config.ts`); without Prism you get the copy button but no token spans.
+The site-owned collection loader compiles fenced blocks to Shiki token spans during the generate step, on the build machine — the highlighter is a devDependency and never ships to the client, so pages carry static token markup with no highlight script and no highlight flash. Token colors are `var(--shiki-token-*)` references resolved by one palette table in the site stylesheet, so both palettes flip with `data-theme` like every other site color. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it owns the copy button only; highlighting is whatever the build compiled into the slot's light DOM, and a block without token spans still renders (and copies) as plain text.
 
-### lib/blog.ts — syntax highlighting recipe (optional)
+### lib/blog.ts — syntax highlighting recipe
 
 ```ts
 import { marked } from 'marked';
-import hljs from 'highlight.js';
+import {
+  createCssVariablesTheme,
+  createHighlighter,
+  createJavaScriptRegexEngine,
+} from 'shiki';
 import type { CollectionOptions } from '../lib/content.ts';
 
-// Default marked behavior + hljs token spans. hljs output only adds class
-// attributes to <code>.
+// Build-time highlighting: token colors are CSS variables resolved by the
+// site stylesheet; the strict JavaScript regex engine loads no WASM and
+// fails the build on an incompatible grammar. Languages outside the loaded
+// set fall through to marked's plain <pre><code> path.
+const theme = createCssVariablesTheme({ variablePrefix: '--shiki-' });
+const highlighter = await createHighlighter({
+  themes: [theme],
+  langs: ['typescript', 'tsx', 'javascript', 'json', 'bash', 'css', 'html'],
+  engine: createJavaScriptRegexEngine(),
+});
+const langs = new Set(['typescript', 'tsx', 'javascript', 'json', 'bash', 'css', 'html']);
+
 const markdown = (content: string) =>
   marked(content, {
-    async: true,
     renderer: {
       code(code: string, lang: string | undefined) {
-        const language = hljs.getLanguage(lang ?? '') ? lang : 'plaintext';
-        const html = hljs.highlight(code, { language }).value;
-        return `<pre><code class="language-${language}">${html}</code></pre>`;
+        const grammar = ({ ts: 'typescript', js: 'javascript', sh: 'bash' })[lang ?? ''] ?? lang;
+        return grammar && langs.has(grammar)
+          ? highlighter.codeToHtml(code, { lang: grammar, theme })
+          : false;
       },
     },
   });

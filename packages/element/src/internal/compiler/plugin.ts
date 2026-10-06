@@ -34,6 +34,7 @@ import {
 } from './semantic-core/module-analysis.ts';
 import { diagnosticPluginError } from './semantic-core/diagnostics/index.ts';
 import { typeCheckEmittedModule } from './semantic-core/type-check.ts';
+import { registerStyleRequest, styleRequestModuleId } from './style-requests.ts';
 
 /** The authored substring every compiled element module contains (`@element(`), used as the cheap prefilter. */
 export const COMPILED_ELEMENT_MARKER = '@element(';
@@ -152,6 +153,18 @@ export interface CompiledElementPluginOptions {
    * sidecar policy statement fails closed with OEC9008.
    */
   staticSidecars?: readonly StaticSidecarDescriptor[];
+  /**
+   * Activate the island style asset protocol (ADR-0164): island modules emit
+   * OE-controlled `.oe-style.css` resource requests instead of inlined
+   * stylesheet bytes, and dynamic style composition fails closed (OEC9028).
+   * Requires a host build plugin that intercepts the reserved suffix and
+   * hands back the sheet adapter (the router client/SSG builds' style-asset
+   * plugin) — without one the build fails at import resolution, never by
+   * silently re-inlining. Default off: island modules keep the legacy
+   * verbatim path, explicitly outside the zero-inline guarantee until a host
+   * activates the protocol.
+   */
+  styleAssetProtocol?: boolean;
 }
 
 /**
@@ -180,8 +193,21 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
         const moduleId = stableModuleId(id, viteRoot, workspaceRoot);
         const compiled = compileElementModule(code, moduleId, {
           staticSidecars: options.staticSidecars,
+          styleAssetProtocol: options.styleAssetProtocol,
         });
         if (!compiled) return null;
+        // ADR-0164: the generated request's CSS payload travels to the
+        // intercepting host plugin through the style-request registry —
+        // keyed by the id the bundler's resolver lands on for the emitted
+        // import. The compiler never writes files; the host build owns the
+        // emitted asset from here.
+        if (compiled.styleRequest) {
+          registerStyleRequest({
+            ...compiled.styleRequest,
+            moduleId: styleRequestModuleId(id, compiled.styleRequest.specifier),
+            importer: id,
+          });
+        }
         if (options.typeCheckEmitted) {
           const diagnostics = typeCheckEmittedModule(compiled.code, moduleId, {
             paths: options.resolutionPaths,

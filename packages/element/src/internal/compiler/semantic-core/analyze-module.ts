@@ -8,7 +8,13 @@
 
 import ts from 'typescript';
 import { type CompilerFail } from './compiler-diagnostics.ts';
-import { type ModuleIntrinsicBindings } from './module-analysis.ts';
+import { type ModuleIntrinsicBindings, type SemanticCoreOptions } from './module-analysis.ts';
+import {
+  admitStaticStyles,
+  admitStyleConstantStatement,
+  assertStyleConstantsErased,
+  type StyleConstantDeclarations,
+} from './style-admission.ts';
 import { type PropertyValueType, type SerializableValue } from '../../protocol/part-program.ts';
 import {
   camelToKebab,
@@ -665,6 +671,15 @@ export interface AnalyzedModule {
   stylesText?: string;
   stylesNode?: ts.Expression;
   stylesTypeText?: string;
+  /**
+   * The island style asset protocol outcome (ADR-0164): present only when the
+   * module is an island, the host activated the protocol, and the authored
+   * `static styles` admitted as statically provable — the generated module
+   * imports this request instead of copying the initializer, and the compiled
+   * module's top-level style constants (admitted and erased under the same
+   * activation) contributed their bytes to it.
+   */
+  styleRequest?: { specifier: string; css: string };
 }
 
 /**
@@ -672,13 +687,26 @@ export interface AnalyzedModule {
  * (#1473 split): the top-level
  * statement admission (OEC9008 fail-closed, island policy passthrough), the
  * exactly-one-`@element`-class rule with its decorator options and canonical
- * heritage provenance, and the {@link propertyFields} inventory.
+ * heritage provenance, and the {@link propertyFields} inventory. Under the
+ * island style asset protocol (ADR-0164, `options.styleAssetProtocol`) island
+ * modules additionally admit same-module style constants and must carry
+ * statically provable `static styles` — dynamic composition fails closed with
+ * OEC9028 instead of falling back to inlined sheet bytes.
  */
 export function analyzeCompiledModule(
   sf: ts.SourceFile,
   intrinsics: ModuleIntrinsicBindings,
   fail: CompilerFail,
+  options: SemanticCoreOptions = {},
 ): AnalyzedModule {
+  // Island-ness is a module-level fact (the policy statement may sit anywhere
+  // among the top-level statements), so the style-constant grammar gates on a
+  // full pass before the admission loop, not on loop order.
+  const islandModule = sf.statements.some((statement) =>
+    isIslandConfigStatement(statement, intrinsics),
+  );
+  const styleGrammar = options.styleAssetProtocol === true && islandModule;
+  const styleConstants: StyleConstantDeclarations = { constants: new Map(), statements: [] };
   const passthroughStatements: ts.Statement[] = [];
   for (const statement of sf.statements) {
     if (
@@ -695,6 +723,21 @@ export function analyzeCompiledModule(
     if (isIslandConfigStatement(statement, intrinsics)) {
       passthroughStatements.push(statement);
       continue;
+    }
+    // ADR-0164 §4: same-module style constants are the one further runtime
+    // statement the protocol's grammar admits, and only in island modules.
+    // Their bytes are erased from the generated module (the emitted asset
+    // carries them), so anything outside the style-constant shape keeps the
+    // grammar's standing OEC9008 rejection.
+    if (styleGrammar && ts.isVariableStatement(statement)) {
+      const declared = admitStyleConstantStatement(statement, sf, styleConstants.constants);
+      if (declared !== null) {
+        for (const { name, initializer } of declared) {
+          styleConstants.constants.set(name.text, initializer);
+        }
+        styleConstants.statements.push(statement);
+        continue;
+      }
     }
     fail(
       statement,
@@ -871,6 +914,43 @@ export function analyzeCompiledModule(
     intrinsics,
     fail,
   );
+
+  // ADR-0164 §4 (island style asset protocol): admission is static-only and
+  // fail-closed for islands. Non-island modules keep the legacy verbatim path
+  // — explicitly outside the zero-inline guarantee. The style constants an
+  // island module carries are erased from the generated module, so every
+  // reference must sit inside the channels the protocol replaces.
+  let styleRequest: { specifier: string; css: string } | undefined;
+  if (styleGrammar) {
+    if (stylesNode !== undefined) {
+      const admission = admitStaticStyles(stylesNode, sf, styleConstants.constants);
+      if (admission.kind === 'dynamic') {
+        fail(
+          admission.node,
+          'OEC9028',
+          `island static styles must be statically provable: ${admission.reason}. Inline the ` +
+            'sheet as a plain template literal (no interpolation) or a compiledStyle() call ' +
+            'over same-module constants — dynamic composition has no island fallback and is ' +
+            'never silently inlined',
+        );
+      }
+      const css = admission.sheets.join('\n');
+      if (css.includes('@import')) {
+        fail(
+          stylesNode,
+          'OEC9028',
+          'island static styles may not carry @import: constructable stylesheets cannot load ' +
+            'nested stylesheets — flatten the sheet in source',
+        );
+      }
+      if (admission.sheets.length > 0) {
+        styleRequest = { specifier: `./${tag}.oe-style.css`, css };
+      }
+    }
+    if (styleConstants.constants.size > 0) {
+      assertStyleConstantsErased(sf, styleConstants, stylesNode, fail);
+    }
+  }
   return {
     passthroughStatements,
     classNode,
@@ -888,5 +968,6 @@ export function analyzeCompiledModule(
     stylesText,
     stylesNode,
     stylesTypeText,
+    ...(styleRequest === undefined ? {} : { styleRequest }),
   };
 }

@@ -24,7 +24,13 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const siteRoot = join(repoRoot, 'www', '');
 
 export async function generateSiteSitemap(dist = join(repoRoot, SITE_DIST)): Promise<string[]> {
-  const blogOptions = { ...blogCollection, contentDir: join(siteRoot, blogCollection.contentDir) };
+  // The feed/sitemap consume slugs and frontmatter only: render no markdown
+  // (the identity override skips the build-time highlighter entirely).
+  const blogOptions = {
+    ...blogCollection,
+    contentDir: join(siteRoot, blogCollection.contentDir),
+    markdown: (content: string) => content,
+  };
   const blogPostRoutes = prepareBlogPosts(await loadCollectionData('blog', blogOptions)).map(
     (post) => `/blog/${post.slug}`,
   );

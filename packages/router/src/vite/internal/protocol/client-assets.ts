@@ -40,6 +40,14 @@ export interface ClientAssetManifest {
   islands: Record<string, ClientIslandAsset>;
   /** Shared chunk URLs emitted by the client build (JS, neither entry nor island-dedicated). */
   shared: string[];
+  /**
+   * Preloadable island style asset URLs (ADR-0164), sorted, base-prefixed.
+   * Shadow-component CSS cannot be applied as a document-level stylesheet —
+   * it cannot reach shadow trees — so the document channel's only role for
+   * these URLs is preload; the sheets themselves are adopted through the
+   * sheet adapters.
+   */
+  styles: string[];
 }
 
 /** The manifest a project without a client bundle carries. */
@@ -47,6 +55,7 @@ export const EMPTY_CLIENT_ASSET_MANIFEST: ClientAssetManifest = {
   entry: '',
   islands: {},
   shared: [],
+  styles: [],
 };
 
 /**
@@ -59,6 +68,7 @@ export function serializeClientAssetsModule(manifest: ClientAssetManifest): stri
 // entry: the island client entry URL ('' when no client bundle shipped).
 // islands: compile-time island identity (delivery tag) -> emitted asset.
 // shared: shared chunk URLs emitted by the client build.
+// styles: preloadable island style asset URLs (ADR-0164).
 export const clientAssets = ${JSON.stringify(manifest, null, 2)};
 `;
 }

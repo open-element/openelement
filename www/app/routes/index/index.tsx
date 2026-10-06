@@ -1,4 +1,5 @@
 import { definePage } from '@openelement/router';
+import { trustedHtml } from '@openelement/element';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import { localizePath } from '#site-ui/link.ts';
@@ -12,6 +13,7 @@ import {
 } from '../../site-ui/diagrams.ts';
 import { alphaLineNote, COMMON_PUBLISHED_NOTE, REGISTRY_NOTE } from '../../data/version.ts';
 import { installCommand } from '../../data/_generated-install-command.ts';
+import { homeHeroCodeHtml } from '../../data/_generated-page-code.ts';
 
 const content = {
   en: {
@@ -258,6 +260,9 @@ export default definePage(PageHome, {
       // The begin-scene command is the create CLI's canonical string (#1414):
       // the page renders the generated module, never a copy of the flags.
       beginCommand: installCommand,
+      // The hero code block is pre-highlighted by the shared site highlighter
+      // (lib/markdown.ts via generate:content) — never a JSX copy.
+      heroCodeHtml: trustedHtml(homeHeroCodeHtml),
       registryNote: REGISTRY_NOTE,
       commonVersionNote: COMMON_PUBLISHED_NOTE(resolved),
       marqueeText: marquee + marquee,

@@ -9,7 +9,6 @@ export const log: Logger = createLogger('ui');
 
 /** open-code-block tuning constants (compiled modules carry no top-level consts). */
 export const CODE_BLOCK_CONSTANTS = {
-  maxHighlightRetries: 120,
   copyFeedbackMs: 2000,
 } as const;
 

@@ -149,6 +149,30 @@ export const ClientBuildErrorCode = {
    * fired and per-island runtime copies would ship silently.
    */
   ELEMENT_RUNTIME_CHUNK_MISSING: 'OE_CLIENT_BUILD_ELEMENT_RUNTIME_CHUNK_MISSING',
+  /**
+   * A `.oe-style.css` style-resource request resolved in the client or SSR
+   * build with no entry in the compiler's style-request registry (ADR-0164).
+   * Either the intercepting plugin answered before the compiled-element
+   * transform registered the payload (an internal ordering bug) or a
+   * hand-written import targets the reserved suffix — both defects; the build
+   * fails instead of letting vite's CSS plugin handle the request (the
+   * silent re-inline path the protocol exists to close).
+   */
+  STYLE_ASSET_UNREGISTERED: 'OE_CLIENT_BUILD_STYLE_ASSET_UNREGISTERED',
+  /**
+   * The SSR build resolved a style-resource request whose emitted `.css`
+   * asset the Phase 2 client build never recorded — Phase 2 did not run for
+   * this graph (or ran with a different island set), so there is no same
+   * asset to read and the DSD text would have to come from a second fact.
+   */
+  STYLE_ASSET_UNMAPPED: 'OE_CLIENT_BUILD_STYLE_ASSET_UNMAPPED',
+  /**
+   * The emitted `.css` asset the SSR build reads for the DSD text no longer
+   * matches the hash the client build recorded for it — a stale or rewritten
+   * dist/client. The build fails instead of embedding CSS the client sheet
+   * cannot byte-match (the DSD/adopted drift the protocol closes).
+   */
+  STYLE_ASSET_HASH_MISMATCH: 'OE_CLIENT_BUILD_STYLE_ASSET_HASH_MISMATCH',
 } as const;
 
 /**

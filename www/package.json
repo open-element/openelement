@@ -57,6 +57,7 @@
     "@zag-js/combobox": "1.43.3",
     "@zag-js/vanilla": "1.43.3",
     "pagefind": "^1.4.0",
+    "shiki": "^4.5.0",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3"
   }

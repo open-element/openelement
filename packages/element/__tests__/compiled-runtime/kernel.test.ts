@@ -252,6 +252,7 @@ test('compiled kernel claims fixed Parts after the serialized static style node'
   const style = document.createElement('style');
   style.setAttribute('data-oe-static-styles', '');
   root.insertBefore(style, root.childNodes[0]);
+  const div = root.childNodes[1] as TestElement;
   const sheet = {
     replaceSync(_text: string): void {},
     cssRules: [{ cssText: ':host { display: block; }' }],
@@ -264,11 +265,17 @@ test('compiled kernel claims fixed Parts after the serialized static style node'
   });
 
   kernel.connect();
-  const button = (root.childNodes[1] as TestElement).childNodes[0] as TestElement;
+  // Claim-then-delete (ADR-0164 §5): the marked node anchored the scan at
+  // rootOffset=1 and is retired once Parts are bound; the adopted sheet is
+  // the one remaining channel.
+  expect(root.childNodes).not.toContain(style);
+  expect(style.parentNode).toEqual(null);
+  expect(root.adoptedStyleSheets).toEqual([sheet]);
+  const button = div.childNodes[0] as TestElement;
   button.dispatch('click');
   expect(clicks).toEqual(1);
   message.value = 'after';
-  expect(toHtml(root.childNodes[1])).toEqual('<div><button>+</button><!--oe:p0-->after</div>');
+  expect(toHtml(div)).toEqual('<div><button>+</button><!--oe:p0-->after</div>');
   kernel.dispose();
 });
 

@@ -11,6 +11,7 @@
  * `pnpm --dir www run generate:content` alongside the article collections.
  */
 
+import { renderSiteMarkdown } from './markdown.ts';
 import type { BlogPost, BlogPostFrontmatter } from './content.ts';
 import type { CollectionEntry, CollectionOptions } from './content.ts';
 
@@ -49,6 +50,10 @@ export const blogCollection: CollectionOptions = {
   contentDir: 'content/blog',
   basePath: '/blog',
   schema: blogCollectionSchema,
+  // Dispatches render through the same build-time markdown pipeline as the
+  // article collections (fences compile to Shiki token spans at generation
+  // time) — see www/lib/markdown.ts.
+  markdown: renderSiteMarkdown,
 };
 
 /** Narrow a loaded collection entry onto the blog post record routes consume. */

@@ -1,4 +1,5 @@
 import type { CollectionOptions, CollectionSchema } from './lib/content.ts';
+import { renderSiteMarkdown } from './lib/markdown.ts';
 
 /**
  * Article frontmatter is the single source of truth for the sidebar nav:
@@ -6,6 +7,10 @@ import type { CollectionOptions, CollectionSchema } from './lib/content.ts';
  * per collection), and `navLabel` is the short sidebar label when the full
  * `title` is too long. Route modules no longer duplicate this in a `meta`
  * export; www/tools/generate-site-nav.ts reads it from here.
+ *
+ * Every article collection renders through the shared build-time markdown
+ * pipeline (www/lib/markdown.ts): fences compile to Shiki token spans at
+ * generation time, so the emitted data modules carry fully highlighted HTML.
  */
 function articleSchema(defaultSection: string): CollectionSchema {
   return {
@@ -28,10 +33,16 @@ function articleSchema(defaultSection: string): CollectionSchema {
 }
 
 export const articleCollections = {
-  guide: { contentDir: 'content/docs/guide', basePath: '/guide', schema: articleSchema('Guide') },
+  guide: {
+    contentDir: 'content/docs/guide',
+    basePath: '/guide',
+    schema: articleSchema('Guide'),
+    markdown: renderSiteMarkdown,
+  },
   architecture: {
     contentDir: 'content/docs/architecture',
     basePath: '/architecture',
     schema: articleSchema('Principles'),
+    markdown: renderSiteMarkdown,
   },
 } satisfies Record<'guide' | 'architecture', CollectionOptions>;

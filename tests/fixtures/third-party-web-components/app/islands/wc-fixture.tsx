@@ -9,9 +9,28 @@
  */
 import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
-import { wcFixtureStyles } from './wc-styles.ts';
+import { compiledStyle } from './wc-styles.ts';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+
+// Same-module style sheet (ADR-0164 §4): statically provable sheets only —
+// the compiler erases this const from the island module and emits its bytes
+// as the component's `.oe-style.css` asset. Cross-module sheet imports fail
+// closed (OEC9028).
+const wcFixtureStyles = [
+  compiledStyle(`
+    :host { display: block; }
+    .fixture-root { display: grid; gap: 1rem; }
+    section { display: grid; gap: 0.5rem; padding: 1rem; border: 1px solid #d0d7de; border-radius: 8px; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+    wc-lit-counter:not(:defined), sl-button:not(:defined), md-filled-button:not(:defined) {
+      outline: 1px solid rgb(0, 120, 80);
+    }
+    wc-lit-counter:defined, sl-button:defined, md-filled-button:defined {
+      outline: 1px solid rgb(80, 80, 80);
+    }
+  `),
+];
 
 @element('wc-fixture', { root: 'shadow-open' })
 export default class ThirdPartyWcFixture extends OpenElement {

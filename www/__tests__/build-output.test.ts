@@ -9,6 +9,7 @@ import { expect, test } from 'vitest';
 
 import { join } from 'node:path';
 import { SITE_BUDGET } from '../site-budget.ts';
+import { PAGEFIND_UI_SUITE_FILES } from '../build-pagefind.ts';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
@@ -23,6 +24,89 @@ test('build output: no Hono virtual entry in public assets', () => {
   expect(honoEntry, `Hono virtual entry should not be in dist/assets/: ${honoEntry}`).toEqual(
     undefined,
   );
+});
+
+test('build output: artifact scan — no vendored highlighter, no self-hosted fonts, no CSS text in island chunks', () => {
+  expect(existsSync(DIST), `Build output is missing: ${DIST}`).toBeTruthy();
+  // The dist-level closeout scan for the three retirement/protocol lanes:
+  //   #1552 — the vendored Prism runtime is gone (pages, pagefind sibling
+  //     guard above): no vendor/prism tree and no prism-named file may ship.
+  //   #1554 — fonts are fontsource-CDN references, never vendored binaries:
+  //     no .woff2 may land anywhere under dist.
+  //   #1553/ADR-0164 — component stylesheets emit as client/assets/*.css and
+  //     are adopted via the shared runtime; the markers below are the
+  //     regression forms of a re-inlined sheet or a second writer on the
+  //     static-styles channel. The @openelement/ui package islands (badge,
+  //     button, code-block, theme-toggle) intentionally ride the legacy
+  //     inline path (ADR-0164 transition note), so generic :host text is NOT
+  //     a violation here — only the specific markers are.
+  const violations: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      const rel = path.slice(DIST.length + 1);
+      if (rel.includes('vendor/prism') || /^prism(-|\b|\.)/.test(entry.name)) {
+        violations.push(`vendored Prism artifact: ${rel}`);
+      }
+      if (entry.name.endsWith('.woff2')) {
+        violations.push(`self-hosted font binary: ${rel}`);
+      }
+    }
+  };
+  walk(DIST);
+
+  const islandsDir = join(DIST, 'client', 'islands');
+  const cssTextMarkers: Array<[string, string]> = [
+    // dragon-live-gaze's sheet lives in client/assets/ — a hit means the
+    // extraction path regressed and the sheet re-inlined into the chunk.
+    ['dragon-enter', 'extracted dragon-live-gaze sheet'],
+    // The DSD static-styles marker is the server serializer's write and the
+    // runtime's claim channel; an island copy would be a second writer.
+    ['data-oe-static-styles', 'static-styles channel'],
+    // The reserved style-request suffix must resolve at build time; the
+    // literal surviving into a chunk means an unintercepted request shipped.
+    ['.oe-style.css', 'reserved style-request suffix'],
+  ];
+  for (const file of readdirSync(islandsDir)) {
+    if (!file.startsWith('island-') || !file.endsWith('.js')) continue;
+    const code = readFileSync(join(islandsDir, file), 'utf8');
+    for (const [marker, why] of cssTextMarkers) {
+      if (code.includes(marker)) {
+        violations.push(`island ${file} carries ${why} (${JSON.stringify(marker)})`);
+      }
+    }
+  }
+
+  expect(violations, 'artifact scan violations').toEqual([]);
+});
+
+test('build output: pagefind ships the core runtime and no UI suites (#1555)', () => {
+  expect(existsSync(DIST), `Build output is missing: ${DIST}`).toBeTruthy();
+  const pagefindDir = join(DIST, 'pagefind');
+  expect(existsSync(pagefindDir), `Pagefind output is missing: ${pagefindDir}`).toBeTruthy();
+
+  // The search island loads only /pagefind/pagefind.js; that entry plus its
+  // worker and the entry manifest are the artifacts the runtime fetches. The
+  // three UI bundles the pagefind service also copies are dead weight and
+  // must be filtered by the build (www/build-pagefind.ts).
+  const emitted = readdirSync(pagefindDir);
+  for (const required of ['pagefind.js', 'pagefind-worker.js', 'pagefind-entry.json']) {
+    expect(
+      emitted.includes(required),
+      `Pagefind core runtime artifact is missing: ${required}`,
+    ).toBeTruthy();
+  }
+  const uiSuites = emitted.filter((f) =>
+    (PAGEFIND_UI_SUITE_FILES as readonly string[]).includes(f),
+  );
+  expect(
+    uiSuites,
+    `Pagefind UI suites must not ship (the runtime never loads them): ${uiSuites.join(', ')}`,
+  ).toEqual([]);
 });
 
 test('build output: client island JS stays within core budget and ships no showcase chunks', () => {
@@ -77,6 +161,27 @@ test('build output: client island JS stays within core budget and ships no showc
       1,
     )}KB exceeds the ${SITE_BUDGET.totalJsKB}KB Site budget`,
   ).toBeTruthy();
+});
+
+test('build output: pages ship exactly two eager scripts — theme-init and the island client (#1552)', () => {
+  expect(existsSync(DIST), `Build output is missing: ${DIST}`).toBeTruthy();
+  // The #1552 retirement removed the vendored Prism runtime and its init
+  // fallback: highlighting compiles into the page HTML at build time, so the
+  // executable eager-script set must be exactly theme-init.js (sync, anti
+  // -flash) + client.js (the island loader). speculationrules / ld+json are
+  // data blocks, not executed scripts, and pagefind loads lazily on search.
+  const eagerScripts = /<script\b[^>]*\bsrc=(["'])(.*?)\1[^>]*>/g;
+  for (const page of [
+    join(DIST, 'index.html'),
+    join(DIST, 'zh', 'guide', 'getting-started', 'index.html'),
+    join(DIST, 'changelog', 'index.html'),
+  ]) {
+    expect(existsSync(page), `Page not built: ${page}`).toBeTruthy();
+    const html = readFileSync(page, 'utf8');
+    const srcs = [...html.matchAll(eagerScripts)].map((m) => m[2]!.split('/').pop());
+    expect(srcs.sort(), `eager scripts on ${page}`).toEqual(['client.js', 'theme-init.js']);
+    expect(html.includes('/assets/vendor/'), `vendored runtime scripts on ${page}`).toBeFalsy();
+  }
 });
 
 test('build output: the light-mode probe fixture stays out of the public Site (#1148)', () => {

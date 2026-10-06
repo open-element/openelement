@@ -217,8 +217,9 @@ test('getting-started leads with copyable commands', async () => {
   // @openelement/create at that tag), the same invariant the install-command
   // gate compares on (www/tools/generate-install-command.ts): runner and
   // flags are the docs' choice, package and tag are the CLI's — the retired
-  // Deno `npm:`-specifier spelling stays retired (ADR-0161).
-  expect(en.html).toContain('<pre><code class="language-bash">');
+  // Deno `npm:`-specifier spelling stays retired (ADR-0161). Since #1552 the
+  // fence is a build-time Shiki token block, not a plain pre>code shell.
+  expect(en.html).toContain('<pre class="shiki css-variables"');
   expect(en.html).toContain('@openelement@alpha');
 });
 

@@ -97,7 +97,7 @@ export const CONVENTION_PACKAGE_JSON = 'package.json';
 
 /** One structured `<script src>` descriptor accepted by `head.scripts`. */
 export interface OpenElementHeadScript {
-  /** Script URL: absolute, or site-root relative (`/prism-init.js`). */
+  /** Script URL: absolute, or site-root relative (`/theme-init.js`). */
   src: string;
   /** Emit `defer`; leave unset for a parser-blocking external script. */
   defer?: boolean;

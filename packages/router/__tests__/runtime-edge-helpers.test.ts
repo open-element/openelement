@@ -259,6 +259,7 @@ test('client-island postprocess handles a static page with no islands', async ()
         entry: '/client/islands/client.js',
         islands: {},
         shared: [],
+        styles: [],
       },
     });
     // #1471/S4b: no post-build script surgery — the document renderer

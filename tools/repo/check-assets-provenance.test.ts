@@ -199,7 +199,7 @@ test('asset provenance rejects total budget overruns', () => {
 test('asset provenance treats common asset extensions as media', () => {
   expect(isMediaPath('dragon-idle.mp4')).toEqual(true);
   expect(isMediaPath('dragon-frames/f00.webp')).toEqual(true);
-  expect(isMediaPath('vendor/prism/prism.min.js')).toEqual(false);
+  expect(isMediaPath('vendor/example-lib/example.min.js')).toEqual(false);
 });
 
 test('toHex renders lowercase hex', () => {

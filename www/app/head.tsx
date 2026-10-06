@@ -2,15 +2,8 @@
  * The official Site's structural document-head content (alpha.4).
  *
  * `app/head.tsx` is compiled into the Site's own module graph, so it may import
- * CSS by URL and the Site's own modules — which is exactly why the Prism theme
- * is an import here instead of a file read: the head module's output is a
- * build artifact, so it must not depend on host filesystem access.
- *
- * The import suffix is `?raw`, deliberately: `?inline` runs the stylesheet
- * through Vite's CSS pipeline, which rewrites the vendored Prism theme (drops
- * `background:0 0`, de-quotes the font stack, flattens `@media print`) — the
- * theme is a pinned third-party artifact (#1088) and must reach the document
- * byte-for-byte, so nothing between the file and `<style>` may transform it.
+ * CSS by URL and the Site's own modules — the head module's output is a build
+ * artifact with no host filesystem dependency at render time.
  *
  * Every entry is DATA, never markup: the framework validates attribute names
  * and URL protocols, escapes values, and serializes the tags. Entries are
@@ -25,8 +18,24 @@
  *   channel. Structured data does not need one: it goes through the page
  *   descriptor's `structuredData`, which the framework serializes (with `<`
  *   escaped) into its own application/ld+json element.
- * - The Prism theme CSS is inlined: it was a render-blocking stylesheet on a
- *   third-party origin (cdnjs) — a slow-network FCP stall and a SPOF.
+ *
+ * Font delivery (#1554): the site no longer vendors WOFF2 files. The faces
+ * come from the fontsource CDN (jsDelivr) at exact package versions — chosen
+ * over Google Fonts' service because fontsource ships the variable faces
+ * (Inter wght 100-900, JetBrains Mono wght 100-800), pins immutable URLs with
+ * one-year immutable cache headers, and allows SRI. SRI lives on the
+ * stylesheet links; the woff2 fetches themselves are CSS-initiated and have
+ * no integrity channel on the platform, so they are pinned by the immutable
+ * versioned URLs and the preloads are a cache warm-up, not a guarantee.
+ * The @font-face declarations now arrive from those stylesheets, which is
+ * why the family names below must match fontsource's ('Inter Variable',
+ * 'JetBrains Mono Variable', 'Instrument Serif' — see www/site-css.ts).
+ * Selection rationale and license roll-up: THIRD_PARTY_NOTICES.md.
+ *
+ * Code fences carry their build-time token colors in the page HTML itself
+ * (www/lib/markdown.ts), and the palette resolves through the document
+ * stylesheet (www/site-css.ts), so the head ships no highlighting style or
+ * script (issue #1552 retired the vendored Prism runtime).
  *
  * Site-wide head only (Beta.2.2, #1327): per-page meaning — title,
  * description, og:title/og:description/og:url, canonical, hreflang — is
@@ -36,18 +45,54 @@
  * would duplicate the page's own.
  */
 import { documentStyle } from '../site-css.ts';
-import prismThemeCss from '../public/assets/vendor/prism/prism.min.css?raw';
 
 /**
- * `crossorigin` needs an explicit value: the head serializer strips the bare
- * form, and a no-cors preload would fetch the font twice.
+ * Fontsource-on-jsDelivr delivery (#1554). `crossorigin` needs an explicit
+ * value: the head serializer strips the bare form, and a no-cors preload
+ * would fetch the font twice. Rotating a font version means rotating the
+ * version in every URL here AND the stylesheet integrity hashes together —
+ * the hashes have no second home. Exported for the drift guard
+ * (www/__tests__/font-delivery.test.ts): the asset manifest's remote font
+ * entries must pin the same versions.
  */
-const FONT_PRELOADS = [
-  '/assets/fonts/inter-latin-variable.woff2',
-  '/assets/fonts/jetbrains-mono-latin-variable.woff2',
+export const FONT_CDN_ORIGIN = 'https://cdn.jsdelivr.net';
+
+export const FONT_FACES = [
+  {
+    css: '/npm/@fontsource-variable/inter@5.3.0/wght.css',
+    integrity: 'sha384-ZTIcl2CmY0wyM9ANOhomBco7rEUIlWztf6lGcLKCocKUrIgGCsfisuZyE+hadW8K',
+  },
+  {
+    css: '/npm/@fontsource-variable/jetbrains-mono@5.3.0/wght.css',
+    integrity: 'sha384-bNykZ+bGB4FclZiYvLmgUfE8clWCvZlLOJ3v63czgIEgamTe0EhkaLXIbptJkvmW',
+  },
+  {
+    css: '/npm/@fontsource/instrument-serif@5.3.0/latin.css',
+    integrity: 'sha384-QxzOjJ0BfJl4xcH1dyDlc1L4BmSeA1Viw4hK2XOJPyOwj/ZH1fr32iEfrFlvn2z5',
+  },
+  {
+    css: '/npm/@fontsource/instrument-serif@5.3.0/latin-italic.css',
+    integrity: 'sha384-wPuiZqBDJVRGQmzwABa5N/ny86zIhFMnaqwVkvNkfXaxYcZlAfMdLSCQRYEnnJPA',
+  },
+] as const;
+
+/**
+ * The two text faces preloaded (#1088). The URLs must stay byte-identical to
+ * what the wght.css stylesheets above resolve to (their ./files/ siblings),
+ * or the preload is wasted and the swap lands after first paint. The latin
+ * subset is the one the site's prose renders; other subsets load on demand
+ * through unicode-range.
+ */
+export const FONT_PRELOADS = [
+  '/npm/@fontsource-variable/inter@5.3.0/files/inter-latin-wght-normal.woff2',
+  '/npm/@fontsource-variable/jetbrains-mono@5.3.0/files/jetbrains-mono-latin-wght-normal.woff2',
 ] as const;
 
 export default [
+  // The font CDN connection warms up first: every font link below (CORS
+  // preloads, integrity-checked stylesheets) rides the same origin, so one
+  // crossorigin preconnect covers them all.
+  { link: { rel: 'preconnect', href: FONT_CDN_ORIGIN, crossorigin: 'anonymous' } },
   { meta: { property: 'og:site_name', content: 'OpenElement' } },
   { meta: { property: 'og:type', content: 'website' } },
   { meta: { property: 'og:image', content: 'https://openelement.org/assets/og-image.jpg' } },
@@ -66,9 +111,17 @@ export default [
   ...FONT_PRELOADS.map((href) => ({
     link: {
       rel: 'preload',
-      href,
+      href: `${FONT_CDN_ORIGIN}${href}`,
       as: 'font',
       type: 'font/woff2',
+      crossorigin: 'anonymous',
+    },
+  })),
+  ...FONT_FACES.map((face) => ({
+    link: {
+      rel: 'stylesheet',
+      href: `${FONT_CDN_ORIGIN}${face.css}`,
+      integrity: face.integrity,
       crossorigin: 'anonymous',
     },
   })),
@@ -89,5 +142,4 @@ export default [
     },
   },
   { style: documentStyle },
-  { style: prismThemeCss },
 ];
