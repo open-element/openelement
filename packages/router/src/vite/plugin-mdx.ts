@@ -66,7 +66,7 @@ export function mdxPlugin(options: OpenMdxPluginOptions = {}): Plugin {
     async resolveId(id, importer) {
       if (!id.endsWith('.mdx')) return null;
       // Resolve to the real file first, then remap to a virtual .tsx module so
-      // the compiled-element transform (and esbuild's TS stripping) apply.
+      // the compiled-element transform (and oxc's TS stripping) apply.
       const resolved = await this.resolve(id, importer, { skipSelf: true });
       if (!resolved) return null;
       return `${VIRTUAL_PREFIX}${resolved.id}${VIRTUAL_SUFFIX}`;

@@ -1,7 +1,7 @@
 // openelement.config.ts — the framework options of the official Site.
 //
 // The Vite configuration owns only Vite concerns (base, resolve.alias, the
-// esbuild JSX transform); everything the framework reads lives here. The
+// oxc JSX transform); everything the framework reads lives here. The
 // plugin call in vite.config.ts is therefore plain `openElement()`.
 //
 // Two channels feed the document <head>:

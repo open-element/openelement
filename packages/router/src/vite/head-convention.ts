@@ -89,9 +89,11 @@ export async function resolveHeadConvention(input: HeadConventionInput): Promise
           output: { format: 'esm', entryFileNames: '[name].js' },
         },
       },
-      esbuild: {
-        jsx: 'automatic',
-        jsxImportSource: '@openelement/element',
+      oxc: {
+        jsx: {
+          runtime: 'automatic',
+          importSource: '@openelement/element',
+        },
       },
     });
   } catch (error) {

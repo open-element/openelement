@@ -473,12 +473,14 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     define: ELEMENT_RUNTIME_MESSAGES_DEFINE,
     // JSX automatic runtime must be configured in the internal
     // viteBuild() call — configFile:false means user's vite.config.ts is
-    // NOT read. Without this, esbuild defaults to classic React.createElement
-    // transform, producing {type, props, $$typeof} objects that OpenElement
-    // does not recognize (causes [object Object] rendering).
-    esbuild: {
-      jsx: 'automatic',
-      jsxImportSource: '@openelement/element',
+    // NOT read. Without this, the oxc transform falls back to the react
+    // jsx-runtime import, producing {type, props, $$typeof} objects that
+    // OpenElement does not recognize (causes [object Object] rendering).
+    oxc: {
+      jsx: {
+        runtime: 'automatic',
+        importSource: '@openelement/element',
+      },
     },
     build: {
       outDir: clientOutDir,

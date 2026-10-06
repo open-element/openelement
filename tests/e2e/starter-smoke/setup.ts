@@ -216,10 +216,7 @@ async function main(): Promise<void> {
   // workspace root. The repository's pnpm-workspace.yaml (membership globs,
   // minimumReleaseAge policy, allowBuilds allowlist, root lockfile) governs
   // THIS checkout, not a consumer project that merely sits inside it.
-  await writeFile(
-    join(appDir, 'pnpm-workspace.yaml'),
-    'packages: []\nallowBuilds:\n  esbuild: true\n',
-  );
+  await writeFile(join(appDir, 'pnpm-workspace.yaml'), 'packages: []\n');
 
   await runStep('pnpm', ['install'], { cwd: appDir });
   await runStep('pnpm', ['run', 'build'], { cwd: appDir });

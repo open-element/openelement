@@ -9,9 +9,11 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   base: '/',
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: '@openelement/element',
+  oxc: {
+    jsx: {
+      runtime: 'automatic',
+      importSource: '@openelement/element',
+    },
   },
   plugins: [
     ...openElement({

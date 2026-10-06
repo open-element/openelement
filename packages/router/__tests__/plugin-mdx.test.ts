@@ -124,9 +124,11 @@ test('mdxPlugin: Phase 3-style SSR viteBuild (configFile:false, noExternal) comp
       minify: false,
     },
     ssr: { noExternal: true },
-    esbuild: {
-      jsx: 'automatic',
-      jsxImportSource: '@openelement/element',
+    oxc: {
+      jsx: {
+        runtime: 'automatic',
+        importSource: '@openelement/element',
+      },
     },
     resolve: {
       alias: {

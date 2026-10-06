@@ -401,20 +401,18 @@ async function buildSSG(
       define: options.headExtras
         ? { __HEAD_EXTRAS__: JSON.stringify(options.headExtras) }
         : { __HEAD_EXTRAS__: '""' },
-      esbuild: {
+      oxc: {
         // JSX automatic runtime, same reason as build-client.ts.
         // SSG build also processes .tsx island files for SSR rendering.
-        jsx: 'automatic',
-        jsxImportSource: '@openelement/element',
-        tsconfigRaw: {
-          compilerOptions: {
-            useDefineForClassFields: false,
-          },
+        jsx: {
+          runtime: 'automatic',
+          importSource: '@openelement/element',
         },
       },
       plugins: [
         // MDX route support must mirror the outer plugin list (plugin.ts),
-        // otherwise .mdx routes fail Phase 3 parse (esbuild treats them as JS).
+        // otherwise .mdx routes fail Phase 3 parse (the oxc transform treats
+        // them as JS).
         // The routesDir keeps the compiled page tag aligned with the
         // path-derived registration tag the entry uses. The MDX transform
         // emits the compiled page module source, so it must run BEFORE the

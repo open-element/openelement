@@ -7,7 +7,8 @@
  * the workspace — a packed tarball installed by hand, a stray `npm install` of
  * local artifacts, a copied release tree. That copy silently wins module
  * resolution for anything that resolves through node_modules before the
- * workspace source (esbuild bundling of a `vite.config.ts`, for instance), so
+ * workspace source (the bundler's oxc lowering of a `vite.config.ts`, for
+ * instance), so
  * a run tests a build of the past while reporting on the working tree.
  *
  * The fix belongs here rather than in each config: the gate names the shadowed
