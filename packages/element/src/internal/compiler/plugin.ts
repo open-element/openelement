@@ -154,7 +154,7 @@ export interface CompiledElementPluginOptions {
    */
   staticSidecars?: readonly StaticSidecarDescriptor[];
   /**
-   * Activate the island style asset protocol (ADR-0164): island modules emit
+   * Activate the island style asset protocol: island modules emit
    * OE-controlled `.oe-style.css` resource requests instead of inlined
    * stylesheet bytes, and dynamic style composition fails closed (OEC9028).
    * Requires a host build plugin that intercepts the reserved suffix and
@@ -196,7 +196,7 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
           styleAssetProtocol: options.styleAssetProtocol,
         });
         if (!compiled) return null;
-        // ADR-0164: the generated request's CSS payload travels to the
+        // the generated request's CSS payload travels to the
         // intercepting host plugin through the style-request registry —
         // keyed by the id the bundler's resolver lands on for the emitted
         // import. The compiler never writes files; the host build owns the

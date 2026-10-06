@@ -309,7 +309,7 @@ export function buildClientAssetManifest(options: {
    */
   resolvedIslandModuleIds?: ReadonlyMap<string, string>;
   /**
-   * The style assets the client build emitted (ADR-0164) — the `.css` file
+   * The style assets the client build emitted — the `.css` file
    * names the style-asset plugin recorded, dist/client-relative. Mapped to
    * base-prefixed, sorted `styles` preload URLs; deduplicated (the emission
    * records are already unique per style request, but the join owns the

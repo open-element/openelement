@@ -73,7 +73,7 @@ export function createOpenPlugin(
   const plugins: Plugin[] = [
     mdxPlugin({ routesDir: state.resolvedOptions.routesDir }),
     corePlugin,
-    // ADR-0164: the dev half of the island style asset protocol — the
+    // the dev half of the island style asset protocol — the
     // compiled-element transform above activates the protocol, and this
     // plugin serves the sheet adapters (inline form; no emitted asset in dev).
     devStyleAssetPlugin(),

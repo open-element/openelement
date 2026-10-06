@@ -672,7 +672,7 @@ export interface AnalyzedModule {
   stylesNode?: ts.Expression;
   stylesTypeText?: string;
   /**
-   * The island style asset protocol outcome (ADR-0164): present only when the
+   * The island style asset protocol outcome: present only when the
    * module is an island, the host activated the protocol, and the authored
    * `static styles` admitted as statically provable — the generated module
    * imports this request instead of copying the initializer, and the compiled
@@ -688,7 +688,7 @@ export interface AnalyzedModule {
  * statement admission (OEC9008 fail-closed, island policy passthrough), the
  * exactly-one-`@element`-class rule with its decorator options and canonical
  * heritage provenance, and the {@link propertyFields} inventory. Under the
- * island style asset protocol (ADR-0164, `options.styleAssetProtocol`) island
+ * island style asset protocol island
  * modules additionally admit same-module style constants and must carry
  * statically provable `static styles` — dynamic composition fails closed with
  * OEC9028 instead of falling back to inlined sheet bytes.
@@ -724,7 +724,7 @@ export function analyzeCompiledModule(
       passthroughStatements.push(statement);
       continue;
     }
-    // ADR-0164 §4: same-module style constants are the one further runtime
+    // §4: same-module style constants are the one further runtime
     // statement the protocol's grammar admits, and only in island modules.
     // Their bytes are erased from the generated module (the emitted asset
     // carries them), so anything outside the style-constant shape keeps the
@@ -915,7 +915,7 @@ export function analyzeCompiledModule(
     fail,
   );
 
-  // ADR-0164 §4 (island style asset protocol): admission is static-only and
+  // §4 (island style asset protocol): admission is static-only and
   // fail-closed for islands. Non-island modules keep the legacy verbatim path
   // — explicitly outside the zero-inline guarantee. The style constants an
   // island module carries are erased from the generated module, so every

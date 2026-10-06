@@ -1,5 +1,5 @@
 /**
- * Static style admission for the island style asset protocol (ADR-0164 §4).
+ * Static style admission for the island style asset protocol.
  *
  * An island component's `static styles` ships as one OE-controlled
  * `.oe-style.css` resource request instead of template-literal bytes inside
@@ -12,7 +12,7 @@
  * stylesheet bytes back into the island chunk and void the zero-inline
  * guarantee the protocol exists for.
  *
- * `compiledStyle` is an authoring convention (the ADR-0143 helper shape), not
+ * `compiledStyle` is an authoring convention (the helper shape), not
  * a compiler intrinsic: admission is by the call-site spelling with exactly
  * one static string argument — the same contract-name admission `static
  * styles` itself uses. The marked call never evaluates in the generated
@@ -24,7 +24,7 @@ import ts from 'typescript';
 import { unwrapExpression } from './analyze-module.ts';
 import { type CompilerFail } from './compiler-diagnostics.ts';
 
-/** The call-site spelling that marks a sheet factory (ADR-0164 §4). */
+/** The call-site spelling that marks a sheet factory. */
 const STYLE_FACTORY_SPELLING = 'compiledStyle';
 
 /** Statically provable sheets: the admitted CSS texts in authored order. */
@@ -53,7 +53,7 @@ export interface StyleConstantDeclarations {
 
 /**
  * The one style-resource request an admitted island component generates
- * (ADR-0164 §2): a sibling module id with the reserved `.oe-style.css`
+ * a sibling module id with the reserved `.oe-style.css`
  * suffix, and the exact CSS the emitted asset must carry.
  */
 export interface CompiledStyleRequest {
@@ -174,7 +174,7 @@ export function admitStaticStyles(
 
 /**
  * Admit one top-level variable statement as same-module style constants
- * (ADR-0164 §4): a plain non-exported `const` whose every declaration binds
+ * a plain non-exported `const` whose every declaration binds
  * an identifier to a statically provable style initializer. Returns null when
  * the statement is not a style-const shape at all — the caller falls through
  * to the module grammar's standing OEC9008 — and never fails on its own.

@@ -12,7 +12,7 @@ import { compiledStyle } from '../components/page-styles.ts';
 
 export const openElement = defineIslandConfig({ hydrate: 'only', ssr: false, dsd: false });
 
-// Same-module style sheet (ADR-0164 §4): the compiler erases this const from
+// Same-module style sheet: the compiler erases this const from
 // the island module and emits its bytes as the component's `.oe-style.css`
 // asset. Cross-module sheet imports fail closed (OEC9028).
 const tickerStyles = [

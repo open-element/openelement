@@ -319,7 +319,7 @@ async function buildSSG(
   try {
     const { build: viteBuild } = await import('vite');
 
-    // ADR-0164: the registry bookkeeping is this build's lifetime; the SSR
+    // the registry bookkeeping is this build's lifetime; the SSR
     // build's own compiled-element transforms re-register every request the
     // island graph carries.
     clearStyleRequests();
@@ -428,7 +428,7 @@ async function buildSSG(
         // Keep SSR lowering identical to the outer Vite and client builds;
         // this inline build has its own plugin list. styleAssetProtocol: the
         // island modules here emit the same `.oe-style.css` requests the
-        // client build emitted (ADR-0164) — the SSR half of the protocol.
+        // client build emitted  — the SSR half of the protocol.
         compiledElementPlugin({
           // Linked workspace packages sit outside the project root; without the
           // workspace anchor their absolute ids would land in the source maps.
@@ -438,7 +438,7 @@ async function buildSSG(
           staticSidecars: [ISLAND_ADMISSION],
           styleAssetProtocol: true,
         }),
-        // ADR-0164: serves the server half of the style asset protocol — the
+        // serves the server half of the style asset protocol — the
         // sheet adapter embeds the bytes of the SAME emitted asset the client
         // build shipped (hash-checked against the Phase 2 record), so the DSD
         // text and the client sheet cannot drift.

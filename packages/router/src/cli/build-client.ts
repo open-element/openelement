@@ -280,7 +280,7 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
 };
 
 async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetManifest | null> {
-  // ADR-0164: the style-request registry's bookkeeping is this build's
+  // the style-request registry's bookkeeping is this build's
   // lifetime — the SSR build clears and re-registers through its own
   // transforms, and a stale entry from an earlier build in this process must
   // never answer a request this build's graph did not produce.
@@ -473,7 +473,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   const clientOutDir = resolve(root, outDir, 'client');
   const clientBase = ctx.phase3.base || '/';
 
-  // ADR-0164: this build owns the island style asset protocol's `.css`
+  // this build owns the island style asset protocol's `.css`
   // artifacts. The emission records feed the manifest's `styles` field and
   // the Phase 3 SSR read.
   const styleAssetRecords = new Map<string, StyleAssetRecord>();
@@ -626,8 +626,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       // its own plugin list and must use the same transform exactly once.
       // styleAssetProtocol: the router build is the only host that can
       // produce island modules (defineIslandConfig admission rides its
-      // injected sidecar descriptor), so it always activates — the ADR-0164
-      // transition ends here, not behind an option.
+      // injected sidecar descriptor), so it always activates — the transition ends here, not behind an option.
       compiledElementPlugin({
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
@@ -637,7 +636,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         staticSidecars: [ISLAND_ADMISSION],
         styleAssetProtocol: true,
       }),
-      // ADR-0164: intercepts the compiler's `.oe-style.css` requests before
+      // intercepts the compiler's `.oe-style.css` requests before
       // vite's CSS plugin, emits the real `.css` assets, and hands the sheet
       // adapters back to the module graph.
       clientStyleAssetPlugin(styleAssetRecords),
@@ -773,7 +772,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       resolvedIslandModuleIds: islandModuleIds,
       styleFileNames: [...styleAssetRecords.values()].map((record) => record.fileName),
     });
-    // ADR-0164: the emission records cross to Phase 3 here — the SSR build
+    // the emission records cross to Phase 3 here — the SSR build
     // reads the same emitted assets (hash-checked) for the DSD text.
     ctx.styleAssets = styleAssetRecords;
 

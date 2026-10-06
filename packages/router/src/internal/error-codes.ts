@@ -151,7 +151,7 @@ export const ClientBuildErrorCode = {
   ELEMENT_RUNTIME_CHUNK_MISSING: 'OE_CLIENT_BUILD_ELEMENT_RUNTIME_CHUNK_MISSING',
   /**
    * A `.oe-style.css` style-resource request resolved in the client or SSR
-   * build with no entry in the compiler's style-request registry (ADR-0164).
+   * build with no entry in the compiler's style-request registry.
    * Either the intercepting plugin answered before the compiled-element
    * transform registered the payload (an internal ordering bug) or a
    * hand-written import targets the reserved suffix — both defects; the build

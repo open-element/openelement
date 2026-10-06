@@ -192,7 +192,7 @@ export class OpenElementBuildContext {
   clientAssetManifest: ClientAssetManifest | null = null;
 
   /**
-   * Phase 2 output (ADR-0164): the client build's style-asset emissions —
+   * Phase 2 output: the client build's style-asset emissions —
    * the style-request registry key of each intercepted `.oe-style.css`
    * request, mapped to the emitted asset's file name (dist/client-relative)
    * and content hash. Phase 3's SSR build reads the SAME emitted assets

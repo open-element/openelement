@@ -47,14 +47,14 @@ export function createCompilerHooks(
         const result = compileElementModule(
           code,
           stableModuleId(id, state.viteRoot, state.workspaceRoot),
-          // ADR-0164: dev activates the protocol so authored islands (whose
+          // dev activates the protocol so authored islands (whose
           // same-module style constants the legacy grammar rejects with
           // OEC9008) compile identically to the production builds; the dev
           // style-asset plugin (open:style-assets-dev) serves the adapters.
           { staticSidecars: [ISLAND_ADMISSION], styleAssetProtocol: true },
         );
         if (!result) return null;
-        // ADR-0164: the compiled-element transform is the style-request
+        // the compiled-element transform is the style-request
         // registry's one writer — this hook is that transform's dev host
         // binding (element's compiledElementPlugin is the build binding),
         // so the registration travels with it; the dev plugin's intercept
@@ -95,7 +95,7 @@ export function createCompilerHooks(
         const result = compileElementModule(
           source,
           stableModuleId(hmr.file, state.viteRoot, state.workspaceRoot),
-          // Same activation as the transform (ADR-0164): dev islands compile
+          // Same activation as the transform: dev islands compile
           // under the protocol's grammar.
           { staticSidecars: [ISLAND_ADMISSION], styleAssetProtocol: true },
         );
@@ -103,7 +103,7 @@ export function createCompilerHooks(
           compiledProgramShapes.delete(hmr.file);
           return;
         }
-        // ADR-0164: a sheet edit changes the style request's payload, not the
+        // a sheet edit changes the style request's payload, not the
         // Part Program shape — the adapter module's content would go stale in
         // the dev module graph. Full reload re-fetches everything fresh; the
         // registry is re-registered by the transform that follows.

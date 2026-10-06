@@ -270,7 +270,7 @@ function removeAllChildren(parent: Node): void {
  * range between its anchors, or the owning root's children (the marked static
  * style node is preserved through the rebuild so the retried scan still
  * claims from rootOffset=1; it is removed only after the recovered claim
- * attaches — ADR-0164 §5 "recovery completed"). Nothing outside the compiled
+ * attaches — §5 "recovery completed"). Nothing outside the compiled
  * location identity is searched or touched.
  */
 export function recoverClaimOwner(error: PartProgramClaimError, ctx: MountContext): boolean {

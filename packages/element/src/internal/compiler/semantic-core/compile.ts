@@ -52,7 +52,7 @@ export interface CompileElementResult {
   program: PartProgramV1;
   /**
    * The island style asset protocol's request when this module's `static
-   * styles` admitted as statically provable (ADR-0164): the reserved-suffix
+   * styles` admitted as statically provable: the reserved-suffix
    * sibling specifier the generated module imports, plus the exact CSS the
    * intercepting build must emit. Undefined on the legacy path.
    */
@@ -67,7 +67,7 @@ export interface CompileElementResult {
  * `options.staticSidecars` admits host-declared sidecar policy statements
  * (e.g. an island delivery descriptor); the default core admits none.
  * `options.styleAssetProtocol` activates the island style asset protocol
- * (ADR-0164): island modules emit `.oe-style.css` resource requests instead
+ * island modules emit `.oe-style.css` resource requests instead
  * of inlined stylesheet bytes, and require a host build plugin that
  * intercepts the reserved suffix — without one the build fails at import
  * resolution, never silently inlines.

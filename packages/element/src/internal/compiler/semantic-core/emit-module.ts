@@ -232,7 +232,7 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
     if (rewritten !== null) pushVerbatim(rewritten, statement);
   }
   if (styleRequest !== undefined && stylesNode !== undefined) {
-    // The island style asset protocol's request channel (ADR-0164): a sibling
+    // The island style asset protocol's request channel : a sibling
     // module id with the reserved `.oe-style.css` suffix. The host build's
     // style-asset plugin intercepts the request (enforce 'pre', before vite's
     // CSS plugin) and hands back a sheet adapter module; the generated module
@@ -396,7 +396,7 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
   }
   if (stylesText !== undefined && stylesNode !== undefined) {
     if (styleRequest !== undefined) {
-      // Reference shape (ADR-0164 §4): the statically admitted initializer is
+      // Reference shape : the statically admitted initializer is
       // replaced by the imported sheet adapter — one request per component,
       // the admitted sheets joined in authored order. The authored annotation
       // is preserved verbatim (the consumer:packaged gate requires it).

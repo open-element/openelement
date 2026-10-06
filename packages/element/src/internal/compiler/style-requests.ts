@@ -1,7 +1,7 @@
 /**
- * Style-resource request payload channel (ADR-0164).
+ * Style-resource request payload channel.
  *
- * The compiler never writes files (three-owner seam split, ADR-0164 §1): an
+ * The compiler never writes files (three-owner seam split, §1): an
  * admitted island `static styles` becomes an import of a reserved-suffix
  * sibling id (`./<tag>.oe-style.css`), and the host build's style-asset plugin
  * intercepts that request and owns the emitted `.css` artifact. This registry
