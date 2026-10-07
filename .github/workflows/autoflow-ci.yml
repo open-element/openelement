@@ -122,9 +122,12 @@ jobs:
         run: vp run --fail-if-no-match @openelement/fixture-web-component-interop#test
 
   # ── Job 4: Pack & Consumer Verification ────────────────────────────────
+  # 25 minutes: the starter smoke alone runs pack, scaffold, install, SSG
+  # build and the bfcache probe — a shared runner needs the wider ceiling
+  # (measured: two consecutive runs timed out at exactly 15).
   pack:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
