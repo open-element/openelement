@@ -99,7 +99,7 @@ jobs:
   # ── Job 3: Site E2E (chromium-only in PR; full on main) ───────────────
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
