@@ -18,12 +18,12 @@ import { expect, test } from 'vitest';
 import { readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
+import { compileElementProgram } from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
 import {
   type EmittedModuleDiagnostic,
   typeCheckEmittedModule,
-} from '../src/internal/compiler/semantic-core/type-check.ts';
-import { typeCheckEmittedModule as typeCheckFromSubpath } from '../src/compiler.ts';
+} from '../../../packages/compiler/src/internal/compiler/semantic-core/type-check.ts';
+import { typeCheckEmittedModule as typeCheckFromSubpath } from '../../../packages/compiler/src/compiler.ts';
 import { readPackage } from '../../../tools/lib/package-graph.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
@@ -128,6 +128,19 @@ test('#1386: the emitted module type-checks across the authoring grammar', () =>
         '}',
       ].join('\n'),
     ],
+    [
+      // #1556: the inline conditional class synthesizes its computed field and
+      // — because this module never imports computed — its own import binding.
+      'inline conditional class + synthesized computed import',
+      [
+        "import { element, OpenElement, property } from '@openelement/element';",
+        "@element('oe-check-conditional-class')",
+        'export class CheckConditionalClass extends OpenElement {',
+        '  @property({ type: Boolean, reflect: false }) flag = false;',
+        "  render() { return <main class={this.flag ? 'on' : 'off'}>x</main>; }",
+        '}',
+      ].join('\n'),
+    ],
   ];
   for (const [name, source] of sources) {
     const diagnostics = emittedDiagnostics(source, `/project/app/islands/${name}.tsx`);
@@ -189,7 +202,8 @@ test('#1386: the check is reachable from the /compiler subpath a consumer import
 });
 
 test('#1386: the Vite plugin gates a build on the emitted module when asked', async () => {
-  const { compiledElementPlugin } = await import('../src/internal/compiler/plugin.ts');
+  const { compiledElementPlugin } =
+    await import('../../../packages/compiler/src/internal/compiler/plugin.ts');
   const source = [
     "import { element, OpenElement, property } from '@openelement/element';",
     "@element('oe-check-plugin-gate')",

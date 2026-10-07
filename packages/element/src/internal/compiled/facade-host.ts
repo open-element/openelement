@@ -18,7 +18,7 @@ import type {
   CompiledPropertyMetadata,
   PartProgram,
   ProgramPart,
-} from '../protocol/part-program.ts';
+} from '@openelement/protocol/part-program';
 import type { CompiledElementKernel } from './runtime/kernel.ts';
 import { signal } from '../signal/index.ts';
 import type { WritableSignal } from '../signal/types.ts';

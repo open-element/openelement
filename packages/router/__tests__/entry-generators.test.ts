@@ -283,6 +283,79 @@ test('#1416: the lit renderer entry imports no element entry at all', () => {
   expect(importLines(code).some((line) => line.includes('@openelement/element'))).toEqual(false);
 });
 
+// #1548: the regions axis. The entry carries the when/each Region builders
+// unless the island regions scan proved no island module lowers one — the
+// codegen only translates that proof into the subpath choice.
+
+test('#1548: includeRegionsRuntime:false picks the no-regions entry for a hydrating page', () => {
+  const code = generateClientEntry(
+    [{ tagName: 'x-counter', modulePath: './counter.ts', strategy: 'idle', ssr: true, dsd: true }],
+    { includeRegionsRuntime: false },
+  );
+  expect(
+    importLines(code).some((line) => line.includes("from '@openelement/element/no-regions'")),
+    'the claim stays (the page hydrates) while the Region builders drop',
+  ).toBeTruthy();
+  expect(importLines(code).some((line) => line.endsWith("from '@openelement/element';"))).toEqual(
+    false,
+  );
+  expect(importLines(code).some((line) => line.includes('client-only'))).toEqual(false);
+  assertEntrySyntax(code);
+});
+
+test('#1548: includeRegionsRuntime:false picks the base entry for a client-only page', () => {
+  const code = generateClientEntry(
+    [
+      {
+        tagName: 'x-only',
+        modulePath: './only.ts',
+        strategy: 'only',
+        ssr: false,
+        dsd: false,
+      },
+    ],
+    { includeRegionsRuntime: false },
+  );
+  expect(
+    importLines(code).some((line) => line.includes("from '@openelement/element/base'")),
+    'neither claim nor regions on a page that can hydrate nothing and use no Regions',
+  ).toBeTruthy();
+  expect(importLines(code).some((line) => line.includes('client-only'))).toEqual(false);
+  expect(importLines(code).some((line) => line.includes('no-regions'))).toEqual(false);
+  assertEntrySyntax(code);
+});
+
+test('#1548: the regions default keeps the full entry (conservative)', () => {
+  // No option = the scan did not run or proved nothing: the default entry
+  // stands, exactly like the #1416 claim default.
+  const code = generateClientEntry([
+    { tagName: 'x-counter', modulePath: './counter.ts', strategy: 'idle' },
+  ]);
+  expect(importLines(code).some((line) => line.endsWith("from '@openelement/element';"))).toBe(
+    true,
+  );
+  expect(importLines(code).some((line) => line.includes('no-regions'))).toBe(false);
+  expect(importLines(code).some((line) => line.includes('/base'))).toBe(false);
+});
+
+test('#1548: includeRegionsRuntime:true is explicit and equivalent to the default', () => {
+  const code = generateClientEntry(
+    [{ tagName: 'x-counter', modulePath: './counter.ts', strategy: 'idle' }],
+    { includeRegionsRuntime: true },
+  );
+  expect(importLines(code).some((line) => line.endsWith("from '@openelement/element';"))).toBe(
+    true,
+  );
+});
+
+test('#1548: the lit renderer ignores the regions axis (no element entry either way)', () => {
+  const code = generateClientEntry(
+    [{ tagName: 'x-lit', modulePath: './lit.ts', strategy: 'idle' }],
+    { renderer: 'lit', includeRegionsRuntime: false },
+  );
+  expect(importLines(code).some((line) => line.includes('@openelement/element'))).toEqual(false);
+});
+
 test('legacy eager/lazy strategies are not emitted by v0.21 runtime', () => {
   const code = generateClientEntry([
     { tagName: 'x-load', modulePath: './load.ts', strategy: 'load' },

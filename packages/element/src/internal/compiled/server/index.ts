@@ -20,7 +20,7 @@ import {
   type ProgramTreeNode,
   type ProgramWhenPart,
   STATIC_STYLES_MARKER,
-} from '../../protocol/part-program.ts';
+} from '@openelement/protocol/part-program';
 import {
   assertCompiledProgram,
   attributeNameIsSafe,
@@ -36,14 +36,14 @@ import { formatError } from '../../core/errors.ts';
 import type { RuntimeProgramIR } from '../runtime-program.ts';
 // The single error dialect (#1386 item 3): every failure in this module is an
 // OpenElementError carrying a code from the catalogue.
-import { frameworkError, ProgramErrorCode } from '../../protocol/errors.ts';
+import { frameworkError, ProgramErrorCode } from '@openelement/protocol/errors';
 // Streamed-frame admission policy (canonical lists live in the protocol
 // module): the deferred executor must refuse any pending Region whose
 // serialized frame the browser installer is contractually required to reject.
 import {
   STREAM_FRAME_FORBIDDEN_TAGS,
   unsafeStreamFrameAttribute,
-} from '../../protocol/stream-frame-policy.ts';
+} from '@openelement/protocol/stream-frame-policy';
 // Canonical attribute-escape contract (issue #1220, L1): the server output is
 // the wire truth for claim parity, so both serializers share this one
 // implementation (escapes & < > " ').
@@ -93,7 +93,7 @@ export interface CompiledNestedElement {
 // the DSD template (renderDsd parity): never-upgrading hosts (pages)
 // need their styles in the SSR payload. The claim path skips exactly this
 // marked element; the client style scope still adopts the live sheets.
-export { STATIC_STYLES_MARKER } from '../../protocol/part-program.ts';
+export { STATIC_STYLES_MARKER } from '@openelement/protocol/part-program';
 
 export interface CompiledServerOptions {
   /** Root ownership mode. Shadow modes become a native DSD template. */

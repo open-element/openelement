@@ -11,10 +11,10 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
 import type { Plugin, ResolvedConfig } from 'vite';
-import type { FrameworkOptions } from './internal/protocol/framework.ts';
-import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
-import type { ClientAssetManifest } from './internal/protocol/client-assets.ts';
-import { serializeClientAssetsModule } from './internal/protocol/client-assets.ts';
+import type { FrameworkOptions } from './framework.ts';
+import type { SsgBehaviorOptions } from '@openelement/protocol/ssg';
+import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
+import { serializeClientAssetsModule } from '@openelement/protocol/client-assets';
 import type { OpenElementBuildContext } from './build-context.ts';
 import { join } from 'pathe';
 import { createLogger } from '@openelement/element';

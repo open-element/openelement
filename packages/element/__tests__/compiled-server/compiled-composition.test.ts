@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { renderDsd } from '../../src/public-runtime.ts';
 import { trustedHtml } from '../../src/internal/core/security.ts';
-import type { PartProgram } from '../../src/internal/protocol/part-program.ts';
+import type { PartProgram } from '@openelement/protocol/part-program';
 import { testProgram } from '../compiled-runtime/test-program.ts';
 
 function compiledClass(program: PartProgram): CustomElementConstructor {

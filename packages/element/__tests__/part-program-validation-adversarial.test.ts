@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
-import { validatePartProgram } from '../src/internal/protocol/part-program.ts';
+import { compileElementProgram } from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
+import { validatePartProgram } from '@openelement/protocol/part-program';
 import { normalizePartProgram } from '../src/internal/compiled/runtime-program.ts';
 
 /** The validator surface under test (one canonical module since ADR-0148 unification). */

@@ -17,9 +17,9 @@
 import { readdir, rm } from 'node:fs/promises';
 import process from 'node:process';
 import { join } from 'pathe';
-import type { ComponentLayer, HydrationStrategy } from '../protocol/framework.ts';
-import type { ClientAssetManifest } from '../protocol/client-assets.ts';
-import type { IslandDecl } from '../protocol/ssg.ts';
+import type { ComponentLayer, HydrationStrategy } from '../../framework.ts';
+import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
+import type { IslandDecl } from '@openelement/protocol/ssg';
 import { createLogger } from '@openelement/element';
 import { buildError, ClientAssetErrorCode } from '../../../internal/error-codes.ts';
 import type { PageIslandManifest } from './island-manifest.ts';

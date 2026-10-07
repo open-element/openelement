@@ -1,5 +1,5 @@
 /** Middleware and API route server-entry emission. */
-import type { ApiRouteDecl, CorsOriginConfig, MiddlewareDecl } from '../protocol/ssg.ts';
+import type { ApiRouteDecl, CorsOriginConfig, MiddlewareDecl } from '@openelement/protocol/ssg';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
 function renderCorsOrigin(origin: CorsOriginConfig): string {
@@ -29,11 +29,11 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
 
   switch (mw.kind) {
     case 'requestId':
-      lines.push("app.use('*', requestId())");
+      lines.push("app.use('*', __requestId())");
       break;
 
     case 'logger':
-      lines.push("app.use('*', honoLogger())");
+      lines.push("app.use('*', __logger())");
       break;
 
     case 'cors': {
@@ -47,16 +47,16 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
       }
       if (corsOriginModule !== undefined) {
         // Module form: the entry imports the user's origin callback module and
-        // passes its default export to cors() — referenced, never serialized.
+        // passes its default export to the CORS middleware — referenced, never serialized.
         lines.push(
           `import * as __cors_origin_module from ${quoteGeneratedJavaScriptValue(
             corsOriginModule,
           )};`,
         );
-        lines.push(`app.use('*', cors({ origin: __cors_origin_module.default, ${CORS_ALLOW} }))`);
+        lines.push(`app.use('*', __cors({ origin: __cors_origin_module.default, ${CORS_ALLOW} }))`);
       } else if (corsOrigin !== undefined) {
         const originStr = renderCorsOrigin(corsOrigin);
-        lines.push(`app.use('*', cors({ origin: ${originStr}, ${CORS_ALLOW} }))`);
+        lines.push(`app.use('*', __cors({ origin: ${originStr}, ${CORS_ALLOW} }))`);
       } else {
         // #1411: the advisory is a production concern, so the dev server
         // (warnOnDefaultCors: false) generates the same handler silently.
@@ -69,7 +69,7 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
               'cross-origin access.',
           );
         }
-        lines.push("app.use('*', cors({ origin: (origin) => {");
+        lines.push("app.use('*', __cors({ origin: (origin) => {");
         lines.push(
           '  if (origin && /^https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/.test(origin)) return origin',
         );
@@ -81,7 +81,7 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
     }
 
     case 'securityHeaders':
-      lines.push("app.use('*', secureHeaders())");
+      lines.push("app.use('*', __secureHeaders())");
       break;
 
     case 'csp': {
@@ -99,10 +99,11 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
           lines.push(`// CSP with auto-nonce: nonce creation and policy instantiation come from`);
           lines.push(`// @openelement/router/server-runtime; the template below`);
           lines.push(`// is generated data derived from middleware.csp.`);
-          lines.push(`// hono/ssg prerender passes bind no nonce: static bytes cannot be`);
+          lines.push(`// The prerender passes bind no nonce: static bytes cannot be`);
           lines.push(`// per-request, so the prerendered output serializes nonce-free and`);
           lines.push(`// the SSG CSP injector's policy-only meta remains the static shape.`);
-          lines.push(`app.use('*', async (c, next) => {`);
+          lines.push(`app.use('*', async (request, next) => {`);
+          lines.push(`  const c = __requestScope(request)`);
           lines.push(`  const nonce = __ssgPrerenderPass(c.env) ? undefined : __cspCreateNonce()`);
           lines.push(
             `  const policy = nonce ? __cspApplyNonce(${quoteGeneratedJavaScriptValue(
@@ -110,15 +111,19 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
             )}, nonce) : undefined`,
           );
           lines.push(`  if (nonce) c.set('cspNonce', nonce)`);
-          lines.push(`  await next()`);
-          lines.push(`  if (policy) c.header('${headerName}', policy)`);
+          lines.push(`  const response = await next()`);
+          lines.push(`  if (policy) response.headers.set('${headerName}', policy)`);
+          lines.push(`  return response`);
           lines.push(`})`);
         } else {
-          lines.push(`app.use('*', async (c, next) => {`);
-          lines.push(`  await next()`);
+          lines.push(`app.use('*', async (request, next) => {`);
+          lines.push(`  const response = await next()`);
           lines.push(
-            `  c.header('${headerName}', ${quoteGeneratedJavaScriptValue(cspConfig.policy ?? '')})`,
+            `  response.headers.set('${headerName}', ${quoteGeneratedJavaScriptValue(
+              cspConfig.policy ?? '',
+            )})`,
           );
+          lines.push(`  return response`);
           lines.push(`})`);
         }
       }
@@ -132,7 +137,7 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
 /**
  * Render an API route. Two authoring forms (api.md):
  * - a function `(ctx) => Response` receiving `{ request, params, env, platform }`
- *   (mounted with app.all — every method reaches the function), or
+ *   (mounted on the WinterCG app — every method reaches the function), or
  * - method-keyed WinterCG handlers (`{ GET: (request, context) => Response, ... }`,
  *   the HttpRouteRecord shape from @openelement/router/http), joined into the
  *   shared route middleware with 405/Allow semantics.
@@ -141,9 +146,9 @@ export function renderApiRoute(lines: string[], route: ApiRouteDecl): void {
   const pathLiteral = quoteGeneratedJavaScriptValue(route.path);
   lines.push(`// API: ${route.path} (${route.filePath})`);
   lines.push(`if (typeof ${route.varName}.default === 'function') {`);
-  lines.push(`  app.all(${pathLiteral}, async (c) => {`);
+  lines.push(`  app.all(${pathLiteral}, async (request, c) => {`);
   lines.push(`    return await ${route.varName}.default({`);
-  lines.push(`      request: c.req.raw,`);
+  lines.push(`      request,`);
   lines.push(`      params: c.req.param() || {},`);
   lines.push(`      env: c.env || {},`);
   lines.push(
@@ -155,7 +160,7 @@ export function renderApiRoute(lines: string[], route: ApiRouteDecl): void {
     `} else if (${route.varName}.default && typeof ${route.varName}.default.fetch === 'function') {`,
   );
   lines.push(
-    `  throw new Error('API route ' + ${pathLiteral} + ' must not default-export a Hono app (dialect form removed); default-export method-keyed WinterCG handlers or a function (ctx) => Response')`,
+    `  throw new Error('API route ' + ${pathLiteral} + ' must not default-export a framework app (dialect form removed); default-export method-keyed WinterCG handlers or a function (ctx) => Response')`,
   );
   lines.push(
     `} else if (${route.varName}.default && typeof ${route.varName}.default === 'object') {`,

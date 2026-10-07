@@ -8,9 +8,9 @@
  * wrapping (copy button; the token highlighting is already in the fence HTML
  * from the build-time markdown pipeline).
  *
- * `articleContentStyles(scope)` emits the prose stylesheet scoped to the
- * caller's container class — blog keeps '.blog-content', guide-article uses
- * '.article-content' with its own additions on top.
+ * The prose sheets themselves ship as .css files (#1558): blog-content.css
+ * and article-content.css carry the typography scoped to each container
+ * class.
  */
 
 import { readingChromeStrings } from './chrome-strings.ts';
@@ -306,54 +306,4 @@ export function prepareArticle(
     '<open-code-block>$1</open-code-block>',
   );
   return { html: withCodeBlocks, outline };
-}
-
-/** Prose typography shared by blog and guide article bodies. */
-export function articleContentStyles(scope: string): string {
-  return `
-    ${scope} { font-family: var(--font-sans); font-size: var(--text-base); line-height: 1.8; color: var(--color-muted-foreground); }
-    ${scope} h2, ${scope} h3 { scroll-margin-top: calc(var(--nav-height) + calc(var(--spacing) * 4)); }
-    ${scope} h2 { margin-top: calc(var(--spacing) * 10); color: var(--color-foreground); font-family: var(--font-sans); font-size: var(--text-4xl); font-weight: var(--font-weight-extrabold); letter-spacing: -0.02em; text-wrap: balance; }
-    ${scope} h3 { margin-top: calc(var(--spacing) * 8); color: var(--color-foreground); font-family: var(--font-sans); font-size: var(--text-xl); font-weight: var(--font-weight-extrabold); text-wrap: balance; }
-    /* Line-art diagrams (locale-free, static): ink from currentColor, one
-       brand accent carried by the markup itself. */
-    ${scope} figure.diagram { margin: calc(var(--spacing) * 6) 0; color: var(--color-muted-foreground); }
-    ${scope} figure.diagram svg { display: block; height: 120px; width: auto; }
-    ${scope} .heading-anchor { margin-inline-start: calc(var(--spacing) * 2); color: var(--color-muted-foreground); font-weight: var(--font-weight-normal); text-decoration: none; opacity: 0; }
-    ${scope} .heading-anchor::after { content: "#"; }
-    ${scope} h2:hover .heading-anchor, ${scope} h3:hover .heading-anchor, ${scope} .heading-anchor:focus-visible { opacity: 1; color: var(--color-primary); }
-    ${scope} p { margin: calc(var(--spacing) * 4) 0; }
-    /* list-style-type is re-declared on purpose: the preset bundle's base
-       layer (Tailwind preflight, since C4 enabled it — #1507) resets lists to
-       none, and this unlayered sheet must win the markers back for prose. */
-    ${scope} ul, ${scope} ol { padding-left: calc(var(--spacing) * 6); margin: calc(var(--spacing) * 4) 0; }
-    ${scope} ul { list-style-type: disc; }
-    ${scope} ol { list-style-type: decimal; }
-    ${scope} li { margin: 0.375rem 0; }
-    ${scope} strong { color: var(--color-foreground); }
-    ${scope} code { background: var(--color-muted); color: var(--color-foreground); padding: 0.125rem 0.375rem; border-radius: var(--radius-md); font-size: var(--text-sm); font-family: var(--font-mono); }
-    ${scope} pre { background: var(--surface-code); border: 0.5px solid var(--color-border); border-radius: var(--radius-lg); padding: calc(var(--spacing) * 4); overflow-x: auto; margin: calc(var(--spacing) * 4) 0; }
-    ${scope} pre code { background: none; color: var(--surface-code-foreground); padding: 0; font-size: var(--text-sm); line-height: 1.6; }
-    /* Fenced blocks compile to Shiki token spans at generation time; token
-       colors resolve through the --shiki-* palette table (site-css.ts), so
-       this sheet only owns the surface, the border and the plain-fence ink. */
-    ${scope} open-code-block { margin: calc(var(--spacing) * 5) 0; }
-    /* Tables carry their own scroll container: a comparison table's min-content
-       (706px on /architecture/comparison) exceeds the reading column below
-       ~1280px, and at 390px it pushed the document to 722px. overflow is
-       ignored on a display:table box, so the table becomes a block that
-       scrolls only when its content actually needs the room — desktop output
-       is byte-identical. */
-    ${scope} table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: calc(var(--spacing) * 4) 0; font-size: var(--text-base); }
-    ${scope} th, ${scope} td { padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3); text-align: left; border-bottom: 0.5px solid var(--color-border); }
-    ${scope} th { background: var(--color-muted); color: var(--color-muted-foreground); font-weight: var(--font-weight-semibold); font-size: var(--font-size-overline); text-transform: uppercase; letter-spacing: var(--tracking-normal); }
-    ${scope} a { color: var(--color-primary); text-decoration: underline; text-underline-offset: var(--underline-offset); text-decoration-color: color-mix(in srgb, var(--color-primary) 34%, transparent); }
-    ${scope} a:hover { text-decoration-thickness: calc(var(--spacing) * 0.25); }
-    /* Keyboard focus indicator on the ring role — the sheet is unlayered, so
-       it wins over the preset bundle's base layer like every rule here. */
-    ${scope} a:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
-    ${scope} hr { border: none; border-top: 0.5px solid var(--color-border); margin: calc(var(--spacing) * 8) 0; }
-    ${scope} blockquote { margin: calc(var(--spacing) * 8) 0; padding: calc(var(--spacing) * 6) calc(var(--spacing) * 4); border: 0; border-block: 1.5px solid color-mix(in srgb, var(--color-ring) 55%, transparent); color: var(--color-primary); font-family: var(--font-serif); font-style: italic; font-size: clamp(1.5rem, 3vw, 2.2rem); line-height: 1.35; text-align: center; }
-    ${scope} blockquote p { margin: 0; }
-  `;
 }

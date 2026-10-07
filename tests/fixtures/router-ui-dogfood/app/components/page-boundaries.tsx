@@ -3,9 +3,11 @@
  * side (#1226): @openelement/ui primitives are shadow-open (observable
  * shadowRoot), while the consumer-authored dogfood-light and dogfood-closed
  * elements prove the other two root modes through the same compiled path.
+ * The ui primitive here is open-button (#1557 retired open-badge to a CSS
+ * recipe; the boundary evidence keeps a retained interactive component).
  */
 import { element, OpenElement } from '@openelement/element';
-import '@openelement/ui/open-badge';
+import '@openelement/ui/open-button';
 import './boundary-closed.tsx';
 import './boundary-light.tsx';
 
@@ -15,7 +17,7 @@ export default class BoundariesPage extends OpenElement {
     return (
       <main>
         <h1>ui dogfood — boundaries</h1>
-        <open-badge id='open-boundary' tone='brand'>open shadow boundary</open-badge>
+        <open-button id='open-boundary' variant='primary'>open shadow boundary</open-button>
         <dogfood-light></dogfood-light>
         <dogfood-closed></dogfood-closed>
       </main>

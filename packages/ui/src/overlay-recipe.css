@@ -1,0 +1,19 @@
+/* authored from HEAD extraction — replace with design pass */
+/* Structural overlay recipe shared by open-dialog and open-dropdown: the
+ * classes their markup renders (trigger + popover overlay/content). Layout
+ * skeleton only — replace with the design pass. */
+.trigger {
+  display: inline-flex;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.overlay.content {
+  position: fixed;
+  inset: auto;
+}

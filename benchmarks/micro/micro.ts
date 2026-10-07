@@ -36,7 +36,11 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFile = promisify(execFileCallback);
-import { compileElementProgram } from '../../packages/element/src/internal/compiler/semantic-core/compile.ts';
+import { compileElementProgram } from '../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
+// #1548: the Region builders reach the runtime through the regions seam — a
+// graph installs them exactly like an element entry does. The keyed-table
+// benchmark renders each-Regions, so this graph installs.
+import '../../packages/element/src/internal/compiled/runtime/regions-install.ts';
 import {
   claimExistingDom,
   createFreshDom,

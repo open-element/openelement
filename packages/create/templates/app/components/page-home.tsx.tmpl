@@ -4,7 +4,7 @@
  *
  * Compiled page: the render() below is lowered to a Part Program
  * at build time. The page uses a light root and owns its rules via
- * `static styles` (./page-styles.ts): the server inlines them into the SSR
+ * `static styles` (the imported .css sheets): the server inlines them into the SSR
  * output as a @scope(index-page) <style data-oe-static-styles> block, so the
  * page is styled with zero client JS. The two island hosts (<my-counter>,
  * <live-timer>) are static custom-element hosts that the generated server
@@ -15,11 +15,13 @@
  * modules under app/islands/).
  */
 import { element, OpenElement } from '@openelement/element';
-import { homePageStyles } from './page-styles.ts';
+import homePageStyles from './page-home.css';
+import badgeStyles from './badges.css';
+import siteChromeStyles from './site-chrome.css';
 
 @element('index-page', { root: 'light' })
 export default class HomePage extends OpenElement {
-  static override styles = homePageStyles;
+  static override styles = [homePageStyles, badgeStyles, siteChromeStyles];
 
   render() {
     // Single root element: the compiled grammar lowers one root per render.

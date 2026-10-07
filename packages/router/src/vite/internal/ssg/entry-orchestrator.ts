@@ -4,14 +4,15 @@
  * Top-level composition axis of the entry-* family (#901): renderEntry()
  * composes the codegen fragments (entry-codegen.ts), the serialized runtime
  * data + the createGeneratedApp factory call, and the SSG section
- * (entry-render-ssg.ts) into the complete virtual Hono entry module.
+ * (entry-render-ssg.ts) into the complete virtual server entry module.
  *
- * Pure function: routes + options -> Hono entry virtual module code.
+ * Pure function: routes + options -> server entry virtual module code.
  *
  * The generated entry's final form (#1470 block e) is
  * imports + route descriptor data + one createGeneratedApp(...) factory call
- * plus per-route wiring. The assembly logic — the Hono app and its WinterCG
- * bridge, the composed handler exports, the client-script plumbing, the SSR
+ * plus per-route wiring. The assembly logic — the internal WinterCG
+ * composition layer (#1560: middleware chain, API mounts, 404 terminal), the
+ * composed handler exports, the client-script plumbing, the SSR
  * registry guard, the dispatch table, and the page-render bindings — is the
  * imported server-runtime factory (server-runtime/app.ts); the entry keeps
  * only route wiring: it imports route modules, emits the per-route
@@ -19,9 +20,10 @@
  * re-exports the factory results under the consumer contract names.
  *
  * Architecture notes:
- * - API routes mount either as (ctx) => Response functions (app.all) or as
- *   method-keyed WinterCG handler records joined into the shared route
- *   middleware below (405/Allow semantics from @openelement/router/http).
+ * - API routes mount either as (ctx) => Response functions (app.all on the
+ *   WinterCG app) or as method-keyed WinterCG handler records joined into
+ *   the shared route middleware below (405/Allow semantics from
+ *   @openelement/router/http).
  * - Island upgrade is handled by the client entry (built by Vite in Phase 2).
  *   No inline script in SSG HTML; the client entry is a Vite-built module
  *   referenced via <script type="module" src="..."> and imports island modules
@@ -41,7 +43,7 @@
  * and pass it directly to `renderEntry()`.
  */
 
-import type { EntryDescriptor } from '../protocol/ssg.ts';
+import type { EntryDescriptor } from '@openelement/protocol/ssg';
 import { validateIslandModuleSpecifier } from './entry-generators.ts';
 import { renderActionRoute, renderPageRoute } from './entry-codegen.ts';
 import { renderNotFoundRoute } from './entry-not-found-codegen.ts';
@@ -226,16 +228,17 @@ export function renderEntry(desc: EntryDescriptor): string {
 
   // --- Generated-app assembly (#1470 block e) ---
   // One factory call owns what the entry template used to emit as assembly
-  // code: the Hono app + WinterCG bridge, the composed openElementHandler
+  // code: the WinterCG app, the composed openElementHandler
   // exports, the island client-script plumbing, the SSR registry guard, the
   // page handler/dispatch tables, the body-limit middleware, and the
   // page-render runtime bindings. The entry passes its serialized build data
   // and its Element imports; dangerous keys and the body-limit budget are
   // NOT passed — the factory imports the canonical policy values from the
   // kernel-free /authoring leaf, so the entry carries no serialized copy.
-  lines.push('// Generated-app assembly: the factory owns the Hono app,');
-  lines.push('// its bridge, the handler exports, the SSR registry guard, and the');
-  lines.push('// page-render bindings; the entry keeps the route wiring below.');
+  lines.push('// Generated-app assembly: the factory owns the WinterCG app,');
+  lines.push('// the request-scope accessor, the handler exports, the SSR registry');
+  lines.push('// guard, and the page-render bindings; the entry keeps the route');
+  lines.push('// wiring below.');
   // Nav data is not part of the 1.0 surface: the app-shell layout props keep
   // their contract with empty defaults. Locales, by contrast, are a project
   // declaration (`openElement({ i18n })`) — the entry carries them so
@@ -303,14 +306,10 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push('  getDefaultLocale: __getDefaultLocale,');
   lines.push('} = __app;');
   lines.push('');
-  // The internal composition bridge (never user-visible): the WinterCG route
-  // middleware from @openelement/router/http is the dialect-free public
-  // contract, while the generated handlers below keep their internal Hono
-  // dialect. The per-request Hono context is bridged by request identity —
-  // one WeakMap entry per dispatch, no cross-request leakage.
-  lines.push(
-    'const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = __app.hono;',
-  );
+  // The internal request scope (never user-visible): the generated handlers
+  // bind the per-request scope by request identity — one scope per dispatch,
+  // no cross-request leakage (#1560).
+  lines.push('const { requestScope: __requestScope } = __app;');
   lines.push('');
   lines.push('export const __setRequestTimeClientScript = __app.setRequestTimeClientScript;');
   lines.push('');
@@ -409,13 +408,14 @@ export function renderEntry(desc: EntryDescriptor): string {
 
   // --- Middleware scopes: _middleware.ts files ---
   // Authors export the dialect-free WinterCG shape (request, next) =>
-  // Promise<Response>; the entry adapts it into the Hono chain in place.
+  // Promise<Response>; the app speaks the same shape, so the default
+  // registers directly (#1560).
   for (const mwScope of desc.middlewareScopes) {
     lines.push(`// Middleware scope: ${mwScope.scope} (${mwScope.importPath})`);
     lines.push(
       `app.use(${quoteGeneratedJavaScriptValue(
         mwScope.scope === '/' ? '/*' : `${mwScope.scope}/*`,
-      )}, (c, next) => ${mwScope.varName}.default(c.req.raw, async () => { await next(); return c.res; }))`,
+      )}, ${mwScope.varName}.default)`,
     );
     lines.push('');
   }
@@ -459,9 +459,11 @@ export function renderEntry(desc: EntryDescriptor): string {
     );
   }
   lines.push(`], { methodNotAllowed: __methodNotAllowed });`);
-  lines.push(
-    `app.all('*', (c, next) => { __honoContexts.set(c.req.raw, c); return __routeMiddleware(c.req.raw, async () => { await next(); return c.res; }); });`,
-  );
+  // The route middleware IS the WinterCG shape: it registers as the app's
+  // route layer (after the fn-form mounts, before the notFound terminal)
+  // and falls through (next) when nothing matches, so the styled-404
+  // terminal below answers (#1560).
+  lines.push(`app.route(__routeMiddleware);`);
   lines.push('');
 
   // --- Styled 404 (#923): unmatched paths render the /404 page ---
@@ -472,13 +474,14 @@ export function renderEntry(desc: EntryDescriptor): string {
 
   // --- Exports: the consumer contract names are the factory results ---
   lines.push('// Handler contract: the factory composed the fetch-middleware onion');
-  lines.push('// (#858) around app.fetch — every runtime (dev server, start CLI, e2e');
-  lines.push('// fixture server, Nitro production entry) shares one composed handler.');
+  lines.push('// (#858) around the WinterCG dispatch — every runtime (dev server,');
+  lines.push('// start CLI, e2e fixture server, Nitro production entry) shares one');
+  lines.push('// composed handler.');
   lines.push('export const openElementHandler = __app.handler;');
   if (desc.fetchMiddleware?.length) {
     lines.push('');
     // The dev server (@hono/vite-dev-server) reads this named export instead of
-    // the default Hono app when middleware.use is configured (see plugin.ts).
+    // the default app when middleware.use is configured (see plugin.ts).
     lines.push('export const openElementDevFetch = __app.devFetch;');
   }
   lines.push('');

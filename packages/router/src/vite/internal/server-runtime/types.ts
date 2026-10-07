@@ -3,7 +3,7 @@
  * request-time server logic lives in typecheckable TS modules, never
  * accretes inside codegen template strings.
  *
- * These modules execute inside the generated Hono entry in every runtime —
+ * These modules execute inside the generated server entry in every runtime —
  * the Vite dev server, the SSG prerender bundle, and the Nitro production
  * bundle (Node and Workers) — so they depend only on WinterCG globals
  * (Request/Response/Headers/crypto) and on no build-tool or Node API.

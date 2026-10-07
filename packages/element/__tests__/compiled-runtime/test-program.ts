@@ -16,7 +16,7 @@ import {
   type ProgramEventAction,
   type RootMode,
   validatePartProgram,
-} from '../../src/internal/protocol/part-program.ts';
+} from '@openelement/protocol/part-program';
 
 export interface TestNodeSpec {
   k: 'el' | 'text' | 'part' | 'ival';

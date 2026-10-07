@@ -1,37 +1,37 @@
 /**
- * Island style asset protocol — compiler-side static style admission and
- * style-resource request generation (ADR-0164 §4, #1553 compiler lane).
+ * Sheet-import admission (#1558) — the one style authoring form.
  *
- * Behavior-first coverage for the compiler half of the protocol:
- *   - the four statically provable shapes (bare template literal,
- *     compiledStyle()-marked call, static array, same-module constant) emit
- *     the reserved-suffix `.oe-style.css` resource request and the static
- *     styles reference shape
- *   - dynamic composition fails closed with OEC9028 and a migration hint —
- *     never a silent inline fallback
- *   - the legacy verbatim path is unchanged where the protocol says it stays:
- *     protocol off, and non-island modules with the protocol on
- *   - same-module style constants are erased from the generated module; a
- *     reference outside the styles channels fails closed
- *   - the style-request registry hands the request's CSS to the intercepting
- *     host build under the module id its resolver lands on (the consumer form
+ * Behavior-first coverage for the compiler half of the style seam:
+ *   - a compiled module's sheets come from relative `.css` default imports,
+ *     arrayed in `static styles` in authored order; the imports and the
+ *     initializer are copied verbatim and the compile result carries the
+ *     edges for the intercepting host build
+ *   - every inline sheet shape (string, factory call, foreign binding)
+ *     fails closed with OEC9029 and a migration hint — never a silent
+ *     inline path
+ *   - the `.css` import shape itself is policed: side-effect and named
+ *     forms have no binding for the class to adopt; bare package specifiers
+ *     do not resolve inside the authoring tree
+ *   - the style-edge registry hands each edge to the intercepting host
+ *     build under the module id its resolver lands on (the consumer form
  *     the router's style-asset plugin reads — seams.md "CSS import
  *     compatibility" row)
  */
 
-import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import { beforeEach, describe, expect, test } from 'vitest';
 import {
   CompiledElementError,
   compileElementProgram,
-} from '../src/internal/compiler/semantic-core/compile.ts';
-import type { StaticSidecarDescriptor } from '../src/internal/compiler/semantic-core/module-analysis.ts';
-import { compiledElementPlugin } from '../src/internal/compiler/plugin.ts';
+} from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
+import type { StaticSidecarDescriptor } from '../../../packages/compiler/src/internal/compiler/semantic-core/module-analysis.ts';
+import { compiledElementPlugin } from '../../../packages/compiler/src/internal/compiler/plugin.ts';
 import {
   clearStyleRequests,
   getStyleRequest,
+  hasStyleImporter,
+  styleRequestFile,
   styleRequestModuleId,
-} from '../src/internal/compiler/style-requests.ts';
+} from '../../../packages/compiler/src/internal/compiler/style-requests.ts';
 
 /**
  * The island sidecar descriptor the router injects (mirrored — element tests
@@ -44,327 +44,240 @@ const ISLAND_SIDECAR: StaticSidecarDescriptor = {
   kind: 'static-sidecar',
 };
 
-const PROTOCOL_ON = { staticSidecars: [ISLAND_SIDECAR], styleAssetProtocol: true } as const;
+const OPTIONS = { staticSidecars: [ISLAND_SIDECAR] } as const;
 
-/**
- * An island module whose `static styles` initializer is the given text.
- * `topLevel` rides between the island policy and the class; `members` land
- * inside the class body after the styles member.
- */
-function islandSource(
-  styles: string,
-  { topLevel = [], members = [] }: { topLevel?: string[]; members?: string[] } = {},
+/** An authored module importing the given `.css` specifiers as `sheet<i>`. */
+function authoredSource(
+  specifiers: string[],
+  stylesExpression: string,
+  { island = true }: { island?: boolean } = {},
 ): string {
   return [
-    "import { element, OpenElement, type StyleSheetLike } from '@openelement/element';",
-    "import { defineIslandConfig } from '@openelement/router';",
-    "import { compiledStyle } from './site-ui/compiled-style.ts';",
-    'export const openElement = defineIslandConfig({ hydrate: "idle" });',
-    ...topLevel,
-    "@element('oe-admit')",
-    'export class StyleAdmit extends OpenElement {',
-    `  ${styles}`,
-    ...members,
+    "import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';",
+    ...(island ? ["import { defineIslandConfig } from '@openelement/router';"] : []),
+    ...specifiers.map((specifier, index) => `import sheet${index} from '${specifier}';`),
+    ...(island ? ['export const openElement = defineIslandConfig({ hydrate: "load" });'] : []),
+    "@element('oe-sheet-import', { root: 'shadow-open' })",
+    'export class SheetImportElement extends OpenElement {',
+    `  static override styles: StyleSheetLike[] = ${stylesExpression};`,
+    "  @property({ reflect: false }) label = '';",
     '  render() {',
-    '    return <main>hello</main>;',
+    '    return <main>{this.label}</main>;',
     '  }',
     '}',
   ].join('\n');
 }
 
-function compileWithProtocol(source: string) {
-  return compileElementProgram(source, '/project/app/islands/admit.tsx', PROTOCOL_ON);
-}
+/** A plain class without sheet imports (the no-styles control). */
+const NO_STYLES_SOURCE = [
+  "import { element, OpenElement, property } from '@openelement/element';",
+  "@element('oe-no-styles')",
+  'export class NoStyles extends OpenElement {',
+  "  @property({ reflect: false }) label = '';",
+  '  render() {',
+  '    return <main>{this.label}</main>;',
+  '  }',
+  '}',
+].join('\n');
 
-/** Compile expecting the fail-closed diagnostic; return the structured error. */
-function compileFailing(source: string, options = PROTOCOL_ON): CompiledElementError {
+const compile = (source: string): ReturnType<typeof compileElementProgram> =>
+  compileElementProgram(source, '/proj/app/islands/x.tsx', OPTIONS);
+
+const failWith = (source: string): string => {
   try {
-    compileElementProgram(source, '/project/app/islands/admit.tsx', options);
+    compile(source);
   } catch (error) {
-    if (error instanceof CompiledElementError) return error;
+    if (error instanceof CompiledElementError) {
+      const diagnostic = error.diagnostics[0]!;
+      expect(diagnostic.code).toEqual('OEC9029');
+      return diagnostic.message;
+    }
     throw error;
   }
-  throw new Error('expected the compile to fail closed with a CompiledElementError');
-}
+  throw new Error('expected the compile to fail closed with OEC9029');
+};
 
-/** The transform hook bound to a harness context (the vite container's shape). */
-function transformHook(options: Parameters<typeof compiledElementPlugin>[0]) {
-  const plugin = compiledElementPlugin(options);
-  const transform = plugin.transform as unknown as (
-    this: { error(message: string): never },
-    code: string,
-    id: string,
-  ) => string | null;
-  const context = {
-    error(message: string): never {
-      throw new Error(message);
-    },
-  };
-  return (code: string, id: string): string | null => transform.call(context, code, id);
-}
+const transformOf = (): ((code: string, id: string) => unknown) => {
+  const plugin = compiledElementPlugin(OPTIONS);
+  const transform = plugin.transform as (this: unknown, code: string, id: string) => unknown;
+  return (code: string, id: string): unknown => transform.call({}, code, id);
+};
 
 beforeEach(() => {
   clearStyleRequests();
 });
 
-describe('island style asset protocol — admission matrix (ADR-0164 §4)', () => {
-  test('a bare template literal emits the reserved-suffix request and the reference shape', () => {
-    const { code, styleRequest } = compileWithProtocol(
-      islandSource('static override styles = `:host { display: block; }`;'),
-    );
-    expect(code).toContain("import __oeStyle from './oe-admit.oe-style.css';");
-    expect(code).toContain('static override styles = [__oeStyle];');
-    // The inlined sheet text is gone from the generated module.
-    expect(code).not.toContain('display: block;');
-    expect(styleRequest).toEqual({
-      tag: 'oe-admit',
-      specifier: './oe-admit.oe-style.css',
-      css: ':host { display: block; }',
-    });
+describe('the admitted form', () => {
+  test('a .css default import arrays verbatim and carries the edge', () => {
+    const result = compile(authoredSource(['./sheet-import.css'], '[sheet0]'));
+    // The generated module keeps the authored import and initializer
+    // verbatim — no synthesized request sibling, no sheet bytes.
+    expect(result.code).toContain("import sheet0 from './sheet-import.css';");
+    expect(result.code).toContain('static override styles: StyleSheetLike[] = [sheet0];');
+    expect(result.code).not.toContain('oe-style');
+    expect(result.styleRequests).toEqual(['./sheet-import.css']);
   });
 
-  test('compiledStyle() over a template literal and a string literal is admitted in order', () => {
-    const { styleRequest } = compileWithProtocol(
-      islandSource(
-        'static override styles = [compiledStyle(`a { color: red; }`), compiledStyle("b { color: blue; }")];',
-      ),
-    );
-    expect(styleRequest?.css).toBe('a { color: red; }\nb { color: blue; }');
-    expect(styleRequest?.specifier).toBe('./oe-admit.oe-style.css');
+  test('several sheets keep the authored array order', () => {
+    const result = compile(authoredSource(['./b.css', './a.css'], '[sheet0, sheet1]'));
+    expect(result.styleRequests).toEqual(['./b.css', './a.css']);
+    expect(result.code).toContain('static override styles: StyleSheetLike[] = [sheet0, sheet1];');
   });
 
-  test('the authored annotation is preserved on the reference shape', () => {
-    const { code } = compileWithProtocol(
-      islandSource('static override styles: StyleSheetLike[] = [compiledStyle(`:host {}`)];'),
+  test('island-ness is irrelevant: page modules track their edges identically', () => {
+    const result = compileElementProgram(
+      authoredSource(['./page.css'], '[sheet0]', { island: false }),
+      '/proj/app/components/page.tsx',
+      OPTIONS,
     );
-    expect(code).toContain('static override styles: StyleSheetLike[] = [__oeStyle];');
+    expect(result.styleRequests).toEqual(['./page.css']);
   });
 
-  test('same-module style constants are admitted and erased from the generated module', () => {
-    const { code, styleRequest } = compileWithProtocol(
-      islandSource('static override styles = [SHEET];', {
-        topLevel: ['const RAW = `:host { color: red; }`;', 'const SHEET = compiledStyle(RAW);'],
-      }),
-    );
-    // The constants' bytes ride the emitted asset, not the generated module.
-    expect(code).not.toContain('color: red;');
-    expect(code).not.toContain('const RAW');
-    expect(code).not.toContain('const SHEET');
-    expect(code).toContain('static override styles = [__oeStyle];');
-    expect(styleRequest?.css).toBe(':host { color: red; }');
-  });
-
-  test('style constants compose: a const of an array of admitted sheets', () => {
-    const { styleRequest } = compileWithProtocol(
-      islandSource('static override styles = INNER;', {
-        topLevel: [
-          'const BASE = `:host { color: red; }`;',
-          'const INNER = [compiledStyle(BASE), compiledStyle(`a { color: blue; }`)];',
-        ],
-      }),
-    );
-    expect(styleRequest?.css).toBe(':host { color: red; }\na { color: blue; }');
-  });
-
-  test('emission is deterministic: byte-identical code, map and request across runs', () => {
-    const source = islandSource(
-      'static override styles = [compiledStyle(`:host { color: red; }`)];',
-    );
-    const first = compileWithProtocol(source);
-    const second = compileWithProtocol(source);
-    expect(first.code).toBe(second.code);
-    expect(first.styleRequest).toEqual(second.styleRequest);
-    expect(first.map.mappings).toBe(second.map.mappings);
-  });
-
-  test('the request import and the reference line map to the authored styles initializer', () => {
-    const source = islandSource(
-      'static override styles = [compiledStyle(`:host { color: red; }`)];',
-    );
-    const { code, map } = compileWithProtocol(source);
-    const trace = new TraceMap(map);
-    const generatedLines = code.split('\n');
-    const importLine = generatedLines.findIndex((line) => line.includes('.oe-style.css'));
-    const referenceLine = generatedLines.findIndex((line) => line.includes('[__oeStyle];'));
-    expect(importLine).toBeGreaterThan(-1);
-    expect(referenceLine).toBeGreaterThan(-1);
-    const authoredLine =
-      source
-        .split('\n')
-        .findIndex((line) => line.trimStart().startsWith('static override styles')) + 1;
-    // The import line's segment sits at column 0; the reference line's at the
-    // derived value's start (after the head, at the '[' of [__oeStyle]).
-    const referenceColumn = generatedLines[referenceLine]!.indexOf('[');
-    const resolvedImport = originalPositionFor(trace, { line: importLine + 1, column: 0 });
-    const resolvedReference = originalPositionFor(trace, {
-      line: referenceLine + 1,
-      column: referenceColumn,
-    });
-    expect(resolvedImport.line).toBe(authoredLine);
-    expect(resolvedReference.line).toBe(authoredLine);
+  test('an empty styles array carries no edges', () => {
+    const result = compile(authoredSource([], '[]'));
+    expect(result.styleRequests).toBeUndefined();
   });
 });
 
-describe('island style asset protocol — dynamic composition fails closed', () => {
-  test('interpolated template literal', () => {
-    const error = compileFailing(
-      islandSource('static override styles = [compiledStyle(`a { inset: ${1 + 1}px; }`)];'),
+describe('inline sheet shapes fail closed (OEC9029)', () => {
+  test('a real inline template is refused with the migration hint', () => {
+    const message = failWith(
+      [
+        "import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';",
+        "@element('oe-sheet-import')",
+        'export class X extends OpenElement {',
+        '  static override styles: StyleSheetLike[] = [`:host { display: block; }`];',
+        "  @property({ reflect: false }) label = '';",
+        '  render() {',
+        '    return <main>{this.label}</main>;',
+        '  }',
+        '}',
+      ].join('\n'),
     );
-    expect(error.diagnostics[0]?.code).toBe('OEC9028');
-    expect(error.diagnostics[0]?.message).toContain('statically provable');
-    expect(error.diagnostics[0]?.message).toContain('compiledStyle()');
+    expect(message).toContain('.css file imports');
   });
 
-  test('a foreign sheet factory is not the marked convention', () => {
-    const error = compileFailing(
-      islandSource('static override styles = [recipe(`:host { color: red; }`)];', {
-        topLevel: ["import { recipe } from './recipes.ts';"],
-      }),
+  test('a factory call initializer (the retired compiledStyle convention)', () => {
+    failWith(
+      [
+        "import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';",
+        "import { compiledStyle } from './compiled-style.ts';",
+        "@element('oe-sheet-import')",
+        'export class X extends OpenElement {',
+        '  static override styles: StyleSheetLike[] = [compiledStyle(`:host{}`)];',
+        "  @property({ reflect: false }) label = '';",
+        '  render() {',
+        '    return <main>{this.label}</main>;',
+        '  }',
+        '}',
+      ].join('\n'),
     );
-    expect(error.diagnostics[0]?.code).toBe('OEC9028');
-    expect(error.diagnostics[0]?.message).toContain('recipe');
   });
 
-  test('runtime concatenation of a constant with a literal', () => {
-    const error = compileFailing(
-      islandSource('static override styles = [compiledStyle(BASE + `a { color: red; }`)];', {
-        topLevel: ['const BASE = `:host { color: red; }`;'],
-      }),
+  test('a bare identifier that is not a .css import', () => {
+    failWith(
+      [
+        "import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';",
+        "import { styles } from './styles.ts';",
+        "@element('oe-sheet-import')",
+        'export class X extends OpenElement {',
+        '  static override styles: StyleSheetLike[] = styles;',
+        "  @property({ reflect: false }) label = '';",
+        '  render() {',
+        '    return <main>{this.label}</main>;',
+        '  }',
+        '}',
+      ].join('\n'),
     );
-    expect(error.diagnostics[0]?.code).toBe('OEC9028');
   });
 
-  test('a cross-module constant is not statically provable', () => {
-    const error = compileFailing(
-      islandSource('static override styles = SHEET;', {
-        topLevel: ["import { SHEET } from './sheet.ts';"],
-      }),
-    );
-    expect(error.diagnostics[0]?.code).toBe('OEC9028');
-    expect(error.diagnostics[0]?.message).toContain('same-module style constant');
+  test('a spread in the styles array', () => {
+    failWith(authoredSource(['./a.css'], '[...sheets]'));
   });
 
-  test('spread in the styles array', () => {
-    const error = compileFailing(
-      islandSource('static override styles = [...SHEETS];', {
-        topLevel: ["import { SHEETS } from './sheet.ts';"],
-      }),
+  test('an imported sheet never referenced by static styles', () => {
+    failWith(
+      [
+        "import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';",
+        "import sheet0 from './a.css';",
+        "@element('oe-sheet-import')",
+        'export class X extends OpenElement {',
+        '  static override styles: StyleSheetLike[] = [];',
+        "  @property({ reflect: false }) label = '';",
+        '  render() {',
+        '    return <main>{this.label}</main>;',
+        '  }',
+        '}',
+      ].join('\n'),
     );
-    expect(error.diagnostics[0]?.code).toBe('OEC9028');
-  });
-
-  test('@import cannot ride a constructable sheet', () => {
-    const error = compileFailing(
-      islandSource('static override styles = [`@import url("./other.css");`];'),
-    );
-    expect(error.diagnostics[0]?.code).toBe('OEC9028');
-    expect(error.diagnostics[0]?.message).toContain('@import');
-  });
-
-  test('a style constant referenced outside static styles fails closed', () => {
-    const error = compileFailing(
-      islandSource('static override styles = [compiledStyle(RAW)];', {
-        topLevel: ['const RAW = `:host { color: red; }`;'],
-        members: ['  ping(): void { void RAW; }'],
-      }),
-    );
-    expect(error.diagnostics[0]?.code).toBe('OEC9028');
-    expect(error.diagnostics[0]?.message).toContain('referenced outside static styles');
-  });
-});
-
-describe('island style asset protocol — explicit legacy scope (ADR-0164 §4)', () => {
-  test('protocol off: island modules keep the verbatim path, byte for byte', () => {
-    const source = islandSource(
-      'static override styles = [compiledStyle(`:host { color: red; }`)];',
-    );
-    const { code, styleRequest } = compileElementProgram(source, '/project/app/islands/admit.tsx', {
-      staticSidecars: [ISLAND_SIDECAR],
-    });
-    expect(code).toContain('static override styles = [compiledStyle(`:host { color: red; }`)];');
-    expect(code).not.toContain('.oe-style.css');
-    expect(styleRequest).toBeUndefined();
-  });
-
-  test('protocol on, non-island module: the legacy verbatim path stays', () => {
-    const source = [
-      "import { element, OpenElement } from '@openelement/element';",
-      "import { compiledStyle } from './site-ui/compiled-style.ts';",
-      "@element('oe-legacy')",
-      'export class Legacy extends OpenElement {',
-      '  static override styles = [compiledStyle(`:host { color: red; }`)];',
-      '  render() {',
-      '    return <main>hello</main>;',
-      '  }',
-      '}',
-    ].join('\n');
-    const { code, styleRequest } = compileWithProtocol(source);
-    expect(code).toContain('static override styles = [compiledStyle(`:host { color: red; }`)];');
-    expect(code).not.toContain('.oe-style.css');
-    expect(styleRequest).toBeUndefined();
-  });
-
-  test('a non-style const stays outside the compiled grammar (OEC9008, unchanged)', () => {
-    const error = compileFailing(
-      islandSource('static override styles = [compiledStyle(`:host { color: red; }`)];', {
-        topLevel: ['const version = 3;'],
-      }),
-    );
-    expect(error.diagnostics[0]?.code).toBe('OEC9008');
   });
 });
 
-describe('style-request payload registry — the intercepting build reads the request here', () => {
-  // The request id stems from the component tag (the specifier's file name),
-  // not the importing module's file name.
-  const REQUEST_ID = '/project/app/islands/oe-admit.oe-style.css';
-
-  test('the plugin registers the request under the resolver-landed module id', () => {
-    const transform = transformHook({
-      staticSidecars: [ISLAND_SIDECAR],
-      styleAssetProtocol: true,
-    });
-    const emitted = transform(
-      islandSource('static override styles = [compiledStyle(`:host { color: red; }`)];'),
-      '/project/app/islands/admit.tsx',
+describe('the .css import shape itself', () => {
+  test('a side-effect .css import has no binding to adopt', () => {
+    const message = failWith(
+      [
+        "import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';",
+        "import './side-effect.css';",
+        "@element('oe-sheet-import')",
+        'export class X extends OpenElement {',
+        '  static override styles: StyleSheetLike[] = [];',
+        "  @property({ reflect: false }) label = '';",
+        '  render() {',
+        '    return <main>{this.label}</main>;',
+        '  }',
+        '}',
+      ].join('\n'),
     );
-    expect(emitted).toContain("import __oeStyle from './oe-admit.oe-style.css';");
-    expect(getStyleRequest(REQUEST_ID)).toEqual({
-      tag: 'oe-admit',
-      specifier: './oe-admit.oe-style.css',
-      css: ':host { color: red; }',
-      moduleId: REQUEST_ID,
-      importer: '/project/app/islands/admit.tsx',
-    });
+    expect(message).toContain('must bind its sheet');
+  });
+
+  test('a bare package .css specifier is refused', () => {
+    failWith(authoredSource(['@openelement/ui/sheet.css'], '[sheet0]'));
+  });
+});
+
+describe('the style-edge registry (the intercept channel)', () => {
+  test('the plugin registers the edge under the resolver-landed module id', () => {
+    const transform = transformOf();
+    const importer = '/proj/app/islands/sheet-import.tsx';
+    transform(authoredSource(['./sheet-import.css'], '[sheet0]'), importer);
+    const key = styleRequestModuleId(importer, './sheet-import.css');
+    const request = getStyleRequest(key);
+    expect(request).toBeDefined();
+    expect(request?.specifier).toEqual('./sheet-import.css');
+    expect(request?.importer).toEqual(importer);
+    expect(request?.file).toEqual(styleRequestFile(importer, './sheet-import.css'));
+    expect(request?.file.endsWith('/app/islands/sheet-import.css')).toEqual(true);
+    expect(hasStyleImporter(importer)).toEqual(true);
   });
 
   test('a query-carrying importer id re-registers under one key', () => {
+    const transform = transformOf();
+    const source = authoredSource(['./sheet-import.css'], '[sheet0]');
+    const importer = '/proj/app/islands/sheet-import.tsx';
+    const key = styleRequestModuleId(importer, './sheet-import.css');
+    transform(source, importer);
+    transform(source, `${importer}?t=123`);
+    expect(getStyleRequest(key)?.importer).toEqual(`${importer}?t=123`);
+  });
+
+  test('a non-style module registers nothing', () => {
+    const transform = transformOf();
+    transform(NO_STYLES_SOURCE, '/proj/app/islands/no-styles.tsx');
+    expect(hasStyleImporter('/proj/app/islands/no-styles.tsx')).toEqual(false);
     expect(
-      styleRequestModuleId('/project/app/islands/admit.tsx?v=2', './oe-admit.oe-style.css'),
-    ).toBe(REQUEST_ID);
+      getStyleRequest(styleRequestModuleId('/proj/app/islands/no-styles.tsx', './x.css')),
+    ).toBeUndefined();
   });
 
-  test('an unknown id carries no request, and clearing empties the registry', () => {
-    const transform = transformHook({
-      staticSidecars: [ISLAND_SIDECAR],
-      styleAssetProtocol: true,
-    });
-    transform(
-      islandSource('static override styles = [compiledStyle(`:host {}`)];'),
-      '/project/app/islands/admit.tsx',
-    );
-    expect(getStyleRequest(REQUEST_ID)).toBeDefined();
-    expect(getStyleRequest('/project/app/islands/other.oe-style.css')).toBeUndefined();
+  test('clearing empties the registry', () => {
+    const transform = transformOf();
+    const importer = '/proj/app/islands/x.tsx';
+    transform(authoredSource(['./x.css'], '[sheet0]'), importer);
+    expect(getStyleRequest(styleRequestModuleId(importer, './x.css'))).toBeDefined();
     clearStyleRequests();
-    expect(getStyleRequest(REQUEST_ID)).toBeUndefined();
-  });
-
-  test('protocol off: the plugin registers nothing', () => {
-    const transform = transformHook({ staticSidecars: [ISLAND_SIDECAR] });
-    transform(
-      islandSource('static override styles = [compiledStyle(`:host {}`)];'),
-      '/project/app/islands/admit.tsx',
-    );
-    expect(getStyleRequest(REQUEST_ID)).toBeUndefined();
+    expect(getStyleRequest(styleRequestModuleId(importer, './x.css'))).toBeUndefined();
+    expect(hasStyleImporter(importer)).toEqual(false);
   });
 });

@@ -11,7 +11,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 import { readdirSync } from 'node:fs';
 import { computed, effect, signal } from '../src/index.ts';
-import { SIGNAL_BRAND } from '../src/internal/protocol/signal.ts';
+import { SIGNAL_BRAND } from '@openelement/protocol/signal';
 import { selectedSignalEngine } from '../src/internal/signal/selection.ts';
 
 const SIGNAL_SRC_DIR = new URL('../src/internal/signal/', import.meta.url);
@@ -24,7 +24,6 @@ const PUBLIC_SOURCES = [
   'client-only.ts',
   'authoring.ts',
   'build-utils.ts',
-  'compiler.ts',
   'html.ts',
   'jsx-dev-runtime.ts',
   'jsx-runtime.ts',
@@ -32,7 +31,6 @@ const PUBLIC_SOURCES = [
   'open-element-params.ts',
   'public-contracts.ts',
   'public-runtime.ts',
-  'vite.ts',
 ];
 
 test('public signal exports are protocol objects, never Preact objects', () => {

@@ -1,7 +1,7 @@
 /** Client island entry emission; browser runtime wiring only. */
 import process from 'node:process';
 import { ACTION_FETCH_HEADER, IDLE_FALLBACK_TIMEOUT_MS } from '@openelement/element';
-import { stableModuleId } from '@openelement/element/compiler';
+import { stableModuleId } from '@openelement/compiler';
 import { findBuildWorkspaceRoot } from '../../workspace-alias.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
@@ -180,10 +180,27 @@ function pageCanHydrateServerDom(islands: readonly NormalizedClientIsland[]): bo
 }
 
 /**
- * The element entry a generated client bundle imports: the client-only
- * subpath only when this page cannot hydrate server DOM (#1416).
+ * The element entry a generated client bundle imports, on two predicates
+ * (the #1416 claim split plus the #1548 regions split):
+ *
+ * - claim axis (#1416): `canHydrateServerDom` — `false` proves every island is
+ *   client-only and the entry drops the compiled claim executor
+ *   (`./client-only`);
+ * - regions axis (#1548): `includeRegionsRuntime` — `false` records the
+ *   island regions scan's proof that no admitted island module lowers a
+ *   conditional or list Region, and the entry drops the compiled when/each
+ *   builders (`./no-regions`, or `./base` when both axes drop).
+ *
+ * Both defaults keep the full runtime: the claim default is "any island can
+ * hydrate", the regions default is "the scan did not run or proved nothing".
  */
-function elementEntrySpecifier(canHydrateServerDom: boolean): string {
+function elementEntrySpecifier(
+  canHydrateServerDom: boolean,
+  includeRegionsRuntime: boolean,
+): string {
+  if (!includeRegionsRuntime) {
+    return canHydrateServerDom ? '@openelement/element/no-regions' : '@openelement/element/base';
+  }
   return canHydrateServerDom ? '@openelement/element' : '@openelement/element/client-only';
 }
 
@@ -205,6 +222,17 @@ interface GenerateClientEntryOptions {
    * island scheduler and enhance client are import-free and stay unchanged.
    */
   renderer?: 'native' | 'lit';
+  /**
+   * Whether the page's element entry installs the compiled when/each Region
+   * builders (#1548). Defaults to true — the full runtime. `false` is the
+   * island regions scan's proof (`islandsMightUseRegions` === false) that no
+   * admitted island module lowers a Region Part; the entry then drops the
+   * builders (`./no-regions`, or `./base` when the page is also all
+   * client-only). Any doubt keeps the builders: a wrong `false` breaks every
+   * when/each Part with a fail-closed runtime error, a wrong `true` costs
+   * only bytes.
+   */
+  includeRegionsRuntime?: boolean;
 }
 
 export function generateClientEntry(
@@ -223,6 +251,9 @@ export function generateClientEntry(
   // client bundle: that entry already keeps its element imports minimal and
   // the subpath choice below is a native-renderer concern.
   const canHydrateServerDom = pageCanHydrateServerDom(admittedIslands);
+  // #1548: the regions axis defaults to installed; only the scan's proof of
+  // absence drops the builders (see includeRegionsRuntime above).
+  const includeRegionsRuntime = options.includeRegionsRuntime !== false;
   const groupsByKey = new Map<string, ActivationGroup>();
   for (const entry of admittedIslands) {
     const key = activationGroupKey(entry);
@@ -343,6 +374,7 @@ var __liftDeferHydration = function (root, tag) {
 };`
     : `import { createLogger, ensureDeepFragmentNavigation, ensurePreHydrationClickCapture } from '${elementEntrySpecifier(
         canHydrateServerDom,
+        includeRegionsRuntime,
       )}';
 import { createIslandScheduler as __schedule } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';
 ${

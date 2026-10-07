@@ -7,10 +7,10 @@
  *
  * Styling ownership: only true globals live here (design tokens, the body
  * baseline, ::selection). Each page element carries its own rules in
- * `static styles` (`app/components/page-styles.ts`) — the server inlines
+ * `static styles`, arrayed from imported `.css` files — the server inlines
  * them into the SSR output as a @scope(<page-tag>) style block, so pages
  * are fully styled with zero client JavaScript. Islands carry their own
- * same-module sheets.
+ * `.css` sheets the same way.
  *
  * The palette is pure CSS custom properties — no Tailwind, no preprocessor.
  * Dark values ride the platform's own media query (P1: the browser picks

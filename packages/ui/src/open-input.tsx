@@ -47,7 +47,9 @@ import {
   type ReadonlySignal,
   type StyleSheetLike,
 } from '@openelement/element';
-import { controlRecipe, nextInstanceId, recipe, syncDisabledState } from './component-recipes.ts';
+import { nextInstanceId, syncDisabledState } from './component-recipes.ts';
+import controlRecipe from './control-recipe.css';
+import openInputStyles from './open-input.css';
 
 @element('open-input', {
   root: 'shadow-open',
@@ -55,86 +57,7 @@ import { controlRecipe, nextInstanceId, recipe, syncDisabledState } from './comp
   formAssociated: true,
 })
 export class OpenInput extends OpenElement {
-  static override styles: StyleSheetLike[] = [
-    controlRecipe,
-    recipe(`
-    :host {
-      display: block;
-    }
-
-    .input-wrapper {
-      display: flex;
-      flex-direction: column;
-      gap: calc(var(--spacing) * 2);
-    }
-
-    label {
-      font-size: var(--text-sm);
-      font-weight: var(--font-weight-medium);
-      color: var(--color-muted-foreground);
-      letter-spacing: var(--tracking-normal);
-    }
-
-    label[hidden] {
-      display: none;
-    }
-
-    .input {
-      width: 100%;
-      padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
-      font-family: var(--font-sans);
-      font-size: var(--text-base);
-      color: var(--color-foreground);
-      background: color-mix(in srgb, var(--color-popover) 78%, transparent);
-      border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
-      border-radius: var(--radius-md);
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-      outline: none;
-    }
-
-    .input::placeholder {
-      color: var(--color-muted-foreground);
-    }
-
-    .input:hover {
-      border-color: color-mix(in srgb, var(--color-violet-400) 74%, var(--color-border));
-    }
-
-    .input:focus {
-      border-color: var(--color-primary);
-      box-shadow: 0 0 0 1px var(--color-primary);
-    }
-
-    .input:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      background: var(--color-muted);
-    }
-
-    .input--error {
-      border-color: var(--color-destructive);
-    }
-
-    :host(:state(disabled)) .input {
-      opacity: 0.5;
-      cursor: not-allowed;
-      background: var(--color-muted);
-    }
-
-    :host(:state(invalid)) .input {
-      border-color: var(--color-destructive);
-    }
-
-    .error-message {
-      font-size: var(--text-xs);
-      color: var(--color-destructive);
-    }
-
-    .error-message[hidden] {
-      display: none;
-    }
-  `),
-  ];
+  static override styles: StyleSheetLike[] = [controlRecipe, openInputStyles];
 
   @property({ reflect: false })
   type = 'text';

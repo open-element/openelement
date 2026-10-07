@@ -1,6 +1,6 @@
 /**
  * Test helper: run the real element compiler over a page/island component
- * source (through the public `@openelement/element/compiler` entry) and
+ * source (through the public `@openelement/compiler` entry) and
  * import the emitted module, so vitest tests exercise the actual compiled
  * class (Part Program + facade) instead of a hand-built double. vitest tests
  * must never import the authoring .tsx modules directly — the ambient
@@ -11,7 +11,7 @@ import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { compileElementProgram } from '@openelement/element/compiler';
+import { compileElementProgram } from '@openelement/compiler';
 
 // Resolved through the workspace (daily dev) or the installed packed
 // tarballs (release qualification) — never a relative path into a package.

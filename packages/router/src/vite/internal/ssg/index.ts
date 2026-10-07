@@ -46,7 +46,7 @@ export type {
   SsrAdmissionPlan,
   SsrBundle,
   StaticComponentDecl,
-} from '../protocol/ssg.ts';
+} from '@openelement/protocol/ssg';
 export { ssgRender } from './ssg-render.ts';
 
 export {
@@ -114,6 +114,11 @@ export type {
 } from './island-manifest.ts';
 
 export { generateClientEntry } from './entry-client-codegen.ts';
+export {
+  islandsMightUseRegions,
+  elementRuntimeRegionsAlias,
+  type IslandsRegionsScanInput,
+} from './island-regions-scan.ts';
 export { validateClientIslandEntry } from './entry-generators.ts';
 export {
   isIslandDeliveryStrategy,

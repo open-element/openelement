@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { join } from 'node:path';
 import { expandDynamicRoutes, expandI18nLocales } from '../src/vite/internal/ssg/ssg-dynamic.ts';
-import type { SsgPageOutput } from '../src/vite/internal/protocol/ssg.ts';
+import type { SsgPageOutput } from '@openelement/protocol/ssg';
 
 function okOutput(html = '<html><body>ok</body></html>'): SsgPageOutput {
   return { html, errors: [], componentCount: 0, renderTimeMs: 0 };

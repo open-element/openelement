@@ -9,21 +9,9 @@
  */
 import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
-import { compiledStyle } from '../components/page-styles.ts';
+import timerStyles from './live-timer.css';
 
 export const openElement = defineIslandConfig({ hydrate: 'only', ssr: false, dsd: false });
-
-// Same-module style sheet: the compiler erases this const from
-// the island module and emits its bytes as the component's `.oe-style.css`
-// asset. Cross-module sheet imports fail closed (OEC9028).
-const timerStyles = [
-  compiledStyle(`
-    :host { display: inline-block; }
-    .timer-row { display: inline-flex; gap: 0.6rem; align-items: baseline; }
-    .value { min-width: 6ch; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 1.4rem; color: var(--brand); }
-    .unit { color: var(--ink-soft); font-size: 0.85rem; }
-  `),
-];
 
 // The interval handle rides the compiled per-instance property state: island
 // classes carry compiled @property fields and methods, and module-level
@@ -31,7 +19,7 @@ const timerStyles = [
 // browser setInterval returns a number, so the handle is a plain number here.
 @element('live-timer', { root: 'shadow-open' })
 export default class LiveTimer extends OpenElement {
-  static override styles = timerStyles;
+  static override styles = [timerStyles];
 
   /** Elapsed seconds as preformatted text (compiled text Parts bind plain
    * properties — no method calls in a text region, OEC9013). */

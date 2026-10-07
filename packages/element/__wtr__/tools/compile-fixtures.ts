@@ -14,7 +14,7 @@
  */
 // NOTE: plain relative paths only — this directory sits outside the pnpm
 // workspace import resolution, so no workspace specifiers are used here.
-import { compileElementModule } from '../../src/internal/compiler/plugin.ts';
+import { compileElementModule } from '../../../compiler/src/internal/compiler/plugin.ts';
 
 const here = import.meta.dirname!; // packages/element/__wtr__/tools
 const suite = join(here, '..');

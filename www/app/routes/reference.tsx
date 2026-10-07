@@ -32,10 +32,29 @@ type AuthoredPackageCopy = {
 };
 
 const authoredCopy: Record<string, AuthoredPackageCopy> = {
+  protocol: {
+    copy: {
+      en: 'The cross-system contracts: the Part Program IR, the error dialect, and the admission descriptors the compiler, runtime and build share (#1557).',
+      zh: '跨系统契约：编译器、运行时与构建共享的 Part Program IR、错误方言与准入描述符（#1557）。',
+    },
+    notes: {
+      en: [
+        'Zero dependencies, contracts only: no logic grows here by charter.',
+        'You normally consume these through the packages that re-export them.',
+        'Repository baseline — awaiting its first publish on the alpha.11 train.',
+      ],
+      zh: [
+        '零依赖、仅装契约：章程禁止逻辑在此生长。',
+        '通常通过转售这些契约的包间接消费。',
+        '仓库基线——等待 alpha.11 列车的首次发布。',
+      ],
+    },
+    kind: 'core',
+  },
   element: {
     copy: {
-      en: 'The supported Custom Element authoring surface for JSX, DSD, hydration, signals and styles.',
-      zh: '受支持的 Custom Element 创作面，覆盖 JSX、DSD、hydration、signals 与样式。',
+      en: 'The supported Custom Element authoring surface for JSX, DSD, hydration, signals and styles — the pure runtime package since the #1557 split.',
+      zh: '受支持的 Custom Element 创作面，覆盖 JSX、DSD、hydration、signals 与样式——#1557 拆分后的纯运行时包。',
     },
     notes: {
       en: [
@@ -50,6 +69,25 @@ const authoredCopy: Record<string, AuthoredPackageCopy> = {
       ],
     },
     kind: 'core',
+  },
+  compiler: {
+    copy: {
+      en: 'The build-time TSX-to-Part-Program compiler and its Vite plugin boundary; the only package carrying the TypeScript dependency (#1557).',
+      zh: '构建期 TSX-to-Part-Program 编译器及其 Vite 插件边界；唯一携带 TypeScript 依赖的包（#1557）。',
+    },
+    notes: {
+      en: [
+        'Build tooling only — never part of a browser/runtime graph.',
+        'You normally drive it through the `@openelement/router` build; the standalone plugin is `@openelement/compiler/vite`.',
+        'Repository baseline — awaiting its first publish on the alpha.11 train.',
+      ],
+      zh: [
+        '仅构建期工具——绝不进入浏览器/运行期依赖图。',
+        '通常通过 `@openelement/router` 构建驱动；独立插件在 `@openelement/compiler/vite`。',
+        '仓库基线——等待 alpha.11 列车的首次发布。',
+      ],
+    },
+    kind: 'build',
   },
   router: {
     copy: {

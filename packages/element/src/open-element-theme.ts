@@ -1,4 +1,4 @@
-import type { StyleSheetLike } from './internal/protocol/style-sheet.ts';
+import type { StyleSheetLike } from '@openelement/protocol/style-sheet';
 
 /**
  * The broadcast attribute this manager owns on every connected compiled host.

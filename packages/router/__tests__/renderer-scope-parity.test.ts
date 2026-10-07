@@ -17,7 +17,7 @@ import {
   rendererScopeMatches,
   renderMatchingRenderersFn,
 } from '../src/vite/internal/ssg/entry-route-helpers.ts';
-import type { RendererDecl } from '../src/vite/internal/protocol/ssg.ts';
+import type { RendererDecl } from '@openelement/protocol/ssg';
 
 function rendererDecls(scopes: readonly string[]): RendererDecl[] {
   return scopes.map((scope, index) => ({

@@ -3,14 +3,16 @@
  *
  * The codegen axis of the entry-* family (#901): shared code-generation
  * helpers used by entry-orchestrator.ts and entry-render-ssg.ts. Each
- * function generates a fragment of the virtual Hono entry. Client entry
+ * function generates a fragment of the virtual server entry. Client entry
  * emission lives in entry-client-codegen.ts. The page-render runtime is
  * imported from @openelement/router/server-runtime; the
  * descriptor data model lives in protocol/ssg.ts and is constructed by
- * entry-descriptor.ts.
+ * entry-descriptor.ts. The per-route handlers are WinterCG route handlers
+ * over the composition layer's request scope (#1560): the emitted chain
+ * element receives `(request, route)` and binds `c` to the request scope.
  */
 
-import type { PageRouteDecl, RendererDecl } from '../protocol/ssg.ts';
+import type { PageRouteDecl, RendererDecl } from '@openelement/protocol/ssg';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   documentWrapOptionsLines,
@@ -66,18 +68,22 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
     lines.push('// GET handler - renders the page with loader data');
   }
   if (isAction) {
-    // The default body-limit middleware is the imported runtime module bound
+    // The default body-limit handler is the imported runtime module bound
     // to the serialized MAX_ACTION_BODY_BYTES policy constant (#568, #1470
     // block c); larger uploads belong on API routes with explicit limits.
+    // It is already the WinterCG route-chain shape (#1560).
     lines.push(
-      `__pageHandlers[${pathLiteral}].POST = [__asFetchMiddleware(__actionBodyLimit), __asFetchHandler(async (c, __route) => {`,
+      `__pageHandlers[${pathLiteral}].POST = [__actionBodyLimit, async (request, __route) => {`,
     );
   } else {
-    lines.push(`__pageHandlers[${pathLiteral}].GET = [__asFetchHandler(async (c, __route) => {`);
+    lines.push(`__pageHandlers[${pathLiteral}].GET = [async (request, __route) => {`);
   }
+  lines.push(`  const c = __requestScope(request);`);
   // One mutable response-header channel per request, shared by the
   // loader and the action (the spread into the action context carries the
-  // reference). The handler body is wrapped in an IIFE so EVERY exit —
+  // reference); the request-scope channel carries the framework-set
+  // headers (c.header) into every response the scope builds. The handler
+  // body is wrapped in an IIFE so EVERY exit —
   // success, re-render, redirect, rejection, error fallback — merges the
   // channel via __mergeChannelHeaders.
   if (!isAction && route.streamManifest) {
@@ -105,8 +111,8 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
     lines.push(`  const __actionState = { isFetch: false };`);
   }
   lines.push(`  try {`);
-  // The WinterCG route middleware resolved the winner; the bridged Hono
-  // context still owns request/response mechanics inside the handler body.
+  // The WinterCG route middleware resolved the winner; the bound request
+  // scope owns request/response mechanics inside the handler body.
   lines.push(`    __params = __route.params`);
   if (!isAction && route.streamManifest) {
     lines.push(`    __streamScope = __streamRequestScope(c.req.raw);`);
@@ -329,11 +335,11 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   // close the handler-body IIFE and merge the response-header
   // channel into whatever response the body produced.
   lines.push(`  })(), __responseHeaders);`);
-  lines.push(`})];`);
+  lines.push(`}];`);
   lines.push('');
 }
 
-/** Generate a Hono route handler for a page route (GET) or its action (POST). */
+/** Generate a WinterCG route handler for a page route (GET) or its action (POST). */
 export function renderRouteHandler(
   lines: string[],
   { method, route, renderers, docConfig, isSSG, renderer }: RenderRouteHandlerOptions,

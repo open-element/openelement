@@ -1,9 +1,9 @@
 /**
- * @openelement/router — open:core ↔ @openelement/element/compiler
+ * @openelement/router — open:core ↔ @openelement/compiler
  * integration boundary.
  *
- * The Element compiler moved to @openelement/element/compiler (1.0 Alpha
- * convergence); the Router-side open:core transform hook stays here until the
+ * The Element compiler lives in @openelement/compiler (the #1557 package split
+ * after 1.0 Alpha convergence); the Router-side open:core transform hook stays here until the
  * Router tooling phase. These tests pin the adapter half of the boundary:
  *   - open:core returns the compiler's real Source Map v3 as its `map` output
  *     and strips the inline map comment from the served code, so the pipeline

@@ -143,9 +143,9 @@ const ELEMENT_ENTRIES = [
   '@openelement/element/html',
   '@openelement/element/logger',
   '@openelement/element/build-utils',
-  '@openelement/element/compiler',
-  '@openelement/element/vite',
 ];
+
+const COMPILER_PACKAGE_ENTRIES = ['@openelement/compiler', '@openelement/compiler/vite'];
 
 const ROUTER_ROUTE_MODE_ENTRIES = [
   '@openelement/router',
@@ -157,7 +157,7 @@ const ROUTER_ROUTE_MODE_ENTRIES = [
 
 function consumerProgram(): string {
   const lines: string[] = [];
-  const all = [...ELEMENT_ENTRIES, ...ROUTER_ROUTE_MODE_ENTRIES];
+  const all = [...ELEMENT_ENTRIES, ...COMPILER_PACKAGE_ENTRIES, ...ROUTER_ROUTE_MODE_ENTRIES];
   all.forEach((specifier, index) => {
     lines.push(`import * as entry${index} from '${specifier}';`);
   });

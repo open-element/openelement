@@ -2,7 +2,7 @@ import type {
   CompatibilityClassification,
   CompatibilityTier,
   HydrationStrategy,
-} from '../protocol/framework.ts';
+} from '../../framework.ts';
 import { formatError, isValidTagName } from '@openelement/element';
 
 export interface OpenElementExtensions {

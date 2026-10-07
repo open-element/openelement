@@ -44,10 +44,12 @@ function isInsidePackage(declaration: ts.Declaration, packageDir: string): boole
  * Whether an exports-map target is a TypeScript entry this gate enumerates.
  * Non-module targets (the CSS style assets the Tailwind preset and plain-CSS
  * consumers import, #1505) declare no symbols, so they are skipped instead of
- * failing the load.
+ * failing the load. Ambient-declaration targets (#1558's `./css-modules` — a
+ * wildcard `declare module` carrier consumed through tsconfig `types`) are
+ * the same category: a global script has no module symbol to enumerate.
  */
 function isTypeScriptEntry(source: unknown): boolean {
-  return typeof source === 'string' && /\.(?:[cm]?tsx?)$/.test(source);
+  return typeof source === 'string' && /\.(?:[cm]?tsx?)$/.test(source) && !/\.d\.ts$/.test(source);
 }
 
 /**

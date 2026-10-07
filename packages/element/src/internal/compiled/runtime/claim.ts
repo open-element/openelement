@@ -15,8 +15,8 @@ import {
   type ProgramTreeNode,
   type ProgramWhenPart,
   STATIC_STYLES_MARKER,
-} from '../../protocol/part-program.ts';
-import { ClaimErrorCode, OpenElementError, RuntimeErrorCode } from '../../protocol/errors.ts';
+} from '@openelement/protocol/part-program';
+import { ClaimErrorCode, OpenElementError, RuntimeErrorCode } from '@openelement/protocol/errors';
 // The broadcast attribute's single writer names it; the claim only classifies it.
 import { THEME_ATTRIBUTE } from '../../../open-element-theme.ts';
 // Canonical each-Region item-key derivation (#1374) — single source shared
@@ -48,16 +48,12 @@ import {
   subscribeWrites,
 } from './program-kernel.ts';
 import { attachFixedParts, resolvePath, type TextPartSlot, updateTextPart } from './parts.ts';
-import {
-  type EachEntry,
-  type EachRegion,
-  type ItemAttrSlot,
-  type ItemValueSlot,
-  updateEach,
-  updateWhen,
-  whenActive,
-  type WhenRegion,
-} from './regions.ts';
+// Region Parts claim and update through the builders seam (#1548): a
+// regions-free bundle (an app whose Part Programs carry no when/each Parts)
+// drops the whole regions module; a regions Part reaching a regions-free
+// graph is a build-selection bug and fails closed.
+import { regionBuildersOrFail } from './regions-seam.ts';
+import type { EachEntry, EachRegion, ItemAttrSlot, ItemValueSlot, WhenRegion } from './regions.ts';
 import {
   type PreUpgradeEvent,
   type PreUpgradeEventCapture,
@@ -455,7 +451,7 @@ export function claimNodes(
     if (part.k === 'when') {
       const anchor = expectComment(at(cursor++), partAnchorMarker(part.index), nodePath, owner);
       const scopedOwner = regionClaimOwner(parent, cursor, part, anchor, owner);
-      const active = whenActive(part, signalOf(ctx, part.signal).value);
+      const active = regionBuildersOrFail().whenActive(part, signalOf(ctx, part.signal).value);
       const partScope = scope.child();
       const branchScope = partScope.child();
       const before = cursor;
@@ -500,7 +496,7 @@ export function claimNodes(
       pending.push({
         scope: partScope,
         signal: part.signal,
-        fn: (value) => updateWhen(region, value),
+        fn: (value) => regionBuildersOrFail().updateWhen(region, value),
       });
       continue;
     }
@@ -568,7 +564,7 @@ export function claimNodes(
       pending.push({
         scope: partScope,
         signal: part.signal,
-        fn: (next) => updateEach(region, next),
+        fn: (next) => regionBuildersOrFail().updateEach(region, next),
       });
       continue;
     }

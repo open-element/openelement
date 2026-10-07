@@ -27,8 +27,6 @@
 
 import * as combobox from '@zag-js/combobox';
 import { normalizeProps, spreadProps, VanillaMachine } from '@zag-js/vanilla';
-import { StyleSheet } from '@openelement/element';
-import type { StyleSheetLike } from '@openelement/element';
 
 export interface ComboboxItem {
   value: string;
@@ -233,20 +231,6 @@ export function zagComboboxSetControlledValue(host: HTMLElement, value: string):
 /** e2e hook: machine-state snapshot after controlled updates. */
 export function zagComboboxSnapshot(host: HTMLElement): ZagComboboxSnapshot | null {
   return bindings.get(host)?.snapshot() ?? null;
-}
-
-// ─── Island styles (consumed via the compiled `static styles` contract) ────
-
-/**
- * Build a component stylesheet outside compiled component modules (ADR-0143).
- * The islands' sheet bytes are same-module `compiledStyle()` calls under the
- * island style asset protocol (ADR-0164) — this helper is the factory they
- * spell; the composed sheet text lives in each island module.
- */
-export function compiledStyle(css: string): StyleSheetLike {
-  const sheet: StyleSheetLike = new StyleSheet();
-  sheet.replaceSync(css);
-  return sheet;
 }
 
 // ─── Compiled-kernel ownership: hand the structure back pristine ───────────

@@ -19,7 +19,7 @@
  * connect (the entry module evaluates first) and no host global is written.
  */
 
-import type { PartProgramV1 } from '../../protocol/part-program.ts';
+import type { PartProgramV1 } from '@openelement/protocol/part-program';
 import type { LifetimeScope } from '../lifetime-scope.ts';
 import type {
   CompiledClaimOptions,

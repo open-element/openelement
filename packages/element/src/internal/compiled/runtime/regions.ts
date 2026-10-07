@@ -18,12 +18,12 @@ import {
   partAnchorMarker,
   type ProgramEachPart,
   type ProgramWhenPart,
-} from '../../protocol/part-program.ts';
+} from '@openelement/protocol/part-program';
 import {
   EachKeyErrorCode,
   RUNTIME_MESSAGES_ENABLED,
   RuntimeErrorCode,
-} from '../../protocol/errors.ts';
+} from '@openelement/protocol/errors';
 import type { LifetimeScope } from '../lifetime-scope.ts';
 import type { MountContext } from './program-kernel.ts';
 import {

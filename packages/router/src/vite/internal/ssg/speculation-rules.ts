@@ -1,4 +1,4 @@
-import type { SpeculationRulesOptions } from '../protocol/ssg.ts';
+import type { SpeculationRulesOptions } from '@openelement/protocol/ssg';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
 interface SpeculationRoute {

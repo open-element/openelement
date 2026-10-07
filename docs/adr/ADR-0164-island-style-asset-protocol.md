@@ -331,3 +331,33 @@ with this named explanation per P5 comply-or-explain: #1558 (file-based styles a
 authoring form) deletes the entire admission machinery within weeks, and retiring the option
 now would break the public compiler surface twice in two consecutive releases for zero user
 benefit. The option retires with the admission machinery in #1558.
+
+## Amendment (2026-10-07): #1558 retires the string admission machine and the styleAssetProtocol option
+
+The protocol's request channel is kept, but its input changes shape: the one style
+authoring form is now a real `.css` file imported into the compiled module and arrayed
+in `static styles` (#1558, P5 — the `css` string-template machine deleted, no shim).
+Consequences, each retiring machinery this ADR carried:
+
+- **Admission is the import edge.** The v1 static-proof machine
+  (`style-admission.ts`, the four admitted shapes, same-module style constants, the
+  OEC9028 dynamic-composition diagnostic) is deleted. The compiler polices only the
+  import/initializer shape (OEC9029: relative `.css` default imports arrayed in
+  `static styles`); the sheet bytes live in exactly one place — the authored file —
+  so the registry carries edge coordinates, never CSS text.
+- **The reserved `.oe-style.css` suffix is retired with the string channel.** The
+  request is the authored specifier itself; the intercept keys on the edge registry
+  (importer + authored `.css` specifier), and a `.css` import from an untracked
+  module rides vite's own CSS channel as a plain app stylesheet.
+- **`styleAssetProtocol` is deleted** — the option's retirement condition (recorded
+  in the previous amendment) is met: the router build registers edges unconditionally,
+  island and non-island compiled modules alike; the legacy verbatim path no longer
+  exists. There is no activation surface left to configure.
+- **The #1543 island-CSS minifier retires with it** — with string sheets deleted
+  from the language, no JS-embedded component CSS exists to minify.
+- **The SSR half reads the authored file** — the client build's emitted asset is
+  content-hashed from the same bytes, so the drift-reconciliation machinery
+  (STYLE_ASSET_UNMAPPED / HASH_MISMATCH) retires: one fact, two consumers.
+- **Fetch/native adapter verdict unchanged** (Appendix C stands): Safari still has
+  no CSS module scripts, and rolldown still fails the native form; the fetch adapter
+  keeps its written retirement condition.

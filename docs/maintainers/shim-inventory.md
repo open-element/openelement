@@ -23,8 +23,8 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 
 | # | 垫片 / 适配层 | 位置 | 处置 |
 | --- | --- | --- | --- |
-| 1 | 岛 CSS 压缩变换（#1543） | `packages/router/src/vite/internal/island-css.ts` | 条件到即删（随 #1558） |
-| 2 | `styleAssetProtocol` 激活开关（#1553） | element 编译器选项 | 条件到即删（随 #1558） |
+| 1 | 岛 CSS 压缩变换（#1543） | ~~`packages/router/src/vite/internal/island-css.ts`~~ | **已删（#1558）** |
+| 2 | `styleAssetProtocol` 激活开关（#1553） | ~~element 编译器选项~~ | **已删（#1558）** |
 | 3 | CSS 双适配器：fetch 回退形态（#1553） | `packages/router/src/vite/internal/style-assets.ts` | 条件到即删（Safari + 工具链）；单一化子裁决待 owner |
 | 4 | dev/SSR 内联 sheet 适配器（#1553） | 同上 | 条件到即删（同 #3 的判定翻转或 dev 走 HTTP） |
 | 5 | `ShimStyleSheet`（SSR 侧 CSSStyleSheet） | `packages/element/src/internal/core/style-sheet.ts` | 保留为平台边缘 |
@@ -47,30 +47,20 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 
 ## 条目详情
 
-### 1. 岛 CSS 压缩变换（#1543）——条件到即删（随 #1558）
+### 1. 岛 CSS 压缩变换（#1543）——已删（#1558，2026-10-07）
 
-- 所有者：router client build（`open:minify-island-css` post transform，
-  接缝登记 [seams.md](../architecture/seams.md) "Island CSS shipped bytes
-  (#1543)" 行，守卫 `island-css.test.ts` / `island-css-pipeline.test.ts`）。
-- 方向：client-build transform → 交付的 island chunk 字节。
-- 存在原因：`build.minify: 'oxc'` 是 JS 压缩器，永不触及模板字面量内容，
-  而当时每份组件样式表都活在其中。
-- 退役条件（已写在
-  `packages/router/src/vite/internal/island-css.ts:240-246`）：遗留逐字
-  通道清空之时——#1558 把唯一创作形态改为文件式样式（css 标签模板
-  退役）后，所有岛模块都走 #1553 抽取路径，本变换随之整段删除。
-- 处置：条件到即删。#1558 已排期；本车道不提前动手。
+- 退役条件已满足：#1558 把唯一创作形态改为 `.css` 文件 + import（css
+  字符串模板整体退役，P5 无 shim），island chunk 里不再有任何 JS 内嵌
+  CSS 可压。`island-css.ts` 与 `open:minify-island-css` transform、
+  `island-css.test.ts` / `island-css-pipeline.test.ts` 守卫一并删除；
+  接缝登记表的 "Island CSS shipped bytes (#1543)" 行随之注销。
 
-### 2. `styleAssetProtocol` 激活开关（#1553）——条件到即删（随 #1558）
+### 2. `styleAssetProtocol` 激活开关（#1553）——已删（#1558，2026-10-07）
 
-- 所有者：element 编译器（`compiledElementPlugin` / semantic core 选项）。
-- 方向：宿主构建配置 → 编译器抽取行为。
-- 存在原因：#1553 交付期以显式开关控制抽取路径的激活面。
-- 退役条件（[ADR-0164](../adr/ADR-0164-island-style-asset-protocol.md)
-  2026-10-07 修正案——一次具名偏离）：router build 是唯一宿主且已硬编码
-  激活，选项文本上今天就可删；为避免连续两个 release 两次破坏公共编译器
-  表面，随 #1558 删除准入机制时一并退役。
-- 处置：条件到即删。
+- 退役条件已满足（ADR-0164 2026-10-07 修正案所记录的条件）：#1558 删除
+  字符串准入机器（`style-admission.ts` + OEC9028）时一并退役了该选项，
+  样式请求通道改为对编译模块的已授权 `.css` import 边的无条件登记
+  （`style-requests.ts` 边注册表，P8 单写者不变）。
 
 ### 3. CSS 双适配器之 fetch 回退形态——条件到即删；单一化子裁决待 owner
 

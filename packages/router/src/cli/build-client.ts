@@ -17,7 +17,12 @@ import { rm } from 'node:fs/promises';
 import process from 'node:process';
 import { build as viteBuild, type InlineConfig } from 'vite';
 import { dirname, isAbsolute, join, relative, resolve } from 'pathe';
-import { extractCustomElementTags, generateClientEntry } from '../vite/internal/ssg/index.ts';
+import {
+  extractCustomElementTags,
+  generateClientEntry,
+  islandsMightUseRegions,
+  elementRuntimeRegionsAlias,
+} from '../vite/internal/ssg/index.ts';
 import { runtimeModulePath } from '../vite/internal/runtime-module-path.ts';
 import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
@@ -29,8 +34,8 @@ import {
 import { walkHtmlFileEntries } from '../vite/internal/html-files.ts';
 import { VIRTUAL_RUNTIME_SPECIFIERS } from '../vite/internal/ssg/entry-generators.ts';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
-import type { IslandDecl } from '../vite/internal/protocol/ssg.ts';
-import type { ClientAssetManifest } from '../vite/internal/protocol/client-assets.ts';
+import type { IslandDecl } from '@openelement/protocol/ssg';
+import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
 import {
   type ClientAssetIslandInput,
   createClientAssetManifest,
@@ -48,12 +53,11 @@ import {
   analyzeModuleSemantics,
   clearStyleRequests,
   compiledElementPlugin,
-} from '@openelement/element/compiler';
+} from '@openelement/compiler';
 import { ELEMENT_RUNTIME_MESSAGES_DEFINE } from '../vite/internal/element-error-messages.ts';
-import { minifyIslandCssModule } from '../vite/internal/island-css.ts';
 import { type StyleAssetRecord, clientStyleAssetPlugin } from '../vite/internal/style-assets.ts';
-import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
-import { ROUTER_MODULE_VOCABULARY } from '../vite/internal/protocol/module-vocabulary.ts';
+import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
+import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
 import { sortAliasEntries } from '../vite/alias-utils.ts';
 import { formatError } from '@openelement/element';
@@ -453,9 +457,39 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   const packageDeclIdentities = () =>
     selectedPackageDecls.map((island) => packageIslandIdentity(island, islandModuleIds));
 
+  // #1548: the regions axis of the element entry selection. The scan asks the
+  // compiler (the single owner of the fact) whether any admitted island
+  // module lowers when/each Region Parts; only its proof of absence drops
+  // the Region builders from the page's element entry. The sidecar
+  // descriptors match the compiledElementPlugin call below, so the scan
+  // admits exactly the modules the build's own transform admits.
+  const mightUseRegions = islandsMightUseRegions({
+    root,
+    islandsDir,
+    islandTagNames: selectedLocalTags,
+    islandFiles: selectedLocalFiles,
+    packageIslandDecls: selectedPackageDecls,
+    compilerBehaviorDecls: selectedCompilerBehaviorDecls,
+    staticSidecars: [ISLAND_ADMISSION],
+  });
+  // The emission half of the same axis: resolve the bare element specifier to
+  // the regions-free entry for the whole client graph. Native renderer only —
+  // a lit build's element modules arrive transitively through the router
+  // client runtime and its generated entry is element-free (#1339).
+  const elementRuntimeRegionsAliasValue =
+    !mightUseRegions && ctx.options.renderer !== 'lit'
+      ? elementRuntimeRegionsAlias(root, serializedAlias)
+      : undefined;
+
   const clientEntryCode = generateClientEntry(islandEntries, {
     enhancedForms,
     renderer: ctx.options.renderer,
+    // Omitted on any doubt: the flag's default (builders installed) is the
+    // entry codegen's own conservative default, not a second copy of it. The
+    // alias bailing out does not flip this flag: the entry subpath resolves
+    // through the package exports regardless of the alias, and keeping the
+    // builders in the entry graph is the safe direction.
+    ...(mightUseRegions ? {} : { includeRegionsRuntime: false }),
   });
 
   // Restore RegExp from serialized noExternal patterns
@@ -603,7 +637,18 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       },
     },
     resolve: {
-      ...(serializedAlias.length > 0 ? { alias: serializedAlias } : {}),
+      alias: [
+        // #1548: with the regions scan's proof of absence, the WHOLE client
+        // graph resolves the element runtime to the regions-free entry — the
+        // generated entry's specifier alone cannot prune the regions cluster,
+        // because every island module imports `@openelement/element` for its
+        // base class and the package's sideEffects declaration (#1425) keeps
+        // the default entry's installs alive in every graph that touches it.
+        // Undefined (or lit, whose element modules arrive transitively and
+        // whose entry is element-free) keeps the default resolution.
+        ...(elementRuntimeRegionsAliasValue !== undefined ? [elementRuntimeRegionsAliasValue] : []),
+        ...serializedAlias,
+      ],
       // The browser-client resolve policy the outer resolved config carries
       // (captured in the open plugin's configResolved). Empty conditions and
       // an unset preserveSymlinks mean "nothing to override" and this build
@@ -624,35 +669,19 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       // The compiler is part of the official client build path. The outer
       // open:core hook covers normal Vite transforms; this inline build owns
       // its own plugin list and must use the same transform exactly once.
-      // styleAssetProtocol: the router build is the only host that can
-      // produce island modules (defineIslandConfig admission rides its
-      // injected sidecar descriptor), so it always activates — the transition ends here, not behind an option.
+      // Island modules carry the island delivery policy statement; the
+      // compiler admits it only through the injected descriptor (the router
+      // build is the only host that can produce island modules).
       compiledElementPlugin({
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
         workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
-        // Island modules carry the island delivery policy statement; the
-        // compiler admits it only through the injected descriptor.
         staticSidecars: [ISLAND_ADMISSION],
-        styleAssetProtocol: true,
       }),
-      // intercepts the compiler's `.oe-style.css` requests before
+      // intercepts the compiled modules' authored `.css` imports before
       // vite's CSS plugin, emits the real `.css` assets, and hands the sheet
       // adapters back to the module graph.
       clientStyleAssetPlugin(styleAssetRecords),
-      {
-        // #1543: the oxc JS minifier never touches template-literal content,
-        // so component stylesheets shipped with their authored formatting.
-        // Collapse them after the compiler and Vite's TS lowering (enforce
-        // 'post') so the chunk's CSS rides minified; fails open to unminified.
-        name: 'open:minify-island-css',
-        enforce: 'post',
-        transform(code: string, id: string) {
-          const cleanId = id.split('?', 1)[0];
-          if (cleanId.includes('\0') || !/\.[cm]?[jt]sx?$/.test(cleanId)) return null;
-          return minifyIslandCssModule(code);
-        },
-      },
       {
         name: 'open:exclude-preact-rts',
         resolveId(id: string) {
@@ -772,9 +801,6 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       resolvedIslandModuleIds: islandModuleIds,
       styleFileNames: [...styleAssetRecords.values()].map((record) => record.fileName),
     });
-    // the emission records cross to Phase 3 here — the SSR build
-    // reads the same emitted assets (hash-checked) for the DSD text.
-    ctx.styleAssets = styleAssetRecords;
 
     const { printBuildManifest } = await import('../vite/build-manifest.ts');
     printBuildManifest({ root, outDir, phase: 2, budget: ctx.phase3.manifestBudget });

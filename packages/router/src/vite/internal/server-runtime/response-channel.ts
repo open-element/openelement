@@ -130,7 +130,7 @@ export function mergeChannelHeaders(response: Response, channel: Headers): Respo
  * Creates one per-request CSP nonce: a UUID without its dashes (32 hex
  * characters). The CSP middleware embeds this value into the
  * `script-src 'nonce-…'` policy it sets on the response and exposes it to
- * the handlers as the `cspNonce` Hono context variable.
+ * the handlers as the `cspNonce` request-scope variable.
  */
 export function createCspNonce(): string {
   return crypto.randomUUID().replace(/-/g, '');
@@ -147,16 +147,16 @@ export function applyCspNonce(policyTemplate: string, nonce: string): string {
 }
 
 /**
- * The env key hono/ssg's `toSSG` sets to `true` on every build-time dispatch
- * (both the per-route info probe and every page render — hono
- * helper/ssg/ssg.js passes `{ [SSG_CONTEXT]: true }` as the request env).
- * hono exports the predicate (`isSSGContext`) but not the constant, so the
- * value is pinned here and covered by the unit tests beside this module.
+ * The env key the SSG prerender pass sets to `true` on every build-time
+ * dispatch (ssg-render.ts passes `{ [SSG_PRERENDER_ENV_KEY]: true }` as the
+ * request env). Since #1560 the prerender driver is our own static
+ * generator, so the key is owned here — this module is the single source;
+ * the build side imports the constant, and no second copy exists to drift.
  */
-const HONO_SSG_CONTEXT = 'HONO_SSG_CONTEXT';
+export const SSG_PRERENDER_ENV_KEY = 'OPEN_ELEMENT_SSG_CONTEXT';
 
 /**
- * True when the dispatch is an hono/ssg prerender pass. Static build output
+ * True when the dispatch is an SSG prerender pass. Static build output
  * cannot carry per-request state — the SSG nonce contract (nonce.ts: SSG
  * output carries none, static bytes cannot be per-request) — so the CSP
  * auto-nonce binds nothing on this pass: the handlers' `c.get('cspNonce')`
@@ -167,6 +167,6 @@ export function isSsgPrerenderDispatch(env: unknown): boolean {
   return (
     typeof env === 'object' &&
     env !== null &&
-    (env as Record<string, unknown>)[HONO_SSG_CONTEXT] === true
+    (env as Record<string, unknown>)[SSG_PRERENDER_ENV_KEY] === true
   );
 }

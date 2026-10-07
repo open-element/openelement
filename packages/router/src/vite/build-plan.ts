@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
 import { join, relative } from 'pathe';
-import type { BuildArtifacts, BuildPlan } from './internal/protocol/ssg.ts';
+import type { BuildArtifacts, BuildPlan } from '@openelement/protocol/ssg';
 import type { OpenElementBuildContext } from './build-context.ts';
 import { fsPathToModuleSpecifier } from './internal/ssg/module-specifier.ts';
 import { resolveIslandHydrate } from './internal/ssg/island-scanner.ts';

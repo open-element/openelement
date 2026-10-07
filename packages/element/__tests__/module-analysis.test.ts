@@ -3,7 +3,7 @@ import {
   analyzeModuleSemantics,
   type ModuleSemanticFacts,
   type ModuleVocabularyDescriptor,
-} from '../src/internal/compiler/semantic-core/module-analysis.ts';
+} from '../../../packages/compiler/src/internal/compiler/semantic-core/module-analysis.ts';
 
 type SemanticCase = {
   name: string;

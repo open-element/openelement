@@ -11,13 +11,14 @@ import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'vite';
 import {
   compileElementModule,
-  getStyleRequest,
   registerStyleRequest,
   stableModuleId,
   stripInlineSourceMapComment,
+  styleEdgesForFile,
+  styleRequestFile,
   styleRequestModuleId,
-} from '@openelement/element/compiler';
-import { ISLAND_ADMISSION } from './internal/protocol/island-admission.ts';
+} from '@openelement/compiler';
+import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import type { OpenPluginState } from './plugin-config.ts';
 
 /**
@@ -47,24 +48,27 @@ export function createCompilerHooks(
         const result = compileElementModule(
           code,
           stableModuleId(id, state.viteRoot, state.workspaceRoot),
-          // dev activates the protocol so authored islands (whose
-          // same-module style constants the legacy grammar rejects with
-          // OEC9008) compile identically to the production builds; the dev
-          // style-asset plugin (open:style-assets-dev) serves the adapters.
-          { staticSidecars: [ISLAND_ADMISSION], styleAssetProtocol: true },
+          // The island delivery policy statement is admitted only through
+          // the injected descriptor; the dev style-asset plugin
+          // (open:style-assets-dev) serves the `.css` edges the compile
+          // registers.
+          { staticSidecars: [ISLAND_ADMISSION] },
         );
         if (!result) return null;
-        // the compiled-element transform is the style-request
+        // the compiled-element transform is the style-edge
         // registry's one writer — this hook is that transform's dev host
         // binding (element's compiledElementPlugin is the build binding),
         // so the registration travels with it; the dev plugin's intercept
         // answers from this registry.
-        if (result.styleRequest) {
-          registerStyleRequest({
-            ...result.styleRequest,
-            moduleId: styleRequestModuleId(id, result.styleRequest.specifier),
-            importer: id,
-          });
+        if (result.styleRequests !== undefined) {
+          for (const specifier of result.styleRequests) {
+            registerStyleRequest({
+              moduleId: styleRequestModuleId(id, specifier),
+              importer: id,
+              specifier,
+              file: styleRequestFile(id, specifier),
+            });
+          }
         }
         const key = id.split('?', 1)[0];
         compiledProgramShapes.set(key, programShape(result.program));
@@ -83,6 +87,14 @@ export function createCompilerHooks(
     },
 
     async handleHotUpdate(hmr) {
+      // A sheet file edit changes the inline adapter's content, not the
+      // Part Program shape — the dev module's bytes would go stale (the
+      // virtual graph id is not a watched file). Full reload re-fetches
+      // everything fresh; the registry re-registers on the next transform.
+      if (/\.css$/.test(hmr.file) && styleEdgesForFile(hmr.file).length > 0) {
+        hmr.server.ws.send({ type: 'full-reload' });
+        return [];
+      }
       if (!/\.tsx$/.test(hmr.file)) return;
       let source: string;
       try {
@@ -95,26 +107,12 @@ export function createCompilerHooks(
         const result = compileElementModule(
           source,
           stableModuleId(hmr.file, state.viteRoot, state.workspaceRoot),
-          // Same activation as the transform: dev islands compile
-          // under the protocol's grammar.
-          { staticSidecars: [ISLAND_ADMISSION], styleAssetProtocol: true },
+          // Same admission as the transform.
+          { staticSidecars: [ISLAND_ADMISSION] },
         );
         if (!result) {
           compiledProgramShapes.delete(hmr.file);
           return;
-        }
-        // a sheet edit changes the style request's payload, not the
-        // Part Program shape — the adapter module's content would go stale in
-        // the dev module graph. Full reload re-fetches everything fresh; the
-        // registry is re-registered by the transform that follows.
-        if (result.styleRequest) {
-          const registered = getStyleRequest(
-            styleRequestModuleId(hmr.file, result.styleRequest.specifier),
-          );
-          if (registered && registered.css !== result.styleRequest.css) {
-            hmr.server.ws.send({ type: 'full-reload' });
-            return [];
-          }
         }
         const nextShape = programShape(result.program);
         const previousShape = compiledProgramShapes.get(hmr.file);

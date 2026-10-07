@@ -17,9 +17,9 @@
  *   (`true` for `{this.prop && …}`, `false` for `{!this.prop && …}`).
  */
 
-import type { ProgramCondition } from '../protocol/part-program.ts';
+import type { ProgramCondition } from '@openelement/protocol/part-program';
 // Single error dialect (#1386 item 3): the evaluation fail-closed path carries a code.
-import { frameworkError, ProgramErrorCode } from '../protocol/errors.ts';
+import { frameworkError, ProgramErrorCode } from '@openelement/protocol/errors';
 
 /**
  * Wire validation guarantees ordering operators carry a numeric literal; a

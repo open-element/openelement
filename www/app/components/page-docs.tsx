@@ -1,9 +1,12 @@
 import { element, OpenElement, property } from '@openelement/element';
-import { pageDocsStyles } from './page-docs-styles.ts';
+import pageDocsStyles from './page-docs.css';
+import '#site-ui/open-reading-shell.tsx';
+import '#site-ui/open-artifact-panel.tsx';
+import '../islands/open-page-rail.tsx';
 
 @element('docs-index')
 export default class PageDocs extends OpenElement {
-  static override styles = pageDocsStyles;
+  static override styles = [pageDocsStyles];
 
   @property({ reflect: false, attribute: false })
   sidenote = '';

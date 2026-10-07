@@ -22,6 +22,7 @@ const PUBLINT_VERSION = '0.3.21';
 const ATTW_VERSION = '0.18.4';
 
 const RUNTIME_FREE_PACKAGES = new Set([
+  '@openelement/protocol',
   '@openelement/element',
   '@openelement/router',
   '@openelement/ui',
@@ -60,15 +61,12 @@ const NODE_FREE_PACKAGES = new Set(['@openelement/create']);
  *   - src/vite/internal/server-runtime/: the ./server-runtime target itself
  *     (mod.ts re-exports the whole tree; entry-descriptor.ts emits
  *     `@openelement/router/server-runtime` as the entries' only request-time
- *     import);
- *   - src/vite/internal/protocol/: shared protocol vocabulary — framework,
- *     ssg and registry-markers are imported by server-runtime modules
- *     (response-channel, security, app, stream-runtime), and any other file
- *     in the tree can join the request-time graph with a single import edit,
- *     so the whole tree stays fail-closed rather than enumerating files.
+ *     import). The former src/vite/internal/protocol/ vocabulary moved to the
+ *     @openelement/protocol package (#1557) and is scanned under that
+ *     package's own runtime-free claim.
  */
 const RUNTIME_SURFACE_PATHS: Record<string, RegExp> = {
-  '@openelement/router': /^src\/vite\/internal\/(?:server-runtime\/|protocol\/)/,
+  '@openelement/router': /^src\/vite\/internal\/server-runtime\//,
 };
 
 /**
@@ -128,14 +126,13 @@ const FORBIDDEN_LEGACY_PATHS: Record<string, ReadonlyArray<string>> = {
   '@openelement/element': [
     // Legacy ElementDefinition / runtime-renderer typing (VNode model).
     'src/types.ts',
-    'src/internal/protocol/vnode.ts',
-    // Legacy static prop-declaration typing (ADR-0052 era), superseded by the
-    // compiler's __compiledProperties metadata.
-    'src/internal/protocol/prop.ts',
     // Legacy renderer DOM helpers with no consumer in the compiled model.
     'src/internal/core/dom-utils.ts',
     'src/internal/core/dsd-shadow-root.ts',
   ],
+  // The legacy typing contracts moved to the protocol package with the split
+  // (#1557); the residue ban follows the files.
+  '@openelement/protocol': ['src/vnode.ts', 'src/prop.ts'],
 };
 
 // Marker strings of the removed v0.43 marker-hydration channel, scanned in

@@ -5,7 +5,7 @@ import {
   type DeferredServerOwner,
   serializeCompiledProgram,
 } from '../../src/internal/compiled/server/index.ts';
-import type { PartProgramV1 } from '../../src/internal/protocol/part-program.ts';
+import type { PartProgramV1 } from '@openelement/protocol/part-program';
 import { testProgram } from '../compiled-runtime/test-program.ts';
 
 const program = testProgram({

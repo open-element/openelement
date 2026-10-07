@@ -43,16 +43,16 @@
  * core. This scanner owns only file discovery, route paths, and delivery data.
  */
 
-import type { RouteEntry, SpecialFileType } from '../protocol/framework.ts';
+import type { RouteEntry, SpecialFileType } from '../../framework.ts';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { dirname, join, resolve } from 'pathe';
 import { buildError, RouteScanErrorCode } from '../../../internal/error-codes.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
-import { analyzeModuleSemantics } from '@openelement/element/compiler';
-import { ROUTER_MODULE_VOCABULARY } from '../protocol/module-vocabulary.ts';
+import { analyzeModuleSemantics } from '@openelement/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { scanStreamManifest } from './stream-manifest.ts';
-import type { StreamRouteManifest } from '../protocol/ssg.ts';
+import type { StreamRouteManifest } from '@openelement/protocol/ssg';
 
 export type ScannedRouteEntry = RouteEntry & { streamManifest?: StreamRouteManifest };
 

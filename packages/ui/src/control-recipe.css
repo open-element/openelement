@@ -1,0 +1,25 @@
+/* authored from HEAD extraction — replace with design pass */
+/* Structural control recipe shared by open-input and open-button: the
+ * classes their markup renders. Layout skeleton only — replace with the
+ * design pass. */
+.control {
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn {
+  cursor: pointer;
+}
+
+.input-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.req {
+  color: inherit;
+}
+
+.error-message {
+  display: block;
+}

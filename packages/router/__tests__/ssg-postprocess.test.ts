@@ -34,8 +34,8 @@ import {
   postProcessClientIslandBuild,
 } from '../src/vite/internal/ssg/build-postprocess.ts';
 import { stableHash } from '../src/vite/internal/ssg/ssg-helpers.ts';
-import type { ClientAssetManifest } from '../src/vite/internal/protocol/client-assets.ts';
-import type { IslandDecl } from '../src/vite/internal/protocol/ssg.ts';
+import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
+import type { IslandDecl } from '@openelement/protocol/ssg';
 
 import { join } from 'node:path';
 

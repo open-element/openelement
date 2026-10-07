@@ -10,7 +10,7 @@
  */
 
 import type { CompiledClaimOptions } from './claim.ts';
-import { ClaimErrorCode } from '../../protocol/errors.ts';
+import { ClaimErrorCode } from '@openelement/protocol/errors';
 import { fail } from './program-kernel.ts';
 
 export interface PreUpgradeEvent {

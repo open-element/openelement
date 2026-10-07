@@ -44,13 +44,13 @@ npx @openelement/create@alpha my-app --no-install --no-git -t showcase
 resolves to `@scope/create` at the same tag, so the canonical spelling names
 the scope, and npm runs this package's generator. The version `@alpha` resolves
 to is registered in
-`the tracked release-state manifest` (currently `1.0.0-alpha.9`, a new baseline —
+`the tracked release-state manifest` (currently `1.0.0-alpha.10`, a new baseline —
 not a 0.x upgrade, with no migration path from 0.x). Pin that exact version
 when reproducibility matters (verify against the live registry with
 `npm view @openelement/create dist-tags.alpha`):
 
 ```bash
-npm create @openelement@1.0.0-alpha.9 my-app
+npm create @openelement@1.0.0-alpha.10 my-app
 ```
 
 The generated starter pins the exact `@openelement/*` versions it was built
@@ -117,8 +117,9 @@ npm create @openelement@0.43 my-app
     `Response.json`
   - `app/islands/` — the two islands (`my-counter` hydrating on idle,
     `live-timer` client-only), the only code that ships JavaScript
-  - `app/components/` — compiled page elements and the shared style sheets
-    (`page-styles.ts`), including the JS-cost badge classes
+  - `app/components/` — compiled page elements and their style sheets
+    (`.css` files next to each element; `site-chrome.css`/`badges.css` are
+    the shared sheets)
   - `app/styles/tokens.css` — pure-CSS design tokens (dark values ride
     `prefers-color-scheme`)
 - `public/` - static assets

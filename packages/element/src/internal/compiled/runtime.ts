@@ -32,9 +32,9 @@ import {
   type SerializeProgramSeams,
   serializeProgramTemplate,
 } from './serializer/serialize-program.ts';
-import type { PartProgramV1 } from '../protocol/part-program.ts';
+import type { PartProgramV1 } from '@openelement/protocol/part-program';
 import { normalizePartProgram, type RuntimeProgramIR } from './runtime-program.ts';
-import { RuntimeErrorCode } from '../protocol/errors.ts';
+import { RuntimeErrorCode } from '@openelement/protocol/errors';
 import {
   type CompiledEventHandler,
   type CompiledProgramInstance,
@@ -46,7 +46,11 @@ import {
   itemValue,
 } from './runtime/program-kernel.ts';
 import { createFreshDom } from './runtime/fresh-dom.ts';
-import { expectsArrayMessage } from './runtime/regions.ts';
+// Region Parts surface through the builders seam (#1548): the seed
+// serializer's array admission needs the regions message builder only, and a
+// regions-free graph (an app whose Part Programs carry no when/each Parts)
+// keeps the regions module out entirely.
+import { regionBuildersOrFail } from './runtime/regions-seam.ts';
 import {
   claimExistingDom,
   type ClaimOwner,
@@ -148,7 +152,10 @@ function seedSerializerSeams(
     whenHolds: (part, value) => conditionHolds(part.test, value),
     regionItems: (part, value) => {
       if (!Array.isArray(value)) {
-        fail(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, expectsArrayMessage(where, part, value));
+        fail(
+          RuntimeErrorCode.LIST_VALUE_NOT_ARRAY,
+          regionBuildersOrFail().expectsArrayMessage(where, part, value),
+        );
       }
       return value;
     },

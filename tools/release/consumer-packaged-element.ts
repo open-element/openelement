@@ -36,6 +36,9 @@ try {
       type: 'module',
       dependencies: {
         '@openelement/element': `file:${root}/packages/element/openelement-element-${PACKAGE_VERSION}.tgz`,
+        // The compiler split (#1557): the standalone vite plugin entry lives in
+        // the compiler package, so the authoring proof installs both tarballs.
+        '@openelement/compiler': `file:${root}/packages/compiler/openelement-compiler-${PACKAGE_VERSION}.tgz`,
       },
       devDependencies: {
         vite: VITE_DEV_PIN,
@@ -59,7 +62,7 @@ export class Counter extends OpenElement {
   );
   await writeFile(
     join(author, 'vite.config.js'),
-    `import {element} from '@openelement/element/vite';
+    `import {element} from '@openelement/compiler/vite';
 export default {plugins:[element(), {name:'proof-module-boundary',generateBundle(){for(const id of this.getModuleIds()){if(/compiler|router\\/src\\/(?:vite|cli)|node:/.test(id))this.error('Browser tooling leak: '+id)}}}],build:{sourcemap:true,lib:{entry:'register.js',formats:['es'],fileName:'counter'}}};`,
   );
   await run([

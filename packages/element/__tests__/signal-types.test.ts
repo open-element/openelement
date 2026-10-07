@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import type { Signal } from '../src/internal/protocol/signal.ts';
+import type { Signal } from '@openelement/protocol/signal';
 import { signal } from '../src/internal/signal/framework.ts';
 import { isSignalLike } from '../src/internal/signal/types.ts';
 

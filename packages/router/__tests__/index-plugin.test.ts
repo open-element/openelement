@@ -224,7 +224,10 @@ test('createOpenPlugin() virtualEntryPlugin.load returns code for resolved ID', 
   // '\0virtual:open-hono-entry' is the resolved ID
   const code = (virtualPlugin.load as Function)('\0virtual:open-hono-entry' as never);
   expect(code).toEqual(expect.anything());
-  expect(code as string).toContain('hono');
+  // The entry imports the generated-app factory — the WinterCG assembly
+  // (#1560); no composition framework appears in the entry.
+  expect(code as string).toContain('createGeneratedApp');
+  expect(code as string).not.toContain("from 'hono'");
 });
 
 // ─── createOpenPlugin() packageIslands option ───────────────────────────
@@ -413,7 +416,10 @@ test('createOpenPlugin() virtualEntryPlugin.load falls back to regenerating from
   // load should return code
   const code = callPluginHook(virtualPlugin.load, '\0virtual:open-hono-entry');
   expect(code).toEqual(expect.anything());
-  expect(code as string).toContain('hono');
+  // The entry imports the generated-app factory — the WinterCG assembly
+  // (#1560); no composition framework appears in the entry.
+  expect(code as string).toContain('createGeneratedApp');
+  expect(code as string).not.toContain("from 'hono'");
 });
 
 test('createOpenPlugin() virtualEntryPlugin.resolveId returns null for unknown IDs', () => {

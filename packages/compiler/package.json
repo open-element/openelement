@@ -1,0 +1,23 @@
+{
+  "name": "@openelement/compiler",
+  "version": "1.0.0-alpha.10",
+  "description": "Build-time compiler for OpenElement — transforms TSX with @element decorators into Part Program modules. The only TypeScript-dependent package.",
+  "type": "module",
+  "license": "MIT",
+  "publish": {
+    "include": ["src/**", "README.md", "LICENSE"],
+    "access": "public"
+  },
+  "dependencies": {
+    "@openelement/protocol": "workspace:*",
+    "typescript": "6.0.3"
+  },
+  "peerDependencies": {
+    "vite": "^8.0.0"
+  },
+  "exports": {
+    ".": "./src/compiler.ts",
+    "./vite": "./src/vite.ts"
+  },
+  "files": ["src", "README.md"]
+}

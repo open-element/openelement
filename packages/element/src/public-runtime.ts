@@ -17,34 +17,34 @@ import type {
   CompiledElementMetadata,
   CompiledPropertyMetadata,
   PartProgram,
-} from './internal/protocol/part-program.ts';
+} from '@openelement/protocol/part-program';
 import { FacadeErrorCode, OpenElementError, raiseFrameworkError } from './internal/core/errors.ts';
 import {
   MAX_COMPOSITION_DEPTH,
   STREAM_MAX_FIELDS,
   STREAM_MAX_OWNERS,
   STREAM_MAX_SEED_PROPERTIES,
-} from './internal/protocol/policy.ts';
+} from '@openelement/protocol/policy';
 import { signal } from './internal/signal/index.ts';
 import type { CompiledProgramHost } from './internal/compiled/server/index.ts';
-import type { RenderOutput } from './internal/protocol/render.ts';
+import type { RenderOutput } from '@openelement/protocol/render';
 import { type TrustedHtml, trustedHtmlValue } from './internal/core/security.ts';
 
 export { collectPublicProps } from './internal/core/props-utils.ts';
-export type { RenderOutput, SsrAdmissionDecision } from './internal/protocol/render.ts';
+export type { RenderOutput, SsrAdmissionDecision } from '@openelement/protocol/render';
 export { consumeContext, createContext, provideContext } from './internal/core/index.ts';
 export type { Context, RenderError } from './internal/core/index.ts';
 export { assertValidTagName, isValidTagName } from './internal/core/tag-utils.ts';
-export { ERROR_PREFIX } from './internal/protocol/errors.ts';
+export { ERROR_PREFIX } from '@openelement/protocol/errors';
 export {
   formatError,
   OpenElementError,
   reportError,
   setErrorTelemetryHook,
 } from './internal/core/errors.ts';
-export type { ErrorTelemetryHook } from './internal/protocol/errors.ts';
+export type { ErrorTelemetryHook } from '@openelement/protocol/errors';
 export { computed, effect, signal } from './internal/signal/index.ts';
-export type { ReadonlySignal, Signal } from './internal/protocol/signal.ts';
+export type { ReadonlySignal, Signal } from '@openelement/protocol/signal';
 export { element, property } from './internal/core/compile-decorators.ts';
 export {
   DANGEROUS_KEYS,
@@ -69,7 +69,7 @@ export {
   STREAM_FRAME_URL_ATTRIBUTES,
   STREAM_FRAME_URL_CONTROL_MAX,
   unsafeStreamFrameAttribute,
-} from './internal/protocol/stream-frame-policy.ts';
+} from '@openelement/protocol/stream-frame-policy';
 // Numeric build/runtime policy budgets (internal/protocol/policy.ts): the
 // same single-source contract for the streaming admission numbers.
 export {
@@ -81,12 +81,12 @@ export {
   STREAM_MAX_PAYLOAD_LENGTH,
   STREAM_MAX_SEED_PROPERTIES,
   STREAM_TIMEOUT_MS,
-} from './internal/protocol/policy.ts';
-export type { IslandOptions } from './internal/protocol/island.ts';
+} from '@openelement/protocol/policy';
+export type { IslandOptions } from '@openelement/protocol/island';
 export { StyleSheet } from './internal/core/style-sheet.ts';
 export { createLogger } from './internal/core/logger.ts';
 export type { Logger } from './internal/core/logger.ts';
-export type { StyleSheetLike } from './internal/protocol/style-sheet.ts';
+export type { StyleSheetLike } from '@openelement/protocol/style-sheet';
 export { deepGetElementById, ensureDeepFragmentNavigation } from './internal/core/deep-fragment.ts';
 export { ensurePreHydrationClickCapture } from './internal/compiled/runtime/pre-upgrade-events.ts';
 
@@ -160,7 +160,7 @@ function failUncompiled(ctor: object, tag: string): never {
     FacadeErrorCode.PROGRAM_MISSING,
     `[openElement] <${tag}> (${classNameOf(ctor)}) has no compiled Part Program. ` +
       'renderDsd only serializes classes produced by the OpenElement compiler ' +
-      '(@openelement/element/compiler open:compiled-element transform).',
+      '(@openelement/compiler open:compiled-element transform).',
   );
 }
 

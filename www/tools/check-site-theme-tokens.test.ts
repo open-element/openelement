@@ -54,7 +54,7 @@ test('role tokens pass; unknown names and per-line dupes do not double-report', 
 
 test('allowlist suppresses only the named sheet', () => {
   expect(
-    flagTexts(['background: var(--color-zinc-950);'], '/x/islands/open-search.tsx'),
+    flagTexts(['background: var(--color-zinc-950);'], '/x/islands/open-search.css'),
   ).toHaveLength(0);
   // The same ref in any other sheet stays red: the key is sheet-scoped.
   expect(flagTexts(['background: var(--color-zinc-950);'])[0]).toContain('BARE_PALETTE_ALLOWLIST');

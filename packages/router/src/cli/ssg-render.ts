@@ -6,7 +6,7 @@
  * (build-manifest printing) through this hook.
  */
 
-import type { SsgRenderEvidence } from '../vite/internal/protocol/ssg.ts';
+import type { SsgRenderEvidence } from '@openelement/protocol/ssg';
 import { printBuildManifest } from '../vite/build-manifest.ts';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 

@@ -22,7 +22,7 @@ export type {
   SignalLike,
   Unsubscribe,
   WritableSignal,
-} from '../protocol/signal.ts';
+} from '@openelement/protocol/signal';
 export { isSignalLike, unwrapSignalLike } from './types.ts';
 
 // Internal engine seam (#723): the built-in adapter getter. One engine per

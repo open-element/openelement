@@ -9,7 +9,7 @@
 
 import { expect, test } from 'vitest';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/index.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import type { RouteEntry } from '@openelement/protocol/framework';
 
 // ─── Helper: create a RouteEntry ──────────────────────────────
 

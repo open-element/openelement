@@ -572,7 +572,10 @@ export async function buildApiReference(): Promise<ApiReferenceBuild> {
       // Non-module targets (the CSS style assets the Tailwind preset and
       // plain-CSS consumers import, #1505) declare no symbols: there is no
       // export surface to enumerate, so they are skipped rather than failed.
-      if (!/\.(?:[cm]?tsx?)$/.test(target)) continue;
+      // Ambient-declaration targets (#1558's `./css-modules` — a wildcard
+      // `declare module` carrier consumed through tsconfig `types`) are the
+      // same category: a global script has no module symbol to enumerate.
+      if (!/\.(?:[cm]?tsx?)$/.test(target) || /\.d\.ts$/.test(target)) continue;
       const entryFile = `${info.dir}/${target.replace(/^\.\//, '')}`;
       let enumerated: ExportRecord[];
       try {

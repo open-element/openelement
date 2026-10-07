@@ -5,7 +5,7 @@ import {
   STREAM_STATE_KEY,
   type StreamHostState,
 } from '../../src/internal/compiled/stream-state.ts';
-import { FacadeErrorCode, OpenElementError } from '../../src/internal/protocol/errors.ts';
+import { FacadeErrorCode, OpenElementError } from '@openelement/protocol/errors';
 import { signal } from '../../src/internal/signal/framework.ts';
 import {
   type FacadeElement,

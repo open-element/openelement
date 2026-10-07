@@ -33,8 +33,9 @@
      Tailwind build compiles no @custom-variant here yet.
    - One deliberate divergence from the shadcn default palette: light
      --color-destructive sits on red-700, not red-600 — red-600 clears 4.5:1
-     on the background but drops to ~3.8:1 on the 10% badge wash of itself
-     that open-badge paints; red-700 clears both (measured in the ui suite).
+     on the background but drops to ~3.8:1 on the 10% wash-of-itself pattern
+     the status recipes paint (the retired open-badge wash was the measured
+     case, ui suite); red-700 clears both.
    - Three non-shadcn status roles (--color-success/-warning/-info) joined
      the table in C3 (#1506): the components' status tones need theme-aware
      inks and the alias layer that used to carry them is deleted. Their light

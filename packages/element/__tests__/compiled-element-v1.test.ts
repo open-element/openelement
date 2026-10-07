@@ -25,8 +25,8 @@ import type { Plugin } from 'vite';
 import {
   COMPILED_MODULE_ABI_VERSION,
   PART_PROGRAM_VERSION,
-} from '../src/internal/protocol/part-program.ts';
-import type { StaticSidecarDescriptor } from '../src/internal/compiler/semantic-core/module-analysis.ts';
+} from '@openelement/protocol/part-program';
+import type { StaticSidecarDescriptor } from '../../../packages/compiler/src/internal/compiler/semantic-core/module-analysis.ts';
 
 const FIXTURE_DIR = new URL('../__fixtures__/compiled-element-v1/', import.meta.url);
 
@@ -35,7 +35,7 @@ const FIXTURE_DIR = new URL('../__fixtures__/compiled-element-v1/', import.meta.
 // every suite below.
 const { compiledElementPlugin } = await loadPluginModule();
 const { compileElementProgram, CompiledElementError } =
-  await import('../src/internal/compiler/semantic-core/compile.ts');
+  await import('../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts');
 
 /**
  * The island sidecar descriptor a host framework injects (#1468): the
@@ -56,10 +56,10 @@ function readFixtureSync(name: string): string {
   return readFileSync(new URL(name, FIXTURE_DIR), 'utf8');
 }
 
-type PluginModule = typeof import('../src/internal/compiler/plugin.ts');
+type PluginModule = typeof import('../../../packages/compiler/src/internal/compiler/plugin.ts');
 
 async function loadPluginModule(): Promise<PluginModule> {
-  return await import('../src/internal/compiler/plugin.ts');
+  return await import('../../../packages/compiler/src/internal/compiler/plugin.ts');
 }
 
 interface TransformContext {
@@ -445,7 +445,7 @@ describe('compiled-element v1 - unsupported syntax fails closed with located dia
 
   test('list Regions admit multi-field item slots and fail closed on non-item expressions', async () => {
     const { compileElementProgram } =
-      await import('../src/internal/compiler/semantic-core/compile.ts');
+      await import('../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts');
     // alpha.8: item templates carry one ival/iattr slot per item field — a row
     // may bind {item.text} twice and per-item attributes (id, href, ...).
     const source = [
@@ -569,8 +569,8 @@ test('compiled-element alpha.1 - canonical program records and decorator lowerin
 
 test('compiled-element alpha.1 - program validation fails closed on unsafe identity', async () => {
   const [{ compileElementProgram }, { validatePartProgram }] = await Promise.all([
-    import('../src/internal/compiler/semantic-core/compile.ts'),
-    import('../src/internal/protocol/part-program.ts'),
+    import('../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts'),
+    import('@openelement/protocol/part-program'),
   ]);
   const source = await readFixture('counter.tsx');
   const program = compileElementProgram(source, '/project/app/islands/counter.tsx').program;
@@ -1013,13 +1013,13 @@ describe('compiled-element strict emission - generated statics carry explicit ty
     expect(code).toContain('const __observedAttributes: string[] = [');
   });
 
-  test('styles keeps the authored annotation with override', () => {
+  test('styles keeps the authored annotation with override (#1558: .css imports)', () => {
     const source = [
       "import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';",
-      "import { recipe } from './component-recipes.ts';",
+      "import strictStyles from './strict-styles.css';",
       "@element('oe-strict-styles', { root: 'shadow-open' })",
       'export class StrictStyles extends OpenElement {',
-      '  static override styles: StyleSheetLike[] = [recipe(`:host { display: block; }`)];',
+      '  static override styles: StyleSheetLike[] = [strictStyles];',
       "  @property({ reflect: false }) label = '';",
       '  render() {',
       '    return <main>{this.label}</main>;',
@@ -1027,7 +1027,8 @@ describe('compiled-element strict emission - generated statics carry explicit ty
       '}',
     ].join('\n');
     const { code } = compileElementProgram(source, '/project/app/islands/strict-styles.tsx');
-    expect(code).toContain('static override styles: StyleSheetLike[] = [recipe(');
+    expect(code).toContain("import strictStyles from './strict-styles.css';");
+    expect(code).toContain('static override styles: StyleSheetLike[] = [strictStyles];');
   });
 
   test('computed factories are explicitly typed through the outer annotation', () => {
@@ -1089,5 +1090,117 @@ describe('compiled-element strict emission - generated statics carry explicit ty
     const { code } = compileElementProgram(source, '/project/app/islands/strict-flags.tsx');
     expect(code).toContain('static override delegatesFocus: boolean = true;');
     expect(code).toContain('static override formAssociated: boolean = true;');
+  });
+});
+
+describe('compiled-element alpha.11 - inline conditional class (#1556)', () => {
+  test('lowers to a synthesized computed field bound to the existing class Part (IR unchanged)', () => {
+    const source = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-conditional-class')",
+      'export class ConditionalClass extends OpenElement {',
+      '  @property({ type: Boolean, reflect: false }) flag = false;',
+      '  @property({ reflect: false }) count = 0;',
+      '  render() {',
+      "    return <main class={this.flag ? 'on' : 'off'} data-n={this.count}>x</main>;",
+      '  }',
+      '}',
+    ].join('\n');
+    const first = compileElementProgram(source, '/project/app/islands/conditional-class.tsx');
+    const second = compileElementProgram(source, '/project/app/islands/conditional-class.tsx');
+    // Deterministic emission, same as every other lowering form.
+    expect(JSON.stringify(first.program)).toEqual(JSON.stringify(second.program));
+
+    const classParts = first.program.parts.filter((part: { k: string }) => part.k === 'class');
+    expect(classParts.length, 'exactly one class Part').toEqual(1);
+    const signal = (classParts[0] as { signal: string }).signal;
+    expect(signal).toMatch(/^__compiledClass/);
+    expect((classParts[0] as { path: number[] }).path).toEqual([0]);
+
+    // The synthesized signal is a real computed property of the instance:
+    // metadata records it with its source dependency, no attribute channel.
+    const meta = first.program.metadata.properties.find(
+      (property: { name: string }) => property.name === signal,
+    ) as { computed?: boolean; deps?: string[]; attribute: string | null; reflect: boolean };
+    expect(meta.computed).toEqual(true);
+    expect(meta.deps).toEqual(['flag']);
+    expect(meta.attribute).toEqual(null);
+    expect(meta.reflect).toEqual(false);
+    // The synthesized field adds no attribute channel; the declared
+    // properties' own channels (reflect: false keeps the attribute) are the
+    // only observed attributes.
+    expect(first.program.metadata.observedAttributes).toEqual(['flag', 'count']);
+
+    // The generated module derives the class value from the source signal;
+    // this module never imported computed, so the factory references the
+    // synthesized binding (asserted on its own test below).
+    expect(first.code).toContain(
+      `${signal}: (__s) => __openelementComputed(() => __s.flag.value ? 'on' : 'off'),`,
+    );
+  });
+
+  test('binds the synthesized computed import when the module never imported computed', () => {
+    const source = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-conditional-class-import')",
+      'export class ConditionalClassImport extends OpenElement {',
+      '  @property({ type: Boolean, reflect: false }) flag = false;',
+      "  render() { return <main class={this.flag ? 'on' : ''}>x</main>; }",
+      '}',
+    ].join('\n');
+    const { code } = compileElementProgram(
+      source,
+      '/project/app/islands/conditional-class-import.tsx',
+    );
+    expect(code).toContain(
+      "import { computed as __openelementComputed } from '@openelement/element';",
+    );
+    expect(code).toContain('__openelementComputed(() => __s.flag.value');
+    // The authored import survives with the compile-time-only bindings
+    // (element, property) stripped, exactly as any other module does.
+    expect(code).toContain("import { OpenElement } from '@openelement/element';");
+  });
+
+  test('reuses the authored local binding when computed is imported under an alias', () => {
+    const source = [
+      "import { computed as derive, element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-conditional-class-alias')",
+      'export class ConditionalClassAlias extends OpenElement {',
+      '  @property({ type: Boolean, reflect: false }) flag = false;',
+      "  render() { return <main class={this.flag ? 'on' : 'off'}>x</main>; }",
+      '}',
+    ].join('\n');
+    const { code } = compileElementProgram(
+      source,
+      '/project/app/islands/conditional-class-alias.tsx',
+    );
+    expect(code).toContain('derive(() => __s.flag.value');
+    expect(code).not.toContain('__openelementComputed');
+  });
+
+  test('supports the computed-condition grammar over declared properties', () => {
+    const source = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-conditional-class-grammar')",
+      'export class ConditionalClassGrammar extends OpenElement {',
+      '  @property({ reflect: false }) count = 0;',
+      '  @property({ reflect: false }) items: string[] = [];',
+      '  render() {',
+      "    return <main class={this.count > 3 && this.items.length > 0 ? 'loaded' : ''}>x</main>;",
+      '  }',
+      '}',
+    ].join('\n');
+    const { program } = compileElementProgram(
+      source,
+      '/project/app/islands/conditional-class-grammar.tsx',
+    );
+    const classPart = program.parts.find((part: { k: string }) => part.k === 'class') as {
+      signal: string;
+    };
+    const meta = program.metadata.properties.find(
+      (property: { name: string }) => property.name === classPart.signal,
+    ) as { deps?: string[] };
+    // deps collect in read order across the whole condition.
+    expect(meta.deps).toEqual(['count', 'items']);
   });
 });

@@ -89,11 +89,20 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   // overrides one.
   ['openelement.config.ts.tmpl', 'openelement.config.ts'],
   ['app/styles/tokens.css', 'app/styles/tokens.css'],
+  // #1557: the retired ui zero-interaction component shapes ship as plain
+  // HTML+CSS recipes the consumer deletes if unused (never an npm dep).
+  ['app/styles/recipes.css', 'app/styles/recipes.css'],
   // alpha.4: the structural document-head convention. The config file carries
   // the structured `head` channel (title/description/favicon/scripts); this
   // module carries what a URL list cannot express (meta tags, preloads).
   ['app/head.tsx.tmpl', 'app/head.tsx'],
-  ['app/components/page-styles.ts.tmpl', 'app/components/page-styles.ts'],
+  // #1558: page CSS is .css files — the one style authoring form. Pages
+  // import and array their sheets in `static styles`.
+  ['app/components/page-home.css', 'app/components/page-home.css'],
+  ['app/components/page-about.css', 'app/components/page-about.css'],
+  ['app/components/page-404.css', 'app/components/page-404.css'],
+  ['app/components/badges.css', 'app/components/badges.css'],
+  ['app/components/site-chrome.css', 'app/components/site-chrome.css'],
   ['app/components/page-home.tsx.tmpl', 'app/components/page-home.tsx'],
   ['app/components/page-about.tsx.tmpl', 'app/components/page-about.tsx'],
   ['app/components/page-404.tsx.tmpl', 'app/components/page-404.tsx'],
@@ -102,7 +111,9 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['app/routes/404.tsx.tmpl', 'app/routes/404.tsx'],
   ['app/routes/api/ping.ts.tmpl', 'app/routes/api/ping.ts'],
   ['app/islands/my-counter.tsx.tmpl', 'app/islands/my-counter.tsx'],
+  ['app/islands/my-counter.css', 'app/islands/my-counter.css'],
   ['app/islands/live-timer.tsx.tmpl', 'app/islands/live-timer.tsx'],
+  ['app/islands/live-timer.css', 'app/islands/live-timer.css'],
 ];
 
 function versionTokens(v: ProductVersions): Record<string, string> {

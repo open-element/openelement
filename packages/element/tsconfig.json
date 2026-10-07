@@ -27,8 +27,6 @@
     "src/authoring.ts",
     "src/html.ts",
     "src/logger.ts",
-    "src/build-utils.ts",
-    "src/compiler.ts",
-    "src/vite.ts"
+    "src/build-utils.ts"
   ]
 }

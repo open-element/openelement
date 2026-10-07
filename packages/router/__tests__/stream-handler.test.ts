@@ -13,9 +13,9 @@ import { testProgram } from '../../element/__tests__/compiled-runtime/test-progr
 import {
   ACTION_FETCH_HEADER,
   createActionBodyLimit,
-  createHonoBridge,
 } from '../src/vite/internal/server-runtime/action-runtime.ts';
-import type { ActionHonoContext } from '../src/vite/internal/server-runtime/action-runtime.ts';
+import { createRequestScope } from '../src/vite/internal/server-runtime/wintercg.ts';
+import type { OpenElementRequestScope } from '../src/vite/internal/server-runtime/wintercg.ts';
 import {
   createStreamHeaderChannel,
   mergeChannelHeaders,
@@ -27,7 +27,7 @@ import {
   STREAM_BROWSER_BOOTSTRAP,
   streamFields,
 } from '../src/vite/internal/server-runtime/stream-runtime.ts';
-import type { PageRouteDecl, StreamRouteManifest } from '../src/vite/internal/protocol/ssg.ts';
+import type { PageRouteDecl, StreamRouteManifest } from '@openelement/protocol/ssg';
 import { renderActionRoute, renderPageRoute } from '../src/vite/internal/ssg/entry-codegen.ts';
 
 const program = testProgram({
@@ -103,7 +103,7 @@ function deferred<T>() {
  * way since ADR-0160 Amendment 1 (the typed `createDeferredPageShell` factory
  * over the serialized manifests + the real executor import), so the gate runs
  * as shipped too. The action POST wiring never executes here (only the GET
- * handler is driven), but the harness binds the real bridge/body-limit so the
+ * handler is driven), but the harness binds the real scope/body-limit so the
  * composed source matches the shipped entry.
  */
 async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest) {
@@ -132,7 +132,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __streamFields = deps.streamFields;
     const __streamBody = deps.createStreamBody({ escapeAttr, timeoutMs: deps.timeoutMs });
     const __streamBrowserBootstrap = deps.streamBrowserBootstrap;
-    const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = deps.bridge;
+    const __requestScope = deps.requestScope;
     const __actionBodyLimit = deps.createActionBodyLimit(deps.maxActionBodyBytes);
     const __actionFetchHeader = deps.ACTION_FETCH_HEADER;
     const $Route_Index = routeModule;
@@ -172,7 +172,20 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     default: Object.assign(Page, { openElementPage: { renderIntent: { mode: 'dynamic' } } }),
     loader: (_context: { responseHeaders: Headers; request: Request }): unknown => ({}),
   };
-  const bridge = createHonoBridge();
+  // The generated handler binds `c` through the request-scope accessor the
+  // factory hands the entry (#1560). The harness mirrors the production
+  // binding one-to-one: one scope per request, seeded with the CSP nonce the
+  // generated wiring reads.
+  const scopes = new Map<Request, OpenElementRequestScope>();
+  const requestScope = (request: Request): OpenElementRequestScope => {
+    let scope = scopes.get(request);
+    if (!scope) {
+      scope = createRequestScope(request);
+      scope.set('cspNonce', 'nonce123');
+      scopes.set(request, scope);
+    }
+    return scope;
+  };
   const deps = {
     routeModule,
     manifest: route.streamManifest,
@@ -189,7 +202,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     timeoutMs,
     createStreamHeaderChannel,
     mergeChannelHeaders,
-    bridge,
+    requestScope,
     createActionBodyLimit,
     maxActionBodyBytes: MAX_ACTION_BODY_BYTES,
     ACTION_FETCH_HEADER,
@@ -200,23 +213,10 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     route: unknown,
   ) => Promise<Response>;
   const fetch = (request: Request) => {
-    const headers = new Headers();
-    const context = {
-      req: { raw: request, path: '/' },
-      env: {},
-      header: (name: string, value: string) => headers.set(name, value),
-      get: (name: string) => (name === 'cspNonce' ? 'nonce123' : undefined),
-      body: (body: ReadableStream<Uint8Array>, status: number, extra: HeadersInit) =>
-        new Response(body, { status, headers: new Headers([...headers, ...new Headers(extra)]) }),
-      html: (body: string, status = 200) =>
-        new Response(body, { status, headers: new Headers(headers) }),
-      redirect: (location: string, status: number) =>
-        new Response(null, { status, headers: { Location: location } }),
-    };
-    // The generated handler is the bridge-wrapped WinterCG shape; production
-    // populates the context WeakMap in the app.all('*') hook. Mirror it here.
-    // The fake context carries only the GET-handler slice of the Hono shape.
-    bridge.contexts.set(request, context as unknown as ActionHonoContext);
+    // The generated handler is a WinterCG route handler binding the request
+    // scope; production creates the scope in the app's dispatch. The harness
+    // creates it here — same accessor, same identity binding.
+    requestScope(request);
     return generated(request, { params: {} });
   };
   return {

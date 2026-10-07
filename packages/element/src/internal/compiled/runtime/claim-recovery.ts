@@ -15,8 +15,8 @@ import {
   type ProgramEachPart,
   type ProgramTreeNode,
   type ProgramWhenPart,
-} from '../../protocol/part-program.ts';
-import { ClaimErrorCode, RuntimeErrorCode } from '../../protocol/errors.ts';
+} from '@openelement/protocol/part-program';
+import { ClaimErrorCode, RuntimeErrorCode } from '@openelement/protocol/errors';
 import type { MountContext } from './program-kernel.ts';
 import {
   displayValue,
@@ -28,7 +28,7 @@ import {
   signalOf,
   subscribeWrites,
 } from './program-kernel.ts';
-import { whenActive } from './regions.ts';
+import { regionBuildersOrFail } from './regions-seam.ts';
 import {
   claimFailure,
   claimItemRecords,
@@ -188,7 +188,7 @@ function buildRecoveryRegionContent(
   part: ProgramWhenPart | ProgramEachPart,
 ): Node[] {
   if (part.k === 'when') {
-    const active = whenActive(part, signalOf(ctx, part.signal).value);
+    const active = regionBuildersOrFail().whenActive(part, signalOf(ctx, part.signal).value);
     return buildStaticRecoveryNodes(doc, active ? part.on : part.off);
   }
   const items = claimItemRecords(part, signalOf(ctx, part.signal).value, `parts[${part.index}]`, {

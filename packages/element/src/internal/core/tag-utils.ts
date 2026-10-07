@@ -17,7 +17,7 @@ import { AuthoringErrorCode, ERROR_PREFIX, OpenElementError } from './errors.ts'
 // import-free protocol base (`../protocol/forbidden-sinks.ts`) so the compiler
 // semantic core shares it without crossing its bundler-neutral import
 // boundary; re-exported here for the core/authoring consumers.
-export { camelToKebab } from '../protocol/forbidden-sinks.ts';
+export { camelToKebab } from '@openelement/protocol/forbidden-sinks';
 
 /** Reserved custom element names per the HTML specification. */
 const RESERVED_CUSTOM_ELEMENT_NAMES = new Set([

@@ -1,7 +1,7 @@
 /**
- * packages/router/__tests__/style-asset-build.test.ts — the island style
- * asset protocol's consumer-form proof (ADR-0164, #1553 production lane;
- * seams.md "Island stylesheet asset" row).
+ * packages/router/__tests__/style-asset-build.test.ts — the style-edge
+ * protocol's consumer-form proof (#1558, after the file-based authoring
+ * retirement; seams.md "Island stylesheet asset" row).
  *
  * A temporary fixture app OUTSIDE this repository is built through the real
  * Router build CLI in a plain Node child process — the same harness as
@@ -9,10 +9,10 @@
  * way downstream consumers see it:
  *
  *   - island chunks carry NO component CSS text: the compiled island modules
- *     import sheet adapters, not stylesheet bytes (the zero-inline
- *     guarantee's consumer form);
+ *     import sheet adapters over authored `.css` files, not stylesheet bytes
+ *     (the zero-inline guarantee's consumer form);
  *   - the emitted `.css` assets exist under dist/client/assets with the
- *     exact sheet bytes the compiler's requests carried;
+ *     exact bytes of the authored files;
  *   - the client asset manifest records the preloadable style URLs (the
  *     `styles` field, read from the generated dist/server/client-assets.js);
  *   - islands carrying identical sheet bytes reuse ONE asset (content
@@ -60,24 +60,22 @@ async function write(joinPath: string, content: string): Promise<void> {
   await writeFile(joinPath, content, 'utf8');
 }
 
-function islandSource(tag: string, sheet: string, sheetConst: string): string {
+function islandSource(tag: string): string {
   const className = tag
     .split('-')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join('');
   return [
-    '/** Styled island of the style-asset proof fixture. */',
+    '/** Styled island of the style-edge proof fixture (#1558). */',
     "import { defineIslandConfig } from '@openelement/router';",
     "import { element, OpenElement } from '@openelement/element';",
-    "import { compiledStyle } from '../shared/compiled-style.ts';",
+    `import sheet from './${tag}.css';`,
     '',
     "export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });",
     '',
-    `const ${sheetConst} = [compiledStyle(\`${sheet}\`)];`,
-    '',
     `@element('${tag}', { root: 'shadow-open' })`,
     `export default class ${className} extends OpenElement {`,
-    `  static override styles = ${sheetConst};`,
+    '  static override styles = [sheet];',
     '  render() {',
     `    return <div class='${tag === 'oe-style-c' ? 'c-rule' : 'shared-rule'}'>${tag}</div>;`,
     '  }',
@@ -107,34 +105,15 @@ async function buildFixture(): Promise<string> {
       '',
     ].join('\n'),
   );
-  await write(
-    join(appDir, 'app', 'shared', 'compiled-style.ts'),
-    [
-      "import { StyleSheet, type StyleSheetLike } from '@openelement/element';",
-      '',
-      '/** Build a component stylesheet outside compiled component modules (ADR-0143). */',
-      'export function compiledStyle(css: string): StyleSheetLike {',
-      '  const sheet = new StyleSheet();',
-      '  sheet.replaceSync(css);',
-      '  return sheet;',
-      '}',
-      '',
-    ].join('\n'),
-  );
-  // Two islands carrying the IDENTICAL sheet bytes (multi-island reuse) and
-  // one with its own sheet.
-  await write(
-    join(appDir, 'app', 'islands', 'oe-style-a.tsx'),
-    islandSource('oe-style-a', SHARED_SHEET, 'SHARED_SHEET'),
-  );
-  await write(
-    join(appDir, 'app', 'islands', 'oe-style-b.tsx'),
-    islandSource('oe-style-b', SHARED_SHEET, 'SHARED_SHEET'),
-  );
-  await write(
-    join(appDir, 'app', 'islands', 'oe-style-c.tsx'),
-    islandSource('oe-style-c', C_SHEET, 'C_SHEET'),
-  );
+  // Two islands importing the IDENTICAL sheet bytes (multi-island reuse; the
+  // shared sheet is its own .css file both import) and one with its own.
+  await write(join(appDir, 'app', 'islands', 'shared-sheet.css'), SHARED_SHEET);
+  await write(join(appDir, 'app', 'islands', 'oe-style-a.css'), SHARED_SHEET);
+  await write(join(appDir, 'app', 'islands', 'oe-style-b.css'), SHARED_SHEET);
+  await write(join(appDir, 'app', 'islands', 'oe-style-c.css'), C_SHEET);
+  await write(join(appDir, 'app', 'islands', 'oe-style-a.tsx'), islandSource('oe-style-a'));
+  await write(join(appDir, 'app', 'islands', 'oe-style-b.tsx'), islandSource('oe-style-b'));
+  await write(join(appDir, 'app', 'islands', 'oe-style-c.tsx'), islandSource('oe-style-c'));
   await write(
     join(appDir, 'app', 'components', 'proof-page.tsx'),
     [

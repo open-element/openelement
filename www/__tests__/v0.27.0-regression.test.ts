@@ -155,9 +155,11 @@ test('v0.44 surface: JSX factories live only in the supported jsx-runtime subpat
 
 test('alpha.10 surface: retired package directories stay deleted', () => {
   const packages = join(import.meta.dirname ?? '.', '..', '..', 'packages');
-  // 1.0 baseline note: 'router' was retired at v0.27, but the directory name was
-  // re-legitimized by the @openelement/router product (ADR-0152) — excluded here.
-  for (const name of ['core', 'signal', 'protocol', 'content', 'ssg']) {
+  // 1.0 baseline notes: 'router' was retired at v0.27 but re-legitimized by the
+  // @openelement/router product (ADR-0152), and 'protocol' was retired at v0.44
+  // but re-legitimized as the @openelement/protocol contracts package (#1557) —
+  // both excluded here.
+  for (const name of ['core', 'signal', 'content', 'ssg']) {
     expect(
       existsSync(join(packages, name)),
       `retired package directory returned: ${name}`,

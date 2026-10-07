@@ -14,10 +14,10 @@
 
 import { expect, test } from 'vitest';
 
-type PluginModule = typeof import('../src/internal/compiler/plugin.ts');
+type PluginModule = typeof import('../../../packages/compiler/src/internal/compiler/plugin.ts');
 
 async function loadPluginModule(): Promise<PluginModule> {
-  return await import('../src/internal/compiler/plugin.ts');
+  return await import('../../../packages/compiler/src/internal/compiler/plugin.ts');
 }
 
 /** The shape Vite's `this.error()` receives for a Rollup-style build error. */

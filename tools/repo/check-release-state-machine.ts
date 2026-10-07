@@ -12,8 +12,8 @@
  * module must mirror release-state.json); it is explicitly NOT registry proof.
  * The release/candidate phase runs the registry drift check, which queries npm
  * read-only and fails closed. The "common complete version" is computed from
- * the live registry as the intersection of stable versions across all four
- * packages; a tracked value must equal that intersection, and no three-package
+ * the live registry as the intersection of stable versions across every
+ * published package; a tracked value must equal that intersection, and no three-package
  * fallback is ever accepted. The checker never publishes or moves a dist-tag.
  */
 
@@ -25,19 +25,28 @@ import { commandOutput } from './node-command.ts';
 
 export type RegistryTags = Record<string, string>;
 
+/**
+ * One package's release-state entry. Schema v4 (#1557, owner ruling
+ * 2026-10-07): a package awaiting its first publish carries
+ * `status: 'unpublished'` and NO registry object — the registry absence is
+ * the tracked truth, never a placeholder dist-tag (P6). The release commit
+ * that first publishes the package flips it to `'published'` with its real
+ * dist-tags.
+ */
 export interface ReleasePackageState {
   name: string;
-  registry: RegistryTags;
+  status: 'published' | 'unpublished';
+  registry?: RegistryTags;
 }
 
-export interface ReleaseStateV3 {
-  schemaVersion: 3;
+export interface ReleaseStateV4 {
+  schemaVersion: 4;
   sourceVersion: string;
   activeTarget: string;
   nextPlannedTrain: string;
   maturity: 'alpha' | 'beta' | 'stable';
   packages: ReleasePackageState[];
-  /** Newest stable version present in all four packages, or null. */
+  /** Newest stable version present in every published package, or null. */
   commonCompleteVersion: string | null;
   latestPrerelease: {
     version: string;
@@ -66,12 +75,12 @@ const ADMITTED_ACTIVE_TARGET = 'v1.0.0-alpha.10';
 
 /** Offline structural + Site-copy validation. Not registry proof. */
 export function validateReleaseState(
-  state: ReleaseStateV3,
+  state: ReleaseStateV4,
   packageVersions: Map<string, string>,
   siteVersionSource: string,
 ): string[] {
   const failures: string[] = [];
-  if (state.schemaVersion !== 3) failures.push('unsupported release-state schema');
+  if (state.schemaVersion !== 4) failures.push('unsupported release-state schema');
   const names = state.packages.map((entry) => entry.name).sort();
   const manifestNames = [...packageVersions.keys()].sort();
   if (names.join(',') !== manifestNames.join(',')) {
@@ -85,7 +94,20 @@ export function validateReleaseState(
         `${entry.name} version ${version} differs from sourceVersion ${state.sourceVersion}`,
       );
     }
-    if (!entry.registry.latest) failures.push(`${entry.name} registry.latest is required`);
+    if (entry.status === 'unpublished') {
+      if (entry.registry !== undefined) {
+        failures.push(
+          `${entry.name} is unpublished and must not carry a registry object ` +
+            '(fabricated dist-tags are a P6 violation)',
+        );
+      }
+      continue;
+    }
+    if (entry.status !== 'published') {
+      failures.push(`${entry.name} status must be "published" or "unpublished"`);
+      continue;
+    }
+    if (!entry.registry?.latest) failures.push(`${entry.name} registry.latest is required`);
   }
   if (state.activeTarget !== ADMITTED_ACTIVE_TARGET) {
     failures.push(`activeTarget must be the admitted train ${ADMITTED_ACTIVE_TARGET}`);
@@ -131,10 +153,32 @@ export function validateReleaseState(
   } else if (commonMatch[2] !== state.commonCompleteVersion) {
     failures.push(`www COMMON_PUBLISHED_VERSION must be ${state.commonCompleteVersion}`);
   }
-  for (const entry of state.packages) {
-    if (!siteVersionSource.includes(`'${entry.name}': 'v${entry.registry.latest}'`)) {
-      failures.push(`www PUBLISHED_LATEST must record ${entry.name} v${entry.registry.latest}`);
+  const unpublished = state.packages
+    .filter((entry) => entry.status === 'unpublished')
+    .map((entry) => entry.name)
+    .sort();
+  const released = state.packages.filter((entry) => entry.status === 'published');
+  for (const entry of released) {
+    if (!siteVersionSource.includes(`'${entry.name}': 'v${entry.registry!.latest}'`)) {
+      failures.push(`www PUBLISHED_LATEST must record ${entry.name} v${entry.registry!.latest}`);
     }
+  }
+  // The unpublished set must be explicit on the site: a package the registry
+  // does not know yet must never appear with a published latest (or silently
+  // disappear from the per-package model).
+  const unreleasedMatch = /UNRELEASED_PACKAGES[^=]*=\s*[^\[\n]*\[([^\]]*)\]/.exec(
+    siteVersionSource,
+  );
+  const listedUnreleased = (unreleasedMatch?.[1] ?? '')
+    .split(',')
+    .map((token) => /'([^']+)'/.exec(token)?.[1] ?? '')
+    .filter((token) => token !== '')
+    .sort();
+  if (listedUnreleased.join(',') !== unpublished.join(',')) {
+    failures.push(
+      `www UNRELEASED_PACKAGES must list exactly the unpublished packages: ` +
+        `${unpublished.join(', ') || 'none'}`,
+    );
   }
   return failures;
 }
@@ -164,11 +208,16 @@ export function commonStableVersion(
  * value present in only three packages is rejected.
  */
 export function validateRegistryEvidence(
-  state: ReleaseStateV3,
+  state: ReleaseStateV4,
   evidence: RegistryEvidence,
 ): string[] {
   const failures: string[] = [];
   for (const entry of state.packages) {
+    // An unpublished package has no registry truth to compare: its absence is
+    // the tracked state (schema v4). The npm view for a fresh name fails, and
+    // treating that failure as drift would make the first-publish train
+    // unprovable; the flip to "published" is where proof resumes.
+    if (entry.status !== 'published') continue;
     const versions = evidence.versions[entry.name];
     const distTags = evidence.distTags[entry.name];
     if (!versions || !distTags) {
@@ -214,7 +263,7 @@ export function validateRegistryEvidence(
   if (state.commonCompleteVersion !== computedCommon) {
     failures.push(
       `commonCompleteVersion: tracked ${state.commonCompleteVersion ?? 'null'}, ` +
-        `registry four-package stable intersection ${computedCommon ?? 'null'}`,
+        `registry published-package stable intersection ${computedCommon ?? 'null'}`,
     );
   }
   if (state.commonCompleteVersion !== null) {
@@ -229,8 +278,8 @@ export function validateRegistryEvidence(
   return failures;
 }
 
-async function readState(): Promise<ReleaseStateV3> {
-  return JSON.parse(await readFile('docs/release/release-state.json', 'utf8')) as ReleaseStateV3;
+async function readState(): Promise<ReleaseStateV4> {
+  return JSON.parse(await readFile('docs/release/release-state.json', 'utf8')) as ReleaseStateV4;
 }
 
 async function workspaceVersions(): Promise<Map<string, string>> {
@@ -264,6 +313,7 @@ async function main(): Promise<void> {
   if (!offline) {
     const evidence: RegistryEvidence = { versions: {}, distTags: {} };
     for (const entry of state.packages) {
+      if (entry.status !== 'published') continue;
       const versionsResult = await commandOutput('npm', {
         args: ['view', entry.name, 'versions', '--json'],
         stdout: 'piped',

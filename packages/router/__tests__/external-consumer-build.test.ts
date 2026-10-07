@@ -17,7 +17,7 @@
  *     chunk the alias was imported from (the alias table travels from the
  *     outer resolved Vite config into the client build);
  *   - island chunks and the client asset manifest: the local island and the
- *     package island (@openelement/ui's open-callout, via its package
+ *     package island (@openelement/ui's open-button, via its package
  *     manifest — the same pattern the reference site uses) each attribute to
  *     exactly one emitted chunk, and the per-page island manifests carry the
  *     joined chunk URLs.
@@ -124,7 +124,7 @@ async function buildFixture(): Promise<Fixture> {
       "import { defineConfig } from '@openelement/router';",
       '',
       '// Package islands come from the real workspace UI package — its manifest',
-      '// declares open-callout exactly as the reference site consumes it.',
+      '// declares open-button exactly as the reference site consumes it.',
       'export default defineConfig({ packageIslands: [',
       "  '@openelement/ui',",
       '] });',
@@ -201,7 +201,7 @@ async function buildFixture(): Promise<Fixture> {
       '    return (',
       "      <div class='proof'>",
       '        <oe-proof-counter></oe-proof-counter>',
-      "        <open-callout type='info' label='Note'>External consumer proof.</open-callout>",
+      "        <open-button variant='primary'>External consumer proof.</open-button>",
       '      </div>',
       '    );',
       '  }',
@@ -279,14 +279,10 @@ async function buildFixture(): Promise<Fixture> {
     '../../../store/@acme/conditions',
     join(appDir, 'node_modules', '@acme', 'conditions'),
   );
-  // The workspace vite is the app's vite. The generated server entry imports
-  // hono directly, so the app declares it — the same declaration a pnpm
-  // consumer makes (pnpm does not hoist transitive dependencies).
+  // The workspace vite is the app's vite. The generated server entry composes
+  // on the internal WinterCG layer (#1560) and imports no hono — the build
+  // must succeed with NO hono copy in the consumer's node_modules.
   await symlink(join(REPO_ROOT, 'node_modules', 'vite'), join(appDir, 'node_modules', 'vite'));
-  await symlink(
-    join(REPO_ROOT, 'packages', 'router', 'node_modules', 'hono'),
-    join(appDir, 'node_modules', 'hono'),
-  );
 
   return { appDir };
 }
@@ -321,7 +317,7 @@ test('external consumer: both islands attribute to exactly one emitted chunk eac
   // island chunk (named by the resolved module identity through the build's
   // own resolver) both exist.
   const counterChunk = clientIslands.find((file) => file.startsWith('island-oe-proof-counter'));
-  const calloutChunk = clientIslands.find((file) => file.startsWith('island-open-callout'));
+  const calloutChunk = clientIslands.find((file) => file.startsWith('island-open-button'));
   expect(counterChunk, `client islands: ${clientIslands.join(', ')}`).toBeTruthy();
   expect(calloutChunk, `client islands: ${clientIslands.join(', ')}`).toBeTruthy();
 
@@ -339,7 +335,7 @@ test('external consumer: both islands attribute to exactly one emitted chunk eac
     return parsed.islands;
   });
   const counterEntry = entries.find((entry) => entry.tagName === 'oe-proof-counter');
-  const calloutEntry = entries.find((entry) => entry.tagName === 'open-callout');
+  const calloutEntry = entries.find((entry) => entry.tagName === 'open-button');
   expect(counterEntry?.chunkUrl).toEqual(`/client/islands/${counterChunk}`);
   expect(calloutEntry?.chunkUrl).toEqual(`/client/islands/${calloutChunk}`);
 });

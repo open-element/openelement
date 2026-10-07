@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import type { RouteEntry } from '@openelement/protocol/framework';
 import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codegen.ts';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { renderEntry } from '../src/vite/internal/ssg/entry-orchestrator.ts';
@@ -37,19 +37,21 @@ const routes: RouteEntry[] = [
 // did not re-pin. Diffing the full dumped entries across d94b0af5e..current
 // shows exactly that one comment line per mode and nothing else; the later
 // comment-only sweep commits regenerate byte-identical entries to 8b75ebdc8.
-// Pins moved once more for the alpha8 emitted-comment restatement: the server
-// entry's '// v0.17.4: SSR admission plan' header dropped its version tag
-// (-9 bytes each mode) and the native client header's retired
-// '(defineIsland() registers on module evaluation)' parenthetical was
-// restated as '(island modules register on evaluation)' (-8 bytes; the lit
-// client header never carried it, so lit client bytes are unchanged).
+// Pins moved once more for #1560: the generated server entry composes on the
+// internal WinterCG layer — the built-in middleware imports moved from the
+// hono/* subpaths to @openelement/router/server-runtime factories, the
+// middleware-scope registration lost its adapter shim, the wildcard
+// dispatcher became `app.use('*', __routeMiddleware)`, and the route chains
+// bind `c` through `__requestScope` (+69 bytes each mode; the native/lit
+// delta is unchanged at 113, so the cross-mode invariant holds). Client
+// bytes are untouched.
 const expected = {
   native: {
-    server: [14222, '29d0b971ebb8a3610ee59d186f5396140882a13727cce56edb9222fa71360548'],
+    server: [14288, '39eeda3fd0ea422fda33254b8e9ddd87c9d8ca9e5637ad8f95cfc46e522bf49d'],
     client: [2004, 'dbd5414e1f2a392a26e98cdce1a2b7c2dc69d4305228c6b7d199b4af6ce00d6f'],
   },
   lit: {
-    server: [14335, 'ea611d2d6c1bc4bbf616ec6fd70a73a17c53f9b91864e5a17de155c435ab11b2'],
+    server: [14401, 'ba5a0168f1f2f218d8a0691316601898debe1c796cc0e89ab5939b925fa5ebed'],
     client: [3167, '7dcb18fd659ffe53b039adfc5139a2496e1b4c02b5d4322ed6c216606511f418'],
   },
 } as const;

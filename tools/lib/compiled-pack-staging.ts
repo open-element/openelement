@@ -28,7 +28,7 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
-import { compileElementModule, stripInlineSourceMapComment } from '@openelement/element/compiler';
+import { compileElementModule, stripInlineSourceMapComment } from '@openelement/compiler';
 
 export interface CompiledModuleOutput {
   /** Package-relative source path (e.g. src/open-button.tsx). */

@@ -13,13 +13,20 @@
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
-/** The subset of the release-state shape the anchor audit needs. */
+/** The subset of the release-state shape the anchor audit needs (schema v4). */
 export interface AnchorReleaseState {
   sourceVersion: string;
   packages: readonly {
     name: string;
-    registry: Record<string, string>;
+    status?: 'published' | 'unpublished';
+    registry?: Record<string, string>;
   }[];
+}
+
+function isPublished(
+  entry: AnchorReleaseState['packages'][number],
+): entry is AnchorReleaseState['packages'][number] & { registry: Record<string, string> } {
+  return entry.status !== 'unpublished';
 }
 
 /** Repo-relative paths of the audited www truth files. */
@@ -58,9 +65,12 @@ export function wwwReleaseAnchorFailures(
     );
   }
   const publishedMatch = releaseLineSource.match(/SOURCE_LINE_PUBLISHED = (true|false)/);
-  const expectedPublished = state.packages.every(
-    (entry) => entry.registry.alpha === state.sourceVersion,
-  );
+  // Schema v4 (#1557): only packages that HAVE an @alpha dist-tag can agree or
+  // disagree with the source version; an unpublished package carries no
+  // dist-tag and cannot vote.
+  const expectedPublished = state.packages
+    .filter(isPublished)
+    .every((entry) => entry.registry.alpha === state.sourceVersion);
   if (publishedMatch?.[1] !== String(expectedPublished)) {
     failures.push(
       'www SOURCE_LINE_PUBLISHED must be ' +
@@ -70,8 +80,8 @@ export function wwwReleaseAnchorFailures(
   }
   const resolvesMatch = releaseLineSource.match(/ALPHA_RESOLVES_TO = '([^']+)'/);
   const expectedResolvesTo =
-    state.packages.find((entry) => entry.name === '@openelement/create')?.registry.alpha ??
-    'unknown';
+    state.packages.find((entry) => entry.name === '@openelement/create' && isPublished(entry))
+      ?.registry.alpha ?? 'unknown';
   if (resolvesMatch?.[1] !== expectedResolvesTo) {
     failures.push(
       'www ALPHA_RESOLVES_TO must be ' +

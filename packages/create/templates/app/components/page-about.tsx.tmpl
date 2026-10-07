@@ -4,15 +4,17 @@
  * Compiled page with the default static renderIntent: prerendered to HTML at
  * build time (SSG). There are NO islands on this page — everything below is
  * prerendered markup and CSS. The header, footer and badges come from the
- * shared sheets in ./page-styles.ts (light root, inlined into SSR as
- * @scope(about-page)).
+ * shared sheets in ./site-chrome.css and ./badges.css (light root, inlined
+ * into SSR as @scope(about-page)).
  */
 import { element, OpenElement } from '@openelement/element';
-import { aboutPageStyles } from './page-styles.ts';
+import aboutPageStyles from './page-about.css';
+import badgeStyles from './badges.css';
+import siteChromeStyles from './site-chrome.css';
 
 @element('about-page', { root: 'light' })
 export default class AboutPage extends OpenElement {
-  static override styles = aboutPageStyles;
+  static override styles = [aboutPageStyles, badgeStyles, siteChromeStyles];
 
   render() {
     return (

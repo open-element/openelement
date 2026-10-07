@@ -70,7 +70,7 @@ Dependencies are tiered by actual consumption:
 ## Compile path (unchanged decision)
 
 Chosen: **`compileElementModule`** from
-`packages/element/src/internal/compiler/plugin.ts` (the exact function the
+`packages/compiler/src/internal/compiler/plugin.ts` (the exact function the
 `open:compiled-element` Vite plugin's `transform` hook calls), driven by
 `tools/compile-fixtures.ts` and emitted into `generated/` — a pure function,
 hermetic, and guaranteed not to drift from the plugin because the plugin

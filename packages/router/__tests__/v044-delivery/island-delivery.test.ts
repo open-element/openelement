@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { join } from 'node:path';
 import { buildCriticalHeadExtras } from '../../src/vite/internal/ssg/critical-assets.ts';
-import { compiledElementPlugin, compileElementModule } from '@openelement/element/compiler';
+import { compiledElementPlugin, compileElementModule } from '@openelement/compiler';
 import { generateClientEntry } from '../../src/vite/internal/ssg/entry-client-codegen.ts';
 import { createIslandScheduler } from '../../src/vite/internal/ssg/island-scheduler.ts';
 import { readIslandConfig } from '../../src/vite/internal/ssg/island-scanner.ts';

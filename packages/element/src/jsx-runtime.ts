@@ -3,7 +3,7 @@
  *
  * This module exists only so TSX sources typecheck
  * (`jsxImportSource: @openelement/element`) while authoring components that
- * the OpenElement compiler (the @openelement/element/compiler
+ * the OpenElement compiler (the @openelement/compiler
  * `open:compiled-element` transform) lowers to Part Programs. Compiled output
  * never calls these factories, so `jsx`/`jsxs`/`Fragment` fail closed with a
  * diagnostic: JSX executing at runtime means the module never passed through

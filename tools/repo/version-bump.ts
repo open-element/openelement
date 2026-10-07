@@ -72,7 +72,9 @@ import { commandStatus } from './node-command.ts';
 
 /** Packages whose package.json carries the release line version. */
 export const PACKAGE_CONFIGS: readonly string[] = [
+  'packages/protocol/package.json',
   'packages/element/package.json',
+  'packages/compiler/package.json',
   'packages/router/package.json',
   'packages/create/package.json',
   'packages/ui/package.json',
@@ -239,7 +241,9 @@ export async function workspaceMemberStamps(
 
 /** The published packages' source trees scanned for historical release names. */
 export const SHIPPED_SOURCE_ROOTS: readonly string[] = [
+  'packages/protocol/src',
   'packages/element/src',
+  'packages/compiler/src',
   'packages/router/src',
   'packages/create/src',
   'packages/ui/src',

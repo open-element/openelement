@@ -28,7 +28,7 @@ test.describe('root boundaries', () => {
     page,
   }) => {
     await page.goto('/boundaries');
-    await page.waitForFunction(() => customElements.get('open-badge') !== undefined);
+    await page.waitForFunction(() => customElements.get('open-button') !== undefined);
 
     const boundaries = await page.evaluate(`(() => {
       const badge = ${deepFirstExpr('#open-boundary')};
@@ -67,9 +67,11 @@ test.describe('root boundaries', () => {
 });
 
 test.describe('hydration claims the server-rendered DOM', () => {
-  test('open-tabs upgrades in place (node identity preserved)', async ({ page }) => {
+  test('open-dialog upgrades in place (node identity preserved)', async ({ page }) => {
     // Runs before any page script: capture the browser-parsed DSD nodes at
-    // the moment the island bundle defines the element.
+    // the moment the island bundle defines the element. (#1557 moved this
+    // evidence off the retired open-tabs; open-dialog is a retained
+    // interactive component with slotted light children.)
     await page.addInitScript(`(() => {
       const deepFirst = (${deepQueryFirstFn});
       window.__claimProbe = {};
@@ -78,7 +80,7 @@ test.describe('hydration claims the server-rendered DOM', () => {
         const host = deepFirst(document, name);
         if (host?.shadowRoot) {
           window.__claimProbe[name] = {
-            shadowChild: host.shadowRoot.querySelector('.tabs'),
+            shadowChild: host.shadowRoot.querySelector('dialog'),
             firstLightChild: host.firstElementChild,
             lightChildCount: host.childElementCount,
           };
@@ -87,18 +89,18 @@ test.describe('hydration claims the server-rendered DOM', () => {
       };
     })()`);
 
-    await page.goto('/tabs');
+    await page.goto('/dialog');
     await page.waitForFunction(
-      `customElements.get('open-tabs') !== undefined && ` +
-        `${deepFirstExpr('#main-tabs [slot="tab"]')}?.getAttribute('role') === 'tab'`,
+      `customElements.get('open-dialog') !== undefined && ` +
+        `${deepFirstExpr('open-dialog')}?.shadowRoot?.querySelector('dialog') != null`,
     );
 
     const claim = await page.evaluate(`(() => {
-      const probe = window.__claimProbe['open-tabs'];
-      const host = (${deepQueryFirstFn})(document, '#main-tabs');
+      const probe = window.__claimProbe['open-dialog'];
+      const host = (${deepQueryFirstFn})(document, 'open-dialog');
       if (!probe || !host) return null;
       return {
-        sameShadowNode: probe.shadowChild === host.shadowRoot?.querySelector('.tabs'),
+        sameShadowNode: probe.shadowChild === host.shadowRoot?.querySelector('dialog'),
         sameLightChild: probe.firstLightChild === host.firstElementChild,
         lightChildCountBefore: probe.lightChildCount,
         lightChildCountAfter: host.childElementCount,
@@ -109,8 +111,8 @@ test.describe('hydration claims the server-rendered DOM', () => {
     expect(claim).toEqual({
       sameShadowNode: true,
       sameLightChild: true,
-      lightChildCountBefore: 6,
-      lightChildCountAfter: 6,
+      lightChildCountBefore: 4,
+      lightChildCountAfter: 4,
     });
   });
 });

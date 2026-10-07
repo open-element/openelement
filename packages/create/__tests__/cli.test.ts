@@ -139,17 +139,24 @@ test('the showcase template is the one scaffold (#1530): static-first surfaces, 
   const expectedTargets = [
     '.gitignore',
     'README.md',
+    'app/components/badges.css',
+    'app/components/page-404.css',
     'app/components/page-404.tsx',
+    'app/components/page-about.css',
     'app/components/page-about.tsx',
+    'app/components/page-home.css',
     'app/components/page-home.tsx',
-    'app/components/page-styles.ts',
+    'app/components/site-chrome.css',
     'app/head.tsx',
+    'app/islands/live-timer.css',
     'app/islands/live-timer.tsx',
+    'app/islands/my-counter.css',
     'app/islands/my-counter.tsx',
     'app/routes/404.tsx',
     'app/routes/about.tsx',
     'app/routes/api/ping.ts',
     'app/routes/index.tsx',
+    'app/styles/recipes.css',
     'app/styles/tokens.css',
     'openelement.config.ts',
     'package.json',
@@ -269,46 +276,48 @@ test('starter pages own their styles via static styles, not the global baseline'
     'vite.config.ts must not carry style/CSS strings (#1411)',
   ).toBeFalsy();
 
-  // Page rules live in page-styles.ts: the shared chrome sheet, the badge
-  // vocabulary, and one sheet per page — single source, spread per page.
-  const styles = readTemplate('app/components/page-styles.ts');
-  for (const exportName of [
-    'compiledStyle',
-    'siteChromeStyles',
-    'badgeStyles',
-    'homePageStyles',
-    'aboutPageStyles',
-    'notFoundPageStyles',
+  // Page rules live in .css files (#1558 — the one style authoring form):
+  // the shared chrome sheet, the badge vocabulary, and one sheet per page.
+  for (const sheet of [
+    'app/components/site-chrome.css',
+    'app/components/badges.css',
+    'app/components/page-home.css',
+    'app/components/page-about.css',
+    'app/components/page-404.css',
   ]) {
-    expect(
-      styles.includes(`export function ${exportName}`) ||
-        styles.includes(`export const ${exportName}`),
-      `page-styles.ts must export ${exportName}`,
-    ).toBeTruthy();
+    expect(readTemplate(sheet).trim().length, `${sheet} carries rules`).toBeTruthy();
   }
-  // Every page spreads the shared chrome sheet (one source for the header).
-  expect(styles.split('...siteChromeStyles').length - 1, styles).toEqual(3);
   // The badge vocabulary is CSS only and is part of the zero-JS surface.
-  expect(styles).toContain('.badge');
-  expect(styles).toContain('.badge-static');
-  expect(styles).toContain('.badge-island');
+  const badges = readTemplate('app/components/badges.css');
+  expect(badges).toContain('.badge');
+  expect(badges).toContain('.badge-static');
+  expect(badges).toContain('.badge-island');
+  // No page module carries CSS strings — the sheets are files.
+  for (const page of ['page-home.tsx', 'page-about.tsx', 'page-404.tsx']) {
+    const source = readTemplate(`app/components/${page}`);
+    expect(source.includes('compiledStyle'), page).toBeFalsy();
+  }
 });
 
-test('starter pages import their sheet from ./page-styles.ts', () => {
+test('starter pages import their sheets from .css files', () => {
   const pages: Array<[string, string]> = [
-    ['app/components/page-home.tsx', 'homePageStyles'],
-    ['app/components/page-about.tsx', 'aboutPageStyles'],
-    ['app/components/page-404.tsx', 'notFoundPageStyles'],
+    ['app/components/page-home.tsx', "from './page-home.css'"],
+    ['app/components/page-about.tsx', "from './page-about.css'"],
+    ['app/components/page-404.tsx', "from './page-404.css'"],
   ];
-  for (const [path, exportName] of pages) {
+  for (const [path, specifier] of pages) {
     const source = readTemplate(path);
     expect(
-      source.includes(`static override styles = ${exportName};`),
-      `${path} must declare static override styles`,
+      source.includes('static override styles = ['),
+      `${path} must array its sheets in static override styles`,
     ).toBeTruthy();
     expect(
-      source.includes(`from './page-styles.ts'`),
-      `${path} must import its sheet from ./page-styles.ts`,
+      source.includes(specifier),
+      `${path} must import its sheet from the .css file`,
+    ).toBeTruthy();
+    expect(
+      source.includes('site-chrome.css'),
+      `${path} must array the shared chrome sheet`,
     ).toBeTruthy();
   }
 });

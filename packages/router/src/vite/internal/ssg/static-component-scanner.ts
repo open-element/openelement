@@ -1,11 +1,11 @@
 /** Discover compiled static components reachable from local route imports. */
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'pathe';
-import type { RouteEntry } from '../protocol/framework.ts';
-import type { StaticComponentDecl } from '../protocol/ssg.ts';
+import type { RouteEntry } from '../../framework.ts';
+import type { StaticComponentDecl } from '@openelement/protocol/ssg';
 import { normalizeSeparators } from '@openelement/element/build-utils';
-import { analyzeModuleSemantics } from '@openelement/element/compiler';
-import { ROUTER_MODULE_VOCABULARY } from '../protocol/module-vocabulary.ts';
+import { analyzeModuleSemantics } from '@openelement/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 
 const SOURCE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'] as const;
 

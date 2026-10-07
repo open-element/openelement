@@ -60,8 +60,19 @@ async function readJson(path: string): Promise<unknown> {
  * matching fork (ADR-0152/#1324) — a dependency boundary, not a second matcher.
  */
 export const ALLOWED_DEPENDENCY_DIRECTION: Readonly<Record<string, readonly string[]>> = {
-  '@openelement/element': [],
-  '@openelement/router': ['@openelement/element', '@openelement/url-pattern-list'],
+  // protocol is the zero-dependency contract leaf (#1557): it depends on
+  // nothing, and everything else may depend on it.
+  '@openelement/protocol': [],
+  '@openelement/element': ['@openelement/protocol'],
+  // compiler shares the contracts and owns the TypeScript dependency; it must
+  // never reach the runtime or the router (#1557).
+  '@openelement/compiler': ['@openelement/protocol'],
+  '@openelement/router': [
+    '@openelement/element',
+    '@openelement/compiler',
+    '@openelement/protocol',
+    '@openelement/url-pattern-list',
+  ],
   // ui consumes element's StyleSheet/logger/manifest contracts (1.0 baseline —
   // the rule predated ui's re-entry onto the publish surface).
   '@openelement/ui': ['@openelement/element'],
@@ -238,7 +249,39 @@ async function validatePackageSurface(packages: PackageInfo[], failures: string[
 
   for (const file of surfaceSourceFiles('packages/element/src')) {
     const source = await readFile(file, 'utf8');
-    failures.push(...forbiddenImportFailures(file, source, ['@openelement/router']));
+    failures.push(
+      ...forbiddenImportFailures(file, source, ['@openelement/router', '@openelement/compiler']),
+    );
+  }
+
+  // The protocol charter (#1557): zero dependencies — no @openelement/* import
+  // of any kind, and no node:/npm host surface beyond the type-level DOM/ES
+  // lib it compiles against.
+  for (const file of surfaceSourceFiles('packages/protocol/src')) {
+    const source = await readFile(file, 'utf8');
+    failures.push(
+      ...forbiddenImportFailures(file, source, [
+        '@openelement/element',
+        '@openelement/compiler',
+        '@openelement/router',
+        '@openelement/ui',
+        '@openelement/create',
+      ]),
+    );
+  }
+
+  // The compiler charter (#1557): build tooling only — the runtime, the
+  // router, and the UI package are unreachable from it.
+  for (const file of surfaceSourceFiles('packages/compiler/src')) {
+    const source = await readFile(file, 'utf8');
+    failures.push(
+      ...forbiddenImportFailures(file, source, [
+        '@openelement/element',
+        '@openelement/router',
+        '@openelement/ui',
+        '@openelement/create',
+      ]),
+    );
   }
 
   for (const file of ['packages/router/src/router.ts', 'packages/router/src/http.ts']) {

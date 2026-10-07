@@ -1,5 +1,5 @@
 import { ErrorCode, OpenElementError } from '../../core/index.ts';
-import type { ErrorSeverity } from '../../protocol/errors.ts';
+import type { ErrorSeverity } from '@openelement/protocol/errors';
 
 function toBoundaryError(error: unknown): OpenElementError {
   if (error instanceof OpenElementError) return error;

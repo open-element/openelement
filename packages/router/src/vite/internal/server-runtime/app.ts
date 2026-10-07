@@ -1,13 +1,14 @@
 /**
  * @openelement/router/server-runtime — the generated-app factory.
  *
- * `createGeneratedApp` is the assembly half of the generated Hono entry
+ * `createGeneratedApp` is the assembly half of the generated server entry
  * (#1470 block e): the entry's final form is imports + a
  * route descriptor + one factory call, and this module owns the entry
- * assembly — the Hono app and its
- * WinterCG bridge, the composed `openElementHandler` (with the middleware.use
- * onion), the runtime adapter exports, the island client-script plumbing
- * (#951), the SSR registration seam (security.ts), the page-render runtime
+ * assembly — the internal WinterCG composition layer (#1560: the middleware
+ * chain, the fn-form API mounts, and the 404 terminal — no Hono), the
+ * composed `openElementHandler` (with the middleware.use onion), the
+ * runtime adapter exports, the island client-script plumbing (#951), the
+ * SSR registration seam (security.ts), the page-render runtime
  * bindings (renderer/page-props/status/app-shell), and the action body-limit
  * middleware bound to the canonical policy constant.
  *
@@ -17,18 +18,17 @@
  * consumers read (`default` app, `openElementHandler`, `openElementDevFetch`,
  * `openElementRuntimeAdapter`, `__setRequestTimeClientScript`).
  *
- * Imports stay on the kernel-free leaves: hono, element/logger,
+ * Imports stay on the kernel-free leaves: element/logger,
  * element/build-utils, element/authoring — the same leaves the generated
  * entries already carried — so the LIT entry's module graph never reaches the
- * Native runtime kernel (#1339).
+ * Native runtime kernel (#1339). Hono is an optional peer behind the single
+ * `@openelement/router/hono` adapter and never appears in this graph.
  */
 
 import { MAX_ACTION_BODY_BYTES } from '@openelement/element/authoring';
 import { composeFetchMiddleware, createRuntimeAdapter } from '@openelement/element/build-utils';
-import { Hono } from 'hono';
-import type { AppShellPlan } from '../protocol/ssg.ts';
-import { createActionBodyLimit, createHonoBridge } from './action-runtime.ts';
-import type { HonoBridge } from './action-runtime.ts';
+import type { AppShellPlan } from '@openelement/protocol/ssg';
+import { createActionBodyLimit } from './action-runtime.ts';
 import { createAppShellRuntime, createStatusHtml } from './document-runtime.ts';
 import type { AppShellRuntime, StatusHtmlRenderer } from './document-runtime.ts';
 import { createPagePropsRuntime } from './page-render.ts';
@@ -42,6 +42,8 @@ import type {
 } from './renderer-runtime.ts';
 import { createMethodNotAllowedResponder, createPageHandlerTable } from './route-dispatch.ts';
 import { DANGEROUS_KEYS, installSsrRegistryGuard } from './security.ts';
+import { createWinterCgApp } from './wintercg.ts';
+import type { OpenElementRequestScope, WinterCgApp } from './wintercg.ts';
 
 /** The WinterCG fetch middleware a `middleware.use` module default-exports. */
 type FetchMiddleware = (request: Request, next: () => Promise<Response>) => Promise<Response>;
@@ -92,17 +94,17 @@ export interface GeneratedAppConfig {
 
 /** Everything the generated entry destructures and re-exports. */
 export interface GeneratedApp {
-  /** The Hono app — the entry's default export. */
-  app: Hono;
+  /** The internal WinterCG app — the entry's default export. */
+  app: WinterCgApp;
   /**
-   * The internal Hono↔WinterCG bridge: `contexts` feeds the entry's
-   * `app.all('*')` request hook, `asFetchHandler`/`asFetchMiddleware` adapt
-   * every generated page handler onto the WinterCG route middleware.
+   * The per-request scope accessor the generated handlers bind
+   * (`__requestScope`): one scope per dispatch, keyed by request identity.
    */
-  hono: HonoBridge;
+  requestScope: (request: Request) => OpenElementRequestScope | undefined;
   /**
-   * The WinterCG request handler: `app.fetch` with the fetch-middleware
-   * onion composed around it when `middleware.use` is configured (#858).
+   * The WinterCG request handler: the app's composed dispatch with the
+   * fetch-middleware onion composed around it when `middleware.use` is
+   * configured (#858).
    */
   handler: (request: Request, context?: { env?: unknown; platform?: unknown }) => Promise<Response>;
   /** Dev-server boundary export, present only with `middleware.use` (#858). */
@@ -137,13 +139,12 @@ export interface GeneratedApp {
 }
 
 /**
- * Assembles the generated Hono app from the entry's route descriptor.
+ * Assembles the generated app from the entry's route descriptor.
  * Pure factory: descriptor data in, handler contract out — every emitted
  * call site in the entry binds a property of the returned record.
  */
 export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
-  const app = new Hono();
-  const bridge: HonoBridge = createHonoBridge();
+  const app = createWinterCgApp();
   const guard = installSsrRegistryGuard();
 
   // #951: one render-time seam for the island client entry. The dev URL was
@@ -161,34 +162,27 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
 
   // The composed handler contract (#858): fetch middleware
   // composes at the handler boundary in onion order (use[0] outermost),
-  // outside the Hono app, so the dev server, the start CLI, the e2e fixture
-  // server, and the Nitro production entry share one composed handler.
-  const baseHandler = (
-    request: Request,
-    context: { env?: unknown; platform?: unknown } = {},
-  ): Promise<Response> =>
-    Promise.resolve(
-      app.fetch(
-        request,
-        (context.env || {}) as Record<string, unknown>,
-        context.platform as Parameters<typeof app.fetch>[2],
-      ),
-    );
+  // outside the app's own chain, so the dev server, the start CLI, the e2e
+  // fixture server, and the Nitro production entry share one composed
+  // handler.
+  type HandlerContext = { env?: unknown; platform?: unknown };
+  const dispatchApp = (request: Request, context: HandlerContext = {}): Promise<Response> =>
+    app.fetch(request, (context.env || {}) as Record<string, unknown>, context.platform);
   const fetchMiddleware = config.fetchMiddleware ?? [];
   const handler =
     fetchMiddleware.length > 0
-      ? composeFetchMiddleware([...fetchMiddleware], baseHandler)
-      : baseHandler;
+      ? composeFetchMiddleware([...fetchMiddleware], dispatchApp)
+      : dispatchApp;
 
   const generated: GeneratedApp = {
     app,
-    hono: bridge,
+    requestScope: app.requestScope,
     handler,
     ...(fetchMiddleware.length > 0
       ? {
           devFetch: {
             // The dev server (@hono/vite-dev-server) reads this named export
-            // instead of the default Hono app when middleware.use is configured
+            // instead of the default app when middleware.use is configured
             // (see plugin.ts); it adapts the (request, env, executionCtx) call
             // shape onto the same composed handler every other runtime uses.
             fetch: (request: Request, env: unknown, executionContext: unknown) =>
@@ -197,11 +191,11 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
         }
       : {}),
     runtimeAdapter: {
-      ...createRuntimeAdapter({ name: 'openelement-hono', fetch: handler }),
+      ...createRuntimeAdapter({ name: 'openelement', fetch: handler }),
     },
     pageHandlers: createPageHandlerTable(config.pageHandlerPaths),
     apiRouteRecords: [],
-    methodNotAllowed: createMethodNotAllowedResponder(bridge.contexts),
+    methodNotAllowed: createMethodNotAllowedResponder(),
     actionBodyLimit: createActionBodyLimit(MAX_ACTION_BODY_BYTES),
     registerSsrComponent: (tag, ctor) => guard.register(tag, ctor),
     setRequestTimeClientScript: (src) => {

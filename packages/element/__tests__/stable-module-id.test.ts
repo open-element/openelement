@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { join } from 'node:path';
-import { stableModuleId } from '../src/internal/compiler/plugin.ts';
+import { stableModuleId } from '../../../packages/compiler/src/internal/compiler/plugin.ts';
 
 /** A temp checkout-shaped tree; anchors are passed explicitly, never read. */
 async function fixtureRepo(

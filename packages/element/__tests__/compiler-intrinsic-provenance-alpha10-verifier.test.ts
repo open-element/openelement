@@ -16,9 +16,9 @@ import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   CompiledElementError,
   compileElementProgram,
-} from '../src/internal/compiler/semantic-core/compile.ts';
-import { analyzeModuleSemantics } from '../src/internal/compiler/semantic-core/module-analysis.ts';
-import { compileElementModule } from '../src/internal/compiler/plugin.ts';
+} from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
+import { analyzeModuleSemantics } from '../../../packages/compiler/src/internal/compiler/semantic-core/module-analysis.ts';
+import { compileElementModule } from '../../../packages/compiler/src/internal/compiler/plugin.ts';
 
 const FILE = '/project/app/islands/alpha10-verifier-impostor.tsx';
 

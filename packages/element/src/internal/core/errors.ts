@@ -10,9 +10,13 @@
  * hook plumbing.
  */
 
-import type { RenderError as ProtocolRenderError } from '../protocol/render.ts';
-import { DEFAULT_RENDER_ERROR_CODE, ErrorCode, OpenElementError } from '../protocol/errors.ts';
-import type { ErrorTelemetryHook } from '../protocol/errors.ts';
+import type { RenderError as ProtocolRenderError } from '@openelement/protocol/render';
+import {
+  DEFAULT_RENDER_ERROR_CODE,
+  ErrorCode,
+  OpenElementError,
+} from '@openelement/protocol/errors';
+import type { ErrorTelemetryHook } from '@openelement/protocol/errors';
 
 // ─── Well-known error codes / prefix (authoritative source in protocol) ───────
 
@@ -34,13 +38,13 @@ export {
   RuntimeErrorCode,
   ServerErrorCode,
   StyleErrorCode,
-} from '../protocol/errors.ts';
+} from '@openelement/protocol/errors';
 export type {
   ErrorPhase,
   ErrorSeverity,
   ErrorTelemetryHook,
   OpenElementErrorOptions,
-} from '../protocol/errors.ts';
+} from '@openelement/protocol/errors';
 
 // ─── Error formatting helper ────────────────────────────────────────
 

@@ -28,14 +28,14 @@ import type {
   ClientBuildChunk,
   ViteClientManifestEntry,
 } from '../src/vite/client-asset-manifest.ts';
-import type { ClientAssetManifest } from '../src/vite/internal/protocol/client-assets.ts';
+import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
 import {
   islandChunkMapFromAssetManifest,
   postProcessClientIslandBuild,
 } from '../src/vite/internal/ssg/build-postprocess.ts';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { renderEntry } from '../src/vite/internal/ssg/entry-orchestrator.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import type { RouteEntry } from '@openelement/protocol/framework';
 import type { ClientIslandDeliveryEntry } from '../src/vite/internal/ssg/delivery.ts';
 
 const ROOT = '/proj';

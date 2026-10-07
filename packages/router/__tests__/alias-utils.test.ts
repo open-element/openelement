@@ -73,8 +73,9 @@ test('normalizeViteAliases drops subpaths removed from the package manifest expo
     ) ?? [];
   const finds = aliases.map((alias) => String(alias.find));
 
-  // packages/router/src/hono.ts was deleted; the export entry is gone too.
-  expect(finds.includes('@openelement/router/hono')).toEqual(false);
+  // `@openelement/router/hono` is exported again (#1560 — the optional-peer
+  // adapter at src/hono-adapter.ts), so the manifest-derived table carries it.
+  expect(finds.includes('@openelement/router/hono')).toEqual(true);
   // open-element-render/open-element-hydration are no longer exported.
   expect(finds.includes('@openelement/element/open-element-render')).toEqual(false);
   expect(finds.includes('@openelement/element/open-element-hydration')).toEqual(false);
