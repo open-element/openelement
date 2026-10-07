@@ -120,8 +120,6 @@ jobs:
           vp run --fail-if-no-match @openelement/fixture-site-light-probe#e2e
       - name: Web component interop
         run: vp run --fail-if-no-match @openelement/fixture-web-component-interop#test
-      - name: Starter smoke
-        run: vp run --fail-if-no-match @openelement/e2e-starter-smoke#gate
 
   # ── Job 4: Pack & Consumer Verification ────────────────────────────────
   pack:
@@ -146,6 +144,8 @@ jobs:
         run: vp run --fail-if-no-match @openelement/tools-release#pack-surface:check
       - name: Publish dry-run (no-op against real registry)
         run: vp run --fail-if-no-match @openelement/tools-release#publish:npm:dry-run
+      - name: Starter smoke (needs packed workspace)
+        run: vp run --fail-if-no-match @openelement/e2e-starter-smoke#gate
 
   # ── Main push only: Full E2E + BFCache + Node Smoke + Cold Install ────
   e2e-full:

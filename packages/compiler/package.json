@@ -1,0 +1,38 @@
+{
+  "name": "@openelement/compiler",
+  "version": "1.0.0-alpha.10",
+  "type": "module",
+  "description": "The OpenElement TSX-to-Part-Program compiler and its Vite plugin boundary.",
+  "exports": {
+    ".": "./src/compiler.ts",
+    "./vite": "./src/vite.ts"
+  },
+  "files": [
+    "src/**",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint src __tests__",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. --project compiler"
+  },
+  "dependencies": {
+    "@openelement/protocol": "workspace:*",
+    "typescript": "6.0.3"
+  },
+  "peerDependencies": {
+    "vite": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@jridgewell/trace-mapping": "0.3.31",
+    "@types/node": "26.5.0",
+    "vite": "8.0.16"
+  }
+}

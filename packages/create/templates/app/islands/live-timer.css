@@ -1,0 +1,6 @@
+
+    :host { display: inline-block; }
+    .timer-row { display: inline-flex; gap: 0.6rem; align-items: baseline; }
+    .value { min-width: 6ch; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 1.4rem; color: var(--brand); }
+    .unit { color: var(--ink-soft); font-size: 0.85rem; }
+  

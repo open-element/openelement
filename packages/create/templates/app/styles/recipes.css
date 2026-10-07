@@ -1,0 +1,235 @@
+/*
+ * Static-shape CSS recipes — the zero-interaction component shapes.
+ *
+ * The @openelement/ui package retired its four zero-interaction components
+ * (open-badge, open-callout, open-card, open-tabs) in #1557: shapes with no
+ * event handlers, no state, and no hydration gain are plain HTML + CSS, not
+ * custom elements. This sheet documents the recipes that replaced them so a
+ * starter keeps the same visual vocabulary with zero JS. Delete the blocks
+ * you do not use.
+ *
+ * Every rule consumes the @theme role tokens from theme.css (or the
+ * framework's token layer), so dark/light parity follows the tokens the same
+ * way the retained components do.
+ */
+
+/* ─── badge ────────────────────────────────────────────────────────────────
+   Compact status label. Was <open-badge tone="…" size="…">text</open-badge>.
+
+   <span class="badge">neutral</span>
+   <span class="badge badge-brand badge-sm">current</span>
+   <span class="badge badge-success">done</span>
+   <span class="badge badge-warning">planned</span>
+   <span class="badge badge-info">beta</span>
+------------------------------------------------------------------------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  min-height: calc(var(--spacing) * 6);
+  padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 2);
+  border: calc(var(--spacing) * 0.25) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-extrabold);
+  line-height: var(--leading-normal);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.badge-brand {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
+}
+.badge-success {
+  border-color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  color: var(--color-success);
+}
+.badge-warning {
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  color: var(--color-warning);
+}
+.badge-info {
+  border-color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 10%, transparent);
+  color: var(--color-info);
+}
+.badge-sm {
+  min-height: calc(var(--spacing) * 5);
+  padding-inline: calc(var(--spacing) * 2);
+}
+
+/* ─── callout ────────────────────────────────────────────────────────────
+   Notice box with a colored leading edge. Was
+   <open-callout type="…" label="…">body</open-callout>.
+
+   <aside class="callout">
+     <p class="callout-title"><span class="callout-icon">ℹ️</span> Note</p>
+     <div class="callout-body"><p>This is an informational callout.</p></div>
+   </aside>
+   Title types: callout-info (default) / callout-warning / callout-danger /
+   callout-tip; icon map: info ℹ️ · warning ⚠ · danger ✕ · tip ✓.
+------------------------------------------------------------------------- */
+.callout {
+  padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+  margin: calc(var(--spacing) * 3) 0;
+  border-left: calc(var(--spacing) * 0.5) solid var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+.callout-warning {
+  border-left-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+.callout-danger {
+  border-left-color: var(--color-destructive);
+  background: color-mix(in srgb, var(--color-destructive) 10%, transparent);
+}
+.callout-tip {
+  border-left-color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+}
+.callout-title {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 1);
+  margin: 0 0 calc(var(--spacing) * 1);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-foreground);
+}
+.callout-icon {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+.callout-body {
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+  color: var(--color-muted-foreground);
+}
+.callout-body > :first-child {
+  margin-block-start: 0;
+}
+.callout-body > :last-child {
+  margin-block-end: 0;
+}
+
+/* ─── card ───────────────────────────────────────────────────────────────
+   Content container with optional header/footer. Was
+   <open-card variant="…">…</open-card> with header/footer slots.
+
+   <article class="card">
+     <div class="card-header"><h3>Card title</h3></div>
+     <div class="card-body"><p>Card content goes here.</p></div>
+     <div class="card-footer">…</div>
+   </article>
+   Variants: card (default) / card-elevated / card-borderless.
+------------------------------------------------------------------------- */
+.card {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-secondary) 14%, transparent),
+      transparent 48%
+    ),
+    var(--color-card);
+  color: var(--color-foreground);
+  border: calc(var(--spacing) * 0.25) solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition:
+    border-color var(--ease-out) var(--default-transition-duration),
+    background var(--ease-out) var(--default-transition-duration),
+    box-shadow var(--ease-out) var(--default-transition-duration);
+}
+.card-elevated {
+  box-shadow: 0 calc(var(--spacing) * 2) calc(var(--spacing) * 8)
+    color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+.card-elevated:hover {
+  border-color: var(--color-primary);
+}
+.card-borderless {
+  border-color: transparent;
+}
+.card-header {
+  padding: calc(var(--spacing) * 4) calc(var(--spacing) * 5) 0;
+}
+.card-header > :first-child {
+  margin-block-start: 0;
+}
+.card-body {
+  padding: calc(var(--spacing) * 4) calc(var(--spacing) * 5);
+}
+.card-footer {
+  padding: 0 calc(var(--spacing) * 5) calc(var(--spacing) * 4);
+}
+
+/* ─── tabs (CSS-only, details/radio pattern) ──────────────────────────────
+   Static tab interface with zero JS. The retired open-tabs carried the
+   WAI-ARIA keyboard pattern; when tabs must be keyboard-operable components
+   with roving tabindex, use a real interactive component instead — this
+   recipe serves the static case only.
+
+   <div class="css-tabs">
+     <input type="radio" name="css-tabs" id="tab-1" checked />
+     <input type="radio" name="css-tabs" id="tab-2" />
+     <nav class="css-tabs-list">
+       <label for="tab-1">First</label>
+       <label for="tab-2">Second</label>
+     </nav>
+     <section class="css-tabs-panel" id="panel-1"><p>First panel</p></section>
+     <section class="css-tabs-panel" id="panel-2"><p>Second panel</p></section>
+   </div>
+------------------------------------------------------------------------- */
+.css-tabs {
+  display: grid;
+}
+.css-tabs > input[type='radio'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.css-tabs-list {
+  display: flex;
+  gap: calc(var(--spacing) * 1);
+}
+.css-tabs-list label {
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+  border: calc(var(--spacing) * 0.25) solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-muted-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.css-tabs-panel {
+  display: none;
+  padding: calc(var(--spacing) * 4) 0;
+  color: var(--color-foreground);
+}
+/* Checked radio (precedes its label/panel in the DOM) selects the pair. */
+.css-tabs > input:nth-of-type(1):checked ~ .css-tabs-list label[for='tab-1'],
+.css-tabs > input:nth-of-type(2):checked ~ .css-tabs-list label[for='tab-2'] {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
+}
+.css-tabs > input:nth-of-type(1):checked ~ #panel-1,
+.css-tabs > input:nth-of-type(2):checked ~ #panel-2 {
+  display: block;
+}
+.css-tabs > input:focus-visible + .css-tabs-list label,
+.css-tabs-list label:has(+ :focus-visible) {
+  outline: calc(var(--spacing) * 0.5) solid var(--color-ring);
+  outline-offset: calc(var(--spacing) * 0.75);
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@openelement/protocol",
+  "version": "1.0.0-alpha.10",
+  "type": "module",
+  "description": "Cross-system contracts and tiny pure predicates for the OpenElement framework (compiler ↔ runtime ↔ build).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./app-model": "./src/app-model.ts",
+    "./client-assets": "./src/client-assets.ts",
+    "./data": "./src/data.ts",
+    "./errors": "./src/errors.ts",
+    "./forbidden-sinks": "./src/forbidden-sinks.ts",
+    "./framework": "./src/framework.ts",
+    "./island": "./src/island.ts",
+    "./island-admission": "./src/island-admission.ts",
+    "./manifest": "./src/manifest.ts",
+    "./module-descriptors": "./src/module-descriptors.ts",
+    "./module-vocabulary": "./src/module-vocabulary.ts",
+    "./part-program": "./src/part-program.ts",
+    "./policy": "./src/policy.ts",
+    "./registry-markers": "./src/registry-markers.ts",
+    "./render": "./src/render.ts",
+    "./runtime": "./src/runtime.ts",
+    "./signal": "./src/signal.ts",
+    "./ssg": "./src/ssg.ts",
+    "./stream-frame-policy": "./src/stream-frame-policy.ts",
+    "./style-sheet": "./src/style-sheet.ts",
+    "./void-tags": "./src/void-tags.ts"
+  },
+  "files": [
+    "src/**",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint src __tests__",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}
