@@ -114,8 +114,10 @@ jobs:
         run: vp run site:build
       - name: Site E2E (chromium only — full 3-engine on main push)
         run: vp run --fail-if-no-match @openelement/www#e2e:chromium
-      - name: Light-probe E2E
-        run: vp run --fail-if-no-match @openelement/fixture-site-light-probe#e2e
+      - name: Light-probe E2E (build fixture first)
+        run: |
+          vp run --fail-if-no-match @openelement/fixture-site-light-probe#build
+          vp run --fail-if-no-match @openelement/fixture-site-light-probe#e2e
       - name: Web component interop
         run: vp run --fail-if-no-match @openelement/fixture-web-component-interop#test
       - name: Starter smoke
