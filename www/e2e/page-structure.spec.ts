@@ -1,5 +1,13 @@
 import { expect, test } from '@playwright/test';
 
+// CDN font stylesheets (#1554) are render-blocking links that stall
+// `networkidle` when jsDelivr is slow on CI runners. Chromium has
+// --host-resolver-rules in playwright.config; Firefox/WebKit need this
+// per-spec route abort. Unreachable fonts fall back to system stack.
+test.beforeEach(async ({ page }) => {
+  await page.route(/cdn\.jsdelivr\.net/, (route) => route.abort());
+});
+
 const readingRoutes = [
   '/guide/getting-started',
   '/guide/routing-and-data',
