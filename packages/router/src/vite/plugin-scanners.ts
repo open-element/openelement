@@ -8,8 +8,8 @@
 
 import process from 'node:process';
 import type { Plugin } from 'vite';
-import type { OpenElementPackageManifest, RouteEntry } from './internal/protocol/framework.ts';
-import type { IslandDecl } from './internal/protocol/ssg.ts';
+import type { OpenElementPackageManifest, RouteEntry } from './framework.ts';
+import type { IslandDecl } from '@openelement/protocol/ssg';
 import { createLogger, formatError, OpenElementError } from '@openelement/element';
 import { join } from 'pathe';
 import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './internal/paths.ts';

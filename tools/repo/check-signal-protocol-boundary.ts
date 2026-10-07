@@ -18,7 +18,12 @@ async function readJson<T = unknown>(path: string | URL): Promise<T> {
 
 type Failure = { file: string; message: string };
 
-const SOURCE_ROOTS = ['packages/element/src', 'packages/router/src'];
+const SOURCE_ROOTS = [
+  'packages/protocol/src',
+  'packages/element/src',
+  'packages/compiler/src',
+  'packages/router/src',
+];
 const PROTECTED_PACKAGE_CONFIGS = ['packages/element/package.json', 'packages/router/package.json'];
 const FORBIDDEN_REQUIRED_DEPS = ['@preact/signals-core', '@preact/signals'];
 

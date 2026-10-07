@@ -20,23 +20,13 @@
  * `head` in openelement.config.ts already covers the title, description,
  * favicon and the og:/twitter: pairs; `head.scripts` / `head.stylesheets`
  * cover external scripts and stylesheets. This file is for what neither can
- * express — here, a resource preload. Per-page meaning (title, description,
- * og:title, canonical) is declared by each route module's `head`, which
- * resolves at render time and wins for crawlers.
+ * express — here, the color-scheme declaration. Per-page meaning (title,
+ * description, og:title, canonical) is declared by each route module's `head`,
+ * which resolves at render time and wins for crawlers.
  */
 export default [
-  // The brand mark is used above the fold on the starter home page, so it is
-  // preloaded. `crossorigin` needs an explicit value when the resource is
-  // fetched with CORS; an image preload without it is same-origin as authored.
-  {
-    link: {
-      rel: 'preload',
-      href: '/openelement-mark.svg',
-      as: 'image',
-      type: 'image/svg+xml',
-    },
-  },
   // Declaring the color scheme the starter supports lets the browser pick the
-  // right native form/scrollbar palette before any CSS is parsed.
+  // right native form/scrollbar palette before any CSS is parsed. The dark
+  // palette itself is tokens.css's `prefers-color-scheme` block — no runtime.
   { meta: { name: 'color-scheme', content: 'dark light' } },
 ];

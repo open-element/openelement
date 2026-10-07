@@ -1,22 +1,12 @@
 {
   "name": "@openelement/compiler",
   "version": "1.0.0-alpha.10",
+  "description": "Build-time compiler for OpenElement — transforms TSX with @element decorators into Part Program modules. The only TypeScript-dependent package.",
   "type": "module",
-  "description": "The OpenElement TSX-to-Part-Program compiler and its Vite plugin boundary.",
-  "exports": {
-    ".": "./src/compiler.ts",
-    "./vite": "./src/vite.ts"
-  },
-  "files": [
-    "src/**",
-    "README.md",
-    "LICENSE"
-  ],
-  "scripts": {
-    "build": "tsc --noEmit -p tsconfig.json",
-    "lint": "oxlint src __tests__",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --root ../.. --project compiler"
+  "license": "MIT",
+  "publish": {
+    "include": ["src/**", "README.md", "LICENSE"],
+    "access": "public"
   },
   "dependencies": {
     "@openelement/protocol": "workspace:*",
@@ -25,14 +15,9 @@
   "peerDependencies": {
     "vite": "^8.0.0"
   },
-  "peerDependenciesMeta": {
-    "vite": {
-      "optional": true
-    }
+  "exports": {
+    ".": "./src/compiler.ts",
+    "./vite": "./src/vite.ts"
   },
-  "devDependencies": {
-    "@jridgewell/trace-mapping": "0.3.31",
-    "@types/node": "26.5.0",
-    "vite": "8.0.16"
-  }
+  "files": ["src", "README.md", "LICENSE"]
 }

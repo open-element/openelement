@@ -15,10 +15,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import {
-  type ConditionOperator,
-  validatePartProgram,
-} from '../src/internal/protocol/part-program.ts';
+import { type ConditionOperator, validatePartProgram } from '@openelement/protocol/part-program';
 import { conditionHolds } from '../src/internal/compiled/condition-holds.ts';
 import { testProgram } from './compiled-runtime/test-program.ts';
 
@@ -107,7 +104,7 @@ test('when operator: the validator admits every documented operator and rejects 
 });
 
 test('when operator: the canonical ConditionOperator declaration stays closed to the admitted set', async () => {
-  const path = 'packages/element/src/internal/protocol/part-program.ts';
+  const path = 'packages/protocol/src/part-program.ts';
   const source = await readFile(new URL(path, REPO_ROOT), 'utf8');
   for (const op of ADMITTED_OPS) {
     expect(

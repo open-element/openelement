@@ -34,7 +34,7 @@ import {
   streamFields,
 } from '../src/vite/internal/server-runtime/stream-runtime.ts';
 import type { StreamExecutorView } from '../src/vite/internal/server-runtime/stream-runtime.ts';
-import type { StreamRouteManifest } from '../src/vite/internal/protocol/ssg.ts';
+import type { StreamRouteManifest } from '@openelement/protocol/ssg';
 
 function manifest(fieldCount: number): StreamRouteManifest {
   return {

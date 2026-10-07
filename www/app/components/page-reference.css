@@ -137,3 +137,4 @@
     .pkg-row { grid-template-columns: minmax(0, 1fr); gap: calc(var(--spacing) * 3); }
     .kind { justify-self: start; }
   }
+

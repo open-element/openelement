@@ -1,4 +1,4 @@
-import { frameworkError, KernelErrorCode } from '../protocol/errors.ts';
+import { frameworkError, KernelErrorCode } from '@openelement/protocol/errors';
 
 /** One tree-shaped browser lifetime owner for components, Parts and Regions. */
 export class LifetimeScope {

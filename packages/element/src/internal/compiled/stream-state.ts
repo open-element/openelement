@@ -1,4 +1,4 @@
-import type { PartProgram } from '../protocol/part-program.ts';
+import type { PartProgram } from '@openelement/protocol/part-program';
 
 export const STREAM_STATE_KEY = Symbol.for('openelement.stream-state.v1');
 

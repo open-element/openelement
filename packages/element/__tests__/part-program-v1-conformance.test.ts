@@ -28,8 +28,8 @@ import { describe, expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { signal } from '../src/internal/signal/framework.ts';
 import type { WritableSignal } from '../src/internal/signal/types.ts';
-import { SIGNAL_BRAND } from '../src/internal/protocol/signal.ts';
-import { validatePartProgram } from '../src/internal/protocol/part-program.ts';
+import { SIGNAL_BRAND } from '@openelement/protocol/signal';
+import { validatePartProgram } from '@openelement/protocol/part-program';
 
 // ─── Minimal instrumented DOM harness ────────────────────────────────
 

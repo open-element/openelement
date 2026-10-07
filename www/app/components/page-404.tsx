@@ -1,10 +1,10 @@
 import { element, OpenElement, property } from '@openelement/element';
 import '@openelement/ui/open-button';
-import { page404Styles } from './page-404-styles.ts';
+import page404Styles from './page-404.css';
 
 @element('el-404')
 export default class Page404 extends OpenElement {
-  static override styles = page404Styles;
+  static override styles = [page404Styles];
 
   @property({ reflect: false })
   serifLine = '';

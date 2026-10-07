@@ -184,7 +184,8 @@ test('cors/requestId headers land on the terminal response through the scope cha
     new Request('https://app.test/', { headers: { origin: 'https://allowed.test' } }),
   );
   // The terminal built its own new Response — the channel headers must ride
-  // the scope's merge (the prepared-headers behavior of the replaced stack).
+  // the scope's boundary merge (the prepared-headers behavior of the
+  // replaced stack).
   expect(response.headers.get('X-Request-Id')).toMatch(/^[\w\-=]+$/);
   expect(response.headers.get('Access-Control-Allow-Origin')).toEqual('https://allowed.test');
 });

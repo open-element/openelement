@@ -19,8 +19,8 @@
 import { createLogger } from '@openelement/element';
 import { join } from 'pathe';
 import { safeReadFile } from './route-scanner-fs.ts';
-import { analyzeModuleSemantics } from '@openelement/element/compiler';
-import { ROUTER_MODULE_VOCABULARY } from '../protocol/module-vocabulary.ts';
+import { analyzeModuleSemantics } from '@openelement/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 
 const log = createLogger('foreign-tag-scan');
 

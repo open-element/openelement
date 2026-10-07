@@ -5,7 +5,7 @@
  * Zero Vite dependency. Usable with any build tool.
  */
 
-import type { IslandTransformOptions, IslandTransformResult } from '../protocol/island.ts';
+import type { IslandTransformOptions, IslandTransformResult } from '@openelement/protocol/island';
 import { normalizeSeparators, pathToTagName } from './path-utils.ts';
 export type { IslandTransformOptions, IslandTransformResult };
 

@@ -1,8 +1,17 @@
 {
   "name": "@openelement/protocol",
   "version": "1.0.0-alpha.10",
+  "description": "Cross-system contracts for OpenElement \u2014 Part Program IR types, policy constants, error codes, island markers. Zero dependencies by charter.",
   "type": "module",
-  "description": "Cross-system contracts and tiny pure predicates for the OpenElement framework (compiler ↔ runtime ↔ build).",
+  "license": "MIT",
+  "publish": {
+    "include": [
+      "src/**",
+      "README.md",
+      "LICENSE"
+    ],
+    "access": "public"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./app-model": "./src/app-model.ts",
@@ -28,13 +37,8 @@
     "./void-tags": "./src/void-tags.ts"
   },
   "files": [
-    "src/**",
+    "src",
     "README.md",
     "LICENSE"
-  ],
-  "scripts": {
-    "build": "tsc --noEmit -p tsconfig.json",
-    "lint": "oxlint src __tests__",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
-  }
+  ]
 }

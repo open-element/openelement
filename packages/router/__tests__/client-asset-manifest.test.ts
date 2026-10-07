@@ -16,7 +16,7 @@ import { ClientAssetErrorCode } from '../src/internal/error-codes.ts';
 import {
   EMPTY_CLIENT_ASSET_MANIFEST,
   serializeClientAssetsModule,
-} from '../src/vite/internal/protocol/client-assets.ts';
+} from '@openelement/protocol/client-assets';
 import type { ClientIslandDeliveryEntry } from '../src/vite/internal/ssg/delivery.ts';
 
 function island(overrides: Partial<ClientIslandDeliveryEntry> = {}): ClientIslandDeliveryEntry {

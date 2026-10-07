@@ -389,3 +389,4 @@
      offset or recolor it. Token colors resolve via the --shiki-* palette
      table (site-css.ts). */
   .changelog-content pre code { background: none; color: inherit; padding: 0; border-radius: 0; font-size: var(--text-sm); line-height: 1.7; }
+

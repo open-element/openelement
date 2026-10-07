@@ -6,7 +6,7 @@ order: 5
 
 ## shadow 边界
 
-路由页面渲染在每页一个的 custom element 内（例如 `<blog-post-page>`）。当页面类显式选择 `root: 'shadow-open'` 时，服务端以 declarative shadow DOM 输出其内容，页面自己的 `<style>` 与 `StyleSheet` 规则位于 shadow root 中。文档级规则如 `.card { ... }` 或 `h1 { ... }` 被限定在 light DOM，永远到不了 shadow 页面内容——而且是静默的：没有 console 警告，也没有构建错误。（编译默认是 light root，此时文档样式是生效的。）
+路由页面渲染在每页一个的 custom element 内（例如 `<blog-post-page>`）。当页面类显式选择 `root: 'shadow-open'` 时，服务端以 declarative shadow DOM 输出其内容，页面自己的 `<style>` 与组件样式表规则位于 shadow root 中。文档级规则如 `.card { ... }` 或 `h1 { ... }` 被限定在 light DOM，永远到不了 shadow 页面内容——而且是静默的：没有 console 警告，也没有构建错误。（编译默认是 light root，此时文档样式是生效的。）
 
 ## 什么能穿过边界
 
@@ -18,7 +18,7 @@ CSS 自定义属性会穿透 shadow 边界继承：在 `:root` 上定义的 `--t
 
 ## 两种受支持的写法
 
-其一：scoped `StyleSheet`——`const s = new StyleSheet(); s.replaceSync(...);` 再赋值为组件的 `static styles`，使其进入 shadow root（shadow root 上走 adoptedStyleSheets，light root 上落入 document head）。其二：在 `:root` 上定义 CSS 自定义属性——它们会穿透 shadow 边界继承。文档级 `<link rel="stylesheet">` 与 head 里的 `<style>` 不会作用于 shadow 内容；编译模板中的裸 `<style>` 标签会被拒绝。
+其一：真实的 `.css` 文件——import 进组件并数组进它的 `static styles`，这是唯一的样式创作形态（#1558）。构建期的 style-asset 管线负责解析该 import：shadow 组件的样式表经 `adoptedStyleSheets` 采纳（island chunk 里是真实的 `.css` 资产，绝不内嵌 JS 字节），light root 的服务端则把同一份字节内联进 SSR 输出。其二：在 `:root` 上定义 CSS 自定义属性——它们会穿透 shadow 边界继承。文档级 `<link rel="stylesheet">` 与 head 里的 `<style>` 不会作用于 shadow 内容；编译模板中的裸 `<style>` 标签会被拒绝。
 
 ### 文档全局样式表（不会生效）
 
@@ -27,34 +27,27 @@ CSS 自定义属性会穿透 shadow 边界继承：在 `:root` 上定义的 `--t
 .card { border: 1px solid silver; }  /* never matches page content */
 ```
 
-### Scoped StyleSheet（生效）
+### 组件 `.css` 文件（生效）
 
-```tsx
-// app/components/page-example.styles.ts — 样式表放在编译组件模块之外
-import { StyleSheet } from '@openelement/element';
-
-const styles = new StyleSheet();
-styles.replaceSync(`
-  :host { display: block; }
-  .card {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 1rem;
-    color: var(--text-primary);
-  }
-`);
-
-export default styles;
+```css
+/* app/components/page-example.css — 样式表是文件，不是 JS 字符串 */
+:host { display: block; }
+.card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem;
+  color: var(--text-primary);
+}
 ```
 
 ```tsx
 // app/components/page-example.tsx — 由 open:compiled-element transform 编译
-import { element, OpenElement } from '@openelement/element';
-import styles from './page-example.styles.ts';
+import { element, OpenElement, type StyleSheetLike } from '@openelement/element';
+import styles from './page-example.css';
 
 @element('page-example', { root: 'shadow-open' })
 export default class ExamplePage extends OpenElement {
-  static override styles = styles;
+  static override styles: StyleSheetLike[] = [styles];
 
   render() {
     return <section class='card'>Themed through custom properties.</section>;
@@ -62,9 +55,11 @@ export default class ExamplePage extends OpenElement {
 }
 ```
 
+内联样式字符串已退役：编译模块的 `static styles` 必须数组 `.css` import，其余任何写法都会以 OEC9029 使构建失败。
+
 ## 自定义属性实战
 
-starter 在 `:root` 上定义了一层设计令牌（颜色、字体、间距），正是为了让页面可以完全通过自定义属性来主题化。优先用令牌做主题；组件自身的布局与排版再交给 `StyleSheet`。
+starter 在 `:root` 上定义了一层设计令牌（颜色、字体、间距），正是为了让页面可以完全通过自定义属性来主题化。优先用令牌做主题；组件自身的布局与排版再交给组件的 `.css` 样式表。
 
 ## 另见
 

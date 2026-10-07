@@ -3,22 +3,11 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": [
-      "ES2023",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2023", "DOM"],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": [
-      "node"
-    ],
-    "allowImportingTsExtensions": true,
-    "experimentalDecorators": true
+    "allowImportingTsExtensions": true
   },
-  "files": [
-    "src/compiler.ts",
-    "src/vite.ts"
-  ]
+  "include": ["src"]
 }

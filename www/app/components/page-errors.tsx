@@ -11,7 +11,7 @@ import { element, OpenElement, property } from '@openelement/element';
 import '#site-ui/open-reading-shell.tsx';
 import '../site-ui/open-section-frame.tsx';
 import '../islands/open-page-rail.tsx';
-import { pageErrorsStyles } from './page-errors-styles.ts';
+import pageErrorsStyles from './page-errors.css';
 
 /** One diagnostic code row, projected from the generated inventory. */
 export interface ErrorCodeItem {
@@ -44,7 +44,7 @@ interface ErrorsMetadata {
 // the fallback for classes without one.
 @element('errors-page')
 export default class ErrorsPage extends OpenElement {
-  static override styles = pageErrorsStyles;
+  static override styles = [pageErrorsStyles];
 
   @property({ reflect: false, attribute: false })
   metadata: ErrorsMetadata = { breadcrumb: '', title: '', lede: '' };

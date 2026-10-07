@@ -9,7 +9,7 @@
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import type { RouteEntry } from '@openelement/protocol/framework';
 
 // Test fixtures
 

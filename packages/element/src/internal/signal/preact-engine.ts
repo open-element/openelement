@@ -17,7 +17,7 @@ import {
   signal as preactSignal,
 } from '@preact/signals-core';
 import type { BatchedSignalEngine } from './types.ts';
-import { SIGNAL_BRAND } from '../protocol/signal.ts';
+import { SIGNAL_BRAND } from '@openelement/protocol/signal';
 
 export function createPreactEngine(): BatchedSignalEngine {
   return {

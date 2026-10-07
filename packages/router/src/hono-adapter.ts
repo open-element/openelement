@@ -1,7 +1,7 @@
 /**
  * @openelement/router/hono — the single Hono adapter (#1560).
  *
- * ADR-0152's original positioning, restored: Hono is an OPTIONAL HTTP
+ * The #152 product-router positioning, restored: Hono is an OPTIONAL HTTP
  * adapter, not the generated entry's composition engine. The generated
  * server entry speaks only the dialect-free WinterCG shape
  * `(request, env?, platform?) => Promise<Response>`; this module is the one

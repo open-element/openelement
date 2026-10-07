@@ -1,19 +1,20 @@
 /**
  * Fresh browser DOM creation from a validated Part Program: the template
  * walk that mounts static nodes, item value/attribute slots, and one anchor
- * Part per index. The walk re-enters the Region builders (buildWhen/
- * buildEach in regions.ts) for anchor Parts, while those builders call back
- * into {@linkcode mountNodes} for nested item/branch templates — a
- * function-level ESM cycle between hoisted declarations with no top-level
- * evaluation, which is safe.
+ * Part per index. The walk re-enters the Region builders for anchor Parts
+ * through the regions seam (#1548) — buildWhen/buildEach are installed by the
+ * importing entry (regions-install.ts), not statically imported here, so a
+ * regions-free graph drops the whole regions module — while those builders
+ * call back into {@linkcode mountNodes} for nested item/branch templates — a
+ * function-level cycle with no top-level evaluation, which is safe.
  */
 
 import type {
   PartProgramV1,
   ProgramEachPart,
   ProgramTreeNode,
-} from '../../protocol/part-program.ts';
-import { RuntimeErrorCode } from '../../protocol/errors.ts';
+} from '@openelement/protocol/part-program';
+import { RuntimeErrorCode } from '@openelement/protocol/errors';
 import { normalizePartProgram } from '../runtime-program.ts';
 import type { LifetimeScope } from '../lifetime-scope.ts';
 import type {
@@ -32,7 +33,8 @@ import {
   removeNodes,
 } from './program-kernel.ts';
 import { attachFixedParts, buildTextPart } from './parts.ts';
-import { buildEach, buildWhen, type ItemAttrSlot, type ItemValueSlot } from './regions.ts';
+import { regionBuildersOrFail } from './regions-seam.ts';
+import type { ItemAttrSlot, ItemValueSlot } from './regions.ts';
 
 export function mountNodes(
   ctx: MountContext,
@@ -132,8 +134,12 @@ function mountPart(
   const part = ctx.program.parts[index];
   if (!part) fail(RuntimeErrorCode.PART_MISSING, `[compiled-runtime] missing Part ${index}`);
   if (part.k === 'text') return buildTextPart(ctx, parentScope, doc, part);
-  if (part.k === 'when') return buildWhen(ctx, parentScope, doc, part, item, itemPart, parent);
-  if (part.k === 'each') return buildEach(ctx, parentScope, doc, part, parent);
+  if (part.k === 'when') {
+    return regionBuildersOrFail().buildWhen(ctx, parentScope, doc, part, item, itemPart, parent);
+  }
+  if (part.k === 'each') {
+    return regionBuildersOrFail().buildEach(ctx, parentScope, doc, part, parent);
+  }
   fail(
     RuntimeErrorCode.FIXED_PART_AS_ANCHOR,
     `[compiled-runtime] fixed Part ${part.index} cannot be used as an anchor`,

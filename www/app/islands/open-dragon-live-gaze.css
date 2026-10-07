@@ -53,3 +53,4 @@
     .poster, .idle-view { object-fit: contain; }
   }
   @media (prefers-reduced-motion: reduce) { .stage { animation: none; } .mote { animation: none; opacity: 0; } }
+

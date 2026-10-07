@@ -294,9 +294,16 @@ test('pack surface: an undeclared seam install fails, a declared one passes', ()
   expect(importerOnly.length).toEqual(1);
   expect(importerOnly[0].path).toContain(INSTALLER_PATH);
 
-  // And the shipped element manifest must not regress to the flat claim.
+  // And the shipped element manifest must not regress to the flat claim. The
+  // flagged set names every install edge's importer and installer (#1425
+  // class): the default entry, the entries that import one install
+  // (`./client-only` → regions, `./no-regions` → claim, #1548), and both
+  // installers.
   expect(packedMetadata('@openelement/element').sideEffects).toEqual([
     './src/index.js',
+    './src/client-only.js',
+    './src/no-regions.js',
     './src/internal/compiled/runtime/claim-install.js',
+    './src/internal/compiled/runtime/regions-install.js',
   ]);
 });

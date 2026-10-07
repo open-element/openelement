@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import {
   CompiledElementError,
   compileElementProgram,
-} from '../src/internal/compiler/semantic-core/compile.ts';
+} from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
 
 const PRELUDE = `
   import { computed, element, OpenElement, property } from '@openelement/element';
@@ -181,5 +181,59 @@ test('semantic compiler rejects forbidden sinks from the shared deny list', () =
     ),
     'OEC9011',
     'unsafe',
+  );
+});
+
+test('#1556: the inline conditional class fails closed outside its admitted shape', () => {
+  const fields = `
+    @property({ type: Boolean, reflect: false }) flag = false;
+    @property({ reflect: false }) label = 'ready';
+    @property({ reflect: false, attribute: false }) derived = computed(() => this.label);
+  `;
+  // (render, code, fragment): every shape the inline conditional class does
+  // not admit keeps failing closed with the same diagnostics the grammar
+  // produced before #1556 — no runtime fallback, no silent widening.
+  const cases: Array<[string, string, string]> = [
+    // Non-literal branches.
+    [`<main class={this.flag ? this.label : 'off'}>x</main>`, 'OEC9011', 'string literals'],
+    [`<main class={this.flag ? 'on' : 0}>x</main>`, 'OEC9011', 'string literals'],
+    // The condition grammar is the computed-body grammar: only declared
+    // plain-property reads.
+    [`<main class={this.missing ? 'on' : 'off'}>x</main>`, 'OEC9024', 'this.missing'],
+    [`<main class={this.derived ? 'on' : 'off'}>x</main>`, 'OEC9024', 'computed field "derived"'],
+    [`<main class={this ? 'on' : 'off'}>x</main>`, 'OEC9024', 'only reference this.<property>'],
+    // A condition over module scope only derives no signal dependency.
+    [`<main class={GLOBAL ? 'on' : 'off'}>x</main>`, 'OEC9011', 'at least one this.<property>'],
+  ];
+  for (const [render, code, fragment] of cases) {
+    expectCompilerFailure(component(fields, render), code, fragment);
+  }
+
+  // Region branches stay fully static: the conditional class keeps today's
+  // generic unsupported-expression diagnostic there (OEC9012 territory is
+  // reserved for dynamic branch content, unchanged from before #1556).
+  expectCompilerFailure(
+    component(
+      fields,
+      `<main>{this.flag ? <p class={this.flag ? 'a' : 'b'}>x</p> : <p>y</p>}</main>`,
+    ),
+    'OEC9011',
+    'must be a literal, this.<property>, or a supported expression',
+  );
+
+  // Custom-element hosts keep today's diagnostics for a conditional class
+  // (their dynamic class lowers through the host-prop path or fails closed).
+  expectCompilerFailure(
+    component(fields, `<x-widget class={this.flag ? 'a' : 'b'}></x-widget>`),
+    'OEC9011',
+    'must be a literal, this.<property>, or a supported expression',
+  );
+
+  // Non-ternary expressions in class position were never admitted and stay
+  // that way.
+  expectCompilerFailure(
+    component(fields, `<main class={this.flag && 'on'}>x</main>`),
+    'OEC9011',
+    'must be a literal, this.<property>, or a supported expression',
   );
 });

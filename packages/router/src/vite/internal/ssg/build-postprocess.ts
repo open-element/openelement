@@ -17,11 +17,12 @@
 import { readdir, rm } from 'node:fs/promises';
 import process from 'node:process';
 import { join } from 'pathe';
-import type { ComponentLayer, HydrationStrategy } from '../protocol/framework.ts';
-import type { ClientAssetManifest } from '../protocol/client-assets.ts';
-import type { IslandDecl } from '../protocol/ssg.ts';
+import type { ComponentLayer, HydrationStrategy } from '../../framework.ts';
+import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
+import type { IslandDecl } from '@openelement/protocol/ssg';
 import { createLogger } from '@openelement/element';
 import { buildError, ClientAssetErrorCode } from '../../../internal/error-codes.ts';
+import type { PageIslandManifest } from './island-manifest.ts';
 import { generateIslandManifests, writeIslandManifests } from './island-manifest.ts';
 import { expandIslandDeliveryDecl, resolveIslandHydrate } from './island-scanner.ts';
 import {
@@ -30,6 +31,8 @@ import {
   resolveIslandDeliveryTags,
 } from './delivery.ts';
 import { DEFAULT_OUT_DIR } from './../paths.ts';
+
+export { buildIslandPrefetchLinks } from './speculation-rules.ts';
 
 const log = createLogger('build-postprocess');
 
@@ -104,12 +107,16 @@ export function islandChunkMapFromAssetManifest(
  * Must only run after Phase 2 (client island build) has completed. The
  * client script tags themselves were already embedded at render time
  * (#1471) — this pass records the identity-driven chunk/strategy/layer
- * manifests only. Fail-closed: the chunk map is resolved — and any missing
- * island asset thrown — before a single page manifest is generated or
- * written, so the pass either writes the complete manifest set or none of
- * it, never a partial record that silently omits an admitted island.
+ * manifests only and stays read-only on the rendered HTML; the per-page
+ * speculation-rules injection (#1561) is a separate lane fed by the
+ * manifests this returns. Fail-closed: the chunk map is resolved — and any
+ * missing island asset thrown — before a single page manifest is generated
+ * or written, so the pass either writes the complete manifest set or none
+ * of it, never a partial record that silently omits an admitted island.
  */
-export async function postProcessClientIslandBuild(ctx: BuildContextView): Promise<void> {
+export async function postProcessClientIslandBuild(
+  ctx: BuildContextView,
+): Promise<PageIslandManifest[]> {
   const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const outputDir = join(root, outDir);
@@ -165,6 +172,7 @@ export async function postProcessClientIslandBuild(ctx: BuildContextView): Promi
 
   const pageManifests = generateIslandManifests(outputDir, chunkMap, strategyMap, layerMap);
   await writeIslandManifests(outputDir, pageManifests);
+  return pageManifests;
 }
 
 /**

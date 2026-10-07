@@ -1,19 +1,20 @@
 /**
- * Ambient module typing for the one style authoring form (#1558).
+ * The `*.css` ambient module type (#1558).
  *
- * A `.css` file import is the sheet itself: the build's style-asset pipeline
- * resolves the import and hands back a module whose default export is the
- * cross-realm `StyleSheetLike` — a constructable stylesheet in the browser,
- * the SSR shim on the server. Authored modules type the binding once, here.
- * Query-suffixed specifiers (`?raw`, `?inline`) are outside this declaration:
- * they stay string channels owned by the bundler.
+ * A wildcard `declare module` cannot live in a module file (TS2664) and a
+ * triple-slash reference is lint-banned, so consuming tsconfigs load this
+ * file through the standard `types` array (the vite/client pattern) via the
+ * `./css-modules` export.
  *
- * Ambient declarations live in a global script file (a module file would turn
- * the wildcard into an augmentation, which TS refuses for non-existent
- * modules); every consumer program that imports `@openelement/element` pulls
- * this file in through the index's triple-slash reference.
+ * The declared default export is the one shape every style channel serves
+ * (router/vite/internal/style-assets.ts): the sheet — the native
+ * CSSStyleSheet in the browser, element's SSR shim in Node. The type comes
+ * from the element public surface so this declaration carries no second copy
+ * of the StyleSheetLike contract.
  */
 declare module '*.css' {
-  const sheet: import('@openelement/protocol/style-sheet').StyleSheetLike;
+  import type { StyleSheetLike } from '@openelement/element';
+
+  const sheet: StyleSheetLike;
   export default sheet;
 }

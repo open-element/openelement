@@ -12,8 +12,8 @@ import type {
   SignalLike,
   Unsubscribe,
   WritableSignal,
-} from '../protocol/signal.ts';
-import { SIGNAL_BRAND } from '../protocol/signal.ts';
+} from '@openelement/protocol/signal';
+import { SIGNAL_BRAND } from '@openelement/protocol/signal';
 
 export type { ReadonlySignal, Signal, SignalEngine, SignalLike, Unsubscribe, WritableSignal };
 

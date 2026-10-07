@@ -135,3 +135,31 @@ Deno install.
 The decisions those statements carried — fresh verification against packed
 artifacts rather than workspace-relative source paths — stand unchanged; only
 their Deno carriage is retired.
+
+## Amendment (2026-10-07, #1560): the original positioning restored
+
+The 2026-09-16 amendment above is superseded. "Hono integration is an optional HTTP adapter"
+is true again, by construction this time: the generated server entry composes on an internal
+WinterCG layer (`@openelement/router/server-runtime` — the request scope, the `(request, next) =>
+Response` middleware chain, the fn-form API mounts, the route layer, and the 404 terminal), the
+built-in middleware (request-id, logger, CORS, secure headers, CSP auto-nonce, action body
+limit) are the runtime's own WinterCG middleware, and the SSG prerender is the build's own
+static generator over the same dispatch — no `hono` import remains anywhere in `@openelement/router`
+source. `hono` is an optional peer of `@openelement/router`; the one adapter is
+`@openelement/router/hono` (`createHonoAdapter`), which mounts the entry's WinterCG handler
+inside a consumer's own Hono app and is the only module that resolves the peer. The dev server
+(`@hono/vite-dev-server`, itself an optional peer) and the Nitro production entry consume the
+entry's WinterCG exports (`openElementDevFetch` / `openElementHandler`) directly and need no
+hono. Every public authoring contract is unchanged: `@openelement/router/http` keeps its exact
+WinterCG shape, `_middleware.ts` and `middleware.use` remain `(request, next) => Response`, and
+Route Mode's matching core remains independent.
+
+Behavior parity with the replaced composition is deliberate: middleware ordering, the
+`'/p/*'`-covers-`/p` scope semantics, the CORS preflight short-circuit and Vary appends, the
+request-id validation, the security header set, the 405/Allow responder, the styled-404
+terminal, and the SSG output naming are pinned by unit tests, the renderer-adapter byte pins,
+and both read-only request-time oracles. One deliberate divergence: the logger's status
+coloring is dropped — its color policy read `process.env`, which runtime code must not (P3).
+The `virtual:open-hono-entry` module id and its `_virtual_open-hono-entry` asset prefix are
+retained as legacy names with no dependency semantics; renaming them would churn build
+artifacts for no observable change.

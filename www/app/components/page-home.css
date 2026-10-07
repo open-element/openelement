@@ -226,3 +226,4 @@
     .links a { border-inline-end:0; border-block-end:1px solid var(--color-border); }
     .links a:last-child { border-block-end:0; }
   }
+

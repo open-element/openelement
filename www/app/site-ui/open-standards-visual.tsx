@@ -6,14 +6,14 @@
  */
 
 import { computed, element, OpenElement, property } from '@openelement/element';
-import { openStandardsVisualStyles } from './open-standards-visual-styles.ts';
+import openStandardsVisualStyles from './open-standards-visual.css';
 
 /** Compiled computed fields expose their derived value through the class facade. */
 type CompiledComputed<T> = ReturnType<typeof computed<T>> & T;
 
 @element('open-standards-visual')
 export default class OpenStandardsVisual extends OpenElement {
-  static override styles = openStandardsVisualStyles;
+  static override styles = [openStandardsVisualStyles];
   @property({ reflect: true })
   variant = 'packages';
   @property({ reflect: true })

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
-import type { PartProgramV1 } from '../../src/internal/protocol/part-program.ts';
+import type { PartProgramV1 } from '@openelement/protocol/part-program';
 import { trustedHtml } from '../../src/internal/core/security.ts';
 import { testProgram } from '../compiled-runtime/test-program.ts';
 

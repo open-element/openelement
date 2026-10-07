@@ -8,7 +8,7 @@
  *                          into a single headExtras string
  */
 
-import type { FrameworkOptions } from './internal/protocol/framework.ts';
+import type { FrameworkOptions } from './framework.ts';
 
 import { OpenElementError } from '@openelement/element/authoring';
 import { isSafeAttributeName } from '@openelement/element/authoring';

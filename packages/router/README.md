@@ -105,6 +105,14 @@ A Vite-mode consumer installs the host packages the tooling peers on:
 
 Consumers install them as dev dependencies (the generated starter does this).
 
+The generated server entry itself has no HTTP-framework dependency: it
+composes on the internal WinterCG layer (#1560 — the request scope, the
+`(request, next) => Response` middleware chain, and the 404/405 method
+policy). `hono` is an optional peer: the one adapter,
+`@openelement/router/hono` (`createHonoAdapter`), mounts the entry's
+WinterCG handler inside a consumer's own Hono app and is the only module
+that resolves it.
+
 ## Lifecycle CLI
 
 Generated applications build and serve through the Router CLI subpaths:
@@ -125,7 +133,7 @@ assets from the Phase 2 build manifest (#1471):
 ```text
 Phase 1: route, API, middleware, and island scan
 Phase 2: client island entry and browser chunks
-Phase 3: SSR bundle, Hono toSSG(), HTML post-processing
+Phase 3: SSR bundle, static prerender over the app dispatch, HTML post-processing
 ```
 
 ## Nitro deploy mount
@@ -143,10 +151,11 @@ import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 
 The generated server entries import their request-time runtime from
 `@openelement/router/server-runtime`: the generated-app factory
-(`createGeneratedApp` — the Hono app, its WinterCG bridge, the composed
-handler exports, and the page-render bindings), the response-header channel
-with its commitment gate, the CSP auto-nonce, the page SSR renderer seam, the
-action POST protocol, and the streaming pump. The logic lives in typecheckable
+(`createGeneratedApp` — the WinterCG app, the request-scope accessor, the
+composed handler exports, and the page-render bindings), the built-in
+middleware (request-id, logger, CORS, secure headers), the response-header
+channel with its commitment gate, the CSP auto-nonce, the page SSR renderer
+seam, the action POST protocol, and the streaming pump. The logic lives in typecheckable
 modules instead of codegen template strings, so it is directly unit-testable.
 
 Applications never import this subpath directly — the entries the Vite

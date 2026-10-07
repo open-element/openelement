@@ -1,5 +1,5 @@
 /** Shared helpers and visual recipes for the public UI primitives. */
-import { createLogger, type Logger, StyleSheet, type StyleSheetLike } from '@openelement/element';
+import { createLogger, type Logger } from '@openelement/element';
 
 /**
  * Shared component logger. Compiled modules may not carry runtime top-level
@@ -19,7 +19,7 @@ export const CODE_BLOCK_CONSTANTS = {
 // so the server and client counters can assign different ids to the same
 // instance. Pairs that must match across realms therefore have to be
 // re-synced on the client — the compiled components assign their ids at
-// activation (open-input, open-dropdown, open-tabs), so client and server
+// activation (open-input, open-dropdown), so client and server
 // each keep one consistent realm. References that stay inside a single
 // activation need no repair.
 let instanceCount = 0;
@@ -27,16 +27,6 @@ let instanceCount = 0;
 /** Return the next realm-unique instance id suffix. */
 export function nextInstanceId(): number {
   return instanceCount++;
-}
-
-/**
- * Build a StyleSheetLike from a CSS string. Shared by the component-local
- * sheets so components do not repeat new StyleSheet()+replaceSync boilerplate.
- */
-export function recipe(css: string): StyleSheetLike {
-  const sheet = new StyleSheet();
-  sheet.replaceSync(css);
-  return sheet;
 }
 
 /**
@@ -77,56 +67,3 @@ export function deepActiveElement(): HTMLElement | null {
   }
   return (active as HTMLElement | null) ?? null;
 }
-
-/**
- * open-callout's type → icon map. Compiled modules may not carry runtime
- * top-level statements (OEC9008), so shared lookup tables live in plain .ts
- * modules like this one.
- */
-export const CALLOUT_TYPE_ICONS: Record<string, string> = {
-  info: 'ℹ️',
-  warning: '⚠',
-  danger: '✕',
-  tip: '✓',
-};
-
-export const controlRecipe: StyleSheetLike = recipe(`
-  .control {
-    font: inherit;
-    color: var(--color-foreground);
-    background: color-mix(in srgb, var(--color-popover) 78%, transparent);
-    border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
-    border-radius: var(--radius-md);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-white) 12%, transparent);
-    transition: border-color var(--default-transition-duration) var(--ease-out),
-      background var(--default-transition-duration) var(--ease-out),
-      box-shadow var(--default-transition-duration) var(--ease-out),
-      transform var(--default-transition-duration) var(--ease-out);
-  }
-  .control:hover { border-color: color-mix(in srgb, var(--color-violet-400) 74%, var(--color-border)); }
-  .control:focus-visible {
-    outline: calc(var(--spacing) * 0.5) solid var(--color-ring);
-    outline-offset: calc(var(--spacing) * 0.75);
-  }
-  .control:disabled, .control[aria-disabled="true"] { opacity: .48; cursor: not-allowed; }
-`);
-
-export const surfaceRecipe: StyleSheetLike = recipe(`
-  .surface {
-    color: var(--color-foreground);
-    background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 9%, var(--color-card)), color-mix(in srgb, var(--color-card) 90%, transparent));
-    border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, var(--color-border) 78%, var(--color-primary));
-    border-radius: var(--radius-lg);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-white) 8%, transparent), var(--shadow-2xl);
-  }
-`);
-
-export const overlayRecipe: StyleSheetLike = recipe(`
-  .overlay {
-    color: var(--color-foreground);
-    background: color-mix(in srgb, var(--color-popover) 92%, transparent);
-    border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, color-mix(in srgb, var(--color-foreground) 25%, var(--color-border)) 62%, var(--color-primary));
-    border-radius: var(--radius-xl);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-white) 8%, transparent), var(--shadow-2xl);
-  }
-`);

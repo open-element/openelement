@@ -18,6 +18,7 @@ import {
   isSsgPrerenderDispatch,
   mergeChannelHeaders,
   PROTOCOL_HEADERS,
+  SSG_PRERENDER_ENV_KEY,
 } from '../src/vite/internal/server-runtime/response-channel.ts';
 
 function textResponse(init?: { headers?: HeadersInit; status?: number }): Response {
@@ -216,17 +217,19 @@ test('applyCspNonce appends a script-src when the policy declares none', () => {
   );
 });
 
-test('isSsgPrerenderDispatch matches exactly the hono/ssg env marker', () => {
-  // hono/ssg dispatches every build-time request with this env (ssg.js
-  // passes `{ [SSG_CONTEXT]: true }` — the probe and every page render).
-  expect(isSsgPrerenderDispatch({ HONO_SSG_CONTEXT: true })).toBeTruthy();
+test('isSsgPrerenderDispatch matches exactly the SSG prerender env marker', () => {
+  // The static generator dispatches every build-time request with this env
+  // ({ [SSG_PRERENDER_ENV_KEY]: true } — one dispatch per page, #1560). The
+  // constant is the single source: the build side imports it from here.
+  expect(isSsgPrerenderDispatch({ [SSG_PRERENDER_ENV_KEY]: true })).toBeTruthy();
+  expect(isSsgPrerenderDispatch({ OPEN_ELEMENT_SSG_CONTEXT: true })).toBeTruthy();
   // Request-time dispatches never carry it: no env, the app's deployment
   // bindings, or any other value must keep the per-request nonce bound.
   expect(isSsgPrerenderDispatch(undefined)).toEqual(false);
   expect(isSsgPrerenderDispatch({})).toEqual(false);
   expect(isSsgPrerenderDispatch({ SOME_DEPLOYMENT_VAR: 'x' })).toEqual(false);
-  expect(isSsgPrerenderDispatch({ HONO_SSG_CONTEXT: 'true' })).toEqual(false);
-  expect(isSsgPrerenderDispatch({ HONO_SSG_CONTEXT: 1 })).toEqual(false);
-  expect(isSsgPrerenderDispatch('HONO_SSG_CONTEXT')).toEqual(false);
+  expect(isSsgPrerenderDispatch({ [SSG_PRERENDER_ENV_KEY]: 'true' })).toEqual(false);
+  expect(isSsgPrerenderDispatch({ [SSG_PRERENDER_ENV_KEY]: 1 })).toEqual(false);
+  expect(isSsgPrerenderDispatch(SSG_PRERENDER_ENV_KEY)).toEqual(false);
   expect(isSsgPrerenderDispatch(null)).toEqual(false);
 });

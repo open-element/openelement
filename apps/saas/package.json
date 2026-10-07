@@ -12,6 +12,7 @@
     "nitro:build-workers": "node ../../tools/release/nitro-build.ts --root . --preset cloudflare_module --out .output-workers --prune-public server"
   },
   "dependencies": {
+    "@openelement/compiler": "workspace:*",
     "@openelement/element": "workspace:*",
     "@openelement/router": "workspace:*",
     "@supabase/realtime-js": "^2.84.0",

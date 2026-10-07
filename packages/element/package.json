@@ -2,23 +2,27 @@
   "name": "@openelement/element",
   "version": "1.0.0-alpha.10",
   "type": "module",
-  "//": "ADR-0155 (docs/adr/ADR-0155-client-only-entry-subpath.md) governs the \"./client-only\" export below: it is the full public surface minus the compiled claim executor, pinned to the same publicShapeSha256 as \".\", and is deletable as one unit when its written retirement condition is met. Recorded as a JSON annotation key rather than a `//` comment because the package-graph reader (tools/lib/package-graph.ts) fails loud on JSONC.",
+  "//": "ADR-0155 (docs/adr/ADR-0155-client-only-entry-subpath.md) governs the \"./client-only\" export below: it is the full public surface minus the compiled claim executor, pinned to the same publicShapeSha256 as \".\", and is deletable as one unit when its written retirement condition is met. ADR-0166 (docs/adr/ADR-0166-regions-axis-entry-subpaths.md) governs \"./no-regions\" and \"./base\" the same way for the when/each Region builders axis (#1548). Recorded as a JSON annotation key rather than a `//` comment because the package-graph reader (tools/lib/package-graph.ts) fails loud on JSONC.",
   "exports": {
     ".": "./src/index.ts",
+    "./css-modules": "./src/css-modules.d.ts",
     "./jsx-runtime": "./src/jsx-runtime.ts",
     "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
     "./authoring": "./src/authoring.ts",
     "./html": "./src/html.ts",
     "./logger": "./src/logger.ts",
     "./build-utils": "./src/build-utils.ts",
-    "./compiler": "./src/compiler.ts",
     "./client-only": "./src/client-only.ts",
-    "./vite": "./src/vite.ts"
+    "./no-regions": "./src/no-regions.ts",
+    "./base": "./src/base.ts"
   },
-  "//sideEffects": "The two paths name one edge (#1425): the default entry is flagged as the importer — a side-effect-free module loses its bare `import './internal/compiled/runtime/claim-install.ts'` — and claim-install.ts as the installer (`installClaimExecutor(...)` at module scope), so a tree-shaking bundler cannot drop server-DOM hydration. Everything else in src/ evaluates pure and stays tree-shakeable. The packed artifact mirrors this pair with compiled .js paths in the release manifest (tools/release/npm-manifest.ts SIDE_EFFECTS) — change the two together; the guard is packages/element/__tests__/side-effects-declaration.test.ts.",
+  "//sideEffects": "The paths name three install edges (#1425 class): the default entry is flagged as the importer — a side-effect-free module loses its bare `import './internal/compiled/runtime/claim-install.ts'` and `regions-install.ts` — together with the installers claim-install.ts (`installClaimExecutor(...)`) and regions-install.ts (`installRegionBuilders(...)`), both module-scope calls; `./client-only` imports the regions install, `./no-regions` the claim install, so those importers are flagged too. A tree-shaking bundler therefore cannot drop server-DOM hydration or when/each Region execution. Everything else in src/ evaluates pure and stays tree-shakeable. The packed artifact mirrors these paths with compiled .js names in the release manifest (tools/release/npm-manifest.ts SIDE_EFFECTS) — change the two together; the guard is packages/element/__tests__/side-effects-declaration.test.ts.",
   "sideEffects": [
     "./src/index.ts",
-    "./src/internal/compiled/runtime/claim-install.ts"
+    "./src/client-only.ts",
+    "./src/no-regions.ts",
+    "./src/internal/compiled/runtime/claim-install.ts",
+    "./src/internal/compiled/runtime/regions-install.ts"
   ],
   "files": [
     "src/**",
@@ -38,16 +42,8 @@
     "browser:gate": "pnpm run browser:install && pnpm run browser:test && pnpm run browser:negative",
     "browser:gate:full": "pnpm run browser:install && OE_BROWSER_MATRIX=full pnpm run browser:test && OE_BROWSER_MATRIX=full pnpm run browser:negative"
   },
-  "peerDependencies": {
-    "vite": "^8.0.0"
-  },
-  "peerDependenciesMeta": {
-    "vite": {
-      "optional": true
-    }
-  },
   "dependencies": {
-    "typescript": "6.0.3"
+    "@openelement/protocol": "workspace:*"
   },
   "devDependencies": {
     "@jridgewell/trace-mapping": "0.3.31",

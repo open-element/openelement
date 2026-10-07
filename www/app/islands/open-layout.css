@@ -492,3 +492,4 @@
   @media (max-width: 480px) {
     .header-inner { padding: 0 calc(var(--spacing) * 3); gap: calc(var(--spacing) * 1); }
   }
+

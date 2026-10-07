@@ -1,14 +1,13 @@
 /**
  * @openelement/router/server-runtime — the action POST protocol.
  *
- * The request-time action semantics of the generated Hono entry: the
+ * The request-time action semantics of the generated entry: the
  * same-origin CSRF floor (#611, #921, #938, #1382), named-action dispatch
  * (#542), the canonical action classification (#541), the fetch-channel
  * ActionResult union, the RFC 9457 problem+json error channel (#863),
- * the POST/Redirect/GET flow (#548), the default body limit (#568) bound to
- * the policy constant, the redirect coercion, and the internal
- * Hono↔WinterCG bridge every generated page handler composes through.
- * The protocol lives in this real module rather than inside codegen template
+ * the POST/Redirect/GET flow (#548), the default body limit (#568) bound
+ * to the policy constant, and the redirect coercion. The protocol lives in
+ * this real module rather than inside codegen template
  * strings, so it is directly unit-testable.
  *
  * Behavior contract: a validation failure RETURNs
@@ -28,37 +27,19 @@
  * leaf (it lives in the import-free `internal/protocol/policy.ts`), so the
  * generated-app factory binds {@linkcode createActionBodyLimit} to the
  * canonical value and the generated entry carries no serialized copy.
+ *
+ * Since #1560 the generated entry composes on the internal WinterCG layer
+ * (wintercg.ts): the per-request context is the bound
+ * {@linkcode OpenElementRequestScope}, not a framework context object.
  */
 
 import { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/element/authoring';
-import type { MiddlewareHandler } from 'hono';
-import { bodyLimit } from 'hono/body-limit';
 import { classifyActionResult } from '../../../authoring.ts';
 import type { ActionOutcome } from '../../../authoring.ts';
+import { boundRequestScope } from './wintercg.ts';
+import type { OpenElementRequestScope } from './wintercg.ts';
 
 export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE };
-
-/**
- * The slice of the Hono request context the action protocol touches. The
- * generated entry passes its real Hono context; the narrow shape keeps this
- * module unit-testable without hono.
- */
-export interface ActionHonoContext {
-  req: {
-    /** The full request URL. */
-    readonly url: string;
-    /** The underlying WinterCG request. */
-    readonly raw: Request;
-    header(name: string): string | undefined;
-  };
-  header(name: string, value: string): void;
-  get(key: string): unknown;
-  json(object: unknown, status?: number, headers?: Record<string, string>): Response;
-  text(text: string, status?: number, headers?: Record<string, string>): Response;
-  redirect(location: string, status?: number): Response;
-  /** The response under construction (read by the middleware bridge fallback). */
-  readonly res: Response;
-}
 
 /** A route module namespace as far as the action protocol reads it. */
 interface ActionRouteModule {
@@ -99,7 +80,7 @@ export interface ActionExecution {
  *   re-renders the form at the author's status (422).
  */
 export async function runActionProtocol(
-  context: ActionHonoContext,
+  context: OpenElementRequestScope,
   routeModule: unknown,
   loadContext: ActionLoadContext,
   renderStatusPage: (title: string, message: string, status: number) => Response,
@@ -256,34 +237,80 @@ export async function runActionProtocol(
 }
 
 /**
- * The default body-limit middleware for action POST routes (#568), bound to
+ * The default body-limit handler for action POST routes (#568), bound to
  * the serialized `MAX_ACTION_BODY_BYTES` policy constant (see the module
  * doc): an oversized body answers the fetch channel with problem+json 413
  * (same fork as the CSRF 403) and the native form channel with plain text.
  * The no-store/Vary negotiation headers ride every 413 like every other
  * action response. Larger uploads belong on API routes with explicit limits.
+ *
+ * Runs as the first element of the generated POST handler chain
+ * (`(request, route, next)` — the {@link HttpHandler} shape of
+ * @openelement/router/http). A declared content length short-circuits; a
+ * stream body is fully buffered first (aborting past the limit) and the
+ * buffered twin replaces the bound scope's request, so the downstream
+ * `formData()` read sees exactly the admitted bytes. The replacement rides
+ * the scope — the public route chain captures its request argument — which
+ * is why the handler reads `scope.req.raw`, never its own parameter.
  */
-export function createActionBodyLimit(maxSize: number): MiddlewareHandler {
-  return bodyLimit({
-    maxSize,
-    onError: (c) => {
-      c.header('Cache-Control', 'no-store');
-      c.header('Vary', ACTION_FETCH_HEADER);
-      if (c.req.header(ACTION_FETCH_HEADER) === 'true') {
-        return c.json(
-          {
-            type: 'about:blank',
-            title: 'Payload Too Large',
-            status: 413,
-            detail: 'The request body exceeded the 10 MiB action limit.',
+export function createActionBodyLimit(
+  maxSize: number,
+): (request: Request, route: unknown, next: () => Promise<Response>) => Promise<Response> {
+  const onLimit = (request: Request): Response => {
+    const scope = boundRequestScope(request);
+    if (!scope) {
+      // Outside the generated app there is no negotiation channel; fail
+      // closed with the plain native-form answer.
+      return new Response('Payload Too Large', { status: 413 });
+    }
+    scope.header('Cache-Control', 'no-store');
+    scope.header('Vary', ACTION_FETCH_HEADER);
+    if (scope.req.header(ACTION_FETCH_HEADER) === 'true') {
+      return scope.json(
+        {
+          type: 'about:blank',
+          title: 'Payload Too Large',
+          status: 413,
+          detail: 'The request body exceeded the 10 MiB action limit.',
+        },
+        413,
+        { 'Content-Type': PROBLEM_JSON_MEDIA_TYPE },
+      );
+    }
+    return scope.text('Payload Too Large', 413);
+  };
+  return async (request, _route, next) => {
+    if (!request.body) return next();
+    const hasTransferEncoding = request.headers.has('transfer-encoding');
+    if (request.headers.has('content-length') && !hasTransferEncoding) {
+      return parseInt(request.headers.get('content-length') || '0', 10) > maxSize
+        ? Promise.resolve(onLimit(request))
+        : next();
+    }
+    let size = 0;
+    const chunks: Uint8Array[] = [];
+    const rawReader = request.body.getReader();
+    for (;;) {
+      const { done, value } = await rawReader.read();
+      if (done) break;
+      size += value.length;
+      if (size > maxSize) return onLimit(request);
+      chunks.push(value);
+    }
+    const scope = boundRequestScope(request);
+    if (scope) {
+      scope.req.raw = new Request(request, {
+        body: new ReadableStream({
+          start(controller) {
+            for (const chunk of chunks) controller.enqueue(chunk);
+            controller.close();
           },
-          413,
-          { 'Content-Type': PROBLEM_JSON_MEDIA_TYPE },
-        );
-      }
-      return c.text('Payload Too Large', 413);
-    },
-  });
+        }),
+        duplex: 'half',
+      } as RequestInit);
+    }
+    return next();
+  };
 }
 
 /**
@@ -296,7 +323,7 @@ export function createActionBodyLimit(maxSize: number): MiddlewareHandler {
  * keep the author's status (the generated catch emits that branch itself).
  */
 export function actionRedirectResponse(
-  context: ActionHonoContext,
+  context: OpenElementRequestScope,
   location: string,
   isFetch: boolean,
 ): Response {
@@ -316,7 +343,7 @@ export function actionRedirectResponse(
  * this module stays free of build-tool globals.
  */
 export function actionErrorResponse(
-  context: ActionHonoContext,
+  context: OpenElementRequestScope,
   routePath: string,
   error: unknown,
   production: boolean,
@@ -341,41 +368,4 @@ export function actionErrorResponse(
     500,
     { 'Content-Type': PROBLEM_JSON_MEDIA_TYPE },
   );
-}
-
-/**
- * The internal Hono↔WinterCG bridge (never user-visible): the WinterCG route
- * middleware from @openelement/router/http is the dialect-free public
- * contract, while the generated handlers keep their internal Hono dialect.
- * The per-request Hono context is bridged by request identity — one WeakMap
- * entry per dispatch, no cross-request leakage.
- */
-export interface HonoBridge {
-  /** Request → Hono context, populated by the entry's `app.all('*')` hook. */
-  readonly contexts: WeakMap<object, ActionHonoContext>;
-  /** Adapts a Hono-dialect handler onto the WinterCG `(request, route)` shape. */
-  asFetchHandler(
-    handler: (context: ActionHonoContext, route: unknown) => unknown,
-  ): (request: Request, route: unknown, next: () => unknown) => unknown;
-  /** Adapts a Hono-dialect middleware onto the WinterCG onion shape. */
-  asFetchMiddleware(
-    middleware: (context: ActionHonoContext, next: () => unknown) => unknown,
-  ): (request: Request, route: unknown, next: () => unknown) => Promise<unknown>;
-}
-
-/** Creates the per-entry Hono bridge the generated handlers compose through. */
-export function createHonoBridge(): HonoBridge {
-  const contexts = new WeakMap<object, ActionHonoContext>();
-  return {
-    contexts,
-    asFetchHandler: (handler) => (request, route, _next) => handler(contexts.get(request)!, route),
-    asFetchMiddleware: (middleware) => async (request, _route, next) => {
-      const c = contexts.get(request)!;
-      let downstream;
-      const own = await middleware(c, async () => {
-        downstream = await next();
-      });
-      return own ?? downstream ?? c.res;
-    },
-  };
 }

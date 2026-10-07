@@ -166,6 +166,9 @@ importers:
 
   .:
     devDependencies:
+      '@openelement/compiler':
+        specifier: workspace:*
+        version: link:packages/compiler
       '@openelement/element':
         specifier: workspace:*
         version: link:packages/element
@@ -220,6 +223,9 @@ importers:
 
   apps/saas:
     dependencies:
+      '@openelement/compiler':
+        specifier: workspace:*
+        version: link:../../packages/compiler
       '@openelement/element':
         specifier: workspace:*
         version: link:../../packages/element
@@ -257,15 +263,8 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
-    devDependencies:
-      '@jridgewell/trace-mapping':
-        specifier: 0.3.31
-        version: 0.3.31
-      '@types/node':
-        specifier: 26.5.0
-        version: 26.5.0
       vite:
-        specifier: 8.0.16
+        specifier: ^8.0.0
         version: 8.0.16(@types/node@26.5.0)(jiti@2.7.0)(yaml@2.9.1)
 
   packages/create:
@@ -276,9 +275,9 @@ importers:
 
   packages/element:
     dependencies:
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
+      '@openelement/protocol':
+        specifier: workspace:*
+        version: link:../protocol
     devDependencies:
       '@jridgewell/trace-mapping':
         specifier: 0.3.31
@@ -306,15 +305,18 @@ importers:
       '@hono/vite-dev-server':
         specifier: ^0.25.3
         version: 0.25.3(hono@4.13.11)
+      '@openelement/compiler':
+        specifier: workspace:*
+        version: link:../compiler
       '@openelement/element':
         specifier: workspace:*
         version: link:../element
+      '@openelement/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@openelement/url-pattern-list':
         specifier: 0.6.0
         version: 0.6.0
-      hono:
-        specifier: ^4.12
-        version: 4.13.11
       marked:
         specifier: ^15.0.0
         version: 15.0.12
@@ -346,6 +348,9 @@ importers:
       '@types/node':
         specifier: 26.5.0
         version: 26.5.0
+      hono:
+        specifier: 4.13.11
+        version: 4.13.11
       lit:
         specifier: 3.3.3
         version: 3.3.3

@@ -7,7 +7,7 @@ Evidence cited by an active ADR follows the same policy: ADR-0120's commissioned
 - [ADR-0108-deno-native-npm-distribution.md](./ADR-0108-deno-native-npm-distribution.md) — SUPERSEDED by ADR-0161
 - [ADR-0110-two-product-doctrine-and-package-truth.md](./ADR-0110-two-product-doctrine-and-package-truth.md)
 - [ADR-0111-router-package-ownership-boundary.md](./ADR-0111-router-package-ownership-boundary.md)
-- [ADR-0112-protocol-types-and-tiny-runtime.md](./ADR-0112-protocol-types-and-tiny-runtime.md)
+- [ADR-0112-protocol-types-and-tiny-runtime.md](./ADR-0112-protocol-types-and-tiny-runtime.md) — SUPERSEDED by ADR-0152
 - [ADR-0120-0-42-0-wc-application-loop-scope.md](./ADR-0120-0-42-0-wc-application-loop-scope.md)
 - [ADR-0125-hydration-instance-purity.md](./ADR-0125-hydration-instance-purity.md)
 - [ADR-0128-decouple-page-registration-from-tagname-export.md](./ADR-0128-decouple-page-registration-from-tagname-export.md)
@@ -27,3 +27,4 @@ Evidence cited by an active ADR follows the same policy: ADR-0120's commissioned
 - [ADR-0160-architecture-debt-repayment.md](./ADR-0160-architecture-debt-repayment.md)
 - [ADR-0161-node-pnpm-consumer-surface.md](./ADR-0161-node-pnpm-consumer-surface.md)
 - [ADR-0162-element-runtime-compiler-split-deferred.md](./ADR-0162-element-runtime-compiler-split-deferred.md)
+- [ADR-0166-regions-axis-entry-subpaths.md](./ADR-0166-regions-axis-entry-subpaths.md)

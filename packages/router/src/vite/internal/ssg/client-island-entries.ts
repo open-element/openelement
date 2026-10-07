@@ -10,8 +10,8 @@
 
 import { resolve } from 'pathe';
 
-import type { HydrationStrategy } from '../protocol/framework.ts';
-import type { IslandDecl } from '../protocol/ssg.ts';
+import type { HydrationStrategy } from '../../framework.ts';
+import type { IslandDecl } from '@openelement/protocol/ssg';
 
 import { fsPathToModuleSpecifier } from './module-specifier.ts';
 import { resolveIslandHydrate, resolveIslandSsrDsd } from './island-scanner.ts';

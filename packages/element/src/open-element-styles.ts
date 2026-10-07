@@ -1,8 +1,8 @@
-import type { StyleSheetLike } from './internal/protocol/style-sheet.ts';
+import type { StyleSheetLike } from '@openelement/protocol/style-sheet';
 import { scopeCompiledLightCss } from './internal/compiled/style.ts';
 import { OpenElementThemeManager } from './open-element-theme.ts';
 // Single error dialect (#1386 item 3): style-application failures carry codes.
-import { raiseFrameworkError, StyleErrorCode } from './internal/protocol/errors.ts';
+import { raiseFrameworkError, StyleErrorCode } from '@openelement/protocol/errors';
 
 /** Raise one style-application failure with its catalogued code. */
 function fail(code: string, message: string): never {

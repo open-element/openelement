@@ -4,7 +4,7 @@
  * The table below is a DERIVED artifact (P6): every row is projected from
  * www/app/data/_generated-error-codes.ts, which is rendered from the OEC code
  * literals in packages/<name>/src and the ErrorCode constants in
- * packages/element/src/internal/protocol/errors.ts. A code the source raises
+ * packages/protocol/src/errors.ts. A code the source raises
  * therefore cannot be missing here, and the page cannot restate a code the
  * source no longer has — `www#check:error-codes` (gate:source) fails on drift.
  * Only the surrounding prose is authored.

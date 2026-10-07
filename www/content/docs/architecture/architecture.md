@@ -65,7 +65,7 @@ a return to the retired product graph.
 
 | Gate         | Requirement                                                                            |
 | ------------ | -------------------------------------------------------------------------------------- |
-| 4 packages   | Current consumer surface, starter and docs agree.                                      |
+| 6 packages   | Current consumer surface (protocol/element/compiler/router/create/ui), starter and docs agree. |
 | output split | The static/request-time output split is frozen; the 0.41.x static freeze is untouched. |
 | 3 browsers   | Candidate releases require Chromium, Firefox and WebKit proof.                         |
 | packed proof | Consumers build from public artifacts, not workspace aliases.                          |

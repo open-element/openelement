@@ -11,7 +11,10 @@ import {
 } from '@openelement/element';
 import '@openelement/ui/open-code-block';
 import '@openelement/ui/open-button';
-import { pageContributingStyles } from './page-contributing-styles.ts';
+import pageContributingStyles from './page-contributing.css';
+import '#site-ui/open-reading-shell.tsx';
+import '#site-ui/open-artifact-panel.tsx';
+import '../islands/open-page-rail.tsx';
 
 interface ReleaseItem {
   id: string;
@@ -40,7 +43,7 @@ interface HelpRow {
 
 @element('contributing-page', { root: 'shadow-open' })
 export default class PageContributing extends OpenElement {
-  static override styles = pageContributingStyles;
+  static override styles = [pageContributingStyles];
 
   @property({ reflect: false, attribute: false })
   eyebrow = '';

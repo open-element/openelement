@@ -14,7 +14,7 @@ import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { createFreshDom, serializeToHtml } from '../../src/internal/compiled/runtime.ts';
 import type { CompiledRuntimeHost } from '../../src/internal/compiled/runtime.ts';
-import { RUNTIME_MESSAGES_ENABLED } from '../../src/internal/protocol/errors.ts';
+import { RUNTIME_MESSAGES_ENABLED } from '@openelement/protocol/errors';
 import { signal } from '../../src/internal/signal/framework.ts';
 import { TestDocument } from './test-dom.ts';
 import { testProgram } from './test-program.ts';

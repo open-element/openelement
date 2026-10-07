@@ -2,19 +2,15 @@
 /** One passive coordinator for the Cinematic V2 native scroll timeline. */
 
 import { element, OpenElement } from '@openelement/element';
-import { compiledStyle } from '../site-ui/compiled-style.ts';
 import { readInstanceState, writeInstanceState } from '@openelement/ui/instance-state';
 import { defineIslandConfig } from '@openelement/router';
+import openCinematicScrollStyles from './open-cinematic-scroll.css';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 
 @element('open-cinematic-scroll')
 export default class CinematicScroll extends OpenElement {
-  static override styles = [
-    compiledStyle(
-      `:host{position:absolute;width:1px;height:1px;overflow:hidden;pointer-events:none}`,
-    ),
-  ];
+  static override styles = [openCinematicScrollStyles];
   override connectedCallback(): void {
     super.connectedCallback();
     const root = this.getRootNode();

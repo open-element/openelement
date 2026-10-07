@@ -11,7 +11,7 @@ import '@openelement/ui/open-code-block';
 import '../islands/open-cinematic-scroll.tsx';
 import '../islands/open-dragon-live-gaze.tsx';
 import '../islands/open-hero-polish.tsx';
-import { pageHomeStyles } from './page-home-styles.ts';
+import pageHomeStyles from './page-home.css';
 
 interface StrategyItem {
   key: string;
@@ -43,7 +43,7 @@ interface DiagramSet {
 
 @element('index-index')
 export default class PageHome extends OpenElement {
-  static override styles = pageHomeStyles;
+  static override styles = [pageHomeStyles];
 
   @property({ reflect: false, attribute: false })
   lede = '';

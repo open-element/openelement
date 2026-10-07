@@ -2,13 +2,13 @@ import { expect, test } from 'vitest';
 import {
   commonStableVersion,
   type RegistryEvidence,
-  type ReleaseStateV3,
+  type ReleaseStateV4,
   validateRegistryEvidence,
   validateReleaseState,
 } from './check-release-state-machine.ts';
 
-const PINNED_STATE: ReleaseStateV3 = {
-  schemaVersion: 3,
+const PINNED_STATE: ReleaseStateV4 = {
+  schemaVersion: 4,
   sourceVersion: '1.0.0-alpha.10',
   activeTarget: 'v1.0.0-alpha.10',
   nextPlannedTrain: 'not scheduled',
@@ -19,13 +19,27 @@ const PINNED_STATE: ReleaseStateV3 = {
     distTag: 'beta',
     state: 'partial',
     publishedPackages: ['@openelement/element', '@openelement/create', '@openelement/ui'],
-    missingPackages: ['@openelement/router'],
+    missingPackages: ['@openelement/router', '@openelement/protocol'],
   },
   packages: [
-    { name: '@openelement/element', registry: { latest: '0.43.3', beta: '0.44.0-beta.2.2' } },
-    { name: '@openelement/router', registry: { latest: '0.41.0-alpha.6' } },
-    { name: '@openelement/create', registry: { latest: '0.43.3', beta: '0.44.0-beta.2.2' } },
-    { name: '@openelement/ui', registry: { latest: '0.43.3', beta: '0.44.0-beta.2.2' } },
+    {
+      name: '@openelement/element',
+      status: 'published',
+      registry: { latest: '0.43.3', beta: '0.44.0-beta.2.2' },
+    },
+    // Schema v4 (#1557): an unpublished package carries no registry object.
+    { name: '@openelement/protocol', status: 'unpublished' },
+    { name: '@openelement/router', status: 'published', registry: { latest: '0.41.0-alpha.6' } },
+    {
+      name: '@openelement/create',
+      status: 'published',
+      registry: { latest: '0.43.3', beta: '0.44.0-beta.2.2' },
+    },
+    {
+      name: '@openelement/ui',
+      status: 'published',
+      registry: { latest: '0.43.3', beta: '0.44.0-beta.2.2' },
+    },
   ],
 };
 
@@ -37,9 +51,11 @@ export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {
   '@openelement/router': 'v0.41.0-alpha.6',
 };
 export const COMMON_PUBLISHED_VERSION: string | null = null;
+export const UNRELEASED_PACKAGES: readonly string[] = ['@openelement/protocol'];
 `;
 
 const VERSIONS = new Map([
+  ['@openelement/protocol', '1.0.0-alpha.10'],
   ['@openelement/element', '1.0.0-alpha.10'],
   ['@openelement/router', '1.0.0-alpha.10'],
   ['@openelement/create', '1.0.0-alpha.10'],
@@ -67,8 +83,30 @@ test('release state: the pinned per-package model validates offline', () => {
   expect(validateReleaseState(PINNED_STATE, VERSIONS, SITE_SOURCE)).toEqual([]);
 });
 
+test('release state: an unpublished package with a fabricated registry is rejected', () => {
+  const fabricated = structuredClone(PINNED_STATE);
+  const protocol = fabricated.packages.find((entry) => entry.name === '@openelement/protocol');
+  protocol!.status = 'unpublished';
+  (protocol as { registry?: Record<string, string> }).registry = { latest: '0.0.1' };
+  const failures = validateReleaseState(fabricated, VERSIONS, SITE_SOURCE);
+  expect(
+    failures.some((f) => f.includes('is unpublished and must not carry a registry object')),
+  ).toEqual(true);
+});
+
+test('release state: the site unpublished list must match the tracked set', () => {
+  const drifted = SITE_SOURCE.replace(
+    "['@openelement/protocol']",
+    "['@openelement/protocol', '@openelement/compiler']",
+  );
+  const failures = validateReleaseState(PINNED_STATE, VERSIONS, drifted);
+  expect(
+    failures.some((f) => f.includes('UNRELEASED_PACKAGES must list exactly the unpublished')),
+  ).toEqual(true);
+});
+
 test('release state: the legacy shared-version schema is rejected', () => {
-  const legacy = { ...PINNED_STATE, schemaVersion: 2 } as unknown as ReleaseStateV3;
+  const legacy = { ...PINNED_STATE, schemaVersion: 2 } as unknown as ReleaseStateV4;
   const failures = validateReleaseState(legacy, VERSIONS, SITE_SOURCE);
   expect(failures.includes('unsupported release-state schema')).toEqual(true);
 });
@@ -100,14 +138,15 @@ test('registry drift: the per-package model matches live evidence', () => {
 });
 
 test('registry drift: three-package 0.43.3 is not a common complete version', () => {
-  // Router lacks 0.43.3, so the live four-package stable intersection is none.
+  // Router lacks 0.43.3, so the live published-package stable intersection is
+  // none (the unpublished protocol entry has no versions at all).
   const wrong = structuredClone(PINNED_STATE);
   wrong.commonCompleteVersion = '0.43.3';
   const failures = validateRegistryEvidence(wrong, evidence());
   expect(
     failures.some((f) =>
       f.includes(
-        'commonCompleteVersion: tracked 0.43.3, registry four-package stable intersection null',
+        'commonCompleteVersion: tracked 0.43.3, registry published-package stable intersection null',
       ),
     ),
   ).toEqual(true);

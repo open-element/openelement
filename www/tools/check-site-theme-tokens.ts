@@ -99,9 +99,9 @@ export const BARE_PALETTE_ALLOWLIST: Readonly<Record<string, string>> = {
   // (--color-foreground, --color-popover-foreground, …) flip light under
   // data-theme="dark", so a role swap regresses. Leaves the allowlist when a
   // --surface-scrim alias exists in site-css.ts (cf. --surface-code).
-  // (#1553: the sheet moved from site-ui/open-search-styles.ts into the
-  // open-search island module — the gate followed it.)
-  'open-search.tsx:--color-zinc-950':
+  // (#1553: the sheet moved into the open-search island module; #1558 moved
+  // it again into the island's open-search.css — the gate followed it.)
+  'open-search.css:--color-zinc-950':
     'theme-invariant dark dialog scrim; no role token is theme-invariant dark',
 };
 

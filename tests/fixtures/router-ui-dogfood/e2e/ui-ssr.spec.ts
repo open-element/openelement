@@ -28,17 +28,6 @@ test.describe('ui dogfood SSR/DSD output', () => {
     expect(html).toContain('<dialog part="overlay" open aria-label="SSR open dialog">');
   });
 
-  test('/tabs emits open-tabs DSD with tabs/panels live in the light DOM', async ({ request }) => {
-    const response = await request.get('/tabs');
-    expect(response.ok()).toBe(true);
-    const html = await response.text();
-    expect(html).toContain('<open-tabs id="main-tabs"><template shadowrootmode="open">');
-    expect(html).toContain('role="tablist"');
-    // The slotted children are SSR'd as-is; the runtime decorates them in place.
-    expect(html).toContain('<button slot="tab" type="button">Alpha</button>');
-    expect(html).toContain('<div slot="panel">Gamma panel content</div>');
-  });
-
   test('/dropdown emits open-dropdown DSD with a native popover content region', async ({
     request,
   }) => {
@@ -70,7 +59,7 @@ test.describe('ui dogfood SSR/DSD output', () => {
     expect(response.ok()).toBe(true);
     const html = await response.text();
     // open: the ui primitive carries a declarative open shadow root.
-    expect(html).toContain('<open-badge id="open-boundary" tone="brand">');
+    expect(html).toContain('<open-button id="open-boundary" variant="primary">');
     expect(html).toContain('<template shadowrootmode="open">');
     // light: consumer-authored light root serializes inline with the marker.
     expect(html).toContain('<dogfood-light data-oe-light>');

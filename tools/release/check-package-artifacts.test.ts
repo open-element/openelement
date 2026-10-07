@@ -216,7 +216,7 @@ test('package artifacts: router server-runtime and protocol paths fail closed on
       LICENSE: 'MIT',
       'index.js': 'export {};',
       'src/vite/internal/server-runtime/app.js': `import process from 'node:process';\nexport const cwd = process.cwd();`,
-      'src/vite/internal/protocol/ssg.js': `import { join } from 'node:path';\nexport const p = join;`,
+      'src/vite/internal/server-runtime/stream.js': `import { join } from 'node:path';\nexport const p = join;`,
     },
     (root) => {
       const messages = scanExtractedPackage('@openelement/router', root).violations.map(
@@ -319,8 +319,6 @@ test('package artifacts: rejects dead v0.43 residue paths (#1273)', async () => 
     {
       'index.js': 'export {};',
       'src/types.ts': 'export interface ElementDefinition {}',
-      'src/internal/protocol/vnode.ts': 'export interface VNode {}',
-      'src/internal/protocol/prop.ts': 'export type PropDecl = never;',
       'src/internal/core/dom-utils.ts': 'export function clearChildren() {}',
       'src/internal/core/dsd-shadow-root.ts': 'export function hasPopulatedShadowRoot() {}',
     },
@@ -331,7 +329,27 @@ test('package artifacts: rejects dead v0.43 residue paths (#1273)', async () => 
       expect(
         messages.filter((message) => message === 'dead v0.43 residue must not be published (#1273)')
           .length,
-      ).toEqual(5);
+      ).toEqual(3);
+    },
+  );
+});
+
+test('package artifacts: rejects dead v0.43 residue paths in the protocol package (#1273, #1557)', async () => {
+  await withPackage(
+    '@openelement/protocol',
+    {
+      'index.js': 'export {};',
+      'src/vnode.ts': 'export interface VNode {}',
+      'src/prop.ts': 'export type PropDecl = never;',
+    },
+    (root) => {
+      const messages = scanExtractedPackage('@openelement/protocol', root).violations.map(
+        (v) => v.message,
+      );
+      expect(
+        messages.filter((message) => message === 'dead v0.43 residue must not be published (#1273)')
+          .length,
+      ).toEqual(2);
     },
   );
 });

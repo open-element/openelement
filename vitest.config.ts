@@ -42,6 +42,7 @@
  * `packages/ui/src`) when the port landed; the retired web-test-runner
  * install chain is gone from `__wtr__/package.json`.
  */
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
@@ -112,6 +113,21 @@ export default defineConfig({
         test: {
           name: 'element',
           include: ['packages/element/__tests__/**/*.test.ts'],
+          // #1548: the Region builders reach the runtime through the regions
+          // seam; tests driving the runtime internals install them exactly
+          // like the entries do (see install-regions-runtime.ts).
+          setupFiles: ['packages/element/__tests__/install-regions-runtime.ts'],
+          testTimeout: 20_000,
+        },
+      },
+      {
+        test: {
+          name: 'compiler',
+          // The compiler sources live in packages/compiler since #1557; the
+          // element-project suites that pair compile output against the
+          // runtime stay in packages/element/__tests__ (cross-package relative
+          // imports, test-graph only).
+          include: ['packages/compiler/__tests__/**/*.test.ts'],
           testTimeout: 20_000,
         },
       },
@@ -170,6 +186,40 @@ export default defineConfig({
         },
       },
       {
+        plugins: [
+          {
+            // The __wtr__ conformance suite's sheet channel (#1558): the ui
+            // fixture modules import their component `.css` sheets, and this
+            // dev-graph stand-in for the router build's style-asset plugin
+            // hands back the cross-realm sheet adapter (element's
+            // StyleSheet over the authored file's bytes) — the same
+            // fail-closed shape the real build serves, sized to the suite.
+            name: 'open:wtr-css-sheet',
+            enforce: 'pre',
+            resolveId(source, importer) {
+              if (!source.endsWith('.css') || !importer) return null;
+              const clean = importer.split('?', 1)[0];
+              const directory = clean.slice(0, clean.lastIndexOf('/'));
+              const file = `${directory}/${source.replace(/^\.\//, '')}`;
+              return `\0oe-wtr-css-sheet:${Buffer.from(file, 'utf8').toString('base64url')}.js`;
+            },
+            async load(id) {
+              if (!id.startsWith('\0oe-wtr-css-sheet:')) return null;
+              const file = Buffer.from(
+                id.slice('\0oe-wtr-css-sheet:'.length, -'.js'.length),
+                'base64url',
+              ).toString('utf8');
+              const css = await readFile(file, 'utf8');
+              return [
+                "import { StyleSheet } from '@openelement/element';",
+                'const sheet = new StyleSheet();',
+                `sheet.replaceSync(${JSON.stringify(css)});`,
+                'export default sheet;',
+                '',
+              ].join('\n');
+            },
+          },
+        ],
         resolve: {
           alias: [
             // The __wtr__ conformance suite's working-tree contract: the bare

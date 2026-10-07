@@ -37,7 +37,7 @@ import {
   PageErrorCode,
   ServeErrorCode,
 } from '../../packages/router/src/internal/error-codes.ts';
-import { ErrorCode } from '../../packages/element/src/internal/protocol/errors.ts';
+import { ErrorCode } from '../../packages/protocol/src/errors.ts';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
@@ -52,12 +52,12 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
  * compile.ts and module-analysis.ts).
  */
 const COMPILER_SOURCES = [
-  'packages/element/src/internal/compiler/semantic-core/analyze-module.ts',
-  'packages/element/src/internal/compiler/semantic-core/compile.ts',
-  'packages/element/src/internal/compiler/semantic-core/compiler-diagnostics.ts',
-  'packages/element/src/internal/compiler/semantic-core/emit-program.ts',
-  'packages/element/src/internal/compiler/semantic-core/lower-program.ts',
-  'packages/element/src/internal/compiler/semantic-core/module-analysis.ts',
+  'packages/compiler/src/internal/compiler/semantic-core/analyze-module.ts',
+  'packages/compiler/src/internal/compiler/semantic-core/compile.ts',
+  'packages/compiler/src/internal/compiler/semantic-core/compiler-diagnostics.ts',
+  'packages/compiler/src/internal/compiler/semantic-core/emit-program.ts',
+  'packages/compiler/src/internal/compiler/semantic-core/lower-program.ts',
+  'packages/compiler/src/internal/compiler/semantic-core/module-analysis.ts',
 ];
 
 /** One error code as it appears on `/errors`. */
@@ -390,7 +390,7 @@ export async function buildErrorReference(): Promise<ErrorReferenceBuild> {
   }
 
   // Element runtime codes, read from the protocol map.
-  const runtimeSource = 'packages/element/src/internal/protocol/errors.ts';
+  const runtimeSource = 'packages/protocol/src/errors.ts';
   for (const code of constantCodes(ErrorCode)) {
     push({
       code,
@@ -427,7 +427,7 @@ export function renderErrorReferenceModule(build: ErrorReferenceBuild): string {
     generatedFrom: [
       ...COMPILER_SOURCES,
       'packages/router/src/internal/error-codes.ts',
-      'packages/element/src/internal/protocol/errors.ts',
+      'packages/protocol/src/errors.ts',
     ],
     codes: build.codes,
   };

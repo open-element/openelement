@@ -11,6 +11,7 @@
     "./lit": "./src/lit.ts",
     "./lit-ssr": "./src/lit-ssr.ts",
     "./server-runtime": "./src/vite/internal/server-runtime/mod.ts",
+    "./hono": "./src/hono-adapter.ts",
     "./vite": "./src/vite/index.ts",
     "./nitro-mount": "./src/nitro-mount.ts",
     "./cli/build": "./src/cli/build.ts",
@@ -29,9 +30,10 @@
   },
   "dependencies": {
     "@hono/vite-dev-server": "^0.25.3",
+    "@openelement/compiler": "workspace:*",
     "@openelement/element": "workspace:*",
+    "@openelement/protocol": "workspace:*",
     "@openelement/url-pattern-list": "0.6.0",
-    "hono": "^4.12",
     "marked": "^15.0.0",
     "mime": "^4.1.0",
     "pathe": "^2.0.3",
@@ -43,12 +45,16 @@
     "@lit-labs/ssr": "^4.1.0",
     "@lit-labs/ssr-client": "^1.1.8",
     "vite": "^8.0.0",
+    "hono": "^4.12",
     "@hono/vite-dev-server": "^0.25.3",
     "marked": "^15.0.0",
     "@tailwindcss/vite": "^4.3.0"
   },
   "peerDependenciesMeta": {
     "lit": {
+      "optional": true
+    },
+    "hono": {
       "optional": true
     },
     "@lit-labs/ssr": {
@@ -72,6 +78,7 @@
   },
   "devDependencies": {
     "@jridgewell/trace-mapping": "0.3.31",
+    "hono": "4.13.11",
     "@lit-labs/ssr": "4.1.0",
     "@lit-labs/ssr-client": "1.1.8",
     "@tailwindcss/vite": "4.3.3",

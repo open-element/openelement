@@ -1,6 +1,6 @@
 /**
  * @openelement/router/server-runtime — the internal WinterCG composition
- * layer (#1560, ADR-0152 original positioning restored).
+ * layer (#1560, the #152 product-router positioning restored).
  *
  * The generated server entry composes HERE, not in Hono: a middleware
  * chain (`(request, next) => Response` onion), the fn-form API mounts, and
@@ -58,7 +58,7 @@ export interface RequestScopeRequest {
 
 /**
  * The per-request scope: one instance per dispatch, bound to its request
- * by the app's identity WeakMap. Response headers written before the
+ * by the identity registry. Response headers written before the
  * response exists (`header()`) flow into every response the scope
  * constructs — the merge point the Hono context's prepared headers used to
  * own.
@@ -250,17 +250,17 @@ export function matchesMiddlewareScope(pattern: string, pathname: string): boole
  */
 const boundScopes = new WeakMap<Request, OpenElementRequestScope>();
 
+/** The scope accessor the generated handlers and built-in middleware share. */
+export function boundRequestScope(request: Request): OpenElementRequestScope | undefined {
+  return boundScopes.get(request);
+}
+
 /**
  * Route-match path params, bound per scope: the fn-form mount layer sets
  * them from its RouteTable match right before the handler runs; every
  * other request reads the empty record.
  */
 const scopeParams = new WeakMap<object, Record<string, string>>();
-
-/** The scope accessor the generated handlers and built-in middleware share. */
-export function boundRequestScope(request: Request): OpenElementRequestScope | undefined {
-  return boundScopes.get(request);
-}
 
 /**
  * Creates the internal WinterCG app one generated entry assembles. The

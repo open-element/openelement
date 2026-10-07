@@ -1,32 +1,21 @@
 # @openelement/compiler
 
-The OpenElement TSX-to-Part-Program compiler: build-time tooling that lowers
-authored `@element` components into the serializable Part Program v1 IR the
-element runtime consumes, plus the Vite plugin boundary
-(`compileElementModule` / `compiledElementPlugin`).
-
-This package is build-tooling only. It is never part of a browser/runtime
-graph: it imports the TypeScript compiler API and ships `typescript` as its
-one heavy dependency, so pure-runtime consumers of `@openelement/element`
-never install it.
-
-## Install
-
-```sh
-npm install @openelement/compiler
-```
-
-You normally do not install this package directly: `@openelement/router`
-depends on it for its build and drives it through the `openElement()` Vite
-plugin.
+Build-time compiler for OpenElement: transforms TSX modules that opt in with a
+canonically bound `@element(...)` decorator into Part Program modules (the
+compiled element model, #1473). The only TypeScript-dependent package —
+this subpath is host-side tooling and must never be reached from a browser
+runtime graph.
 
 ## Subpaths
 
-- `@openelement/compiler` — the compiler facade: `compileElementProgram`,
-  `analyzeModuleSemantics`, the Part Program boundary types, diagnostics.
-- `@openelement/compiler/vite` — the standalone `element()` authoring plugin
-  (`compiledElementPlugin`), for builds that do not use Router.
+| Subpath                        | Import it for                                                                                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@openelement/compiler`        | The semantic core tooling entry: `compileElementProgram` / `compileElementModule` (the one transform the Vite plugin and the build lanes share), `analyzeModuleSemantics`, diagnostics, the style-edge registry, and `stableModuleId`. |
+| `@openelement/compiler/vite`   | The standalone `element()` Vite plugin (`compiledElementPlugin`) — the `open:compiled-element` transform for hosts that compose their own Vite config. No Router, SSG or deployment imports. |
 
-## License
+## Boundary
 
-MIT
+Admission is binding-provenance based (#1209): a module is compiled only when
+its `@element` decorator resolves to a runtime named import from
+`@openelement/element`. Unsupported grammar fails closed with source-located
+`OEC9xxx` diagnostics — there is no runtime fallback renderer.

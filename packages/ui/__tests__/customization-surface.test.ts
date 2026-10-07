@@ -219,13 +219,25 @@ const actualVars = (source: string): string[] => {
   return [...names].sort();
 };
 
-const sourceOf = (tag: string): Promise<string> =>
-  readFile(new URL(`../src/${tag}.tsx`, import.meta.url), 'utf8');
+/** The component's authored surface: the TSX (markup/parts) plus its sheet
+ * file — since #1558 the styles live in the component's own .css file. */
+const sourceOf = async (tag: string): Promise<string> => {
+  const tsx = await readFile(new URL(`../src/${tag}.tsx`, import.meta.url), 'utf8');
+  try {
+    const css = await readFile(new URL(`../src/${tag}.css`, import.meta.url), 'utf8');
+    return `${tsx}\n${css}`;
+  } catch {
+    return tsx;
+  }
+};
 
-const recipesSource = await readFile(
-  new URL('../src/component-recipes.ts', import.meta.url),
-  'utf8',
-);
+const recipesSource = (
+  await Promise.all(
+    ['control-recipe.css', 'surface-recipe.css', 'overlay-recipe.css'].map((file) =>
+      readFile(new URL(`../src/${file}`, import.meta.url), 'utf8'),
+    ),
+  )
+).join('\n');
 
 test('every declared ::part set matches the pin and never shrinks against alpha8', async () => {
   for (const decl of manifest.declarations) {

@@ -1,9 +1,5 @@
 import { expect, test } from 'vitest';
-import type {
-  ActionContext,
-  LoaderContext,
-  ServerRouteContext,
-} from '../src/internal/protocol/data.ts';
+import type { ActionContext, LoaderContext, ServerRouteContext } from '@openelement/protocol/data';
 
 interface WorkerEnv {
   QUEUE: { send(value: unknown): Promise<void> };

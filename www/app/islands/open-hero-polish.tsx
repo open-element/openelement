@@ -19,18 +19,15 @@
 
 import { element, OpenElement } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
-import { compiledStyle, HERO_CURSOR_CSS } from '../site-ui/compiled-style.ts';
+import openHeroPolishStyles from './open-hero-polish.css';
+import { HERO_CURSOR_CSS } from '../site-ui/hero-cursor-css.ts';
 import { readInstanceState, writeInstanceState } from '@openelement/ui/instance-state';
 
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });
 
 @element('open-hero-polish')
 export default class HeroPolish extends OpenElement {
-  static override styles = [
-    compiledStyle(
-      `:host{position:absolute;width:1px;height:1px;overflow:hidden;pointer-events:none}`,
-    ),
-  ];
+  static override styles = [openHeroPolishStyles];
   override connectedCallback(): void {
     super.connectedCallback();
     const root = this.getRootNode();
@@ -69,7 +66,7 @@ export default class HeroPolish extends OpenElement {
 
     // ── cursor + magnetism: fine pointers, full motion only ──
     if (!reduced && fine) {
-      // compiledStyle only scopes rules to this element's shadow root; the
+      // static styles scope to this element's shadow root; the
       // cursor must track across the hero in the light parent scope, so the
       // stylesheet has to be injected there at runtime instead.
       const styleEl = document.createElement('style');

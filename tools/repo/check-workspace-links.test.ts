@@ -62,8 +62,10 @@ test('workspace shadow check reads the real workspace member list', async () => 
   // members, and the private fixture names must never collide with them.
   const names = real.map((member) => member.name).sort();
   for (const published of [
+    '@openelement/compiler',
     '@openelement/create',
     '@openelement/element',
+    '@openelement/protocol',
     '@openelement/router',
     '@openelement/ui',
   ]) {
@@ -71,8 +73,8 @@ test('workspace shadow check reads the real workspace member list', async () => 
   }
   expect(
     real.filter((member) => names.includes(member.name) && member.dir.startsWith('packages/'))
-      .length === 4,
-    'exactly the four consumer packages live under packages/',
+      .length === 6,
+    'exactly the six consumer packages live under packages/',
   ).toBeTruthy();
   // A member without a node_modules entry is skipped by the shadow check, so
   // the private fixture members are harmless additions.

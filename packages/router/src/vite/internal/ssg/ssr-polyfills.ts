@@ -10,7 +10,7 @@
  * being absent.
  */
 
-import { SSR_REGISTRY_STUB_MARKER } from '../protocol/registry-markers.ts';
+import { SSR_REGISTRY_STUB_MARKER } from '@openelement/protocol/registry-markers';
 
 /**
  * Generates the entry-code polyfill (CSSStyleSheet only).

@@ -12,9 +12,9 @@ import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codegen.ts';
-import { analyzeModuleSemantics } from '@openelement/element/compiler';
-import { ROUTER_MODULE_VOCABULARY } from '../src/vite/internal/protocol/module-vocabulary.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import { analyzeModuleSemantics } from '@openelement/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
+import type { RouteEntry } from '@openelement/protocol/framework';
 
 const litRoutes: RouteEntry[] = [
   { path: '/notes', filePath: 'notes.ts', type: 'page', varName: 'pageNotes', definePage: true },

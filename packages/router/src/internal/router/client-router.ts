@@ -5,8 +5,11 @@
  * URLPattern owns pathname grammar; RouteTable owns declaration order,
  * separate query/captures, and HTTP policy. There are no client-local route
  * grammars or compatibility matchers: browser navigation and the other route
- * consumers share one semantic owner.
+ * consumers share one semantic owner. The address-bar transport is the
+ * navigation driver seam (navigation/adapter.ts): this file never calls
+ * history.pushState/popstate plumbing directly.
  */
+import { createNavigationAdapter, type NavigationAdapter } from '../../navigation/adapter.ts';
 import { NavigationState, type NavigationTicket } from './navigation-state.ts';
 import { type RouteMatch, type RouteRecord, RouteTable } from './route-table.ts';
 
@@ -36,6 +39,21 @@ interface RouterOptions {
   onChange?: () => void | Promise<void>;
   /** Invalidate pending execution as soon as a newer navigation owns intent. */
   onPending?: () => void;
+  /**
+   * Opt in to wrapping the render step of every navigation in
+   * document.startViewTransition when the platform offers it (the animation
+   * itself is user CSS via ::view-transition-* — the framework ships zero
+   * animation code). Default off — NAMED DEVIATION from #1561's
+   * wrap-by-default ruling, traded against P4's degrade-gracefully rule:
+   * in headless Chromium 147 a view transition that has run in a document
+   * suppresses subsequent trusted anchor activations (the click dispatches,
+   * the engine starts no navigation), which fails deterministically for
+   * every headless e2e consumer of the router (10 controlled runs: clean
+   * tree passes, wrapper on fails, adapter-only passes). Flip the default
+   * to true when that platform bug is fixed — that flip is this option's
+   * retirement condition (P5).
+   */
+  viewTransitions?: boolean;
 }
 
 /**
@@ -122,35 +140,23 @@ export function createRouter(options: RouterOptions): RouterInstance {
   // guard-veto restore marker (#1036) and disposal. See navigation-state.ts.
   const navigationState = new NavigationState();
   const streamControlKey = Symbol.for('openelement.stream-control.v1');
-  const nativeNavigation =
-    mode === 'history' && typeof navigation !== 'undefined' ? navigation : undefined;
+  const adapter: NavigationAdapter = createNavigationAdapter(mode);
 
-  /** Registered listeners keyed by event type, to support dispose. */
-  const listeners: Array<{ type: string; handler: EventListener }> = [];
-
-  function addCleanupListener(type: string, handler: EventListener): void {
-    listeners.push({ type, handler });
-    addEventListener(type, handler);
-  }
-
-  function readPath(): string {
-    if (mode === 'hash') {
-      const hash = location.hash.replace(/^#/, '') || '/';
-      return hash;
-    }
-    return location.pathname + location.search;
-  }
-
-  function toHashUrl(path: string): string {
-    return '#' + (path.startsWith('#') ? path.slice(1) : path);
-  }
+  // View Transitions are progressive enhancement (P1 — use the platform),
+  // opt in via options.viewTransitions (see RouterOptions for the named
+  // deviation that keeps the default off). The framework ships zero
+  // animation code — the transition visuals are user CSS.
+  const canViewTransition =
+    options.viewTransitions === true &&
+    typeof document !== 'undefined' &&
+    typeof document.startViewTransition === 'function';
 
   function resolveTarget(url: URL): RouteMatch<RouteConfig> | null {
     const resolution = routeMatcher.resolve(url);
     return resolution.kind === 'match' ? resolution : null;
   }
 
-  function rematch(raw = readPath()): void {
+  function rematch(raw = adapter.current()): void {
     const u = new URL(raw, location.href);
     const search = u.search;
     const matched = resolveTarget(u);
@@ -167,9 +173,17 @@ export function createRouter(options: RouterOptions): RouterInstance {
     // Promise.resolve().catch() only handles async rejections; a sync throw
     // during argument evaluation would crash the router.
     try {
-      void Promise.resolve(options.onChange?.()).catch((err) => {
-        log.error('onChange failed:', err);
-      });
+      const render = (): Promise<void> =>
+        Promise.resolve(options.onChange?.()).catch((err) => {
+          log.error('onChange failed:', err);
+        });
+      if (canViewTransition) {
+        void document.startViewTransition(render).updateCallbackDone.catch((err) => {
+          log.error('onChange failed:', err);
+        });
+        return;
+      }
+      void render();
     } catch (err) {
       log.error('onChange failed:', err);
     }
@@ -203,8 +217,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
    * for the router's own restore.
    */
   function restoreBlockedEntry(): void {
-    const url = mode === 'hash' ? toHashUrl(currentPath) : currentPath;
-    if (nativeNavigation) {
+    if (adapter.kind === 'navigation-api') {
       // An intercepted traverse must be superseded by a real navigation to
       // leave the vetoed URL. history.replaceState fires a navigate event
       // (navigationType "replace") for it; the one-shot marker armed here lets
@@ -213,11 +226,9 @@ export function createRouter(options: RouterOptions): RouterInstance {
       // races the in-flight traverse and does not land. The marker is armed
       // as an absolute href so it compares directly against the navigate
       // event's already-resolved destination URL.
-      navigationState.armRestore(new URL(url, location.href).href);
-      history.replaceState(null, '', url);
-      return;
+      navigationState.armRestore(new URL(currentPath, location.href).href);
     }
-    history.replaceState(null, '', url);
+    adapter.rewrite(currentPath);
   }
 
   async function commitNavigation(
@@ -270,15 +281,14 @@ export function createRouter(options: RouterOptions): RouterInstance {
     }
 
     if (!navigationState.owns(ticket)) return;
-    const url = mode === 'hash' ? toHashUrl(path) : path;
-    if (nativeNavigation) {
+    if (adapter.kind === 'navigation-api') {
       // Under the Navigation API the commit point is the navigate event:
       // onPending fires when onNativeNavigate intercepts it (the guard above
       // already passed), so a vetoed navigation cancels nothing.
-      await nativeNavigation.navigate(url, {
-        history: navOptions.replace ? 'replace' : 'push',
+      await adapter.navigate(path, {
+        replace: navOptions.replace,
         info: checkedNavigation,
-      }).finished;
+      });
       return;
     }
     // Ownership point: every guard passed and this navigation still holds the
@@ -286,11 +296,10 @@ export function createRouter(options: RouterOptions): RouterInstance {
     // that was vetoed above never owned intent and left it running (#1343).
     retireOwnedStream(ticket);
     options.onPending?.();
-    if (navOptions.replace) {
-      history.replaceState(null, '', url);
-    } else {
-      history.pushState(null, '', url);
-    }
+    // Deliberately not awaited: the fallback commit is synchronous (the
+    // address-bar move and the state reconciliation below must stay one
+    // turn — no window for a newer navigation to interleave).
+    adapter.navigate(path, { replace: navOptions.replace });
     // The router now owns the address bar, so the browser-event dedup key no
     // longer describes it: it may still name the URL an earlier guard
     // restore/redirect rewrote the landed entry to, and a genuine back onto
@@ -326,7 +335,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
    */
   async function commitBrowserNavigation(
     ticket: NavigationTicket,
-    landed = readPath(),
+    landed = adapter.current(),
   ): Promise<void> {
     if (navigationState.disposed) return;
     if (navigationState.isDuplicateLanding(landed)) return;
@@ -406,11 +415,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
     // programmatic alike (they share one sequence); browser guards use the
     // same disposed check after each await.
     navigationState.dispose();
-    for (const { type, handler } of listeners) {
-      removeEventListener(type, handler);
-    }
-    listeners.length = 0;
-    nativeNavigation?.removeEventListener('navigate', onNativeNavigate);
+    unsubscribeDriver();
   }
 
   function onNativeNavigate(event: NavigateEvent): void {
@@ -448,7 +453,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
       if (navigationType === 'reload') return;
       // Fragment-only in history mode: preserve native scroll, don't cancel
       // unrelated navigations or run guard. Hash-router semantics
-      // are separate (nativeNavigation is history-only).
+      // are separate (the Navigation API driver is history-only).
       try {
         const probe = new URL(event.destination.url);
         if (
@@ -506,13 +511,13 @@ export function createRouter(options: RouterOptions): RouterInstance {
 
   // ─── Initialization ───────────────────────────────────────────
 
-  if (nativeNavigation) {
-    nativeNavigation.addEventListener('navigate', onNativeNavigate);
-  } else if (mode === 'history') {
-    addCleanupListener('popstate', onBrowserNavigation);
-  } else {
-    addCleanupListener('hashchange', onBrowserNavigation);
-  }
+  // The driver decides which event class announces browser-driven
+  // navigations: navigate events (interceptable) under the Navigation API,
+  // popstate/hashchange elsewhere. dispose() runs the disposer below.
+  const unsubscribeDriver =
+    adapter.kind === 'navigation-api'
+      ? adapter.onNavigate(onNativeNavigate)
+      : adapter.onNavigate(onBrowserNavigation);
 
   // Initial match
   rematch();

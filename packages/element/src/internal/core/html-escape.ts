@@ -18,7 +18,7 @@ import { isSafeAttributeName } from './security.ts';
 
 const log = createLogger('html-escape');
 
-import type { SafeHtml, UnsafeHtml } from '../protocol/framework.ts';
+import type { SafeHtml, UnsafeHtml } from '@openelement/protocol/framework';
 export type { SafeHtml, UnsafeHtml };
 
 /**
@@ -63,7 +63,7 @@ export function escapeAttrValue(value: unknown): string {
 // The canonical HTML void-element set lives in one import-free protocol
 // module; this runtime module re-exports it so existing consumers keep a
 // single source of truth (issue #1220, M4).
-export { VOID_TAGS } from '../protocol/void-tags.ts';
+export { VOID_TAGS } from '@openelement/protocol/void-tags';
 
 /**
  * A framework-generated <script> to embed after the rendered HTML

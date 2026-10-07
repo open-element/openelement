@@ -1,7 +1,19 @@
-  .overlay {
-    color: var(--color-foreground);
-    background: color-mix(in srgb, var(--color-popover) 92%, transparent);
-    border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, color-mix(in srgb, var(--color-foreground) 25%, var(--color-border)) 62%, var(--color-primary));
-    border-radius: var(--radius-xl);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-white) 8%, transparent), var(--shadow-2xl);
-  }
+/* authored from HEAD extraction — replace with design pass */
+/* Structural overlay recipe shared by open-dialog and open-dropdown: the
+ * classes their markup renders (trigger + popover overlay/content). Layout
+ * skeleton only — replace with the design pass. */
+.trigger {
+  display: inline-flex;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.overlay.content {
+  position: fixed;
+  inset: auto;
+}

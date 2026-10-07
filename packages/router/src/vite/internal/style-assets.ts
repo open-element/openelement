@@ -1,25 +1,31 @@
 /**
- * The island style asset protocol's intercepting plugin (#1553
- * production lane). The router client build is the sole owner of the emitted
- * `.css` artifact: `emitFile`, content hash, file name, manifest mapping and
- * the sheet adapter handed back to the module graph (the three-owner seam
- * split's middle owner — the compiler only requests, the runtime only
- * adopts).
+ * The style-edge intercept (#1558; the #1553 protocol after the file-based
+ * authoring retirement). The router client build is the sole owner of the
+ * emitted `.css` artifact: `emitFile`, content hash, file name, manifest
+ * mapping and the sheet adapter handed back to the module graph (the
+ * three-owner seam split's middle owner — the compiler only requests, the
+ * runtime only adopts).
  *
- * The compiled-element transform (activated with `styleAssetProtocol`) turns
- * an admitted island `static styles` into an import of a reserved-suffix
- * sibling (`./<tag>.oe-style.css`) and registers the request's CSS payload in
- * element's style-request registry under the module id the resolver lands on.
- * This plugin intercepts that request at `enforce: 'pre'` — before vite's CSS
- * plugin, which would otherwise fail the resolution (the file does not exist)
- * or, worse, re-inline the sheet. A registry miss fails closed: there is no
- * path where a style request is served by anything but this plugin.
+ * The compiled-element transform registers every authored `.css` import edge
+ * of a compiled module in element's style-edge registry, keyed by the module
+ * id the resolver lands on. This plugin intercepts those edges at
+ * `enforce: 'pre'` — before vite's CSS plugin, which would serve a shadow
+ * component's sheet as a document-level channel it can never reach shadow
+ * trees through. A `.css` import from a module with no registered edges is a
+ * plain app stylesheet and passes through untouched; a `.css` import from a
+ * tracked module with no edge entry is a defect and fails closed.
+ *
+ * The sheet's bytes live in exactly one place — the authored file (P6). The
+ * intercept reads those bytes for every half: the client build emits them
+ * content-hashed, the SSR build embeds them into the DSD `<style>` text, and
+ * the dev server rides them on the inline adapter. There is no second copy of
+ * the bytes anywhere in the protocol, so there is nothing to reconcile.
  *
  * The graph id handed to the bundler is a `\0`-virtual id whose encoded key
  * carries no path shape and whose terminal suffix is `.js` — never the
- * `.oe-style.css` key itself: the toolchain infers the module type from the
- * id's extension suffix, and a `.css`-suffixed id is processed as a CSS
- * module — the load result is ignored and the build fails with MISSING_EXPORT
+ * `.css` id itself: the toolchain infers the module type from the id's
+ * extension suffix, and a `.css`-suffixed id is processed as a CSS module —
+ * the load result is ignored and the build fails with MISSING_EXPORT
  * (reproduced on vite 8.0.16 / rolldown 1.0.3; `moduleType` on the resolveId
  * result does not override it). See the GRAPH_ID_PREFIX doc for the chunking
  * side of the same fact.
@@ -37,8 +43,8 @@
  * adapter is bundled, so a runtime check cannot choose between two build-time
  * module shapes. The verdict on record is negative twice over — rolldown
  * 1.0.3 hard-fails the native form at MISSING_EXPORT
- * and Safari has no CSS module scripts through Safari 27 (Appendix C), so
- * even a bundler-capable native form would not cover the delivered fleet.
+ * and Safari has no CSS module scripts through Safari 27 (#1553 App. C),
+ * so even a bundler-capable native form would not cover the delivered fleet.
  * Retirement condition (P5): when a toolchain both bundles the native form
  * and the fleet supports it, flip the verdict and delete the fetch emission —
  * the adapter form is a capability probe, not a permanent architecture.
@@ -50,13 +56,9 @@
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { join } from 'pathe';
 import type { Plugin } from 'vite';
-import { getStyleRequest, styleRequestModuleId } from '@openelement/element/compiler';
+import { getStyleRequest, hasStyleImporter, styleRequestModuleId } from '@openelement/compiler';
 import { buildError, ClientBuildErrorCode } from '../../internal/error-codes.ts';
-
-/** The reserved request suffix the compiled-element transform emits. */
-export const STYLE_REQUEST_SUFFIX = '.oe-style.css';
 
 /**
  * The `\0`-virtual graph id prefix. The registry key rides base64url-encoded
@@ -64,8 +66,8 @@ export const STYLE_REQUEST_SUFFIX = '.oe-style.css';
  * extension suffix, and the client build's island chunk-grouping rules match
  * on path segments (`/<islandsDir>/`) — a raw-key graph id would be typed as
  * a CSS module (load result ignored, MISSING_EXPORT) and grouped into a
- * nonsense `island-<tag>.oe-style.css` chunk. The encoding makes the graph id
- * path-free and JS-typed while the key round-trips exactly.
+ * nonsense `<sheet>.css` chunk. The encoding makes the graph id path-free and
+ * JS-typed while the key round-trips exactly.
  */
 const GRAPH_ID_PREFIX = '\0oe-style-asset:';
 
@@ -86,7 +88,7 @@ const HASH_SLICE = 12;
 export interface StyleAssetRecord {
   /** The emitted file name, dist/client-relative (`assets/<hash>.css`). */
   readonly fileName: string;
-  /** SHA-256 hex of the emitted bytes — the hash the SSR read reconciles. */
+  /** SHA-256 hex of the emitted bytes — the manifest's content address. */
   readonly hash: string;
 }
 
@@ -107,7 +109,7 @@ export function styleAssetFileName(source: string): string {
   return `assets/${styleAssetHash(source).slice(0, HASH_SLICE)}.css`;
 }
 
-/** The virtual graph id for one style request (module doc: why the encoding). */
+/** The virtual graph id for one style edge (module doc: why the encoding). */
 export function styleAssetGraphId(registryKey: string): string {
   return `${GRAPH_ID_PREFIX}${Buffer.from(registryKey, 'utf8').toString('base64url')}.js`;
 }
@@ -174,9 +176,9 @@ export function sheetAdapterForm(): SheetAdapterForm {
 }
 
 /**
- * The inline sheet adapter: the sheet text rides the module. Dev server and
- * dev SSR have no emitted asset to fetch and no size or zero-inline contract,
- * so the text inlines there (element's cross-realm StyleSheet is the native
+ * The inline sheet adapter: the sheet text rides the module. Dev has no
+ * emitted asset to fetch and no size or zero-inline contract, so the text
+ * inlines there (element's cross-realm StyleSheet is the native
  * CSSStyleSheet in the browser and the SSR shim in Node — one module serves
  * both dev channels). Retirement condition (P5): when the native
  * CSS-module-script verdict flips, or dev learns to serve protocol assets
@@ -197,13 +199,51 @@ export function inlineSheetAdapterModule(css: string): string {
 }
 
 /**
- * The client-build plugin: intercepts style requests, emits the real `.css`
- * asset (byte-verbatim from the registry — the DSD text and the runtime
- * `CSSStyleSheet.replace` text both derive from these bytes), records each
- * emission into `records` for the client asset manifest's `styles` field and
- * the Phase 3 SSR read, and hands the sheet adapter back to the module graph.
+ * The intercept's resolve half, shared by every channel (client build, SSR
+ * build, dev). A relative `.css` import from a tracked module answers with
+ * the edge's graph id; anything else passes through untouched. Fail closed:
+ * a tracked importer whose `.css` edge carries no registry entry is a defect
+ * (the compiled-element transform registers every edge it admits), and an
+ * importer-less `.css` source is never an authored module edge.
  */
-export function clientStyleAssetPlugin(records: Map<string, StyleAssetRecord>): Plugin {
+function styleEdgeResolveId(this: unknown, source: string, importer?: string): string | null {
+  if (!source.endsWith('.css') || !importer) return null;
+  if (!hasStyleImporter(importer)) return null;
+  const registryKey = styleRequestModuleId(importer, source);
+  if (!getStyleRequest(registryKey)) {
+    throw buildError(
+      ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
+      `Style edge "${source}" from ${importer} carries no registry entry — the ` +
+        'compiled-element transform registers every `.css` edge it admits, so a tracked ' +
+        'importer with an unregistered edge is a defect. The intercept never re-inlines',
+    );
+  }
+  return styleAssetGraphId(registryKey);
+}
+
+/** Read the edge's sheet file — the one place the bytes exist. */
+async function readSheetFile(file: string): Promise<string> {
+  try {
+    return await readFile(file, 'utf8');
+  } catch (cause) {
+    throw buildError(
+      ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
+      `The style edge's sheet file ${file} cannot be read — authored .css files are ` +
+        `the protocol's only byte source (reason: ${(cause as Error).message})`,
+      { cause: cause as Error },
+    );
+  }
+}
+
+/**
+ * The client-build plugin: intercepts style edges, emits the real `.css`
+ * asset (content-addressed from the authored file's bytes), records each
+ * emission into `records` for the client asset manifest's `styles` field, and
+ * hands the sheet adapter back to the module graph.
+ */
+export const clientStyleAssetPlugin: (records: Map<string, StyleAssetRecord>) => Plugin = (
+  records,
+) => {
   // Emission dedup keyed by the content-addressed file name: identical sheet
   // bytes from several islands emit ONE asset; every adapter rewrites the
   // same file-URL reference to the same hashed URL (reproduced on
@@ -212,46 +252,27 @@ export function clientStyleAssetPlugin(records: Map<string, StyleAssetRecord>): 
   return {
     name: 'open:style-assets',
     enforce: 'pre',
-    resolveId(source, importer) {
-      if (!source.endsWith(STYLE_REQUEST_SUFFIX)) return null;
-      if (!importer) {
-        throw buildError(
-          ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
-          `Style request "${source}" has no importer module — the reserved suffix is only ` +
-            'emitted by the compiled-element transform, never authored by hand',
-        );
-      }
-      const registryKey = styleRequestModuleId(importer, source);
-      const request = getStyleRequest(registryKey);
-      if (!request) {
-        throw buildError(
-          ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
-          `Style request "${source}" from ${importer} carries no registered payload — the ` +
-            'compiled-element transform must register the request before its import resolves. ' +
-            'A hand-written import of the reserved suffix has no payload channel and fails here',
-        );
-      }
-      return styleAssetGraphId(registryKey);
-    },
-    load(id) {
+    resolveId: styleEdgeResolveId,
+    async load(id) {
       const registryKey = styleAssetRegistryKey(id);
       if (registryKey === undefined) return null;
       const request = getStyleRequest(registryKey);
       if (!request) {
         throw buildError(
           ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
-          `Resolved style module ${id} carries no registered payload — the registry entry ` +
+          `Resolved style module ${id} carries no registry entry — the edge ` +
             'disappeared between resolution and load',
         );
       }
-      const hash = styleAssetHash(request.css);
-      const fileName = styleAssetFileName(request.css);
+      const css = await readSheetFile(request.file);
+      const hash = styleAssetHash(css);
+      const fileName = styleAssetFileName(css);
       records.set(registryKey, { fileName, hash });
       // Both forms consume the same emitted asset; the verdict selects only
       // the adapter module handed back to the graph.
       let referenceId = emitted.get(fileName);
       if (referenceId === undefined) {
-        referenceId = this.emitFile({ type: 'asset', fileName, source: request.css });
+        referenceId = this.emitFile({ type: 'asset', fileName, source: css });
         emitted.set(fileName, referenceId);
       }
       if (sheetAdapterForm() === 'native-css-module') {
@@ -260,90 +281,39 @@ export function clientStyleAssetPlugin(records: Map<string, StyleAssetRecord>): 
       return fetchSheetAdapterModule(referenceId);
     },
   };
-}
+};
 
 /**
  * The SSR-build plugin: serves the server half of the protocol. The sheet
- * adapter embeds the bytes of the SAME emitted asset the client build shipped
- * — read from dist/client and hash-checked against the client build's record,
- * so the DSD `<style data-oe-static-styles>` text and the client sheet cannot
- * drift (a stale dist fails the build instead of shipping a second fact).
+ * adapter embeds the authored file's bytes — the same bytes the client build
+ * emitted content-hashed — so the DSD `<style data-oe-static-styles>` text
+ * and the client sheet cannot drift: one file, one fact (P6).
  * `StyleSheet` is element's cross-realm constructor: the SSR shim parses the
  * rules the serializer reads back through `cssRules` (collectStaticStyleCss),
  * exactly the legacy path's text channel.
  */
-export function serverStyleAssetPlugin(options: {
-  /** The client build's emission records (ctx.styleAssets). */
-  styleAssets: ReadonlyMap<string, StyleAssetRecord>;
-  /** The client build's output directory (dist/client). */
-  clientOutDir: string;
-}): Plugin {
-  const { styleAssets, clientOutDir } = options;
+export function serverStyleAssetPlugin(): Plugin {
   return {
     name: 'open:style-assets-ssr',
     enforce: 'pre',
-    resolveId(source, importer) {
-      if (!source.endsWith(STYLE_REQUEST_SUFFIX)) return null;
-      if (!importer) {
-        throw buildError(
-          ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
-          `Style request "${source}" has no importer module — the reserved suffix is only ` +
-            'emitted by the compiled-element transform, never authored by hand',
-        );
-      }
-      const registryKey = styleRequestModuleId(importer, source);
-      if (!getStyleRequest(registryKey)) {
-        throw buildError(
-          ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
-          `Style request "${source}" from ${importer} carries no registered payload — the ` +
-            'compiled-element transform must register the request before its import resolves',
-        );
-      }
-      return styleAssetGraphId(registryKey);
-    },
+    resolveId: styleEdgeResolveId,
     async load(id) {
       const registryKey = styleAssetRegistryKey(id);
       if (registryKey === undefined) return null;
-      const record = styleAssets.get(registryKey);
-      if (!record) {
+      const request = getStyleRequest(registryKey);
+      if (!request) {
         throw buildError(
-          ClientBuildErrorCode.STYLE_ASSET_UNMAPPED,
-          `Style request ${registryKey} has no client-build emission record — the SSR build ` +
-            'reads the DSD CSS text from the same .css asset the client build emitted, ' +
-            'and Phase 2 recorded none. Run the client build before the SSR build',
+          ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
+          `Resolved style module ${id} carries no registry entry — the edge ` +
+            'disappeared between resolution and load',
         );
       }
-      const assetPath = join(clientOutDir, record.fileName);
-      let text: string;
-      try {
-        text = await readFile(assetPath, 'utf8');
-      } catch (cause) {
-        throw buildError(
-          ClientBuildErrorCode.STYLE_ASSET_UNMAPPED,
-          `The client-build style asset ${assetPath} cannot be read — the SSR build embeds the ` +
-            `DSD text from that emitted asset and refuses a second fact (reason: ` +
-            `${(cause as Error).message})`,
-          { cause: cause as Error },
-        );
-      }
-      const hash = styleAssetHash(text);
-      if (hash !== record.hash) {
-        throw buildError(
-          ClientBuildErrorCode.STYLE_ASSET_HASH_MISMATCH,
-          `The client-build style asset ${assetPath} no longer matches the hash the client ` +
-            'build recorded for it (recorded ' +
-            record.hash.slice(0, HASH_SLICE) +
-            ', read ' +
-            hash.slice(0, HASH_SLICE) +
-            ') — a stale or rewritten dist/client. The DSD text ' +
-            'must be the same bytes the client sheet serves; rebuild the client build',
-        );
-      }
+      const text = await readSheetFile(request.file);
       return [
         '// <generated by open:style-assets — SSR style sheet adapter; do not edit>',
-        '// Server half of the style asset protocol: the sheet text is the emitted .css',
-        "// asset's own bytes (hash-checked against the client build's record), so the",
-        '// DSD output and the adopted client sheet cannot drift.',
+        '// Server half of the style edge protocol: the sheet text is the authored .css',
+        "// file's own bytes — the same bytes the client build emitted content-hashed —",
+        '// so the DSD output and the adopted client sheet cannot drift.',
         "import { StyleSheet } from '@openelement/element';",
         `const sheet = new StyleSheet();`,
         `sheet.replaceSync(${JSON.stringify(text)});`,
@@ -356,48 +326,29 @@ export function serverStyleAssetPlugin(options: {
 
 /**
  * The dev plugin: same fail-closed intercept, inline adapter. The dev
- * transform pipeline runs the compiled-element transform (protocol
- * activated) before the island module's import resolves, so the registry
- * entry exists; the adapter rides the module (see inlineSheetAdapterModule).
- * Dev keeps the graph ids identical to the build's, so dev and prod exercise
- * the same seam shape.
+ * transform pipeline runs the compiled-element transform before the module's
+ * import resolves, so the registry entry exists; the adapter rides the module
+ * (see inlineSheetAdapterModule) with the authored file's bytes. Dev keeps
+ * the graph ids identical to the build's, so dev and prod exercise the same
+ * seam shape.
  */
 export function devStyleAssetPlugin(): Plugin {
   return {
     name: 'open:style-assets-dev',
     enforce: 'pre',
-    resolveId(source, importer) {
-      if (!source.endsWith(STYLE_REQUEST_SUFFIX)) return null;
-      if (!importer) {
-        throw buildError(
-          ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
-          `Style request "${source}" has no importer module — the reserved suffix is only ` +
-            'emitted by the compiled-element transform, never authored by hand',
-        );
-      }
-      const registryKey = styleRequestModuleId(importer, source);
-      const request = getStyleRequest(registryKey);
-      if (!request) {
-        throw buildError(
-          ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
-          `Style request "${source}" from ${importer} carries no registered payload — the ` +
-            'compiled-element transform must register the request before its import resolves',
-        );
-      }
-      return styleAssetGraphId(registryKey);
-    },
-    load(id) {
+    resolveId: styleEdgeResolveId,
+    async load(id) {
       const registryKey = styleAssetRegistryKey(id);
       if (registryKey === undefined) return null;
       const request = getStyleRequest(registryKey);
       if (!request) {
         throw buildError(
           ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED,
-          `Resolved style module ${id} carries no registered payload — the registry entry ` +
+          `Resolved style module ${id} carries no registry entry — the edge ` +
             'disappeared between resolution and load',
         );
       }
-      return inlineSheetAdapterModule(request.css);
+      return inlineSheetAdapterModule(await readSheetFile(request.file));
     },
   };
 }

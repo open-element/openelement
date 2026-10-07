@@ -14,7 +14,7 @@ import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { join } from 'node:path';
 import { mdxPlugin } from '../src/vite/plugin-mdx.ts';
 import { mdxToCompiledPageSource } from '../src/vite/plugin-mdx-lower.ts';
-import { compiledElementPlugin } from '@openelement/element/compiler';
+import { compiledElementPlugin } from '@openelement/compiler';
 
 const WORKSPACE_ELEMENT = new URL('../../element/src/index.ts', import.meta.url).pathname;
 

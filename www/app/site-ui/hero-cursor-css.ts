@@ -1,11 +1,6 @@
-/**
- * The hero cursor's runtime-injected light-scope sheet (open-hero-polish).
- * The cursor tracks across the hero in the light parent scope, so this
- * sheet cannot be a component's static styles (those scope to the shadow
- * root); it is a JS runtime payload injected with a <style> element at
- * hydration — not a static-styles channel (#1558 keeps static styles as
- * .css file imports; this constant is runtime data like any other string).
- */
+/* authored from HEAD extraction — replace with design pass.
+ * The hero cursor layer's sheet text: consumed by open-hero-polish as a
+ * CSS-variable block injected at render (see that island for the rAF driver). */
 export const HERO_CURSOR_CSS = `
   .hero-main, .hero-main * { cursor: none !important; }
   .hero-cursor { position: fixed; inset: 0 auto auto 0; z-index: 60; pointer-events: none; opacity: 0; transition: opacity .25s ease; }

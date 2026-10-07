@@ -45,7 +45,7 @@ interface ComponentMeta {
   cssParts: OpenElementCssPart[];
   layer: 'dsd-static' | 'dsd-interactive';
   // Hand-aligned with HYDRATION_STRATEGIES in
-  // packages/element/src/internal/protocol/framework.ts (source of truth);
+  // packages/protocol/src/framework.ts (source of truth);
   // tools cannot import element runtime code.
   hydrate: 'load' | 'idle' | 'visible' | 'only';
   // Owner ruling C1 (#1468): the unadopted surface is experimental until each
@@ -55,16 +55,12 @@ interface ComponentMeta {
 }
 
 const COMPONENT_ORDER = [
-  'open-card',
-  'open-callout',
   'open-button',
   'open-input',
   'open-theme-toggle',
   'open-code-block',
-  'open-badge',
   'open-dialog',
   'open-dropdown',
-  'open-tabs',
 ];
 
 // Fail-loud registry: every @openelement/ui component class must have an
@@ -72,19 +68,15 @@ const COMPONENT_ORDER = [
 // component shipped without a layering or stability decision — throw instead
 // of silently defaulting.
 // Hand-aligned with HYDRATION_STRATEGIES in
-// packages/element/src/internal/protocol/framework.ts (source of truth);
+// packages/protocol/src/framework.ts (source of truth);
 // tools cannot import element runtime code.
 const POLICY_BY_CLASS: Record<string, Pick<ComponentMeta, 'layer' | 'hydrate' | 'status'>> = {
-  OpenCard: { layer: 'dsd-static', hydrate: 'idle', status: 'experimental' },
-  OpenCallout: { layer: 'dsd-static', hydrate: 'idle', status: 'experimental' },
   OpenButton: { layer: 'dsd-interactive', hydrate: 'load', status: 'stable' },
   OpenInput: { layer: 'dsd-interactive', hydrate: 'load', status: 'experimental' },
   OpenThemeToggle: { layer: 'dsd-interactive', hydrate: 'load', status: 'stable' },
   OpenCodeBlock: { layer: 'dsd-static', hydrate: 'idle', status: 'stable' },
-  OpenBadge: { layer: 'dsd-static', hydrate: 'idle', status: 'stable' },
   OpenDialog: { layer: 'dsd-interactive', hydrate: 'idle', status: 'experimental' },
   OpenDropdown: { layer: 'dsd-interactive', hydrate: 'load', status: 'experimental' },
-  OpenTabs: { layer: 'dsd-interactive', hydrate: 'load', status: 'experimental' },
 };
 
 function policyForClass(className: string): Pick<ComponentMeta, 'layer' | 'hydrate' | 'status'> {

@@ -5,7 +5,7 @@ import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/
 import { dirname, join } from 'node:path';
 import ts from 'typescript';
 import { createDeferredDsdExecutor } from '@openelement/element';
-import { compileElementProgram } from '@openelement/element/compiler';
+import { compileElementProgram } from '@openelement/compiler';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { renderEntry } from '../src/vite/internal/ssg/entry-orchestrator.ts';
 import { assertCompiledStreamRoute as __assertStreamRoute } from '../src/vite/internal/server-runtime/route-dispatch.ts';

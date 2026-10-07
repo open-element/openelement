@@ -54,12 +54,14 @@ section: 'Reference'
 
 ### 状态与动效
 
-状态标签与动效状态以可读文本为先，颜色其次。
+状态标签与动效状态以可读文本为先，颜色其次。零交互形态是纯 HTML + CSS
+recipe，而非自定义元素——退役的 `open-badge` 以文档化 recipe 的形式活在
+create 起始模板的 `app/styles/recipes.css` 中（#1557）：
 
 ```html
-<open-badge tone="brand">current</open-badge>
-<open-badge tone="success">done</open-badge>
-<open-badge tone="warning">planned</open-badge>
+<span class="badge badge-brand">current</span>
+<span class="badge badge-success">done</span>
+<span class="badge badge-warning">planned</span>
 ```
 
 ## 代码与图示就是视觉资产

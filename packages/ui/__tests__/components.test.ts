@@ -310,47 +310,6 @@ test('open-theme-toggle: init never persists; explicit toggle persists and dispa
   expect(harness.dispatched.includes('open:theme-change')).toEqual(true);
 });
 
-// ─── open-tabs: WAI-ARIA keyboard pattern ────────────────────────────────────
-
-function tabsWith(count: number) {
-  return (async () => {
-    const { OpenTabs } = await import('../src/open-tabs.tsx');
-    const el = new (OpenTabs as unknown as new () => AnyComponent)();
-    const tabs = Array.from({ length: count }, () => ({
-      focused: false,
-      focus() {
-        this.focused = true;
-      },
-      addEventListener: () => {},
-      setAttribute: () => {},
-      removeAttribute: () => {},
-      classList: { toggle: () => false },
-    }));
-    el.querySelectorAll = (selector: string) =>
-      (selector === '[slot="tab"]' ? tabs : tabs) as unknown as NodeListOf<Element>;
-    return { el, tabs };
-  })();
-}
-
-test('open-tabs: ArrowRight/Left wrap, Home/End jump, focus follows selection', async () => {
-  const { el, tabs } = await tabsWith(3);
-  const key = (k: string) =>
-    el.onKeydown({ key: k, preventDefault: () => {} } as unknown as KeyboardEvent);
-  key('ArrowRight');
-  expect(el.active).toEqual(1);
-  key('ArrowRight');
-  expect(el.active).toEqual(2);
-  key('ArrowRight');
-  expect(el.active, 'ArrowRight wraps').toEqual(0);
-  key('ArrowLeft');
-  expect(el.active, 'ArrowLeft wraps backwards').toEqual(2);
-  key('End');
-  expect(el.active).toEqual(2);
-  key('Home');
-  expect(el.active).toEqual(0);
-  expect(tabs[0].focused, 'selection moves DOM focus').toEqual(true);
-});
-
 // ─── open-dropdown: pointerdown popover guard + per-instance anchor (#1061) ──
 
 test('open-dropdown: click toggles the native popover; pointerdown on an open popover swallows the re-open', async () => {
@@ -442,8 +401,6 @@ test('open-code-block: failed clipboard write shows Failed', async () => {
 test("manifest: every declaration carries the component's published attributes and events", async () => {
   const { manifest } = await import('../src/index.ts');
   const expected: Record<string, { attributes: string[]; events: string[] }> = {
-    'open-card': { attributes: ['variant'], events: [] },
-    'open-callout': { attributes: ['type', 'label'], events: [] },
     'open-button': {
       attributes: ['variant', 'size', 'disabled', 'href', 'target', 'type'],
       events: ['open-click'],
@@ -463,10 +420,8 @@ test("manifest: every declaration carries the component's published attributes a
     },
     'open-theme-toggle': { attributes: ['theme'], events: ['open:theme-change'] },
     'open-code-block': { attributes: [], events: [] },
-    'open-badge': { attributes: ['tone', 'size'], events: [] },
     'open-dialog': { attributes: ['open', 'label'], events: ['open-dialog-close'] },
     'open-dropdown': { attributes: [], events: [] },
-    'open-tabs': { attributes: [], events: [] },
   };
   const actual = Object.fromEntries(
     manifest.declarations.map((decl) => [

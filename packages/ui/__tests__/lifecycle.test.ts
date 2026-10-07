@@ -8,7 +8,7 @@
  * the imperative methods the compiler copies verbatim.
  *
  * What this harness deliberately does NOT assert (it would fake-pass):
- * - computed reactivity (open-callout icon fallback, open-input inputClass):
+ * - computed reactivity (open-input inputClass):
  *   uncompiled, @property fields are plain values, so `computed()` snapshots
  *   the initializer and never re-derives — the reactive path only exists in
  *   the compiled program.
@@ -298,139 +298,6 @@ test('open-dialog: dispose tears the open effect down exactly once; reconnect re
   // Reconnect re-subscribes the compiled-signal effect for the new session.
   el.onCsrRendered();
   expect(typeof readInstanceState(el, 'openEffect', () => undefined)).toEqual('function');
-});
-
-// ─── open-tabs: decoration wiring across activation, dispose and reconnect ───
-
-interface FakeTab {
-  attrs: Map<string, string>;
-  clickListeners: EventListener[];
-  focused: boolean;
-  classes: Map<string, boolean>;
-  setAttribute(name: string, value: string): void;
-  getAttribute(name: string): string | null;
-  removeAttribute(name: string): void;
-  addEventListener(type: string, listener: EventListener): void;
-  focus(): void;
-  click(): void;
-  classList: { toggle(name: string, on: boolean): void };
-}
-
-function fakeTab(): FakeTab {
-  const tab: FakeTab = {
-    attrs: new Map(),
-    clickListeners: [],
-    focused: false,
-    classes: new Map(),
-    setAttribute(name, value) {
-      tab.attrs.set(name, value);
-    },
-    getAttribute(name) {
-      return tab.attrs.get(name) ?? null;
-    },
-    removeAttribute(name) {
-      tab.attrs.delete(name);
-    },
-    addEventListener(type, listener) {
-      if (type === 'click') tab.clickListeners.push(listener);
-    },
-    focus() {
-      tab.focused = true;
-    },
-    click() {
-      for (const listener of [...tab.clickListeners]) {
-        listener.call(tab as unknown as EventTarget, new Event('click'));
-      }
-    },
-    classList: {
-      toggle(name, on) {
-        tab.classes.set(name, on);
-      },
-    },
-  };
-  return tab;
-}
-
-function tabsHost(tabCount: number, panelCount: number) {
-  return (async () => {
-    const { OpenTabs } = await import('../src/open-tabs.tsx');
-    const el = new (OpenTabs as unknown as new () => AnyComponent)();
-    const tabs = Array.from({ length: tabCount }, fakeTab);
-    const panels = Array.from({ length: panelCount }, fakeTab);
-    el.querySelectorAll = (selector: string) =>
-      (selector === '[slot="tab"]' ? tabs : panels) as unknown as NodeListOf<Element>;
-    return { el, tabs, panels };
-  })();
-}
-
-test('open-tabs: activation decorates the WAI-ARIA wiring; selection re-decorates', async () => {
-  const { el, tabs, panels } = await tabsHost(3, 3);
-  el.onCsrRendered();
-  expect(el.tabsId).not.toEqual('');
-
-  expect(tabs[0].attrs.get('role')).toEqual('tab');
-  expect(tabs[0].attrs.get('aria-selected')).toEqual('true');
-  expect(tabs[0].attrs.get('tabindex')).toEqual('0');
-  expect(tabs[1].attrs.get('aria-selected')).toEqual('false');
-  expect(tabs[1].attrs.get('tabindex')).toEqual('-1');
-  // id/aria-controls and aria-labelledby pair tabs with panels per instance.
-  expect(tabs[1].attrs.get('aria-controls')).toEqual(`${el.tabsId}-panel-1`);
-  expect(panels[1].attrs.get('aria-labelledby')).toEqual(`${el.tabsId}-tab-1`);
-  expect(panels[0].attrs.has('hidden')).toEqual(false);
-  expect(panels[1].attrs.get('hidden')).toEqual('');
-
-  // Selecting a tab re-decorates the wiring (uncompiled, the compiled-signal
-  // effect does not re-run — decorate() is the effect body, called directly).
-  el.select(2);
-  el.decorate();
-  expect(tabs[2].attrs.get('aria-selected')).toEqual('true');
-  expect(tabs[0].attrs.get('aria-selected')).toEqual('false');
-  expect(panels[2].attrs.has('hidden')).toEqual(false);
-  expect(panels[0].attrs.get('hidden')).toEqual('');
-});
-
-test('open-tabs: click wiring attaches once per tab across dispose/reconnect; reconnect re-syncs stale ARIA', async () => {
-  const { el, tabs } = await tabsHost(2, 2);
-  el.onCsrRendered();
-  expect(tabs.map((t) => t.clickListeners.length)).toEqual([1, 1]);
-
-  // Click selection goes through the wired listener exactly once per click.
-  tabs[1].click();
-  expect(el.active).toEqual(1);
-
-  // Dispose: the decorate effect is torn down and its slot cleared.
-  el.disconnectedCallback();
-  expect(readInstanceState(el, 'decorateEffect', () => 'missing')).toEqual(undefined);
-
-  // While detached, external markup drifts stale (browser-level analog:
-  // ui-dogfood ui-tabs.spec.ts reconnect test observes exactly this).
-  tabs[0].setAttribute('aria-selected', 'true');
-  el.select(0);
-
-  // Reconnect: a fresh effect re-runs decorate once — stale ARIA is corrected,
-  // and the WeakSet wiring guard keeps click listeners at one per tab.
-  el.onCsrRendered();
-  expect(typeof readInstanceState(el, 'decorateEffect', () => undefined)).toEqual('function');
-  expect(tabs.map((t) => t.clickListeners.length)).toEqual([1, 1]);
-  expect(tabs[0].attrs.get('aria-selected')).toEqual('true');
-  expect(tabs[1].attrs.get('aria-selected')).toEqual('false');
-});
-
-test('open-tabs: two instances on one page get independent id prefixes and selection state', async () => {
-  const first = await tabsHost(2, 2);
-  const second = await tabsHost(2, 2);
-  first.el.onCsrRendered();
-  second.el.onCsrRendered();
-  expect(first.el.tabsId).not.toEqual(second.el.tabsId);
-
-  first.el.select(1);
-  first.el.decorate();
-  second.el.decorate();
-  expect(first.tabs[1].attrs.get('aria-selected')).toEqual('true');
-  // The second instance's decoration is untouched by the first's selection.
-  expect(second.tabs[0].attrs.get('aria-selected')).toEqual('true');
-  expect(second.tabs[1].attrs.get('aria-selected')).toEqual('false');
-  expect(second.el.active).toEqual(0);
 });
 
 // ─── open-dropdown: activation wiring is reconnect-safe ──────────────────────

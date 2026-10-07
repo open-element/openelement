@@ -13,14 +13,14 @@ import type {
   ResolvedAppShell,
   SsrAdmissionPlan,
   StaticComponentDecl,
-} from '../protocol/ssg.ts';
+} from '@openelement/protocol/ssg';
 import type {
   AppShellConfig,
   CompatibilityClassification,
   FrameworkOptions,
   HydrationStrategy,
   OpenElementPackageManifest,
-} from '../protocol/framework.ts';
+} from '../../framework.ts';
 import type { SsrAdmissionDecision } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from '../paths.ts';
@@ -127,7 +127,7 @@ export function buildEntryDescriptor(
   const imports: ImportDecl[] = [];
 
   // The generated-app factory (#1470 block e): the entry's
-  // assembly — the Hono app, its bridge, the composed handler exports, the
+  // assembly — the WinterCG app, the composed handler exports, the
   // registry guard, and the page-render bindings — is the imported runtime;
   // the entry keeps imports + descriptor data + wiring. It replaces the
   // entry-emitted `new Hono()` and the bridge import.
@@ -231,19 +231,37 @@ export function buildEntryDescriptor(
     imports.push(adapter.runtimeSeam().streamGuard);
   }
 
-  // Conditional middleware imports
+  // Conditional middleware imports (#1560): the built-ins are the
+  // WinterCG middleware factories from the imported server runtime —
+  // the entry imports no composition framework.
   const mw = options.middleware;
   if (mw?.requestId !== false) {
-    imports.push({ from: 'hono/request-id', names: ['requestId'] });
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['createRequestIdMiddleware'],
+      alias: '__requestId',
+    });
   }
   if (mw?.logger !== false) {
-    imports.push({ from: 'hono/logger', names: ['logger'], alias: 'honoLogger' });
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['createLoggerMiddleware'],
+      alias: '__logger',
+    });
   }
   if (mw?.cors !== false) {
-    imports.push({ from: 'hono/cors', names: ['cors'] });
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['createCorsMiddleware'],
+      alias: '__cors',
+    });
   }
   if (mw?.securityHeaders !== false) {
-    imports.push({ from: 'hono/secure-headers', names: ['secureHeaders'] });
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['createSecureHeadersMiddleware'],
+      alias: '__secureHeaders',
+    });
   }
   // The CSP auto-nonce is the same imported-runtime seam: the middleware
   // emission below only references __ssgPrerenderPass/__cspCreateNonce/

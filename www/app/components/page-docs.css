@@ -15,50 +15,8 @@
   }
 
   /* ── masthead: serif "Read the" + mono "MANUAL." ── */
-  
-  .masthead {
-    position: relative;
-    isolation: isolate;
-    padding: clamp(4rem, 11vh, 8rem) clamp(1.5rem, 5vw, 4.5rem) clamp(2.5rem, 6vh, 4.5rem);
-  }
-
-  .masthead::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background-image:
-      linear-gradient(color-mix(in srgb, var(--color-violet-600) 7%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in srgb, var(--color-violet-600) 7%, transparent) 1px, transparent 1px);
-    background-size: 72px 72px;
-    mask-image: linear-gradient(180deg, black, transparent);
-  }
-
-  
-  .eyebrow {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    color: var(--color-primary);
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    font-weight: var(--font-weight-extrabold);
-    letter-spacing: 0.29em;
-    text-transform: uppercase;
-  }
-  /* Subject-side :lang — @scope'd sheets cannot match the html[lang] ancestor. */
-  .eyebrow:lang(zh) {
-    text-transform: none;
-    letter-spacing: 0.08em;
-  }
-
-  .eyebrow::before {
-    content: "";
-    width: 2rem;
-    height: 2px;
-    background: var(--color-primary);
-  }
-
+  ${mastheadStyles}
+  ${eyebrowStyles}
 
   /* Static layout lives as utilities in the markup (page-layer utility
      freedom, C4 #1507); the sheet keeps only what utilities cannot express
@@ -203,3 +161,4 @@
       display: none;
     }
   }
+

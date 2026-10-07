@@ -9,7 +9,7 @@
 import { expect, test } from 'vitest';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { renderSsgSection } from '../src/vite/internal/ssg/entry-render-ssg.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import type { RouteEntry } from '@openelement/protocol/framework';
 
 const routes: RouteEntry[] = [
   {

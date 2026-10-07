@@ -1,11 +1,11 @@
 /**
  * Styled 404 route emission.
  *
- * Generate the Hono notFound fallback (#923): unmatched paths render the
+ * Generate the notFound terminal (#923): unmatched paths render the
  * /404 page with a 404 status. Any failure inside the fallback degrades to
  * the plain status page — the fallback itself never 500s.
  */
-import type { PageRouteDecl, RendererDecl } from '../protocol/ssg.ts';
+import type { PageRouteDecl, RendererDecl } from '@openelement/protocol/ssg';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   documentWrapOptionsLines,
@@ -34,7 +34,8 @@ export function renderNotFoundRoute(
     ? '__headExtras'
     : quoteGeneratedJavaScriptValue(docConfig.headExtras);
   lines.push('// Styled 404 (#923): unmatched paths render the /404 page with a 404 status');
-  lines.push('app.notFound(async (c) => {');
+  lines.push('app.notFound(async (request) => {');
+  lines.push('  const c = __requestScope(request);');
   lines.push(`  const __responseHeaders = new Headers();`);
   lines.push(`  return __mergeChannelHeaders(await (async () => {`);
   lines.push(`  let __tag = ${pageRouteTagExpr(route.varName, route.tagName)};`);

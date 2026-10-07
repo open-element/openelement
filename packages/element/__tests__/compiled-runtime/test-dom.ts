@@ -165,6 +165,35 @@ export class TestElement extends TestNodeBase {
     this.listeners.set(type, listeners);
   }
 
+  /**
+   * Structural subset for per-item event targets (#1556 IR v2): the compiler
+   * emits `:scope > *:nth-child(<n>)` chains and nothing else, so the test
+   * DOM resolves exactly that grammar — `:nth-child` counts element
+   * siblings, matching real DOM semantics for static item templates.
+   */
+  querySelector(selector: string): TestElement | null {
+    if (!selector.startsWith(':scope')) return null;
+    const steps = selector.split('>').map((step) => step.trim());
+    const positions: number[] = [];
+    for (let index = 1; index < steps.length; index++) {
+      const match = /^\*:nth-child\((\d+)\)$/.exec(steps[index]);
+      if (!match) return null;
+      positions.push(Number(match[1]));
+    }
+    const resolve = (node: TestNode, depth: number): TestElement | null => {
+      if (depth === positions.length) {
+        return node instanceof TestElement ? node : null;
+      }
+      if (!(node instanceof TestElement)) return null;
+      const elements = node.childNodes.filter(
+        (child): child is TestElement => child instanceof TestElement,
+      );
+      const next = elements[positions[depth] - 1];
+      return next ? resolve(next, depth + 1) : null;
+    };
+    return resolve(this, 0);
+  }
+
   removeEventListener(type: string, fn: (event: unknown) => void): void {
     const listeners = this.listeners.get(type);
     if (!listeners) return;

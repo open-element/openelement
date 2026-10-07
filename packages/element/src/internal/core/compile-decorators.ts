@@ -3,7 +3,7 @@
  * decorator intrinsics (#1209).
  *
  * The OpenElement compiler (this package's open:compiled-element Vite
- * transform, wired into router builds via @openelement/element/compiler)
+ * transform, wired into router builds via @openelement/compiler)
  * recognizes these decorators by binding provenance — a runtime named import
  * of `element`/`property` from '@openelement/element', aliases followed —
  * and erases the applications from generated code (the bindings are stripped

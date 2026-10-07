@@ -7,8 +7,8 @@
  * rendering. A capability module may expose one or many element constructors.
  */
 
-import type { ClientIslandEntry, IslandDeliveryStrategy } from '../protocol/ssg.ts';
-export type { IslandDeliveryStrategy } from '../protocol/ssg.ts';
+import type { ClientIslandEntry, IslandDeliveryStrategy } from '@openelement/protocol/ssg';
+export type { IslandDeliveryStrategy } from '@openelement/protocol/ssg';
 import { HYDRATION_STRATEGIES, isValidTagName } from '@openelement/element';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { isInvalidIslandMedia } from '../../../internal/island-media.ts';

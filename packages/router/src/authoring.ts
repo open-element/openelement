@@ -203,7 +203,7 @@ export type ActionOutcome<Data = unknown> =
 
 /**
  * Canonical application-level classification for an action return value.
- * Hono and SPA executors project this result differently, but neither may
+ * Server and SPA executors project this result differently, but neither may
  * redefine validation failure or admit a raw Response as action data.
  */
 export function classifyActionResult<Data>(result: Data): ActionOutcome<Data> {

@@ -665,13 +665,19 @@ test('starter template: openelement.config.ts validates against the accepted sch
       )}`,
     ).toBeTruthy();
   }
-  // The starter ships the token stylesheet and the shell the conventions read.
+  // The starter ships the token stylesheet and its two showcase islands.
+  // The app-shell layout island is NOT part of the showcase template (#1530):
+  // pages own their chrome as light-root markup, so island-free pages (like
+  // /about) carry no island hosts at all.
   expect(
     readTemplate('app/styles/tokens.css').includes('--brand'),
     'tokens.css must define --brand',
   ).toBeTruthy();
   expect(
-    readTemplate('app/islands/app-shell.tsx.tmpl').includes("@element('app-shell'"),
+    readTemplate('app/islands/my-counter.tsx.tmpl').includes("@element('my-counter'"),
+  ).toBeTruthy();
+  expect(
+    readTemplate('app/islands/live-timer.tsx.tmpl').includes("@element('live-timer'"),
   ).toBeTruthy();
 });
 

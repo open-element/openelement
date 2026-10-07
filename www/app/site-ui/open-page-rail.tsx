@@ -3,7 +3,7 @@
 import { computed, element, OpenElement, property } from '@openelement/element';
 import { readingChromeStrings } from './chrome-strings.ts';
 import { installRailScrollspy, uninstallRailScrollspy } from './open-page-rail-controller.ts';
-import { compiledStyle } from './compiled-style.ts';
+import openPageRailStyles from './open-page-rail.css';
 
 interface RailItem {
   id: string;
@@ -14,11 +14,7 @@ interface RailItem {
 
 @element('open-page-rail')
 export default class OpenPageRail extends OpenElement {
-  static override styles = [
-    compiledStyle(`
-  :host{display:block}.mobile-outline{display:none}.links{display:grid;gap:calc(var(--spacing) * 1);counter-reset:rail-item}a{display:block;padding:calc(var(--spacing) * 1) 0 calc(var(--spacing) * 1) calc(var(--spacing) * 3);color:var(--color-muted-foreground);font-family:var(--font-mono);font-size:var(--text-xs);line-height:1.45;text-decoration:none;border-inline-start:calc(var(--spacing) * 0.5) solid transparent}a::before{counter-increment:rail-item;content:"§" counter(rail-item) "  ";color:color-mix(in srgb,var(--color-muted-foreground) 70%,transparent)}a[data-depth="3"]{padding-inline-start:calc(var(--spacing) * 5);font-size:calc(var(--text-xs) * .94)}a:hover,a:focus-visible{color:var(--color-foreground)}a[aria-current="location"]{color:var(--color-foreground);font-weight:var(--font-weight-extrabold);border-inline-start-color:var(--color-primary)}a[aria-current="location"]::before{color:var(--color-primary)}@media(max-width:900px){.desktop-outline{display:none}.mobile-outline{display:block}summary{cursor:pointer;color:var(--color-foreground);border:calc(var(--spacing) * 0.25) solid var(--color-border);border-radius:var(--radius-lg);padding:calc(var(--spacing) * 3) calc(var(--spacing) * 4);background:var(--surface-1);font-family:var(--font-mono);font-size:var(--text-xs);font-weight:var(--font-weight-extrabold);letter-spacing:.12em;text-transform:uppercase}.mobile-outline .links{padding-block-start:calc(var(--spacing) * 3)}}
-`),
-  ];
+  static override styles = [openPageRailStyles];
 
   @property({ reflect: false })
   items: RailItem[] = [];

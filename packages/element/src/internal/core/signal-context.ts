@@ -4,7 +4,7 @@
  * walk or provider Signal crosses the interoperability boundary.
  */
 
-import type { Unsubscribe, WritableSignal } from '../protocol/signal.ts';
+import type { Unsubscribe, WritableSignal } from '@openelement/protocol/signal';
 import { signal } from '../signal/index.ts';
 
 export const CONTEXT_REQUEST_EVENT = 'context-request';

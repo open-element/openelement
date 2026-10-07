@@ -23,7 +23,7 @@ import {
   resolveCompiledPageTag,
   resolveLitPageTag,
 } from '../src/vite/internal/server-runtime/renderer-runtime.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import type { RouteEntry } from '@openelement/protocol/framework';
 
 const definePageRoutes: RouteEntry[] = [
   {

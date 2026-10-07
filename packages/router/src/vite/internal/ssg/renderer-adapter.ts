@@ -1,4 +1,4 @@
-import type { ImportDecl } from '../protocol/ssg.ts';
+import type { ImportDecl } from '@openelement/protocol/ssg';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
 type RendererMode = 'native' | 'lit';

@@ -46,3 +46,4 @@
     .codes-head { display: none; }
     .code-row { grid-template-columns: minmax(0, 1fr); gap: calc(var(--spacing) * 2); }
   }
+

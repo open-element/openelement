@@ -1,5 +1,5 @@
 /** Shared route-entry expressions and document option emission. */
-import type { ImportDecl, RendererDecl } from '../protocol/ssg.ts';
+import type { ImportDecl, RendererDecl } from '@openelement/protocol/ssg';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
 export function renderImport(imp: ImportDecl): string {
@@ -79,7 +79,7 @@ export function documentResolutionSetupLine(pageExpr: string, contextExpr: strin
 }
 
 /**
- * Emit the request-time (Hono handler) page context + resolved-Document
+ * Emit the request-time (server handler) page context + resolved-Document
  * setup: ONE context object per render feeds both the props projector and the
  * head resolver, so the Document never sees a divergent view of the render.
  * Shared by the page/action handlers and the styled-404 handler.
@@ -102,7 +102,7 @@ export function documentWrapOptionsLines(options: {
   langExpr: string;
   headExtrasExpr: string;
   allowHeadExtrasScripts: boolean;
-  /** Emit the per-request CSP nonce line (Hono handlers only). */
+  /** Emit the per-request CSP nonce line (request-time handlers only). */
   cspNonce?: boolean;
 }): string[] {
   const lines = [

@@ -14,9 +14,9 @@ import { eachMapping, originalPositionFor, TraceMap } from '@jridgewell/trace-ma
 import {
   CompiledElementError,
   compileElementProgram,
-} from '../src/internal/compiler/semantic-core/compile.ts';
-import type { StaticSidecarDescriptor } from '../src/internal/compiler/semantic-core/module-analysis.ts';
-import { compileElementModule } from '../src/internal/compiler/plugin.ts';
+} from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
+import type { StaticSidecarDescriptor } from '../../../packages/compiler/src/internal/compiler/semantic-core/module-analysis.ts';
+import { compileElementModule } from '../../../packages/compiler/src/internal/compiler/plugin.ts';
 
 const FILE = '/project/app/components/map-fixture.tsx';
 

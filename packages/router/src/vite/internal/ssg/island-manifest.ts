@@ -7,7 +7,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'pathe';
-import type { ComponentLayer } from '../protocol/framework.ts';
+import type { ComponentLayer } from '../../framework.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
 import { isValidTagName } from '@openelement/element';
 import { stableHash } from './ssg-helpers.ts';
@@ -45,14 +45,19 @@ export type IslandStrategyMap = Record<string, IslandDeliveryStrategy>;
 /** Layer map type: tagName -> layer */
 export type IslandLayerMap = Record<string, ComponentLayer>;
 
-function readTagName(html: string, start: number): { name: string; end: number } | undefined {
+/** Read one tag-open name; shared by every HTML token walk (#1561). */
+export function readTagName(
+  html: string,
+  start: number,
+): { name: string; end: number } | undefined {
   let end = start;
   while (end < html.length && /[A-Za-z0-9:._-]/.test(html[end])) end++;
   if (end === start) return undefined;
   return { name: html.slice(start, end).toLowerCase(), end };
 }
 
-function skipThroughClosingTag(html: string, from: number, tagName: string): number {
+/** Skip to just past the closing tag of `tagName`, starting inside its open tag. */
+export function skipThroughClosingTag(html: string, from: number, tagName: string): number {
   const lower = html.toLowerCase();
   const close = lower.indexOf(`</${tagName}`, from);
   if (close === -1) return html.length;
@@ -115,6 +120,31 @@ export function extractCustomElementTags(html: string): string[] {
 }
 
 /**
+ * Output-relative HTML path → site route: 'index.html' → '/',
+ * 'about/index.html' → '/about', 'about.html' → '/about'.
+ * The single route derivation for every consumer that keys output files by
+ * route (island manifests, per-page speculation rules).
+ */
+export function routeFromRelativePath(relativePath: string): string {
+  const rel = normalizeSeparators(relativePath).replace(/\.html$/, '');
+  return rel === 'index' ? '/' : `/${rel.replace(/\/index$/, '')}`;
+}
+
+/**
+ * Route → the deduped, sorted island chunk URLs that route's page loads.
+ * The projection every per-page consumer of the manifests reads; chunk
+ * facts are never re-derived by scanning output files.
+ */
+export function pageChunkMap(manifests: readonly PageIslandManifest[]): Map<string, string[]> {
+  return new Map(
+    manifests.map((manifest) => [
+      manifest.route,
+      [...new Set(manifest.islands.map((island) => island.chunkUrl))].sort(),
+    ]),
+  );
+}
+
+/**
  * Generate island manifests for all HTML files in the output directory.
  */
 export function generateIslandManifests(
@@ -141,13 +171,8 @@ export function generateIslandManifests(
         layer: layerMap[tag] || 'dsd-static',
       }));
 
-    // Route from the output-relative path: 'index.html' -> '/',
-    // 'about/index.html' -> '/about', 'about.html' -> '/about'.
-    const rel = normalizeSeparators(entry.relativePath).replace(/\.html$/, '');
-    const route = rel === 'index' ? '/' : `/${rel.replace(/\/index$/, '')}`;
-
     manifests.push({
-      route,
+      route: routeFromRelativePath(entry.relativePath),
       islands,
       builtAt: DETERMINISTIC_MANIFEST_TIMESTAMP,
     });

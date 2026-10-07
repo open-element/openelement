@@ -7,7 +7,7 @@
  * (#541), the fetch/native channel fork, the RFC 9457 problem+json error
  * channel (#863, #549), the PRG flow (#548), the default body limit (#568)
  * bound to the S1c policy constant, the ADR-0121 303 coercion, the 500 error
- * mapping (#558), and the internal Hono↔WinterCG bridge.
+ * mapping (#558).
  *
  * The generated WIRING stays pinned by entry-renderer.test.ts; the
  * end-to-end behavior stays pinned by the read-only request-time-parity
@@ -20,57 +20,35 @@ import {
   actionErrorResponse,
   actionRedirectResponse,
   createActionBodyLimit,
-  createHonoBridge,
   runActionProtocol,
 } from '../src/vite/internal/server-runtime/action-runtime.ts';
-import type { ActionHonoContext } from '../src/vite/internal/server-runtime/action-runtime.ts';
+import {
+  boundRequestScope,
+  createRequestScope,
+  createWinterCgApp,
+} from '../src/vite/internal/server-runtime/wintercg.ts';
+import type { OpenElementRequestScope } from '../src/vite/internal/server-runtime/wintercg.ts';
 
 const PROBLEM_JSON = 'application/problem+json';
 
 /**
- * A minimal Hono-dialect context: responses are real `Response` objects and
- * the `c.header()` writes are folded into them, mirroring how the generated
- * handler's channel merge would carry them out.
+ * The REAL per-request scope from the WinterCG composition layer (#1560):
+ * the protocol runs against the same request mechanics the generated
+ * handlers bind, so the scope's channel merge (c.header() folding into
+ * every constructed response) is exercised verbatim.
  */
 function actionContext(options: {
   url: string;
   headers?: Record<string, string>;
   body?: string | null;
   env?: Record<string, unknown>;
-}): ActionHonoContext {
+}): OpenElementRequestScope {
   const raw = new Request(options.url, {
     method: 'POST',
     headers: options.headers,
     body: options.body === undefined ? undefined : options.body,
   });
-  const extra = new Headers();
-  return {
-    req: {
-      url: options.url,
-      raw,
-      header: (name) => raw.headers.get(name) ?? undefined,
-    },
-    header: (name, value) => extra.set(name, value),
-    get: () => undefined,
-    json: (object, status = 200, headers) =>
-      // hono's setDefaultContentType: the application/json default yields to
-      // an explicitly passed Content-Type (same key, replaced) — mirror it so
-      // problem+json responses carry the exact media type.
-      new Response(JSON.stringify(object) ?? '', {
-        status,
-        headers: new Headers({
-          'Content-Type': 'application/json',
-          ...headers,
-          ...Object.fromEntries(extra),
-        }),
-      }),
-    text: (text, status = 200) => new Response(text, { status, headers: new Headers([...extra]) }),
-    redirect: (location, status = 302) => {
-      extra.set('Location', location);
-      return new Response(null, { status, headers: new Headers([...extra]) });
-    },
-    res: new Response(null),
-  };
+  return createRequestScope(raw, options.env ?? {});
 }
 
 function statusPage(title: string, message: string, status: number): Response {
@@ -87,7 +65,7 @@ function formPost(options: {
   secFetchSite?: string;
   env?: Record<string, unknown>;
   body?: string;
-}): { context: ActionHonoContext; state: { isFetch: boolean } } {
+}): { context: OpenElementRequestScope; state: { isFetch: boolean } } {
   const headers: Record<string, string> = {
     'content-type': options.contentType ?? 'application/x-www-form-urlencoded',
   };
@@ -333,16 +311,7 @@ test('same-origin posts pass; the http loopback allowance covers host variety (#
     },
     body: 'message=hello',
   });
-  const context: ActionHonoContext = {
-    req: { url: raw.url, raw, header: (name) => raw.headers.get(name) ?? undefined },
-    header: () => {},
-    get: () => undefined,
-    json: (object, status = 200) => new Response(JSON.stringify(object), { status }),
-    text: (text, status = 200) => new Response(text, { status }),
-    redirect: (location, status = 302) =>
-      new Response(null, { status, headers: { Location: location } }),
-    res: new Response(null),
-  };
+  const context = createRequestScope(raw);
   const execution = await runActionProtocol(
     context,
     { action: () => 'ok' },
@@ -506,36 +475,27 @@ test('createActionBodyLimit answers an oversized body per channel (#568)', async
   const limit = createActionBodyLimit(1024);
 
   // An oversized body: the fetch channel speaks problem+json with the
-  // negotiation headers; the native channel keeps plain text. The negotiation
-  // headers must ride the response the way the generated handler's channel
-  // merge would carry them out.
-  async function oversize(fetchHeader: boolean): Promise<Response> {
+  // negotiation headers; the native channel keeps plain text. The handler
+  // runs inside the WinterCG app's dispatch, so the scope channel carries
+  // the negotiation headers into the response exactly as the generated
+  // POST chain does.
+  function oversize(fetchHeader: boolean): Promise<Response> {
     const headers: Record<string, string> = {};
     if (fetchHeader) headers[ACTION_FETCH_HEADER] = 'true';
-    const raw = new Request('https://pages.example.test/form', {
-      method: 'POST',
-      headers,
-      body: new Uint8Array(2048),
-    });
-    const extra = new Headers();
-    const context = {
-      req: { raw, header: (name: string) => raw.headers.get(name) ?? undefined },
-      header: (name: string, value: string) => extra.set(name, value),
-      json: (object: unknown, status = 200, responseHeaders?: Record<string, string>) =>
-        new Response(JSON.stringify(object), {
-          status,
-          headers: new Headers({ ...Object.fromEntries(extra), ...responseHeaders }),
-        }),
-      text: (text: string, status = 200) =>
-        new Response(text, { status, headers: new Headers([...extra]) }),
-    };
-    const response = await (limit as (c: unknown, next: () => Promise<void>) => Promise<unknown>)(
-      context,
-      () => {
-        throw new Error('next() must not run past an oversized body');
-      },
+    const app = createWinterCgApp();
+    app.use('*', (request, next) =>
+      limit(request, {}, () => {
+        void next;
+        return new Response('reached');
+      }),
     );
-    return response as Response;
+    return app.fetch(
+      new Request('https://pages.example.test/form', {
+        method: 'POST',
+        headers,
+        body: new Uint8Array(2048),
+      }),
+    );
   }
 
   const problem = await oversize(true);
@@ -554,57 +514,44 @@ test('createActionBodyLimit answers an oversized body per channel (#568)', async
 
 test('createActionBodyLimit passes an under-limit body through to next()', async () => {
   const limit = createActionBodyLimit(1024);
-  const raw = new Request('https://pages.example.test/form', {
-    method: 'POST',
-    headers: { 'content-length': '10' },
-    body: 'message=ok',
-  });
+  const app = createWinterCgApp();
   let reachedNext = false;
-  await (limit as (c: unknown, next: () => unknown) => Promise<unknown>)({ req: { raw } }, () => {
-    reachedNext = true;
-  });
+  app.use('*', (request, next) =>
+    limit(request, {}, () => {
+      reachedNext = true;
+      void request;
+      void next;
+      return new Response('ok');
+    }),
+  );
+  await app.fetch(
+    new Request('https://pages.example.test/form', {
+      method: 'POST',
+      headers: { 'content-length': '10' },
+      body: 'message=ok',
+    }),
+  );
   expect(reachedNext).toEqual(true);
 });
 
-test('the Hono bridge binds contexts by request identity', async () => {
-  const bridge = createHonoBridge();
-  const request = new Request('https://pages.example.test/');
-  const context = actionContext({ url: request.url });
-  bridge.contexts.set(request, context);
-
-  const handled: unknown[] = [];
-  const handler = bridge.asFetchHandler((c, route) => {
-    handled.push(c, route);
-    return new Response('handled');
-  });
-  const response = await handler(request, { params: {} }, () => undefined);
-  expect(await (response as Response).text()).toEqual('handled');
-  expect(handled[0]).toEqual(context);
-  expect(handled[1]).toEqual({ params: {} });
-});
-
-test('the Hono bridge middleware keeps onion order and the response fallbacks', async () => {
-  const bridge = createHonoBridge();
-  const request = new Request('https://pages.example.test/');
-  const context = actionContext({ url: request.url });
-  bridge.contexts.set(request, context);
-
-  // A middleware that returns its own response wins over the downstream one.
-  const own = bridge.asFetchMiddleware((c, next) => {
-    expect(c === context).toBeTruthy();
-    void next();
-    return new Response('own');
-  });
-  expect(
-    await ((await own(request, {}, () => new Response('downstream'))) as Response).text(),
-  ).toEqual('own');
-
-  // A pass-through middleware falls back to the downstream response, then to
-  // the context's own response.
-  const pass = bridge.asFetchMiddleware((_c, next) => next());
-  expect(
-    await ((await pass(request, {}, () => new Response('downstream'))) as Response).text(),
-  ).toEqual('downstream');
-  const fallback = (await pass(request, {}, () => undefined)) as Response;
-  expect(fallback).toEqual(context.res);
+test('createActionBodyLimit swaps the bound request for the buffered twin on stream bodies', async () => {
+  const limit = createActionBodyLimit(1024);
+  const app = createWinterCgApp();
+  let buffered: Request | undefined;
+  app.use('*', (request) =>
+    limit(request, {}, async () => {
+      buffered = boundRequestScope(request)!.req.raw;
+      return new Response(await buffered!.text());
+    }),
+  );
+  const response = await app.fetch(
+    new Request('https://pages.example.test/form', {
+      method: 'POST',
+      headers: { 'transfer-encoding': 'chunked' },
+      body: 'message=streamed',
+      duplex: 'half',
+    } as RequestInit),
+  );
+  expect(await response.text()).toEqual('message=streamed');
+  expect(buffered).not.toBeNull();
 });

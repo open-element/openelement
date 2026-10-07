@@ -9,12 +9,8 @@
  * initial values during construction and subscribe only to future writes.
  */
 
-import { SIGNAL_BRAND } from '../../src/internal/protocol/signal.ts';
-import type {
-  ReadonlySignal,
-  Unsubscribe,
-  WritableSignal,
-} from '../../src/internal/protocol/signal.ts';
+import { SIGNAL_BRAND } from '@openelement/protocol/signal';
+import type { ReadonlySignal, Unsubscribe, WritableSignal } from '@openelement/protocol/signal';
 import type { BatchedSignalEngine } from '../../src/internal/signal/types.ts';
 
 interface ReactiveSource {

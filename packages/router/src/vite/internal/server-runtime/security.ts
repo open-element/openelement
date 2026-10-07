@@ -28,7 +28,7 @@ import {
   ENTRY_REGISTRATION_OWNERS,
   SSR_REGISTRY_ORIGINAL_DEFINE,
   SSR_REGISTRY_STUB_MARKER,
-} from '../protocol/registry-markers.ts';
+} from '@openelement/protocol/registry-markers';
 
 export { DANGEROUS_KEYS };
 

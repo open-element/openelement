@@ -24,12 +24,8 @@ import type {
   HydrationStrategy,
   OpenElementPackageManifest,
   RouteEntry,
-} from '../vite/internal/protocol/framework.ts';
-import type {
-  EntryDescriptor,
-  IslandDecl,
-  StaticComponentDecl,
-} from '../vite/internal/protocol/ssg.ts';
+} from '../vite/framework.ts';
+import type { EntryDescriptor, IslandDecl, StaticComponentDecl } from '@openelement/protocol/ssg';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
 import {
@@ -51,8 +47,8 @@ import {
   generateCustomElementsPolyfill,
   generateSsrPolyfillBanner,
 } from '../vite/internal/ssg/index.ts';
-import { clearStyleRequests, compiledElementPlugin } from '@openelement/element/compiler';
-import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
+import { clearStyleRequests, compiledElementPlugin } from '@openelement/compiler';
+import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { serverStyleAssetPlugin } from '../vite/internal/style-assets.ts';
 import { normalizeViteAliases } from '../vite/alias-utils.ts';
 import {
@@ -110,7 +106,7 @@ interface BuildSSGOptions {
   /** Phase 1 discoveries reused by the production BuildPlan path. */
   routes?: RouteEntry[];
   islandFiles?: string[];
-  islandMeta?: Record<string, Partial<import('../vite/internal/protocol/ssg.ts').IslandDecl>>;
+  islandMeta?: Record<string, Partial<import('@openelement/protocol/ssg').IslandDecl>>;
   staticComponents?: StaticComponentDecl[];
   packageManifests?: OpenElementPackageManifest[];
   /** CEM-derived compatibility classifications from Phase 1 auto-detection. */
@@ -141,7 +137,7 @@ interface BuildSSGOptions {
    * Enables browser prefetch/prerender of pages before the user navigates.
    * Can be a boolean (true = auto-generate from routes) or explicit rules.
    */
-  speculation?: boolean | import('../vite/internal/protocol/ssg.ts').SpeculationRulesOptions;
+  speculation?: boolean | import('@openelement/protocol/ssg').SpeculationRulesOptions;
   /**
    * Policy for dynamic-route render failures during SSG.
    * See SsgRenderOptions.dynamicRouteFailure. Defaults to 'fail'.
@@ -426,9 +422,9 @@ async function buildSSG(
         mdxPlugin({ routesDir }),
         ...(renderer === 'lit' ? [litSsrDataUrlStubPlugin()] : []),
         // Keep SSR lowering identical to the outer Vite and client builds;
-        // this inline build has its own plugin list. styleAssetProtocol: the
-        // island modules here emit the same `.oe-style.css` requests the
-        // client build emitted  — the SSR half of the protocol.
+        // this inline build has its own plugin list. The compiled modules
+        // here register the same `.css` style edges the client build
+        // intercepted — the SSR half of the protocol.
         compiledElementPlugin({
           // Linked workspace packages sit outside the project root; without the
           // workspace anchor their absolute ids would land in the source maps.
@@ -436,16 +432,12 @@ async function buildSSG(
           // Route/island sources carry the island delivery policy statement;
           // the compiler admits it only through the injected descriptor.
           staticSidecars: [ISLAND_ADMISSION],
-          styleAssetProtocol: true,
         }),
-        // serves the server half of the style asset protocol — the
-        // sheet adapter embeds the bytes of the SAME emitted asset the client
-        // build shipped (hash-checked against the Phase 2 record), so the DSD
-        // text and the client sheet cannot drift.
-        serverStyleAssetPlugin({
-          styleAssets: ctx.styleAssets ?? new Map(),
-          clientOutDir: join(root, outDir, 'client'),
-        }),
+        // serves the server half of the style edge protocol — the
+        // sheet adapter embeds the authored .css file's bytes, the same bytes
+        // the client build emitted content-hashed, so the DSD text and the
+        // client sheet cannot drift.
+        serverStyleAssetPlugin(),
         // Virtual SSG entry module
         {
           name: 'open:virtual-ssg-entry',
@@ -494,7 +486,10 @@ async function buildSSG(
     const module = (await import(ssrBundleImportUrl(ssrBundlePath))) as Record<string, unknown>;
 
     if (!module.default) {
-      throw new SsrRenderError('virtual:open-ssg-entry', new Error('Failed to load Hono app'));
+      throw new SsrRenderError(
+        'virtual:open-ssg-entry',
+        new Error('Failed to load server entry (no default export)'),
+      );
     }
 
     // #1471: the document renders the client scripts. Phase 2 ran

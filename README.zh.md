@@ -5,7 +5,7 @@
 OpenElement 是一个 Web Platform 优先、只围绕两个核心产品构建的仓库：**Element** 与 **Router**。
 Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用于服务端序列化、创建新 DOM 与复用现有 DOM。Router 负责路由选择、HTTP 语义、导航、loader/action，以及 Native 与 Lit Framework Mode 共享的应用协议。
 
-源码目前是 Element 与 Router 的全新公开基线 `1.0.0-alpha.10`。它不是从历史 0.x API 到 1.x 的兼容迁移。npm `latest` 是按包独立的：element、create、ui 继续指向 0.43 稳定线，而 Router 的 `latest` 是 0.41.0-alpha.6 预发布。在单独准入发布之前，没有任何单一版本同时覆盖全部四个包。
+源码目前是 Element 与 Router 的全新公开基线 `1.0.0-alpha.10`。它不是从历史 0.x API 到 1.x 的兼容迁移。npm `latest` 是按包独立的：element、create、ui 继续指向 0.43 稳定线，而 Router 的 `latest` 是 0.41.0-alpha.6 预发布。在单独准入发布之前，没有任何单一版本同时覆盖所有包。自 #1557 起，Element 单体拆为三个包：`@openelement/protocol`（跨系统契约，零依赖）、`@openelement/element`（纯运行时）与 `@openelement/compiler`（构建期 TSX-to-Part-Program 编译器 + Vite 插件）——两个新包是仓库基线，等待首次发布。
 
 ## 快速开始
 
@@ -61,9 +61,10 @@ export default definePage(HelloPage, {
 
 ## 仓库结构
 
-- `packages/element`：Element 核心产品。
+- `packages/element`：Element 核心产品（纯运行时）。
+- `packages/protocol`：跨系统契约包（#1557）：Part Program IR、错误方言、准入描述符；零依赖，仅装契约。
+- `packages/compiler`：Element 编译器（#1557）：TSX-to-Part-Program 语义核心与 Vite 插件边界；唯一携带 TypeScript 依赖的包。
 - `packages/router`：Router 核心产品：Route Mode 与 Framework Mode 实现。
-- `packages/element` 的 `/compiler` 与 `/vite` 子路径：Element 编译与 Vite 工具集成；
   `packages/router` 的 `/vite`、`/cli/*` 与 `/nitro-mount` 子路径：Router 的应用生命周期与服务器输出。
 - `packages/create`：面向这两个核心产品的正式创建入口。
 - `packages/ui`：实验性 UI 产品，由本仓库维护，不在 1.0 稳定承诺内。

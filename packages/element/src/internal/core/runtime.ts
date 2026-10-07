@@ -11,8 +11,8 @@ import type {
   RuntimeAdapter,
   RuntimeAdapterOptions,
   RuntimeContext,
-} from '../protocol/runtime.ts';
-import type { Middleware } from '../protocol/framework.ts';
+} from '@openelement/protocol/runtime';
+import type { Middleware } from '@openelement/protocol/framework';
 export type { OpenElementRequestHandler, RuntimeContext };
 
 /**

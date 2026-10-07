@@ -1,7 +1,11 @@
 import { expect, test } from '@playwright/test';
 
+// CDN font stylesheets (#1554) are render-blocking links that stall
+// `networkidle` when jsDelivr is slow on CI runners. Chromium has
+// --host-resolver-rules in playwright.config; Firefox/WebKit need this
+// per-spec route abort. Unreachable fonts fall back to system stack.
 test.beforeEach(async ({ page }) => {
-  await page.route('**cdn.jsdelivr.net**', (route) => route.abort());
+  await page.route(/cdn\.jsdelivr\.net/, (route) => route.abort());
 });
 
 const readingRoutes = [
@@ -159,10 +163,12 @@ test.describe('Unified page structure', () => {
     await expect(elementRow).toBeVisible();
     await expect(elementRow.locator('.ce-tag')).toHaveText('<open-button>');
     expect(await page.locator('.ref-row').count()).toBeGreaterThan(150);
-    expect(await page.locator('.ce-row').count()).toBe(10);
+    // #1557 retired the four zero-interaction ui components: the element
+    // reference table carries the frozen six-component roster.
+    expect(await page.locator('.ce-row').count()).toBe(6);
     // zh renders the same generated anchors with zh chrome.
     await page.goto('/zh/reference');
-    await expect(page.locator('#ce-open-badge')).toBeVisible();
+    await expect(page.locator('#ce-open-input')).toBeVisible();
     await expect(page.locator('.ref-row').first()).toBeVisible();
   });
 

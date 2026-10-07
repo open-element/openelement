@@ -1,7 +1,7 @@
 /** Canonical browser-delivery inputs derived from compiler-owned semantics. */
 
-import type { HydrationStrategy } from '../protocol/framework.ts';
-import type { IslandDecl, StaticComponentDecl } from '../protocol/ssg.ts';
+import type { HydrationStrategy } from '../../framework.ts';
+import type { IslandDecl, StaticComponentDecl } from '@openelement/protocol/ssg';
 
 /**
  * A route-reachable compiled component needs browser delivery when the

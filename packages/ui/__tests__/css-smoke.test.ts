@@ -115,17 +115,15 @@ test('the C1 alias layer stays deleted — no retired name anywhere in the packa
     '--gray-11',
   ];
   for (const file of [
-    '../src/component-recipes.ts',
-    '../src/open-badge.tsx',
-    '../src/open-button.tsx',
-    '../src/open-callout.tsx',
-    '../src/open-card.tsx',
-    '../src/open-code-block.tsx',
-    '../src/open-dialog.tsx',
-    '../src/open-dropdown.tsx',
-    '../src/open-input.tsx',
-    '../src/open-tabs.tsx',
-    '../src/open-theme-toggle.tsx',
+    '../src/control-recipe.css',
+    '../src/surface-recipe.css',
+    '../src/overlay-recipe.css',
+    '../src/open-button.css',
+    '../src/open-code-block.css',
+    '../src/open-dialog.css',
+    '../src/open-dropdown.css',
+    '../src/open-input.css',
+    '../src/open-theme-toggle.css',
   ]) {
     const source = await readFile(new URL(file, import.meta.url), 'utf8');
     for (const name of retired) {
@@ -158,11 +156,13 @@ test('retired token exports stay gone', async () => {
   expect('themeTokenSheet' in index).toBeFalsy();
 });
 
-test('component recipes are valid constructable sheets', async () => {
-  const recipes = await import('../src/component-recipes.ts');
-  for (const sheet of [recipes.controlRecipe, recipes.surfaceRecipe, recipes.overlayRecipe]) {
-    expect(typeof sheet.replaceSync).toEqual('function');
-    expect(sheet.cssRules.length > 0).toEqual(true);
+test('component recipe sheets are real .css files with rules (#1558)', async () => {
+  // The one authoring form: the recipes ship as .css files next to the
+  // components; the import edge (not a JS string) carries the bytes.
+  for (const name of ['control-recipe.css', 'surface-recipe.css', 'overlay-recipe.css']) {
+    const css = await readFile(new URL(`../src/${name}`, import.meta.url), 'utf8');
+    expect(css.trim().length > 0, `${name} carries rules`).toEqual(true);
+    expect(css.includes('`'), `${name} is plain CSS, not a template literal`).toEqual(false);
   }
 });
 
@@ -177,7 +177,6 @@ test('retained interactive components are exported', async () => {
   const index = await import('../src/index.ts');
   expect(index.OpenDialog).toEqual(expect.anything());
   expect(index.OpenDropdown).toEqual(expect.anything());
-  expect(index.OpenTabs).toEqual(expect.anything());
 });
 
 /* ─── forced-colors: every role re-seats on a system color ────────────────
@@ -263,15 +262,11 @@ test('component recipes consume only declared roles', async () => {
   ]);
   const files = [
     'component-recipes.ts',
-    'open-badge.tsx',
     'open-button.tsx',
-    'open-callout.tsx',
-    'open-card.tsx',
     'open-code-block.tsx',
     'open-dialog.tsx',
     'open-dropdown.tsx',
     'open-input.tsx',
-    'open-tabs.tsx',
     'open-theme-toggle.tsx',
   ];
   for (const file of files) {
@@ -392,32 +387,19 @@ test('focus ring clears the WCAG 1.4.11 3:1 floor in both themes', () => {
   }
 });
 
-test('status role inks clear the 4.5:1 AA floor on the background and their recipe wash', async () => {
-  // The 10% wash now lives where it is painted: open-badge washes the three
-  // positive/negative tones, open-callout washes destructive (its danger
-  // type). Parse the percentages from those recipes so the math can never
-  // drift from what ships.
-  const badge = stripComments(
-    await readFile(new URL('../src/open-badge.tsx', import.meta.url), 'utf8'),
-  );
-  const callout = stripComments(
-    await readFile(new URL('../src/open-callout.tsx', import.meta.url), 'utf8'),
-  );
-  const washOf = (role: string): { source: string; percent: number } => {
-    const re = new RegExp(
-      `color-mix\\(in srgb,\\s*var\\(${role}\\)\\s*([\\d.]+)%,\\s*transparent\\)`,
-    );
-    const hit = re.exec(role === '--color-destructive' ? callout : badge);
-    expect(hit, `${role} must have a recipe wash`).toBeTruthy();
-    return { source: role, percent: Number(hit![1]) };
+test('status role inks clear the 4.5:1 AA floor on the background and their recipe wash', () => {
+  // The 10% wash lives where it is painted: the retired open-badge/
+  // open-callout recipes moved to the create starter's CSS recipes (#1557),
+  // and this table pins the wash percentages they document so the theme's
+  // AA math cannot drift from what the recipes ship.
+  const WASHES: Record<string, number> = {
+    '--color-destructive': 10,
+    '--color-success': 10,
+    '--color-warning': 10,
+    '--color-info': 10,
   };
   for (const dark of [false, true]) {
-    for (const role of [
-      '--color-destructive',
-      '--color-success',
-      '--color-warning',
-      '--color-info',
-    ]) {
+    for (const [role, percent] of Object.entries(WASHES)) {
       const ink = resolveColor(role, dark);
       const bg = resolveColor('--color-background', dark);
       const onBase = contrast(ink, bg);
@@ -425,7 +407,6 @@ test('status role inks clear the 4.5:1 AA floor on the background and their reci
         onBase >= 4.5,
         `${dark ? 'dark' : 'light'} ${role} on base = ${onBase.toFixed(2)}:1`,
       ).toEqual(true);
-      const { percent } = washOf(role);
       const onWash = contrast(ink, compositeWash(ink, percent / 100, bg));
       expect(
         onWash >= 4.5,
@@ -441,7 +422,9 @@ test('open-dialog opens and exits through discrete transitions, not keyframes', 
   // so the dialog stays rendered and in the top layer until the exit
   // transition finishes. Textual assertions — the fake-DOM harness cannot
   // run transitions.
-  const source = await readFile(new URL('../src/open-dialog.tsx', import.meta.url), 'utf8');
+  // #1558: the sheet lives in the component's .css file now — the consumer
+  // reads the authored bytes.
+  const source = await readFile(new URL('../src/open-dialog.css', import.meta.url), 'utf8');
   const code = stripComments(source);
   expect(code.includes('allow-discrete'), 'the display/overlay legs must defer discretely');
   expect(code.match(/allow-discrete/gu)?.length).toBeGreaterThanOrEqual(4);

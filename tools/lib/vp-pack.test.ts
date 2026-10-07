@@ -215,6 +215,9 @@ test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on un
     writeFileSync(join(staged, 'src', 'internal', 'helper.ts'), 'export const y = 2;\n');
     mkdirSync(join(staged, 'src', 'unreachable'), { recursive: true });
     writeFileSync(join(staged, 'src', 'unreachable', 'orphan.ts'), 'export const z = 3;\n');
+    // An ambient declaration (#1558's ./css-modules pattern): payload by
+    // design — nothing imports it, so the dist graph carries no stem for it.
+    writeFileSync(join(staged, 'src', 'css-modules.d.ts'), 'declare module "*.css";\n');
     writeFileSync(join(staged, 'README.md'), 'readme\n');
     writeFileSync(join(staged, 'src', 'tokens.css'), ':root {}\n');
     writeFileSync(join(staged, 'vite.config.ts'), 'export default {};\n');
@@ -229,6 +232,7 @@ test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on un
         'src/index.ts',
         'src/internal/helper.ts',
         'src/tokens.css',
+        'src/css-modules.d.ts',
         'README.md',
       ]),
       publishInclude: ['src/**', 'README.md'],
@@ -246,6 +250,8 @@ test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on un
     expect(statSync(join(out, 'src', 'index.d.ts')).isFile()).toBeTruthy();
     expect(statSync(join(out, 'src', 'internal', 'helper.js')).isFile()).toBeTruthy();
     expect(statSync(join(out, 'src', 'tokens.css')).isFile()).toBeTruthy();
+    // The ambient declaration ships verbatim, without a dist stem.
+    expect(statSync(join(out, 'src', 'css-modules.d.ts')).isFile()).toBeTruthy();
     // The synthesized vite.config.ts never ships.
     let leaked = false;
     try {
