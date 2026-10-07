@@ -54,6 +54,7 @@ import { attachFixedParts, resolvePath, type TextPartSlot, updateTextPart } from
 // graph is a build-selection bug and fails closed.
 import { regionBuildersOrFail } from './regions-seam.ts';
 import type { EachEntry, EachRegion, ItemAttrSlot, ItemValueSlot, WhenRegion } from './regions.ts';
+import { attachItemEvents } from './regions.ts';
 import {
   type PreUpgradeEvent,
   type PreUpgradeEventCapture,
@@ -544,14 +545,19 @@ export function claimNodes(
           itemAttrs,
           stream,
         );
+        // Claimed item DOM gets the same per-item listeners a fresh build
+        // mounts (#1556 IR v2): the box keeps them live across keyed reuse.
+        const itemBox = { item: currentItem };
         const entry: EachEntry = {
           key,
           scope: itemScope,
           nodes: Array.from(parent.childNodes).slice(before, cursor),
           valueSlots: itemSlots,
           attrSlots: itemAttrs,
+          itemBox,
           item: currentItem,
         };
+        attachItemEvents(ctx, part, entry.nodes, itemScope, itemBox);
         region.entries.push(entry);
         region.byKey.set(key, entry);
       }

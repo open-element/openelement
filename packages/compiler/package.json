@@ -19,5 +19,5 @@
     ".": "./src/compiler.ts",
     "./vite": "./src/vite.ts"
   },
-  "files": ["src", "README.md"]
+  "files": ["src", "README.md", "LICENSE"]
 }

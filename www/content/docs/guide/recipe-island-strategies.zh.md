@@ -1,6 +1,6 @@
 ---
 title: '选 island 策略'
-lede: '五个策略，每个组件做一次决策：它的 JavaScript 何时可以加载，在此之前读者得到什么。'
+lede: '六个策略，每个组件做一次决策：它的 JavaScript 何时可以加载，在此之前读者得到什么。'
 navLabel: 'Island 策略选型'
 order: 122
 section: 'Recipes'
@@ -10,7 +10,7 @@ section: 'Recipes'
 
 渲染内容、布局或文档的组件保持 `dsd-static`：序列化为 DSD，永远没有客户端模块。只有需要运行时状态或框架互操作的组件才晋升为 island。下面的决策假设晋升已经物有所值。
 
-## 五个选项
+## 六个选项
 
 ```tsx
 import { defineIslandConfig } from '@openelement/router';
@@ -23,6 +23,7 @@ export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, d
 - `visible`——首屏之下的分量：评论、图表、嵌入。IntersectionObserver 到视口附近才放行拉取。
 - `media`——按能力开关的分量：在 island 的 `media` 字段声明媒体查询，查询命中时才拉取。
 - `only`——无法产出可靠 DSD 的纯浏览器组件（canvas、媒体、WebGL）。服务端只输出宿主标签与序列化 props；跳过 SSR。
+- `none`——纯 SSR：服务端照常序列化该组件，但构建永不发射它的 chunk。用于交互性已退役的 chrome——按组件编写，按纯标记交付。
 
 ## 实例决策
 
@@ -31,6 +32,7 @@ export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, d
 - **代码块复制按钮** → `idle`。有用，但读者在进页面的最初一刻用不上它。
 - **文章下的评论区** → `visible`。重、在页面深处、经常到不了。
 - **hero 上的实时光标跟随** → `only`。它无法有意义地 SSR，也绝不能拖慢文档。
+- **站点布局 chrome** → `none`。外壳在服务端渲染一次；浏览器端不会有任何变化，因此交付零客户端 JavaScript。
 
 ## 在此之前
 

@@ -295,6 +295,26 @@ export interface ProgramWhenPart {
   location: ProgramLocation;
 }
 
+/**
+ * An event binding scoped to each item of an `each` region. The runtime
+ * attaches this listener to every item root node created by the region,
+ * making per-item handlers (onClick={this.select(row.id)}) expressible
+ * without fixed-path event parts.
+ */
+export interface ItemEventBinding {
+  /** DOM event name ('click', 'input', …). */
+  event: string;
+  /** Handler method name on the compiled class. */
+  handler: string;
+  /** The action to dispatch, same union as fixed event parts. */
+  action: ProgramEventAction;
+  /**
+   * Optional child selector within the item template (e.g. '.probe-button').
+   * When omitted, the listener attaches to the item root.
+   */
+  selector?: string;
+}
+
 /** A list part: repeats its template node per item of a bound signal. */
 export interface ProgramEachPart {
   k: 'each';
@@ -308,6 +328,8 @@ export interface ProgramEachPart {
    */
   field?: string;
   item: ProgramTreeNode[];
+  /** Per-item event bindings (#1556 IR v2): listeners attached to each item. */
+  itemEvents?: ItemEventBinding[];
   location: ProgramLocation;
 }
 
@@ -1093,7 +1115,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
       case 'each':
         validateKeys(
           part,
-          ['k', 'index', 'signal', 'key', 'field', 'item', 'location'],
+          ['k', 'index', 'signal', 'key', 'field', 'item', 'itemEvents', 'location'],
           `parts[${position}]`,
         );
         if (
@@ -1116,6 +1138,33 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
           [],
         );
         validateItemValueFields(part.item, part.field, `parts[${position}].item`);
+        if (part.itemEvents !== undefined) {
+          if (!Array.isArray(part.itemEvents)) {
+            fail(`parts[${position}].itemEvents must be an array`);
+          }
+          part.itemEvents.forEach((binding, bindingIndex) => {
+            const where = `parts[${position}].itemEvents[${bindingIndex}]`;
+            validateKeys(
+              binding as unknown as Record<string, unknown>,
+              ['event', 'handler', 'action', 'selector'],
+              where,
+            );
+            if (
+              !isIdentifier(binding.handler) ||
+              typeof binding.event !== 'string' ||
+              binding.event.length === 0
+            ) {
+              fail(`${where} needs event and handler`);
+            }
+            if (!/^[a-z][a-z0-9:-]*$/.test(binding.event)) {
+              fail(`${where} event name is unsafe`);
+            }
+            if (binding.selector !== undefined && typeof binding.selector !== 'string') {
+              fail(`${where} selector must be a string`);
+            }
+            validateEventAction(binding.action, `${where}.action`);
+          });
+        }
         validateAnchorPath(
           raw.template as ProgramTreeNode[],
           part.location.path,

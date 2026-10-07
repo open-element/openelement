@@ -110,15 +110,14 @@ The docs site is a normal openElement app, islands included, so its client outpu
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `island-open-layout`           | 82,663    | 13,624  |
-| `element-runtime`              | 82,169    | 25,778  |
+| `element-runtime`              | 83,172    | 26,038  |
 | `island-open-button`           | 13,323    | 2,398   |
 | `island-open-dragon-live-gaze` | 10,988    | 4,063   |
-| `island-open-page-rail`        | 8,597     | 2,393   |
+| `island-open-page-rail`        | 9,461     | 2,863   |
 | `island-open-cinematic-scroll` | 7,013     | 2,809   |
 | `island-open-code-block`       | 3,323     | 1,229   |
 | `island-open-hero-polish`      | 5,359     | 2,254   |
-| `client.js`                    | 6,689     | 1,919   |
+| `client.js`                    | 6,293     | 1,919   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
@@ -131,9 +130,9 @@ What a page actually downloads follows from its island manifest plus the entry's
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 203,172 B            | 7               |
-| `/guide/getting-started` | 203,172 B            | 7               |
-| `/`                      | 210,922 B            | 8               |
+| `/guide/mdx`             | 150,163 B            | 8               |
+| `/guide/getting-started` | 150,163 B            | 8               |
+| `/`                      | 166,510 B            | 10              |
 
 Across all 70 page manifests the site declares 9 island tags in 332 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 60, `open-code-block` on 48, and the remaining tags on a handful of pages each. The #1557 B8 retirement removed the `open-badge` package island (its roadmap usage is a plain HTML+CSS recipe now), and the reference page documents the two new split packages, which moved the payload rows.
 

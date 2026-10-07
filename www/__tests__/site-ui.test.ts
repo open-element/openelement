@@ -31,10 +31,10 @@ for (const [tagName, path] of siteModules) {
   });
 }
 
-test('open-layout is an explicitly hydrated compiled app-shell island', async () => {
+test('open-layout is an SSR-only compiled app-shell island (hydrate: none)', async () => {
   const url = new URL('../app/islands/open-layout.tsx', import.meta.url);
   const source = await readFile(url, 'utf8');
-  expect(source).toContain("defineIslandConfig({ hydrate: 'load', ssr: true })");
+  expect(source).toContain("defineIslandConfig({ hydrate: 'none', ssr: true })");
   expect(source).toContain("@element('open-layout')");
   expect(source).toContain('export default class OpenLayout extends OpenElement');
   const result = compileElementProgram(source, url.pathname, {

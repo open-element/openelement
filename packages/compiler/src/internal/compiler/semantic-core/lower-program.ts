@@ -19,6 +19,7 @@ import {
 import {
   conditionLiteralAllowed,
   type ConditionOperator,
+  type ItemEventBinding,
   type ProgramCondition,
   type ProgramDependencyRecord,
   type ProgramEventAction,
@@ -1038,7 +1039,13 @@ export class Lowering {
     if (!key) this.fail(body, 'OEC9014', 'list Region items require key={<item>.<field>}');
 
     const itemFields: string[] = [];
-    const item = this.lowerItemElement(body, param, itemFields, [], true);
+    // Per-item event bindings (#1556 IR v2): `on<event>={this.<method>}` (or a
+    // single-action arrow) inside the item template lowers to ItemEventBinding
+    // entries on the each part — the runtime attaches them per item and
+    // dispatches with (event, item), the same action union as fixed event
+    // parts.
+    const itemEvents: ItemEventBinding[] = [];
+    const item = this.lowerItemElement(body, param, itemFields, [], true, itemEvents, '');
     const uniqueFields = [...new Set(itemFields)];
     if (uniqueFields.length === 0) {
       this.fail(
@@ -1056,6 +1063,7 @@ export class Lowering {
         // multi-field templates omit it — every ival/iattrs slot owns its own.
         ...(uniqueFields.length === 1 ? { field: uniqueFields[0] } : {}),
         item: [item],
+        ...(itemEvents.length > 0 ? { itemEvents } : {}),
       },
       path,
       near,
@@ -1069,6 +1077,8 @@ export class Lowering {
     itemFields: string[],
     path: number[],
     allowKey = false,
+    itemEvents?: ItemEventBinding[],
+    selector = '',
   ): ProgramTreeNode {
     const tagName = ts.isJsxElement(element) ? element.openingElement.tagName : element.tagName;
     const attributes = ts.isJsxElement(element)
@@ -1100,7 +1110,16 @@ export class Lowering {
         }
         continue;
       }
-      if (!isSafeAttributeName(name)) {
+      // Event-handler attributes (`on<event>={...}`) are not wire attributes —
+      // they lower to ItemEventBinding entries below, so they take the same
+      // exemption from the attribute-name safety check the fixed-element
+      // path grants dynamic events.
+      const isItemEvent =
+        /^on[A-Z]/.test(name) &&
+        prop.initializer !== undefined &&
+        ts.isJsxExpression(prop.initializer) &&
+        prop.initializer.expression !== undefined;
+      if (!isSafeAttributeName(name) && !isItemEvent) {
         this.fail(prop, 'OEC9011', `attribute name "${name}" is unsafe`);
       }
       const attributeKey = name.toLowerCase();
@@ -1118,6 +1137,31 @@ export class Lowering {
       }
       if (!ts.isJsxExpression(prop.initializer) || !prop.initializer.expression) {
         this.fail(prop, 'OEC9011', 'item template attributes must be static literals');
+      }
+      // Per-item event handlers (#1556 IR v2): `on<event>={this.<method>}` (or
+      // a single-action arrow) lowers to an ItemEventBinding on the each part
+      // instead of a fixed-path event Part — the runtime re-attaches it per
+      // item and dispatches with (event, item). Custom-element hosts inside
+      // item templates stay handler-free, matching the host rule above.
+      if (/^on[A-Z]/.test(name)) {
+        if (isCustomHost) {
+          this.fail(prop, 'OEC9017', `custom-element host <${tag}> may not carry event handlers`);
+        }
+        if (itemEvents === undefined) {
+          this.fail(
+            prop,
+            'OEC9012',
+            'event handlers are only supported on list Region item templates',
+          );
+        }
+        const action = this.eventAction(unwrapExpression(prop.initializer.expression), prop);
+        itemEvents.push({
+          event: name.slice(2).toLowerCase(),
+          handler: action.handler,
+          action: action.action,
+          ...(selector ? { selector } : {}),
+        });
+        continue;
       }
       // alpha.8: per-item attribute slots — `name={item.<field>}` resolves from
       // the current item at mount/claim (true emits a bare attribute, falsy
@@ -1161,6 +1205,7 @@ export class Lowering {
         `custom-element host <${tag}> may not have children in the compiler grammar (slots are unsupported)`,
       );
     }
+    let elementChildIndex = 0;
     for (const child of rawChildren) {
       const childPath = [...path, children.length];
       if (ts.isJsxText(child)) {
@@ -1183,7 +1228,23 @@ export class Lowering {
         this.fail(child, 'OEC9013', `item child must be {${param}.<field>}`);
       }
       if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child)) {
-        children.push(this.lowerItemElement(child, param, itemFields, childPath));
+        // Structural selector for nested item-event targets (#1556 IR v2):
+        // `:nth-child` counts element siblings only, and item templates are
+        // static, so the element position is a compile-time constant. The
+        // root binding carries no selector.
+        const childSelector = `${selector || ':scope'} > *:nth-child(${elementChildIndex + 1})`;
+        children.push(
+          this.lowerItemElement(
+            child,
+            param,
+            itemFields,
+            childPath,
+            false,
+            itemEvents,
+            childSelector,
+          ),
+        );
+        elementChildIndex += 1;
         continue;
       }
       this.fail(

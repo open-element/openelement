@@ -108,15 +108,14 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `island-open-layout`           | 82,663   | 13,624  |
-| `element-runtime`              | 82,169   | 25,778  |
+| `element-runtime`              | 83,172   | 26,038  |
 | `island-open-button`           | 13,323   | 2,398   |
 | `island-open-dragon-live-gaze` | 10,988   | 4,063   |
-| `island-open-page-rail`        | 8,597    | 2,393   |
+| `island-open-page-rail`        | 9,461    | 2,863   |
 | `island-open-cinematic-scroll` | 7,013    | 2,809   |
 | `island-open-code-block`       | 3,323    | 1,229   |
 | `island-open-hero-polish`      | 5,359    | 2,254   |
-| `client.js`                    | 6,689    | 1,919   |
+| `client.js`                    | 6,293    | 1,919   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
@@ -129,9 +128,9 @@ island 入口（`client.js`）承载 island import 工厂与错误串，字节�
 
 | 路由                     | 客户端载荷（原始） | 不同 chunk 数 |
 | ------------------------ | ------------------ | ------------- |
-| `/guide/mdx`             | 203,172 B          | 7             |
-| `/guide/getting-started` | 203,172 B          | 7             |
-| `/`                      | 210,922 B          | 8             |
+| `/guide/mdx`             | 150,163 B          | 8             |
+| `/guide/getting-started` | 150,163 B          | 8             |
+| `/`                      | 166,510 B          | 10             |
 
 70 份页面 manifest 合计声明了 9 个 island 标签、332 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 60 页，`open-code-block` 出现在 48 页，其余标签只在少数页面上。#1557 的 B8 退役移除了 `open-badge` 包 island（roadmap 上的用法已改为纯 HTML+CSS recipe），而参考页新增了两个拆分包的文档，使载荷行发生移动。
 

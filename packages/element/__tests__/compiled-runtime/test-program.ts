@@ -11,6 +11,7 @@
  */
 
 import {
+  type ItemEventBinding,
   type PartProgram,
   type ProgramCondition,
   type ProgramEventAction,
@@ -57,6 +58,8 @@ export interface TestPartSpec {
   key?: string;
   field?: string;
   item?: TestNodeSpec[];
+  /** Per-item event bindings (#1556 IR v2); valid only on `each` parts. */
+  itemEvents?: ItemEventBinding[];
 }
 
 export interface TestProgramSpec {

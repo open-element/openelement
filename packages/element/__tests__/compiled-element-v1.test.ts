@@ -490,6 +490,128 @@ describe('compiled-element v1 - unsupported syntax fails closed with located dia
     );
     expect(ctx.messages[0]).toContain('OEC9013');
   });
+
+  test('list Region item events lower to ItemEventBinding entries (#1556 IR v2)', async () => {
+    const { compileElementProgram } =
+      await import('../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts');
+    // Method form on the item root: one binding, no selector — the runtime
+    // attaches it to each item's root and dispatches with (event, item).
+    const source = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-proof-item-events')",
+      'export class ItemEvents extends OpenElement {',
+      "  @property({ reflect: false }) items = [{ id: 'a', label: 'alpha' }];",
+      '  pick(event: MouseEvent, item: { id: string }) { void event; void item; }',
+      '  render() {',
+      '    return <ul>{this.items.map((item) => <li key={item.id} onClick={this.pick}>{item.label}</li>)}</ul>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const program = compileElementProgram(source, '/project/app/islands/item-events.tsx').program;
+    const each = program.parts.find((part: { k: string }) => part.k === 'each') as
+      | { itemEvents?: unknown[] }
+      | undefined;
+    expect(each, 'each Region must exist').toBeTruthy();
+    expect(each.itemEvents).toEqual([
+      { event: 'click', handler: 'pick', action: { kind: 'method', name: 'pick' } },
+    ]);
+
+    // Nested element target: the binding carries the compile-time structural
+    // selector (`:nth-child` counts element siblings; ival text does not).
+    const nested = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-proof-item-events-nested')",
+      'export class NestedItemEvents extends OpenElement {',
+      "  @property({ reflect: false }) items = [{ id: 'a', label: 'alpha' }];",
+      '  press(event: PointerEvent, item: { id: string }) { void event; void item; }',
+      '  render() {',
+      '    return <ul>{this.items.map((item) => <li key={item.id}>{item.label}<button onPointerDown={this.press}>go</button></li>)}</ul>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const nestedProgram = compileElementProgram(
+      nested,
+      '/project/app/islands/item-events-nested.tsx',
+    ).program;
+    const nestedEach = nestedProgram.parts.find((part: { k: string }) => part.k === 'each') as
+      | { itemEvents?: Array<{ event: string; handler: string; selector?: string }> }
+      | undefined;
+    expect(nestedEach.itemEvents).toEqual([
+      {
+        event: 'pointerdown',
+        handler: 'press',
+        action: { kind: 'method', name: 'press' },
+        selector: ':scope > *:nth-child(1)',
+      },
+    ]);
+
+    // Single-action arrows reuse the fixed-event action grammar verbatim.
+    const arrow = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-proof-item-events-arrow')",
+      'export class ArrowItemEvents extends OpenElement {',
+      "  @property({ reflect: false }) items = [{ id: 'a', label: 'alpha' }];",
+      '  @property({ reflect: false }) picked = 0;',
+      '  render() {',
+      '    return <ul>{this.items.map((item) => <li key={item.id} onClick={() => this.picked++}>{item.label}</li>)}</ul>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const arrowProgram = compileElementProgram(
+      arrow,
+      '/project/app/islands/item-events-arrow.tsx',
+    ).program;
+    const arrowEach = arrowProgram.parts.find((part: { k: string }) => part.k === 'each') as
+      | { itemEvents?: Array<{ action: { kind: string; signal: string } }> }
+      | undefined;
+    expect(arrowEach.itemEvents).toEqual([
+      {
+        event: 'click',
+        handler: '__compiledEvent0',
+        action: { kind: 'increment', signal: 'picked' },
+      },
+    ]);
+
+    // Non-method this.<property> handlers fail closed with the event dialect.
+    const notAMethod = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-proof-item-events-bad')",
+      'export class BadItemEvents extends OpenElement {',
+      "  @property({ reflect: false }) items = [{ id: 'a', label: 'alpha' }];",
+      '  @property({ reflect: false }) pick = 0;',
+      '  render() {',
+      '    return <ul>{this.items.map((item) => <li key={item.id} onClick={this.pick}>{item.label}</li>)}</ul>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const ctx = failingContext();
+    assertThrowsIncludes(
+      () => transform.call(ctx, notAMethod, '/project/app/islands/item-events-bad.tsx'),
+      Error,
+      'event handlers must be',
+    );
+    expect(ctx.messages[0]).toContain('OEC9016');
+
+    // The mapper parameter is not a handler source: item.<field> stays a slot
+    // expression and fails the event dialect rather than silently binding.
+    const itemRef = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-proof-item-events-item-ref')",
+      'export class ItemRefEvents extends OpenElement {',
+      "  @property({ reflect: false }) items = [{ id: 'a', label: 'alpha', pick: 'noop' }];",
+      '  render() {',
+      '    return <ul>{this.items.map((item) => <li key={item.id} onClick={item.pick}>{item.label}</li>)}</ul>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const itemCtx = failingContext();
+    assertThrowsIncludes(
+      () => transform.call(itemCtx, itemRef, '/project/app/islands/item-events-item-ref.tsx'),
+      Error,
+      'event handlers must be',
+    );
+    expect(itemCtx.messages[0]).toContain('OEC9016');
+  });
 });
 
 test('compiled-element alpha.1 - canonical program records and decorator lowering', async () => {
