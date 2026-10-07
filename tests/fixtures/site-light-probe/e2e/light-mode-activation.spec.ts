@@ -53,21 +53,18 @@ test('fixture build: the probe chunk stays a dynamic import', () => {
   // The delayed-upgrade gate holds the probe chunk. If Rollup ever folds the
   // shared runtime into it, client.js would statically import it, holding
   // would stall client.js evaluation, and this spec's premise is gone.
+  // After #1544 the shared element runtime rides its own named chunk
+  // (element-runtime-*.js), so the carrier island no longer needs to be
+  // client.js's static import for the shared helpers to stay loadable.
   const islandsDir = new URL('../dist/client/islands/', import.meta.url);
   const files = readdirSync(islandsDir);
   const probe = files.find((name) => name.startsWith('island-open-light-probe-'));
-  const carrier = files.find((name) => name.startsWith('island-light-probe-runtime-carrier-'));
-  if (!probe || !carrier) throw new Error('fixture island chunks missing; build first');
+  if (!probe) throw new Error('fixture island chunks missing; build first');
   const client = readFileSync(new URL('client.js', islandsDir), 'utf8');
   assert.strictEqual(
     client.includes(`from"./${probe}"`),
     false,
     'client.js must not statically import the probe chunk',
-  );
-  assert.strictEqual(
-    client.includes(`from"./${carrier}"`),
-    true,
-    'client.js must statically import the shared-runtime carrier chunk',
   );
 });
 

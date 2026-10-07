@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.route('**cdn.jsdelivr.net**', (route) => route.abort());
+});
+
 const readingRoutes = [
   '/guide/getting-started',
   '/guide/routing-and-data',
