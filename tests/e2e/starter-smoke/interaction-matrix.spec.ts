@@ -1,66 +1,28 @@
 /**
- * Client-side interaction matrix for the starter surface (#936).
+ * Client-side interaction matrix for the starter surface (#936, #1530
+ * showcase form).
  *
- * The starter's own routes (contact form loop, counter island, in-app nav)
- * exercised the way a user would. Tests 1-2 are the #937/#938 repros: they
- * were RED against the published alpha.15 stack and have gated the Wave 1
- * fixes (green) since that train landed.
+ * The showcase starter retired the contact form and the only-ticker island:
+ * the pre-hydration click replay and third-party-pressure gates keep running
+ * against my-counter (idle), the client-only island gate runs against
+ * live-timer (hydrate 'only', shadow-open), and the scroll-restore gate runs
+ * on the landing page — the showcase's longest scrollable surface.
  */
 import { expect, test } from '@playwright/test';
 
-test.describe('form loop', () => {
-  // #937/#938 repros — RED on the published alpha.15 stack, green since the
-  // Wave 1 fixes landed; they now gate those fixes.
-  test('enhanced submit morphs #thanks without a full reload (#937)', async ({ page }) => {
-    await page.goto('/contact');
-    await page.evaluate(() => {
-      (window as unknown as { __morphDoc?: number }).__morphDoc = 1;
-    });
-    await page.getByPlaceholder('you@example.com').fill('ada@example.com');
-    await page.getByRole('button', { name: 'Subscribe' }).click();
-    await expect(page.locator('#thanks')).toBeVisible({ timeout: 10_000 });
-    const marker = await page.evaluate(
-      () => (window as unknown as { __morphDoc?: number }).__morphDoc,
-    );
-    expect(marker).toBe(1);
-  });
-
-  test('validation failure morphs #error without a full reload (#937)', async ({ page }) => {
-    await page.goto('/contact');
-    await page.evaluate(() => {
-      (window as unknown as { __morphDoc2?: number }).__morphDoc2 = 1;
-    });
-    await page.getByPlaceholder('you@example.com').fill('not-an-email');
-    await page.getByRole('button', { name: 'Subscribe' }).click();
-    await expect(page.locator('#error')).toBeVisible({ timeout: 10_000 });
-    const marker = await page.evaluate(
-      () => (window as unknown as { __morphDoc2?: number }).__morphDoc2,
-    );
-    expect(marker).toBe(1);
-  });
-
-  test('no-JS native POST is accepted, PRG lands on #thanks (#938)', async ({ browser }) => {
-    const context = await browser.newContext({ javaScriptEnabled: false });
-    const page = await context.newPage();
-    await page.goto('/contact');
-    await page.getByPlaceholder('you@example.com').fill('grace@example.com');
-    await page.getByRole('button', { name: 'Subscribe' }).click();
-    await expect(page).toHaveURL(/subscribed=grace%40example\.com/);
-    await expect(page.locator('#thanks')).toBeVisible();
-    await context.close();
-  });
-});
-
 test.describe('hydration timing', () => {
-  test('client-only island renders and binds signals without DSD (#939)', async ({ page }) => {
+  test("client-only island renders without SSR and ticks (live-timer, #939's class)", async ({
+    page,
+  }) => {
     await page.goto('/');
-    const ticker = page.locator('only-ticker');
-    await expect(ticker).toBeVisible();
-    const span = ticker.locator('#tick');
-    await expect(span).toHaveText('0');
-    await ticker.getByRole('button', { name: 'tick' }).click();
-    await expect(span).toHaveText('1');
+    const timer = page.locator('live-timer');
+    await expect(timer).toBeVisible();
+    // ssr:false means the island's DOM exists only after the client entry
+    // builds it; the tick then advances from the document time origin.
+    const first = await timer.locator('#elapsed').innerText();
+    await expect(timer.locator('#elapsed')).not.toHaveText(first, { timeout: 5_000 });
   });
+
   // #942 (fixed): the document-level capture listener
   // (ensurePreHydrationClickCapture) observes a retargeted event.target (the
   // island host) for clicks originating inside the island's open shadow root.
@@ -160,15 +122,15 @@ test.describe('navigation', () => {
   // relaxation of request-time GET 200s from no-store to private,no-cache
   // (covered by the Router request-time parity gate); this test gates
   // the user-visible outcome — back/forward restores the scroll position —
-  // on a genuinely scrollable starter page (narrow viewport).
+  // on a genuinely scrollable starter page (narrow viewport, the landing).
   test('scroll position is restored on back navigation (#943)', async ({ page }) => {
     await page.setViewportSize({ width: 800, height: 420 });
-    await page.goto('/blog/welcome');
+    await page.goto('/');
     await page.evaluate(() => globalThis.scrollTo(0, 9999));
     await page.waitForTimeout(300);
     const yBefore = await page.evaluate(() => globalThis.scrollY);
     expect(yBefore).toBeGreaterThan(100);
-    await page.goto('/');
+    await page.goto('/about');
     await page.goBack();
     await page.waitForTimeout(300);
     const y = await page.evaluate(() => globalThis.scrollY);
