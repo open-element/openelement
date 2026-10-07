@@ -192,8 +192,12 @@ async function main(): Promise<void> {
   await assertPackedCliPrintsCanonicalCommand(createCli);
   // The packed CLI is node-hosted and prompt-free: a bare node spawn is the
   // whole contract (no host permission flags on the Node consumer surface).
-  // Non-interactive stdin takes the scaffold default (the showcase form, #1530).
-  await runStep('node', [createCli, 'my-blog'], { cwd: workDir });
+  // --no-install: this harness rewires every framework dependency to this
+  // checkout's packed tarballs before installing, so the CLI's default
+  // registry install would fetch packages the rewire immediately discards —
+  // and its pnpm-lock.yaml would then mismatch the file:// specifiers under
+  // CI's implicit frozen install (#1530 install-on-scaffold default).
+  await runStep('node', [createCli, 'my-blog', '--no-install'], { cwd: workDir });
   if (!existsSync(appDir)) {
     throw new Error(`scaffolded starter missing at ${appDir}`);
   }
@@ -207,7 +211,9 @@ async function main(): Promise<void> {
   // THIS checkout, not a consumer project that merely sits inside it.
   await writeFile(join(appDir, 'pnpm-workspace.yaml'), 'packages: []\n');
 
-  await runStep('pnpm', ['install'], { cwd: appDir });
+  // --no-frozen-lockfile: CI runners imply frozen installs; the smoke's
+  // file:// rewiring is exactly the manifest change a frozen install refuses.
+  await runStep('pnpm', ['install', '--no-frozen-lockfile'], { cwd: appDir });
   await runStep('pnpm', ['run', 'build'], { cwd: appDir });
   console.log(`starter-smoke ready at ${appDir}`);
 }
