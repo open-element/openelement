@@ -16,4 +16,4 @@ rules:
       # workflow_run.head_sha (not PR head), and the environment gate
       # (openelement-release) binds human approval + OIDC provenance.
       # Scoped to this exact line; the audit stays live everywhere else.
-      - autoflow-release.yml:13
+      - autoflow-release.yml:7

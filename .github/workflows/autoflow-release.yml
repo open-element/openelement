@@ -41,11 +41,13 @@ jobs:
 
       - name: Read and verify version (all 4 packages must agree)
         id: version
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           VERSION=$(node -e "console.log(require('./packages/element/package.json').version)")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "CANDIDATE_SHA=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_ENV"
-          echo "Publishing @openelement/*@$VERSION from $CANDIDATE_SHA"
+          echo "sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "Publishing @openelement/*@$VERSION from $HEAD_SHA"
           # Four-package consistency (the ten-stamp lesson from #1508)
           node tools/repo/check-release-version.ts "$VERSION"
 
@@ -93,7 +95,7 @@ jobs:
           fi
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$CANDIDATE_SHA" \
+            --target "${{ steps.version.outputs.sha }}" \
             --prerelease \
             --title "$VERSION" \
             --generate-notes
