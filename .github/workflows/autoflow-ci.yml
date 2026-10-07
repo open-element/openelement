@@ -75,7 +75,7 @@ jobs:
   # ── Job 2: Unit Tests + Browser Gate (3 engines) ──────────────────────
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -122,12 +122,12 @@ jobs:
         run: vp run --fail-if-no-match @openelement/fixture-web-component-interop#test
 
   # ── Job 4: Pack & Consumer Verification ────────────────────────────────
-  # 25 minutes: the starter smoke alone runs pack, scaffold, install, SSG
-  # build and the bfcache probe — a shared runner needs the wider ceiling
-  # (measured: two consecutive runs timed out at exactly 15).
+  # 40 minutes (measured): the starter smoke alone runs pack, scaffold,
+  # install, SSG build and the bfcache probe; shared runners need 2-3x the
+  # local wall clock (runs timed out at exactly 15, then at 25).
   pack:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     permissions:
       contents: read
     steps:
