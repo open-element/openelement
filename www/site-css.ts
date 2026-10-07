@@ -148,11 +148,11 @@ body {
   --shiki-token-string-expression: #032f62;
   --shiki-token-keyword: #cb2431;
   --shiki-token-function: #6f42c1;
-  --shiki-token-parameter: #b35900;
+  --shiki-token-parameter: #9a4d00;
   --shiki-token-link: #032f62;
-  --shiki-token-inserted: #22863a;
+  --shiki-token-inserted: #1a7f37;
   --shiki-token-deleted: #b31d28;
-  --shiki-token-changed: #b35900;
+  --shiki-token-changed: #9a4d00;
 }
 :root[data-theme='dark'] {
   --shiki-background: var(--surface-code);

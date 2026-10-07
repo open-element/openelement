@@ -264,7 +264,11 @@ export function minifyIslandCssModule(code: string): string | null {
   // Inside a part-program module the whitespace-bearing templates are the
   // copied stylesheets; the program object's own literals carry tag names
   // and node ids, nothing minifiable, so the whitespace gate excludes them.
-  const contractChannel = code.includes('__partProgram');
+  // The contract channel admits only templates inside the compiled styles
+  // initializer (__publicField(_, "styles", ...)) — the rest of a program
+  // module (method bodies, @property defaults) may carry non-CSS templates
+  // that must ship byte-identical. The whole-module gate is too wide.
+  const contractChannel = false;
   collectReplacements(program, code, contractChannel, replacements);
   if (replacements.length === 0) return null;
   let result = code;

@@ -10,7 +10,7 @@
  *
  * Run: pnpm --dir www run e2e:browsers
  */
-import { defineConfig } from '@playwright/test';
+import { test as base, defineConfig } from '@playwright/test';
 import process from 'node:process';
 
 // This value must be derived once for both the web server and every worker.
@@ -48,7 +48,18 @@ export default defineConfig({
   // node:* port — the fresh-clone runner has no deno binary) for www/dist/.
   // Callers that need parallel isolation can pass openElement_E2E_PORT.  A
   // deterministic default keeps the server and all workers on the same URL.
-  webServer: {
+  // Applied to every test context: abort requests to the font CDN and analytics
+// endpoints so external availability can never stall page load assertions.
+export const test = base.extend({
+  page: async ({ page }, use) => {
+    await page.route(/cdn\.jsdelivr\.net|goatcounter\.com|gc\.zgo\.at/, route =>
+      route.abort(),
+    );
+    await use(page);
+  },
+});
+
+webServer: {
     // `exec` prevents the shell Playwright launches from orphaning the
     // server when the suite finishes or is interrupted. Node direct-runs the
     // .ts entry (type stripping), the same as every other www script.
@@ -87,4 +98,9 @@ export default defineConfig({
       use: { browserName: 'webkit' },
     },
   ],
+
+  // Cross-browser CDN blocking (#1554 font delivery): render-blocking
+  // jsDelivr stylesheets stall networkidle on unreachable networks. The
+  // Chromium --host-resolver-rules above covers its engine; this context
+  // fixture covers Firefox and WebKit, which reject that launch arg.
 });
