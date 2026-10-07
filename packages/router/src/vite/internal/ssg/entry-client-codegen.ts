@@ -239,9 +239,14 @@ export function generateClientEntry(
   islands: readonly ClientIslandDeliveryInput[],
   options: GenerateClientEntryOptions = {},
 ): string {
-  const admittedIslands = expandClientIslandEntries(islands);
+  const allIslands = expandClientIslandEntries(islands);
+  // hydrate:'none' islands SSR-only — they never enter the client bundle
+  const admittedIslands = allIslands.filter((i) => i.strategy !== 'none');
 
   if (admittedIslands.length === 0 && options.enhancedForms !== true) {
+    if (allIslands.length > 0) {
+      return '// openElement Client Entry - All islands are hydrate:none (SSR-only), zero client JS\n';
+    }
     return '// openElement Client Entry - No islands detected, zero client JS needed\n';
   }
 

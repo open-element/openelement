@@ -24,7 +24,7 @@ import openLayoutStyles from './open-layout.css';
 
 type CompiledComputed<T> = ReturnType<typeof computed<T>> & T;
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
+export const openElement = defineIslandConfig({ hydrate: 'none', ssr: true });
 
 @element('open-layout')
 export default class OpenLayout extends OpenElement {
