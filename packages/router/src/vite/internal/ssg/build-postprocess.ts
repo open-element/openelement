@@ -32,6 +32,8 @@ import {
 } from './delivery.ts';
 import { DEFAULT_OUT_DIR } from './../paths.ts';
 
+export { buildIslandPrefetchLinks } from './speculation-rules.ts';
+
 const log = createLogger('build-postprocess');
 
 /** Narrow view of OpenElementBuildContext used by the SSG post-processor. */

@@ -19,7 +19,7 @@ import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/
 import { OpenElementError } from '@openelement/element';
 import { ClientAssetErrorCode } from '../src/internal/error-codes.ts';
 import {
-  buildIslandPrefetchRulesJson,
+  buildIslandPrefetchLinks,
   buildSpeculationRulesJson,
   extractLinkHrefs,
   injectCspMeta,
@@ -842,28 +842,19 @@ test('injectSpeculationRules still injects when body text mentions speculationru
 
 // ─── Per-page island-chunk prefetch (#1561) ─────────────────────────────
 
-test('buildIslandPrefetchRulesJson returns empty for an empty chunk set', () => {
-  expect(buildIslandPrefetchRulesJson([])).toEqual('');
+test('buildIslandPrefetchLinks returns empty for an empty chunk set', () => {
+  expect(buildIslandPrefetchLinks([])).toEqual('');
 });
 
-test('buildIslandPrefetchRulesJson emits an explicit source-list prefetch rule', () => {
-  const parsed = JSON.parse(
-    buildIslandPrefetchRulesJson(['/client/islands/b-2.js', '/client/islands/a-1.js']),
-  ) as { prefetch: Array<{ source: string; urls: string[]; eagerness: string }> };
-  expect(parsed.prefetch).toEqual([
-    {
-      source: 'list',
-      urls: ['/client/islands/b-2.js', '/client/islands/a-1.js'],
-      eagerness: 'conservative',
-    },
-  ]);
-});
-
-test('buildIslandPrefetchRulesJson honors an explicit eagerness', () => {
-  const parsed = JSON.parse(buildIslandPrefetchRulesJson(['/c.js'], 'moderate')) as {
-    prefetch: Array<{ eagerness: string }>;
-  };
-  expect(parsed.prefetch[0]?.eagerness).toEqual('moderate');
+test('buildIslandPrefetchLinks emits resource prefetch link tags', () => {
+  const html = buildIslandPrefetchLinks(['/client/islands/a-1.js', '/client/islands/b-2.js']);
+  expect(html).toContain(
+    '<link rel="prefetch" as="fetch" href="/client/islands/a-1.js" data-open-island-prefetch>',
+  );
+  expect(html).toContain(
+    '<link rel="prefetch" as="fetch" href="/client/islands/b-2.js" data-open-island-prefetch>',
+  );
+  expect(html).not.toContain('speculationrules');
 });
 
 test('extractLinkHrefs reads anchors and skips comments, script and style blocks', () => {
@@ -972,38 +963,32 @@ test('injectIslandPrefetchRules writes each page the chunks of the pages it link
 
     const index = readFileSync(join(tmp, 'index.html'), 'utf8');
     // /about + /blog/x chunks; external and anchor links contribute nothing;
-    // the page's own chunk (home-Zz9) is never listed.
-    const indexRules = JSON.parse(
-      /<script type="speculationrules"[^>]*>\n\s*([\s\S]*?)\n\s*<\/script>/.exec(index)?.[1] ??
-        '{}',
-    ) as { prefetch: Array<{ urls: string[]; eagerness: string }> };
-    expect(indexRules.prefetch[0]?.urls).toEqual([
-      '/client/islands/badge-Cd34.js',
-      '/client/islands/counter-Ab12.js',
-    ]);
-    expect(indexRules.prefetch[0]?.eagerness).toEqual('conservative');
-    expect((index.match(/data-open-island-prefetch/g) || []).length).toEqual(1);
-    expect(index.indexOf('<script type="speculationrules"')).toBeGreaterThan(
-      index.indexOf('<head>'),
+    // the page's own chunk (home-Zz9) is never listed. Resource prefetch
+    // link tags, not speculationrules (Speculation Rules targets documents).
+    expect(index).toContain(
+      '<link rel="prefetch" as="fetch" href="/client/islands/badge-Cd34.js" data-open-island-prefetch>',
     );
+    expect(index).toContain(
+      '<link rel="prefetch" as="fetch" href="/client/islands/counter-Ab12.js" data-open-island-prefetch>',
+    );
+    expect(index).not.toContain('home-Zz9');
+    expect((index.match(/data-open-island-prefetch/g) || []).length).toEqual(2);
+    expect(index.indexOf('rel="prefetch"')).toBeGreaterThan(index.indexOf('<head>'));
 
-    // A page without outbound links ships no tag at all.
+    // A page without outbound links ships no prefetch links.
     const about = readFileSync(join(tmp, 'about', 'index.html'), 'utf8');
-    expect(about.includes('speculationrules')).toEqual(false);
+    expect(about.includes('rel="prefetch"')).toEqual(false);
 
     // Trailing-slash links resolve to the same route; the home page's own
     // chunk is excluded from /blog/x's list (it links to / only).
     const blogX = readFileSync(join(tmp, 'blog', 'x.html'), 'utf8');
-    const blogRules = JSON.parse(
-      /<script type="speculationrules"[^>]*>\n\s*([\s\S]*?)\n\s*<\/script>/.exec(blogX)?.[1] ??
-        '{}',
-    ) as { prefetch: Array<{ urls: string[] }> };
-    // /blog/x links to / and /about/ (trailing slash → same route); the
-    // page's own badge chunk is excluded from its own list.
-    expect(blogRules.prefetch[0]?.urls).toEqual([
-      '/client/islands/counter-Ab12.js',
-      '/client/islands/home-Zz9.js',
-    ]);
+    expect(blogX).toContain(
+      '<link rel="prefetch" as="fetch" href="/client/islands/counter-Ab12.js" data-open-island-prefetch>',
+    );
+    expect(blogX).toContain(
+      '<link rel="prefetch" as="fetch" href="/client/islands/home-Zz9.js" data-open-island-prefetch>',
+    );
+    expect(blogX).not.toContain('badge-Cd34');
   } finally {
     cleanup(tmp);
   }
@@ -1056,9 +1041,11 @@ test('injectIslandPrefetchRules is idempotent and leaves other lanes’ tags alo
 
     const index = readFileSync(join(tmp, 'index.html'), 'utf8');
     expect((index.match(/data-open-island-prefetch/g) || []).length).toEqual(1);
-    // The global lane's tag survives untouched; the about page gains its own.
+    // The global lane's tag survives untouched; the about page gains its own
+    // prefetch link (not a second speculationrules script — resource prefetch
+    // uses link tags, not the Speculation Rules document API).
     const about = readFileSync(join(tmp, 'about.html'), 'utf8');
-    expect((about.match(/<script type="speculationrules"/g) || []).length).toEqual(2);
+    expect((about.match(/<script type="speculationrules"/g) || []).length).toEqual(1);
     expect(about.includes('data-open-island-prefetch')).toEqual(true);
   } finally {
     cleanup(tmp);

@@ -19,7 +19,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { createLogger } from '@openelement/element';
 import { visitHtmlFiles, walkHtmlFileEntries } from '../html-files.ts';
 import { readTagName, routeFromRelativePath, skipThroughClosingTag } from './island-manifest.ts';
-import { buildIslandPrefetchRulesJson, type SpeculationEagerness } from './speculation-rules.ts';
+import { buildIslandPrefetchLinks } from './speculation-rules.ts';
 export { buildSpeculationRulesJson } from './speculation-rules.ts';
 
 const log = createLogger('postprocess');
@@ -239,7 +239,6 @@ function sameOriginLinkRoutes(html: string, pageRoute: string): string[] {
 export function injectIslandPrefetchRules(
   dir: string,
   pageChunks: ReadonlyMap<string, readonly string[]>,
-  eagerness: SpeculationEagerness = 'conservative',
 ): void {
   for (const entry of walkHtmlFileEntries(dir)) {
     const content = readFileSync(entry.absolutePath, 'utf8');
@@ -252,11 +251,8 @@ export function injectIslandPrefetchRules(
         if (!ownChunks.has(chunk)) chunks.add(chunk);
       }
     }
-    const rulesJson = buildIslandPrefetchRulesJson([...chunks].sort(), eagerness);
-    if (!rulesJson) continue;
-    const scriptTag =
-      `  <script type="speculationrules" data-open-island-prefetch>\n` +
-      `  ${rulesJson}\n  </script>`;
-    writeFileSync(entry.absolutePath, insertAfterHead(content, scriptTag), 'utf8');
+    const links = buildIslandPrefetchLinks([...chunks].sort());
+    if (!links) continue;
+    writeFileSync(entry.absolutePath, insertAfterHead(content, links), 'utf8');
   }
 }

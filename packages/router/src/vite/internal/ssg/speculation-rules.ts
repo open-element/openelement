@@ -68,23 +68,20 @@ export function buildSpeculationRulesJson(
 export type SpeculationEagerness = 'immediate' | 'moderate' | 'conservative';
 
 /**
- * Speculation Rules JSON that prefetches the island chunks of the pages one
- * page links to (#1561). `source: "list"` keeps the URL set explicit — it is
- * derived at build time from the per-page island manifests, so there is no
- * pattern to drift from the real link graph. Unsupported browsers ignore the
- * script tag entirely (zero JS, zero cost); supported ones fetch each URL on
- * the eagerness schedule (default `conservative`), and the immutable hashed
- * chunk responses then serve the target page's module fetches from cache.
+ * Resource prefetch hints (`<link rel="prefetch">`) for the island chunks of
+ * the pages one page links to (#1561). Speculation Rules `prefetch` targets
+ * document URLs only — it does not prefetch arbitrary sub-resources — so
+ * island JS/CSS chunks use the platform's resource prefetch channel instead.
+ * Each URL emits `<link rel="prefetch" as="fetch" href="...">` which the
+ * browser fetches into its HTTP cache at low priority; the module loader's
+ * later fetch for the same URL is then a cache hit. Unsupported browsers
+ * treat prefetch links as a no-op hint (they are never render-blocking).
  */
-export function buildIslandPrefetchRulesJson(
-  chunkUrls: readonly string[],
-  eagerness: SpeculationEagerness = 'conservative',
-): string {
+export function buildIslandPrefetchLinks(chunkUrls: readonly string[]): string {
   if (!chunkUrls.length) return '';
-  return quoteGeneratedJavaScriptValue(
-    { prefetch: [{ source: 'list', urls: [...chunkUrls], eagerness }] },
-    2,
-  );
+  return chunkUrls
+    .map((url) => `<link rel="prefetch" as="fetch" href="${url}" data-open-island-prefetch>`)
+    .join('\n');
 }
 
 function addExclusions(rules: Record<string, unknown[]>, patterns: string[]): void {

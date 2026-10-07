@@ -57,7 +57,7 @@ export {
   injectSpeculationRules,
   injectViewTransitionMeta,
 } from './postprocess.ts';
-export { buildIslandPrefetchRulesJson, type SpeculationEagerness } from './speculation-rules.ts';
+export { buildIslandPrefetchLinks, type SpeculationEagerness } from './speculation-rules.ts';
 
 export {
   cleanSsrArtifacts,
