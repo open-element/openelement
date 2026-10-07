@@ -140,7 +140,10 @@ jobs:
         with:
           node-version: '24'
       - name: Install browsers for packed consumers
-        run: ./node_modules/.bin/playwright install chromium firefox webkit
+        # --with-deps: WebKit needs host libraries (libgtk-4, gstreamer, …)
+        # the plain browser download does not bring — the packed starter smoke
+        # drives all three engines (the old workflow's install-deps step).
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Pack dry-run
         run: vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
       - name: Pack surface check
