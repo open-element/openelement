@@ -1,9 +1,8 @@
 name: Release
 
 # Redesigned 2026-10-07 (#1566): auto-triggered by main-push CI success.
-# No manual dispatch, no 45-step gate (PR CI already covered it).
-# Reads version from package.json (stamped by the version-bump task).
-# Total: ~5 minutes from merge to npm publish.
+# Reads version from package.json, checks all 4 packages for idempotency,
+# publishes via OIDC, creates GitHub Release. ~5 minutes.
 
 on:
   workflow_run:
@@ -17,11 +16,7 @@ concurrency:
 
 jobs:
   release:
-    # Only publish when main CI succeeded AND we're on a version that hasn't
-    # been published yet (idempotent: re-running after a partial publish is safe).
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      !startsWith(github.event.workflow_run.head_commit.message, 'release:')
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: openelement-release
@@ -29,7 +24,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       published: ${{ steps.check.outputs.already_published }}
     permissions:
-      contents: read
+      contents: write
       actions: read
       id-token: write
     steps:
@@ -44,50 +39,46 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Read version from package.json
+      - name: Read and verify version (all 4 packages must agree)
         id: version
         run: |
           VERSION=$(node -e "console.log(require('./packages/element/package.json').version)")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Publishing @openelement/*@$VERSION"
+          echo "CANDIDATE_SHA=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_ENV"
+          echo "Publishing @openelement/*@$VERSION from $CANDIDATE_SHA"
+          # Four-package consistency (the ten-stamp lesson from #1508)
+          node tools/repo/check-release-version.ts "$VERSION"
 
-      - name: Check if already published (idempotent)
+      - name: Check if all 4 packages already published (idempotent)
         id: check
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # npm propagation-aware check with generous retry
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-            RESULT=$(npm view "@openelement/element@$VERSION" version 2>/dev/null || echo "not-found")
-            if [ "$RESULT" = "$VERSION" ]; then
-              echo "already_published=true" >> "$GITHUB_OUTPUT"
-              echo "Version $VERSION already on npm — skipping publish."
-              exit 0
+          # Check ALL packages — partial publish state must NOT skip
+          ALL_PUBLISHED=true
+          for PKG in element router create ui; do
+            RESULT=$(npm view "@openelement/$PKG@$VERSION" version 2>/dev/null || echo "not-found")
+            if [ "$RESULT" != "$VERSION" ]; then
+              ALL_PUBLISHED=false
+              echo "$PKG not yet at $VERSION"
             fi
-            sleep $((i * 10))
           done
-          echo "already_published=false" >> "$GITHUB_OUTPUT"
-          echo "Version $VERSION not yet on npm — proceeding to publish."
+          if [ "$ALL_PUBLISHED" = "true" ]; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "All 4 packages already at $VERSION — skipping."
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Verify CI evidence for this SHA
+      - name: Pack and verify
         if: steps.check.outputs.already_published != 'true'
-        env:
-          CANDIDATE_SHA: ${{ github.event.workflow_run.head_sha }}
-          GH_TOKEN: ${{ github.token }}
         run: |
-          # Simple check: the AutoFlow CI run that triggered us was for this
-          # SHA and succeeded. No evidence artifact download/hash recomputation.
-          test -n "$CANDIDATE_SHA"
-          echo "CI evidence: ${{ github.event.workflow_run.html_url }}"
+          vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
+          vp run --fail-if-no-match @openelement/tools-release#pack-surface:check
 
-      - name: Pack and publish
+      - name: Publish to npm (OIDC trusted publishing)
         if: steps.check.outputs.already_published != 'true'
-        env:
-          CANDIDATE_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          vp run --fail-if-no-match @openelement/tools-release pack:dry-run
-          vp run --fail-if-no-match @openelement/tools-release pack-surface:check
-          vp run --fail-if-no-match @openelement/tools-release publish:npm
+        run: vp run --fail-if-no-match @openelement/tools-release#publish:npm
 
       - name: Create GitHub Release
         if: steps.check.outputs.already_published != 'true'
@@ -110,9 +101,9 @@ jobs:
   # Post-publish consumer verification (3 OS, from the published registry)
   post-publish-consumers:
     needs: release
-    if: needs.release.result == 'success'
+    if: needs.release.result == 'success' && needs.release.outputs.published != 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/published-consumers.yml
     with:
-      version: ${{ needs.release.outputs.version || 'skip' }}
+      version: ${{ needs.release.outputs.version }}

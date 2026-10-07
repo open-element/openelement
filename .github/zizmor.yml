@@ -1,6 +1,6 @@
 # zizmor configuration (#1156 B2.6). Findings are fixed, not suppressed; the
-# only disabled audit is a repository-local path style preference, plus one
-# line-scoped audited exception below.
+# only disabled audit is a repository-local path style preference, plus
+# line-scoped audited exceptions below.
 rules:
   self-repository:
     # The repository standardizes on the `./.github/...` local-action form;
@@ -8,11 +8,12 @@ rules:
     disable: true
   dangerous-triggers:
     ignore:
-      # Audited 2026-09-21 (#1420, #1409): this line is requeue-once.yml's
-      # `on: workflow_run` trigger. The escalation vector the audit guards
-      # is structurally absent — no PR-head checkout, no secrets, the sole
-      # write scope is actions:write for the single rerun call, and
-      # workflow_run evaluates the default-branch copy of the file, so a
-      # pull request cannot rewrite the requeue logic. Scoped to this exact
-      # line; the audit stays live for every other workflow and line.
-      - requeue-once.yml:24
+      # Audited 2026-10-07 (#1566 CI redesign): autoflow-release.yml's
+      # `on: workflow_run` trigger — the auto-release mechanism. The
+      # escalation vector the audit guards is structurally absent:
+      # workflow_run evaluates the default-branch copy of this file (a
+      # PR cannot rewrite the release logic), the checkout pins
+      # workflow_run.head_sha (not PR head), and the environment gate
+      # (openelement-release) binds human approval + OIDC provenance.
+      # Scoped to this exact line; the audit stays live everywhere else.
+      - autoflow-release.yml:13

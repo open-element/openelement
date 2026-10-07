@@ -1,15 +1,8 @@
 name: AutoFlow CI
 
-# Redesigned 2026-10-07 (#1566): 4 parallel jobs replace the 12-job evidence
-# aggregation system. PR feedback target: 8-12 minutes. Full 3-engine e2e and
-# cold-install verification run on main push, not on every PR.
-#
-# What was removed and why (docs in issue #1566):
-# - fresh-clone (28 min, 80% redundant) → split into e2e job + main-push jobs
-# - tree-SHA reuse resolver (~200 YAML + ~500 tool lines) → CI is fast enough
-# - evidence aggregator with hash recomputation → GitHub checks are the evidence
-# - requeue-once → flaky tests get fixed, not auto-retried
-# - 45-step release gate → distributed to PR (here) and main push
+# Redesigned 2026-10-07 (#1566). PR layer: 6 parallel jobs, target 10 min.
+# Main push layer: +3 jobs (full e2e, cold install, consumer matrix).
+# Full audit trail: PR #1567 review + issue #1566.
 
 on:
   push:
@@ -26,13 +19,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Job 1: Lint & Security ─────────────────────────────────────────────
+  # ── Job 1: Lint, Security & Governance ────────────────────────────────
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -45,9 +37,9 @@ jobs:
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tar.gz" | sha256sum -c -
           tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
           /tmp/actionlint -color
-      - name: Security audit (zizmor)
+      - name: Security audit (zizmor, pinned)
         run: |
-          pip install zizmor
+          pip install zizmor==1.30.0
           zizmor --offline .github
       - name: Secret scan (gitleaks)
         run: |
@@ -59,8 +51,26 @@ jobs:
       - uses: ./.github/actions/setup-node-workspace
       - name: Fast checks (fmt, lint, typecheck, markdown)
         run: vp run check
+      - name: Generate all artifacts
+        run: vp run generate:all
+      - name: Interface snapshot check
+        run: vp run --fail-if-no-match @openelement/tools-repo#interface:snapshot
+      - name: Governance checks (boundaries, provenance, state machine)
+        run: |
+          vp run --fail-if-no-match @openelement/tools-repo#esm:boundary-check
+          vp run --fail-if-no-match @openelement/tools-repo#signals:check-protocol-boundary
+          vp run --fail-if-no-match @openelement/tools-repo#validation:boundary-check
+          vp run --fail-if-no-match @openelement/tools-repo#assets:check-provenance
+          vp run --fail-if-no-match @openelement/tools-repo#release:state-machine:check
+          vp run --fail-if-no-match @openelement/tools-repo#workspace:links:check
+          vp run --fail-if-no-match @openelement/tools-repo#deps:vite-check
+      - name: Dependency review (PR only)
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
+        with:
+          fail-on-severity: high
 
-  # ── Job 2: Unit Tests + Browser Gate ───────────────────────────────────
+  # ── Job 2: Unit Tests + Browser Gate (3 engines) ──────────────────────
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -75,18 +85,16 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
-      - name: Install Playwright browsers
-        run: ./node_modules/.bin/playwright install --with-deps chromium
-      - name: Unit tests (element, router, create, ui)
-        run: |
-          vp run --fail-if-no-match @openelement/element#test
-          vp run --fail-if-no-match @openelement/router#test
-      - name: Browser gate (chromium)
+      - name: Install all browser engines
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - name: Element tests
+        run: vp run --fail-if-no-match @openelement/element#test
+      - name: Router tests (includes 3-engine browser tests)
+        run: vp run --fail-if-no-match @openelement/router#test
+      - name: Element browser gate (full matrix)
         run: vp run --fail-if-no-match @openelement/element#browser:gate
-      - name: Interface snapshot check
-        run: vp run generate:all
 
-  # ── Job 3: Site E2E (chromium, sharded) ────────────────────────────────
+  # ── Job 3: Site E2E (chromium-only in PR; full on main) ───────────────
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -98,14 +106,18 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - name: Install Playwright browsers
+      - name: Install chromium
         run: ./node_modules/.bin/playwright install --with-deps chromium
       - name: Build site
         run: vp run site:build
-      - name: Site E2E (chromium)
-        run: vp run --fail-if-no-match @openelement/www#e2e:chromium
-      - name: Light-probe E2E (chromium)
+      - name: Site E2E (chromium only — full 3-engine on main push)
+        run: node tools/repo/site-e2e-run.ts --retries 1 --engines chromium
+      - name: Light-probe E2E
         run: vp run --fail-if-no-match @openelement/fixture-site-light-probe#e2e
+      - name: Web component interop
+        run: vp run --fail-if-no-match @openelement/fixture-web-component-interop#test
+      - name: Starter smoke
+        run: vp run --fail-if-no-match @openelement/e2e-starter-smoke#gate
 
   # ── Job 4: Pack & Consumer Verification ────────────────────────────────
   pack:
@@ -122,16 +134,16 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
+      - name: Install browsers for packed consumers
+        run: ./node_modules/.bin/playwright install chromium firefox webkit
       - name: Pack dry-run
-        run: vp run --fail-if-no-match @openelement/tools-release pack:dry-run
-      - name: Pack-surface check
-        run: vp run --fail-if-no-match @openelement/tools-release pack-surface:check
-      - name: Packed consumer (ubuntu)
-        run: vp run --fail-if-no-match @openelement/tools-release consumer:packaged
+        run: vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
+      - name: Pack surface check
+        run: vp run --fail-if-no-match @openelement/tools-release#pack-surface:check
+      - name: Publish dry-run (no-op against real registry)
+        run: vp run --fail-if-no-match @openelement/tools-release#publish:npm:dry-run
 
-  # ── Main push only: Full E2E + Cold Install ────────────────────────────
-  # These run only on push to main, not on PRs. PR CI is fast (8-12 min);
-  # these are the post-merge safety net (~25 min, non-blocking for merges).
+  # ── Main push only: Full E2E + BFCache + Node Smoke + Cold Install ────
   e2e-full:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -155,16 +167,91 @@ jobs:
           vp run --fail-if-no-match @openelement/fixture-router-native-framework#gate
           vp run --fail-if-no-match @openelement/fixture-router-lit-framework#gate
           vp run --fail-if-no-match @openelement/fixture-router-ui-dogfood#gate
-          vp run --fail-if-no-match @openelement/fixture-site-light-probe#gate
+          vp run --fail-if-no-match @openelement/fixture-router-static-only#build
       - name: Nitro proofs
         run: |
           vp run --fail-if-no-match @openelement/fixture-router-nitro#proof:node
           vp run --fail-if-no-match @openelement/fixture-router-nitro#proof:workers
 
+  bfcache:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-workspace
+      - name: Install Chrome channel and xvfb
+        run: |
+          ./node_modules/.bin/playwright install chrome
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      - name: Build the packed starter
+        run: vp run --fail-if-no-match @openelement/e2e-starter-smoke#setup
+      - name: BFCache restore (Chrome channel, headed)
+        run: xvfb-run -a vp run --fail-if-no-match @openelement/e2e-starter-smoke#test:bfcache
+
+  node-serve-smoke:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['24', '26']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-workspace
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Pack the release tarballs
+        run: vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
+      - name: Packed serve proof under Node ${{ matrix.node }}
+        run: node tools/release/consumer-packaged-node-serve.ts node
+
+  packed-consumer-matrix:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-workspace
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Install browsers
+        run: ./node_modules/.bin/playwright install chromium firefox webkit
+      - name: Install system deps (Linux)
+        if: runner.os == 'Linux'
+        run: sudo ./node_modules/.bin/playwright install-deps chromium firefox webkit
+      - name: Pack the release tarballs
+        run: vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
+      - name: Fresh packed-starter consumer proof
+        run: vp run --fail-if-no-match @openelement/tools-release#consumer:packaged
+
   fresh-install:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -176,14 +263,13 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
-      - name: Fresh install (empty store, no cache)
+      - name: Fresh install (empty store)
         run: |
           mkdir -p /tmp/fresh-store /tmp/fresh-cache
           pnpm install --frozen-lockfile \
             --store-dir /tmp/fresh-store \
             --cache-dir /tmp/fresh-cache
-      - name: Cold build check
+      - name: Cold typecheck
         run: |
-          export PATH="/tmp/fresh-store/node_modules/.bin:$PATH"
           npx tsc --noEmit -p packages/element/tsconfig.json
           npx tsc --noEmit -p packages/router/tsconfig.json
