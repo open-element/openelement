@@ -11,14 +11,16 @@
  * This module minifies those sheets at the client-build transform stage. The
  * one admission channel is the compiled-element contract, in the two shapes
  * the initializer takes: a `static styles` PropertyDefinition (the authored
- * shape) and the compiler-emitted part-program module carrying the
+ * shape) and, inside a compiler-emitted part-program module carrying the
  * `__partProgram` ABI marker (the shape real builds ship — the @element
- * decorator forces class-field lowering, and the compiler copies the
- * initializer verbatim into that module, whose members are StyleSheetLike
- * values, so the CSS reading is provable, not guessed). Everything else —
- * interpolated templates, tagged templates the tag cooks, templates whose
- * raw bytes carry a JS escape, class-external constants and business strings
- * that merely resemble CSS — is left byte-identical.
+ * decorator forces class-field lowering), the lowered `static styles` field
+ * alone: the `__publicField(_, "styles", ...)` call the lowering emits, whose
+ * value subtree is the only admitted range (#1563). A part-program module
+ * also carries method bodies whose template literals are runtime payloads,
+ * not CSS — admitting the module wholesale rewrote them silently. Everything
+ * else — interpolated templates, tagged templates the tag cooks, templates
+ * whose raw bytes carry a JS escape, class-external constants and business
+ * strings that merely resemble CSS — is left byte-identical.
  *
  * The minifier itself is whitespace- and comment-only, quote- and
  * escape-aware, and drops a space only against a delimiter that cannot
@@ -165,10 +167,27 @@ function hasMinifiableWhitespace(text: string): boolean {
   return /\n|\r|\t| {2}|\/\*/.test(text);
 }
 
+/**
+ * The lowered shape of the authored `static styles` field: the class-field
+ * lowering turns the PropertyDefinition into a module-level helper call that
+ * carries the field name as a string-literal second argument and the copied
+ * initializer as its third.
+ */
+function isPublicFieldStylesCall(node: AstNode): boolean {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee as AstNode | undefined;
+  if (!callee || callee.type !== 'Identifier' || callee.name !== '__publicField') return false;
+  const args = node.arguments;
+  if (!Array.isArray(args)) return false;
+  const key = args[1] as AstNode | undefined;
+  return key?.type === 'Literal' && key.value === 'styles';
+}
+
 function collectReplacements(
   node: AstNode,
   code: string,
   inStyles: boolean,
+  partProgram: boolean,
   out: Replacement[],
 ): void {
   if (node.type === 'TaggedTemplateExpression') {
@@ -214,7 +233,24 @@ function collectReplacements(
     (node.key as AstNode).name === 'styles' &&
     node.value
   ) {
-    collectReplacements(node.value as AstNode, code, true, out);
+    collectReplacements(node.value as AstNode, code, true, partProgram, out);
+    return;
+  }
+  if (partProgram && isPublicFieldStylesCall(node)) {
+    // In a part-program module the lowering call is the only admissible
+    // shape. Admission is its value argument alone; the receiver and key
+    // arguments stay in the outer scope — a class expression in receiver
+    // position would carry method bodies of its own. The rest of the module
+    // (facade methods, runtime payloads) keeps the outer inStyles (#1563:
+    // module-wide admission silently rewrote those templates).
+    const args = node.arguments as AstNode[];
+    const value = args[2] as AstNode | undefined;
+    if (value) collectReplacements(value, code, true, partProgram, out);
+    for (let index = 0; index < args.length; index++) {
+      if (index === 2) continue;
+      const arg = args[index] as AstNode | undefined;
+      if (arg) collectReplacements(arg, code, inStyles, partProgram, out);
+    }
     return;
   }
   for (const key of Object.keys(node)) {
@@ -223,11 +259,11 @@ function collectReplacements(
     if (Array.isArray(value)) {
       for (const item of value) {
         if (item && typeof item === 'object') {
-          collectReplacements(item as AstNode, code, inStyles, out);
+          collectReplacements(item as AstNode, code, inStyles, partProgram, out);
         }
       }
     } else if (value && typeof value === 'object') {
-      collectReplacements(value as AstNode, code, inStyles, out);
+      collectReplacements(value as AstNode, code, inStyles, partProgram, out);
     }
   }
 }
@@ -261,11 +297,12 @@ export function minifyIslandCssModule(code: string): string | null {
   // authored PropertyDefinition — the @element decorator forces class-field
   // lowering, so the initializer rides `__publicField` module statements —
   // and without this marker the channel would never fire outside unit tests.
-  // Inside a part-program module the whitespace-bearing templates are the
-  // copied stylesheets; the program object's own literals carry tag names
-  // and node ids, nothing minifiable, so the whitespace gate excludes them.
-  const contractChannel = code.includes('__partProgram');
-  collectReplacements(program, code, contractChannel, replacements);
+  // The marker opens only the lowered-shape scope, never the module
+  // (#1563): part-program modules also carry method bodies whose templates
+  // are runtime payloads, so the admitted range is each `__publicField`,
+  // "styles", ... call's value subtree alone.
+  const partProgram = code.includes('__partProgram');
+  collectReplacements(program, code, false, partProgram, replacements);
   if (replacements.length === 0) return null;
   let result = code;
   for (const replacement of [...replacements].sort((a, b) => b.start - a.start)) {

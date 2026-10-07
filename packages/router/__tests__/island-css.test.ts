@@ -7,7 +7,10 @@
  * module rewrite that locates stylesheet template literals through the
  * compiled-element contract channel — the authored `static styles`
  * PropertyDefinition and the compiler's `__partProgram` part-program module
- * (the shape decorators' class-field lowering actually ships). Anything
+ * (the shape decorators' class-field lowering actually ships), scoped within
+ * that module to the lowered `__publicField(_, "styles", ...)` value subtree
+ * (#1563: the module's method-body templates are runtime payloads, not CSS).
+ * Anything
  * whose raw bytes the CSS rules cannot judge — JS escapes in the template,
  * tagged templates the tag cooks — and anything outside the contract
  * channel fails open byte-identical.
@@ -121,6 +124,57 @@ test('minifyIslandCssModule rewrites the compiled part-program module real build
   // The program object's own template literals (tag names, node ids) carry
   // no minifiable whitespace and stay verbatim.
   expect(rewritten).toContain('() => program,');
+});
+
+test('minifyIslandCssModule scopes part-program admission to the __publicField styles subtree (#1563)', () => {
+  // The part-program channel once admitted the whole module: a method-body
+  // template (runtime markup, a business string) with minifiable whitespace
+  // was silently rewritten like a stylesheet. Admission is the lowered
+  // `static styles` field alone — the `__publicField(_, "styles", ...)`
+  // value subtree; everything else ships byte-identical.
+  const partProgramModule = [
+    'import { compiledStyle } from "@openelement/element";',
+    'class OpenBadge extends OpenElement {}',
+    '__publicField(OpenBadge, "styles", [compiledStyle(`',
+    '  .control {',
+    '    color: red;',
+    '  }',
+    '`)]);',
+    'export const facade = {',
+    '  __elementMetadata: () => meta,',
+    '  __partProgram: () => program,',
+    '  caption() {',
+    '    return `',
+    '      <span class="open-badge__count">  keep   this  spacing </span>',
+    '    `;',
+    '  },',
+    '};',
+  ].join('\n');
+  const rewritten = minifyIslandCssModule(partProgramModule);
+  expect(rewritten).toContain('`.control{color:red;}`');
+  expect(rewritten).toContain(
+    [
+      '    return `',
+      '      <span class="open-badge__count">  keep   this  spacing </span>',
+      '    `;',
+    ].join('\n'),
+  );
+});
+
+test('minifyIslandCssModule refuses the lowered __publicField shape outside a part-program module', () => {
+  // The ABI marker is the provenance gate for the lowered shape: a helper
+  // call with a "styles" key in a module the element compiler did not emit
+  // is a guess, not the contract — it fails open byte-identical.
+  const loweredModule = [
+    'import { compiledStyle } from "@openelement/element";',
+    'class PlainBadge {}',
+    '__publicField(PlainBadge, "styles", [compiledStyle(`',
+    '  .control {',
+    '    color: red;',
+    '  }',
+    '`)]);',
+  ].join('\n');
+  expect(minifyIslandCssModule(loweredModule)).toBe(null);
 });
 
 test('minifyIslandCssModule still refuses class-external templates in part-program-adjacent modules', () => {
