@@ -27,7 +27,7 @@ const workDir = join(suiteDir, 'work');
 const appDir = join(workDir, 'my-blog');
 const depsDir = join(workDir, 'deps');
 
-const PACKAGES = ['element', 'router', 'create'] as const;
+const PACKAGES = ['protocol', 'element', 'compiler', 'router', 'create'] as const;
 /**
  * The release toolchain (vp pack) writes each packed tarball next to the
  * package sources under its logical artifact name. Returns the tarball path.
@@ -100,12 +100,13 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
 /**
  * Rewire the scaffolded starter's @openelement/* dependencies to the packed
  * current-SHA tarballs (B5, ADR-0161: dependency pins in package.json replace
- * the retired import-map rewrite). The starter depends on element and router
- * (create is the scaffold CLI itself); the mapping must hit every entry or
- * the gate silently tests the published registry instead of this checkout
- * (#944).
+ * the retired import-map rewrite). The starter's direct deps are element and
+ * router, but since the #1557 split their packed tarballs carry TRANSITIVE
+ * workspace pins (protocol, compiler at the exact current version) — pnpm
+ * overrides force those to this checkout's tarballs too, so the smoke never
+ * depends on the registry having published the new packages yet (#944).
  */
-const STARTER_FRAMEWORK_PACKAGES = ['element', 'router'] as const;
+const STARTER_FRAMEWORK_PACKAGES = ['protocol', 'element', 'compiler', 'router'] as const;
 
 /**
  * The scaffold default is the ONE showcase template (#1530): no Tailwind
@@ -170,16 +171,41 @@ async function rewireToPackedTarballs(
   };
   for (const pkg of STARTER_FRAMEWORK_PACKAGES) {
     const name = `@openelement/${pkg}`;
-    const current = manifest.dependencies[name];
-    if (typeof current !== 'string') {
+    const tarball = tarballs[pkg];
+    if (typeof tarball !== 'string') {
       throw new Error(
-        `[starter-smoke setup] generated starter has no "${name}" dependency to rewire ` +
-          `(found: ${current ?? 'nothing'}); the gate may not be testing this checkout`,
+        `[starter-smoke setup] no packed tarball for ${name}; the gate may not be ` +
+          `testing this checkout`,
       );
     }
-    manifest.dependencies[name] = pathToFileURL(tarballs[pkg]).href;
+    if (typeof manifest.dependencies[name] === 'string') {
+      manifest.dependencies[name] = pathToFileURL(tarball).href;
+    }
   }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+/**
+ * pnpm 12 reads overrides from the workspace file, not package.json: the
+ * starter's own pnpm-workspace.yaml carries the file:// pins for every
+ * framework package so the TRANSITIVE workspace deps inside the element and
+ * router tarballs (protocol, compiler — #1557) resolve to this checkout.
+ */
+async function writeStarterOverrides(
+  workspacePath: string,
+  tarballs: Record<(typeof PACKAGES)[number], string>,
+): Promise<void> {
+  const overrides: Record<string, string> = {};
+  for (const pkg of STARTER_FRAMEWORK_PACKAGES) {
+    overrides[`@openelement/${pkg}`] = pathToFileURL(tarballs[pkg]).href;
+  }
+  const yaml = [
+    'packages: []',
+    'overrides:',
+    ...Object.entries(overrides).map(([name, url]) => `  "${name}": ${url}`),
+    '',
+  ].join('\n');
+  await writeFile(workspacePath, yaml);
 }
 
 async function main(): Promise<void> {
@@ -208,8 +234,10 @@ async function main(): Promise<void> {
   // Clean-machine simulation: the generated starter must install as its OWN
   // workspace root. The repository's pnpm-workspace.yaml (membership globs,
   // minimumReleaseAge policy, allowBuilds allowlist, root lockfile) governs
-  // THIS checkout, not a consumer project that merely sits inside it.
-  await writeFile(join(appDir, 'pnpm-workspace.yaml'), 'packages: []\n');
+  // THIS checkout, not a consumer project that merely sits inside it. Its
+  // overrides pin every framework package — transitive workspace deps of the
+  // packed tarballs included — to this checkout's tarballs.
+  await writeStarterOverrides(join(appDir, 'pnpm-workspace.yaml'), tarballs);
 
   // --no-frozen-lockfile: CI runners imply frozen installs; the smoke's
   // file:// rewiring is exactly the manifest change a frozen install refuses.
