@@ -170,10 +170,10 @@ export const pageHomeStyles = [
   /* ── §5 begin ── */
   .begin { text-align:center; padding-block:clamp(5rem,12vh,9rem); }
   .begin h2 { font-family:var(--font-serif); font-style:italic; font-weight:400; font-size:clamp(4rem,8vw,7rem); color:var(--color-primary); }
-  /* The command box paints --surface-code (= --bg-code, dark in both themes),
-     so its text must use the theme-stable --code-text: light --text-primary is
-     near-black, i.e. 1.24:1 on that surface. */
-  .begin .command { margin-block-start:calc(var(--spacing) * 6); padding:calc(var(--spacing) * 3) calc(var(--spacing) * 5); border:calc(var(--spacing) * 0.25) solid var(--color-border); border-radius:var(--radius-lg); background:var(--surface-code); color:var(--color-zinc-200); font-size:var(--text-sm); }
+  /* The command box paints --surface-code, which is now theme-aware
+     (--color-muted light / --color-zinc-950 dark); its ink follows the paired
+     --surface-code-foreground alias so both palettes keep AA contrast. */
+  .begin .command { margin-block-start:calc(var(--spacing) * 6); padding:calc(var(--spacing) * 3) calc(var(--spacing) * 5); border:calc(var(--spacing) * 0.25) solid var(--color-border); border-radius:var(--radius-lg); background:var(--surface-code); color:var(--surface-code-foreground); font-size:var(--text-sm); }
   .begin .command code { color:var(--color-success); }
   .begin .command-note { max-width:32rem; margin:calc(var(--spacing) * 3) auto 0; color:var(--color-muted-foreground); font-size:var(--text-xs); line-height:1.6; }
   .begin .actions { justify-content:center; margin-block-end:0; }

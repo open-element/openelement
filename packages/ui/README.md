@@ -35,7 +35,7 @@ npm install @openelement/ui
 | `OpenButton`      | `open-button`       | Button component.                                                |
 | `OpenInput`       | `open-input`        | Input component.                                                 |
 | `OpenCard`        | `open-card`         | Content card.                                                    |
-| `OpenCodeBlock`   | `open-code-block`   | Code block with copy behavior; Prism highlighting (host-loaded). |
+| `OpenCodeBlock`   | `open-code-block`   | Code block with copy behavior; highlighting is the host's build-time step. |
 | `OpenBadge`       | `open-badge`        | Status/content badge.                                            |
 | `OpenThemeToggle` | `open-theme-toggle` | Theme switch island.                                             |
 | `OpenDialog`      | `open-dialog`       | Modal/non-modal dialog.                                          |
@@ -59,29 +59,26 @@ primitives and tokens. Application routing and document navigation belongs to
 `@openelement/router`; the site layout component (`OpenLayout`) lives in the
 reference site that consumes this package, not in it.
 
-## `open-code-block` syntax highlighting
+## `open-code-block` and syntax highlighting
 
-`open-code-block` ships the copy button and Prism token styles, but bundles
-**no tokenizer and no highlighting runtime** — the component itself stays
-cross-runtime, so the host page must load Prism (core plus each language
-grammar) as a global script. (The package as a whole depends on
-`@openelement/element`; this note is scoped to the code block.)
-On hydration the component looks for `globalThis.Prism`, tokenizes the
-slotted `<pre><code class="language-x">`, and swaps in the highlighted copy
-inside the shadow root. Without Prism it renders plain text with the copy
-button (and retries briefly while deferred scripts load).
+`open-code-block` ships the copy button only. It bundles **no tokenizer and no
+highlighting runtime** — the component stays cross-runtime, and since the
+runtime-highlighter contract was retired (#1552) it no longer looks for a
+global `Prism` either. The host page compiles its code fences to token-span
+HTML at BUILD time (the reference site runs Shiki inside its markdown
+pipeline) and projects the result through the slot; the projected content
+stays light DOM, so the host's stylesheet owns the code surface and the token
+inks, and the component only paints its chip.
 
 ```html
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-<script
-  src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
-
+<!-- build time: markdown fences -> <pre class="shiki …"><code>…token spans…</code></pre> -->
 <open-code-block>
-  <pre><code class="language-typescript">const x: number = 1;</code></pre>
+  <pre><code>const x: number = 1;</code></pre>
 </open-code-block>
 ```
 
-The reference site wires the same scripts through its Vite `inject` option.
+Without a host-side highlighting step the block renders plain text with the
+copy button — an expected degradation, not a bug.
 
 ## Design tokens
 

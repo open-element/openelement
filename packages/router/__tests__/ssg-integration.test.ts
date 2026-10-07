@@ -102,6 +102,7 @@ const MANIFEST: ClientAssetManifest = {
     'theme-toggle': { file: '/client/islands/island-theme-toggle-def456.js', strategy: 'load' },
   },
   shared: [],
+  styles: [],
 };
 
 // ─── Tests ─────────────────────────────────────────────────────

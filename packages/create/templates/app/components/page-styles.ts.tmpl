@@ -1,76 +1,33 @@
 /**
  * Style sheets for the starter's compiled elements (v0.44).
  *
- * Compiled modules may not carry runtime top-level statements, so the sheets
- * live in this plain module and the compiled classes reference them through
- * `static styles`. Island sheets (shadow roots) apply as adoptedStyleSheets
- * when the element hydrates — see the zag-combobox fixture pattern in
- * fixtures/router-native-framework. Page elements use light roots: the server
- * inlines their sheets into the SSR output as a @scope(<page-tag>) block
- * (<style data-oe-static-styles>), so pages are styled with zero client JS.
- * Under @scope the host tag prefixes of a document stylesheet are dropped:
- * the page element itself is `:host` and descendant selectors go unprefixed.
+ * Page sheets live in this plain module (compiled modules may not carry
+ * runtime top-level statements, and page components are not islands). Page
+ * elements use light roots: the server inlines their sheets into the SSR
+ * output as a @scope(<page-tag>) block (<style data-oe-static-styles>), so
+ * pages are styled with zero client JS. Under @scope the host tag prefixes
+ * of a document stylesheet are dropped: the page element itself is `:host`
+ * and descendant selectors go unprefixed.
+ *
+ * ISLAND sheets are same-module `compiledStyle()` consts in the island
+ * modules under the island style asset protocol — cross-module
+ * sheet imports fail closed (OEC9028). This module ships the factory helper
+ * the islands spell.
  */
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';
 
-function sheet(css: string): StyleSheetLike {
-  const instance = new StyleSheet();
+export function compiledStyle(css: string): StyleSheetLike {
+  const instance: StyleSheetLike = new StyleSheet();
   instance.replaceSync(css);
   return instance;
 }
-
-export const shellStyles = [
-  sheet(`
-    :host { display: block; min-height: 100vh; }
-    header { border-bottom: 1px solid var(--line); }
-    .bar { max-width: 740px; margin: 0 auto; padding: 1.15rem 1.25rem; display: flex; justify-content: space-between; align-items: baseline; }
-    .brand { font-family: var(--font-serif); font-weight: 700; font-size: 1.2rem; letter-spacing: -0.01em; color: var(--ink); }
-    .brand:hover { text-decoration: none; color: var(--brand); }
-    nav { display: flex; gap: 1.5rem; }
-    nav a { color: var(--ink-2); font-size: 0.95rem; font-weight: 500; }
-    nav a:hover { color: var(--brand); text-decoration: none; }
-    main { max-width: 740px; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
-    footer { border-top: 1px solid var(--line); color: var(--ink-2); font-size: 0.85rem; }
-    .foot { max-width: 740px; margin: 0 auto; padding: 1.25rem; display: flex; justify-content: space-between; gap: 1rem; }
-    a { color: var(--brand); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  `),
-];
-
-export const counterStyles = [
-  sheet(`
-    :host { display: inline-block; }
-    .counter-row { display: inline-flex; gap: 0.75rem; align-items: center; }
-    button {
-      width: 2rem; height: 2rem; border: 1px solid var(--line); border-radius: 6px;
-      background: #fff; color: var(--ink); font-size: 1rem; line-height: 1; cursor: pointer;
-      transition: border-color 0.15s ease, color 0.15s ease;
-    }
-    button:hover { border-color: var(--brand); color: var(--brand); }
-    span { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
-  `),
-];
-
-export const tickerStyles = [
-  sheet(`
-    :host { display: inline-block; }
-    .ticker-row { display: inline-flex; gap: 0.75rem; align-items: center; }
-    button {
-      height: 2rem; padding: 0 0.9rem; border: 1px solid var(--line); border-radius: 6px;
-      background: #fff; color: var(--ink); font-size: 0.9rem; cursor: pointer;
-      transition: border-color 0.15s ease, color 0.15s ease;
-    }
-    button:hover { border-color: var(--brand); color: var(--brand); }
-    span { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
-  `),
-];
 
 // ─── Page sheets (light roots → inlined as @scope(<page-tag>) in SSR) ───
 
 // Shared post-list rules (home teaser + blog index) — one source, both pages
 // include this sheet in their `static styles` arrays.
 export const postListStyles = [
-  sheet(`
+  compiledStyle(`
     .posts { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
     .post { display: block; padding: 1.15rem 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; }
     a.post:hover .title { color: var(--brand); }
@@ -82,7 +39,7 @@ export const postListStyles = [
 
 // Home page (index-page)
 export const homePageStyles = [
-  sheet(`
+  compiledStyle(`
     :host { display: block; }
     .hero { padding: 2.5rem 0 1rem; }
     .eyebrow { color: var(--brand); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; }
@@ -104,7 +61,7 @@ export const homePageStyles = [
 
 // Blog index (blog-index)
 export const blogIndexStyles = [
-  sheet(`
+  compiledStyle(`
     :host { display: block; }
     .eyebrow { color: var(--brand); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; }
     h1 { font-family: var(--font-serif); letter-spacing: -0.015em; margin: 0.5rem 0; }
@@ -117,7 +74,7 @@ export const blogIndexStyles = [
 
 // Blog post page (blog-welcome)
 export const blogWelcomeStyles = [
-  sheet(`
+  compiledStyle(`
     :host { display: block; }
     h1 { font-family: var(--font-serif); font-size: 2.4rem; line-height: 1.15; letter-spacing: -0.015em; margin: 0.5rem 0; }
     .meta { color: var(--ink-2); font-size: 0.9rem; margin-top: 0; padding-bottom: 1.5rem; border-bottom: 1px solid var(--line); }
@@ -131,7 +88,7 @@ export const blogWelcomeStyles = [
 
 // Freshness proof (freshness-page)
 export const freshnessPageStyles = [
-  sheet(`
+  compiledStyle(`
     :host { display: block; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
     p { color: var(--ink-2); }
   `),
@@ -139,7 +96,7 @@ export const freshnessPageStyles = [
 
 // Styled 404 (el-404)
 export const notFoundPageStyles = [
-  sheet(`
+  compiledStyle(`
     :host { display: block; }
     h1 { font-family: var(--font-serif); font-size: 2.4rem; letter-spacing: -0.015em; margin: 0.75rem 0 0.5rem; font-weight: 700; }
     p { color: var(--ink-2); line-height: 1.6; }
@@ -150,7 +107,7 @@ export const notFoundPageStyles = [
 
 // Contact form (contact-page)
 export const contactPageStyles = [
-  sheet(`
+  compiledStyle(`
     :host { display: block; }
     h1 { font-family: var(--font-serif); font-size: 2.4rem; letter-spacing: -0.015em; margin: 0.75rem 0 0.5rem; font-weight: 700; }
     .sub { color: var(--ink-2); line-height: 1.6; max-width: 52ch; margin: 0 0 1.75rem; }

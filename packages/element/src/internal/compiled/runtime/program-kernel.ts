@@ -16,7 +16,11 @@ import type {
 // The single error dialect (#1386 item 3): every failure raised by this module
 // is an OpenElementError carrying a code from the catalogue, so a consumer
 // classifies a compiled-runtime failure by code instead of by message prefix.
-import { raiseFrameworkError, RuntimeErrorCode } from '../../protocol/errors.ts';
+import {
+  raiseFrameworkError,
+  RUNTIME_MESSAGES_ENABLED,
+  RuntimeErrorCode,
+} from '../../protocol/errors.ts';
 import type { RuntimeProgramIR } from '../runtime-program.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 
@@ -113,8 +117,12 @@ export function signalOf(ctx: MountContext, name: string): SignalLike<unknown> {
   if (!signal) {
     fail(
       RuntimeErrorCode.HOST_SIGNAL_MISSING,
-      `${origin(ctx)}: render() reads this.${name}, but no host signal is registered. Every ` +
-        `signal read by render() must be a declared @property on the compiled class.`,
+      // #1546 strip seam: a production client build folds the prose branch
+      // away and keeps the origin + code form.
+      RUNTIME_MESSAGES_ENABLED
+        ? `${origin(ctx)}: render() reads this.${name}, but no host signal is registered. Every ` +
+            `signal read by render() must be a declared @property on the compiled class.`
+        : `${origin(ctx)}: ${RuntimeErrorCode.HOST_SIGNAL_MISSING}`,
     );
   }
   return signal;

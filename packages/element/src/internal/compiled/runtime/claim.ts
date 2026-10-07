@@ -17,6 +17,8 @@ import {
   STATIC_STYLES_MARKER,
 } from '../../protocol/part-program.ts';
 import { ClaimErrorCode, OpenElementError, RuntimeErrorCode } from '../../protocol/errors.ts';
+// The broadcast attribute's single writer names it; the claim only classifies it.
+import { THEME_ATTRIBUTE } from '../../../open-element-theme.ts';
 // Canonical each-Region item-key derivation (#1374) — single source shared
 // with the server serializer; do not reintroduce a private copy.
 import { eachItemKey } from '../each-key.ts';
@@ -165,6 +167,13 @@ function claimElementAttributes(
         element.getAttribute(DATA_OE_LIGHT) !== null
       )
         continue;
+      // The theme manager writes its broadcast attribute on a custom-element
+      // host at that host's own connect — which under chunked island loading
+      // can precede THIS claim (the parent upgrades after the child island's
+      // chunk). The attribute is runtime-managed state (THEME_ATTRIBUTE is the
+      // manager's own constant), not server-rendered drift; its authored
+      // value, when the program declares one, is still drift-checked above.
+      if (name === THEME_ATTRIBUTE && node.tag.includes('-')) continue;
       if (!expected.has(name)) claimFailure(path, `unexpected attribute "${name}"`, owner);
     }
     for (const name of expected) {
@@ -577,6 +586,11 @@ export interface CompiledClaimOptions {
    * emits those styles as one marked `<style data-oe-static-styles>` element —
    * the first template child — so a claim skips exactly that node. A marked
    * style node on a style-less class is drift and fails closed.
+   *
+   * Claim-then-delete: the skipped node is removed only after
+   * the staged plan attaches (Parts bound, rootOffset=1 honored throughout) —
+   * a claim failure keeps it, so recovery and never-upgrade pages keep
+   * first-paint styling by construction.
    */
   expectStaticStyle?: boolean;
   /** Default is `throw`; `owning` enables one bounded recovery attempt. */
@@ -597,6 +611,20 @@ export function isStaticStyleNode(node: Node | undefined): boolean {
     node.tagName.toLowerCase() === 'style' &&
     node.hasAttribute(STATIC_STYLES_MARKER)
   );
+}
+
+/**
+ * Claim-then-delete: remove the marked DSD style node this
+ * claim skipped at index 0. Called only after the staged plan has attached —
+ * removal must not precede claim because Part paths resolve against
+ * rootOffset=1 — so the node served first paint and anchored the scan, and
+ * the shared adopted sheet the kernel applied is the one remaining channel.
+ * A failed claim never reaches the caller, leaving the node in place for
+ * recovery and for pages that never upgrade.
+ */
+function removeClaimedStaticStyle(root: Node): void {
+  const node = root.childNodes[0];
+  if (isStaticStyleNode(node)) root.removeChild(node);
 }
 
 /**
@@ -746,6 +774,10 @@ export function claimExistingDom(
       // recovery never contains fixed-Part targets, so `claim` mode stands.
       attachFixedParts(ctx, root, rootRebuilt ? 'fresh' : 'claim', cursorStart);
       replayPreUpgradeEvents(root, capturedEvents);
+      // Part binding completed: the DSD style node's double application
+      // retires (no-op when the claim ran from cursor 0). On the recovery
+      // path this is "recovery completed" from the scenario table.
+      if (cursorStart === 1) removeClaimedStaticStyle(root);
       const claimed = instance(ctx);
       if (!stream || stream.ranges.size === 0) return claimed;
       let disposed = false;

@@ -85,54 +85,56 @@ What we measure, and the commands that reproduce each row.
 
 ### Output size
 
-Numbers measured on 2026-10-05 from the docs site's own build (`www/dist`, built with `pnpm run site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. The figures moved four times since alpha6: the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160); the alpha8 B2 manifest conversion (pnpm workspaces, no `deno.json` workspace marker) re-cut the app-side island chunks; the alpha8 client build now resolves each package island's declared identity to its real module id before chunk grouping (#1471 fail-closed), so every island chunk is named `island-open-<tag>-<hash>.js` and the shared compiled-element runtime ships as one chunk that `client.js` loads eagerly on every island page; and the alpha9 styling train seated the site on the @theme role sheet with the Zag-powered open-search island (#1502), which grows the island chunks and route payloads measured below. Route payloads below are measured as the eager import closure of the route's manifest chunk set, so they stay honest no matter which chunk file hosts shared code.
+Numbers measured on 2026-10-06 from the docs site's own build (`www/dist`, built with `pnpm run site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. The figures moved five times since alpha6: the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160); the alpha8 B2 manifest conversion (pnpm workspaces, no `deno.json` workspace marker) re-cut the app-side island chunks; the alpha8 client build now resolves each package island's declared identity to its real module id before chunk grouping (#1471 fail-closed), so every island chunk is named `island-open-<tag>-<hash>.js` and the shared compiled-element runtime ships as one chunk that `client.js` loads eagerly on every island page; the alpha9 styling train seated the site on the @theme role sheet with the Zag-powered open-search island (#1502), which grows the island chunks and route payloads measured below; and the alpha10 train minified the island component styles (#1543), gave the shared compiled-element runtime its own `element-runtime-<hash>.js` chunk instead of a berth inside an island chunk (#1544), and then extracted the island stylesheets out of the chunks entirely as content-addressed `client/assets/*.css` resources (#1553, ADR-0164), which re-cut the island rows and route payloads measured below. Route payloads below are measured as the eager import closure of the route's manifest chunk set, so they stay honest no matter which chunk file hosts shared code.
 
 | Metric                 | Value                                              |
 | ---------------------- | -------------------------------------------------- |
 | Pre-rendered documents | 70 HTML files                                      |
 | URLs in `sitemap.xml`  | 68                                                 |
-| Total static output    | 8.9 MB                                             |
+| Total static output    | 8.6 MB                                             |
 | Island manifests       | 70 — one per page                                  |
-| Search index           | 34 pages per locale (en, zh), 68 fragments, 1.4 MB |
+| Search index           | 34 pages per locale (en, zh), 68 fragments, 1.3 MB |
 
 ```bash
 pnpm run site:build                         # regenerate everything below first
 find www/dist -name '*.html' | wc -l        # 70
 grep -c '<loc>' www/dist/sitemap.xml        # 68
-du -sh www/dist                             # 9.6M (platform-dependent; the 8.9 MB above is the byte sum)
+du -sh www/dist                             # 9.3M (platform-dependent; the 8.6 MB above is the byte sum)
 ls www/dist/island-manifests | wc -l        # 70
 cat www/dist/pagefind/pagefind-entry.json   # page_count 34 per language
 ```
 
 ### Island bundles
 
-The docs site is a normal openElement app, islands included, so its client output is a fair sample. Raw and gzip sizes of every emitted chunk:
+The docs site is a normal openElement app, islands included, so its client output is a fair sample. Raw and gzip sizes of the island chunks plus the shared entry and runtime chunks:
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `island-open-layout`           | 102,800   | 17,211  |
-| `island-open-badge`            | 88,566    | 27,515  |
-| `island-open-button`           | 16,816    | 3,121   |
-| `island-open-dragon-live-gaze` | 14,198    | 5,181   |
-| `island-open-page-rail`        | 9,882     | 2,754   |
-| `island-open-code-block`       | 8,834     | 2,816   |
-| `island-open-cinematic-scroll` | 7,843     | 3,099   |
-| `island-open-hero-polish`      | 4,478     | 1,862   |
+| `island-open-layout`           | 83,559    | 13,634  |
+| `element-runtime`              | 82,137    | 25,734  |
+| `island-open-button`           | 15,776    | 2,923   |
+| `island-open-dragon-live-gaze` | 10,988    | 4,062   |
+| `island-open-page-rail`        | 9,915     | 2,781   |
+| `island-open-cinematic-scroll` | 6,985     | 2,796   |
+| `island-open-code-block`       | 4,003     | 1,454   |
+| `island-open-badge`            | 6,103     | 1,691  |
+| `island-open-hero-polish`      | 5,420     | 2,253   |
+| `client.js`                    | 7,155     | 1,993   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
 gzip -9 -c www/dist/client/islands/client.js | wc -c
 ```
 
-The shared entry (`client.js`, ~7 KB) is deliberately not pinned: its island import factories and error strings follow the admitted island set, so its bytes move with that set rather than holding a fixed shape. The `island-open-badge-<hash>.js` row is not the badge component's size either: chunk grouping hosts the shared compiled-element runtime in the chunk named after the `open-badge` island identity, and `client.js` plus every island chunk statically import that chunk, so its bytes ride along on every island page regardless of route. Per-chunk raw rows tolerate ±1% and gzip rows ±3% for the same class of cross-platform byte variance, route payloads below tolerate ±1%, and chunk counts stay exact.
+The island entry (`client.js`) carries the island import factories and error strings, so its bytes move with the admitted island set; since the #1367 fix anchored module ids on the workspace segment it no longer embeds checkout-absolute paths, so it is pinned like every other row. Since the alpha10 chunk re-grouping (#1544), the shared compiled-element runtime rides its own `element-runtime-<hash>.js` chunk instead of homing inside an island chunk — `client.js` and every island chunk statically import it, so its bytes ride along on every island page regardless of route. Two emitted surfaces stay out of the table: the ~99 KB search combobox runtime is a dynamic chunk fetched on the first search open, and the component stylesheets are not island JS at all — they emit as content-addressed `client/assets/*.css` resources under the island style-asset protocol (#1553, ADR-0164) and are adopted in the browser, which is why the island rows above dropped sharply against the previous baseline. Per-chunk raw rows tolerate ±1% and gzip rows ±3% for the same class of cross-platform byte variance, route payloads below tolerate ±1%, and chunk counts stay exact.
 
 What a page actually downloads follows from its island manifest plus the entry's eager (static) imports — the payload rows are measured as that import closure, so they do not depend on which chunk file hosts shared code:
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 225,644 B            | 6               |
-| `/guide/getting-started` | 225,644 B            | 6               |
-| `/`                      | 234,438 B            | 7               |
+| `/guide/mdx`             | 205,316 B            | 8               |
+| `/guide/getting-started` | 205,316 B            | 8               |
+| `/`                      | 206,423 B            | 8               |
 
 Across all 70 page manifests the site declares 10 island tags in 334 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 60, `open-code-block` on 48, and the remaining tags on a handful of pages each.
 

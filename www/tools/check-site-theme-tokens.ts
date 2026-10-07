@@ -47,10 +47,14 @@ const FONT_SIZE_LITERAL = /font-size\s*:\s*[0-9.]+(?:px|rem|em)\b/;
 const MEDIA_LINE = /@media/;
 const TIER_VALUE = /(?:max-width|max-height|min-width):\s*(\d+)(?![\d.])/g;
 const TIERS = new Set<number>(SITE_BREAKPOINT_TIERS);
-// Rule 4 scope: the site-ui sheets. Components under www/app/components/
-// still carry bare palette refs (page-styles, page-home-styles, page-404-styles)
-// and are a later migration, not this gate's round.
-const SITE_UI_SEGMENT = '/site-ui/';
+// Rule 4 scope: the site-ui sheets and the island modules (island component
+// sheets moved into their island files under the #1553 style asset protocol's
+// same-module admission, and keep the same palette gate). Components under
+// www/app/components/ still carry bare palette refs (page-styles,
+// page-home-styles, page-404-styles) and are a later migration, not this
+// gate's round.
+const BARE_PALETTE_SEGMENTS = ['/site-ui/', '/islands/'];
+export { BARE_PALETTE_SEGMENTS };
 // `var(--color-<name>)` captures. Only the var() form is gated: a palette
 // value consumed through var() is a live second fact; prose mentions are not.
 const COLOR_REF = /var\(--color-([a-z0-9-]+)\)/g;
@@ -91,18 +95,13 @@ const ROLE_DEFINITION = /^\s*--color-([a-z0-9-]+):/gm;
  * cannot move to a role token yet. Empty entries are deleted, not tolerated.
  */
 export const BARE_PALETTE_ALLOWLIST: Readonly<Record<string, string>> = {
-  // pre code ink sits on --surface-code, which is --color-zinc-950 in BOTH
-  // themes (www/site-css.ts): the ink must be theme-invariant light. Every
-  // light-ink role (--color-foreground, --color-card-foreground, …) flips
-  // dark under data-theme="dark", so a role swap regresses. Leaves the
-  // allowlist when a --surface-code-foreground alias exists in site-css.ts.
-  'article-body.ts:--color-zinc-200':
-    'theme-invariant light ink on the always-dark --surface-code; no role token is theme-invariant light',
   // Dialog scrim: must stay dark in both themes. The dark-in-light roles
   // (--color-foreground, --color-popover-foreground, …) flip light under
   // data-theme="dark", so a role swap regresses. Leaves the allowlist when a
   // --surface-scrim alias exists in site-css.ts (cf. --surface-code).
-  'open-search-styles.ts:--color-zinc-950':
+  // (#1553: the sheet moved from site-ui/open-search-styles.ts into the
+  // open-search island module — the gate followed it.)
+  'open-search.tsx:--color-zinc-950':
     'theme-invariant dark dialog scrim; no role token is theme-invariant dark',
 };
 
@@ -212,7 +211,7 @@ async function main(): Promise<void> {
       const lines = text.split('\n');
       failures.push(...findThemeTokenFailures(entryPath, lines));
       failures.push(...findBreakpointFailures(entryPath, lines));
-      if (entryPath.includes(SITE_UI_SEGMENT)) {
+      if (BARE_PALETTE_SEGMENTS.some((segment) => entryPath.includes(segment))) {
         failures.push(...findBarePaletteFailures(entryPath, lines, roleTokens));
       }
     }

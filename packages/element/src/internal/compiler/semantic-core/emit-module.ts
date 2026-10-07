@@ -117,6 +117,7 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
     stylesText,
     stylesNode,
     stylesTypeText,
+    styleRequest,
     passthroughStatements,
     decorator,
     classNode,
@@ -229,6 +230,15 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
     // so the canonical binding (possibly aliased) always exists in the source
     // and is carried by the copied imports above.
     if (rewritten !== null) pushVerbatim(rewritten, statement);
+  }
+  if (styleRequest !== undefined && stylesNode !== undefined) {
+    // The island style asset protocol's request channel : a sibling
+    // module id with the reserved `.oe-style.css` suffix. The host build's
+    // style-asset plugin intercepts the request (enforce 'pre', before vite's
+    // CSS plugin) and hands back a sheet adapter module; the generated module
+    // never carries the sheet bytes itself. The request derives from the
+    // authored static-styles initializer, so the import line maps to it.
+    pushDerivedBlock(`import __oeStyle from '${styleRequest.specifier}';`, stylesNode);
   }
   // The consumer:packaged gate types the generated __computedFields through
   // ReadonlySignal: reuse the source's local binding (possibly aliased), or
@@ -385,14 +395,25 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
     push('  };');
   }
   if (stylesText !== undefined && stylesNode !== undefined) {
-    // Copied verbatim: the facade reads static styles into the compiled style
-    // scope (adoptedStyleSheets on shadow roots, a document-head sink on light
-    // roots); the serializer inlines them as the marked DSD <style> element.
-    const stylesHead = `  static override styles${stylesTypeText ?? ''} = `;
-    const stylesLine = codeLines.length + 1;
-    push(`${stylesHead}${stylesText};`);
-    mapLineAt(stylesLine, stylesHead.length, stylesNode);
-    mapContinuationLines(stylesText, stylesLine, stylesNode, 0);
+    if (styleRequest !== undefined) {
+      // Reference shape : the statically admitted initializer is
+      // replaced by the imported sheet adapter — one request per component,
+      // the admitted sheets joined in authored order. The authored annotation
+      // is preserved verbatim (the consumer:packaged gate requires it).
+      const stylesHead = `  static override styles${stylesTypeText ?? ''} = `;
+      const stylesLine = codeLines.length + 1;
+      push(`${stylesHead}[__oeStyle];`);
+      mapLineAt(stylesLine, stylesHead.length, stylesNode);
+    } else {
+      // Copied verbatim: the facade reads static styles into the compiled style
+      // scope (adoptedStyleSheets on shadow roots, a document-head sink on light
+      // roots); the serializer inlines them as the marked DSD <style> element.
+      const stylesHead = `  static override styles${stylesTypeText ?? ''} = `;
+      const stylesLine = codeLines.length + 1;
+      push(`${stylesHead}${stylesText};`);
+      mapLineAt(stylesLine, stylesHead.length, stylesNode);
+      mapContinuationLines(stylesText, stylesLine, stylesNode, 0);
+    }
   }
   for (const field of fields) {
     // Computed fields carry no initializer on the generated class: the

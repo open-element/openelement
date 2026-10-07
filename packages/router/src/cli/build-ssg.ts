@@ -51,8 +51,9 @@ import {
   generateCustomElementsPolyfill,
   generateSsrPolyfillBanner,
 } from '../vite/internal/ssg/index.ts';
-import { compiledElementPlugin } from '@openelement/element/compiler';
+import { clearStyleRequests, compiledElementPlugin } from '@openelement/element/compiler';
 import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
+import { serverStyleAssetPlugin } from '../vite/internal/style-assets.ts';
 import { normalizeViteAliases } from '../vite/alias-utils.ts';
 import {
   CHUNK_SIZE_WARNING_LIMIT_KB,
@@ -318,6 +319,11 @@ async function buildSSG(
   try {
     const { build: viteBuild } = await import('vite');
 
+    // the registry bookkeeping is this build's lifetime; the SSR
+    // build's own compiled-element transforms re-register every request the
+    // island graph carries.
+    clearStyleRequests();
+
     // Handle alias - prefer CLI options, then ctx from Phase 1
     const alias = metadataResolveAlias;
     const viteResolveAlias = normalizeViteAliases(alias, root);
@@ -401,20 +407,18 @@ async function buildSSG(
       define: options.headExtras
         ? { __HEAD_EXTRAS__: JSON.stringify(options.headExtras) }
         : { __HEAD_EXTRAS__: '""' },
-      esbuild: {
+      oxc: {
         // JSX automatic runtime, same reason as build-client.ts.
         // SSG build also processes .tsx island files for SSR rendering.
-        jsx: 'automatic',
-        jsxImportSource: '@openelement/element',
-        tsconfigRaw: {
-          compilerOptions: {
-            useDefineForClassFields: false,
-          },
+        jsx: {
+          runtime: 'automatic',
+          importSource: '@openelement/element',
         },
       },
       plugins: [
         // MDX route support must mirror the outer plugin list (plugin.ts),
-        // otherwise .mdx routes fail Phase 3 parse (esbuild treats them as JS).
+        // otherwise .mdx routes fail Phase 3 parse (the oxc transform treats
+        // them as JS).
         // The routesDir keeps the compiled page tag aligned with the
         // path-derived registration tag the entry uses. The MDX transform
         // emits the compiled page module source, so it must run BEFORE the
@@ -422,7 +426,9 @@ async function buildSSG(
         mdxPlugin({ routesDir }),
         ...(renderer === 'lit' ? [litSsrDataUrlStubPlugin()] : []),
         // Keep SSR lowering identical to the outer Vite and client builds;
-        // this inline build has its own plugin list.
+        // this inline build has its own plugin list. styleAssetProtocol: the
+        // island modules here emit the same `.oe-style.css` requests the
+        // client build emitted  — the SSR half of the protocol.
         compiledElementPlugin({
           // Linked workspace packages sit outside the project root; without the
           // workspace anchor their absolute ids would land in the source maps.
@@ -430,6 +436,15 @@ async function buildSSG(
           // Route/island sources carry the island delivery policy statement;
           // the compiler admits it only through the injected descriptor.
           staticSidecars: [ISLAND_ADMISSION],
+          styleAssetProtocol: true,
+        }),
+        // serves the server half of the style asset protocol — the
+        // sheet adapter embeds the bytes of the SAME emitted asset the client
+        // build shipped (hash-checked against the Phase 2 record), so the DSD
+        // text and the client sheet cannot drift.
+        serverStyleAssetPlugin({
+          styleAssets: ctx.styleAssets ?? new Map(),
+          clientOutDir: join(root, outDir, 'client'),
         }),
         // Virtual SSG entry module
         {

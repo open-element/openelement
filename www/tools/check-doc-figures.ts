@@ -86,17 +86,21 @@ const fragmentFiles = [...distFiles.keys()].filter((path) => path.startsWith('pa
 
 const chunkSize = new Map<string, { raw: number; gzip: number }>();
 for (const [rel, abs] of distFiles) {
-  const match = /^client\/islands\/(.+)\.js$/.exec(rel);
-  if (match) {
-    chunkSize.set(match[1], {
+  const match = /^client\/islands\/(.+)$/.exec(rel);
+  if (match?.[0].endsWith('.js')) {
+    chunkSize.set(match[1]!, {
       raw: (await stat(abs)).size,
       gzip: await gzipSize(abs),
     });
   }
 }
 function chunkStem(docName: string): string {
+  // Doc names are either the full filename (`client.js`) or the emitted
+  // chunk stem without its content hash (`island-open-layout`).
   const hits = [...chunkSize.keys()].filter(
-    (stem) => stem === docName || stem.startsWith(`${docName}-`),
+    (file) =>
+      file === docName ||
+      (!docName.endsWith('.js') && file.startsWith(`${docName}-`) && file.endsWith('.js')),
   );
   if (hits.length !== 1) {
     failures.push(`chunk ${docName}: want exactly one dist file, found ${hits.length}`);
@@ -248,11 +252,7 @@ for (const docPath of docs) {
     /\|\s*`([^`(|]+?)`(?:\([^)]*\))?\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|/g,
   )) {
     const name = row[1].trim();
-    if (!/^(client\.js|island-|open-)/.test(name)) continue;
-    // client.js embeds checkout-absolute island paths in its error strings,
-    // so its raw bytes vary by checkout depth. The doc carries it as prose,
-    // not a pinned figure; payloads below tolerate the same variance.
-    if (name === 'client.js') continue;
+    if (!/^(client\.js|element-runtime|island-|open-)/.test(name)) continue;
     const sizes = chunkSize.get(chunkStem(name));
     if (!sizes) continue;
     check(scope + `chunk ${name} raw`, Number(row[2].replaceAll(',', '')), sizes.raw, 0.01);

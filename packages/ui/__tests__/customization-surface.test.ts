@@ -125,26 +125,22 @@ const PINNED_VARS: Record<string, string[]> = {
     '--ease-in-out',
     '--spacing',
   ],
+  // #1552 shrank open-code-block to the copy chip: the code surface and the
+  // token inks moved to the host's build-time highlight pipeline + stylesheet,
+  // so the component's var surface contracted deliberately (pin + doc updated
+  // together) and gained --color-foreground for the theme-aware chip ink.
   'open-code-block': [
     '--color-destructive',
+    '--color-foreground',
     '--color-primary',
-    '--color-zinc-200',
-    '--color-zinc-700',
-    '--color-zinc-950',
     '--default-transition-duration',
     '--ease-in-out',
-    '--font-mono',
     '--font-sans',
-    '--font-weight-bold',
     '--font-weight-semibold',
-    '--leading-relaxed',
-    '--radius-lg',
     '--radius-md',
     '--spacing',
-    '--text-sm',
     '--text-xs',
     '--tracking-wider',
-    '--tracking-widest',
   ],
   'open-badge': [
     '--color-border',

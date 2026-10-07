@@ -11,8 +11,11 @@ import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'vite';
 import {
   compileElementModule,
+  getStyleRequest,
+  registerStyleRequest,
   stableModuleId,
   stripInlineSourceMapComment,
+  styleRequestModuleId,
 } from '@openelement/element/compiler';
 import { ISLAND_ADMISSION } from './internal/protocol/island-admission.ts';
 import type { OpenPluginState } from './plugin-config.ts';
@@ -44,9 +47,25 @@ export function createCompilerHooks(
         const result = compileElementModule(
           code,
           stableModuleId(id, state.viteRoot, state.workspaceRoot),
-          { staticSidecars: [ISLAND_ADMISSION] },
+          // dev activates the protocol so authored islands (whose
+          // same-module style constants the legacy grammar rejects with
+          // OEC9008) compile identically to the production builds; the dev
+          // style-asset plugin (open:style-assets-dev) serves the adapters.
+          { staticSidecars: [ISLAND_ADMISSION], styleAssetProtocol: true },
         );
         if (!result) return null;
+        // the compiled-element transform is the style-request
+        // registry's one writer — this hook is that transform's dev host
+        // binding (element's compiledElementPlugin is the build binding),
+        // so the registration travels with it; the dev plugin's intercept
+        // answers from this registry.
+        if (result.styleRequest) {
+          registerStyleRequest({
+            ...result.styleRequest,
+            moduleId: styleRequestModuleId(id, result.styleRequest.specifier),
+            importer: id,
+          });
+        }
         const key = id.split('?', 1)[0];
         compiledProgramShapes.set(key, programShape(result.program));
         // The semantic core emits the real Source Map v3 (#1210): return it as
@@ -76,11 +95,26 @@ export function createCompilerHooks(
         const result = compileElementModule(
           source,
           stableModuleId(hmr.file, state.viteRoot, state.workspaceRoot),
-          { staticSidecars: [ISLAND_ADMISSION] },
+          // Same activation as the transform: dev islands compile
+          // under the protocol's grammar.
+          { staticSidecars: [ISLAND_ADMISSION], styleAssetProtocol: true },
         );
         if (!result) {
           compiledProgramShapes.delete(hmr.file);
           return;
+        }
+        // a sheet edit changes the style request's payload, not the
+        // Part Program shape — the adapter module's content would go stale in
+        // the dev module graph. Full reload re-fetches everything fresh; the
+        // registry is re-registered by the transform that follows.
+        if (result.styleRequest) {
+          const registered = getStyleRequest(
+            styleRequestModuleId(hmr.file, result.styleRequest.specifier),
+          );
+          if (registered && registered.css !== result.styleRequest.css) {
+            hmr.server.ws.send({ type: 'full-reload' });
+            return [];
+          }
         }
         const nextShape = programShape(result.program);
         const previousShape = compiledProgramShapes.get(hmr.file);

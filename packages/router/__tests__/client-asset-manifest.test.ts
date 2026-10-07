@@ -205,6 +205,46 @@ test('buildClientAssetManifest maps islands by Rollup module id, not by output f
     preload: true,
   });
   expect(manifest.shared).toEqual([]);
+  expect(manifest.styles).toEqual([]);
+});
+
+test('buildClientAssetManifest maps the emitted style assets to sorted preload URLs', () => {
+  // ADR-0164: the client build's style-asset emissions become the manifest's
+  // `styles` field — base-prefixed, deduplicated, sorted (the field is a
+  // preloadable URL set, so its order is canonical, never emission order).
+  const manifest = buildClientAssetManifest({
+    root: ROOT,
+    base: '/',
+    islands: [
+      {
+        entry: island({ strategy: 'load' }),
+        sourceFile: join(ROOT, 'app/islands/counter.ts'),
+      },
+    ],
+    viteManifest: {
+      'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+      'app/islands/counter.ts': { file: 'islands/island-counter-Ab12cd.js' },
+    },
+    chunks: [
+      {
+        fileName: 'islands/island-counter-Ab12cd.js',
+        facadeModuleId: '/proj/app/islands/counter.ts',
+        modules: { '/proj/app/islands/counter.ts': {} },
+      },
+      { fileName: 'islands/client.js', modules: {} },
+    ],
+    manifestPath: MANIFEST_PATH,
+    styleFileNames: [
+      'assets/open-search-4f7a2b9c1d0e.css',
+      'assets/open-layout-9e8b7c6d5f4a.css',
+      // A duplicate record folds: the URL set is the deduplicated view.
+      'assets/open-layout-9e8b7c6d5f4a.css',
+    ],
+  });
+  expect(manifest.styles).toEqual([
+    '/client/assets/open-layout-9e8b7c6d5f4a.css',
+    '/client/assets/open-search-4f7a2b9c1d0e.css',
+  ]);
 });
 
 test('buildClientAssetManifest keeps island identity when islands share one chunk', () => {
@@ -862,6 +902,7 @@ test('serializeClientAssetsModule emits pure structured data', () => {
     entry: '/client/islands/client.js',
     islands: { 'open-counter': { file: '/client/islands/island-counter.js', strategy: 'idle' } },
     shared: ['/client/islands/preact.js'],
+    styles: ['/client/assets/open-counter-4f7a2b9c1d0e.css'],
   });
   expect(
     module.includes('export const clientAssets = '),
@@ -877,6 +918,12 @@ test('serializeClientAssetsModule emits pure structured data', () => {
     entry: '/client/islands/client.js',
     islands: { 'open-counter': { file: '/client/islands/island-counter.js', strategy: 'idle' } },
     shared: ['/client/islands/preact.js'],
+    styles: ['/client/assets/open-counter-4f7a2b9c1d0e.css'],
   });
-  expect(EMPTY_CLIENT_ASSET_MANIFEST).toEqual({ entry: '', islands: {}, shared: [] });
+  expect(EMPTY_CLIENT_ASSET_MANIFEST).toEqual({
+    entry: '',
+    islands: {},
+    shared: [],
+    styles: [],
+  });
 });

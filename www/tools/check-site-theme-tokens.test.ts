@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 import {
   BARE_PALETTE_ALLOWLIST,
+  BARE_PALETTE_SEGMENTS,
   findBarePaletteFailures,
   loadRoleColorTokens,
 } from './check-site-theme-tokens.ts';
@@ -52,11 +53,11 @@ test('role tokens pass; unknown names and per-line dupes do not double-report', 
 });
 
 test('allowlist suppresses only the named sheet', () => {
-  expect(flagTexts(['color: var(--color-zinc-200);'], '/x/site-ui/article-body.ts')).toHaveLength(
-    0,
-  );
+  expect(
+    flagTexts(['background: var(--color-zinc-950);'], '/x/islands/open-search.tsx'),
+  ).toHaveLength(0);
   // The same ref in any other sheet stays red: the key is sheet-scoped.
-  expect(flagTexts(['color: var(--color-zinc-200);'])[0]).toContain('BARE_PALETTE_ALLOWLIST');
+  expect(flagTexts(['background: var(--color-zinc-950);'])[0]).toContain('BARE_PALETTE_ALLOWLIST');
 });
 
 test('role names come from theme.css, not a checker copy', async () => {
@@ -69,10 +70,18 @@ test('role names come from theme.css, not a checker copy', async () => {
 });
 
 test('allowlist entries stay live: token still referenced by its sheet', async () => {
-  const siteUiRoot = fileURLToPath(new URL('../app/site-ui/', import.meta.url));
+  // Sheet files live under one of the gate's own segments (the checker's
+  // segment list is the single location fact; #1553 moved the open-search
+  // sheet into its island module).
+  const appRoot = fileURLToPath(new URL('../app/', import.meta.url));
   for (const key of Object.keys(BARE_PALETTE_ALLOWLIST)) {
     const [sheet, token] = key.split(':');
-    const text = await readFile(`${siteUiRoot}${sheet}`, 'utf8');
-    expect(text.includes(`var(${token})`), key).toEqual(true);
+    const candidates = BARE_PALETTE_SEGMENTS.map((segment) => `${appRoot}${segment}${sheet}`);
+    const texts = await Promise.all(
+      candidates.map((path) => readFile(path, 'utf8').catch(() => null)),
+    );
+    const text = texts.find((candidate) => candidate !== null);
+    expect(text, `${key} — no candidate sheet found under ${candidates.join(', ')}`).toBeDefined();
+    expect(text!.includes(`var(${token})`), key).toEqual(true);
   }
 });

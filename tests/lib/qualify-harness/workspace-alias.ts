@@ -123,9 +123,6 @@ export async function applyWorkspaceAliases(
  * documents for its clean-machine simulation.
  */
 export async function installAppDependencies(appDir: string): Promise<void> {
-  await writeFile(
-    join(appDir, 'pnpm-workspace.yaml'),
-    'packages: []\nallowBuilds:\n  esbuild: true\n',
-  );
+  await writeFile(join(appDir, 'pnpm-workspace.yaml'), 'packages: []\n');
   await runStep('pnpm', ['install'], { cwd: appDir });
 }

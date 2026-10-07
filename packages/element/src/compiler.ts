@@ -31,6 +31,14 @@ export {
   type SemanticCoreOptions,
   type StaticSidecarDescriptor,
 } from './internal/compiler/semantic-core/module-analysis.ts';
+export { type CompiledStyleRequest } from './internal/compiler/semantic-core/style-admission.ts';
+export {
+  clearStyleRequests,
+  getStyleRequest,
+  registerStyleRequest,
+  type RegisteredStyleRequest,
+  styleRequestModuleId,
+} from './internal/compiler/style-requests.ts';
 export {
   type EmittedModuleDiagnostic,
   type EmittedModuleTypeCheckOptions,

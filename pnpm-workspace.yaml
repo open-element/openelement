@@ -21,8 +21,7 @@ packages:
 # least 3 days (4320 minutes) before they are eligible for resolution.
 minimumReleaseAge: 4320
 
-# Postinstall allowlist (pnpm blocks build scripts by default). esbuild
-# validates/links its platform binary; pagefind downloads the search binary.
+# Postinstall allowlist (pnpm blocks build scripts by default). pagefind
+# downloads the search binary.
 allowBuilds:
-  esbuild: true
   pagefind: true

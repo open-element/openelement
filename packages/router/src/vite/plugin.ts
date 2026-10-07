@@ -25,6 +25,7 @@ import { createCompilerHooks } from './plugin-hmr.ts';
 import { createBuildStartHook } from './plugin-scanners.ts';
 import { createConfigureServerHook } from './plugin-watch.ts';
 import { createVirtualEntryPlugin, VIRTUAL_ENTRY_ID } from './plugin-virtual-modules.ts';
+import { devStyleAssetPlugin } from './internal/style-assets.ts';
 
 /** Internal-only third argument of {@linkcode createOpenPlugin}. */
 export interface CreateOpenPluginInternalOptions {
@@ -72,6 +73,10 @@ export function createOpenPlugin(
   const plugins: Plugin[] = [
     mdxPlugin({ routesDir: state.resolvedOptions.routesDir }),
     corePlugin,
+    // the dev half of the island style asset protocol — the
+    // compiled-element transform above activates the protocol, and this
+    // plugin serves the sheet adapters (inline form; no emitted asset in dev).
+    devStyleAssetPlugin(),
     virtualEntryPlugin,
   ];
 

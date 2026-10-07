@@ -30,6 +30,7 @@ import { Lowering } from './lower-program.ts';
 import { typescriptParser } from './parse-module.ts';
 import { createModuleIntrinsicBindings, type SemanticCoreOptions } from './module-analysis.ts';
 import { type CompiledElementSourceMap } from './source-map.ts';
+import { type CompiledStyleRequest } from './style-admission.ts';
 import { type PartProgramV1 } from '../../protocol/part-program.ts';
 
 export { CompiledElementError, type ElementCompilerDiagnostic } from './compiler-diagnostics.ts';
@@ -49,6 +50,13 @@ export interface CompileElementResult {
    */
   map: CompiledElementSourceMap;
   program: PartProgramV1;
+  /**
+   * The island style asset protocol's request when this module's `static
+   * styles` admitted as statically provable: the reserved-suffix
+   * sibling specifier the generated module imports, plus the exact CSS the
+   * intercepting build must emit. Undefined on the legacy path.
+   */
+  styleRequest?: CompiledStyleRequest;
 }
 
 /**
@@ -58,6 +66,11 @@ export interface CompileElementResult {
  * {@link CompiledElementError} carrying the ordered OEC diagnostics.
  * `options.staticSidecars` admits host-declared sidecar policy statements
  * (e.g. an island delivery descriptor); the default core admits none.
+ * `options.styleAssetProtocol` activates the island style asset protocol
+ * island modules emit `.oe-style.css` resource requests instead
+ * of inlined stylesheet bytes, and require a host build plugin that
+ * intercepts the reserved suffix — without one the build fails at import
+ * resolution, never silently inlines.
  */
 export function compileElementProgram(
   source: string,
@@ -80,7 +93,7 @@ export function compileElementProgram(
   // analysis — no spelling-based recognizer survives in the compiler.
   const intrinsics = createModuleIntrinsicBindings(sf, options);
 
-  const analyzed = analyzeCompiledModule(sf, intrinsics, fail);
+  const analyzed = analyzeCompiledModule(sf, intrinsics, fail, options);
 
   const methodNames = analyzed.methods.map((method) => (method.name as ts.Identifier).text);
   const lowering = new Lowering(sf, analyzed.fields, methodNames);
@@ -117,5 +130,8 @@ export function compileElementProgram(
     metadataJson,
     observedJson,
   });
-  return { code, map, program };
+  const styleRequest: CompiledStyleRequest | undefined = analyzed.styleRequest
+    ? { tag: analyzed.tag, ...analyzed.styleRequest }
+    : undefined;
+  return { code, map, program, ...(styleRequest === undefined ? {} : { styleRequest }) };
 }

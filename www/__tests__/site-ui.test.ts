@@ -108,6 +108,10 @@ test('open-search keeps its view compiler-owned and its browser state external',
   expect(source).toContain("from '../site-ui/open-search-controller.ts'");
   const result = compileElementProgram(source, url.pathname, {
     staticSidecars: ISLAND_SIDECARS,
+    // The island carries a same-module style sheet (ADR-0164 §4); the router
+    // build activates the style asset protocol for islands, so this consumer
+    // form must compile under the same activation.
+    styleAssetProtocol: true,
   });
   expect(result.program.tag).toEqual('open-search');
   // The view is property-driven (C-5): the shell passes the page-locale chrome

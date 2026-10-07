@@ -8,9 +8,26 @@
  */
 import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
-import { tickerStyles } from '../components/page-styles.ts';
+import { compiledStyle } from '../components/page-styles.ts';
 
 export const openElement = defineIslandConfig({ hydrate: 'only', ssr: false, dsd: false });
+
+// Same-module style sheet: the compiler erases this const from
+// the island module and emits its bytes as the component's `.oe-style.css`
+// asset. Cross-module sheet imports fail closed (OEC9028).
+const tickerStyles = [
+  compiledStyle(`
+    :host { display: inline-block; }
+    .ticker-row { display: inline-flex; gap: 0.75rem; align-items: center; }
+    button {
+      height: 2rem; padding: 0 0.9rem; border: 1px solid var(--line); border-radius: 6px;
+      background: #fff; color: var(--ink); font-size: 0.9rem; cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease;
+    }
+    button:hover { border-color: var(--brand); color: var(--brand); }
+    span { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+  `),
+];
 
 @element('only-ticker', { root: 'shadow-open' })
 export default class OnlyTicker extends OpenElement {

@@ -18,6 +18,10 @@ import { resolvePageDocument } from '../src/document.ts';
 import type { PagePropsContext } from '../src/index.ts';
 import { packageIslandIdentity } from '../src/cli/build-client.ts';
 import {
+  requireElementRuntimeChunk,
+  resolveElementRuntimeIdentity,
+} from '../src/vite/internal/element-runtime-chunk.ts';
+import {
   authoringError,
   buildError,
   ClientAssetErrorCode,
@@ -249,6 +253,25 @@ test('error codes: the client island build reports build-phase codes', () => {
   );
   expect(error.code).toEqual(ClientBuildErrorCode.PACKAGE_IDENTITY_UNRESOLVED);
   expect(error.phase).toEqual('build');
+
+  // #1544: the shared element-runtime chunk's raisers report the same
+  // surface — an unanchorable package root fails identity resolution, and a
+  // native build that grouped zero runtime modules fails the emitted-chunk
+  // guard instead of shipping per-island runtime copies.
+  const identityError = assertThrowsIncludes(
+    () => resolveElementRuntimeIdentity('/nowhere/src/index.ts'),
+    OpenElementError,
+    'cannot be anchored',
+  );
+  expect(identityError.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_IDENTITY_UNRESOLVED);
+  expect(identityError.phase).toEqual('build');
+  const chunkError = assertThrowsIncludes(
+    () => requireElementRuntimeChunk([], { packageRoot: '/nowhere/packages/element' }),
+    OpenElementError,
+    'shared element-runtime chunk never fired',
+  );
+  expect(chunkError.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
+  expect(chunkError.phase).toEqual('build');
 });
 
 /** The minimal delivery entry the raiser proofs above need. */

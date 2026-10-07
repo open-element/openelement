@@ -19,7 +19,11 @@ import {
   type ProgramEachPart,
   type ProgramWhenPart,
 } from '../../protocol/part-program.ts';
-import { EachKeyErrorCode, RuntimeErrorCode } from '../../protocol/errors.ts';
+import {
+  EachKeyErrorCode,
+  RUNTIME_MESSAGES_ENABLED,
+  RuntimeErrorCode,
+} from '../../protocol/errors.ts';
 import type { LifetimeScope } from '../lifetime-scope.ts';
 import type { MountContext } from './program-kernel.ts';
 import {
@@ -51,8 +55,15 @@ function regionName(part: ProgramEachPart | ProgramWhenPart): string {
  * authored property and the received value is what makes the failure
  * actionable; the compiler cannot reject it because the property type is an
  * authoring decision, and the Region is re-read on every signal write.
+ *
+ * The strip seam (#1546) sits before the template: in a production client
+ * build {@linkcode RUNTIME_MESSAGES_ENABLED} is a literal `false`, so the
+ * early return keeps only the code and the minifier drops the prose. The
+ * origin prefix stays in both halves — it names the failing module and tag,
+ * which is runtime data, not payload prose.
  */
 export function expectsArrayMessage(where: string, part: ProgramEachPart, value: unknown): string {
+  if (!RUNTIME_MESSAGES_ENABLED) return `${where}: ${RuntimeErrorCode.LIST_VALUE_NOT_ARRAY}`;
   const received = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
   return (
     `${where}: the list Region over ${regionName(part)} expects an array, got ` +
@@ -61,8 +72,11 @@ export function expectsArrayMessage(where: string, part: ProgramEachPart, value:
   );
 }
 
-/** Two items in one list Region derived the same item key. */
+/** Two items in one list Region derived the same item key (#1546 seam: see expectsArrayMessage). */
 function duplicateKeyMessage(ctx: MountContext, part: ProgramEachPart, key: string): string {
+  if (!RUNTIME_MESSAGES_ENABLED) {
+    return `${origin(ctx)}: ${EachKeyErrorCode.DUPLICATE_KEY}`;
+  }
   return (
     `${origin(ctx)}: duplicate key in the list Region over ${regionName(part)} — two items ` +
     `share ${JSON.stringify(part.key)} = ${key}. A key is the item's DOM identity and must be ` +

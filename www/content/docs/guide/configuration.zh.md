@@ -71,7 +71,7 @@ export default [
 ];
 ```
 
-每个条目是 `{ meta }` 记录、`{ link }` 记录（`rel` 与 `href` 必填）或 `{ style }` CSS 字符串，按书写顺序输出。属性名、URL 协议与内联 CSS 都经过与其他 head 片段完全相同的 fail-closed 检查：不安全的属性名、`javascript:` URL、`@import` 或提前闭合的 `</style>` 会让构建失败，而不是被静默丢弃。需要文件字节原样进入文档时用 `?raw` 导入 CSS（`?inline` 会让它过一遍 Vite 的 CSS 管线）——本站固定的 Prism 主题就是这样导入的。
+每个条目是 `{ meta }` 记录、`{ link }` 记录（`rel` 与 `href` 必填）或 `{ style }` CSS 字符串，按书写顺序输出。属性名、URL 协议与内联 CSS 都经过与其他 head 片段完全相同的 fail-closed 检查：不安全的属性名、`javascript:` URL、`@import` 或提前闭合的 `</style>` 会让构建失败，而不是被静默丢弃。需要文件字节原样进入文档时用 `?raw` 导入 CSS（`?inline` 会让它过一遍 Vite 的 CSS 管线）。
 
 ## 内容 collection 归站点所有
 
@@ -160,27 +160,40 @@ export default definePage(BlogPostPage, {
 
 `getStaticPaths()` 预渲染每个 slug；`innerHTML` + `trustedHtml` 是渲染 markdown HTML 的显式信任边界。
 
-## 代码块语法高亮（可选）
+## 代码块语法高亮（构建期）
 
-站点自有的 collection loader 把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。collection 的 `markdown` 选项可以替换 renderer；其输出仍是第一方可信内容，hljs span 只追加 `class` 属性。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站 vendored 在 `public/assets/vendor/prism/` 并在 `www/openelement.config.ts` 声明的同源 script）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
+站点自有的 collection loader 在构建机的 generate 步骤里把围栏代码块编译为 Shiki token span——高亮器是 devDependency，永不进入客户端 bundle，页面携带的是静态 token 标记：没有高亮 script，也没有高亮闪烁。token 颜色是 `var(--shiki-token-*)` 引用，由站点样式表里唯一的调色板表解析，两套配色随 `data-theme` 与站点其他颜色一起切换。collection 的 `markdown` 选项可以替换 renderer；其输出仍是第一方可信内容。路由/页面里的代码块用 `<open-code-block>`（`@openelement/ui`）包裹——它只拥有 copy 按钮；高亮是构建期编译进 slot light DOM 的部分，没有 token span 的代码块也照常渲染（可复制）为纯文本。
 
-### lib/blog.ts —— 语法高亮配方（可选）
+### lib/blog.ts —— 语法高亮配方
 
 ```ts
 import { marked } from 'marked';
-import hljs from 'highlight.js';
+import {
+  createCssVariablesTheme,
+  createHighlighter,
+  createJavaScriptRegexEngine,
+} from 'shiki';
 import type { CollectionOptions } from '../lib/content.ts';
 
-// Default marked behavior + hljs token spans. hljs output only adds class
-// attributes to <code>.
+// 构建期高亮：token 颜色是 CSS 变量，由站点样式表解析；严格的 JavaScript
+// regex 引擎不加载 WASM，遇到不兼容 grammar 直接让构建失败。不在已加载
+// 集合内的语言回落到 marked 的纯文本 <pre><code> 路径。
+const theme = createCssVariablesTheme({ variablePrefix: '--shiki-' });
+const highlighter = await createHighlighter({
+  themes: [theme],
+  langs: ['typescript', 'tsx', 'javascript', 'json', 'bash', 'css', 'html'],
+  engine: createJavaScriptRegexEngine(),
+});
+const langs = new Set(['typescript', 'tsx', 'javascript', 'json', 'bash', 'css', 'html']);
+
 const markdown = (content: string) =>
   marked(content, {
-    async: true,
     renderer: {
       code(code: string, lang: string | undefined) {
-        const language = hljs.getLanguage(lang ?? '') ? lang : 'plaintext';
-        const html = hljs.highlight(code, { language }).value;
-        return `<pre><code class="language-${language}">${html}</code></pre>`;
+        const grammar = ({ ts: 'typescript', js: 'javascript', sh: 'bash' })[lang ?? ''] ?? lang;
+        return grammar && langs.has(grammar)
+          ? highlighter.codeToHtml(code, { lang: grammar, theme })
+          : false;
       },
     },
   });

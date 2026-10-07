@@ -5,7 +5,8 @@
  * render identical prose typography (the guide redesign references the blog
  * as its layout model). `prepareArticle` post-processes compiled markdown
  * HTML: stable heading ids + rail outline, and <pre> → <open-code-block>
- * wrapping (copy button + highlighting).
+ * wrapping (copy button; the token highlighting is already in the fence HTML
+ * from the build-time markdown pipeline).
  *
  * `articleContentStyles(scope)` emits the prose stylesheet scoped to the
  * caller's container class — blog keeps '.blog-content', guide-article uses
@@ -298,7 +299,8 @@ export function prepareArticle(
       );
     })
     .join('');
-  // Code display goes through open-code-block (copy button + highlighting).
+  // Code display goes through open-code-block (copy button; the highlighting
+  // itself is already compiled into the fence HTML at generation time).
   const withCodeBlocks = withIds.replace(
     /(<pre[\s\S]*?<\/pre>)/gi,
     '<open-code-block>$1</open-code-block>',
@@ -331,7 +333,10 @@ export function articleContentStyles(scope: string): string {
     ${scope} strong { color: var(--color-foreground); }
     ${scope} code { background: var(--color-muted); color: var(--color-foreground); padding: 0.125rem 0.375rem; border-radius: var(--radius-md); font-size: var(--text-sm); font-family: var(--font-mono); }
     ${scope} pre { background: var(--surface-code); border: 0.5px solid var(--color-border); border-radius: var(--radius-lg); padding: calc(var(--spacing) * 4); overflow-x: auto; margin: calc(var(--spacing) * 4) 0; }
-    ${scope} pre code { background: none; color: var(--color-zinc-200); padding: 0; font-size: var(--text-sm); line-height: 1.6; }
+    ${scope} pre code { background: none; color: var(--surface-code-foreground); padding: 0; font-size: var(--text-sm); line-height: 1.6; }
+    /* Fenced blocks compile to Shiki token spans at generation time; token
+       colors resolve through the --shiki-* palette table (site-css.ts), so
+       this sheet only owns the surface, the border and the plain-fence ink. */
     ${scope} open-code-block { margin: calc(var(--spacing) * 5) 0; }
     /* Tables carry their own scroll container: a comparison table's min-content
        (706px on /architecture/comparison) exceeds the reading column below
@@ -342,8 +347,8 @@ export function articleContentStyles(scope: string): string {
     ${scope} table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: calc(var(--spacing) * 4) 0; font-size: var(--text-base); }
     ${scope} th, ${scope} td { padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3); text-align: left; border-bottom: 0.5px solid var(--color-border); }
     ${scope} th { background: var(--color-muted); color: var(--color-muted-foreground); font-weight: var(--font-weight-semibold); font-size: var(--font-size-overline); text-transform: uppercase; letter-spacing: var(--tracking-normal); }
-    ${scope} a { color: var(--color-primary); text-decoration: none; }
-    ${scope} a:hover { text-decoration: underline; }
+    ${scope} a { color: var(--color-primary); text-decoration: underline; text-underline-offset: var(--underline-offset); text-decoration-color: color-mix(in srgb, var(--color-primary) 34%, transparent); }
+    ${scope} a:hover { text-decoration-thickness: calc(var(--spacing) * 0.25); }
     /* Keyboard focus indicator on the ring role — the sheet is unlayered, so
        it wins over the preset bundle's base layer like every rule here. */
     ${scope} a:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }

@@ -49,6 +49,29 @@ export const DEFAULT_RENDER_ERROR_CODE = 'RENDER_ERROR';
 /** Error message prefix for all openElement errors. */
 export const ERROR_PREFIX = '[openElement]';
 
+// ─── Production message strip seam (#1546) ──────────────────────────
+
+/**
+ * The client build's strip switch (#1546): never referenced bare and never
+ * declared at runtime. The router's client build (build-client.ts) injects
+ * `OE_RUNTIME_MESSAGES: 'false'` through Vite `define`, so this identifier —
+ * read once by {@linkcode RUNTIME_MESSAGES_ENABLED} — is replaced textually
+ * and the authored prose guarded on it folds out of the bundle. The
+ * `typeof` read keeps every environment no define reaches (tests, dev server,
+ * SSR, node consumers) on the full-message default instead of tripping an
+ * undeclared global: element source must evaluate cleanly without a bundler.
+ */
+declare const OE_RUNTIME_MESSAGES: boolean | undefined;
+
+/**
+ * Whether the authored error prose is kept: `true` everywhere except a
+ * production client build, the one context that defines
+ * `OE_RUNTIME_MESSAGES` to `false`. Stripping is a payload decision, so it
+ * belongs to the browser bundle only — server-side failures keep their prose.
+ */
+export const RUNTIME_MESSAGES_ENABLED: boolean =
+  typeof OE_RUNTIME_MESSAGES === 'boolean' ? OE_RUNTIME_MESSAGES : true;
+
 // ─── Types ──────────────────────────────────────────────────────────
 
 export type ErrorSeverity = 'error' | 'warning';

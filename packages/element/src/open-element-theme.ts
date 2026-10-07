@@ -1,5 +1,15 @@
 import type { StyleSheetLike } from './internal/protocol/style-sheet.ts';
 
+/**
+ * The broadcast attribute this manager owns on every connected compiled host.
+ * Single source (P6/P8): the compiled claim reads this name to classify the
+ * attribute as runtime-managed state rather than server-rendered drift —
+ * a host can legally grow it between SSR serialization and a parent's claim
+ * (the manager writes it at this host's own connect, which under chunked
+ * island loading can precede the parent's upgrade).
+ */
+export const THEME_ATTRIBUTE = 'data-theme';
+
 /** Owns global styles and document-theme propagation for OpenElement hosts. */
 export class OpenElementThemeManager {
   #styles: StyleSheetLike[] = [];
@@ -39,7 +49,7 @@ export class OpenElementThemeManager {
 
   connect(host: HTMLElement): void {
     this.#connected.add(host);
-    if (host.hasAttribute('data-theme')) {
+    if (host.hasAttribute(THEME_ATTRIBUTE)) {
       // The host owns its data-theme: broadcasts must not overwrite or remove
       // it (#773). Recorded here so the MutationObserver path can apply the
       // same guard as the connect path. An attribute we applied ourselves on
@@ -49,7 +59,7 @@ export class OpenElementThemeManager {
       const theme =
         typeof document === 'undefined' ? undefined : document.documentElement?.dataset?.theme;
       if (theme) {
-        host.setAttribute('data-theme', theme);
+        host.setAttribute(THEME_ATTRIBUTE, theme);
         this.#broadcastApplied.add(host);
       }
     }
@@ -73,7 +83,7 @@ export class OpenElementThemeManager {
     )
       return;
     const observer = new MutationObserver((mutations) => {
-      if (!mutations.some((m) => m.type === 'attributes' && m.attributeName === 'data-theme')) {
+      if (!mutations.some((m) => m.type === 'attributes' && m.attributeName === THEME_ATTRIBUTE)) {
         return;
       }
       const theme = document.documentElement?.dataset?.theme;
@@ -85,17 +95,17 @@ export class OpenElementThemeManager {
         }
         if (this.#selfThemed.has(host)) continue;
         if (theme) {
-          host.setAttribute('data-theme', theme);
+          host.setAttribute(THEME_ATTRIBUTE, theme);
           this.#broadcastApplied.add(host);
         } else {
-          host.removeAttribute('data-theme');
+          host.removeAttribute(THEME_ATTRIBUTE);
           this.#broadcastApplied.delete(host);
         }
       }
     });
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-theme'],
+      attributeFilter: [THEME_ATTRIBUTE],
     });
     this.#observer = observer;
   }

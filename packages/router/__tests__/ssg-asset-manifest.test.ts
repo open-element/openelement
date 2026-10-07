@@ -448,6 +448,7 @@ test('matrix — postProcessClientIslandBuild honors the manifest on a real temp
         'open-counter': { file: '/client/islands/chunk-9f3e2a.js', strategy: 'idle' },
       },
       shared: [],
+      styles: [],
     };
     await postProcessClientIslandBuild({
       phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' },

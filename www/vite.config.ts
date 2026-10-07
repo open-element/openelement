@@ -77,9 +77,11 @@ export default defineConfig({
   },
   base: '/',
   // Keep Vite's automatic JSX transform aligned with the workspace compiler.
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: '@openelement/element',
+  oxc: {
+    jsx: {
+      runtime: 'automatic',
+      importSource: '@openelement/element',
+    },
   },
   plugins: [openElement(), siteTailwindPreset()],
 });

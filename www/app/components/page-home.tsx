@@ -1,5 +1,12 @@
 /** @jsxImportSource @openelement/element */
-import { computed, element, OpenElement, property, trustedHtml } from '@openelement/element';
+import {
+  computed,
+  element,
+  OpenElement,
+  property,
+  trustedHtml,
+  type TrustedHtml,
+} from '@openelement/element';
 import '@openelement/ui/open-code-block';
 import '../islands/open-cinematic-scroll.tsx';
 import '../islands/open-dragon-live-gaze.tsx';
@@ -90,6 +97,12 @@ export default class PageHome extends OpenElement {
   specOutput = '';
   @property({ reflect: false, attribute: false })
   begin = '';
+  /**
+   * The hero component example, pre-highlighted at generation time
+   * (app/data/_generated-page-code.ts — build-time Shiki, --shiki-* palette).
+   */
+  @property({ type: Object, reflect: false, attribute: false })
+  heroCodeHtml: TrustedHtml = trustedHtml('');
   /** The create CLI's canonical install command (#1414), rendered verbatim. */
   @property({ reflect: false, attribute: false })
   beginCommand = '';
@@ -240,24 +253,7 @@ export default class PageHome extends OpenElement {
           </div>
           <div class='scene-art'>
             <open-code-block>
-              <pre>
-                <code>{`import { element, OpenElement, property } from '@openelement/element'
-
-@element('open-counter', { root: 'shadow-open' })
-export class OpenCounter extends OpenElement {
-  @property({ reflect: true, attribute: 'count', type: Number })
-  count = 0
-
-  render() {
-    return (
-      <button type="button">Count: {this.count}</button>
-    )
-  }
-}
-
-// SSR: <open-counter count="0"> + DSD shadow root.
-// Markup paints and reads with no JavaScript.`}</code>
-              </pre>
+              <div innerHTML={this.heroCodeHtml} trustedHtml />
             </open-code-block>
           </div>
         </section>

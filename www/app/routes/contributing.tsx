@@ -3,9 +3,11 @@
  * PR checklist, numbered help rows, and a questions-first callout.
  */
 import { definePage } from '@openelement/router';
+import { trustedHtml } from '@openelement/element';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import { localizePath } from '#site-ui/link.ts';
+import { contributingSetupCodeHtml } from '../data/_generated-page-code.ts';
 import PageContributing from '../components/page-contributing.tsx';
 
 export const meta = { section: '', label: 'Contributing', order: 30 };
@@ -289,6 +291,9 @@ export default definePage(PageContributing, {
     const text = content[resolved];
     return {
       ...text,
+      // The setup code block is pre-highlighted by the shared site highlighter
+      // (lib/markdown.ts via generate:content) — never a JSX copy.
+      setupCodeHtml: trustedHtml(contributingSetupCodeHtml),
       discussionsHref: 'https://github.com/open-element/openelement/discussions',
       issuesHref: 'https://github.com/open-element/openelement/issues',
       changelogHref: localizePath('/changelog', resolved),

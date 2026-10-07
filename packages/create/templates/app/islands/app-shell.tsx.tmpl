@@ -16,9 +16,30 @@
  */
 import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
-import { shellStyles } from '../components/page-styles.ts';
+import { compiledStyle } from '../components/page-styles.ts';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+
+// Same-module style sheet: the compiler erases this const from
+// the island module and emits its bytes as the component's `.oe-style.css`
+// asset. Cross-module sheet imports fail closed (OEC9028).
+const shellStyles = [
+  compiledStyle(`
+    :host { display: block; min-height: 100vh; }
+    header { border-bottom: 1px solid var(--line); }
+    .bar { max-width: 740px; margin: 0 auto; padding: 1.15rem 1.25rem; display: flex; justify-content: space-between; align-items: baseline; }
+    .brand { font-family: var(--font-serif); font-weight: 700; font-size: 1.2rem; letter-spacing: -0.01em; color: var(--ink); }
+    .brand:hover { text-decoration: none; color: var(--brand); }
+    nav { display: flex; gap: 1.5rem; }
+    nav a { color: var(--ink-2); font-size: 0.95rem; font-weight: 500; }
+    nav a:hover { color: var(--brand); text-decoration: none; }
+    main { max-width: 740px; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+    footer { border-top: 1px solid var(--line); color: var(--ink-2); font-size: 0.85rem; }
+    .foot { max-width: 740px; margin: 0 auto; padding: 1.25rem; display: flex; justify-content: space-between; gap: 1rem; }
+    a { color: var(--brand); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  `),
+];
 
 @element('app-shell', { root: 'shadow-open' })
 export default class AppShell extends OpenElement {

@@ -1,13 +1,12 @@
-/** Changelog route: request projection and build-time Markdown loading. */
+/** Changelog route: request projection over the generated CHANGELOG.md archive. */
 import { definePage } from '@openelement/router';
 import { trustedHtml } from '@openelement/element';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import { localizePath } from '#site-ui/link.ts';
-import { marked } from 'marked';
+import { changelogArchiveHtml } from '../data/_generated-changelog-archive.ts';
 import PageChangelog from '../components/page-changelog.tsx';
 import { COMMON_PUBLISHED_LABEL, PUBLISHED_LATEST, REGISTRY_NOTE } from '../data/version.ts';
-import { readFileSync, statSync } from 'node:fs';
 
 export const meta = { section: '', label: 'Changelog', order: 20 };
 
@@ -45,8 +44,6 @@ const content = {
       'The npm 0.41.0-era beta.1–beta.3 artifacts — published under the 0.41 line before its stable cut — are withdrawn partial releases: never a supported product line, never an upgrade path. The v0.44.0-beta.2.2 prerelease on dist-tag beta is also partial: element, create, and ui published; Router never did, so it is not a four-package release.',
     footnote:
       '※ The withdrawn 0.41.0-era npm beta.1–beta.3 partial artifacts stay withdrawn from the active release story. History is kept, not rewritten.',
-    loadError:
-      '<p>Unable to load the changelog. Read it on <a href="https://github.com/open-element/openelement/blob/main/CHANGELOG.md">GitHub</a>.</p>',
     archiveSource:
       'Rendered unchanged from the repository <a href="https://github.com/open-element/openelement/blob/main/CHANGELOG.md">CHANGELOG.md</a>. Current release truth is machine-checked in <a href="https://github.com/open-element/openelement/blob/main/docs/release/release-state.json">docs/release/release-state.json</a>; the register above summarizes the current npm dist-tags.',
     langNotice: '',
@@ -74,8 +71,6 @@ const content = {
       'npm 上 0.41.0 时代的 beta.1–beta.3 产物——在 0.41 线正式版之前发布——是已撤回的残缺发布：既非受支持的产品线，也不构成升级路径。dist-tag beta 上的 v0.44.0-beta.2.2 预发布同样是残缺发布：element、create、ui 已发布，Router 从未发布，因此它不是四包版本。',
     footnote:
       '※ 已撤回的 0.41.0 时代 npm beta.1–beta.3 残缺产物在活跃发布叙事中保持撤回状态。历史被保留，不被改写。',
-    loadError:
-      '<p>无法加载 changelog。请到 <a href="https://github.com/open-element/openelement/blob/main/CHANGELOG.md">GitHub</a> 阅读。</p>',
     archiveSource:
       '以下内容原样渲染自仓库 <a href="https://github.com/open-element/openelement/blob/main/CHANGELOG.md">CHANGELOG.md</a>。当前发布真值由 <a href="https://github.com/open-element/openelement/blob/main/docs/release/release-state.json">docs/release/release-state.json</a> 机器校验；当前 npm dist-tags 摘要见上方登记表。',
     langNotice: '归档正文以英文原文发布（English original）。',
@@ -84,45 +79,22 @@ const content = {
   },
 } as const;
 
-function loadChangelogHtml(copy: {
-  loadError: string;
-  archiveSource: string;
-  langNotice: string;
-}): string {
-  let changelogPath: URL | undefined;
-  let cursor = new URL('.', import.meta.url);
-  for (let depth = 0; depth < 8 && !changelogPath; depth++) {
-    const candidate = new URL('CHANGELOG.md', cursor);
-    try {
-      statSync(candidate);
-      changelogPath = candidate;
-    } catch {
-      cursor = new URL('../', cursor);
-    }
-  }
-  try {
-    if (!changelogPath) throw new Error('CHANGELOG.md not found');
-    const markdown = readFileSync(changelogPath, 'utf8')
-      .replace(/^#\s+Changelog\s*\n/, '')
-      // CHANGELOG.md links are repository-relative so they resolve on GitHub;
-      // on the built site they would 404 (#1159 link truth), so project them
-      // onto the canonical GitHub tree before rendering.
-      .replaceAll('](./', '](https://github.com/open-element/openelement/tree/main/');
-    // CHANGELOG.md is a first-party repository file: trustedHtml trust level.
-    // Do not feed untrusted Markdown here without sanitizing it first.
-    const archive = marked.parse(markdown, { async: false }) as string;
-    // The archive body is the English original on every locale: disclose that
-    // with the same lang-notice pattern the blog uses (page-blog-post.tsx),
-    // and carry the content language on the wrapper since page-changelog.tsx
-    // owns the outer container.
-    const notice =
-      copy.langNotice === ''
-        ? ''
-        : `<p class="lang-notice" role="note" style="max-width:640px;margin:0 0 calc(var(--spacing) * 4);padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);border-inline-start:calc(var(--spacing) * 0.5) solid var(--color-ring);color:var(--color-muted-foreground);font-size:var(--text-sm);line-height:1.65;">${copy.langNotice}</p>`;
-    return `<p class="archive-source">${copy.archiveSource}</p>${notice}<div lang="en">${archive}</div>`;
-  } catch {
-    return copy.loadError;
-  }
+/**
+ * The archive body is the English original on every locale: disclose that
+ * with the same lang-notice pattern the blog uses (page-blog-post.tsx), and
+ * carry the content language on the wrapper since page-changelog.tsx owns
+ * the outer container. The rendered HTML itself comes from the generated
+ * module (www/tools/generate-site-content-data.ts) — the same build-time
+ * markdown pipeline as the article collections, so a missing CHANGELOG.md
+ * fails generation instead of shipping a fallback page, and no renderer or
+ * filesystem access runs at request time.
+ */
+function changelogArchiveDocument(copy: { archiveSource: string; langNotice: string }): string {
+  const notice =
+    copy.langNotice === ''
+      ? ''
+      : `<p class="lang-notice" role="note" style="max-width:640px;margin:0 0 calc(var(--spacing) * 4);padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);border-inline-start:calc(var(--spacing) * 0.5) solid var(--color-ring);color:var(--color-muted-foreground);font-size:var(--text-sm);line-height:1.65;">${copy.langNotice}</p>`;
+  return `<p class="archive-source">${copy.archiveSource}</p>${notice}<div lang="en">${changelogArchiveHtml}</div>`;
 }
 
 export default definePage(PageChangelog, {
@@ -162,7 +134,7 @@ export default definePage(PageChangelog, {
         label: text.railLabels[index] ?? id,
         depth: '2',
       })),
-      changelogHtml: trustedHtml(loadChangelogHtml(text)),
+      changelogHtml: trustedHtml(changelogArchiveDocument(text)),
       roadmapHref: localizePath('/roadmap', resolved),
       roadmapLabel: text.navRoadmap,
       gettingStartedHref: localizePath('/guide/getting-started', resolved),

@@ -34,9 +34,24 @@ import type { ClientAssetManifest } from '../vite/internal/protocol/client-asset
 import {
   type ClientAssetIslandInput,
   createClientAssetManifest,
+  collectClientBuildChunks,
   packageIslandChunkName,
 } from '../vite/client-asset-manifest.ts';
-import { analyzeModuleSemantics, compiledElementPlugin } from '@openelement/element/compiler';
+import {
+  ELEMENT_RUNTIME_ENTRY_SPECIFIER,
+  type ElementRuntimeIdentity,
+  elementRuntimeChunkName,
+  requireElementRuntimeChunk,
+  resolveElementRuntimeIdentity,
+} from '../vite/internal/element-runtime-chunk.ts';
+import {
+  analyzeModuleSemantics,
+  clearStyleRequests,
+  compiledElementPlugin,
+} from '@openelement/element/compiler';
+import { ELEMENT_RUNTIME_MESSAGES_DEFINE } from '../vite/internal/element-error-messages.ts';
+import { minifyIslandCssModule } from '../vite/internal/island-css.ts';
+import { type StyleAssetRecord, clientStyleAssetPlugin } from '../vite/internal/style-assets.ts';
 import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
 import { ROUTER_MODULE_VOCABULARY } from '../vite/internal/protocol/module-vocabulary.ts';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
@@ -265,6 +280,11 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
 };
 
 async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetManifest | null> {
+  // the style-request registry's bookkeeping is this build's
+  // lifetime — the SSR build clears and re-registers through its own
+  // transforms, and a stale entry from an earlier build in this process must
+  // never answer a request this build's graph did not produce.
+  clearStyleRequests();
   const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const islandsDir = ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR;
@@ -393,6 +413,18 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   const islandModuleIds = new Map<string, string>();
   const declaredIslandSpecifiers = [...new Set(islandEntries.map((entry) => entry.modulePath))];
 
+  // #1544: the shared element-runtime chunk's grouping identity — the
+  // element package root, derived from a module id this build's own resolver
+  // answers (same identity pass, same virtual-entry importer the generated
+  // entry's runtime import resolves through). Filled in buildStart, before
+  // chunk grouping runs, renderer-independent: the specifier resolves under
+  // lit too — the lit entry is element-free (#1339), but element modules
+  // still reach its graph transitively through the router client runtime —
+  // so the identity, and the group, are real under both renderers. Only the
+  // guards are renderer-conditional: an unresolvable specifier fails a
+  // native build and is tolerated under lit.
+  let elementRuntimeIdentity: ElementRuntimeIdentity | null = null;
+
   const clientAssetIslands: ClientAssetIslandInput[] = [
     ...selectedLocalTags.map((tagName, index) => ({
       entry: islandEntries[index],
@@ -440,19 +472,31 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
 
   const clientOutDir = resolve(root, outDir, 'client');
   const clientBase = ctx.phase3.base || '/';
+
+  // this build owns the island style asset protocol's `.css`
+  // artifacts. The emission records feed the manifest's `styles` field and
+  // the Phase 3 SSR read.
+  const styleAssetRecords = new Map<string, StyleAssetRecord>();
+
   const clientConfig: ViteInlineConfigWithManifest = {
     configFile: false,
     root,
     base: `${clientBase}client/`,
     logLevel: 'warn',
+    // #1546: production bundles strip the element runtime's authored error
+    // prose to its stable codes (element's protocol/errors.ts seam). Dev
+    // builds never inject this, so dev keeps the full messages.
+    define: ELEMENT_RUNTIME_MESSAGES_DEFINE,
     // JSX automatic runtime must be configured in the internal
     // viteBuild() call — configFile:false means user's vite.config.ts is
-    // NOT read. Without this, esbuild defaults to classic React.createElement
-    // transform, producing {type, props, $$typeof} objects that OpenElement
-    // does not recognize (causes [object Object] rendering).
-    esbuild: {
-      jsx: 'automatic',
-      jsxImportSource: '@openelement/element',
+    // NOT read. Without this, the oxc transform falls back to the react
+    // jsx-runtime import, producing {type, props, $$typeof} objects that
+    // OpenElement does not recognize (causes [object Object] rendering).
+    oxc: {
+      jsx: {
+        runtime: 'automatic',
+        importSource: '@openelement/element',
+      },
     },
     build: {
       outDir: clientOutDir,
@@ -494,6 +538,22 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
                       priority: 10,
                     },
                     {
+                      // #1544: the element runtime rides one shared chunk,
+                      // exactly as the native renderer's manualChunks branch
+                      // groups it. Real under lit too: the identity pass
+                      // resolves the runtime here as well, and the element
+                      // modules that reach a lit graph transitively (router
+                      // client runtime) home in this chunk. Harmless for lit
+                      // — its element-free entry (#1339) has no ordering
+                      // stake in the runtime — and a lit graph with zero
+                      // element modules legally leaves the group empty (lit
+                      // skips the post-build guard).
+                      name(id: string) {
+                        return elementRuntimeChunkName(id, elementRuntimeIdentity) ?? null;
+                      },
+                      priority: 15,
+                    },
+                    {
                       name(id: string) {
                         if (id.includes(`/${islandsDir}/`)) {
                           const match = id.match(/\/([^/]+)\.(ts|tsx|js|jsx)$/);
@@ -513,6 +573,15 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
                 entryFileNames: 'islands/[name].js',
                 chunkFileNames: 'islands/[name]-[hash].js',
                 manualChunks(id: string) {
+                  // #1544: the element runtime rides one shared chunk every
+                  // island imports, instead of homing inside whichever island
+                  // chunk its import reached first. The match is exact
+                  // package-root containment from the identity pass — a
+                  // native build that groups zero runtime modules fails the
+                  // post-build guard below rather than shipping per-island
+                  // copies.
+                  const runtimeChunk = elementRuntimeChunkName(id, elementRuntimeIdentity);
+                  if (runtimeChunk) return runtimeChunk;
                   // Force preact + preact/hooks into a single chunk so the shared
                   // options object is not duplicated across chunks (which breaks hooks).
                   if (id.includes('node_modules/preact') || id.includes('/preact/')) {
@@ -555,6 +624,9 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       // The compiler is part of the official client build path. The outer
       // open:core hook covers normal Vite transforms; this inline build owns
       // its own plugin list and must use the same transform exactly once.
+      // styleAssetProtocol: the router build is the only host that can
+      // produce island modules (defineIslandConfig admission rides its
+      // injected sidecar descriptor), so it always activates — the transition ends here, not behind an option.
       compiledElementPlugin({
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
@@ -562,7 +634,25 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         // Island modules carry the island delivery policy statement; the
         // compiler admits it only through the injected descriptor.
         staticSidecars: [ISLAND_ADMISSION],
+        styleAssetProtocol: true,
       }),
+      // intercepts the compiler's `.oe-style.css` requests before
+      // vite's CSS plugin, emits the real `.css` assets, and hands the sheet
+      // adapters back to the module graph.
+      clientStyleAssetPlugin(styleAssetRecords),
+      {
+        // #1543: the oxc JS minifier never touches template-literal content,
+        // so component stylesheets shipped with their authored formatting.
+        // Collapse them after the compiler and Vite's TS lowering (enforce
+        // 'post') so the chunk's CSS rides minified; fails open to unminified.
+        name: 'open:minify-island-css',
+        enforce: 'post',
+        transform(code: string, id: string) {
+          const cleanId = id.split('?', 1)[0];
+          if (cleanId.includes('\0') || !/\.[cm]?[jt]sx?$/.test(cleanId)) return null;
+          return minifyIslandCssModule(code);
+        },
+      },
       {
         name: 'open:exclude-preact-rts',
         resolveId(id: string) {
@@ -619,6 +709,31 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
               }
               islandModuleIds.set(specifier, resolved.id);
             }
+            // #1544: anchor the shared element-runtime chunk's identity the
+            // same way — through this build's own resolver, from the virtual
+            // entry the generated code imports the runtime through. The
+            // specifier resolves under both renderers (lit carries element
+            // modules transitively via the router client runtime), so the
+            // identity — and the group — are set for lit builds too. The
+            // element-free lit entry (#1339) changes only the failure
+            // posture: native builds statically import the runtime, so an
+            // unresolvable specifier (or a package layout the root walk
+            // cannot anchor) fails here instead of letting chunk grouping
+            // guess, while lit tolerates it with the identity left null
+            // rather than failing a build that requires no runtime.
+            const runtimeResolved = await this.resolve(
+              ELEMENT_RUNTIME_ENTRY_SPECIFIER,
+              RESOLVED_CLIENT_ENTRY_ID,
+            );
+            if (runtimeResolved) {
+              elementRuntimeIdentity = resolveElementRuntimeIdentity(runtimeResolved.id);
+            } else if (ctx.options.renderer !== 'lit') {
+              this.error(
+                `The element runtime "${ELEMENT_RUNTIME_ENTRY_SPECIFIER}" does not resolve in the ` +
+                  `client build (importer: ${VIRTUAL_CLIENT_ENTRY_ID}) — the generated entry ` +
+                  `statically imports it, so the shared element-runtime chunk cannot be grouped`,
+              );
+            }
           },
         },
       },
@@ -628,6 +743,15 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   try {
     const outputs = await viteBuild(clientConfig);
     log.info('Client bundle built -> ' + clientOutDir);
+
+    // #1544, fail closed: a native build's entry statically imports the
+    // element runtime, so the emitted graph must group runtime modules into
+    // the shared chunk — zero matches is a structural failure (per-island
+    // runtime copies would ship silently), not a degraded chunk layout. Lit
+    // builds are element-free by design (#1339) and skip the guard.
+    if (ctx.options.renderer !== 'lit') {
+      requireElementRuntimeChunk(collectClientBuildChunks(outputs), elementRuntimeIdentity);
+    }
 
     // #1471: the client asset manifest — compile-time island identity joined
     // with the build manifest and Rollup module metadata (never output file
@@ -646,7 +770,11 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       manifestPath: join(clientOutDir, '.vite', 'manifest.json'),
       buildResult: outputs,
       resolvedIslandModuleIds: islandModuleIds,
+      styleFileNames: [...styleAssetRecords.values()].map((record) => record.fileName),
     });
+    // the emission records cross to Phase 3 here — the SSR build
+    // reads the same emitted assets (hash-checked) for the DSD text.
+    ctx.styleAssets = styleAssetRecords;
 
     const { printBuildManifest } = await import('../vite/build-manifest.ts');
     printBuildManifest({ root, outDir, phase: 2, budget: ctx.phase3.manifestBudget });
