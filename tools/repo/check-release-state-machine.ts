@@ -218,6 +218,10 @@ export function validateRegistryEvidence(
     // treating that failure as drift would make the first-publish train
     // unprovable; the flip to "published" is where proof resumes.
     if (entry.status !== 'published') continue;
+    if (!entry.registry) {
+      failures.push(`${entry.name} is published but carries no registry record`);
+      continue;
+    }
     const versions = evidence.versions[entry.name];
     const distTags = evidence.distTags[entry.name];
     if (!versions || !distTags) {
