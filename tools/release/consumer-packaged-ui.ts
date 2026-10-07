@@ -48,6 +48,8 @@ try {
       dependencies: {
         '@openelement/ui': `file:${uiTarball}`,
         '@openelement/element': `file:${elementTarball}`,
+        // element's #1557 transitive workspace pin, satisfied locally.
+        '@openelement/protocol': `file:${repoRoot}/packages/protocol/openelement-protocol-${PACKAGE_VERSION}.tgz`,
         typescript: '6.0.3',
       },
     }),
@@ -74,7 +76,8 @@ try {
 
   writeFileSync(
     join(tmp, 'main.ts'),
-    `import { OpenButton, OpenCallout, OpenInput, manifest, registerOpenUi } from '@openelement/ui';
+    `import { OpenButton, OpenInput, manifest, registerOpenUi } from '@openelement/ui';
+import { OpenDialog } from '@openelement/ui/open-dialog';
 import { OpenDropdown } from '@openelement/ui/open-dropdown';
 import { createLogger, type Logger, type ReadonlySignal } from '@openelement/element';
 
@@ -89,11 +92,10 @@ const button = new OpenButton();
 button.variant = 'primary';
 const input = new OpenInput();
 input.label = 'Name';
-const callout = new OpenCallout();
-callout.type = 'info';
+const dialog = new OpenDialog();
 const dropdown = new OpenDropdown();
 dropdown.anchorName = 'menu';
-void [button, input, callout, dropdown];
+void [button, input, dialog, dropdown];
 if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI manifest');
 `,
   );

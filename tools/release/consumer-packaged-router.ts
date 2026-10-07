@@ -27,11 +27,17 @@ const repoRoot = resolve(import.meta.dirname!, '../..');
 const packages = await readPackages();
 const router = packages.find((pkg) => pkg.name === '@openelement/router');
 const element = packages.find((pkg) => pkg.name === '@openelement/element');
+const protocol = packages.find((pkg) => pkg.name === '@openelement/protocol');
+const compiler = packages.find((pkg) => pkg.name === '@openelement/compiler');
 if (!router) throw new Error('@openelement/router is missing from the package graph');
 if (!element) throw new Error('@openelement/element is missing from the package graph');
+if (!protocol) throw new Error('@openelement/protocol is missing from the package graph');
+if (!compiler) throw new Error('@openelement/compiler is missing from the package graph');
 const routerTarball = join(repoRoot, tarballPath(router));
 const elementTarball = join(repoRoot, tarballPath(element));
-for (const tarball of [routerTarball, elementTarball]) {
+const protocolTarball = join(repoRoot, tarballPath(protocol));
+const compilerTarball = join(repoRoot, tarballPath(compiler));
+for (const tarball of [routerTarball, elementTarball, protocolTarball, compilerTarball]) {
   if (!existsSync(tarball))
     throw new Error(`Missing ${tarball}; run pnpm --dir tools/release run pack:dry-run first`);
 }
@@ -66,6 +72,15 @@ async function routeModeConsumer(tmp: string): Promise<void> {
           hono: '4.13.7',
         },
         devDependencies: { typescript: '5.9.3' },
+        // The packed router's REGULAR transitive workspace pins (#1557:
+        // protocol, compiler) have no published copy before release day, and
+        // Route Mode must keep Element absent (it ships as a peer in the
+        // packed manifest) — overrides redirect only those two, installing
+        // nothing by themselves.
+        overrides: {
+          '@openelement/protocol': `file:${protocolTarball}`,
+          '@openelement/compiler': `file:${compilerTarball}`,
+        },
       },
       null,
       2,
@@ -141,6 +156,9 @@ async function frameworkRootConsumer(tmp: string): Promise<void> {
         dependencies: {
           '@openelement/router': `file:${routerTarball}`,
           '@openelement/element': `file:${elementTarball}`,
+          // #1557 transitive workspace pins, satisfied from local tarballs.
+          '@openelement/protocol': `file:${protocolTarball}`,
+          '@openelement/compiler': `file:${compilerTarball}`,
         },
         devDependencies: { typescript: '5.9.3' },
       },

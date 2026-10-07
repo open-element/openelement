@@ -39,6 +39,9 @@ try {
         // The compiler split (#1557): the standalone vite plugin entry lives in
         // the compiler package, so the authoring proof installs both tarballs.
         '@openelement/compiler': `file:${root}/packages/compiler/openelement-compiler-${PACKAGE_VERSION}.tgz`,
+        // element's own transitive workspace pin — declared directly so npm
+        // dedupe resolves it from the local tarball pre-publish.
+        '@openelement/protocol': `file:${root}/packages/protocol/openelement-protocol-${PACKAGE_VERSION}.tgz`,
       },
       devDependencies: {
         vite: VITE_DEV_PIN,

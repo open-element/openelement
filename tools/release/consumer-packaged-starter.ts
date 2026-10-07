@@ -51,10 +51,11 @@ import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 import { CREATE_BIN } from './npm-manifest.ts';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
-// The Tailwind-ON scaffold pin (#1524) — the create CLI's embedded copy is
-// anchored to the router's dev pins by the create tests; this consumer reads
-// the same source module so a pin drift fails here, on the packed surface.
-import { TAILWIND_STARTER_PIN } from '../../packages/create/src/version.ts';
+// The scaffold's pinned Vite devDependency (#1530 showcase form) — the
+// create CLI's embedded copy is anchored by the create tests; this consumer
+// reads the same source module so a pin drift fails here, on the packed
+// surface.
+import { VITE_STARTER_PIN } from '../../packages/create/src/version.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
@@ -217,9 +218,10 @@ try {
     (globalThis as { __starterContinuation?: string }).__starterContinuation ?? null
   );
   if (marker !== 'alive') throw new Error('starter island interaction caused a full reload');
-  // Request-time navigation renders through the packed server entry.
-  await page.goto(baseUrl + '/contact', { waitUntil: 'load' });
-  await page.getByText('Stay in the loop').waitFor({ timeout: 30000 });
+  // Static navigation through the packed server output (the showcase About
+  // page is the zero-JS static route).
+  await page.goto(baseUrl + '/about', { waitUntil: 'load' });
+  await page.getByText('Static first, interactive where it counts').waitFor({ timeout: 30000 });
   console.log('STARTER-BROWSER-OK ' + browserName + ' ' + browser.version());
 } finally {
   await browser.close();
@@ -451,9 +453,12 @@ try {
   // node-hosted (its source is node:*-ported, shebang `#!/usr/bin/env node`)
   // and only scaffolds files: no prompts, no native bindings.
   const createBinName = Object.keys(CREATE_BIN).sort()[0];
+  // --no-install: this consumer rewires the framework dependencies to this
+  // checkout's tarballs before installing; the CLI's default registry install
+  // would fetch published copies the rewire immediately discards.
   const create = await run(
     'npm',
-    ['exec', createBinName, '--', 'starter'],
+    ['exec', createBinName, '--', 'starter', '--no-install'],
     tmp,
     NPM_INSTALL_TIMEOUT_MS,
     npmEnv,
@@ -471,9 +476,9 @@ try {
   // dependency surface — no more, no less (a missing pin breaks the consumer;
   // an extra one would leak an internal alias into the public contract).
   // Subpaths (jsx-runtime, /vite, /nitro-mount) resolve through the packages'
-  // own exports maps and are never separate pins. The Tailwind-ON scaffold
-  // (#1524) adds its pins to devDependencies (build-time only), so the
-  // product surface is unchanged.
+  // own exports maps and are never separate pins. The #1530 showcase scaffold
+  // keeps all styling in platform CSS files, so the product surface is the
+  // two framework packages plus the dev-server peer.
   const productDependencies = [
     '@hono/vite-dev-server',
     '@openelement/element',
@@ -486,24 +491,30 @@ try {
         Object.keys(manifest.dependencies).sort().join('\n'),
     );
   }
-  // The CLI runs non-interactively here, so the scaffold must be the
-  // Tailwind-ON default form: exact build-time pins (tailwindcss +
-  // @tailwindcss/vite, the 4.3.x line) in devDependencies.
-  for (const [name, expected] of Object.entries({
-    '@tailwindcss/vite': TAILWIND_STARTER_PIN,
-    tailwindcss: TAILWIND_STARTER_PIN,
-  })) {
-    if (manifest.devDependencies[name] !== expected) {
-      throw new Error(
-        `Packed starter is not the Tailwind-ON default form: devDependency ` +
-          `${name}=${manifest.devDependencies[name] ?? '<missing>'}, expected ${expected}`,
-      );
+  // The CLI runs non-interactively here, so the scaffold must be the ONE
+  // showcase template (#1530): platform CSS (tokens.css + recipes.css), no
+  // Tailwind anywhere, and the pinned Vite devDependency.
+  const manifestText = JSON.stringify(manifest);
+  if (manifestText.includes('tailwind')) {
+    throw new Error(
+      'Packed starter carries a Tailwind dependency: the #1530 showcase form is ' +
+        'platform-CSS only',
+    );
+  }
+  if (manifest.devDependencies.vite !== VITE_STARTER_PIN) {
+    throw new Error(
+      `Packed starter is not the showcase form: devDependency vite=` +
+        `${manifest.devDependencies.vite ?? '<missing>'}, expected ${VITE_STARTER_PIN}`,
+    );
+  }
+  for (const sheet of ['tokens.css', 'recipes.css']) {
+    if (!existsSync(join(starter, 'app', 'styles', sheet))) {
+      throw new Error(`Packed starter is missing app/styles/${sheet} (#1530 showcase form)`);
     }
   }
-  if (!existsSync(join(starter, 'app', 'styles', 'theme.css'))) {
+  if (existsSync(join(starter, 'app', 'styles', 'theme.css'))) {
     throw new Error(
-      'Packed starter is not the Tailwind-ON default form: app/styles/theme.css (the @theme ' +
-        'role sheet) is missing. Pass --no-tailwind explicitly for the minimal form.',
+      'Packed starter still ships the retired @theme role sheet (pre-#1530 Tailwind form)',
     );
   }
   const generatedDependencies = {
@@ -536,9 +547,29 @@ try {
   manifest.dependencies['@openelement/router'] = pathToFileURL(routerTarball).href;
   manifest.dependencies['@openelement/element'] = pathToFileURL(elementTarball).href;
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  // Since #1557 the packed element/router tarballs carry transitive workspace
+  // pins (protocol, compiler at the exact current version) the registry does
+  // not have before release day — pnpm 12 reads overrides from the workspace
+  // file, so the starter carries its own overrides pinning every framework
+  // package to this checkout's tarballs.
+  const frameworkTarballs: Array<[string, string]> = [
+    ['@openelement/protocol', tarballFor('@openelement/protocol')],
+    ['@openelement/element', elementTarball],
+    ['@openelement/compiler', tarballFor('@openelement/compiler')],
+    ['@openelement/router', routerTarball],
+  ];
+  await writeFile(
+    join(starter, 'pnpm-workspace.yaml'),
+    [
+      'packages: []',
+      'overrides:',
+      ...frameworkTarballs.map(([name, path]) => `  "${name}": ${pathToFileURL(path).href}`),
+      '',
+    ].join('\n'),
+  );
   const installStarter = await run(
     'pnpm',
-    ['install', '--ignore-workspace'],
+    ['install', '--no-frozen-lockfile'],
     starter,
     NPM_INSTALL_TIMEOUT_MS,
   );
@@ -562,7 +593,7 @@ try {
     (port) => ['run', 'dev', '--port', String(port), '--host', '127.0.0.1', '--strictPort'],
     starter,
     {},
-    [['/', 'Static pages, alive where it counts']],
+    [['/', 'Rendered before JavaScript arrives']],
   );
 
   // Lifecycle leg 2 — check.
@@ -592,10 +623,10 @@ try {
     );
   }
 
-  // Structured build manifest: the packed build must report the starter's
-  // full route surface — index, freshness, blog index + post, the contact
-  // action page, and the styled 404 (#923) as pages; /api/health as the one
-  // API route — with no per-page errors.
+  // Structured build manifest: the packed build must report the showcase
+  // route surface (#1530) — index and the zero-JS About page as pages plus
+  // the styled 404 (#923); /api/ping as the one API route — with no per-page
+  // errors.
   const buildEvidencePath = join(starter, '.openElement', 'build-artifacts.json');
   if (!existsSync(buildEvidencePath)) {
     throw new Error('Packed starter build emitted no structured build manifest.');
@@ -610,7 +641,7 @@ try {
   const apiRoutes = manifestRoutes.filter((route) => route.kind === 'api');
   if (
     buildEvidence.success !== true ||
-    pageRoutes.length !== 6 ||
+    pageRoutes.length !== 3 ||
     apiRoutes.length !== 1 ||
     (buildEvidence.pages ?? []).some((page) => (page.errors?.length ?? 0) > 0)
   ) {
@@ -620,38 +651,42 @@ try {
     );
   }
 
-  // Prerendered output: the static home and the freshness proof route must be
-  // prerendered through the app shell, and the public asset must be copied.
+  // Prerendered output: the static home and the zero-JS About page must be
+  // prerendered, and the public asset must be copied.
   const indexHtmlPath = join(starter, 'dist', 'index.html');
   if (!existsSync(indexHtmlPath)) {
     throw new Error('Packed starter build emitted no prerendered dist/index.html');
   }
   const indexHtml = await readFile(indexHtmlPath, 'utf8');
-  for (const marker of ['Static pages, alive where it counts', 'data-open-layout="app-shell"']) {
+  for (const marker of ['Rendered before JavaScript arrives', 'Interactive island']) {
     if (!indexHtml.includes(marker)) {
       throw new Error(`Packed starter dist/index.html missing marker: ${marker}`);
     }
   }
-  // Tailwind-ON delivery (#1524): the compiled role-sheet bundle must exist as
-  // the linked asset and be referenced from the rendered pages — link, never
-  // an inline sheet (the preset's full-inline prohibition runs inside the
-  // build, so a surviving inline delivery would have failed the build leg).
-  const tailwindBundle = join(starter, 'dist', 'assets', 'open-tailwind.css');
-  if (!existsSync(tailwindBundle)) {
+  // Showcase delivery (#1530 + #1558): the authored tokens/recipes sheets
+  // ride the build as content-addressed client assets, and the static page
+  // carries its critical styles inline — link-adopted or inline sheets, never
+  // a JS-embedded style blob (that form retired with css``).
+  const clientAssets = join(starter, 'dist', 'client', 'assets');
+  const emittedSheets = existsSync(clientAssets)
+    ? readdirSync(clientAssets).filter((name) => name.endsWith('.css'))
+    : [];
+  if (emittedSheets.length === 0) {
     throw new Error(
-      'Packed starter (Tailwind-ON default) emitted no compiled Tailwind bundle: ' + tailwindBundle,
+      'Packed starter build emitted no content-addressed client css asset ' +
+        `(expected at least one under ${clientAssets})`,
     );
   }
-  if (!indexHtml.includes('/assets/open-tailwind.css')) {
-    throw new Error('Packed starter dist/index.html does not link the compiled Tailwind bundle');
+  if (!indexHtml.includes('<style')) {
+    throw new Error('Packed starter dist/index.html carries no inline critical styles');
   }
-  const freshnessHtmlPath = join(starter, 'dist', 'freshness', 'index.html');
-  if (!existsSync(freshnessHtmlPath)) {
-    throw new Error('Packed starter build did not prerender the freshness proof route');
+  const aboutHtmlPath = join(starter, 'dist', 'about', 'index.html');
+  if (!existsSync(aboutHtmlPath)) {
+    throw new Error('Packed starter build did not prerender the zero-JS About page');
   }
-  const freshnessHtml = await readFile(freshnessHtmlPath, 'utf8');
-  if (!freshnessHtml.includes('Freshness proof')) {
-    throw new Error('Packed starter dist/freshness/index.html missing the freshness proof content');
+  const aboutHtml = await readFile(aboutHtmlPath, 'utf8');
+  if (!aboutHtml.includes('Static first, interactive where it counts')) {
+    throw new Error('Packed starter dist/about/index.html missing the About heading');
   }
   if (!existsSync(join(starter, 'dist', 'openelement-mark.svg'))) {
     throw new Error('Packed starter build did not copy the public asset dist/openelement-mark.svg');
@@ -690,9 +725,9 @@ try {
   // route and the API route over HTTP. Production deploys go through the
   // Nitro mount (qualified by nitro:proof and the packed serve consumer).
   const serveProbes = [
-    ['/', 'Static pages, alive where it counts'],
-    ['/contact', 'Stay in the loop'],
-    ['/api/health', '"framework":"openElement"'],
+    ['/', 'Rendered before JavaScript arrives'],
+    ['/about', 'Static first, interactive where it counts'],
+    ['/api/ping', '"pong":true'],
   ] as const;
   await exerciseServer(
     'Packed starter start server',
