@@ -211,9 +211,16 @@ try {
   });
 
   await cell('manifest', ['pack'], async () => {
-    const elementTar = tarballs.get('@openelement/element');
-    if (!elementTar) throw new Error('@openelement/element is missing from the package graph');
-    const shown = await run('tar', ['-xzOf', elementTar, 'package/package.json'], repoRoot, 30_000);
+    // #1557: the classic TypeScript pin moved to @openelement/compiler (the
+    // only TS-dependent package); element must NOT carry it anymore.
+    const compilerTar = tarballs.get('@openelement/compiler');
+    if (!compilerTar) throw new Error('@openelement/compiler is missing from the package graph');
+    const shown = await run(
+      'tar',
+      ['-xzOf', compilerTar, 'package/package.json'],
+      repoRoot,
+      30_000,
+    );
     if (!shown.success) throw new Error(`tar failed:\n${shown.output}`);
     const pkgJson = JSON.parse(shown.output) as {
       dependencies?: Record<string, string>;
@@ -222,17 +229,37 @@ try {
     const deps = { ...pkgJson.peerDependencies, ...pkgJson.dependencies };
     if (deps['typescript'] !== TS6_VERSION) {
       throw new Error(
-        'packed @openelement/element must pin its classic TypeScript dependency to ' +
+        'packed @openelement/compiler must pin its classic TypeScript dependency to ' +
           `${TS6_VERSION}; ` +
           `dependencies: ${JSON.stringify(deps)}`,
       );
     }
     if (deps['@typescript/typescript6'] !== undefined) {
       throw new Error(
-        'packed @openelement/element must not retain the deprecated @typescript/typescript6 wrapper',
+        'packed @openelement/compiler must not retain the deprecated @typescript/typescript6 wrapper',
       );
     }
-    return `@openelement/element tarball dependency: typescript@${TS6_VERSION}`;
+    const elementTar = tarballs.get('@openelement/element');
+    if (!elementTar) throw new Error('@openelement/element is missing from the package graph');
+    const elementShown = await run(
+      'tar',
+      ['-xzOf', elementTar, 'package/package.json'],
+      repoRoot,
+      30_000,
+    );
+    if (!elementShown.success) throw new Error(`tar failed:\n${elementShown.output}`);
+    const elementJson = JSON.parse(elementShown.output) as {
+      dependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+    };
+    const elementDeps = { ...elementJson.peerDependencies, ...elementJson.dependencies };
+    if (elementDeps['typescript'] !== undefined) {
+      throw new Error(
+        'packed @openelement/element still pins typescript — the #1557 split moved it to ' +
+          '@openelement/compiler',
+      );
+    }
+    return `@openelement/compiler tarball dependency: typescript@${TS6_VERSION}`;
   });
 
   await cell('install', ['manifest'], async () => {
@@ -293,10 +320,11 @@ try {
     );
     if (!installed.success) throw new Error(`npm install failed:\n${installed.output}`);
     // Invoke the launchers by explicit package path, never node_modules/.bin:
-    // the consumer root owns TS7 while Element owns its pinned TS6 dependency.
+    // the consumer root owns TS7 while @openelement/compiler owns its pinned
+    // TS6 dependency (the #1557 split moved the pin off element).
     for (const required of [
       'node_modules/typescript/bin/tsc',
-      'node_modules/@openelement/element/node_modules/typescript/bin/tsc',
+      'node_modules/@openelement/compiler/node_modules/typescript/bin/tsc',
       'node_modules/@openelement/element',
       'node_modules/@openelement/router',
       'node_modules/@openelement/create',
@@ -314,7 +342,7 @@ try {
     if (!version.success || !version.output.includes(`Version ${TS7_VERSION}`)) {
       throw new Error(`TS7 tsc did not report Version ${TS7_VERSION}:\n${version.output}`);
     }
-    return `consumer installed; tsc reports TS ${TS7_VERSION}, Element-owned baseline TS ${TS6_VERSION}`;
+    return `consumer installed; tsc reports TS ${TS7_VERSION}, compiler-owned baseline TS ${TS6_VERSION}`;
   });
 
   interface TscRun {
@@ -328,7 +356,7 @@ try {
       tmp,
       'node_modules',
       '@openelement',
-      'element',
+      'compiler',
       'node_modules',
       'typescript',
       'bin',
@@ -413,7 +441,7 @@ try {
   for (const note of notes) console.log(`  note: ${note}`);
   console.log(
     failed.length === 0
-      ? `TS7 shadow gate PASS — typescript@${TS7_VERSION} CLI vs Element-owned typescript@${TS6_VERSION} baseline (shadow only; not a required gate).`
+      ? `TS7 shadow gate PASS — typescript@${TS7_VERSION} CLI vs compiler-owned typescript@${TS6_VERSION} baseline (shadow only; not a required gate).`
       : `TS7 shadow gate FAIL — ${failed.map(([name]) => name).join(', ')}`,
   );
   await rm(tmp, { recursive: true }).catch(() => undefined);
