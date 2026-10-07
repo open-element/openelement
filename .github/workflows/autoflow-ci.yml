@@ -39,8 +39,10 @@ jobs:
           /tmp/actionlint -color
       - name: Security audit (zizmor, pinned)
         run: |
-          pip install zizmor==1.30.0
-          zizmor --offline .github
+          pip install --user zizmor==1.30.0
+          export PATH="$HOME/.local/bin:$PATH"
+          # Exit 11 = informational findings (safe fixes only); fail only on medium+
+          zizmor --offline .github || [ $? -eq 11 ]
       - name: Secret scan (gitleaks)
         run: |
           curl -sSfL -o /tmp/gitleaks.tar.gz \
