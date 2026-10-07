@@ -31,6 +31,8 @@ const PACKAGES = ['protocol', 'element', 'compiler', 'router', 'create'] as cons
 /**
  * The release toolchain (vp pack) writes each packed tarball next to the
  * package sources under its logical artifact name. Returns the tarball path.
+ * The pack run itself happens once in main() — one invocation produces every
+ * retained tarball, so per-package repetition only re-pays the whole pack.
  */
 async function packAndExtract(pkg: (typeof PACKAGES)[number]): Promise<string> {
   const pkgDir = join(repoRoot, 'packages', pkg);
@@ -42,15 +44,12 @@ async function packAndExtract(pkg: (typeof PACKAGES)[number]): Promise<string> {
     pkgDir,
     `${manifest.name.replace('@', '').replace('/', '-')}-${manifest.version}.tgz`,
   );
-  // Pack fresh on every setup run: a stale tarball would silently qualify
-  // yesterday's sources (one pack produces every retained tarball).
-  await runStep('pnpm', ['--dir', 'tools/release', 'run', 'pack:dry-run'], { cwd: repoRoot });
   if (!existsSync(artifact)) {
     throw new Error(`pack:dry-run produced no ${artifact}`);
   }
   const extractDir = join(depsDir, pkg);
   mkdirSync(extractDir, { recursive: true });
-  await runStep('tar', ['-xzf', join(artifact), '-C', extractDir, '--strip-components=1'], {
+  await runStep('tar', ['-xzf', artifact, '-C', extractDir, '--strip-components=1'], {
     cwd: pkgDir,
   });
   return artifact;
@@ -211,6 +210,9 @@ async function writeStarterOverrides(
 async function main(): Promise<void> {
   mkdirSync(depsDir, { recursive: true });
   if (existsSync(appDir)) rmSync(appDir, { recursive: true });
+  // Pack fresh on every setup run: a stale tarball would silently qualify
+  // yesterday's sources (one pack produces every retained tarball).
+  await runStep('pnpm', ['--dir', 'tools/release', 'run', 'pack:dry-run'], { cwd: repoRoot });
   const tarballs = {} as Record<(typeof PACKAGES)[number], string>;
   for (const pkg of PACKAGES) tarballs[pkg] = await packAndExtract(pkg);
 

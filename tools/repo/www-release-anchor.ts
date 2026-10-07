@@ -81,7 +81,7 @@ export function wwwReleaseAnchorFailures(
   const resolvesMatch = releaseLineSource.match(/ALPHA_RESOLVES_TO = '([^']+)'/);
   const expectedResolvesTo =
     state.packages.find((entry) => entry.name === '@openelement/create' && isPublished(entry))
-      ?.registry.alpha ?? 'unknown';
+      ?.registry?.alpha ?? 'unknown';
   if (resolvesMatch?.[1] !== expectedResolvesTo) {
     failures.push(
       'www ALPHA_RESOLVES_TO must be ' +
