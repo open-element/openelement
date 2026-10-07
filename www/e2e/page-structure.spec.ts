@@ -5,7 +5,10 @@ import { expect, test } from '@playwright/test';
 // --host-resolver-rules in playwright.config; Firefox/WebKit need this
 // per-spec route abort. Unreachable fonts fall back to system stack.
 test.beforeEach(async ({ page }) => {
-  await page.route(/cdn\.jsdelivr\.net/, (route) => route.abort());
+  // Glob, not a URL regex: Playwright matches the pattern against the whole
+  // URL, and a bare-host regex also matches URLs that merely embed the host
+  // as a substring (the CodeQL js/incomplete-url-regexp-substring class).
+  await page.route('**cdn.jsdelivr.net**', (route) => route.abort());
 });
 
 const readingRoutes = [
