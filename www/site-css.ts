@@ -141,18 +141,18 @@ body {
 :root {
   --shiki-background: var(--surface-code);
   --shiki-foreground: var(--surface-code-foreground);
-  --shiki-token-comment: #6a737d;
+  --shiki-token-comment: #57606a;
   --shiki-token-punctuation: #24292e;
   --shiki-token-constant: #005cc5;
   --shiki-token-string: #032f62;
   --shiki-token-string-expression: #032f62;
-  --shiki-token-keyword: #d73a49;
+  --shiki-token-keyword: #cb2431;
   --shiki-token-function: #6f42c1;
-  --shiki-token-parameter: #e36209;
+  --shiki-token-parameter: #b35900;
   --shiki-token-link: #032f62;
   --shiki-token-inserted: #22863a;
   --shiki-token-deleted: #b31d28;
-  --shiki-token-changed: #e36209;
+  --shiki-token-changed: #b35900;
 }
 :root[data-theme='dark'] {
   --shiki-background: var(--surface-code);
