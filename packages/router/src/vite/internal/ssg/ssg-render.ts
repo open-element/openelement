@@ -368,9 +368,14 @@ export async function ssgRender(
     log.info(`404 page -> ${label}404.html (GitHub Pages)`);
   };
   rename404Dir(outputDir, 'dist/');
-  for (const entry of readdirSync(outputDir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      rename404Dir(join(outputDir, entry.name), `dist/${entry.name}/`);
+  // Zero-page runs (dynamic-only routes without getStaticPaths, warn-policy
+  // failures, empty path sets) never create the outDir — the walk is skipped
+  // rather than fabricating an empty tree (pure-static output stays frozen).
+  if (existsSync(outputDir)) {
+    for (const entry of readdirSync(outputDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        rename404Dir(join(outputDir, entry.name), `dist/${entry.name}/`);
+      }
     }
   }
 

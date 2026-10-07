@@ -66,6 +66,10 @@ async function scrollThroughAndSettle(page: Page): Promise<void> {
 test.describe('Accessibility gate (axe)', () => {
   for (const route of SCANNED_ROUTES) {
     test(`axe scan meets WCAG 2.1 A+AA on ${route}`, async ({ page }) => {
+      // /reference is the one generated mega-page (~13k elements across the
+      // 6-package API surface): axe's rule×node walk takes minutes on a shared
+      // CI runner, so that scan alone carries a wider ceiling.
+      test.setTimeout(route === '/reference' ? 420_000 : 120_000);
       await page.goto(route);
       // Let hydration settle: the islands upgrade synchronously after the
       // module loads, and the scan should see the page a reader sees.
