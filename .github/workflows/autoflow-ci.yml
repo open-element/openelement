@@ -1,11 +1,21 @@
 name: AutoFlow CI
 
+# Redesigned 2026-10-07 (#1566): 4 parallel jobs replace the 12-job evidence
+# aggregation system. PR feedback target: 8-12 minutes. Full 3-engine e2e and
+# cold-install verification run on main push, not on every PR.
+#
+# What was removed and why (docs in issue #1566):
+# - fresh-clone (28 min, 80% redundant) → split into e2e job + main-push jobs
+# - tree-SHA reuse resolver (~200 YAML + ~500 tool lines) → CI is fast enough
+# - evidence aggregator with hash recomputation → GitHub checks are the evidence
+# - requeue-once → flaky tests get fixed, not auto-retried
+# - 45-step release gate → distributed to PR (here) and main push
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -15,129 +25,31 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Execution is separated from evidence aggregation:
-#   fast-checks / source-matrix / packed / fresh-clone each RUN one slice of
-#   the suite and upload their result.json + logs; `autoflow-ci` only reads
-#   those artifacts (same SHA/tree, recomputed log hashes) and fails if any
-#   input is missing or inconsistent. Nothing re-runs the suite in the
-#   aggregation step. The fresh-clone job is isolated with an empty pnpm
-#   store and npm cache. Bun is not a required Alpha runtime; its explicit
-#   local smoke task is outside this default workflow.
-#
-# PR layer vs release train: this workflow runs the fast PR layer. The
-# source-matrix lane drives `tools/repo#gate:source` (the trimmed fast gate)
-# and the fresh-clone lane owns the candidate's Site E2E proof, so a pull
-# request gets quick feedback. The steps trimmed out of gate:source
-# (site build + www checks, coverage, fixture gates, provenance/boundary
-# scans, three-engine site/browser matrices) live in `tools/repo#gate:release`
-# and run on the release train: `vp run release:check` in the Release
-# workflow, which must pass before anything is published.
 jobs:
-  dependency-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    # Every lane carries a ceiling (#1402); the dependency-review action is a
-    # single API call, so ten minutes is generous for it and stops a stalled
-    # action from holding a slot.
-    timeout-minutes: 10
-    # Read-only: the action only fails on severity (no PR comments), so it
-    # needs no write scope.
-    permissions:
-      contents: read
-    steps:
-      # v5.0.0
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
-        with:
-          fail-on-severity: high
-
-  # Tree-SHA evidence reuse (#1425 follow-up). A green evidence package proves
-  # a TREE, not a commit: every record carries `tree`, every log is bound to it
-  # by the clean-proof line, and every tarball is byte-hashed. Two commits with
-  # the same tree have byte-identical content — a squash sync, a rebase, or an
-  # amend that touched only the commit message — so the package that proved
-  # tree T is valid proof for any commit whose tree is T.
-  #
-  # This job decides once, for all four producer lanes, whether such a package
-  # exists. It is the ONLY thing that reads another run's artifacts; the lanes
-  # themselves either run the real gate or replay a verified no-op, and the
-  # aggregation job re-derives the tree match from the claimed records.
-  #
-  # Fail-closed by construction: any error, missing permission, absent run, or
-  # unresolvable tree resolves to `reused=false`, and every lane then runs its
-  # full gate. Nothing downstream trusts a reuse claim that the aggregate's own
-  # tree check does not corroborate.
-  reuse:
+  # ── Job 1: Lint & Security ─────────────────────────────────────────────
+  lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      # Listing this workflow's runs, reading their commit trees, and listing
-      # their artifacts. Read-only: the resolver never writes to another run.
-      actions: read
-    outputs:
-      reused: ${{ steps.resolve.outputs.reused }}
-      source_run_id: ${{ steps.resolve.outputs.source_run_id }}
-      source_sha: ${{ steps.resolve.outputs.source_sha }}
-      tree: ${{ steps.resolve.outputs.tree }}
+      security-events: write
     steps:
-      # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
           persist-credentials: false
-      - uses: ./.github/actions/setup-node-workspace
-      - name: Resolve tree-SHA evidence reuse
-        id: resolve
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # One resolve decides for all four lanes: they share the tree, and a
-        # package is only reusable when ONE source run carries every lane's
-        # evidence artifact (a bundle spliced from two runs would be caught by
-        # the aggregate's single-tree identity check, but refusing it here is
-        # the honest reading of "the same evidence package").
-        run: |
-          vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:reuse:resolve \
-            --github-output "$GITHUB_OUTPUT"
-
-  fast-checks:
-    needs: reuse
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          # #1156 R11: test the exact attested SHA — the PR head on
-          # pull_request, github.sha on push/workflow_call/workflow_dispatch —
-          # never checkout's default synthetic merge ref.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      # #1156 (B2.6): mature OSS governance gates (ADR-0144, retired;
-      # preserved in Git history) — fail fast, before the heavy matrix.
-      # Binaries pinned by version + SHA-256;
-      # Action revisions and downloaded binaries are pinned in this workflow.
-      - name: actionlint (workflow lint)
+      - name: Workflow lint (actionlint)
         run: |
           curl -sSfL -o /tmp/actionlint.tar.gz \
             https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tar.gz" | sha256sum -c -
           tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
           /tmp/actionlint -color
-      # v0.6.3
-      - uses: zizmorcore/zizmor-action@70fb788f84895a7701f5643d103d587e460b5c99
-        with:
-          # Offline audits only: this gate must be deterministic and
-          # reproducible locally (`zizmor --offline .github/workflows
-          # .github/actions`); network-dependent audits stay out of CI.
-          online-audits: false
-          advanced-security: false
-          version: '1.30.0'
-      - name: gitleaks (secret scan)
+      - name: Security audit (zizmor)
+        run: |
+          pip install zizmor
+          zizmor --offline .github
+      - name: Secret scan (gitleaks)
         run: |
           curl -sSfL -o /tmp/gitleaks.tar.gz \
             https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
@@ -145,498 +57,133 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           /tmp/gitleaks git --redact --verbose .
       - uses: ./.github/actions/setup-node-workspace
-      # Tree-identical reuse (#1425): this lane's proof already exists for the
-      # tree we are on, so replay it instead of re-running the gate.
-      #
-      # The claim runs FIRST, and its failure is NOT fatal: a refused claim
-      # means "this package cannot be honestly replayed here", which is a
-      # reason to run the gate, not a reason to fail the lane (#1439 — a
-      # legitimate chain was refused and all four lanes went red with no
-      # fallback). The gate below is skipped only when the decision said reuse
-      # AND the claim actually stamped a record for this tree, so the lane is
-      # still proven either way.
-      - name: Reuse tree-identical fast-checks evidence
-        id: claim
-        if: needs.reuse.outputs.reused == 'true'
-        continue-on-error: true
-        uses: ./.github/actions/claim-reused-evidence
-        with:
-          job: fast-checks
-          source-run-id: ${{ needs.reuse.outputs.source_run_id }}
-          source-sha: ${{ needs.reuse.outputs.source_sha }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-      # A refused claim may still have downloaded the source artifact (the
-      # stamp is what fails, not the download). Leaving it in place would mix
-      # another run's files into this lane's evidence — or, worse, let a stale
-      # file survive the real run — so the download is discarded before the
-      # fallback gate starts.
-      - name: Fall back to a full run (claim refused or unusable)
-        if: needs.reuse.outputs.reused == 'true' && steps.claim.outcome != 'success'
-        run: |
-          echo "::warning::tree-identical reuse was resolved, but the claim did not stamp this lane's record; running the full gate instead"
-          rm -rf .artifacts/ci
-      - name: Install Playwright browsers for evidence metadata
-        # Every evidence producer records the exact three browser revisions.
-        # Fast checks do not launch them, so system dependencies are unnecessary.
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        run: ./node_modules/.bin/playwright install chromium firefox webkit
-      # ADR-0144 (retired; preserved in Git history) / #1229 (B2.7): generic
-      # toolchain gates are pinned OSS tool steps, not AutoFlow gates.
-      - name: Fast checks (fmt, lint, markdown, typecheck)
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:fast
-      # The site's media lives on the R2 custom domain, so the runner's view of
-      # that edge is part of the candidate surface. Non-blocking: this only
-      # prints what the runner's egress POP actually sees (the e2e suite is the
-      # gate), which is how an edge-only CORS regression gets localised.
-      - name: External asset origin probe (diagnostic, never gates)
-        continue-on-error: true
-        run: |
-          URL=https://assets.openelement.org/site/v1/dragon/dragon-idle.mp4
-          FRAME=https://assets.openelement.org/site/v1/dragon/frames/f27.webp
-          probe() {
-            label="$1"; shift
-            echo "--- $label ---"
-            curl -sS -D /tmp/h.txt -o /tmp/b.txt --max-time 20 "$@" || true
-            tr -d '\r' < /tmp/h.txt \
-              | grep -iE '^(HTTP/|access-control-allow-origin|cf-cache-status|cf-ray|cf-mitigated|vary|age|content-type|server)' \
-              || echo "(no response)"
-            # Body only when it is not a payload: keeps the binary out of logs
-            # while still naming a block page (403 challenge, WAF, R2 error).
-            status=$(head -n 1 /tmp/h.txt | tr -d '\r' | awk '{print $2}')
-            case "$status" in 2*|3*) ;; *) echo "body: $(head -c 200 /tmp/b.txt | tr -d '\n')";; esac
-          }
-          probe "video + Origin (h2)" -H "Origin: http://127.0.0.1:4174" "$URL"
-          probe "video + Origin + Range (h2)" -H "Origin: http://127.0.0.1:4174" -H "Range: bytes=0-" "$URL"
-          probe "video without Origin (h2)" "$URL"
-          probe "video Chromium UA (h2)" -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" "$URL"
-          probe "video cache-bust query (h2)" "$URL?probe=$RANDOM"
-          probe "video HEAD (h2)" -I "$URL"
-          probe "frame + Origin (h2)" -H "Origin: http://127.0.0.1:4174" "$FRAME"
-          probe "openelement.org homepage (h2)" "https://openelement.org/"
-          probe "video + Origin (h3, may be unsupported)" --http3 -H "Origin: http://127.0.0.1:4174" "$URL"
-          echo "curl: $(curl --version | head -n 1)"
-          echo "resolver: $(getent hosts assets.openelement.org | head -n 3 | tr '\n' ' ')"
-      - name: Upload fast-checks evidence
-        if: always()
-        # v7.0.1
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: evidence-fast-checks
-          path: .artifacts/ci
-          if-no-files-found: ignore
-          retention-days: 14
+      - name: Fast checks (fmt, lint, typecheck, markdown)
+        run: vp run check
 
-  # Core source matrix for the candidate scope (Element, Router, Create, UI,
-  # Site, repo/release tooling). This lane runs the PR-layer source gate
-  # (`tools/repo#gate:source`, ten steps). The separate packed-consumers lane
-  # owns the packed gate; fresh-clone runs it once in its isolated checkout.
-  # The release train's heavier steps are `tools/repo#gate:release`, which the
-  # Release workflow runs. Independently governed apps/saas is outside this
-  # candidate lane. Router Nitro Node/Workers fixtures remain the core deploy
-  # proof (gate:release).
-  source-matrix:
-    needs: reuse
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/setup-node-workspace
-      # Tree-identical reuse (#1425): the proof for this tree already exists.
-      # The claim runs first and is non-fatal — a refusal means the lane runs
-      # the real gate below, never that the lane fails (#1439).
-      - name: Reuse tree-identical source-matrix evidence
-        id: claim
-        if: needs.reuse.outputs.reused == 'true'
-        continue-on-error: true
-        uses: ./.github/actions/claim-reused-evidence
-        with:
-          job: source-matrix
-          source-run-id: ${{ needs.reuse.outputs.source_run_id }}
-          source-sha: ${{ needs.reuse.outputs.source_sha }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-      # Discard the unclaimable download before any fallback step runs: a stale
-      # tarball or log left behind would otherwise leak into this lane's
-      # evidence (or survive the fresh run).
-      - name: Fall back to a full run (claim refused or unusable)
-        if: needs.reuse.outputs.reused == 'true' && steps.claim.outcome != 'success'
-        run: |
-          echo "::warning::tree-identical reuse was resolved, but the claim did not stamp this lane's record; running the full gate instead"
-          rm -rf .artifacts/ci
-      # The request-time fixture may launch Node consumers; keep the Node 24
-      # floor even though packed qualification now has its own producer.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        with:
-          node-version: '24'
-      - name: Install Playwright browsers
-        # The gate's element browser leg launches Chromium; the recorded
-        # toolchain metadata names all three engines.
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Source matrix (PR-layer source gate, unit tests, browsers)
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:source
-      - name: Upload source-matrix evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: evidence-source-matrix
-          path: .artifacts/ci
-          if-no-files-found: ignore
-          retention-days: 14
-
-  packed-consumers:
-    needs: reuse
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/setup-node-workspace
-      # Tree-identical reuse (#1425): the proof for this tree already exists.
-      # The claim runs first and is non-fatal — a refusal means the lane runs
-      # the real gate below, never that the lane fails (#1439).
-      - name: Reuse tree-identical packed evidence
-        id: claim
-        if: needs.reuse.outputs.reused == 'true'
-        continue-on-error: true
-        uses: ./.github/actions/claim-reused-evidence
-        with:
-          job: packed
-          source-run-id: ${{ needs.reuse.outputs.source_run_id }}
-          source-sha: ${{ needs.reuse.outputs.source_sha }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-      # Discard the unclaimable download before any fallback step runs: a stale
-      # tarball or log left behind would otherwise leak into this lane's
-      # evidence (or survive the fresh run).
-      - name: Fall back to a full run (claim refused or unusable)
-        if: needs.reuse.outputs.reused == 'true' && steps.claim.outcome != 'success'
-        run: |
-          echo "::warning::tree-identical reuse was resolved, but the claim did not stamp this lane's record; running the full gate instead"
-          rm -rf .artifacts/ci
-      # v7.0.0 — ADR-0154 pins the Alpha node runtime to Node 24 (native
-      # URLPattern). The runner default (22) cannot load the packed router.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        with:
-          node-version: '24'
-      - name: Install Playwright browsers
-        # Packed Native/Lit/Starter/Create/UI consumers assert hydration on
-        # all three engines.
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Packed consumers (pack, artifact scan, all packed gates, publish dry-run)
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:packed
-      - name: Upload packed evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: evidence-packed
-          path: .artifacts/ci
-          if-no-files-found: ignore
-          retention-days: 14
-
-  fresh-clone:
-    needs: reuse
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/setup-node-workspace
-      # Tree-identical reuse (#1425): the clone's proof (including the Site E2E
-      # sidecar it owns) already exists for this tree. The claim runs first and
-      # is non-fatal — a refusal means the lane runs the real gate below, never
-      # that the lane fails (#1439).
-      - name: Reuse tree-identical fresh-clone evidence
-        id: claim
-        if: needs.reuse.outputs.reused == 'true'
-        continue-on-error: true
-        uses: ./.github/actions/claim-reused-evidence
-        with:
-          job: fresh-clone
-          source-run-id: ${{ needs.reuse.outputs.source_run_id }}
-          source-sha: ${{ needs.reuse.outputs.source_sha }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-      # Discard the unclaimable download before any fallback step runs: a stale
-      # tarball, log or Site E2E sidecar left behind would otherwise leak into
-      # this lane's evidence (or survive the fresh run).
-      - name: Fall back to a full run (claim refused or unusable)
-        if: needs.reuse.outputs.reused == 'true' && steps.claim.outcome != 'success'
-        run: |
-          echo "::warning::tree-identical reuse was resolved, but the claim did not stamp this lane's record; running the full gate instead"
-          rm -rf .artifacts/ci
-      # v7.0.0 — the clone's explicit packed gate runs the Node 24 consumers
-      # (ADR-0154); the runner default (22) lacks native URLPattern.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        with:
-          node-version: '24'
-      - name: Install Playwright browsers
-        # The clone's own packed gate runs the three-browser consumers and this
-        # lane also drives the official Site E2E suite (it owns the candidate's
-        # Site proof); the browser binaries are reused from the preinstalled
-        # HOME cache (disclosed in the fresh-clone manifest), while the clone's
-        # package state starts empty: its install/build runs with
-        # npm_config_store_dir and npm_config_cache pointed at fresh
-        # directories, sharing no store or cache with the workspace checkout.
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Fresh clone (install, check, source gate, packed gate, Site E2E)
-        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
-        env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:fresh
-      - name: Upload fresh-clone evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: evidence-fresh-clone
-          path: .artifacts/ci
-          if-no-files-found: ignore
-          retention-days: 14
-
-  # TS7 shadow gate (1.0 Alpha convergence — "TypeScript 7: split decision").
-  # Resident on every PR run but NON-BLOCKING by design
-  # (tools/repo/ts7-shadow-gate.ts header): it graduates to required only
-  # after a complete matching matrix against the classic checker, and until
-  # then every PR run accumulates one more observation. Job-level
-  # continue-on-error keeps the workflow green while the job's own
-  # red/green summary carries the evidence. It is deliberately absent from
-  # the evidence bundle and from the AutoFlow CI aggregate below: it is not
-  # one of the five required producer lanes.
-  ts7-shadow:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    continue-on-error: true
-    permissions:
-      contents: read
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          # #1156 R11: same exact-SHA expression as every required job.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - uses: ./.github/actions/setup-node-workspace
-      - name: TS7 shadow gate (typescript@7 CLI vs pinned TS6 baseline)
-        run: vp run --fail-if-no-match --filter @openelement/tools-repo gate:ts7:shadow
-
-  # Candidate evidence aggregation: reads the four job artifacts, verifies one
-  # commit/tree, recomputes every log hash from real bytes, and publishes the
-  # full bundle (evidence JSON + all logs + tarball manifest + fresh-clone
-  # manifest + pack diagnostic summary). It never re-runs the suite.
-  # `if: always()` keeps this required check fail-closed: without it a failed
-  # producer would leave this job skipped, which GitHub reports as Success.
-  autoflow-ci:
-    name: AutoFlow CI
-    needs: [reuse, fast-checks, source-matrix, packed-consumers, fresh-clone]
-    if: always()
+  # ── Job 2: Unit Tests + Browser Gate ───────────────────────────────────
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      # With `if: always()` this job runs even when a producer failed or was
-      # cancelled; assert every producer result explicitly so the required
-      # check fails instead of aggregating partial evidence. The reuse job is
-      # asserted too: its failure means the lanes ran their full gates, which
-      # is correct, but a failed RESOLVER must not silently look like "no
-      # source found".
-      - name: Assert producer job results
-        env:
-          REUSE_RESULT: ${{ needs.reuse.result }}
-          REUSE_REUSED: ${{ needs.reuse.outputs.reused }}
-        run: |
-          echo "reuse: ${REUSE_RESULT} (reused=${REUSE_REUSED:-unknown})"
-          echo "fast-checks: ${{ needs.fast-checks.result }}"
-          echo "source-matrix: ${{ needs.source-matrix.result }}"
-          echo "packed-consumers: ${{ needs.packed-consumers.result }}"
-          echo "fresh-clone: ${{ needs.fresh-clone.result }}"
-          test "${REUSE_RESULT}" = success
-          test "${{ needs.fast-checks.result }}" = success
-          test "${{ needs.source-matrix.result }}" = success
-          test "${{ needs.packed-consumers.result }}" = success
-          test "${{ needs.fresh-clone.result }}" = success
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/setup-node-workspace
-      # v7.0.0
-      - name: Download job evidence
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          pattern: evidence-*
-          path: .artifacts/ci
-          merge-multiple: true
-      - name: Aggregate candidate evidence
-        env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          # Reuse disclosure (#1425): a bundle that replayed a tree-identical
-          # package says so on the run, with the source run and commit. The
-          # per-job `reused` stamps are what the validator acts on; the
-          # aggregate independently requires every reused record's tree to
-          # equal the checked-out tree and every stamp to name one source run.
-          # Passed through the environment (never interpolated into the script)
-          # so a job output can never be read as shell syntax.
-          REUSE_REUSED: ${{ needs.reuse.outputs.reused }}
-          REUSE_RUN_ID: ${{ needs.reuse.outputs.source_run_id }}
-          REUSE_SHA: ${{ needs.reuse.outputs.source_sha }}
-          REUSE_TREE: ${{ needs.reuse.outputs.tree }}
-        run: |
-          echo "tree-SHA reuse: ${REUSE_REUSED:-unknown}"
-          if [ "${REUSE_REUSED}" = "true" ]; then
-            echo "  replayed from run ${REUSE_RUN_ID} (commit ${REUSE_SHA})"
-            echo "  checked-out tree: ${REUSE_TREE}"
-          fi
-          vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:aggregate
-          vp run --fail-if-no-match --filter @openelement/tools-repo candidate:evidence:validate
-      - name: Upload candidate evidence
-        # v7.0.1
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: candidate-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            .artifacts/candidate-evidence.json
-            .artifacts/tarball-manifest.json
-            .artifacts/pack-diagnostics.json
-            .artifacts/tarballs
-            .artifacts/ci
-          if-no-files-found: error
-          retention-days: 14
-
-  # BFCache restore contract (#943). Bundled Playwright Chromium ships
-  # --disable-back-forward-cache, so this lane installs the Google Chrome
-  # channel and runs headed under xvfb; the launch drops the disabling switch
-  # and asserts the direct pageshow.persisted signal. Required for the candidate
-  # — it must not become optional while the contract is claimed.
-  bfcache-chrome:
-    name: BFCache Chrome channel (#943)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - name: Install Chrome channel and xvfb
-        run: |
-          ./node_modules/.bin/playwright install chrome
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-      - name: Build the packed starter
-        run: vp run --fail-if-no-match --filter @openelement/e2e-starter-smoke setup
-      - name: BFCache restore (Chrome channel, headed under xvfb)
-        run: xvfb-run -a vp run --fail-if-no-match --filter @openelement/e2e-starter-smoke test:bfcache
-
-  # The packed deploy artifact must boot under plain Node. The runtime floor
-  # is Node.js >= 24.2 (the shipped CLI entries gate on import.meta.main,
-  # added in 24.2; the WHATWG URLPattern global): the matrix serves on 24
-  # (lowest supported line, required) and 26 (Current, required). The
-  # below-floor clean-error behavior stays pinned by unit test
-  # (packages/router/__tests__/ssg-helpers.test.ts), not by an EOL Node job.
-  # Admission proof is packed-world: the harness installs the real
-  # pack:dry-run tarballs into an isolated consumer (empty npm cache, no
-  # workspace source on the resolution path), builds with the packed CLI, and
-  # boots the Nitro server output built from the packed app under plain Node —
-  # never a workspace build plus a hand-made shim. Local preview stays on
-  # cli/start; the build generates no second production server. This proof
-  # lives in these smoke jobs — not in gate:packed — because gate:packed runs
-  # on the pinned Node 24 line only, while this matrix also proves the
-  # plain-Node serve path on 26 (Current).
-  node-serve-smoke:
-    name: dist/server Node smoke (Node ${{ matrix.node }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ['24', '26']
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          # #1156 R11: same exact-SHA expression as every required job.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - uses: ./.github/actions/setup-node-workspace
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: ${{ matrix.node }}
-      - name: Pack the release tarballs
-        run: vp run --fail-if-no-match --filter @openelement/tools-release pack:dry-run
-      - name: Packed serve proof under Node ${{ matrix.node }}
-        run: node tools/release/consumer-packaged-node-serve.ts node
-
-  # Pre-publish packed-consumer matrix (1.0 Alpha convergence, item 5).
-  # The current-SHA packed tarballs must install into a scratch consumer
-  # outside the repo and pass the full external starter lifecycle on Linux and
-  # macOS — before any publish. Post-publish registry checks
-  # (published-consumers.yml, workflow_dispatch) cannot substitute for this
-  # matrix: only current-SHA tarballs prove the candidate shippable.
-  # Windows is out of scope: the candidate deploys to Linux/Workers targets,
-  # and the pack surface on Windows drops the './vite' types condition for
-  # the Router entry (upstream, identical pack diagnostics to Linux
-  # otherwise), which the fail-closed types check correctly refuses to ship.
-  packed-consumer-matrix:
-    name: packed starter consumer (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          # #1156 R11: same exact-SHA expression as every required job.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - uses: ./.github/actions/setup-node-workspace
-      # v7.0.0 — the scratch consumer installs tarballs through npm; Node 24
-      # is the deployment floor and the harness's install/build tool here.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
       - name: Install Playwright browsers
-        # The packed gates assert island hydration/continuation per packed
-        # tarball consumer on Chromium, Firefox and WebKit.
-        run: ./node_modules/.bin/playwright install chromium firefox webkit
-      - name: Install Playwright system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: sudo ./node_modules/.bin/playwright install-deps chromium firefox webkit
-      - name: Pack the release tarballs
-        run: vp run --fail-if-no-match --filter @openelement/tools-release pack:dry-run
-      - name: Fresh packed-starter consumer proof
-        run: vp run --fail-if-no-match --filter @openelement/tools-release consumer:packaged
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+      - name: Unit tests (element, router, create, ui)
+        run: |
+          vp run --fail-if-no-match @openelement/element#test
+          vp run --fail-if-no-match @openelement/router#test
+      - name: Browser gate (chromium)
+        run: vp run --fail-if-no-match @openelement/element#browser:gate
+      - name: Interface snapshot check
+        run: vp run generate:all
+
+  # ── Job 3: Site E2E (chromium, sharded) ────────────────────────────────
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-workspace
+      - name: Install Playwright browsers
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+      - name: Build site
+        run: vp run site:build
+      - name: Site E2E (chromium)
+        run: vp run --fail-if-no-match @openelement/www#e2e:chromium
+      - name: Light-probe E2E (chromium)
+        run: vp run --fail-if-no-match @openelement/fixture-site-light-probe#e2e
+
+  # ── Job 4: Pack & Consumer Verification ────────────────────────────────
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-workspace
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Pack dry-run
+        run: vp run --fail-if-no-match @openelement/tools-release pack:dry-run
+      - name: Pack-surface check
+        run: vp run --fail-if-no-match @openelement/tools-release pack-surface:check
+      - name: Packed consumer (ubuntu)
+        run: vp run --fail-if-no-match @openelement/tools-release consumer:packaged
+
+  # ── Main push only: Full E2E + Cold Install ────────────────────────────
+  # These run only on push to main, not on PRs. PR CI is fast (8-12 min);
+  # these are the post-merge safety net (~25 min, non-blocking for merges).
+  e2e-full:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-workspace
+      - name: Install all browser engines
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - name: Build site
+        run: vp run site:build
+      - name: Site E2E (3 engines)
+        run: vp run @openelement/www#e2e:browsers
+      - name: Fixture gates
+        run: |
+          vp run --fail-if-no-match @openelement/fixture-router-native-framework#gate
+          vp run --fail-if-no-match @openelement/fixture-router-lit-framework#gate
+          vp run --fail-if-no-match @openelement/fixture-router-ui-dogfood#gate
+          vp run --fail-if-no-match @openelement/fixture-site-light-probe#gate
+      - name: Nitro proofs
+        run: |
+          vp run --fail-if-no-match @openelement/fixture-router-nitro#proof:node
+          vp run --fail-if-no-match @openelement/fixture-router-nitro#proof:workers
+
+  fresh-install:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Fresh install (empty store, no cache)
+        run: |
+          mkdir -p /tmp/fresh-store /tmp/fresh-cache
+          pnpm install --frozen-lockfile \
+            --store-dir /tmp/fresh-store \
+            --cache-dir /tmp/fresh-cache
+      - name: Cold build check
+        run: |
+          export PATH="/tmp/fresh-store/node_modules/.bin:$PATH"
+          npx tsc --noEmit -p packages/element/tsconfig.json
+          npx tsc --noEmit -p packages/router/tsconfig.json

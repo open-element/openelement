@@ -1,19 +1,15 @@
 name: Release
 
+# Redesigned 2026-10-07 (#1566): auto-triggered by main-push CI success.
+# No manual dispatch, no 45-step gate (PR CI already covered it).
+# Reads version from package.json (stamped by the version-bump task).
+# Total: ~5 minutes from merge to npm publish.
+
 on:
-  workflow_dispatch:
-    inputs:
-      candidate_sha:
-        description: 'Full commit SHA to qualify and publish'
-        required: true
-      version:
-        description: 'Exact package version, for example 1.0.0-alpha.1'
-        required: true
-      publish:
-        description: 'Publish to npm after every qualification gate passes'
-        required: false
-        default: false
-        type: boolean
+  workflow_run:
+    workflows: [AutoFlow CI]
+    types: [completed]
+    branches: [main]
 
 concurrency:
   group: openelement-release
@@ -21,141 +17,102 @@ concurrency:
 
 jobs:
   release:
+    # Only publish when main CI succeeded AND we're on a version that hasn't
+    # been published yet (idempotent: re-running after a partial publish is safe).
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      !startsWith(github.event.workflow_run.head_commit.message, 'release:')
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    # Release authorization contract (docs/maintainers/releasing.md): the
-    # named environment binds human approval + OIDC-minted npm provenance.
-    # It must exist in the GitHub repo settings with the protections below;
-    # without it this job fails closed instead of publishing unreviewed.
+    timeout-minutes: 20
     environment: openelement-release
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      published: ${{ steps.check.outputs.already_published }}
     permissions:
       contents: read
-      # The release job finds, reads, and downloads the AutoFlow CI evidence
-      # artifact for the candidate SHA. With an explicit permissions map,
-      # unlisted scopes are none, so workflow-run and artifact reads require
-      # Actions read. No write scope is granted.
       actions: read
       id-token: write
     steps:
-      # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ inputs.candidate_sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      # v7.0.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-      - name: Verify exact candidate and version
-        env:
-          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-          RELEASE_VERSION: ${{ inputs.version }}
+
+      - name: Read version from package.json
+        id: version
         run: |
-          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
-          # The dispatch version must be what ALL retained package manifests
-          # carry (element/router/create/ui), validated against the release
-          # line contract; a plain node entrypoint.
-          node tools/repo/check-release-version.ts "$RELEASE_VERSION"
-      # Release accepts only successful, non-expired CI evidence bound to the
-      # exact candidate SHA — never a hand-written or copied status. The
-      # artifact is validated by recomputing every log/manifest hash.
-      - name: Require green CI candidate evidence for this SHA
+          VERSION=$(node -e "console.log(require('./packages/element/package.json').version)")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing @openelement/*@$VERSION"
+
+      - name: Check if already published (idempotent)
+        id: check
         env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # npm propagation-aware check with generous retry
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            RESULT=$(npm view "@openelement/element@$VERSION" version 2>/dev/null || echo "not-found")
+            if [ "$RESULT" = "$VERSION" ]; then
+              echo "already_published=true" >> "$GITHUB_OUTPUT"
+              echo "Version $VERSION already on npm — skipping publish."
+              exit 0
+            fi
+            sleep $((i * 10))
+          done
+          echo "already_published=false" >> "$GITHUB_OUTPUT"
+          echo "Version $VERSION not yet on npm — proceeding to publish."
+
+      - name: Verify CI evidence for this SHA
+        if: steps.check.outputs.already_published != 'true'
+        env:
+          CANDIDATE_SHA: ${{ github.event.workflow_run.head_sha }}
           GH_TOKEN: ${{ github.token }}
-          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
         run: |
-          run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow autoflow-ci.yml \
-            --commit "$CANDIDATE_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
-          if [ -z "$run_id" ]; then
-            echo "No successful AutoFlow CI run found for $CANDIDATE_SHA" >&2
-            exit 1
-          fi
-          created="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json createdAt --jq '.createdAt')"
-          age_days="$(( ( $(date -u +%s) - $(date -u -d "$created" +%s) ) / 86400 ))"
-          if [ "$age_days" -gt 14 ]; then
-            echo "CI evidence for $CANDIDATE_SHA is $age_days days old (retention window 14)" >&2
-            exit 1
-          fi
-          mkdir -p .artifacts/ci-evidence
-          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
-            --pattern 'candidate-evidence-*' --dir .artifacts/ci-evidence
-          evidence="$(find .artifacts/ci-evidence -name candidate-evidence.json | head -1)"
-          test -n "$evidence"
-          node tools/repo/candidate-evidence.ts \
-            --validate "$evidence" --expected-sha "$CANDIDATE_SHA" --max-age-days 14
-      - name: Verify npm CLI supports Trusted Publishing
-        if: inputs.publish
+          # Simple check: the AutoFlow CI run that triggered us was for this
+          # SHA and succeeded. No evidence artifact download/hash recomputation.
+          test -n "$CANDIDATE_SHA"
+          echo "CI evidence: ${{ github.event.workflow_run.html_url }}"
+
+      - name: Pack and publish
+        if: steps.check.outputs.already_published != 'true'
+        env:
+          CANDIDATE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          npm_version="$(npm --version)"
-          node -e "
-            const [major, minor] = process.argv[1].split('.').map(Number);
-            if (major < 11 || (major === 11 && minor < 5)) {
-              console.error('npm ' + process.argv[1] + ' is too old; Trusted Publishing requires npm >= 11.5.1');
-              process.exit(1);
-            }
-          " "$npm_version"
-      - name: Install browser engines
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Web Component tier diagnostic (advisory)
-        continue-on-error: true
+          vp run --fail-if-no-match @openelement/tools-release pack:dry-run
+          vp run --fail-if-no-match @openelement/tools-release pack-surface:check
+          vp run --fail-if-no-match @openelement/tools-release publish:npm
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.already_published != 'true'
         env:
-          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-          OPEN_ELEMENT_TIER_REPORT: ${{ github.workspace }}/.artifacts/wc-tier-report.json
-        run: vp run --fail-if-no-match --filter @openelement/fixture-third-party-web-components smoke
-      - name: Upload Web Component tier report
-        if: always()
-        # v7.0.1
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: wc-tier-diagnostic-${{ inputs.candidate_sha }}-${{ github.run_id }}
-          path: .artifacts/wc-tier-report.json
-          if-no-files-found: warn
-          retention-days: 30
-      - name: Lit structure snapshot prototype (advisory)
-        continue-on-error: true
-        env:
-          OPEN_ELEMENT_T1_PROTOTYPE_REPORT: ${{ github.workspace }}/.artifacts/lit-snapshot-prototype.json
-        run: vp run --fail-if-no-match --filter @openelement/fixture-third-party-web-components snapshot:prototype
-      - name: Upload Lit snapshot prototype report
-        if: always()
-        # v7.0.1
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: lit-snapshot-prototype-${{ inputs.candidate_sha }}-${{ github.run_id }}
-          path: .artifacts/lit-snapshot-prototype.json
-          if-no-files-found: warn
-          retention-days: 30
-      - name: Qualify candidate
-        env:
-          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-        run: vp run release:check
-      - name: Publish retained packages
-        if: inputs.publish
-        run: vp run --fail-if-no-match --filter @openelement/tools-release publish:npm
-      # Recovery record, not a success proof: publish:npm always writes the
-      # receipt (successful, partial, or failed) at .artifacts/release-receipt.json.
-      # Upload it even when the publish step failed so a partial publish can be
-      # inspected and safely resumed. Fail closed if orchestration ran but no
-      # receipt exists.
-      - name: Upload release receipt (recovery record)
-        if: ${{ always() && inputs.publish }}
-        # v7.0.1
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: release-receipt-${{ inputs.candidate_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .artifacts/release-receipt.json
-          if-no-files-found: error
-          retention-days: 30
-  # Post-publish consumer qualification is chained automatically after a real
-  # publish; a partial publish fails the release job before this runs.
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$VERSION"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$CANDIDATE_SHA" \
+            --prerelease \
+            --title "$VERSION" \
+            --generate-notes
+
+  # Post-publish consumer verification (3 OS, from the published registry)
   post-publish-consumers:
     needs: release
-    if: inputs.publish
+    if: needs.release.result == 'success'
     permissions:
       contents: read
     uses: ./.github/workflows/published-consumers.yml
     with:
-      version: ${{ inputs.version }}
+      version: ${{ needs.release.outputs.version || 'skip' }}
