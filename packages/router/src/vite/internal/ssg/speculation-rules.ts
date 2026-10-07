@@ -64,6 +64,29 @@ export function buildSpeculationRulesJson(
   return quoteGeneratedJavaScriptValue(rules, 2);
 }
 
+/** Eagerness schedule for speculation rules (protocol union, #1561 default conservative). */
+export type SpeculationEagerness = 'immediate' | 'moderate' | 'conservative';
+
+/**
+ * Speculation Rules JSON that prefetches the island chunks of the pages one
+ * page links to (#1561). `source: "list"` keeps the URL set explicit — it is
+ * derived at build time from the per-page island manifests, so there is no
+ * pattern to drift from the real link graph. Unsupported browsers ignore the
+ * script tag entirely (zero JS, zero cost); supported ones fetch each URL on
+ * the eagerness schedule (default `conservative`), and the immutable hashed
+ * chunk responses then serve the target page's module fetches from cache.
+ */
+export function buildIslandPrefetchRulesJson(
+  chunkUrls: readonly string[],
+  eagerness: SpeculationEagerness = 'conservative',
+): string {
+  if (!chunkUrls.length) return '';
+  return quoteGeneratedJavaScriptValue(
+    { prefetch: [{ source: 'list', urls: [...chunkUrls], eagerness }] },
+    2,
+  );
+}
+
 function addExclusions(rules: Record<string, unknown[]>, patterns: string[]): void {
   if (!patterns.length) return;
   const orMatches = patterns.map((pattern) => ({ href_matches: pattern }));

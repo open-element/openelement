@@ -29,7 +29,8 @@
     "typecheck": "pnpm -r --filter @openelement/element --filter @openelement/router --filter @openelement/create --filter @openelement/ui run typecheck",
     "gate:release": "node tools/repo/gate.ts @openelement/tools-repo#gate:release @openelement/tools-release#gate:packed",
     "saas:workers": "node tools/repo/gate.ts @openelement/saas#build @openelement/saas#nitro:build-workers @openelement/tools-repo#workers:boundary-check",
-    "verify:core": "node tools/repo/gate.ts @openelement/tools-repo#gate:source @openelement/tools-release#gate:packed"
+    "verify:core": "node tools/repo/gate.ts @openelement/tools-repo#gate:source @openelement/tools-release#gate:packed",
+    "prepare": "node_modules/.bin/vp run --fail-if-no-match @openelement/tools-repo#hooks:install"
   },
   "devDependencies": {
     "@openelement/element": "workspace:*",

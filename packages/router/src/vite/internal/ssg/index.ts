@@ -51,10 +51,13 @@ export { ssgRender } from './ssg-render.ts';
 
 export {
   buildSpeculationRulesJson,
+  extractLinkHrefs,
   injectCspMeta,
+  injectIslandPrefetchRules,
   injectSpeculationRules,
   injectViewTransitionMeta,
 } from './postprocess.ts';
+export { buildIslandPrefetchRulesJson, type SpeculationEagerness } from './speculation-rules.ts';
 
 export {
   cleanSsrArtifacts,
@@ -98,6 +101,8 @@ export { renderEntry } from './entry-orchestrator.ts';
 export {
   extractCustomElementTags,
   generateIslandManifests,
+  pageChunkMap,
+  routeFromRelativePath,
   writeIslandManifests,
 } from './island-manifest.ts';
 

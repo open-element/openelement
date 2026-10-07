@@ -1952,3 +1952,277 @@ test('Navigation API: a programmatic navigation superseded mid-guard never reach
     nav.restore();
   }
 });
+
+// ─── View Transitions (#1561): the render step inside startViewTransition ──
+
+interface ViewTransitionStub {
+  transitions: Array<() => unknown>;
+  /** Invoke the update callback the way the browser would, resolving its done promise. */
+  run: () => Promise<void>;
+}
+
+/** Install a fake `document` whose startViewTransition defers the callback to the test. */
+function installFakeDocument(): ViewTransitionStub {
+  const transitions: Array<() => unknown> = [];
+  const fake = {
+    startViewTransition(callback: () => unknown) {
+      transitions.push(callback);
+      return {
+        updateCallbackDone: Promise.resolve(),
+      };
+    },
+  };
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: fake });
+  return {
+    transitions,
+    run: async () => {
+      const callback = transitions[transitions.length - 1];
+      if (!callback) throw new Error('no view transition captured');
+      await callback();
+    },
+  };
+}
+
+function restoreDocument(descriptor: PropertyDescriptor | undefined): void {
+  if (descriptor) Object.defineProperty(globalThis, 'document', descriptor);
+  else delete (globalThis as Record<string, unknown>).document;
+}
+
+test('View Transitions: the render step of a navigation runs inside startViewTransition', async () => {
+  const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  const stub = installFakeDocument();
+  const original = {
+    location: Object.getOwnPropertyDescriptor(globalThis, 'location'),
+    history: Object.getOwnPropertyDescriptor(globalThis, 'history'),
+    add: globalThis.addEventListener,
+    remove: globalThis.removeEventListener,
+  };
+  let onChangeRuns = 0;
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: {
+      protocol: 'https:',
+      href: 'https://router.test/',
+      pathname: '/',
+      search: '',
+      hash: '',
+    },
+  });
+  Object.defineProperty(globalThis, 'history', {
+    configurable: true,
+    value: {
+      pushState(_s: unknown, _t: string, url: string) {
+        (globalThis as { location: { href: string; pathname: string } }).location.href =
+          `https://router.test${url}`;
+        (globalThis as { location: { pathname: string } }).location.pathname = url;
+      },
+      replaceState() {},
+    },
+  });
+  globalThis.addEventListener = (() => {}) as typeof globalThis.addEventListener;
+  globalThis.removeEventListener = (() => {}) as typeof globalThis.removeEventListener;
+  try {
+    const router = createRouter({
+      mode: 'history',
+      routes,
+      viewTransitions: true,
+      onChange: () => {
+        onChangeRuns++;
+      },
+    });
+    try {
+      await router.navigate('/items/9');
+      // The transition is captured; the DOM update is deferred into its
+      // callback — that callback is where the user's ::view-transition-*
+      // CSS gets an old/new state pair to animate.
+      expect(stub.transitions.length).toEqual(1);
+      expect(onChangeRuns).toEqual(0);
+      await stub.run();
+      expect(onChangeRuns).toEqual(1);
+    } finally {
+      router.dispose();
+    }
+  } finally {
+    restoreDocument(documentDescriptor);
+    if (original.location) Object.defineProperty(globalThis, 'location', original.location);
+    else delete (globalThis as Record<string, unknown>).location;
+    if (original.history) Object.defineProperty(globalThis, 'history', original.history);
+    else delete (globalThis as Record<string, unknown>).history;
+    globalThis.addEventListener = original.add;
+    globalThis.removeEventListener = original.remove;
+  }
+});
+
+test('View Transitions: without the platform API the DOM update runs directly', async () => {
+  const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  restoreDocument(undefined);
+  const original = {
+    location: Object.getOwnPropertyDescriptor(globalThis, 'location'),
+    history: Object.getOwnPropertyDescriptor(globalThis, 'history'),
+    add: globalThis.addEventListener,
+    remove: globalThis.removeEventListener,
+  };
+  let onChangeRuns = 0;
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: {
+      protocol: 'https:',
+      href: 'https://router.test/',
+      pathname: '/',
+      search: '',
+      hash: '',
+    },
+  });
+  Object.defineProperty(globalThis, 'history', {
+    configurable: true,
+    value: { pushState() {}, replaceState() {} },
+  });
+  globalThis.addEventListener = (() => {}) as typeof globalThis.addEventListener;
+  globalThis.removeEventListener = (() => {}) as typeof globalThis.removeEventListener;
+  try {
+    const router = createRouter({
+      mode: 'history',
+      routes,
+      onChange: () => {
+        onChangeRuns++;
+      },
+    });
+    try {
+      await router.navigate('/items/9');
+      expect(onChangeRuns).toEqual(1);
+    } finally {
+      router.dispose();
+    }
+  } finally {
+    restoreDocument(documentDescriptor);
+    if (original.location) Object.defineProperty(globalThis, 'location', original.location);
+    else delete (globalThis as Record<string, unknown>).location;
+    if (original.history) Object.defineProperty(globalThis, 'history', original.history);
+    else delete (globalThis as Record<string, unknown>).history;
+    globalThis.addEventListener = original.add;
+    globalThis.removeEventListener = original.remove;
+  }
+});
+
+test('View Transitions: default off — the platform offer alone wraps nothing', async () => {
+  const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  const stub = installFakeDocument();
+  const original = {
+    location: Object.getOwnPropertyDescriptor(globalThis, 'location'),
+    history: Object.getOwnPropertyDescriptor(globalThis, 'history'),
+    add: globalThis.addEventListener,
+    remove: globalThis.removeEventListener,
+  };
+  let onChangeRuns = 0;
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: {
+      protocol: 'https:',
+      href: 'https://router.test/',
+      pathname: '/',
+      search: '',
+      hash: '',
+    },
+  });
+  Object.defineProperty(globalThis, 'history', {
+    configurable: true,
+    value: { pushState() {}, replaceState() {} },
+  });
+  globalThis.addEventListener = (() => {}) as typeof globalThis.addEventListener;
+  globalThis.removeEventListener = (() => {}) as typeof globalThis.removeEventListener;
+  try {
+    const router = createRouter({
+      mode: 'history',
+      routes,
+      onChange: () => {
+        onChangeRuns++;
+      },
+    });
+    try {
+      await router.navigate('/items/9');
+      // No opt-in, no transition — even though the platform offers one.
+      expect(stub.transitions.length).toEqual(0);
+      expect(onChangeRuns).toEqual(1);
+    } finally {
+      router.dispose();
+    }
+  } finally {
+    restoreDocument(documentDescriptor);
+    if (original.location) Object.defineProperty(globalThis, 'location', original.location);
+    else delete (globalThis as Record<string, unknown>).location;
+    if (original.history) Object.defineProperty(globalThis, 'history', original.history);
+    else delete (globalThis as Record<string, unknown>).history;
+    globalThis.addEventListener = original.add;
+    globalThis.removeEventListener = original.remove;
+  }
+});
+
+test('View Transitions: a rejected update logs through the same error channel', async () => {
+  const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  const original = {
+    location: Object.getOwnPropertyDescriptor(globalThis, 'location'),
+    history: Object.getOwnPropertyDescriptor(globalThis, 'history'),
+    add: globalThis.addEventListener,
+    remove: globalThis.removeEventListener,
+    error: console.error,
+  };
+  const updateFailure = new Error('update failed');
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: {
+      startViewTransition: (callback: () => unknown) => {
+        void callback();
+        return { updateCallbackDone: Promise.reject(updateFailure) };
+      },
+    },
+  });
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: {
+      protocol: 'https:',
+      href: 'https://router.test/',
+      pathname: '/',
+      search: '',
+      hash: '',
+    },
+  });
+  Object.defineProperty(globalThis, 'history', {
+    configurable: true,
+    value: { pushState() {}, replaceState() {} },
+  });
+  globalThis.addEventListener = (() => {}) as typeof globalThis.addEventListener;
+  globalThis.removeEventListener = (() => {}) as typeof globalThis.removeEventListener;
+  const errors: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    errors.push(args);
+  };
+  try {
+    const router = createRouter({
+      mode: 'history',
+      routes,
+      viewTransitions: true,
+      onChange: () => {},
+    });
+    try {
+      await router.navigate('/items/9');
+      // Let the rejected updateCallbackDone settle through its catch.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(
+        errors.some((args) => args[0] === '[router]' && args[1] === 'onChange failed:'),
+        'the view-transition failure lands in the router error channel',
+      ).toEqual(true);
+    } finally {
+      router.dispose();
+    }
+  } finally {
+    console.error = original.error;
+    restoreDocument(documentDescriptor);
+    if (original.location) Object.defineProperty(globalThis, 'location', original.location);
+    else delete (globalThis as Record<string, unknown>).location;
+    if (original.history) Object.defineProperty(globalThis, 'history', original.history);
+    else delete (globalThis as Record<string, unknown>).history;
+    globalThis.addEventListener = original.add;
+    globalThis.removeEventListener = original.remove;
+  }
+});

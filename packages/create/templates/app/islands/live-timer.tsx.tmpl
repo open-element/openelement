@@ -1,0 +1,66 @@
+/**
+ * live-timer — client-only live stats island (compiled).
+ *
+ * hydrate: 'only' with ssr: false renders nothing on the server; the client
+ * entry creates the DOM fresh from the compiled Part Program and starts the
+ * clock in connectedCallback. Elapsed time is measured from the document's
+ * time origin (performance.now()), so the number is honest page time, and
+ * disconnectedCallback stops the interval when the host leaves the tree.
+ */
+import { defineIslandConfig } from '@openelement/router';
+import { element, OpenElement, property } from '@openelement/element';
+import { compiledStyle } from '../components/page-styles.ts';
+
+export const openElement = defineIslandConfig({ hydrate: 'only', ssr: false, dsd: false });
+
+// Same-module style sheet: the compiler erases this const from
+// the island module and emits its bytes as the component's `.oe-style.css`
+// asset. Cross-module sheet imports fail closed (OEC9028).
+const timerStyles = [
+  compiledStyle(`
+    :host { display: inline-block; }
+    .timer-row { display: inline-flex; gap: 0.6rem; align-items: baseline; }
+    .value { min-width: 6ch; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 1.4rem; color: var(--brand); }
+    .unit { color: var(--ink-soft); font-size: 0.85rem; }
+  `),
+];
+
+// The interval handle rides the compiled per-instance property state: island
+// classes carry compiled @property fields and methods, and module-level
+// runtime statements are outside the compiled grammar (OEC9008). In the
+// browser setInterval returns a number, so the handle is a plain number here.
+@element('live-timer', { root: 'shadow-open' })
+export default class LiveTimer extends OpenElement {
+  static override styles = timerStyles;
+
+  /** Elapsed seconds as preformatted text (compiled text Parts bind plain
+   * properties — no method calls in a text region, OEC9013). */
+  @property({ reflect: false, attribute: false })
+  elapsed = '0.0';
+
+  /** The ticking interval's handle; 0 when the host is not connected. */
+  @property({ reflect: false, attribute: false })
+  interval = 0;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.interval = setInterval(() => {
+      this.elapsed = (Math.round(performance.now()) / 1000).toFixed(1);
+    }, 100);
+  }
+
+  override disconnectedCallback(): void {
+    clearInterval(this.interval);
+    this.interval = 0;
+    super.disconnectedCallback();
+  }
+
+  render() {
+    return (
+      <div class='timer-row'>
+        <span id='elapsed'>{this.elapsed}</span>
+        <span class='unit'>seconds on this page</span>
+      </div>
+    );
+  }
+}

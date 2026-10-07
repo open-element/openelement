@@ -9,6 +9,7 @@
   "files": [
     "src/cli.ts",
     "src/install-command.ts",
+    "src/pm.ts",
     "src/template-builder.ts",
     "src/version.ts",
     "templates",

@@ -1,5 +1,5 @@
 /**
- * Style sheets for the starter's compiled elements (v0.44).
+ * Style sheets for the showcase starter's compiled elements (v0.44).
  *
  * Page sheets live in this plain module (compiled modules may not carry
  * runtime top-level statements, and page components are not islands). Page
@@ -22,102 +22,104 @@ export function compiledStyle(css: string): StyleSheetLike {
   return instance;
 }
 
-// ─── Page sheets (light roots → inlined as @scope(<page-tag>) in SSR) ───
+// ─── Site chrome (every page spreads this sheet; one source) ───
+//
+// The showcase starter ships no app-shell island: the header and footer are
+// plain markup inside each light-root page, styled once here. Deleting a
+// page's header markup or this sheet keeps the page rendering.
 
-// Shared post-list rules (home teaser + blog index) — one source, both pages
-// include this sheet in their `static styles` arrays.
-export const postListStyles = [
+export const siteChromeStyles = [
   compiledStyle(`
-    .posts { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
-    .post { display: block; padding: 1.15rem 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; }
-    a.post:hover .title { color: var(--brand); }
-    .post .title { display: block; font-family: var(--font-serif); font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); transition: color 0.15s ease; }
-    .post .meta { display: block; margin-top: 0.3rem; font-size: 0.85rem; color: var(--ink-2); }
-    .post .excerpt { display: block; margin-top: 0.45rem; color: var(--ink-2); line-height: 1.6; }
+    :host { display: block; }
+    .site-head { border-bottom: 1px solid var(--line); background: var(--paper); }
+    .site-head .bar { max-width: var(--content-width); margin: 0 auto; padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+    .site-brand { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+    .site-brand:hover { color: var(--brand); text-decoration: none; }
+    .site-head nav { display: flex; gap: 1.25rem; }
+    .site-head nav a { color: var(--ink-soft); font-size: 0.95rem; font-weight: 500; text-decoration: none; }
+    .site-head nav a:hover { color: var(--brand); text-decoration: none; }
+    main { max-width: var(--content-width); margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+    .site-foot { border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 0.85rem; }
+    .site-foot .bar { max-width: var(--content-width); margin: 0 auto; padding: 1.25rem; display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .site-foot a { color: var(--ink-soft); text-decoration: none; }
+    .site-foot a:hover { color: var(--brand); text-decoration: none; }
   `),
 ];
 
-// Home page (index-page)
+// ─── JS-cost badges (the showcase's cost vocabulary) ───
+//
+// Badges mark what each section costs the client: `static` sections ship
+// markup only, `island` sections hydrate a compiled island. Pure CSS — the
+// badge is itself part of the zero-JS surface.
+
+export const badgeStyles = [
+  compiledStyle(`
+    .badge { display: inline-flex; align-items: center; gap: 0.4em; padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid var(--line); color: var(--ink-soft); background: var(--surface); }
+    .badge-static { border-color: color-mix(in srgb, var(--ok) 35%, transparent); color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+    .badge-island { border-color: color-mix(in srgb, var(--brand) 40%, transparent); color: var(--brand); background: var(--brand-soft); }
+  `),
+];
+
+// ─── Page sheets (light roots → inlined as @scope(<page-tag>) in SSR) ───
+
+// Home / landing page (index-page)
 export const homePageStyles = [
   compiledStyle(`
     :host { display: block; }
     .hero { padding: 2.5rem 0 1rem; }
-    .eyebrow { color: var(--brand); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; }
-    h1 { font-family: var(--font-serif); font-size: 3rem; line-height: 1.12; letter-spacing: -0.015em; margin: 0.75rem 0 1.25rem; font-weight: 700; }
-    .lede { font-size: 1.15rem; line-height: 1.75; color: var(--ink-2); max-width: 58ch; margin: 0; }
-    .lede code { font-size: 0.85em; }
-    .more { display: inline-block; margin-top: 1.5rem; font-weight: 600; }
-    .demo { margin-top: 2.75rem; border: 1px solid var(--line); border-radius: 8px; padding: 1.25rem 1.5rem; }
-    .demo .label { color: var(--ink-2); font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 0.9rem; }
-    .recent { margin-top: 3rem; }
-    .recent h2 { font-family: var(--font-serif); letter-spacing: -0.01em; margin: 0 0 0.25rem; }
-    .recent .sub { color: var(--ink-2); font-size: 0.925rem; margin: 0 0 1.5rem; }
-    .recent .sub code { font-size: 0.85em; }
+    .eyebrow { color: var(--brand); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; margin: 0; }
+    h1 { font-size: clamp(2.2rem, 6vw, 3.2rem); line-height: 1.1; letter-spacing: -0.02em; margin: 0.75rem 0 1rem; font-weight: 700; max-width: 22ch; }
+    .lede { font-size: 1.12rem; line-height: 1.75; color: var(--ink-soft); max-width: 56ch; margin: 0; }
+    .lede code, .panel p code { font-family: var(--font-mono); font-size: 0.85em; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 0.08em 0.35em; }
+    .cta { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; margin-top: 1.75rem; }
+    .button { display: inline-block; padding: 0.6rem 1.15rem; border-radius: var(--radius-m); background: var(--brand); border: 1px solid var(--brand); color: var(--brand-ink); font-weight: 600; text-decoration: none; transition: opacity 0.15s ease; }
+    .button:hover { opacity: 0.88; text-decoration: none; }
+    .button-ghost { display: inline-block; padding: 0.6rem 1.15rem; border-radius: var(--radius-m); border: 1px solid var(--line); color: var(--ink); font-weight: 600; text-decoration: none; background: var(--paper); transition: border-color 0.15s ease, color 0.15s ease; }
+    .button-ghost:hover { border-color: var(--brand); color: var(--brand); text-decoration: none; }
+    .panel { margin-top: 2.5rem; border: 1px solid var(--line); border-radius: var(--radius-l); padding: 1.5rem 1.75rem; background: var(--paper); box-shadow: var(--shadow-1); }
+    .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .panel-head h2 { margin: 0; font-size: 1.3rem; letter-spacing: -0.01em; }
+    .panel > p { color: var(--ink-soft); margin: 0.35rem 0 1.25rem; max-width: 60ch; }
+    .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+    .card { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 1rem 1.15rem; background: var(--surface); }
+    .card h3 { margin: 0.6rem 0 0.35rem; font-size: 1rem; }
+    .card p { margin: 0; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
     a { color: var(--brand); text-decoration: none; }
     a:hover { text-decoration: underline; }
   `),
-  ...postListStyles,
+  ...badgeStyles,
+  ...siteChromeStyles,
 ];
 
-// Blog index (blog-index)
-export const blogIndexStyles = [
+// About page (about-page)
+export const aboutPageStyles = [
   compiledStyle(`
     :host { display: block; }
-    .eyebrow { color: var(--brand); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; }
-    h1 { font-family: var(--font-serif); letter-spacing: -0.015em; margin: 0.5rem 0; }
-    .sub { color: var(--ink-2); font-size: 0.925rem; margin: 0 0 1.5rem; }
-    .sub code { font-size: 0.85em; }
+    .eyebrow { color: var(--brand); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; margin: 0; }
+    h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); line-height: 1.15; letter-spacing: -0.02em; margin: 0.75rem 0 1rem; font-weight: 700; }
+    .lede { font-size: 1.08rem; color: var(--ink-soft); max-width: 58ch; margin: 0 0 2rem; }
+    h2 { font-size: 1.25rem; letter-spacing: -0.01em; margin: 2.25rem 0 0.6rem; }
+    p { margin: 0.6rem 0; max-width: 62ch; }
+    p code, li code { font-family: var(--font-mono); font-size: 0.85em; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 0.08em 0.35em; }
+    .conventions { list-style: none; margin: 1rem 0 0; padding: 0; border-top: 1px solid var(--line); }
+    .conventions li { display: flex; gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+    .conventions code { font-family: var(--font-mono); font-size: 0.85rem; color: var(--brand); min-width: 15rem; }
+    .conventions span { color: var(--ink-soft); font-size: 0.92rem; }
     a { color: var(--brand); text-decoration: none; }
+    a:hover { text-decoration: underline; }
   `),
-  ...postListStyles,
-];
-
-// Blog post page (blog-welcome)
-export const blogWelcomeStyles = [
-  compiledStyle(`
-    :host { display: block; }
-    h1 { font-family: var(--font-serif); font-size: 2.4rem; line-height: 1.15; letter-spacing: -0.015em; margin: 0.5rem 0; }
-    .meta { color: var(--ink-2); font-size: 0.9rem; margin-top: 0; padding-bottom: 1.5rem; border-bottom: 1px solid var(--line); }
-    a { color: var(--brand); text-decoration: none; }
-    .post-body { line-height: 1.8; font-size: 1.05rem; }
-    .post-body h2 { font-family: var(--font-serif); margin: 2.5rem 0 0.75rem; letter-spacing: -0.01em; }
-    .post-body p { margin: 1rem 0; }
-    .post-body code { font-family: var(--font-mono, ui-monospace, Menlo, monospace); font-size: 0.85em; background: #f1efe8; border: 1px solid var(--line); padding: 0.1em 0.4em; border-radius: 5px; }
-  `),
-];
-
-// Freshness proof (freshness-page)
-export const freshnessPageStyles = [
-  compiledStyle(`
-    :host { display: block; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
-    p { color: var(--ink-2); }
-  `),
+  ...badgeStyles,
+  ...siteChromeStyles,
 ];
 
 // Styled 404 (el-404)
 export const notFoundPageStyles = [
   compiledStyle(`
     :host { display: block; }
-    h1 { font-family: var(--font-serif); font-size: 2.4rem; letter-spacing: -0.015em; margin: 0.75rem 0 0.5rem; font-weight: 700; }
-    p { color: var(--ink-2); line-height: 1.6; }
+    h1 { font-size: 2.4rem; letter-spacing: -0.02em; margin: 0.75rem 0 0.5rem; font-weight: 700; }
+    p { color: var(--ink-soft); line-height: 1.6; }
     a { color: var(--brand); font-weight: 600; text-decoration: none; }
     a:hover { text-decoration: underline; }
   `),
-];
-
-// Contact form (contact-page)
-export const contactPageStyles = [
-  compiledStyle(`
-    :host { display: block; }
-    h1 { font-family: var(--font-serif); font-size: 2.4rem; letter-spacing: -0.015em; margin: 0.75rem 0 0.5rem; font-weight: 700; }
-    .sub { color: var(--ink-2); line-height: 1.6; max-width: 52ch; margin: 0 0 1.75rem; }
-    form { display: flex; gap: 0.6rem; flex-wrap: wrap; }
-    input { font: inherit; min-width: 16rem; padding: 0.55rem 0.8rem; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; background: #fff; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-    input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px #8262db2e; }
-    button { font: inherit; font-weight: 600; padding: 0.55rem 1.1rem; cursor: pointer; border: 1px solid var(--brand); border-radius: 6px; background: var(--brand); color: #fff; transition: opacity 0.15s ease; }
-    button:hover { opacity: 0.88; }
-    #error { color: #c92a2a; margin: 1rem 0 0; }
-    #error:empty, #thanks:empty { display: none; }
-    #thanks { color: var(--brand); font-weight: 600; margin: 1rem 0 0; }
-  `),
+  ...siteChromeStyles,
 ];

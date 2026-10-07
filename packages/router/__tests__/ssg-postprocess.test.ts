@@ -19,10 +19,15 @@ import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/
 import { OpenElementError } from '@openelement/element';
 import { ClientAssetErrorCode } from '../src/internal/error-codes.ts';
 import {
+  buildIslandPrefetchRulesJson,
   buildSpeculationRulesJson,
+  extractLinkHrefs,
   injectCspMeta,
+  injectIslandPrefetchRules,
   injectSpeculationRules,
   injectViewTransitionMeta,
+  pageChunkMap,
+  routeFromRelativePath,
 } from '../src/vite/internal/ssg/index.ts';
 import {
   islandChunkMapFromAssetManifest,
@@ -830,6 +835,231 @@ test('injectSpeculationRules still injects when body text mentions speculationru
     // Should have the script tag injected (not skipped because of body text)
     const matchCount = (content.match(/<script type="speculationrules"/g) || []).length;
     expect(matchCount).toEqual(1);
+  } finally {
+    cleanup(tmp);
+  }
+});
+
+// ─── Per-page island-chunk prefetch (#1561) ─────────────────────────────
+
+test('buildIslandPrefetchRulesJson returns empty for an empty chunk set', () => {
+  expect(buildIslandPrefetchRulesJson([])).toEqual('');
+});
+
+test('buildIslandPrefetchRulesJson emits an explicit source-list prefetch rule', () => {
+  const parsed = JSON.parse(
+    buildIslandPrefetchRulesJson(['/client/islands/b-2.js', '/client/islands/a-1.js']),
+  ) as { prefetch: Array<{ source: string; urls: string[]; eagerness: string }> };
+  expect(parsed.prefetch).toEqual([
+    {
+      source: 'list',
+      urls: ['/client/islands/b-2.js', '/client/islands/a-1.js'],
+      eagerness: 'conservative',
+    },
+  ]);
+});
+
+test('buildIslandPrefetchRulesJson honors an explicit eagerness', () => {
+  const parsed = JSON.parse(buildIslandPrefetchRulesJson(['/c.js'], 'moderate')) as {
+    prefetch: Array<{ eagerness: string }>;
+  };
+  expect(parsed.prefetch[0]?.eagerness).toEqual('moderate');
+});
+
+test('extractLinkHrefs reads anchors and skips comments, script and style blocks', () => {
+  const html = `
+<!-- <a href="/in-comment"> -->
+<script>const html = '<a href="/in-script">';</script>
+<style>a { content: '<a href="/in-style">' }</style>
+<a href="/first">one</a>
+<a href='/second'>two</a>
+<a data-x=1 href=/third>three</a>
+<a name="no-href">four</a>
+`;
+  expect(extractLinkHrefs(html)).toEqual(['/first', '/second', '/third']);
+});
+
+test('routeFromRelativePath is the single output-path → route derivation', () => {
+  expect(routeFromRelativePath('index.html')).toEqual('/');
+  expect(routeFromRelativePath('about.html')).toEqual('/about');
+  expect(routeFromRelativePath(join('guide', 'intro', 'index.html'))).toEqual('/guide/intro');
+});
+
+test('pageChunkMap dedupes and sorts each route’s chunk URLs', () => {
+  const map = pageChunkMap([
+    {
+      route: '/a',
+      islands: [
+        { tagName: 'x-b', chunkUrl: '/c/b.js', strategy: 'idle', layer: 'dsd-static' },
+        { tagName: 'x-a', chunkUrl: '/c/shared.js', strategy: 'idle', layer: 'dsd-static' },
+        { tagName: 'x-c', chunkUrl: '/c/b.js', strategy: 'idle', layer: 'pure-island' },
+      ],
+      builtAt: '1970-01-01T00:00:00.000Z',
+    },
+  ]);
+  expect(map.get('/a')).toEqual(['/c/b.js', '/c/shared.js']);
+});
+
+test('injectIslandPrefetchRules writes each page the chunks of the pages it links to', () => {
+  const tmp = makeTempDir();
+  try {
+    mkdirSync(tmp, { recursive: true });
+    mkdirSync(join(tmp, 'about'), { recursive: true });
+    mkdirSync(join(tmp, 'blog'), { recursive: true });
+    writeFileSync(
+      join(tmp, 'index.html'),
+      '<html><head><title>home</title></head><body>' +
+        '<a href="/about">about</a><a href="/blog/x">post</a>' +
+        '<a href="https://elsewhere.example/nope">external</a><a href="#top">anchor</a>' +
+        '</body></html>',
+    );
+    writeFileSync(
+      join(tmp, 'about', 'index.html'),
+      '<html><head></head><body><p>no links</p></body></html>',
+    );
+    writeFileSync(
+      join(tmp, 'blog', 'x.html'),
+      '<html><head></head><body><a href="/">home</a><a href="/about/">about</a></body></html>',
+    );
+
+    // The chunk facts come from the island manifests (pageChunkMap form) —
+    // the consumer shape the build lane feeds the injector.
+    const pageChunks = pageChunkMap([
+      {
+        route: '/',
+        islands: [
+          {
+            tagName: 'open-home',
+            chunkUrl: '/client/islands/home-Zz9.js',
+            strategy: 'idle',
+            layer: 'dsd-static',
+          },
+        ],
+        builtAt: '1970-01-01T00:00:00.000Z',
+      },
+      {
+        route: '/about',
+        islands: [
+          {
+            tagName: 'open-counter',
+            chunkUrl: '/client/islands/counter-Ab12.js',
+            strategy: 'idle',
+            layer: 'dsd-static',
+          },
+        ],
+        builtAt: '1970-01-01T00:00:00.000Z',
+      },
+      {
+        route: '/blog/x',
+        islands: [
+          {
+            tagName: 'open-badge',
+            chunkUrl: '/client/islands/badge-Cd34.js',
+            strategy: 'idle',
+            layer: 'pure-island',
+          },
+          {
+            tagName: 'open-badge-2',
+            chunkUrl: '/client/islands/badge-Cd34.js',
+            strategy: 'idle',
+            layer: 'pure-island',
+          },
+        ],
+        builtAt: '1970-01-01T00:00:00.000Z',
+      },
+    ]);
+    injectIslandPrefetchRules(tmp, pageChunks);
+
+    const index = readFileSync(join(tmp, 'index.html'), 'utf8');
+    // /about + /blog/x chunks; external and anchor links contribute nothing;
+    // the page's own chunk (home-Zz9) is never listed.
+    const indexRules = JSON.parse(
+      /<script type="speculationrules"[^>]*>\n\s*([\s\S]*?)\n\s*<\/script>/.exec(index)?.[1] ??
+        '{}',
+    ) as { prefetch: Array<{ urls: string[]; eagerness: string }> };
+    expect(indexRules.prefetch[0]?.urls).toEqual([
+      '/client/islands/badge-Cd34.js',
+      '/client/islands/counter-Ab12.js',
+    ]);
+    expect(indexRules.prefetch[0]?.eagerness).toEqual('conservative');
+    expect((index.match(/data-open-island-prefetch/g) || []).length).toEqual(1);
+    expect(index.indexOf('<script type="speculationrules"')).toBeGreaterThan(
+      index.indexOf('<head>'),
+    );
+
+    // A page without outbound links ships no tag at all.
+    const about = readFileSync(join(tmp, 'about', 'index.html'), 'utf8');
+    expect(about.includes('speculationrules')).toEqual(false);
+
+    // Trailing-slash links resolve to the same route; the home page's own
+    // chunk is excluded from /blog/x's list (it links to / only).
+    const blogX = readFileSync(join(tmp, 'blog', 'x.html'), 'utf8');
+    const blogRules = JSON.parse(
+      /<script type="speculationrules"[^>]*>\n\s*([\s\S]*?)\n\s*<\/script>/.exec(blogX)?.[1] ??
+        '{}',
+    ) as { prefetch: Array<{ urls: string[] }> };
+    // /blog/x links to / and /about/ (trailing slash → same route); the
+    // page's own badge chunk is excluded from its own list.
+    expect(blogRules.prefetch[0]?.urls).toEqual([
+      '/client/islands/counter-Ab12.js',
+      '/client/islands/home-Zz9.js',
+    ]);
+  } finally {
+    cleanup(tmp);
+  }
+});
+
+test('injectIslandPrefetchRules is idempotent and leaves other lanes’ tags alone', () => {
+  const tmp = makeTempDir();
+  try {
+    mkdirSync(tmp, { recursive: true });
+    writeFileSync(
+      join(tmp, 'index.html'),
+      '<html><head></head><body><a href="/about">about</a></body></html>',
+    );
+    // The global speculation lane's tag is a different script — it must not
+    // block (or be blocked by) this lane.
+    writeFileSync(
+      join(tmp, 'about.html'),
+      '<html><head><script type="speculationrules">{"prefetch":[]}</script></head>' +
+        '<body><a href="/">home</a></body></html>',
+    );
+    const pageChunks = pageChunkMap([
+      {
+        route: '/',
+        islands: [
+          {
+            tagName: 'open-home',
+            chunkUrl: '/client/islands/home-Zz9.js',
+            strategy: 'idle',
+            layer: 'dsd-static',
+          },
+        ],
+        builtAt: '1970-01-01T00:00:00.000Z',
+      },
+      {
+        route: '/about',
+        islands: [
+          {
+            tagName: 'open-counter',
+            chunkUrl: '/client/islands/counter-Ab12.js',
+            strategy: 'idle',
+            layer: 'dsd-static',
+          },
+        ],
+        builtAt: '1970-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    injectIslandPrefetchRules(tmp, pageChunks);
+    injectIslandPrefetchRules(tmp, pageChunks);
+
+    const index = readFileSync(join(tmp, 'index.html'), 'utf8');
+    expect((index.match(/data-open-island-prefetch/g) || []).length).toEqual(1);
+    // The global lane's tag survives untouched; the about page gains its own.
+    const about = readFileSync(join(tmp, 'about.html'), 'utf8');
+    expect((about.match(/<script type="speculationrules"/g) || []).length).toEqual(2);
+    expect(about.includes('data-open-island-prefetch')).toEqual(true);
   } finally {
     cleanup(tmp);
   }

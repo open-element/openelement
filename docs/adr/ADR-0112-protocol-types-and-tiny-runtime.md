@@ -1,7 +1,15 @@
 # ADR-0112: Protocol Types and Tiny Runtime
 
-- Status: ACCEPTED
+- Status: SUPERSEDED by [ADR-0152](./ADR-0152-product-router-and-alpha-convergence.md)
 - Date: 2026-07-10
+- Superseded: the `@openelement/protocol` contracts package this decision
+  governs no longer exists — it left the tree at v0.40.0 (`605d85bb6`),
+  and [ADR-0152](./ADR-0152-product-router-and-alpha-convergence.md)
+  superseded the multi-package boundary it belonged to; the shared
+  contract types now live inside `@openelement/element`
+  (`packages/element/src/public-surface.ts`), which the retired-API gate
+  (`tools/repo/check-retired-api-refs.ts`) bars from re-emerging as a
+  package.
 
 ## Context
 

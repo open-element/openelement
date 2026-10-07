@@ -1,14 +1,22 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { OPEN_ELEMENT_CONFIG_KEYS } from '../../router/src/config.ts';
-import { CREATE_VERSION, TAILWIND_STARTER_PIN, VITE_STARTER_PIN } from '../src/version.ts';
+import { CREATE_VERSION, VITE_STARTER_PIN } from '../src/version.ts';
 import { createInstallCommand } from '../src/install-command.ts';
+import { detectPackageManager } from '../src/pm.ts';
 import {
   assertUnifiedProductVersions,
   buildTemplates,
@@ -26,26 +34,49 @@ function readTemplate(path: string): string {
   return readFileSync(existsSync(payloadPath) ? payloadPath : logicalPath, 'utf8');
 }
 
-async function runCreate(executable: string, cwd: string, name: string, ...extra: string[]) {
+const gitAvailable = spawnSync('git', ['--version'], { stdio: 'ignore' }).status === 0;
+
+// The packed-CLI test drives the release toolchain's pnpm script; on hosts
+// without pnpm on PATH (probe below) it cannot run at all, so it skips there
+// and stays active in CI where pnpm is the package manager.
+const pnpmAvailable = spawnSync('pnpm', ['--version'], { stdio: 'ignore' }).status === 0;
+
+async function runCreate(
+  executable: string,
+  cwd: string,
+  name: string,
+  ...extra: string[]
+): Promise<{ stdout: string; stderr: string; code: number }> {
   const child = spawn(process.execPath, [executable, name, ...extra], { cwd });
   const [out, err] = await Promise.all([
     Array.fromAsync(child.stdout!),
     Array.fromAsync(child.stderr!),
   ]);
   const code = await new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1)));
-  expect(code, Buffer.concat(err).toString()).toEqual(0);
-  return Buffer.concat(out).toString();
+  return { stdout: Buffer.concat(out).toString(), stderr: Buffer.concat(err).toString(), code };
 }
 
-async function runCreateExpectingFailure(executable: string, cwd: string, name: string) {
-  const child = spawn(process.execPath, [executable, name], { cwd });
-  const [, err] = await Promise.all([
-    Array.fromAsync(child.stdout!),
-    Array.fromAsync(child.stderr!),
-  ]);
-  const code = await new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1)));
-  expect(code !== 0, `expected create to fail for "${name}"`).toBeTruthy();
-  return Buffer.concat(err).toString();
+/** A create run expected to succeed; asserts exit 0 with a clean stderr. */
+async function runCreateOk(
+  executable: string,
+  cwd: string,
+  name: string,
+  ...extra: string[]
+): Promise<string> {
+  const { stdout, stderr, code } = await runCreate(executable, cwd, name, ...extra);
+  expect(code, stderr).toEqual(0);
+  return stdout;
+}
+
+async function runCreateExpectingFailure(
+  executable: string,
+  cwd: string,
+  name: string,
+  ...extra: string[]
+): Promise<string> {
+  const { stderr, code } = await runCreate(executable, cwd, name, ...extra);
+  expect(code !== 0, `expected create to fail for "${name}" (${extra.join(' ')})`).toBeTruthy();
+  return stderr;
 }
 
 // A clean, actionable CLI error is a single message line: no runtime stack
@@ -65,8 +96,8 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
     '@openelement/router',
     'hono',
   ]);
-  // The raw template is the --no-tailwind manifest (#1524): the Tailwind pins
-  // are injected by buildTemplates on the ON form, never hand-edited here.
+  // One template (#1530): the showcase starter is pure CSS — no Tailwind
+  // dependency surface of any kind.
   expect(Object.keys(manifest.devDependencies).sort()).toEqual([
     '@playwright/test',
     'typescript',
@@ -103,105 +134,267 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
   expect(tsconfig.include).toEqual(['app', 'vite.config.ts', 'openelement.config.ts']);
 });
 
-test('the default scaffold is the Tailwind-ON form (#1524)', async () => {
-  const on = await buildTemplates(resolveVersions(), 'sample-app');
-  const explicit = await buildTemplates(resolveVersions(), 'sample-app', { tailwind: true });
-  expect(on).toEqual(explicit);
-  // The manifest carries the exact Tailwind dev pins alongside the base three.
-  const pkg = JSON.parse(on['package.json']);
-  expect(Object.keys(pkg.devDependencies).sort()).toEqual([
-    '@playwright/test',
-    '@tailwindcss/vite',
-    'tailwindcss',
-    'typescript',
-    'vite',
-  ]);
-  expect(pkg.devDependencies['@tailwindcss/vite']).toEqual(TAILWIND_STARTER_PIN);
-  expect(pkg.devDependencies.tailwindcss).toEqual(TAILWIND_STARTER_PIN);
-  // The product dependency surface is untouched by the form.
-  expect(Object.keys(pkg.dependencies).sort()).toEqual([
-    '@hono/vite-dev-server',
-    '@openelement/element',
-    '@openelement/router',
-    'hono',
-  ]);
-  // The preset-wired vite config replaces the plain one; the role sheet joins
-  // the styles convention.
-  expect(on['vite.config.ts']).toContain('applyTailwindPreset');
-  expect(on['vite.config.ts']).toContain('openElement()');
-  expect(on['app/styles/theme.css']).toBeTruthy();
-  // The generated README explains the default form.
-  expect(on['README.md']).toContain('Tailwind and the @theme role sheet');
-  // The Tailwind line is aligned with the router's own dev pins (same anchor
-  // discipline deps:vite-check applies to VITE_STARTER_PIN).
-  const routerManifest = JSON.parse(
-    readFileSync(join(packageDir, '..', 'router', 'package.json'), 'utf8'),
-  );
-  expect(routerManifest.devDependencies['@tailwindcss/vite']).toEqual(TAILWIND_STARTER_PIN);
-  expect(routerManifest.devDependencies.tailwindcss).toEqual(TAILWIND_STARTER_PIN);
+test('the showcase template is the one scaffold (#1530): static-first surfaces, two islands', async () => {
+  const templates = await buildTemplates(resolveVersions(), 'sample-app');
+  const expectedTargets = [
+    '.gitignore',
+    'README.md',
+    'app/components/page-404.tsx',
+    'app/components/page-about.tsx',
+    'app/components/page-home.tsx',
+    'app/components/page-styles.ts',
+    'app/head.tsx',
+    'app/islands/live-timer.tsx',
+    'app/islands/my-counter.tsx',
+    'app/routes/404.tsx',
+    'app/routes/about.tsx',
+    'app/routes/api/ping.ts',
+    'app/routes/index.tsx',
+    'app/styles/tokens.css',
+    'openelement.config.ts',
+    'package.json',
+    'public/openelement-mark.svg',
+    'tsconfig.json',
+    'vite.config.ts',
+  ].sort();
+  expect(Object.keys(templates)).toEqual(expectedTargets);
+  // No Tailwind surface anywhere: no role sheet, no pins, no preset wiring.
+  expect(JSON.stringify(templates).includes('tailwind')).toBeFalsy();
+  expect(templates['vite.config.ts']).toContain('plugins: [...openElement()]');
+  // The landing page is the showcase: framework name, tagline, both islands,
+  // the static architecture section, and JS-cost badges naming each section.
+  const home = templates['app/components/page-home.tsx'];
+  expect(home).toContain('openElement');
+  expect(home).toContain('Rendered before JavaScript arrives');
+  expect(home).toContain('<my-counter></my-counter>');
+  expect(home).toContain('<live-timer></live-timer>');
+  expect(home).toContain('badge-static');
+  expect(home).toContain('badge-island');
+  expect(home).toContain('The architecture');
+  // Nav links across the chrome: home, about, and the API surface.
+  for (const target of ["href='/'", "href='/about'", "href='/api/ping'"]) {
+    expect(home.includes(target), target).toBeTruthy();
+  }
+  // The About page is fully static: no island hosts, and it says so.
+  const about = templates['app/components/page-about.tsx'];
+  expect(about.includes('<my-counter'), 'about page must not host islands').toBeFalsy();
+  expect(about.includes('<live-timer'), 'about page must not host islands').toBeFalsy();
+  expect(about).toContain('no islands on this page');
+  // The API route returns Response.json (WinterCG-shaped handler).
+  expect(templates['app/routes/api/ping.ts']).toContain('Response.json');
+  expect(templates['app/routes/api/ping.ts']).toContain("route: '/api/ping'");
 });
 
-test('the --no-tailwind form is the pre-#1524 minimal starter', async () => {
-  const off = await buildTemplates(resolveVersions(), 'sample-app', { tailwind: false });
-  // No Tailwind surface anywhere: no role sheet, no pins, no preset wiring,
-  // no README section, no leftover scaffold token.
-  expect('app/styles/theme.css' in off).toBeFalsy();
-  const pkg = JSON.parse(off['package.json']);
-  expect(JSON.stringify(pkg).includes('tailwind')).toBeFalsy();
-  expect(off['vite.config.ts'].includes('applyTailwindPreset')).toBeFalsy();
-  expect(off['README.md'].includes('Tailwind and the @theme role sheet')).toBeFalsy();
-  expect(off['README.md'].includes('${tailwind.section}')).toBeFalsy();
-  // The file surface is exactly the base template set.
-  expect(Object.keys(off)).not.toContain('app/styles/theme.css');
-  // And the plain vite config stays the #1411 shape: no style strings.
-  expect(off['vite.config.ts']).toContain('plugins: [...openElement()]');
-});
-
-test('the Tailwind role sheet keeps the @theme contract: roles, no scale values', () => {
-  const raw = readTemplate('tailwind/theme.css');
-  // Same contract as packages/ui/src/theme.css: semantic roles expressed with
-  // Tailwind default theme variables — zero handwritten scale values.
-  expect(raw).toContain('@theme {');
-  expect(raw).toContain(":root[data-theme='dark']");
-  expect(raw).toContain('@media (forced-colors: active)');
-  // No color literals anywhere: hex, rgb(), hsl(), oklch() are all banned —
-  // role values are var(--color-*) references or forced-colors system
-  // keywords.
-  expect(/#[0-9a-fA-F]{3,8}\b/.test(raw), 'hex literal in theme.css').toBeFalsy();
-  expect(/(rgb|rgba|hsl|hsla|oklch|oklab|color-mix)\(/.test(raw), 'color function').toBeFalsy();
-  for (const match of raw.matchAll(/--color-[a-z0-9-]+:\s*([^;]+);/g)) {
-    const value = match[1].trim();
+test('starter pages are compiled elements with light roots and shared chrome', () => {
+  for (const path of [
+    'app/components/page-home.tsx',
+    'app/components/page-about.tsx',
+    'app/components/page-404.tsx',
+    'app/islands/my-counter.tsx',
+    'app/islands/live-timer.tsx',
+  ]) {
+    const source = readTemplate(path);
+    // Compiled modules: @element decorator on an OpenElement subclass, bound
+    // by a canonical named import of the compile-time-only intrinsic from
+    // '@openelement/element' (the compiler strips it from generated output).
+    expect(source.includes("@element('"), path).toBeTruthy();
     expect(
-      /^var\(--color-[a-z0-9-]+\)$/.test(value) || /^[A-Z][A-Za-z]+$/.test(value),
-      `role value must be a TW variable or system keyword: ${value}`,
+      /import \{[^}]*\belement\b[^}]*\bOpenElement\b[^}]*\} from '@openelement\/element'/.test(
+        source,
+      ),
+      path,
+    ).toBeTruthy();
+    expect(source.includes('declare function element('), path).toBeFalsy();
+    expect(source.includes('@openelement/core'), path).toBeFalsy();
+    // Legacy authoring APIs were removed in v0.44 (ADR-0143).
+    expect(source.includes('defineElement'), path).toBeFalsy();
+    expect(source.includes('defineCustomElement'), path).toBeFalsy();
+    expect(source.includes('customElements.define'), path).toBeFalsy();
+    expect(source.includes('registerSignal'), path).toBeFalsy();
+  }
+  expect(readTemplate('gitignore.tmpl').includes('dist/')).toBeTruthy();
+});
+
+test('starter islands are single-module compiled classes with declared strategies', () => {
+  const counter = readTemplate('app/islands/my-counter.tsx');
+  // The delivery policy stays in the statically scanned defineIslandConfig
+  // export; state is a compiled @property and events are method Parts.
+  expect(counter.includes("hydrate: 'idle'"), counter).toBeTruthy();
+  expect(counter.includes('defineIslandConfig'), counter).toBeTruthy();
+  expect(counter.includes('count = 0'), counter).toBeTruthy();
+  expect(counter.includes('onClick={this.increment}'), counter).toBeTruthy();
+  // Compiled text Parts replace the renderer-owned hydration markers; starter
+  // code never hand-authors protocol attributes.
+  expect(counter.includes('data-signal'), counter).toBeFalsy();
+
+  const timer = readTemplate('app/islands/live-timer.tsx');
+  // Client-only live stats: nothing prerenders, the clock starts client-side,
+  // and the interval dies with the host (connected/disconnected overrides).
+  expect(timer.includes("hydrate: 'only'"), timer).toBeTruthy();
+  expect(timer.includes('ssr: false'), timer).toBeTruthy();
+  expect(timer.includes('connectedCallback'), timer).toBeTruthy();
+  expect(timer.includes('disconnectedCallback'), timer).toBeTruthy();
+  expect(timer.includes('setInterval'), timer).toBeTruthy();
+  expect(timer.includes('clearInterval'), timer).toBeTruthy();
+  expect(timer.includes('elapsed = '), timer).toBeTruthy();
+  expect(timer.includes('data-signal'), timer).toBeFalsy();
+});
+
+test('starter pages ship exactly one H1 each (duplicate-H1 regression class)', () => {
+  for (const path of ['app/components/page-home.tsx', 'app/components/page-about.tsx']) {
+    const page = readTemplate(path);
+    expect(page.split('<h1>').length - 1, path).toEqual(1);
+  }
+});
+
+test('starter pages own their styles via static styles, not the global baseline', () => {
+  const tokens = readTemplate('app/styles/tokens.css');
+  // #1411: tokens live in the app/styles/tokens.css convention file that the
+  // config loader inlines into <head>; vite.config.ts carries no CSS at all.
+  // Bare `--token:value` declarations at stylesheet top level are dropped by
+  // CSS error recovery and take the following body rule down with them.
+  expect(tokens.includes(':root {'), tokens).toBeTruthy();
+  expect(tokens.includes('body {'), tokens).toBeTruthy();
+  expect(tokens.includes('::selection {'), tokens).toBeTruthy();
+  // The dark palette rides the platform media query (P1), not a runtime.
+  expect(tokens.includes('@media (prefers-color-scheme: dark)'), tokens).toBeTruthy();
+  for (const tag of ['index-page', 'about-page', 'el-404']) {
+    expect(
+      tokens.includes(`${tag}{`) || tokens.includes(`${tag} `),
+      `the tokens file must not scope rules under ${tag}`,
+    ).toBeFalsy();
+  }
+  expect(
+    readTemplate('vite.config.ts').includes('headFragments'),
+    'vite.config.ts must not carry style/CSS strings (#1411)',
+  ).toBeFalsy();
+
+  // Page rules live in page-styles.ts: the shared chrome sheet, the badge
+  // vocabulary, and one sheet per page — single source, spread per page.
+  const styles = readTemplate('app/components/page-styles.ts');
+  for (const exportName of [
+    'compiledStyle',
+    'siteChromeStyles',
+    'badgeStyles',
+    'homePageStyles',
+    'aboutPageStyles',
+    'notFoundPageStyles',
+  ]) {
+    expect(
+      styles.includes(`export function ${exportName}`) ||
+        styles.includes(`export const ${exportName}`),
+      `page-styles.ts must export ${exportName}`,
     ).toBeTruthy();
   }
-  // The sheet teaches the role vocabulary the ui package owns.
-  for (const role of [
-    '--color-background',
-    '--color-foreground',
-    '--color-primary',
-    '--color-muted',
-    '--color-border',
-    '--color-ring',
-  ]) {
-    expect(raw.includes(role), role).toBeTruthy();
+  // Every page spreads the shared chrome sheet (one source for the header).
+  expect(styles.split('...siteChromeStyles').length - 1, styles).toEqual(3);
+  // The badge vocabulary is CSS only and is part of the zero-JS surface.
+  expect(styles).toContain('.badge');
+  expect(styles).toContain('.badge-static');
+  expect(styles).toContain('.badge-island');
+});
+
+test('starter pages import their sheet from ./page-styles.ts', () => {
+  const pages: Array<[string, string]> = [
+    ['app/components/page-home.tsx', 'homePageStyles'],
+    ['app/components/page-about.tsx', 'aboutPageStyles'],
+    ['app/components/page-404.tsx', 'notFoundPageStyles'],
+  ];
+  for (const [path, exportName] of pages) {
+    const source = readTemplate(path);
+    expect(
+      source.includes(`static override styles = ${exportName};`),
+      `${path} must declare static override styles`,
+    ).toBeTruthy();
+    expect(
+      source.includes(`from './page-styles.ts'`),
+      `${path} must import its sheet from ./page-styles.ts`,
+    ).toBeTruthy();
   }
 });
 
-test('the Tailwind vite config wires the public preset face, not private options', () => {
-  const config = readTemplate('tailwind/vite.config.ts');
-  // The preset enters through the router's public applyTailwindPreset (the
-  // same face www uses), applied at the SSG-finished closeBundle stage.
-  expect(config.includes("from '@openelement/router/vite'"), config).toBeTruthy();
-  expect(config.includes('applyTailwindPreset'), config).toBeTruthy();
-  expect(config.includes("apply: 'build'"), config).toBeTruthy();
-  // The role sheet path is declared relative to the preset's staging entry.
-  expect(config.includes("'../../app/styles/theme.css'"), config).toBeTruthy();
-  // #1411 carries over: no style/CSS strings in vite.config, and no inline
-  // sheet delivery (the preset links the bundle).
-  expect(config.includes('headFragments'), config).toBeFalsy();
-  expect(config.includes('<style'), config).toBeFalsy();
+test('the About route is a static page route; the landing route stays static', () => {
+  const about = readTemplate('app/routes/about.tsx');
+  expect(about.includes('definePage'), about).toBeTruthy();
+  expect(about.includes('page-about.tsx'), about).toBeTruthy();
+  // No renderIntent override in the descriptor: the default static mode is
+  // the point of the page (fully prerendered SSG output).
+  expect(about.includes('renderIntent:'), about).toBeFalsy();
+  const home = readTemplate('app/routes/index.tsx');
+  expect(home.includes('definePage'), home).toBeTruthy();
+  expect(home).toContain('Rendered before JavaScript arrives');
+});
+
+test('starter owns a concrete --brand token without a UI package dependency', () => {
+  // #1411: the token sheet is the convention file the config loader inlines.
+  const tokens = readTemplate('app/styles/tokens.css');
+  const brand = tokens.match(/--brand:\s*(#[0-9a-fA-F]{3,8})/)?.[1];
+  expect(brand, 'starter app/styles/tokens.css must define a --brand token').toBeTruthy();
+});
+
+test('TypeScript starter sources are pack-safe template payloads', () => {
+  for (const path of [
+    'vite.config.ts',
+    'app/head.tsx',
+    'app/islands/my-counter.tsx',
+    'app/islands/live-timer.tsx',
+    'app/components/page-home.tsx',
+    'app/components/page-about.tsx',
+    'app/routes/api/ping.ts',
+  ]) {
+    const logicalPath = join(packageDir, 'templates', path);
+    expect(
+      existsSync(logicalPath),
+      `raw TypeScript source must not be packed: ${path}`,
+    ).toBeFalsy();
+    expect(
+      existsSync(`${logicalPath}.tmpl`),
+      `missing template payload: ${path}.tmpl`,
+    ).toBeTruthy();
+  }
+});
+
+test('starter app/head.tsx is the structural head convention (alpha.4)', () => {
+  const source = readTemplate('app/head.tsx');
+  // Data entries only: the framework serializes them, the file never writes
+  // markup. The showcase head carries the color-scheme declaration.
+  expect(source.includes('export default ['), source).toBeTruthy();
+  expect(/\{\s*meta:\s*\{/.test(source), source).toBeTruthy();
+  // A raw HTML string is not a head entry: the convention is structured.
+  expect(source.includes('<meta '), source).toBeFalsy();
+  expect(source.includes('<link '), source).toBeFalsy();
+  // No host APIs: the module is a build artifact, not a runtime read.
+  expect(source.includes('Deno.'), source).toBeFalsy();
+  expect(source.includes('readFileSync'), source).toBeFalsy();
+});
+
+test('starter openelement.config.ts keeps framework options in one home', () => {
+  const source = readTemplate('openelement.config.ts');
+  const written = [...source.matchAll(/^\s{2}([a-zA-Z]+):/gm)].map((match) => match[1]);
+  for (const key of written) {
+    expect(
+      OPEN_ELEMENT_CONFIG_KEYS.includes(key),
+      `starter config writes unknown key "${key}"; accepted: ${OPEN_ELEMENT_CONFIG_KEYS.join(
+        ', ',
+      )}`,
+    ).toBeTruthy();
+  }
+  // The raw-head channel has no home in the config file, and the retired inline
+  // spelling must not reappear.
+  expect(source.includes('inject'), source).toBeFalsy();
+  expect(source.includes('html:'), source).toBeFalsy();
+});
+
+test('generated starter README maps the JS cost of every surface', async () => {
+  const templates = await buildTemplates(resolveVersions(), 'sample-app');
+  const readme = templates['README.md'];
+  // The cost map is the starter's contract with its reader: every page and
+  // island appears with an honest JS answer.
+  for (const surface of ['/', '/about', '/api/ping', 'my-counter', 'live-timer']) {
+    expect(readme.includes(surface), `README must map ${surface}`).toBeTruthy();
+  }
+  // The app-wide island-client honesty note is present, not marketing.
+  expect(readme.includes('app-wide'), readme).toBeTruthy();
 });
 
 test('embedded CLI version matches its package manifest', () => {
@@ -368,329 +561,194 @@ test('starter pins vite and typescript exactly, aligned with the router', async 
   );
 });
 
-test('starter templates use the compiled element authoring surface (v0.44)', () => {
-  for (const path of [
-    'app/components/page-home.tsx',
-    'app/components/page-freshness.tsx',
-    'app/components/page-404.tsx',
-    'app/components/page-contact.tsx',
-    'app/components/page-blog-index.tsx',
-    'app/components/page-blog-welcome.tsx',
-    'app/islands/app-shell.tsx',
-    'app/islands/my-counter.tsx',
-    'app/islands/only-ticker.tsx',
-  ]) {
-    const source = readTemplate(path);
-    // Compiled modules: @element decorator on an OpenElement subclass, bound
-    // by a canonical named import of the compile-time-only intrinsic from
-    // '@openelement/element' (the compiler strips it from generated output).
-    expect(source.includes("@element('"), path).toBeTruthy();
-    expect(
-      /import \{[^}]*\belement\b[^}]*\bOpenElement\b[^}]*\} from '@openelement\/element'/.test(
-        source,
-      ),
-      path,
-    ).toBeTruthy();
-    expect(source.includes('declare function element('), path).toBeFalsy();
-    expect(source.includes('@openelement/core'), path).toBeFalsy();
-    // Legacy authoring APIs were removed in v0.44 (ADR-0143).
-    expect(source.includes('defineElement'), path).toBeFalsy();
-    expect(source.includes('defineCustomElement'), path).toBeFalsy();
-    expect(source.includes('customElements.define'), path).toBeFalsy();
-    expect(source.includes('registerSignal'), path).toBeFalsy();
-  }
-  expect(readTemplate('gitignore.tmpl').includes('dist/')).toBeTruthy();
-});
-
-test('starter islands are single-module compiled classes (#1092, #939)', () => {
-  const counter = readTemplate('app/islands/my-counter.tsx');
-  // The delivery policy stays in the statically scanned defineIslandConfig
-  // export; state is a compiled @property and events are method Parts.
-  expect(counter.includes("hydrate: 'idle'"), counter).toBeTruthy();
-  expect(counter.includes('defineIslandConfig'), counter).toBeTruthy();
-  expect(counter.includes('count = 0'), counter).toBeTruthy();
-  expect(counter.includes('onClick={this.increment}'), counter).toBeTruthy();
-  // Compiled text Parts replace the renderer-owned hydration markers; starter
-  // code never hand-authors protocol attributes.
-  expect(counter.includes('data-signal'), counter).toBeFalsy();
-
-  const ticker = readTemplate('app/islands/only-ticker.tsx');
-  expect(ticker.includes("hydrate: 'only'"), ticker).toBeTruthy();
-  expect(ticker.includes('ssr: false'), ticker).toBeTruthy();
-  expect(ticker.includes('tick = 0'), ticker).toBeTruthy();
-  expect(ticker.includes('onClick={this.bump}'), ticker).toBeTruthy();
-  expect(ticker.includes('data-signal'), ticker).toBeFalsy();
-});
-
-test('starter global style block scopes tokens under :root', () => {
-  // #1411: tokens live in the app/styles/tokens.css convention file that the
-  // config loader inlines into <head>; vite.config.ts carries no CSS at all.
-  const tokens = readTemplate('app/styles/tokens.css');
-  // Bare `--token:value` declarations at stylesheet top level are dropped by
-  // CSS error recovery and take the following body rule down with them.
-  expect(tokens.includes(':root {'), tokens).toBeTruthy();
-  expect(tokens.includes('--gray-0: #f8f9fa'), tokens).toBeTruthy();
-  expect(
-    readTemplate('vite.config.ts').includes('headFragments'),
-    'vite.config.ts must not carry style/CSS strings (#1411)',
-  ).toBeFalsy();
-});
-
-test('starter pages own their styles via static styles, not the global baseline', () => {
-  const tokens = readTemplate('app/styles/tokens.css');
-  // The tokens file keeps only true globals (design tokens + body/::selection
-  // baseline); per-page rules live in each page's `static styles` (inlined into
-  // SSR as @scope(<page-tag>) for light roots).
-  for (const tag of [
-    'index-page',
-    'blog-index',
-    'blog-welcome',
-    'freshness-page',
-    'el-404',
-    'contact-page',
-  ]) {
-    expect(
-      tokens.includes(`${tag}{`),
-      `the tokens file must not scope rules under ${tag}`,
-    ).toBeFalsy();
-    expect(
-      tokens.includes(`${tag} `),
-      `the tokens file must not scope rules under ${tag}`,
-    ).toBeFalsy();
-  }
-  expect(tokens.includes('body {'), tokens).toBeTruthy();
-  expect(tokens.includes('::selection {'), tokens).toBeTruthy();
-
-  const styles = readTemplate('app/components/page-styles.ts');
-  for (const exportName of [
-    'postListStyles',
-    'homePageStyles',
-    'blogIndexStyles',
-    'blogWelcomeStyles',
-    'freshnessPageStyles',
-    'notFoundPageStyles',
-    'contactPageStyles',
-  ]) {
-    expect(
-      styles.includes(`export const ${exportName}`),
-      `page-styles.ts must export ${exportName}`,
-    ).toBeTruthy();
-  }
-  // The post-list rules stay single-source: both list pages spread the shared
-  // sheet instead of duplicating the rules.
-  expect(styles.split('...postListStyles').length - 1, styles).toEqual(2);
-
-  const pages: Array<[string, string]> = [
-    ['app/components/page-home.tsx', 'homePageStyles'],
-    ['app/components/page-blog-index.tsx', 'blogIndexStyles'],
-    ['app/components/page-blog-welcome.tsx', 'blogWelcomeStyles'],
-    ['app/components/page-freshness.tsx', 'freshnessPageStyles'],
-    ['app/components/page-404.tsx', 'notFoundPageStyles'],
-    ['app/components/page-contact.tsx', 'contactPageStyles'],
-  ];
-  for (const [path, exportName] of pages) {
-    const source = readTemplate(path);
-    expect(
-      source.includes(`static override styles = ${exportName};`),
-      `${path} must declare static override styles`,
-    ).toBeTruthy();
-    expect(
-      source.includes(`from './page-styles.ts'`),
-      `${path} must import its sheet from ./page-styles.ts`,
-    ).toBeTruthy();
-    // The stale workaround guidance must be gone from the starter.
-    expect(source.includes('global baseline'), path).toBeFalsy();
-  }
-});
-
-test('starter blog is a pair of compiled page routes', () => {
-  const index = readTemplate('app/routes/blog/index.tsx');
-  // The route module is a thin definePage wrapper around the compiled page
-  // element; the page class lives in app/components/.
-  expect(index.includes('definePage'), index).toBeTruthy();
-  expect(index.includes('page-blog-index.tsx'), index).toBeTruthy();
-  const post = readTemplate('app/routes/blog/welcome.tsx');
-  expect(post.includes('definePage'), post).toBeTruthy();
-  expect(post.includes('page-blog-welcome.tsx'), post).toBeTruthy();
-  const page = readTemplate('app/components/page-blog-welcome.tsx');
-  expect(page.includes("@element('blog-welcome'"), page).toBeTruthy();
-  // The post body renders exactly one H1 (the markdown-body duplicate-H1
-  // regression class from the legacy starter stays impossible by authoring).
-  const h1Count = page.split('<h1>').length - 1;
-  expect(h1Count, page).toEqual(1);
-  // #922: an unknown slug is a 404 — there is no [slug] fallback route, so
-  // unmatched paths render the styled 404 page with a 404 status.
-  let slugRouteExists = true;
-  try {
-    readTemplate('app/routes/blog/[slug].tsx');
-  } catch {
-    slugRouteExists = false;
-  }
-  expect(slugRouteExists, 'the legacy dynamic [slug] route must not ship').toBeFalsy();
-});
-
-test('starter owns a concrete --brand token without a UI package dependency', () => {
-  // #1411: the token sheet is the convention file the config loader inlines.
-  const tokens = readTemplate('app/styles/tokens.css');
-  const brand = tokens.match(/--brand:\s*(#[0-9a-fA-F]{3,8})/)?.[1];
-  expect(brand, 'starter app/styles/tokens.css must define a --brand token').toBeTruthy();
-});
-
-test('TypeScript starter sources are pack-safe template payloads', () => {
-  for (const path of [
-    'vite.config.ts',
-    'app/head.tsx',
-    'app/islands/app-shell.tsx',
-    'app/components/page-home.tsx',
-    'app/routes/api/health.ts',
-  ]) {
-    const logicalPath = join(packageDir, 'templates', path);
-    expect(
-      existsSync(logicalPath),
-      `raw TypeScript source must not be packed: ${path}`,
-    ).toBeFalsy();
-    expect(
-      existsSync(`${logicalPath}.tmpl`),
-      `missing template payload: ${path}.tmpl`,
-    ).toBeTruthy();
-  }
-});
-
-test('starter app/head.tsx is the structural head convention (alpha.4)', () => {
-  const source = readTemplate('app/head.tsx');
-  // Data entries only: the framework serializes them, the file never writes
-  // markup. Two of the three accepted shapes are exercised.
-  expect(source.includes('export default ['), source).toBeTruthy();
-  expect(/\{\s*link:\s*\{/.test(source), source).toBeTruthy();
-  expect(/\{\s*meta:\s*\{/.test(source), source).toBeTruthy();
-  // A raw HTML string is not a head entry: the convention is structured.
-  expect(source.includes('<meta '), source).toBeFalsy();
-  expect(source.includes('<link '), source).toBeFalsy();
-  // No host APIs: the module is a build artifact, not a runtime read.
-  expect(source.includes('Deno.'), source).toBeFalsy();
-  expect(source.includes('readFileSync'), source).toBeFalsy();
-});
-
-test('starter openelement.config.ts keeps framework options in one home', () => {
-  const source = readTemplate('openelement.config.ts');
-  const written = [...source.matchAll(/^\s{2}([a-zA-Z]+):/gm)].map((match) => match[1]);
-  for (const key of written) {
-    expect(
-      OPEN_ELEMENT_CONFIG_KEYS.includes(key),
-      `starter config writes unknown key "${key}"; accepted: ${OPEN_ELEMENT_CONFIG_KEYS.join(
-        ', ',
-      )}`,
-    ).toBeTruthy();
-  }
-  // The raw-head channel has no home in the config file, and the retired inline
-  // spelling must not reappear.
-  expect(source.includes('inject'), source).toBeFalsy();
-  expect(source.includes('html:'), source).toBeFalsy();
-});
-
-test('source CLI generates a complete, token-free starter', async () => {
+test('source CLI generates the showcase starter with git init and the boxed handoff', async () => {
   const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-source-'));
   try {
-    const stdout = await runCreate(join(packageDir, 'src', 'cli.ts'), tmpRoot, 'sample-app');
+    // --no-install keeps the default-install plumbing out of the unit lane
+    // (the fake-PM test below owns it); git init runs by default.
+    const executable = join(packageDir, 'src', 'cli.ts');
+    const stdout = await runCreateOk(executable, tmpRoot, 'sample-app', '--no-install');
     const appDir = join(tmpRoot, 'sample-app');
     expect(existsSync(join(appDir, '.gitignore'))).toBeTruthy();
     expect(existsSync(join(appDir, 'gitignore.tmpl'))).toBeFalsy();
+    // Default git: the repository is initialized without --git.
+    if (gitAvailable) {
+      expect(existsSync(join(appDir, '.git')), 'default run must git init').toBeTruthy();
+    }
     // B5 (ADR-0161): the scaffold is a Node/pnpm project — package.json
     // manifest, generated tsconfig, no Deno config anywhere.
     expect(existsSync(join(appDir, 'deno.json'))).toBeFalsy();
     const manifest = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8'));
     expect(JSON.stringify(manifest).includes('${v.')).toBeFalsy();
+    expect(JSON.stringify(manifest).includes('tailwind')).toBeFalsy();
     expect(existsSync(join(appDir, 'tsconfig.json'))).toBeTruthy();
-    // #1524: a non-interactive run defaults to the Tailwind-ON form — the
-    // role sheet and the preset wiring are on disk, the pins are exact.
-    expect(existsSync(join(appDir, 'app', 'styles', 'theme.css'))).toBeTruthy();
-    expect(
-      readFileSync(join(appDir, 'vite.config.ts'), 'utf8').includes('applyTailwindPreset'),
-    ).toBeTruthy();
-    expect(manifest.devDependencies.tailwindcss).toEqual(TAILWIND_STARTER_PIN);
-    // Starter ships the compiled blog routes and a README explaining
-    // scripts/conventions.
+    // The showcase surfaces are on disk: about page, ping route, both islands,
+    // and no retired surface.
+    expect(existsSync(join(appDir, 'app', 'routes', 'about.tsx'))).toBeTruthy();
+    expect(existsSync(join(appDir, 'app', 'routes', 'api', 'ping.ts'))).toBeTruthy();
+    expect(existsSync(join(appDir, 'app', 'islands', 'live-timer.tsx'))).toBeTruthy();
+    expect(existsSync(join(appDir, 'app', 'islands', 'my-counter.tsx'))).toBeTruthy();
+    expect(existsSync(join(appDir, 'app', 'routes', 'blog'))).toBeFalsy();
+    expect(existsSync(join(appDir, 'app', 'routes', 'contact.tsx'))).toBeFalsy();
+    expect(existsSync(join(appDir, 'app', 'styles', 'theme.css'))).toBeFalsy();
     expect(existsSync(join(appDir, 'README.md'))).toBeTruthy();
-    expect(existsSync(join(appDir, 'app', 'routes', 'blog', 'index.tsx'))).toBeTruthy();
-    expect(existsSync(join(appDir, 'app', 'routes', 'blog', 'welcome.tsx'))).toBeTruthy();
-    // Success output walks the documented pnpm lifecycle and names the form.
-    expect(stdout.includes('pnpm install'), stdout).toBeTruthy();
-    expect(stdout.includes('pnpm dev'), stdout).toBeTruthy();
+    // The boxed handoff names the next commands and the docs.
+    expect(stdout.includes('cd sample-app'), stdout).toBeTruthy();
+    expect(stdout.includes('run dev'), stdout).toBeTruthy();
     expect(stdout.includes('README.md'), stdout).toBeTruthy();
-    expect(stdout.includes('Tailwind: ON'), stdout).toBeTruthy();
+    expect(stdout.includes('openelement.org'), stdout).toBeTruthy();
+    // The template confirmation resolves non-interactively (non-TTY skips).
+    expect(stdout.includes('template: showcase'), stdout).toBeTruthy();
   } finally {
     rmSync(tmpRoot, { recursive: true });
   }
 });
 
-test('#1524: --no-tailwind scaffolds the minimal starter, --tailwind the preset one', async () => {
-  const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-forms-'));
-  try {
-    const executable = join(packageDir, 'src', 'cli.ts');
-    await runCreate(executable, tmpRoot, 'no-tw', '--no-tailwind');
-    await runCreate(executable, tmpRoot, 'with-tw', '--tailwind');
-    const off = JSON.parse(readFileSync(join(tmpRoot, 'no-tw', 'package.json'), 'utf8'));
-    const on = JSON.parse(readFileSync(join(tmpRoot, 'with-tw', 'package.json'), 'utf8'));
-    // Exactly one form-specific surface difference in the manifests.
-    expect('tailwindcss' in off.devDependencies).toBeFalsy();
-    expect('tailwindcss' in on.devDependencies).toBeTruthy();
-    expect(existsSync(join(tmpRoot, 'no-tw', 'app', 'styles', 'theme.css'))).toBeFalsy();
-    expect(existsSync(join(tmpRoot, 'with-tw', 'app', 'styles', 'theme.css'))).toBeTruthy();
-    expect(
-      readFileSync(join(tmpRoot, 'no-tw', 'vite.config.ts'), 'utf8').includes(
-        'applyTailwindPreset',
-      ),
-    ).toBeFalsy();
-    expect(
-      readFileSync(join(tmpRoot, 'with-tw', 'vite.config.ts'), 'utf8').includes(
-        'applyTailwindPreset',
-      ),
-    ).toBeTruthy();
-  } finally {
-    rmSync(tmpRoot, { recursive: true });
-  }
-});
+test.skipIf(process.platform === 'win32')(
+  'default install runs through the detected package manager (fake-PM probe)',
+  async () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-pm-'));
+    try {
+      // A fake pnpm earlier on PATH records its argv and exits 0: the default
+      // (--install) path runs without network, and the detection order (pnpm
+      // beats npm) is observable in the recorded invocation.
+      const binDir = join(tmpRoot, 'bin');
+      mkdirSync(binDir);
+      const invocationLog = join(tmpRoot, 'invocations.log');
+      writeFileSync(join(binDir, 'pnpm'), `#!/bin/sh\necho "$@" >> ${invocationLog}\nexit 0\n`, {
+        mode: 0o755,
+      });
+      const child = spawn(process.execPath, [join(packageDir, 'src', 'cli.ts'), 'pm-app'], {
+        cwd: tmpRoot,
+        env: { ...process.env, PATH: `${binDir}:${process.env.PATH}` },
+      });
+      const [out] = await Promise.all([Array.fromAsync(child.stdout!)]);
+      const code = await new Promise<number>((resolve) =>
+        child.once('exit', (c) => resolve(c ?? -1)),
+      );
+      const stdout = Buffer.concat(out).toString();
+      expect(code, stdout).toEqual(0);
+      const invocations = readFileSync(invocationLog, 'utf8').trim().split('\n');
+      // Probe (--version) then the install command, both through pnpm.
+      expect(invocations[0], invocations.join('\n')).toContain('--version');
+      expect(
+        invocations.some((line) => line.includes('install')),
+        `expected an install invocation: ${invocations.join('\n')}`,
+      ).toBeTruthy();
+      expect(stdout.includes('Installing dependencies with pnpm'), stdout).toBeTruthy();
+    } finally {
+      rmSync(tmpRoot, { recursive: true });
+    }
+  },
+);
 
-test('L9: contradictory Tailwind form flags fail with a clean actionable error', async () => {
+test('#1530 flags: --no-git skips the repository, -t showcase pins the template', async () => {
   const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-flags-'));
   try {
-    const child = spawn(
-      process.execPath,
-      [join(packageDir, 'src', 'cli.ts'), 'sample-app', '--tailwind', '--no-tailwind'],
-      { cwd: tmpRoot },
+    const executable = join(packageDir, 'src', 'cli.ts');
+    await runCreateOk(
+      executable,
+      tmpRoot,
+      'no-git-app',
+      '--no-install',
+      '--no-git',
+      '-t',
+      'showcase',
     );
-    const [, err] = await Promise.all([
-      Array.fromAsync(child.stdout!),
-      Array.fromAsync(child.stderr!),
-    ]);
-    const code = await new Promise<number>((resolve) =>
-      child.once('exit', (c) => resolve(c ?? -1)),
+    expect(
+      existsSync(join(tmpRoot, 'no-git-app', '.git')),
+      '--no-git must skip git init',
+    ).toBeFalsy();
+    expect(existsSync(join(tmpRoot, 'no-git-app', '.gitignore'))).toBeTruthy();
+    const stdout = await runCreateOk(
+      executable,
+      tmpRoot,
+      'pinned-app',
+      '--no-install',
+      '--no-git',
+      '--template=showcase',
     );
-    expect(code).toEqual(1);
-    const stderr = Buffer.concat(err).toString();
-    expect(stderr.includes('mutually exclusive'), stderr).toBeTruthy();
-    assertCleanError(stderr);
+    expect(stdout.includes('template: showcase'), stdout).toBeTruthy();
+  } finally {
+    rmSync(tmpRoot, { recursive: true });
+  }
+});
+
+test('L9: contradictory or incoherent flags fail with clean actionable errors', async () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-flags-'));
+  try {
+    const executable = join(packageDir, 'src', 'cli.ts');
+    const cases: Array<[string[], string]> = [
+      [['--install', '--no-install'], 'mutually exclusive'],
+      [['--git', '--no-git'], 'mutually exclusive'],
+      [['--start', '--no-install'], '--start needs'],
+      [['--bogus'], 'Unknown flag'],
+      [['a', 'b'], 'Unexpected extra argument'],
+      [['--no-install', '--no-git', '-t', 'nope'], 'Unknown template'],
+      [['--template'], '--template requires a value'],
+    ];
+    for (const [extra, fragment] of cases) {
+      const stderr = await runCreateExpectingFailure(executable, tmpRoot, 'sample-app', ...extra);
+      expect(
+        stderr.includes(fragment),
+        `${extra.join(' ')}: expected "${fragment}" in:\n${stderr}`,
+      ).toBeTruthy();
+      assertCleanError(stderr);
+    }
+    // Every failure happened before any filesystem work.
     expect(existsSync(join(tmpRoot, 'sample-app'))).toBeFalsy();
   } finally {
     rmSync(tmpRoot, { recursive: true });
   }
 });
 
-test('usage documents the Tailwind form flags beside the canonical install command', async () => {
+test('usage documents the new flag surface beside the canonical install command', async () => {
+  const child = spawn(process.execPath, [join(packageDir, 'src', 'cli.ts'), '--help'], {
+    cwd: packageDir,
+  });
+  const [out, err] = await Promise.all([
+    Array.fromAsync(child.stdout!),
+    Array.fromAsync(child.stderr!),
+  ]);
+  const code = await new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1)));
+  const stdout = Buffer.concat(out).toString();
+  expect(code).toEqual(0);
+  expect(Buffer.concat(err).toString()).toEqual('');
+  // First line stays the canonical install command (the starter-smoke gate
+  // compares exactly that line against createInstallCommand()).
+  expect(stdout.startsWith(`Usage (Alpha): ${createInstallCommand()}`), stdout).toBeTruthy();
+  for (const flag of [
+    '-t, --template',
+    '--install',
+    '--no-install',
+    '--start',
+    '--git',
+    '--no-git',
+    '--help',
+  ]) {
+    expect(stdout.includes(flag), `usage must document ${flag}`).toBeTruthy();
+  }
+  expect(stdout.includes('(default: showcase)'), stdout).toBeTruthy();
+  expect(stdout.includes('(default: install)'), stdout).toBeTruthy();
+  expect(stdout.includes('(default: git init)'), stdout).toBeTruthy();
+});
+
+test('no arguments: usage on stdout, exit 1, canonical command first', async () => {
   const child = spawn(process.execPath, [join(packageDir, 'src', 'cli.ts')], { cwd: packageDir });
   const [out, err] = await Promise.all([
     Array.fromAsync(child.stdout!),
     Array.fromAsync(child.stderr!),
   ]);
-  await new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1)));
+  const code = await new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1)));
   const stdout = Buffer.concat(out).toString();
-  expect(Buffer.concat(err).toString()).toEqual('');
-  // First line stays the canonical install command (the starter-smoke gate
-  // compares exactly that line against createInstallCommand()).
+  expect(code).toEqual(1);
   expect(stdout.startsWith(`Usage (Alpha): ${createInstallCommand()}`), stdout).toBeTruthy();
-  expect(stdout.includes('--tailwind'), stdout).toBeTruthy();
-  expect(stdout.includes('--no-tailwind'), stdout).toBeTruthy();
-  expect(stdout.includes('(default)'), stdout).toBeTruthy();
+  expect(Buffer.concat(err).toString().includes('a project name is required')).toBeTruthy();
+});
+
+test('detectPackageManager probes pnpm before npm and answers a real manager', () => {
+  const pm = detectPackageManager();
+  expect(['pnpm', 'npm']).toContain(pm);
 });
 
 test('L11: project name validation enforces npm-name and traversal rules', () => {
@@ -725,6 +783,8 @@ test('L9/L11: CLI rejects an invalid project name with a clean actionable error'
       join(packageDir, 'src', 'cli.ts'),
       tmpRoot,
       'Bad Name',
+      '--no-install',
+      '--no-git',
     );
     expect(stderr.includes('Invalid project name'), stderr).toBeTruthy();
     assertCleanError(stderr);
@@ -738,8 +798,14 @@ test('L9: CLI refuses an existing target directory with guidance, not a stack tr
   const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-exists-'));
   try {
     const executable = join(packageDir, 'src', 'cli.ts');
-    await runCreate(executable, tmpRoot, 'sample-app');
-    const stderr = await runCreateExpectingFailure(executable, tmpRoot, 'sample-app');
+    await runCreateOk(executable, tmpRoot, 'sample-app', '--no-install', '--no-git');
+    const stderr = await runCreateExpectingFailure(
+      executable,
+      tmpRoot,
+      'sample-app',
+      '--no-install',
+      '--no-git',
+    );
     expect(stderr.includes('already exists'), stderr).toBeTruthy();
     // Actionable: tells the adopter how to resolve the collision.
     expect(stderr.includes('Choose a different name'), stderr).toBeTruthy();
@@ -760,6 +826,8 @@ test.skipIf(process.platform === 'win32')(
         join(packageDir, 'src', 'cli.ts'),
         join(tmpRoot, 'readonly'),
         'sample-app',
+        '--no-install',
+        '--no-git',
       );
       expect(
         stderr.includes('Permission denied') || stderr.includes('Failed to'),
@@ -774,37 +842,42 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
-test('packed CLI retains every starter template, including dotfiles', async () => {
-  const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-packed-'));
-  try {
-    // The packed payload is produced by the release toolchain (vp pack via
-    // publish-npm dry-run; `deno pack` retired with the A1 toolchain swap).
-    // The dry run writes the same payload tarballs the publish flow ships.
-    const repoRoot = join(packageDir, '..', '..');
-    const pack = spawnSync('pnpm', ['--dir', 'tools/release', 'run', 'pack:dry-run'], {
-      cwd: repoRoot,
-    });
-    expect(pack.status, pack.stderr.toString()).toEqual(0);
-    const tarball = join(packageDir, `openelement-create-${CREATE_VERSION}.tgz`);
-    const unpack = spawnSync('tar', ['-xzf', tarball, '-C', tmpRoot]);
-    expect(unpack.status, unpack.stderr.toString()).toEqual(0);
-    await runCreate(join(tmpRoot, 'package', 'src', 'cli.js'), tmpRoot, 'sample-app');
-    expect(existsSync(join(tmpRoot, 'sample-app', '.gitignore'))).toBeTruthy();
-    expect(
-      existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', 'blog', 'welcome.tsx')),
-    ).toBeTruthy();
-    expect(existsSync(join(tmpRoot, 'sample-app', 'README.md'))).toBeTruthy();
-    expect(
-      existsSync(join(tmpRoot, 'sample-app', 'app', 'components', 'page-home.tsx')),
-    ).toBeTruthy();
-    // No JSR bridge may ship in packed scaffolds, not just workspace runs.
-    // B5 (ADR-0161): the packed scaffold is a Node/pnpm project — the
-    // manifest and tsconfig ship, no Deno config does.
-    expect(existsSync(join(tmpRoot, 'sample-app', 'package.json'))).toBeTruthy();
-    expect(existsSync(join(tmpRoot, 'sample-app', 'tsconfig.json'))).toBeTruthy();
-    expect(existsSync(join(tmpRoot, 'sample-app', 'deno.json'))).toBeFalsy();
-    expect(existsSync(join(tmpRoot, 'sample-app', '.npmrc'))).toBeFalsy();
-  } finally {
-    rmSync(tmpRoot, { recursive: true });
-  }
-}, 300_000);
+test.skipIf(!pnpmAvailable)(
+  'packed CLI retains every starter template, including dotfiles',
+  async () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-packed-'));
+    try {
+      // The packed payload is produced by the release toolchain (vp pack via
+      // publish-npm dry-run; `deno pack` retired with the A1 toolchain swap).
+      // The dry run writes the same payload tarballs the publish flow ships.
+      const repoRoot = join(packageDir, '..', '..');
+      const pack = spawnSync('pnpm', ['--dir', 'tools/release', 'run', 'pack:dry-run'], {
+        cwd: repoRoot,
+      });
+      expect(pack.status, pack.stderr.toString()).toEqual(0);
+      const tarball = join(packageDir, `openelement-create-${CREATE_VERSION}.tgz`);
+      const unpack = spawnSync('tar', ['-xzf', tarball, '-C', tmpRoot]);
+      expect(unpack.status, unpack.stderr.toString()).toEqual(0);
+      await runCreate(join(tmpRoot, 'package', 'src', 'cli.js'), tmpRoot, 'sample-app');
+      expect(existsSync(join(tmpRoot, 'sample-app', '.gitignore'))).toBeTruthy();
+      expect(existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', 'about.tsx'))).toBeTruthy();
+      expect(
+        existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', 'api', 'ping.ts')),
+      ).toBeTruthy();
+      expect(existsSync(join(tmpRoot, 'sample-app', 'README.md'))).toBeTruthy();
+      expect(
+        existsSync(join(tmpRoot, 'sample-app', 'app', 'components', 'page-home.tsx')),
+      ).toBeTruthy();
+      // No JSR bridge may ship in packed scaffolds, not just workspace runs.
+      // B5 (ADR-0161): the packed scaffold is a Node/pnpm project — the
+      // manifest and tsconfig ship, no Deno config does.
+      expect(existsSync(join(tmpRoot, 'sample-app', 'package.json'))).toBeTruthy();
+      expect(existsSync(join(tmpRoot, 'sample-app', 'tsconfig.json'))).toBeTruthy();
+      expect(existsSync(join(tmpRoot, 'sample-app', 'deno.json'))).toBeFalsy();
+      expect(existsSync(join(tmpRoot, 'sample-app', '.npmrc'))).toBeFalsy();
+    } finally {
+      rmSync(tmpRoot, { recursive: true });
+    }
+  },
+  300_000,
+);
