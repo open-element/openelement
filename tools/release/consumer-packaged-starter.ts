@@ -55,7 +55,7 @@ import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 // create CLI's embedded copy is anchored by the create tests; this consumer
 // reads the same source module so a pin drift fails here, on the packed
 // surface.
-import { VITE_STARTER_PIN } from '../../packages/create/src/version.ts';
+import { TAILWIND_STARTER_PIN, VITE_STARTER_PIN } from '../../packages/create/src/version.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
@@ -492,30 +492,29 @@ try {
     );
   }
   // The CLI runs non-interactively here, so the scaffold must be the ONE
-  // showcase template (#1530): platform CSS (tokens.css + recipes.css), no
-  // Tailwind anywhere, and the pinned Vite devDependency.
-  const manifestText = JSON.stringify(manifest);
-  if (manifestText.includes('tailwind')) {
-    throw new Error(
-      'Packed starter carries a Tailwind dependency: the #1530 showcase form is ' +
-        'platform-CSS only',
-    );
-  }
+  // default form: Tailwind-ON (owner ruling 2026-10-08 — one default, no
+  // variant, no flag) carrying the #1530 showcase pages.
   if (manifest.devDependencies.vite !== VITE_STARTER_PIN) {
     throw new Error(
       `Packed starter is not the showcase form: devDependency vite=` +
         `${manifest.devDependencies.vite ?? '<missing>'}, expected ${VITE_STARTER_PIN}`,
     );
   }
-  for (const sheet of ['tokens.css', 'recipes.css']) {
-    if (!existsSync(join(starter, 'app', 'styles', sheet))) {
-      throw new Error(`Packed starter is missing app/styles/${sheet} (#1530 showcase form)`);
+  for (const [name, expected] of Object.entries({
+    '@tailwindcss/vite': TAILWIND_STARTER_PIN,
+    tailwindcss: TAILWIND_STARTER_PIN,
+  })) {
+    if (manifest.devDependencies[name] !== expected) {
+      throw new Error(
+        `Packed starter is not the Tailwind-ON default form: devDependency ` +
+          `${name}=${manifest.devDependencies[name] ?? '<missing>'}, expected ${expected}`,
+      );
     }
   }
-  if (existsSync(join(starter, 'app', 'styles', 'theme.css'))) {
-    throw new Error(
-      'Packed starter still ships the retired @theme role sheet (pre-#1530 Tailwind form)',
-    );
+  for (const sheet of ['theme.css', 'recipes.css']) {
+    if (!existsSync(join(starter, 'app', 'styles', sheet))) {
+      throw new Error(`Packed starter is missing app/styles/${sheet}`);
+    }
   }
   const generatedDependencies = {
     ...manifest.dependencies,

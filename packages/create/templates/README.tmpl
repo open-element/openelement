@@ -49,7 +49,7 @@ convention:
 
 | Option | Convention |
 | --- | --- |
-| design tokens | `app/styles/tokens.css` |
+| design tokens | `app/styles/theme.css` (the @theme role sheet) |
 | document head content | `app/head.tsx` (meta tags, preloads, inline CSS) |
 | site title | the `name` field of `package.json` |
 | static-shape recipes | `app/styles/recipes.css` (zero-interaction badge/callout/card/tabs shapes as plain HTML+CSS — the @openelement/ui components retired to these recipes in #1557) |
@@ -68,7 +68,7 @@ accepted-key list. `vite.config.ts` stays Vite-only: `plugins: [...openElement()
 - `app/islands/` — client islands, the only code that ships JavaScript. Each
   island declares its hydration strategy (`idle`, `load`, `visible`,
   client-only) through `defineIslandConfig`.
-- `app/styles/tokens.css` — design tokens inlined into every document head.
+- `app/styles/theme.css` — the @theme role sheet: Tailwind-ON roles, the starter palette aliases, dark and forced-colors pairs. Dev serves it directly; the build compiles it through the router's Tailwind preset.
   Dark values ride `prefers-color-scheme`; no theme runtime.
 - `app/styles/recipes.css` — documented plain HTML+CSS recipes for the
   zero-interaction shapes (badge, callout, card, CSS-only tabs) that retired
@@ -90,7 +90,7 @@ accepted-key list. `vite.config.ts` stays Vite-only: `plugins: [...openElement()
 ## Styling ownership
 
 Global design tokens and the document baseline (`body`, `::selection`) live
-in `app/styles/tokens.css`. Pages use light roots and own their rules in
+in `app/styles/theme.css`. Pages use light roots and own their rules in
 `static styles`, arrayed from imported `.css` files (#1558 — the one style
 authoring form): the server inlines each page's sheets into the SSR output as
 a `@scope(<page-tag>)` style block, so pages are fully styled with zero
