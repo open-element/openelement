@@ -1,7 +1,28 @@
-/* authored from HEAD extraction — replace with design pass */
-/* Minimal shell: the component carried no authored styles in its pre-#1558
- * (Tailwind-preset) form — zero-style per its HEAD source. Replace with the
- * design pass. */
-:host {
-  display: block;
-}
+/* open-dropdown — authored component styles, ported verbatim from the pre-#1558
+ * recipe() sheet (the alpha.9 design system). The #1558 migration had
+ * replaced this with a placeholder shell under the false note that the
+ * component "carried no authored styles"; it did — this is that sheet. */
+    :host {
+      display: inline-block;
+    }
+
+    .trigger {
+      display: contents;
+    }
+
+    .content {
+      /* The base inset is the placement fallback for engines without CSS Anchor
+         Positioning; it must stay present because Firefox's anchor resolution
+         only applies anchor() longhands on top of an explicit inset. */
+      position: absolute;
+      inset: 100% auto auto 0;
+      top: anchor(bottom);
+      left: anchor(left);
+      min-width: 12rem;
+      /* The gap rides on margin-top: calc(anchor() + length) resolves without
+         the added length in Firefox. */
+      margin: calc(var(--spacing) * 2) 0 0;
+      padding: calc(var(--spacing) * 2);
+      font-family: var(--font-sans);
+    }
+  
