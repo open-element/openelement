@@ -219,3 +219,26 @@ test('request() resolves relative paths and threads env', async () => {
   expect(response.status).toEqual(200);
   expect(seenEnv).toEqual({ A: '1' });
 });
+
+test('channel set-cookie accumulates over the response cookies (no replace)', async () => {
+  const app = getApp();
+  app.use('*', async (_request, next) => {
+    const scope = boundRequestScope(_request as Request);
+    scope.header('Set-Cookie', 'mw1=1; Path=/', { append: true });
+    scope.header('Set-Cookie', 'mw2=2; Path=/', { append: true });
+    return await next();
+  });
+  app.all(
+    '/',
+    () =>
+      new Response('logged in', {
+        headers: { 'Set-Cookie': 'session=logged-in; HttpOnly' },
+      }),
+  );
+  const response = await app.request('/');
+  // The regression: applyChannelHeaders deleted the accumulated set-cookie
+  // once per channel cookie, so only the LAST middleware cookie survived and
+  // the route's session cookie vanished. All three must ride the response.
+  const cookies = response.headers.getSetCookie();
+  expect(cookies).toEqual(['session=logged-in; HttpOnly', 'mw1=1; Path=/', 'mw2=2; Path=/']);
+});
