@@ -161,13 +161,23 @@ export async function verifyNpmRelease(options: VerifyNpmReleaseOptions): Promis
           if (!(error instanceof NpmViewError) || !error.retryable) throw error;
         }
       }
-      // First publish: a package with zero published versions has no
-      // predecessor to require. #1557's protocol/compiler enter the registry
-      // this way — demanding their predecessor would fail the verify AFTER
-      // the six-package publish loop had already run (unrevertable), leaving
-      // a partial release the retry loop then skips.
-      if (published.length === 0) {
-        options.log?.(`First publish: ${packageName} has no registry history; continuity skipped.`);
+      // Line-first exemption: a package with no EARLIER version on this
+      // release line is publishing onto the line for the first time, so the
+      // same-line predecessor cannot exist by definition. Registry-zero was
+      // the wrong predicate twice over: @openelement/protocol carries 0.41-era
+      // history under the same name (so its list is never empty), and this
+      // verify runs AFTER the publish loop (so a just-published name queries
+      // back its own current version except through slow-propagation races).
+      // Either way the old check threw after the packages were already on the
+      // registry — unrevertable — and the retry loop then skipped the release.
+      const linePrefix = `${options.version.split('-')[0]}-`;
+      const earlierOnLine = published.filter(
+        (v) => v !== options.version && v.startsWith(linePrefix),
+      );
+      if (earlierOnLine.length === 0) {
+        options.log?.(
+          `Line-first publish: ${packageName} has no earlier ${linePrefix}* version; continuity skipped.`,
+        );
         continue;
       }
       if (!published.includes(predecessor)) {

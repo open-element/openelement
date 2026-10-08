@@ -405,6 +405,41 @@ test('verifyNpmRelease does not require latest === prerelease (#607)', async () 
   });
 });
 
+test('verifyNpmRelease: the line-first exemption covers a name with pre-1.0 history (protocol) and a just-published name (compiler)', async () => {
+  // The registry reality this pins: @openelement/protocol exists with 0.41-era
+  // versions under the same name, and verifyNpmRelease runs AFTER the publish
+  // loop — so a registry-zero predicate never fires for either shape and the
+  // old predecessor check threw post-publish. The line-first predicate must
+  // pass both without touching the version/dist-tag verification.
+  const scenarios: Array<{ name: string; versions: string[] }> = [
+    {
+      name: 'protocol',
+      versions: ['0.41.0-alpha.1', '0.41.0-alpha.8', '1.0.0-alpha.11'],
+    },
+    { name: 'compiler', versions: ['1.0.0-alpha.11'] },
+  ];
+  for (const { name, versions } of scenarios) {
+    const logs: string[] = [];
+    await verifyNpmRelease({
+      version: '1.0.0-alpha.11',
+      packages: [name],
+      delaysMs: [0],
+      sleep: () => Promise.resolve(),
+      log: (line) => logs.push(line),
+      query: (specifier, field) => {
+        if (field === 'versions') return Promise.resolve(VERSIONS_FIELD(versions));
+        // 1.0-line publishes verify `latest` (the ruling) — the value itself
+        // is checked elsewhere; here only the continuity path matters.
+        return Promise.resolve('1.0.0-alpha.11');
+      },
+    });
+    expect(
+      logs.some((line) => line.includes('Line-first publish')),
+      `${name}: continuity skipped`,
+    ).toBe(true);
+  }
+});
+
 test('verifyNpmRelease rejects a release whose predecessor is unpublished (#869-2.5)', async () => {
   await assertRejectsIncludes(
     () =>

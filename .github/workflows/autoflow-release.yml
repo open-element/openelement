@@ -48,7 +48,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "Publishing @openelement/*@$VERSION from $HEAD_SHA"
-          # Four-package consistency (the ten-stamp lesson from #1508)
+          # Six-package consistency (the ten-stamp lesson from #1508)
           node tools/repo/check-release-version.ts "$VERSION"
 
       - name: Check if all 6 packages already published (idempotent)
@@ -83,10 +83,12 @@ jobs:
         if: steps.check.outputs.already_published != 'true'
         run: vp run --fail-if-no-match @openelement/tools-release#publish:npm
 
-      # The 1.0 line publishes onto `latest` (owner ruling 2026-10-07); the
-      # channel alias keeps resolving for @alpha consumers. Best-effort: a
-      # dist-tag write the trusted-publishing flow refuses logs a warning —
-      # the alias is convenience, not the release contract.
+      # The 1.0 line publishes onto `latest` (owner ruling 2026-10-07). This
+      # alias re-point is best-effort and EXPECTED to fail in this workflow:
+      # `npm dist-tag add` requires a token, and trusted publishing (OIDC)
+      # only exchanges for `npm publish` — so under pure OIDC the @alpha tag
+      # stays on the last release that had credentials. It succeeds only when
+      # a token is present (a local/manual run). Warning, never failure.
       - name: Re-point the alpha channel alias at this version
         if: steps.check.outputs.already_published != 'true'
         run: |
