@@ -1,7 +1,8 @@
 /**
  * npm publish policy: version existence, the publish invocation, and the
- * dist-tag policy (prereleases never move `latest`). Reads no workspace state
- * beyond the package graph and the packed tarball path.
+ * dist-tag policy (the 1.0 prerelease line rides `latest` — owner ruling
+ * 2026-10-07 — while earlier lines keep the #607 channel tag). Reads no
+ * workspace state beyond the package graph and the packed tarball path.
  */
 
 import { assertPublicReleaseVersion, prereleaseChannel } from '../lib/version.ts';

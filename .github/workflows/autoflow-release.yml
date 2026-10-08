@@ -91,6 +91,11 @@ jobs:
       - name: Re-point the alpha channel alias at this version
         if: steps.check.outputs.already_published != 'true'
         run: |
+          # Without pipefail the pipeline's exit status came from tee, so an npm
+          # dist-tag failure was swallowed and the ::warning:: branch below was
+          # unreachable; pipefail surfaces the real exit code while the step
+          # stays best-effort (warning, never failure).
+          set -o pipefail
           for PKG in protocol element compiler router create ui; do
             if ! npm dist-tag add "@openelement/$PKG@$VERSION" alpha 2>&1 | tee /tmp/disttag.log; then
               echo "::warning::could not re-point alpha alias for $PKG (latest is already set)"
