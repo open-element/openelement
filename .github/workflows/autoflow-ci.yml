@@ -279,11 +279,14 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm@12.8.1 # zizmor: ignore[adhoc-packages] — same pin and rationale as the setup action
       - name: Fresh install (empty store)
+        # --cache-dir is gone from pnpm 12's install (the error blames
+        # --frozen-lockfile but the parser dies on cache-dir); the empty
+        # --store-dir alone carries the cold-install proof — the store holds
+        # every tarball pnpm would otherwise cache.
         run: |
-          mkdir -p /tmp/fresh-store /tmp/fresh-cache
+          mkdir -p /tmp/fresh-store
           pnpm install --frozen-lockfile \
-            --store-dir /tmp/fresh-store \
-            --cache-dir /tmp/fresh-cache
+            --store-dir /tmp/fresh-store
       - name: Cold typecheck
         run: |
           npx tsc --noEmit -p packages/element/tsconfig.json
