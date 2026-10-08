@@ -6,7 +6,10 @@
  * `openelement.config.ts`; the file is OPTIONAL and near-empty by default, and
  * every option it omits is provided by a file convention:
  *
- *   - design tokens: `app/styles/tokens.css` (inlined into the document head)
+ *   - design tokens: `app/styles/tokens.css` (inlined into the document head;
+ *     a generic token channel — apps on the Tailwind preset typically name
+ *     their sheet `theme.css` instead and reach it through `tailwind.theme`,
+ *     which replaces this convention for them)
  *   - app shell:     `app/islands/app-shell.tsx` (auto-registered, deletable)
  *   - site title:    the `name` field of `package.json`
  *   - document head: `app/head.tsx` (structural head content, see below)
