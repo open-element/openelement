@@ -398,21 +398,27 @@ document.head.append(pin);`;
         await page.mouse.click(link.x + link.width / 2, link.y + link.height / 2);
         await page.waitForTimeout(600);
         const state = await page.evaluate('({path: location.pathname, log: window.vtLog})');
-        // 2026-10-08 verified on Chromium 147, Firefox Nightly and WebKit
-        // 26.4: the pointerdown reaches the page (the skip fires), yet the
-        // anchor activation is suppressed — a same-burst skipTransition()
-        // cannot rescue it. This pin documents the RouterOptions.viewTransitions
-        // default-off retirement condition: the day an engine lets this
-        // click navigate, this assertion fails and the default flip is
-        // unblocked for that engine.
+        // 2026-10-08, with the window pinned open: Chromium 147 and Firefox
+        // Nightly suppress the anchor activation (pointerdown reaches the
+        // page, the skip fires, the navigation never starts — a same-burst
+        // skipTransition() cannot rescue it). WebKit 26.4 lets the click
+        // navigate even under an active transition. This pin documents the
+        // RouterOptions.viewTransitions default-off retirement condition:
+        // when every engine lands on the WebKit behavior, flip the default.
         expect(
           state.log.some((entry) => entry === 'skip-on-interact'),
           type.name(),
         ).toBe(true);
-        expect(
-          state.path,
-          `${type.name()} suppressed the click (retire this pin to flip the default)`,
-        ).toBe('/b');
+        if (type === webkit) {
+          expect(
+            state.path,
+            'webkit lets input navigate under an active transition (the retirement target behavior)',
+          ).toBe('/a');
+        } else {
+          expect(state.path, `${type.name()} suppressed the click under an active transition`).toBe(
+            '/b',
+          );
+        }
       } finally {
         await browser.close();
       }
