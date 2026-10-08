@@ -1,6 +1,6 @@
 {
   "name": "@openelement/element",
-  "version": "1.0.0-alpha.11",
+  "version": "1.0.0-alpha.12",
   "type": "module",
   "//": "ADR-0155 (docs/adr/ADR-0155-client-only-entry-subpath.md) governs the \"./client-only\" export below: it is the full public surface minus the compiled claim executor, pinned to the same publicShapeSha256 as \".\", and is deletable as one unit when its written retirement condition is met. ADR-0166 (docs/adr/ADR-0166-regions-axis-entry-subpaths.md) governs \"./no-regions\" and \"./base\" the same way for the when/each Region builders axis (#1548). Recorded as a JSON annotation key rather than a `//` comment because the package-graph reader (tools/lib/package-graph.ts) fails loud on JSONC.",
   "exports": {
