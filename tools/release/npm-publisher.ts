@@ -1,7 +1,8 @@
 /**
  * npm publish policy: version existence, the publish invocation, and the
- * dist-tag policy (prereleases never move `latest`). Reads no workspace state
- * beyond the package graph and the packed tarball path.
+ * dist-tag policy (the 1.0 prerelease line rides `latest` — owner ruling
+ * 2026-10-07 — while earlier lines keep the #607 channel tag). Reads no
+ * workspace state beyond the package graph and the packed tarball path.
  */
 
 import { assertPublicReleaseVersion, prereleaseChannel } from '../lib/version.ts';
@@ -77,17 +78,29 @@ export async function publishPackage(
     }
     throw error;
   }
-  // #607: prerelease publishes use --tag alpha|beta|rc only. Never move
-  // `latest` onto an alpha — `latest` stays on the last stable line so
-  // `npm install @openelement/*` does not land on prerelease by default.
-  // Stable publishes keep npm's default `latest` tag.
+  // See npmPublishTag: the 1.0 prerelease line publishes onto `latest`
+  // (owner ruling 2026-10-07); earlier lines keep the #607 channel-only rule.
 }
 
+/**
+ * Owner ruling 2026-10-07: from 1.0.0-alpha.11 the 1.0 prerelease line
+ * rides the `latest` dist-tag — `npm install @openelement/*` should land on
+ * the current 1.0 line (the pre-1.0 0.x registry history stays behind it).
+ * This supersedes #607's never-move-latest-with-a-prerelease rule for this
+ * line; the channel tag (alpha) stays as an alias, re-pointed post-publish
+ * by the release workflow so `@alpha` consumers keep resolving.
+ */
 export function npmPublishTag(version: string): string {
   // Canonical prerelease/version truth: tools/lib/version.ts (#1231 M16).
   const channel = prereleaseChannel(version);
-  if (channel) return channel;
-  // Only called for prereleases (see publishPackage), and the release line
-  // produces alpha/beta/rc only — anything else is a tooling bug, not 'next'.
-  throw new Error(`No npm publish tag for version: ${version}`);
+  if (!channel) {
+    // Only called for prereleases (see publishPackage); anything else is a
+    // tooling bug, not 'next'.
+    throw new Error(`No npm publish tag for version: ${version}`);
+  }
+  return isOneOhPrereleaseLine(version) ? 'latest' : channel;
+}
+
+function isOneOhPrereleaseLine(version: string): boolean {
+  return version.startsWith('1.0.0-');
 }

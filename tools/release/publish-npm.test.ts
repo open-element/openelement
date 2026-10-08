@@ -44,10 +44,15 @@ const io: DeriveDepsIo = {
   readSrcFiles: () => [],
 };
 
-test('npm publish tag follows alpha, beta and rc prerelease names', () => {
-  expect(npmPublishTag('1.0.0-alpha.1')).toEqual('alpha');
-  expect(npmPublishTag('1.0.0-beta.1')).toEqual('beta');
-  expect(npmPublishTag('1.0.0-rc.1')).toEqual('rc');
+test('npm publish tag: the 1.0 prerelease line rides latest; earlier lines keep the channel tag', () => {
+  // Owner ruling 2026-10-07: from the 1.0 line onward the prerelease IS the
+  // shipping line, so `latest` points at it (the alpha alias is re-pointed
+  // post-publish by the release workflow).
+  expect(npmPublishTag('1.0.0-alpha.11')).toEqual('latest');
+  expect(npmPublishTag('1.0.0-beta.1')).toEqual('latest');
+  expect(npmPublishTag('1.0.0-rc.1')).toEqual('latest');
+  expect(npmPublishTag('0.41.0-alpha.1')).toEqual('alpha');
+  expect(npmPublishTag('0.41.0-rc.1')).toEqual('rc');
 });
 
 test('deriveDependencies includes an external npm dependency with a version', () => {
@@ -400,6 +405,41 @@ test('verifyNpmRelease does not require latest === prerelease (#607)', async () 
   });
 });
 
+test('verifyNpmRelease: the line-first exemption covers a name with pre-1.0 history (protocol) and a just-published name (compiler)', async () => {
+  // The registry reality this pins: @openelement/protocol exists with 0.41-era
+  // versions under the same name, and verifyNpmRelease runs AFTER the publish
+  // loop — so a registry-zero predicate never fires for either shape and the
+  // old predecessor check threw post-publish. The line-first predicate must
+  // pass both without touching the version/dist-tag verification.
+  const scenarios: Array<{ name: string; versions: string[] }> = [
+    {
+      name: 'protocol',
+      versions: ['0.41.0-alpha.1', '0.41.0-alpha.8', '1.0.0-alpha.11'],
+    },
+    { name: 'compiler', versions: ['1.0.0-alpha.11'] },
+  ];
+  for (const { name, versions } of scenarios) {
+    const logs: string[] = [];
+    await verifyNpmRelease({
+      version: '1.0.0-alpha.11',
+      packages: [name],
+      delaysMs: [0],
+      sleep: () => Promise.resolve(),
+      log: (line) => logs.push(line),
+      query: (specifier, field) => {
+        if (field === 'versions') return Promise.resolve(VERSIONS_FIELD(versions));
+        // 1.0-line publishes verify `latest` (the ruling) — the value itself
+        // is checked elsewhere; here only the continuity path matters.
+        return Promise.resolve('1.0.0-alpha.11');
+      },
+    });
+    expect(
+      logs.some((line) => line.includes('Line-first publish')),
+      `${name}: continuity skipped`,
+    ).toBe(true);
+  }
+});
+
 test('verifyNpmRelease rejects a release whose predecessor is unpublished (#869-2.5)', async () => {
   await assertRejectsIncludes(
     () =>
@@ -431,7 +471,10 @@ test('verifyNpmRelease reports the final observed state after exhausting retries
         },
       }),
     Error,
-    'Continuity check failed for 0.41.0-alpha.13: predecessor 0.41.0-alpha.12 is not among published versions',
+    // A persistently E404 name reads as "no registry history" — the
+    // first-publish continuity exemption — and the failure surfaces at the
+    // version verification step with the observed registry state.
+    'version verification failed after 3 attempts: expected=0.41.0-alpha.13, observed=<query failed>',
   );
 });
 

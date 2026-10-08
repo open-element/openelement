@@ -93,6 +93,19 @@ jobs:
         run: vp run --fail-if-no-match @openelement/element#test
       - name: Router tests (includes 3-engine browser tests)
         run: vp run --fail-if-no-match @openelement/router#test
+      - name: UI, create and tools tests
+        # The review gap: the PR layer ran only element+router, so ui/create/
+        # tools reds (style shells, stale schedule assertions) were invisible
+        # until the release train. All six product surfaces now gate the PR.
+        # The tools suites ride the root vitest "tools" project (the repo
+        # package has no aggregate test task by design).
+        run: |
+          vp run --fail-if-no-match @openelement/ui#test
+          vp run --fail-if-no-match @openelement/create#test
+          # The tools suites read www's generated data modules (release-line,
+          # content) — a fresh checkout carries none until this runs.
+          vp run --fail-if-no-match @openelement/www#generate:content
+          ./node_modules/.bin/vitest run --project tools
       - name: Element browser gate (full matrix)
         run: vp run --fail-if-no-match @openelement/element#browser:gate
 

@@ -8,6 +8,7 @@
  * orchestration and calls `verifyNpmRelease`.
  */
 
+import { npmPublishTag } from './npm-publisher.ts';
 import { commandOutput } from '../repo/node-command.ts';
 import {
   type PrereleaseChannel,
@@ -160,6 +161,25 @@ export async function verifyNpmRelease(options: VerifyNpmReleaseOptions): Promis
           if (!(error instanceof NpmViewError) || !error.retryable) throw error;
         }
       }
+      // Line-first exemption: a package with no EARLIER version on this
+      // release line is publishing onto the line for the first time, so the
+      // same-line predecessor cannot exist by definition. Registry-zero was
+      // the wrong predicate twice over: @openelement/protocol carries 0.41-era
+      // history under the same name (so its list is never empty), and this
+      // verify runs AFTER the publish loop (so a just-published name queries
+      // back its own current version except through slow-propagation races).
+      // Either way the old check threw after the packages were already on the
+      // registry — unrevertable — and the retry loop then skipped the release.
+      const linePrefix = `${options.version.split('-')[0]}-`;
+      const earlierOnLine = published.filter(
+        (v) => v !== options.version && v.startsWith(linePrefix),
+      );
+      if (earlierOnLine.length === 0) {
+        options.log?.(
+          `Line-first publish: ${packageName} has no earlier ${linePrefix}* version; continuity skipped.`,
+        );
+        continue;
+      }
       if (!published.includes(predecessor)) {
         throw new Error(
           `Continuity check failed for ${options.version}: predecessor ${predecessor} ` +
@@ -179,9 +199,14 @@ export async function verifyNpmRelease(options: VerifyNpmReleaseOptions): Promis
       options.version,
       runtime,
     );
-    if (tag) {
-      // #607: prerelease only requires its line tag (alpha/beta/rc). Do not
-      // require latest === prerelease — latest must remain on stable.
+    // Owner ruling 2026-10-07: the 1.0 prerelease line publishes onto
+    // `latest` (npmPublishTag), so the verified dist-tag is `latest` there;
+    // earlier prerelease lines keep the #607 channel-tag contract. The
+    // channel alias on the 1.0 line is re-pointed post-publish by the
+    // release workflow and is deliberately not part of this proof.
+    // npmPublishTag answers prereleases only; a stable verifies latest.
+    const expectedTag = tag ? npmPublishTag(options.version) : 'latest';
+    if (tag && expectedTag !== 'latest') {
       await verifyField(
         `${packageName} dist-tags.${tag}`,
         packageName,
@@ -200,7 +225,9 @@ export async function verifyNpmRelease(options: VerifyNpmReleaseOptions): Promis
         options.version,
         runtime,
       );
-      options.log?.(`${packageName}@${options.version}: latest dist-tag verified (stable)`);
+      options.log?.(
+        `${packageName}@${options.version}: latest dist-tag verified (${expectedTag === 'latest' && tag ? '1.0 prerelease line' : 'stable'})`,
+      );
     }
   }
 }

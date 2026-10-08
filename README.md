@@ -5,7 +5,7 @@ English | [简体中文](./README.zh.md)
 OpenElement is a Web Platform-first core for two products: **Element** and **Router**.
 Element compiles JSX-authored Custom Elements into a Part Program used by server serialization, fresh DOM, and existing-DOM claim. Router owns route selection, HTTP semantics, navigation, loaders, actions, and the shared Native/Lit Framework Mode application contract.
 
-The source tree is `1.0.0-alpha.10`, a new public baseline for Element and Router. It is not a compatibility migration from historic 0.x snapshots. npm `latest` is per package: element, create, and ui remain on the 0.43 stable line, while Router's `latest` is the 0.41.0-alpha.6 prerelease. No single version is published for every package until a separately admitted release. Since #1557 the Element monolith is three packages: `@openelement/protocol` (cross-system contracts, zero dependencies), `@openelement/element` (pure runtime), and `@openelement/compiler` (build-time TSX-to-Part-Program compiler + Vite plugin) — both new packages are repository baselines awaiting their first publish.
+The source tree is `1.0.0-alpha.11`, a new public baseline for Element and Router. It is not a compatibility migration from historic 0.x snapshots. From this release the six packages (`protocol`, `element`, `compiler`, `router`, `create`, `ui`) publish as one line, and npm `latest` points at that line — `npm install @openelement/router` resolves to the current 1.0 prerelease. Since #1557 the Element monolith is three packages: `@openelement/protocol` (cross-system contracts, zero dependencies), `@openelement/element` (pure runtime), and `@openelement/compiler` (build-time TSX-to-Part-Program compiler + Vite plugin).
 
 ## Quick Start
 
