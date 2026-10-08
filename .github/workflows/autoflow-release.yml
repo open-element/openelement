@@ -83,6 +83,14 @@ jobs:
         if: steps.check.outputs.already_published != 'true'
         run: vp run --fail-if-no-match @openelement/tools-release#publish:npm
 
+      # dist-tag writes over OIDC trusted publishing need npm >= 12.2.0 (npm docs);
+      # the runner's bundled npm is older, so the CLI is pinned in its own step
+      # before the re-point below. It cannot ride the re-point step's `run: |`
+      # body: there a trailing `# zizmor: ignore[...]` is script text, not a YAML
+      # comment, so the adhoc-packages finding would stay unsuppressed.
+      - name: Install pinned npm (dist-tag OIDC floor)
+        run: npm install -g npm@12.2.0 # zizmor: ignore[adhoc-packages] — pinned exact version; npm dist-tag over trusted publishing requires npm >= 12.2.0 (npm docs), and the runner's bundled npm is older
+
       # The 1.0 line publishes onto `latest` (owner ruling 2026-10-07). The
       # alias re-point rides trusted publishing's manage-dist-tags permission
       # (checked on each package's trusted-publisher entry); without it the
