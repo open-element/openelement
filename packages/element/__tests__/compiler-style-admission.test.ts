@@ -252,6 +252,21 @@ describe('the style-edge registry (the intercept channel)', () => {
     expect(hasStyleImporter(importer)).toEqual(true);
   });
 
+  test('same-named sheets in sibling subdirectories stay distinct edges', () => {
+    // The regression: the registry key was importer directory + bare file
+    // name, so `./a/style.css` and `./b/style.css` from one importer
+    // collapsed onto one key and the later edge silently overwrote the
+    // first — both virtual edges then resolved to the last-registered file.
+    const transform = transformOf();
+    const importer = '/proj/app/components/widget.tsx';
+    transform(authoredSource(['./a/style.css', './b/style.css'], '[sheet0, sheet1]'), importer);
+    const a = getStyleRequest(styleRequestModuleId(importer, './a/style.css'));
+    const b = getStyleRequest(styleRequestModuleId(importer, './b/style.css'));
+    expect(a?.file).toEqual('/proj/app/components/a/style.css');
+    expect(b?.file).toEqual('/proj/app/components/b/style.css');
+    expect(a && b && a !== b).toEqual(true);
+  });
+
   test('a query-carrying importer id re-registers under one key', () => {
     const transform = transformOf();
     const source = authoredSource(['./sheet-import.css'], '[sheet0]');
