@@ -83,12 +83,11 @@ jobs:
         if: steps.check.outputs.already_published != 'true'
         run: vp run --fail-if-no-match @openelement/tools-release#publish:npm
 
-      # The 1.0 line publishes onto `latest` (owner ruling 2026-10-07). This
-      # alias re-point is best-effort and EXPECTED to fail in this workflow:
-      # `npm dist-tag add` requires a token, and trusted publishing (OIDC)
-      # only exchanges for `npm publish` — so under pure OIDC the @alpha tag
-      # stays on the last release that had credentials. It succeeds only when
-      # a token is present (a local/manual run). Warning, never failure.
+      # The 1.0 line publishes onto `latest` (owner ruling 2026-10-07). The
+      # alias re-point rides trusted publishing's manage-dist-tags permission
+      # (checked on each package's trusted-publisher entry); without it the
+      # step warns and @alpha stays on its previous release. Best-effort by
+      # design: warning, never failure.
       - name: Re-point the alpha channel alias at this version
         if: steps.check.outputs.already_published != 'true'
         run: |
