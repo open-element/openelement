@@ -102,6 +102,9 @@ jobs:
         run: |
           vp run --fail-if-no-match @openelement/ui#test
           vp run --fail-if-no-match @openelement/create#test
+          # The tools suites read www's generated data modules (release-line,
+          # content) — a fresh checkout carries none until this runs.
+          vp run --fail-if-no-match @openelement/www#generate:content
           ./node_modules/.bin/vitest run --project tools
       - name: Element browser gate (full matrix)
         run: vp run --fail-if-no-match @openelement/element#browser:gate
