@@ -369,7 +369,7 @@ test('verifyNpmRelease retries transient registry misses and verifies the matchi
 
 test('verifyNpmRelease default retry schedule covers npm propagation delays', async () => {
   const sleeps: number[] = [];
-  let misses = 6;
+  let misses = 7;
   await verifyNpmRelease({
     version: '1.0.0',
     packages: ['element'],
@@ -382,8 +382,8 @@ test('verifyNpmRelease default retry schedule covers npm propagation delays', as
       return Promise.resolve('1.0.0');
     },
   });
-  expect(sleeps).toEqual([5_000, 10_000, 20_000, 30_000, 45_000, 60_000]);
-  expect(sleeps.reduce((total, delay) => total + delay, 0)).toEqual(170_000);
+  expect(sleeps).toEqual([5_000, 15_000, 30_000, 60_000, 120_000, 180_000, 300_000]);
+  expect(sleeps.reduce((total, delay) => total + delay, 0)).toEqual(710_000);
 });
 
 test('verifyNpmRelease does not require latest === prerelease (#607)', async () => {

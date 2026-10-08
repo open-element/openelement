@@ -85,6 +85,7 @@ test('defineConfig: identity helper, accepted key set is the documented surface'
     'styles',
     'i18n',
     'viewTransition',
+    'tailwind',
     'speculation',
     'build',
     'middleware',
@@ -670,8 +671,8 @@ test('starter template: openelement.config.ts validates against the accepted sch
   // pages own their chrome as light-root markup, so island-free pages (like
   // /about) carry no island hosts at all.
   expect(
-    readTemplate('app/styles/tokens.css').includes('--brand'),
-    'tokens.css must define --brand',
+    readTemplate('app/styles/theme.css').includes('--brand'),
+    'theme.css must define --brand',
   ).toBeTruthy();
   expect(
     readTemplate('app/islands/my-counter.tsx.tmpl').includes("@element('my-counter'"),
