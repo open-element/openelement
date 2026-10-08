@@ -3,12 +3,32 @@ name: Release
 # Redesigned 2026-10-07 (#1566): auto-triggered by main-push CI success.
 # Reads version from package.json, checks all 4 packages for idempotency,
 # publishes via OIDC, creates GitHub Release. ~5 minutes.
+#
+# A manual dispatch is the channel re-point path (owner-run backstop): the
+# alias re-point inside the publish path is best-effort — dist-tag writes over
+# OIDC need npm >= 12.2.0 while the runner's bundled CLI is older — and the
+# packages' trusted-publisher entries match this workflow file's OIDC identity
+# only, so a separate re-point workflow's writes fail E401. A dispatch from
+# here repairs a channel tag riding that same identity (see
+# docs/release/release-state.json).
 
 on:
   workflow_run:
     workflows: [AutoFlow CI]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Channel dist-tag to re-point
+        required: false
+        default: alpha
+        type: string
+      version:
+        description: Published version to point the tag at (empty = packages/element/package.json)
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: openelement-release
@@ -137,3 +157,60 @@ jobs:
     uses: ./.github/workflows/published-consumers.yml
     with:
       version: ${{ needs.release.outputs.version }}
+
+  # Manual-dispatch path: re-point a channel dist-tag at a published version
+  # for all six packages. The `release` job's `if` never matches a dispatch,
+  # so this is the only job a manual run executes.
+  repoint:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # A hung dist-tag write must not hold a runner slot indefinitely (#1402).
+    timeout-minutes: 10
+    environment: openelement-release
+    # contents: read is checkout's floor; id-token: write is what trusted
+    # publishing needs. Nothing else is granted.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Install pinned npm (dist-tag OIDC floor)
+        run: npm install -g npm@12.2.0 # zizmor: ignore[adhoc-packages] — pinned exact version; npm dist-tag over trusted publishing requires npm >= 12.2.0 (npm docs), and the runner's bundled npm is older
+      - name: Re-point the channel tag for all six packages
+        # Inputs travel through env, never interpolated into the script body
+        # (zizmor template-injection): a dispatch input is arbitrary text.
+        env:
+          TAG: ${{ inputs.tag }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          # pipefail so the pipeline reports npm's exit status, not tee's — the
+          # same trap the Release alias step hit; here a failure is counted and
+          # summarized, and any failure fails the run.
+          set -o pipefail
+          VERSION="$INPUT_VERSION"
+          if [ -z "$VERSION" ]; then
+            # The element manifest is the line's version anchor — Release reads
+            # the same file, and check-release-version.ts keeps all six equal.
+            VERSION=$(node -e "console.log(require('./packages/element/package.json').version)")
+          fi
+          echo "Re-pointing $TAG at @openelement/*@$VERSION"
+          SUCCEEDED=0
+          FAILED=0
+          for PKG in protocol element compiler router create ui; do
+            if npm dist-tag add "@openelement/$PKG@$VERSION" "$TAG" 2>&1 | tee "/tmp/disttag-$PKG.log"; then
+              SUCCEEDED=$((SUCCEEDED + 1))
+            else
+              echo "::warning::could not re-point $TAG for $PKG at $VERSION"
+              FAILED=$((FAILED + 1))
+            fi
+          done
+          echo "re-point summary: $SUCCEEDED ok, $FAILED failed (tag $TAG at $VERSION)"
+          if [ "$FAILED" -ne 0 ]; then
+            exit 1
+          fi
