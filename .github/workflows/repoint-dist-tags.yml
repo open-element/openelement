@@ -1,9 +1,10 @@
 name: Re-point channel dist-tags
 
 # Owner-run tool: point a channel dist-tag (default the `alpha` alias) at a
-# published version for every package in the 1.0 line. It exists because the
-# Release workflow's OIDC identity cannot write dist-tags (E401): the alias
-# re-point there is best-effort and warns, so a manual dispatch is the backstop
+# published version for every package in the 1.0 line. It exists because
+# dist-tag writes over OIDC trusted publishing need npm >= 12.2.0 (npm docs)
+# while the runner's bundled npm is older, so the alias re-point in the
+# Release workflow is best-effort and warns: a manual dispatch is the backstop
 # that repairs @alpha after a release (see docs/release/release-state.json).
 # Auth rides the same OIDC trusted-publishing path as autoflow-release.yml's
 # alias step — npm picks the OIDC identity up inside Actions; no npm token
@@ -44,6 +45,8 @@ jobs:
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+      - name: Install pinned npm (dist-tag OIDC floor)
+        run: npm install -g npm@12.2.0 # zizmor: ignore[adhoc-packages] — pinned exact version; npm dist-tag over trusted publishing requires npm >= 12.2.0 (npm docs), and the runner's bundled npm is older
       - name: Re-point the channel tag for all six packages
         # Inputs travel through env, never interpolated into the script body
         # (zizmor template-injection): a dispatch input is arbitrary text.
