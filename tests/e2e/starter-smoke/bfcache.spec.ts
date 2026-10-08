@@ -23,7 +23,7 @@ test('island state survives back/forward (bfcache, #943)', async ({ page }) => {
   await page.locator('my-counter').getByRole('button', { name: '+' }).click();
   await expect(page.locator('my-counter #count')).toHaveText('1');
 
-  await page.goto('/blog');
+  await page.goto('/about');
   await page.goBack({ waitUntil: 'commit' });
 
   // Direct restore signal: a normal reload leaves the flag false.

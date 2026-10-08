@@ -64,11 +64,7 @@ import {
 } from '../src/vite/client-asset-manifest.ts';
 import { islandChunkMapFromAssetManifest } from '../src/vite/internal/ssg/build-postprocess.ts';
 import type { ClientIslandDeliveryEntry } from '../src/vite/internal/ssg/delivery.ts';
-import type {
-  SsgRenderOptions,
-  SsrBundle,
-  StreamRouteManifest,
-} from '../src/vite/internal/protocol/ssg.ts';
+import type { SsgRenderOptions, SsrBundle, StreamRouteManifest } from '@openelement/protocol/ssg';
 
 const TABLES = {
   PageErrorCode,

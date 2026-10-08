@@ -16,7 +16,7 @@ export const OPENELEMENT_VERSION = `v${SOURCE_VERSION}`;
 
 // Per-package registry `latest` dist-tag truth. There is deliberately NO
 // single "published version" constant: @openelement/router has never shipped
-// the 0.43.x stable line, so no one version covers all four packages. Site and
+// the 0.43.x stable line, so no one version covers every package. Site and
 // docs copy must present the per-package state, never a fabricated shared
 // version. Keep in sync with docs/release/release-state.json
 // (release:state-machine:check offline; release:registry-check verifies it
@@ -27,6 +27,15 @@ export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {
   '@openelement/ui': 'v0.43.3',
   '@openelement/router': 'v0.41.0-alpha.6',
 };
+
+// Schema v4 (#1557): packages that have never published carry no registry
+// truth yet. They are named here — never given a placeholder latest — until
+// the release commit that first publishes them flips their release-state
+// status to "published" and moves them into PUBLISHED_LATEST.
+export const UNRELEASED_PACKAGES: readonly string[] = [
+  '@openelement/protocol',
+  '@openelement/compiler',
+];
 
 // The newest STABLE version published for every package, or null when none
 // exists. It is null today: Router has no 0.43.x. release:registry-check
@@ -43,13 +52,13 @@ export function COMMON_PUBLISHED_NOTE(locale: ReleaseLocale): string {
   const published = COMMON_PUBLISHED_VERSION;
   if (published === null) {
     return locale === 'zh'
-      ? '四个包尚无统一已发布的稳定版本'
-      : 'no single stable version is published for all four packages';
+      ? '各发布包尚无统一已发布的稳定版本'
+      : 'no single stable version is published across the published packages';
   }
   const version = String(published);
   return locale === 'zh'
-    ? `${version} — 已发布到全部四个包`
-    : `${version} — published for all four packages`;
+    ? `${version} — 已发布到全部发布包`
+    : `${version} — published for every published package`;
 }
 
 // Short label for that version in UI chrome: no number until one exists for

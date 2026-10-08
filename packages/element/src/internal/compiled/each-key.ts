@@ -11,8 +11,8 @@
  * rejected here rather than collapsing into `String()`.
  */
 
-import type { ProgramEachPart } from '../protocol/part-program.ts';
-import { EachKeyErrorCode, OpenElementError } from '../protocol/errors.ts';
+import type { ProgramEachPart } from '@openelement/protocol/part-program';
+import { EachKeyErrorCode, OpenElementError } from '@openelement/protocol/errors';
 
 /**
  * One keyed each item cannot participate in keyed identity: the item is not

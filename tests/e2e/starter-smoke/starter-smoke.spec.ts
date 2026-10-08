@@ -1,14 +1,15 @@
 /**
- * Packed-starter visual + interaction smoke (#934).
+ * Packed-starter visual + interaction smoke (#934, #1530 showcase form).
  *
- * Guards the five starter regression classes that round-3 blog e2e caught:
- * unstyled page (no :root baseline), dead island, jammed nav, clipped
- * assets, duplicate H1. Every assertion here targets the *computed* surface,
- * the layer curl-level checks cannot see.
+ * Guards the starter regression classes the computed surface owns: unstyled
+ * page (no token baseline), dead island, jammed nav, duplicate H1, missing
+ * 404 fidelity — the layer curl-level checks cannot see. The showcase
+ * starter's chrome is plain light DOM (header.site-head), so the old
+ * app-shell shadow queries are gone along with the blog routes.
  */
 import { expect, test } from '@playwright/test';
 
-const PAPER = 'rgb(250, 249, 246)';
+const PAPER = 'rgb(253, 253, 252)';
 
 test('computed body background is the design-token paper, not the UA default', async ({ page }) => {
   await page.goto('/');
@@ -18,22 +19,15 @@ test('computed body background is the design-token paper, not the UA default', a
 
 test('header nav links are spaced apart (not jammed)', async ({ page }) => {
   await page.goto('/');
-  // The compiled shell applies its `static styles` when it hydrates (the
-  // serializer never inlines styles into DSD) — wait for the flex layout
-  // before measuring link geometry.
-  await page.waitForFunction(() => {
-    const nav = document.querySelector('app-shell')?.shadowRoot?.querySelector('nav');
-    return !!nav && getComputedStyle(nav).display === 'flex';
-  });
-  const links = page.locator('app-shell header nav a');
-  await expect(links).toHaveCount(2);
-  const [home, blog] = await links.evaluateAll((els) =>
+  const links = page.locator('header.site-head nav a');
+  await expect(links).toHaveCount(3);
+  const [home, about] = await links.evaluateAll((els) =>
     els.map((el) => {
       const r = el.getBoundingClientRect();
       return { left: r.left, right: r.right };
     }),
   );
-  expect(blog.left - home.right).toBeGreaterThan(4);
+  expect(about.left - home.right).toBeGreaterThan(4);
 });
 
 test('counter island hydrates and responds to clicks', async ({ page }) => {
@@ -50,13 +44,13 @@ test('counter island hydrates and responds to clicks', async ({ page }) => {
   await expect(counter.locator('#count')).toHaveText('1');
 });
 
-test('blog post page renders exactly one H1', async ({ page }) => {
-  await page.goto('/blog/welcome');
+test('about page renders exactly one H1', async ({ page }) => {
+  await page.goto('/about');
   await expect(page.locator('h1')).toHaveCount(1);
 });
 
-test('unknown blog slug is a 404 status, not a 200 fallback (#922)', async ({ page }) => {
-  const response = await page.goto('/blog/definitely-not-a-post');
+test('unknown route is a 404 status, not a 200 fallback (#922)', async ({ page }) => {
+  const response = await page.goto('/definitely-not-a-page');
   expect(response?.status()).toBe(404);
   await expect(page.locator('h1')).toContainText('404');
 });

@@ -10,17 +10,15 @@
  */
 import { expect, test } from 'vitest';
 
+// Frozen 6-component roster (owner ruling 2026-10-07, #1557): the four
+// zero-interaction components retired to CSS recipes in the create starter.
 const EXPECTED_TAGS = [
-  'open-card',
-  'open-callout',
   'open-button',
   'open-input',
   'open-theme-toggle',
   'open-code-block',
-  'open-badge',
   'open-dialog',
   'open-dropdown',
-  'open-tabs',
 ];
 
 test('open-ui - index exports manifest (WC Package Protocol)', async () => {
@@ -41,21 +39,17 @@ test('open-ui - explicit registration is complete and idempotent', async () => {
 
   registerOpenUi(registry);
   registerOpenUi(registry);
-  expect(definitions.size).toEqual(10);
+  expect(definitions.size).toEqual(6);
   expect([...definitions.keys()]).toEqual(EXPECTED_TAGS);
 });
 
 test('open-ui - every component module exports its class', async () => {
   const expectedExports: Record<string, string> = {
-    'open-badge': 'OpenBadge',
     'open-button': 'OpenButton',
-    'open-callout': 'OpenCallout',
-    'open-card': 'OpenCard',
     'open-code-block': 'OpenCodeBlock',
     'open-dialog': 'OpenDialog',
     'open-dropdown': 'OpenDropdown',
     'open-input': 'OpenInput',
-    'open-tabs': 'OpenTabs',
     'open-theme-toggle': 'OpenThemeToggle',
   };
   for (const [name, exportName] of Object.entries(expectedExports)) {

@@ -1,5 +1,5 @@
 /** CEM manifest discovery and compatibility classification. */
-import type { CompatibilityClassification } from '../protocol/framework.ts';
+import type { CompatibilityClassification } from '../../framework.ts';
 import { createLogger } from '@openelement/element';
 import { join } from 'pathe';
 import { classifyCemManifest, parseCem } from './cem-compat.ts';

@@ -2,12 +2,13 @@
  * @openelement/router/server-runtime — the typecheckable runtime modules
  * that generated entries import.
  *
- * Generated Hono entries are route wiring: they select routes, bind
+ * Generated server entries are route wiring: they select routes, bind
  * renderers, and forward requests. The request-time server semantics they
- * invoke — the generated-app assembly itself (createGeneratedApp: the Hono
- * app, its WinterCG bridge, the composed handler exports, the client-script
- * plumbing, the SSR registry guard, the dispatch table, and the page-render
- * bindings), the response/header channel, its commitment gate, the CSP
+ * invoke — the generated-app assembly itself (createGeneratedApp: the
+ * internal WinterCG composition layer, the composed handler exports, the
+ * client-script plumbing, the SSR registry guard, the dispatch table, and
+ * the page-render bindings), the WinterCG request scope and the built-in
+ * middleware, the response/header channel, its commitment gate, the CSP
  * auto-nonce, the page SSR renderer seam, the page descriptor/props
  * projection, the app-shell composition, the status-page/locale resolution,
  * the action protocol, and the streaming pump (request scope, deferred-field
@@ -36,6 +37,7 @@ export {
   isSsgPrerenderDispatch,
   mergeChannelHeaders,
   PROTOCOL_HEADERS,
+  SSG_PRERENDER_ENV_KEY,
 } from './response-channel.ts';
 export type { ResponseHeaderChannel } from './types.ts';
 export {
@@ -43,16 +45,29 @@ export {
   actionErrorResponse,
   actionRedirectResponse,
   createActionBodyLimit,
-  createHonoBridge,
   runActionProtocol,
 } from './action-runtime.ts';
+export type { ActionExecution, ActionLoadContext, ActionProtocolState } from './action-runtime.ts';
+export {
+  boundRequestScope,
+  createRequestScope,
+  createWinterCgApp,
+  matchesMiddlewareScope,
+} from './wintercg.ts';
 export type {
-  ActionExecution,
-  ActionHonoContext,
-  ActionLoadContext,
-  ActionProtocolState,
-  HonoBridge,
-} from './action-runtime.ts';
+  ApiRouteFunction,
+  OpenElementRequestScope,
+  RequestScopeRequest,
+  WinterCgApp,
+  WinterCgFetchMiddleware,
+} from './wintercg.ts';
+export {
+  createCorsMiddleware,
+  createLoggerMiddleware,
+  createRequestIdMiddleware,
+  createSecureHeadersMiddleware,
+} from './middleware.ts';
+export type { CorsOptions, LoggerOptions, RequestIdOptions } from './middleware.ts';
 export {
   createPagePropsRuntime,
   localeFromPath,

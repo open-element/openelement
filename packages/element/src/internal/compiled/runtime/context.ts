@@ -14,9 +14,9 @@ import {
   provideContext,
   releaseConsumedContext,
 } from '../../core/signal-context.ts';
-import type { Unsubscribe } from '../../protocol/signal.ts';
+import type { Unsubscribe } from '@openelement/protocol/signal';
 // Single error dialect (#1386 item 3): context lifecycle failures carry codes.
-import { ContextErrorCode, raiseFrameworkError } from '../../protocol/errors.ts';
+import { ContextErrorCode, raiseFrameworkError } from '@openelement/protocol/errors';
 
 /** Raise one context-service lifecycle failure with its catalogued code. */
 function fail(code: string, message: string): never {

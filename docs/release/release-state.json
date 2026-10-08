@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "sourceVersion": "1.0.0-alpha.10",
   "activeTarget": "v1.0.0-alpha.10",
   "nextPlannedTrain": "not scheduled",
@@ -11,49 +11,64 @@
   },
   "packages": [
     {
+      "name": "@openelement/protocol",
+      "status": "unpublished"
+    },
+    {
       "name": "@openelement/element",
+      "status": "published",
       "registry": {
         "latest": "0.43.3",
-        "alpha": "1.0.0-alpha.9",
+        "alpha": "1.0.0-alpha.10",
         "beta": "0.44.0-beta.2.2"
       }
     },
     {
+      "name": "@openelement/compiler",
+      "status": "unpublished"
+    },
+    {
       "name": "@openelement/router",
+      "status": "published",
       "registry": {
         "latest": "0.41.0-alpha.6",
-        "alpha": "1.0.0-alpha.9"
+        "alpha": "1.0.0-alpha.10"
       }
     },
     {
       "name": "@openelement/create",
+      "status": "published",
       "registry": {
         "latest": "0.43.3",
-        "alpha": "1.0.0-alpha.9",
+        "alpha": "1.0.0-alpha.10",
         "beta": "0.44.0-beta.2.2"
       }
     },
     {
       "name": "@openelement/ui",
+      "status": "published",
       "registry": {
         "latest": "0.43.3",
-        "alpha": "1.0.0-alpha.9",
+        "alpha": "1.0.0-alpha.10",
         "beta": "0.44.0-beta.2.2"
       }
     }
   ],
   "commonCompleteVersion": null,
-  "commonCompleteVersionNote": "No stable version is published for all four packages. @openelement/router has only 0.41.0 prereleases; the 0.43.3 stable line covers element, create, and ui only. Any non-null value here must be present in every package and is verified by release:registry-check.",
+  "commonCompleteVersionNote": "No stable version is published for every published package. @openelement/router has only 0.41.0 prereleases; the 0.43.3 stable line covers element, create, and ui only. Any non-null value here must be present in every published package and is verified by release:registry-check. Schema v4 (#1557): packages awaiting their first publish carry status \"unpublished\" and no registry object; the alpha.11 release commit flips them to \"published\" with their dist-tags.",
   "latestPrerelease": {
-    "version": "1.0.0-alpha.9",
+    "version": "1.0.0-alpha.10",
     "distTag": "alpha",
-    "state": "complete",
+    "state": "partial",
     "publishedPackages": [
       "@openelement/element",
       "@openelement/router",
       "@openelement/create",
       "@openelement/ui"
     ],
-    "missingPackages": []
+    "missingPackages": [
+      "@openelement/protocol",
+      "@openelement/compiler"
+    ]
   }
 }

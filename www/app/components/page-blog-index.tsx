@@ -1,5 +1,8 @@
 import { element, OpenElement, property } from '@openelement/element';
-import { pageBlogIndexStyles } from './page-blog-index-styles.ts';
+import pageBlogIndexStyles from './page-blog-index.css';
+import '#site-ui/open-reading-shell.tsx';
+import '#site-ui/open-artifact-panel.tsx';
+import '../islands/open-page-rail.tsx';
 
 interface BlogIndexRow {
   slug: string;
@@ -13,7 +16,7 @@ interface BlogIndexRow {
 
 @element('blog-index')
 export default class BlogIndexPage extends OpenElement {
-  static override styles = pageBlogIndexStyles;
+  static override styles = [pageBlogIndexStyles];
 
   @property({ reflect: false, attribute: false })
   featuredHref = '';

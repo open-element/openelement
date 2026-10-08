@@ -17,7 +17,7 @@ import type {
   CompatibilityClassification,
   OpenElementPackageManifest,
   RouteEntry,
-} from '../src/vite/internal/protocol/framework.ts';
+} from '@openelement/protocol/framework';
 
 const routes: RouteEntry[] = [
   {

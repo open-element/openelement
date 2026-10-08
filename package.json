@@ -10,9 +10,9 @@
   "scripts": {
     "check": "node tools/repo/gate.ts fmt:check lint typecheck @openelement/tools-repo#lint:markdown",
     "check:dep-age": "node tools/repo/check-dependency-age.ts",
-    "test": "pnpm run generate:all && vitest run --project element --project router --project create --project ui --project saas --project www --project tools --project tests --project benchmarks",
+    "test": "pnpm run generate:all && vitest run --project element --project compiler --project router --project create --project ui --project saas --project www --project tools --project tests --project benchmarks",
     "test:e2e": "node tools/repo/gate.ts site:build @openelement/www#e2e:browsers @openelement/fixture-router-native-framework#e2e @openelement/fixture-router-lit-framework#e2e",
-    "build": "pnpm -r --filter @openelement/element --filter @openelement/router --filter @openelement/create --filter @openelement/ui run build",
+    "build": "pnpm -r --filter @openelement/protocol --filter @openelement/element --filter @openelement/compiler --filter @openelement/router --filter @openelement/create --filter @openelement/ui run build",
     "verify": "node tools/repo/gate.ts check test @openelement/tools-repo#gate:source saas:verify saas:workers @openelement/tools-release#gate:packed",
     "release:check": "node tools/repo/gate.ts @openelement/tools-repo#generate:all @openelement/tools-repo#release:registry-check @openelement/tools-repo#gate:release @openelement/tools-release#gate:packed @openelement/tools-release#publish:npm:dry-run",
     "site:build": "node tools/repo/gate.ts @openelement/tools-repo#generate:all @openelement/www#build @openelement/www#pagefind @openelement/www#emit:redirects @openelement/www#emit:sitemap @openelement/www#emit:rss",
@@ -26,12 +26,14 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
-    "typecheck": "pnpm -r --filter @openelement/element --filter @openelement/router --filter @openelement/create --filter @openelement/ui run typecheck",
+    "typecheck": "pnpm -r --filter @openelement/protocol --filter @openelement/element --filter @openelement/compiler --filter @openelement/router --filter @openelement/create --filter @openelement/ui run typecheck",
     "gate:release": "node tools/repo/gate.ts @openelement/tools-repo#gate:release @openelement/tools-release#gate:packed",
     "saas:workers": "node tools/repo/gate.ts @openelement/saas#build @openelement/saas#nitro:build-workers @openelement/tools-repo#workers:boundary-check",
-    "verify:core": "node tools/repo/gate.ts @openelement/tools-repo#gate:source @openelement/tools-release#gate:packed"
+    "verify:core": "node tools/repo/gate.ts @openelement/tools-repo#gate:source @openelement/tools-release#gate:packed",
+    "prepare": "node_modules/.bin/vp run --fail-if-no-match @openelement/tools-repo#hooks:install"
   },
   "devDependencies": {
+    "@openelement/compiler": "workspace:*",
     "@openelement/element": "workspace:*",
     "@openelement/ui": "workspace:*",
     "@playwright/test": "1.59.1",

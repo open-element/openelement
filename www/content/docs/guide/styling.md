@@ -18,7 +18,7 @@ Class, id, and tag selectors from a document stylesheet never match inside the s
 
 ## The two supported patterns
 
-One: a scoped `StyleSheet` — `const s = new StyleSheet(); s.replaceSync(...);` and assign it as the component's `static styles` so it lands in the shadow root (adoptedStyleSheets on shadow roots, a document-head sink on light roots). Two: CSS custom properties defined on `:root`, which inherit through the shadow boundary. Document-level `<link rel="stylesheet">` and `<style>` in the head do not apply to shadow content, and raw-text `<style>` tags are rejected from compiled templates.
+One: a real `.css` file imported into the component and arrayed in its `static styles` — the one style authoring form (#1558). The build's style-asset pipeline resolves the import: shadow components get the sheet adopted through `adoptedStyleSheets` (a real `.css` asset in island chunks, never JS-embedded bytes), and the server inlines the same bytes into the SSR output for light roots. Two: CSS custom properties defined on `:root`, which inherit through the shadow boundary. Document-level `<link rel="stylesheet">` and `<style>` in the head do not apply to shadow content, and raw-text `<style>` tags are rejected from compiled templates.
 
 ### A document-level stylesheet (does not apply)
 
@@ -27,34 +27,27 @@ One: a scoped `StyleSheet` — `const s = new StyleSheet(); s.replaceSync(...);`
 .card { border: 1px solid silver; }  /* never matches page content */
 ```
 
-### A scoped StyleSheet (applies)
+### A component `.css` file (applies)
 
-```tsx
-// app/components/page-example.styles.ts — sheets live outside compiled modules
-import { StyleSheet } from '@openelement/element';
-
-const styles = new StyleSheet();
-styles.replaceSync(`
-  :host { display: block; }
-  .card {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 1rem;
-    color: var(--text-primary);
-  }
-`);
-
-export default styles;
+```css
+/* app/components/page-example.css — the sheet is a file, not a JS string */
+:host { display: block; }
+.card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem;
+  color: var(--text-primary);
+}
 ```
 
 ```tsx
 // app/components/page-example.tsx — compiled by the open:compiled-element transform
-import { element, OpenElement } from '@openelement/element';
-import styles from './page-example.styles.ts';
+import { element, OpenElement, type StyleSheetLike } from '@openelement/element';
+import styles from './page-example.css';
 
 @element('page-example', { root: 'shadow-open' })
 export default class ExamplePage extends OpenElement {
-  static override styles = styles;
+  static override styles: StyleSheetLike[] = [styles];
 
   render() {
     return <section class='card'>Themed through custom properties.</section>;
@@ -62,9 +55,11 @@ export default class ExamplePage extends OpenElement {
 }
 ```
 
+Inline sheet strings are retired: a compiled module's `static styles` must array `.css` imports, and anything else fails the build with OEC9029.
+
 ## Custom properties in practice
 
-The starter defines a design-token layer on `:root` (colors, fonts, spacing) precisely so pages can be themed entirely through custom properties. Theme with tokens first; use the component `StyleSheet` for the page-internal layout and typography.
+The starter defines a design-token layer on `:root` (colors, fonts, spacing) precisely so pages can be themed entirely through custom properties. Theme with tokens first; use the component's `.css` sheet for the page-internal layout and typography.
 
 ## See also
 

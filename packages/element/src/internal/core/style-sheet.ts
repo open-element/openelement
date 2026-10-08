@@ -6,7 +6,7 @@
  * used by OpenElement and renderDsd().
  */
 
-import type { StyleSheetLike, StyleSheetRule } from '../protocol/style-sheet.ts';
+import type { StyleSheetLike, StyleSheetRule } from '@openelement/protocol/style-sheet';
 export type { StyleSheetLike, StyleSheetRule };
 
 function parseRules(css: string): StyleSheetRule[] {

@@ -10,7 +10,7 @@ import { element, OpenElement, property } from '@openelement/element';
 import '#site-ui/open-reading-shell.tsx';
 import '../site-ui/open-section-frame.tsx';
 import '../islands/open-page-rail.tsx';
-import { pageReferenceStyles } from './page-reference-styles.ts';
+import pageReferenceStyles from './page-reference.css';
 
 export interface ApiPackageItem {
   id: string;
@@ -102,7 +102,7 @@ interface ApiMetadata {
 // the fallback for classes without one.
 @element('reference-page')
 export default class ReferencePage extends OpenElement {
-  static override styles = pageReferenceStyles;
+  static override styles = [pageReferenceStyles];
 
   @property({ reflect: false, attribute: false })
   metadata: ApiMetadata = { breadcrumb: '', title: '', lede: '' };

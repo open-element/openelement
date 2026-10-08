@@ -83,7 +83,7 @@ export { OpenElementBuildContext } from './build-context.ts';
 export type { ArtifactInfo, BuildManifest } from './build-manifest.ts';
 
 // Protocol type re-exports
-export type { SpeculationRulesOptions, SsgBehaviorOptions } from './internal/protocol/ssg.ts';
+export type { SpeculationRulesOptions, SsgBehaviorOptions } from '@openelement/protocol/ssg';
 
 // Head injection (public helpers)
 export { buildHeadExtras } from './head-injection.ts';

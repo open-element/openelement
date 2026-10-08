@@ -8,7 +8,8 @@ import {
 import '@openelement/ui/open-button';
 import '#site-ui/open-reading-shell.tsx';
 import '../islands/open-page-rail.tsx';
-import { pageChangelogStyles } from './page-changelog-styles.ts';
+import pageChangelogStyles from './page-changelog.css';
+import '#site-ui/open-artifact-panel.tsx';
 
 interface ChangelogRailItem {
   id: string;
@@ -19,7 +20,7 @@ interface ChangelogRailItem {
 
 @element('changelog-page')
 export default class PageChangelog extends OpenElement {
-  static override styles = pageChangelogStyles;
+  static override styles = [pageChangelogStyles];
 
   @property({ reflect: false, attribute: false })
   eyebrow = '';

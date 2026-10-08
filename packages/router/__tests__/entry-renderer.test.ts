@@ -14,7 +14,7 @@ import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/inde
 import { resetCorsOriginWarningForTests } from '../src/vite/internal/ssg/entry-server-codegen.ts';
 import { createAppShellRuntime } from '../src/vite/internal/server-runtime/document-runtime.ts';
 import { routeMeta } from '../src/vite/internal/server-runtime/page-render.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import type { RouteEntry } from '@openelement/protocol/framework';
 
 // Fixtures
 
@@ -123,15 +123,17 @@ test('renderEntry: CSP with nonce generates per-request nonce', () => {
   // ADR-0160 rule a: nonce creation and policy instantiation are calls into
   // the imported @openelement/router/server-runtime module; the template is
   // generated data (the nonce semantics themselves are pinned by
-  // server-runtime-response-channel.test.ts). The hono/ssg prerender pass
+  // server-runtime-response-channel.test.ts). The prerender pass
   // binds no nonce — static bytes cannot be per-request — so binding is
-  // gated on __ssgPrerenderPass(c.env) and both the context variable and
-  // the CSP header only materialize for request-time dispatches.
+  // gated on __ssgPrerenderPass(c.env) and both the scope variable and
+  // the CSP header only materialize for request-time dispatches (#1560:
+  // the middleware is WinterCG-shaped — scope variable before next(), the
+  // header set on the response after it).
   expect(code).toContain(
     'const nonce = __ssgPrerenderPass(c.env) ? undefined : __cspCreateNonce()',
   );
   expect(code).toContain("if (nonce) c.set('cspNonce', nonce)");
-  expect(code).toContain("if (policy) c.header('Content-Security-Policy', policy)");
+  expect(code).toContain("if (policy) response.headers.set('Content-Security-Policy', policy)");
   // v0.3.1: NONCE_PLACEHOLDER template approach (fixes missing closing quote bug)
   expect(code).toContain('NONCE_PLACEHOLDER');
   expect(code).toContain(
@@ -195,10 +197,8 @@ test('renderEntry: _middleware.ts generates an app.use scope with the WinterCG a
   expect(code).toContain('$apiMiddleware');
   expect(code).toContain('app.use(');
   // The author-facing contract is the WinterCG shape (request, next); the
-  // entry adapts it into the Hono chain in place.
-  expect(code).toContain(
-    'app.use("/api/*", (c, next) => $apiMiddleware.default(c.req.raw, async () => { await next(); return c.res; }))',
-  );
+  // app speaks the same shape, so the default registers directly (#1560).
+  expect(code).toContain('app.use("/api/*", $apiMiddleware.default)');
 });
 
 test('buildEntryDescriptor: special routes are separated from page/api', () => {
@@ -834,7 +834,7 @@ test('renderEntry: logger middleware', () => {
   });
   const code = renderEntry(desc);
 
-  expect(code).toContain('honoLogger');
+  expect(code).toContain('__logger()');
 });
 
 test('renderEntry: no middleware generates clean app', () => {
@@ -851,7 +851,7 @@ test('renderEntry: no middleware generates clean app', () => {
   expect(code.includes('cors')).toEqual(false);
   expect(code.includes('secureHeaders')).toEqual(false);
   expect(code.includes('requestId')).toEqual(false);
-  expect(code.includes('honoLogger')).toEqual(false);
+  expect(code.includes('__logger(')).toEqual(false);
 });
 
 test('renderEntry: SSG mode disabled by default', () => {
@@ -1002,7 +1002,7 @@ test('renderEntry: action POST wiring follows the ADR-0120 protocol', () => {
   // leaf and binds the middleware itself, so the entry carries neither the
   // serialized number nor the binding line (only the destructured middleware).
   expect(code).toContain(
-    '__pageHandlers["/"].POST = [__asFetchMiddleware(__actionBodyLimit), __asFetchHandler(async (c, __route) => {',
+    '__pageHandlers["/"].POST = [__actionBodyLimit, async (request, __route) => {',
   );
   expect(code.includes('__maxActionBodyBytes')).toBeFalsy();
   expect(code.includes('createActionBodyLimit')).toBeFalsy();
@@ -1035,17 +1035,13 @@ test('renderEntry: ADR-0121 hardening wiring is present in the action codegen', 
   expect(code).toContain("c.header('Cache-Control', 'private, no-cache');");
   // #572: non-GET/POST methods on page routes are a defined 405.
   expect(code).toContain('const __routeMiddleware = __createRouteMiddleware([');
-  expect(code).toContain(
-    "app.all('*', (c, next) => { __honoContexts.set(c.req.raw, c); return __routeMiddleware(c.req.raw,",
-  );
+  expect(code).toContain('app.route(__routeMiddleware);');
   // The Hono↔WinterCG bridge is the factory's own bridge, destructured once
   // (ADR-0160 rule a, #1470 block e — the bridge creation moved into
   // createGeneratedApp; the 405 responder is the factory-bound dispatch
   // module).
   expect(code).toContain('methodNotAllowed: __methodNotAllowed,');
-  expect(code).toContain(
-    'const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = __app.hono;',
-  );
+  expect(code).toContain('const { requestScope: __requestScope } = __app;');
   expect(code.includes('const __honoContexts = new WeakMap();')).toBeFalsy();
   expect(code.includes('createHonoBridge')).toBeFalsy();
 });
@@ -1197,7 +1193,7 @@ test('renderEntry: middleware.corsOriginModule is imported and referenced, never
   const code = renderEntry(desc);
 
   expect(code).toContain('import * as __cors_origin_module from "/app/cors-origin.ts";');
-  expect(code).toContain("app.use('*', cors({ origin: __cors_origin_module.default,");
+  expect(code).toContain("app.use('*', __cors({ origin: __cors_origin_module.default,");
 });
 
 test('renderEntry: no middleware.use keeps the single composed handler export', () => {
@@ -1270,7 +1266,7 @@ test('renderEntry: /404 page route emits the styled notFound fallback (#923)', (
     { path: '/404', filePath: '404.tsx', type: 'page', varName: 'page404' },
   ];
   const code = renderEntry(buildEntryDescriptor(routes));
-  expect(code).toContain('app.notFound(async (c) => {');
+  expect(code).toContain('app.notFound(async (request) => {');
   expect(code).toContain('// Styled 404 (#923)');
   expect(code).toContain('page404.loader === "function"');
   expect(code).toContain('__renderAppShell(__content, c.req.path || "/404",');

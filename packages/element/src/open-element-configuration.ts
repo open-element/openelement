@@ -1,4 +1,4 @@
-import type { StyleSheetLike } from './internal/protocol/style-sheet.ts';
+import type { StyleSheetLike } from '@openelement/protocol/style-sheet';
 import { OpenElementBase } from './open-element-base.ts';
 import { themeManager } from './open-element-styles.ts';
 

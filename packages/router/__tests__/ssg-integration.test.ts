@@ -20,7 +20,7 @@ import process from 'node:process';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { join } from 'node:path';
 import { injectCspMeta, islandChunkMapFromAssetManifest } from '../src/vite/internal/ssg/index.ts';
-import type { ClientAssetManifest } from '../src/vite/internal/protocol/client-assets.ts';
+import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
 
 // ─── Test fixtures ─────────────────────────────────────────────
 

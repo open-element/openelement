@@ -19,10 +19,10 @@
 
 import { expect, test } from 'vitest';
 import { isSafeAttributeName as securityFace } from '../src/internal/core/security.ts';
-import { isAttributeName as wireValidatorFace } from '../src/internal/protocol/part-program.ts';
-import { isSafeAttributeName as compilerFace } from '../src/internal/compiler/semantic-core/analyze-module.ts';
+import { isAttributeName as wireValidatorFace } from '@openelement/protocol/part-program';
+import { isSafeAttributeName as compilerFace } from '../../../packages/compiler/src/internal/compiler/semantic-core/analyze-module.ts';
 import { attributeNameIsSafe as serverFace } from '../src/internal/compiled/server/shared.ts';
-import { isSafeAttributeName as canonical } from '../src/internal/protocol/forbidden-sinks.ts';
+import { isSafeAttributeName as canonical } from '@openelement/protocol/forbidden-sinks';
 // The exact binding the router head-injection path imports
 // (`@openelement/element/authoring`), so the head channel's fail-closed
 // rejection is pinned at the seam the router actually consumes.

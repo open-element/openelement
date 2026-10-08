@@ -1,13 +1,13 @@
 /**
- * @openelement/router — the island style asset protocol's intercepting plugin
- * (ADR-0164, #1553 production lane).
+ * @openelement/router — the style-edge intercept (the ADR-0164 protocol after
+ * the #1558 file-based authoring retirement).
  *
- * Unit coverage of the router-side seam: the fail-closed intercept of the
- * compiler's `.oe-style.css` requests, the client build's `.css` emission
- * (content-hashed file name, verbatim bytes, emission records), the sheet
- * adapter forms (fetch + TLA today; the native form behind the recorded
- * capability verdict), and the SSR half's same-asset read with the recorded
- * hash reconciliation. The real-build consumer form — island JS without
+ * Unit coverage of the router-side seam: the fail-closed intercept of a
+ * compiled module's authored `.css` edges, the client build's `.css` emission
+ * (content-hashed file name, verbatim file bytes, emission records), the
+ * sheet adapter forms (fetch + TLA today; the native form behind the recorded
+ * capability verdict), the SSR half reading the same authored file, and the
+ * dev inline adapter. The real-build consumer form — island JS without
  * component CSS text, the emitted asset, the manifest styles field,
  * multi-island reuse — is pinned by style-asset-build.test.ts.
  */
@@ -19,8 +19,9 @@ import { beforeEach, afterEach, expect, test } from 'vitest';
 import {
   clearStyleRequests,
   registerStyleRequest,
+  styleRequestFile,
   styleRequestModuleId,
-} from '@openelement/element/compiler';
+} from '@openelement/compiler';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { OpenElementError } from '@openelement/element';
 import { ClientBuildErrorCode } from '../src/internal/error-codes.ts';
@@ -38,8 +39,7 @@ import {
   styleAssetRegistryKey,
 } from '../src/vite/internal/style-assets.ts';
 
-const IMPORTER = '/proj/app/islands/open-layout.tsx';
-const REGISTRY_KEY = styleRequestModuleId(IMPORTER, './open-layout.oe-style.css');
+const SPECIFIER = './open-layout.css';
 const SHEET = ':host { display: block; }\n.open-layout { color: red; }\n';
 
 interface EmittedAsset {
@@ -57,124 +57,136 @@ function harness(emitted: EmittedAsset[]) {
   };
 }
 
-function serverLoad(
-  records: ReadonlyMap<string, StyleAssetRecord>,
-  clientOutDir: string,
-  graphId: string,
-): Promise<string | null> {
-  const plugin = serverStyleAssetPlugin({ styleAssets: records, clientOutDir });
-  const load = plugin.load as (this: unknown, id: string) => Promise<string | null>;
-  return load.call({}, graphId);
-}
+let sheetDir: string;
+let importer: string;
+let sheetFile: string;
+let registryKey: string;
 
-beforeEach(() => {
+beforeEach(async () => {
   clearStyleRequests();
+  sheetDir = await mkdtemp(join(tmpdir(), 'oe-style-assets-'));
+  // A tracked importing module and its authored sheet file: the protocol's
+  // one byte source.
+  importer = join(sheetDir, 'app', 'islands', 'open-layout.tsx');
+  sheetFile = styleRequestFile(importer, SPECIFIER);
+  registryKey = styleRequestModuleId(importer, SPECIFIER);
+  await mkdir(join(sheetDir, 'app', 'islands'), { recursive: true });
+  await writeFile(sheetFile, SHEET, 'utf8');
   registerStyleRequest({
-    tag: 'open-layout',
-    specifier: './open-layout.oe-style.css',
-    css: SHEET,
-    moduleId: REGISTRY_KEY,
-    importer: IMPORTER,
+    moduleId: registryKey,
+    importer,
+    specifier: SPECIFIER,
+    file: sheetFile,
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   clearStyleRequests();
+  await rm(sheetDir, { recursive: true, force: true });
 });
 
 test('graph ids round-trip the registry key behind a JS-typed virtual id', () => {
-  const graphId = styleAssetGraphId(REGISTRY_KEY);
-  // The id must not end with the reserved suffix: the toolchain infers the
-  // module type from the extension, and a .css-suffixed id is processed as a
-  // CSS module — the load result is ignored (reproduced MISSING_EXPORT).
-  expect(graphId.endsWith('.oe-style.css')).toBe(false);
+  const graphId = styleAssetGraphId(registryKey);
+  // The id must not end with a css suffix: the toolchain infers the module
+  // type from the extension, and a .css-suffixed id is processed as a CSS
+  // module — the load result is ignored (reproduced MISSING_EXPORT).
+  expect(graphId.endsWith('.css')).toBe(false);
   expect(graphId.endsWith('.js')).toBe(true);
-  expect(styleAssetRegistryKey(graphId)).toEqual(REGISTRY_KEY);
-  expect(styleAssetRegistryKey('./open-layout.oe-style.css')).toBeUndefined();
+  expect(styleAssetRegistryKey(graphId)).toEqual(registryKey);
+  expect(styleAssetRegistryKey('./open-layout.css')).toBeUndefined();
 });
 
-test('the client plugin resolves registered requests and leaves everything else alone', () => {
+test('the client plugin intercepts edges from tracked importers only', () => {
   const plugin = clientStyleAssetPlugin(new Map<string, StyleAssetRecord>());
   const resolveId = plugin.resolveId as (
     this: unknown,
     source: string,
     importer?: string,
   ) => string | null;
-  expect(resolveId.call({}, './open-layout.oe-style.css', IMPORTER)).toEqual(
-    styleAssetGraphId(REGISTRY_KEY),
-  );
-  // Non-request specifiers pass through untouched.
-  expect(resolveId.call({}, './open-layout.css', IMPORTER)).toEqual(null);
-  expect(resolveId.call({}, './styles.css', IMPORTER)).toEqual(null);
+  expect(resolveId.call({}, SPECIFIER, importer)).toEqual(styleAssetGraphId(registryKey));
+  // A plain app stylesheet (importer with no registered edges) passes
+  // through to vite's own CSS channel untouched.
+  expect(resolveId.call({}, './global.css', '/proj/app/other.ts')).toEqual(null);
+  // An importer-less .css source is never an authored module edge.
+  expect(resolveId.call({}, SPECIFIER)).toEqual(null);
+  // Query-suffixed specifiers (string channels) are not sheet edges.
+  expect(resolveId.call({}, './open-layout.css?raw', importer)).toEqual(null);
 });
 
-test('the client plugin fails closed on a request with no registered payload', () => {
+test('the client plugin fails closed on a tracked edge with no registry entry', () => {
   const plugin = clientStyleAssetPlugin(new Map<string, StyleAssetRecord>());
   const resolveId = plugin.resolveId as (
     this: unknown,
     source: string,
     importer?: string,
   ) => string | null;
-  // A hand-written import of the reserved suffix: no payload channel exists.
+  // A tracked importer whose .css edge carries no entry: a defect (the
+  // compiled-element transform registers every edge it admits).
+  registerStyleRequest({
+    moduleId: styleRequestModuleId(importer, './tracked.css'),
+    importer,
+    specifier: './tracked.css',
+    file: styleRequestFile(importer, './tracked.css'),
+  });
   const error = assertThrowsIncludes(
-    () => resolveId.call({}, './rogue.oe-style.css', IMPORTER),
+    () => resolveId.call({}, './rogue.css', importer),
     OpenElementError,
   );
   expect(error.code).toEqual(ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED);
-  // An importer-less request has no registry key to answer with.
-  const noImporter = assertThrowsIncludes(
-    () => resolveId.call({}, './open-layout.oe-style.css'),
-    OpenElementError,
-  );
-  expect(noImporter.code).toEqual(ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED);
 });
 
-test('the client build emits the verbatim sheet under a content-hashed file name', () => {
+test('the client build emits the authored file bytes under a content-hashed name', async () => {
   const emitted: EmittedAsset[] = [];
   const records = new Map<string, StyleAssetRecord>();
   const plugin = clientStyleAssetPlugin(records);
   const load = plugin.load as (
     this: { emitFile(file: unknown): string },
     id: string,
-  ) => string | null;
-  load.call(harness(emitted), styleAssetGraphId(REGISTRY_KEY));
+  ) => Promise<string | null>;
+  const adapter = (await load.call(harness(emitted), styleAssetGraphId(registryKey))) as string;
 
   expect(emitted).toHaveLength(1);
-  // The artifact owner is the client build; the bytes are the request's own
-  // CSS, verbatim — the DSD text and the runtime replace() text derive from
+  // The artifact owner is the client build; the bytes are the authored
+  // file's own — the DSD text and the runtime replace() text derive from
   // exactly these bytes.
   expect(emitted[0].source).toEqual(SHEET);
   expect(emitted[0].fileName).toEqual(styleAssetFileName(SHEET));
   expect(emitted[0].fileName).toMatch(/^assets\/[0-9a-f]{12}\.css$/);
-  expect(records.get(REGISTRY_KEY)).toEqual({
+  expect(records.get(registryKey)).toEqual({
     fileName: emitted[0].fileName,
     hash: styleAssetHash(SHEET),
   });
+  // The fetch adapter references the emission for the sheet.
+  expect(adapter).toContain(`import.meta.ROLLUP_FILE_URL_ref-1`);
 });
 
-test('identical sheet bytes deduplicate into one emission (multi-island reuse)', () => {
-  // A second island module carries the same sheet: a distinct registry key,
-  // the same content hash — one emitted asset, one URL, two adapters.
-  const otherImporter = '/proj/app/islands/open-dock.tsx';
-  const otherKey = styleRequestModuleId(otherImporter, './open-dock.oe-style.css');
+test('identical sheet bytes deduplicate into one emission (multi-island reuse)', async () => {
+  // A second island carries the same sheet: a distinct registry key, the
+  // same content hash — one emitted asset, one URL, two adapters.
+  const otherImporter = join(sheetDir, 'app', 'islands', 'open-dock.tsx');
+  const otherSpecifier = './open-dock.css';
+  const otherKey = styleRequestModuleId(otherImporter, otherSpecifier);
   registerStyleRequest({
-    tag: 'open-dock',
-    specifier: './open-dock.oe-style.css',
-    css: SHEET,
     moduleId: otherKey,
     importer: otherImporter,
+    specifier: otherSpecifier,
+    file: styleRequestFile(otherImporter, otherSpecifier),
   });
+  const parts = styleRequestFile(otherImporter, otherSpecifier).split('/');
+  await mkdir(parts.slice(0, -1).join('/'), { recursive: true });
+  await writeFile(styleRequestFile(otherImporter, otherSpecifier), SHEET, 'utf8');
+
   const emitted: EmittedAsset[] = [];
   const records = new Map<string, StyleAssetRecord>();
   const plugin = clientStyleAssetPlugin(records);
   const load = plugin.load as (
     this: { emitFile(file: unknown): string },
     id: string,
-  ) => string | null;
-  const first = load.call(harness(emitted), styleAssetGraphId(REGISTRY_KEY));
-  const second = load.call(harness(emitted), styleAssetGraphId(otherKey));
+  ) => Promise<string | null>;
+  const first = (await load.call(harness(emitted), styleAssetGraphId(registryKey))) as string;
+  const second = (await load.call(harness(emitted), styleAssetGraphId(otherKey))) as string;
   expect(emitted).toHaveLength(1);
-  expect(records.get(otherKey)).toEqual(records.get(REGISTRY_KEY));
+  expect(records.get(otherKey)).toEqual(records.get(registryKey));
   // Both adapters reference the same build-global file-URL reference, which
   // the bundler rewrites to the same hashed asset URL in each chunk.
   const firstUrl = /import\.meta\.ROLLUP_FILE_URL_(\w+)/.exec(first)?.[1];
@@ -208,90 +220,56 @@ test('the native adapter form is the import-attribute shape and stays behind the
   expect(sheetAdapterForm()).toEqual('fetch');
 });
 
-test('the SSR half serves the same emitted asset, hash-checked against the record', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'oe-style-assets-'));
-  try {
-    const fileName = styleAssetFileName(SHEET);
-    await mkdir(join(dir, 'assets'), { recursive: true });
-    await writeFile(join(dir, fileName), SHEET, 'utf8');
-    const records = new Map<string, StyleAssetRecord>([
-      [REGISTRY_KEY, { fileName, hash: styleAssetHash(SHEET) }],
-    ]);
-    const adapter = await serverLoad(records, dir, styleAssetGraphId(REGISTRY_KEY));
-    // The sheet text is the asset's own bytes — the DSD text cannot drift
-    // from the client sheet (both are these bytes).
-    expect(adapter).toContain(`sheet.replaceSync(${JSON.stringify(SHEET)});`);
-    expect(adapter).toContain("import { StyleSheet } from '@openelement/element';");
-    expect(adapter).not.toContain('document.head');
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+test('the SSR half embeds the authored file bytes — one fact, no reconciliation', async () => {
+  const plugin = serverStyleAssetPlugin();
+  const load = plugin.load as (this: unknown, id: string) => Promise<string | null>;
+  const adapter = (await load.call({}, styleAssetGraphId(registryKey))) as string;
+  // The sheet text is the authored file's own bytes — the same bytes the
+  // client build emitted content-hashed — so the DSD text cannot drift from
+  // the client sheet.
+  expect(adapter).toContain(`sheet.replaceSync(${JSON.stringify(SHEET)});`);
+  expect(adapter).toContain("import { StyleSheet } from '@openelement/element';");
+  expect(adapter).not.toContain('document.head');
 });
 
-test('the SSR half fails closed when the asset record, file or hash is missing', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'oe-style-assets-'));
-  try {
-    const fileName = styleAssetFileName(SHEET);
-    await mkdir(join(dir, 'assets'), { recursive: true });
-    // No record at all: Phase 2 never ran for this graph.
-    const unmapped = await assertRejectsIncludes(
-      () => serverLoad(new Map(), dir, styleAssetGraphId(REGISTRY_KEY)),
-      OpenElementError,
-    );
-    expect(unmapped.code).toEqual(ClientBuildErrorCode.STYLE_ASSET_UNMAPPED);
-
-    // A record whose file is gone (stale dist).
-    const missing = await assertRejectsIncludes(
-      () =>
-        serverLoad(
-          new Map([[REGISTRY_KEY, { fileName, hash: styleAssetHash(SHEET) }]]),
-          dir,
-          styleAssetGraphId(REGISTRY_KEY),
-        ),
-      OpenElementError,
-    );
-    expect(missing.code).toEqual(ClientBuildErrorCode.STYLE_ASSET_UNMAPPED);
-
-    // The file exists but its bytes were rewritten: the DSD text would no
-    // longer be the bytes the client sheet serves.
-    await writeFile(join(dir, fileName), ':host { display: none; }\n', 'utf8');
-    const mismatch = await assertRejectsIncludes(
-      () =>
-        serverLoad(
-          new Map([[REGISTRY_KEY, { fileName, hash: styleAssetHash(SHEET) }]]),
-          dir,
-          styleAssetGraphId(REGISTRY_KEY),
-        ),
-      OpenElementError,
-    );
-    expect(mismatch.code).toEqual(ClientBuildErrorCode.STYLE_ASSET_HASH_MISMATCH);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+test('the SSR half fails closed when the sheet file is missing', async () => {
+  await rm(sheetFile);
+  const plugin = serverStyleAssetPlugin();
+  const load = plugin.load as (this: unknown, id: string) => Promise<string | null>;
+  const error = await assertRejectsIncludes(
+    () => load.call({}, styleAssetGraphId(registryKey)),
+    OpenElementError,
+  );
+  expect(error.code).toEqual(ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED);
 });
 
-test('the dev plugin serves the inline adapter from the registry, fail-closed', () => {
+test('the dev plugin serves the inline adapter from the authored file, fail-closed', async () => {
   const plugin = devStyleAssetPlugin();
   const resolveId = plugin.resolveId as (
     this: unknown,
     source: string,
     importer?: string,
   ) => string | null;
-  expect(resolveId.call({}, './open-layout.oe-style.css', IMPORTER)).toEqual(
-    styleAssetGraphId(REGISTRY_KEY),
-  );
-  // Same fail-closed posture as the builds: an unregistered request has no
-  // payload channel in dev either.
+  expect(resolveId.call({}, SPECIFIER, importer)).toEqual(styleAssetGraphId(registryKey));
+  // Same fail-closed posture as the builds: a tracked edge without a
+  // registry entry fails the resolve.
+  registerStyleRequest({
+    moduleId: styleRequestModuleId(importer, './tracked.css'),
+    importer,
+    specifier: './tracked.css',
+    file: styleRequestFile(importer, './tracked.css'),
+  });
   const error = assertThrowsIncludes(
-    () => resolveId.call({}, './rogue.oe-style.css', IMPORTER),
+    () => resolveId.call({}, './rogue.css', importer),
     OpenElementError,
   );
   expect(error.code).toEqual(ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED);
 
   // The dev adapter rides the module (no emitted asset to fetch): element's
-  // cross-realm StyleSheet + replaceSync, no document-head sink.
-  const load = plugin.load as (this: unknown, id: string) => string | null;
-  const adapter = load.call({}, styleAssetGraphId(REGISTRY_KEY)) as string;
+  // cross-realm StyleSheet + replaceSync with the authored bytes, no
+  // document-head sink.
+  const load = plugin.load as (this: unknown, id: string) => Promise<string | null>;
+  const adapter = (await load.call({}, styleAssetGraphId(registryKey))) as string;
   expect(adapter).toContain("import { StyleSheet } from '@openelement/element';");
   expect(adapter).toContain(`sheet.replaceSync(${JSON.stringify(SHEET)});`);
   expect(adapter).toContain('export default sheet;');

@@ -7,12 +7,12 @@
  * machinery from here.
  */
 
-import type { SignalLike, Unsubscribe } from '../../protocol/signal.ts';
+import type { SignalLike, Unsubscribe } from '@openelement/protocol/signal';
 import type {
   PartProgramV1,
   ProgramEachPart,
   ProgramTreeNode,
-} from '../../protocol/part-program.ts';
+} from '@openelement/protocol/part-program';
 // The single error dialect (#1386 item 3): every failure raised by this module
 // is an OpenElementError carrying a code from the catalogue, so a consumer
 // classifies a compiled-runtime failure by code instead of by message prefix.
@@ -20,7 +20,7 @@ import {
   raiseFrameworkError,
   RUNTIME_MESSAGES_ENABLED,
   RuntimeErrorCode,
-} from '../../protocol/errors.ts';
+} from '@openelement/protocol/errors';
 import type { RuntimeProgramIR } from '../runtime-program.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 

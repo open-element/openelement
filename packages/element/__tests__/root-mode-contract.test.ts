@@ -9,7 +9,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { expect, test } from 'vitest';
-import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
+import { compileElementProgram } from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
 
 function compile(option: string): string {
   const source = `

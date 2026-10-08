@@ -10,99 +10,6 @@
   "repository": "https://github.com/open-element/openelement",
   "declarations": [
     {
-      "tagName": "open-card",
-      "className": "OpenCard",
-      "superclassName": "OpenElement",
-      "description": "Card container with optional `header`/`footer` slots and a themed body",
-      "attributes": [
-        {
-          "name": "variant",
-          "type": "string",
-          "description": "variant attribute"
-        }
-      ],
-      "slots": [
-        {
-          "name": "",
-          "description": "Default slot"
-        },
-        {
-          "name": "header",
-          "description": "The 'header' slot"
-        },
-        {
-          "name": "footer",
-          "description": "The 'footer' slot"
-        }
-      ],
-      "cssParts": [
-        {
-          "name": "container",
-          "description": "The article wrapper"
-        },
-        {
-          "name": "body",
-          "description": "The card body content area"
-        }
-      ],
-      "openElement": {
-        "ssr": true,
-        "dsd": true,
-        "layer": "dsd-static",
-        "hydrate": "idle",
-        "status": "experimental",
-        "module": "@openelement/ui/open-card",
-        "export": "OpenCard"
-      }
-    },
-    {
-      "tagName": "open-callout",
-      "className": "OpenCallout",
-      "superclassName": "OpenElement",
-      "description": "Callout/notice box for inline documentation alerts.",
-      "attributes": [
-        {
-          "name": "type",
-          "type": "string",
-          "description": "type attribute"
-        },
-        {
-          "name": "label",
-          "type": "string",
-          "description": "label attribute"
-        }
-      ],
-      "slots": [
-        {
-          "name": "",
-          "description": "Default slot"
-        }
-      ],
-      "cssParts": [
-        {
-          "name": "container",
-          "description": "The callout wrapper"
-        },
-        {
-          "name": "icon",
-          "description": "The type icon span"
-        },
-        {
-          "name": "content",
-          "description": "The content area"
-        }
-      ],
-      "openElement": {
-        "ssr": true,
-        "dsd": true,
-        "layer": "dsd-static",
-        "hydrate": "idle",
-        "status": "experimental",
-        "module": "@openelement/ui/open-callout",
-        "export": "OpenCallout"
-      }
-    },
-    {
       "tagName": "open-button",
       "className": "OpenButton",
       "superclassName": "OpenElement",
@@ -339,45 +246,6 @@
       }
     },
     {
-      "tagName": "open-badge",
-      "className": "OpenBadge",
-      "superclassName": "OpenElement",
-      "description": "Compact status badge themed by the shadcn role table (C3 #1506).",
-      "attributes": [
-        {
-          "name": "tone",
-          "type": "string",
-          "description": "tone attribute"
-        },
-        {
-          "name": "size",
-          "type": "string",
-          "description": "size attribute"
-        }
-      ],
-      "slots": [
-        {
-          "name": "",
-          "description": "Default slot"
-        }
-      ],
-      "cssParts": [
-        {
-          "name": "badge",
-          "description": "The badge span"
-        }
-      ],
-      "openElement": {
-        "ssr": true,
-        "dsd": true,
-        "layer": "dsd-static",
-        "hydrate": "idle",
-        "status": "stable",
-        "module": "@openelement/ui/open-badge",
-        "export": "OpenBadge"
-      }
-    },
-    {
       "tagName": "open-dialog",
       "className": "OpenDialog",
       "superclassName": "OpenElement",
@@ -481,31 +349,6 @@
         "status": "experimental",
         "module": "@openelement/ui/open-dropdown",
         "export": "OpenDropdown"
-      }
-    },
-    {
-      "tagName": "open-tabs",
-      "className": "OpenTabs",
-      "superclassName": "OpenElement",
-      "description": "WAI-ARIA tabs pattern. The slotted [slot=\"tab\"] and [slot=\"panel\"] elements",
-      "slots": [
-        {
-          "name": "tab",
-          "description": "Tab label element (one per panel)"
-        },
-        {
-          "name": "panel",
-          "description": "Panel shown while its tab is active"
-        }
-      ],
-      "openElement": {
-        "ssr": true,
-        "dsd": true,
-        "layer": "dsd-interactive",
-        "hydrate": "load",
-        "status": "experimental",
-        "module": "@openelement/ui/open-tabs",
-        "export": "OpenTabs"
       }
     }
   ]

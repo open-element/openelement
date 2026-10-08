@@ -23,7 +23,7 @@
 
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
-import { validatePartProgram } from '../../src/internal/protocol/part-program.ts';
+import { validatePartProgram } from '@openelement/protocol/part-program';
 import { PartProgramClaimError } from '../../src/internal/compiled/runtime.ts';
 import { testProgram } from '../compiled-runtime/test-program.ts';
 import { parseHtml, TestDocument, TestElement, TestText } from '../compiled-runtime/test-dom.ts';

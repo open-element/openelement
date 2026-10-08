@@ -28,7 +28,7 @@ import { readFile } from 'node:fs/promises';
 import { join, relative } from 'pathe';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, ClientAssetErrorCode } from '../internal/error-codes.ts';
-import type { ClientAssetManifest, ClientIslandAsset } from './internal/protocol/client-assets.ts';
+import type { ClientAssetManifest, ClientIslandAsset } from '@openelement/protocol/client-assets';
 import {
   type ClientIslandDeliveryEntry,
   resolveIslandDeliveryTags,

@@ -6,18 +6,16 @@
  * and value-delivery contracts). Zero Lit dependency - built on openElement
  * (native HTMLElement).
  *
- * Components:
+ * Components (frozen roster, owner ruling 2026-10-07 — #1557 retired the four
+ * zero-interaction components open-badge/open-callout/open-card/open-tabs to
+ * plain HTML+CSS recipes documented in the create starter template):
  * - open-button: Button with variants (default, primary, ghost, accent)
- * - open-card: Card container with optional header/footer
- * - open-input: Input field with label and error states
+ * * - open-input: Input field with label and error states
  * - open-code-block: Code block with copy button
- * - open-badge: semantic status badge
- * - open-theme-toggle: Theme toggle Island (Dark/Light)
+ * * - open-theme-toggle: Theme toggle Island (Dark/Light)
  * - open-dialog: Dialog component using native <dialog>
- * - open-callout: Callout/notice box (info/warning/danger/tip)
- * - open-dropdown: Dropdown toggle with trigger slot and content slot
- * - open-tabs: Tab interface with tab and panel slots
- *
+ * * - open-dropdown: Dropdown toggle with trigger slot and content slot
+ * *
  * Usage:
  * ```ts
  * // Import all components
@@ -38,15 +36,11 @@ export { readInstanceState, writeInstanceState } from './instance-state.ts';
 
 // Components
 export { OpenButton } from './open-button.tsx';
-export { OpenCard } from './open-card.tsx';
 export { OpenInput } from './open-input.tsx';
 export { OpenCodeBlock } from './open-code-block.tsx';
-export { OpenBadge } from './open-badge.tsx';
 export { OpenThemeToggle } from './open-theme-toggle.tsx';
 export { OpenDialog } from './open-dialog.tsx';
-export { OpenCallout } from './open-callout.tsx';
 export { OpenDropdown } from './open-dropdown.tsx';
-export { OpenTabs } from './open-tabs.tsx';
 
 // Package manifest (WC Package Protocol)
 // Consumers (the router build) read manifest.declarations to derive island metadata.

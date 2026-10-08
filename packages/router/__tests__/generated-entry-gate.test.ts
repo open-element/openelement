@@ -31,7 +31,7 @@ import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codeg
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { renderEntry } from '../src/vite/internal/ssg/entry-orchestrator.ts';
 import { OPENELEMENT_EXPORT_FILES } from '../src/vite/generated-export-files.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import type { RouteEntry } from '@openelement/protocol/framework';
 
 const REPO_ROOT = new URL('../../../', import.meta.url).pathname;
 const SERVER_RUNTIME_DIR = resolve(REPO_ROOT, 'packages/router/src/vite/internal/server-runtime');

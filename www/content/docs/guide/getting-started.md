@@ -31,8 +31,8 @@ The scaffold is optional. A project that wants only the component runtime instal
 pnpm add @openelement/element
 ```
 
-- **Vite projects** mount the compiler through the package's Vite seam: `import { element } from '@openelement/element/vite'` and add `element()` to `plugins`. The plugin compiles each component's TSX `render()` into the Part Program at build time.
-- **Other bundlers** drive the same compiler programmatically through `@openelement/element/compiler` — the TSX-to-Part-Program core the Vite plugin itself calls — and wire its output into their own pipeline.
+- **Vite projects** mount the compiler through the package's Vite seam: `import { element } from '@openelement/compiler/vite'` and add `element()` to `plugins`. The plugin compiles each component's TSX `render()` into the Part Program at build time.
+- **Other bundlers** drive the same compiler programmatically through `@openelement/compiler` — the TSX-to-Part-Program core the Vite plugin itself calls — and wire its output into their own pipeline.
 - **The output is standard Custom Elements.** A compiled component is a plain class you register with `customElements.define`, so the emitted bundle loads in any page or framework with no runtime to vendor. This path is verified on every release: the packed-artifact consumer qualification installs `@openelement/element` alone (no Router, no scaffold), compiles a component, and loads the bundle from a separate plain-HTML page in three browsers.
 
 ## Explore

@@ -250,13 +250,13 @@ custom properties.
 
 ### Shared recipes (`component-recipes.ts`)
 
-- `controlRecipe` (`.control`): `--color-border`, `--color-foreground`,
+- `control-recipe.css` (`.control`): `--color-border`, `--color-foreground`,
   `--color-popover`, `--color-primary`, `--color-ring`, `--color-violet-400`,
   `--color-white`, `--default-transition-duration`, `--ease-out`,
   `--radius-md`, `--spacing`
-- `surfaceRecipe` (`.surface`) adds: `--color-card`, `--radius-lg`,
+- `surface-recipe.css` (`.surface`) adds: `--color-card`, `--radius-lg`,
   `--shadow-2xl`
-- `overlayRecipe` (`.overlay`) adds: `--radius-xl`
+- `overlay-recipe.css` (`.overlay`) adds: `--radius-xl`
 
 ## Deep customization
 

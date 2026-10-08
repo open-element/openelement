@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import type { RouteEntry } from '@openelement/protocol/framework';
 import { scanStaticComponents } from '../src/vite/internal/ssg/static-component-scanner.ts';
 
 async function write(root: string, path: string, source: string): Promise<void> {

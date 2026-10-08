@@ -25,8 +25,9 @@
  * ```
  */
 import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
-import { log, recipe } from './component-recipes.ts';
+import { log } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
+import openThemeToggleStyles from './open-theme-toggle.css';
 
 @element('open-theme-toggle', { root: 'shadow-open', delegatesFocus: true })
 export class OpenThemeToggle extends OpenElement {
@@ -35,58 +36,7 @@ export class OpenThemeToggle extends OpenElement {
   // theme bundle, or the host's own role table) arrives as page-level
   // CSS from vite.config.ts — CSS custom properties cascade from :root
   // naturally. Only adopt the component-specific sheet.
-  static override styles: StyleSheetLike[] = [
-    recipe(`
-    :host {
-      display: inline-block;
-    }
-
-    .theme-toggle {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 38px; height: 38px; padding: 0;
-      border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
-      border-radius: calc(infinity * 1px);
-      background: color-mix(in srgb, var(--color-popover) 76%, transparent);
-      color: var(--color-muted-foreground);
-      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-background) 70%, transparent);
-      cursor: pointer;
-      transition: all var(--ease-in-out) var(--default-transition-duration);
-    }
-    .theme-toggle:hover {
-      color: var(--color-foreground);
-      border-color: var(--color-violet-400);
-      background: color-mix(in srgb, color-mix(in srgb, var(--color-primary) 16%, transparent) 42%, var(--color-popover));
-    }
-
-    .theme-toggle:focus-visible {
-      outline: calc(var(--spacing) * 0.5) solid var(--color-ring);
-      outline-offset: calc(var(--spacing) * 0.75);
-    }
-
-    .theme-toggle svg {
-      width: 16px;
-      height: 16px;
-    }
-
-    .theme-toggle .icon-sun {
-      display: block;
-    }
-
-    .theme-toggle .icon-moon {
-      display: none;
-    }
-
-    .theme-toggle[data-theme='light'] .icon-sun {
-      display: none;
-    }
-
-    .theme-toggle[data-theme='light'] .icon-moon {
-      display: block;
-    }
-  `),
-  ];
+  static override styles: StyleSheetLike[] = [openThemeToggleStyles];
 
   /** The resolved theme — drives the compiled data-theme sink on the button. */
   @property({ reflect: false })

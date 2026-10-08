@@ -5,14 +5,13 @@
  * properties; this module owns only the compiled element and its markup.
  */
 import { element, OpenElement, property } from '@openelement/element';
-import '@openelement/ui/open-badge';
 import '@openelement/ui/open-button';
 import '../site-ui/open-standards-visual.tsx';
 import '#site-ui/open-artifact-panel.tsx';
 import '#site-ui/open-section-frame.tsx';
 import '#site-ui/open-reading-shell.tsx';
 import '../islands/open-page-rail.tsx';
-import { pageRoadmapStyles } from './page-roadmap-styles.ts';
+import pageRoadmapStyles from './page-roadmap.css';
 
 interface RoadmapTimelineItem {
   key: string;
@@ -45,7 +44,7 @@ interface RoadmapRailItem {
 
 @element('roadmap-page')
 export default class RoadmapPage extends OpenElement {
-  static override styles = pageRoadmapStyles;
+  static override styles = [pageRoadmapStyles];
 
   @property({ reflect: false, attribute: false })
   metadata: RoadmapMetadata = { breadcrumb: '', title: '', lede: '' };
@@ -167,7 +166,9 @@ export default class RoadmapPage extends OpenElement {
               <span slot='title'>{this.releaseLineTitle}</span>
               <span slot='copy'>{this.releaseLineCopy}</span>
               <div class='now-callout'>
-                <open-badge tone='warning'>{this.freezeBadge}</open-badge>
+                {/* Retired ui open-badge → plain HTML+CSS recipe (#1557): the
+                    warning-tone wash the component painted, inline. */}
+                <span class='freeze-badge'>{this.freezeBadge}</span>
                 <p class='now-title'>{this.nowTitle}</p>
                 <p class='now-copy'>{this.nowCopy}</p>
               </div>

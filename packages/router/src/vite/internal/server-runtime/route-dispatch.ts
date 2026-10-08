@@ -9,7 +9,7 @@
  */
 
 import { ACTION_FETCH_HEADER } from './action-runtime.ts';
-import type { ActionHonoContext } from './action-runtime.ts';
+import { boundRequestScope } from './wintercg.ts';
 import { DispatchErrorCode, serveError } from '../../../internal/error-codes.ts';
 import type { PageRouteModule, StreamRouteManifestLike } from './types.ts';
 
@@ -93,14 +93,13 @@ export function createPageHandlerTable(
  * The 405 responder handed to `createRouteMiddleware` as `methodNotAllowed`:
  * no-store (request-time responses are never cacheable), the action
  * negotiation `Vary`, and the `Allow` header listing the route's methods
- * (#572). Reads the bridged per-request Hono context so the WinterCG-side
- * middleware can still answer with the Hono text channel.
+ * (#572). Reads the per-request scope bound by the WinterCG composition
+ * layer so the WinterCG-side middleware can answer through the scope's text
+ * channel with the channel headers merged in.
  */
-export function createMethodNotAllowedResponder(
-  contexts: WeakMap<object, ActionHonoContext>,
-): (request: Request, allow: string[]) => Response {
+export function createMethodNotAllowedResponder(): (request: Request, allow: string[]) => Response {
   return (request, allow) => {
-    const c = contexts.get(request)!;
+    const c = boundRequestScope(request)!;
     c.header('Cache-Control', 'no-store');
     c.header('Vary', ACTION_FETCH_HEADER);
     return c.text('Method Not Allowed', 405, { Allow: allow.join(', ') });

@@ -26,7 +26,7 @@ import {
   scanForeignTags,
 } from '../src/vite/internal/ssg/index.ts';
 import type { IslandDecl } from '../src/vite/internal/ssg/index.ts';
-import type { CompatibilityClassification } from '../src/vite/internal/protocol/framework.ts';
+import type { CompatibilityClassification } from '@openelement/protocol/framework';
 
 // ─── Discovery (pure, source-level) ─────────────────────────────
 

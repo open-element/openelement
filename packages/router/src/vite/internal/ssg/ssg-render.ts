@@ -13,7 +13,7 @@
  */
 
 import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { existsSync } from 'node:fs';
 import { dirname, join, relative } from 'pathe';
@@ -24,29 +24,124 @@ import type {
   SsgRenderOptions,
   SsgRenderSummary,
   SsrBundle,
-} from '../protocol/ssg.ts';
+} from '@openelement/protocol/ssg';
 import {
   EMPTY_CLIENT_ASSET_MANIFEST,
   serializeClientAssetsModule,
-} from '../protocol/client-assets.ts';
+} from '@openelement/protocol/client-assets';
 import { createLogger } from '@openelement/element';
 import { expandDynamicRoutes, expandI18nLocales } from './ssg-dynamic.ts';
 import { findHtmlFiles, renderRequestTimeServerModule } from './ssg-helpers.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, SsgRenderErrorCode } from '../../../internal/error-codes.ts';
+import { SSG_PRERENDER_ENV_KEY } from '../server-runtime/response-channel.ts';
 import { DEFAULT_OUT_DIR } from './../paths.ts';
 
 const log = createLogger('ssg-render');
 
 /**
- * Minimal Hono app surface consumed by hono/ssg toSSG():
- * routes for route discovery, fetch for the per-route info request, and
- * request for the per-page content fetch.
+ * The generated server app surface the static generator drives (#1560):
+ * the WinterCG dispatch and the fn-form mounts (page-discovery exclusion).
  */
-interface SsgHonoApp {
-  routes: Array<{ method: string; handler: unknown; path: string }>;
-  fetch: (request: Request, ...args: unknown[]) => Promise<Response>;
-  request: (input: string | URL | Request, ...args: unknown[]) => Promise<Response>;
+interface SsgDispatchApp {
+  routes?: ReadonlyArray<{ method: string; path: string }>;
+  fetch: (request: Request, env?: Record<string, unknown>) => Promise<Response>;
+}
+
+/** File-name extension mapping for prerendered content types (toSSG parity). */
+const PRERENDER_EXTENSION_MAP: Readonly<Record<string, string>> = {
+  'text/html': 'html',
+  'text/xml': 'xml',
+  'application/xml': 'xml',
+  'application/atom+xml': 'xml',
+  'application/rss+xml': 'xml',
+  'application/yaml': 'yaml',
+};
+
+/**
+ * The output path for one prerendered route, byte-compatible with the
+ * naming the toSSG pass produced (the clean-URL postprocess below still
+ * converts flat `about.html` outputs to `about/index.html`):
+ * `/` -> `index.<ext>`, `/p/` -> `p/index.<ext>`, `/p` -> `p.<ext>`,
+ * `/p.<ext>` stays flat.
+ */
+function prerenderFilePath(routePath: string, outDir: string, mimeType: string): string {
+  const baseType = mimeType.split(';', 1)[0].trim();
+  const extension =
+    PRERENDER_EXTENSION_MAP[baseType] ?? (baseType === 'text/plain' ? 'txt' : 'html');
+  let filePath: string;
+  if (routePath.endsWith(`.${extension}`)) filePath = join(outDir, routePath);
+  else if (routePath === '/') filePath = join(outDir, `index.${extension}`);
+  else if (routePath.endsWith('/')) filePath = join(outDir, routePath, `index.${extension}`);
+  else filePath = join(outDir, `${routePath}.${extension}`);
+  // Traversal guard: the resolved file must stay inside the output dir.
+  const resolved = join(outDir, relative(outDir, filePath));
+  if (relative(outDir, resolved).startsWith('..')) {
+    throw buildError(
+      SsgRenderErrorCode.PRERENDER_PATH_ESCAPED,
+      `Prerender path escapes the output directory: ${routePath}`,
+    );
+  }
+  return filePath;
+}
+
+/**
+ * Drives one prerender request per target path through the app's WinterCG
+ * dispatch and writes the 200 responses to disk. Sequential by design:
+ * rendering is CPU-bound in-process, and a deterministic order keeps
+ * build logs reproducible (the replaced toSSG pass interleaved two at a
+ * time; output bytes are unaffected).
+ */
+async function prerenderStaticPages(
+  app: SsgDispatchApp,
+  targets: readonly string[],
+  outputDir: string,
+  hooks: {
+    onRequestTimeExcluded(path: string): boolean;
+    onNon200(path: string, status: number): void;
+    onError(error: unknown): void;
+  },
+): Promise<string[]> {
+  const ssgEnv = { [SSG_PRERENDER_ENV_KEY]: true } as Record<string, unknown>;
+  const files: string[] = [];
+  const madeDirs = new Set<string>();
+  for (const path of targets) {
+    if (hooks.onRequestTimeExcluded(path)) continue;
+    const response = await app.fetch(
+      new Request('http://localhost' + path, { method: 'GET' }),
+      ssgEnv,
+    );
+    if (response.status !== 200) {
+      hooks.onNon200(path, response.status);
+      continue;
+    }
+    const mimeType = response.headers.get('Content-Type')?.split(';')[0] || 'text/plain';
+    const filePath = prerenderFilePath(path, outputDir, mimeType);
+    const dirPath = dirname(filePath);
+    if (dirPath && !madeDirs.has(dirPath)) {
+      await mkdir(dirPath, { recursive: true });
+      madeDirs.add(dirPath);
+    }
+    const contentType = response.headers.get('Content-Type') ?? '';
+    let content: string | Uint8Array;
+    try {
+      content =
+        contentType.includes('text') || contentType.includes('json')
+          ? await response.text()
+          : new Uint8Array(await response.arrayBuffer());
+    } catch (error) {
+      hooks.onError(
+        new Error(
+          `Error processing response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        ),
+      );
+      continue;
+    }
+    if (typeof content === 'string') await writeFile(filePath, content, 'utf8');
+    else await writeFile(filePath, content);
+    files.push(filePath);
+  }
+  return files;
 }
 
 // ─── Core render pipeline ──────────────────────────────────────
@@ -100,103 +195,53 @@ export async function ssgRender(
 
   await expandDynamicRoutes(dynamicRoutes, renderRoute, getStaticPaths, options, root, outDir);
 
-  // ── Main SSG via Hono's toSSG() ────────────────────────────
-  const { toSSG } = await import('hono/ssg');
-
-  const fsModule = {
-    writeFile: async (path: string, data: string | Uint8Array) => {
-      const dir = dirname(path);
-      await mkdir(dir, { recursive: true });
-      if (typeof data === 'string') await writeFile(path, data, 'utf8');
-      else await writeFile(path, data);
-    },
-    mkdir: async (path: string) => {
-      await mkdir(path, { recursive: true });
-    },
-    isDirectory: async (path: string) => {
-      try {
-        return (await stat(path)).isDirectory();
-      } catch {
-        return false;
-      }
-    },
-  };
+  // ── Main SSG through the internal static generator (#1560) ──────
+  // The entry's default export is the WinterCG app; the generator drives
+  // app.fetch per eligible static path — the same dispatch every runtime
+  // serves, so the prerendered bytes carry the same middleware semantics.
 
   const outputDir = join(root, outDir);
-  const app = module.default as SsgHonoApp | undefined;
-  if (!app) {
+  const app = module.default as SsgDispatchApp | undefined;
+  if (!app || typeof app.fetch !== 'function') {
     throw buildError(
       SsgRenderErrorCode.APP_MISSING,
-      'SSR bundle loaded but no Hono app found (no default export)',
+      'SSR bundle loaded but no dispatchable server app found (no default export)',
     );
   }
 
-  // hono/ssg's defaultPlugin silently drops every non-200 response, so
-  // static-route 404/500/redirect pages would vanish without a trace. Record
-  // them through a request wrapper (the afterResponseHook does not receive the
-  // request path) and surface them in the build summary.
+  // The generator (like the toSSG pass it replaces) silently drops every
+  // non-200 response, so static-route 404/500/redirect pages would vanish
+  // without a trace. Record them here and surface them in the build summary.
   const staticNon200: Array<{ path: string; status: number }> = [];
   const warnings: string[] = [];
-  // #1325: the unified entry serves pages behind a single
-  // app.all('*', dispatcher), so app.routes no longer enumerates pages and
-  // hono/ssg discovers nothing. Project eligible static pages from canonical
-  // routeInfo for DISCOVERY ONLY — matching/rendering still runs through the
-  // real app.fetch/request (unified dispatcher). The dummy handler is never
-  // executed; its arity only keeps hono's isMiddleware filter from dropping
-  // the enumerated path. Host routes coexisting on the app are preserved
-  // as-is; the wildcard dispatcher itself is not a discoverable page.
+  // #1325: the unified entry serves pages behind a single wildcard route
+  // middleware, so the app's own route list no longer enumerates pages.
+  // Project eligible static pages from canonical routeInfo — matching and
+  // rendering still run through the real app.fetch (unified dispatcher).
   const eligibleStaticPaths = routeInfo
     .filter((r) => r.rendering !== 'dynamic' && !r.isDynamic)
     .map((r) => r.path);
-  const preservedHostRoutes = (app.routes ?? []).filter((r) => r.path !== '*' && r.path !== '/*');
-  // Dedupe only against host entries hono/ssg would itself discover
-  // (filterStaticGenerateRoutes: method GET/ALL, non-middleware handler).
-  // An exact-path middleware (`app.use('/about', …)`, method ALL, arity 2) or
-  // a method-only host registration (POST/…) is filtered out of SSG discovery
-  // by hono — letting it suppress the canonical GET entry silently dropped the
-  // page from the build while the build reported success (review, #1343).
-  const preservedPaths = new Set(
-    preservedHostRoutes
-      .filter(
-        (r) =>
-          (r.method === 'GET' || r.method === 'ALL') &&
-          typeof r.handler === 'function' &&
-          r.handler.length <= 1,
-      )
-      .map((r) => r.path),
+  // Host fn-form API mounts coexisting on the app suppress the canonical GET
+  // entry at the same path — letting a page at an API path prerender would
+  // bypass the API handler (review, #1343 parity). The wildcard route
+  // middleware itself is not a host route.
+  const hostMountPaths = new Set(
+    (app.routes ?? []).filter((r) => r.path !== '*' && r.path !== '/*').map((r) => r.path),
   );
-  const discoveryHandler = () => {};
-  const discoveryRoutes = [
-    ...preservedHostRoutes,
-    ...eligibleStaticPaths
-      .filter((p) => !preservedPaths.has(p))
-      .map((path) => ({ method: 'GET', handler: discoveryHandler, path })),
-  ];
-  const recordingApp: SsgHonoApp = {
-    routes: discoveryRoutes,
-    fetch: (request, ...args) => app.fetch(request, ...args),
-    request: async (input, ...args) => {
-      const response = await app.request(input, ...args);
-      if (response.status !== 200) {
-        const url = input instanceof Request ? input.url : new URL(input, 'http://localhost').href;
-        staticNon200.push({ path: new URL(url).pathname, status: response.status });
-      }
-      return response;
-    },
-  };
-
-  // Request-time routes are excluded from prerendering: hono/ssg skips a
-  // route when the beforeRequestHook returns false.
+  // Request-time routes are excluded from prerendering (eligibleStaticPaths
+  // already projects them out; the check keeps the invariant local).
   const requestTimePaths = new Set(requestTimeRoutes.map((r) => r.path));
-  const result = await toSSG(recordingApp as never, fsModule, {
-    dir: outputDir,
-    beforeRequestHook: (request: Request) => {
-      const path = new URL(request.url).pathname;
-      return requestTimePaths.has(path) ? false : request;
+  const prerenderTargets = eligibleStaticPaths.filter(
+    (path) => !hostMountPaths.has(path) && !requestTimePaths.has(path),
+  );
+
+  await prerenderStaticPages(app, prerenderTargets, outputDir, {
+    onRequestTimeExcluded: (path) => requestTimePaths.has(path),
+    onNon200: (path, status) => staticNon200.push({ path, status }),
+    onError: (error) => {
+      throw error;
     },
   });
-
-  if (!result.success) throw result.error;
 
   // Emit the request-time server artifacts when any route needs the server at
   // request time: a 'dynamic' route (GET + POST) or any page with an action
@@ -250,7 +295,7 @@ export async function ssgRender(
   }
 
   // #600: only non-200 for known page routes (in routeInfo) fail the build.
-  // API routes registered on the Hono app are not page routes — their non-200
+  // API routes registered on the generated app are not page routes — their non-200
   // status does not mean missing content. The same routeInfo-filter avoids
   // hard-coding path conventions such as /api/.
   const pagePaths = new Set(routeInfo.map((r) => r.path));
@@ -323,9 +368,14 @@ export async function ssgRender(
     log.info(`404 page -> ${label}404.html (GitHub Pages)`);
   };
   rename404Dir(outputDir, 'dist/');
-  for (const entry of readdirSync(outputDir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      rename404Dir(join(outputDir, entry.name), `dist/${entry.name}/`);
+  // Zero-page runs (dynamic-only routes without getStaticPaths, warn-policy
+  // failures, empty path sets) never create the outDir — the walk is skipped
+  // rather than fabricating an empty tree (pure-static output stays frozen).
+  if (existsSync(outputDir)) {
+    for (const entry of readdirSync(outputDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        rename404Dir(join(outputDir, entry.name), `dist/${entry.name}/`);
+      }
     }
   }
 

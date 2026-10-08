@@ -118,7 +118,8 @@ function renderRequestTimeAdmissionPatterns(routes: RequestTimeRoutePattern[]): 
  * action (hybrid pages keep their prerendered static GET; the dispatcher
  * admits their POSTs by method), so pure-static output trees stay
  * byte-identical. The module mounts the
- * prerendering SSR bundle (the same Hono app, with loaders/actions) on the
+ * prerendering SSR bundle (the same generated server entry, with
+ * loaders/actions) on the
  * public `nitro-mount` seam; Nitro Node/Workers builds bundle it as the
  * server entry, and plain Node (>= 24 — the route table below builds
  * WHATWG URLPattern objects at module scope, #969) can run the portable
@@ -132,7 +133,7 @@ function renderRequestTimeAdmissionPatterns(routes: RequestTimeRoutePattern[]): 
  * '/item/1' to the server entry without reading server-manifest.json or
  * re-implementing pattern matching. It does not own winner selection,
  * precedence, params, method semantics, query merging, basePath, or trailing
- * slash — those stay with the canonical path (the entry's Hono app, same
+ * slash — those stay with the canonical path (the entry's app, same
  * declaration order as the app RouteTable). The predicate is a conservative
  * superset: a plain OR over the request-time URLPatterns (#856),
  * so a pathname the canonical table would route request-time is never
@@ -180,7 +181,7 @@ __setRequestTimeClientScript(clientAssets.entry);
 // route table — a boolean OR over the route URLPatterns (#856).
 // Admission only: winner selection, precedence, params, methods, query
 // merging, basePath and trailing slash belong to the canonical path (the
-// entry's Hono app / app RouteTable). The predicate is a conservative
+// entry's app / app RouteTable). The predicate is a conservative
 // superset, so a request-time pathname is never excluded; a false positive
 // is harmless because the server entry re-validates and answers its 404.
 const requestTimePatterns = [

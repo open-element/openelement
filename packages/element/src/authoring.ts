@@ -17,9 +17,9 @@ export {
   isSafeAttributeName,
 } from './internal/core/security.ts';
 export { ERROR_PREFIX, OpenElementError } from './internal/core/errors.ts';
-export { HYDRATION_STRATEGIES } from './internal/protocol/framework.ts';
-export type { HydrationStrategy } from './internal/protocol/framework.ts';
-export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from './internal/protocol/data.ts';
+export { HYDRATION_STRATEGIES } from '@openelement/protocol/framework';
+export type { HydrationStrategy } from '@openelement/protocol/framework';
+export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/protocol/data';
 // Streamed-route policy constants (internal/protocol/policy.ts and
 // stream-frame-policy.ts, both import-free): the single-source admission
 // budgets and frame deny lists the router's typed stream runtime imports
@@ -35,10 +35,10 @@ export {
   STREAM_MAX_PAYLOAD_LENGTH,
   STREAM_MAX_SEED_PROPERTIES,
   STREAM_TIMEOUT_MS,
-} from './internal/protocol/policy.ts';
+} from '@openelement/protocol/policy';
 export {
   STREAM_FRAME_FORBIDDEN_TAGS,
   STREAM_FRAME_UNSAFE_URL,
   STREAM_FRAME_URL_ATTRIBUTES,
   STREAM_FRAME_URL_CONTROL_MAX,
-} from './internal/protocol/stream-frame-policy.ts';
+} from '@openelement/protocol/stream-frame-policy';

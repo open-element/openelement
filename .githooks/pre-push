@@ -18,6 +18,9 @@ pnpm run typecheck
 echo "=== pre-push gates for '$BRANCH' ==="
 
 pnpm --dir tools/release run graph:check
+# pack-surface:check reads the packed tarballs (pack:dry-run writes them); with
+# none present it fails closed and names that task itself (#1541).
+node_modules/.bin/vp run --fail-if-no-match @openelement/tools-release#pack-surface:check
 pnpm --dir tools/repo run export-files:check
 
 echo ""

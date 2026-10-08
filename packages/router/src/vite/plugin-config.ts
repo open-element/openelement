@@ -17,8 +17,8 @@ import {
   loadConfigFromFile,
   type Plugin,
 } from 'vite';
-import type { FrameworkOptions } from './internal/protocol/framework.ts';
-import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
+import type { FrameworkOptions } from './framework.ts';
+import type { SsgBehaviorOptions } from '@openelement/protocol/ssg';
 
 import { formatError } from '@openelement/element';
 import { createLogger } from '@openelement/element';

@@ -46,15 +46,18 @@ export type {
   SsrAdmissionPlan,
   SsrBundle,
   StaticComponentDecl,
-} from '../protocol/ssg.ts';
+} from '@openelement/protocol/ssg';
 export { ssgRender } from './ssg-render.ts';
 
 export {
   buildSpeculationRulesJson,
+  extractLinkHrefs,
   injectCspMeta,
+  injectIslandPrefetchRules,
   injectSpeculationRules,
   injectViewTransitionMeta,
 } from './postprocess.ts';
+export { buildIslandPrefetchLinks, type SpeculationEagerness } from './speculation-rules.ts';
 
 export {
   cleanSsrArtifacts,
@@ -98,6 +101,8 @@ export { renderEntry } from './entry-orchestrator.ts';
 export {
   extractCustomElementTags,
   generateIslandManifests,
+  pageChunkMap,
+  routeFromRelativePath,
   writeIslandManifests,
 } from './island-manifest.ts';
 
@@ -109,6 +114,11 @@ export type {
 } from './island-manifest.ts';
 
 export { generateClientEntry } from './entry-client-codegen.ts';
+export {
+  islandsMightUseRegions,
+  elementRuntimeRegionsAlias,
+  type IslandsRegionsScanInput,
+} from './island-regions-scan.ts';
 export { validateClientIslandEntry } from './entry-generators.ts';
 export {
   isIslandDeliveryStrategy,

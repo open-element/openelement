@@ -35,7 +35,7 @@ import {
   RuntimeErrorCode,
   ServerErrorCode,
   StyleErrorCode,
-} from '../src/internal/protocol/errors.ts';
+} from '@openelement/protocol/errors';
 
 const SRC_ROOT = new URL('../src/', import.meta.url);
 
@@ -273,8 +273,8 @@ test('#1386: the compiled program grammar raises catchable codes per failure fam
   expect(grammarThrown).toBeInstanceOf(CompiledProgramValidationError);
 
   // The wire program validator raises the program family's code.
-  const wireProtocol: typeof import('../src/internal/protocol/part-program.ts') =
-    await import('../src/internal/protocol/part-program.ts');
+  const wireProtocol: typeof import('@openelement/protocol/part-program') =
+    await import('@openelement/protocol/part-program');
   let wireThrown: unknown;
   try {
     wireProtocol.validatePartProgram({ tag: 'div' });
@@ -287,7 +287,7 @@ test('#1386: the compiled program grammar raises catchable codes per failure fam
 
 test('#1386: the compiler reports a failed compile as one catchable code', async () => {
   const { CompiledElementError, compileElementProgram } =
-    await import('../src/internal/compiler/semantic-core/compile.ts');
+    await import('../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts');
   let thrown: unknown;
   try {
     compileElementProgram('const notAClass = 1;', '/app/components/broken.tsx');

@@ -1,0 +1,15 @@
+
+    :host { display: block; }
+    .eyebrow { color: var(--brand); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; margin: 0; }
+    h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); line-height: 1.15; letter-spacing: -0.02em; margin: 0.75rem 0 1rem; font-weight: 700; }
+    .lede { font-size: 1.08rem; color: var(--ink-soft); max-width: 58ch; margin: 0 0 2rem; }
+    h2 { font-size: 1.25rem; letter-spacing: -0.01em; margin: 2.25rem 0 0.6rem; }
+    p { margin: 0.6rem 0; max-width: 62ch; }
+    p code, li code { font-family: var(--font-mono); font-size: 0.85em; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 0.08em 0.35em; }
+    .conventions { list-style: none; margin: 1rem 0 0; padding: 0; border-top: 1px solid var(--line); }
+    .conventions li { display: flex; gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+    .conventions code { font-family: var(--font-mono); font-size: 0.85rem; color: var(--brand); min-width: 15rem; }
+    .conventions span { color: var(--ink-soft); font-size: 0.92rem; }
+    a { color: var(--brand); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  

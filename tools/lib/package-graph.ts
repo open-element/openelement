@@ -283,7 +283,9 @@ export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
   // dependency check below still throws if that puts a dependent before
   // its dependency (#828).
   const releasePriority = [
+    '@openelement/protocol',
     '@openelement/element',
+    '@openelement/compiler',
     '@openelement/router',
     '@openelement/create',
     '@openelement/ui',

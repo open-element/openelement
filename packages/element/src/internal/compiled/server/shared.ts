@@ -15,14 +15,14 @@ import {
   type PartProgramV1,
   type ProgramPart,
   type ProgramTreeNode,
-} from '../../protocol/part-program.ts';
+} from '@openelement/protocol/part-program';
 import {
   FORBIDDEN_PROPERTY_NAMES,
   forbiddenSinkReason,
   isSafeAttributeName as canonicalAttributeNameIsSafe,
   RAW_TEXT_TAGS,
-} from '../../protocol/forbidden-sinks.ts';
-import { OpenElementError, ServerErrorCode } from '../../protocol/errors.ts';
+} from '@openelement/protocol/forbidden-sinks';
+import { OpenElementError, ServerErrorCode } from '@openelement/protocol/errors';
 import { normalizePartProgram, type RuntimeProgramIR } from '../runtime-program.ts';
 // Canonical void-element set (issue #1220, M4) — single source of truth.
 import { VOID_TAGS } from '../../core/html-escape.ts';

@@ -2,7 +2,7 @@
  * VOID_TAGS single-owner guard (issue #1220, M4).
  *
  * One canonical, import-free, host-free owner:
- *   packages/element/src/internal/protocol/void-tags.ts
+ *   packages/protocol/src/void-tags.ts
  * The runtime module (internal/core/html-escape.ts) and the Part Program
  * exchange artifact (internal/protocol/part-program.ts) re-export it, and the
  * compiler/runtime/serializer consumers reference it. This guard asserts the
@@ -16,15 +16,15 @@ import { expect, test } from 'vitest';
 
 const REPO_ROOT = new URL('../../../', import.meta.url);
 
-const OWNER = 'packages/element/src/internal/protocol/void-tags.ts';
+const OWNER = 'packages/protocol/src/void-tags.ts';
 const REEXPORTERS = [
   'packages/element/src/internal/core/html-escape.ts',
-  'packages/element/src/internal/protocol/part-program.ts',
+  'packages/protocol/src/part-program.ts',
 ];
 const CONSUMERS = [
   'packages/element/src/internal/compiled/serializer/serialize-program.ts',
   'packages/element/src/internal/compiled/server/shared.ts',
-  'packages/element/src/internal/compiler/semantic-core/lower-program.ts',
+  'packages/compiler/src/internal/compiler/semantic-core/lower-program.ts',
 ];
 
 /** The full HTML Standard void-element set (param included). */
@@ -72,7 +72,8 @@ test('VOID_TAGS has one definition; the runtime and protocol re-export it', asyn
       `${path}: must not redefine VOID_TAGS`,
     ).toBeTruthy();
     expect(
-      /void-tags\.ts/.test(source) && /\bVOID_TAGS\b/.test(source),
+      (/void-tags\.ts/.test(source) || /@openelement\/protocol\/void-tags/.test(source)) &&
+        /\bVOID_TAGS\b/.test(source),
       `${path}: must import/re-export the canonical VOID_TAGS owner`,
     ).toBeTruthy();
   }

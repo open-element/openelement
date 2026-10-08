@@ -15,7 +15,7 @@
 
 import { localeFromPath } from './page-render.ts';
 import type { PageSsrRenderer, TrustedHtmlValue } from './renderer-runtime.ts';
-import type { AppShellPlan, ResolvedAppShell } from '../protocol/ssg.ts';
+import type { AppShellPlan, ResolvedAppShell } from '@openelement/protocol/ssg';
 
 /**
  * Shell href localization: root-relative hrefs gain the active locale prefix

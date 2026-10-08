@@ -1,12 +1,12 @@
 /**
  * entry-render-ssg.ts - SSG entry code generation
  *
- * Generates the SSG-specific sections of the virtual Hono entry module,
+ * Generates the SSG-specific sections of the virtual server entry module,
  * including routeInfo, renderRoute, getStaticPaths, and supporting helper
  * functions.
  */
 
-import type { EntryDescriptor } from '../protocol/ssg.ts';
+import type { EntryDescriptor } from '@openelement/protocol/ssg';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   documentResolutionSetupLine,

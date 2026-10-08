@@ -12,7 +12,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "types": [
-      "node"
+      "node",
+      "@openelement/element/css-modules"
     ],
     "jsx": "react-jsx",
     "jsxImportSource": "@openelement/element",

@@ -7,7 +7,8 @@ import {
 } from '@openelement/element';
 import '#site-ui/open-reading-shell.tsx';
 import '../islands/open-page-rail.tsx';
-import { pageBlogPostStyles } from './page-blog-post-styles.ts';
+import pageBlogPostStyles from './page-blog-post.css';
+import '#site-ui/open-artifact-panel.tsx';
 
 interface BlogTag {
   key: string;
@@ -30,7 +31,7 @@ interface BlogNavigation {
 
 @element('blog-slug')
 export default class PageBlogPost extends OpenElement {
-  static override styles = pageBlogPostStyles;
+  static override styles = [pageBlogPostStyles];
 
   @property({ reflect: false, attribute: false })
   notFoundClass = 'not-found';

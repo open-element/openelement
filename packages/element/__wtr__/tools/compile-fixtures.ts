@@ -14,7 +14,7 @@
  */
 // NOTE: plain relative paths only — this directory sits outside the pnpm
 // workspace import resolution, so no workspace specifiers are used here.
-import { compileElementModule } from '../../src/internal/compiler/plugin.ts';
+import { compileElementModule } from '../../../compiler/src/internal/compiler/plugin.ts';
 
 const here = import.meta.dirname!; // packages/element/__wtr__/tools
 const suite = join(here, '..');
@@ -69,6 +69,20 @@ const fixtures: FixtureSpec[] = [
 
 const outDir = join(suite, 'generated');
 await import('node:fs/promises').then((fs) => fs.mkdir(outDir, { recursive: true }));
+
+// The compiled ui fixtures keep their authored `.css` imports (the #1558
+// file-based style form), and the element-browser project's sheet plugin
+// resolves them relative to generated/ — so the authored ui sheets are copied
+// next to the fixtures here. One copy list, keyed by the css the fixtures
+// import; a new sheet import in packages/ui fails closed in this loop.
+const uiSrc = join(elementPkg, '../ui/src');
+for (const sheet of ['overlay-recipe.css', 'open-dialog.css', 'open-dropdown.css']) {
+  const bytes = await import('node:fs/promises').then((fs) =>
+    fs.readFile(join(uiSrc, sheet), 'utf8'),
+  );
+  await import('node:fs/promises').then((fs) => fs.writeFile(join(outDir, sheet), bytes));
+  console.log(`copied ui sheet ${sheet} -> generated/${sheet}`);
+}
 
 for (const fixture of fixtures) {
     const code = await import('node:fs/promises').then((fs) =>

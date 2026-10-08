@@ -285,7 +285,9 @@ async function expandManifestPaths(): Promise<string[]> {
 
 async function collectBuildSources(): Promise<{ path: string; text: string }[]> {
   const roots = [
+    'packages/protocol/src',
     'packages/element/src',
+    'packages/compiler/src',
     'packages/router/src',
     'packages/create/src',
     'packages/ui/src',

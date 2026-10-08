@@ -1,0 +1,7 @@
+/* authored from HEAD extraction — replace with design pass */
+/* Minimal shell: the component carried no authored styles in its pre-#1558
+ * (Tailwind-preset) form — zero-style per its HEAD source. Replace with the
+ * design pass. */
+:host {
+  display: block;
+}

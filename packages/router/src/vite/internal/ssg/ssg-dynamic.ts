@@ -23,7 +23,7 @@ import type {
   SsgPageOutput,
   SsgRenderEvidence,
   SsgRenderOptions,
-} from '../protocol/ssg.ts';
+} from '@openelement/protocol/ssg';
 import { createLogger } from '@openelement/element';
 import { formatError } from '@openelement/element';
 import { resolveDynamicRoutePath } from './ssg-helpers.ts';

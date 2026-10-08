@@ -25,8 +25,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 // component (the #952 invalidation chain is the same: watcher → module
 // re-evaluation → next request renders the edited module).
 const PAGE_FILE = new URL('./work/my-blog/app/components/page-home.tsx', import.meta.url).pathname;
-const H1_ORIGINAL = 'Static pages, alive where it counts';
-const H1_EDITED = 'Static pages, edited in dev mode';
+const H1_ORIGINAL = 'Rendered before JavaScript arrives';
+const H1_EDITED = 'Edited in dev mode';
 
 test('dev serves the island client entry (#951)', async ({ request }) => {
   const response = await request.get('/client/islands/client.js');

@@ -31,8 +31,8 @@ pnpm dev
 pnpm add @openelement/element
 ```
 
-- **Vite 项目**通过包的 Vite 接缝挂载编译器：`import { element } from '@openelement/element/vite'`，把 `element()` 加进 `plugins`。该插件在构建期把每个组件的 TSX `render()` 编译成 Part Program。
-- **其他打包器**通过 `@openelement/element/compiler` 以编程方式驱动同一套编译器——即 Vite 插件自己调用的 TSX-to-Part-Program 内核——再把产物接进自己的流水线。
+- **Vite 项目**通过包的 Vite 接缝挂载编译器：`import { element } from '@openelement/compiler/vite'`，把 `element()` 加进 `plugins`。该插件在构建期把每个组件的 TSX `render()` 编译成 Part Program。
+- **其他打包器**通过 `@openelement/compiler` 以编程方式驱动同一套编译器——即 Vite 插件自己调用的 TSX-to-Part-Program 内核——再把产物接进自己的流水线。
 - **产物是标准 Custom Elements。** 编译后的组件就是一个用 `customElements.define` 注册的普通类，产出的 bundle 可以直接进任何页面或框架，无需内嵌任何运行时。这条路每轮发布都会验证：打包产物消费者验收会单独安装 `@openelement/element`（无 Router、无脚手架），编译一个组件，再从独立的纯 HTML 页面在三个浏览器里加载该 bundle。
 
 ## 探索

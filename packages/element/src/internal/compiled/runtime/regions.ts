@@ -18,12 +18,12 @@ import {
   partAnchorMarker,
   type ProgramEachPart,
   type ProgramWhenPart,
-} from '../../protocol/part-program.ts';
+} from '@openelement/protocol/part-program';
 import {
   EachKeyErrorCode,
   RUNTIME_MESSAGES_ENABLED,
   RuntimeErrorCode,
-} from '../../protocol/errors.ts';
+} from '@openelement/protocol/errors';
 import type { LifetimeScope } from '../lifetime-scope.ts';
 import type { MountContext } from './program-kernel.ts';
 import {
@@ -31,6 +31,7 @@ import {
   fail,
   guardedUpdate,
   insertNodesBefore,
+  isElement,
   itemAttrValue,
   itemValue,
   NO_ITEM,
@@ -120,8 +121,8 @@ export interface EachEntry {
   valueSlots: ItemValueSlot[];
   attrSlots: ItemAttrSlot[];
   /**
-   * The item value this entry was last rendered from (#1416). Every slot in
-   * an entry is a pure projection of one item, so an identical reference
+   * The item value this entry was last rendered from (#1416). Every slot in an
+   * entry is a pure projection of one item, so an identical reference
    * means the projection cannot have changed and `updateEach` skips the whole
    * slot walk for that entry. Mutating an item in place is therefore outside
    * the reactive contract — the same object-identity boundary the canonical
@@ -129,6 +130,12 @@ export interface EachEntry {
    * rewrite them.
    */
   item: unknown;
+  /**
+   * The live item holder this entry's per-item event listeners dispatch with
+   * (#1556 IR v2). `item` above stays the rendered-from reference; the box is
+   * what a listener reads at dispatch time, refreshed on keyed reuse.
+   */
+  itemBox: ItemBox;
 }
 
 export interface EachRegion {
@@ -155,17 +162,24 @@ export function buildItem(
   part: ProgramEachPart,
   item: unknown,
   parent?: Node,
-): { nodes: Node[]; valueSlots: ItemValueSlot[]; attrSlots: ItemAttrSlot[]; scope: LifetimeScope } {
+): {
+  nodes: Node[];
+  valueSlots: ItemValueSlot[];
+  attrSlots: ItemAttrSlot[];
+  itemBox: ItemBox;
+  scope: LifetimeScope;
+} {
   const scope = regionScope.child();
   const valueSlots: ItemValueSlot[] = [];
   const attrSlots: ItemAttrSlot[] = [];
+  // The mutable item holder every per-item listener reads at dispatch time:
+  // keyed reuse replaces an entry's item without rebuilding its DOM, so a
+  // listener closing over the item value directly would dispatch a stale one.
+  const itemBox: ItemBox = { item };
   try {
-    return {
-      nodes: mountNodes(ctx, scope, doc, part.item, item, part, valueSlots, parent, attrSlots),
-      valueSlots,
-      attrSlots,
-      scope,
-    };
+    const nodes = mountNodes(ctx, scope, doc, part.item, item, part, valueSlots, parent, attrSlots);
+    attachItemEvents(ctx, part, nodes, scope, itemBox);
+    return { nodes, valueSlots, attrSlots, itemBox, scope };
   } catch (error) {
     try {
       scope.dispose();
@@ -173,6 +187,57 @@ export function buildItem(
       // Preserve the item construction error after attempting every cleanup.
     }
     throw error;
+  }
+}
+
+/** The per-entry live item value per-item event listeners dispatch with. */
+export interface ItemBox {
+  item: unknown;
+}
+
+/**
+ * Per-item event wiring (#1556 IR v2): attach each ItemEventBinding to the
+ * item's root (or a `selector` match within it). Listeners are registered on
+ * the item's LifetimeScope — they are removed when the item is destroyed —
+ * and read the item from `itemBox` at dispatch time so keyed-reuse updates
+ * keep them current without re-attaching.
+ */
+export function attachItemEvents(
+  ctx: MountContext,
+  part: ProgramEachPart,
+  nodes: Node[],
+  scope: LifetimeScope,
+  itemBox: ItemBox,
+): void {
+  const bindings = part.itemEvents;
+  if (!bindings?.length) return;
+  for (const node of nodes) {
+    if (!isElement(node)) continue;
+    for (const binding of bindings) {
+      const target = binding.selector ? node.querySelector(binding.selector) : node;
+      if (!target) continue;
+      const listener = (event: Event) => {
+        dispatchItemAction(ctx, binding, itemBox.item, event);
+      };
+      target.addEventListener(binding.event, listener);
+      scope.add(() => target.removeEventListener(binding.event, listener));
+    }
+  }
+}
+
+function dispatchItemAction(
+  ctx: MountContext,
+  binding: { handler: string },
+  item: unknown,
+  event: Event,
+): void {
+  // Item handlers receive (event, item) — the widened dispatch contract of
+  // ItemEventBinding; fixed-path handlers keep their single-event signature.
+  const handler = ctx.host.handlers[binding.handler] as
+    | ((event: unknown, item?: unknown) => void)
+    | undefined;
+  if (typeof handler === 'function') {
+    handler(event, item);
   }
 }
 
@@ -306,6 +371,7 @@ export function buildEach(
       nodes: entry.nodes,
       valueSlots: entry.valueSlots,
       attrSlots: entry.attrSlots,
+      itemBox: entry.itemBox,
       item: value[index],
     };
     region.entries.push(stored);
@@ -596,6 +662,9 @@ export function updateEach(region: EachRegion, value: unknown): void {
       return region.end;
     });
     entry.item = descriptor.item;
+    // Keyed reuse replaced the item without rebuilding DOM: refresh the box
+    // the entry's per-item listeners dispatch with (#1556 IR v2).
+    entry.itemBox.item = descriptor.item;
   }
   region.entries = nextEntries;
   region.byKey = new Map(nextEntries.map((entry) => [entry.key, entry]));

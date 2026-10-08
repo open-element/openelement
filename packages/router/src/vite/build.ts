@@ -11,14 +11,19 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
 import type { Plugin, ResolvedConfig } from 'vite';
-import type { FrameworkOptions } from './internal/protocol/framework.ts';
-import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
-import type { ClientAssetManifest } from './internal/protocol/client-assets.ts';
-import { serializeClientAssetsModule } from './internal/protocol/client-assets.ts';
+import type { FrameworkOptions } from './framework.ts';
+import type { SsgBehaviorOptions } from '@openelement/protocol/ssg';
+import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
+import { serializeClientAssetsModule } from '@openelement/protocol/client-assets';
 import type { OpenElementBuildContext } from './build-context.ts';
 import { join } from 'pathe';
 import { createLogger } from '@openelement/element';
-import { cleanSsrArtifacts, postProcessClientIslandBuild } from './internal/ssg/index.ts';
+import {
+  cleanSsrArtifacts,
+  injectIslandPrefetchRules,
+  pageChunkMap,
+  postProcessClientIslandBuild,
+} from './internal/ssg/index.ts';
 import { applyTailwindPreset, resolveTailwindPresetOptions } from './preset-tailwind.ts';
 import {
   collectBuildArtifacts,
@@ -169,9 +174,21 @@ export function buildPlugin(
         try {
           const manifest = ctx.clientAssetManifest;
           if (manifest) {
-            await postProcessClientIslandBuild(ctx);
+            const pageManifests = await postProcessClientIslandBuild(ctx);
             await writeRequestTimeClientAssets(ctx, manifest);
             log.info(`Client scripts rendered from the asset manifest: ${manifest.entry}`);
+            // -- Per-page island-chunk prefetch (#1561) --
+            // A separate lane from the manifest pass, which stays read-only
+            // on the rendered HTML (#1471 pin): the chunk facts derive from
+            // the manifests just written (single owner of the page→chunk
+            // mapping), and this lane owns the only HTML write they feed —
+            // one <script type="speculationrules"> per page, listing the
+            // linked pages' island chunks. Unsupported browsers ignore the
+            // tag (zero JS, zero cost).
+            injectIslandPrefetchRules(
+              join(ctx.phase3.root || process.cwd(), ctx.phase3.outDir || DEFAULT_OUT_DIR),
+              pageChunkMap(pageManifests),
+            );
           } else {
             log.info('No Phase 2 client asset manifest - island manifests skipped');
           }

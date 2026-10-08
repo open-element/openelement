@@ -42,9 +42,9 @@ import {
   type ProgramStylePart,
   type ProgramTreeNode,
   type ProgramWhenPart,
-} from '../../protocol/part-program.ts';
-import { VOID_TAGS } from '../../protocol/void-tags.ts';
-import { raiseFrameworkError, RuntimeErrorCode } from '../../protocol/errors.ts';
+} from '@openelement/protocol/part-program';
+import { VOID_TAGS } from '@openelement/protocol/void-tags';
+import { raiseFrameworkError, RuntimeErrorCode } from '@openelement/protocol/errors';
 // Canonical text-node escape contract (#1272) — the one shared implementation;
 // do not reintroduce a private copy.
 import { escapeText } from '../escape-text.ts';

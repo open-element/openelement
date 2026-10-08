@@ -27,7 +27,7 @@ import type {
   OpenElementNavSection,
   OpenElementPackageManifest,
   RouteEntry,
-} from './internal/protocol/framework.ts';
+} from './framework.ts';
 import type { OpenElementI18nOptions } from './framework.ts';
 import type {
   BuildArtifacts,
@@ -35,9 +35,8 @@ import type {
   IslandDecl,
   SsrAdmissionPlan,
   StaticComponentDecl,
-} from './internal/protocol/ssg.ts';
-import type { ClientAssetManifest } from './internal/protocol/client-assets.ts';
-import type { StyleAssetRecord } from './internal/style-assets.ts';
+} from '@openelement/protocol/ssg';
+import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
 import {
   DEFAULT_COMPONENTS_DIR,
   DEFAULT_ISLANDS_DIR,
@@ -192,15 +191,6 @@ export class OpenElementBuildContext {
   clientAssetManifest: ClientAssetManifest | null = null;
 
   /**
-   * Phase 2 output: the client build's style-asset emissions —
-   * the style-request registry key of each intercepted `.oe-style.css`
-   * request, mapped to the emitted asset's file name (dist/client-relative)
-   * and content hash. Phase 3's SSR build reads the SAME emitted assets
-   * (hash-checked) for the DSD CSS text, so server output and the client
-   * sheet cannot drift. Null until the client build runs.
-   */
-  styleAssets: ReadonlyMap<string, StyleAssetRecord> | null = null;
-
   /** Canonical result consumed by release evidence and deployment adapters. */
   buildArtifacts: BuildArtifacts | null = null;
   /** Phase 1: Route scanning & build metadata */
@@ -311,7 +301,6 @@ export class OpenElementBuildContext {
     this.completed.clear();
     this.buildPlan = null;
     this.clientAssetManifest = null;
-    this.styleAssets = null;
     this.buildArtifacts = null;
 
     const userResolveAlias = this.phase1.userResolveAlias;

@@ -5,8 +5,8 @@ import {
   type DeferredDsdManifest,
   renderDsd,
 } from '../../src/public-runtime.ts';
-import { OpenElementError } from '../../src/internal/protocol/errors.ts';
-import type { PartProgramV1 } from '../../src/internal/protocol/part-program.ts';
+import { OpenElementError } from '@openelement/protocol/errors';
+import type { PartProgramV1 } from '@openelement/protocol/part-program';
 import { CompiledProgramValidationError } from '../../src/internal/compiled/server/shared.ts';
 import { type TestNodeSpec, testProgram } from '../compiled-runtime/test-program.ts';
 

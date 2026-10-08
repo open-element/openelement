@@ -1,12 +1,13 @@
 import { computed, element, OpenElement, property, trustedHtml } from '@openelement/element';
 import '../islands/open-page-rail.tsx';
 import './open-reading-shell.tsx';
+import '#site-ui/open-artifact-panel.tsx';
 import type { ArticlePageModel } from './article-page-model.ts';
-import { openArticleViewStyles } from './open-article-view-styles.ts';
+import openArticleViewStyles from './open-article-view.css';
 
 @element('open-article-view')
 export default class OpenArticleView extends OpenElement {
-  static override styles = openArticleViewStyles;
+  static override styles = [openArticleViewStyles];
 
   @property({ reflect: false, attribute: false })
   model: ArticlePageModel = {

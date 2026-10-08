@@ -98,10 +98,10 @@ test('layer/hydrate policies fail loud on unknown component classes', () => {
     Error,
     'No layer/hydrate/status policy',
   );
-  expect(layerFromClass('OpenCard')).toEqual('dsd-static');
+  expect(layerFromClass('OpenButton')).toEqual('dsd-interactive');
   expect(layerFromClass('OpenDialog')).toEqual('dsd-interactive');
   expect(hydrateFromClass('OpenDialog')).toEqual('idle');
-  expect(hydrateFromClass('OpenTabs')).toEqual('load');
+  expect(hydrateFromClass('OpenInput')).toEqual('load');
 });
 
 test('generated UI manifest covers every shipped component', () => {
@@ -109,16 +109,12 @@ test('generated UI manifest covers every shipped component', () => {
   expect(manifest.packageName).toEqual('@openelement/ui');
   expect(manifest.$comment).toContain('GENERATED FILE');
   expect(manifest.declarations.map((declaration) => declaration.tagName)).toEqual([
-    'open-card',
-    'open-callout',
     'open-button',
     'open-input',
     'open-theme-toggle',
     'open-code-block',
-    'open-badge',
     'open-dialog',
     'open-dropdown',
-    'open-tabs',
   ]);
   for (const declaration of manifest.declarations) {
     expect(declaration.className, `${declaration.tagName} missing className`).toBeTruthy();

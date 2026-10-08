@@ -2,10 +2,10 @@
 import process from 'node:process';
 import ts from 'typescript';
 import { dirname, extname, resolve } from 'pathe';
-import { compileElementProgram, stableModuleId } from '@openelement/element/compiler';
+import { compileElementProgram, stableModuleId } from '@openelement/compiler';
 import { isDangerousKey } from '@openelement/element/authoring';
-import type { StreamRouteManifest } from '../protocol/ssg.ts';
-import { ISLAND_ADMISSION } from '../protocol/island-admission.ts';
+import type { StreamRouteManifest } from '@openelement/protocol/ssg';
+import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { safeReadFile } from './route-scanner-fs.ts';
 import {
   STREAM_FRAME_FORBIDDEN_TAGS,

@@ -1,0 +1,43 @@
+/* authored from HEAD extraction — replace with design pass */
+/* Plain HTML+CSS recipes for the four retired zero-interaction ui shapes
+ * (open-badge, open-callout, open-card, open-tabs #1557): the class
+ * structures their HEAD markup rendered, as copyable rules. Consumers delete
+ * what they do not use. Structure only — replace with the design pass. */
+
+/* open-badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* open-callout */
+.callout {
+  display: block;
+}
+
+.callout-header {
+  display: flex;
+  align-items: center;
+}
+
+.callout-icon {
+  display: inline-flex;
+}
+
+.callout-title {
+  margin: 0;
+}
+
+/* open-card */
+.surface {
+  display: block;
+}
+
+.card-body {
+  display: block;
+}
+
+/* open-tabs */
+.tabs {
+  display: flex;
+}

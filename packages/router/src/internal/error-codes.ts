@@ -115,10 +115,12 @@ export const SsgRenderErrorCode = {
   ROUTE_INFO_MISSING: 'OE_SSG_ROUTE_INFO_MISSING',
   /** `routeInfo` resolved but enumerates no routes. */
   ROUTE_INFO_EMPTY: 'OE_SSG_ROUTE_INFO_EMPTY',
-  /** The SSR bundle carries no default Hono app export. */
+  /** The SSR bundle carries no dispatchable default app export. */
   APP_MISSING: 'OE_SSG_APP_MISSING',
   /** Prerendered static page routes returned non-200 and were not written. */
   STATIC_NON_200: 'OE_SSG_STATIC_NON_200',
+  /** A prerender route path resolves outside the output directory. */
+  PRERENDER_PATH_ESCAPED: 'OE_SSG_PRERENDER_PATH_ESCAPED',
 } as const;
 
 /**
@@ -150,29 +152,15 @@ export const ClientBuildErrorCode = {
    */
   ELEMENT_RUNTIME_CHUNK_MISSING: 'OE_CLIENT_BUILD_ELEMENT_RUNTIME_CHUNK_MISSING',
   /**
-   * A `.oe-style.css` style-resource request resolved in the client or SSR
-   * build with no entry in the compiler's style-request registry.
+   * A `.css` style edge resolved in the client or SSR build with no entry in
+   * the compiler's style-edge registry, or whose sheet file cannot be read.
    * Either the intercepting plugin answered before the compiled-element
-   * transform registered the payload (an internal ordering bug) or a
-   * hand-written import targets the reserved suffix — both defects; the build
-   * fails instead of letting vite's CSS plugin handle the request (the
-   * silent re-inline path the protocol exists to close).
+   * transform registered the edge (an internal ordering bug) or the sheet
+   * file is missing — both defects; the build fails instead of letting
+   * vite's CSS plugin handle the edge (the document-channel path a shadow
+   * component's sheet can never use).
    */
   STYLE_ASSET_UNREGISTERED: 'OE_CLIENT_BUILD_STYLE_ASSET_UNREGISTERED',
-  /**
-   * The SSR build resolved a style-resource request whose emitted `.css`
-   * asset the Phase 2 client build never recorded — Phase 2 did not run for
-   * this graph (or ran with a different island set), so there is no same
-   * asset to read and the DSD text would have to come from a second fact.
-   */
-  STYLE_ASSET_UNMAPPED: 'OE_CLIENT_BUILD_STYLE_ASSET_UNMAPPED',
-  /**
-   * The emitted `.css` asset the SSR build reads for the DSD text no longer
-   * matches the hash the client build recorded for it — a stale or rewritten
-   * dist/client. The build fails instead of embedding CSS the client sheet
-   * cannot byte-match (the DSD/adopted drift the protocol closes).
-   */
-  STYLE_ASSET_HASH_MISMATCH: 'OE_CLIENT_BUILD_STYLE_ASSET_HASH_MISMATCH',
 } as const;
 
 /**

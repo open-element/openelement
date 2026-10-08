@@ -25,6 +25,7 @@ const BUGS = 'https://github.com/open-element/openelement/issues';
  * each package names its own surface instead of sharing one framework list.
  */
 const PACKAGE_KEYWORDS: Record<string, string[]> = {
+  '@openelement/protocol': ['openelement', 'web-components', 'protocol', 'contracts', 'ir'],
   '@openelement/element': [
     'openelement',
     'web-components',
@@ -32,6 +33,14 @@ const PACKAGE_KEYWORDS: Record<string, string[]> = {
     'typescript',
     'signals',
     'ssg',
+  ],
+  '@openelement/compiler': [
+    'openelement',
+    'web-components',
+    'compiler',
+    'tsx',
+    'vite',
+    'part-program',
   ],
   '@openelement/router': ['openelement', 'web-components', 'router', 'ssg', 'vite', 'nitro'],
   '@openelement/create': ['openelement', 'web-components', 'scaffolding', 'generator', 'starter'],
@@ -52,7 +61,9 @@ const PACKAGE_KEYWORDS: Record<string, string[]> = {
  * Node program, and Create's CLI is a Node bin (`#!/usr/bin/env node`).
  */
 const ENGINES: Record<string, Record<string, string>> = {
+  '@openelement/protocol': { node: '>=24.2' },
   '@openelement/element': { node: '>=24.2' },
+  '@openelement/compiler': { node: '>=24.2' },
   '@openelement/router': { node: '>=24.2' },
   '@openelement/create': { node: '>=24.2' },
   '@openelement/ui': { node: '>=24.2' },
@@ -74,17 +85,29 @@ const ENGINES: Record<string, Record<string, string>> = {
  * body (a side-effect-free module with no used exports) — so the claim
  * executor is missing at runtime and every island that must adopt
  * server-rendered DOM throws instead of hydrating. Declaring an array is not
- * enough to name one side of that edge: the two entries below are the importer
- * and the installer, and both must survive. Verified by the packed-consumer
- * browser matrix (tools/release#consumer:packaged leg 6), which fails 3/3
- * browsers when either entry is removed from this list.
+ * enough to name one side of that edge: the importer and installer entries
+ * below must survive. Verified by the packed-consumer browser matrix
+ * (tools/release#consumer:packaged leg 6), which fails 3/3 browsers when
+ * either entry is removed from this list.
  *
- * The `./client-only` entry stays unflagged and never imports either module,
- * so a page whose islands are all client-only still bundles without the claim
- * cluster (ADR-0155's −9.4 KB).
+ * #1548 adds the regions axis to the same contract: the default entry and
+ * `./client-only` also import `regions-install.js` (`installRegionBuilders(...)`
+ * at module scope), so the when/each Region builders ship on those entries and
+ * are droppable on `./no-regions` and `./base`. The flagged set is therefore
+ * the three importing entries plus both installers; the source-side mirror
+ * lives in packages/element/package.json `sideEffects` and the walker shared
+ * by both guards is packages/element/__tests__/side-effects-declaration.test.ts.
  */
 const SIDE_EFFECTS: Record<string, false | string[]> = {
-  '@openelement/element': ['./src/index.js', './src/internal/compiled/runtime/claim-install.js'],
+  '@openelement/protocol': false,
+  '@openelement/element': [
+    './src/index.js',
+    './src/client-only.js',
+    './src/no-regions.js',
+    './src/internal/compiled/runtime/claim-install.js',
+    './src/internal/compiled/runtime/regions-install.js',
+  ],
+  '@openelement/compiler': false,
   '@openelement/router': false,
   '@openelement/create': ['./src/cli.js'],
   '@openelement/ui': false,
@@ -96,6 +119,8 @@ const SIDE_EFFECTS: Record<string, false | string[]> = {
  * description.
  */
 const PACKAGE_DESCRIPTIONS: Record<string, string> = {
+  '@openelement/protocol':
+    'Cross-system contracts and tiny pure predicates for the OpenElement framework.',
   '@openelement/router':
     'Routing, application runtime, and lifecycle tooling for the OpenElement framework.',
   '@openelement/create': 'Project generator for the OpenElement Web Components framework.',

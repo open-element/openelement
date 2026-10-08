@@ -21,7 +21,10 @@
 
 import { describe, expect, test } from 'vitest';
 import type { Plugin } from 'vite';
-import { compiledElementPlugin, compileElementModule } from '../../src/internal/compiler/plugin.ts';
+import {
+  compiledElementPlugin,
+  compileElementModule,
+} from '../../../../packages/compiler/src/internal/compiler/plugin.ts';
 
 interface TransformContext {
   // Mirrors Vite's `this.error(string | RollupError)`: the adapter passes the

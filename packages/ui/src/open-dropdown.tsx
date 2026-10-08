@@ -25,39 +25,14 @@ import {
   type ReadonlySignal,
   type StyleSheetLike,
 } from '@openelement/element';
-import { deepActiveElement, nextInstanceId, overlayRecipe, recipe } from './component-recipes.ts';
+import { deepActiveElement, nextInstanceId } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
+import overlayRecipe from './overlay-recipe.css';
+import openDropdownStyles from './open-dropdown.css';
 
 @element('open-dropdown', { root: 'shadow-open' })
 export class OpenDropdown extends OpenElement {
-  static override styles: StyleSheetLike[] = [
-    overlayRecipe,
-    recipe(`
-    :host {
-      display: inline-block;
-    }
-
-    .trigger {
-      display: contents;
-    }
-
-    .content {
-      /* The base inset is the placement fallback for engines without CSS Anchor
-         Positioning; it must stay present because Firefox's anchor resolution
-         only applies anchor() longhands on top of an explicit inset. */
-      position: absolute;
-      inset: 100% auto auto 0;
-      top: anchor(bottom);
-      left: anchor(left);
-      min-width: 12rem;
-      /* The gap rides on margin-top: calc(anchor() + length) resolves without
-         the added length in Firefox. */
-      margin: calc(var(--spacing) * 2) 0 0;
-      padding: calc(var(--spacing) * 2);
-      font-family: var(--font-sans);
-    }
-  `),
-  ];
+  static override styles: StyleSheetLike[] = [overlayRecipe, openDropdownStyles];
 
   /** #1061: every instance anchors its popover to its own host. */
   @property({ reflect: false, attribute: false })

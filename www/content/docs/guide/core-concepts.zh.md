@@ -39,7 +39,7 @@ export default class MyCounter extends OpenElement {
 
 `@element(tag, { root })` 为自定义元素命名并决定内容渲染到哪里：`'light'` 是默认值，渲染进 light DOM，因此文档级样式直接生效；`'shadow-open'` 与 `'shadow-closed'` 则挂载 shadow root。`@property({ reflect })` 声明响应式字段。attribute 是默认通道，名称取属性名的 kebab-case 形式（`attribute: 'my-name'` 可覆盖）；`attribute: false` 用于绝不能序列化进标记的值。派生值是 `computed(...)` 字段，编译器要求它必须是 `reflect: false, attribute: false`，因为派生值没有 attribute 通道。这两者背后都是 `signal()`——`computed()` 从它派生，`effect()` 订阅它；三者都由 `@openelement/element` 导出。
 
-状态变化只会重渲染读取了该值的 Part。模板里写下的事件处理器（`onClick`、`onInput`）在 upgrade 时绑定；运行时不会用字符串做任何查找。服务端由 `renderDsd` 序列化同一个编译类，因此两种输出背后是同一份程序，而不是两个会互相漂移的渲染器。
+状态变化只会重渲染读取了该值的 Part。模板里写下的事件处理器（`onClick`、`onInput`）在 upgrade 时绑定；运行时不会用字符串做任何查找。列表 Region 的 item 模板里，同一套处理器语法会带上条目本身：`this.items.map((item) => <li key={item.id} onClick={this.pick}>{item.label}</li>)` 会编译为逐条目绑定，`pick` 收到被点击那一行的 `(event, item)`。服务端由 `renderDsd` 序列化同一个编译类，因此两种输出背后是同一份程序，而不是两个会互相漂移的渲染器。
 
 ### shadow root 行为：delegatesFocus
 

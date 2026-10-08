@@ -5,20 +5,23 @@ import ts from 'typescript';
 import {
   CompiledElementError,
   compileElementProgram,
-} from '../src/internal/compiler/semantic-core/compile.ts';
+} from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
 
-const CORE_ROOT = new URL('../src/internal/compiler/semantic-core/', import.meta.url);
+const CORE_ROOT = new URL(
+  '../../../packages/compiler/src/internal/compiler/semantic-core/',
+  import.meta.url,
+);
 /**
  * The canonical Part Program protocol module (ADR-0148 exchange artifact).
  * It is the one deliberate outside-module import: import-free, bundler-neutral,
  * and shared with the runtime so compiler and runtime cannot drift.
  */
-const PROTOCOL_PROGRAM = new URL('../src/internal/protocol/part-program.ts', import.meta.url);
+const PROTOCOL_PROGRAM = new URL('../../../packages/protocol/src/part-program.ts', import.meta.url);
 /** The import-free, host-free canonical VOID_TAGS owner (protocol base). */
-const PROTOCOL_VOID_TAGS = new URL('../src/internal/protocol/void-tags.ts', import.meta.url);
+const PROTOCOL_VOID_TAGS = new URL('../../../packages/protocol/src/void-tags.ts', import.meta.url);
 /** The import-free, host-free canonical forbidden-sink owner (protocol base). */
 const PROTOCOL_FORBIDDEN_SINKS = new URL(
-  '../src/internal/protocol/forbidden-sinks.ts',
+  '../../../packages/protocol/src/forbidden-sinks.ts',
   import.meta.url,
 );
 /**
@@ -27,7 +30,7 @@ const PROTOCOL_FORBIDDEN_SINKS = new URL(
  * may import it without gaining host state — the same admission rule as the
  * other protocol base owners.
  */
-const PROTOCOL_ERRORS = new URL('../src/internal/protocol/errors.ts', import.meta.url);
+const PROTOCOL_ERRORS = new URL('../../../packages/protocol/src/errors.ts', import.meta.url);
 
 /** Protocol base owners a semantic-core or protocol module may import. */
 const PROTOCOL_BASE = [
@@ -75,7 +78,9 @@ test('ADR-0148 semantic core imports stay bundler-neutral and inside the core', 
     const source = await readFile(file, 'utf8');
     for (const specifier of moduleSpecifiers(source, file)) {
       if (!specifier.startsWith('.')) {
-        expect(specifier, `${file.pathname} external import`).toEqual('typescript');
+        expect(specifier, `${file.pathname} external import`).toMatch(
+          /^(?:typescript|@openelement\/protocol\/[a-z-]+)$/,
+        );
         continue;
       }
       const resolved = new URL(specifier, file);

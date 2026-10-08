@@ -30,7 +30,7 @@ export type {
   SpecialFileType,
   StrategySource,
   UnsafeHtml,
-} from '../protocol/framework.ts';
+} from '@openelement/protocol/framework';
 
 export {
   ERROR_PREFIX,
@@ -41,10 +41,10 @@ export {
   setErrorTelemetryHook,
   SsrRenderError,
 } from './errors.ts';
-export type { ErrorPhase, ErrorSeverity, ErrorTelemetryHook } from '../protocol/errors.ts';
+export type { ErrorPhase, ErrorSeverity, ErrorTelemetryHook } from '@openelement/protocol/errors';
 export { wrapInDocument } from './html-escape.ts';
 export { StyleSheet } from './style-sheet.ts';
-export type { StyleSheetLike, StyleSheetRule } from '../protocol/style-sheet.ts';
+export type { StyleSheetLike, StyleSheetRule } from '@openelement/protocol/style-sheet';
 export { camelToKebab } from './tag-utils.ts';
 export type {
   OpenElementAttribute,
@@ -53,20 +53,20 @@ export type {
   OpenElementEvent,
   OpenElementPackageManifest,
   OpenElementSlot,
-} from '../protocol/manifest.ts';
+} from '@openelement/protocol/manifest';
 export type {
   CemCompatibilityReport,
   CompatibilityClassification,
   CompatibilityTier,
-} from '../protocol/manifest.ts';
+} from '@openelement/protocol/manifest';
 export { escapeAttr, escapeAttrValue, escapeHtml } from './html-escape.ts';
-export type { SignalLike, Unsubscribe } from '../protocol/signal.ts';
+export type { SignalLike, Unsubscribe } from '@openelement/protocol/signal';
 export { consumeContext, type Context, createContext, provideContext } from './signal-context.ts';
 export { createLogger } from './logger.ts';
 export { assertValidTagName, isValidTagName } from './tag-utils.ts';
 export { normalizeSeparators, pathToTagName } from './path-utils.ts';
 export { transformIslandSource } from './island-transform.ts';
-export type { IslandTransformOptions, IslandTransformResult } from '../protocol/island.ts';
+export type { IslandTransformOptions, IslandTransformResult } from '@openelement/protocol/island';
 
 // Data adapters — type contract surface only
 export type {
@@ -76,7 +76,7 @@ export type {
   LoaderContext,
   ServerRouteContext,
   ServerRouteMetadata,
-} from '../protocol/data.ts';
+} from '@openelement/protocol/data';
 
 export {
   deepGetElementById,

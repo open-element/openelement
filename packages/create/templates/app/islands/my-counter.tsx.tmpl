@@ -1,36 +1,20 @@
 /**
- * my-counter — minimal counter island (compiled).
+ * my-counter — the interactive counter island (compiled).
  *
  * Hydrates on idle; the buttons increment/decrement through the compiled
  * event Parts and the count renders through the compiled text Part. The
- * shadow root keeps the island a DSD citizen.
+ * shadow root keeps the island a DSD citizen. Design tokens from
+ * app/styles/tokens.css inherit through the shadow boundary.
  */
 import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
-import { compiledStyle } from '../components/page-styles.ts';
+import counterStyles from './my-counter.css';
 
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
 
-// Same-module style sheet: the compiler erases this const from
-// the island module and emits its bytes as the component's `.oe-style.css`
-// asset. Cross-module sheet imports fail closed (OEC9028).
-const counterStyles = [
-  compiledStyle(`
-    :host { display: inline-block; }
-    .counter-row { display: inline-flex; gap: 0.75rem; align-items: center; }
-    button {
-      width: 2rem; height: 2rem; border: 1px solid var(--line); border-radius: 6px;
-      background: #fff; color: var(--ink); font-size: 1rem; line-height: 1; cursor: pointer;
-      transition: border-color 0.15s ease, color 0.15s ease;
-    }
-    button:hover { border-color: var(--brand); color: var(--brand); }
-    span { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
-  `),
-];
-
 @element('my-counter', { root: 'shadow-open' })
 export default class MyCounter extends OpenElement {
-  static override styles = counterStyles;
+  static override styles = [counterStyles];
 
   @property({ reflect: false, attribute: false })
   count = 0;

@@ -44,9 +44,11 @@ import { tmpdir } from 'node:os';
 
 const repoRoot = join(import.meta.dirname!, '..', '..');
 
-test('version-bump: the ten points are the named stamp sites', () => {
+test('version-bump: the named stamp sites cover the six release packages', () => {
   expect(PACKAGE_CONFIGS).toEqual([
+    'packages/protocol/package.json',
     'packages/element/package.json',
+    'packages/compiler/package.json',
     'packages/router/package.json',
     'packages/create/package.json',
     'packages/ui/package.json',
@@ -197,7 +199,7 @@ test('version-bump: dry run reports every point against the live tree', async ()
     ADMITTED_TWIN_FIXTURE,
     ...README_SOURCE_LINES.map((line) => line.path),
   ]);
-  expect(plan.edits.filter((edit) => edit.point === 'package-config').length).toEqual(4);
+  expect(plan.edits.filter((edit) => edit.point === 'package-config').length).toEqual(6);
   expect(plan.edits.filter((edit) => edit.point === 'create-anchor').length).toEqual(1);
   expect(plan.edits.filter((edit) => edit.point === 'release-state').length).toEqual(1);
   expect(plan.edits.filter((edit) => edit.point === 'admitted-target').length).toEqual(1);
@@ -261,15 +263,15 @@ test('version-bump: consistency check reports the points that lag', async () => 
   expect(
     atCurrent.filter((line) => memberPaths.some((path) => line.startsWith(path))).length,
   ).toEqual(laggingNow);
-  // A different expected version reports every stamp point: 4 configs + anchor
+  // A different expected version reports every stamp point: 6 configs + anchor
   // + state sourceVersion/activeTarget + admitted + twin pair + two READMEs +
-  // generated manifest = 13, plus every member riding the tree's train (the
+  // generated manifest = 15, plus every member riding the tree's train (the
   // #1524 stamps — none can carry a 9.9.9 target); the www anchor audit is
   // expected-version-independent, so it adds nothing here on a healthy tree.
   const allMembers = await planVersionBump(repoRoot, '9.9.9');
   const trainMembers = allMembers.members.filter((member) => member.status !== 'skipped').length;
   const failures = await inconsistencyFailures(repoRoot, '9.9.9');
-  expect(failures.length).toEqual(13 + trainMembers);
+  expect(failures.length).toEqual(15 + trainMembers);
   // The skipped (non-release-line) fixtures stay exempt from the stamp check.
   expect(allMembers.members.some((member) => member.status === 'skipped')).toBeTruthy();
   expect(
@@ -397,7 +399,7 @@ test('version-bump: a write against a fixture tree moves all ten points and rege
     await writeFile(join(root, GENERATED_MANIFEST), `{\n  "version": "${version}"\n}`);
 
     const plan = await planVersionBump(root, next);
-    expect(plan.edits.length).toEqual(10);
+    expect(plan.edits.length).toEqual(12);
     for (const edit of plan.edits) {
       await writeFile(join(root, edit.path), edit.after, 'utf8');
     }

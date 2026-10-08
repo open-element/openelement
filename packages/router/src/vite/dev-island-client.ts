@@ -20,15 +20,16 @@
 import process from 'node:process';
 import type { Plugin } from 'vite';
 
-import type { FrameworkOptions } from './internal/protocol/framework.ts';
+import type { FrameworkOptions } from './framework.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
 
-import { generateClientEntry } from './internal/ssg/index.ts';
+import { generateClientEntry, islandsMightUseRegions } from './internal/ssg/index.ts';
 import { buildClientIslandEntries } from './internal/ssg/client-island-entries.ts';
 import { VIRTUAL_RUNTIME_SPECIFIERS } from './internal/ssg/entry-generators.ts';
 import { DEFAULT_ISLANDS_DIR } from './internal/paths.ts';
 import { compilerBehaviorDeclarations } from './internal/ssg/client-admission.ts';
 import { runtimeModulePath } from './internal/runtime-module-path.ts';
+import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 
 const VIRTUAL_CLIENT_ENTRY_ID = 'virtual:open-client-entry';
 // Exported for plugin.ts: the dev watcher invalidates this module when the
@@ -99,7 +100,27 @@ export function devIslandClientPlugin(
         ),
         upgradeStrategy: options.island?.upgradeStrategy,
       });
-      return generateClientEntry(islandEntries, { enhancedForms, renderer: options.renderer });
+      // #1548: same regions scan the production build runs, so dev serves the
+      // same entry specialization (and exercises it) instead of diverging
+      // from the built bundle. The scan is conservative: any unresolvable
+      // island module keeps the builders-carrying entry.
+      const mightUseRegions = islandsMightUseRegions({
+        root,
+        islandsDir,
+        islandTagNames: ctx.phase1.islandTagNames ?? [],
+        islandFiles: ctx.phase1.islandFiles ?? [],
+        packageIslandDecls: ctx.phase1.packageIslandDecls ?? [],
+        compilerBehaviorDecls: compilerBehaviorDeclarations(
+          ctx.phase1.staticComponents,
+          options.island?.upgradeStrategy,
+        ),
+        staticSidecars: [ISLAND_ADMISSION],
+      });
+      return generateClientEntry(islandEntries, {
+        enhancedForms,
+        renderer: options.renderer,
+        ...(mightUseRegions ? {} : { includeRegionsRuntime: false }),
+      });
     },
   };
 }

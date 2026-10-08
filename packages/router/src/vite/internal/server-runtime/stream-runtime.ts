@@ -1,7 +1,7 @@
 /**
  * @openelement/router/server-runtime — the streaming pump.
  *
- * The request-time streaming semantics of the generated Hono entry: the
+ * The request-time streaming semantics of the generated server entry: the
  * request scope with its abort fan-out, the deferred-field observer front
  * gate, the shell commitment with its typed seed attribute, the bounded
  * wake/queue pump behind a `highWaterMark: 0` ReadableStream, the
@@ -46,7 +46,7 @@ import {
 } from '@openelement/element/authoring';
 import { isOpenElementNotFound, isOpenElementRedirect } from '../../../authoring.ts';
 import { serveError, StreamErrorCode } from '../../../internal/error-codes.ts';
-import type { StreamRouteManifest } from '../protocol/ssg.ts';
+import type { StreamRouteManifest } from '@openelement/protocol/ssg';
 
 /** One declared deferred field's settlement record (the pump's queue unit). */
 export interface StreamFieldRecord {

@@ -32,8 +32,8 @@ test('ISR modules are deleted from @openelement/element internals', async () => 
     'packages/element/src/internal/core/isr.ts must be deleted (#1217)',
   ).toEqual(false);
   expect(
-    await repoFileExists('packages/element/src/internal/protocol/isr.ts'),
-    'packages/element/src/internal/protocol/isr.ts must be deleted (#1217)',
+    await repoFileExists('packages/protocol/src/isr.ts'),
+    'packages/protocol/src/isr.ts must be deleted (#1217)',
   ).toEqual(false);
 });
 
@@ -48,8 +48,8 @@ test('no ISR surface remains in element public entry points', async () => {
     'packages/element/src/public-contracts.ts',
     'packages/element/src/build-utils.ts',
     'packages/element/src/internal/core/index.ts',
-    'packages/element/src/internal/protocol/framework.ts',
-    'packages/element/src/internal/protocol/runtime.ts',
+    'packages/protocol/src/framework.ts',
+    'packages/protocol/src/runtime.ts',
   ]) {
     const source = await readRepoFile(path);
     for (const token of [
@@ -74,8 +74,8 @@ test('no ISR/revalidate semantics remain in app authoring or adapter SSG', async
     'packages/router/src/vite/internal/ssg/ssg-render.ts',
     'packages/router/src/vite/internal/ssg/entry-route-helpers.ts',
     'packages/router/src/vite/internal/ssg/entry-render-ssg.ts',
-    'packages/router/src/vite/internal/protocol/framework.ts',
-    'packages/router/src/vite/internal/protocol/ssg.ts',
+    'packages/protocol/src/framework.ts',
+    'packages/protocol/src/ssg.ts',
     'packages/router/src/vite/framework.ts',
   ]) {
     const source = await readRepoFile(path);

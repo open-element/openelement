@@ -150,15 +150,23 @@ const releaseState = JSON.parse(
   await readFile(join(siteRoot, '../docs/release/release-state.json'), 'utf8'),
 ) as {
   sourceVersion: string;
-  packages: Array<{ name: string; registry: Record<string, string | undefined> }>;
+  packages: Array<{
+    name: string;
+    status?: 'published' | 'unpublished';
+    registry?: Record<string, string | undefined>;
+  }>;
 };
 const sourceVersion = releaseState.sourceVersion;
-const alphaResolutions = releaseState.packages.map((pkg) => pkg.registry.alpha);
-// The source line counts as published only when EVERY package's @alpha
-// dist-tag resolves to it — a partial train must still read as unpublished.
+// Schema v4 (#1557): only published packages carry dist-tags; an unpublished
+// package has no @alpha tag and cannot vote on the published claim.
+const publishedPackages = releaseState.packages.filter((pkg) => pkg.status !== 'unpublished');
+const alphaResolutions = publishedPackages.map((pkg) => pkg.registry?.alpha);
+// The source line counts as published only when EVERY published package's
+// @alpha dist-tag resolves to it — a partial train must still read as
+// unpublished.
 const sourceLinePublished = alphaResolutions.every((v) => v === sourceVersion);
-const createEntry = releaseState.packages.find((pkg) => pkg.name === '@openelement/create');
-const alphaResolvesTo = createEntry?.registry.alpha ?? 'unknown';
+const createEntry = publishedPackages.find((pkg) => pkg.name === '@openelement/create');
+const alphaResolvesTo = createEntry?.registry?.alpha ?? 'unknown';
 
 // Roadmap publish-state drift guard: app/routes/roadmap.tsx must not
 // hand-write an alpha-train publish claim beside

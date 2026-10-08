@@ -6,7 +6,7 @@ Docs and guides: <https://openelement.org>.
 
 This package exposes `OpenElement`, the product-facing base class for native
 Web Components, running on the compiled Part Program kernel: one mandatory
-compiler (`@openelement/element/compiler`) lowers each component's `render()` into
+compiler (`@openelement/compiler`) lowers each component's `render()` into
 a serializable program consumed by server serialization, fresh DOM creation,
 and existing-DOM claim alike. Light DOM is the current compiled default;
 Shadow/DSD is a first-class mode selected explicitly with
@@ -71,13 +71,16 @@ facade for one job; none of them names an `internal/` module.
 | `@openelement/element/html`            | Pure document helpers: `escapeHtml`/`escapeAttr`, `wrapInDocument`, `trustedHtml` — no runtime kernel in the graph.                                                          |
 | `@openelement/element/logger`          | The shared structured logger (`createLogger`, `createWarnScope`, `warnOnce`) without pulling in the compiled runtime.                                                        |
 | `@openelement/element/build-utils`     | Build orchestration for adapters: JSON formatting, tag/path helpers, `SsrRenderError`, island transforms, runtime adapters.                                                  |
-| `@openelement/element/compiler`        | Compiler tooling **inside a build process**: the TSX-to-Part-Program semantic core plus the Vite plugin boundary.                                                            |
-| `@openelement/element/vite`            | The standalone Element authoring plugin (`element()`), for builds that do not use Router.                                                                                    |
 | `@openelement/element/client-only`     | The fresh-DOM runtime WITHOUT the existing-DOM claim executor — selected by the Router for pages where no island can hydrate server DOM. Same public surface, ~9 KB smaller. |
+| `@openelement/element/no-regions`      | The hydrating runtime WITHOUT the when/each Region builders (#1548) — selected by the Router when the island regions scan proves no admitted island module lowers a conditional or list Region. Same public surface; a Region Part reaching it fails closed (`OE_RUNTIME_REGION_BUILDERS_MISSING`). |
+| `@openelement/element/base`            | Neither optional install: no claim executor, no Region builders (#1548) — the `base` row of the per-feature floor table, for pages whose every island is client-only AND uses no Regions. The Router's two-predicate selection lands here only on proof of both. |
+| `@openelement/element/css-modules`     | Ambient `*.css` module type (#1558): the default export of an imported `.css` sheet is the cross-realm `StyleSheetLike`. Types-only — load it through tsconfig `types` (the vite/client pattern); it resolves no runtime module. |
 
-`compiler` and `vite` are host-side build entries: they import the TypeScript
-compiler API (and Vite, for `vite`) and must never be reached from
-browser/runtime entry points.
+The compiler (`@openelement/compiler`, including the standalone `element()`
+Vite plugin at `@openelement/compiler/vite`) is a separate package since the
+#1557 split: it imports the TypeScript compiler API and must never be reached
+from browser/runtime entry points. The cross-system contracts (Part Program
+IR, error dialect, admission descriptors) live in `@openelement/protocol`.
 
 ## Boundary
 

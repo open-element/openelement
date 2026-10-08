@@ -21,11 +21,11 @@ import {
   ENTRY_REGISTRATION_OWNERS,
   SSR_REGISTRY_ORIGINAL_DEFINE,
   SSR_REGISTRY_STUB_MARKER,
-} from '../src/vite/internal/protocol/registry-markers.ts';
+} from '@openelement/protocol/registry-markers';
 import { generateCustomElementsPolyfill } from '../src/vite/internal/ssg/ssr-polyfills.ts';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { installSsrRegistryGuard } from '../src/vite/internal/server-runtime/security.ts';
-import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
+import type { RouteEntry } from '@openelement/protocol/framework';
 
 const routes: RouteEntry[] = [
   {

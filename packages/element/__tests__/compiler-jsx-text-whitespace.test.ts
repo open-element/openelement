@@ -36,8 +36,8 @@ import ts from 'typescript';
 import {
   CompiledElementError,
   compileElementProgram,
-} from '../src/internal/compiler/semantic-core/compile.ts';
-import type { ProgramTreeNode } from '../src/internal/protocol/part-program.ts';
+} from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
+import type { ProgramTreeNode } from '@openelement/protocol/part-program';
 import { serializeToHtml } from '../src/internal/compiled/runtime.ts';
 
 const PRELUDE = `

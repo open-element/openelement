@@ -1,0 +1,12 @@
+/**
+ * /api/ping — a request-time server route: a plain WinterCG-shaped handler
+ * (Request → Response). No framework runtime attaches to it; any Response
+ * works, and Response.json is the common shape.
+ */
+export default function ping() {
+  return Response.json({
+    pong: true,
+    framework: 'openElement',
+    route: '/api/ping',
+  });
+}

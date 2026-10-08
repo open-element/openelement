@@ -74,7 +74,11 @@ const tmp = await mkdtemp(join(tmpdir(), `openelement-packed-serve-${runtime}-`)
 let server: import('node:child_process').ChildProcess | undefined;
 try {
   // The unpublished @openelement/* file: pins resolve into the installed
-  // node_modules tree instead of the registry.
+  // node_modules tree instead of the registry. Since #1557 the packed
+  // element/router tarballs carry transitive workspace pins (protocol,
+  // compiler at the exact current version); declaring every framework
+  // tarball as a direct file: dependency lets npm dedupe satisfy those
+  // transitives from the local tarballs pre-publish.
   writeFileSync(
     join(tmp, 'package.json'),
     formatJson({
@@ -84,6 +88,8 @@ try {
       dependencies: {
         '@openelement/router': `file:${routerTarball}`,
         '@openelement/element': `file:${elementTarball}`,
+        '@openelement/protocol': `file:${repoRoot}/packages/protocol/openelement-protocol-${PACKAGE_VERSION}.tgz`,
+        '@openelement/compiler': `file:${repoRoot}/packages/compiler/openelement-compiler-${PACKAGE_VERSION}.tgz`,
         vite: VITE_DEV_PIN,
         hono: '4.12.0',
         nitro: NITRO_VERSION,

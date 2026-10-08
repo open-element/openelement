@@ -8,8 +8,8 @@ export type {
   ProblemDetails,
   ServerRouteContext,
   ServerRouteMetadata,
-} from './internal/protocol/data.ts';
-export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from './internal/protocol/data.ts';
+} from '@openelement/protocol/data';
+export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/protocol/data';
 export type {
   AppShellConfig,
   CompatibilityClassification,
@@ -21,9 +21,9 @@ export type {
   Middleware,
   RouteEntry,
   SpecialFileType,
-} from './internal/protocol/framework.ts';
-export { HYDRATION_STRATEGIES } from './internal/protocol/framework.ts';
-export type { OpenElementRouteKind, OpenElementRouteNode } from './internal/protocol/app-model.ts';
+} from '@openelement/protocol/framework';
+export { HYDRATION_STRATEGIES } from '@openelement/protocol/framework';
+export type { OpenElementRouteKind, OpenElementRouteNode } from '@openelement/protocol/app-model';
 export type {
   OpenElementAttribute,
   OpenElementCssPart,
@@ -31,4 +31,4 @@ export type {
   OpenElementEvent,
   OpenElementPackageManifest,
   OpenElementSlot,
-} from './internal/protocol/manifest.ts';
+} from '@openelement/protocol/manifest';

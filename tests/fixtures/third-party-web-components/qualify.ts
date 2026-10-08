@@ -517,8 +517,9 @@ async function verifySsrHtml(appDir: string): Promise<void> {
 const FIXTURE_SOURCE_FILES = [
   'app/routes/third-party-wc.tsx',
   'app/components/page-third-party-wc.tsx',
+  'app/components/wc-page.css',
   'app/islands/wc-fixture.tsx',
-  'app/islands/wc-styles.ts',
+  'app/islands/wc-fixture.css',
   'app/islands/wc-open-child.tsx',
   'app/client/wc-client.ts',
 ] as const;

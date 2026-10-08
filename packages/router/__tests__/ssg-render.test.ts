@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { Hono } from 'hono';
 import { ssgRender } from '../src/vite/internal/ssg/index.ts';
+import { createWinterCgApp } from '../src/vite/internal/server-runtime/wintercg.ts';
 import { resolveDynamicRoutePath } from '../src/vite/internal/ssg/ssg-helpers.ts';
 import type { SsgPageOutput, SsgRenderOptions, SsrBundle } from '../src/vite/internal/ssg/index.ts';
 
@@ -22,12 +22,21 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 function createMockBundle(overrides: Partial<SsrBundle> = {}): SsrBundle {
-  const app = new Hono();
-  app.get('/', (c) => c.text('ok'));
+  const app = createWinterCgApp();
   // Mock dispatcher must serve every static routeInfo path: SSG discovers
   // from routeInfo and renders through the real dispatcher (Beta.2.1), so a
   // routeInfo path missing from the app is a real 404, not a silent skip.
-  app.get('/about', (c) => c.text('about ok'));
+  // Pages dispatch through a wildcard middleware — the unified-dispatcher
+  // shape the generated entry ships (fn-form mounts would suppress their
+  // path from prerender discovery by design).
+  const pages: Record<string, () => Response> = {
+    '/': () => new Response('ok'),
+    '/about': () => new Response('about ok'),
+  };
+  app.use('*', (request, next) => {
+    const respond = pages[new URL(request.url).pathname];
+    return respond ? respond() : next();
+  });
   return {
     default: app,
     routeInfo: [
@@ -80,7 +89,7 @@ test('ssgRender - rejects when module has no default export', async () => {
   await assertRejectsIncludes(
     () => ssgRender(bundle as SsrBundle, defaultOptions),
     Error,
-    'no Hono app found',
+    'no dispatchable server app',
   );
 });
 
@@ -204,11 +213,22 @@ test('ssgRender - output mkdir failure aborts the build with the fs error (#674)
 test('ssgRender - static non-200 routes fail the build (#600)', async () => {
   const outDir = './dist-test-ssg-render-non200';
   await rm(outDir, { recursive: true }).catch(() => {});
-  const app = new Hono();
-  app.get('/', (c) => c.html('<html><body>ok</body></html>'));
-  app.get('/missing', (c) => c.html('<html><body>not found</body></html>', 404));
-  app.get('/boom', (c) => c.html('<html><body>error</body></html>', 500));
-  app.get('/moved', (c) => c.redirect('/'));
+  const app = createWinterCgApp();
+  const html = (body: string, status = 200) =>
+    new Response(body, {
+      status,
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' },
+    });
+  const pages: Record<string, () => Response> = {
+    '/': () => html('<html><body>ok</body></html>'),
+    '/missing': () => html('<html><body>not found</body></html>', 404),
+    '/boom': () => html('<html><body>error</body></html>', 500),
+    '/moved': () => new Response(null, { status: 302, headers: { Location: '/' } }),
+  };
+  app.use('*', (request, next) => {
+    const respond = pages[new URL(request.url).pathname];
+    return respond ? respond() : next();
+  });
   const bundle = createMockBundle({
     default: app,
     routeInfo: [
@@ -337,9 +357,19 @@ test('ssgRender - dynamic-route failure in warn mode skips the failed page', asy
 test('ssgRender - request-time routes skip prerender and emit server artifacts', async () => {
   const outDir = './dist-test-ssg-render-request-time';
   await rm(outDir, { recursive: true }).catch(() => {});
-  const app = new Hono();
-  app.get('/', (c) => c.html('<html><body>static home</body></html>'));
-  app.get('/live', (c) => c.html('<html><body>request time</body></html>'));
+  const app = createWinterCgApp();
+  const page = (body: string) =>
+    new Response(`<html><body>${body}</body></html>`, {
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' },
+    });
+  const pages: Record<string, () => Response> = {
+    '/': () => page('static home'),
+    '/live': () => page('request time'),
+  };
+  app.use('*', (request, next) => {
+    const respond = pages[new URL(request.url).pathname];
+    return respond ? respond() : next();
+  });
   const bundle = createMockBundle({
     default: app,
     routeInfo: [
@@ -391,10 +421,20 @@ test('ssgRender - request-time routes skip prerender and emit server artifacts',
 test('ssgRender - index route under a directory prefix gets a clean URL (#956)', async () => {
   const outDir = './dist-test-ssg-render-blog-index';
   await rm(outDir, { recursive: true }).catch(() => {});
-  const app = new Hono();
-  app.get('/', (c) => c.html('<html><body>home</body></html>'));
-  app.get('/blog', (c) => c.html('<html><body>blog index</body></html>'));
-  app.get('/blog/first-post', (c) => c.html('<html><body>first post</body></html>'));
+  const app = createWinterCgApp();
+  const page = (body: string) =>
+    new Response(`<html><body>${body}</body></html>`, {
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' },
+    });
+  const pages: Record<string, () => Response> = {
+    '/': () => page('home'),
+    '/blog': () => page('blog index'),
+    '/blog/first-post': () => page('first post'),
+  };
+  app.use('*', (request, next) => {
+    const respond = pages[new URL(request.url).pathname];
+    return respond ? respond() : next();
+  });
   const bundle = createMockBundle({
     default: app,
     routeInfo: [
@@ -425,9 +465,19 @@ test('ssgRender - index route under a directory prefix gets a clean URL (#956)',
 test('ssgRender - hybrid pages (static GET + action) prerender and emit server artifacts (ADR-0120 amendment)', async () => {
   const outDir = './dist-test-ssg-render-hybrid';
   await rm(outDir, { recursive: true }).catch(() => {});
-  const app = new Hono();
-  app.get('/', (c) => c.html('<html><body>static home</body></html>'));
-  app.get('/guestbook', (c) => c.html('<html><body>guestbook</body></html>'));
+  const app = createWinterCgApp();
+  const page = (body: string) =>
+    new Response(`<html><body>${body}</body></html>`, {
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' },
+    });
+  const pages: Record<string, () => Response> = {
+    '/': () => page('static home'),
+    '/guestbook': () => page('guestbook'),
+  };
+  app.use('*', (request, next) => {
+    const respond = pages[new URL(request.url).pathname];
+    return respond ? respond() : next();
+  });
   const bundle = createMockBundle({
     default: app,
     routeInfo: [
@@ -494,26 +544,24 @@ test('request-time server entry serves the SSR bundle at request time', async ()
 
   const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    // The temp fixture sits outside any node_modules tree, so the bare
-    // 'hono' specifier the real generated entry uses cannot resolve there;
-    // hand the fixture the resolved specifier instead.
-    const honoSpecifier = import.meta.resolve('hono');
     // A minimal stand-in for the built SSR bundle: one request-time route
     // whose output depends on the live request (unlike a prerendered page).
-    // The openElementHandler named export mirrors the real entry's handler
-    // contract (#858), and __setRequestTimeClientScript mirrors the render-
-    // time client-script embedding the generated index.js wires up.
+    // The stand-in is hono-free WinterCG — the shape the generated entry
+    // ships since #1560. The openElementHandler named export mirrors the
+    // real entry's handler contract (#858), and __setRequestTimeClientScript
+    // mirrors the render-time client-script embedding the generated
+    // index.js wires up.
     await writeFile(
       join(dir, 'entry.js'),
-      `import { Hono } from ${JSON.stringify(honoSpecifier)};
-const app = new Hono();
-let __clientSrc = null;
+      `let __clientSrc = null;
 export function __setRequestTimeClientScript(src) { __clientSrc = src || null; }
-app.get('/live', (c) => c.html('<h1>live ' + new URL(c.req.url).searchParams.get('x') + '</h1>' +
-  (__clientSrc ? '<script type="module" src="' + __clientSrc + '"></script>' : '')));
-export const openElementHandler = (request, context = {}) =>
-  app.fetch(request, context.env || {}, context.platform);
-export default app;
+const page = (request) => new Response(
+  '<h1>live ' + new URL(request.url).searchParams.get('x') + '</h1>' +
+  (__clientSrc ? '<script type="module" src="' + __clientSrc + '"></script>' : ''),
+  { headers: { 'Content-Type': 'text/html; charset=UTF-8' } },
+);
+export const openElementHandler = (request, context = {}) => page(request, context);
+export default { fetch: (request, env, platform) => openElementHandler(request, { env, platform }) };
 `,
     );
     await writeFile(join(dir, 'index.js'), renderRequestTimeServerModule());
@@ -542,21 +590,20 @@ test('request-time server entry wires the island client script into the entry re
 
   const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    // The temp fixture sits outside any node_modules tree; use the resolved
-    // specifier (see the first request-time entry test).
-    const honoSpecifier = import.meta.resolve('hono');
+    // The temp fixture stands in for the built SSR bundle (hono-free
+    // WinterCG — see the first request-time entry test).
     await writeFile(
       join(dir, 'entry.js'),
-      `import { Hono } from ${JSON.stringify(honoSpecifier)};
-const app = new Hono();
-let __clientSrc = null;
+      `let __clientSrc = null;
 export function __setRequestTimeClientScript(src) { __clientSrc = src || null; }
-app.get('/live', (c) => c.html('<html><body><h1>live</h1>' +
+const page = (request) => new Response(
+  '<html><body><h1>live</h1>' +
   (__clientSrc ? '<script type="module" src="' + __clientSrc + '"></script>' : '') +
-  '</body></html>'));
-export const openElementHandler = (request, context = {}) =>
-  app.fetch(request, context.env || {}, context.platform);
-export default app;
+  '</body></html>',
+  { headers: { 'Content-Type': 'text/html; charset=UTF-8' } },
+);
+export const openElementHandler = (request, context = {}) => page(request, context);
+export default { fetch: (request, env, platform) => openElementHandler(request, { env, platform }) };
 `,
     );
     await writeFile(join(dir, 'index.js'), renderRequestTimeServerModule());
@@ -586,17 +633,13 @@ test('request-time server entry isRequestTimePath admits request-time paths (#55
 
   const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    // The temp fixture sits outside any node_modules tree; use the resolved
-    // specifier (see the first request-time entry test).
-    const honoSpecifier = import.meta.resolve('hono');
+    // The temp fixture stands in for the built SSR bundle (hono-free
+    // WinterCG — see the first request-time entry test).
     await writeFile(
       join(dir, 'entry.js'),
-      `import { Hono } from ${JSON.stringify(honoSpecifier)};
-const app = new Hono();
-export function __setRequestTimeClientScript() {}
-export const openElementHandler = (request, context = {}) =>
-  app.fetch(request, context.env || {}, context.platform);
-export default app;
+      `export function __setRequestTimeClientScript() {}
+export const openElementHandler = () => new Response('ok');
+export default { fetch: (request, env, platform) => openElementHandler(request, { env, platform }) };
 `,
     );
     await writeFile(
@@ -638,7 +681,7 @@ export default app;
 test('SSG discovers static pages from route records behind the unified HTTP middleware', async () => {
   const { createRouteMiddleware } = await import('@openelement/router/http');
   const root = await mkdtemp(join(tmpdir(), 'oe-record-ssg-'));
-  const app = new Hono();
+  const app = createWinterCgApp();
   let dynamicCalls = 0;
   const html = (body: string) =>
     new Response(body, { headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
@@ -655,12 +698,8 @@ test('SSG discovers static pages from route records behind the unified HTTP midd
       },
     },
   ]);
-  app.all('*', (c, next) =>
-    routeMiddleware(c.req.raw, async () => {
-      await next();
-      return c.res;
-    }),
-  );
+  // The route middleware IS the WinterCG shape: it registers directly (#1560).
+  app.use('*', routeMiddleware);
   try {
     await ssgRender(
       createMockBundle({
@@ -686,20 +725,19 @@ test('SSG discovers static pages from route records behind the unified HTTP midd
   }
 });
 
-// #1343 review (P2): exact-path middleware and method-only host registrations
-// are filtered out of hono/ssg discovery (method ALL + arity 2, or non-GET),
-// so they must not suppress the canonical GET discovery entry for the same
-// path — otherwise the page silently vanishes from a successful build.
+// #1343 review (P2): a scoped host middleware on the canonical path must not
+// suppress the canonical GET discovery entry for the same path — otherwise
+// the page silently vanishes from a successful build.
 test('SSG keeps canonical pages discoverable behind exact-path host middleware (#1343)', async () => {
   const { createRouteMiddleware } = await import('@openelement/router/http');
   const root = await mkdtemp(join(tmpdir(), 'oe-mw-ssg-'));
-  const app = new Hono();
+  const app = createWinterCgApp();
   let middlewareCalls = 0;
   // Host middleware on the exact canonical path: preserved as host behavior,
   // but not an SSG-discoverable page entry.
-  app.use('/about', async (_c, next) => {
+  app.use('/about', (_request, next) => {
     middlewareCalls++;
-    await next();
+    return next();
   });
   const html = (body: string) =>
     new Response(body, { headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
@@ -711,12 +749,7 @@ test('SSG keeps canonical pages discoverable behind exact-path host middleware (
       handlers: { GET: () => html('<main>canonical about</main>') },
     },
   ]);
-  app.all('*', (c, next) =>
-    routeMiddleware(c.req.raw, async () => {
-      await next();
-      return c.res;
-    }),
-  );
+  app.use('*', routeMiddleware);
   try {
     await ssgRender(
       createMockBundle({
@@ -736,12 +769,13 @@ test('SSG keeps canonical pages discoverable behind exact-path host middleware (
   }
 });
 
-test('SSG keeps canonical pages discoverable behind method-only host routes (#1343)', async () => {
+test('SSG keeps canonical pages discoverable behind method-keyed host records (#1343)', async () => {
   const { createRouteMiddleware } = await import('@openelement/router/http');
   const root = await mkdtemp(join(tmpdir(), 'oe-postonly-ssg-'));
-  const app = new Hono();
-  // A POST-only host route on the canonical path is not a GET page entry.
-  app.post('/contact', (c) => c.json({ ok: true }));
+  const app = createWinterCgApp();
+  // A POST method-keyed record on the canonical path is not a GET page
+  // entry, and a method-keyed API record is not a fn-form mount — the
+  // canonical page stays discoverable.
   const html = (body: string) =>
     new Response(body, { headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
   const routeMiddleware = createRouteMiddleware([
@@ -752,12 +786,7 @@ test('SSG keeps canonical pages discoverable behind method-only host routes (#13
       handlers: { GET: () => html('<main>canonical contact</main>') },
     },
   ]);
-  app.all('*', (c, next) =>
-    routeMiddleware(c.req.raw, async () => {
-      await next();
-      return c.res;
-    }),
-  );
+  app.use('*', routeMiddleware);
   try {
     await ssgRender(
       createMockBundle({
@@ -772,9 +801,10 @@ test('SSG keeps canonical pages discoverable behind method-only host routes (#13
     expect(await readFile(`${root}/dist/contact/index.html`, 'utf8')).toContain(
       'canonical contact',
     );
-    // The host POST route still answers through the real dispatcher.
+    // The 405 policy still answers through the real dispatcher (the record
+    // is GET-only; a POST hits the method-not-allowed responder).
     const posted = await app.request('/contact', { method: 'POST' });
-    expect(posted.status).toEqual(200);
+    expect(posted.status).toEqual(405);
   } finally {
     await rm(root, { recursive: true });
   }

@@ -1,46 +1,61 @@
-/* Design tokens + the document baseline (openElement starter).
+/* Design tokens + the document baseline (openElement showcase starter).
  *
  * Convention, not configuration: `openelement.config.ts` inlines this file
  * into every rendered document's <head> as <style data-oe-tokens>. Override
  * the path with `styles: { tokens: '...' }` there; delete the file and the
  * pages render unstyled but functional.
  *
- * Styling ownership: only true globals (design tokens, body baseline) live
- * here. Each page element carries its own rules in `static styles`
- * (`app/components/page-styles.ts`) — the server inlines them into the SSR
- * output as a @scope(<page-tag>) style block for light roots. Islands carry
- * their own `static styles` too.
+ * Styling ownership: only true globals live here (design tokens, the body
+ * baseline, ::selection). Each page element carries its own rules in
+ * `static styles`, arrayed from imported `.css` files — the server inlines
+ * them into the SSR output as a @scope(<page-tag>) style block, so pages
+ * are fully styled with zero client JavaScript. Islands carry their own
+ * `.css` sheets the same way.
  *
- * `--brand` must stay aligned with the ui package tokens (`--violet-6` in a
- * consumer-owned design-system stylesheet).
+ * The palette is pure CSS custom properties — no Tailwind, no preprocessor.
+ * Dark values ride the platform's own media query (P1: the browser picks
+ * the palette; the framework ships no theme runtime).
  */
 :root {
-  --paper: #faf9f6;
-  --ink: #1c1b17;
-  --ink-2: #5b594f;
-  --line: #e5e2d8;
-  --gray-0: #f8f9fa;
-  --gray-1: #f1f3f5;
-  --gray-3: #dee2e6;
-  --gray-5: #adb5bd;
-  --gray-7: #495057;
-  --gray-9: #212529;
+  --paper: #fdfdfc;
+  --surface: #f5f4f1;
+  --ink: #191823;
+  --ink-soft: #5d5b6a;
+  --line: #e5e4ec;
   --brand: #8262db;
-  --brand-2: #4f8ef7;
+  --brand-ink: #ffffff;
+  --brand-soft: #8262db1f;
+  --ok: #2b8a5e;
+  --warn: #b0802a;
+  --gray-0: #f8f9fa;
   --size-1: 4px;
   --size-2: 8px;
   --size-3: 12px;
   --size-4: 16px;
+  --size-6: 24px;
+  --size-8: 32px;
   --border-size-1: 1px;
-  --radius-2: 8px;
-  --radius-3: 14px;
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
   --font-sans: system-ui, -apple-system, sans-serif;
-  --font-serif: ui-serif, Georgia, 'Times New Roman', serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-size-0: 0.875rem;
-  --font-weight-5: 500;
-  --shadow-1: 0 1px 3px 0 rgb(0 0 0 / 0.08);
-  --shadow-2: 0 10px 28px rgb(80 70 160 / 0.12);
+  --content-width: 46rem;
+  --shadow-1: 0 1px 3px 0 rgb(20 18 33 / 0.07);
+  --shadow-2: 0 10px 28px rgb(60 50 120 / 0.1);
+}
+
+/* The same palette under the platform's dark preference: the custom
+ * properties cascade into every page and shadow root; no runtime swaps. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #17161f;
+    --surface: #1f1e2a;
+    --ink: #eceaf4;
+    --ink-soft: #a5a2b8;
+    --line: #312f40;
+    --brand-soft: #8262db33;
+  }
 }
 
 body {
@@ -48,10 +63,11 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-sans);
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 ::selection {
-  background: #8262db2e;
+  background: var(--brand-soft);
 }

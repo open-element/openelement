@@ -67,9 +67,6 @@ test('build output: artifact scan — no vendored highlighter, no self-hosted fo
     // The DSD static-styles marker is the server serializer's write and the
     // runtime's claim channel; an island copy would be a second writer.
     ['data-oe-static-styles', 'static-styles channel'],
-    // The reserved style-request suffix must resolve at build time; the
-    // literal surviving into a chunk means an unintercepted request shipped.
-    ['.oe-style.css', 'reserved style-request suffix'],
   ];
   for (const file of readdirSync(islandsDir)) {
     if (!file.startsWith('island-') || !file.endsWith('.js')) continue;

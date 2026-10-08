@@ -11,12 +11,13 @@
  */
 
 import {
+  type ItemEventBinding,
   type PartProgram,
   type ProgramCondition,
   type ProgramEventAction,
   type RootMode,
   validatePartProgram,
-} from '../../src/internal/protocol/part-program.ts';
+} from '@openelement/protocol/part-program';
 
 export interface TestNodeSpec {
   k: 'el' | 'text' | 'part' | 'ival';
@@ -57,6 +58,8 @@ export interface TestPartSpec {
   key?: string;
   field?: string;
   item?: TestNodeSpec[];
+  /** Per-item event bindings (#1556 IR v2); valid only on `each` parts. */
+  itemEvents?: ItemEventBinding[];
 }
 
 export interface TestProgramSpec {

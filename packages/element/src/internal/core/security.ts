@@ -19,7 +19,7 @@
 
 import { createLogger } from './logger.ts';
 import { AuthoringErrorCode, formatError, OpenElementError } from './errors.ts';
-import { isSafeAttributeName as protocolIsSafeAttributeName } from '../protocol/forbidden-sinks.ts';
+import { isSafeAttributeName as protocolIsSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
 
 /** Object prototype keys that must never be injected from untrusted props. */
 export const DANGEROUS_KEYS: ReadonlySet<string> = new Set([

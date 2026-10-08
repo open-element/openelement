@@ -12,8 +12,8 @@
  */
 
 import type { Plugin } from 'vite';
-import type { FrameworkOptions } from './internal/protocol/framework.ts';
-import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
+import type { FrameworkOptions } from './framework.ts';
+import type { SsgBehaviorOptions } from '@openelement/protocol/ssg';
 import { OpenElementBuildContext } from './build-context.ts';
 import { buildPlugin } from './build.ts';
 import { islandTransformPlugin } from './island-transform.ts';
@@ -60,7 +60,7 @@ export function createOpenPlugin(
     name: 'open:core',
     // The transform hook compiles @element modules and must see the authored
     // TSX source: enforce 'pre' so it runs before Vite's builtin TS/JSX
-    // lowering (see @openelement/element/compiler).
+    // lowering (see @openelement/compiler).
     enforce: 'pre',
     ...createConfigHooks(state, options),
     ...createCompilerHooks(state),
@@ -86,8 +86,9 @@ export function createOpenPlugin(
       // with middleware.use configured, the entry
       // exposes openElementDevFetch — the dev-server-shaped adapter over the
       // same composed fetch-middleware handler that the start CLI, the e2e
-      // fixture server, and the Nitro entry use. Without it, keep the
-      // default export (the bare Hono app) so the dev path is unchanged.
+      // fixture server, and the Nitro entry use. Without it, the default
+      // export (the WinterCG app, #1560) answers fetch(request, env, ctx)
+      // directly, so the dev path is unchanged.
       ...(state.resolvedOptions.middleware?.use?.length ? { export: 'openElementDevFetch' } : {}),
       injectClientScript: true,
       // #951: the upstream exclude regexes test req.url WITH its query
