@@ -177,7 +177,8 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
   expect(manifest.devDependencies['@tailwindcss/vite']).toEqual('4.3.3');
   expect(manifest.devDependencies.tailwindcss).toEqual('4.3.3');
   expect(templates['app/styles/theme.css']).toContain('@theme');
-  expect(templates['vite.config.ts']).toContain('applyTailwindPreset');
+  expect(templates['vite.config.ts']).toContain('plugins: [...openElement()]');
+  expect(templates['openelement.config.ts']).toContain('tailwind: { theme: [');
   // The landing page is the showcase: framework name, tagline, both islands,
   // the static architecture section, and JS-cost badges naming each section.
   const home = templates['app/components/page-home.tsx'];

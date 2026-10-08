@@ -197,6 +197,14 @@ export interface OpenElementUserConfig {
    */
   viewTransition?: boolean;
   /**
+   * The Tailwind preset (alpha9 C2 #1505, opt-in): the config-file home for
+   * the same option the inline `openElement(...)` face takes. `true` enables
+   * the preset with defaults; an object names the theme/components sources,
+   * the `@scope` face tags, and the DSD link injection — see
+   * `TailwindPresetOptions` (@openelement/router/vite).
+   */
+  tailwind?: boolean | import('./vite/preset-tailwind.ts').TailwindPresetOptions;
+  /**
    * Speculation Rules emission. Boolean for now: `true` uses the framework
    * route-derived defaults, `false` emits none. An object form (explicit
    * prerender/prefetch lists, exclusions, eagerness) is a possible future
@@ -233,9 +241,18 @@ export const OPEN_ELEMENT_CONFIG_KEYS: readonly string[] = [
   'styles',
   'i18n',
   'viewTransition',
+  'tailwind',
   'speculation',
   'build',
   'middleware',
+];
+
+/** Accepted keys inside the `tailwind` preset object. */
+export const OPEN_ELEMENT_TAILWIND_KEYS: readonly string[] = [
+  'theme',
+  'components',
+  'scopeTags',
+  'injectDsdLinks',
 ];
 
 /** Accepted keys inside `head`. */
@@ -371,6 +388,7 @@ export function assertValidUserConfig(value: unknown): asserts value is OpenElem
     styles,
     i18n,
     viewTransition,
+    tailwind,
     speculation,
     build,
     middleware,
@@ -451,6 +469,20 @@ export function assertValidUserConfig(value: unknown): asserts value is OpenElem
   // no build reads pass validation.
   if (viewTransition !== undefined) assertBooleanKey('viewTransition', viewTransition);
   if (speculation !== undefined) assertBooleanKey('speculation', speculation);
+  if (tailwind !== undefined && tailwind !== true) {
+    if (!isPlainObject(tailwind)) {
+      throw typeError('tailwind', 'true or an object', tailwind);
+    }
+    assertKnownKeys(tailwind, 'tailwind', OPEN_ELEMENT_TAILWIND_KEYS);
+    for (const key of ['theme', 'components', 'scopeTags'] as const) {
+      const list = tailwind[key];
+      if (list !== undefined) assertStringArray(`tailwind.${key}`, list);
+    }
+    const injectDsdLinks = (tailwind as { injectDsdLinks?: unknown }).injectDsdLinks;
+    if (injectDsdLinks !== undefined) {
+      assertBooleanKey('tailwind.injectDsdLinks', injectDsdLinks);
+    }
+  }
 
   if (build !== undefined) {
     if (!isPlainObject(build)) throw typeError('build', 'an object', build);
