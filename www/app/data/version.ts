@@ -15,27 +15,29 @@ import {
 export const OPENELEMENT_VERSION = `v${SOURCE_VERSION}`;
 
 // Per-package registry `latest` dist-tag truth. There is deliberately NO
-// single "published version" constant: @openelement/router has never shipped
-// the 0.43.x stable line, so no one version covers every package. Site and
-// docs copy must present the per-package state, never a fabricated shared
-// version. Keep in sync with docs/release/release-state.json
-// (release:state-machine:check offline; release:registry-check verifies it
-// against the live registry).
+// single "published version" constant: a version common to every package is
+// what would justify one, and no STABLE version is (see
+// COMMON_PUBLISHED_VERSION below) — the 1.0 prerelease line sits on `latest`
+// for all six packages. Site and docs copy must present the per-package
+// state, never a fabricated shared version. Keep in sync with
+// docs/release/release-state.json (release:state-machine:check offline;
+// release:registry-check verifies it against the live registry).
 export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {
-  '@openelement/element': 'v0.43.3',
-  '@openelement/create': 'v0.43.3',
-  '@openelement/ui': 'v0.43.3',
-  '@openelement/router': 'v0.41.0-alpha.6',
+  '@openelement/protocol': 'v1.0.0-alpha.11',
+  '@openelement/element': 'v1.0.0-alpha.11',
+  '@openelement/compiler': 'v1.0.0-alpha.11',
+  '@openelement/router': 'v1.0.0-alpha.11',
+  '@openelement/create': 'v1.0.0-alpha.11',
+  '@openelement/ui': 'v1.0.0-alpha.11',
 };
 
 // Schema v4 (#1557): packages that have never published carry no registry
 // truth yet. They are named here — never given a placeholder latest — until
 // the release commit that first publishes them flips their release-state
-// status to "published" and moves them into PUBLISHED_LATEST.
-export const UNRELEASED_PACKAGES: readonly string[] = [
-  '@openelement/protocol',
-  '@openelement/compiler',
-];
+// status to "published" and moves them into PUBLISHED_LATEST. Empty since the
+// alpha.11 release published the last two (protocol, compiler); the constant
+// stays as the explicit anchor release:state-machine:check requires.
+export const UNRELEASED_PACKAGES: readonly string[] = [];
 
 // The newest STABLE version published for every package, or null when none
 // exists. It is null today: Router has no 0.43.x. release:registry-check

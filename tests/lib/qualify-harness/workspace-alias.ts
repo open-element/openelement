@@ -121,8 +121,15 @@ export async function applyWorkspaceAliases(
  * allowBuilds allowlist, root lockfile) governs THIS checkout, not a consumer
  * project that merely sits inside it — the same contract the starter smoke
  * documents for its clean-machine simulation.
+ *
+ * --no-frozen-lockfile: the scaffolded app's create-CLI install (the default
+ * `pnpm install`) already wrote a registry-resolved pnpm-lock.yaml, and
+ * applyWorkspaceAliases then rewrites the manifest (link: entries + fixture
+ * pins). CI runners imply frozen installs, and that manifest rewrite is
+ * exactly the change a frozen install refuses (ERR_PNPM_OUTDATED_LOCKFILE) —
+ * same rationale as the starter smoke's file:// rewiring (#1530).
  */
 export async function installAppDependencies(appDir: string): Promise<void> {
   await writeFile(join(appDir, 'pnpm-workspace.yaml'), 'packages: []\n');
-  await runStep('pnpm', ['install'], { cwd: appDir });
+  await runStep('pnpm', ['install', '--no-frozen-lockfile'], { cwd: appDir });
 }

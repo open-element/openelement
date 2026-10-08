@@ -72,11 +72,11 @@ const THIRD_PARTY_IMPORTS = {
 async function readEventCount(page: Page): Promise<number> {
   return await page.evaluate(() => {
     // The definePage route renders the compiled page class directly under the
-    // path-derived tag (third-party-wc); the fixture island lives in its
-    // shadow root.
+    // path-derived tag (third-party-wc), a body-level element: the #1530
+    // showcase starter scaffolds no app-shell island between the document and
+    // the route element. The fixture island lives in the page's shadow root.
     const fixture = document
-      .querySelector('app-shell')
-      ?.shadowRoot?.querySelector('third-party-wc')
+      .querySelector('third-party-wc')
       ?.shadowRoot?.querySelector('wc-fixture') as HTMLElement | null;
     const root = fixture?.shadowRoot;
     const eventText = root?.querySelector('#event-count')?.textContent ?? '';
@@ -90,8 +90,7 @@ async function interactAndVerifyEventCount(page: Page, startCount: number): Prom
       // The compiled page class renders under the path-derived tag; the
       // fixture island lives in its shadow root.
       const fixture = document
-        .querySelector('app-shell')
-        ?.shadowRoot?.querySelector('third-party-wc')
+        .querySelector('third-party-wc')
         ?.shadowRoot?.querySelector('wc-fixture') as HTMLElement | null;
       const root = fixture?.shadowRoot;
       const eventText = root?.querySelector('#event-count')?.textContent ?? '';
@@ -196,8 +195,10 @@ export async function verifyBrowser(distDir: string): Promise<{
       const tags = ['wc-lit-counter', 'sl-button', 'md-filled-button'];
       const observed = new Set<Node>();
       const watch = new MutationObserver(() => {
-        const appRoot = document.querySelector('app-shell')?.shadowRoot;
-        const routeRoot = appRoot?.querySelector('third-party-wc')?.shadowRoot;
+        // The route element is body-level (no shell island, #1530): body is
+        // the outermost node the pre-upgrade capture watches.
+        const appRoot = document.body;
+        const routeRoot = document.querySelector('third-party-wc')?.shadowRoot;
         const root = routeRoot?.querySelector('wc-fixture')?.shadowRoot;
         for (const candidate of [appRoot, routeRoot, root]) {
           if (candidate && !observed.has(candidate)) {
@@ -262,8 +263,7 @@ export async function verifyBrowser(distDir: string): Promise<{
       // The compiled page class renders under the path-derived tag; the
       // fixture island lives in its shadow root.
       const fixture = document
-        .querySelector('app-shell')
-        ?.shadowRoot?.querySelector('third-party-wc')
+        .querySelector('third-party-wc')
         ?.shadowRoot?.querySelector('wc-fixture') as HTMLElement | null;
       const lit = fixture?.shadowRoot?.querySelector('wc-lit-counter') as HTMLElement & {
         shadowRoot?: ShadowRoot;
@@ -295,8 +295,7 @@ export async function verifyBrowser(distDir: string): Promise<{
       // The compiled page class renders under the path-derived tag; the
       // fixture island lives in its shadow root.
       const fixture = document
-        .querySelector('app-shell')
-        ?.shadowRoot?.querySelector('third-party-wc')
+        .querySelector('third-party-wc')
         ?.shadowRoot?.querySelector('wc-fixture') as HTMLElement | null;
       const root = fixture?.shadowRoot;
       if (!fixture || !root) throw new Error('wc-fixture shadow root missing');
@@ -348,8 +347,7 @@ export async function verifyBrowser(distDir: string): Promise<{
     await interactAndVerifyEventCount(page, summary.eventCount);
     const evidence = await page.evaluate(() => {
       const root = document
-        .querySelector('app-shell')
-        ?.shadowRoot?.querySelector('third-party-wc')
+        .querySelector('third-party-wc')
         ?.shadowRoot?.querySelector('wc-fixture')?.shadowRoot;
       if (!root) throw new Error('fixture root unavailable for capability evidence');
       const eventLog =
@@ -461,8 +459,7 @@ export async function verifyBrowser(distDir: string): Promise<{
           }
         ).__wcBeforeUpgrade?.get(name);
         const root = document
-          .querySelector('app-shell')
-          ?.shadowRoot?.querySelector('third-party-wc')
+          .querySelector('third-party-wc')
           ?.shadowRoot?.querySelector('wc-fixture')?.shadowRoot;
         const current = root?.querySelector(name);
         return {

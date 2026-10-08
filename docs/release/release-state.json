@@ -6,32 +6,38 @@
   "maturity": "alpha",
   "registry": {
     "source": "registry.npmjs.org",
-    "verifiedAt": "2026-10-05",
+    "verifiedAt": "2026-10-08",
     "method": "read-only npm view versions + dist-tags"
   },
   "packages": [
     {
       "name": "@openelement/protocol",
-      "status": "unpublished"
+      "status": "published",
+      "registry": {
+        "latest": "1.0.0-alpha.11",
+        "alpha": "0.41.0-alpha.8"
+      }
     },
     {
       "name": "@openelement/element",
       "status": "published",
       "registry": {
-        "latest": "0.43.3",
-        "alpha": "1.0.0-alpha.10",
-        "beta": "0.44.0-beta.2.2"
+        "latest": "1.0.0-alpha.11",
+        "alpha": "1.0.0-alpha.10"
       }
     },
     {
       "name": "@openelement/compiler",
-      "status": "unpublished"
+      "status": "published",
+      "registry": {
+        "latest": "1.0.0-alpha.11"
+      }
     },
     {
       "name": "@openelement/router",
       "status": "published",
       "registry": {
-        "latest": "0.41.0-alpha.6",
+        "latest": "1.0.0-alpha.11",
         "alpha": "1.0.0-alpha.10"
       }
     },
@@ -39,36 +45,34 @@
       "name": "@openelement/create",
       "status": "published",
       "registry": {
-        "latest": "0.43.3",
-        "alpha": "1.0.0-alpha.10",
-        "beta": "0.44.0-beta.2.2"
+        "latest": "1.0.0-alpha.11",
+        "alpha": "1.0.0-alpha.10"
       }
     },
     {
       "name": "@openelement/ui",
       "status": "published",
       "registry": {
-        "latest": "0.43.3",
-        "alpha": "1.0.0-alpha.10",
-        "beta": "0.44.0-beta.2.2"
+        "latest": "1.0.0-alpha.11",
+        "alpha": "1.0.0-alpha.10"
       }
     }
   ],
   "commonCompleteVersion": null,
-  "commonCompleteVersionNote": "No stable version is published for every published package. @openelement/router has only 0.41.0 prereleases; the 0.43.3 stable line covers element, create, and ui only. Any non-null value here must be present in every published package and is verified by release:registry-check. Schema v4 (#1557): packages awaiting their first publish carry status \"unpublished\" and no registry object; the alpha.11 release commit flips them to \"published\" with their dist-tags.",
+  "commonCompleteVersionNote": "No stable version is published for every published package. @openelement/router has only 0.41.0 prereleases, and @openelement/protocol and @openelement/compiler carry no stable release either; the 0.43.3 stable line covers element, create, and ui only. Any non-null value here must be present in every published package and is verified by release:registry-check. Schema v4 (#1557): packages awaiting their first publish carry status \"unpublished\" and no registry object; the alpha.11 release published all six packages, so no entry carries \"unpublished\" today.",
   "latestPrerelease": {
-    "version": "1.0.0-alpha.10",
-    "distTag": "alpha",
-    "state": "partial",
+    "version": "1.0.0-alpha.11",
+    "distTag": "latest",
+    "state": "complete",
     "publishedPackages": [
+      "@openelement/protocol",
       "@openelement/element",
+      "@openelement/compiler",
       "@openelement/router",
       "@openelement/create",
       "@openelement/ui"
     ],
-    "missingPackages": [
-      "@openelement/protocol",
-      "@openelement/compiler"
-    ]
+    "missingPackages": [],
+    "note": "The 1.0 prerelease line publishes onto latest (alpha.11 ruling), so the newest prerelease is served under latest for all six packages. The @alpha alias is NOT re-pointed at it: the Release workflow's OIDC trusted publishing cannot write dist-tags (E401), pending an owner manual `npm dist-tag add`. @alpha still resolves to 1.0.0-alpha.10 for element/router/create/ui, to 0.41.0-alpha.8 for protocol, and to nothing for compiler — the per-package registry blocks record those actual tags."
   }
 }
