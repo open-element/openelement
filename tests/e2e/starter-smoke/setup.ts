@@ -116,39 +116,36 @@ const STARTER_FRAMEWORK_PACKAGES = ['protocol', 'element', 'compiler', 'router']
  */
 async function assertShowcaseStarter(manifestPath: string, starterDir: string): Promise<void> {
   const versionUrl = pathToFileURL(join(repoRoot, 'packages', 'create', 'src', 'version.ts')).href;
-  const { VITE_STARTER_PIN } = (await import(versionUrl)) as {
+  const { VITE_STARTER_PIN, TAILWIND_STARTER_PIN } = (await import(versionUrl)) as {
     VITE_STARTER_PIN: string;
+    TAILWIND_STARTER_PIN: string;
   };
-  const manifestText = await readFile(manifestPath, 'utf8');
-  if (manifestText.includes('tailwind')) {
-    throw new Error(
-      '[starter-smoke setup] the generated starter carries a Tailwind dependency: ' +
-        'the #1530 showcase form is platform-CSS only (tokens.css + recipes.css)',
-    );
-  }
-  const manifest = JSON.parse(manifestText) as {
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
     devDependencies: Record<string, string>;
   };
   const vitePin = manifest.devDependencies.vite;
   if (vitePin !== VITE_STARTER_PIN) {
     throw new Error(
       `[starter-smoke setup] the generated starter is not the showcase form: ` +
-        `devDependency vite=${vitePin ?? '<missing>'}, expected ${VITE_STARTER_PIN} (#1530)`,
+        `devDependency vite=${vitePin ?? '<missing>'}, expected ${VITE_STARTER_PIN}`,
     );
   }
-  for (const sheet of ['tokens.css', 'recipes.css']) {
-    if (!existsSync(join(starterDir, 'app', 'styles', sheet))) {
+  // Tailwind-ON is the single scaffold default (owner ruling 2026-10-08 — one
+  // default, no variant, no flag): both build-time pins must ride the packed
+  // template payload, and the @theme role sheet must be on disk.
+  for (const name of ['tailwindcss', '@tailwindcss/vite']) {
+    if (manifest.devDependencies[name] !== TAILWIND_STARTER_PIN) {
       throw new Error(
-        `[starter-smoke setup] the generated starter is missing app/styles/${sheet} ` +
-          'of the #1530 showcase form',
+        `[starter-smoke setup] the generated starter is not the Tailwind-ON default: ` +
+          `devDependency ${name}=${manifest.devDependencies[name] ?? '<missing>'}, ` +
+          `expected ${TAILWIND_STARTER_PIN}`,
       );
     }
   }
-  if (existsSync(join(starterDir, 'app', 'styles', 'theme.css'))) {
-    throw new Error(
-      '[starter-smoke setup] the generated starter still ships the retired @theme role ' +
-        'sheet (app/styles/theme.css) of the pre-#1530 Tailwind-ON form',
-    );
+  for (const sheet of ['theme.css', 'recipes.css']) {
+    if (!existsSync(join(starterDir, 'app', 'styles', sheet))) {
+      throw new Error(`[starter-smoke setup] the generated starter is missing app/styles/${sheet}`);
+    }
   }
   for (const island of ['my-counter.tsx', 'live-timer.tsx']) {
     if (!existsSync(join(starterDir, 'app', 'islands', island))) {
@@ -158,7 +155,7 @@ async function assertShowcaseStarter(manifestPath: string, starterDir: string): 
       );
     }
   }
-  console.log('[starter-smoke setup] starter is the #1530 showcase form');
+  console.log('[starter-smoke setup] starter is the showcase form, Tailwind-ON single default');
 }
 
 async function rewireToPackedTarballs(

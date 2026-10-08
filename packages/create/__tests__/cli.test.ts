@@ -96,10 +96,13 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
     '@openelement/router',
     'hono',
   ]);
-  // One template (#1530): the showcase starter is pure CSS — no Tailwind
-  // dependency surface of any kind.
+  // Tailwind-ON single default (#1524 form restored as the ONE scaffold):
+  // both build-time pins ride devDependencies; the product surface above is
+  // unchanged.
   expect(Object.keys(manifest.devDependencies).sort()).toEqual([
     '@playwright/test',
+    '@tailwindcss/vite',
+    'tailwindcss',
     'typescript',
     'vite',
   ]);
@@ -134,7 +137,7 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
   expect(tsconfig.include).toEqual(['app', 'vite.config.ts', 'openelement.config.ts']);
 });
 
-test('the showcase template is the one scaffold (#1530): static-first surfaces, two islands', async () => {
+test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner single-default ruling): static-first surfaces, two islands', async () => {
   const templates = await buildTemplates(resolveVersions(), 'sample-app');
   const expectedTargets = [
     '.gitignore',
@@ -157,7 +160,7 @@ test('the showcase template is the one scaffold (#1530): static-first surfaces, 
     'app/routes/api/ping.ts',
     'app/routes/index.tsx',
     'app/styles/recipes.css',
-    'app/styles/tokens.css',
+    'app/styles/theme.css',
     'openelement.config.ts',
     'package.json',
     'public/openelement-mark.svg',
@@ -165,9 +168,17 @@ test('the showcase template is the one scaffold (#1530): static-first surfaces, 
     'vite.config.ts',
   ].sort();
   expect(Object.keys(templates)).toEqual(expectedTargets);
-  // No Tailwind surface anywhere: no role sheet, no pins, no preset wiring.
-  expect(JSON.stringify(templates).includes('tailwind')).toBeFalsy();
+  // Tailwind-ON is the single default (#1524 restored as the ONE form, owner
+  // ruling 2026-10-08): exact build-time pins in devDependencies, the @theme
+  // role sheet on disk, and the preset wiring in the vite config.
+  const manifest = JSON.parse(
+    templates['package.json'].replace(/\$\{v\.[a-z]+\}/g, '1.0.0-alpha.10'),
+  ) as { devDependencies: Record<string, string> };
+  expect(manifest.devDependencies['@tailwindcss/vite']).toEqual('4.3.3');
+  expect(manifest.devDependencies.tailwindcss).toEqual('4.3.3');
+  expect(templates['app/styles/theme.css']).toContain('@theme');
   expect(templates['vite.config.ts']).toContain('plugins: [...openElement()]');
+  expect(templates['openelement.config.ts']).toContain('tailwind: { theme: [');
   // The landing page is the showcase: framework name, tagline, both islands,
   // the static architecture section, and JS-cost badges naming each section.
   const home = templates['app/components/page-home.tsx'];
@@ -255,9 +266,9 @@ test('starter pages ship exactly one H1 each (duplicate-H1 regression class)', (
 });
 
 test('starter pages own their styles via static styles, not the global baseline', () => {
-  const tokens = readTemplate('app/styles/tokens.css');
-  // #1411: tokens live in the app/styles/tokens.css convention file that the
-  // config loader inlines into <head>; vite.config.ts carries no CSS at all.
+  const tokens = readTemplate('app/styles/theme.css');
+  // The @theme role sheet is the one styling source: roles, palette aliases,
+  // and the document base all ride it; vite.config.ts carries no CSS at all.
   // Bare `--token:value` declarations at stylesheet top level are dropped by
   // CSS error recovery and take the following body rule down with them.
   expect(tokens.includes(':root {'), tokens).toBeTruthy();
@@ -334,11 +345,12 @@ test('the About route is a static page route; the landing route stays static', (
   expect(home).toContain('Rendered before JavaScript arrives');
 });
 
-test('starter owns a concrete --brand token without a UI package dependency', () => {
-  // #1411: the token sheet is the convention file the config loader inlines.
-  const tokens = readTemplate('app/styles/tokens.css');
-  const brand = tokens.match(/--brand:\s*(#[0-9a-fA-F]{3,8})/)?.[1];
-  expect(brand, 'starter app/styles/tokens.css must define a --brand token').toBeTruthy();
+test('starter owns a concrete --brand role without a UI package dependency', () => {
+  // Tailwind-ON form: --brand is an alias seated on the --color-primary role,
+  // and the role itself sits on a concrete Tailwind scale step (violet).
+  const theme = readTemplate('app/styles/theme.css');
+  expect(theme).toContain('--brand: var(--color-primary)');
+  expect(theme).toContain('--color-primary: var(--color-violet-700)');
 });
 
 test('TypeScript starter sources are pack-safe template payloads', () => {
@@ -589,7 +601,6 @@ test('source CLI generates the showcase starter with git init and the boxed hand
     expect(existsSync(join(appDir, 'deno.json'))).toBeFalsy();
     const manifest = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8'));
     expect(JSON.stringify(manifest).includes('${v.')).toBeFalsy();
-    expect(JSON.stringify(manifest).includes('tailwind')).toBeFalsy();
     expect(existsSync(join(appDir, 'tsconfig.json'))).toBeTruthy();
     // The showcase surfaces are on disk: about page, ping route, both islands,
     // and no retired surface.
@@ -599,7 +610,7 @@ test('source CLI generates the showcase starter with git init and the boxed hand
     expect(existsSync(join(appDir, 'app', 'islands', 'my-counter.tsx'))).toBeTruthy();
     expect(existsSync(join(appDir, 'app', 'routes', 'blog'))).toBeFalsy();
     expect(existsSync(join(appDir, 'app', 'routes', 'contact.tsx'))).toBeFalsy();
-    expect(existsSync(join(appDir, 'app', 'styles', 'theme.css'))).toBeFalsy();
+    expect(existsSync(join(appDir, 'app', 'styles', 'theme.css'))).toBeTruthy();
     expect(existsSync(join(appDir, 'README.md'))).toBeTruthy();
     // The boxed handoff names the next commands and the docs.
     expect(stdout.includes('cd sample-app'), stdout).toBeTruthy();

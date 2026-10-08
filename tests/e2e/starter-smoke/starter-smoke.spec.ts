@@ -9,7 +9,8 @@
  */
 import { expect, test } from '@playwright/test';
 
-const PAPER = 'rgb(253, 253, 252)';
+// Tailwind-ON form: --paper seats on --color-background = --color-white.
+const PAPER = 'rgb(255, 255, 255)';
 
 test('computed body background is the design-token paper, not the UA default', async ({ page }) => {
   await page.goto('/');

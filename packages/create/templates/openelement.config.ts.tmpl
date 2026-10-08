@@ -2,7 +2,8 @@
 //
 // Every option below is OPTIONAL. With an empty object, options come from the
 // file conventions:
-//   - design tokens: app/styles/tokens.css (inlined into every document <head>)
+//   - design tokens: app/styles/theme.css (the @theme role sheet; dev serves
+//     it directly, the build compiles it through the `tailwind` key below)
 //   - app shell:     app/islands/app-shell.tsx (auto-registered; the file is
 //                    deletable and pages still render)
 //   - document head: app/head.tsx (structural head content: meta tags, font
@@ -21,6 +22,13 @@
 import { defineConfig } from '@openelement/router';
 
 export default defineConfig({
+  // The Tailwind preset — the single-default scaffold form. The roles in
+  // app/styles/theme.css compile into the preset's linked, layer-ordered
+  // bundle (/assets/open-tailwind.css) after the SSG render; the path climbs
+  // out of the preset's build-time staging entry (.openElement/
+  // tailwind-preset/), the file the @import resolves from. `pnpm dev` serves
+  // the authored sheet directly.
+  tailwind: { theme: ['../../app/styles/theme.css'] },
   head: {
     // Titles default to the package.json "name"; this overrides the document
     // title fallback while page routes keep their own `head: { title }`.

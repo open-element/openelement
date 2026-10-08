@@ -105,7 +105,7 @@ npm create @openelement@0.43 my-app
   have exactly one home:
 - `openelement.config.ts` - the framework options. It is OPTIONAL and nearly
   empty by default; every option it omits comes from a file convention —
-  design tokens from `app/styles/tokens.css`, structural document-head
+  design tokens from `app/styles/theme.css` (the @theme role sheet), structural document-head
   content from `app/head.tsx`, the site title from `package.json`. Passing
   framework options inline to `openElement()` while this file carries options
   is a hard error, and an unknown key fails the build with the accepted-key
@@ -120,7 +120,8 @@ npm create @openelement@0.43 my-app
   - `app/components/` — compiled page elements and their style sheets
     (`.css` files next to each element; `site-chrome.css`/`badges.css` are
     the shared sheets)
-  - `app/styles/tokens.css` — pure-CSS design tokens (dark values ride
+  - `app/styles/theme.css` — the @theme role sheet, Tailwind-ON single-default
+    scaffold form (dark values ride
     `prefers-color-scheme`)
 - `public/` - static assets
 - `README.md` and `.gitignore` - starter docs and ignore rules
