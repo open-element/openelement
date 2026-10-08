@@ -125,6 +125,13 @@ jobs:
         run: ./node_modules/.bin/playwright install --with-deps chromium
       - name: Build site
         run: vp run site:build
+      - name: WWW unit tests (build-output invariants)
+        # The www vitest project asserts on the built site (www/dist), so it
+        # needs the Build site step above. After the #1567 redesign no CI lane
+        # ran it — only the release train's coverage step did — yet it carries
+        # the guards registered in seams.md (#1544 shared element-runtime
+        # chunk, #1552 eager-script budget, #1555 pagefind filter).
+        run: vp run --fail-if-no-match @openelement/www#test
       - name: Site E2E (chromium only — full 3-engine on main push)
         run: vp run --fail-if-no-match @openelement/www#e2e:chromium
       - name: Light-probe E2E (build fixture first)

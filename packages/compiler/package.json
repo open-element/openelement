@@ -1,7 +1,7 @@
 {
   "name": "@openelement/compiler",
   "version": "1.0.0-alpha.11",
-  "description": "Build-time compiler for OpenElement — transforms TSX with @element decorators into Part Program modules. The only TypeScript-dependent package.",
+  "description": "Build-time compiler for OpenElement — transforms TSX with @element decorators into Part Program modules. The three-package split's only TypeScript-dependent package.",
   "type": "module",
   "license": "MIT",
   "publish": {
@@ -14,6 +14,12 @@
   },
   "peerDependencies": {
     "vite": "^8.0.0"
+  },
+  "//": "The optional peer drives the packed-dependencies prune in the publish path (a peer marked optional is removed from dependencies), so vite rides peer-only in the packed manifest.",
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
   },
   "exports": {
     ".": "./src/compiler.ts",

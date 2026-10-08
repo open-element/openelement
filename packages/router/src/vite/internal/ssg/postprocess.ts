@@ -227,14 +227,16 @@ function sameOriginLinkRoutes(html: string, pageRoute: string): string[] {
 }
 
 /**
- * Inject per-page Speculation Rules that prefetch the island chunks of the
- * pages each page links to (#1561). `pageChunks` maps a site route to the
- * island chunk URLs that route's page loads — derived from the per-page
+ * Inject per-page island-chunk prefetch links (#1561): a group of
+ * `<link rel="prefetch" as="fetch" href="...">` tags listing the island
+ * chunks of the pages each page links to. `pageChunks` maps a site route to
+ * the island chunk URLs that route's page loads — derived from the per-page
  * island manifests, the single owner of the page→chunk facts. A page's own
  * chunks are never listed (the page fetches them itself); the remaining
- * linked-page chunks ship in one `<script type="speculationrules">` after
- * <head>, tagged `data-open-island-prefetch` so re-runs are idempotent and
- * the global speculation lane's tag on the same page is unaffected.
+ * linked-page chunks ship as sorted link tags after <head>, each carrying
+ * `data-open-island-prefetch` — the marker is what makes re-runs idempotent,
+ * and the global speculation lane's `<script type="speculationrules">` tag
+ * on the same page is unaffected.
  */
 export function injectIslandPrefetchRules(
   dir: string,
