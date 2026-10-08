@@ -256,6 +256,14 @@ test('starter islands are single-module compiled classes with declared strategie
   expect(timer.includes('clearInterval'), timer).toBeTruthy();
   expect(timer.includes('elapsed = '), timer).toBeTruthy();
   expect(timer.includes('data-signal'), timer).toBeFalsy();
+
+  // #1582: the island's sheet and the id it renders are one fact — the sheet
+  // selected `.value` while the class renders <span id='elapsed'>, so the
+  // clock lost its brand color and tabular figures.
+  const timerCss = readTemplate('app/islands/live-timer.css');
+  expect(timer.includes("id='elapsed'"), timer).toBeTruthy();
+  expect(timerCss.includes('#elapsed'), timerCss).toBeTruthy();
+  expect(/\.value\s*\{/.test(timerCss), `no .value rule: ${timerCss}`).toBeFalsy();
 });
 
 test('starter pages ship exactly one H1 each (duplicate-H1 regression class)', () => {
@@ -351,6 +359,22 @@ test('starter owns a concrete --brand role without a UI package dependency', () 
   const theme = readTemplate('app/styles/theme.css');
   expect(theme).toContain('--brand: var(--color-primary)');
   expect(theme).toContain('--color-primary: var(--color-violet-700)');
+});
+
+test('dark prefers-color-scheme block re-seats the brand aliases (#1582)', () => {
+  // The dark block redefined only --paper/--surface/--ink/--ink-soft/--line,
+  // so the light violet-700 brand rode into OS dark mode at ≈2.8:1 on
+  // zinc-950. Every alias a sheet consumes for the brand channel re-seats in
+  // the dark block, on a step that clears 4.5:1 (violet-400 on zinc-950:
+  // 6.98:1; violet-950 ink on violet-400: 5.36:1).
+  const theme = readTemplate('app/styles/theme.css');
+  const dark = theme.slice(theme.indexOf('@media (prefers-color-scheme: dark)'));
+  expect(dark.length > 0, 'theme.css carries a prefers-color-scheme dark block').toBeTruthy();
+  for (const alias of ['--brand:', '--brand-ink:', '--brand-soft:', '--ok:']) {
+    expect(dark.includes(alias), `dark block must re-seat ${alias}`).toBeTruthy();
+  }
+  expect(dark).toContain('--brand: var(--color-violet-400)');
+  expect(dark).toContain('--brand-ink: var(--color-violet-950)');
 });
 
 test('TypeScript starter sources are pack-safe template payloads', () => {

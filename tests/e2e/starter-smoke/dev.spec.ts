@@ -12,6 +12,12 @@
  * re-evaluation and every define() guard kept the first class. Re-definition
  * now wins under the stub, so the next request renders the edited module.
  *
+ * #1582: dev served the token layer nowhere, so every `var(--paper/--ink/
+ * --brand/…)` resolved empty and the starter rendered uncolored under
+ * `pnpm dev`. The computed-token assertions below are the acceptance criteria
+ * of that issue, on the real starter surface — the class of regression the
+ * former text-only dev checks could not see.
+ *
  * Prerequisites:
  *   pnpm --dir tests/e2e/starter-smoke run setup
  *
@@ -46,6 +52,42 @@ test('dev island hydrates and handles clicks (#951)', async ({ page }) => {
   await expect(counter.locator('#count')).toHaveText('0');
   await counter.getByRole('button', { name: '+' }).click();
   await expect(counter.locator('#count')).toHaveText('1');
+});
+
+test('dev delivers the compiled theme tokens (#1582)', async ({ page }) => {
+  // The acceptance criteria of #1582, on the packed starter surface: the
+  // document must link the compiled theme sheet, and the computed tokens must
+  // resolve — `pnpm dev` used to serve every var(--paper/--brand/…) empty.
+  await page.goto('/');
+
+  // The theme sheet is served before the page's own @scope styles: the link
+  // rides the document head while the page static styles sit in the body.
+  const linkHref = await page.locator('head link[rel="stylesheet"]').first().getAttribute('href');
+  expect(linkHref, 'the dev document head links the compiled theme sheet').toContain(
+    'tailwind-preset/entry.css',
+  );
+
+  // --brand is the alias the starter's component sheets consume; it resolves
+  // only when the authored @theme block passed through the Tailwind compile.
+  const brand = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
+  );
+  expect(brand, '--brand must resolve to a compiled value').not.toBe('');
+
+  // The panel's border/radius read var(--line)/var(--radius-l): zero values
+  // are the "token layer missing" signature the issue recorded.
+  const panel = page.locator('.panel').first();
+  const panelStyle = await panel.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { borderWidth: style.borderTopWidth, borderRadius: style.borderTopLeftRadius };
+  });
+  expect(parseFloat(panelStyle.borderWidth), 'panel border is non-zero').toBeGreaterThan(0);
+  expect(parseFloat(panelStyle.borderRadius), 'panel radius is non-zero').toBeGreaterThan(0);
+
+  // body{margin:0} rides the same compiled sheet (it lands in the utilities
+  // layer of the theme source), so a default 8px margin is the same failure.
+  const bodyMargin = await page.evaluate(() => getComputedStyle(document.body).marginTop);
+  expect(parseFloat(bodyMargin), 'body margin is reset by the theme sheet').toBe(0);
 });
 
 test('route edit invalidates dev SSR output (#952)', async ({ request }) => {

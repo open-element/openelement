@@ -38,6 +38,20 @@
  * router's request path (index/http/model/router/nitro-mount) never imports
  * a Tailwind symbol — the preset's only runtime artifact is the emitted CSS
  * asset and the `<link>` tags the SSG output carries.
+ *
+ * Dev-mode delivery (#1582, alpha.12): the build-side seams above left dev
+ * with NO token delivery at all — `tailwind.theme` was read only by
+ * `closeBundle`, so `pnpm dev` served pages whose `var(--paper/--brand/…)`
+ * all resolved empty (the authored `@theme` block is an unknown at-rule to
+ * the browser, and the aliases seated on it stay empty until the sheet passes
+ * through the Tailwind compile). The dev half lives in `dev-tailwind.ts`: it
+ * mounts the same lazily-resolved `@tailwindcss/vite` peer into the DEV css
+ * channel and serves the SAME staged entry (`renderTailwindPresetEntry`) as a
+ * module, so dev and build consume one compiled fact. The two channels are
+ * mutually exclusive by `apply`: the dev plugin is `apply: 'serve'` and the
+ * build delivery stays `closeBundle`-only, so no artifact can carry both, and
+ * with the `tailwind` key absent neither channel exists (OFF stays OFF: no
+ * peer load, no staging write, no head fragment).
  */
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';

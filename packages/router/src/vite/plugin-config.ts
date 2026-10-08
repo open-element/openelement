@@ -174,6 +174,25 @@ function applyResolvedOptions(state: OpenPluginState, merged: FrameworkOptions):
 }
 
 /**
+ * Append one stylesheet to the resolved `inject.stylesheets` channel and
+ * re-serialize the head artifact. The single late-contribution path: the dev
+ * Tailwind preset's theme link joins the user's own declared stylesheets here,
+ * so the raw user `headExtras` stays the only re-validation input, the channel
+ * is validated exactly once per append, and the link is built by
+ * `buildHeadExtras`'s own serializer — one `<link>` emitter, whose href passes
+ * the protocol blocklist.
+ */
+export function appendInjectStylesheets(state: OpenPluginState, hrefs: string[]): void {
+  if (hrefs.length === 0) return;
+  const existing = state.resolvedOptions.inject?.stylesheets ?? [];
+  const missing = hrefs.filter((href) => !existing.includes(href));
+  if (missing.length === 0) return;
+  applyResolvedOptions(state, {
+    inject: { ...state.resolvedOptions.inject, stylesheets: [...existing, ...missing] },
+  });
+}
+
+/**
  * #1411: `openelement.config.ts` is the framework options' single home. The
  * file is loaded through Vite's own config loader in its native mode (Node's
  * native TypeScript import — zero new dependencies), so dev, `cli/build` and

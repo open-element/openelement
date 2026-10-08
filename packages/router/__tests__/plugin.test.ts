@@ -59,7 +59,7 @@ function callLoad(plugin: unknown, id: string): unknown {
 
 test('openPlugin: returns retained plugins in correct order', () => {
   const plugins = createOpenPlugin();
-  expect(plugins.length).toEqual(8);
+  expect(plugins.length).toEqual(9);
 
   const names = plugins.map((p) => p.name);
   expect(names).toEqual([
@@ -69,6 +69,9 @@ test('openPlugin: returns retained plugins in correct order', () => {
     // sheet adapters for the requests the open:core compiled-element
     // transform (protocol-activated) emits.
     'open:style-assets-dev',
+    // #1582: the dev half of the Tailwind preset (apply: 'serve'), inert
+    // until the resolved options carry the `tailwind` key.
+    'open:tailwind-preset-dev',
     'open:virtual-entry',
     '@hono/vite-dev-server',
     'open:island-transform',
@@ -155,8 +158,8 @@ test('openPlugin: respects custom islandsDir', async () => {
 test('openPlugin: accepts default and custom componentsDir', () => {
   // componentsDir is only consumed by the build closeBundle phase; here we can
   // only assert both forms construct a valid pipeline.
-  expect(createOpenPlugin({}).length).toEqual(8);
-  expect(createOpenPlugin({ componentsDir: 'src/ui' }).length).toEqual(8);
+  expect(createOpenPlugin({}).length).toEqual(9);
+  expect(createOpenPlugin({ componentsDir: 'src/ui' }).length).toEqual(9);
 });
 
 // ─── Upgrade Strategy ─────────────────────────────────────────
@@ -174,8 +177,8 @@ test('openPlugin: island.upgradeStrategy flows into the SSR admission plan', asy
   expect(onlyCode).toContain('client-only');
 
   // 'load' / 'visible' remain valid construction options.
-  expect(createOpenPlugin({ island: { upgradeStrategy: 'load' } }).length).toEqual(8);
-  expect(createOpenPlugin({ island: { upgradeStrategy: 'visible' } }).length).toEqual(8);
+  expect(createOpenPlugin({ island: { upgradeStrategy: 'load' } }).length).toEqual(9);
+  expect(createOpenPlugin({ island: { upgradeStrategy: 'visible' } }).length).toEqual(9);
 });
 
 // ─── Invalid Options ──────────────────────────────────────────
@@ -198,12 +201,12 @@ test('openPlugin: rejects script tags in inject.headFragments', () => {
 
 test('openPlugin: handles empty options object', () => {
   const plugins = createOpenPlugin({});
-  expect(plugins.length).toEqual(8);
+  expect(plugins.length).toEqual(9);
 });
 
 test('openPlugin: handles undefined options', () => {
   const plugins = createOpenPlugin();
-  expect(plugins.length).toEqual(8);
+  expect(plugins.length).toEqual(9);
 });
 
 // ─── Virtual Entry Plugin Behaviors ───────────────────────────
@@ -369,15 +372,15 @@ test('openPlugin: dev server plugin is @hono/vite-dev-server', () => {
   expect(devServerPlugin).toEqual(expect.anything());
 });
 
-test('openPlugin: SSG mode (default) includes @hono/vite-dev-server (7 plugins)', () => {
+test('openPlugin: SSG mode (default) includes @hono/vite-dev-server (9 plugins)', () => {
   const plugins = createOpenPlugin({});
-  expect(plugins.length).toEqual(8);
+  expect(plugins.length).toEqual(9);
   expect(plugins.find((p) => p.name === '@hono/vite-dev-server')).toEqual(expect.anything());
 });
 
 test('openPlugin: explicit SSG mode includes @hono/vite-dev-server', () => {
   const plugins = createOpenPlugin({ mode: 'ssg' });
-  expect(plugins.length).toEqual(8);
+  expect(plugins.length).toEqual(9);
   expect(plugins.find((p) => p.name === '@hono/vite-dev-server')).toEqual(expect.anything());
 });
 
@@ -386,13 +389,13 @@ test('openPlugin: explicit SSG mode includes @hono/vite-dev-server', () => {
 test('openPlugin: accepts packageIslands option', () => {
   const plugins = createOpenPlugin({ packageIslands: ['@acme/components'] });
   expect(plugins).toEqual(expect.anything());
-  expect(plugins.length).toEqual(8);
+  expect(plugins.length).toEqual(9);
 });
 
 test('openPlugin: accepts empty packageIslands', () => {
   const plugins = createOpenPlugin({ packageIslands: [] });
   expect(plugins).toEqual(expect.anything());
-  expect(plugins.length).toEqual(8);
+  expect(plugins.length).toEqual(9);
 });
 
 test('openPlugin: accepts multiple packageIslands', () => {

@@ -1,6 +1,9 @@
 
     :host { display: inline-block; }
     .timer-row { display: inline-flex; gap: 0.6rem; align-items: baseline; }
-    .value { min-width: 6ch; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 1.4rem; color: var(--brand); }
+    /* #1582: the selector names the id the class renders (#elapsed) — a
+       `.value` selector matched nothing, so the clock lost its brand color
+       and tabular figures. */
+    #elapsed { min-width: 6ch; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 1.4rem; color: var(--brand); }
     .unit { color: var(--ink-soft); font-size: 0.85rem; }
   
