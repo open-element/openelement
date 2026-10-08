@@ -55,6 +55,8 @@ Accepted keys — anything else fails the build with this list:
 - `styles` — `{ tokens }` to point the token convention at another file.
 - `i18n` — `{ locales, defaultLocale }`; the build expands every route under each additional locale prefix.
 - `viewTransition` / `speculation` — booleans. The object forms are a possible future widening of these two keys.
+  This `viewTransition` is the BUILD-side switch (whether client navigation carries the View Transition meta). It is a different knob from the client router's `viewTransitions` option (`createRouter`, default off) — the switch that wraps each navigation's render in `document.startViewTransition` and stays opt-in for the input-suppression reasons its JSDoc records.
+
 - `build` — `{ manifestBudget }`, an advisory per-entry manifest budget in KB.
 - `middleware` — `{ corsOrigin }` static allowlist data; the origin *callback* lives in a module (`middleware.use` / `middleware.corsOriginModule`), never in the config file.
 

@@ -55,6 +55,8 @@ export default defineConfig({
 - `styles`——`{ tokens }`，把 token 约定指向另一个文件。
 - `i18n`——`{ locales, defaultLocale }`；构建会在每个额外 locale 前缀下展开所有路由。
 - `viewTransition` / `speculation`——布尔值。对象形式是这两个键将来可能的扩展方向。
+  这里的 `viewTransition` 是构建侧开关（客户端导航是否携带 View Transition 元信息）。它与客户端路由的 `viewTransitions` 选项（`createRouter`，默认关）是两个不同的旋钮——后者把每次导航的渲染包进 `document.startViewTransition`，因输入抑制问题保持 opt-in（其 JSDoc 记录了原因）。
+
 - `build`——`{ manifestBudget }`，以 KB 为单位的建议性 manifest 预算。
 - `middleware`——`{ corsOrigin }` 静态白名单数据；来源**回调**放在模块里（`middleware.use` / `middleware.corsOriginModule`），永远不进配置文件。
 
