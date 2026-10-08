@@ -79,6 +79,10 @@ jobs:
           vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
           vp run --fail-if-no-match @openelement/tools-release#pack-surface:check
 
+      - name: Publish to npm (OIDC trusted publishing)
+        if: steps.check.outputs.already_published != 'true'
+        run: vp run --fail-if-no-match @openelement/tools-release#publish:npm
+
       # The 1.0 line publishes onto `latest` (owner ruling 2026-10-07); the
       # channel alias keeps resolving for @alpha consumers. Best-effort: a
       # dist-tag write the trusted-publishing flow refuses logs a warning —
@@ -91,10 +95,6 @@ jobs:
               echo "::warning::could not re-point alpha alias for $PKG (latest is already set)"
             fi
           done
-
-      - name: Publish to npm (OIDC trusted publishing)
-        if: steps.check.outputs.already_published != 'true'
-        run: vp run --fail-if-no-match @openelement/tools-release#publish:npm
 
       - name: Create GitHub Release
         if: steps.check.outputs.already_published != 'true'
