@@ -2,7 +2,7 @@
   "$comment": "GENERATED FILE - do not edit. Regenerate with: pnpm --filter @openelement/ui run generate:ui-manifest (drift gate: ui-manifest:check).",
   "schemaVersion": "1.0.0",
   "packageName": "@openelement/ui",
-  "version": "1.0.0-alpha.11",
+  "version": "1.0.0-alpha.12",
   "description": "Semantic Web Component library for openElement",
   "author": "openElement",
   "license": "MIT",

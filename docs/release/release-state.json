@@ -1,7 +1,7 @@
 {
   "schemaVersion": 4,
-  "sourceVersion": "1.0.0-alpha.11",
-  "activeTarget": "v1.0.0-alpha.11",
+  "sourceVersion": "1.0.0-alpha.12",
+  "activeTarget": "v1.0.0-alpha.12",
   "nextPlannedTrain": "not scheduled",
   "maturity": "alpha",
   "registry": {
@@ -15,7 +15,7 @@
       "status": "published",
       "registry": {
         "latest": "1.0.0-alpha.11",
-        "alpha": "0.41.0-alpha.8"
+        "alpha": "1.0.0-alpha.11"
       }
     },
     {
@@ -23,14 +23,15 @@
       "status": "published",
       "registry": {
         "latest": "1.0.0-alpha.11",
-        "alpha": "1.0.0-alpha.10"
+        "alpha": "1.0.0-alpha.11"
       }
     },
     {
       "name": "@openelement/compiler",
       "status": "published",
       "registry": {
-        "latest": "1.0.0-alpha.11"
+        "latest": "1.0.0-alpha.11",
+        "alpha": "1.0.0-alpha.11"
       }
     },
     {
@@ -38,7 +39,7 @@
       "status": "published",
       "registry": {
         "latest": "1.0.0-alpha.11",
-        "alpha": "1.0.0-alpha.10"
+        "alpha": "1.0.0-alpha.11"
       }
     },
     {
@@ -46,7 +47,7 @@
       "status": "published",
       "registry": {
         "latest": "1.0.0-alpha.11",
-        "alpha": "1.0.0-alpha.10"
+        "alpha": "1.0.0-alpha.11"
       }
     },
     {
@@ -54,7 +55,7 @@
       "status": "published",
       "registry": {
         "latest": "1.0.0-alpha.11",
-        "alpha": "1.0.0-alpha.10"
+        "alpha": "1.0.0-alpha.11"
       }
     }
   ],
@@ -73,6 +74,6 @@
       "@openelement/ui"
     ],
     "missingPackages": [],
-    "note": "The 1.0 prerelease line publishes onto latest (alpha.11 ruling), so the newest prerelease is served under latest for all six packages. The @alpha alias is NOT re-pointed at it: the Release workflow's OIDC trusted publishing cannot write dist-tags (E401), pending an owner manual `npm dist-tag add`. @alpha still resolves to 1.0.0-alpha.10 for element/router/create/ui, to 0.41.0-alpha.8 for protocol, and to nothing for compiler — the per-package registry blocks record those actual tags."
+    "note": "The 1.0 prerelease line publishes onto latest (alpha.11 ruling), so the newest prerelease is served under latest for all six packages, and the @alpha alias rides the same version: re-pointed on 2026-10-08, so both dist-tags resolve to 1.0.0-alpha.11 for every package — the per-package registry blocks record those actual tags."
   }
 }
