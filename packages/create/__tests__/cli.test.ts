@@ -446,14 +446,18 @@ test('Alpha README never emits an untagged create install command', () => {
   ).toBeTruthy();
   // The exact-version pin is bound to registry truth (release-state.json), not
   // to the source-tree version: before the release is published the README must
-  // not advertise it; once release-state registers it, the README must.
+  // not advertise it; once release-state registers it, the README must. The
+  // README's exact pin documents what the `alpha` dist-tag resolves to, so the
+  // binding is that tag — since the alpha.11 ruling the 1.0 prerelease line
+  // also rides `latest`, and a version served only under `latest` must not
+  // force the README to advertise a version `@alpha` does not serve yet.
   const releaseState = JSON.parse(
     readFileSync(join(packageDir, '..', '..', 'docs', 'release', 'release-state.json')),
   );
   const createRegistry = releaseState.packages.find(
     (p: { name: string }) => p.name === '@openelement/create',
   ).registry;
-  const isPublished = Object.values(createRegistry).includes(CREATE_VERSION);
+  const isPublished = createRegistry.alpha === CREATE_VERSION;
   // The exact version may be pinned in either documented spelling: the full
   // package specifier (`@openelement/create@<v>`, the npx/pnpm alternates) or
   // the canonical alias form (`npm create @openelement@<v>`, which npm resolves

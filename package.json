@@ -30,7 +30,7 @@
     "gate:release": "node tools/repo/gate.ts @openelement/tools-repo#gate:release @openelement/tools-release#gate:packed",
     "saas:workers": "node tools/repo/gate.ts @openelement/saas#build @openelement/saas#nitro:build-workers @openelement/tools-repo#workers:boundary-check",
     "verify:core": "node tools/repo/gate.ts @openelement/tools-repo#gate:source @openelement/tools-release#gate:packed",
-    "prepare": "node_modules/.bin/vp run --fail-if-no-match @openelement/tools-repo#hooks:install"
+    "prepare": "vp run --fail-if-no-match @openelement/tools-repo#hooks:install"
   },
   "devDependencies": {
     "@openelement/compiler": "workspace:*",

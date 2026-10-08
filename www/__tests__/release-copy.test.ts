@@ -1,8 +1,9 @@
 /**
  * Release-copy guard: the Site must present per-package registry truth and must
- * never claim a single version is published for all four packages (Router has
- * no 0.43.x). The offline release-state checker also enforces this against
- * docs/release/release-state.json; this test keeps the shipped copy honest.
+ * never claim a single STABLE version is published for every package (no
+ * common stable version exists). The offline release-state checker also
+ * enforces this against docs/release/release-state.json; this test keeps the
+ * shipped copy honest.
  */
 import { expect, test } from 'vitest';
 import { SOURCE_LINE_PUBLISHED } from '../app/data/_generated-release-line.ts';
@@ -21,8 +22,12 @@ test('release copy: there is no common complete version', () => {
   expect(COMMON_PUBLISHED_VERSION).toEqual(null);
   expect(COMMON_PUBLISHED_NOTE('en').includes('no single stable version')).toEqual(true);
   expect(COMMON_PUBLISHED_NOTE('zh').includes('稳定版本')).toEqual(true);
-  expect(PUBLISHED_LATEST['@openelement/router']).toEqual('v0.41.0-alpha.6');
-  expect(PUBLISHED_LATEST['@openelement/element']).toEqual('v0.43.3');
+  // Every package's npm latest is the alpha.11 prerelease line — the version
+  // is shared, but it is a prerelease, so COMMON_PUBLISHED_VERSION (STABLE
+  // only) stays null and no shared-version claim may appear in copy.
+  expect(PUBLISHED_LATEST['@openelement/router']).toEqual('v1.0.0-alpha.11');
+  expect(PUBLISHED_LATEST['@openelement/element']).toEqual('v1.0.0-alpha.11');
+  expect(PUBLISHED_LATEST['@openelement/protocol']).toEqual('v1.0.0-alpha.11');
 });
 
 test('release copy: registry note is per package', () => {
