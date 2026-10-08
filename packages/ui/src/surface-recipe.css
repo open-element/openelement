@@ -1,0 +1,10 @@
+/* .surface — the public surface recipe (a package CSS surface independent
+ * of the retired zero-interaction components). Ported verbatim from the
+ * pre-#1558 surfaceRecipe sheet. */
+  .surface {
+    color: var(--color-foreground);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 9%, var(--color-card)), color-mix(in srgb, var(--color-card) 90%, transparent));
+    border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, var(--color-border) 78%, var(--color-primary));
+    border-radius: var(--radius-lg);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-white) 8%, transparent), var(--shadow-2xl);
+  }
