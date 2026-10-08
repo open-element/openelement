@@ -1387,9 +1387,9 @@
           "publicSymbols": []
         },
         "./install-command": {
-          "publicShapeSha256": "db92d14e9cf523539ee2aa7a6fb43fd65647ac78210477d264365dac7297530f",
+          "publicShapeSha256": "1a95918ed0b6461fb893b004475f170288c42bec4e33eeec67b303454d6fa9da",
           "publicSymbols": [
-            "CREATE_INSTALL_TAG=value:\"alpha\"",
+            "CREATE_INSTALL_TAG=value:\"latest\"",
             "CREATE_NPM_CREATE_SCOPE=value:\"@openelement\"",
             "CREATE_PACKAGE_SPECIFIER=value:\"@openelement/create\"",
             "CREATE_PROJECT_PLACEHOLDER=value:\"<project-name>\"",

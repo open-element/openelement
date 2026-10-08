@@ -4,10 +4,11 @@ Project scaffolding CLI for openElement applications.
 
 Docs and guides: <https://openelement.org>.
 
-> 1.0 Alpha line: the supported creation entry for Element and Router. The
-> published npm versions and dist-tags are registry truth (query them with
-> `npm view @openelement/create dist-tags`); `latest` stays on the stable 0.43
-> line until a separately admitted stable release.
+> 1.0 line: the supported creation entry for Element and Router. The published
+> npm versions and dist-tags are registry truth (query them with
+> `npm view @openelement/create dist-tags`); `latest` rides the 1.0 line since
+> the alpha.11 ruling, so a versionless install resolves the current 1.0
+> prerelease.
 
 `@openelement/create` generates a new openElement project from ONE template —
 the showcase starter: a static-first landing page with two islands, a fully
@@ -18,7 +19,7 @@ Node/pnpm project.
 ## Usage (1.0 Alpha)
 
 ```bash
-npm create @openelement@alpha my-app
+npm create @openelement my-app
 ```
 
 The CLI scaffolds, initializes git (when git is available), detects a package
@@ -37,20 +38,21 @@ accepts the default). Non-interactive runs (CI, packed consumers) skip the
 prompt and take the defaults; pass `-t` to pin the template explicitly.
 
 ```bash
-npx @openelement/create@alpha my-app --no-install --no-git -t showcase
+npx @openelement/create my-app --no-install --no-git -t showcase
 ```
 
-`npm create @openelement@alpha` rides npm's initializer alias: a bare `@scope`
-resolves to `@scope/create` at the same tag, so the canonical spelling names
-the scope, and npm runs this package's generator. The version `@alpha` resolves
-to is registered in
-`the tracked release-state manifest` (currently `1.0.0-alpha.10`, a new baseline —
+`npm create @openelement` rides npm's initializer alias: a bare `@scope`
+resolves to `@scope/create` at the scope's default dist-tag — with no tag in
+the command, that is `latest`, which the 1.0 line rides — so the canonical
+spelling names no tag, and npm runs this package's generator. The version a
+versionless install resolves is registered in
+`the tracked release-state manifest` (currently `1.0.0-alpha.11`, a new baseline —
 not a 0.x upgrade, with no migration path from 0.x). Pin that exact version
 when reproducibility matters (verify against the live registry with
-`npm view @openelement/create dist-tags.alpha`):
+`npm view @openelement/create dist-tags`):
 
 ```bash
-npm create @openelement@1.0.0-alpha.10 my-app
+npm create @openelement@1.0.0-alpha.11 my-app
 ```
 
 The generated starter pins the exact `@openelement/*` versions it was built
@@ -68,8 +70,8 @@ generated project. The packed package ships two equivalent npm bins
 form must name one explicitly:
 
 ```bash
-npx @openelement/create@alpha my-app
-pnpm dlx --package=@openelement/create@alpha openelement-create my-app
+npx @openelement/create my-app
+pnpm dlx --package=@openelement/create openelement-create my-app
 ```
 
 The scaffolded project itself is Node-native: Node.js 24.2+ and
@@ -77,9 +79,9 @@ pnpm run its scripts.
 
 ## Stable 0.43 (maintenance line)
 
-The stable 0.43 line is still published, but it is not the Alpha install path.
-A versionless install resolves the npm `latest` dist-tag to it; pin the line
-explicitly instead:
+The stable 0.43 line is still published, but it is not the 1.0 install path.
+A versionless install resolves the npm `latest` dist-tag to the 1.0 line; pin
+the maintenance line explicitly instead:
 
 ```bash
 npm create @openelement@0.43 my-app

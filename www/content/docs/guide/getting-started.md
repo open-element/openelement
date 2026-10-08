@@ -19,7 +19,7 @@ pnpm dev
 
 The version the install command resolves is registered in [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json), the repository's registry-verified source of truth: the scaffold writes the resolved exact `@openelement/*` pins into the generated `package.json`, so no extra flags are involved.
 
-The scaffold ships the Tailwind-ON starter by default: a preset-wired `vite.config.ts`, the `app/styles/theme.css` `@theme` role sheet (semantic roles over the Tailwind default scale), and exact `tailwindcss` / `@tailwindcss/vite` dev pins. Pass `--no-tailwind` to the create command (for example through the `npx @openelement/create@alpha <project-name>` spelling) for the minimal starter without the Tailwind surface.
+The scaffold ships the Tailwind-ON starter by default: a preset-wired `vite.config.ts`, the `app/styles/theme.css` `@theme` role sheet (semantic roles over the Tailwind default scale), and exact `tailwindcss` / `@tailwindcss/vite` dev pins. Pass `--no-tailwind` to the create command (for example through the `npx @openelement/create <project-name>` spelling) for the minimal starter without the Tailwind surface.
 
 > The generated project is a plain Node/pnpm app (ADR-0161): Node.js 24.2+ and pnpm run its scripts — Node 24.2 is the verified floor the packed packages declare and CI exercises (the Router CLI relies on `import.meta.main`, added in Node 24.2.0; `.node-version` pins the 24.18 development line). The bootstrap command itself is a plain Node invocation, so the whole flow needs only Node and pnpm; the earlier Deno bootstrap was retired by the 2026-10-03 ADR-0161 amendment.
 

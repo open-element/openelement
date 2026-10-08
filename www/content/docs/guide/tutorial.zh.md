@@ -30,7 +30,7 @@ pnpm install
 pnpm dev
 ```
 
-这条命令跑在普通 Node 工具链上：从 npm 拉取已发布的 `@openelement/create@alpha` 包，并把解析出的精确依赖版本脚手架进项目。
+这条命令跑在普通 Node 工具链上：从 npm 拉取已发布的 `@openelement/create` 包——无 tag 的安装解析 `latest`，即当前 1.0 线——并把解析出的精确依赖版本脚手架进项目。
 
 create CLI 每个文件打印一行 `created <path>`，随后打印后续命令：
 

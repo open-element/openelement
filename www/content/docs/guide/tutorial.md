@@ -30,7 +30,7 @@ pnpm install
 pnpm dev
 ```
 
-The command runs on plain Node tooling: it fetches the published `@openelement/create@alpha` package from npm and scaffolds the project with the resolved exact dependency pins.
+The command runs on plain Node tooling: it fetches the published `@openelement/create` package from npm — a versionless install resolves `latest`, the current 1.0 line — and scaffolds the project with the resolved exact dependency pins.
 
 The create CLI prints one `created <path>` line per file, then the next steps:
 

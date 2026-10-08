@@ -19,7 +19,7 @@ pnpm dev
 
 安装命令解析到的版本登记在 [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json)（仓库的 registry 核验真值）中：脚手架会把解析出的精确 `@openelement/*` 版本钉进生成的 `package.json`，不需要任何额外旗标。
 
-脚手架默认交付 Tailwind-ON 形态的 starter：接好 preset 的 `vite.config.ts`、`app/styles/theme.css` 这张 `@theme` 角色表（语义角色落在 Tailwind 默认尺度上），以及精确的 `tailwindcss` / `@tailwindcss/vite` 开发依赖。在 create 命令后加 `--no-tailwind`（例如走 `npx @openelement/create@alpha <project-name>` 拼写）即可得到不带 Tailwind 面的最小 starter。
+脚手架默认交付 Tailwind-ON 形态的 starter：接好 preset 的 `vite.config.ts`、`app/styles/theme.css` 这张 `@theme` 角色表（语义角色落在 Tailwind 默认尺度上），以及精确的 `tailwindcss` / `@tailwindcss/vite` 开发依赖。在 create 命令后加 `--no-tailwind`（例如走 `npx @openelement/create <project-name>` 拼写）即可得到不带 Tailwind 面的最小 starter。
 
 > 生成的项目是纯 Node/pnpm 应用（ADR-0161）：脚本由 Node.js 24.2+ 与 pnpm 驱动——Node 24.2 是打包产物 engines 声明、CI 实际运行过的验证下限（Router CLI 依赖 Node 24.2.0 引入的 `import.meta.main`；`.node-version` 钉住 24.18 开发线）。bootstrap 命令本身就是一次普通的 Node 调用，整条流程只需要 Node 与 pnpm；早先的 Deno bootstrap 已随 2026-10-03 的 ADR-0161 修订被退役。
 
