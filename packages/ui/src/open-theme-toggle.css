@@ -1,7 +1,53 @@
-/* authored from HEAD extraction — replace with design pass */
-/* Minimal shell: the component carried no authored styles in its pre-#1558
- * (Tailwind-preset) form — zero-style per its HEAD source. Replace with the
- * design pass. */
-:host {
-  display: block;
-}
+/* open-theme-toggle — authored component styles, ported verbatim from the pre-#1558
+ * recipe() sheet (the alpha.9 design system). The #1558 migration had
+ * replaced this with a placeholder shell under the false note that the
+ * component "carried no authored styles"; it did — this is that sheet. */
+    :host {
+      display: inline-block;
+    }
+
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px; height: 38px; padding: 0;
+      border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
+      border-radius: calc(infinity * 1px);
+      background: color-mix(in srgb, var(--color-popover) 76%, transparent);
+      color: var(--color-muted-foreground);
+      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-background) 70%, transparent);
+      cursor: pointer;
+      transition: all var(--ease-in-out) var(--default-transition-duration);
+    }
+    .theme-toggle:hover {
+      color: var(--color-foreground);
+      border-color: var(--color-violet-400);
+      background: color-mix(in srgb, color-mix(in srgb, var(--color-primary) 16%, transparent) 42%, var(--color-popover));
+    }
+
+    .theme-toggle:focus-visible {
+      outline: calc(var(--spacing) * 0.5) solid var(--color-ring);
+      outline-offset: calc(var(--spacing) * 0.75);
+    }
+
+    .theme-toggle svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .theme-toggle .icon-sun {
+      display: block;
+    }
+
+    .theme-toggle .icon-moon {
+      display: none;
+    }
+
+    .theme-toggle[data-theme='light'] .icon-sun {
+      display: none;
+    }
+
+    .theme-toggle[data-theme='light'] .icon-moon {
+      display: block;
+    }
+  

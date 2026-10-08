@@ -65,16 +65,18 @@ function cleanImporterId(importerId: string): string {
 }
 
 /**
- * The registry key for one authored edge: the importing module's directory
- * plus the specifier's file name — the sheet file's own path. Query suffixes
- * on the importer id (dev-time cache busting) never change the directory, so
- * recompiles re-register under one key.
+ * The registry key for one authored edge: the sheet file's resolved path.
+ * Query suffixes on the importer id (dev-time cache busting) are stripped,
+ * so recompiles re-register under one key; the full relative path keeps
+ * same-named sheets in sibling subdirectories distinct edges.
  */
 export function styleRequestModuleId(importerId: string, specifier: string): string {
-  const clean = cleanImporterId(importerId);
-  const directory = clean.slice(0, clean.lastIndexOf('/'));
-  const file = specifier.slice(specifier.lastIndexOf('/') + 1);
-  return `${directory}/${file}`;
+  // The key must carry the specifier's full relative path. The former
+  // directory-plus-filename form collapsed `./a/style.css` and
+  // `./b/style.css` from one importer onto a single key, so the later edge
+  // silently overwrote the first in the registry and both virtual edges
+  // resolved to the last-registered file.
+  return styleRequestFile(importerId, specifier);
 }
 
 /**
