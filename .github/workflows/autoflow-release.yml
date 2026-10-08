@@ -39,7 +39,7 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Read and verify version (all 4 packages must agree)
+      - name: Read and verify version (all 6 packages must agree)
         id: version
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -51,14 +51,15 @@ jobs:
           # Four-package consistency (the ten-stamp lesson from #1508)
           node tools/repo/check-release-version.ts "$VERSION"
 
-      - name: Check if all 4 packages already published (idempotent)
+      - name: Check if all 6 packages already published (idempotent)
         id: check
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # Check ALL packages — partial publish state must NOT skip
+          # Check ALL six packages — partial publish state must NOT skip
+          # (#1557 split: protocol and compiler publish from this line on).
           ALL_PUBLISHED=true
-          for PKG in element router create ui; do
+          for PKG in protocol element compiler router create ui; do
             RESULT=$(npm view "@openelement/$PKG@$VERSION" version 2>/dev/null || echo "not-found")
             if [ "$RESULT" != "$VERSION" ]; then
               ALL_PUBLISHED=false
@@ -77,6 +78,19 @@ jobs:
         run: |
           vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
           vp run --fail-if-no-match @openelement/tools-release#pack-surface:check
+
+      # The 1.0 line publishes onto `latest` (owner ruling 2026-10-07); the
+      # channel alias keeps resolving for @alpha consumers. Best-effort: a
+      # dist-tag write the trusted-publishing flow refuses logs a warning —
+      # the alias is convenience, not the release contract.
+      - name: Re-point the alpha channel alias at this version
+        if: steps.check.outputs.already_published != 'true'
+        run: |
+          for PKG in protocol element compiler router create ui; do
+            if ! npm dist-tag add "@openelement/$PKG@$VERSION" alpha 2>&1 | tee /tmp/disttag.log; then
+              echo "::warning::could not re-point alpha alias for $PKG (latest is already set)"
+            fi
+          done
 
       - name: Publish to npm (OIDC trusted publishing)
         if: steps.check.outputs.already_published != 'true'

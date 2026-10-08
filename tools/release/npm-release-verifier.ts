@@ -160,6 +160,15 @@ export async function verifyNpmRelease(options: VerifyNpmReleaseOptions): Promis
           if (!(error instanceof NpmViewError) || !error.retryable) throw error;
         }
       }
+      // First publish: a package with zero published versions has no
+      // predecessor to require. #1557's protocol/compiler enter the registry
+      // this way — demanding their predecessor would fail the verify AFTER
+      // the six-package publish loop had already run (unrevertable), leaving
+      // a partial release the retry loop then skips.
+      if (published.length === 0) {
+        options.log?.(`First publish: ${packageName} has no registry history; continuity skipped.`);
+        continue;
+      }
       if (!published.includes(predecessor)) {
         throw new Error(
           `Continuity check failed for ${options.version}: predecessor ${predecessor} ` +

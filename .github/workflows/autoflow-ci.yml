@@ -93,6 +93,14 @@ jobs:
         run: vp run --fail-if-no-match @openelement/element#test
       - name: Router tests (includes 3-engine browser tests)
         run: vp run --fail-if-no-match @openelement/router#test
+      - name: UI, create and tools tests
+        # The review gap: the PR layer ran only element+router, so ui/create/
+        # tools reds (style shells, stale schedule assertions) were invisible
+        # until the release train. All six product surfaces now gate the PR.
+        run: |
+          vp run --fail-if-no-match @openelement/ui#test
+          vp run --fail-if-no-match @openelement/create#test
+          vp run --fail-if-no-match @openelement/tools-repo#test
       - name: Element browser gate (full matrix)
         run: vp run --fail-if-no-match @openelement/element#browser:gate
 

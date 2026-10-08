@@ -44,10 +44,15 @@ const io: DeriveDepsIo = {
   readSrcFiles: () => [],
 };
 
-test('npm publish tag follows alpha, beta and rc prerelease names', () => {
-  expect(npmPublishTag('1.0.0-alpha.1')).toEqual('alpha');
-  expect(npmPublishTag('1.0.0-beta.1')).toEqual('beta');
-  expect(npmPublishTag('1.0.0-rc.1')).toEqual('rc');
+test('npm publish tag: the 1.0 prerelease line rides latest; earlier lines keep the channel tag', () => {
+  // Owner ruling 2026-10-07: from the 1.0 line onward the prerelease IS the
+  // shipping line, so `latest` points at it (the alpha alias is re-pointed
+  // post-publish by the release workflow).
+  expect(npmPublishTag('1.0.0-alpha.11')).toEqual('latest');
+  expect(npmPublishTag('1.0.0-beta.1')).toEqual('latest');
+  expect(npmPublishTag('1.0.0-rc.1')).toEqual('latest');
+  expect(npmPublishTag('0.41.0-alpha.1')).toEqual('alpha');
+  expect(npmPublishTag('0.41.0-rc.1')).toEqual('rc');
 });
 
 test('deriveDependencies includes an external npm dependency with a version', () => {
@@ -369,7 +374,7 @@ test('verifyNpmRelease retries transient registry misses and verifies the matchi
 
 test('verifyNpmRelease default retry schedule covers npm propagation delays', async () => {
   const sleeps: number[] = [];
-  let misses = 6;
+  let misses = 7;
   await verifyNpmRelease({
     version: '1.0.0',
     packages: ['element'],
@@ -382,8 +387,8 @@ test('verifyNpmRelease default retry schedule covers npm propagation delays', as
       return Promise.resolve('1.0.0');
     },
   });
-  expect(sleeps).toEqual([5_000, 10_000, 20_000, 30_000, 45_000, 60_000]);
-  expect(sleeps.reduce((total, delay) => total + delay, 0)).toEqual(170_000);
+  expect(sleeps).toEqual([5_000, 15_000, 30_000, 60_000, 120_000, 180_000, 300_000]);
+  expect(sleeps.reduce((total, delay) => total + delay, 0)).toEqual(710_000);
 });
 
 test('verifyNpmRelease does not require latest === prerelease (#607)', async () => {
@@ -431,7 +436,10 @@ test('verifyNpmRelease reports the final observed state after exhausting retries
         },
       }),
     Error,
-    'Continuity check failed for 0.41.0-alpha.13: predecessor 0.41.0-alpha.12 is not among published versions',
+    // A persistently E404 name reads as "no registry history" — the
+    // first-publish continuity exemption — and the failure surfaces at the
+    // version verification step with the observed registry state.
+    'version verification failed after 3 attempts: expected=0.41.0-alpha.13, observed=<query failed>',
   );
 });
 
