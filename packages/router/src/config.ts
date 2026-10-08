@@ -9,7 +9,8 @@
  *   - design tokens: `app/styles/tokens.css` (inlined into the document head;
  *     a generic token channel — apps on the Tailwind preset typically name
  *     their sheet `theme.css` instead and reach it through `tailwind.theme`,
- *     which replaces this convention for them)
+ *     which replaces this convention for them: dev serves the compiled theme
+ *     sheet and links it, the build emits it as the linked bundle asset)
  *   - app shell:     `app/islands/app-shell.tsx` (auto-registered, deletable)
  *   - site title:    the `name` field of `package.json`
  *   - document head: `app/head.tsx` (structural head content, see below)

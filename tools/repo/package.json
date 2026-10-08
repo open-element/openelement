@@ -34,8 +34,6 @@
     "candidate:evidence:fresh": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/candidate-evidence.ts --job fresh-clone --out .artifacts/ci/fresh-clone",
     "candidate:evidence:aggregate": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/candidate-evidence.ts --aggregate --input-dir .artifacts/ci --output .artifacts/candidate-evidence.json",
     "candidate:evidence:validate": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/candidate-evidence.ts --validate .artifacts/candidate-evidence.json --max-age-days 14",
-    "candidate:evidence:reuse:resolve": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/evidence-reuse.ts --resolve",
-    "candidate:evidence:reuse:claim": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/evidence-reuse.ts --claim",
     "release:registry-check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-release-state-machine.ts",
     "product:classification:check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-product-classification.ts"
   },

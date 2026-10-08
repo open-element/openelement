@@ -10,9 +10,10 @@
       component sheets use, each seated on a role so the dark and
       forced-colors pairs below apply everywhere.
 
-   `pnpm dev` serves this file directly (the #1558 authored-sheet path); the
-   build compiles it through the router's Tailwind preset into the linked,
-   layer-ordered bundle.
+   `pnpm dev` and the build both compile this file through the router's
+   Tailwind preset: dev serves the compile from
+   /.openElement/tailwind-preset/entry.css and links it in the document head,
+   the build emits the same compile as the layer-ordered linked bundle.
    ═══════════════════════════════════════════════════════════════════════ */
 
 @theme {
@@ -158,7 +159,11 @@ body {
 }
 
 /* Automatic dark for the starter palette (no runtime): the role sheet's
-   data-theme pairs above cover runtime-toggled themes. */
+   data-theme pairs above cover runtime-toggled themes. The --brand pair joins
+   the dark side here (#1582): the light violet-700 reads ≈2.8:1 on zinc-950,
+   so the alias pair mirrors the data-theme dark roles (violet-400 on
+   violet-950 ink — 6.98:1 / 5.36:1), and the referenced soft/ok aliases take
+   the dark secondary surface instead of the light violet-100. */
 @media (prefers-color-scheme: dark) {
   :root {
     --paper: var(--color-zinc-950);
@@ -166,5 +171,9 @@ body {
     --ink: var(--color-zinc-50);
     --ink-soft: var(--color-zinc-400);
     --line: var(--color-zinc-800);
+    --brand: var(--color-violet-400);
+    --brand-ink: var(--color-violet-950);
+    --brand-soft: var(--color-zinc-800);
+    --ok: var(--color-zinc-800);
   }
 }
