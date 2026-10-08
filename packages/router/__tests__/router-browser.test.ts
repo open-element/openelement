@@ -219,3 +219,189 @@ test('Navigation API: native POST / fragment / reload stay browser-owned (three 
     await server.close();
   }
 }, 300_000);
+
+test('View Transitions: settle-then-click flows on every engine (regression pin)', async function fn() {
+  const root = new URL('../../../', import.meta.url).pathname.replace(/\/$/, '');
+  const source = `import {createRouter} from '/@fs/${root}/packages/router/src/internal/router/client-router.ts';
+window.changes = [];
+window.vtStarts = 0;
+const origVT = document.startViewTransition?.bind(document);
+if (origVT) {
+  document.startViewTransition = (cb) => { window.vtStarts++; return origVT(cb); };
+}
+window.router = createRouter({
+  mode: 'history',
+  viewTransitions: true,
+  routes: [
+    { path: '/', tagName: 'home-page' },
+    { path: '/a', tagName: 'a-page' },
+    { path: '/b', tagName: 'b-page' },
+  ],
+  onChange: () => { window.changes.push(window.router.currentPath); },
+});`;
+  const server = await createServer({
+    root,
+    configFile: false,
+    optimizeDeps: { noDiscovery: true, include: [] },
+    logLevel: 'error',
+    server: { host: '127.0.0.1', port: 0 },
+    plugins: [
+      {
+        name: 'vt-settle',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            if (req.url === '/proof.js') {
+              res.setHeader('content-type', 'text/javascript');
+              res.end(source);
+              return;
+            }
+            if (req.headers.accept?.includes('text/html')) {
+              res.setHeader('content-type', 'text/html');
+              res.end('<script type="module" src="/proof.js"></script><a href="/a" id="la">a</a>');
+              return;
+            }
+            next();
+          });
+        },
+      },
+    ],
+  });
+  await server.listen();
+  try {
+    const address = server.httpServer!.address() as { port: number };
+    for (const type of [chromium, firefox, webkit]) {
+      const browser = await type.launch({ headless: true });
+      const page = await browser.newPage();
+      page.setDefaultTimeout(10_000);
+      try {
+        await page.goto(`http://127.0.0.1:${address.port}`);
+        await page.waitForFunction('window.router');
+        await page.evaluate('window.router.navigate("/b")');
+        await page.waitForFunction('window.router.currentPath === "/b"');
+        // Settle first: every engine now ships the VT API, and an anchor
+        // activation whose input burst begins while a transition is still
+        // active is suppressed (see the retirement-probe test below).
+        await page
+          .waitForFunction(
+            'window.vtStarts === 0 || window.changes.length >= 1 && !document.startViewTransition',
+          )
+          .catch(() => {});
+        await page.waitForTimeout(300);
+        const link = await page.evaluate(() =>
+          document.querySelector('#la')!.getBoundingClientRect().toJSON(),
+        );
+        await page.mouse.click(link.x + link.width / 2, link.y + link.height / 2);
+        await page.waitForFunction('window.router.currentPath === "/a"');
+        expect(await page.evaluate('location.pathname'), type.name()).toBe('/a');
+      } finally {
+        await browser.close();
+      }
+    }
+  } finally {
+    await server.close();
+  }
+}, 90_000);
+
+test('View Transitions: input bursts during an active transition stay suppressed (retirement probe)', async function fn() {
+  const root = new URL('../../../', import.meta.url).pathname.replace(/\/$/, '');
+  const source = `import {createRouter} from '/@fs/${root}/packages/router/src/internal/router/client-router.ts';
+window.changes = [];
+window.vtLog = [];
+window.vtStarts = 0;
+window.__activeVT = null;
+const origVT = document.startViewTransition?.bind(document);
+if (origVT) {
+  document.startViewTransition = (cb) => {
+    window.vtLog.push('start');
+    const t = origVT(cb);
+    window.__activeVT = t;
+    t.finished.then(() => { if (window.__activeVT === t) window.__activeVT = null; }, () => {});
+    window.vtStarts++;
+    return t;
+  };
+  document.addEventListener(
+    'pointerdown',
+    () => { if (window.__activeVT) { window.vtLog.push('skip-on-interact'); window.__activeVT.skipTransition(); } },
+    { capture: true },
+  );
+}
+window.router = createRouter({
+  mode: 'history',
+  viewTransitions: true,
+  routes: [
+    { path: '/', tagName: 'home-page' },
+    { path: '/a', tagName: 'a-page' },
+    { path: '/b', tagName: 'b-page' },
+  ],
+  onChange: () => { window.changes.push(window.router.currentPath); },
+});`;
+  const server = await createServer({
+    root,
+    configFile: false,
+    optimizeDeps: { noDiscovery: true, include: [] },
+    logLevel: 'error',
+    server: { host: '127.0.0.1', port: 0 },
+    plugins: [
+      {
+        name: 'vt-probe',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            if (req.url === '/proof.js') {
+              res.setHeader('content-type', 'text/javascript');
+              res.end(source);
+              return;
+            }
+            if (req.headers.accept?.includes('text/html')) {
+              res.setHeader('content-type', 'text/html');
+              res.end('<script type="module" src="/proof.js"></script><a href="/a" id="la">a</a>');
+              return;
+            }
+            next();
+          });
+        },
+      },
+    ],
+  });
+  await server.listen();
+  try {
+    const address = server.httpServer!.address() as { port: number };
+    for (const type of [chromium, firefox, webkit]) {
+      const browser = await type.launch({ headless: true });
+      const page = await browser.newPage();
+      page.setDefaultTimeout(8_000);
+      try {
+        await page.goto(`http://127.0.0.1:${address.port}`);
+        await page.waitForFunction('window.router');
+        await page.evaluate('window.router.navigate("/b")');
+        // Resolve the moment the route committed — the first transition is
+        // still in flight here by construction.
+        await page.waitForFunction('window.router.currentPath === "/b"');
+        const link = await page.evaluate(() =>
+          document.querySelector('#la')!.getBoundingClientRect().toJSON(),
+        );
+        await page.mouse.click(link.x + link.width / 2, link.y + link.height / 2);
+        await page.waitForTimeout(600);
+        const state = await page.evaluate('({path: location.pathname, log: window.vtLog})');
+        // 2026-10-08 verified on Chromium 147, Firefox Nightly and WebKit
+        // 26.4: the pointerdown reaches the page (the skip fires), yet the
+        // anchor activation is suppressed — a same-burst skipTransition()
+        // cannot rescue it. This pin documents the RouterOptions.viewTransitions
+        // default-off retirement condition: the day an engine lets this
+        // click navigate, this assertion fails and the default flip is
+        // unblocked for that engine.
+        expect(
+          state.log.some((entry) => entry === 'skip-on-interact'),
+          type.name(),
+        ).toBe(true);
+        expect(
+          state.path,
+          `${type.name()} suppressed the click (retire this pin to flip the default)`,
+        ).toBe('/b');
+      } finally {
+        await browser.close();
+      }
+    }
+  } finally {
+    await server.close();
+  }
+}, 90_000);
