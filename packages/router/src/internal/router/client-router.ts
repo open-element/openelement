@@ -43,15 +43,20 @@ interface RouterOptions {
    * Opt in to wrapping the render step of every navigation in
    * document.startViewTransition when the platform offers it (the animation
    * itself is user CSS via ::view-transition-* — the framework ships zero
-   * animation code). Default off — NAMED DEVIATION from #1561's
-   * wrap-by-default ruling, traded against P4's degrade-gracefully rule:
-   * in headless Chromium 147 a view transition that has run in a document
-   * suppresses subsequent trusted anchor activations (the click dispatches,
-   * the engine starts no navigation), which fails deterministically for
-   * every headless e2e consumer of the router (10 controlled runs: clean
-   * tree passes, wrapper on fails, adapter-only passes). Flip the default
-   * to true when that platform bug is fixed — that flip is this option's
-   * retirement condition (P5).
+   * animation code). Default off, NAMED DEVIATION from #1561's
+   * wrap-by-default ruling — verified cross-engine platform behavior
+   * (2026-10-08, Chromium 147 / Firefox Nightly / WebKit 26.4, deterministic
+   * three-engine browser probe): an anchor activation whose input burst
+   * begins while a same-document view transition is active is suppressed —
+   * the pointerdown reaches the page, but the navigation never starts, and
+   * a synchronous skipTransition() in that same burst cannot rescue it. In
+   * headed browsers the window is one short animation; in test/automation
+   * contexts transitions can linger far longer, so default-on would eat
+   * real user clicks (fast double-navigation) and every headless e2e
+   * consumer. Flip the default when engines let an input burst that begins
+   * during an active transition navigate (the engine-matrix test in
+   * router-browser.test.ts is the retirement probe — its suppressed-click
+   * leg goes red the day an engine changes this).
    */
   viewTransitions?: boolean;
 }
@@ -144,8 +149,8 @@ export function createRouter(options: RouterOptions): RouterInstance {
 
   // View Transitions are progressive enhancement (P1 — use the platform),
   // opt in via options.viewTransitions (see RouterOptions for the named
-  // deviation that keeps the default off). The framework ships zero
-  // animation code — the transition visuals are user CSS.
+  // deviation and its retirement probe). The framework ships zero animation
+  // code — the transition visuals are user CSS.
   const canViewTransition =
     options.viewTransitions === true &&
     typeof document !== 'undefined' &&

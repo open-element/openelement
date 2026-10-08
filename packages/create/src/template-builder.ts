@@ -67,9 +67,9 @@ export function assertUnifiedProductVersions(versions: ProductVersions): Product
 // package root to npm tooling; pnpm scripts and the exact @openelement/* pins
 // (B5: the former deno.json import map) live in it when written.
 //
-// One template (#1530): the showcase starter. There is no minimal/tailwind
-// variant pair anymore — the former Tailwind-ON overlay (templates/tailwind/,
-// the #1524 form) retired with the single-template decision.
+// One template: the showcase starter, Tailwind-ON (the owner's single-default
+// ruling — one default, no variant pair, no flag; the demo pages and islands
+// from #1530 ride on top of the Tailwind role sheet).
 const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   // npm tarballs omit dotfiles even when a directory is included. Keep the
   // template non-hidden and write the expected dotfile into generated apps.
@@ -88,7 +88,9 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   // it near-empty, so every option comes from a file convention until the user
   // overrides one.
   ['openelement.config.ts.tmpl', 'openelement.config.ts'],
-  ['app/styles/tokens.css', 'app/styles/tokens.css'],
+  // The @theme role sheet — the ONE styling source (dev serves it directly,
+  // build compiles it through the router's Tailwind preset).
+  ['app/styles/theme.css', 'app/styles/theme.css'],
   // #1557: the retired ui zero-interaction component shapes ship as plain
   // HTML+CSS recipes the consumer deletes if unused (never an npm dep).
   ['app/styles/recipes.css', 'app/styles/recipes.css'],

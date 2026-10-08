@@ -376,6 +376,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
     };
   }
   if (overrides.viewTransition !== undefined) options.viewTransition = overrides.viewTransition;
+  if (overrides.tailwind !== undefined) options.tailwind = overrides.tailwind;
   if (overrides.speculation !== undefined) options.speculation = overrides.speculation;
   if (overrides.build?.manifestBudget !== undefined) {
     options.build = { ...options.build, manifestBudget: { ...overrides.build.manifestBudget } };

@@ -1,0 +1,170 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   The starter's @theme role sheet — the ONE styling source (Tailwind-ON is
+   the single scaffold default; there is no variant pair and no flag).
+
+   Two layers share this file:
+   1. @theme roles — shadcn-style semantic names over Tailwind default scale
+      variables (var(--color-<ramp>-<step>)). Extend by naming a role on the
+      left and an existing Tailwind variable on the right.
+   2. The starter palette aliases — the --paper/--ink/--brand names the
+      component sheets use, each seated on a role so the dark and
+      forced-colors pairs below apply everywhere.
+
+   `pnpm dev` serves this file directly (the #1558 authored-sheet path); the
+   build compiles it through the router's Tailwind preset into the linked,
+   layer-ordered bundle.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── semantic roles (light), over the TW4 default scale.
+     Violet-anchored roles (the starter brand reads violet); neutral
+     surfaces stay zinc so the page base keeps its near-neutral paper
+     feel. ── */
+
+  --color-background: var(--color-white);
+  --color-foreground: var(--color-zinc-950);
+
+  --color-card: var(--color-white);
+  --color-card-foreground: var(--color-zinc-950);
+
+  --color-popover: var(--color-white);
+  --color-popover-foreground: var(--color-zinc-950);
+
+  --color-primary: var(--color-violet-700);
+  --color-primary-foreground: var(--color-violet-50);
+
+  --color-secondary: var(--color-violet-100);
+  --color-secondary-foreground: var(--color-violet-900);
+
+  --color-muted: var(--color-zinc-100);
+  --color-muted-foreground: var(--color-zinc-600);
+
+  --color-accent: var(--color-violet-100);
+  --color-accent-foreground: var(--color-violet-900);
+
+  --color-destructive: var(--color-red-700);
+  --color-destructive-foreground: var(--color-white);
+
+  --color-border: var(--color-violet-200);
+  --color-input: var(--color-violet-200);
+  --color-ring: var(--color-violet-500);
+}
+
+/* Dark pairs (shadcn v4 convention; the selector matches the runtime theme
+   attribute the ui package documents). */
+:root[data-theme='dark'],
+:host([data-theme='dark']) {
+  --color-background: var(--color-zinc-950);
+  --color-foreground: var(--color-zinc-50);
+
+  --color-card: var(--color-zinc-900);
+  --color-card-foreground: var(--color-zinc-50);
+
+  --color-popover: var(--color-zinc-900);
+  --color-popover-foreground: var(--color-zinc-50);
+
+  --color-primary: var(--color-violet-400);
+  --color-primary-foreground: var(--color-violet-950);
+
+  --color-secondary: var(--color-zinc-800);
+  --color-secondary-foreground: var(--color-zinc-100);
+
+  --color-muted: var(--color-zinc-800);
+  --color-muted-foreground: var(--color-zinc-400);
+
+  --color-accent: var(--color-zinc-800);
+  --color-accent-foreground: var(--color-zinc-100);
+
+  --color-destructive: var(--color-red-400);
+  --color-destructive-foreground: var(--color-red-950);
+
+  --color-border: var(--color-zinc-800);
+  --color-input: var(--color-zinc-800);
+  --color-ring: var(--color-violet-400);
+}
+
+/* Forced-colors layer: every role re-seats on a system color. Values are
+   system keywords — no author color survives the forcing. */
+@media (forced-colors: active) {
+  :root {
+    --color-background: Canvas;
+    --color-foreground: CanvasText;
+    --color-card: Canvas;
+    --color-card-foreground: CanvasText;
+    --color-popover: Canvas;
+    --color-popover-foreground: CanvasText;
+    --color-primary: ButtonText;
+    --color-primary-foreground: Canvas;
+    --color-secondary: ButtonFace;
+    --color-secondary-foreground: ButtonText;
+    --color-muted: Canvas;
+    --color-muted-foreground: GrayText;
+    --color-accent: ButtonFace;
+    --color-accent-foreground: ButtonText;
+    --color-destructive: CanvasText;
+    --color-destructive-foreground: Canvas;
+    --color-border: CanvasText;
+    --color-input: CanvasText;
+    --color-ring: Highlight;
+  }
+}
+
+/* ── Starter palette aliases (component sheet names → roles) ── */
+:root {
+  --paper: var(--color-background);
+  --surface: var(--color-card);
+  --ink: var(--color-foreground);
+  --ink-soft: var(--color-muted-foreground);
+  --line: var(--color-border);
+  --brand: var(--color-primary);
+  --brand-ink: var(--color-primary-foreground);
+  --brand-soft: var(--color-secondary);
+  --ok: var(--color-secondary);
+  --warn: var(--color-accent);
+}
+
+/* ── Static (non-role) design tokens the component sheets read ── */
+:root {
+  --gray-0: var(--color-muted);
+  --size-1: 4px;
+  --size-2: 8px;
+  --size-3: 12px;
+  --size-4: 16px;
+  --size-6: 24px;
+  --size-8: 32px;
+  --border-size-1: 1px;
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
+  --font-sans: system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --content-width: 46rem;
+  --shadow-1: 0 1px 3px 0 rgb(20 18 33 / 0.07);
+  --shadow-2: 0 10px 28px rgb(60 50 120 / 0.1);
+}
+
+/* ── Document base (rides the same sheet; no separate tokens convention) ── */
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+::selection {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+/* Automatic dark for the starter palette (no runtime): the role sheet's
+   data-theme pairs above cover runtime-toggled themes. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: var(--color-zinc-950);
+    --surface: var(--color-zinc-900);
+    --ink: var(--color-zinc-50);
+    --ink-soft: var(--color-zinc-400);
+    --line: var(--color-zinc-800);
+  }
+}
