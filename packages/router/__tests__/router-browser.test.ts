@@ -238,7 +238,15 @@ window.router = createRouter({
     { path: '/b', tagName: 'b-page' },
   ],
   onChange: () => { window.changes.push(window.router.currentPath); },
-});`;
+});
+// Deterministic window: without a pinned animation the default transition
+// can finish before the click lands (engine- and load-timing-dependent —
+// WebKit was observed both ways), which made this probe flaky. Five
+// seconds on every transition pseudo guarantees the click lands inside an
+// active transition; whatever each engine does then IS its true behavior.
+const pin = document.createElement('style');
+pin.textContent = '::view-transition-group(*), ::view-transition-image-pair(*), ::view-transition-old(*), ::view-transition-new(*) { animation-duration: 5s !important; }';
+document.head.append(pin);`;
   const server = await createServer({
     root,
     configFile: false,
@@ -334,7 +342,15 @@ window.router = createRouter({
     { path: '/b', tagName: 'b-page' },
   ],
   onChange: () => { window.changes.push(window.router.currentPath); },
-});`;
+});
+// Deterministic window: without a pinned animation the default transition
+// can finish before the click lands (engine- and load-timing-dependent —
+// WebKit was observed both ways), which made this probe flaky. Five
+// seconds on every transition pseudo guarantees the click lands inside an
+// active transition; whatever each engine does then IS its true behavior.
+const pin = document.createElement('style');
+pin.textContent = '::view-transition-group(*), ::view-transition-image-pair(*), ::view-transition-old(*), ::view-transition-new(*) { animation-duration: 5s !important; }';
+document.head.append(pin);`;
   const server = await createServer({
     root,
     configFile: false,
