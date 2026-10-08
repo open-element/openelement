@@ -24,7 +24,9 @@ import {
 // (#869-2.5) so a release can never skip a number.
 // ---------------------------------------------------------------------------
 
-const DEFAULT_REGISTRY_DELAYS_MS = [0, 5_000, 10_000, 20_000, 30_000, 45_000, 60_000] as const;
+const DEFAULT_REGISTRY_DELAYS_MS = [
+  0, 5_000, 15_000, 30_000, 60_000, 120_000, 180_000, 300_000,
+] as const;
 
 export class NpmViewError extends Error {
   /** Explicit field (no parameter property): node's strip-only TS mode rejects them. */

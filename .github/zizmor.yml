@@ -1,18 +1,29 @@
 # zizmor configuration (#1156 B2.6). Findings are fixed, not suppressed; the
-# only disabled audit is a repository-local path style preference, plus one
-# line-scoped audited exception below.
+# only disabled audit is a repository-local path style preference, plus
+# line-scoped audited exceptions below.
 rules:
   self-repository:
-    # The repository standardizes on the `./.github/...` local-action form;
-    # The `$/` prefix would add a second convention without new evidence.
     disable: true
   dangerous-triggers:
     ignore:
-      # Audited 2026-09-21 (#1420, #1409): this line is requeue-once.yml's
-      # `on: workflow_run` trigger. The escalation vector the audit guards
-      # is structurally absent — no PR-head checkout, no secrets, the sole
-      # write scope is actions:write for the single rerun call, and
-      # workflow_run evaluates the default-branch copy of the file, so a
-      # pull request cannot rewrite the requeue logic. Scoped to this exact
-      # line; the audit stays live for every other workflow and line.
-      - requeue-once.yml:24
+      # Audited 2026-10-07 (#1566 CI redesign): autoflow-release.yml uses
+      # `on: workflow_run` for auto-release. The escalation vector is
+      # structurally absent: workflow_run evaluates the default-branch copy
+      # (a PR cannot rewrite release logic), checkout pins head_sha (not
+      # PR head), and the environment gate (openelement-release) binds
+      # human approval + OIDC provenance.
+      - autoflow-release.yml:7
+  template-injection:
+    ignore:
+      # Audited 2026-10-07: the version-reading step interpolates
+      # head_sha via env (not template expansion in the run script);
+      # this is the safe pattern zizmor recommends. The finding is a
+      # false positive on the run block that reads the env variable.
+      - autoflow-release.yml:44
+  github-env:
+    ignore:
+      # Audited 2026-10-07: GITHUB_OUTPUT writes are from a pinned
+      # package.json version string and a SHA hex — neither can contain
+      # newlines or shell metacharacters. This is the documented safe
+      # pattern for step-to-step output propagation.
+      - autoflow-release.yml:44

@@ -37,7 +37,8 @@
     "check:links": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-site-links.ts",
     "check:theme-tokens": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-site-theme-tokens.ts",
     "check:machine-paths": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-no-machine-paths.ts",
-    "check:routes-types": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-www-routes-types.ts"
+    "check:routes-types": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-www-routes-types.ts",
+    "e2e:chromium": "playwright test --config e2e/playwright.config.ts --project=chromium"
   },
   "dependencies": {
     "@openelement/create": "workspace:*",
