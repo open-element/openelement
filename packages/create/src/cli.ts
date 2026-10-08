@@ -154,7 +154,7 @@ function printUsage(): void {
   // The FIRST line is load-bearing: the starter-smoke gate compares exactly
   // this line against createInstallCommand() (the one documented spelling).
   console.log(`Usage (Alpha): ${createInstallCommand()}`);
-  console.log('(a versionless install resolves the stable 0.43 line)');
+  console.log('(a versionless install resolves latest — the current 1.0 line)');
   console.log(`  -t, --template <name>   scaffold template (default: ${TEMPLATE_NAME})`);
   console.log('  --install / --no-install');
   console.log(

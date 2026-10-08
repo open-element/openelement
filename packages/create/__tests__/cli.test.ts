@@ -424,7 +424,7 @@ test('embedded CLI version matches its package manifest', () => {
   expect(versionSource.includes(`'${manifest.version}'`)).toBeTruthy();
 });
 
-test('Alpha README never emits an untagged create install command', () => {
+test('create README documents the versionless canonical install and registry-truth pins', () => {
   const readme = readFileSync(join(packageDir, 'README.md'), 'utf8');
   // The documented bootstrap is a plain Node runner invoking the create
   // package (npm create via the @scope alias / npm exec / npx / pnpm dlx —
@@ -436,20 +436,27 @@ test('Alpha README never emits an untagged create install command', () => {
     ),
   ];
   expect(installs.length > 0, 'README must document at least one install command').toBeTruthy();
-  for (const [command, tag] of installs) {
-    // A versionless `@openelement/create` resolves the stable 0.43 line.
-    expect(tag, `install command must carry an explicit tag or version: ${command}`).toBeTruthy();
-  }
+  // Since the alpha.11 ruling the documented install rides `latest`, so the
+  // canonical spelling is versionless: npm's `@scope` initializer alias
+  // resolves a bare `@openelement` to `@openelement/create` at the scope's
+  // default dist-tag. The primary path is the builder's own string, never a
+  // hand-typed copy.
   expect(
-    readme.includes('npm create @openelement@alpha my-app'),
-    'the primary Alpha install path must use the canonical @alpha command',
+    readme.includes(createInstallCommand('my-app')),
+    `the primary install path must be the canonical versionless command: ${createInstallCommand('my-app')}`,
+  ).toBeTruthy();
+  // The retired channel spelling must not creep back into the install paths:
+  // a tagged copy pins a channel on purpose (the 0.43 maintenance line, an
+  // exact-version pin), never the default entry.
+  expect(
+    !readme.includes('@openelement@alpha'),
+    'the install entry must not route through the alpha channel',
   ).toBeTruthy();
   // The exact-version pin is bound to registry truth (release-state.json), not
-  // to the source-tree version: before the release is published the README must
-  // not advertise it; once release-state registers it, the README must. The
-  // README's exact pin documents what the `alpha` dist-tag resolves to, so the
-  // binding is that tag — since the alpha.11 ruling the 1.0 prerelease line
-  // also rides `latest`, and a version served only under `latest` must not
+  // to the source-tree version: before the release is served under `latest`
+  // the README must not advertise it; once it is, the README must. The
+  // README's exact pin documents what the versionless install resolves, so the
+  // binding is that dist-tag — a version served only under `latest` must not
   // force the README to advertise a version `@alpha` does not serve yet.
   const releaseState = JSON.parse(
     readFileSync(join(packageDir, '..', '..', 'docs', 'release', 'release-state.json')),
@@ -457,7 +464,7 @@ test('Alpha README never emits an untagged create install command', () => {
   const createRegistry = releaseState.packages.find(
     (p: { name: string }) => p.name === '@openelement/create',
   ).registry;
-  const isPublished = createRegistry.alpha === CREATE_VERSION;
+  const isPublished = createRegistry.latest === CREATE_VERSION;
   // The exact version may be pinned in either documented spelling: the full
   // package specifier (`@openelement/create@<v>`, the npx/pnpm alternates) or
   // the canonical alias form (`npm create @openelement@<v>`, which npm resolves
@@ -468,8 +475,8 @@ test('Alpha README never emits an untagged create install command', () => {
   expect(
     documentsExactVersion === isPublished,
     isPublished
-      ? `README must document the exact Alpha version @${CREATE_VERSION}`
-      : `README must not pin the unpublished version @${CREATE_VERSION}`,
+      ? `README must document the exact version @latest resolves: @${CREATE_VERSION}`
+      : `README must not pin the version @latest does not serve yet: @${CREATE_VERSION}`,
   ).toBeTruthy();
 });
 

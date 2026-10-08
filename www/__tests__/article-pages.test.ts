@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { createInstallCommand } from '@openelement/create/install-command';
 import { loadCollectionData } from '../lib/content.ts';
 import { fileURLToPath } from 'node:url';
 import { articleCollections } from '../content-collections.ts';
@@ -212,15 +213,19 @@ test('getting-started leads with copyable commands', async () => {
   const en = pages.find((p) => p.slug === 'getting-started' && p.locale === 'en');
   expect(en).toEqual(expect.anything());
   // The page's primary job: a fenced, copyable install command — not prose.
-  // The pinned shape is the install command's scope-plus-tag (the canonical
-  // `npm create @openelement@<tag>` alias, which npm resolves to
-  // @openelement/create at that tag), the same invariant the install-command
-  // gate compares on (www/tools/generate-install-command.ts): runner and
-  // flags are the docs' choice, package and tag are the CLI's — the retired
-  // Deno `npm:`-specifier spelling stays retired (ADR-0161). Since #1552 the
-  // fence is a build-time Shiki token block, not a plain pre>code shell.
+  // The pinned shape is the canonical versionless `npm create @openelement`
+  // alias (npm resolves the bare scope to @openelement/create at the scope's
+  // default dist-tag `latest`, the 1.0 line), the same invariant the
+  // install-command gate compares on (www/tools/generate-install-command.ts)
+  // through the builder's own string (www/lib/content.ts): runner and flags
+  // are the docs' choice, the package is the CLI's — the retired Deno
+  // `npm:`-specifier spelling stays retired (ADR-0161). Since #1552 the fence
+  // is a build-time Shiki token block, not a plain pre>code shell; Shiki
+  // splits the command into styled spans, so the exact string is asserted on
+  // the resolved Markdown source and the HTML carries the package token.
   expect(en.html).toContain('<pre class="shiki css-variables"');
-  expect(en.html).toContain('@openelement@alpha');
+  expect(en.content).toContain(createInstallCommand('my-app'));
+  expect(en.html).toContain('@openelement');
 });
 
 // The security page deep-links the configuration anchor; the configuration

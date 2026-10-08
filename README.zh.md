@@ -12,7 +12,7 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 需要 **Node.js 24.2+** 与 pnpm。创建、安装、运行、构建：
 
 ```bash
-npm create @openelement@alpha my-app
+npm create @openelement my-app
 cd my-app
 pnpm install
 pnpm dev

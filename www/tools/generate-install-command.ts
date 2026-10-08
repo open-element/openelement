@@ -10,11 +10,14 @@
  * command that differs from what the CLI prints fails `--check`, which
  * gate:release (the release train) runs.
  *
- * The assertion compares the command's specifier-plus-tag (`…create@<tag>`,
- * with the canonical `npm create @openelement@<tag>` alias normalized onto the
- * same package) so a documentation example may name its own project (`my-app`)
- * and choose among the verified spellings (npm create / npm exec / npx /
- * pnpm dlx) while the package and dist-tag stay the CLI's.
+ * The assertion compares the command's specifier with its dist-tag slot
+ * normalized (the canonical `npm create @openelement <name>` scope alias
+ * normalizes onto the same package) so a documentation example may name its own
+ * project (`my-app`) and choose among the verified spellings (npm create /
+ * npm exec / npx / pnpm dlx) while the package stays the CLI's. The tag slot
+ * is symbolic: the canonical spelling is versionless (`latest`, the 1.0 line
+ * since the alpha.11 ruling) and a copy may pin a channel or an exact version
+ * on purpose (the 0.43 maintenance line, a reproducibility pin).
  */
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,16 +34,21 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 /**
  * Files that display the install command to a reader. Each must either use the
  * generated truth (the placeholder or the generated module) or carry a command
- * whose specifier and dist-tag match the canonical one exactly.
+ * whose specifier matches the canonical one.
  *
  * CHANGELOG.md is deliberately absent: it is a dated record of what shipped,
  * so an older command in it is history, not current guidance (the same reason
  * blog dispatches are excluded from the content gate).
+ *
+ * `packages/create/templates/README.tmpl` is the starter README every scaffold
+ * ships; it was outside this list when it silently hardened to a pinned old
+ * version (found in the alpha.11 follow-ups), so it is covered from now on.
  */
 const DISPLAY_FILES: readonly string[] = [
   'README.md',
   'README.zh.md',
   'packages/create/README.md',
+  'packages/create/templates/README.tmpl',
   'www/content/docs/guide/getting-started.md',
   'www/content/docs/guide/getting-started.zh.md',
   'www/content/docs/guide/tutorial.md',
@@ -51,42 +59,72 @@ const DISPLAY_FILES: readonly string[] = [
 ];
 
 /**
- * A documented install command: either the canonical `npm create @openelement@<tag>`
- * spelling (npm's `@scope` initializer alias resolves it to the create package)
- * or a Node runner (npm exec / npx / pnpm dlx, including the pnpm form's
- * explicit `--package=` + bin — the packed package ships two bins, so a bare
- * `pnpm dlx` cannot resolve one) invoking the create package with an explicit
- * tag. The match ends at the specifier — the project name that follows is a
- * free example.
+ * A documented install command: either the canonical `npm create @openelement`
+ * spelling (npm's `@scope` initializer alias resolves it to the create package
+ * at the scope's default dist-tag — versionless, so it rides `latest`) or a
+ * Node runner (npm exec / npx / pnpm dlx, including the pnpm form's explicit
+ * `--package=` + bin — the packed package ships two bins, so a bare
+ * `pnpm dlx` cannot resolve one) invoking the create package. The tag slot is
+ * optional in both: a copy may pin an exact version or a channel on purpose.
+ * The match ends at the specifier — the project name that follows is a free
+ * example.
  */
 const DOCUMENTED_COMMAND =
-  /(?:npm exec|npx|pnpm dlx)\b[^`\n]*?@openelement\/create@[^\s`]+|npm create\s+@openelement@[^\s`]+/g;
+  /(?:npm exec|npx|pnpm dlx)\b[^`\n]*?@openelement\/create(?:@[^\s`]+)?|npm create\s+@openelement(?:@[^\s`]+)?/g;
 
-const DOCUMENTED_SPECIFIER = /@openelement\/create@[^\s`]+/;
+const DOCUMENTED_SPECIFIER = /@openelement\/create(?:@[^\s`]+)?/;
 
 /**
  * The comparable shape of an install command: its package specifier with the
- * dist-tag normalized, so a deliberately pinned version is compared on the
- * package alone (`@<tag>`). Runner and flags are the docs' choice among the
- * verified spellings; package and tag are the CLI's. The canonical
- * `npm create @openelement@<tag>` spelling normalizes through npm's
- * `@scope` → `@scope/create` initializer alias, so every verified form compares
- * equal on the same package+tag.
+ * dist-tag slot normalized, so a deliberately pinned version is compared on the
+ * package alone. Runner and flags are the docs' choice among the verified
+ * spellings; the package is the CLI's. The canonical
+ * `npm create @openelement` spelling normalizes through npm's `@scope` →
+ * `@scope/create` initializer alias, so every verified form compares equal on
+ * the same package, whether or not it names a tag.
  */
 function commandShape(command: string): string {
   const direct = command.match(DOCUMENTED_SPECIFIER)?.[0];
   // Anchor the tag strip on the final `@<tag>` segment (no `@` inside it), so
-  // the package name survives the normalization.
-  if (direct) return direct.replace(/@[^@\s`]+$/, '@<tag>');
-  // `npm create @openelement@<tag>`: the alias form carries the scope, not the
-  // package name — normalize it to the package it resolves to.
-  const alias = command.match(/@openelement@[^\s`]+/)?.[0];
+  // the package name survives the normalization; a versionless specifier
+  // already carries the default tag (`latest`).
+  if (direct) {
+    return direct.includes('@openelement/create@')
+      ? direct.replace(/@[^@\s`]+$/, '@<tag>')
+      : `${CREATE_PACKAGE_SPECIFIER}@<tag>`;
+  }
+  // `npm create @openelement(@<tag>)`: the alias form carries the scope, not
+  // the package name — normalize it to the package it resolves to.
+  const alias = command.match(/@openelement(?:@[^\s`]+)?/)?.[0];
   if (alias) return `${CREATE_PACKAGE_SPECIFIER}@<tag>`;
   return '';
 }
 
+/**
+ * Files whose copies must carry the canonical spelling verbatim — only the
+ * project name may differ, no tag slot at all. The starter template README
+ * belongs here: it had hardened to a stale pinned version while it was outside
+ * this gate, and the tag-normalized comparison below cannot catch a
+ * recurrence (a pin is a legal spelling for the copies that intend it).
+ * Copies that pin a channel or a version on purpose (the create README's
+ * reproducibility example, the 0.43 maintenance line) stay on the
+ * tag-normalized comparison.
+ */
+const CANONICAL_ONLY_FILES: ReadonlySet<string> = new Set([
+  'packages/create/templates/README.tmpl',
+]);
+
 const canonicalCommand = createInstallCommand('my-app');
 const canonicalShape = commandShape(canonicalCommand);
+
+/**
+ * The canonical command truncated to the same token count as `command`. The
+ * documented-command match never carries the project name (the regex ends at
+ * the specifier), so a verbatim copy equals this prefix exactly.
+ */
+function canonicalPrefix(command: string): string {
+  return canonicalCommand.split(/\s+/).slice(0, command.trim().split(/\s+/).length).join(' ');
+}
 
 export interface InstallCommandBuild {
   command: string;
@@ -111,13 +149,15 @@ export async function buildInstallCommand(): Promise<InstallCommandBuild> {
       // nothing here to compare.
       continue;
     }
+    const strict = CANONICAL_ONLY_FILES.has(relative);
     const documented = [...text.matchAll(DOCUMENTED_COMMAND)].map((match) => match[0]);
     for (const command of documented) {
-      if (commandShape(command) === canonicalShape) continue;
+      const verbatim = !strict || command === canonicalPrefix(command);
+      if (commandShape(command) === canonicalShape && verbatim) continue;
       failures.push(
         `${relative} documents an install command that differs from the create CLI's:\n` +
-          `    documented: ${commandShape(command)}\n` +
-          `    canonical:  ${canonicalShape}\n` +
+          `    documented: ${strict ? command : commandShape(command)}\n` +
+          `    canonical:  ${strict ? canonicalCommand : canonicalShape}\n` +
           `    Use {{INSTALL_COMMAND}} (site content) or the generated module instead of a copy.`,
       );
     }
