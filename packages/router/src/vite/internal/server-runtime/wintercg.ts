@@ -402,7 +402,11 @@ function applyChannelHeaders(response: Response, channel: Headers): Response {
     const lower = key.toLowerCase();
     if (lower === 'content-type') return;
     if (lower === 'set-cookie') {
-      merged.delete('set-cookie');
+      // Multi-value accumulation, no replacement: a channel cookie appends
+      // alongside the response's own Set-Cookie entries and every earlier
+      // channel cookie. The former delete-then-append dropped both with
+      // each channel cookie (a route's session cookie and all but the last
+      // middleware cookie vanished whenever any channel carried cookies).
       merged.append('set-cookie', value);
       return;
     }
