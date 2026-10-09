@@ -14,6 +14,7 @@ const readingRoutes = [
 const guideRoutes = [
   '/guide/getting-started',
   '/guide/core-concepts',
+  '/guide/compiled-grammar',
   '/guide/routing-and-data',
   '/guide/streaming',
   '/guide/mdx',

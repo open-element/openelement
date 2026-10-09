@@ -136,10 +136,28 @@ export class OpenElement extends OpenElementConfiguration {
       formAssociated: ctor.formAssociated ?? false,
       errorBoundary:
         ctor.isErrorBoundary === true
-          ? // The public ErrorBoundary owns the user-facing retry policy
-            // (maxRetries field); the kernel service only tracks state, so its
-            // own retry budget stays out of the way.
-            { maxRetries: Number.MAX_SAFE_INTEGER }
+          ? {
+              // The public ErrorBoundary owns the user-facing retry policy
+              // (maxRetries field); the kernel service only tracks state, so its
+              // own retry budget stays out of the way.
+              maxRetries: Number.MAX_SAFE_INTEGER,
+              // Publish every automatic capture (connect, claim and update
+              // failures) into the element's own error state: a compiled
+              // ErrorBoundary subclass that declares `hasError` as a property
+              // reads the write through its signal-backed accessor — so a
+              // render() branch on hasError flips on kernel-captured failures
+              // too, not only on application catchError() calls.
+              onError: () => {
+                this._publishErrorState();
+              },
+              // The kernel clears the service after a successful connect
+              // (kernel.ts `if (this.errors.hasError) this.errors.reset()`);
+              // publish that too, or a recovered element would keep showing
+              // the fallback branch.
+              onReset: () => {
+                this._publishErrorState();
+              },
+            }
           : undefined,
     });
     this.#kernel = state.kernel;
@@ -154,6 +172,16 @@ export class OpenElement extends OpenElementConfiguration {
   protected get _errors(): CompiledErrorBoundary {
     return this.#kernel?.errors ?? this.#detachedErrors;
   }
+
+  /**
+   * Publish the boundary service's state after the kernel captured or cleared
+   * an error automatically (connect/claim/update captures and the post-connect
+   * reset). No-op on the base class (a plain OpenElement carries no boundary
+   * state); `ErrorBoundary` overrides it to write its `hasError` field, so a
+   * compiled subclass that declares `hasError` as a property reads the
+   * automatic transitions through the same signal its render() branches on.
+   */
+  protected _publishErrorState(): void {}
 
   /**
    * Returns an AbortSignal that is aborted when the element is disconnected.

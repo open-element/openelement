@@ -17,6 +17,11 @@ export {
   stableModuleId,
   stripInlineSourceMapComment,
 } from './internal/compiler/plugin.ts';
+// The artifact adoption read (#1558/KR-10): the style edges of a shipped
+// compiled module. Host builds whose compiled-element binding is not
+// `compiledElementPlugin` (the router dev transform, plugin-hmr.ts) register
+// these the same way the plugin does.
+export { compiledArtifactStyleRequests } from './internal/compiler/compiled-artifact-style-requests.ts';
 export {
   CompiledElementError,
   compileElementProgram,

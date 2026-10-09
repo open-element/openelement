@@ -2,7 +2,7 @@
  * @openelement/element — open:compiled-element v1 plugin (#1160).
  *
  * Vite integration boundary for the TSX-to-Part Program compiler.
- * The hook activates only for .tsx modules that opt into the compiled model
+ * The hook activates for .tsx modules that opt into the compiled model
  * with a canonically bound `@element(...)` decorator application on a class
  * declaration (#1209: the decorator identifier must resolve to a runtime
  * named import of `element` from '@openelement/element'; a bare or same-name
@@ -17,6 +17,13 @@
  * OEC9027 diagnostic; other unsupported grammar in a genuinely decorated
  * module fails through this.error() with a source-located OEC9xx diagnostic —
  * there is no runtime fallback.
+ *
+ * The hook also ADOPTS this compiler's own emitted artifacts (a package's
+ * shipped module): there is nothing left to compile, but the module's `.css`
+ * imports are the same style edges the authored path registers, and the
+ * style-asset intercept only answers registered edges. The artifact read
+ * recovers exactly those edges (compiled-artifact-style-requests.ts) so the
+ * packed and workspace-source forms of one package admit identically.
  *
  * Internal Part Program v1 pipeline: not part of the public adapter API.
  */
@@ -34,6 +41,7 @@ import {
 } from './semantic-core/module-analysis.ts';
 import { diagnosticPluginError } from './semantic-core/diagnostics/index.ts';
 import { typeCheckEmittedModule } from './semantic-core/type-check.ts';
+import { compiledArtifactStyleRequests } from './compiled-artifact-style-requests.ts';
 import { registerStyleRequest, styleRequestFile, styleRequestModuleId } from './style-requests.ts';
 
 /** The authored substring every compiled element module contains (`@element(`), used as the cheap prefilter. */
@@ -182,14 +190,20 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
         const compiled = compileElementModule(code, moduleId, {
           staticSidecars: options.staticSidecars,
         });
-        if (!compiled) return null;
+        // An ALREADY-compiled artifact (a package's shipped module) has no
+        // authored grammar left to compile, but its `.css` imports are the
+        // same style edges the authored path registers — recovered through the
+        // artifact read (compiled-artifact-style-requests.ts) so the packed
+        // form is admitted identically to the workspace-source form (#1558/
+        // KR-10). This transform stays the registry's one writer.
+        const styleRequests = compiled?.styleRequests ?? compiledArtifactStyleRequests(code, id);
         // The compiled module's `.css` edges travel to the intercepting host
         // plugin through the style-edge registry — keyed by the id the
         // bundler's resolver lands on for the authored import. The compiler
         // never writes files or reads sheet bytes; the host build owns the
         // emitted artifacts from here.
-        if (compiled.styleRequests !== undefined) {
-          for (const specifier of compiled.styleRequests) {
+        if (styleRequests !== undefined) {
+          for (const specifier of styleRequests) {
             registerStyleRequest({
               moduleId: styleRequestModuleId(id, specifier),
               importer: id,
@@ -198,6 +212,10 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
             });
           }
         }
+        // The edge registration above is the whole job for an adopted
+        // artifact: it ships as its own emitted module, nothing to compile or
+        // type-check here.
+        if (!compiled) return null;
         if (options.typeCheckEmitted) {
           const diagnostics = typeCheckEmittedModule(compiled.code, moduleId, {
             paths: options.resolutionPaths,

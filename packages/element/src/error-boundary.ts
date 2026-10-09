@@ -7,17 +7,35 @@
  * boundary state observed here and by the runtime never diverges.
  *
  * Fallback presentation is program-defined in the compiled architecture: a
- * boundary's Part Program expresses its fallback as a Region (a `when` over an
- * error-state signal written from a `catchError` override), not as a VNode
- * returned from render(). The legacy VNode `onError()`/`render()` fallback
- * machinery was removed with the legacy renderer.
+ * boundary's Part Program expresses its fallback as a Region (a `when` over
+ * the `hasError` state), not as a VNode returned from render(). The legacy
+ * VNode `onError()`/`render()` fallback machinery was removed with the legacy
+ * renderer.
  *
- * Usage:
+ * `hasError` is this class's error-state property, maintained by the boundary
+ * itself (catchError / retry / reset and the kernel's automatic captures). A
+ * compiled subclass whose render() branches on it declares the same name as a
+ * compiled property:
+ *
  * ```tsx
- * class MyBoundary extends ErrorBoundary {
- *   // compiled render expresses the fallback branch over hasError state
+ * @element('my-boundary', { root: 'shadow-open' })
+ * export class MyBoundary extends ErrorBoundary {
+ *   // The error state the boundary maintains. Declared because a compiled
+ *   // render reads @property signals; the boundary writes through it, so the
+ *   // branch updates when a failure is captured or cleared.
+ *   @property({ reflect: false, attribute: false })
+ *   hasError = false;
+ *
+ *   render() {
+ *     return <div>{this.hasError ? <p>Something went wrong</p> : <slot></slot>}</div>;
+ *   }
  * }
  * ```
+ *
+ * The property is declared on the base class (rather than exposed as a
+ * getter) precisely so that subclass declaration is legal TypeScript: a class
+ * field may shadow a base field, but overriding a base accessor with a field
+ * is a type error (TS2610).
  */
 
 import { OpenElement } from './open-element.ts';
@@ -35,9 +53,14 @@ export abstract class ErrorBoundary extends OpenElement {
   /** Maximum number of retry attempts before giving up. Default: 3. */
   protected maxRetries = 3;
 
-  get hasError(): boolean {
-    return this._errors.hasError;
-  }
+  /**
+   * Current error state. The boundary machinery is the writer: catchError /
+   * retry / reset publish here, and the kernel's automatic captures (connect,
+   * claim and update failures) route through the same publication. Read it
+   * directly, or — in a compiled subclass — declare it as a compiled property
+   * and branch render() on it.
+   */
+  hasError = false;
 
   get error(): OpenElementError | null {
     return this._errors.error;
@@ -54,6 +77,7 @@ export abstract class ErrorBoundary extends OpenElement {
    */
   catchError(error: Error, source?: unknown): void {
     this._errors.catchError(error, source);
+    this.hasError = this._errors.hasError;
   }
 
   /**
@@ -82,6 +106,9 @@ export abstract class ErrorBoundary extends OpenElement {
         }
       }
     });
+    // A successful recovery cleared the service state; a recaptured failure
+    // set it again. Publish whichever is true now.
+    this.hasError = this._errors.hasError;
   }
 
   /**
@@ -91,6 +118,18 @@ export abstract class ErrorBoundary extends OpenElement {
    */
   reset(): void {
     this._errors.reset();
+    this.hasError = this._errors.hasError;
+  }
+
+  /**
+   * The base class's publish seam: the kernel captures connect/claim/update
+   * failures into the boundary service without calling through this class, so
+   * the service's state is mirrored into `hasError` here — the one place the
+   * error state is written from either side (application calls and automatic
+   * captures), keeping the field and the service in agreement.
+   */
+  protected override _publishErrorState(): void {
+    this.hasError = this._errors.hasError;
   }
 }
 

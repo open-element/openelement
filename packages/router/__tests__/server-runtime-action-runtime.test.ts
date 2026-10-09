@@ -115,6 +115,41 @@ test('the bare `action` export dispatches when no ?/name is present', async () =
   expect(execution.response?.status).toEqual(303);
 });
 
+test('a successful action discards its return value: 303 PRG, no success envelope anywhere (#I4/KR-13)', async () => {
+  // ADR-0120 decision 3: success data has no envelope. The native channel is
+  // a bare 303; the fetch channel is the `redirect` ActionResult. The
+  // authored success value never rides either response on either channel.
+  const authValue = { saved: true, id: 7 };
+  const nativePost = formPost({ origin: 'https://pages.example.test' });
+  const nativeExecution = await runActionProtocol(
+    nativePost.context,
+    { action: () => authValue },
+    { env: {} },
+    statusPage,
+    nativePost.state,
+  );
+  expect(nativeExecution.actionResult, 'success never enters the re-render channel').toEqual(
+    undefined,
+  );
+  expect(nativeExecution.response!.status).toEqual(303);
+  expect(await nativeExecution.response!.text()).not.toContain('saved');
+
+  const fetchPost = formPost({
+    origin: 'https://pages.example.test',
+    fetchHeader: true,
+  });
+  const fetchExecution = await runActionProtocol(
+    fetchPost.context,
+    { action: () => authValue },
+    { env: {} },
+    statusPage,
+    fetchPost.state,
+  );
+  const body = (await fetchExecution.response!.json()) as { type: string };
+  expect(body.type).toEqual('redirect');
+  expect(JSON.stringify(body)).not.toContain('saved');
+});
+
 test('fail() re-render channel: native callers receive the classified outcome at 422', async () => {
   const { context, state } = formPost({ origin: 'https://pages.example.test' });
   const execution = await runActionProtocol(

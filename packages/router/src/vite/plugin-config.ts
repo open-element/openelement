@@ -365,8 +365,25 @@ export function createConfigHooks(
         throw error;
       }
 
+      // KR-10 (a): a package the app declares as a package-island is BUNDLED
+      // into the SSR graph, never externalized — its shipped modules import
+      // their own `.css` sheets, which Node's ESM loader cannot load
+      // (`Unknown file extension ".css"`, the packed-consumer failure).
+      // The derivation itself is the config loader's (packageIslands →
+      // ssr.noExternal, app-config.ts); this hook is where it must reach the
+      // RESOLVED config, because the dev server's SSR environment externalizes
+      // by that list and nothing else carried it before — every workspace
+      // consumer masked the gap through the pnpm symlink layout, and only the
+      // packed consumer (tarballs under node_modules) felt it.
+      // Vite's merge treats `noExternal: true` as an absorbing value
+      // (mergeConfigRecursively, `ssr.noExternal`), so a user's broader
+      // declaration is never narrowed by this list.
+      const derivedNoExternal = state.resolvedOptions.ssr?.noExternal ?? [];
+      const noExternal = derivedNoExternal.length > 0 ? [...derivedNoExternal] : undefined;
+
       return {
         resolve: normalizedAliases ? { alias: normalizedAliases } : undefined,
+        ...(noExternal === undefined ? {} : { ssr: { noExternal } }),
         // Chokidar's fs.watch backend drops consecutive change events within
         // 50ms. A quick fix after a syntax error can otherwise leave Vite's
         // SSR error cached forever (the packed Lit consumer on Linux).

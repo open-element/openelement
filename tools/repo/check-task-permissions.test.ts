@@ -37,6 +37,7 @@ const TASK_FILES: TaskFile[] = [
     ffiAllowed: { test: 'root suite includes the router vite-plugin graph' },
   },
   { path: 'packages/element/package.json', ffiAllowed: {} },
+  { path: 'packages/compiler/package.json', ffiAllowed: {} },
   { path: 'packages/ui/package.json', ffiAllowed: {} },
   { path: 'packages/create/package.json', ffiAllowed: {} },
   {
@@ -151,6 +152,7 @@ test('task permissions: unit suites run on vitest — the deno permission surfac
   // test runner (which would silently drop the flag audit).
   for (const [path, name] of [
     ['packages/element/package.json', 'test'],
+    ['packages/compiler/package.json', 'test'],
     ['packages/ui/package.json', 'test'],
     ['packages/create/package.json', 'test'],
     ['packages/router/package.json', 'test'],

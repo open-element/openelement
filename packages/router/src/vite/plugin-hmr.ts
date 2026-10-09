@@ -1,15 +1,18 @@
 /**
  * The compiler hooks of the open build plugin (issue #1473 extraction).
  *
- * `transform` compiles @element modules during the build; `handleHotUpdate`
- * decides between ordinary module HMR and a full reload by comparing Part
- * Program shapes. The per-plugin-instance shape map stays an instance-local
- * closure, so no program can leak between Vite builds.
+ * `transform` compiles @element modules during the build and adopts this
+ * compiler's own emitted artifacts (a package's shipped module) for their
+ * style edges; `handleHotUpdate` decides between ordinary module HMR and a
+ * full reload by comparing Part Program shapes. The per-plugin-instance shape
+ * map stays an instance-local closure, so no program can leak between Vite
+ * builds.
  */
 
 import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'vite';
 import {
+  compiledArtifactStyleRequests,
   compileElementModule,
   registerStyleRequest,
   stableModuleId,
@@ -54,14 +57,18 @@ export function createCompilerHooks(
           // registers.
           { staticSidecars: [ISLAND_ADMISSION] },
         );
-        if (!result) return null;
+        // A shipped compiled artifact (a package's emitted module) has no
+        // authored grammar left to compile, but its `.css` imports are the
+        // same style edges — recovered through the artifact read so dev admits
+        // the packed form exactly as the build does (#1558/KR-10).
+        const styleRequests = result?.styleRequests ?? compiledArtifactStyleRequests(code, id);
         // the compiled-element transform is the style-edge
         // registry's one writer — this hook is that transform's dev host
         // binding (element's compiledElementPlugin is the build binding),
         // so the registration travels with it; the dev plugin's intercept
         // answers from this registry.
-        if (result.styleRequests !== undefined) {
-          for (const specifier of result.styleRequests) {
+        if (styleRequests !== undefined) {
+          for (const specifier of styleRequests) {
             registerStyleRequest({
               moduleId: styleRequestModuleId(id, specifier),
               importer: id,
@@ -70,6 +77,9 @@ export function createCompilerHooks(
             });
           }
         }
+        // The edge registration is the whole job for an adopted artifact:
+        // it ships as its own module, nothing to compile or hand back.
+        if (!result) return null;
         const key = id.split('?', 1)[0];
         compiledProgramShapes.set(key, programShape(result.program));
         // The semantic core emits the real Source Map v3 (#1210): return it as

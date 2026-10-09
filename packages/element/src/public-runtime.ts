@@ -101,6 +101,12 @@ interface CompiledComponentConstructor extends CustomElementConstructor {
     string,
     (signals: Record<string, ReturnType<typeof signal>>) => ReturnType<typeof signal>
   >;
+  /**
+   * The emitted property table (`static props`), whose `default` holds the
+   * authored initializer verbatim — the only carrier of a non-serializable
+   * default (a `trustedHtml(...)` capability object) at SSR time.
+   */
+  props?: Record<string, { default?: unknown }>;
   styles?: unknown;
   delegatesFocus?: boolean;
 }
@@ -199,6 +205,32 @@ function parseJsonProp(record: CompiledPropertyMetadata, raw: string): unknown {
   }
 }
 
+/**
+ * The property's initial value for a host the caller did not pass a prop for.
+ *
+ * The compiled metadata carries the SERIALIZABLE projection of the authored
+ * default, which is `null` for the one admitted non-serializable default
+ * shape — a `trustedHtml(...)` initializer (analyze-module.ts: the capability
+ * object has no literal form, so the metadata default is null). The generated
+ * class's own `static props` carries the authored initializer verbatim, so
+ * the runtime capability object exists there (the same object the class field
+ * initializer produces on the client). SSR must seed from THAT object, or the
+ * html Part's brand check fails on the metadata's null and an island holding a
+ * `@property html = trustedHtml(...)` cannot render (KR-12). Page components
+ * always pass such fields through `props()`, which is why only islands felt
+ * it. Plain fields project identically in both carriers; a class without
+ * `static props` (compiled before the emission) keeps the metadata default
+ * exactly as before.
+ */
+function compiledDefaultOf(
+  ctor: CompiledComponentConstructor,
+  record: CompiledPropertyMetadata,
+): unknown {
+  if (record.default !== null) return record.default;
+  const runtimeDefault = ctor.props?.[record.name]?.default;
+  return runtimeDefault === undefined ? record.default : runtimeDefault;
+}
+
 function seedCompiledProperties(
   ctor: CompiledComponentConstructor,
   props: Record<string, unknown>,
@@ -230,13 +262,12 @@ function seedCompiledProperties(
     const present = preserveNull
       ? Object.prototype.hasOwnProperty.call(props, record.name)
       : record.name in props;
-    const value = present
-      ? coerceServerProp(record, props[record.name], preserveNull)
-      : record.default;
+    const fallback = compiledDefaultOf(ctor, record);
+    const value = present ? coerceServerProp(record, props[record.name], preserveNull) : fallback;
     signals[record.name] = signal(value);
     if (record.attribute !== null) {
       const serialized = convertToAttribute(record, value);
-      if (serialized !== convertToAttribute(record, record.default) && serialized !== null) {
+      if (serialized !== convertToAttribute(record, fallback) && serialized !== null) {
         hostAttrs.push([record.attribute, serialized] as const);
       }
     }
