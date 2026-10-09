@@ -1,7 +1,133 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { installCommand } from '../app/data/_generated-install-command.ts';
 import { SOURCE_VERSION } from '../app/data/_generated-release-line.ts';
 import { packageCountPhrase } from '../app/data/version.ts';
+
+/**
+ * The hero media stack, as selectors the band guard below matches on: the
+ * mascot island, its `<figure class="stage">`, the poster `<img>`, the live
+ * `<canvas>` and the absolutely positioned stage wrapper.
+ */
+const HERO_MEDIA_SELECTOR = 'open-dragon-live-gaze, canvas, .stage, .poster, .hero-stage';
+
+/**
+ * Scrolls the stats strip into the lower half of the viewport and waits for
+ * the scroll island to settle `--hero-exit` — the state in which the exit
+ * transform moves the hero stage downward. The bug this guard pins only
+ * exists while that transform is live, so no reduced-motion emulation here.
+ */
+async function parkStripBelowFold(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const strip = document.querySelector('index-index .spec-strip');
+          const hero = document.querySelector('index-index .hero-main');
+          if (!strip || !hero) return -1;
+          if (strip.getBoundingClientRect().top > innerHeight) {
+            window.scrollTo(0, Math.max(0, strip.getBoundingClientRect().top - innerHeight * 0.3));
+          }
+          return Number(hero.style.getPropertyValue('--hero-exit') || 0);
+        }),
+      { message: 'the scroll island settles --hero-exit' },
+    )
+    .toBeGreaterThan(0.5);
+}
+
+/**
+ * Page-side half of the band guard. Runs inside the browser (passed to
+ * page.evaluate, so it must be self-contained):
+ *
+ *  - `spill`: the hero media stack must not hit-test at any point of the
+ *    chrome bands below the hero — the stats strip (the row whose contrast is
+ *    guarded here) and the marquee that follows it. The mascot stage is
+ *    absolutely positioned; while `--hero-exit` translates it down it used to
+ *    paint OVER both, which are in-flow content below the hero.
+ *  - `inks`: the strip's text elements and the color they paint with.
+ */
+const stripGuardSample = (selector: string) => {
+  const strip = document.querySelector('index-index .spec-strip') as HTMLElement | null;
+  const marquee = document.querySelector('index-index .marquee') as HTMLElement | null;
+  if (!strip) return { spill: ['index-index .spec-strip missing'], inks: [] as string[] };
+  const rect = strip.getBoundingClientRect();
+  const bottom = (marquee ?? strip).getBoundingClientRect().bottom;
+  const hits = new Set<string>();
+  const stepX = Math.max(24, Math.round(rect.width / 12));
+  for (let x = 8; x < rect.width - 8; x += stepX) {
+    for (const y of [rect.top + 4, rect.top + rect.height / 2, rect.bottom - 4, bottom - 4]) {
+      for (const el of document.elementsFromPoint(x, y)) {
+        if (el.matches(selector)) hits.add(el.tagName.toLowerCase());
+      }
+    }
+  }
+  const inks: string[] = [];
+  for (const el of strip.querySelectorAll('.version-line, .spec-fact, .spec-cell small')) {
+    inks.push(getComputedStyle(el).color);
+  }
+  return { spill: [...hits], inks };
+};
+
+/** The luminance span of the pixels a page.screenshot clip contains. */
+const luminanceSpan = async (
+  page: Page,
+  clip: { x: number; y: number; width: number; height: number },
+): Promise<{ min: number; max: number }> => {
+  const shot = await page.screenshot({ clip });
+  return page.evaluate(
+    async (dataUrl: string) => {
+      const channel = (c: number): number => {
+        const v = c / 255;
+        return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      };
+      const img = new Image();
+      img.src = dataUrl;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) throw new Error('2d context unavailable');
+      ctx.drawImage(img, 0, 0);
+      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let min = 1;
+      let max = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const l =
+          0.2126 * channel(data[i]) + 0.7152 * channel(data[i + 1]) + 0.0722 * channel(data[i + 2]);
+        if (l < min) min = l;
+        if (l > max) max = l;
+      }
+      return { min, max };
+    },
+    `data:image/png;base64,${shot.toString('base64')}`,
+  );
+};
+
+/**
+ * WCAG relative luminance of a computed color string. Computed colors come
+ * back in whatever modern function the engine normalized them to (oklch since
+ * the @theme token table), and only a canvas resolves every supported
+ * function into sRGB.
+ */
+const inkLuminance = (page: Page, value: string): Promise<number> =>
+  page.evaluate((css: string) => {
+    const probe = document.createElement('canvas');
+    probe.width = 1;
+    probe.height = 1;
+    const ctx = probe.getContext('2d', { colorSpace: 'srgb' });
+    if (!ctx) throw new Error('2d context unavailable');
+    ctx.fillStyle = css;
+    ctx.fillRect(0, 0, 1, 1);
+    const { data } = ctx.getImageData(0, 0, 1, 1);
+    const channel = (c: number): number => {
+      const v = c / 255;
+      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(data[0]) + 0.7152 * channel(data[1]) + 0.0722 * channel(data[2]);
+  }, value);
+
+const contrastRatio = (a: number, b: number): number =>
+  (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
 test.describe('Cinematic homepage', () => {
   test('keeps the product story and starter available without animation', async ({ page }) => {
@@ -38,6 +164,71 @@ test.describe('Cinematic homepage', () => {
     await expect(home.locator('.spec-strip')).toContainText('DSD server output');
     // The index/sentence pair no longer renders a "four packages" graph cell.
     await expect(home.locator('.spec-strip')).not.toContainText('four packages');
+  });
+
+  test('the stats strip keeps its copy on the page ground while the hero exits', async ({
+    page,
+  }) => {
+    // The band regression this guards (F lane, owner screenshot 2026-10-09):
+    // the hero stage is absolutely positioned and translates down as
+    // `--hero-exit` grows; with no clip on .hero-main it painted over the
+    // in-flow stats strip, so the copy sat on raw photography — measured on
+    // the pre-fix build, the dark theme's white ink fell to 2.7:1 and the
+    // light theme's near-black ink to 1.3:1, with the image's own claw
+    // detail sitting inside the strip's page-ground bands. Two independent
+    // guards, in both themes: the hero media must not reach the strip's band
+    // at all, and the background under each text element must clear AA
+    // against its ink.
+    for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      await page.setViewportSize({ width: 1024, height: 900 });
+      await page.goto('/');
+      await parkStripBelowFold(page);
+
+      const { spill, inks } = await page.evaluate(stripGuardSample, HERO_MEDIA_SELECTOR);
+      expect(
+        spill,
+        `${theme}: the hero media stack paints inside the stats strip band (${spill.join(', ')})`,
+      ).toEqual([]);
+
+      // Hide the ink only (visibility keeps geometry) so each text element's
+      // own line box screenshots as pure background.
+      await page.evaluate(() => {
+        for (const el of document.querySelectorAll(
+          'index-index .spec-strip .version-line, index-index .spec-strip .spec-fact, index-index .spec-strip small',
+        )) {
+          (el as HTMLElement).style.visibility = 'hidden';
+        }
+      });
+      const boxes = await page
+        .locator(
+          'index-index .spec-strip .version-line, index-index .spec-strip .spec-fact, index-index .spec-strip .spec-cell small',
+        )
+        .evaluateAll((els) =>
+          els.map((el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              label: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 30),
+              x: Math.max(0, Math.round(r.left) - 2),
+              y: Math.max(0, Math.round(r.top) - 2),
+              width: Math.ceil(r.width) + 4,
+              height: Math.ceil(r.height) + 4,
+            };
+          }),
+        );
+      expect(boxes.length, `${theme}: the strip's text elements are present`).toBeGreaterThan(0);
+
+      for (const [index, box] of boxes.entries()) {
+        const ink = await inkLuminance(page, inks[index] ?? '');
+        const { min, max } = await luminanceSpan(page, box);
+        const worst = Math.min(contrastRatio(ink, min), contrastRatio(ink, max));
+        expect(
+          worst,
+          `${theme}: "${box.label}" sits on a background at ${min.toFixed(3)}..${max.toFixed(3)} ` +
+            `(ink ${ink.toFixed(3)}); worst contrast ${worst.toFixed(2)}:1, AA needs 4.5:1`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   });
 
   test('the hero keeps horizontal scroll inside the code block only (§1)', async ({ page }) => {

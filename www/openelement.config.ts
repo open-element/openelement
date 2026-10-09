@@ -55,6 +55,28 @@ export default defineConfig({
   // bundled, not imported at run time. There is no separate `ssr` key.
   packageIslands: ['@openelement/ui'],
   viewTransition: true,
+  // The Tailwind preset (alpha9 C2 #1505; moved here from a build-only
+  // consumer plugin in the alpha.13 F lane): the framework compiles the
+  // declared sources into one bundle and delivers it on BOTH channels — dev
+  // serves the compile from /.openElement/tailwind-preset/entry.css and links
+  // it in the document head, the build emits the same compile as the
+  // layer-ordered /assets/open-tailwind.css after the SSG render.
+  //
+  // The theme source is the ui package's real @theme role table (C3 made the
+  // recipes and the site read the role names directly), compiled into the
+  // bundle's `theme` layer alongside Tailwind's own defaults. No `components`
+  // layer and no `@scope` face: the site's own components keep their compiled
+  // shadow sheets and the page layer is light DOM, so the plain bundle covers
+  // both adoptions.
+  tailwind: {
+    theme: ['@openelement/ui/theme.css'],
+    // The Site's compiled DSD islands claim their shadow DOM exactly (the
+    // compiled-claim walk requires the shadow root's children to equal the
+    // Part Program's own nodes), so the per-shadow-template link injection is
+    // off: the head link alone reaches every shadow tree — the theme layer is
+    // custom properties, which inherit across the shadow boundary.
+    injectDsdLinks: false,
+  },
   speculation: true,
   // One shared official-Site SLO (www/site-budget.ts): the build manifest
   // reports against exactly these values.
