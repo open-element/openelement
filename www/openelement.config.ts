@@ -8,10 +8,11 @@
 //   - `head.scripts` below: external scripts, structured (src/defer), so the
 //     framework serializes the tags and the Site never hand-writes markup;
 //   - `app/head.tsx`: structural content a URL list cannot express (meta tags,
-//     font preloads, icons, feed links, inline critical CSS).
+//     icons, feed links, inline critical CSS).
 import { defineConfig } from '@openelement/router';
 import { SITE_BUDGET } from './site-budget.ts';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from './site-config.ts';
+import { SITE_FONT_SOURCES } from './site-fonts.ts';
 import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 
 export default defineConfig({
@@ -68,8 +69,17 @@ export default defineConfig({
   // layer and no `@scope` face: the site's own components keep their compiled
   // shadow sheets and the page layer is light DOM, so the plain bundle covers
   // both adoptions.
+  //
+  // The self-hosted @font-face faces (www/site-fonts.ts, the H lane's
+  // replacement for #1554's four jsDelivr stylesheet links) ride the same
+  // bundle: the declared fontsource stylesheets compile in, their woff2 files
+  // emit as content-hashed assets beside the bundle and the bundle's url()
+  // references are rewritten to those shipped names — the #1535 path this
+  // preset already owns for compile-referenced assets. One linked same-origin
+  // stylesheet carries theme + fonts, so no font request can leave the
+  // origin and no CDN outage can stall first paint.
   tailwind: {
-    theme: ['@openelement/ui/theme.css'],
+    theme: ['@openelement/ui/theme.css', ...SITE_FONT_SOURCES],
     // The Site's compiled DSD islands claim their shadow DOM exactly (the
     // compiled-claim walk requires the shadow root's children to equal the
     // Part Program's own nodes), so the per-shadow-template link injection is

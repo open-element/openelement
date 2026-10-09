@@ -232,6 +232,7 @@ test('start cli: start mode serves dist/ statically over HTTP', async () => {
   try {
     await mkdir(join(dir, 'dist'), { recursive: true });
     await writeFile(join(dir, 'dist', 'index.html'), '<h1>merged cli</h1>\n');
+    await writeFile(join(dir, 'dist', '404.html'), '<h1>cli not found</h1>\n');
 
     server = spawn(process.execPath, [startCli], {
       cwd: dir,
@@ -251,6 +252,22 @@ test('start cli: start mode serves dist/ statically over HTTP', async () => {
     expect(response, 'start mode server did not come up').toBeTruthy();
     expect(response.status).toEqual(200);
     expect(await response.text()).toContain('<h1>merged cli</h1>');
+
+    // KR-7 at the CLI layer: an unmatched route answers the build's error
+    // document with a 404 status, and direct access to the document keeps
+    // that status. HEAD reports the same status without a body.
+    const unmatched = await fetch(`http://127.0.0.1:${freePort}/no-such-page`);
+    expect(unmatched.status).toEqual(404);
+    expect(await unmatched.text()).toEqual('<h1>cli not found</h1>\n');
+    expect(unmatched.headers.get('content-type')).toEqual('text/html; charset=UTF-8');
+
+    const direct = await fetch(`http://127.0.0.1:${freePort}/404.html`);
+    expect(direct.status).toEqual(404);
+    expect(await direct.text()).toEqual('<h1>cli not found</h1>\n');
+
+    const head = await fetch(`http://127.0.0.1:${freePort}/no-such-page`, { method: 'HEAD' });
+    expect(head.status).toEqual(404);
+    expect(await head.text()).toEqual('');
   } finally {
     try {
       server?.kill('SIGTERM');

@@ -211,7 +211,17 @@ export default class PageHome extends OpenElement {
               <p class='spec-fact'>{this.outputValue}</p>
             </div>
           </div>
-          <div class='marquee' aria-hidden='true'>
+          {/* `marqueeText` carries the slogan twice by construction (the
+              translateX(-50%) seam math — www/app/routes/index/index.tsx), so
+              the container shields the duplicate from text consumers:
+              `data-nosnippet` keeps search-engine snippets from echoing the
+              phrase twice, and `data-pagefind-ignore` keeps it out of the
+              site's own search index (the repo's chrome convention — measured:
+              pagefind indexes the doubled phrase without it and drops it with
+              it; data-nosnippet/aria-hidden alone do not). The page is
+              runtime-free, so nothing can clone the second copy at run time;
+              aria-hidden keeps it out of the a11y tree. */}
+          <div class='marquee' aria-hidden='true' data-nosnippet data-pagefind-ignore>
             <span>{this.marqueeText}</span>
           </div>
         </section>

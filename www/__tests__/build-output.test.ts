@@ -26,13 +26,16 @@ test('build output: no Hono virtual entry in public assets', () => {
   );
 });
 
-test('build output: artifact scan — no vendored highlighter, no self-hosted fonts, no CSS text in island chunks', () => {
+test('build output: artifact scan — no vendored highlighter, no CDN font references, no CSS text in island chunks', () => {
   expect(existsSync(DIST), `Build output is missing: ${DIST}`).toBeTruthy();
-  // The dist-level closeout scan for the three retirement/protocol lanes:
+  // The dist-level closeout scan for the retirement/protocol lanes:
   //   #1552 — the vendored Prism runtime is gone (pages, pagefind sibling
   //     guard above): no vendor/prism tree and no prism-named file may ship.
-  //   #1554 — fonts are fontsource-CDN references, never vendored binaries:
-  //     no .woff2 may land anywhere under dist.
+  //   H lane (supersedes #1554) — fonts are self-hosted from the fontsource
+  //     npm packages (www/site-fonts.ts) through the linked style bundle:
+  //     woff2 binaries ship under assets/ by design, but no artifact may
+  //     reference the retired jsDelivr CDN, and no woff2 may sit outside the
+  //     emitted assets tree (which is where the preset ships url() assets).
   //   #1553/ADR-0164 — component stylesheets emit as client/assets/*.css and
   //     are adopted via the shared runtime; the markers below are the
   //     regression forms of a re-inlined sheet or a second writer on the
@@ -41,6 +44,7 @@ test('build output: artifact scan — no vendored highlighter, no self-hosted fo
   //     inline path (ADR-0164 transition note), so generic :host text is NOT
   //     a violation here — only the specific markers are.
   const violations: string[] = [];
+  const fontReferences = new Set<string>();
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = `${dir}/${entry.name}`;
@@ -53,11 +57,41 @@ test('build output: artifact scan — no vendored highlighter, no self-hosted fo
         violations.push(`vendored Prism artifact: ${rel}`);
       }
       if (entry.name.endsWith('.woff2')) {
-        violations.push(`self-hosted font binary: ${rel}`);
+        const asset = `assets/${entry.name}`;
+        if (!rel.startsWith('assets/')) {
+          violations.push(`font binary outside the emitted assets tree: ${rel}`);
+        }
+        fontReferences.add(asset);
+      }
+      if (/\.(?:html|css|js|json|xml|txt|webmanifest)$/.test(entry.name)) {
+        const text = readFileSync(path, 'utf8');
+        if (text.includes('cdn.jsdelivr.net')) {
+          violations.push(`jsDelivr reference in shipped artifact: ${rel}`);
+        }
       }
     }
   };
   walk(DIST);
+
+  // The self-hosted contract (H lane): the face binaries ship, and the
+  // linked style bundle is what references them. A build that drops the
+  // preset font sources (or rewrites their url() targets wrongly) fails here
+  // instead of delivering fallback glyphs.
+  expect(
+    fontReferences.size,
+    'no woff2 faces shipped under dist/assets — the self-hosted font sources ' +
+      'did not reach the emitted style bundle',
+  ).toBeGreaterThan(0);
+  const bundlePath = join(DIST, 'assets', 'open-tailwind.css');
+  expect(existsSync(bundlePath), `linked style bundle is missing: ${bundlePath}`).toBeTruthy();
+  const bundle = readFileSync(bundlePath, 'utf8');
+  for (const asset of fontReferences) {
+    expect(
+      bundle.includes(asset.slice('assets/'.length)),
+      `shipped face ${asset} is not referenced by ${bundlePath}`,
+    ).toBe(true);
+  }
+  expect(bundle.includes('@font-face'), 'the linked bundle carries no @font-face rule').toBe(true);
 
   const islandsDir = join(DIST, 'client', 'islands');
   const cssTextMarkers: Array<[string, string]> = [

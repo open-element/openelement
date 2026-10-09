@@ -382,7 +382,12 @@
   .changelog-content h2::before { content:""; position:absolute; inset:0 auto 0 0; width:2px; background:var(--color-primary); }
   .changelog-content h2:first-child::after { content:"published history"; display:block; margin-top:calc(var(--spacing) * 2); color:var(--color-primary); font-family:var(--font-mono); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.08em; }
   .changelog-content h3 { font-size: var(--text-2xl); margin: calc(var(--spacing) * 6) 0 calc(var(--spacing) * 2); }
-  .changelog-content code { font-family: var(--font-mono); background: var(--color-muted); padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2); border-radius: var(--radius-md); font-size: var(--text-xs); }
+  /* Inline code joins the archive's prose wrap contract: the CHANGELOG carries
+     long single-token identifiers (`AppIslandOptions` measured at 133px inside
+     a 342px list item, pushing the page 16px wide at 390px). Fences are
+     unaffected — `white-space: pre` on the pre suppresses breaking, so they
+     keep scrolling in place below. */
+  .changelog-content code { overflow-wrap: anywhere; font-family: var(--font-mono); background: var(--color-muted); padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2); border-radius: var(--radius-md); font-size: var(--text-xs); }
   .changelog-content pre { background: var(--surface-code); color: var(--surface-code-foreground); padding: calc(var(--spacing) * 5) calc(var(--spacing) * 6); border-radius: var(--radius-lg); overflow-x: auto; }
   /* Fenced blocks compile to Shiki token spans (build-time, #1552): the chip
      dressing above is for inline code only, and the fence's <code> must not

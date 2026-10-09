@@ -319,6 +319,21 @@ test.describe('Cinematic homepage', () => {
     const marquee = page.locator('index-index .marquee');
     const strip = marquee.locator('span');
     await expect(marquee).toHaveAttribute('aria-hidden', 'true');
+    // The span holds the slogan TWICE by construction: the translateX(-50%)
+    // keyframe restarts seamlessly only when the animated span spans exactly
+    // two copies, and the page ships without a client runtime, so nothing can
+    // clone the copy at run time. The duplicate is therefore shielded from
+    // text consumers — data-nosnippet (search-engine snippets) and
+    // data-pagefind-ignore (the site's own index; pagefind does NOT honour
+    // aria-hidden or data-nosnippet, measured). Pinned here so a refactor to a
+    // single copy (which would break the loop's seam) or a dropped attribute
+    // fails loudly.
+    await expect(marquee).toHaveAttribute('data-nosnippet', '');
+    await expect(marquee).toHaveAttribute('data-pagefind-ignore', '');
+    const stripText = await strip.innerText();
+    expect(stripText.match(/CUSTOM ELEMENTS/g), 'the strip spans exactly two copies').toHaveLength(
+      2,
+    );
     await expect(strip).toHaveCSS('animation-name', 'marquee');
     await expect(strip).toHaveCSS('animation-play-state', 'running');
     // Reading the strip: pointing at it holds the strip still. Pausing (rather

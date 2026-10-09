@@ -73,8 +73,22 @@
 
   .setup-col {
     display: grid;
+    /* minmax(0, 1fr): a bare implicit `auto` track floors at the widest item's
+       min-content — the setup fence's 445px at a 390px viewport pushed the
+       page 79px wide. The explicit floor lets the column take the available
+       width; the fence itself scrolls (rule below). */
+    grid-template-columns: minmax(0, 1fr);
     gap: calc(var(--spacing) * 4);
     align-content: start;
+  }
+
+  /* The setup fence is the block-scroll owner, matching the document-layer
+     `open-code-block pre` surface rule (www/site-css.ts) — this page's tree is
+     a shadow root, which a document sheet cannot reach, so the page sheet
+     carries the same constraint here. */
+  open-code-block pre {
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   .setup-copy {

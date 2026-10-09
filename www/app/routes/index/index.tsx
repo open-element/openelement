@@ -234,6 +234,28 @@ const references = {
   ],
 } as const;
 
+/**
+ * The marquee slogan, one spinner cycle long — the trailing ' ✳ ' keeps the
+ * seam invisible. The page renders it TWICE (see `marqueeText` below): the
+ * strip's animation is `transform: translateX(-50%)` (page-home.css
+ * `@keyframes marquee`), so the animated span must measure exactly two copies
+ * for the loop to restart seamlessly.
+ *
+ * Every honest reduction of the duplicate was checked and rejected:
+ * - a `connectedCallback` clone cannot run — pages ship as static markup and
+ *   `index-index` is never defined client-side (verified in the built page:
+ *   `customElements.get('index-index')` is undefined after load);
+ * - one copy plus a wider container does not loop: the keyframe's -50% would
+ *   expose the strip's own blank tail every cycle;
+ * - CSS-generated content (`::after { content: attr(...) }`) would take
+ *   decorative text out of the document entirely, so text-only consumers
+ *   would lose the phrase instead of seeing it once.
+ *
+ * The duplicate therefore stays in the source, and the container carries the
+ * exclusion attributes (page-home.tsx): `data-nosnippet` for search-engine
+ * snippets and `data-pagefind-ignore` for the site's own search index — both
+ * measured, see that file's comment.
+ */
 const marquee = 'CUSTOM ELEMENTS ✳ DECLARATIVE SHADOW DOM ✳ ES MODULES ✳ SIGNALS ✳ HTML FIRST ✳ ';
 
 export default definePage(PageHome, {
@@ -272,6 +294,8 @@ export default definePage(PageHome, {
       versionLine,
       versionHref: 'https://www.npmjs.com/package/@openelement/element',
       commonVersionNote: COMMON_PUBLISHED_NOTE(resolved),
+      // Two copies by construction — the translateX(-50%) keyframe's seam
+      // math (see the `marquee` constant above).
       marqueeText: marquee + marquee,
       startBuildingHref: localizePath('/guide/getting-started', resolved),
       getStartedHref: localizePath('/guide/getting-started', resolved),
