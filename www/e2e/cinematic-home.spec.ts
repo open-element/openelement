@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { installCommand } from '../app/data/_generated-install-command.ts';
+import { SOURCE_VERSION } from '../app/data/_generated-release-line.ts';
+import { packageCountPhrase } from '../app/data/version.ts';
 
 test.describe('Cinematic homepage', () => {
   test('keeps the product story and starter available without animation', async ({ page }) => {
@@ -11,6 +13,133 @@ test.describe('Cinematic homepage', () => {
     // The starter command is generated truth (#1414): assert the rendered page
     // shows the create CLI's canonical string, not a copy that could drift.
     await expect(page.getByText(installCommand)).toBeVisible();
+  });
+
+  test('the spec strip states its facts and the version block stays one line', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto('/');
+    const home = page.locator('index-index');
+    // Four fact cells: the one-line version block plus three sentence facts
+    // (E2 §2). The count is pinned so a silent re-add of a label grid fails.
+    await expect(home.locator('.spec-strip .spec-cell')).toHaveCount(4);
+    // The version line is generated truth: source version, release-state
+    // package count, and the shared-version fact, on one nowrap row.
+    const versionLine = home.locator('.version-line');
+    await expect(versionLine).toHaveText(
+      `v${SOURCE_VERSION} · ${packageCountPhrase('en')} · one version`,
+    );
+    await expect(versionLine).toHaveAttribute(
+      'href',
+      'https://www.npmjs.com/package/@openelement/element',
+    );
+    // The fact cells keep their exact sentence copy (E1-5/E1-7 corrections).
+    await expect(home.locator('.spec-strip')).toContainText('3 browser engines in CI');
+    await expect(home.locator('.spec-strip')).toContainText('element: 0 third-party runtime deps');
+    await expect(home.locator('.spec-strip')).toContainText('DSD server output');
+    // The index/sentence pair no longer renders a "four packages" graph cell.
+    await expect(home.locator('.spec-strip')).not.toContainText('four packages');
+  });
+
+  test('the hero keeps horizontal scroll inside the code block only (§1)', async ({ page }) => {
+    // The pre-redesign grid pinned its right column at 320px, which pushed the
+    // page wide at narrow viewports and left two horizontal scrollbars in §1
+    // (the grid itself plus the code block). Both are gone: the document
+    // never scrolls sideways and the code block is the one scroll owner.
+    for (const width of [1024, 768, 480, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/');
+      await expect(page.locator('index-index .scene-split')).toBeVisible();
+      const state = await page.evaluate(() => {
+        const root = document.querySelector('index-index');
+        const pre = root?.querySelector('.scene-art pre');
+        const split = root?.querySelector('.scene-split');
+        return {
+          docScrollWidth: document.documentElement.scrollWidth,
+          docClientWidth: document.documentElement.clientWidth,
+          preClientWidth: pre?.clientWidth ?? 0,
+          preScrollWidth: pre?.scrollWidth ?? 0,
+          splitScrollWidth: split?.scrollWidth ?? 0,
+          splitClientWidth: split?.clientWidth ?? 0,
+        };
+      });
+      expect(state.docScrollWidth, `document overflows horizontally at ${width}px`).toEqual(
+        state.docClientWidth,
+      );
+      expect(state.splitScrollWidth, `§1 grid overflows its own width at ${width}px`).toEqual(
+        state.splitClientWidth,
+      );
+      expect(
+        state.preScrollWidth,
+        `code block has no scrollable width at ${width}px`,
+      ).toBeGreaterThanOrEqual(state.preClientWidth);
+    }
+  });
+
+  test('the slotted code surface survives the component @scope in every engine', async ({
+    page,
+  }) => {
+    // The <pre> is slotted light DOM inside open-code-block, and a component
+    // sheet compiles to `@scope (<tag>)` — which WebKit does not apply across
+    // a shadow-host boundary (measured 2026-10-09: a plain descendant rule
+    // inside the scope applied, the slotted `<pre>` stayed unstyled, and §1
+    // overflowed the page). The surface therefore lives in the document sheet
+    // (www/site-css.ts). This pins the properties that carry it plus the one
+    // invariant that makes the two surfaces one look: the home block and an
+    // article fence must agree on padding/border/radius/scroll, so a move back
+    // into a scoped sheet (or a fork of the two declarations) fails here in
+    // every configured engine instead of only on WebKit.
+    const surface = (locator: ReturnType<typeof page.locator>) =>
+      locator.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          padding: [cs.paddingTop, cs.paddingLeft],
+          radius: cs.borderTopLeftRadius,
+          border: cs.borderTopWidth,
+          overflow: cs.overflowX,
+          background: cs.backgroundColor,
+          color: cs.color,
+        };
+      });
+
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto('/');
+    const block = page.locator('index-index .scene-art pre');
+    await expect(block).toBeVisible();
+    const blockSurface = await surface(block);
+    // Not the UA default: the pre's own padding/scroll come from the site rule.
+    expect(blockSurface.padding).toEqual(['16px', '16px']);
+    expect(blockSurface.overflow).toEqual('auto');
+    // A hairline border (the declaration is 0.5px; the computed value snaps to
+    // whole device pixels, so assert non-zero rather than the raw string).
+    expect(parseFloat(blockSurface.border)).toBeGreaterThan(0);
+
+    await page.goto('/guide/getting-started');
+    const fence = page.locator('open-reading-shell .article-content pre').first();
+    await expect(fence).toBeVisible();
+    // The invariant that makes the two surfaces one look: identical computed
+    // padding, radius, border width, scroll and surface colors.
+    expect(await surface(fence)).toEqual(blockSurface);
+  });
+
+  test('the marquee stays decorative: hidden from the a11y tree, stilled under reduced motion, held on hover', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const marquee = page.locator('index-index .marquee');
+    const strip = marquee.locator('span');
+    await expect(marquee).toHaveAttribute('aria-hidden', 'true');
+    await expect(strip).toHaveCSS('animation-name', 'marquee');
+    await expect(strip).toHaveCSS('animation-play-state', 'running');
+    // Reading the strip: pointing at it holds the strip still. Pausing (rather
+    // than lengthening the duration) is deliberate — the animation's progress
+    // is a fraction of its duration, so a duration change would jump the strip
+    // mid-flight instead of slowing it.
+    await marquee.hover();
+    await expect(strip).toHaveCSS('animation-play-state', 'paused');
+    await page.mouse.move(0, 0);
+    await expect(strip).toHaveCSS('animation-play-state', 'running');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(strip).toHaveCSS('animation-name', 'none');
   });
 
   test('renders a transparent theme-aware logo linked to the current locale home', async ({
@@ -65,7 +194,6 @@ test.describe('Cinematic homepage', () => {
     await expect(poster).toHaveAttribute('crossorigin', 'anonymous');
     await expect(dragon.locator('canvas')).toHaveCount(1);
     await expect(home.locator('.marquee span').first()).toBeVisible();
-    await expect(home.locator('.spec-strip .spec-cell')).toHaveCount(5);
     const strategies = home.locator('.strategy');
     await expect(strategies).toHaveCount(4);
     await expect(strategies.nth(1).locator('.tag-default')).toHaveText('DEFAULT');

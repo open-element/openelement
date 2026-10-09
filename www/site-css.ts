@@ -6,6 +6,15 @@
  * component sheets. Component-local concerns (including language variants via
  * subject-side `:lang(zh)`) belong in the component sheets instead.
  *
+ * One subject is document-level for an engine reason rather than a layering
+ * one: content SLOTTED into a shadow host's `<slot>` (open-code-block's
+ * projected `<pre>`). A component sheet compiles to `@scope (<host-tag>)`,
+ * and WebKit does not apply scoped rules to slotted light DOM — measured
+ * 2026-10-09 on the built home page: a plain descendant rule inside the scope
+ * applied, while `open-code-block pre` and `open-code-block` itself kept their
+ * unscoped values (Chromium applied both). The document layer reaches the
+ * slotted element in every engine, so the code-block surface is stated here.
+ *
  * `documentStyle` is the same layer one step further out: the body baseline,
  * composed with `siteCSS` into the single inline <style> the document head
  * carries. It lives here rather than in app/head.tsx because
@@ -111,8 +120,7 @@ html[data-theme="dark"],
 }
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 50% -12%, color-mix(in srgb, var(--color-ring) 24%, transparent), transparent 42%),
+  background:    radial-gradient(circle at 50% -12%, color-mix(in srgb, var(--color-ring) 24%, transparent), transparent 42%),
     linear-gradient(115deg, color-mix(in srgb, var(--color-secondary) 38%, transparent), transparent 46%),
     linear-gradient(color-mix(in srgb, var(--color-border) 34%, transparent) calc(var(--spacing) * 0.25), transparent calc(var(--spacing) * 0.25)),
     linear-gradient(90deg, color-mix(in srgb, var(--color-border) 30%, transparent) calc(var(--spacing) * 0.25), transparent calc(var(--spacing) * 0.25)),
@@ -127,6 +135,27 @@ body {
 ::selection {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
   color: var(--color-foreground);
+}
+/* The code-block surface (open-code-block's slotted <pre>), owned here for the
+   engine reason in the module doc. Two surface levels only: this block surface
+   (--surface-code with its paired ink) and the page paper; the block owns its
+   own horizontal scroll so a long line never widens the page, and the
+   padding/border/radius repeat the article fences' declaration (see
+   open-article-view.css, the .article-content pre rule), so a code block reads
+   the same wherever it appears. Shiki paints the pre's background/color inline
+   from --shiki-background/--shiki-foreground, which alias the same two tokens,
+   so the inline style and this rule agree by construction. */
+open-code-block pre {
+  max-width: 100%;
+  margin: 0;
+  padding: calc(var(--spacing) * 4);
+  border: 0.5px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-code);
+  color: var(--surface-code-foreground);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+  line-height: 1.6;
 }
 /* Build-time syntax highlighting palette (www/lib/markdown.ts, issue #1552).
    Shiki's css-variables theme emits token colors as var() references, so this

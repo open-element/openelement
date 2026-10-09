@@ -130,6 +130,38 @@ jobs:
             fi
           done
 
+      # Second registry read-back, now that the alias above has been moved.
+      # The publish step already ran one (tools/release/registry-sync.ts runs
+      # inside publish:npm); that one recorded the `alpha` alias as it stood
+      # BEFORE the re-point. This run records what the alias serves now, so the
+      # tracked block and the registry agree on both tags — otherwise the next
+      # release would land a block whose `alpha` entry is one release behind,
+      # and the release-train drift check would fail on files the publish train
+      # itself wrote. It fails the job like the first read-back does: the
+      # tracked truth is only worth keeping if a read or write failure is red.
+      - name: Re-read the registry after the alias re-point
+        if: always() && steps.check.outputs.already_published != 'true'
+        run: vp run --fail-if-no-match @openelement/tools-release#sync:registry
+
+      # What the publish train writes: docs/release/release-state.json and the
+      # site's display constants, both set to what npm answers, so the tracked
+      # truth cannot lag the registry (the alpha.12 E400 legacy). Landing those
+      # files is a maintainer PR — main requires a pull request and this job
+      # holds no push identity — so the job hands them over as an artifact
+      # instead. Until the PR lands, the release-train drift check
+      # (@openelement/tools-release#registry-drift:check, inside gate:release)
+      # fails when the displayed versions no longer match the registry.
+      - name: Upload the registry-synced release state
+        if: always() && steps.check.outputs.already_published != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: registry-release-state
+          path: |
+            docs/release/release-state.json
+            www/app/data/version.ts
+            www/app/data/_generated-release-line.ts
+          if-no-files-found: error
+
       - name: Create GitHub Release
         if: steps.check.outputs.already_published != 'true'
         env:

@@ -67,21 +67,24 @@ const SECTION_ZH: Readonly<Record<string, string>> = {
 /**
  * Curated header links; each must resolve to a scanned static route.
  *
- * Alpha keeps the smallest possible top bar: the Docs hub (/docs) is the
- * single entrance to the guide and architecture trees, and Blog is the one
- * separate stream. API reference, roadmap and changelog are reachable from
- * the docs hub and the footer. A Playground entry is planned for a later
- * release (mature framework sites run two to four top-level links; see
- * lit.dev and svelte.dev).
+ * Four entries: the two trees (Docs hub, Blog stream) plus the two pages a
+ * reader looks for by name (the API reference and the Roadmap). Changelog and
+ * Contributing stay in the footer — they are project history rather than
+ * navigation a reader needs beside the content. A Playground entry is
+ * planned for a later release.
  */
 const HEADER_NAV: ReadonlyArray<{ path: string; label: string }> = [
   { path: '/docs', label: 'Docs' },
+  { path: '/reference', label: 'API' },
+  { path: '/roadmap', label: 'Roadmap' },
   { path: '/blog', label: 'Blog' },
 ];
 
 /** zh header labels keyed by path (they name sections, not page titles). */
 const HEADER_NAV_ZH: Readonly<Record<string, string>> = {
   '/docs': '文档',
+  '/reference': 'API',
+  '/roadmap': '路线图',
   '/blog': '博客',
 };
 

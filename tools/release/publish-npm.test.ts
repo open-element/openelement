@@ -641,3 +641,57 @@ test('publishRelease fails closed when registry verification fails', async () =>
   expect(result.packages[0].error?.includes('dist-tag beta moved')).toEqual(true);
   expect(receipt()?.result).toEqual('failed');
 });
+
+test('publishRelease writes the registry read-back after a complete publish', async () => {
+  let synced = false;
+  const { io, receipt } = releaseIo({
+    syncRegistry: () => {
+      synced = true;
+      return Promise.resolve({
+        verifiedAt: '2026-10-09',
+        latestPrerelease: '1.0.0-alpha.13',
+        latest: { '@openelement/element': '1.0.0-alpha.13' },
+      });
+    },
+  });
+  const result = await publishRelease(releasePackages(), io);
+  expect(synced).toEqual(true);
+  expect(result.result).toEqual('published');
+  expect(result.registrySync?.latestPrerelease).toEqual('1.0.0-alpha.13');
+  expect(receipt()?.registrySync?.verifiedAt).toEqual('2026-10-09');
+});
+
+test('publishRelease fails closed when the registry read-back fails', async () => {
+  const { io, receipt } = releaseIo({
+    syncRegistry: () => Promise.reject(new Error('npm view @openelement/element dist-tags failed')),
+  });
+  const result = await publishRelease(releasePackages(), io);
+  // The packages are on the registry, but the tracked truth could not be
+  // updated — the train must not report success (that is the alpha.12 lag).
+  expect(result.result).toEqual('failed');
+  expect(result.packages.every((entry) => !entry.verified)).toEqual(true);
+  expect(result.packages[0].error?.includes('npm view')).toEqual(true);
+  expect(result.registrySync).toBeUndefined();
+  expect(receipt()?.result).toEqual('failed');
+});
+
+test('a partial publish never touches the registry read-back', async () => {
+  let synced = false;
+  const { io } = releaseIo({
+    publish: (entry) =>
+      entry.name === '@openelement/router'
+        ? Promise.reject(new Error('E403 forbidden'))
+        : Promise.resolve(),
+    syncRegistry: () => {
+      synced = true;
+      return Promise.resolve({
+        verifiedAt: '2026-10-09',
+        latestPrerelease: '1.0.0-alpha.13',
+        latest: {},
+      });
+    },
+  });
+  const result = await publishRelease(releasePackages(), io);
+  expect(result.result).toEqual('partial');
+  expect(synced).toEqual(false);
+});

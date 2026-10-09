@@ -258,7 +258,14 @@ test('a theme.css edit hot-updates the delivered sheet (#1582)', async () => {
     // The edit must surface as a css-update for the staged entry: that is the
     // HMR signal the browser applies, and the peer registers the declared
     // sources as watch files precisely so this fires.
-    const deadline = Date.now() + 10_000;
+    //
+    // The deadline is 30s, not 10s (F-1, alpha.13): this test starts a real Vite
+    // dev server and a real Tailwind compile, and on a 2-core CI runner those
+    // compete with the rest of the suite for the same cores — the 10s wall
+    // clock was observed exceeding once for a compile that then did arrive. The
+    // loop still fails on a genuinely missing update, just later; the assertion
+    // below is unchanged.
+    const deadline = Date.now() + 30_000;
     while (
       !handle.hotPayloads.some(
         (payload) =>

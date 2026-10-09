@@ -48,9 +48,9 @@ Standard Custom Elements and Declarative Shadow DOM define the durable component
 
 `Request`, `Response` and `FormData` are the basis of the current loader/action surfaces — application interaction without a proprietary transport.
 
-### Four-package ownership
+### Package ownership
 
-`Element`, `Router`, `Create` and the experimental `UI` package are the current consumer surface; internal contracts stay internal.
+`Element`, `Router`, `Create` and the experimental `UI` package are the consumer surface most authors touch. `Protocol` and `Compiler` are published too, for the tools and contract types built on them: `Protocol` carries the cross-package contracts and `Element` re-exports several of them, while `Compiler` is consumed directly by the build layer that uses it; internal implementation stays internal.
 
 ## See also
 

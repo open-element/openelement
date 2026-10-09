@@ -123,3 +123,10 @@ is an optional peer of `@openelement/router`, and `@openelement/router/hono`
 handler inside your own Hono app. For Nitro deployments, the built handler
 bridges through the `@openelement/router/nitro-mount` subpath of the one
 `@openelement/router` dependency. Do not remove them.
+
+pnpm manages a `pnpm-workspace.yaml` for this project. That file is pnpm's own
+bookkeeping, not starter output: it carries workspace membership and the
+package-manager settings that apply here — including `minimumReleaseAge`, the
+supply-chain window that withholds freshly published versions, and any
+exemptions pnpm records when you approve a package inside that window. Keep
+the file (pnpm rewrites it), and review the exemptions it lists.

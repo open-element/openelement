@@ -3,17 +3,21 @@ import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import { localizePath } from '#site-ui/link.ts';
 import PageDocs from '../../components/page-docs.tsx';
-import { sourceLineStamp } from '../../data/version.ts';
+import { packageCountModifier, sourceLineStamp } from '../../data/version.ts';
 
 // The hub is the manual's first entry: it opens the guide section the rest of
 // /guide/* fills, so the sidebar tree and the URL tree name the same family.
 export const meta = { section: 'Guide', label: 'Docs', order: 0 };
 
+// Package-count phrases derive from release-state truth (data/version.ts), so
+// the hub copy moves with the surface and no hand-written numeral can go stale.
+const countEn = packageCountModifier('en');
+const countZh = packageCountModifier('zh');
+
 const content = {
   en: {
     headTitle: 'Documentation',
-    headDescription:
-      'openElement documentation: guides, architecture notes and the supported public surface of the four consumer packages.',
+    headDescription: `openElement documentation: guides, architecture notes and the supported public surface of the ${countEn} consumer set.`,
     sidenote: 'Docs index',
     eyebrow: 'Docs — The manual',
     serifLine: 'Read the',
@@ -23,7 +27,7 @@ const content = {
   },
   zh: {
     headTitle: '文档',
-    headDescription: 'openElement 文档：指南、架构说明，以及四个面向使用者包的受支持公开面。',
+    headDescription: `openElement 文档：指南、架构说明，以及${countZh}消费面的受支持公开接口。`,
     sidenote: '文档索引',
     eyebrow: '手册',
     serifLine: '通读',
@@ -37,14 +41,14 @@ const entrances = {
   en: [
     ['Get started', 'Zero to a running application in three commands.', '/guide/getting-started'],
     ['Tutorial', 'Build a page, an island and a form action, step by step.', '/guide/tutorial'],
-    ['API reference', 'The four-package surface, export by export.', '/reference'],
+    ['API reference', `The ${countEn} surface, export by export.`, '/reference'],
     ['Architecture', 'Who owns what, and why the boundaries hold.', '/architecture'],
     ['Roadmap', 'Where the stable line goes next.', '/roadmap'],
   ],
   zh: [
     ['快速开始', '三条命令，从零到可运行的应用。', '/guide/getting-started'],
     ['教程', '逐步构建一个页面、一个 island 与一个表单 action。', '/guide/tutorial'],
-    ['API 参考', '四个包的接口面，逐个 export 列出。', '/reference'],
+    ['API 参考', `${countZh}接口面，逐个 export 列出。`, '/reference'],
     ['架构', '谁负责什么，以及边界为何成立。', '/architecture'],
     ['路线图', 'stable 线的下一步走向。', '/roadmap'],
   ],

@@ -2,8 +2,8 @@
 /**
  * @openelement/router - the `openelement` lifecycle CLI.
  *
- * One bin, two subcommands, and each subcommand is exactly the packaged
- * subpath entry it dispatches to:
+ * One bin, two subcommands (plus version/help), and each subcommand is exactly
+ * the packaged subpath entry it dispatches to:
  *
  *   openelement build            -> ./build.ts (buildApp: SSG + client phases)
  *   openelement start            -> ./start.ts (serve dist/ over node:http)
@@ -11,6 +11,9 @@
  *                                -> ./start.ts with the mode flag passed
  *                                   through (static-only; refuses a build
  *                                   with a request-time server)
+ *   openelement version | --version | -v
+ *                                -> the router package's own version, read
+ *                                   from the installed manifest
  *
  * The packed manifest declares this file as the `openelement` bin (the
  * release coordinator writes the declaration from the same path constant the
@@ -24,10 +27,11 @@
  * loaded lazily: `build` pulls the Vite tooling graph, `start` does not, so
  * the serve command keeps resolving without a Vite install in the consumer's
  * tree (the same resolution the `./cli/start` subpath entry has), and the
- * usage paths load neither.
+ * version/usage paths load neither.
  */
 
 import process from 'node:process';
+import { readFileSync } from 'node:fs';
 
 /** The one usage text both the no-argument and the unknown-command paths print. */
 const USAGE = [
@@ -36,7 +40,28 @@ const USAGE = [
   'Commands:',
   '  build                  production build (SSG + client) into dist/',
   '  start [--mode=preview] serve the built output; preview is static-only',
+  '  version                print the router package version',
+  '',
+  'Options:',
+  '  --version, -v          print the router package version',
+  '  --help, -h             print this usage',
 ].join('\n');
+
+/**
+ * The CLI's own package version. The manifest is read relative to this module
+ * (not the working directory): the CLI runs from an npm-installed tree, and
+ * the answer must be the tree that is executing, never the cwd's. The packed
+ * layout is `<pkg>/src/cli/cli.js`, so the manifest sits two levels up.
+ */
+function packageVersion(): string {
+  const manifest = JSON.parse(
+    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+  ) as { version?: unknown };
+  if (typeof manifest.version !== 'string') {
+    throw new Error('[openelement] router package.json carries no version');
+  }
+  return manifest.version;
+}
 
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
@@ -49,6 +74,10 @@ async function main(): Promise<void> {
     const { runServeCli } = await import('./start.ts');
     await runServeCli(rest);
     return;
+  }
+  if (command === 'version' || command === '--version' || command === '-v') {
+    console.log(packageVersion());
+    process.exit(0);
   }
   if (command === 'help' || command === '--help' || command === '-h') {
     console.log(USAGE);

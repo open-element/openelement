@@ -63,6 +63,23 @@ generated from instead of exact pins.
   purely static build prerenders it. The script lists match the scaffold
   (no `preview` script), and the static-only serve is documented under its
   real spelling, `openelement start --mode=preview`.
+- **The homepage fact layer is checked against the registry.** The versions
+  the site displays and the dist-tags npm serves must agree: after a publish
+  the release workflow reads the registry back and writes what it finds into
+  the release record and the site's version constants, and the release check
+  fails when the displayed versions and the registry disagree — a stale
+  number can no longer ship. The version block is now one line
+  (`v1.0.0-alpha.13 · six packages · one version`), the fact strip under it
+  states one fact per cell (CI browser engines, third-party runtime
+  dependencies for `element`, and the server output shape), and package
+  counts come from release data instead of hand-written numbers.
+- **`openelement --version`.** The command prints the version of the
+  installed router package; `--version` and `-v` print the same, and the
+  usage text lists them.
+- **The site's route sources are type-checked again.** The check had been
+  reporting missing stylesheet type declarations instead of compiling the
+  routes, which hid any real type error behind that noise; the compiler now
+  receives the stylesheet declaration and the check passes over every route.
 
 ## 1.0.0-alpha.9
 

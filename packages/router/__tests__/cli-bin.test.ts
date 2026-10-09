@@ -12,12 +12,16 @@
  *   3. the usage paths answer without loading either subcommand's module
  *      graph — `start` must resolve in a consumer tree that has no Vite
  *      install (the same resolution `cli/start.ts` has), which an eager
- *      import of the build entry would break.
+ *      import of the build entry would break;
+ *   4. `version` / `--version` / `-v` print the executing tree's package
+ *      version (read from the router manifest beside the module, not the
+ *      working directory), and the usage text names the command.
  */
 
 import { expect, test } from 'vitest';
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { join } from 'node:path';
@@ -59,6 +63,28 @@ test('openelement bin: usage and unknown commands fail closed without a subcomma
     const help = await run(cliBin, ['--help'], dir);
     expect(help.code).toEqual(0);
     expect(help.output).toContain('Usage: openelement <command> [options]');
+    // The usage text names the version command and its flags (F-2).
+    expect(help.output).toContain('version                print the router package version');
+    expect(help.output).toContain('--version, -v          print the router package version');
+  } finally {
+    await rm(dir, { recursive: true });
+  }
+});
+
+test('openelement bin: version prints the executing tree manifest, from any cwd', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'oe-bin-'));
+  try {
+    const manifest = JSON.parse(
+      readFileSync(join(import.meta.dirname!, '../package.json'), 'utf8'),
+    ) as { version: string };
+    // All three spellings agree, and the answer is the module-relative
+    // manifest — never the working directory's (the temp cwd has no manifest
+    // at all, so a cwd-relative read would throw instead of printing).
+    for (const args of [['version'], ['--version'], ['-v']]) {
+      const result = await run(cliBin, args, dir);
+      expect(result.code, `openelement ${args.join(' ')}`).toEqual(0);
+      expect(result.output.trim()).toEqual(manifest.version);
+    }
   } finally {
     await rm(dir, { recursive: true });
   }

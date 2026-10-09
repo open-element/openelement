@@ -17,6 +17,8 @@ import matter from 'gray-matter';
 import { marked } from 'marked';
 import { createInstallCommand } from '@openelement/create/install-command';
 import { readFile, readdir } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 /** Primitive frontmatter field types supported by content collections. */
 export type CollectionFieldType = 'string' | 'number' | 'boolean' | 'string[]';
@@ -172,16 +174,36 @@ export function collectionFieldTypeScript(value: CollectionFieldType | Collectio
  * command cannot drift from the one the CLI prints. The published example uses
  * the project name the guides' own next line (`cd my-app`) refers to.
  *
+ * `{{PACKAGE_COUNT}}` is the number of packages the release record carries
+ * (docs/release/release-state.json `packages`), so a hand-written count cannot
+ * go stale the way the "4 packages" gate table did when the surface grew. The
+ * placeholder is locale-neutral (a digit); the surrounding noun stays authored
+ * text. Read once per process and fail-closed: a placeholder must never
+ * silently render as a stale or empty number.
+ *
  * Resolution lives in the content loader — the one seam every consumer of
  * authored content goes through (the data generator, nav/sitemap/RSS emitters,
  * and the content tests) — so a placeholder can never reach a generated module,
- * an emitted artifact, or a test. The string has exactly one owner
- * (packages/create/src/install-command.ts), and
+ * an emitted artifact, or a test. Both strings have exactly one owner
+ * (packages/create/src/install-command.ts and the release record), and
  * www/tools/generate-install-command.ts fails the build when a display copy of
  * the command drifts from it.
  */
+function releasePackageCount(): number {
+  const path = fileURLToPath(new URL('../../docs/release/release-state.json', import.meta.url));
+  const parsed = JSON.parse(readFileSync(path, 'utf8')) as { packages?: unknown };
+  if (!Array.isArray(parsed.packages) || parsed.packages.length === 0) {
+    throw new Error(
+      `content placeholders: ${path} carries no packages array — ` +
+        'the package count cannot be derived.',
+    );
+  }
+  return parsed.packages.length;
+}
+
 export const CONTENT_PLACEHOLDERS: Readonly<Record<string, string>> = {
   '{{INSTALL_COMMAND}}': createInstallCommand('my-app'),
+  '{{PACKAGE_COUNT}}': String(releasePackageCount()),
 };
 
 function resolveContentPlaceholders(text: string): string {

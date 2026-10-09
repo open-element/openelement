@@ -36,12 +36,40 @@
  * focus()/keyboard — the Zag behavior under assertion is identical.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const LIGHT_CHUNK_PATTERN = '**/client/islands/island-zag-combobox-light-*.js';
 
 function shadowHost(machineId: string) {
   return `zag-combobox[machine-id="${machineId}"]`;
+}
+
+/**
+ * Hydration entry gate (KR-2): the fixture hydrates by loading an island chunk
+ * and defining its custom element, and an interaction that races that upgrade
+ * types into an unbound input — the machine never sees the event, so the test
+ * then waits out its whole timeout on an attribute that never arrives. Every
+ * interacting test now waits for the tag it drives first, using the
+ * `customElements.get()` idiom this spec already used for the light island:
+ * once `define()` has run, every existing host of that tag has upgraded
+ * synchronously, so the following interactions reach a bound machine.
+ *
+ * The gate is bounded (15s, not the test's 60s): a tag that never defines is a
+ * distinct failure from a slow assertion, and it should read that way in the
+ * log. On WebKit the gate can legitimately time out — measured 2026-10-09, a
+ * shared chunk's top-level await lets WebKit resolve one island's entry
+ * namespace before the export is bound, so the generated loader reads
+ * `mod.default` as undefined, throws "did not export a constructor", and the
+ * tag stays undefined for the rest of the page's life (a later re-read of the
+ * same namespace does see the function). That is a loader-side race in
+ * packages/router/src/vite/internal/ssg/entry-client-codegen.ts, not
+ * something the spec can retry around; the gate's job here is to report it as
+ * "never defined" instead of as a mystery attribute timeout.
+ */
+async function waitForIsland(page: Page, tagName: string): Promise<void> {
+  await page.waitForFunction((tag) => customElements.get(tag) !== undefined, tagName, {
+    timeout: 15_000,
+  });
 }
 
 /** Deep active element data-part, piercing every open shadow root. */
@@ -106,6 +134,7 @@ test.describe('zag combobox spike (#1149)', () => {
     page,
   }) => {
     await page.goto('/combobox');
+    await waitForIsland(page, 'zag-combobox');
     const aInput = page.locator(`${shadowHost('shadow-a')} input[data-part="input"]`);
     const bInput = page.locator(`${shadowHost('shadow-b')} input[data-part="input"]`);
     await expect(aInput).toBeVisible();
@@ -138,6 +167,7 @@ test.describe('zag combobox spike (#1149)', () => {
     page,
   }) => {
     await page.goto('/combobox');
+    await waitForIsland(page, 'zag-combobox');
     const host = shadowHost('shadow-a');
     const input = page.locator(`${host} input[data-part="input"]`);
     const content = page.locator(`${host} [data-part="content"]`);
@@ -238,6 +268,9 @@ test.describe('zag combobox spike (#1149)', () => {
       // dynamic import of the held chunk is pending.
       await page.goto('/combobox', { waitUntil: 'domcontentloaded' });
       await expect.poll(() => chunkRequested).toBe(true);
+      // The light island is deliberately still undefined here (that is this
+      // test's subject); the shadow islands are not held, so gate on theirs.
+      await waitForIsland(page, 'zag-combobox');
 
       const host = page.locator('zag-combobox-light');
       await expect(host).toHaveAttribute('data-oe-light', '');
@@ -266,7 +299,7 @@ test.describe('zag combobox spike (#1149)', () => {
       await input.focus();
 
       releaseChunk();
-      await page.waitForFunction(() => customElements.get('zag-combobox-light') !== undefined);
+      await waitForIsland(page, 'zag-combobox-light');
 
       // In-place activation: same nodes, preserved value and focus.
       const post = await page.evaluate(() => {
@@ -317,6 +350,7 @@ test.describe('zag combobox spike (#1149)', () => {
     page,
   }) => {
     await page.goto('/combobox');
+    await waitForIsland(page, 'zag-combobox');
     const host = shadowHost('shadow-a');
     const input = page.locator(`${host} input[data-part="input"]`);
     await expect(input).toHaveAttribute('role', 'combobox');
@@ -379,6 +413,7 @@ test.describe('zag combobox spike (#1149)', () => {
     page,
   }) => {
     await page.goto('/combobox');
+    await waitForIsland(page, 'zag-combobox');
     const bInput = page.locator(`${shadowHost('shadow-b')} input[data-part="input"]`);
     await expect(bInput).toHaveAttribute('role', 'combobox');
 
@@ -415,6 +450,7 @@ test.describe('zag combobox spike (#1149)', () => {
 
   test('form POST carries the selected value (native, unenhanced)', async ({ page }) => {
     await page.goto('/combobox');
+    await waitForIsland(page, 'zag-combobox-light');
     const input = page.locator('zag-combobox-light input[data-part="input"]');
     await expect(input).toHaveAttribute('role', 'combobox');
     await expect(input).toHaveAttribute('name', 'fruit');
@@ -439,7 +475,7 @@ test.describe('zag combobox spike (#1149)', () => {
   }) => {
     await page.goto('/combobox');
     // Wait until the light island class is defined (chunk loaded on load strategy).
-    await page.waitForFunction(() => customElements.get('zag-combobox-light') !== undefined);
+    await waitForIsland(page, 'zag-combobox-light');
     await page.evaluate(() => {
       const hostEl = document.createElement('zag-combobox-light');
       hostEl.setAttribute('machine-id', 'light-document');

@@ -25,6 +25,7 @@ import {
 } from '../lib/package-graph.ts';
 import { runCommand, runWithOutput } from '../lib/process.ts';
 import { assertCleanWorktree } from '../lib/git-cleanliness.ts';
+import { fileURLToPath } from 'node:url';
 import { formatJson } from '@openelement/element/build-utils';
 import { buildDeclarationClosure, packageRootDeclarationIo } from '../lib/declaration-closure.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
@@ -40,6 +41,7 @@ import {
   synthesizedPackedManifest,
 } from '../lib/vp-pack.ts';
 import { npmView, verifyNpmRelease } from './npm-release-verifier.ts';
+import { type RegistrySyncResult, syncRegistryState } from './registry-sync.ts';
 import {
   applyPackageJsonOverrides,
   assertOnlyApprovedManifestChanges,
@@ -60,6 +62,19 @@ export {
   importsShapeFromPackageJson,
 } from './npm-manifest.ts';
 export { npmPublishTag, publishPackage, type PublishPackageIo } from './npm-publisher.ts';
+// The registry read-back the publish train ends with: same module the drift
+// check (@openelement/tools-release#registry-drift:check, run inside
+// gate:release) reads, so the writer and both readers share one implementation.
+export {
+  REGISTRY_METHOD,
+  RELEASE_STATE_PATH,
+  npmRegistryEvidence,
+  rewriteRegistryBlock,
+  syncRegistryState,
+  WWW_VERSION_PATH,
+  type RegistryEvidence,
+  type RegistrySyncResult,
+} from './registry-sync.ts';
 
 const COMMANDS = new Set(['pack', 'pack:dry-run', 'publish:npm', 'publish:npm:dry-run']);
 
@@ -493,12 +508,21 @@ export interface ReleaseReceipt {
   tarballs: Record<string, string>;
   packages: ReleasePackageOutcome[];
   result: 'published' | 'partial' | 'failed';
+  /** The registry read-back written back after a complete publish. */
+  registrySync?: RegistrySyncResult;
   generatedAt: string;
 }
 
 export interface PublishReleaseIo {
   publish: (pkg: PackageInfo) => Promise<void>;
   verify: (version: string, packages: PackageInfo[]) => Promise<void>;
+  /**
+   * Post-publish registry read-back (tools/release/registry-sync.ts): the
+   * train's last step, so the tracked registry block and the site's display
+   * constants name what npm actually serves. A failure here marks the release
+   * `failed` — the same class as a failed registry verification.
+   */
+  syncRegistry?: () => Promise<RegistrySyncResult>;
   sha: () => Promise<string>;
   tree: () => Promise<string>;
   tarballHash: (pkg: PackageInfo) => Promise<string>;
@@ -507,11 +531,11 @@ export interface PublishReleaseIo {
 }
 
 /**
- * Publish every package, then verify every published package against the
- * registry, and always emit a per-package receipt bound to the exact
- * SHA/tree/tarball hashes. Partial publication is recorded as partial (never
- * reported as overall success) and a re-run safely resumes: `publishPackage`
- * skips versions that already exist.
+ * Publish every package, verify every published package against the registry,
+ * write the registry read-back into the tracked release-state, and always emit
+ * a per-package receipt bound to the exact SHA/tree/tarball hashes. Partial
+ * publication is recorded as partial (never reported as overall success) and a
+ * re-run safely resumes: `publishPackage` skips versions that already exist.
  */
 export async function publishRelease(
   packages: PackageInfo[],
@@ -566,6 +590,24 @@ export async function publishRelease(
     );
   }
 
+  // Final step of a complete publish: write the registry's own answers back
+  // into the tracked release-state and the site's display constants. A failure
+  // here is a train failure — the whole point is that the tracked truth cannot
+  // silently lag the registry (the alpha.12 E400 legacy).
+  let registrySync: RegistrySyncResult | undefined;
+  if (result === 'published') {
+    try {
+      registrySync = await (io.syncRegistry?.() ?? Promise.resolve(undefined));
+    } catch (error) {
+      result = 'failed';
+      const message = error instanceof Error ? error.message : String(error);
+      for (const outcome of outcomes) {
+        outcome.verified = false;
+        outcome.error = message;
+      }
+    }
+  }
+
   const receipt: ReleaseReceipt = {
     schemaVersion: 1,
     sha,
@@ -574,6 +616,7 @@ export async function publishRelease(
     tarballs,
     packages: outcomes,
     result,
+    ...(registrySync ? { registrySync } : {}),
     generatedAt: new Date().toISOString(),
   };
   await io.writeReceipt(receipt);
@@ -657,6 +700,15 @@ async function main(): Promise<void> {
           version,
           packages: pkgs.map((pkg) => pkg.name.replace('@openelement/', '')),
           query: npmView,
+        }),
+      // Registry read-back: the tracked release-state (and the site's display
+      // constants) end the train naming what npm serves. The synced files are
+      // uploaded by the workflow as `registry-release-state`; landing them is
+      // the maintainer's ordinary PR (see the module doc).
+      syncRegistry: () =>
+        syncRegistryState({
+          root: fileURLToPath(new URL('../../', import.meta.url)),
+          log: console.log,
         }),
       sha: () => gitRef('HEAD'),
       tree: () => gitRef('HEAD^{tree}'),

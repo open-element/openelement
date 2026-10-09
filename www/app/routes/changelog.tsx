@@ -6,21 +6,24 @@ import { contentLocale } from '#site-ui/locale.ts';
 import { localizePath } from '#site-ui/link.ts';
 import { changelogArchiveHtml } from '../data/_generated-changelog-archive.ts';
 import PageChangelog from '../components/page-changelog.tsx';
-import { COMMON_PUBLISHED_LABEL, PUBLISHED_LATEST, REGISTRY_NOTE } from '../data/version.ts';
+import {
+  COMMON_PUBLISHED_LABEL,
+  COMMON_PUBLISHED_VERSION,
+  PUBLISHED_LATEST_SHARED,
+  REGISTRY_NOTE,
+} from '../data/version.ts';
 
 export const meta = { section: '', label: 'Changelog', order: 20 };
 
-// Registry-derived prose constants: PUBLISHED_LATEST is the per-package npm
-// `latest` dist-tag truth (kept in sync with docs/release/release-state.json),
-// so the prose below cannot drift from the register rendered beside it. The
-// display `v` is stripped so the sentences keep their bare-number form.
-function registryVersion(name: string): string {
-  return (PUBLISHED_LATEST[name] ?? '').replace(/^v/, '');
-}
-const STABLE_LINE = registryVersion('@openelement/element');
-const STABLE_LINE_MAJOR_MINOR = STABLE_LINE.split('.').slice(0, 2).join('.');
-const ROUTER_LATEST = registryVersion('@openelement/router');
-const ROUTER_LATEST_BASE = ROUTER_LATEST.split('-')[0];
+// Registry-derived prose: every sentence below is built from the same tracked
+// truth the register renders (data/version.ts ← release-state.json), and states
+// only what that truth can prove. The former "stable <x> line covers a, b, c"
+// sentence derived its version from element's `latest` dist-tag, which stopped
+// being the stable line when the 1.0 prerelease line began publishing onto
+// `latest` — so it claimed a stable 1.0 line that does not exist. Stable-line
+// history now stays where it is recorded (the archive and release-state.json),
+// and the live register speaks only of the dist-tags it carries.
+const sharedLatestBare = (PUBLISHED_LATEST_SHARED ?? '').replace(/^v/, '');
 
 const content = {
   en: {
@@ -36,12 +39,17 @@ const content = {
     publishedIntro:
       'The project follows Keep a Changelog and SemVer. Historical entries preserve older names where they describe older releases; current docs use the openElement contract.',
     stampCurrent: 'Current',
-    regCurrentSummary: `There is no common complete version: element, create, and ui are on ${STABLE_LINE} while router's latest is the ${ROUTER_LATEST} prerelease.`,
+    regCurrentSummary:
+      COMMON_PUBLISHED_VERSION === null
+        ? sharedLatestBare === ''
+          ? 'There is no common complete version: the published packages\u2019 npm latest values differ — see the per-package register above.'
+          : `There is no common complete version: every published package\u2019s npm latest is the same prerelease, ${sharedLatestBare}.`
+        : `Every published package serves the common stable version ${COMMON_PUBLISHED_VERSION}.`,
     stableHeading: 'Stable line',
-    stableBody: `The stable maintenance line covers @openelement/element, @openelement/create, and @openelement/ui only. @openelement/router has no ${STABLE_LINE_MAJOR_MINOR}.x; its npm latest is a ${ROUTER_LATEST_BASE} prerelease. No single stable version is published for all four packages. The static, request-time, and Universal WC SSR contracts remain frozen under ADR-0119, ADR-0122, and ADR-0135; ADR-0140 admits compatible patches without scheduling a 0.44 feature train.`,
+    stableBody: `No stable release covers every published package. The stable lines and the packages each one covered are recorded in the archive below and machine-checked in docs/release/release-state.json. The static, request-time, and Universal WC SSR contracts remain frozen under ADR-0119, ADR-0122, and ADR-0135; ADR-0140 admits compatible patches without scheduling a 0.44 feature train.`,
     withdrawnHeading: 'Withdrawn partial artifacts',
     withdrawnBody:
-      'The npm 0.41.0-era beta.1–beta.3 artifacts — published under the 0.41 line before its stable cut — are withdrawn partial releases: never a supported product line, never an upgrade path. The v0.44.0-beta.2.2 prerelease on dist-tag beta is also partial: element, create, and ui published; Router never did, so it is not a four-package release.',
+      'The npm 0.41.0-era beta.1–beta.3 artifacts — published under the 0.41 line before its stable cut — are withdrawn partial releases: never a supported product line, never an upgrade path. The v0.44.0-beta.2.2 prerelease on dist-tag beta is also partial: element, create, and ui published; Router never did, so it is not a complete-surface release.',
     footnote:
       '※ The withdrawn 0.41.0-era npm beta.1–beta.3 partial artifacts stay withdrawn from the active release story. History is kept, not rewritten.',
     archiveSource:
@@ -63,12 +71,17 @@ const content = {
     publishedIntro:
       '本项目遵循 Keep a Changelog 与 SemVer。历史条目在描述旧版本时保留旧名称；当前文档使用 openElement 契约。',
     stampCurrent: '当前',
-    regCurrentSummary: `不存在共同完整版本：element、create、ui 在 ${STABLE_LINE}，而 router 的 latest 是 ${ROUTER_LATEST} 预发布。`,
+    regCurrentSummary:
+      COMMON_PUBLISHED_VERSION === null
+        ? sharedLatestBare === ''
+          ? '不存在共同完整版本：各发布包的 npm latest 互不相同——见上方逐包登记表。'
+          : `不存在共同完整版本：各发布包的 npm latest 同为预发布版本 ${sharedLatestBare}。`
+        : `全部发布包都已提供共同稳定版本 ${COMMON_PUBLISHED_VERSION}。`,
     stableHeading: '稳定线',
-    stableBody: `稳定维护线仅覆盖 @openelement/element、@openelement/create、@openelement/ui。@openelement/router 没有 ${STABLE_LINE_MAJOR_MINOR}.x；其 npm latest 是 ${ROUTER_LATEST_BASE} 预发布。没有任何单一稳定版本覆盖全部四个包。静态、请求时与 Universal WC SSR 契约继续受 ADR-0119、ADR-0122 和 ADR-0135 冻结；ADR-0140 允许兼容 patch，但不预排 0.44 功能列车。`,
+    stableBody: `没有任何 stable 版本覆盖全部发布包。各条稳定线及其覆盖范围记录在下方归档中，并由 docs/release/release-state.json 机器校验。静态、请求时与 Universal WC SSR 契约继续受 ADR-0119、ADR-0122 和 ADR-0135 冻结；ADR-0140 允许兼容 patch，但不预排 0.44 功能列车。`,
     withdrawnHeading: '已撤回的残缺产物',
     withdrawnBody:
-      'npm 上 0.41.0 时代的 beta.1–beta.3 产物——在 0.41 线正式版之前发布——是已撤回的残缺发布：既非受支持的产品线，也不构成升级路径。dist-tag beta 上的 v0.44.0-beta.2.2 预发布同样是残缺发布：element、create、ui 已发布，Router 从未发布，因此它不是四包版本。',
+      'npm 上 0.41.0 时代的 beta.1–beta.3 产物——在 0.41 线正式版之前发布——是已撤回的残缺发布：既非受支持的产品线，也不构成升级路径。dist-tag beta 上的 v0.44.0-beta.2.2 预发布同样是残缺发布：element、create、ui 已发布，Router 从未发布，因此它不是覆盖全部包的发布。',
     footnote:
       '※ 已撤回的 0.41.0 时代 npm beta.1–beta.3 残缺产物在活跃发布叙事中保持撤回状态。历史被保留，不被改写。',
     archiveSource:

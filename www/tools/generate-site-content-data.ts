@@ -197,6 +197,8 @@ outputs.set(
 export const SOURCE_VERSION = '${sourceVersion}';
 export const SOURCE_LINE_PUBLISHED = ${sourceLinePublished};
 export const ALPHA_RESOLVES_TO = '${alphaResolvesTo}';
+/** release-state packages[] length: the published consumer surface size. */
+export const PACKAGE_COUNT = ${releaseState.packages.length};
 `,
 );
 

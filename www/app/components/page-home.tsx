@@ -50,9 +50,9 @@ export default class PageHome extends OpenElement {
   @property({ reflect: false, attribute: false })
   eyebrow = '';
   @property({ reflect: false, attribute: false })
-  registryPrefix = '';
+  versionLine = '';
   @property({ reflect: false, attribute: false })
-  packagesValue = '';
+  versionHref = '';
   @property({ reflect: false, attribute: false })
   enginesValue = '';
   @property({ reflect: false, attribute: false })
@@ -86,16 +86,6 @@ export default class PageHome extends OpenElement {
   @property({ reflect: false, attribute: false })
   readGuide = '';
   @property({ reflect: false, attribute: false })
-  specVersion = '';
-  @property({ reflect: false, attribute: false })
-  specGraph = '';
-  @property({ reflect: false, attribute: false })
-  specEngines = '';
-  @property({ reflect: false, attribute: false })
-  specDeps = '';
-  @property({ reflect: false, attribute: false })
-  specOutput = '';
-  @property({ reflect: false, attribute: false })
   begin = '';
   /**
    * The hero component example, pre-highlighted at generation time
@@ -114,8 +104,6 @@ export default class PageHome extends OpenElement {
   continueComposition = '';
   @property({ reflect: false, attribute: false })
   referenceCopy = '';
-  @property({ reflect: false, attribute: false })
-  registryNote = '';
   @property({ reflect: false, attribute: false })
   commonVersionNote = '';
   @property({ reflect: false, attribute: false })
@@ -202,29 +190,25 @@ export default class PageHome extends OpenElement {
             </div>
           </div>
           <div class='spec-strip'>
-            <div class='spec-cell'>
-              <small>{this.specVersion}</small>
-              <strong>
-                {this.registryPrefix}
-                {this.registryNote}
-              </strong>
+            <div class='spec-cell spec-version'>
+              <a
+                class='version-line'
+                href={this.versionHref}
+                target='_blank'
+                rel='noopener noreferrer'
+              >
+                {this.versionLine}
+              </a>
               <small>{this.commonVersionNote}</small>
             </div>
             <div class='spec-cell'>
-              <small>{this.specGraph}</small>
-              <strong>{this.packagesValue}</strong>
+              <p class='spec-fact'>{this.enginesValue}</p>
             </div>
             <div class='spec-cell'>
-              <small>{this.specEngines}</small>
-              <strong>{this.enginesValue}</strong>
+              <p class='spec-fact accent'>{this.depsValue}</p>
             </div>
             <div class='spec-cell'>
-              <small>{this.specDeps}</small>
-              <strong class='accent'>{this.depsValue}</strong>
-            </div>
-            <div class='spec-cell'>
-              <small>{this.specOutput}</small>
-              <strong>{this.outputValue}</strong>
+              <p class='spec-fact'>{this.outputValue}</p>
             </div>
           </div>
           <div class='marquee' aria-hidden='true'>
@@ -259,10 +243,12 @@ export default class PageHome extends OpenElement {
         </section>
 
         <section class='scene flood'>
-          <p class='scene-index'>{this.sceneDsdIndex}</p>
-          <figure class='scene-figure' aria-hidden='true'>
-            <div innerHTML={this.diagramDsd} trustedHtml />
-          </figure>
+          <div class='scene-head'>
+            <p class='scene-index'>{this.sceneDsdIndex}</p>
+            <figure class='scene-figure' aria-hidden='true'>
+              <div innerHTML={this.diagramDsd} trustedHtml />
+            </figure>
+          </div>
           <h2>
             {this.sceneDsdLead}
             <span class='accent'>{this.sceneDsdAccent}</span>
@@ -295,10 +281,12 @@ export default class PageHome extends OpenElement {
         </section>
 
         <section class='scene'>
-          <p class='scene-index'>{this.sceneIslandsIndex}</p>
-          <figure class='scene-figure' aria-hidden='true'>
-            <div innerHTML={this.diagramIslands} trustedHtml />
-          </figure>
+          <div class='scene-head'>
+            <p class='scene-index'>{this.sceneIslandsIndex}</p>
+            <figure class='scene-figure' aria-hidden='true'>
+              <div innerHTML={this.diagramIslands} trustedHtml />
+            </figure>
+          </div>
           <h2>
             {this.sceneIslandsLead}
             <span class='accent'>{this.sceneIslandsAccent}</span>
@@ -324,10 +312,12 @@ export default class PageHome extends OpenElement {
         </section>
 
         <section class='scene'>
-          <p class='scene-index'>{this.sceneOutputIndex}</p>
-          <figure class='scene-figure' aria-hidden='true'>
-            <div innerHTML={this.diagramOutput} trustedHtml />
-          </figure>
+          <div class='scene-head'>
+            <p class='scene-index'>{this.sceneOutputIndex}</p>
+            <figure class='scene-figure' aria-hidden='true'>
+              <div innerHTML={this.diagramOutput} trustedHtml />
+            </figure>
+          </div>
           <h2>
             {this.sceneOutputLead}
             <span class='accent'>{this.sceneOutputAccent}</span>
