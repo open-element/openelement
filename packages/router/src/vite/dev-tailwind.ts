@@ -10,13 +10,25 @@
  * Dev must deliver the COMPILED theme; serving the authored sheet verbatim
  * cannot work (the ruled-out approaches in #1582).
  *
- * The delivery, one seam:
+ * The delivery, one seam, request-time:
  *
  * 1. `renderStagedPresetEntry()` — the SAME generated entry the build
  *    compiles (declared layer order + `@import 'tailwindcss'` + the declared
  *    theme/components sources, app-relative paths resolved against the app
- *    root) — is staged under `.openElement/tailwind-preset/entry.css` and
- *    served by the dev server as a module.
+ *    root) — is served by the dev server at the contract URL
+ *    `/.openElement/tailwind-preset/entry.css`, as a module that exists only
+ *    in memory: `resolveId` maps the URL onto the very path the build half
+ *    stages its compile input at (so the peer compiler's resolution base for
+ *    the entry's relative `@import`s is byte-identical on both channels) and
+ *    `load` returns the generated text per request.
+ *    The dev channel therefore owns NO file on disk. That is a correctness
+ *    requirement, not a preference: the build half's inner vite build runs
+ *    with `emptyOutDir: true` against that same directory
+ *    (preset-tailwind.ts), so any `vite build` empties
+ *    `.openElement/tailwind-preset/` — a disk-backed dev channel died with the
+ *    build that happened to run beside it: the document kept linking the URL
+ *    and the URL answered 404 until the dev server restarted and re-staged
+ *    (the www site's dev/build coexistence, alpha.13 F lane).
  * 2. `@tailwindcss/vite` is mounted into the dev css channel through a
  *    delegating wrapper (the peer is optional and resolved lazily, like the
  *    build half and like `@hono/vite-dev-server`): a plugin returned from a
@@ -30,24 +42,24 @@
  *    — the same relation the build's head link has.
  *
  * OFF stays OFF: with no `tailwind` key the plugin resolves nothing, loads no
- * peer, writes no staging file, and contributes no head fragment. The build
- * delivery is untouched (`apply: 'serve'` vs. `closeBundle`): no artifact can
- * carry both channels.
+ * peer, serves no module, writes nothing, and contributes no head fragment.
+ * The build delivery is untouched (`apply: 'serve'` vs. `closeBundle`): no
+ * artifact can carry both channels.
  *
  * HMR: a `theme.css` edit reaches the browser as a Vite `css-update` for the
- * staged entry (the peer registers every scanned/loaded file as a watch
+ * served entry (the peer registers every scanned/loaded file as a watch
  * file), and the client re-requests the link with a `?t=` stamp, which both
  * `.*\.css$` and `\?t\=\d+$` in the Hono dev server's exclude list let
- * through to Vite (the versioned-module trap the issue names).
+ * through to Vite (the versioned-module trap the issue names). Freshness rides
+ * the peer's own mtime check over the declared sources: the stamped request is
+ * a fresh module id, so the compile re-runs and answers the edit.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
 import { join } from 'pathe';
 import type { Plugin } from 'vite';
 import { createLogger } from '@openelement/element';
 import {
-  presetStagingDir,
   renderStagedPresetEntry,
   resolveTailwindPresetOptions,
   tailwindPresetPlugins,
@@ -57,29 +69,30 @@ import { appendInjectStylesheets, type OpenPluginState } from './plugin-config.t
 
 const log = createLogger('router-vite:tailwind-preset-dev');
 
-/** The staged entry the build half also compiles, project-relative. */
+/** The served entry the build half also compiles, project-relative. */
 export const DEV_PRESET_ENTRY = '.openElement/tailwind-preset/entry.css' as const;
 
-/** The public dev URL of the staged entry, joined through the Vite `base`. */
+/** The public dev URL of the served entry, joined through the Vite `base`. */
 export function devPresetEntryHref(base: string): string {
   const cleanBase = base.endsWith('/') ? base : `${base}/`;
   return `${cleanBase}${DEV_PRESET_ENTRY}`;
 }
 
 /**
- * Stage the dev entry under `.openElement/tailwind-preset/`. Text-identical to
- * the build staging (one generator), so a dev/prod comparison diffs only the
- * compile, never the input.
+ * The absolute path the contract URL maps onto — the same path the build half
+ * stages its compile input at. The module behind it is virtual (see
+ * {@linkcode devTailwindPresetPlugin}'s `resolveId`/`load`): the path is used
+ * for its identity, never for its contents, so a build that deletes it does
+ * not disturb the dev channel.
  */
-export function stageDevPresetEntry(
-  root: string,
-  options: TailwindPresetOptions,
-): { dir: string; entryPath: string } {
-  const dir = presetStagingDir(root);
-  mkdirSync(dir, { recursive: true });
-  const entryPath = join(dir, 'entry.css');
-  writeFileSync(entryPath, renderStagedPresetEntry(root, options), 'utf8');
-  return { dir, entryPath };
+export function devPresetEntryPath(root: string): string {
+  return join(root, DEV_PRESET_ENTRY);
+}
+
+/** The id without its `?query`/`#hash` suffix (Vite ids are POSIX-normalized). */
+function devPresetEntryId(id: string): string {
+  const suffix = id.search(/[?#]/);
+  return suffix === -1 ? id : id.slice(0, suffix);
 }
 
 /** The peer's plugin hooks this wrapper proxies. */
@@ -149,6 +162,9 @@ async function callPeerHook(
 export function devTailwindPresetPlugin(state: OpenPluginState): Plugin {
   let peer: Plugin[] | undefined;
   let entryUrl: string | undefined;
+  let entryFile: string | undefined;
+  let entryRoot: string | undefined;
+  let entryOptions: TailwindPresetOptions | undefined;
   const loadPeer = async (mode: string): Promise<Plugin[]> =>
     (peer ??= applicablePlugins(await tailwindPresetPlugins(), mode));
 
@@ -165,7 +181,15 @@ export function devTailwindPresetPlugin(state: OpenPluginState): Plugin {
       const options = resolveTailwindPresetOptions(state.resolvedOptions.tailwind);
       if (!options) return;
       const root = config.root ?? process.cwd();
-      stageDevPresetEntry(root, options);
+      // Request-time delivery, decided here because only `configResolved`
+      // sees the resolved options: remember the entry's identity (the path the
+      // build stages at) and the options the generator needs. Nothing is
+      // written — the module's text is produced on each load, so the build
+      // half emptying `.openElement/tailwind-preset/` cannot take this channel
+      // down (the dev server keeps serving the sheet; see the module header).
+      entryOptions = options;
+      entryRoot = root;
+      entryFile = devPresetEntryPath(root);
       // Fail closed at dev start rather than on the first css request: a
       // preset-enabled dev server that cannot compile is an error, never a
       // silently unstyled page (the #1582 symptom).
@@ -177,11 +201,52 @@ export function devTailwindPresetPlugin(state: OpenPluginState): Plugin {
       // blocklist. Idempotent across Vite's config re-resolution (a dev server
       // restart re-runs configResolved on the same plugin instance).
       appendInjectStylesheets(state, [entryUrl]);
-      // No staging-path log line: the debug channel prints by default, and the
-      // absolute filesystem path of a build-internal file is noise no dev can
-      // act on — the info line below already names the URL the sheet is served
-      // at, which is the fact a dev uses.
+      // No served-path log line: the debug channel prints by default, and the
+      // absolute filesystem path of a module that is not a file is noise no
+      // dev can act on — the info line below already names the URL the sheet
+      // is served at, which is the fact a dev uses.
       await callPeerHook(plugins, 'configResolved', this, [config]);
+    },
+
+    /**
+     * Resolve the contract URL onto the entry's identity path — regardless of
+     * whether anything exists at that path. A build emptying the staging
+     * directory must not turn the URL into a 404 (the alpha.13 F-lane
+     * regression); this hook is what keeps the dev channel independent of the
+     * disk. Two spellings arrive here: an absolute path (import-graph
+     * contexts) and the root-relative URL a document `<link>` / browser
+     * refresh asks the dev server for (leading slash; the base middleware
+     * strips the prefix first). Both map onto the identity path; the query
+     * suffix (`?t=` stamp) rides along verbatim so cache-busting stays exactly
+     * as Vite serves it.
+     */
+    resolveId(id) {
+      if (entryFile === undefined || entryRoot === undefined) return;
+      const file = devPresetEntryId(id);
+      const suffix = id.slice(file.length);
+      if (file === entryFile) return entryFile + suffix;
+      // Root-relative URL form ('/' + DEV_PRESET_ENTRY, POSIX separators —
+      // Vite normalizes request ids before the plugin pipeline).
+      if (file.startsWith('/') && join(entryRoot, file.slice(1)) === entryFile) {
+        return entryFile + suffix;
+      }
+      return;
+    },
+
+    /**
+     * Serve the entry from memory: the same generator the build compiles
+     * (`renderStagedPresetEntry`), so dev and build feed one input and a
+     * dev/prod comparison diffs only the compile. Deterministic by
+     * construction — the text is a pure function of the resolved options and
+     * the declared sources — so no cache key is needed beyond Vite's own
+     * module graph (a `?t=` request resolves to a fresh module and re-runs the
+     * peer's compile, whose mtime check over the declared sources answers the
+     * edit).
+     */
+    load(id) {
+      if (entryFile === undefined || entryRoot === undefined || entryOptions === undefined) return;
+      if (devPresetEntryId(id) !== entryFile) return;
+      return renderStagedPresetEntry(entryRoot, entryOptions);
     },
 
     async configureServer(server) {

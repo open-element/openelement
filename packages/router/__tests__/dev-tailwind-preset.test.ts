@@ -319,3 +319,36 @@ test('with no tailwind key the dev document is unchanged (#1582 constraint)', as
     'OFF writes no staging file',
   ).toEqual(false);
 });
+
+test('the served entry is request-time: a build emptying .openElement cannot 404 it', async () => {
+  rmSync(join(FIXTURE_DIR, '.openElement'), { recursive: true, force: true });
+  const handle = await bootDev(openElement(PRESET_ON));
+  handles.push(handle);
+  const stagedPath = join(FIXTURE_DIR, STAGED_ENTRY);
+
+  // The dev channel owns no file: the URL answers the compiled theme with
+  // nothing on disk (the build half's `emptyOutDir` inner build empties that
+  // directory — a disk-backed dev channel died with the next `vite build`).
+  const served = await fetchStagedCss(handle);
+  expect(served).toMatch(COMPILED_THEME_BLOCK);
+  expect(existsSync(stagedPath), 'the dev channel writes no file').toEqual(false);
+
+  // A build half's staging write lands on that same path next; the served
+  // module must stay the generated entry (the file is never the source), and
+  // its later deletion (the inner build's emptyOutDir) must not disturb the
+  // already-running server.
+  mkdirSync(join(FIXTURE_DIR, '.openElement', 'tailwind-preset'), { recursive: true });
+  writeFileSync(stagedPath, '/* stale staging text a build left behind */\n', 'utf8');
+  const afterWrite = await fetchStagedCss(handle, `?t=${Date.now()}`);
+  expect(afterWrite, 'the file at the mapped path is not the served source').toMatch(
+    COMPILED_THEME_BLOCK,
+  );
+  rmSync(stagedPath);
+  // Both client shapes after the wipe: the HMR-stamped re-request and the
+  // plain URL a browser refresh asks for (the plain form is the one the
+  // recorded incident saw 404 — the unlink had invalidated the module).
+  const afterWipe = await fetchStagedCss(handle, `?t=${Date.now()}`);
+  expect(afterWipe, 'the wiped entry still answers the compile').toMatch(COMPILED_SCALE_MARKER);
+  const afterWipePlain = await fetchStagedCss(handle);
+  expect(afterWipePlain, 'the plain URL still answers the compile').toMatch(COMPILED_THEME_BLOCK);
+});
