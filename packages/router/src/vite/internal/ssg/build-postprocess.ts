@@ -179,6 +179,15 @@ export async function postProcessClientIslandBuild(
  * Clean Phase 1 SSR artifacts from the public dist directory.
  * The SSR virtual entry bundle and its source map are build-time only
  * and must not be deployed to static hosting.
+ *
+ * The Rollup build trigger (`virtual:open-build-trigger`) is the outer
+ * build's own entry: `plugin-config.ts` sets it as `rollupOptions.input` so
+ * the outer bundle has something to build, and `plugin-virtual-modules.ts`
+ * loads it as `export default null`. Rolldown therefore emits it as a real
+ * (empty) chunk — nothing imports it, so it is dead weight in the deployed
+ * tree, and its zero bytes make the file read as a packaging mistake to a
+ * consumer inspecting dist/. Same treatment as the SSR entry: build-time
+ * artifact, not payload.
  */
 export async function cleanSsrArtifacts(ctx: BuildContextView): Promise<void> {
   const root = ctx.phase3.root || process.cwd();
@@ -190,6 +199,7 @@ export async function cleanSsrArtifacts(ctx: BuildContextView): Promise<void> {
     const toDelete = entries.filter(
       (f) =>
         f.startsWith('_virtual_open-hono-entry') ||
+        f.startsWith('_virtual_open-build-trigger') ||
         (f.startsWith('src-') && f.endsWith('.js') && !f.includes('client')),
     );
     for (const f of toDelete) {

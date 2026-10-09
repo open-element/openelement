@@ -45,6 +45,15 @@ The optional, near-empty config file: `export default defineConfig({ ... })` fro
 
 The shared base is the three roots' longest common directory: `dirs: { routes: 'src/routes', islands: 'src/islands', components: 'src/components' }` moves the tokens file to `src/styles/tokens.css`, the shell to `src/islands/app-shell.tsx` and the head module to `src/head.tsx`. A partial `dirs` has no shared segment left (`src/pages` against the default `app/*`), so it moves only what it names and the conventions stay at `app`.
 
+### tokens.css or theme.css
+
+The two sheets serve different roles:
+
+- `tokens.css` is the generic token convention above: a plain stylesheet the framework inlines into every document `<head>`, no build step and no Tailwind involved. Its presence is what triggers it — create the file and it is inlined on every page; `styles: { tokens }` points the convention at a different file.
+- `theme.css` is the starter's Tailwind sheet. It is not a framework convention — the scaffold names it explicitly through `tailwind: { theme: ['app/styles/theme.css'] }` in `openelement.config.ts`. That key is independent of the convention above: dev compiles the declared sources and serves the compiled sheet through a head link, and the build emits the same compile as the linked `/assets/open-tailwind.css`. Roles land in the Tailwind `theme` layer rather than as a raw inlined block.
+
+A starter project keeps its tokens in the `theme.css` sheet it declares, so there is one token source rather than two — but that is a project choice, not a rule the framework enforces. What it does enforce is one *home* for framework options: passing options inline to `openElement()` while `openelement.config.ts` carries them is a hard error. If you keep both a `tokens.css` convention file and a `tailwind.theme` sheet, both take effect (both are compiled/inlined) and you own keeping them consistent.
+
 Accepted keys — anything else fails the build with this list:
 
 - `renderer` — `'native'` (default, the compiled Part Program serializer) or `'lit'`.

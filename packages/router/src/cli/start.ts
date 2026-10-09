@@ -7,11 +7,13 @@
  *                      fetch(Request): Response dispatch. When
  *                      dist/server/index.js exists, dynamic routes and
  *                      mutations dispatch to it.
- *                      (`pnpm start` in a generated project.)
+ *                      (`pnpm start` in a generated project — its script
+ *                      runs `openelement start`.)
  *   preview          - static-only `vite preview`; refuses to run when
  *                      dist/server/index.js exists because `vite preview`
  *                      cannot serve dynamic routes.
- *                      (`pnpm preview` in a generated project.)
+ *                      (`openelement start --mode=preview`; a generated
+ *                      project ships no preview script.)
  *
  * Node/Workers/Bun deploys are produced by the Nitro mount from the same
  * standard fetch entry; this CLI serves the local/preview surface only.
@@ -69,10 +71,10 @@ async function loadProductionConfig(mode: ServeMode): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
+async function main(argv: string[]): Promise<void> {
   let parsed: { mode: ServeMode; rest: string[]; debug: boolean };
   try {
-    parsed = extractServeMode(process.argv.slice(2));
+    parsed = extractServeMode(argv);
   } catch (error) {
     console.error(renderCliFailure(error, false));
     process.exit(1);
@@ -133,7 +135,7 @@ async function runPreview(viteArgs: string[]): Promise<void> {
       `[openElement preview] This project has request-time routes (${DEFAULT_OUT_DIR}/server).\n` +
         '  `vite preview` cannot serve dynamic loader/action routes.\n' +
         '  Use: pnpm start\n' +
-        '  (or: node node_modules/@openelement/router/src/cli/start.js)',
+        '  (or: openelement start)',
     );
     process.exit(1);
   }
@@ -212,14 +214,22 @@ function processEnvRecord(): Record<string, string> {
   return record;
 }
 
-const isMainModule = import.meta.main;
-
-if (isMainModule) {
+/**
+ * Run the serve CLI with the arguments that follow the command (the bin's
+ * `start` subcommand passes them through verbatim, so `--mode=preview`
+ * reaches the mode parser unchanged). Shared by the `openelement` bin
+ * (cli.ts) and this module's own main block.
+ */
+export async function runServeCli(argv: string[]): Promise<void> {
   try {
-    await main();
+    await main(argv);
   } catch (error) {
     // #1413: message (+ cause chain) by default, raw stack only under --debug.
     console.error(renderCliFailure(error, cliDebug));
     process.exit(1);
   }
+}
+
+if (import.meta.main) {
+  await runServeCli(process.argv.slice(2));
 }

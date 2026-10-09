@@ -27,10 +27,10 @@ export default defineConfig({
   // app/styles/theme.css compile into the preset's deliverable both ways: dev
   // serves the compile from /.openElement/tailwind-preset/entry.css and links
   // it in the document head, the build emits the same compile as the
-  // layer-ordered /assets/open-tailwind.css after the SSG render. The path
-  // climbs out of the preset's staging entry (.openElement/tailwind-preset/),
-  // the file the @import resolves from.
-  tailwind: { theme: ['../../app/styles/theme.css'] },
+  // layer-ordered /assets/open-tailwind.css after the SSG render. The path is
+  // app-relative (resolved against the app root); package CSS specifiers such
+  // as '@openelement/ui/theme.css' also work here.
+  tailwind: { theme: ['app/styles/theme.css'] },
   head: {
     // Titles default to the package.json "name"; this overrides the document
     // title fallback while page routes keep their own `head: { title }`.

@@ -49,6 +49,15 @@ import { formatJson } from '@openelement/element/build-utils';
 import { runWithOutput } from './process.ts';
 import type { PackageInfo } from './package-graph.ts';
 
+/**
+ * The Router `openelement` bin entry (#1633), package-relative. One source
+ * for two consumers: the pack entry list below (the module graph has no
+ * public import edge to a bin target, so it must be an explicit entry) and
+ * the packed manifest's `bin` declaration (tools/release/npm-manifest.ts
+ * derives the emitted `./src/cli/cli.js` from this).
+ */
+export const ROUTER_BIN_ENTRY = 'src/cli/cli.ts' as const;
+
 /** Pinned vp toolchain. Bump the core alias together with the CLI. */
 export const VP_TOOLCHAIN = {
   vitePlus: '1.0.0',
@@ -151,9 +160,9 @@ function isAmbientDeclarationTarget(pkg: PackageInfo, subpath: string, target: s
 
 /**
  * The pack entry list: every TypeScript exports target (the compiled public
- * surface) plus, for the router, the path-delivered client-runtime modules.
- * Asset export targets are not compile entries. Order-stable and
- * deduplicated.
+ * surface) plus, for the router, the path-delivered client-runtime modules and
+ * the `openelement` bin dispatcher. Asset export targets are not compile
+ * entries. Order-stable and deduplicated.
  */
 export function vpPackEntries(pkg: PackageInfo): string[] {
   const map = exportsMap(pkg);
@@ -171,6 +180,10 @@ export function vpPackEntries(pkg: PackageInfo): string[] {
   }
   if (pkg.name === '@openelement/router') {
     for (const entry of ROUTER_CLIENT_RUNTIME_ENTRIES) push(entry);
+    // The bin target is not an exports subpath (bins are declared in the
+    // manifest, written by the coordinator), so the pack needs it as an
+    // explicit entry — the module graph has no public import edge to it.
+    push(ROUTER_BIN_ENTRY);
   }
   return entries;
 }

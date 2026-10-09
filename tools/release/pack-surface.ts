@@ -6,8 +6,8 @@
  * bytes (run tools/release#pack:dry-run first) and fails closed on five
  * things a consumer would otherwise see:
  *
- *   1. facade metadata (`homepage`, `keywords`, `engines`, `sideEffects`)
- *      missing or diverging from packedMetadata();
+ *   1. facade metadata (`homepage`, `keywords`, `engines`, `sideEffects`,
+ *      `bin`) missing or diverging from packedMetadata();
  *   2. repository-internal references in shipped text — a repo directory path
  *      (`packages/`, `tools/`, `www/`, `apps/`, `tests/`, `benchmarks/`,
  *      `docs/`) or a decision-record citation. The tarball is the only
@@ -146,11 +146,51 @@ export function findMetadataViolations(
   ) {
     fail('sideEffects', metadata.sideEffects);
   }
+  if (
+    metadata.bin !== undefined &&
+    JSON.stringify(packageJson.bin) !== JSON.stringify(metadata.bin)
+  ) {
+    fail('bin', metadata.bin);
+  }
   return violations;
 }
 
 /**
- * Export subpaths the shipped README never names. The README is the only
+ * Bins the packed manifest declares whose target file is missing from the
+ * archive. npm materializes one `.bin` shim per declared bin at install time;
+ * a shim pointing at an absent file is a broken command, and the same
+ * manifest is the only place a consumer can read the command name from. The
+ * declared target is the published `./src/…js` form; the archive member is
+ * matched after stripping the leading `./`.
+ */
+export function findMissingBinTargets(
+  packageName: string,
+  bin: unknown,
+  files: ReadonlyMap<string, string>,
+): PackSurfaceViolation[] {
+  const targets: string[] = [];
+  if (typeof bin === 'string') targets.push(bin);
+  else if (bin && typeof bin === 'object') {
+    for (const value of Object.values(bin as Record<string, unknown>)) {
+      if (typeof value === 'string') targets.push(value);
+    }
+  }
+  const violations: PackSurfaceViolation[] = [];
+  for (const target of targets) {
+    const member = `package/${target.replace(/^\.\//, '')}`;
+    if (!files.has(member)) {
+      violations.push({
+        packageName,
+        path: 'package.json',
+        message: `declared bin target '${target}' is missing from the packed archive`,
+      });
+    }
+  }
+  return violations;
+}
+
+/**
+ * Exports subpaths the shipped README never names. The README is the only
  * per-subpath documentation an npm consumer gets, so an undocumented public
  * subpath is a facade gap (#1412 acceptance 4). A README names a subpath
  * either qualified (`@openelement/element/html`) or bare (`/html`), so either
@@ -307,6 +347,7 @@ export function scanPackedPackage(
   const packageJson = JSON.parse(manifestText) as Record<string, unknown>;
   const metadata = packedMetadata(packageName);
   violations.push(...findMetadataViolations(packageName, packageJson, metadata));
+  violations.push(...findMissingBinTargets(packageName, packageJson.bin, files));
   violations.push(
     ...findUndocumentedSubpaths(
       packageName,

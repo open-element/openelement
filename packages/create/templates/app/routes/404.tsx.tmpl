@@ -1,6 +1,10 @@
 /**
- * Styled 404 (#923): the request-time server renders this page with a 404
- * status for unmatched paths; SSG builds also emit it as static 404.html.
+ * Styled 404 (#923). `renderIntent: { mode: 'dynamic' }` keeps this page on
+ * the request-time path, and it is the reason this starter's build emits
+ * `dist/server/`: the request-time server renders it with a 404 status for
+ * every unmatched path, so the build writes no static 404.html. Drop the
+ * renderIntent line and the route becomes prerenderable — a build with no
+ * other request-time route then writes the page to dist/404.html.
  */
 import { definePage } from '@openelement/router';
 import NotFoundPage from '../components/page-404.tsx';

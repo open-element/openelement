@@ -45,6 +45,15 @@ export default defineConfig({
 
 共享基目录是三个根的公共前缀：`dirs: { routes: 'src/routes', islands: 'src/islands', components: 'src/components' }` 会把 token 文件移到 `src/styles/tokens.css`、shell 移到 `src/islands/app-shell.tsx`、head 模块移到 `src/head.tsx`。部分覆盖的 `dirs` 不再与默认的 `app/*` 共享前缀（例如只写 `src/pages`），因此它只移动自己点名的根，约定仍留在 `app`。
 
+### tokens.css 与 theme.css
+
+两张样式表职责不同：
+
+- `tokens.css` 就是上表中的通用 token 约定：一张普通样式表，框架把它内联进每个文档 `<head>`，不经构建步骤、与 Tailwind 无关。触发它的是文件是否存在——建了这张表，它就会被内联进每个页面；`styles: { tokens }` 可把约定指向别的文件。
+- `theme.css` 是 starter 的 Tailwind 样式表。它不是框架约定——脚手架通过 `openelement.config.ts` 里的 `tailwind: { theme: ['app/styles/theme.css'] }` 显式点名它。该键与上面的约定相互独立：dev 编译声明的源并在文档头以 link 交付编译产物，build 把同一份编译结果作为 `/assets/open-tailwind.css` 输出并链接。角色落在 Tailwind 的 `theme` 层，而不是一段原样内联的样式。
+
+脚手架项目把 token 放在它声明的 `theme.css` 里，于是只有一个 token 来源而不是两个——但这是项目选择，不是框架强制的规则。框架真正强制的是「框架选项只有一个家」：`openelement.config.ts` 已带选项时再往 `openElement()` 内联传选项是硬错误。如果你同时保留 `tokens.css` 约定文件与 `tailwind.theme` 样式表，两者都会生效（都会被内联/编译），保持一致的责任在使用方。
+
 可接受的键——其余任何键都会以这份列表报错并让构建失败：
 
 - `renderer`——`'native'`（默认，编译后的 Part Program 序列化器）或 `'lit'`。

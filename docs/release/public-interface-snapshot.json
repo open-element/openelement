@@ -1171,12 +1171,16 @@
           ]
         },
         "./cli/build": {
-          "publicShapeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "publicSymbols": []
+          "publicShapeSha256": "6319eefb11b1476667552c7c75bbf0e1c4dd286143a9eb5af8dd567fa68ba64d",
+          "publicSymbols": [
+            "runBuildCli=value:{call:()=>Promise<void>}"
+          ]
         },
         "./cli/start": {
-          "publicShapeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "publicSymbols": []
+          "publicShapeSha256": "d93631090e156b7c4ef96a5d382a9242979da8392c94a8feb9e978a6c9da95d4",
+          "publicSymbols": [
+            "runServeCli=value:{call:(argv:array(string))=>Promise<void>}"
+          ]
         },
         "./document": {
           "publicShapeSha256": "21c079e2d7027a2e7bf4bb792a2ab0f2318e18db880aec66e621ff30ce90d6cd",

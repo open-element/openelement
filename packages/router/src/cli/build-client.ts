@@ -517,6 +517,13 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     root,
     base: `${clientBase}client/`,
     logLevel: 'warn',
+    // The island bundle is a build-stage artifact, not a second copy of the
+    // app's static files: copying public/ here would publish every static
+    // asset under a second URL (`/client/openelement-mark.svg` beside
+    // `/openelement-mark.svg`), byte-identical and differently cached. The
+    // outer build already copies public/ into dist/, and the SSR bundle build
+    // sets the same flag for the same reason (cli/build-ssg.ts).
+    publicDir: false,
     // #1546: production bundles strip the element runtime's authored error
     // prose to its stable codes (element's protocol/errors.ts seam). Dev
     // builds never inject this, so dev keeps the full messages.

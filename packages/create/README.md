@@ -12,9 +12,9 @@ Docs and guides: <https://openelement.org>.
 
 `@openelement/create` generates a new openElement project from ONE template —
 the showcase starter: a static-first landing page with two islands, a fully
-static About page, an `/api/ping` server route, and a pure-CSS design-token
-sheet (no Tailwind, no template variants). The generated project is a plain
-Node/pnpm project.
+static About page, an `/api/ping` server route, and a Tailwind-ON design-token
+sheet (the `@theme` role table; one template, no variants). The generated
+project is a plain Node/pnpm project.
 
 ## Usage (1.0 Alpha)
 
@@ -45,18 +45,19 @@ npx @openelement/create my-app --no-install --no-git -t showcase
 resolves to `@scope/create` at the scope's default dist-tag — with no tag in
 the command, that is `latest`, which the 1.0 line rides — so the canonical
 spelling names no tag, and npm runs this package's generator. The version a
-versionless install resolves is registered in
-`the tracked release-state manifest` (currently `1.0.0-alpha.11`, a new baseline —
-not a 0.x upgrade, with no migration path from 0.x). Pin that exact version
-when reproducibility matters (verify against the live registry with
-`npm view @openelement/create dist-tags`):
+versionless install resolves is registry truth: read it from the live registry
+(`npm view @openelement/create dist-tags`), and from the framework's tracked
+release-state manifest, which records the version each dist-tag was last
+verified to serve. The 1.0 line is a new baseline — not a 0.x upgrade, with no
+migration path from 0.x. Pin an exact version when reproducibility matters:
 
 ```bash
-npm create @openelement@1.0.0-alpha.11 my-app
+npm create @openelement@<version> my-app
 ```
 
-The generated starter pins the exact `@openelement/*` versions it was built
-from in its `package.json` dependencies.
+The generated starter depends on `@openelement/*` through caret ranges over
+the release it was generated from, so `pnpm update` picks up later `1.0.0`
+prereleases without a manifest edit.
 
 The canonical install command is exported from `@openelement/create/install-command` (one builder, every documented copy derives from it).
 
@@ -99,8 +100,10 @@ npm create @openelement@0.43 my-app
 
 ## What It Creates
 
-- `package.json` - starter dependencies (exact `@openelement/*` release pins)
-  and the lifecycle scripts (`dev`/`check`/`test`/`build`/`start`/`preview`)
+- `package.json` - starter dependencies (`@openelement/*` with caret ranges
+  over the generated-from release)
+  and the lifecycle scripts (`dev`/`check`/`test`/`build`/`start`; `build` and
+  `start` run the `openelement` bin from `@openelement/router`)
 - `tsconfig.json` - the type-check surface for `pnpm check`: JSX authoring
   through the element import source, whole-`app/` coverage
 - `vite.config.ts` - Vite build configuration only; framework options still

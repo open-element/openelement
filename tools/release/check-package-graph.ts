@@ -23,8 +23,9 @@
  * - release-critical package configuration: every package is on
  *   PACKAGE_VERSION, declares exports and a files allowlist (with
  *   README.md/LICENSE present on disk), uses the @openelement
- *   scope, and the create CLI's embedded CREATE_VERSION tracks the release
- *   line (merged from the former standalone package-config verification)
+ *   scope, and the create CLI's embedded CREATE_VERSION and the packed
+ *   consumer's browser-probe Playwright pin track the release line (merged
+ *   from the former standalone package-config verification)
  */
 
 import { readdirSync } from 'node:fs';
@@ -321,8 +322,50 @@ export function createVersionFailures(createVersionSource: string): string[] {
   return [];
 }
 
+/**
+ * Cross-assert the browser-probe Playwright pin against the workspace root's.
+ *
+ * tools/release/consumer-packaged-starter.ts pins `@playwright/test` for the
+ * probe it writes into the scaffolded starter (PW_PROBE_PIN). CI installs the
+ * browser builds for the ROOT pin — every workflow runs
+ * `./node_modules/.bin/playwright install`, which resolves the root manifest —
+ * so a probe pin left behind by a root upgrade would surface only when the
+ * packed-consumer matrix tried to launch a browser: a failure at the far end
+ * of the release train instead of here.
+ */
+export function probePlaywrightPinFailures(
+  consumerSource: string,
+  rootManifest: Record<string, unknown>,
+): string[] {
+  const match = consumerSource.match(/PW_PROBE_PIN = '([^']+)'/u);
+  if (!match) {
+    return ['tools/release/consumer-packaged-starter.ts: PW_PROBE_PIN anchor missing'];
+  }
+  const devDependencies = rootManifest.devDependencies as Record<string, string> | undefined;
+  const expected = devDependencies?.['@playwright/test'];
+  if (expected === undefined) {
+    return [
+      'package.json: devDependencies["@playwright/test"] missing — ' +
+        'the pin the packed-consumer browser probe anchors to',
+    ];
+  }
+  if (match[1] !== expected) {
+    return [
+      `tools/release/consumer-packaged-starter.ts: PW_PROBE_PIN ${match[1]} does not match ` +
+        `root @playwright/test ${expected}`,
+    ];
+  }
+  return [];
+}
+
 async function validatePackageConfigs(packages: PackageInfo[], failures: string[]): Promise<void> {
   failures.push(...createVersionFailures(await readFile('packages/create/src/version.ts', 'utf8')));
+  failures.push(
+    ...probePlaywrightPinFailures(
+      await readFile('tools/release/consumer-packaged-starter.ts', 'utf8'),
+      (await readJson('package.json')) as Record<string, unknown>,
+    ),
+  );
 
   for (const pkg of packages) {
     // The publish surface is the package.json `files` allowlist (npm) —

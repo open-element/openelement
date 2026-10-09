@@ -30,7 +30,7 @@ pnpm install
 pnpm dev
 ```
 
-The command runs on plain Node tooling: it fetches the published `@openelement/create` package from npm — a versionless install resolves `latest`, the current 1.0 line — and scaffolds the project with the resolved exact dependency pins.
+The command runs on plain Node tooling: it fetches the published `@openelement/create` package from npm — a versionless install resolves `latest`, the current 1.0 line — and scaffolds the project with `@openelement/*` caret ranges over that release.
 
 The create CLI prints one `created <path>` line per file, then the next steps:
 
@@ -40,7 +40,7 @@ openElement project created at ./my-app/
   cd my-app
   pnpm install
   pnpm dev
-  See README.md for all scripts (check/test/build/start/preview)
+  See README.md for all scripts (check/test/build/start)
 ```
 
 `pnpm dev` starts the Vite dev server and prints the URL to open:
@@ -55,7 +55,7 @@ That page is the starter's home route. Its layout is the whole architecture:
 
 ```text
 my-app/
-  package.json      dependencies + pnpm scripts: dev, check, test, build, start, preview
+  package.json      dependencies + pnpm scripts: dev, check, test, build, start
   openelement.config.ts  framework options (tokens, head, shell conventions)
   vite.config.ts    Vite configuration; the plugin call takes no arguments
   app/routes/       one file per URL
@@ -316,10 +316,10 @@ The entries this tutorial's work produced:
 ```text
 index.html          prerendered /
 hello/index.html    prerendered /hello
-404.html            the not-found route
 client/islands/     one chunk per reachable island
 island-manifests/   page-<hash>.json — which islands each page loads
-server/index.js     the request-time handler that answers POST /notes
+server/index.js     the request-time handler: it answers POST /notes and
+                    renders the styled 404 for unmatched paths
 ```
 
 Serve the artifact:
@@ -343,7 +343,7 @@ curl -i http://localhost:4173/hello | head -1
 HTTP/1.1 200 OK
 ```
 
-`/hello` is a file on disk; `/notes` reached the server entry. `pnpm preview` is the static-only mode and refuses to run while `dist/server` exists — which is why a project with a request-time route is served with `pnpm start`.
+`/hello` is a file on disk; `/notes` reached the server entry — as does the styled 404 for an unmatched path. A project whose build has no request-time route can be served static-only with `openelement start --mode=preview`, which is why this one, which has one, is served with `pnpm start`.
 
 You now have a project, a page, an island, a form action, and a build you can deploy.
 

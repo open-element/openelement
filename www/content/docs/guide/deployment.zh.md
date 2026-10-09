@@ -6,22 +6,21 @@ order: 100
 
 ## Build、start、preview
 
-脚手架生成的项目把 pnpm 脚本接到 router CLI 子路径：
+脚手架生成的项目把 pnpm 脚本接到 `openelement` 命令：
 
 ```bash
 pnpm build     # SSG + 请求时服务器，产出到 dist/
 pnpm start     # 伺服 dist/；dynamic 路由与变更请求分派给 dist/server
-pnpm preview   # 纯静态预览；存在 dist/server 时拒绝运行
 pnpm dev       # Vite 开发服务器
 ```
 
-`pnpm start` 静态伺服 `dist/`，并在 `dist/server/index.js` 存在时把 dynamic 路由与变更请求分派给它。端口取 `OPEN_ELEMENT_PORT`（其次 `PORT`，默认 4173），主机取 `OPEN_ELEMENT_HOST`。同一条 CLI 加 `--mode=preview` 即只伺服静态产物，发现 `dist/server` 时会拒绝运行并指向 start 模式——只对没有请求时路由的项目使用它。
+`pnpm start` 静态伺服 `dist/`，并在 `dist/server/index.js` 存在时把 dynamic 路由与变更请求分派给它。端口取 `OPEN_ELEMENT_PORT`（其次 `PORT`，默认 4173），主机取 `OPEN_ELEMENT_HOST`。同一条命令加 `--mode=preview`（`openelement start --mode=preview`）即只伺服静态产物，发现 `dist/server` 时会拒绝运行并指向 start 模式——只对没有请求时路由的项目使用它。
 
 ## 静态输出
 
 `pnpm build` 把预渲染站点写入 `dist/`：
 
-- `dist/<route>/index.html`，每个预渲染路由一份，另有 not-found 路由的 `dist/404.html`。
+- `dist/<route>/index.html`，每个预渲染路由一份。标记为 `renderIntent: { mode: 'dynamic' }` 的 not-found 路由由请求时服务器渲染（带真实 404 状态），而不是写成静态文件；可预渲染的 not-found 路由才写成 `dist/404.html`。
 - `public/` 下的内容原样拷贝——favicon、`robots.txt`、图片。
 - 应用存在 island 或增强表单时产出 `dist/client/`：共享入口 `client.js`，以及 `dist/client/islands/` 下每个 island 标签一个 chunk。
 - `dist/island-manifests/page-<hash>.json`，每页一份，列出该页每个 island 的标签、chunk URL、策略与层级——构建产物自己回答「这个页面加载哪些 JavaScript」。

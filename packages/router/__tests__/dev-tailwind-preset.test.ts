@@ -178,9 +178,9 @@ const PRESET_OPTIONS = {
 /** The one option under test: the declared theme source, preset ON. */
 const PRESET_ON = {
   ...PRESET_OPTIONS,
-  // The generated staging entry lives at .openElement/tailwind-preset/, so a
-  // relative source path climbs out of it — exactly the starter's spelling.
-  tailwind: { theme: [`../../app/styles/theme.css`] },
+  // App-relative (the documented contract, #1633): the preset resolves it
+  // against the app root into the staged entry's own base.
+  tailwind: { theme: ['app/styles/theme.css'] },
 };
 
 async function fetchDoc(handle: DevHandle, path = '/'): Promise<string> {

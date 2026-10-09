@@ -21,8 +21,10 @@ import {
   buildTailwindPresetBundle,
   extractLayerComponents,
   injectPresetLinks,
+  renderStagedPresetEntry,
   renderTailwindPresetEntry,
   renderTailwindScopeFace,
+  resolvePresetSource,
   resolveTailwindPresetOptions,
   scopePresetComponentCss,
 } from '../src/vite/preset-tailwind.ts';
@@ -60,6 +62,75 @@ test('an empty preset entry still declares the layer order', () => {
   const entry = renderTailwindPresetEntry({});
   expect(entry.includes(TAILWIND_LAYER_ORDER)).toEqual(true);
   expect(entry.includes("@import 'tailwindcss';")).toEqual(true);
+});
+
+// ─── App-relative source resolution (#1633, the seam's consumer form) ──
+
+test('app-relative sources resolve against the app root into the staging base', () => {
+  // The discriminator is the filesystem, so the app files must exist.
+  const root = join(import.meta.dirname!, '../__test_fixtures__/preset-source-base');
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(join(root, 'app', 'styles'), { recursive: true });
+  writeFileSync(join(root, 'app/styles/theme.css'), '@theme { --color-x: red; }\n', 'utf8');
+  try {
+    // The documented spelling: a path under the app root. It becomes the
+    // relative path from .openElement/tailwind-preset/ (the entry's own base).
+    expect(resolvePresetSource(root, 'app/styles/theme.css')).toEqual('../../app/styles/theme.css');
+    // `./`-prefixed and absolute spellings resolve to the same staged specifier.
+    expect(resolvePresetSource(root, './app/styles/theme.css')).toEqual(
+      '../../app/styles/theme.css',
+    );
+    expect(resolvePresetSource(root, `${root}/app/styles/theme.css`)).toEqual(
+      '../../app/styles/theme.css',
+    );
+    // A sibling of the staging directory needs no climb.
+    expect(resolvePresetSource(root, '.openElement/extra.css')).toEqual('../extra.css');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('package specifiers pass through untouched (they never resolve against the root)', () => {
+  const root = join(import.meta.dirname!, '../__test_fixtures__/preset-source-packages');
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+  try {
+    for (const source of [
+      '@openelement/ui/theme.css',
+      '@tailwindcss/vite/x.css',
+      '#site-ui/tokens.css',
+    ]) {
+      expect(resolvePresetSource(root, source), source).toEqual(source);
+    }
+    // A bare word path the app root does not carry stays a specifier, so the
+    // compiler answers with its own unresolved-import diagnostic instead of
+    // the preset silently rewriting a package name into a path.
+    expect(resolvePresetSource(root, 'tailwindcss/theme.css')).toEqual('tailwindcss/theme.css');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the staged entry carries the resolved sources, the raw generator does not', () => {
+  const root = join(import.meta.dirname!, '../__test_fixtures__/preset-source-resolution');
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(join(root, 'app', 'styles'), { recursive: true });
+  writeFileSync(join(root, 'app/styles/theme.css'), '@theme { --color-x: red; }\n', 'utf8');
+  try {
+    // The app file exists, so the bare app-relative spelling resolves as a
+    // path; the package specifier beside it passes through.
+    const staged = renderStagedPresetEntry(root, {
+      theme: ['app/styles/theme.css', '@openelement/ui/theme.css'],
+    });
+    expect(staged).toEqual(expect.stringContaining("@import '../../app/styles/theme.css';"));
+    expect(staged).toEqual(expect.stringContaining("@import '@openelement/ui/theme.css';"));
+    // The raw generator is a pure renderer: it writes what it is given.
+    const raw = renderTailwindPresetEntry({ theme: ['app/styles/theme.css'] });
+    expect(raw).toEqual(expect.stringContaining("@import 'app/styles/theme.css';"));
+    expect(raw).not.toEqual(expect.stringContaining('../../app/styles/theme.css'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // ─── @scope face (seam 1: light-DOM surface) ───────────────────
@@ -123,8 +194,10 @@ test('a bare empty-layer statement extracts no components body (#1536)', () => {
  * Writes the #1535 fixture root: a theme source carrying a url() font and a
  * components source carrying a url() background. Both payloads sit above the
  * default 4KB inline limit — smaller files compile to data URIs and would
- * never exercise the asset copy. Declared source paths resolve relative to
- * the staged entry (`.openElement/tailwind-preset/entry.css`), hence `../..`.
+ * never exercise the asset copy. Declared sources are app-relative (the
+ * documented contract, #1633), so they sit at the fixture root under their
+ * plain names; the preset resolves them against the app root into the staged
+ * entry's own base.
  */
 function writeUrlAssetFixture(name: string): string {
   const root = join(import.meta.dirname!, `../__test_fixtures__/${name}`);
@@ -156,8 +229,8 @@ test('url() assets referenced by the declared sources ship next to the bundle (#
     root,
     outDir,
     options: {
-      theme: ['../../theme.css'],
-      components: ['../../components.css'],
+      theme: ['theme.css'],
+      components: ['components.css'],
       scopeTags: ['open-card'],
     },
     base: '/',

@@ -12,10 +12,11 @@
  *
  * The delivery, one seam:
  *
- * 1. `renderTailwindPresetEntry()` — the SAME generated entry the build
+ * 1. `renderStagedPresetEntry()` — the SAME generated entry the build
  *    compiles (declared layer order + `@import 'tailwindcss'` + the declared
- *    theme/components sources) — is staged under `.openElement/tailwind-
- *    preset/entry.css` and served by the dev server as a module.
+ *    theme/components sources, app-relative paths resolved against the app
+ *    root) — is staged under `.openElement/tailwind-preset/entry.css` and
+ *    served by the dev server as a module.
  * 2. `@tailwindcss/vite` is mounted into the dev css channel through a
  *    delegating wrapper (the peer is optional and resolved lazily, like the
  *    build half and like `@hono/vite-dev-server`): a plugin returned from a
@@ -46,7 +47,8 @@ import { join } from 'pathe';
 import type { Plugin } from 'vite';
 import { createLogger } from '@openelement/element';
 import {
-  renderTailwindPresetEntry,
+  presetStagingDir,
+  renderStagedPresetEntry,
   resolveTailwindPresetOptions,
   tailwindPresetPlugins,
   type TailwindPresetOptions,
@@ -73,10 +75,10 @@ export function stageDevPresetEntry(
   root: string,
   options: TailwindPresetOptions,
 ): { dir: string; entryPath: string } {
-  const dir = join(root, '.openElement', 'tailwind-preset');
+  const dir = presetStagingDir(root);
   mkdirSync(dir, { recursive: true });
   const entryPath = join(dir, 'entry.css');
-  writeFileSync(entryPath, renderTailwindPresetEntry(options), 'utf8');
+  writeFileSync(entryPath, renderStagedPresetEntry(root, options), 'utf8');
   return { dir, entryPath };
 }
 
@@ -163,7 +165,7 @@ export function devTailwindPresetPlugin(state: OpenPluginState): Plugin {
       const options = resolveTailwindPresetOptions(state.resolvedOptions.tailwind);
       if (!options) return;
       const root = config.root ?? process.cwd();
-      const { entryPath } = stageDevPresetEntry(root, options);
+      stageDevPresetEntry(root, options);
       // Fail closed at dev start rather than on the first css request: a
       // preset-enabled dev server that cannot compile is an error, never a
       // silently unstyled page (the #1582 symptom).
@@ -175,7 +177,10 @@ export function devTailwindPresetPlugin(state: OpenPluginState): Plugin {
       // blocklist. Idempotent across Vite's config re-resolution (a dev server
       // restart re-runs configResolved on the same plugin instance).
       appendInjectStylesheets(state, [entryUrl]);
-      log.debug(`tailwind preset staging entry: ${entryPath}`);
+      // No staging-path log line: the debug channel prints by default, and the
+      // absolute filesystem path of a build-internal file is noise no dev can
+      // act on — the info line below already names the URL the sheet is served
+      // at, which is the fact a dev uses.
       await callPeerHook(plugins, 'configResolved', this, [config]);
     },
 

@@ -15,9 +15,10 @@ root holds the build's internal state (head-convention bookkeeping and build
 plans). `pnpm dev` and `pnpm build` write it as needed; the `.gitignore`
 excludes it and deleting it is safe — the next run recreates it.
 
-This starter pins the exact `@openelement/element` and `@openelement/router`
-versions it was generated from in `package.json`; update both there when
-moving to a new release.
+The `@openelement/element` and `@openelement/router` dependencies carry caret
+ranges over the `1.0.0` release this starter was generated from, so
+`pnpm update` picks up later `1.0.0` prereleases (and the final `1.0.0`)
+without editing this file.
 
 ## The JS cost map
 
@@ -83,9 +84,14 @@ accepted-key list. `vite.config.ts` stays Vite-only: `plugins: [...openElement()
   whole `app/` directory (`tsconfig.json`), so new files are picked up
   automatically.
 - `pnpm test` — run Node's built-in test runner (the starter ships none).
-- `pnpm build` — production build (SSG + Nitro server) into `dist/`.
+- `pnpm build` — production build into `dist/`: prerendered HTML for every
+  static route, plus the request-time server when the app has one.
 - `pnpm start` — serve the production build.
-- `pnpm preview` — static-only preview of the SSG output.
+
+`build` and `start` run the `openelement` bin from the `@openelement/router`
+dependency (`openelement build` / `openelement start`); the router's CLI also
+carries a static-only `openelement start --mode=preview`, which refuses a
+build that has a request-time server.
 
 ## Styling ownership
 
@@ -105,10 +111,12 @@ unused.
 
 ## Dependency notes
 
-`@hono/vite-dev-server` is installed even though no source file imports it:
-the Vite dev server needs it, and it is loaded lazily, so `build`/`start`
-never resolve it. `hono` rides along because the dev server's own node
-adapter declares it a peer. The generated server entry itself imports no
+`@openelement/element` and `@openelement/router` are the runtime dependencies
+your app imports. `@hono/vite-dev-server` and `hono` ride devDependencies:
+the Vite dev server needs the former (and the latter as its own node-adapter
+peer), it is loaded lazily, and `build`/`start` never resolve either — so
+`npm install --omit=dev` in a production image installs only the runtime pair.
+The generated server entry itself imports no
 HTTP framework — it composes on the internal WinterCG layer (#1560); `hono`
 is an optional peer of `@openelement/router`, and `@openelement/router/hono`
 (`createHonoAdapter`) is the one opt-in if you ever want to mount the built

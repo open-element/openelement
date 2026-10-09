@@ -64,8 +64,9 @@ export function assertUnifiedProductVersions(versions: ProductVersions): Product
 
 // [sourceTemplate, targetRelativePath] pairs. The starter manifest is stored
 // as package.json.tmpl so the templates/ directory never looks like a nested
-// package root to npm tooling; pnpm scripts and the exact @openelement/* pins
-// (B5: the former deno.json import map) live in it when written.
+// package root to npm tooling; pnpm scripts and the @openelement/* dependency
+// ranges (caret over the generated-from release — owner ruling 2026-10-09;
+// B5: the former deno.json import map) live in it when written.
 //
 // One template: the showcase starter, Tailwind-ON (the owner's single-default
 // ruling — one default, no variant pair, no flag; the demo pages and islands

@@ -1,7 +1,7 @@
 {
   "name": "@openelement/tools-release",
   "private": true,
-  "version": "1.0.0-alpha.12",
+  "version": "1.0.0-alpha.13",
   "type": "module",
   "//": "The release toolchain is node-hosted end to end (owner ruling 2026-10-03): scripts enter through node with type stripping, no Deno host required.",
   "scripts": {
@@ -19,7 +19,8 @@
     "graph:check": "node ../repo/run-in.ts --root ../.. -- node tools/release/check-package-graph.ts",
     "consumer:packaged-app": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-native.ts && node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-lit.ts",
     "gate:packed": "node ../repo/gate.ts @openelement/tools-repo#generate:all @openelement/tools-release#typecheck @openelement/tools-release#pack:dry-run @openelement/tools-release#package-artifacts:check:prepacked @openelement/tools-release#pack-surface:check @openelement/tools-release#consumer:packaged @openelement/tools-release#consumer:packaged-app @openelement/tools-release#consumer:packaged-router @openelement/tools-release#consumer:packaged-element @openelement/tools-release#consumer:packaged-ui @openelement/fixture-third-party-web-components#smoke",
-    "typecheck": "node ../repo/run-in.ts --root ../.. -- tsc --noEmit -p tools/tsconfig.json"
+    "typecheck": "node ../repo/run-in.ts --root ../.. -- tsc --noEmit -p tools/tsconfig.json",
+    "test": "node ../repo/run-in.ts --root ../.. -- vitest run --project tools"
   },
   "devDependencies": {
     "@types/node": "26.5.0",
