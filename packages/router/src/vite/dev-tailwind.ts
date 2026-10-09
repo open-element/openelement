@@ -138,7 +138,9 @@ async function callPeerHook(
     const fn =
       typeof candidate === 'function'
         ? candidate
-        : typeof candidate === 'object' && candidate !== null && 'handler' in candidate
+        : // Null already skipped above, so the object branch cannot be null
+          // (and the null check would be a dead comparison for scanners).
+          typeof candidate === 'object' && 'handler' in candidate
           ? (candidate as { handler: unknown }).handler
           : undefined;
     if (typeof fn !== 'function') continue;
