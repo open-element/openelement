@@ -341,14 +341,22 @@ async function main(): Promise<void> {
     // the `vite@*: "catalog:"` override points every peer's vite at the Vite+
     // core build. Assert the packed scaffold carries it (same fragments the
     // starter leg and the starter-smoke setup anchor) BEFORE this gate
-    // touches the file.
+    // touches the file. The read is itself the existence check
+    // (read-and-expect-ENOENT, no existsSync shape probe): a missing file
+    // fails the gate right here without opening a check-then-write race
+    // window on the path below.
     const workspacePath = join(starter, 'pnpm-workspace.yaml');
-    if (!existsSync(workspacePath)) {
-      throw new Error(
-        'Packed starter is missing pnpm-workspace.yaml (the Vite+ catalog/override form ships it)',
-      );
+    let workspaceYaml: string;
+    try {
+      workspaceYaml = await readFile(workspacePath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+        throw new Error(
+          'Packed starter is missing pnpm-workspace.yaml (the Vite+ catalog/override form ships it)',
+        );
+      }
+      throw error;
     }
-    const workspaceYaml = await readFile(workspacePath, 'utf8');
     for (const fragment of [
       'npm:@voidzero-dev/vite-plus-core@1.1.0',
       'vite-plus: 1.1.0',
@@ -375,21 +383,25 @@ async function main(): Promise<void> {
       ['@openelement/ui', uiTarball],
     ];
     const overridesKey = /^overrides:\n/m;
-    if (!overridesKey.test(workspaceYaml)) {
+    // One deterministic pass over the in-memory read (same fold shape as the
+    // starter leg): transform first, then validate the transformation against
+    // the same string it was computed from (a no-op replace is exactly the
+    // missing-overrides case), then write once — no shape check precedes the
+    // write, so the check-then-write TOCTOU window CodeQL flags
+    // (js/file-system-race) cannot open here.
+    const foldedYaml = workspaceYaml.replace(
+      overridesKey,
+      `overrides:\n${frameworkTarballs
+        .map(([name, path]) => `  "${name}": ${pathToFileURL(path).href}`)
+        .join('\n')}\n`,
+    );
+    if (foldedYaml === workspaceYaml) {
       throw new Error(
         'Packed starter pnpm-workspace.yaml has no overrides block to extend; ' +
           'the Vite+ scaffold form changed under this gate',
       );
     }
-    await writeFile(
-      workspacePath,
-      workspaceYaml.replace(
-        overridesKey,
-        `overrides:\n${frameworkTarballs
-          .map(([name, path]) => `  "${name}": ${pathToFileURL(path).href}`)
-          .join('\n')}\n`,
-      ),
-    );
+    await writeFile(workspacePath, foldedYaml);
 
     const configPath = join(starter, 'openelement.config.ts');
     const config = await readFile(configPath, 'utf8');

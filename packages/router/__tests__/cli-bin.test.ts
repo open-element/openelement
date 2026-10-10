@@ -144,21 +144,27 @@ test('router bins: version prints the executing tree manifest, from any cwd', as
 test('router bins: start and preview dispatch identically to the cli/start entry', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'oe-bin-'));
   try {
-    // Both paths must agree on the missing-dist refusal (the cheapest shared
-    // outcome: no build needed, and it proves the arguments reached the same
-    // parser). Run once per declared bin name.
+    // The entry-reference invocations do not depend on the bin name (the bins
+    // dispatch to this very entry), so each runs ONCE and every bin's output
+    // is compared against the shared reference instead of re-spawning the
+    // entry per bin. All `start` runs must also happen BEFORE the
+    // request-time fixture below: with dist/server/index.js present the
+    // start mode boots a server that never exits, while the missing-dist
+    // refusal is the cheap shared outcome under comparison.
+    const entryStart = await run(startEntry, [], dir);
     for (const binName of Object.keys(declaredBins())) {
       const binStart = await run(binTarget(binName), ['start'], dir);
-      const entryStart = await run(startEntry, [], dir);
       expect(binStart.output, `${binName} start output`).toEqual(entryStart.output);
       expect(binStart.code, `${binName} start code`).toEqual(entryStart.code);
+    }
 
-      // The preview mode flag passes through verbatim, and the refusal names
-      // the bin's own spelling as the alternative (#1633).
-      await mkdir(join(dir, 'dist', 'server'), { recursive: true });
-      await writeFile(join(dir, 'dist', 'server', 'index.js'), 'export default () => {};\n');
+    // The preview mode flag passes through verbatim, and the refusal names
+    // the bin's own spelling as the alternative (#1633).
+    await mkdir(join(dir, 'dist', 'server'), { recursive: true });
+    await writeFile(join(dir, 'dist', 'server', 'index.js'), 'export default () => {};\n');
+    const entryPreview = await run(startEntry, ['--mode=preview'], dir);
+    for (const binName of Object.keys(declaredBins())) {
       const binPreview = await run(binTarget(binName), ['start', '--mode=preview'], dir);
-      const entryPreview = await run(startEntry, ['--mode=preview'], dir);
       expect(binPreview.output, `${binName} preview output`).toEqual(entryPreview.output);
       expect(binPreview.code, `${binName} preview code`).toEqual(1);
       expect(binPreview.output).toContain('request-time routes');
@@ -168,7 +174,7 @@ test('router bins: start and preview dispatch identically to the cli/start entry
   } finally {
     await rm(dir, { recursive: true });
   }
-});
+}, 180_000); // CI cold-boot cost of sequential CLI spawns of the router graph
 
 test('router bins: build dispatches identically to the cli/build entry', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'oe-bin-'));
