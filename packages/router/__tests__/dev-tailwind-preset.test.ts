@@ -25,7 +25,7 @@
  * run — the #1535/#1536 preset tests use the same shape.
  */
 
-import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import process from 'node:process';
@@ -331,7 +331,9 @@ test('the served entry is request-time: a build emptying .openElement cannot 404
   // directory — a disk-backed dev channel died with the next `vite build`).
   const served = await fetchStagedCss(handle);
   expect(served).toMatch(COMPILED_THEME_BLOCK);
-  expect(existsSync(stagedPath), 'the dev channel writes no file').toEqual(false);
+  expect(() => readFileSync(stagedPath, 'utf8'), 'the dev channel writes no file').toThrow(
+    /ENOENT/,
+  );
 
   // A build half's staging write lands on that same path next; the served
   // module must stay the generated entry (the file is never the source), and

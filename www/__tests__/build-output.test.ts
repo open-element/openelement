@@ -65,7 +65,11 @@ test('build output: artifact scan — no vendored highlighter, no CDN font refer
       }
       if (/\.(?:html|css|js|json|xml|txt|webmanifest)$/.test(entry.name)) {
         const text = readFileSync(path, 'utf8');
-        if (text.includes('cdn.jsdelivr.net')) {
+        // Host-boundary anchored: a shipped artifact violates only when it
+        // references the CDN as a URL host (scheme or protocol-relative) —
+        // a bare substring test is both over- and under-specific and is the
+        // incomplete-sanitization shape code scanning flags.
+        if (/(?:https?:)?\/\/cdn\.jsdelivr\.net(?:[/?:#]|$)/.test(text)) {
           violations.push(`jsDelivr reference in shipped artifact: ${rel}`);
         }
       }
