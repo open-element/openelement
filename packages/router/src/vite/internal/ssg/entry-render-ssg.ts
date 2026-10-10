@@ -8,6 +8,7 @@
 
 import type { EntryDescriptor } from '@openelement/protocol/ssg';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
+import { routeHeadExtrasStatements } from './entry-codegen.ts';
 import {
   documentResolutionSetupLine,
   documentWrapOptionsLines,
@@ -113,6 +114,11 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   );
   lines.push('    const props = __pageProps(info.module, __pageContext);');
   lines.push(`    ${documentResolutionSetupLine('page', '__pageContext')}`);
+  // Per-property og dedup: the wrap below serializes this page's __doc.meta,
+  // so the site-level fallback drops the og tags the route declares. Status
+  // pages below keep the raw headExtrasValue — they emit no route meta, so
+  // filtering there would orphan the head of its og block.
+  lines.push(...routeHeadExtrasStatements('headExtrasValue', '    '));
   lines.push('    if (locale) props.locale = locale;');
   lines.push('    let content = __ssr(info.tagName, props, { route: routePath });');
   lines.push('    for (const renderer of __matchingRenderers(routePath)) {');
@@ -129,7 +135,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   for (const optionLine of documentWrapOptionsLines({
     titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
     langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
-    headExtrasExpr: 'headExtrasValue',
+    headExtrasExpr: '__routeHeadExtras',
     allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
   })) {
     lines.push(`      ${optionLine}`);
@@ -200,6 +206,9 @@ export function renderSsgSection(desc: EntryDescriptor): string {
     '        const errorContent = __renderAppShell(__ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath }), routePath, { locale, routeMeta });',
   );
   lines.push(`        ${documentResolutionSetupLine('page', '__errorPageContext')}`);
+  // Per-property og dedup on the boundary re-render: the fresh __doc above
+  // re-resolves the route's meta, and the wrap below serializes it.
+  lines.push(...routeHeadExtrasStatements('headExtrasValue', '        '));
   lines.push(
     '        const errorComponentCount = (errorContent.match(/<template shadowrootmode="open"/g) || []).length;',
   );
@@ -207,7 +216,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   for (const optionLine of documentWrapOptionsLines({
     titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
     langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
-    headExtrasExpr: 'headExtrasValue',
+    headExtrasExpr: '__routeHeadExtras',
     allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
   })) {
     lines.push(`          ${optionLine}`);
