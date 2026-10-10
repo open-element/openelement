@@ -7,24 +7,24 @@
  * time origin (performance.now()), so the number is honest page time, and
  * disconnectedCallback stops the interval when the host leaves the tree.
  */
-import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
-import timerStyles from './live-timer.css';
+import { defineIslandConfig } from "@openelement/router";
+import { element, OpenElement, property } from "@openelement/element";
+import timerStyles from "./live-timer.css";
 
-export const openElement = defineIslandConfig({ hydrate: 'only', ssr: false, dsd: false });
+export const openElement = defineIslandConfig({ hydrate: "only", ssr: false, dsd: false });
 
 // The interval handle rides the compiled per-instance property state: island
 // classes carry compiled @property fields and methods, and module-level
 // runtime statements are outside the compiled grammar (OEC9008). In the
 // browser setInterval returns a number, so the handle is a plain number here.
-@element('live-timer', { root: 'shadow-open' })
+@element("live-timer", { root: "shadow-open" })
 export default class LiveTimer extends OpenElement {
   static override styles = [timerStyles];
 
   /** Elapsed seconds as preformatted text (compiled text Parts bind plain
    * properties — no method calls in a text region, OEC9013). */
   @property({ reflect: false, attribute: false })
-  elapsed = '0.0';
+  elapsed = "0.0";
 
   /** The ticking interval's handle; 0 when the host is not connected. */
   @property({ reflect: false, attribute: false })
@@ -45,9 +45,9 @@ export default class LiveTimer extends OpenElement {
 
   render() {
     return (
-      <div class='timer-row'>
-        <span id='elapsed'>{this.elapsed}</span>
-        <span class='unit'>seconds on this page</span>
+      <div class="timer-row">
+        <span id="elapsed">{this.elapsed}</span>
+        <span class="unit">seconds on this page</span>
       </div>
     );
   }

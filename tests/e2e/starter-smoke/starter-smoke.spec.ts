@@ -3,9 +3,10 @@
  *
  * Guards the starter regression classes the computed surface owns: unstyled
  * page (no token baseline), dead island, jammed nav, duplicate H1, missing
- * 404 fidelity — the layer curl-level checks cannot see. The showcase
- * starter's chrome is plain light DOM (header.site-head), so the old
- * app-shell shadow queries are gone along with the blog routes.
+ * 404 fidelity — the layer curl-level checks cannot see. Since alpha.14 the
+ * chrome (header.site-head among it) renders inside the auto-registered
+ * app-shell's open shadow root; Playwright's CSS engine pierces open shadow
+ * roots, so the same selectors keep guarding the real surface.
  */
 import { expect, test } from '@playwright/test';
 

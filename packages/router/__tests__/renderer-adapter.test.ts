@@ -45,13 +45,20 @@ const routes: RouteEntry[] = [
 // bind `c` through `__requestScope` (+69 bytes each mode; the native/lit
 // delta is unchanged at 113, so the cross-mode invariant holds). Client
 // bytes are untouched.
+// Server pins moved once more for the per-property og dedup wiring: every
+// page GET/POST handler gains the __routeOgOwned/__routeHeadExtras statement
+// pair at its two route-meta-serializing wraps (success + error-boundary
+// re-render), so a route-declared og: property no longer duplicates the
+// baked site default (+1720 bytes each mode; the native/lit delta is
+// unchanged at 113, so the cross-mode invariant holds). Client bytes are
+// untouched.
 const expected = {
   native: {
-    server: [14288, '39eeda3fd0ea422fda33254b8e9ddd87c9d8ca9e5637ad8f95cfc46e522bf49d'],
+    server: [16008, 'f58b2285eb17db28284adf0125bbe2af17963b44e8fba6564c3799e9d0265314'],
     client: [2004, 'dbd5414e1f2a392a26e98cdce1a2b7c2dc69d4305228c6b7d199b4af6ce00d6f'],
   },
   lit: {
-    server: [14401, 'ba5a0168f1f2f218d8a0691316601898debe1c796cc0e89ab5939b925fa5ebed'],
+    server: [16121, '2bca8403fbd5a7c65a02bf23cf2c762eff6a907f2308d053bc538622a4729d59'],
     client: [3167, '7dcb18fd659ffe53b039adfc5139a2496e1b4c02b5d4322ed6c216606511f418'],
   },
 } as const;

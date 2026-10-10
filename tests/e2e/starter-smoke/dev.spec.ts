@@ -1,6 +1,6 @@
 /**
- * Dev-mode smoke (#951/#952) — runs against `pnpm dev` (vite dev server),
- * not the production build:
+ * Dev-mode smoke (#951/#952) — runs against `pnpm dev` (the Vite+ dev
+ * server, `vp dev`), not the production build:
  *
  * #951: dev used to 500 on /client/islands/client.js (the URL was treated as
  * a file path), so islands never hydrated in dev. The dev server now serves

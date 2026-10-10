@@ -1,0 +1,29 @@
+# pnpm workspace bookkeeping for this project. pnpm rewrites this file (for
+# example when it records a new minimumReleaseAgeExclude entry you approve);
+# keep it and review the entries it lists.
+#
+# catalog: the Vite+ form. `vite` resolves to the Vite+ core build through
+# the catalog and the `vite@*` override below, so every peer that asks for
+# vite (the router's dev server, the Tailwind Vite plugin) gets the same
+# Vite+ tree; `vp dev` serves through it directly.
+#
+# minimumReleaseAgeExclude: pnpm's supply-chain cooldown withholds versions
+# published inside its maturity window. These entries are exempt: the
+# @openelement packages at the version this project was generated from (a
+# fresh scaffold installs on release day) and vite-plus itself.
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@1.1.0
+  vite-plus: 1.1.0
+minimumReleaseAgeExclude:
+  - "@openelement/compiler@${v.element}"
+  - "@openelement/element@${v.element}"
+  - "@openelement/protocol@${v.element}"
+  - "@openelement/router@${v.router}"
+  - "vite-plus@1.1.0"
+overrides:
+  vite@*: "catalog:"
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: "*"

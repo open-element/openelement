@@ -110,24 +110,40 @@ const STARTER_FRAMEWORK_PACKAGES = ['protocol', 'element', 'compiler', 'router']
 /**
  * The scaffold default is the ONE showcase template (#1530): no Tailwind
  * variant pair anymore — the starter ships platform CSS (tokens + recipes)
- * and the two showcase islands. The pin the manifest must still carry is the
- * Vite devDependency, imported in-process from the create package's own
- * source module (the same pattern as the canonical-command check above).
+ * and the two showcase islands. The Vite+ toolchain form (alpha.14) replaces
+ * the Vite devDependency with the catalog-managed tree: the manifest carries
+ * `vite-plus: catalog:` and the workspace file points the whole vite tree at
+ * the Vite+ core through the catalog + override pair. The Tailwind pins are
+ * imported in-process from the create package's own source module (the same
+ * pattern as the canonical-command check above).
  */
 async function assertShowcaseStarter(manifestPath: string, starterDir: string): Promise<void> {
   const versionUrl = pathToFileURL(join(repoRoot, 'packages', 'create', 'src', 'version.ts')).href;
-  const { VITE_STARTER_PIN, TAILWIND_STARTER_PIN } = (await import(versionUrl)) as {
-    VITE_STARTER_PIN: string;
+  const { TAILWIND_STARTER_PIN } = (await import(versionUrl)) as {
     TAILWIND_STARTER_PIN: string;
   };
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
     devDependencies: Record<string, string>;
+    scripts: Record<string, string>;
   };
   const vitePin = manifest.devDependencies.vite;
-  if (vitePin !== VITE_STARTER_PIN) {
+  if (vitePin !== undefined) {
     throw new Error(
-      `[starter-smoke setup] the generated starter is not the showcase form: ` +
-        `devDependency vite=${vitePin ?? '<missing>'}, expected ${VITE_STARTER_PIN}`,
+      `[starter-smoke setup] the generated starter is not the Vite+ form: ` +
+        `devDependency vite=${vitePin} must be gone (the vite tree is catalog-managed)`,
+    );
+  }
+  if (manifest.devDependencies['vite-plus'] !== 'catalog:') {
+    throw new Error(
+      `[starter-smoke setup] the generated starter is not the Vite+ form: ` +
+        `devDependency vite-plus=${manifest.devDependencies['vite-plus'] ?? '<missing>'}, ` +
+        `expected catalog:`,
+    );
+  }
+  if (manifest.scripts.build !== 'oe build' || manifest.scripts.dev !== 'vp dev') {
+    throw new Error(
+      `[starter-smoke setup] the generated starter scripts are not the Vite+ form: ` +
+        `dev=${manifest.scripts.dev}, build=${manifest.scripts.build}`,
     );
   }
   // Tailwind-ON is the single scaffold default (owner ruling 2026-10-08 — one
@@ -142,20 +158,40 @@ async function assertShowcaseStarter(manifestPath: string, starterDir: string): 
       );
     }
   }
+  const workspacePath = join(starterDir, 'pnpm-workspace.yaml');
+  if (!existsSync(workspacePath)) {
+    throw new Error(
+      '[starter-smoke setup] the generated starter is missing pnpm-workspace.yaml ' +
+        '(the Vite+ catalog/override form ships it)',
+    );
+  }
+  const workspace = await readFile(workspacePath, 'utf8');
+  for (const fragment of [
+    'npm:@voidzero-dev/vite-plus-core@1.1.0',
+    'vite-plus: 1.1.0',
+    'vite@*: "catalog:"',
+  ]) {
+    if (!workspace.includes(fragment)) {
+      throw new Error(
+        `[starter-smoke setup] the shipped pnpm-workspace.yaml is not the Vite+ form: ` +
+          `missing ${fragment}`,
+      );
+    }
+  }
   for (const sheet of ['theme.css', 'recipes.css']) {
     if (!existsSync(join(starterDir, 'app', 'styles', sheet))) {
       throw new Error(`[starter-smoke setup] the generated starter is missing app/styles/${sheet}`);
     }
   }
-  for (const island of ['my-counter.tsx', 'live-timer.tsx']) {
+  for (const island of ['my-counter.tsx', 'live-timer.tsx', 'app-shell.tsx']) {
     if (!existsSync(join(starterDir, 'app', 'islands', island))) {
       throw new Error(
-        `[starter-smoke setup] the generated starter is missing the showcase island ` +
-          `app/islands/${island} (#1530)`,
+        `[starter-smoke setup] the generated starter is missing the island module ` +
+          `app/islands/${island} (#1530; app-shell is the alpha.14 chrome convention)`,
       );
     }
   }
-  console.log('[starter-smoke setup] starter is the showcase form, Tailwind-ON single default');
+  console.log('[starter-smoke setup] starter is the showcase form, Vite+ toolchain, Tailwind-ON');
 }
 
 async function rewireToPackedTarballs(
@@ -183,25 +219,31 @@ async function rewireToPackedTarballs(
 
 /**
  * pnpm 12 reads overrides from the workspace file, not package.json: the
- * starter's own pnpm-workspace.yaml carries the file:// pins for every
- * framework package so the TRANSITIVE workspace deps inside the element and
- * router tarballs (protocol, compiler — #1557) resolve to this checkout.
+ * starter's SHIPPED pnpm-workspace.yaml carries the Vite+ catalog/override
+ * pair and the release-day exemptions — this step folds the file:// pins for
+ * every framework package INTO that file (under its existing `overrides:`
+ * key) so the TRANSITIVE workspace deps inside the element and router
+ * tarballs (protocol, compiler — #1557) resolve to this checkout. The
+ * shipped blocks stay verbatim: the smoke exercises the scaffold's own
+ * workspace form, not a rebuilt one.
  */
 async function writeStarterOverrides(
   workspacePath: string,
   tarballs: Record<(typeof PACKAGES)[number], string>,
 ): Promise<void> {
-  const overrides: Record<string, string> = {};
-  for (const pkg of STARTER_FRAMEWORK_PACKAGES) {
-    overrides[`@openelement/${pkg}`] = pathToFileURL(tarballs[pkg]).href;
+  const yaml = await readFile(workspacePath, 'utf8');
+  const pins = STARTER_FRAMEWORK_PACKAGES.map(
+    (pkg) => `  "@openelement/${pkg}": ${pathToFileURL(tarballs[pkg]).href}`,
+  );
+  const overridesKey = /^overrides:\n/m;
+  if (!overridesKey.test(yaml)) {
+    throw new Error(
+      '[starter-smoke setup] the shipped pnpm-workspace.yaml has no overrides block to ' +
+        'extend; the Vite+ scaffold form changed under this harness',
+    );
   }
-  const yaml = [
-    'packages: []',
-    'overrides:',
-    ...Object.entries(overrides).map(([name, url]) => `  "${name}": ${url}`),
-    '',
-  ].join('\n');
-  await writeFile(workspacePath, yaml);
+  const merged = yaml.replace(overridesKey, `overrides:\n${pins.join('\n')}\n`);
+  await writeFile(workspacePath, merged);
 }
 
 async function main(): Promise<void> {

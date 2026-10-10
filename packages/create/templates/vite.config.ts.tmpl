@@ -1,11 +1,20 @@
-import { openElement } from '@openelement/router/vite';
-import { defineConfig } from 'vite';
+import { openElement } from "@openelement/router/vite";
+import { defineConfig } from "vite-plus";
 
 // Vite configuration only. Framework options live in openelement.config.ts —
 // the plugin reads that file itself, so the plugin call stays bare. The JSX
 // transform is owned by the plugin's compiler pass (TSX → Part Program);
 // nothing JSX-related needs configuring here.
+//
+// `defineConfig` comes from vite-plus so the config carries the Vite+ native
+// tool blocks: `fmt` is what `vp fmt` reads. Its ignore list stays empty —
+// the formatter's defaults already skip markdown, JSON, YAML, and CSS, so
+// the authored sources ship in formatted form and `pnpm fmt --check`
+// (`vp fmt --check`) passes out of the box.
 export default defineConfig({
-  base: '/',
+  fmt: {
+    ignorePatterns: [],
+  },
+  base: "/",
   plugins: [...openElement()],
 });

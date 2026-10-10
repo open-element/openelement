@@ -1,10 +1,10 @@
 /** Static home page (default renderIntent mode 'static') — prerendered at build time. */
-import { definePage } from '@openelement/router';
-import HomePage from '../components/page-home.tsx';
+import { definePage } from "@openelement/router";
+import HomePage from "../components/page-home.tsx";
 
 export default definePage(HomePage, {
   head: {
-    title: 'Rendered before JavaScript arrives',
-    description: 'openElement showcase — static pages, alive where it counts',
+    title: "Rendered before JavaScript arrives",
+    description: "openElement showcase — static pages, alive where it counts",
   },
 });

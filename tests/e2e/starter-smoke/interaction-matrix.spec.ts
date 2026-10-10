@@ -45,9 +45,11 @@ test.describe('hydration timing', () => {
     const counter = page.locator('my-counter');
     await expect(counter).toBeVisible();
     await page.evaluate(() => {
-      // Islands live inside the page element's shadow tree (#562) — a
-      // light-DOM querySelector never sees them (the page root is light in
-      // v0.44, so the direct querySelector finds the host first).
+      // Island hosts are light-DOM descendants of the page element, which
+      // itself sits in the app-shell's light DOM (slotted content), so the
+      // direct document query finds the host; the descent only crosses open
+      // shadow roots to be robust against either tree the framework renders
+      // (#562).
       const deep = (root: Document | ShadowRoot): Element | null => {
         const direct = root.querySelector('my-counter');
         if (direct) return direct;

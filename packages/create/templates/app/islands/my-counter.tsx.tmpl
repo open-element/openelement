@@ -6,13 +6,13 @@
  * shadow root keeps the island a DSD citizen. Design tokens from
  * app/styles/theme.css inherit through the shadow boundary.
  */
-import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
-import counterStyles from './my-counter.css';
+import { defineIslandConfig } from "@openelement/router";
+import { element, OpenElement, property } from "@openelement/element";
+import counterStyles from "./my-counter.css";
 
-export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({ hydrate: "idle", ssr: true, dsd: true });
 
-@element('my-counter', { root: 'shadow-open' })
+@element("my-counter", { root: "shadow-open" })
 export default class MyCounter extends OpenElement {
   static override styles = [counterStyles];
 
@@ -29,10 +29,14 @@ export default class MyCounter extends OpenElement {
 
   render() {
     return (
-      <div class='counter-row'>
-        <button type='button' onClick={this.decrement}>-</button>
-        <span id='count'>{this.count}</span>
-        <button type='button' onClick={this.increment}>+</button>
+      <div class="counter-row">
+        <button type="button" onClick={this.decrement}>
+          -
+        </button>
+        <span id="count">{this.count}</span>
+        <button type="button" onClick={this.increment}>
+          +
+        </button>
       </div>
     );
   }

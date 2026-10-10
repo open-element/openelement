@@ -1,5 +1,24 @@
-
-    .badge { display: inline-flex; align-items: center; gap: 0.4em; padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid var(--line); color: var(--ink-soft); background: var(--surface); }
-    .badge-static { border-color: color-mix(in srgb, var(--ok) 35%, transparent); color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, transparent); }
-    .badge-island { border-color: color-mix(in srgb, var(--brand) 40%, transparent); color: var(--brand); background: var(--brand-soft); }
-  
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  background: var(--surface);
+}
+.badge-static {
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+.badge-island {
+  border-color: color-mix(in srgb, var(--brand) 40%, transparent);
+  color: var(--brand);
+  background: var(--brand-soft);
+}

@@ -10,122 +10,106 @@
  * <live-timer>) are static custom-element hosts that the generated server
  * entry expands through the islands' own compiled classes.
  *
+ * The site chrome (header, main region, footer) is NOT here: every page
+ * renders inside the auto-registered app shell
+ * (app/islands/app-shell.tsx), which owns that markup exactly once. The
+ * compiled grammar lowers one root per render, so the page returns a single
+ * content wrapper and the shell's <slot> carries it.
+ *
  * The badge spans name each section's client cost: static sections ship
  * markup only; island sections hydrate a compiled island (see the island
  * modules under app/islands/).
  */
-import { element, OpenElement } from '@openelement/element';
-import homePageStyles from './page-home.css';
-import badgeStyles from './badges.css';
-import siteChromeStyles from './site-chrome.css';
+import { element, OpenElement } from "@openelement/element";
+import homePageStyles from "./page-home.css";
+import badgeStyles from "./badges.css";
 
-@element('index-page', { root: 'light' })
+@element("index-page", { root: "light" })
 export default class HomePage extends OpenElement {
-  static override styles = [homePageStyles, badgeStyles, siteChromeStyles];
+  static override styles = [homePageStyles, badgeStyles];
 
   render() {
     // Single root element: the compiled grammar lowers one root per render.
     return (
-      <div class='page-body'>
-        <header class='site-head'>
-          <div class='bar'>
-            <a class='site-brand' href='/'>
-              openElement
+      <div class="page-content">
+        <section class="hero">
+          <span class="badge badge-static">static · 0 KB JS</span>
+          <p class="eyebrow">openElement starter</p>
+          <h1>Rendered before JavaScript arrives</h1>
+          <p class="lede">
+            Every page here is prerendered HTML. JavaScript loads only where a section is
+            interactive — the badges below name the cost of each block. Edit{" "}
+            <code>app/routes/index.tsx</code> to make it yours.
+          </p>
+          <div class="cta">
+            <a class="button" href="/about">
+              How it works
             </a>
-            <nav>
-              <a href='/'>Home</a>
-              <a href='/about'>About</a>
-              <a href='/api/ping'>API</a>
-            </nav>
+            <a class="button-ghost" href="https://openelement.org">
+              Read the docs
+            </a>
           </div>
-        </header>
-        <main>
-          <section class='hero'>
-            <span class='badge badge-static'>static · 0 KB JS</span>
-            <p class='eyebrow'>openElement starter</p>
-            <h1>Rendered before JavaScript arrives</h1>
-            <p class='lede'>
-              Every page here is prerendered HTML. JavaScript loads only where a
-              section is interactive — the badges below name the cost of each
-              block. Edit <code>app/routes/index.tsx</code> to make it yours.
-            </p>
-            <div class='cta'>
-              <a class='button' href='/about'>
-                How it works
-              </a>
-              <a class='button-ghost' href='https://openelement.org'>
-                Read the docs
-              </a>
-            </div>
-          </section>
-          <section class='panel'>
-            <div class='panel-head'>
-              <h2>Interactive island</h2>
-              <span class='badge badge-island'>island · hydrates on idle</span>
-            </div>
-            <p>
-              The counter is a compiled island (<code>app/islands/my-counter.tsx</code>
-              ): the server renders its markup, the browser hydrates it when idle.
-            </p>
-            <my-counter></my-counter>
-          </section>
-          <section class='panel'>
-            <div class='panel-head'>
-              <h2>Live stats</h2>
-              <span class='badge badge-island'>island · client-only</span>
-            </div>
-            <p>
-              Elapsed time on this page (<code>app/islands/live-timer.tsx</code>) renders
-              only in the browser — a live clock has nothing meaningful to
-              prerender, so the island ships <code>ssr: false</code>.
-            </p>
-            <live-timer></live-timer>
-          </section>
-          <section class='panel'>
-            <div class='panel-head'>
-              <h2>The architecture</h2>
-              <span class='badge badge-static'>static · 0 KB JS</span>
-            </div>
-            <p>
-              This section — like the hero and this page's header — is plain
-              prerendered HTML and CSS. No framework script runs it.
-            </p>
-            <ul class='cards'>
-              <li class='card'>
-                <span class='badge badge-static'>static</span>
-                <h3>Prerendered pages</h3>
-                <p>
-                  Routes under <code>app/routes/</code> compile to static HTML at
-                  build time (SSG) and keep their HTTP cache semantics.
-                </p>
-              </li>
-              <li class='card'>
-                <span class='badge badge-island'>island</span>
-                <h3>Islands where needed</h3>
-                <p>
-                  Interactive pieces live in <code>app/islands/</code> and hydrate
-                  on the strategy each one declares — idle, load, visible, or
-                  client-only.
-                </p>
-              </li>
-              <li class='card'>
-                <span class='badge badge-static'>static</span>
-                <h3>Platform APIs</h3>
-                <p>
-                  Server routes (<code>app/routes/api/</code>) are plain{' '}
-                  <code>Request → Response</code> handlers — WinterCG-shaped, no
-                  framework runtime attached.
-                </p>
-              </li>
-            </ul>
-          </section>
-        </main>
-        <footer class='site-foot'>
-          <div class='bar'>
-            <span>Generated by @openelement/create.</span>
-            <a href='https://openelement.org'>openelement.org</a>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Interactive island</h2>
+            <span class="badge badge-island">island · hydrates on idle</span>
           </div>
-        </footer>
+          <p>
+            The counter is a compiled island (<code>app/islands/my-counter.tsx</code>
+            ): the server renders its markup, the browser hydrates it when idle.
+          </p>
+          <my-counter></my-counter>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Live stats</h2>
+            <span class="badge badge-island">island · client-only</span>
+          </div>
+          <p>
+            Elapsed time on this page (<code>app/islands/live-timer.tsx</code>) renders only in the
+            browser — a live clock has nothing meaningful to prerender, so the island ships{" "}
+            <code>ssr: false</code>.
+          </p>
+          <live-timer></live-timer>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>The architecture</h2>
+            <span class="badge badge-static">static · 0 KB JS</span>
+          </div>
+          <p>
+            This section — like the hero above — is plain prerendered HTML and CSS. No framework
+            script runs it.
+          </p>
+          <ul class="cards">
+            <li class="card">
+              <span class="badge badge-static">static</span>
+              <h3>Prerendered pages</h3>
+              <p>
+                Routes under <code>app/routes/</code> compile to static HTML at build time (SSG) and
+                keep their HTTP cache semantics.
+              </p>
+            </li>
+            <li class="card">
+              <span class="badge badge-island">island</span>
+              <h3>Islands where needed</h3>
+              <p>
+                Interactive pieces live in <code>app/islands/</code> and hydrate on the strategy
+                each one declares — idle, load, visible, or client-only.
+              </p>
+            </li>
+            <li class="card">
+              <span class="badge badge-static">static</span>
+              <h3>Platform APIs</h3>
+              <p>
+                Server routes (<code>app/routes/api/</code>) are plain{" "}
+                <code>Request → Response</code> handlers — WinterCG-shaped, no framework runtime
+                attached.
+              </p>
+            </li>
+          </ul>
+        </section>
       </div>
     );
   }
