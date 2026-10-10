@@ -75,12 +75,12 @@ export function packageCountModifier(locale: ReleaseLocale): string {
 // docs/release/release-state.json (release:state-machine:check offline;
 // release:registry-check verifies it against the live registry).
 export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {
-  '@openelement/protocol': 'v1.0.0-alpha.13',
-  '@openelement/element': 'v1.0.0-alpha.13',
-  '@openelement/compiler': 'v1.0.0-alpha.13',
-  '@openelement/router': 'v1.0.0-alpha.13',
-  '@openelement/create': 'v1.0.0-alpha.13',
-  '@openelement/ui': 'v1.0.0-alpha.13',
+  '@openelement/protocol': 'v1.0.0-alpha.14',
+  '@openelement/element': 'v1.0.0-alpha.14',
+  '@openelement/compiler': 'v1.0.0-alpha.14',
+  '@openelement/router': 'v1.0.0-alpha.14',
+  '@openelement/create': 'v1.0.0-alpha.14',
+  '@openelement/ui': 'v1.0.0-alpha.14',
 };
 
 // The one `latest` dist-tag value every published package shares, or null when
