@@ -11,7 +11,13 @@ import {
   diagramIslands,
   diagramOutput,
 } from '../../site-ui/diagrams.ts';
-import { alphaLineNote, COMMON_PUBLISHED_NOTE, REGISTRY_NOTE } from '../../data/version.ts';
+import {
+  alphaLineNote,
+  COMMON_PUBLISHED_NOTE,
+  OPENELEMENT_VERSION,
+  packageCountModifier,
+  packageCountPhrase,
+} from '../../data/version.ts';
 import { installCommand } from '../../data/_generated-install-command.ts';
 import { homeHeroCodeHtml } from '../../data/_generated-page-code.ts';
 
@@ -41,11 +47,6 @@ const content = {
     watchUnfold: 'Watch it unfold',
     getStarted: 'Get started',
     readGuide: 'Read the guide',
-    specVersion: 'Version',
-    specGraph: 'Graph',
-    specEngines: 'CI engines',
-    specDeps: 'Framework deps',
-    specOutput: 'Server output',
     begin: 'Begin.',
     beginNote: `${alphaLineNote('en')}`,
     facts: 'Facts behind the feeling',
@@ -77,11 +78,6 @@ const content = {
     watchUnfold: '看它展开',
     getStarted: '快速开始',
     readGuide: '阅读指南',
-    specVersion: '版本',
-    specGraph: '包图',
-    specEngines: 'CI 引擎',
-    specDeps: '框架依赖',
-    specOutput: '服务端输出',
     begin: '开始。',
     beginNote: `${alphaLineNote('zh')}`,
     facts: '感觉背后的事实',
@@ -107,7 +103,7 @@ const strategies = {
       glyph: 'I',
       name: 'idle',
       tag: 'DEFAULT',
-      copy: 'Non-critical interaction, scheduled into idle opportunities; actual timing depends on the scheduler fallback.',
+      copy: 'Non-critical interaction, scheduled after load.',
       uses: 'counters · forms',
     },
     {
@@ -145,7 +141,7 @@ const strategies = {
       glyph: 'I',
       name: 'idle',
       tag: '默认',
-      copy: '非关键交互，调度到空闲时机；实际时机受调度 fallback 影响。',
+      copy: '非关键交互，在加载后调度。',
       uses: '计数器 · 表单',
     },
     {
@@ -182,7 +178,7 @@ const outputs = {
       className: 'output-row active',
       name: 'NODE',
       description:
-        'Nitro server output. Static-first delivery with a generated request-time entry for dynamic routes.',
+        'WinterCG server entry, with an optional Nitro mount for Node and Workers deploys.',
     },
     {
       key: 'workers',
@@ -202,7 +198,7 @@ const outputs = {
       key: 'node',
       className: 'output-row active',
       name: 'NODE',
-      description: 'Nitro 服务端输出。静态优先分发，动态路由由生成的请求时入口承接。',
+      description: 'WinterCG 服务端入口，Node 与 Workers 部署可选 Nitro mount。',
     },
     {
       key: 'workers',
@@ -225,19 +221,41 @@ const references = {
       '02',
       'API reference',
       '/reference',
-      'Inspect the four-package surface and optional primitives.',
+      `Inspect the ${packageCountModifier('en')} surface and optional primitives.`,
     ],
     ['03', 'Architecture', '/architecture', 'Follow the element, app and build contracts.'],
     ['04', 'Roadmap', '/roadmap', 'See current truth and the next product boundary.'],
   ],
   zh: [
     ['01', '快速开始', '/guide/getting-started', '从受支持的公开接口创建一个真实应用。'],
-    ['02', 'API 参考', '/reference', '检视四包表面与可选原语。'],
+    ['02', 'API 参考', '/reference', `检视${packageCountModifier('zh')}表面与可选原语。`],
     ['03', '架构', '/architecture', '沿 element、app 与 build 三层契约走一遍。'],
     ['04', '路线图', '/roadmap', '查看当前事实与下一个产品边界。'],
   ],
 } as const;
 
+/**
+ * The marquee slogan, one spinner cycle long — the trailing ' ✳ ' keeps the
+ * seam invisible. The page renders it TWICE (see `marqueeText` below): the
+ * strip's animation is `transform: translateX(-50%)` (page-home.css
+ * `@keyframes marquee`), so the animated span must measure exactly two copies
+ * for the loop to restart seamlessly.
+ *
+ * Every honest reduction of the duplicate was checked and rejected:
+ * - a `connectedCallback` clone cannot run — pages ship as static markup and
+ *   `index-index` is never defined client-side (verified in the built page:
+ *   `customElements.get('index-index')` is undefined after load);
+ * - one copy plus a wider container does not loop: the keyframe's -50% would
+ *   expose the strip's own blank tail every cycle;
+ * - CSS-generated content (`::after { content: attr(...) }`) would take
+ *   decorative text out of the document entirely, so text-only consumers
+ *   would lose the phrase instead of seeing it once.
+ *
+ * The duplicate therefore stays in the source, and the container carries the
+ * exclusion attributes (page-home.tsx): `data-nosnippet` for search-engine
+ * snippets and `data-pagefind-ignore` for the site's own search index — both
+ * measured, see that file's comment.
+ */
 const marquee = 'CUSTOM ELEMENTS ✳ DECLARATIVE SHADOW DOM ✳ ES MODULES ✳ SIGNALS ✳ HTML FIRST ✳ ';
 
 export default definePage(PageHome, {
@@ -254,6 +272,16 @@ export default definePage(PageHome, {
   props({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const { headTitle: _headTitle, headDescription: _headDescription, ...copy } = content[resolved];
+    // The version block is one line, and every part of it is generated truth:
+    // the source version, the release-state package count, and the shared
+    // per-package registry fact. The link target is the per-package npm view
+    // command's subject — the package name is the line's stable anchor, while
+    // the version shown beside it moves with the release line.
+    const versionLine = [
+      OPENELEMENT_VERSION,
+      packageCountPhrase(resolved),
+      resolved === 'zh' ? '同一版本' : 'one version',
+    ].join(' · ');
     return {
       ...copy,
       ...homeStrings(resolved),
@@ -263,8 +291,11 @@ export default definePage(PageHome, {
       // The hero code block is pre-highlighted by the shared site highlighter
       // (lib/markdown.ts via generate:content) — never a JSX copy.
       heroCodeHtml: trustedHtml(homeHeroCodeHtml),
-      registryNote: REGISTRY_NOTE,
+      versionLine,
+      versionHref: 'https://www.npmjs.com/package/@openelement/element',
       commonVersionNote: COMMON_PUBLISHED_NOTE(resolved),
+      // Two copies by construction — the translateX(-50%) keyframe's seam
+      // math (see the `marquee` constant above).
       marqueeText: marquee + marquee,
       startBuildingHref: localizePath('/guide/getting-started', resolved),
       getStartedHref: localizePath('/guide/getting-started', resolved),

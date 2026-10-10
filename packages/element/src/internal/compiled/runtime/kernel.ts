@@ -80,6 +80,19 @@ function clearFormattingWhitespace(root: CompiledStyleRoot): void {
 export type CompiledRootMode = 'light' | 'open' | 'closed';
 
 /**
+ * The facade's error-routing seam as the kernel sees it: the kernel holds the
+ * host element, and the host element carries `_captureError` (protected on
+ * OpenElement) — the same path the compiler-emitted lifecycle wrappers and
+ * the facade property setter call. Structural, not imported: the kernel must
+ * stay usable with host shapes that never carry the facade (the bare runtime
+ * hosts of the region/kernel suites), where the optional call is simply
+ * absent and routing degrades to the element-local capture above.
+ */
+interface ErrorRoutingHost {
+  _captureError?(error: unknown): boolean;
+}
+
+/**
  * Which executor ran for one activation: the canonical claim of existing
  * (SSR/DSD) content, or fresh DOM creation. The kernel decides from the
  * resolved root's actual content and reports it here — the semantic owner of
@@ -197,10 +210,24 @@ export class CompiledElementKernel {
       if (!hasContent && root.childNodes.length > 0) clearFormattingWhitespace(root);
       // Update-phase failures (#1375) land in the same element-local boundary
       // as connect failures: this element owns the Region subscriptions, so it
-      // is the nearest boundary for their update errors.
+      // is the nearest boundary for their update errors — when it IS a
+      // boundary. When it is not (the common case: a plain element failing
+      // inside a boundary's subtree), the failure additionally routes to the
+      // nearest ancestor boundary through the facade's one routing path
+      // (_captureError, P6), so a post-hydration evaluation failure flips the
+      // enclosing boundary's fallback instead of dead-ending in this
+      // element's unread local service. Boundary elements never route upward:
+      // their own capture already publishes through the wired onError
+      // (service-local state stays service-local, including nested
+      // boundaries).
       const host: CompiledRuntimeHost = {
         ...this.#options,
-        onUpdateError: (error) => this.errors.capture(error, this.#element),
+        onUpdateError: (error) => {
+          this.errors.capture(error, this.#element);
+          if (this.#options.errorBoundary === undefined) {
+            (this.#element as unknown as ErrorRoutingHost)._captureError?.(error);
+          }
+        },
       };
       this.#instance =
         mode === 'fresh'

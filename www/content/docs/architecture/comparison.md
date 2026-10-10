@@ -89,19 +89,19 @@ Numbers measured on 2026-10-07 from the docs site's own build (`www/dist`, built
 
 | Metric                 | Value                                              |
 | ---------------------- | -------------------------------------------------- |
-| Pre-rendered documents | 70 HTML files                                      |
-| URLs in `sitemap.xml`  | 68                                                 |
+| Pre-rendered documents | 72 HTML files                                      |
+| URLs in `sitemap.xml`  | 70                                                 |
 | Total static output    | 8.6 MB                                             |
-| Island manifests       | 70 — one per page                                  |
-| Search index           | 34 pages per locale (en, zh), 68 fragments, 1.3 MB |
+| Island manifests       | 72 — one per page                                  |
+| Search index           | 35 pages per locale (en, zh), 70 fragments, 1.3 MB |
 
 ```bash
 pnpm run site:build                         # regenerate everything below first
-find www/dist -name '*.html' | wc -l        # 70
-grep -c '<loc>' www/dist/sitemap.xml        # 68
+find www/dist -name '*.html' | wc -l        # 72
+grep -c '<loc>' www/dist/sitemap.xml        # 70
 du -sh www/dist                             # 9.3M (platform-dependent; the 8.6 MB above is the byte sum)
-ls www/dist/island-manifests | wc -l        # 70
-cat www/dist/pagefind/pagefind-entry.json   # page_count 34 per language
+ls www/dist/island-manifests | wc -l        # 72
+cat www/dist/pagefind/pagefind-entry.json   # page_count 35 per language
 ```
 
 ### Island bundles
@@ -134,7 +134,7 @@ What a page actually downloads follows from its island manifest plus the entry's
 | `/guide/getting-started` | 150,163 B            | 8               |
 | `/`                      | 166,510 B            | 10              |
 
-Across all 70 page manifests the site declares 9 island tags in 332 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 60, `open-code-block` on 48, and the remaining tags on a handful of pages each. The #1557 B8 retirement removed the `open-badge` package island (its roadmap usage is a plain HTML+CSS recipe now), and the reference page documents the two new split packages, which moved the payload rows.
+Across all 72 page manifests the site declares 9 island tags in 342 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 62, `open-code-block` on 50, and the remaining tags on a handful of pages each. The #1557 B8 retirement removed the `open-badge` package island (its roadmap usage is a plain HTML+CSS recipe now), and the reference page documents the two new split packages, which moved the payload rows.
 
 ```bash
 cat www/dist/island-manifests/page-<hash>.json   # one page's island set: tag, chunk, strategy, layer

@@ -54,36 +54,32 @@ if those upstream markers reappear in the tarball.
 
 ## Fonts
 
-The site does not vendor font binaries. Since #1554 the four faces are
-referenced from the fontsource CDN (jsDelivr) at exact package versions, with
-each face's provenance and byte digest recorded in the manifest as a
-`remote` third-party entry.
+The site self-hosts its fonts. The three fontsource packages are ordinary
+www dependencies (`www/package.json`, pinned exactly; the set, the stylesheets
+and the family names are declared in `www/site-fonts.ts`), their stylesheets
+compile into the site's one linked style bundle and the build emits each
+woff2 as a content-hashed same-origin asset beside it. No font request leaves
+the site's origin, so the manifest carries no font asset entries (nothing
+lives under `www/public/assets`) and no CDN reference.
 
-Selection rationale: fontsource-on-jsDelivr was chosen over Google Fonts'
-serving service because it (a) ships the variable faces the site uses
-(Inter wght 100-900, JetBrains Mono wght 100-800), (b) serves version-pinned
-immutable URLs with `cache-control: public, max-age=31536000, immutable` and
-CORS headers, and (c) therefore supports Subresource Integrity on the
-stylesheet links that carry the `@font-face` declarations (app/head.tsx pins
-the sha384 hashes). Platform limitation, stated plainly: a font file fetched
-through CSS has no integrity channel in any browser, so the WOFF2 bytes are
-pinned by their immutable versioned URLs; only the stylesheets carry
-enforced SRI.
+Why not the fontsource CDN: #1554 delivered the same faces as four
+render-blocking jsDelivr stylesheet links (with SRI on those links). On
+networks where the CDN is unreachable — the everyday case for the site's
+Chinese audience — those links stalled first paint until the browser gave up.
+The npm route serves the identical bytes (the package files match the digests
+recorded for the CDN references) without the third-party single point of
+failure. fontsource remains the source because it ships the variable faces
+the site uses (Inter wght 100-900, JetBrains Mono wght 100-800).
 
-| Font                                          | CDN reference (jsDelivr)                                                       | Copyright                                           |
+| Font                                          | Source package (npm)                                                           | Copyright                                           |
 | --------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------- |
-| Inter 4.001 (`@fontsource-variable/inter@5.3.0`) | `npm/@fontsource-variable/inter@5.3.0/wght.css` + latin woff2                | Copyright 2016 The Inter Project Authors            |
-| JetBrains Mono 2.211 (`@fontsource-variable/jetbrains-mono@5.3.0`) | `npm/@fontsource-variable/jetbrains-mono@5.3.0/wght.css` + latin woff2 | Copyright 2020 The JetBrains Mono Project Authors   |
-| Instrument Serif 1.000 (`@fontsource/instrument-serif@5.3.0`) | `npm/@fontsource/instrument-serif@5.3.0/latin.css` + `latin-italic.css` + latin woff2 | Copyright 2022 The Instrument Serif Project Authors |
+| Inter 4.001 (`@fontsource-variable/inter@5.3.0`) | `wght.css` + subset woff2                                                  | Copyright 2016 The Inter Project Authors            |
+| JetBrains Mono 2.211 (`@fontsource-variable/jetbrains-mono@5.3.0`) | `wght.css` + subset woff2                              | Copyright 2020 The JetBrains Mono Project Authors   |
+| Instrument Serif 1.000 (`@fontsource/instrument-serif@5.3.0`) | `latin.css` + `latin-italic.css` + latin woff2                 | Copyright 2022 The Instrument Serif Project Authors |
 
-The Instrument Serif bytes changed with this move: the previously vendored
-subsets were Google Fonts' serving builds (gstatic service v5); the site now
-serves fontsource's build of the same upstream release 1.000. Both are OFL
-1.1.
-
-Retirement condition: if the CDN dependency ever needs to go away, the
-reversal is re-vendoring the pinned files and re-declaring them as ordinary
-(non-remote) manifest entries.
+The Instrument Serif bytes are fontsource's build of upstream release 1.000
+(the site's earlier vendored subsets were Google Fonts' serving builds,
+gstatic service v5). Both are OFL 1.1.
 
 Each font's license and copyright are also embedded in its name table. The
 license text follows.

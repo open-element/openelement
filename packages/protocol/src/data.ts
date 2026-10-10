@@ -74,13 +74,22 @@ export type Action<
  * as plain HTTP (303 on success, 422 with the re-rendered form on validation
  * failure, redirect/error as status codes).
  *
+ * Success carries no data envelope. The application-loop contract makes a
+ * successful non-GET action answer 303 (PRG) — the framework never answers
+ * 200 with a rendered page, or with a success document, for a successful
+ * mutation — so the fetch channel answers `{ type: 'redirect' }` naming the
+ * PRG target and the authored return value is discarded by design. Success
+ * data travels the PRG target instead (query state the loader re-runs with,
+ * which the props projector then maps; see the router guide's "Form actions"
+ * section). The union previously declared a `{ type: 'success' }` member that
+ * no code path ever emitted — removed so the type matches the wire.
+ *
  * Error outcomes (CSRF 403, unknown action 404, unparseable body 400,
  * unexpected 500) are NOT part of this union: since #863
  * they answer RFC 9457 Problem Details with the
  * PROBLEM_JSON_MEDIA_TYPE content type — see ProblemDetails.
  */
-export type ActionResult<Success = unknown, Failure = unknown> =
-  | { type: 'success'; status: number; data?: Success }
+export type ActionResult<Failure = unknown> =
   | { type: 'failure'; status: number; data?: Failure }
   | { type: 'redirect'; status: number; location: string };
 

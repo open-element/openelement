@@ -87,19 +87,19 @@ OpenElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权
 
 | 指标                 | 数值                                             |
 | -------------------- | ------------------------------------------------ |
-| 预渲染文档           | 70 个 HTML 文件                                  |
-| `sitemap.xml` URL 数 | 68                                               |
+| 预渲染文档           | 72 个 HTML 文件                                  |
+| `sitemap.xml` URL 数 | 70                                               |
 | 静态产物总量         | 8.6 MB                                           |
-| island manifest      | 70 份——每页一份                                  |
-| 搜索索引             | 每个语言 34 页（en、zh），68 个 fragment，1.3 MB |
+| island manifest      | 72 份——每页一份                                  |
+| 搜索索引             | 每个语言 35 页（en、zh），70 个 fragment，1.3 MB |
 
 ```bash
 pnpm run site:build                         # 先重新生成以下全部内容
-find www/dist -name '*.html' | wc -l        # 70
-grep -c '<loc>' www/dist/sitemap.xml        # 68
+find www/dist -name '*.html' | wc -l        # 72
+grep -c '<loc>' www/dist/sitemap.xml        # 70
 du -sh www/dist                             # 9.3M（随平台变化；上表 8.6 MB 是字节总和）
-ls www/dist/island-manifests | wc -l        # 70
-cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 34
+ls www/dist/island-manifests | wc -l        # 72
+cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 35
 ```
 
 ### Island bundle
@@ -132,7 +132,7 @@ island 入口（`client.js`）承载 island import 工厂与错误串，字节�
 | `/guide/getting-started` | 150,163 B          | 8             |
 | `/`                      | 166,510 B          | 10             |
 
-70 份页面 manifest 合计声明了 9 个 island 标签、332 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 60 页，`open-code-block` 出现在 48 页，其余标签只在少数页面上。#1557 的 B8 退役移除了 `open-badge` 包 island（roadmap 上的用法已改为纯 HTML+CSS recipe），而参考页新增了两个拆分包的文档，使载荷行发生移动。
+72 份页面 manifest 合计声明了 9 个 island 标签、342 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 62 页，`open-code-block` 出现在 50 页，其余标签只在少数页面上。#1557 的 B8 退役移除了 `open-badge` 包 island（roadmap 上的用法已改为纯 HTML+CSS recipe），而参考页新增了两个拆分包的文档，使载荷行发生移动。
 
 ```bash
 cat www/dist/island-manifests/page-<hash>.json   # 单页的 island 集合：标签、chunk、策略、层级

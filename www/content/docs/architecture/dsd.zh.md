@@ -48,9 +48,9 @@ OpenElement 依赖 Web 平台契约，而非自研的注册表产品。Custom El
 
 `Request`、`Response` 与 `FormData` 是当前 loader/action 面的基础——应用交互无需私有传输层。
 
-### 四包归属
+### 包归属
 
-`Element`、`Router`、`Create` 与实验性的 `UI` 包是当前的对外消费界面；内部契约保持内部。
+`Element`、`Router`、`Create` 与实验性的 `UI` 包是多数作者直接接触的消费面。`Protocol` 与 `Compiler` 同样已发布，面向构建在其上的工具与契约类型：`Protocol` 承载跨包契约，`Element` 再导出其中若干项；`Compiler` 由使用它的构建层直接消费。内部实现保持内部。
 
 ## 另见
 

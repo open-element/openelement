@@ -284,9 +284,13 @@ async function qualificationMain(): Promise<void> {
       };
       for (const pkg of ['router', 'element']) {
         const actual = manifest.dependencies[`@openelement/${pkg}`];
-        if (actual !== options.version) {
+        // The scaffold rides the 1.0 line with a caret range (owner ruling
+        // 2026-10-09), so the generated specifier names the published version
+        // as its lower bound rather than an exact pin.
+        const expected = `^${options.version}`;
+        if (actual !== expected) {
           throw new Error(
-            `starter dependency @openelement/${pkg}=${actual}, expected the published ${options.version}`,
+            `starter dependency @openelement/${pkg}=${actual}, expected the published ${expected}`,
           );
         }
       }
@@ -517,7 +521,9 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
       dependencies: Record<string, string>;
     };
     for (const pkg of ['router', 'element']) {
-      const expected = version;
+      // Caret range over the published version (owner ruling 2026-10-09):
+      // the starter floats on the 1.0 line rather than pinning it exactly.
+      const expected = `^${version}`;
       const actual = manifest.dependencies[`@openelement/${pkg}`];
       if (actual !== expected) {
         throw new Error(`starter dependency @openelement/${pkg}=${actual}, expected=${expected}`);

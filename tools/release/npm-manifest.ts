@@ -11,6 +11,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { sha256Hex } from '../lib/deterministic-tar.ts';
 import { extractOpenImports, type PackageInfo } from '../lib/package-graph.ts';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
+import { ROUTER_BIN_ENTRY } from '../lib/vp-pack.ts';
 
 const REPOSITORY = {
   type: 'git',
@@ -136,6 +137,7 @@ export interface PackedMetadata {
   homepage: string;
   engines?: Record<string, string>;
   sideEffects?: false | string[];
+  bin?: Record<string, string>;
 }
 
 /**
@@ -151,6 +153,7 @@ export function packedMetadata(name: string): PackedMetadata {
     homepage: HOMEPAGE,
     engines: ENGINES[name],
     sideEffects: SIDE_EFFECTS[name],
+    bin: PACKAGE_BINS[name],
   };
 }
 
@@ -164,6 +167,34 @@ export function packedMetadata(name: string): PackedMetadata {
 export const CREATE_BIN: Record<string, string> = {
   'openelement-create': './src/cli.js',
   'create-openelement': './src/cli.js',
+};
+
+/**
+ * The `openelement` lifecycle bin (#1633): the packed Router CLI dispatcher
+ * (`src/cli/cli.ts`, shebang `#!/usr/bin/env node`), whose `build`/`start`
+ * subcommands run the same modules the `./cli/build` and `./cli/start`
+ * export subpaths serve. The generated starter's scripts call this bin, so
+ * the documented lifecycle never names an installed-tree path. The entry
+ * path comes from the pack layer (tools/lib/vp-pack.ts) — the same constant
+ * that puts the module in the packed payload, so the manifest can never
+ * name a file the pack did not emit.
+ */
+export const ROUTER_BIN: Record<string, string> = {
+  openelement: `./${ROUTER_BIN_ENTRY.replace(/\.ts$/, '.js')}`,
+};
+
+/**
+ * The npm bins the packed artifacts expose (post-pack manifest mutation
+ * below), keyed by package name.
+ */
+export const PACKAGE_BINS: Record<string, Record<string, string> | undefined> = {
+  // The `openelement` lifecycle bin: the generated project's scripts run
+  // `openelement build` / `openelement start` through the `.bin` shim npm
+  // materializes at install time, never a path into the installed tree. One
+  // bin, two subcommands; the subcommand bodies are the same modules the
+  // `./cli/build` and `./cli/start` export subpaths serve.
+  '@openelement/router': ROUTER_BIN,
+  '@openelement/create': CREATE_BIN,
 };
 
 /**
@@ -484,7 +515,5 @@ export function applyPackageJsonOverrides(
   pkgJson.keywords = metadata.keywords;
   if (metadata.engines) pkgJson.engines = metadata.engines;
   if (metadata.sideEffects !== undefined) pkgJson.sideEffects = metadata.sideEffects;
-  if (pkg.name === '@openelement/create') {
-    pkgJson.bin = CREATE_BIN;
-  }
+  if (metadata.bin !== undefined) pkgJson.bin = metadata.bin;
 }

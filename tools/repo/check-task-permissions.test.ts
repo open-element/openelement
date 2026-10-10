@@ -37,6 +37,7 @@ const TASK_FILES: TaskFile[] = [
     ffiAllowed: { test: 'root suite includes the router vite-plugin graph' },
   },
   { path: 'packages/element/package.json', ffiAllowed: {} },
+  { path: 'packages/compiler/package.json', ffiAllowed: {} },
   { path: 'packages/ui/package.json', ffiAllowed: {} },
   { path: 'packages/create/package.json', ffiAllowed: {} },
   {
@@ -62,8 +63,13 @@ const TASK_FILES: TaskFile[] = [
   { path: 'tests/fixtures/third-party-web-components/package.json', ffiAllowed: {} },
 ];
 
-/** Template lifecycle scripts audited for the flag-free Node contract. */
-const TEMPLATE_FFI_REQUIRED = ['dev', 'build', 'start', 'preview'];
+/**
+ * Template lifecycle scripts audited for the flag-free Node contract. The
+ * former `preview` entry retired with the starter's preview script (owner
+ * ruling 2026-10-09): the documented preview spelling is the router bin's
+ * `start --mode=preview`, not a starter script.
+ */
+const TEMPLATE_FFI_REQUIRED = ['dev', 'build', 'start'];
 
 /** The starter template's lifecycle scripts (package.json.tmpl, B5/ADR-0161). */
 function templateScripts(): Record<string, string> {
@@ -146,6 +152,7 @@ test('task permissions: unit suites run on vitest — the deno permission surfac
   // test runner (which would silently drop the flag audit).
   for (const [path, name] of [
     ['packages/element/package.json', 'test'],
+    ['packages/compiler/package.json', 'test'],
     ['packages/ui/package.json', 'test'],
     ['packages/create/package.json', 'test'],
     ['packages/router/package.json', 'test'],
@@ -162,11 +169,13 @@ test('task permissions: unit suites run on vitest — the deno permission surfac
 
 test('task permissions: create template lifecycle is flag-free on the Node host', () => {
   // DISCLOSED SEMANTIC CHANGE (B5): the former assertion pinned --allow-ffi
-  // on the template's dev/build/start/preview Deno tasks (vite native
-  // binding). The B5 cutover makes the generated starter a Node/pnpm project
-  // (ADR-0161) — there is no permission model to scope, so the invariant that
-  // REMAINS: the lifecycle scripts exist and carry no host permission flags
-  // at all.
+  // on the template's Deno tasks (vite native binding). The B5 cutover makes
+  // the generated starter a Node/pnpm project (ADR-0161) — there is no
+  // permission model to scope, so the invariant that REMAINS: the lifecycle
+  // scripts exist and carry no host permission flags at all. The audit list
+  // follows the shipped lifecycle: preview retired from the starter (owner
+  // ruling 2026-10-09) and the remaining scripts run the router's
+  // `openelement` bin, which host permission flags have no handle on either.
   const template = templateScripts();
   for (const name of TEMPLATE_FFI_REQUIRED) {
     const command = template[name];

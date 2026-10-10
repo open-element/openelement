@@ -3,10 +3,16 @@
 // (check-esm-boundary.ts firstCodeLine), so it stays above every import.
 import { expect, test } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { cssExportSubpaths, scanExtractedPackage } from './check-package-artifacts.ts';
+import {
+  type ArtifactViolation,
+  cssExportSubpaths,
+  findPublishSurfaceViolations,
+  findTemplateScriptViolations,
+  scanExtractedPackage,
+} from './check-package-artifacts.ts';
 
 async function withPackage(
   packageName: string,
@@ -635,4 +641,113 @@ test('package artifacts: css export subpaths feed the attw exclusion, and only t
     }),
   ).toEqual([]);
   expect(cssExportSubpaths(undefined)).toEqual([]);
+});
+
+// ─── Publish-surface scan (#1633) ──────────────────────────────────────────
+//
+// Three classes: the retired installed-tree command form, template scripts
+// that name a file path, and one file asserting both sides of a contract.
+// Every class carries a red sample (the fixture that must fail) and a green
+// assertion against the LIVE shipped surface, so the gate's honesty is proven
+// on the repository every run: a rule that stopped matching would fail the
+// green half, and a rule that never fails would fail the red half.
+
+const repoRoot = join(import.meta.dirname!, '..', '..');
+
+/** Red sample: the retired installed-tree command form in shipped prose. */
+test('publish surface: the installed-tree command form fails (red sample)', () => {
+  const violations = findPublishSurfaceViolations(
+    '@openelement/router',
+    'README.md',
+    'Build it:\n\n```bash\nnode node_modules/@openelement/router/src/cli/build.js\n```\n',
+  );
+  expect(violations.length, JSON.stringify(violations)).toEqual(1);
+  expect(violations[0].line).toEqual(4);
+  expect(violations[0].message).toContain('installed-tree command form');
+  // A bin-form command in the same position is clean.
+  expect(
+    findPublishSurfaceViolations(
+      '@openelement/router',
+      'README.md',
+      '```bash\nopenelement build\n```\n',
+    ),
+  ).toEqual([]);
+});
+
+test('publish surface: template scripts must be bare commands (red and green samples)', () => {
+  const barePath = JSON.stringify({
+    scripts: {
+      dev: 'vite',
+      check: 'tsc --noEmit',
+      test: 'node --test',
+      build: 'openelement build',
+      start: 'openelement start',
+    },
+  });
+  expect(
+    findTemplateScriptViolations('@openelement/create', 'templates/package.json.tmpl', barePath),
+  ).toEqual([]);
+  const pathForm = JSON.stringify({
+    scripts: {
+      build: 'node node_modules/@openelement/router/src/cli/build.js',
+      start: 'node ./src/cli.js',
+    },
+  });
+  const violations = findTemplateScriptViolations(
+    '@openelement/create',
+    'templates/package.json.tmpl',
+    pathForm,
+  );
+  expect(violations.length, JSON.stringify(violations)).toEqual(2);
+  for (const violation of violations) expect(violation.message).toContain('names a file path');
+  // A flag-only value never trips the path rule (all flags, one bare command).
+  expect(
+    findTemplateScriptViolations(
+      '@openelement/create',
+      'templates/package.json.tmpl',
+      JSON.stringify({ scripts: { check: 'tsc --noEmit --pretty false' } }),
+    ),
+  ).toEqual([]);
+});
+
+test('publish surface: one file asserting both contract terms fails (red sample)', () => {
+  const text =
+    'The scaffold ships a design-token sheet (no Tailwind).\n\nIt is the Tailwind-ON default.\n';
+  const violations = findPublishSurfaceViolations('@openelement/create', 'README.md', text);
+  expect(violations.length, JSON.stringify(violations)).toEqual(1);
+  expect(violations[0].message).toContain("asserts both 'no Tailwind' and 'Tailwind-ON'");
+});
+
+test('publish surface: the live shipped surface is clean (green half of every rule)', () => {
+  const create = JSON.parse(
+    readFileSync(join(repoRoot, 'packages/create/package.json'), 'utf8'),
+  ) as { files: string[] };
+  const surfaces: string[] = [];
+  for (const entry of readdirSync(join(repoRoot, 'packages'), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const readme = join(repoRoot, 'packages', entry.name, 'README.md');
+    if (existsSync(readme)) surfaces.push(readme);
+  }
+  // The create package's shipped payload, from its own `files` allowlist.
+  for (const entry of create.files) {
+    const path = join(repoRoot, 'packages/create', entry);
+    if (statSync(path).isFile()) surfaces.push(path);
+    else
+      for (const file of readdirSync(path, { recursive: true, withFileTypes: true })) {
+        if (file.isFile()) surfaces.push(join(file.parentPath, file.name));
+      }
+  }
+  expect(surfaces.length, 'the shipped surface must not be empty').toBeGreaterThan(10);
+  const violations: ArtifactViolation[] = [];
+  for (const path of surfaces) {
+    const relative = path.slice(repoRoot.length + 1);
+    violations.push(
+      ...findPublishSurfaceViolations(
+        `@openelement/${relative.split('/')[1]}`,
+        relative,
+        readFileSync(path, 'utf8'),
+      ),
+    );
+  }
+  expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
 });

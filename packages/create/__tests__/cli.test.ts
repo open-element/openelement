@@ -87,43 +87,47 @@ function assertCleanError(stderr: string): void {
 
 test('starter exposes only product dependencies and the standard lifecycle', () => {
   const manifest = JSON.parse(readTemplate('package.json.tmpl'));
-  // B5 (ADR-0161): the import map collapsed into four plain npm dependencies.
+  // B5 (ADR-0161): the import map collapsed into plain npm dependencies.
   // Subpaths (jsx-runtime, /vite, /nitro-mount, ...) resolve through the
   // published packages' own exports maps — they are never separate pins.
+  // Owner ruling 2026-10-09: only the two RUNTIME packages stay here, so
+  // `npm install --omit=dev` in a production image installs exactly the
+  // surface the built app imports.
   expect(Object.keys(manifest.dependencies).sort()).toEqual([
-    '@hono/vite-dev-server',
     '@openelement/element',
     '@openelement/router',
-    'hono',
   ]);
-  // Tailwind-ON single default (#1524 form restored as the ONE scaffold):
-  // both build-time pins ride devDependencies; the product surface above is
-  // unchanged.
+  // Build-time and dev-server packages ride devDependencies: the Vite dev
+  // server pair (`@hono/vite-dev-server` + its `hono` peer — loaded lazily, so
+  // `build`/`start` never resolve them), the Tailwind-ON single default pins
+  // (#1524 form restored as the ONE scaffold), the type-check pin, and the
+  // build-time Vite pin. No browser-automation dependency ships: the starter
+  // has no Playwright surface (owner ruling 2026-10-09).
   expect(Object.keys(manifest.devDependencies).sort()).toEqual([
-    '@playwright/test',
+    '@hono/vite-dev-server',
     '@tailwindcss/vite',
+    'hono',
     'tailwindcss',
     'typescript',
     'vite',
   ]);
-  expect(Object.keys(manifest.scripts).sort()).toEqual([
-    'build',
-    'check',
-    'dev',
-    'preview',
-    'start',
-    'test',
-  ]);
+  expect(Object.keys(manifest.scripts).sort()).toEqual(['build', 'check', 'dev', 'start', 'test']);
   expect(manifest.scripts.dev).toEqual('vite');
   // The starter ships no test files today; the runner must permit that
   // (the Node counterpart of the retired --permit-no-files task).
   expect(manifest.scripts.test).toEqual('node --test');
-  // Lifecycle scripts drive the router CLI subpaths through the starter's own
-  // node_modules tree (#601): build/start/preview are the same CLI, one mode
-  // flag apart.
-  expect(manifest.scripts.build).toContain('@openelement/router/src/cli/build.js');
-  expect(manifest.scripts.start).toContain('@openelement/router/src/cli/start.js');
-  expect(manifest.scripts.preview).toContain('--mode=preview');
+  // Lifecycle scripts run the router's `openelement` bin: npm materializes
+  // the shim from the packed router manifest at install time, so the scripts
+  // never name an installed-tree path (#1633). One bin, two subcommands.
+  expect(manifest.scripts.build).toEqual('openelement build');
+  expect(manifest.scripts.start).toEqual('openelement start');
+  expect(manifest.scripts.preview).toEqual(undefined);
+  for (const command of Object.values(manifest.scripts)) {
+    expect(
+      command.includes('node_modules'),
+      `starter script must not name an installed-tree path: ${command}`,
+    ).toBeFalsy();
+  }
   expect(manifest.engines).toEqual({ node: '>=24.2' });
   expect(JSON.stringify(manifest).includes('@openelement/core')).toBeFalsy();
   expect(JSON.stringify(manifest).includes('@openelement/app')).toBeFalsy();
@@ -573,11 +577,15 @@ test('generated starter is a Node project: no deno.json, pnpm lifecycle', async 
   expect(pkg.scripts.check).toEqual('tsc --noEmit');
 });
 
-test('generated starter pins every OpenElement dependency to the exact release', async () => {
+test('generated starter floats the OpenElement dependencies on the caret release line', async () => {
   const versions = resolveVersions();
   const pkg = JSON.parse((await buildTemplates(versions, 'sample-app'))['package.json']);
-  expect(pkg.dependencies['@openelement/router']).toEqual(versions.router);
-  expect(pkg.dependencies['@openelement/element']).toEqual(versions.element);
+  // Owner ruling 2026-10-09: the scaffold rides the 1.0 line with caret
+  // ranges, so `pnpm update` picks up later prereleases of the line. The
+  // exact version is still the generated LOWER BOUND — the range must name
+  // the release the scaffold was generated from, never an older one.
+  expect(pkg.dependencies['@openelement/router']).toEqual(`^${versions.router}`);
+  expect(pkg.dependencies['@openelement/element']).toEqual(`^${versions.element}`);
 });
 
 test('starter pins vite and typescript exactly, aligned with the router', async () => {
@@ -605,16 +613,19 @@ test('starter pins vite and typescript exactly, aligned with the router', async 
   expect(generated.scripts.dev).toEqual('vite');
   // The build-time TypeScript pin stays aligned with the router's own.
   expect(raw.devDependencies.typescript).toEqual(routerManifest.dependencies.typescript);
-  // The starter's @playwright/test pin stays aligned with the workspace root's
-  // (single version line: the packed starter-browser probe resolves through
-  // the starter's own devDependency, and CI pre-installs browsers for the
-  // workspace pin — a drift would hunt for browser builds that were never
-  // downloaded).
-  const rootManifest = JSON.parse(readFileSync(join(packageDir, '..', '..', 'package.json')));
-  expect(rootManifest.devDependencies['@playwright/test']).toEqual('1.59.1');
-  expect(raw.devDependencies['@playwright/test']).toEqual(
-    rootManifest.devDependencies['@playwright/test'],
+  // The dev-server pair stays a devDependency pair whose ranges match the
+  // router's own optional peers (one contract, two surfaces): the starter the
+  // consumer installs and the peer the router's dev server resolves.
+  expect(raw.devDependencies['@hono/vite-dev-server']).toEqual(
+    routerManifest.peerDependencies['@hono/vite-dev-server'],
   );
+  expect(raw.devDependencies.hono).toEqual(routerManifest.peerDependencies.hono);
+  // No browser-automation dependency ships with the starter (owner ruling
+  // 2026-10-09): the packed starter-browser gate adds its own Playwright pin to
+  // the scaffolded manifest before installing
+  // (tools/release/consumer-packaged-starter.ts PW_PROBE_PIN).
+  expect(JSON.stringify(raw).includes('@playwright/test')).toBeFalsy();
+  expect(JSON.stringify(generated).includes('@playwright/test')).toBeFalsy();
 });
 
 test('source CLI generates the showcase starter with git init and the boxed handoff', async () => {
@@ -647,10 +658,16 @@ test('source CLI generates the showcase starter with git init and the boxed hand
     expect(existsSync(join(appDir, 'app', 'routes', 'contact.tsx'))).toBeFalsy();
     expect(existsSync(join(appDir, 'app', 'styles', 'theme.css'))).toBeTruthy();
     expect(existsSync(join(appDir, 'README.md'))).toBeTruthy();
-    // The boxed handoff names the next commands and the docs.
+    // The boxed handoff names the next commands, the docs, and the generator
+    // version (a cached `npx` run resolves whatever copy it first downloaded,
+    // so the box is where a stale generator announces itself — #1634).
     expect(stdout.includes('cd sample-app'), stdout).toBeTruthy();
     expect(stdout.includes('run dev'), stdout).toBeTruthy();
     expect(stdout.includes('README.md'), stdout).toBeTruthy();
+    expect(
+      stdout.includes(`@openelement/create ${CREATE_VERSION}`),
+      `handoff box must carry the generator version:\n${stdout}`,
+    ).toBeTruthy();
     // toContain, not includes(): CodeQL reads `<string>.includes('<domain>')`
     // as URL-substring matching and flags the domain-in-string pattern.
     expect(stdout).toContain('openelement.org');
@@ -897,6 +914,57 @@ test.skipIf(process.platform === 'win32')(
       rmSync(tmpRoot, { recursive: true });
     }
   },
+);
+
+test.skipIf(!pnpmAvailable)(
+  'packed router declares the openelement bin and the scaffolded scripts name it (#1633)',
+  async () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-bin-'));
+    try {
+      // Consumer form of the bin seam: read the REAL packed router manifest
+      // and the generated starter's own scripts, so the claim is about the
+      // artifact a consumer installs, not about the workspace sources.
+      const repoRoot = join(packageDir, '..', '..');
+      const pack = spawnSync('pnpm', ['--dir', 'tools/release', 'run', 'pack:dry-run'], {
+        cwd: repoRoot,
+      });
+      expect(pack.status, pack.stderr.toString()).toEqual(0);
+      const tarball = join(
+        repoRoot,
+        'packages',
+        'router',
+        `openelement-router-${CREATE_VERSION}.tgz`,
+      );
+      expect(existsSync(tarball), tarball).toBeTruthy();
+      const unpack = spawnSync('tar', ['-xzf', tarball, '-C', tmpRoot]);
+      expect(unpack.status, unpack.stderr.toString()).toEqual(0);
+      const routerManifest = JSON.parse(
+        readFileSync(join(tmpRoot, 'package', 'package.json'), 'utf8'),
+      ) as { bin?: Record<string, string> };
+      expect(Object.keys(routerManifest.bin ?? {})).toContain('openelement');
+      const target = join(tmpRoot, 'package', routerManifest.bin!.openelement.replace(/^\.\//, ''));
+      expect(existsSync(target), `declared bin target must exist: ${target}`).toBeTruthy();
+      expect(readFileSync(target, 'utf8').startsWith('#!/usr/bin/env node')).toBeTruthy();
+
+      // The generated starter's scripts run that bin, never a tree path.
+      const { stderr, code } = await runCreate(
+        join(packageDir, 'src', 'cli.ts'),
+        tmpRoot,
+        'bin-app',
+        '--no-install',
+      );
+      expect(code, stderr).toEqual(0);
+      const manifest = JSON.parse(
+        readFileSync(join(tmpRoot, 'bin-app', 'package.json'), 'utf8'),
+      ) as { scripts: Record<string, string> };
+      expect(manifest.scripts.build).toEqual('openelement build');
+      expect(manifest.scripts.start).toEqual('openelement start');
+      expect(manifest.scripts.preview).toEqual(undefined);
+    } finally {
+      rmSync(tmpRoot, { recursive: true });
+    }
+  },
+  300_000,
 );
 
 test.skipIf(!pnpmAvailable)(

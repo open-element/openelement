@@ -2,13 +2,27 @@
 
 Release state is owned by package manifests, registry state, Git tags, and the small machine-readable `docs/release/release-state.json` record. Do not maintain a second writable status or roadmap projection.
 
-`release-state.json` records registry truth **per package**: each package's `latest`/prerelease dist-tags, the latest prerelease's published/missing package partition, and a `commonCompleteVersion` that is the stable version present in **all four** packages or `null` when none exists (it is `null` today — Router has no 0.43.x). Never present a version present in only some packages as the shared published line. A partial publish (some packages shipped, others absent) is represented explicitly, never as one shared version string. `pnpm --dir tools/repo run release:state-machine:check` validates that model offline (structure, source versions, Site copy consistency); `pnpm --dir tools/repo run release:registry-check` queries npm read-only, recomputes the four-package stable intersection, and fails closed on any drift or false common version — it never publishes or moves a dist-tag, and the ordinary offline `pnpm run check` does not require network.
+`release-state.json` records registry truth **per package**: each package's `latest`/prerelease dist-tags, the latest prerelease's published/missing package partition, and a `commonCompleteVersion` that is the stable version present in **every published package** or `null` when none exists (it is `null` today). Never present a version present in only some packages as the shared published line. A partial publish (some packages shipped, others absent) is represented explicitly, never as one shared version string. `pnpm --dir tools/repo run release:state-machine:check` validates that model offline (structure, source versions, Site copy consistency); `pnpm --dir tools/repo run release:registry-check` queries npm read-only, recomputes the stable intersection, and fails closed on any drift or false common version — it never publishes or moves a dist-tag, and the ordinary offline `pnpm run check` does not require network.
+
+## Registry truth is written, not remembered
+
+The tracked registry block used to be updated by hand after each publish, and it lagged: alpha.12 shipped while both `release-state.json` and the site still named alpha.11, so the homepage advertised a version the registry no longer served. The publish train now ends with one read-back (`tools/release/registry-sync.ts`):
+
+- `publishRelease` (inside `publish:npm`) runs the sync after a complete publish and registry verification. It re-reads every published package's dist-tags and version list with read-only `npm view`, rewrites the tracked block (`registry.verifiedAt`, `method`, each published package's dist-tags, `latestPrerelease`), projects the result into `www/app/data/version.ts` (`PUBLISHED_LATEST`, `UNRELEASED_PACKAGES`), and regenerates `www/app/data/_generated-release-line.ts` through the site's own content generator. A query or a write failing fails the release job.
+- The release job runs the same sync a **second time after the alpha alias re-point** (`sync:registry` in `autoflow-release.yml`). The first read-back happens inside `publish:npm`, before the alias step, so it records `alpha` as it stood before the re-point; the second run records the post-re-point alias. Recording only the first would leave the tracked `alpha` entry one release behind and make the next release fail the drift check on files the publish train itself wrote. Both runs fail the job on an error.
+- The synced files are **not** pushed by the job: `main` requires a pull request and the release job holds no push identity. The workflow uploads them as the `registry-release-state` artifact, and a maintainer lands them through the ordinary PR path (same files every time: `docs/release/release-state.json`, `www/app/data/version.ts`, `www/app/data/_generated-release-line.ts`).
+- Until that PR lands, `@openelement/tools-release#registry-drift:check` fails when the displayed version values no longer match what npm serves, or when the tracked block disagrees with the registry. It is wired into `@openelement/tools-repo#gate:release` beside `release:state-machine:check`; no CI workflow runs that gate on its own, so the readers are the maintainer running `pnpm run release:check` before a publish and the release train itself. Without network it prints a `SKIP` line naming the reason and passes — an explicit, visible skip, never a silent pass — but findings already established from the packages that answered are still reported and still fail the run; any non-network query failure (auth, malformed answer) is a red. (The PR job runs `release:state-machine:check` only, so a drift the maintainer does not run the gate for is caught at the next publish, not on the PR.)
 
 ## Public 1.0 prerelease baseline
 
 `1.0.0-alpha.1` is the first public 1.0 baseline, not a migration from 0.x. Historic pre-1.0 Git tags remain source snapshots. GitHub Release objects begin with `1.0.0-alpha.1`; release tooling must not require an earlier GitHub Release object.
 
-Public alpha packages use the npm `alpha` dist-tag. npm `latest` stays on the stable line until a separately admitted stable release.
+Public alpha packages use the npm `alpha` dist-tag. For pre-1.0 lines the
+npm `latest` tag stays on the stable line until a separately admitted stable
+release — but from the 1.0 line onward the prerelease IS the shipping line:
+`publishPackage` publishes 1.0.0-prereleases onto `latest` and keeps the
+channel tag (`alpha`) as an alias the release workflow re-points after the
+publish (owner ruling 2026-10-07; see `npmPublishTag`, tested).
 
 ## Candidate procedure
 
@@ -41,15 +55,17 @@ publish; a missing environment fails the job closed instead of publishing:
   the read-only registry-state check) on the exact
   `candidate_sha`, and re-verifies `git rev-parse HEAD == candidate_sha` after
   checkout.
-- `publish:npm` publishes each package, then verifies every published package's exact version and dist-tag against the registry (continuity is checked per package, not just the first), and writes `.artifacts/release-receipt.json` bound to the exact SHA, tree, and tarball hashes. A partial publish is recorded as `partial` and fails the job instead of reporting success; a re-run safely resumes because already-published versions are skipped. `latest` is never moved onto a prerelease. The workflow uploads `.artifacts/release-receipt.json` with `if: always()` as a recovery record (successful/partial/failed), bound to the candidate SHA and run id/attempt; the receipt is a recovery aid, not proof of a successful publish, and post-publish consumers run only after a complete publish plus registry verification.
+- `publish:npm` publishes each package, then verifies every published package's exact version and dist-tag against the registry (continuity is checked per package, not just the first), and writes `.artifacts/release-receipt.json` bound to the exact SHA, tree, and tarball hashes. A partial publish is recorded as `partial` and fails the job instead of reporting success; a re-run safely resumes because already-published versions are skipped. (For the tag each line publishes under, see "Public 1.0 prerelease baseline" — the 1.0 line publishes onto `latest`.) The workflow uploads `.artifacts/release-receipt.json` with `if: always()` as a recovery record (successful/partial/failed), bound to the candidate SHA and run id/attempt; the receipt is a recovery aid, not proof of a successful publish, and post-publish consumers run only after a complete publish plus registry verification.
 - After a successful publish the same workflow chains the published-consumer qualification workflow automatically; it is no longer a manual-only proof.
 - The release job refuses to proceed without a successful, non-expired
   `autoflow-ci` artifact for the same SHA: it finds the CI run for that
   commit, downloads the `candidate-evidence-*` artifact, recomputes every log
   and manifest hash, and rejects evidence older than the 14-day retention
   window. Copied or hand-written evidence is never accepted.
-- Prereleases publish under `--tag alpha|beta|rc` only; `latest` never moves
-  onto an alpha (`publishPackage` guard, tested).
+- Prereleases publish under `--tag alpha|beta|rc` for pre-1.0 lines; the 1.0
+  line publishes onto `latest` and rides the channel tag as a re-pointed alias
+  (`npmPublishTag`, tested — see "Public 1.0 prerelease baseline"). A pre-1.0
+  prerelease still never moves `latest` onto itself.
 - Required checks for `dev` and `main` (repository ruleset `21775463`):
   `fast-checks`, `source-matrix`, `fresh-clone`, and `packed-consumers` from
   AutoFlow CI, plus `dependency-review`, `CodeQL`, and the strict required

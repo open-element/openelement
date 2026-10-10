@@ -101,8 +101,16 @@ interface CompiledComponentConstructor extends CustomElementConstructor {
     string,
     (signals: Record<string, ReturnType<typeof signal>>) => ReturnType<typeof signal>
   >;
+  /**
+   * The emitted property table (`static props`), whose `default` holds the
+   * authored initializer verbatim — the only carrier of a non-serializable
+   * default (a `trustedHtml(...)` capability object) at SSR time.
+   */
+  props?: Record<string, { default?: unknown }>;
   styles?: unknown;
   delegatesFocus?: boolean;
+  /** Marks a compiled ErrorBoundary subclass (the public base sets it). */
+  isErrorBoundary?: boolean;
 }
 
 /**
@@ -199,6 +207,32 @@ function parseJsonProp(record: CompiledPropertyMetadata, raw: string): unknown {
   }
 }
 
+/**
+ * The property's initial value for a host the caller did not pass a prop for.
+ *
+ * The compiled metadata carries the SERIALIZABLE projection of the authored
+ * default, which is `null` for the one admitted non-serializable default
+ * shape — a `trustedHtml(...)` initializer (analyze-module.ts: the capability
+ * object has no literal form, so the metadata default is null). The generated
+ * class's own `static props` carries the authored initializer verbatim, so
+ * the runtime capability object exists there (the same object the class field
+ * initializer produces on the client). SSR must seed from THAT object, or the
+ * html Part's brand check fails on the metadata's null and an island holding a
+ * `@property html = trustedHtml(...)` cannot render (KR-12). Page components
+ * always pass such fields through `props()`, which is why only islands felt
+ * it. Plain fields project identically in both carriers; a class without
+ * `static props` (compiled before the emission) keeps the metadata default
+ * exactly as before.
+ */
+function compiledDefaultOf(
+  ctor: CompiledComponentConstructor,
+  record: CompiledPropertyMetadata,
+): unknown {
+  if (record.default !== null) return record.default;
+  const runtimeDefault = ctor.props?.[record.name]?.default;
+  return runtimeDefault === undefined ? record.default : runtimeDefault;
+}
+
 function seedCompiledProperties(
   ctor: CompiledComponentConstructor,
   props: Record<string, unknown>,
@@ -230,13 +264,12 @@ function seedCompiledProperties(
     const present = preserveNull
       ? Object.prototype.hasOwnProperty.call(props, record.name)
       : record.name in props;
-    const value = present
-      ? coerceServerProp(record, props[record.name], preserveNull)
-      : record.default;
+    const fallback = compiledDefaultOf(ctor, record);
+    const value = present ? coerceServerProp(record, props[record.name], preserveNull) : fallback;
     signals[record.name] = signal(value);
     if (record.attribute !== null) {
       const serialized = convertToAttribute(record, value);
-      if (serialized !== convertToAttribute(record, record.default) && serialized !== null) {
+      if (serialized !== convertToAttribute(record, fallback) && serialized !== null) {
         hostAttrs.push([record.attribute, serialized] as const);
       }
     }
@@ -619,75 +652,105 @@ function renderDsdAtDepth(
   const host: CompiledProgramHost = { signals, handlers: {} };
   const staticStyleCss = collectStaticStyleCss(resolvedClass);
   const admitted = new Set(options.ssrRenderableTags ?? []);
-  const html = serializeCompiledProgram(program, host, {
-    mode,
-    hostAttrs,
-    // SSR/CSR parity (#1226): the client kernel passes the compiled
-    // delegatesFocus static to attachShadow; the DSD template must carry the
-    // matching shadowrootdelegatesfocus marker or the claimed shadow root
-    // silently loses focus delegation.
-    dsd: resolvedClass.delegatesFocus === true ? { delegatesFocus: true } : undefined,
-    styleCss:
-      mode === 'light' && staticStyleCss
-        ? scopeCompiledLightCss(tag, staticStyleCss)
-        : staticStyleCss,
-    projectedChildren: options.projectedChildren,
-    renderNestedElement:
-      admitted.size === 0
-        ? undefined
-        : (nested) => {
-            if (!admitted.has(nested.tag)) return undefined;
-            const nestedClass =
-              typeof customElements === 'undefined'
-                ? undefined
-                : (customElements.get(nested.tag) as CompiledComponentConstructor | undefined);
-            if (!nestedClass?.__partProgram) {
-              throw new OpenElementError(
-                `[openElement] admitted nested component <${nested.tag}> is not registered with a compiled Part Program.`,
-                { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-              );
-            }
-            const nestedProperties = Array.isArray(nestedClass.__compiledProperties)
-              ? nestedClass.__compiledProperties
-              : nestedClass.__partProgram.metadata.properties;
-            const nestedProps: Record<string, unknown> = { ...nested.properties };
-            const propertyAttributes = new Set<string>();
-            for (const record of nestedProperties) {
-              propertyAttributes.add(record.name);
-              if (record.attribute !== null) propertyAttributes.add(record.attribute);
-              if (record.name in nestedProps) continue;
-              const attribute = nested.attributes.find(
-                ([name]) => name === record.name || name === record.attribute,
-              );
-              // Boolean attributes are true by presence, including the canonical
-              // static JSX encoding `name=""`. Do not feed the empty serialized
-              // value through Boolean("") or the nested host loses its state.
-              if (attribute) {
-                nestedProps[record.name] =
-                  record.type === 'boolean' ? true : coerceServerProp(record, attribute[1]);
+  /** Serialize this element's program once (re-run by the boundary capture below). */
+  const serializeOnce = (): string =>
+    serializeCompiledProgram(program, host, {
+      mode,
+      hostAttrs,
+      // SSR/CSR parity (#1226): the client kernel passes the compiled
+      // delegatesFocus static to attachShadow; the DSD template must carry the
+      // matching shadowrootdelegatesfocus marker or the claimed shadow root
+      // silently loses focus delegation.
+      dsd: resolvedClass.delegatesFocus === true ? { delegatesFocus: true } : undefined,
+      styleCss:
+        mode === 'light' && staticStyleCss
+          ? scopeCompiledLightCss(tag, staticStyleCss)
+          : staticStyleCss,
+      projectedChildren: options.projectedChildren,
+      renderNestedElement:
+        admitted.size === 0
+          ? undefined
+          : (nested) => {
+              if (!admitted.has(nested.tag)) return undefined;
+              const nestedClass =
+                typeof customElements === 'undefined'
+                  ? undefined
+                  : (customElements.get(nested.tag) as CompiledComponentConstructor | undefined);
+              if (!nestedClass?.__partProgram) {
+                throw new OpenElementError(
+                  `[openElement] admitted nested component <${nested.tag}> is not registered with a compiled Part Program.`,
+                  { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+                );
               }
-            }
-            const passthrough = nested.attributes.filter(([name]) => !propertyAttributes.has(name));
-            const nestedMode = nestedClass.__partProgram.root.kind;
-            const rendered = renderDsdAtDepth(
-              nested.tag,
-              {
-                componentClass: nestedClass,
-                props: nestedProps,
-                sourceInfo: options.sourceInfo,
-                ssrRenderableTags: options.ssrRenderableTags,
-                hostAttrs: passthrough,
-                projectedChildren: nestedMode === 'light' ? nested.projectedChildren : undefined,
-              },
-              depth + 1,
-            ).html;
-            if (nestedMode === 'light') return rendered;
-            const closing = `</${nested.tag}>`;
-            return nested.children === ''
-              ? rendered
-              : rendered.slice(0, -closing.length) + nested.children + closing;
-          },
-  });
+              const nestedProperties = Array.isArray(nestedClass.__compiledProperties)
+                ? nestedClass.__compiledProperties
+                : nestedClass.__partProgram.metadata.properties;
+              const nestedProps: Record<string, unknown> = { ...nested.properties };
+              const propertyAttributes = new Set<string>();
+              for (const record of nestedProperties) {
+                propertyAttributes.add(record.name);
+                if (record.attribute !== null) propertyAttributes.add(record.attribute);
+                if (record.name in nestedProps) continue;
+                const attribute = nested.attributes.find(
+                  ([name]) => name === record.name || name === record.attribute,
+                );
+                // Boolean attributes are true by presence, including the canonical
+                // static JSX encoding `name=""`. Do not feed the empty serialized
+                // value through Boolean("") or the nested host loses its state.
+                if (attribute) {
+                  nestedProps[record.name] =
+                    record.type === 'boolean' ? true : coerceServerProp(record, attribute[1]);
+                }
+              }
+              const passthrough = nested.attributes.filter(
+                ([name]) => !propertyAttributes.has(name),
+              );
+              const nestedMode = nestedClass.__partProgram.root.kind;
+              const rendered = renderDsdAtDepth(
+                nested.tag,
+                {
+                  componentClass: nestedClass,
+                  props: nestedProps,
+                  sourceInfo: options.sourceInfo,
+                  ssrRenderableTags: options.ssrRenderableTags,
+                  hostAttrs: passthrough,
+                  projectedChildren: nestedMode === 'light' ? nested.projectedChildren : undefined,
+                },
+                depth + 1,
+              ).html;
+              if (nestedMode === 'light') return rendered;
+              const closing = `</${nested.tag}>`;
+              return nested.children === ''
+                ? rendered
+                : rendered.slice(0, -closing.length) + nested.children + closing;
+            },
+    });
+
+  // SSR boundary capture: a subtree evaluation throw (this element's own
+  // serialized derivations, or a nested recursion surfacing from a deeper
+  // non-boundary element) must render the boundary's fallback branch instead
+  // of 500-ing the route. The try wraps THIS element's serialization — the
+  // recursion inside renderNestedElement surfaces here at the nearest
+  // boundary because non-boundary elements rethrow. The repair re-serializes
+  // the same program with the `hasError` signal forced true: a compiled
+  // boundary's fallback is a `when` Region over that signal (the same
+  // dependency the client's publication flips), so the re-run takes the
+  // fallback branch and never re-enters the failed subtree. The signals
+  // record is per-call, so the override cannot leak into sibling renders;
+  // an element without the declared property simply carries an unread
+  // signal. P7 prior art: React SSR error boundaries substitute fallback
+  // UI for a failed subtree; the compiled difference is that the branch is
+  // the program's own Region, not a second renderer.
+  let html: string;
+  let captured = false;
+  try {
+    html = serializeOnce();
+  } catch (error) {
+    if (resolvedClass.isErrorBoundary !== true) throw error;
+    signals.hasError = signal(true);
+    html = serializeOnce();
+    captured = true;
+  }
 
   return {
     html,
@@ -697,7 +760,7 @@ function renderDsdAtDepth(
       renderTimeMs: 0,
       templateSize: html.length,
       layer: mode === 'light' ? 'light-dom' : 'dsd-interactive',
-      hasError: false,
+      hasError: captured,
       nestingDepth: 0,
     },
     hydrationHints: [],

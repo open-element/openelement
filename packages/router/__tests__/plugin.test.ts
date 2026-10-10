@@ -405,6 +405,43 @@ test('openPlugin: accepts multiple packageIslands', () => {
   expect(plugins).toEqual(expect.anything());
 });
 
+// ─── packageIslands → the resolved config's ssr.noExternal (KR-10a) ───
+//
+// The config LOADER derives the list (app-config.ts, covered by
+// app-config.test.ts); these pin the OTHER half of the wiring: the derived
+// list must reach the config object Vite actually resolves, because the dev
+// server's SSR environment externalizes by that list. Only the packed
+// consumer felt the gap (`Unknown file extension ".css"`); the workspace
+// consumers masked it through the pnpm symlink layout.
+
+test('openPlugin: packageIslands reaches the config return as ssr.noExternal', async () => {
+  const plugins = createOpenPlugin({ packageIslands: ['@acme/components', '@openelement/ui'] });
+  const corePlugin = plugins.find((p) => p.name === 'open:core')!;
+  const result = await callConfig(corePlugin);
+  const ssr = result.ssr as { noExternal?: string[] };
+  expect(ssr?.noExternal).toEqual(['@acme/components', '@openelement/ui']);
+});
+
+test('openPlugin: no packageIslands leaves the config return without an ssr key', async () => {
+  const plugins = createOpenPlugin({});
+  const corePlugin = plugins.find((p) => p.name === 'open:core')!;
+  const result = await callConfig(corePlugin);
+  // Absent, not an empty list: an empty list would merge as a no-op either
+  // way, but the resolved config must stay byte-identical to a build that
+  // never mentioned the option.
+  expect(result.ssr).toEqual(undefined);
+});
+
+test('openPlugin: an explicit ssr.noExternal without packageIslands still reaches the config', async () => {
+  // The low-level face (`createOpenPlugin`) takes FrameworkOptions directly;
+  // a caller that states its own externalization list keeps it.
+  const plugins = createOpenPlugin({ ssr: { noExternal: ['lit'] } });
+  const corePlugin = plugins.find((p) => p.name === 'open:core')!;
+  const result = await callConfig(corePlugin);
+  const ssr = result.ssr as { noExternal?: unknown[] };
+  expect(ssr?.noExternal).toEqual(['lit']);
+});
+
 // ─── CORS Origin Edge Cases ───────────────────────────────────
 
 test('openPlugin: accepts middleware.corsOrigin as string', () => {

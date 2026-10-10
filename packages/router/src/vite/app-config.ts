@@ -427,7 +427,16 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
   }
   if (packageIslands !== undefined) options.packageIslands = [...packageIslands];
   if (derivedNoExternal !== undefined) {
-    options.ssr = { ...options.ssr, noExternal: [...derivedNoExternal] };
+    // The derivation ADDS: a caller that stated its own `ssr.noExternal` on
+    // the inline face keeps every entry, with the declared packages appended
+    // (deduplicated). Replacing the list would silently un-bundle a package
+    // the caller asked to bundle.
+    const inlineNoExternal = (inline['ssr'] as { noExternal?: (string | RegExp)[] } | undefined)
+      ?.noExternal;
+    options.ssr = {
+      ...options.ssr,
+      noExternal: [...new Set([...(inlineNoExternal ?? []), ...derivedNoExternal])],
+    };
   }
 
   const headConventionPath = conventionHeadPath(dirs.base);

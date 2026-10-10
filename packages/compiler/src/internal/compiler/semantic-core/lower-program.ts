@@ -407,7 +407,7 @@ export class Lowering {
       this.fail(
         tagNameNode,
         'OEC9010',
-        `component tag <${tag}> is outside the compiler grammar (intrinsic lowercase elements and custom-element hosts only)`,
+        `component tag <${tag}> is outside the compiler grammar (intrinsic lowercase elements and custom-element hosts only) — custom elements compose by tag name — use the tag string, not the class value`,
       );
     }
     const tagReason = forbiddenSinkReason('tag', tag);

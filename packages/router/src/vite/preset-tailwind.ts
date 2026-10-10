@@ -46,7 +46,7 @@
  * the browser, and the aliases seated on it stay empty until the sheet passes
  * through the Tailwind compile). The dev half lives in `dev-tailwind.ts`: it
  * mounts the same lazily-resolved `@tailwindcss/vite` peer into the DEV css
- * channel and serves the SAME staged entry (`renderTailwindPresetEntry`) as a
+ * channel and serves the SAME staged entry (`renderStagedPresetEntry`) as a
  * module, so dev and build consume one compiled fact. The two channels are
  * mutually exclusive by `apply`: the dev plugin is `apply: 'serve'` and the
  * build delivery stays `closeBundle`-only, so no artifact can carry both, and
@@ -56,9 +56,10 @@
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
-import { basename, join } from 'pathe';
+import { basename, isAbsolute, join, relative, resolve } from 'pathe';
 import type { Plugin, ResolvedConfig } from 'vite';
 import { PresetErrorCode, buildError } from '../internal/error-codes.ts';
+import { OPEN_ELEMENT_DIR } from './internal/paths.ts';
 import { createLogger } from '@openelement/element';
 
 const log = createLogger('router-vite:tailwind-preset');
@@ -137,9 +138,73 @@ export async function tailwindPresetPlugins(): Promise<Plugin[]> {
 }
 
 /**
+ * Whether one declared style source is a package specifier rather than an
+ * app-relative path.
+ *
+ * A scoped or subpath-import specifier (`@openelement/ui/theme.css`,
+ * `#site-ui/tokens.css`) can only be a package reference, and a `./`/`../`/
+ * `/` spelling can only be a path. The remaining ambiguity is a bare word
+ * path: `app/styles/theme.css` (the documented app-relative form) and
+ * `tailwindcss/theme.css` (the Tailwind theme source a consumer may import)
+ * are lexically identical. It is resolved by the filesystem: a source that
+ * exists under the app root IS the app file; anything else passes through to
+ * the compiler as a specifier, which then fails closed with its own
+ * unresolved-import diagnostic if the name is wrong.
+ */
+export function isPackageStyleSource(root: string, source: string): boolean {
+  if (source.startsWith('@') || source.startsWith('#')) return true;
+  if (source.startsWith('.') || source.startsWith('/') || isAbsolute(source)) return false;
+  return !existsSync(resolve(root, source));
+}
+
+/** The staging directory the preset entry is written to, under the app root. */
+export function presetStagingDir(root: string): string {
+  return join(root, OPEN_ELEMENT_DIR, 'tailwind-preset');
+}
+
+/**
+ * Resolve one declared theme/components source to the specifier the STAGED
+ * entry must carry. Package specifiers pass through untouched. App-relative
+ * paths resolve against the app root — the stated contract of
+ * {@linkcode TailwindPresetOptions.theme} ("app-relative paths") — and become
+ * the relative path from the staging entry's own directory, which is the only
+ * base its `@import` resolves from. Absolute paths are rewritten relative on
+ * that same base.
+ *
+ * Without this resolution the authored spelling (`app/styles/theme.css`) is
+ * read as a bare package specifier by the compiler and fails to resolve: only
+ * a hand-counted climb (`../../app/styles/theme.css`) happened to work, which
+ * made the documented contract a lie.
+ */
+export function resolvePresetSource(root: string, source: string): string {
+  if (isPackageStyleSource(root, source)) return source;
+  const absolute = isAbsolute(source) ? source : resolve(root, source);
+  // pathe normalizes to `/` separators, so the emitted @import is portable.
+  return relative(presetStagingDir(root), absolute);
+}
+
+/**
+ * The staged entry's CSS text: the app's declared sources resolved against
+ * the app root (see {@linkcode resolvePresetSource}) and rendered by the one
+ * entry generator. Both staging passes write exactly this, so dev and build
+ * compile one input.
+ */
+export function renderStagedPresetEntry(root: string, options: TailwindPresetOptions): string {
+  return renderTailwindPresetEntry({
+    ...options,
+    ...(options.theme ? { theme: options.theme.map((s) => resolvePresetSource(root, s)) } : {}),
+    ...(options.components
+      ? { components: options.components.map((s) => resolvePresetSource(root, s)) }
+      : {}),
+  });
+}
+
+/**
  * The bundle entry the preset compiles: the declared cascade order, then
- * Tailwind itself, then the app's declared theme and component sources.
- * Written next to the app root as a staged, build-time-only input.
+ * Tailwind itself, then the app's declared theme and component sources, as
+ * given. Callers staging a real entry pass sources through
+ * {@linkcode renderStagedPresetEntry}, which resolves them against the app
+ * root first.
  */
 export function renderTailwindPresetEntry(options: TailwindPresetOptions): string {
   const lines = [
@@ -296,10 +361,10 @@ export async function buildTailwindPresetBundle(
   input: BundleBuildInput,
 ): Promise<TailwindBundleResult> {
   const { root, outDir, options } = input;
-  const stagingDir = join(root, '.openElement', 'tailwind-preset');
+  const stagingDir = presetStagingDir(root);
   mkdirSync(stagingDir, { recursive: true });
   const entryPath = join(stagingDir, 'entry.css');
-  writeFileSync(entryPath, renderTailwindPresetEntry(options), 'utf8');
+  writeFileSync(entryPath, renderStagedPresetEntry(root, options), 'utf8');
 
   const plugins = await tailwindPresetPlugins();
   const { build: viteBuild } = await import('vite');

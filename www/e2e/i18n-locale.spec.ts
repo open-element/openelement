@@ -88,7 +88,9 @@ test.describe('Localized app shell', () => {
     const state = await readShellState(page);
     expect(state.htmlLang).toBe('en');
     expect(state.homeHref).toBe('/');
-    expect(state.navHrefs).toContain('/docs');
+    // The header carries the same four entrances in every locale (E2 §4):
+    // Docs / API / Roadmap / Blog, unprefixed on the default locale.
+    expect(state.navHrefs).toEqual(['/docs', '/reference', '/roadmap', '/blog']);
     expect(state.navHrefs?.some((href) => href?.startsWith('/zh/'))).toBe(false);
   });
 
@@ -99,7 +101,7 @@ test.describe('Localized app shell', () => {
     const state = await readShellState(page);
     expect(state.htmlLang).toBe('zh');
     expect(state.homeHref).toBe('/zh');
-    expect(state.navHrefs).toContain('/zh/docs');
+    expect(state.navHrefs).toEqual(['/zh/docs', '/zh/reference', '/zh/roadmap', '/zh/blog']);
   });
 
   test('switching locale via URL changes page language', async ({ page }) => {

@@ -5,6 +5,7 @@ import {
   createVersionFailures,
   isAllowedDependencyDirection,
   packageSetFailures,
+  probePlaywrightPinFailures,
 } from './check-package-graph.ts';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import type { PackageInfo } from '../lib/package-graph.ts';
@@ -74,4 +75,36 @@ test('package configs: real repo create version source is in sync with release s
   // main() runs this against disk; asserting it here keeps the embedded CLI
   // version honest when a bump forgets packages/create/src/version.ts (#713).
   expect(createVersionFailures(readFileSync('packages/create/src/version.ts', 'utf8'))).toEqual([]);
+});
+
+test('package configs: the packed browser-probe Playwright pin tracks the root manifest', () => {
+  const rootManifest = JSON.parse(readFileSync('package.json', 'utf8')) as Record<string, unknown>;
+  const rootPin = (rootManifest.devDependencies as Record<string, string>)['@playwright/test'];
+  const inSync = `const PW_PROBE_PIN = '${rootPin}';\n`;
+  expect(probePlaywrightPinFailures(inSync, rootManifest)).toEqual([]);
+  // A drifted probe pin fails here rather than at the far end of the release
+  // train, where the packed-consumer browser matrix would try to launch a
+  // browser build CI never downloaded.
+  const drifted = probePlaywrightPinFailures("const PW_PROBE_PIN = '0.0.1';\n", rootManifest);
+  expect(drifted.length).toEqual(1);
+  expect(drifted[0].includes('does not match')).toBeTruthy();
+  expect(drifted[0].includes(rootPin)).toBeTruthy();
+  // A missing anchor (the assignment renamed away) is its own failure.
+  const missing = probePlaywrightPinFailures('const SOMETHING_ELSE = 1;\n', rootManifest);
+  expect(missing.length).toEqual(1);
+  expect(missing[0].includes('PW_PROBE_PIN anchor missing')).toBeTruthy();
+  // A root manifest without the pin cannot anchor anything.
+  const noRootPin = probePlaywrightPinFailures(inSync, { devDependencies: {} });
+  expect(noRootPin.length).toEqual(1);
+  expect(noRootPin[0].includes('@playwright/test')).toBeTruthy();
+});
+
+test('package configs: real repo browser-probe pin is in sync with the root manifest', () => {
+  const rootManifest = JSON.parse(readFileSync('package.json', 'utf8')) as Record<string, unknown>;
+  expect(
+    probePlaywrightPinFailures(
+      readFileSync('tools/release/consumer-packaged-starter.ts', 'utf8'),
+      rootManifest,
+    ),
+  ).toEqual([]);
 });

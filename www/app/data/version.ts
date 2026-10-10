@@ -7,36 +7,100 @@
 // directly: publish is a gated human authorization, not an automatic step.
 import type { SiteLocale } from '../../site-config.ts';
 import {
-  ALPHA_RESOLVES_TO,
+  PACKAGE_COUNT,
   SOURCE_LINE_PUBLISHED,
   SOURCE_VERSION,
 } from './_generated-release-line.ts';
 
+type ReleaseLocale = SiteLocale;
+
 export const OPENELEMENT_VERSION = `v${SOURCE_VERSION}`;
+
+/**
+ * Size of the published consumer surface — the release-state `packages` array
+ * length, projected through the generated release-line module. Every package
+ * count in site copy derives from this value (packageCountWord /
+ * packageCountPhrase / packageCountModifier): a hand-written number is a claim
+ * that goes stale the moment the surface changes (the alpha.11 split added
+ * protocol and compiler, and every pre-split count sentence became false).
+ */
+export const PUBLISHED_PACKAGE_COUNT = PACKAGE_COUNT;
+
+/**
+ * Copy spelling for a small count. Site chrome uses words, never digits or
+ * hand-written numerals, so the only literal is this table.
+ */
+const COUNT_WORDS: Readonly<Record<ReleaseLocale, readonly string[]>> = {
+  en: [
+    'zero',
+    'one',
+    'two',
+    'three',
+    'four',
+    'five',
+    'six',
+    'seven',
+    'eight',
+    'nine',
+    'ten',
+    'eleven',
+    'twelve',
+  ],
+  zh: ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二'],
+};
+
+/** The count as a copy word ("six" / "六"); digits only past the table. */
+export function packageCountWord(locale: ReleaseLocale, count = PUBLISHED_PACKAGE_COUNT): string {
+  return COUNT_WORDS[locale][count] ?? String(count);
+}
+
+/** "six packages" / "六个包". */
+export function packageCountPhrase(locale: ReleaseLocale): string {
+  const word = packageCountWord(locale);
+  return locale === 'zh' ? `${word}个包` : `${word} packages`;
+}
+
+/** Attributive form for noun phrases: "six-package surface" / "六包表面". */
+export function packageCountModifier(locale: ReleaseLocale): string {
+  const word = packageCountWord(locale);
+  return locale === 'zh' ? `${word}包` : `${word}-package`;
+}
 
 // Per-package registry `latest` dist-tag truth. There is deliberately NO
 // single "published version" constant: a version common to every package is
 // what would justify one, and no STABLE version is (see
 // COMMON_PUBLISHED_VERSION below) — the 1.0 prerelease line sits on `latest`
-// for all six packages. Site and docs copy must present the per-package
-// state, never a fabricated shared version. Keep in sync with
+// for every package. Site and docs copy must present the per-package state,
+// never a fabricated shared version. Keep in sync with
 // docs/release/release-state.json (release:state-machine:check offline;
 // release:registry-check verifies it against the live registry).
 export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {
-  '@openelement/protocol': 'v1.0.0-alpha.11',
-  '@openelement/element': 'v1.0.0-alpha.11',
-  '@openelement/compiler': 'v1.0.0-alpha.11',
-  '@openelement/router': 'v1.0.0-alpha.11',
-  '@openelement/create': 'v1.0.0-alpha.11',
-  '@openelement/ui': 'v1.0.0-alpha.11',
+  '@openelement/protocol': 'v1.0.0-alpha.12',
+  '@openelement/element': 'v1.0.0-alpha.12',
+  '@openelement/compiler': 'v1.0.0-alpha.12',
+  '@openelement/router': 'v1.0.0-alpha.12',
+  '@openelement/create': 'v1.0.0-alpha.12',
+  '@openelement/ui': 'v1.0.0-alpha.12',
 };
+
+// The one `latest` dist-tag value every published package shares, or null when
+// they differ. Copy that wants to name the shared line must read this instead
+// of picking one package: element's `latest` stopped being the stable line when
+// the 1.0 prerelease line began publishing onto `latest` (alpha.11 ruling), and
+// prose that kept treating it as the stable line stated a stable 1.0 line that
+// did not exist.
+export const PUBLISHED_LATEST_SHARED: string | null = (() => {
+  const values = new Set(Object.values(PUBLISHED_LATEST));
+  return values.size === 1 ? [...values][0]! : null;
+})();
 
 // Schema v4 (#1557): packages that have never published carry no registry
 // truth yet. They are named here — never given a placeholder latest — until
 // the release commit that first publishes them flips their release-state
-// status to "published" and moves them into PUBLISHED_LATEST. Empty since the
-// alpha.11 release published the last two (protocol, compiler); the constant
-// stays as the explicit anchor release:state-machine:check requires.
+// status to "published" and moves them into PUBLISHED_LATEST. The constant
+// stays as the explicit anchor release:state-machine:check requires, and the
+// publish train's registry sync rewrites the list from the tracked
+// release-state on every release (tools/release/registry-sync.ts).
 export const UNRELEASED_PACKAGES: readonly string[] = [];
 
 // The newest STABLE version published for every package, or null when none
@@ -47,6 +111,10 @@ export const COMMON_PUBLISHED_VERSION: string | null = null;
 
 // Human-readable note for the (absent) common complete version, in the page
 // locale — chrome copy is finalized at SSR, never rewritten at runtime.
+// The note names the shared fact (one version across the packages) instead of
+// the old "no single stable version is published across the published
+// packages" spelling, which read as "the packages disagree with each other"
+// while every published package actually rides one prerelease version.
 // The interpolation goes through an explicitly typed local and String() so
 // no operand can be implicitly converted (CodeQL js/implicit-operand-
 // conversion on the string|null template operands); behavior is unchanged.
@@ -54,8 +122,8 @@ export function COMMON_PUBLISHED_NOTE(locale: ReleaseLocale): string {
   const published = COMMON_PUBLISHED_VERSION;
   if (published === null) {
     return locale === 'zh'
-      ? '各发布包尚无统一已发布的稳定版本'
-      : 'no single stable version is published across the published packages';
+      ? '预发布线——尚无 stable 版本；所有包共用同一版本'
+      : 'prerelease line — no stable release yet; all packages share one version';
   }
   const version = String(published);
   return locale === 'zh'
@@ -64,7 +132,7 @@ export function COMMON_PUBLISHED_NOTE(locale: ReleaseLocale): string {
 }
 
 // Short label for that version in UI chrome: no number until one exists for
-// all four packages, so chrome never fabricates a shared line.
+// every published package, so chrome never fabricates a shared line.
 export const COMMON_PUBLISHED_LABEL = COMMON_PUBLISHED_VERSION === null
   ? 'none'
   : COMMON_PUBLISHED_VERSION;
@@ -73,8 +141,6 @@ export const COMMON_PUBLISHED_LABEL = COMMON_PUBLISHED_VERSION === null
 export const REGISTRY_NOTE = Object.entries(PUBLISHED_LATEST)
   .map(([name, version]) => `${name.replace('@openelement/', '')} ${version}`)
   .join(' · ');
-
-type ReleaseLocale = SiteLocale;
 
 /** Docs-page stamp: "vX · repository baseline" until publish, then plain. */
 export function sourceLineStamp(locale: ReleaseLocale): string {
@@ -94,37 +160,44 @@ export function sourceLineAppliesLabel(locale: ReleaseLocale): string {
 
 /**
  * One-sentence install-command caveat for getting-started and the home
- * "Begin." note: what @alpha resolves to today, in plain text (no markdown —
- * this string is also substituted into rendered HTML).
+ * "Begin." note, in plain text (no markdown — this string is also substituted
+ * into rendered HTML).
+ *
+ * Deliberately branch-free: the sentence states the versionless-install rule
+ * (npm's `latest` dist-tag) and hands verification to the registry, so it
+ * stays true whether or not the current source line has published yet. No
+ * "current version" claim lives here to go stale, and no release-line history
+ * ("the previous 0.43 line") is hardcoded beside it.
  */
 export function alphaLineNote(locale: ReleaseLocale): string {
-  if (SOURCE_LINE_PUBLISHED) {
-    return locale === 'en'
-      ? `The @alpha dist-tag resolves to ${SOURCE_VERSION} — the current baseline.`
-      : `@alpha dist-tag 解析到 ${SOURCE_VERSION}——即当前基线。`;
-  }
+  const verify = 'npm view @openelement/create dist-tags';
   return locale === 'en'
-    ? `The @alpha dist-tag currently resolves to ${ALPHA_RESOLVES_TO} (the previous 0.43 line); ${SOURCE_VERSION} is the repository baseline, not yet on npm.`
-    : `@alpha dist-tag 当前解析到 ${ALPHA_RESOLVES_TO}（此前的 0.43 线）；${SOURCE_VERSION} 是仓库基线，尚未发布到 npm。`;
+    ? `The versionless install resolves the current 1.0 prerelease from the npm latest dist-tag — verify the exact version with ${verify}.`
+    : `不带版本号的安装从 npm latest dist-tag 解析出当前 1.0 预发布——具体版本用 ${verify} 核实。`;
 }
 
 /**
  * Roadmap alpha-train publish-state (routes/roadmap.tsx timeline), derived
- * from the same release-state truth: the row reads as published once the
- * train is on npm under @alpha, and as a repository baseline before that —
- * the route must never hand-write this status beside
- * docs/release/release-state.json (one source of truth, guarded by the
- * www check:content-data drift check).
+ * from the same release-state truth.
+ *
+ * Both branches carry the registry verify pointer, and the unpublished branch
+ * states the tracked baseline without asserting a registry absence: the
+ * tracked registry block is a snapshot (release:registry-check refreshes it),
+ * so a stale block must never make the page claim "not yet on npm" — the
+ * reader is sent to `npm view` instead. The route must never hand-write this
+ * status beside docs/release/release-state.json (one source of truth, guarded
+ * by the www check:content-data drift check).
  */
 export function prereleasePublishStatus(locale: ReleaseLocale): string {
+  const verify = 'npm view @openelement/create dist-tags';
   if (SOURCE_LINE_PUBLISHED) {
     return locale === 'zh'
-      ? '已通过 @alpha dist-tag 发布到 npm'
-      : 'published to npm under the @alpha dist-tag';
+      ? `已通过 @alpha dist-tag 发布到 npm——实况请用 ${verify} 核实`
+      : `published to npm under the @alpha dist-tag — verify the live dist-tags with ${verify}`;
   }
   return locale === 'zh'
-    ? '仓库基线——尚未发布到 npm'
-    : 'repository baseline — not yet on npm';
+    ? `仓库基线——实况 dist-tags 请用 ${verify} 核实`
+    : `repository baseline — verify the live dist-tags with ${verify}`;
 }
 
 /** Getting-started lead-in note ({{SOURCE_LINE_NOTE}} placeholder). */
@@ -135,6 +208,6 @@ export function sourceLineNote(locale: ReleaseLocale): string {
       : `${SOURCE_VERSION} 是 Element 与 Router 的当前基线，已通过 @alpha dist-tag 发布到 npm。`;
   }
   return locale === 'en'
-    ? `${SOURCE_VERSION} is the repository baseline for Element and Router and is not yet published to npm. The @alpha dist-tag currently resolves to ${ALPHA_RESOLVES_TO} — the previous 0.43 line with the retired functional authoring model.`
-    : `${SOURCE_VERSION} 是 Element 与 Router 的仓库基线，尚未发布到 npm。@alpha dist-tag 当前解析到 ${ALPHA_RESOLVES_TO}——即旧的 0.43 线，采用已退役的函数式创作模型。`;
+    ? `${SOURCE_VERSION} is the repository baseline for Element and Router. The @alpha dist-tag serves the current 1.0 prerelease — verify the exact version with npm view @openelement/create dist-tags.`
+    : `${SOURCE_VERSION} 是 Element 与 Router 的仓库基线。@alpha dist-tag 服务于当前 1.0 预发布——具体版本用 npm view @openelement/create dist-tags 核实。`;
 }

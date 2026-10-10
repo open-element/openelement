@@ -1,6 +1,6 @@
 {
   "name": "@openelement/protocol",
-  "version": "1.0.0-alpha.12",
+  "version": "1.0.0-alpha.13",
   "description": "Cross-system contracts for OpenElement \u2014 Part Program IR types, policy constants, error codes, island markers. Zero dependencies by charter.",
   "type": "module",
   "license": "MIT",

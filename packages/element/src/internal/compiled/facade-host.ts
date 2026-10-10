@@ -257,20 +257,43 @@ export function installAccessors(
         if (!sig) return;
         const next = coercePropertyValue(record, value);
         if (Object.is(sig.value, next)) return;
-        sig.value = next;
-        // Post-connect reflection to the attribute, guarded against the
-        // attribute -> property -> attribute loop.
-        if (record.reflect && record.attribute !== null && state.kernel?.active) {
-          const serialized = convertToAttribute(record, next);
-          const current = this.getAttribute(record.attribute);
-          if (current !== serialized) {
-            state.reflecting = record.attribute;
-            try {
-              if (serialized === null) this.removeAttribute(record.attribute);
-              else this.setAttribute(record.attribute, serialized);
-            } finally {
-              state.reflecting = null;
+        // Signal-graph evaluation is synchronous at the write: assigning a
+        // plain property re-evaluates the computeds and Region subscriptions
+        // that depend on it on this stack, so a throwing derivation (e.g.
+        // `computed(() => this.payload.nested.deep)` after the handler wrote
+        // `{ nested: null }`) would otherwise escape through this setter into
+        // the event handler / window. The setter is therefore the one client
+        // capture point for signal-write-triggered evaluation failures —
+        // handler-driven and external writes ride the same path (P7 prior
+        // art: React captures render/lifecycle throws; the compiled
+        // difference is that here the throw surfaces at a property write).
+        // Reflection stays inside the try: a routed error must not leave a
+        // half-applied attribute mirror behind, and a reflection failure is
+        // equally an element failure to route.
+        try {
+          sig.value = next;
+          // Post-connect reflection to the attribute, guarded against the
+          // attribute -> property -> attribute loop.
+          if (record.reflect && record.attribute !== null && state.kernel?.active) {
+            const serialized = convertToAttribute(record, next);
+            const current = this.getAttribute(record.attribute);
+            if (current !== serialized) {
+              state.reflecting = record.attribute;
+              try {
+                if (serialized === null) this.removeAttribute(record.attribute);
+                else this.setAttribute(record.attribute, serialized);
+              } finally {
+                state.reflecting = null;
+              }
             }
+          }
+        } catch (error) {
+          if (
+            !(this as unknown as { _captureError?: (error: unknown) => boolean })._captureError?.(
+              error,
+            )
+          ) {
+            throw error;
           }
         }
       },

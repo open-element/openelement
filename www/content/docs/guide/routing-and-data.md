@@ -135,9 +135,22 @@ export default definePage(GuestbookPage, {
 });
 ```
 
+**Success data has no envelope — it travels through the PRG target.** The `actionData` in the context above is the payload of a RETURNED failure (`fail(status, data)`) and nothing else. A successful action answers 303 (PRG), so the projector runs again on the redirected GET — exactly where a no-JS submission lands — and the success state to show is whatever that GET can read: the loader's re-run and the PRG target's own query state. The `echoed` value above is that pattern; a loader-side read is the other half:
+
+```ts
+// The redirected GET re-runs the loader: success state arrives here, not
+// through a success envelope on the POST.
+export async function loader(ctx: { request: Request }): Promise<GuestbookData> {
+  const posted = new URL(ctx.request.url).searchParams.get('posted');
+  return { entries: await listEntries(), posted: posted ?? '' };
+}
+```
+
+This is ADR-0120's three-state status rule, frozen: a successful non-GET action answers 303, an action endpoint never answers 200 with a success document, and validation stays a `fail(4xx)` return. On the fetch channel the same success is the `redirect` ActionResult (`{ type: 'redirect', status: 303, location }`), whose body the built-in enhancement follows as a navigation.
+
 ## Action fetch negotiation
 
-Fetch-based action posts are recognized by the `x-openelement-action` header (exported as `ACTION_FETCH_HEADER` from `@openelement/router`): the built-in morph enhancement sends `enhance` and receives the same full-HTML responses as the no-JS path; a programmatic caller sends `true` and receives the serialized `ActionResult` union — `success` / `failure` / `redirect` with `status` and `data` — while error outcomes answer RFC 9457 `problem+json` (`type`/`title`/`status`/`detail`). No header means a plain browser form post.
+Fetch-based action posts are recognized by the `x-openelement-action` header (exported as `ACTION_FETCH_HEADER` from `@openelement/router`): the built-in morph enhancement sends `enhance` and receives the same full-HTML responses as the no-JS path; a programmatic caller sends `true` and receives the serialized `ActionResult` union — `failure` with `status`/`data`, or `redirect` with the PRG `status`/`location`; there is no success document, because a successful mutation answers 303 (see the Form actions section) — while error outcomes answer RFC 9457 `problem+json` (`type`/`title`/`status`/`detail`). No header means a plain browser form post.
 
 ## Two loader/action chains
 

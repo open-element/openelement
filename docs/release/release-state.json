@@ -1,12 +1,12 @@
 {
   "schemaVersion": 4,
-  "sourceVersion": "1.0.0-alpha.12",
-  "activeTarget": "v1.0.0-alpha.12",
+  "sourceVersion": "1.0.0-alpha.13",
+  "activeTarget": "v1.0.0-alpha.13",
   "nextPlannedTrain": "not scheduled",
   "maturity": "alpha",
   "registry": {
     "source": "registry.npmjs.org",
-    "verifiedAt": "2026-10-08",
+    "verifiedAt": "2026-10-09",
     "method": "read-only npm view versions + dist-tags"
   },
   "packages": [
@@ -14,55 +14,55 @@
       "name": "@openelement/protocol",
       "status": "published",
       "registry": {
-        "latest": "1.0.0-alpha.11",
-        "alpha": "1.0.0-alpha.11"
+        "alpha": "1.0.0-alpha.12",
+        "latest": "1.0.0-alpha.12"
       }
     },
     {
       "name": "@openelement/element",
       "status": "published",
       "registry": {
-        "latest": "1.0.0-alpha.11",
-        "alpha": "1.0.0-alpha.11"
+        "alpha": "1.0.0-alpha.12",
+        "latest": "1.0.0-alpha.12"
       }
     },
     {
       "name": "@openelement/compiler",
       "status": "published",
       "registry": {
-        "latest": "1.0.0-alpha.11",
-        "alpha": "1.0.0-alpha.11"
+        "alpha": "1.0.0-alpha.12",
+        "latest": "1.0.0-alpha.12"
       }
     },
     {
       "name": "@openelement/router",
       "status": "published",
       "registry": {
-        "latest": "1.0.0-alpha.11",
-        "alpha": "1.0.0-alpha.11"
+        "alpha": "1.0.0-alpha.12",
+        "latest": "1.0.0-alpha.12"
       }
     },
     {
       "name": "@openelement/create",
       "status": "published",
       "registry": {
-        "latest": "1.0.0-alpha.11",
-        "alpha": "1.0.0-alpha.11"
+        "alpha": "1.0.0-alpha.12",
+        "latest": "1.0.0-alpha.12"
       }
     },
     {
       "name": "@openelement/ui",
       "status": "published",
       "registry": {
-        "latest": "1.0.0-alpha.11",
-        "alpha": "1.0.0-alpha.11"
+        "alpha": "1.0.0-alpha.12",
+        "latest": "1.0.0-alpha.12"
       }
     }
   ],
   "commonCompleteVersion": null,
   "commonCompleteVersionNote": "No stable version is published for every published package. @openelement/router has only 0.41.0 prereleases, and @openelement/protocol and @openelement/compiler carry no stable release either; the 0.43.3 stable line covers element, create, and ui only. Any non-null value here must be present in every published package and is verified by release:registry-check. Schema v4 (#1557): packages awaiting their first publish carry status \"unpublished\" and no registry object; the alpha.11 release published all six packages, so no entry carries \"unpublished\" today.",
   "latestPrerelease": {
-    "version": "1.0.0-alpha.11",
+    "version": "1.0.0-alpha.12",
     "distTag": "latest",
     "state": "complete",
     "publishedPackages": [
@@ -74,6 +74,6 @@
       "@openelement/ui"
     ],
     "missingPackages": [],
-    "note": "The 1.0 prerelease line publishes onto latest (alpha.11 ruling), so the newest prerelease is served under latest for all six packages, and the @alpha alias rides the same version: re-pointed on 2026-10-08, so both dist-tags resolve to 1.0.0-alpha.11 for every package — the per-package registry blocks record those actual tags."
+    "note": "Registry read-back on 2026-10-09 (tools/release/registry-sync.ts): the per-package registry blocks record the dist-tags npm served, and 1.0.0-alpha.12 is the newest prerelease served on latest."
   }
 }

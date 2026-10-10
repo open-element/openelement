@@ -12,10 +12,19 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import mime from 'mime';
 import { pathToFileURL } from 'node:url';
-import { extname, join, resolve } from 'pathe';
+import { basename, extname, join, resolve } from 'pathe';
 
 /** Forward-slash separator: `pathe` normalizes every path to `/`. */
 const SEP = '/';
+
+/**
+ * The error-document convention (GitHub Pages, and the shape the SSG emits:
+ * `ssg-render.ts` renames `<locale>/404/index.html` to `<locale>/404.html`).
+ * A request that resolves to this file — `/404.html`, its clean-URL twin
+ * `/404`, a locale copy — is the not-found answer, not a real page, and a
+ * static miss answers with it when the build shipped one.
+ */
+export const ERROR_DOCUMENT = '404.html';
 
 /**
  * Content-Type for a static file, by extension. `text/*` types carry an
@@ -62,6 +71,13 @@ export function isMalformedUrlError(err: unknown): boolean {
 /**
  * Serve a static file from `distDir` for `pathname`, or null when no
  * candidate exists. Paths escaping the root are refused.
+ *
+ * Status fidelity: when the resolved file is the error document
+ * ({@linkcode ERROR_DOCUMENT}) the response carries the 404 status it
+ * denotes. `/404.html` and its clean-URL twin `/404` are the not-found answer
+ * by definition; serving them as a 200 page would let a cache or crawler
+ * record the error document as real content — the same reason the SSG never
+ * emits a locale error document as a 200 directory page.
  */
 export function tryStatic(distDir: string, pathname: string): Response | null {
   let candidates: string[];
@@ -102,10 +118,49 @@ export function tryStatic(distDir: string, pathname: string): Response | null {
     const headers: Record<string, string> = { 'content-type': contentTypeFor(filePath) };
     const cacheControl = cacheControlFor(filePath);
     if (cacheControl) headers['cache-control'] = cacheControl;
+    // basename of the CONTAINMENT-CHECKED path: it equals the real file's
+    // name (the realpath check above refused symlinks out of the root, and an
+    // in-root symlink's name is the served name).
+    const found = basename(filePath);
     return new Response(body as unknown as BodyInit, {
-      status: 200,
+      status: found === ERROR_DOCUMENT ? 404 : 200,
       headers,
     });
+  }
+  return null;
+}
+
+/**
+ * The error document for a requested pathname, as a 404 response, or null
+ * when the build shipped none.
+ *
+ * Nearest-document lookup, two levels: the request's first path segment's
+ * directory (`<segment>/404.html`), then the root (`404.html`). The SSG emits
+ * the per-locale copies at exactly those positions (`dist/404.html` and
+ * `dist/<locale>/404.html`), so a miss under `/zh/...` — including `/zh/`
+ * itself — answers with the zh error document and any other miss answers with
+ * the root one. The lookup never descends deeper than the first segment:
+ * `guide/deep/404.html` is not a site error document, so a miss under
+ * `/guide/deep/` is not answered from there.
+ *
+ * Body and status come from the same read: the document ships as a 404 (it is
+ * the not-found answer by definition), and a miss with no document on disk
+ * keeps the caller's bare response.
+ */
+export function tryErrorDocument(distDir: string, pathname: string): Response | null {
+  const segments = pathname
+    .split('?')[0]
+    .split('/')
+    .filter((segment) => segment !== '');
+  const candidates: string[] = [];
+  if (segments.length > 0) candidates.push(`${segments[0]}/${ERROR_DOCUMENT}`);
+  candidates.push(ERROR_DOCUMENT);
+  for (const candidate of candidates) {
+    const response = tryStatic(distDir, `/${candidate}`);
+    // Only the error document's own status qualifies. tryStatic's other
+    // outcomes (the malformed-encoding 400) are not error documents, and this
+    // function's contract is exactly "the document, or null".
+    if (response?.status === 404) return response;
   }
   return null;
 }
@@ -129,7 +184,9 @@ export interface DispatchRequestOptions {
 /**
  * Canonical production request dispatch: admitted request-time paths and
  * every mutating method reach the server first; GET/HEAD may use a static
- * artifact; a static miss falls through to the server.
+ * artifact; a static miss falls through to the server, and a pure-static
+ * deployment answers a miss with the build's error document when one shipped
+ * ({@linkcode tryErrorDocument}) instead of a bare status line.
  */
 export async function dispatchRequest(
   request: Request,
@@ -165,7 +222,10 @@ export async function dispatchRequest(
   const staticResponse = tryStatic(distDir, url.pathname);
   if (staticResponse) return staticResponse;
   if (serverMod?.default) return await invokeServer();
-  return new Response('Not Found', { status: 404 });
+  // Pure-static miss: the build's own error document when it shipped one.
+  // Only reached on the GET/HEAD path (mutating methods left above), so the
+  // document serves exactly the requests that can carry a body.
+  return tryErrorDocument(distDir, url.pathname) ?? new Response('Not Found', { status: 404 });
 }
 
 /** Import the generated request-time server entry from an absolute file path. */

@@ -9,6 +9,78 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.13
+
+**The lifecycle gets one documented command name, and the scaffold stops
+pinning itself to one release.** `@openelement/router` now ships an
+`openelement` executable, the generated starter calls it from its scripts,
+and the starter's dependencies are caret ranges over the release they were
+generated from instead of exact pins.
+
+- **One lifecycle command.** The router package installs an `openelement`
+  command: `openelement build` produces the site, `openelement start` serves
+  it, and `openelement start --mode=preview` is the static-only serve (it
+  refuses a build that has request-time routes, and points at `start`
+  instead). Commands no longer route through file paths inside your
+  installed `node_modules`; the equivalent `@openelement/router/cli/build`
+  and `@openelement/router/cli/start` subpaths keep working for callers that
+  use them directly.
+- **Starter scripts use the command.** The scaffolded `build` and `start`
+  scripts are `openelement build` and `openelement start`. The `preview`
+  script is gone: the starter ships an `/api/ping` route, so preview could
+  only ever refuse — run `openelement start --mode=preview` yourself if you
+  want the static-only check.
+- **Starter dependencies use caret ranges.** `@openelement/element` and
+  `@openelement/router` are now caret ranges over the release the scaffold
+  was generated from, so `pnpm update` picks up later 1.0.0 prereleases (and
+  the final 1.0.0) without editing `package.json` by hand.
+- **Dependencies split by when they run.** The generated `package.json`
+  keeps only the two runtime packages in `dependencies`; the Vite dev server
+  and its Hono peer, Tailwind, TypeScript and Vite itself move to
+  `devDependencies`. A production install (`npm install --omit=dev`) now
+  installs just what the built app imports. The starter also no longer ships
+  a browser-automation dependency — it had no test using one.
+- **Tailwind theme paths are app-relative.** `tailwind.theme` (and
+  `components`) entries now resolve against your app root, so the starter
+  declares `['app/styles/theme.css']` rather than counting `../..` climbs out
+  of the build's staging directory. Package specifiers such as
+  `@openelement/ui/theme.css` keep working unchanged.
+- **Cleaner build output.** Builds no longer emit a zero-byte build-trigger
+  chunk into `dist/assets/`, and the island build no longer copies your
+  `public/` files a second time under `dist/client/` — each public asset
+  ships once, at the path your pages reference.
+- **Quieter, more honest output.** The scaffold's closing handoff box now
+  prints the generator version, so a cached `npx` run resolves something you
+  can identify. The dev server's route summary drops the framework
+  name-suffix that read like your site title had been appended, and no longer
+  prints an absolute staging path.
+- **Documentation corrections.** The guides no longer teach a
+  `--no-tailwind` flag (there is no such flag — dropping Tailwind is a
+  project edit, and the docs now say how), explain when to use the
+  `app/styles/tokens.css` convention versus the starter's `theme.css` role
+  sheet, and describe the styled 404 accurately: a build with request-time
+  routes serves it from the server and writes no static `404.html`, while a
+  purely static build prerenders it. The script lists match the scaffold
+  (no `preview` script), and the static-only serve is documented under its
+  real spelling, `openelement start --mode=preview`.
+- **The homepage fact layer is checked against the registry.** The versions
+  the site displays and the dist-tags npm serves must agree: after a publish
+  the release workflow reads the registry back and writes what it finds into
+  the release record and the site's version constants, and the release check
+  fails when the displayed versions and the registry disagree — a stale
+  number can no longer ship. The version block is now one line
+  (`v1.0.0-alpha.13 · six packages · one version`), the fact strip under it
+  states one fact per cell (CI browser engines, third-party runtime
+  dependencies for `element`, and the server output shape), and package
+  counts come from release data instead of hand-written numbers.
+- **`openelement --version`.** The command prints the version of the
+  installed router package; `--version` and `-v` print the same, and the
+  usage text lists them.
+- **The site's route sources are type-checked again.** The check had been
+  reporting missing stylesheet type declarations instead of compiling the
+  routes, which hid any real type error behind that noise; the compiler now
+  receives the stylesheet declaration and the check passes over every route.
+
 ## 1.0.0-alpha.9
 
 **The styling blood-swap: one @theme token source, opt-in Tailwind seams,

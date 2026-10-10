@@ -15,6 +15,7 @@ import {
   dispatchRequest,
   isMalformedUrlError,
   staticFileCandidates,
+  tryErrorDocument,
   tryStatic,
 } from '../src/vite/internal/static-serve.ts';
 
@@ -113,6 +114,211 @@ test('tryStatic serves files and refuses path escape', async () => {
     expect(tryStatic(root, '/missing')).toEqual(null);
     // Path escape outside the static root must never be served.
     expect(tryStatic(root, '/../secret.txt')).toEqual(null);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('tryStatic serves the error document with the 404 status it denotes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    await mkdir(join(root, 'zh'));
+    await writeFile(join(root, 'index.html'), '<h1>home</h1>');
+    await writeFile(join(root, '404.html'), '<h1>not found</h1>');
+    await writeFile(join(root, 'zh', '404.html'), '<h1>未找到</h1>');
+
+    // The document is the not-found answer by definition, whichever URL form
+    // reaches it: the exact file, or the clean-URL twin the candidate rules
+    // resolve to the same bytes. It must never answer 200, or a cache or
+    // crawler records the error document as real content.
+    for (const pathname of ['/404.html', '/404', '/zh/404.html', '/zh/404']) {
+      const response = tryStatic(root, pathname);
+      expect(response, `${pathname} resolves to the error document`).toBeTruthy();
+      expect(response!.status, `${pathname} status`).toEqual(404);
+      expect(response!.headers.get('content-type')).toEqual('text/html; charset=UTF-8');
+    }
+    expect(await tryStatic(root, '/404.html')!.text()).toEqual('<h1>not found</h1>');
+    expect(await tryStatic(root, '/zh/404')!.text()).toEqual('<h1>未找到</h1>');
+
+    // Ordinary pages keep the 200 contract.
+    expect(tryStatic(root, '/')!.status).toEqual(200);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test("tryErrorDocument: the request's first-segment document wins, else the root one", async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    await writeFile(join(root, '404.html'), '<h1>root error</h1>');
+    await mkdir(join(root, 'zh'));
+    await writeFile(join(root, 'zh', '404.html'), '<h1>zh error</h1>');
+    await mkdir(join(root, 'guide'));
+    await writeFile(join(root, 'guide', '404.html'), '<h1>guide error</h1>');
+    // A document two levels down exists but is NOT a site error document.
+    await mkdir(join(root, 'deep'));
+    await mkdir(join(root, 'deep', 'nested'));
+    await writeFile(join(root, 'deep', 'nested', '404.html'), '<h1>deeper decoy</h1>');
+
+    const root404 = tryErrorDocument(root, '/no-such-page');
+    expect(root404!.status).toEqual(404);
+    expect(await root404!.text()).toEqual('<h1>root error</h1>');
+
+    // The locale convention the SSG emits: dist/<locale>/404.html. It covers
+    // misses under the locale AND the locale directory itself.
+    const zh404 = tryErrorDocument(root, '/zh/no-such-page');
+    expect(zh404!.status).toEqual(404);
+    expect(await zh404!.text()).toEqual('<h1>zh error</h1>');
+    expect(await tryErrorDocument(root, '/zh/')!.text()).toEqual('<h1>zh error</h1>');
+
+    // The first segment's own document.
+    expect(await tryErrorDocument(root, '/guide/no-such-page')!.text()).toEqual(
+      '<h1>guide error</h1>',
+    );
+    // A miss deeper under the same first segment still resolves through that
+    // first segment, never through a document nested below it.
+    expect(await tryErrorDocument(root, '/guide/deep/no-such-page')!.text()).toEqual(
+      '<h1>guide error</h1>',
+    );
+    // `deep/nested/404.html` is two levels deep: not consulted (the answer
+    // comes from the root document, since `deep/404.html` does not exist).
+    expect(await tryErrorDocument(root, '/deep/nested/no-such-page')!.text()).toEqual(
+      '<h1>root error</h1>',
+    );
+    // A single-segment miss whose segment carries no document falls back.
+    expect(await tryErrorDocument(root, '/deep/')!.text()).toEqual('<h1>root error</h1>');
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('tryErrorDocument returns null when the build shipped no error document', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    await writeFile(join(root, 'index.html'), '<h1>home</h1>');
+    expect(tryErrorDocument(root, '/no-such-page')).toEqual(null);
+    // A locale-prefixed miss with only the root document falls back to it.
+    await writeFile(join(root, '404.html'), '<h1>root error</h1>');
+    expect(await tryErrorDocument(root, '/zh/no-such-page')!.text()).toEqual('<h1>root error</h1>');
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('tryErrorDocument never forwards a non-document response', async () => {
+  // tryStatic answers malformed percent-encoding with a 400. That is not an
+  // error document: a malformed first segment must be skipped (the root
+  // document still answers), and with no document on disk the miss stays null
+  // rather than surfacing the inner 400 as the caller's answer.
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  const bare = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    await writeFile(join(root, '404.html'), '<h1>root error</h1>');
+    const malformed = tryErrorDocument(root, '/%zz/no-such-page');
+    expect(malformed).toBeTruthy();
+    expect(malformed!.status).toEqual(404);
+    expect(await malformed!.text()).toEqual('<h1>root error</h1>');
+
+    expect(tryErrorDocument(bare, '/%zz/no-such-page')).toEqual(null);
+  } finally {
+    await rm(root, { recursive: true });
+    await rm(bare, { recursive: true });
+  }
+});
+
+test('dispatchRequest: a pure-static miss answers the error document (#KR-7)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    await writeFile(join(root, 'index.html'), '<h1>home</h1>');
+    await writeFile(join(root, '404.html'), '<h1>styled not found</h1>');
+
+    const missing = await dispatchRequest(new Request('http://example.test/no-such-page'), {
+      distDir: root,
+      serverMod: null,
+    });
+    expect(missing.status).toEqual(404);
+    expect(await missing.text()).toEqual('<h1>styled not found</h1>');
+    expect(missing.headers.get('content-type')).toEqual('text/html; charset=UTF-8');
+
+    // Direct access to the document keeps the same 404 status.
+    const direct = await dispatchRequest(new Request('http://example.test/404.html'), {
+      distDir: root,
+      serverMod: null,
+    });
+    expect(direct.status).toEqual(404);
+
+    // A build with no error document keeps the bare response.
+    const bare = await mkdtemp(join(tmpdir(), 'oe-'));
+    try {
+      await writeFile(join(bare, 'index.html'), '<h1>home</h1>');
+      const bare404 = await dispatchRequest(new Request('http://example.test/no-such-page'), {
+        distDir: bare,
+        serverMod: null,
+      });
+      expect(bare404.status).toEqual(404);
+      expect(await bare404.text()).toEqual('Not Found');
+    } finally {
+      await rm(bare, { recursive: true });
+    }
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('dispatchRequest: a dynamic server owns its own miss, the static document never shadows it', async () => {
+  // A build with dist/server answers unmatched GETs from the server (the
+  // starter's dynamic 404). The static error document is a pure-static
+  // fallback only: it must not pre-empt the server's answer.
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    await writeFile(join(root, 'index.html'), '<h1>home</h1>');
+    await writeFile(join(root, '404.html'), '<h1>static error</h1>');
+    const serverMod = {
+      isRequestTimePath: () => false,
+      default: () =>
+        Promise.resolve(
+          new Response('<h1>dynamic not found</h1>', {
+            status: 404,
+            statusText: 'Dynamic Not Found',
+          }),
+        ),
+    };
+
+    const missing = await dispatchRequest(new Request('http://example.test/no-such-page'), {
+      distDir: root,
+      serverMod,
+    });
+    expect(missing.status).toEqual(404);
+    expect(missing.statusText).toEqual('Dynamic Not Found');
+    expect(await missing.text()).toEqual('<h1>dynamic not found</h1>');
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('dispatchRequest: HEAD carries the error document status without a body', async () => {
+  // The node:http adapter (node-http.ts sendResponse) writes the status and
+  // drops the body for HEAD; this pins the handler side of the same contract
+  // so the error document's status is the one HEAD reports.
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    await writeFile(join(root, 'index.html'), '<h1>home</h1>');
+    await writeFile(join(root, '404.html'), '<h1>styled not found</h1>');
+
+    const head = await dispatchRequest(
+      new Request('http://example.test/no-such-page', { method: 'HEAD' }),
+      { distDir: root, serverMod: null },
+    );
+    expect(head.status).toEqual(404);
+    expect(await head.text()).toEqual('<h1>styled not found</h1>');
+
+    // Mutating methods keep their defined 405 shape, document or not.
+    const post = await dispatchRequest(
+      new Request('http://example.test/no-such-page', { method: 'POST', body: 'x=1' }),
+      { distDir: root, serverMod: null },
+    );
+    expect(post.status).toEqual(405);
+    expect(await post.text()).toEqual('Method Not Allowed');
   } finally {
     await rm(root, { recursive: true });
   }

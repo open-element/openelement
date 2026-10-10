@@ -4,7 +4,7 @@
  * Builds the static-only fixture (no renderIntent 'dynamic' routes) and pins
  * the deployable tree:
  *   - #953: no dist/server is emitted for a pure-static project, so the
- *     `cli/start --mode=preview` gate accepts the output and vite preview
+ *     `cli/start --mode=preview` gate accepts the output and preview
  *     actually serves it (previously the leftover SSR bundle directory made
  *     preview look unsupported).
  *   - #954: an app/routes/*.mdx page is discovered by the route scanner and
@@ -14,7 +14,7 @@
  *   pnpm --dir tests/fixtures/router-static-only run build
  */
 
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { stat, readFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
@@ -128,9 +128,7 @@ test('static-only build: preview mode serves the output (#953)', async () => {
         setTimeout(resolve, 5000).unref();
       });
     }
-    // Preview delegates to a `node <app-vite-bin>/vite.js preview` grandchild
-    // (start.ts runPreview spawns process.execPath + the vite bin path);
-    // kill it by its unique port argument so no server leaks.
-    spawnSync('pkill', ['-f', `vite.js preview --port ${freePort}`]);
+    // Preview serves dist/ in its own process (no `vite preview` grandchild
+    // since the static-contract unification), so SIGTERM above ends it.
   }
 });

@@ -291,6 +291,15 @@ export interface PagePropsContext<
   Params extends Record<string, string> = Record<string, string>,
 > {
   data: Data | undefined;
+  /**
+   * The 422 re-render payload of a RETURNED action failure (`fail(status,
+   * data)`): the classified `failure.data`, verbatim. It is `undefined` on
+   * every other render — a successful action answers 303 (PRG), and the
+   * projector runs again only on the redirected GET, where success data
+   * arrives through the loader's re-run (read the PRG target's query state
+   * there). There is no success envelope on this channel by design: a
+   * successful non-GET action answers 303 (the PRG contract).
+   */
   actionData: unknown;
   params: Params;
   request?: Request;

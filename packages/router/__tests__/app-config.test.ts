@@ -557,6 +557,22 @@ test('app config: inline packageIslands also derives noExternal', () => {
   expect(resolved.options.ssr).toEqual({ noExternal: ['@acme/components'] });
 });
 
+test('app config: the derivation ADDS to an inline ssr.noExternal list', () => {
+  // Replacing the caller's own list would silently un-bundle a package they
+  // asked to bundle — the derivation is a union, deduplicated.
+  const resolved = resolveAppConfig({
+    root: process.cwd(),
+    configFile: null,
+    inlineOptions: {
+      packageIslands: ['@openelement/ui', 'lit'],
+      ssr: { noExternal: ['lit', 'some-cjs-package'] },
+    },
+  });
+  expect(resolved.options.ssr).toEqual({
+    noExternal: ['lit', 'some-cjs-package', '@openelement/ui'],
+  });
+});
+
 // ─── alpha.4: the structured head channel ───
 
 test('app config: head.scripts and head.stylesheets reach the inject channel', () => {

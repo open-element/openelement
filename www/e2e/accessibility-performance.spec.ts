@@ -16,11 +16,14 @@ import { deepQueryAllInPage } from '../../tools/lib/shadow-walker.ts';
 // CI runners are fast and deterministic; local Windows dev boxes can be
 // much slower, so relax the load-time ceiling outside of CI.
 const LOAD_THRESHOLD_MS = process.env.CI ? 5000 : 60000;
+// Hosts whose console errors are infrastructure noise, not site bugs. The
+// retired font CDN is deliberately absent: the faces are self-hosted
+// (www/site-fonts.ts), so any cdn.jsdelivr.net request that reappears is a
+// regression and must surface as a critical error, not be allowlisted.
 const NON_CRITICAL_EXTERNAL_HOSTS = new Set([
   'gc.zgo.at',
   'openelement.goatcounter.com',
   'cdnjs.cloudflare.com',
-  'cdn.jsdelivr.net',
 ]);
 
 function isNonCriticalExternalUrl(value: string): boolean {

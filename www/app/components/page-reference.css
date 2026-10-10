@@ -78,8 +78,14 @@
   }
   .ce-row { grid-template-columns: minmax(0, .9fr) minmax(0, 1fr); }
   /* Source paths and identifiers carry no break opportunity, so they set the
-     min-content floor of whichever track holds them. */
-  .ref-name, .ref-container, .ref-source, .ce-tag, .ce-class, .ce-module, .ce-detail { overflow-wrap: anywhere; }
+     min-content floor of whichever track holds them. The summary and options
+     paragraphs join this list for the same reason: they are generated from
+     TSDoc/JSDoc bodies, which embed URLs and signature fragments (a 88-char
+     `[MDN Reference](https://developer.mozilla.org/…)` token was measured
+     setting a 634px floor inside a 326px track at 390px — 276px of page
+     overflow). */
+  .ref-name, .ref-container, .ref-source, .ce-tag, .ce-class, .ce-module, .ce-detail,
+  .ref-summary, .ref-options { overflow-wrap: anywhere; }
   .ref-name {
     display: inline;
     color: var(--color-primary);

@@ -254,7 +254,8 @@ export default definePage(RoadmapPage, {
     const resolved = contentLocale(locale ?? 'en');
     const t = content[resolved];
     const timeline: RoadmapTimelineItem[] = entries[resolved].map((phase) => {
-      // There is no four-package published version (Router has no 0.43.x),
+      // There is no complete-surface published version on the stable line
+      // (Router has no 0.43.x; protocol and compiler have no stable release),
       // so COMMON_PUBLISHED_VERSION is null and no timeline row is marked
       // current from registry state.
       const stamp =

@@ -62,6 +62,26 @@ function encodeBase64(value: string): string {
   return btoa(binary);
 }
 
+/**
+ * The platform lifecycle callbacks whose authored bodies the compiler wraps
+ * in the error-boundary capture contract. These are the callbacks the platform
+ * invokes outside any application stack — a throw inside them would otherwise
+ * escape straight to window.onerror with no boundary the way a render throw
+ * in React reaches the nearest error boundary. Everything else (event
+ * handlers, plain author methods) keeps the verbatim emission: those already
+ * run inside caller stacks, and the runtime capture points (the facade
+ * property setter, the kernel update sink) own their failure modes.
+ */
+const CAPTURE_WRAPPED_LIFECYCLE_CALLBACKS = new Set([
+  'connectedCallback',
+  'disconnectedCallback',
+  'adoptedCallback',
+  'attributeChangedCallback',
+  'formAssociatedCallback',
+  'formResetCallback',
+  'formStateRestoreCallback',
+]);
+
 function generatedHandlerText(handler: GeneratedHandler): string {
   const action = handler.action;
   if (action.kind === 'method') return `  ${handler.name}(): void { this.${action.name}(); }`;
@@ -424,8 +444,50 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
       field.node.initializer,
     );
   }
+  /**
+   * Emit one platform lifecycle callback with the boundary-capture wrapper
+   * (P2: the wrapper is a compile-time cost; the runtime delta is one method
+   * call on the failure path only). The body bytes and their columns are
+   * emitted UNCHANGED from the verbatim copy — body line i keeps the authored
+   * text at the authored column, so the continuation mapping stays
+   * byte-identical to what `pushVerbatim` produced; the inserted `try {` and
+   * `} catch` lines are pure scaffolding and stay unmapped (consumers fall
+   * through to the nearest real construct, the method's own first-line
+   * mapping). Prior art (P7): React error boundaries capture lifecycle and
+   * render throws at runtime; the compiled difference is that this capture
+   * point is materialized once, at compile time, around exactly the platform
+   * entry points — `_captureError` on the base class then performs the same
+   * nearest-boundary climb React's component stack does.
+   */
+  const pushLifecycleCapture = (method: ts.MethodDeclaration, name: string): void => {
+    const body = method.body!;
+    const methodText = method.getText(sf);
+    // Header: everything the authored method carries before its body block —
+    // accessibility/modifiers, name, type parameters, parameters, return type.
+    const header = methodText.slice(0, body.getStart(sf) - method.getStart(sf));
+    // Body text between the braces, minus the indentation-only line that
+    // carried the method's own closing brace (the wrapper supplies its own).
+    const bodyText = methodText
+      .slice(header.length + 1, methodText.length - 1)
+      .replace(/\n[ \t]*$/, '');
+    const firstGeneratedLine = codeLines.length + 1;
+    push(`  ${header}{`);
+    mapLineAt(firstGeneratedLine, 2, method, name);
+    push(`  try {${bodyText}`);
+    // bodyText's line 0 is the remainder of the authored `{` line, so its
+    // line 1 is authored line bodyStart+1 — exactly what the continuation
+    // mapper computes with the body node and the `try {` line as line 0.
+    mapContinuationLines(bodyText, firstGeneratedLine + 1, body, 0);
+    push(`  } catch (error) { if (!this._captureError(error)) throw error; }`);
+    push(`  }`);
+  };
   for (const method of methods) {
-    pushVerbatim(method.getText(sf), method, '  ', (method.name as ts.Identifier).text);
+    const name = (method.name as ts.Identifier).text;
+    if (CAPTURE_WRAPPED_LIFECYCLE_CALLBACKS.has(name)) {
+      pushLifecycleCapture(method, name);
+      continue;
+    }
+    pushVerbatim(method.getText(sf), method, '  ', name);
   }
   for (const handler of lowering.generatedHandlers) {
     // Synthesized forwarding method; its whole line traces to the authored

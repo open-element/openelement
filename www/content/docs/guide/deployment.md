@@ -6,22 +6,21 @@ order: 100
 
 ## Build, start, preview
 
-A generated project wires its pnpm scripts to the router CLI subpaths:
+A generated project wires its pnpm scripts to the `openelement` command:
 
 ```bash
 pnpm build     # SSG + request-time server into dist/
 pnpm start     # serve dist/; dynamic routes and mutations dispatch to dist/server
-pnpm preview   # static-only preview; refused when dist/server exists
 pnpm dev       # Vite dev server
 ```
 
-`pnpm start` serves `dist/` statically and, when `dist/server/index.js` exists, dispatches dynamic routes and mutations to it. Port comes from `OPEN_ELEMENT_PORT` (falling back to `PORT`, default 4173) and host from `OPEN_ELEMENT_HOST`. The same CLI with `--mode=preview` is static-only and refuses to run when `dist/server` exists, pointing at start mode instead — use it only for projects without request-time routes.
+`pnpm start` serves `dist/` statically and, when `dist/server/index.js` exists, dispatches dynamic routes and mutations to it. Port comes from `OPEN_ELEMENT_PORT` (falling back to `PORT`, default 4173) and host from `OPEN_ELEMENT_HOST`. The same command with `--mode=preview` (`openelement start --mode=preview`) is static-only and refuses to run when `dist/server` exists, pointing at start mode instead — use it only for projects without request-time routes.
 
 ## Static output
 
 `pnpm build` writes the prerendered site into `dist/`:
 
-- `dist/<route>/index.html` for every prerendered route, plus `dist/404.html` for the not-found route.
+- `dist/<route>/index.html` for every prerendered route. A not-found route marked `renderIntent: { mode: 'dynamic' }` is served by the request-time server instead (with a real 404 status); a prerenderable one is written to `dist/404.html`.
 - Everything under `public/` copied as-is — favicon, `robots.txt`, images.
 - `dist/client/` when the app has islands or enhanced forms: the shared entry `client.js` and one chunk per island tag under `dist/client/islands/`.
 - `dist/island-manifests/page-<hash>.json`, one per page, listing each island's tag, chunk URL, strategy and layer — the built answer to "which JavaScript does this page load?".

@@ -283,9 +283,12 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
         const apiCount = routes.filter((r) => r.type === 'api' && !r.special).length;
         const totalIslands =
           state.ctx.phase1.islandTagNames.length + state.ctx.phase1.packageIslandDecls.length;
+        // A data line, not a banner: the counts are what a dev reading the
+        // startup output acts on. A branding suffix here read as though the
+        // site title had been concatenated onto the line, and it duplicated
+        // the framework's own startup banner.
         log.info(
-          `Routes: ${pageCount} page(s), ${apiCount} API route(s), ` +
-            `${totalIslands} island(s) - openElement Architecture`,
+          `Routes: ${pageCount} page(s), ${apiCount} API route(s), ` + `${totalIslands} island(s)`,
         );
       } catch (err) {
         throw new OpenElementError(`Route scan failed: ${formatError(err)}`, {

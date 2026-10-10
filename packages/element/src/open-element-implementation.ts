@@ -81,6 +81,21 @@ function failMissingProgram(ctor: object): never {
 }
 
 /**
+ * Whether a parent node is a shadow root: a document fragment (nodeType 11)
+ * carrying a host. Checked structurally so the climb works against both the
+ * platform DOM and the minimal facade DOM the tests run on — a plain
+ * DocumentFragment (no host) is not a shadow boundary and stops the climb.
+ */
+function isShadowRootLike(node: unknown): node is ShadowRoot {
+  if (!node || typeof node !== 'object') return false;
+  if ((node as { nodeType?: unknown }).nodeType !== 11) return false;
+  return (
+    typeof (node as { host?: unknown }).host === 'object' &&
+    (node as { host: unknown }).host !== null
+  );
+}
+
+/**
  * Custom Element base class for the compiled Part Program architecture.
  *
  * Subclasses are produced by the compiler; hand-written subclasses that
@@ -136,10 +151,28 @@ export class OpenElement extends OpenElementConfiguration {
       formAssociated: ctor.formAssociated ?? false,
       errorBoundary:
         ctor.isErrorBoundary === true
-          ? // The public ErrorBoundary owns the user-facing retry policy
-            // (maxRetries field); the kernel service only tracks state, so its
-            // own retry budget stays out of the way.
-            { maxRetries: Number.MAX_SAFE_INTEGER }
+          ? {
+              // The public ErrorBoundary owns the user-facing retry policy
+              // (maxRetries field); the kernel service only tracks state, so its
+              // own retry budget stays out of the way.
+              maxRetries: Number.MAX_SAFE_INTEGER,
+              // Publish every automatic capture (connect, claim and update
+              // failures) into the element's own error state: a compiled
+              // ErrorBoundary subclass that declares `hasError` as a property
+              // reads the write through its signal-backed accessor — so a
+              // render() branch on hasError flips on kernel-captured failures
+              // too, not only on application catchError() calls.
+              onError: () => {
+                this._publishErrorState();
+              },
+              // The kernel clears the service after a successful connect
+              // (kernel.ts `if (this.errors.hasError) this.errors.reset()`);
+              // publish that too, or a recovered element would keep showing
+              // the fallback branch.
+              onReset: () => {
+                this._publishErrorState();
+              },
+            }
           : undefined,
     });
     this.#kernel = state.kernel;
@@ -153,6 +186,92 @@ export class OpenElement extends OpenElementConfiguration {
    */
   protected get _errors(): CompiledErrorBoundary {
     return this.#kernel?.errors ?? this.#detachedErrors;
+  }
+
+  /**
+   * Publish the boundary service's state after the kernel captured or cleared
+   * an error automatically (connect/claim/update captures and the post-connect
+   * reset). No-op on the base class (a plain OpenElement carries no boundary
+   * state); `ErrorBoundary` overrides it to write its `hasError` field, so a
+   * compiled subclass that declares `hasError` as a property reads the
+   * automatic transitions through the same signal its render() branches on.
+   */
+  protected _publishErrorState(): void {}
+
+  /**
+   * Route one error to the nearest error boundary in the composed ancestor
+   * chain (P6: the one routing path every automatic capture rides — the
+   * compiler-emitted lifecycle wrappers, the facade property setter, and the
+   * kernel's update-error sink all funnel here; no second error channel).
+   *
+   * Prior art is the React error boundary (lifecycle/render throws bubble to
+   * the nearest boundary); the compiled difference is WHERE the capture point
+   * lives — the compiler emits the try/catch around platform lifecycle bodies
+   * at compile time (P2: pay at compile time, minimal runtime delta), and the
+   * runtime adds the two points compilation cannot see: synchronous
+   * signal-graph evaluation at a property write (facade-host.ts) and the
+   * kernel's Region-update isolation (kernel.ts onUpdateError).
+   *
+   * The climb starts at `this` (a boundary class may capture its own
+   * author-code errors), then walks `parentElement`, crossing shadow
+   * boundaries through `shadowRoot.host` (an error inside a child island's
+   * shadow tree must still reach a boundary in the parent island's light
+   * DOM). It stops at the document or a host-less fragment. An element is a
+   * boundary iff its constructor carries `isErrorBoundary === true` (the
+   * public ErrorBoundary base and the kernel-wired facade set it).
+   *
+   * Capture goes through the boundary's own `_errors.catchError(error, this)`
+   * so publication rides the existing service options: a compiled boundary
+   * subclass's kernel wires `onError` → `_publishErrorState()` → the
+   * `hasError` property write, so the fallback Region flips exactly as an
+   * application `catchError()` call would. The captured `source` is `this`
+   * (the failing element), so `retry()` re-activates the right host.
+   *
+   * Returns true when a boundary captured the error, false when the climb
+   * found none (callers rethrow so uncaught semantics outside boundaries are
+   * unchanged). A boundary whose service already holds the identical error
+   * object reports true without re-capturing — the composition where the
+   * kernel captures a boundary's own connect failure and the emitted
+   * lifecycle wrapper then routes the rethrown error must not publish the
+   * same failure twice.
+   */
+  protected _captureError(error: unknown): boolean {
+    type BoundaryCandidate = Element & { parentElement?: unknown; parentNode?: unknown };
+    let current: BoundaryCandidate = this as unknown as BoundaryCandidate;
+    for (;;) {
+      const constructor = Object.getPrototypeOf(current)?.constructor as
+        | { isErrorBoundary?: boolean }
+        | undefined;
+      if (constructor?.isErrorBoundary === true) {
+        const service = (current as unknown as OpenElement)._errors;
+        if (service.error === error) return true;
+        service.catchError(error, this);
+        return true;
+      }
+      const parentElement = current.parentElement;
+      if (parentElement && typeof parentElement === 'object') {
+        current = parentElement as BoundaryCandidate;
+        continue;
+      }
+      // parentElement is null/absent: an element whose parentNode is a shadow
+      // root keeps climbing at the host (the facade test DOM exposes only
+      // parentNode, hence the element fallback in the same read).
+      const parentNode = current.parentNode;
+      if (isShadowRootLike(parentNode)) {
+        current = (parentNode as ShadowRoot).host as BoundaryCandidate;
+        continue;
+      }
+      if (
+        parentNode &&
+        typeof parentNode === 'object' &&
+        (parentNode as { nodeType?: unknown }).nodeType === 1
+      ) {
+        current = parentNode as BoundaryCandidate;
+        continue;
+      }
+      // Document or host-less DocumentFragment: no boundary remains.
+      return false;
+    }
   }
 
   /**

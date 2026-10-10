@@ -19,6 +19,14 @@
  *   - a zero-entry scan is an error, never a vacuous pass;
  *   - any compiler failure fails the gate.
  *
+ * `--types node,@openelement/element/css-modules` (KR-1): the routes and the
+ * components/islands they import carry `import sheet from './x.css'` style
+ * imports through the style-asset protocol (#1553/#1558), whose ambient module
+ * declaration lives in the element package's `./css-modules` export — the same
+ * entry the www vite config consumes. Without it the gate reported 22 TS2307
+ * "Cannot find module './*.css'" findings and called them generated-module
+ * drift, which buried any real type error behind that noise.
+ *
  * Usage:
  *   node www/tools/check-www-routes-types.ts
  */
@@ -98,7 +106,7 @@ const check = await commandOutput(process.execPath, {
     '--experimentalDecorators',
     '--noImplicitOverride',
     '--types',
-    'node',
+    'node,@openelement/element/css-modules',
     ...files,
   ],
   cwd: repoRoot,

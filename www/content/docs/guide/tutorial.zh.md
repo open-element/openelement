@@ -30,7 +30,7 @@ pnpm install
 pnpm dev
 ```
 
-这条命令跑在普通 Node 工具链上：从 npm 拉取已发布的 `@openelement/create` 包——无 tag 的安装解析 `latest`，即当前 1.0 线——并把解析出的精确依赖版本脚手架进项目。
+这条命令跑在普通 Node 工具链上：从 npm 拉取已发布的 `@openelement/create` 包——无 tag 的安装解析 `latest`，即当前 1.0 线——并以该版本为下限，把 `@openelement/*` 的 caret 范围写进项目。
 
 create CLI 每个文件打印一行 `created <path>`，随后打印后续命令：
 
@@ -40,7 +40,7 @@ openElement project created at ./my-app/
   cd my-app
   pnpm install
   pnpm dev
-  See README.md for all scripts (check/test/build/start/preview)
+  See README.md for all scripts (check/test/build/start)
 ```
 
 `pnpm dev` 启动 Vite dev server，并打印要打开的地址：
@@ -55,7 +55,7 @@ openElement project created at ./my-app/
 
 ```text
 my-app/
-  package.json      依赖与 pnpm 脚本：dev、check、test、build、start、preview
+  package.json      依赖与 pnpm 脚本：dev、check、test、build、start
   openelement.config.ts  框架选项（token、head、shell 约定）
   vite.config.ts    Vite 配置；插件调用不接受参数
   app/routes/       一个文件对应一个 URL
@@ -316,10 +316,9 @@ ls dist
 ```text
 index.html          预渲染的 /
 hello/index.html    预渲染的 /hello
-404.html            未找到路由
 client/islands/     每个可达 island 一个 chunk
 island-manifests/   page-<hash>.json——记录每个页面加载哪些 island
-server/index.js     回答 POST /notes 的请求时处理器
+server/index.js     请求时处理器：回答 POST /notes，并为未匹配路径渲染带样式的 404
 ```
 
 起服务：
@@ -343,7 +342,7 @@ curl -i http://localhost:4173/hello | head -1
 HTTP/1.1 200 OK
 ```
 
-`/hello` 是磁盘上的文件；`/notes` 走到了服务端入口。`pnpm preview` 是纯静态模式，只要 `dist/server` 存在就拒绝运行——所以带请求时路由的项目要用 `pnpm start` 起。
+`/hello` 是磁盘上的文件；`/notes` 走到了服务端入口——未匹配路径的带样式 404 也一样。构建产物没有请求时路由的项目可以用 `openelement start --mode=preview` 只起静态产物，而这个项目有请求时路由，所以要用 `pnpm start` 起。
 
 到这里你有了一个项目、一个页面、一个 island、一个表单 action，以及一份可以部署的构建产物。
 

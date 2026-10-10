@@ -17,9 +17,9 @@ pnpm install
 pnpm dev
 ```
 
-The version the install command resolves is registered in [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json), the repository's registry-verified source of truth: the scaffold writes the resolved exact `@openelement/*` pins into the generated `package.json`, so no extra flags are involved.
+The version the install command resolves is registered in [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json), the repository's registry-verified source of truth: the scaffold writes `@openelement/*` caret ranges over that release into the generated `package.json`, so no extra flags are involved and later `1.0.0` prereleases arrive through `pnpm update`.
 
-The scaffold ships the Tailwind-ON starter by default: a preset-wired `vite.config.ts`, the `app/styles/theme.css` `@theme` role sheet (semantic roles over the Tailwind default scale), and exact `tailwindcss` / `@tailwindcss/vite` dev pins. Pass `--no-tailwind` to the create command (for example through the `npx @openelement/create <project-name>` spelling) for the minimal starter without the Tailwind surface.
+The scaffold ships one form, Tailwind-ON: a preset-wired `vite.config.ts`, the `app/styles/theme.css` `@theme` role sheet (semantic roles over the Tailwind default scale), and exact `tailwindcss` / `@tailwindcss/vite` dev pins. There is no flag and no second template — the styling surface is not a scaffold variant. Dropping Tailwind is a project edit, and it is supported: point `tailwind` in `openelement.config.ts` at your own sheet, or remove the key and let the `app/styles/tokens.css` token convention supply the document's tokens.
 
 > The generated project is a plain Node/pnpm app (ADR-0161): Node.js 24.2+ and pnpm run its scripts — Node 24.2 is the verified floor the packed packages declare and CI exercises (the Router CLI relies on `import.meta.main`, added in Node 24.2.0; `.node-version` pins the 24.18 development line). The bootstrap command itself is a plain Node invocation, so the whole flow needs only Node and pnpm; the earlier Deno bootstrap was retired by the 2026-10-03 ADR-0161 amendment.
 
@@ -43,15 +43,14 @@ Read the [docs](/docs), [API reference](/reference), and [roadmap](/roadmap) as 
 
 `pnpm build` produces the deployable site in `dist/` — prerendered HTML for every static route, everything under `public/` copied as-is, and, when the app has islands or request-time routes, the client chunks and the server entry beside it. That directory is the artifact: upload it to any static host, or point a Node/Workers deployment at `dist/server/index.js`.
 
-Three scripts cover the loop:
+Two scripts cover the build-and-serve loop:
 
 ```bash
 pnpm build     # prerender into dist/ (+ dist/client, dist/server when needed)
 pnpm start     # serve the real build, including request-time routes
-pnpm preview   # static-only preview; refuses to run when dist/server exists
 ```
 
-`pnpm start` is the one to check a change against, because it serves the same output production does and dispatches dynamic routes and form posts to the generated server entry. `pnpm preview` is deliberately narrower — it refuses a build that has a server side rather than silently hiding it, so it is only useful for an app with no request-time routes. Port comes from `OPEN_ELEMENT_PORT` (falling back to `PORT`, default 4173) and host from `OPEN_ELEMENT_HOST`.
+`pnpm start` is the one to check a change against, because it serves the same output production does and dispatches dynamic routes and form posts to the generated server entry. For a project whose build has no request-time route, the router command also carries a static-only mode — `openelement start --mode=preview` — which refuses a build that has a server side rather than silently hiding it. Port comes from `OPEN_ELEMENT_PORT` (falling back to `PORT`, default 4173) and host from `OPEN_ELEMENT_HOST`.
 
 Before shipping, `pnpm check` type-checks the app and `pnpm test` runs its tests; both are wired into the starter's scripts and need no extra setup. The full output contract — which files the build writes and what each one answers — is documented under [Deployment](/guide/deployment).
 

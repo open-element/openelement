@@ -9,7 +9,10 @@ to the 1.0.0-alpha.8 baseline.
 ## Semver contract
 
 - **`::part` names never shrink.** Every part shipped in 1.0.0-alpha.8 exists
-  today and must exist in every later release; adding a part is allowed.
+  today and must exist in every later release, for every component that still
+  ships; adding a part is allowed. (`open-card`, `open-callout`, `open-badge`
+  and `open-tabs` left the package under the Alpha disclaimer and are no
+  longer part of this contract.)
 - **Consumed variables are pinned at the C3 role-direct baseline.** Adding or
   removing a `var()` reference in a recipe is a deliberate surface change: the
   guard fails until the pin and this document are updated in the same change.
@@ -132,27 +135,14 @@ Deliberate pixel breaks to note (this is C3's contract, not a migration):
   (primary-foreground/secondary/border/ring/primary/secondary-foreground), so
   coordinated surfaces (e.g. the site's flood panels) invert together with
   the theme instead of mirroring a fixed ramp.
-- Badge/callout washes are computed inline (`color-mix(... 10%, transparent)`)
-  from each status role; the light-theme rgba tint overrides are gone.
-- Card `artifact`, code-block and dialog backdrop keep static zinc surfaces
-  in both themes (the retired sheet's behavior, now explicit literals-free
-  ramp references).
+- Code-block and dialog backdrop keep static zinc surfaces in both themes
+  (the retired sheet's behavior, now explicit literals-free ramp references).
 
 ## Per-component surface
 
 Variables listed are the ones each component's recipe **consumes**; all of
 them resolve from the role table above. There are no component-defined
 custom properties.
-
-### `open-badge`
-
-- Parts: `badge`
-- Variables: `--color-border`, `--color-info`, `--color-muted`,
-  `--color-muted-foreground`, `--color-primary`, `--color-success`,
-  `--color-warning`, `--font-mono`, `--font-weight-extrabold`,
-  `--leading-normal`, `--radius-md`, `--spacing`, `--text-xs`
-- Tones `brand/success/warning/info` paint their 10% wash with `color-mix`
-  off the matching role; AA is asserted against base and wash in the suite.
 
 ### `open-button`
 
@@ -164,28 +154,6 @@ custom properties.
   `--shadow-sm`, `--spacing`, `--text-base`, `--text-sm`, `--text-xl`
 - Shares the control recipe (below). Variant `primary`/`accent` fill with
   `--color-primary` over `--color-primary-foreground`.
-
-### `open-callout`
-
-- Parts: `container`, `icon`, `content`
-- Variables: `--color-destructive`, `--color-foreground`,
-  `--color-muted-foreground`, `--color-primary`, `--color-success`,
-  `--color-warning`, `--font-weight-semibold`, `--leading-relaxed`,
-  `--radius-lg`, `--spacing`, `--text-base`, `--text-sm`
-- Types `info/warning/danger/tip` map to primary/warning/destructive/success
-  inks with 10% washes; the alpha8 light-theme rgba overrides are gone (the
-  roles' dark pairs carry the flip).
-
-### `open-card`
-
-- Parts: `container`, `body`
-- Variables: `--color-border`, `--color-card`, `--color-foreground`,
-  `--color-muted`, `--color-muted-foreground`, `--color-primary`,
-  `--color-secondary`, `--color-zinc-200`, `--color-zinc-700`,
-  `--color-zinc-950`, `--default-transition-duration`, `--ease-out`,
-  `--font-weight-semibold`, `--radius-md`, `--spacing`, `--text-sm`,
-  `--text-xl`
-- Variant `artifact` paints a static zinc-950 panel in both themes.
 
 ### `open-code-block`
 
@@ -232,13 +200,6 @@ custom properties.
   `--text-sm`, `--text-xs`, `--tracking-normal`
 - Shares the control recipe; error/invalid states use
   `--color-destructive`.
-
-### `open-tabs`
-
-- Parts: none (light-DOM decoration pattern; the tabs/panels stay in the
-  page's DOM, styled through inherited roles)
-- Variables: `--color-border`, `--color-foreground`,
-  `--color-muted-foreground`, `--color-primary`, `--spacing`
 
 ### `open-theme-toggle`
 

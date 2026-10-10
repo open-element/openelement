@@ -232,6 +232,7 @@ test('start cli: start mode serves dist/ statically over HTTP', async () => {
   try {
     await mkdir(join(dir, 'dist'), { recursive: true });
     await writeFile(join(dir, 'dist', 'index.html'), '<h1>merged cli</h1>\n');
+    await writeFile(join(dir, 'dist', '404.html'), '<h1>cli not found</h1>\n');
 
     server = spawn(process.execPath, [startCli], {
       cwd: dir,
@@ -251,6 +252,22 @@ test('start cli: start mode serves dist/ statically over HTTP', async () => {
     expect(response, 'start mode server did not come up').toBeTruthy();
     expect(response.status).toEqual(200);
     expect(await response.text()).toContain('<h1>merged cli</h1>');
+
+    // KR-7 at the CLI layer: an unmatched route answers the build's error
+    // document with a 404 status, and direct access to the document keeps
+    // that status. HEAD reports the same status without a body.
+    const unmatched = await fetch(`http://127.0.0.1:${freePort}/no-such-page`);
+    expect(unmatched.status).toEqual(404);
+    expect(await unmatched.text()).toEqual('<h1>cli not found</h1>\n');
+    expect(unmatched.headers.get('content-type')).toEqual('text/html; charset=UTF-8');
+
+    const direct = await fetch(`http://127.0.0.1:${freePort}/404.html`);
+    expect(direct.status).toEqual(404);
+    expect(await direct.text()).toEqual('<h1>cli not found</h1>\n');
+
+    const head = await fetch(`http://127.0.0.1:${freePort}/no-such-page`, { method: 'HEAD' });
+    expect(head.status).toEqual(404);
+    expect(await head.text()).toEqual('');
   } finally {
     try {
       server?.kill('SIGTERM');
@@ -263,6 +280,136 @@ test('start cli: start mode serves dist/ statically over HTTP', async () => {
         setTimeout(resolve, 5000).unref();
       });
     }
+    await rm(dir, { recursive: true });
+  }
+});
+
+test('start cli: preview mode serves the SAME static contract as start mode', async () => {
+  // Regression (alpha13 artifact honesty): preview used to delegate to
+  // `vite preview`, whose index.html fallback answered 200 with the home
+  // page for every miss AND for extensionless pretty URLs like /about.
+  // Two static serving modes must not disagree — preview rides the same
+  // static-serve dispatch, so the contract below is byte-for-byte the one
+  // the start-mode test above pins.
+  const dir = await mkdtemp(join(tmpdir(), 'start-cli-'));
+  const freePort = await new Promise<number>((resolve) => {
+    const probe = createServer();
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as AddressInfo;
+      probe.close(() => resolve(port));
+    });
+  });
+
+  let server: ChildProcess | undefined;
+  try {
+    await mkdir(join(dir, 'dist', 'about'), { recursive: true });
+    await writeFile(join(dir, 'dist', 'index.html'), '<h1>merged cli</h1>\n');
+    await writeFile(join(dir, 'dist', 'about', 'index.html'), '<h1>about page</h1>\n');
+    await writeFile(join(dir, 'dist', '404.html'), '<h1>cli not found</h1>\n');
+
+    server = spawn(
+      process.execPath,
+      [startCli, '--mode=preview', '--port', String(freePort), '--host', '127.0.0.1'],
+      { cwd: dir, stdio: 'ignore' },
+    );
+
+    let response: Response | undefined;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      try {
+        response = await fetch(`http://127.0.0.1:${freePort}/`);
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    expect(response, 'preview mode server did not come up').toBeTruthy();
+    expect(response.status).toEqual(200);
+    expect(await response.text()).toContain('<h1>merged cli</h1>');
+
+    // A pretty URL without the trailing slash resolves the REAL page — not
+    // the SPA fallback's 200-with-index.html the vite-preview path answered.
+    const about = await fetch(`http://127.0.0.1:${freePort}/about`);
+    expect(about.status).toEqual(200);
+    expect(await about.text()).toEqual('<h1>about page</h1>\n');
+
+    // A miss answers the build's error document with a 404 status.
+    const unmatched = await fetch(`http://127.0.0.1:${freePort}/nope`);
+    expect(unmatched.status).toEqual(404);
+    expect(await unmatched.text()).toEqual('<h1>cli not found</h1>\n');
+    expect(unmatched.headers.get('content-type')).toEqual('text/html; charset=UTF-8');
+
+    // Direct access to the error document keeps the 404 it denotes.
+    const direct = await fetch(`http://127.0.0.1:${freePort}/404.html`);
+    expect(direct.status).toEqual(404);
+    expect(await direct.text()).toEqual('<h1>cli not found</h1>\n');
+  } finally {
+    try {
+      server?.kill('SIGTERM');
+    } catch {
+      // The process may have already exited.
+    }
+    if (server) {
+      await new Promise<void>((resolve) => {
+        server!.once('exit', () => resolve());
+        setTimeout(resolve, 5000).unref();
+      });
+    }
+    await rm(dir, { recursive: true });
+  }
+});
+
+test('start cli: preview mode probes the next port when the requested one is busy', async () => {
+  // vite-preview parity kept on purpose: a busy port is not a failure, the
+  // server moves up until one binds (strictPort would turn it into one).
+  const dir = await mkdtemp(join(tmpdir(), 'start-cli-'));
+  const occupier = createServer();
+  await new Promise<void>((resolve) => occupier.listen(0, '127.0.0.1', resolve));
+  const { port: busyPort } = occupier.address() as AddressInfo;
+
+  let server: ChildProcess | undefined;
+  try {
+    await mkdir(join(dir, 'dist'), { recursive: true });
+    await writeFile(join(dir, 'dist', 'index.html'), '<h1>probed port</h1>\n');
+
+    server = spawn(
+      process.execPath,
+      [startCli, '--mode=preview', '--port', String(busyPort), '--host', '127.0.0.1'],
+      { cwd: dir, stdio: 'ignore' },
+    );
+
+    // The probe starts at busyPort+1; on a noisy host it may climb further,
+    // so poll the first few candidates rather than exactly one.
+    let response: Response | undefined;
+    for (let attempt = 0; attempt < 100 && response === undefined; attempt++) {
+      for (let offset = 1; offset <= 3; offset++) {
+        try {
+          const probe = await fetch(`http://127.0.0.1:${busyPort + offset}/`);
+          if (probe.status === 200 && (await probe.text()).includes('probed port')) {
+            response = probe;
+            break;
+          }
+        } catch {
+          // Not up on this candidate (yet).
+        }
+      }
+      if (response === undefined) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    expect(response, 'preview did not come up on a probed next port').toBeTruthy();
+  } finally {
+    try {
+      server?.kill('SIGTERM');
+    } catch {
+      // The process may have already exited.
+    }
+    if (server) {
+      await new Promise<void>((resolve) => {
+        server!.once('exit', () => resolve());
+        setTimeout(resolve, 5000).unref();
+      });
+    }
+    await new Promise<void>((resolve) => occupier.close(() => resolve()));
     await rm(dir, { recursive: true });
   }
 });

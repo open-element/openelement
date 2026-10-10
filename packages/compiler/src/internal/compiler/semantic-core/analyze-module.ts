@@ -8,7 +8,7 @@
 
 import ts from 'typescript';
 import { type CompilerFail } from './compiler-diagnostics.ts';
-import { type ModuleIntrinsicBindings } from './module-analysis.ts';
+import { resolveCanonicalBaseClass, type ModuleIntrinsicBindings } from './module-analysis.ts';
 import { admitStylesInitializer, collectSheetImports } from './style-imports.ts';
 import { type PropertyValueType, type SerializableValue } from '@openelement/protocol/part-program';
 import {
@@ -906,19 +906,21 @@ export function analyzeCompiledModule(
   const heritage = classNode.heritageClauses?.find(
     (clause) => clause.token === ts.SyntaxKind.ExtendsKeyword,
   );
-  // Provenance (#1209): the base class must bind the canonical OpenElement
-  // import (aliases followed); a same-name local class, a foreign import or a
-  // namespace-qualified reference never enters the grammar.
+  // Provenance (#1209): the base class must bind a canonical named import
+  // from '@openelement/element' (aliases followed); a same-name local class, a
+  // foreign import or a namespace-qualified reference never enters the
+  // grammar. The admitted set is OpenElement or ErrorBoundary (I2, KR-11):
+  // the README documents subclassing ErrorBoundary, and ErrorBoundary extends
+  // OpenElement, so everything downstream of this check is unchanged.
   const heritageExpression =
     heritage?.types.length === 1 ? unwrapExpression(heritage.types[0].expression) : undefined;
-  const heritageResolution = heritageExpression
-    ? intrinsics.resolveIntrinsic(heritageExpression, 'OpenElement')
-    : undefined;
+  const heritageResolution = resolveCanonicalBaseClass(intrinsics, heritageExpression);
   if (!heritageResolution?.canonical) {
     fail(
       classNode.name ?? classNode,
       'OEC9003',
-      `compiled classes must extend the canonical OpenElement import from '@openelement/element' ` +
+      `compiled classes must extend a canonical import of OpenElement or ErrorBoundary ` +
+        `from '@openelement/element' ` +
         `(found ${heritage?.types[0]?.expression.getText(sf) ?? 'no base class'}` +
         (heritageResolution?.unsupported ? `; ${heritageResolution.unsupported}` : '') +
         ')',

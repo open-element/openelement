@@ -1,15 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-// CDN font stylesheets (#1554) are render-blocking links that stall
-// `networkidle` when jsDelivr is slow on CI runners. Chromium has
-// --host-resolver-rules in playwright.config; Firefox/WebKit need this
-// per-spec route abort. Unreachable fonts fall back to system stack.
-test.beforeEach(async ({ page }) => {
-  // Glob, not a URL regex: Playwright matches the pattern against the whole
-  // URL, and a bare-host regex also matches URLs that merely embed the host
-  // as a substring (the CodeQL js/incomplete-url-regexp-substring class).
-  await page.route('**cdn.jsdelivr.net**', (route) => route.abort());
-});
+// Fonts are self-hosted (www/site-fonts.ts): every face is a same-origin
+// asset emitted by the build, so page loads wait on no third-party CDN and
+// this spec needs no CDN route abort.
 
 const readingRoutes = [
   '/guide/getting-started',
@@ -21,6 +14,7 @@ const readingRoutes = [
 const guideRoutes = [
   '/guide/getting-started',
   '/guide/core-concepts',
+  '/guide/compiled-grammar',
   '/guide/routing-and-data',
   '/guide/streaming',
   '/guide/mdx',
@@ -281,5 +275,32 @@ test.describe('Unified page structure', () => {
     });
     await expect(page.locator('open-reading-shell').locator('h1')).toBeVisible();
     await expect(page.locator('open-page-rail')).toBeVisible();
+  });
+
+  test('long-form pages do not scroll horizontally at 390px', async ({ page }) => {
+    // The four pages whose generated/authored content carries unbreakable
+    // tokens (reference summaries and option lists with Markdown URLs, archive
+    // identifiers, config identifiers, the setup fence) overflowed the viewport
+    // at 390px — measured 276/16/79/50px. The fixes are per-owner: break
+    // opportunities for text runs (overflow-wrap) and block-internal scroll
+    // for the fence. This pins the acceptance criterion (document scrollWidth
+    // equals its clientWidth) so a new long token or a re-flowed grid fails
+    // here instead of shipping a page that pans.
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const route of ['/reference', '/changelog', '/contributing', '/guide/configuration']) {
+      await page.goto(route);
+      // The app shell is the one landmark every page shares (contributing has
+      // no reading shell — its h1 lives in the page component's shadow root).
+      await expect(page.locator('open-layout').first()).toBeVisible();
+      // Wrap points depend on font metrics: measure after the faces settle.
+      await page.evaluate(() => document.fonts.ready);
+      const state = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
+      expect(state.scrollWidth, `${route} overflows horizontally at 390px`).toEqual(
+        state.clientWidth,
+      );
+    }
   });
 });

@@ -1,9 +1,15 @@
 {
   "name": "@openelement/compiler",
-  "version": "1.0.0-alpha.12",
+  "version": "1.0.0-alpha.13",
   "description": "Build-time compiler for OpenElement — transforms TSX with @element decorators into Part Program modules. The three-package split's only TypeScript-dependent package.",
   "type": "module",
   "license": "MIT",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. --project compiler",
+    "lint": "oxlint src __tests__",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
   "publish": {
     "include": ["src/**", "README.md", "LICENSE"],
     "access": "public"

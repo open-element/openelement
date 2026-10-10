@@ -9,8 +9,8 @@ import {
 
 const PINNED_STATE: ReleaseStateV4 = {
   schemaVersion: 4,
-  sourceVersion: '1.0.0-alpha.12',
-  activeTarget: 'v1.0.0-alpha.12',
+  sourceVersion: '1.0.0-alpha.13',
+  activeTarget: 'v1.0.0-alpha.13',
   nextPlannedTrain: 'not scheduled',
   maturity: 'alpha',
   commonCompleteVersion: null,
@@ -55,11 +55,11 @@ export const UNRELEASED_PACKAGES: readonly string[] = ['@openelement/protocol'];
 `;
 
 const VERSIONS = new Map([
-  ['@openelement/protocol', '1.0.0-alpha.12'],
-  ['@openelement/element', '1.0.0-alpha.12'],
-  ['@openelement/router', '1.0.0-alpha.12'],
-  ['@openelement/create', '1.0.0-alpha.12'],
-  ['@openelement/ui', '1.0.0-alpha.12'],
+  ['@openelement/protocol', '1.0.0-alpha.13'],
+  ['@openelement/element', '1.0.0-alpha.13'],
+  ['@openelement/router', '1.0.0-alpha.13'],
+  ['@openelement/create', '1.0.0-alpha.13'],
+  ['@openelement/ui', '1.0.0-alpha.13'],
 ]);
 
 function evidence(): RegistryEvidence {

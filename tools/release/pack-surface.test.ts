@@ -9,6 +9,7 @@ import { expect, test } from 'vitest';
 import {
   findInternalReferences,
   findMetadataViolations,
+  findMissingBinTargets,
   findModuleScopeGlobalWrites,
   findModuleScopeSeamInstalls,
   findUndocumentedSubpaths,
@@ -32,6 +33,7 @@ function manifest(
     keywords: metadata.keywords,
     engines: metadata.engines,
     sideEffects: metadata.sideEffects,
+    ...(metadata.bin ? { bin: metadata.bin } : {}),
     exports: { '.': {} },
     ...overrides,
   };
@@ -225,6 +227,41 @@ test('pack surface: create keeps its side-effectful cli out of the scan', () => 
   ]);
   // Create declares sideEffects: ['./src/cli.js'], so the write is expected.
   expect(scanPackedPackage('@openelement/create', files)).toEqual([]);
+});
+
+test('pack surface: a declared bin whose target is missing from the archive fails', () => {
+  const files = new Map<string, string>([
+    ['package/package.json', JSON.stringify(manifest('@openelement/router'))],
+    ['package/README.md', ''],
+    ['package/src/cli/cli.js', '#!/usr/bin/env node\n'],
+  ]);
+  // The declared target exists in the archive: the bin is deliverable.
+  expect(
+    findMissingBinTargets('@openelement/router', { openelement: './src/cli/cli.js' }, files),
+  ).toEqual([]);
+  // The same declaration with the payload absent is a broken command: npm
+  // still writes the `.bin` shim, and it resolves to nothing.
+  const missing = findMissingBinTargets(
+    '@openelement/router',
+    { openelement: './src/cli/absent.js' },
+    files,
+  );
+  expect(missing.length).toEqual(1);
+  expect(missing[0].path).toEqual('package.json');
+  expect(missing[0].message).toContain("'./src/cli/absent.js'");
+  expect(missing[0].message).toContain('missing from the packed archive');
+  // Every declared name is checked, not just the first.
+  const twoNames = findMissingBinTargets(
+    '@openelement/create',
+    { 'openelement-create': './src/cli.js', 'create-openelement': './src/other.js' },
+    new Map([['package/src/cli.js', '#!/usr/bin/env node\n']]),
+  );
+  expect(twoNames.length).toEqual(1);
+  expect(twoNames[0].message).toContain("'./src/other.js'");
+  // The string form (npm's single-bin shorthand) is read too, and a package
+  // that declares no bin produces no violations.
+  expect(findMissingBinTargets('@openelement/router', './src/nowhere.js', files).length).toEqual(1);
+  expect(findMissingBinTargets('@openelement/router', undefined, files)).toEqual([]);
 });
 
 test('pack surface: module-scope seam installs are found, deferred ones are not', () => {

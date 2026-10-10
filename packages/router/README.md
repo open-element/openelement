@@ -24,7 +24,9 @@ you import from the package root or use Framework Mode. The declarations are
 checked against that contract by a strict, isolated npm consumer.
 
 Host tooling lives behind explicit subpath exports (`./vite`, `./cli/build`,
-`./cli/start`) whose dependencies are optional peers. The `./nitro-mount`
+`./cli/start`) whose dependencies are optional peers; the lifecycle commands
+run through the package's `openelement` bin, whose subcommands dispatch to
+the same two CLI entries. The `./nitro-mount`
 deployment subpath instead expects the deploying application to install
 `nitro` itself: declaring it as a peer would make npm auto-place
 `nitro@3.0.0`, whose own `vite@^7` peer conflicts with the tooling's
@@ -115,16 +117,20 @@ that resolves it.
 
 ## Lifecycle CLI
 
-Generated applications build and serve through the Router CLI subpaths:
+Generated applications build and serve through the `openelement` bin this
+package ships (`build` and `start` subcommands), or through the equivalent
+tooling subpaths `@openelement/router/cli/build` and
+`@openelement/router/cli/start`:
 
 ```bash
-node node_modules/@openelement/router/src/cli/build.js   # production build (SSG + client)
-node node_modules/@openelement/router/src/cli/start.js   # serve built output
+openelement build          # production build (SSG + client)
+openelement start          # serve built output
 ```
 
 In a generated project the same commands are the package scripts
-`pnpm build` and `pnpm start` (plus `pnpm dev` for the Vite dev server and
-`pnpm preview` for static-only preview).
+`pnpm build` and `pnpm start` (plus `pnpm dev` for the Vite dev server; a
+static-only serve is `openelement start --mode=preview`, which refuses a
+build that has a request-time server).
 
 The build executes in a fixed phase order — the client bundle (Phase 2) runs
 before the SSG render (Phase 3), because the SSG pages inject their client
@@ -232,7 +238,8 @@ authors should start from this package.
 
 Build configuration is owned by this package's tooling subpaths; generated
 projects import the `openElement()` facade from `@openelement/router/vite` and
-run builds through `@openelement/router/cli/build`, so the runtime import
+run builds through the `openelement` bin (or the equivalent
+`@openelement/router/cli/build` subpath), so the runtime import
 surface stays free of host dependencies.
 
 ## Install
@@ -249,8 +256,8 @@ npm install @openelement/router @openelement/element
 ```
 
 Note that the `./vite` and `./cli/*` tooling subpaths are **build-time**
-modules — run builds through the Node-hosted CLI
-(`node node_modules/@openelement/router/src/cli/build.js`) or the Vite CLI.
+modules — run builds through the Node-hosted `openelement` bin
+(`openelement build`) or the Vite CLI.
 The request-time output is host-free and deploys to any WinterCG target.
 
 ## License

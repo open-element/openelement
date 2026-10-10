@@ -163,6 +163,128 @@ const UPSTREAM_RESIDUE_EXTENSIONS = new Set([
 const UPSTREAM_RESIDUE_MARKERS = [/open[-_]?props/i, /argyle/i];
 const MODULE_SCAN_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.d.ts']);
 
+/**
+ * Publish-surface text scan (#1633, owner ruling 2026-10-09): three classes of
+ * defect a consumer would otherwise read straight off the shipped artifact —
+ * the installed-tree command form, template scripts that name a file path, and
+ * a file that asserts both sides of one contract. Each class is scanned in
+ * every shipped text file (the READMEs and the create templates are the
+ * publish surface a consumer copies commands out of), so the gate fails on the
+ * artifact rather than on a maintainer remembering the rule.
+ */
+const PUBLISH_SURFACE_EXTENSIONS = new Set([
+  '.md',
+  '.tmpl',
+  '.json',
+  '.txt',
+  '.css',
+  '.html',
+  '.js',
+  '.mjs',
+  '.cjs',
+]);
+
+/**
+ * The retired command form: `node node_modules/...` reaches into the installed
+ * tree instead of running the package's declared bin. A consumer copying it
+ * depends on an internal layout that no version contract covers.
+ */
+const BARE_NODE_MODULES_PATTERN = /\bnode\s+[\w./\\-]*node_modules[\\/]/;
+
+/**
+ * Mutually exclusive contract terms, per shipped file. A file that asserts
+ * both sides of one pair contradicts itself and cannot both be true; the
+ * reader has no way to tell which half the artifact means. The table is the
+ * general rule — entries are added with the artifact that pairs them.
+ */
+const EXCLUSIVE_CONTRACT_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ['no Tailwind', 'Tailwind-ON'],
+];
+
+/** A script token that names a file path rather than a resolvable command. */
+function isScriptPathToken(token: string): boolean {
+  if (token.startsWith('-')) return false;
+  if (token.includes('/') || token.includes('\\')) return true;
+  return /\.(?:[cm]?[jt]sx?)$/.test(token);
+}
+
+/**
+ * Publish-surface violations in one shipped text file. `relative` is
+ * package-relative so the reported path is the artifact's own path.
+ */
+export function findPublishSurfaceViolations(
+  packageName: string,
+  relative: string,
+  text: string,
+): ArtifactViolation[] {
+  const violations: ArtifactViolation[] = [];
+  const lines = text.split('\n');
+  for (let index = 0; index < lines.length; index++) {
+    if (BARE_NODE_MODULES_PATTERN.test(lines[index])) {
+      violations.push({
+        path: `${packageName}/${relative}`,
+        line: index + 1,
+        message:
+          'installed-tree command form (`node node_modules/...`) must not ship: run the ' +
+          "package's declared bin instead",
+      });
+    }
+  }
+  for (const [left, right] of EXCLUSIVE_CONTRACT_PAIRS) {
+    if (text.includes(left) && text.includes(right)) {
+      violations.push({
+        path: `${packageName}/${relative}`,
+        message: `file asserts both '${left}' and '${right}', which cannot both hold`,
+      });
+    }
+  }
+  if (relative.endsWith('package.json.tmpl')) {
+    violations.push(...findTemplateScriptViolations(packageName, relative, text));
+  }
+  return violations;
+}
+
+/**
+ * Script values a shipped template manifest may carry: a bare command name
+ * (npm resolves it through the consumer's `node_modules/.bin` at run time)
+ * with optional flags, or Node's built-in test runner (`node --test`). Any
+ * value naming a file path is a facade leak — the path is not a versioned
+ * contract, and the installed tree's layout is not the consumer's to depend
+ * on.
+ */
+export function findTemplateScriptViolations(
+  packageName: string,
+  relative: string,
+  text: string,
+): ArtifactViolation[] {
+  let scripts: unknown;
+  try {
+    scripts = (JSON.parse(text) as { scripts?: unknown }).scripts;
+  } catch {
+    return [
+      {
+        path: `${packageName}/${relative}`,
+        message: 'template manifest is not valid JSON; script values cannot be checked',
+      },
+    ];
+  }
+  if (!scripts || typeof scripts !== 'object') return [];
+  const violations: ArtifactViolation[] = [];
+  for (const [name, value] of Object.entries(scripts as Record<string, unknown>)) {
+    if (typeof value !== 'string') continue;
+    const pathToken = value.split(/\s+/).find((token) => isScriptPathToken(token));
+    if (pathToken !== undefined) {
+      violations.push({
+        path: `${packageName}/${relative}`,
+        message:
+          `script '${name}' names a file path ('${pathToken}'); template scripts must be bare ` +
+          'commands (resolved through node_modules/.bin) or the `node --test` form',
+      });
+    }
+  }
+  return violations;
+}
+
 function isRawTypeScript(relative: string): boolean {
   return (relative.endsWith('.ts') || relative.endsWith('.tsx')) && !relative.endsWith('.d.ts');
 }
@@ -386,6 +508,11 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
         path: `${packageName}/${relative}`,
         message: 'dead v0.43 residue must not be published (#1273)',
       });
+    }
+    if (PUBLISH_SURFACE_EXTENSIONS.has(extension(entryPath))) {
+      violations.push(
+        ...findPublishSurfaceViolations(packageName, relative, readFileSync(entryPath, 'utf8')),
+      );
     }
     if (forbiddenSourcePatterns.length > 0 && SOURCE_SCAN_EXTENSIONS.has(extension(entryPath))) {
       const text = stripComments(readFileSync(entryPath, 'utf8'));

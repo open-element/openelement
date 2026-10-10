@@ -64,16 +64,14 @@ export default defineConfig({
       use: {
         browserName: 'chromium',
         // E2E must not depend on third-party availability: resolve the
-        // GoatCounter endpoints AND the font CDN (#1554) to nowhere so the
-        // page load event never waits on an external fetch (hangs on networks
-        // where the domain is unreachable; the font stylesheets are
-        // render-blocking, so an unreachable CDN would otherwise stall first
-        // paint instead of falling back to system fonts). Chromium-only
-        // switch — WebKit rejects unknown launch args at browserType.launch,
-        // so this must not live in the shared use.
+        // GoatCounter endpoints to nowhere so the page load event never waits
+        // on an external fetch. (The font CDN is gone: the faces are
+        // self-hosted, www/site-fonts.ts — no font host needs a rule.)
+        // Chromium-only switch — WebKit rejects unknown launch args at
+        // browserType.launch, so this must not live in the shared use.
         launchOptions: {
           args: [
-            '--host-resolver-rules=MAP gc.zgo.at ~NOTFOUND, MAP openelement.goatcounter.com ~NOTFOUND, MAP cdn.jsdelivr.net ~NOTFOUND',
+            '--host-resolver-rules=MAP gc.zgo.at ~NOTFOUND, MAP openelement.goatcounter.com ~NOTFOUND',
           ],
         },
       },

@@ -11,6 +11,7 @@ import {
   prepareVpStagingFiles,
   publishGlobToRegExp,
   rootStagingPackageJsonFor,
+  ROUTER_BIN_ENTRY,
   ROUTER_CLIENT_RUNTIME_ENTRIES,
   stagingPackageJsonFor,
   synthesizedPackedManifest,
@@ -45,14 +46,17 @@ test('vpPackEntries derives ordered entries from exports', () => {
   ]);
 });
 
-test('vpPackEntries appends the router client-runtime entries exactly once each', () => {
+test('vpPackEntries appends the router client-runtime entries and the bin dispatcher exactly once each', () => {
   const routerExports: Record<string, string> = {
     '.': './src/index.ts',
     './vite': './src/vite/index.ts',
   };
   const entries = vpPackEntries(pkg('@openelement/router', routerExports, 'packages/router'));
   expect(entries.slice(0, 2)).toEqual(['src/index.ts', 'src/vite/index.ts']);
-  expect(entries.slice(2)).toEqual([...ROUTER_CLIENT_RUNTIME_ENTRIES]);
+  // The client-runtime modules first, then the `openelement` bin dispatcher: a
+  // bin target is not an exports subpath, so the pack carries it as an
+  // explicit entry (tools/release/npm-manifest.ts declares the same path).
+  expect(entries.slice(2)).toEqual([...ROUTER_CLIENT_RUNTIME_ENTRIES, ROUTER_BIN_ENTRY]);
   expect(new Set(entries).size).toEqual(entries.length);
 });
 

@@ -8,10 +8,11 @@
 //   - `head.scripts` below: external scripts, structured (src/defer), so the
 //     framework serializes the tags and the Site never hand-writes markup;
 //   - `app/head.tsx`: structural content a URL list cannot express (meta tags,
-//     font preloads, icons, feed links, inline critical CSS).
+//     icons, feed links, inline critical CSS).
 import { defineConfig } from '@openelement/router';
 import { SITE_BUDGET } from './site-budget.ts';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from './site-config.ts';
+import { SITE_FONT_SOURCES } from './site-fonts.ts';
 import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 
 export default defineConfig({
@@ -55,6 +56,37 @@ export default defineConfig({
   // bundled, not imported at run time. There is no separate `ssr` key.
   packageIslands: ['@openelement/ui'],
   viewTransition: true,
+  // The Tailwind preset (alpha9 C2 #1505; moved here from a build-only
+  // consumer plugin in the alpha.13 F lane): the framework compiles the
+  // declared sources into one bundle and delivers it on BOTH channels — dev
+  // serves the compile from /.openElement/tailwind-preset/entry.css and links
+  // it in the document head, the build emits the same compile as the
+  // layer-ordered /assets/open-tailwind.css after the SSG render.
+  //
+  // The theme source is the ui package's real @theme role table (C3 made the
+  // recipes and the site read the role names directly), compiled into the
+  // bundle's `theme` layer alongside Tailwind's own defaults. No `components`
+  // layer and no `@scope` face: the site's own components keep their compiled
+  // shadow sheets and the page layer is light DOM, so the plain bundle covers
+  // both adoptions.
+  //
+  // The self-hosted @font-face faces (www/site-fonts.ts, the H lane's
+  // replacement for #1554's four jsDelivr stylesheet links) ride the same
+  // bundle: the declared fontsource stylesheets compile in, their woff2 files
+  // emit as content-hashed assets beside the bundle and the bundle's url()
+  // references are rewritten to those shipped names — the #1535 path this
+  // preset already owns for compile-referenced assets. One linked same-origin
+  // stylesheet carries theme + fonts, so no font request can leave the
+  // origin and no CDN outage can stall first paint.
+  tailwind: {
+    theme: ['@openelement/ui/theme.css', ...SITE_FONT_SOURCES],
+    // The Site's compiled DSD islands claim their shadow DOM exactly (the
+    // compiled-claim walk requires the shadow root's children to equal the
+    // Part Program's own nodes), so the per-shadow-template link injection is
+    // off: the head link alone reaches every shadow tree — the theme layer is
+    // custom properties, which inherit across the shadow boundary.
+    injectDsdLinks: false,
+  },
   speculation: true,
   // One shared official-Site SLO (www/site-budget.ts): the build manifest
   // reports against exactly these values.

@@ -28,6 +28,7 @@ import readline from 'node:readline/promises';
 import { buildTemplates, resolveVersions, validateProjectName } from './template-builder.ts';
 import { createInstallCommand } from './install-command.ts';
 import { detectPackageManager } from './pm.ts';
+import { CREATE_VERSION } from './version.ts';
 
 /** The one scaffold template (#1530). `-t/--template` pins it non-interactively. */
 const TEMPLATE_NAME = 'showcase';
@@ -213,11 +214,19 @@ function initGitRepository(targetDir: string, relativeTarget: string): void {
   console.info('  initialized git repository (with .gitignore)');
 }
 
-/** The boxed end-of-run handoff: where to go, what to run, where to read. */
+/**
+ * The boxed end-of-run handoff: where to go, what to run, where to read, and
+ * which generator version produced the scaffold. The version line is load
+ * bearing: a cached `npm exec` / `npx` run resolves whatever copy it first
+ * downloaded, so the box is the one place a stale generator announces itself
+ * (#1634). The framework's packed-starter qualification asserts the line on
+ * the packed artifact.
+ */
 function printHandoff(relativeTarget: string, pm: string | null, startRequested: boolean): void {
   const devCommand = pm ? `${pm} run dev` : 'pnpm run dev';
   const lines = [
     'openElement project ready',
+    `(@openelement/create ${CREATE_VERSION})`,
     '',
     `cd ${relativeTarget}`,
     `${devCommand}      # start the dev server`,

@@ -46,12 +46,23 @@ export interface ModuleSemanticFacts {
  * {@link StaticSidecarDescriptor}s, never through compiler-side knowledge of
  * another package.
  */
-export type IntrinsicName = 'element' | 'property' | 'OpenElement' | 'computed' | 'trustedHtml';
+export type IntrinsicName =
+  | 'element'
+  | 'property'
+  | 'OpenElement'
+  | 'ErrorBoundary'
+  | 'computed'
+  | 'trustedHtml';
 
 const INTRINSIC_MODULES: Readonly<Record<IntrinsicName, readonly string[]>> = {
   element: ['@openelement/element'],
   property: ['@openelement/element'],
   OpenElement: ['@openelement/element'],
+  // The README's error-boundary authoring form subclasses ErrorBoundary —
+  // a canonical named import of '@openelement/element' like OpenElement, and
+  // the compiler's admitted base-class set (analyze-module.ts). ErrorBoundary
+  // extends OpenElement, so everything downstream of admission is unchanged.
+  ErrorBoundary: ['@openelement/element'],
   computed: ['@openelement/element'],
   trustedHtml: ['@openelement/element'],
 };
@@ -151,6 +162,48 @@ export interface ModuleIntrinsicBindings {
     module: string | readonly string[],
     imported: string,
   ): boolean;
+}
+
+/**
+ * The compiler's admitted base classes, in resolution order (alpha.13 I2,
+ * KR-11): the README documents subclassing `ErrorBoundary`, and the compiler
+ * admits that authoring form exactly as it admits `OpenElement` — both must
+ * be runtime named imports of '@openelement/element', so the binding-source
+ * check is unchanged. `ErrorBoundary extends OpenElement`, so everything
+ * downstream of admission sees the same class shape.
+ */
+export const CANONICAL_BASE_CLASS_INTRINSICS: readonly IntrinsicName[] = [
+  'OpenElement',
+  'ErrorBoundary',
+];
+
+/**
+ * Resolve one heritage clause against the admitted base classes. Returns the
+ * first canonical resolution; when none is canonical, the first resolution
+ * that names why the provenance is unsupported (so the caller's fail-closed
+ * diagnostic keeps carrying the reason). A plain identifier whose text is one
+ * of the admitted names is tried first, so a conflicting-binding diagnostic
+ * names the base class the author wrote rather than the other one.
+ */
+export function resolveCanonicalBaseClass(
+  bindings: ModuleIntrinsicBindings,
+  heritage: ts.Expression | undefined,
+): IntrinsicResolution | undefined {
+  if (heritage === undefined) return undefined;
+  const writtenName = ts.isIdentifier(heritage) ? heritage.text : undefined;
+  const candidates = [
+    ...CANONICAL_BASE_CLASS_INTRINSICS.filter((name) => name === writtenName),
+    ...CANONICAL_BASE_CLASS_INTRINSICS.filter((name) => name !== writtenName),
+  ];
+  let unsupported: IntrinsicResolution | undefined;
+  for (const intrinsic of candidates) {
+    const resolution = bindings.resolveIntrinsic(heritage, intrinsic);
+    if (resolution.canonical) return resolution;
+    if (unsupported === undefined && resolution.unsupported !== undefined) {
+      unsupported = resolution;
+    }
+  }
+  return unsupported;
 }
 
 /**
@@ -449,10 +502,11 @@ export function analyzeModuleSemantics(
     const heritage = statement.heritageClauses?.find(
       (clause) => clause.token === ts.SyntaxKind.ExtendsKeyword,
     )?.types[0]?.expression;
-    // Provenance-only (#1209): a bare `OpenElement` spelling never counts; the
-    // heritage identifier must bind the canonical import (aliases followed).
-    const extendsOpenElement =
-      heritage !== undefined && imports.resolveIntrinsic(heritage, 'OpenElement').canonical;
+    // Provenance-only (#1209): a bare base-class spelling never counts; the
+    // heritage identifier must bind a canonical named import (aliases
+    // followed). The admitted set is OpenElement or ErrorBoundary — the
+    // README's error-boundary authoring form (I2, KR-11).
+    const extendsCanonicalBase = resolveCanonicalBaseClass(imports, heritage)?.canonical === true;
     for (const decorator of ts.getDecorators(statement) ?? []) {
       if (!ts.isCallExpression(decorator.expression)) {
         continue;
@@ -471,7 +525,7 @@ export function analyzeModuleSemantics(
       const tag = stringArgument(decorator.expression);
       if (!tag || !isCustomElementTag(tag)) continue;
       defined.add(tag);
-      if (isDefault && extendsOpenElement) defaultCompiledTag = tag;
+      if (isDefault && extendsCanonicalBase) defaultCompiledTag = tag;
     }
   }
 
