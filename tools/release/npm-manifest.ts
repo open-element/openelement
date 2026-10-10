@@ -181,6 +181,10 @@ export const CREATE_BIN: Record<string, string> = {
  */
 export const ROUTER_BIN: Record<string, string> = {
   openelement: `./${ROUTER_BIN_ENTRY.replace(/\.ts$/, '.js')}`,
+  // The short alias the starter's scripts run (`oe build` / `oe start`,
+  // #1633): the same dispatcher entry as the long spelling, mirroring the
+  // workspace manifest's two-name bin declaration.
+  oe: `./${ROUTER_BIN_ENTRY.replace(/\.ts$/, '.js')}`,
 };
 
 /**
@@ -189,10 +193,10 @@ export const ROUTER_BIN: Record<string, string> = {
  */
 export const PACKAGE_BINS: Record<string, Record<string, string> | undefined> = {
   // The `openelement` lifecycle bin: the generated project's scripts run
-  // `openelement build` / `openelement start` through the `.bin` shim npm
+  // `oe build` / `oe start` (the short alias) through the `.bin` shim npm
   // materializes at install time, never a path into the installed tree. One
-  // bin, two subcommands; the subcommand bodies are the same modules the
-  // `./cli/build` and `./cli/start` export subpaths serve.
+  // dispatcher, two bins, two subcommands; the subcommand bodies are the same
+  // modules the `./cli/build` and `./cli/start` export subpaths serve.
   '@openelement/router': ROUTER_BIN,
   '@openelement/create': CREATE_BIN,
 };

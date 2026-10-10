@@ -20,7 +20,7 @@
 // Passing framework options inline to openElement() while this file carries
 // options is a hard error: framework options cannot have two homes. Unknown
 // keys are rejected with the accepted-key list.
-import { defineConfig } from '@openelement/router';
+import { defineConfig } from "@openelement/router";
 
 export default defineConfig({
   // The Tailwind preset — the single-default scaffold form. The roles in
@@ -30,12 +30,12 @@ export default defineConfig({
   // layer-ordered /assets/open-tailwind.css after the SSG render. The path is
   // app-relative (resolved against the app root); package CSS specifiers such
   // as '@openelement/ui/theme.css' also work here.
-  tailwind: { theme: ['app/styles/theme.css'] },
+  tailwind: { theme: ["app/styles/theme.css"] },
   head: {
     // Titles default to the package.json "name"; this overrides the document
     // title fallback while page routes keep their own `head: { title }`.
-    title: 'openElement Showcase',
-    description: 'A static-first openElement showcase — rendered before JavaScript arrives.',
-    favicon: '/openelement-mark.svg',
+    title: "openElement Showcase",
+    description: "A static-first openElement showcase — rendered before JavaScript arrives.",
+    favicon: "/openelement-mark.svg",
   },
 });

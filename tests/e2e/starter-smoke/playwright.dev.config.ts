@@ -2,8 +2,8 @@
  * Playwright configuration for the dev-mode smoke (#951/#952).
  *
  * Same packed-starter surface as playwright.config.ts, but served by the
- * starter's own `dev` command (vite dev server + @hono/vite-dev-server SSR)
- * instead of the production `start` command.
+ * starter's own `dev` command (the Vite+ dev server, `vp dev`, with the
+ * @hono/vite-dev-server SSR) instead of the production `start` command.
  *
  * Prerequisites:
  *   pnpm --dir tests/e2e/starter-smoke run setup
@@ -32,10 +32,11 @@ export default defineConfig({
   },
 
   webServer: {
-    // B5 (ADR-0161): the starter's own `dev` script — the exact-pinned vite
-    // devDependency; args pass straight through to vite. The host is pinned
-    // because vite's default 'localhost' binding is IPv6-first on some
-    // platforms while the probe URL is 127.0.0.1.
+    // B5 (ADR-0161): the starter's own `dev` script — `vp dev` on the Vite+
+    // toolchain (alpha.14); the flags below are vite-compatible and pass
+    // straight through. The host is pinned because the dev server's default
+    // 'localhost' binding is IPv6-first on some platforms while the probe
+    // URL is 127.0.0.1.
     command: `exec pnpm run dev --port ${PORT} --host 127.0.0.1 --strictPort`,
     cwd: new URL('./work/my-blog', import.meta.url).pathname,
     url: baseURL,

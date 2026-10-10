@@ -52,7 +52,7 @@ verified to serve. The 1.0 line is a new baseline — not a 0.x upgrade, with no
 migration path from 0.x. Pin an exact version when reproducibility matters:
 
 ```bash
-npm create @openelement@<version> my-app
+npm create @openelement@1.0.0-alpha.13 my-app
 ```
 
 The generated starter depends on `@openelement/*` through caret ranges over

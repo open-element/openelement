@@ -2,8 +2,8 @@
 /**
  * @openelement/router - the `openelement` lifecycle CLI.
  *
- * One bin, two subcommands (plus version/help), and each subcommand is exactly
- * the packaged subpath entry it dispatches to:
+ * One entry, two bin names, two subcommands (plus version/help), and each
+ * subcommand is exactly the packaged subpath entry it dispatches to:
  *
  *   openelement build            -> ./build.ts (buildApp: SSG + client phases)
  *   openelement start            -> ./start.ts (serve dist/ over node:http)
@@ -15,12 +15,13 @@
  *                                -> the router package's own version, read
  *                                   from the installed manifest
  *
- * The packed manifest declares this file as the `openelement` bin (the
- * release coordinator writes the declaration from the same path constant the
- * pack input list uses), so a generated project's scripts run the CLI through
- * the installed `.bin` shim instead of reaching into the installed tree by
- * path. The direct subpath entries (`./cli/build`, `./cli/start`) keep
- * working unchanged for callers that import or run them explicitly.
+ * The manifest declares this file twice as the bin target - `openelement`
+ * (the long, unambiguous spelling) and `oe` (the short alias) - and both
+ * entries name the same module, so the alias is zero-behavior-difference by
+ * construction: the invoked argv differs only in how the program was
+ * reached, never in what it runs. The direct subpath entries (`./cli/build`,
+ * `./cli/start`) keep working unchanged for callers that import or run them
+ * explicitly.
  *
  * The dispatcher body runs only as the process's main module, so importing
  * this file (should a caller ever do that) has no effect. Each subcommand is
@@ -33,9 +34,15 @@
 import process from 'node:process';
 import { readFileSync } from 'node:fs';
 
-/** The one usage text both the no-argument and the unknown-command paths print. */
+/**
+ * The one usage text both the no-argument and the unknown-command paths
+ * print. The alias line is documentation only: `oe` reaches this same
+ * dispatcher through the manifest's second bin entry, so every command and
+ * flag below answers identically under either spelling.
+ */
 const USAGE = [
   'Usage: openelement <command> [options]',
+  'Alias: oe <command> [options] (same entry, same behavior)',
   '',
   'Commands:',
   '  build                  production build (SSG + client) into dist/',

@@ -17,6 +17,10 @@
     "./cli/build": "./src/cli/build.ts",
     "./cli/start": "./src/cli/start.ts"
   },
+  "bin": {
+    "openelement": "./src/cli/cli.ts",
+    "oe": "./src/cli/cli.ts"
+  },
   "files": [
     "src/**",
     "README.md",

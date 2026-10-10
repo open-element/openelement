@@ -20,13 +20,17 @@
  * `head` in openelement.config.ts already covers the title, description,
  * favicon and the og:/twitter: pairs; `head.scripts` / `head.stylesheets`
  * cover external scripts and stylesheets. This file is for what neither can
- * express — here, the color-scheme declaration. Per-page meaning (title,
- * description, og:title, canonical) is declared by each route module's `head`,
- * which resolves at render time and wins for crawlers.
+ * express — here, the color-scheme declaration. A route module's `head`
+ * resolves at render time: its title and description update only <title> and
+ * the meta description. The og:* tags keep the site-wide defaults except
+ * where the route's `head.meta` declares the same `property="og:…"` — that
+ * property's site default is then not emitted (the route's own tag is the
+ * only one, in prerendered and request-rendered HTML alike). `name=` meta
+ * entries (e.g. twitter:card) never suppress a site default.
  */
 export default [
   // Declaring the color scheme the starter supports lets the browser pick the
   // right native form/scrollbar palette before any CSS is parsed. The dark
   // palette itself is theme.css's dark pair block — no runtime.
-  { meta: { name: 'color-scheme', content: 'dark light' } },
+  { meta: { name: "color-scheme", content: "dark light" } },
 ];
