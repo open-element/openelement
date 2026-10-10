@@ -578,14 +578,50 @@ interface PreUpgradeRootBucket {
 const preUpgradeRootBuckets = new WeakMap<object, PreUpgradeRootBucket>();
 
 /**
+ * The nearest still-pending DECLARED island host strictly between a captured
+ * target and the root that is about to adopt it.
+ *
+ * Containment alone cannot own a record when islands nest: an outer island
+ * and an inner one hydrated from the same deferred callback race their module
+ * chains (each island chunk carries its own top-level style await), so the
+ * OUTER element can claim and activate while the inner host is still
+ * un-upgraded. An outer activation that adopted the inner's record would
+ * dispatch it into a tree with no handlers yet, consume it, and release it —
+ * the inner island's own activation would then replay nothing. The adoption
+ * filter below keeps such records pending for the inner host's activation
+ * (the same pending-for-my-own-upgrade rule as #1170, one level up).
+ *
+ * The declared set is the page capture's (the generated entry's island tag
+ * list, merged by ensurePreHydrationClickCapture); without one — kernel-level
+ * callers, legacy no-tags captures — the filter is inert and adoption keeps
+ * the pure containment contract.
+ */
+function pendingDeclaredIslandBetween(root: Node, target: EventTarget): boolean {
+  if (!isNodeValue(target)) return false;
+  const doc = (root as Node).ownerDocument ?? (target as Node).ownerDocument;
+  const declared = doc ? preUpgradeCaptureRoots.get(doc)?.declared : undefined;
+  if (!declared || declared.size === 0) return false;
+  let current: Node | null = target;
+  while (current) {
+    if (current === root) return false;
+    const tag = tagNameOf(current);
+    if (tag && declared.has(tag) && !settledIslandHosts.has(current as object)) return true;
+    current = composedParentNode(current);
+  }
+  return false;
+}
+
+/**
  * The root's own bucket, claiming its share of the shared pool on first
  * touch. Adoption is the one-time ownership handoff that makes per-root
  * replay possible at all: records are captured before their claim root
  * exists (delayed/lazy upgrade, #1170 — the upgraded element replaces the
  * un-upgraded host), so a root must claim its share when it first arrives,
- * sweeping detached records in the same pass. Afterwards the pool holds only
- * records owned by still-pending roots, which adopt them at their own
- * activation.
+ * sweeping detached records in the same pass. Records under a still-pending
+ * declared inner island host stay in the pool for that host's own activation
+ * (nested-island activation order, see pendingDeclaredIslandBetween).
+ * Afterwards the pool holds only records owned by still-pending roots, which
+ * adopt them at their own activation.
  */
 function adoptRootBucket(root: Node): PreUpgradeRecordStore {
   let bucket = preUpgradeRootBuckets.get(root as object);
@@ -598,8 +634,9 @@ function adoptRootBucket(root: Node): PreUpgradeRecordStore {
   // Detached records can never hydrate: sweep them first so removals free
   // their slot for genuinely pending islands.
   preUpgradePendingRecords.takeWhere((record) => isDetachedTarget(record.target));
-  for (const record of preUpgradePendingRecords.takeWhere((candidate) =>
-    isInsideRoot(root, candidate.target),
+  for (const record of preUpgradePendingRecords.takeWhere(
+    (candidate) =>
+      isInsideRoot(root, candidate.target) && !pendingDeclaredIslandBetween(root, candidate.target),
   )) {
     bucket.store.replaceFor(record);
   }
