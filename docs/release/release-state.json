@@ -14,15 +14,15 @@
       "name": "@openelement/protocol",
       "status": "published",
       "registry": {
-        "latest": "1.0.0-alpha.13",
-        "alpha": "1.0.0-alpha.12"
+        "alpha": "1.0.0-alpha.13",
+        "latest": "1.0.0-alpha.13"
       }
     },
     {
       "name": "@openelement/element",
       "status": "published",
       "registry": {
-        "alpha": "1.0.0-alpha.12",
+        "alpha": "1.0.0-alpha.13",
         "latest": "1.0.0-alpha.13"
       }
     },
@@ -30,23 +30,23 @@
       "name": "@openelement/compiler",
       "status": "published",
       "registry": {
-        "latest": "1.0.0-alpha.13",
-        "alpha": "1.0.0-alpha.12"
+        "alpha": "1.0.0-alpha.13",
+        "latest": "1.0.0-alpha.13"
       }
     },
     {
       "name": "@openelement/router",
       "status": "published",
       "registry": {
-        "latest": "1.0.0-alpha.13",
-        "alpha": "1.0.0-alpha.12"
+        "alpha": "1.0.0-alpha.13",
+        "latest": "1.0.0-alpha.13"
       }
     },
     {
       "name": "@openelement/create",
       "status": "published",
       "registry": {
-        "alpha": "1.0.0-alpha.12",
+        "alpha": "1.0.0-alpha.13",
         "latest": "1.0.0-alpha.13"
       }
     },
@@ -54,7 +54,7 @@
       "name": "@openelement/ui",
       "status": "published",
       "registry": {
-        "alpha": "1.0.0-alpha.12",
+        "alpha": "1.0.0-alpha.13",
         "latest": "1.0.0-alpha.13"
       }
     }
