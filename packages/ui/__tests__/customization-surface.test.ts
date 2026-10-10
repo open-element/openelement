@@ -37,43 +37,18 @@ const ALPHA8_PARTS: Record<string, string[]> = {
   'open-tabs': [],
 };
 
-/** The C3 role-direct baseline (pinned; deliberate-edit to change). */
-const PINNED_PARTS: Record<string, string[]> = ALPHA8_PARTS;
+/** The pinned part baseline (deliberate-edit to change): the alpha8 part
+ * sets of the components the package still ships. The retired alpha8
+ * components (open-card, open-callout, open-badge, open-tabs) left the pin
+ * in the same change that removed them from the package and from
+ * CUSTOMIZATION.md; ALPHA8_PARTS keeps the full historical set above. */
+const PINNED_PARTS: Record<string, string[]> = Object.fromEntries(
+  Object.entries(ALPHA8_PARTS).filter(([tag]) =>
+    manifest.declarations.some((decl) => decl.tagName === tag),
+  ),
+);
 
 const PINNED_VARS: Record<string, string[]> = {
-  'open-card': [
-    '--color-border',
-    '--color-card',
-    '--color-foreground',
-    '--color-muted',
-    '--color-muted-foreground',
-    '--color-primary',
-    '--color-secondary',
-    '--color-zinc-200',
-    '--color-zinc-700',
-    '--color-zinc-950',
-    '--default-transition-duration',
-    '--ease-out',
-    '--font-weight-semibold',
-    '--radius-md',
-    '--spacing',
-    '--text-sm',
-    '--text-xl',
-  ],
-  'open-callout': [
-    '--color-destructive',
-    '--color-foreground',
-    '--color-muted-foreground',
-    '--color-primary',
-    '--color-success',
-    '--color-warning',
-    '--font-weight-semibold',
-    '--leading-relaxed',
-    '--radius-lg',
-    '--spacing',
-    '--text-base',
-    '--text-sm',
-  ],
   'open-button': [
     '--color-border',
     '--color-foreground',
@@ -142,21 +117,6 @@ const PINNED_VARS: Record<string, string[]> = {
     '--text-xs',
     '--tracking-wider',
   ],
-  'open-badge': [
-    '--color-border',
-    '--color-info',
-    '--color-muted',
-    '--color-muted-foreground',
-    '--color-primary',
-    '--color-success',
-    '--color-warning',
-    '--font-mono',
-    '--font-weight-extrabold',
-    '--leading-normal',
-    '--radius-md',
-    '--spacing',
-    '--text-xs',
-  ],
   'open-dialog': [
     '--color-border',
     '--color-foreground',
@@ -177,13 +137,6 @@ const PINNED_VARS: Record<string, string[]> = {
     '--text-xl',
   ],
   'open-dropdown': ['--font-sans', '--spacing'],
-  'open-tabs': [
-    '--color-border',
-    '--color-foreground',
-    '--color-muted-foreground',
-    '--color-primary',
-    '--spacing',
-  ],
   'component-recipes': [
     '--color-border',
     '--color-card',

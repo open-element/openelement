@@ -83,7 +83,7 @@ class MyBadge extends OpenElement { /* … */ }
 import { element, ErrorBoundary, property } from '@openelement/element';
 
 @element('my-boundary', { root: 'shadow-open' })
-export class MyBoundary extends ErrorBoundary {
+export default class MyBoundary extends ErrorBoundary {
   @property({ reflect: false, attribute: false })
   hasError = false;
 
@@ -101,6 +101,8 @@ export class MyBoundary extends ErrorBoundary {
 // 拒绝：再导出来源永不被追踪 —— OEC9003
 import { OpenElement } from './my-element-re-export.ts';
 ```
+
+两种交付形态的注册是不对称的，上面示例里的 `default` 导出对其中一种至关重要。页作用域组件——位于 routes 与 islands 目录之外的编译模块——只能经路由导入链被发现：页面模块（或页面导入的模块）必须导入组件模块，例如 `import './my-boundary.tsx'`，且静态组件扫描只登记模块**默认导出**的标签，因此组件为具名导出的页作用域模块可以正常编译，却永远进不了服务端注册表。island 正相反：页面/岛模板扫描按标签发现它们，页面无需导入其模块。每种形态向浏览器发布什么，见 [Islands 与 SSR](/zh/guide/islands-and-ssr)。
 
 ## 实例字段必须全是 `@property`
 
@@ -159,7 +161,7 @@ static override styles: StyleSheetLike[] = [`:host { display: block; }`];
 
 ## 禁止顶层运行语句
 
-编译模块是数据加一个类。信号、context 与共享常量住在普通 `.ts` 模块里——starter 的 `app/islands/lab-context.ts` 就是范式——编译模块再导入它们。唯一被承认的语句是岛交付策略。
+编译模块是数据加一个类。信号、context 与共享常量住在普通 `.ts` 模块里——下方的 `app/islands/lab-context.ts` 模块就是范式——编译模块再导入它们。唯一被承认的语句是岛交付策略。
 
 ```ts
 // app/islands/lab-context.ts —— 普通模块承载模块级状态
@@ -171,8 +173,8 @@ export const LabCtx = createContext<string>(Symbol('lab-ctx'), 'lab-default');
 
 ```tsx
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
-import { LabCtx, labA, consumeContext } from './lab-context.ts';
+import { consumeContext, element, OpenElement, property } from '@openelement/element';
+import { LabCtx, labA } from './lab-context.ts';
 
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
 
@@ -187,6 +189,59 @@ export default class ElementLab extends OpenElement {
 }
 ```
 
+context 沿着同一条接缝端到端工作。普通模块持有令牌；提供者元素在 `connectedCallback` 里供给值；消费者用 `consumeContext` 读取最近的提供者，并把值复制进一个 `@property`。下面两个元素都是 island，各自携带与上方 `element-lab` 相同的 `defineIslandConfig` 声明——页作用域组件永远不会在浏览器里运行生命周期代码（见 [Islands 与 SSR](/zh/guide/islands-and-ssr)）。
+
+```tsx
+// app/islands/lab-provider.tsx —— 提供者持有值
+import { element, OpenElement, property, provideContext } from '@openelement/element';
+import { LabCtx } from './lab-context.ts';
+
+@element('lab-provider', { root: 'shadow-open' })
+export default class LabProvider extends OpenElement {
+  @property({ reflect: false })
+  lab = 'lab-default';
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    provideContext(this, LabCtx, this.lab);
+  }
+
+  pick(): void {
+    this.lab = 'lab-a';
+    provideContext(this, LabCtx, this.lab);
+  }
+
+  render() {
+    return <button type='button' onClick={this.pick}>在实验 A 中工作</button>;
+  }
+}
+```
+
+```tsx
+// 消费者把最近提供者的值复制进一个 @property
+import { consumeContext, element, OpenElement, property } from '@openelement/element';
+import { LabCtx } from './lab-context.ts';
+
+@element('lab-readout', { root: 'shadow-open' })
+export default class LabReadout extends OpenElement {
+  @property({ reflect: false })
+  lab = 'lab-default';
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    const lab = consumeContext<string>(LabCtx, this);
+    this.lab = lab.value;
+    lab.subscribe((next) => { this.lab = next; });
+  }
+
+  render() {
+    return <p>{this.lab}</p>;
+  }
+}
+```
+
+订阅再复制的形态是文法本身决定的：`computed(...)` 字段只能读取 `this.<已声明的属性>`，而消费到的信号不是属性——因此消费者把提供者的更新复制进属性，编译 Part 读取的是那个属性。
+
 ```text
 // 拒绝：模块顶层的 signal()/createContext() —— OEC9008
 const count = signal(0);
@@ -195,10 +250,11 @@ const ThemeCtx = createContext<string>(Symbol('theme'), 'dark');
 
 ## JSX 用标签名组合
 
-编译标记按 HTML 标签与自定义元素宿主书写；类以 `@element` 标签注册，因此 render 里读取的是该标签的字符串。类值出现在 JSX 位置是文法之外——编译器只降级已知标签。
+编译标记按 HTML 标签与自定义元素宿主书写；类以 `@element` 标签注册，因此 render 里读取的是该标签的字符串。宿主模块仍需导入子组件模块——见下方 `import './my-counter.tsx'`——这样标签才被注册、路由导入链也才能到达它；文法禁止的只是 JSX 位置上的类值。
 
 ```tsx
 import { element, OpenElement, property } from '@openelement/element';
+import './my-counter.tsx';
 
 @element('my-dashboard', { root: 'shadow-open' })
 export class MyDashboard extends OpenElement {

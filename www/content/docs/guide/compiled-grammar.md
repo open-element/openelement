@@ -83,7 +83,7 @@ The base class must be a runtime named import of `@openelement/element` — `Ope
 import { element, ErrorBoundary, property } from '@openelement/element';
 
 @element('my-boundary', { root: 'shadow-open' })
-export class MyBoundary extends ErrorBoundary {
+export default class MyBoundary extends ErrorBoundary {
   @property({ reflect: false, attribute: false })
   hasError = false;
 
@@ -101,6 +101,8 @@ export class MyBoundary extends ErrorBoundary {
 // rejected: re-export provenance is never followed — OEC9003
 import { OpenElement } from './my-element-re-export.ts';
 ```
+
+Registration is asymmetric between the two delivery forms, and the `default` export above is load-bearing for one of them. A page-scope component — a compiled module that lives outside the routes and islands directories — is discovered only through the route import chain: the page module (or a module it imports) must import the component module, e.g. `import './my-boundary.tsx'`, and the static-component scan registers the module's **default export's** tag, so a page-scope module whose component is a named export compiles cleanly but never reaches the server registry. Islands are the other way around: the page/island template scan discovers them by tag, and their module needs no import from the page. [Islands and SSR](/guide/islands-and-ssr) states the shipping contract each form buys.
 
 ## Every instance field is a `@property`
 
@@ -160,7 +162,7 @@ static override styles: StyleSheetLike[] = [`:host { display: block; }`];
 
 ## No runtime top-level statements
 
-A compiled module is data plus a class. Signals, contexts and shared constants live in plain `.ts` modules — `app/islands/lab-context.ts` in the starter is the pattern — and the compiled module imports them. The one admitted statement is the island delivery policy.
+A compiled module is data plus a class. Signals, contexts and shared constants live in plain `.ts` modules — the `app/islands/lab-context.ts` module below is the pattern — and the compiled module imports them. The one admitted statement is the island delivery policy.
 
 ```ts
 // app/islands/lab-context.ts — a plain module owns module-level state
@@ -172,8 +174,8 @@ export const LabCtx = createContext<string>(Symbol('lab-ctx'), 'lab-default');
 
 ```tsx
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
-import { LabCtx, labA, consumeContext } from './lab-context.ts';
+import { consumeContext, element, OpenElement, property } from '@openelement/element';
+import { LabCtx, labA } from './lab-context.ts';
 
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
 
@@ -188,6 +190,59 @@ export default class ElementLab extends OpenElement {
 }
 ```
 
+Context rides the same seam end to end. The plain module owns the token; a provider element supplies the value from `connectedCallback`; a consumer reads the nearest provider with `consumeContext` and copies the value into a `@property`. Both elements below are islands, each carrying the same `defineIslandConfig` declaration as `element-lab` above — page-scope components never run lifecycle code in the browser ([Islands and SSR](/guide/islands-and-ssr)).
+
+```tsx
+// app/islands/lab-provider.tsx — the provider owns the value
+import { element, OpenElement, property, provideContext } from '@openelement/element';
+import { LabCtx } from './lab-context.ts';
+
+@element('lab-provider', { root: 'shadow-open' })
+export default class LabProvider extends OpenElement {
+  @property({ reflect: false })
+  lab = 'lab-default';
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    provideContext(this, LabCtx, this.lab);
+  }
+
+  pick(): void {
+    this.lab = 'lab-a';
+    provideContext(this, LabCtx, this.lab);
+  }
+
+  render() {
+    return <button type='button' onClick={this.pick}>work in lab A</button>;
+  }
+}
+```
+
+```tsx
+// the consumer copies the nearest provider's value into a @property
+import { consumeContext, element, OpenElement, property } from '@openelement/element';
+import { LabCtx } from './lab-context.ts';
+
+@element('lab-readout', { root: 'shadow-open' })
+export default class LabReadout extends OpenElement {
+  @property({ reflect: false })
+  lab = 'lab-default';
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    const lab = consumeContext<string>(LabCtx, this);
+    this.lab = lab.value;
+    lab.subscribe((next) => { this.lab = next; });
+  }
+
+  render() {
+    return <p>{this.lab}</p>;
+  }
+}
+```
+
+The subscribe-and-copy shape is forced by the grammar itself: a `computed(...)` field may only read `this.<declared property>`, and the consumed signal is not a property — so the consumer copies provider updates into one, and the compiled Parts read that property.
+
 ```text
 // rejected: signal()/createContext() at module top level — OEC9008
 const count = signal(0);
@@ -196,10 +251,11 @@ const ThemeCtx = createContext<string>(Symbol('theme'), 'dark');
 
 ## JSX composes by tag name
 
-Compiled markup is written in terms of HTML tags and custom-element hosts; the class is registered by its `@element` tag, so the render reads that tag as a string. A class value in the JSX position is outside the grammar — the compiler only lowers known tags.
+Compiled markup is written in terms of HTML tags and custom-element hosts; the class is registered by its `@element` tag, so the render reads that tag as a string. The host module still imports the child's module — `import './my-counter.tsx'` below — so the tag is registered and the route import chain can reach it; what the grammar forbids is only a class value in the JSX position.
 
 ```tsx
 import { element, OpenElement, property } from '@openelement/element';
+import './my-counter.tsx';
 
 @element('my-dashboard', { root: 'shadow-open' })
 export class MyDashboard extends OpenElement {

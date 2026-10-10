@@ -34,14 +34,10 @@ npm install @openelement/ui
 | ----------------- | ------------------- | ---------------------------------------------------------------- |
 | `OpenButton`      | `open-button`       | Button component.                                                |
 | `OpenInput`       | `open-input`        | Input component.                                                 |
-| `OpenCard`        | `open-card`         | Content card.                                                    |
 | `OpenCodeBlock`   | `open-code-block`   | Code block with copy behavior; highlighting is the host's build-time step. |
-| `OpenBadge`       | `open-badge`        | Status/content badge.                                            |
 | `OpenThemeToggle` | `open-theme-toggle` | Theme switch island.                                             |
 | `OpenDialog`      | `open-dialog`       | Modal/non-modal dialog.                                          |
-| `OpenCallout`     | `open-callout`      | Callout/notice box.                                              |
 | `OpenDropdown`    | `open-dropdown`     | Popover-first dropdown.                                          |
-| `OpenTabs`        | `open-tabs`         | Accessible tab interface.                                        |
 
 ## Layering contract
 
@@ -150,14 +146,10 @@ manifest; the per-component JSDoc is the source of truth for those.
 ```text
 @openelement/ui/open-button
 @openelement/ui/open-input
-@openelement/ui/open-card
 @openelement/ui/open-code-block
-@openelement/ui/open-badge
 @openelement/ui/open-theme-toggle
 @openelement/ui/open-dialog
-@openelement/ui/open-callout
 @openelement/ui/open-dropdown
-@openelement/ui/open-tabs
 @openelement/ui/theme.css              (the @theme role source; compiled through the router preset)
 @openelement/ui/instance-state         (per-element instance state store; tree-shakeable leaf)
 @openelement/ui/manifest               (generated WC package manifest; node-safe leaf)
