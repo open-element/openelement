@@ -71,13 +71,20 @@ const THIRD_PARTY_IMPORTS = {
 
 async function readEventCount(page: Page): Promise<number> {
   return await page.evaluate(() => {
-    // The definePage route renders the compiled page class directly under the
-    // path-derived tag (third-party-wc), a body-level element: the #1530
-    // showcase starter scaffolds no app-shell island between the document and
-    // the route element. The fixture island lives in the page's shadow root.
-    const fixture = document
-      .querySelector('third-party-wc')
-      ?.shadowRoot?.querySelector('wc-fixture') as HTMLElement | null;
+    // The route element composes through the starter's app-shell shadow root
+    // (the alpha.14 starter ships the shell island); the probe pierces it.
+    const pierce = (sel: string): Element | null => {
+      const flat = document.querySelector(sel);
+      if (flat) return flat;
+      for (const shell of document.querySelectorAll('app-shell')) {
+        const hit = (shell.shadowRoot ?? shell).querySelector(sel);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const fixture = pierce('third-party-wc')?.shadowRoot?.querySelector(
+      'wc-fixture',
+    ) as HTMLElement | null;
     const root = fixture?.shadowRoot;
     const eventText = root?.querySelector('#event-count')?.textContent ?? '';
     return Number(eventText.replace(/\D+/g, ''));
@@ -87,11 +94,21 @@ async function readEventCount(page: Page): Promise<number> {
 async function interactAndVerifyEventCount(page: Page, startCount: number): Promise<void> {
   const expectCount = async (expected: number, label: string): Promise<void> => {
     await page.waitForFunction((target) => {
-      // The compiled page class renders under the path-derived tag; the
-      // fixture island lives in its shadow root.
-      const fixture = document
-        .querySelector('third-party-wc')
-        ?.shadowRoot?.querySelector('wc-fixture') as HTMLElement | null;
+      // The compiled page class renders under the path-derived tag; with the
+      // starter's app-shell island the page element composes through the
+      // shell's shadow root, so the probe pierces the shell.
+      const pierce = (sel: string): Element | null => {
+        const flat = document.querySelector(sel);
+        if (flat) return flat;
+        for (const shell of document.querySelectorAll('app-shell')) {
+          const hit = (shell.shadowRoot ?? shell).querySelector(sel);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const fixture = pierce('third-party-wc')?.shadowRoot?.querySelector(
+        'wc-fixture',
+      ) as HTMLElement | null;
       const root = fixture?.shadowRoot;
       const eventText = root?.querySelector('#event-count')?.textContent ?? '';
       return Number(eventText.replace(/\D+/g, '')) >= target;
@@ -198,7 +215,16 @@ export async function verifyBrowser(distDir: string): Promise<{
         // The route element is body-level (no shell island, #1530): body is
         // the outermost node the pre-upgrade capture watches.
         const appRoot = document.body;
-        const routeRoot = document.querySelector('third-party-wc')?.shadowRoot;
+        const pierce = (sel: string): Element | null => {
+          const flat = document.querySelector(sel);
+          if (flat) return flat;
+          for (const shell of document.querySelectorAll('app-shell')) {
+            const hit = (shell.shadowRoot ?? shell).querySelector(sel);
+            if (hit) return hit;
+          }
+          return null;
+        };
+        const routeRoot = pierce('third-party-wc')?.shadowRoot;
         const root = routeRoot?.querySelector('wc-fixture')?.shadowRoot;
         for (const candidate of [appRoot, routeRoot, root]) {
           if (candidate && !observed.has(candidate)) {
@@ -260,11 +286,20 @@ export async function verifyBrowser(distDir: string): Promise<{
     }
 
     const thirdPartyReady = (diagnostic = false) => {
-      // The compiled page class renders under the path-derived tag; the
-      // fixture island lives in its shadow root.
-      const fixture = document
-        .querySelector('third-party-wc')
-        ?.shadowRoot?.querySelector('wc-fixture') as HTMLElement | null;
+      // Browser-evaluable end to end: the page element composes through the
+      // starter's app-shell shadow root, so the probe pierces the shell.
+      const pierce = (sel: string): Element | null => {
+        const flat = document.querySelector(sel);
+        if (flat) return flat;
+        for (const shell of document.querySelectorAll('app-shell')) {
+          const hit = (shell.shadowRoot ?? shell).querySelector(sel);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const fixture = pierce('third-party-wc')?.shadowRoot?.querySelector(
+        'wc-fixture',
+      ) as HTMLElement | null;
       const lit = fixture?.shadowRoot?.querySelector('wc-lit-counter') as HTMLElement & {
         shadowRoot?: ShadowRoot;
       };
@@ -292,11 +327,19 @@ export async function verifyBrowser(distDir: string): Promise<{
     }
 
     const summary = await page.evaluate(() => {
-      // The compiled page class renders under the path-derived tag; the
-      // fixture island lives in its shadow root.
-      const fixture = document
-        .querySelector('third-party-wc')
-        ?.shadowRoot?.querySelector('wc-fixture') as HTMLElement | null;
+      // The page element composes through the starter's app-shell shadow root.
+      const pierce = (sel: string): Element | null => {
+        const flat = document.querySelector(sel);
+        if (flat) return flat;
+        for (const shell of document.querySelectorAll('app-shell')) {
+          const hit = (shell.shadowRoot ?? shell).querySelector(sel);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const fixture = pierce('third-party-wc')?.shadowRoot?.querySelector(
+        'wc-fixture',
+      ) as HTMLElement | null;
       const root = fixture?.shadowRoot;
       if (!fixture || !root) throw new Error('wc-fixture shadow root missing');
       const lit = root.querySelector('wc-lit-counter') as HTMLElement & {
@@ -346,9 +389,16 @@ export async function verifyBrowser(distDir: string): Promise<{
     // Interaction event propagation checks for #221.
     await interactAndVerifyEventCount(page, summary.eventCount);
     const evidence = await page.evaluate(() => {
-      const root = document
-        .querySelector('third-party-wc')
-        ?.shadowRoot?.querySelector('wc-fixture')?.shadowRoot;
+      const pierce = (sel: string): Element | null => {
+        const flat = document.querySelector(sel);
+        if (flat) return flat;
+        for (const shell of document.querySelectorAll('app-shell')) {
+          const hit = (shell.shadowRoot ?? shell).querySelector(sel);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const root = pierce('third-party-wc')?.shadowRoot?.querySelector('wc-fixture')?.shadowRoot;
       if (!root) throw new Error('fixture root unavailable for capability evidence');
       const eventLog =
         (window as Window & { __thirdPartyWcEventLog?: string[] }).__thirdPartyWcEventLog ?? [];
