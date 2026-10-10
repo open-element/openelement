@@ -1,8 +1,13 @@
 import { expect, test } from 'vitest';
-import { assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { assertRejectsIncludes, assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import {
   admitsRelease,
+  assertStarterCarriesVitePlusWorkspace,
+  assertVitePlusWorkspaceYaml,
   cdnAvailabilityDecision,
   classifyRegistryResponse,
   fail,
@@ -16,6 +21,7 @@ import {
   releaseGateExitCode,
   skipAllowed,
   unknown,
+  VITE_PLUS_WORKSPACE_FRAGMENTS,
   VITE_SMOKE_SOURCE,
 } from './published-consumer-qualification.ts';
 
@@ -327,4 +333,71 @@ test('node runtime smoke stays on the plain-Node core surface', () => {
     VITE_SMOKE_SOURCE.includes("from '@openelement/router/vite'"),
     'vite smoke covers the vite entry',
   ).toBeTruthy();
+});
+
+// Scaffold workspace-form guard (the alpha.14 Vite+ catalog): both starter
+// legs run `pnpm install` inside the scaffolded project, whose manifest asks
+// for `vite-plus: "catalog:"` — a spec that resolves ONLY through the
+// scaffold's own pnpm-workspace.yaml catalog block. A harness step that
+// replaces or drops that file strands the spec and pnpm dies with
+// ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC (the alpha.14 published-consumers
+// failure). The guard must name the lost catalog before the install runs.
+
+const repoRoot = join(import.meta.dirname!, '..', '..');
+const scaffoldWorkspaceTemplate = () =>
+  readFile(join(repoRoot, 'packages', 'create', 'templates', 'pnpm-workspace.yaml.tmpl'), 'utf8');
+
+test('starter workspace guard accepts the create template shipped form', async () => {
+  // The real template payload (placeholders included — the fragments do not
+  // touch the version lines) must satisfy the guard, so a create-side drift
+  // away from the anchored fragments fails here, on the repo surface.
+  const template = await scaffoldWorkspaceTemplate();
+  for (const fragment of VITE_PLUS_WORKSPACE_FRAGMENTS) {
+    expect(template, `template must carry ${fragment}`).toContain(fragment);
+  }
+  expect(() => assertVitePlusWorkspaceYaml(template, 'template starter')).not.toThrow();
+});
+
+test('starter workspace guard rejects the harness clobber that lost the catalog in CI', () => {
+  // tests/lib/qualify-harness/workspace-alias.ts installAppDependencies wrote
+  // a bare `packages: []` over the scaffold's file before installing — the
+  // exact alpha.14 published-consumers failure. The guard must fail naming
+  // the missing catalog pair (not pnpm's resolver error), with the caller's
+  // context legible in the message.
+  const err = assertThrowsIncludes(
+    () => assertVitePlusWorkspaceYaml('packages: []\n', 'clobbered starter'),
+    Error,
+    'is not the Vite+ form: missing npm:@voidzero-dev/vite-plus-core@1.1.0',
+  );
+  expect(err.message).toContain('clobbered starter');
+  expect(err.message).toContain('catalog must travel with the scaffold');
+});
+
+test('starter workspace guard rejects a catalog stripped of the vite override', () => {
+  // Full catalog entry, no `vite@*: "catalog:"` override: the guard must name
+  // the override specifically (the first fragment check that fails).
+  assertThrowsIncludes(
+    () =>
+      assertVitePlusWorkspaceYaml(
+        'catalog:\n  vite: npm:@voidzero-dev/vite-plus-core@1.1.0\n  vite-plus: 1.1.0\n',
+        'stripped',
+      ),
+    Error,
+    'missing vite@*: "catalog:"',
+  );
+});
+
+test('starter workspace guard fails closed when the scaffold ships no workspace file', async () => {
+  const emptyScaffold = await mkdtemp(join(tmpdir(), 'pcq-workspace-guard-empty-'));
+  await assertRejectsIncludes(
+    () => assertStarterCarriesVitePlusWorkspace(emptyScaffold, 'bare starter'),
+    Error,
+    'missing pnpm-workspace.yaml',
+  );
+});
+
+test('starter workspace guard passes the scaffold file in place beside package.json', async () => {
+  const scaffold = await mkdtemp(join(tmpdir(), 'pcq-workspace-guard-ok-'));
+  await writeFile(join(scaffold, 'pnpm-workspace.yaml'), await scaffoldWorkspaceTemplate());
+  await assertStarterCarriesVitePlusWorkspace(scaffold, 'in-place starter');
 });

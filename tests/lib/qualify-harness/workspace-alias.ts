@@ -18,6 +18,7 @@ import { allPackageAliases } from '../../../tools/lib/package-aliases.ts';
 import { runStep } from './command-run.ts';
 import { readJson } from './json-file.ts';
 import { routerBuildScript } from './build-router.ts';
+import { ensureOwnWorkspaceRoot } from './workspace-isolation.ts';
 
 export interface WorkspaceSourceAlias {
   specifier: string;
@@ -115,12 +116,15 @@ export async function applyWorkspaceAliases(
 }
 
 /**
- * Install the app's npm dependencies with pnpm. The generated pnpm-workspace
- * file keeps the temp app its OWN workspace root: the repository's
- * pnpm-workspace.yaml (membership globs, minimumReleaseAge policy,
- * allowBuilds allowlist, root lockfile) governs THIS checkout, not a consumer
- * project that merely sits inside it — the same contract the starter smoke
- * documents for its clean-machine simulation.
+ * Install the app's npm dependencies with pnpm. The app directory must be its
+ * OWN workspace root: the repository's pnpm-workspace.yaml (membership globs,
+ * minimumReleaseAge policy, allowBuilds allowlist, root lockfile) governs THIS
+ * checkout, not a consumer project that merely sits inside it — the same
+ * contract the starter smoke documents for its clean-machine simulation.
+ * ensureOwnWorkspaceRoot (workspace-isolation.ts) provides that isolation
+ * while keeping a shipped Vite+ catalog byte-intact — the bare `packages: []`
+ * overwrite it replaced once destroyed the scaffold's catalog and CI died
+ * with ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC (alpha.14, run 38057211080).
  *
  * --no-frozen-lockfile: the scaffolded app's create-CLI install (the default
  * `pnpm install`) already wrote a registry-resolved pnpm-lock.yaml, and
@@ -130,6 +134,6 @@ export async function applyWorkspaceAliases(
  * same rationale as the starter smoke's file:// rewiring (#1530).
  */
 export async function installAppDependencies(appDir: string): Promise<void> {
-  await writeFile(join(appDir, 'pnpm-workspace.yaml'), 'packages: []\n');
+  await ensureOwnWorkspaceRoot(appDir);
   await runStep('pnpm', ['install', '--no-frozen-lockfile'], { cwd: appDir });
 }
