@@ -20,6 +20,12 @@
  *   4. with no `tailwind` key the document is byte-identical to the same
  *      pipeline minus this plugin (OFF stays OFF: no staging file, no link,
  *      nothing contributed).
+ *   5. dev/build parity: the served entry and the build bundle (through
+ *      `buildTailwindPresetBundle`) declare the same custom-property set
+ *      with an equal normalized declaration set — including the
+ *      Tailwind-internal `--tw-shadow`, whose multi-occurrence shape and
+ *      the peer's two inherent variant differences are documented at the
+ *      parity test below.
  *
  * The fixture lives under __test_fixtures__ (gitignored) and is written per
  * run — the #1535/#1536 preset tests use the same shape.
@@ -33,6 +39,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import type { Plugin, ViteDevServer } from 'vite';
 import { openElement } from '../src/vite/app-vite.ts';
+import { buildTailwindPresetBundle } from '../src/vite/preset-tailwind.ts';
 
 const FIXTURE_DIR = join(import.meta.dirname!, '../__test_fixtures__/tailwind-dev-delivery');
 const THEME_PATH = join(FIXTURE_DIR, 'app', 'styles', 'theme.css');
@@ -46,6 +53,8 @@ const STAGED_ENTRY = '.openElement/tailwind-preset/entry.css';
 const THEME_CSS = `@theme {
   --color-background: var(--color-white);
   --color-primary: var(--color-violet-700);
+  --shadow-1: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --shadow-2: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
 /* Starter palette aliases: the names component sheets consume. */
@@ -72,7 +81,7 @@ export default class HomePage extends OpenElement {
     return (
       <main>
         <h1 id='home'>dev preset fixture</h1>
-        <section class='panel'>panel</section>
+        <section class='panel shadow-1'>panel</section>
       </main>
     );
   }
@@ -353,4 +362,129 @@ test('the served entry is request-time: a build emptying .openElement cannot 404
   expect(afterWipe, 'the wiped entry still answers the compile').toMatch(COMPILED_SCALE_MARKER);
   const afterWipePlain = await fetchStagedCss(handle);
   expect(afterWipePlain, 'the plain URL still answers the compile').toMatch(COMPILED_THEME_BLOCK);
+});
+
+// ─── Dev/build parity (--tw-shadow and the minified-literal deltas) ─────────
+//
+// The preset's two channels ride the two variants of the @tailwindcss/vite
+// peer (dev-tailwind.ts proxies the serve plugins; preset-tailwind.ts runs
+// the inner build with the build plugins), and the peer compiles them with
+// a few known, INHERENT differences — verified against 4.3.3 by direct
+// probe and pinned here so they cannot silently grow:
+//
+// 1. MINIFICATION: the build variant emits minified literals —
+//    `rgb(0 0 0 / 0.05)` → `#0000000d`, `0.27` → `.27`, `150ms` → `.15s`,
+//    `::before` → `:before`, whitespace inside function calls — while the
+//    serve variant emits the authored spellings. Every such difference is a
+//    literal spelling, never a different declaration.
+// 2. MINIFIER DEDUP: the build variant drops duplicate identical
+//    declarations the serve variant keeps (observed: one extra
+//    `--tw-gradient-position: in oklab` on dev), so declaration COUNTS are
+//    not comparable between the channels — only presence is.
+// 3. BLOCK ORDER: the build variant emits `@layer properties` (the --tw-*
+//    compat fallbacks) BEFORE `@layer utilities`, the serve variant after.
+//    `--tw-shadow` is one NAME for several distinct declarations by design —
+//    the shadow utility's resolved value (`.shadow-1 { --tw-shadow: 0 1px
+//    2px 0 var(--tw-shadow-color, …), … }`), the `*, ::before, …` compat
+//    fallback (`--tw-shadow: 0 0 #0000`), and the `@property` initial value
+//    (also `0 0 #0000`) — so a NAME-keyed (first/last-wins) dev/build diff
+//    reports different occurrences as "the value" and looks like a
+//    divergence. It is not one: both channels ship the same declarations.
+//
+// The parity bound below therefore compares (a) the custom-property NAME
+// sets and (b) the SET of unique normalized declarations — anything beyond
+// the inherent differences above fails the test.
+
+/** Abstract color/time literals and minified decimal/whitespace spellings. */
+function normalizeDeclarationValue(value: string): string {
+  return value
+    .replace(/#[0-9a-fA-F]{3,8}\b/g, 'COLOR')
+    .replace(/\b(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch|color)\([^()]*\)/g, 'COLOR')
+    .replace(/(?<![\w.])0\.(?=\d)/g, '.')
+    .replace(/(?<![\w.])(?:\d*\.)?\d+(?:ms|s)\b/g, 'TIME')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .replace(/\s+/g, ' ');
+}
+
+/** Every `--name: value` declaration in sheet order (multi-occurrence kept). */
+function cssDeclarations(css: string): Array<{ name: string; value: string }> {
+  return [...css.matchAll(/(--[a-zA-Z0-9-]+)\s*:\s*([^;}]+)/g)].map((match) => ({
+    name: match[1]!,
+    value: normalizeDeclarationValue(match[2]!.trim()),
+  }));
+}
+
+test('dev and build compile one contract: equal declaration sets (--tw-shadow pinned)', async () => {
+  // The fixture carries the consumer-reported shape: custom `--shadow-1`/
+  // `--shadow-2` theme tokens AND a page that uses the `shadow-1` utility,
+  // so the Tailwind-internal `--tw-shadow` machinery compiles on both
+  // channels (with no shadow utility neither channel emits any --tw-shadow
+  // at all — the variable exists only as utility/compat output).
+  rmSync(join(FIXTURE_DIR, '.openElement'), { recursive: true, force: true });
+  const handle = await bootDev(openElement(PRESET_ON));
+  handles.push(handle);
+  const devCss = await fetchStagedCss(handle);
+
+  // The build channel over the SAME root and options. It stages/empties
+  // `.openElement/tailwind-preset/` on disk — the dev channel's served
+  // module is disk-independent (the test above), so the order is safe.
+  const built = await buildTailwindPresetBundle({
+    root: FIXTURE_DIR,
+    outDir: join(FIXTURE_DIR, 'dist'),
+    options: PRESET_ON.tailwind,
+    base: '/',
+  });
+
+  // (a) The name SETS are equal: neither channel drops or adds a custom
+  // property (a dropped candidate or a dropped theme token fails here).
+  const devNames = new Set(cssDeclarations(devCss).map((entry) => entry.name));
+  const buildNames = new Set(cssDeclarations(built.bundleCss).map((entry) => entry.name));
+  expect(
+    [...devNames].filter((name) => !buildNames.has(name)),
+    'dev-only names',
+  ).toEqual([]);
+  expect(
+    [...buildNames].filter((name) => !devNames.has(name)),
+    'build-only names',
+  ).toEqual([]);
+
+  // (b) The SET of unique normalized declarations is equal: the only
+  // accepted deltas are the peer's minified literal spellings and its
+  // duplicate-declaration dedup, both of which the normalizer abstracts
+  // away (counts excluded for exactly the dedup reason above).
+  const uniqueDeclarations = (css: string): string[] =>
+    [...new Set(cssDeclarations(css).map((entry) => `${entry.name}: ${entry.value}`))].sort();
+  expect(uniqueDeclarations(devCss), 'dev declaration set').toEqual(
+    uniqueDeclarations(built.bundleCss),
+  );
+
+  // --tw-shadow, covered explicitly (the reported pair):
+  // both channels carry the compat fallback — byte-identical, `0 0 #0000`
+  // is already the minified spelling on both sides…
+  for (const [label, css] of [
+    ['dev', devCss],
+    ['build', built.bundleCss],
+  ] as const) {
+    expect(
+      css.match(/--tw-shadow:\s*0 0 #0000/g)?.length ?? 0,
+      `${label}: the compat fallback occurrence count`,
+    ).toBeGreaterThan(0);
+    // …and both carry the utility's own resolved value with the two-layer
+    // geometry the authored `--shadow-1` token declares, the color overlay
+    // spelled per variant (rgb() on dev, minified hex on build).
+    expect(
+      css.match(
+        /--tw-shadow:\s*0 1px 2px 0 var\(--tw-shadow-color, (?:rgb\(0 0 0 \/ 0\.05\)|#0000000d)\), 0 1px 3px 0 var\(--tw-shadow-color, (?:rgb\(0 0 0 \/ 0\.1\)|#0000001a)\)/,
+      ),
+      `${label}: the .shadow-1 utility's resolved --tw-shadow value`,
+    ).toBeTruthy();
+  }
+
+  // The consumer-reported tokens are present on both channels (their value
+  // delta is exactly the minified color class the normalizer abstracts).
+  for (const token of ['--shadow-1', '--shadow-2']) {
+    expect(devCss.match(new RegExp(`${token}:`)), `dev carries ${token}`).toBeTruthy();
+    expect(built.bundleCss.match(new RegExp(`${token}:`)), `build carries ${token}`).toBeTruthy();
+  }
 });
