@@ -175,30 +175,77 @@ function metaTag(attrs: Record<string, string>): string {
   return `<meta ${serialized}>`;
 }
 
+/**
+ * The `og:` properties a route's resolved head.meta declares. A declaration is
+ * ownership: the route's own tag serializes through the Document seam's meta
+ * channel, so the site-level default for the SAME property must not be emitted
+ * a second time. Only string `property` values with the `og:` prefix count —
+ * `name=` entries (twitter:card, robots) never suppress a site default, and
+ * the match is exact (OG property names are case-sensitive). Non-object
+ * entries are skipped: resolvePageDocument validates the array, not its
+ * entries, and a suppression query must not turn malformed data into a wrong
+ * emission — the serializer rejects those entries on its own.
+ */
+export function routeDeclaredOgProperties(
+  meta: ReadonlyArray<Record<string, string | number | boolean>> | undefined,
+): ReadonlySet<string> {
+  const declared = new Set<string>();
+  for (const entry of meta ?? []) {
+    if (entry === null || typeof entry !== 'object') continue;
+    const property = entry['property'];
+    if (typeof property === 'string' && property.startsWith('og:')) declared.add(property);
+  }
+  return declared;
+}
+
 type HeadConfig = NonNullable<OpenElementUserConfig['head']>;
-type HeadFragmentEmitter = (head: HeadConfig, title: string | null, fragments: string[]) => void;
+/**
+ * One site-level head fragment emitter. `suppressOg` carries the `og:`
+ * properties a route declaration already owns — empty at config resolution,
+ * where no route is in scope. A suppressed property is not emitted at all,
+ * rather than duplicated behind the page's own tag.
+ */
+type HeadFragmentEmitter = (
+  head: HeadConfig,
+  title: string | null,
+  fragments: string[],
+  suppressOg: ReadonlySet<string>,
+) => void;
+
+/** Emit one site-level `og:` meta unless a route declaration owns the property. */
+function emitOgMeta(
+  fragments: string[],
+  property: string,
+  content: string,
+  suppressOg: ReadonlySet<string>,
+): void {
+  if (suppressOg.has(property)) return;
+  fragments.push(metaTag({ property, content }));
+}
 
 const HEAD_FRAGMENT_EMITTERS = {
-  favicon(head, _title, fragments) {
+  favicon(head, _title, fragments, _suppressOg) {
     if (head.favicon) fragments.push(`<link rel="icon" href="${escapeAttr(head.favicon)}">`);
   },
-  title(_head, title, fragments) {
+  title(_head, title, fragments, suppressOg) {
     if (title) {
-      fragments.push(metaTag({ property: 'og:title', content: title }));
-      fragments.push(metaTag({ property: 'og:site_name', content: title }));
+      emitOgMeta(fragments, 'og:title', title, suppressOg);
+      emitOgMeta(fragments, 'og:site_name', title, suppressOg);
     }
   },
-  description(head, title, fragments) {
+  description(head, title, fragments, suppressOg) {
     if (head.description) {
-      fragments.push(metaTag({ property: 'og:description', content: head.description }));
+      emitOgMeta(fragments, 'og:description', head.description, suppressOg);
     }
     if (title || head.description) {
-      fragments.push(metaTag({ property: 'og:type', content: 'website' }));
+      emitOgMeta(fragments, 'og:type', 'website', suppressOg);
     }
   },
-  ogImage(head, _title, fragments) {
+  ogImage(head, _title, fragments, suppressOg) {
     if (head.ogImage) {
-      fragments.push(metaTag({ property: 'og:image', content: head.ogImage }));
+      emitOgMeta(fragments, 'og:image', head.ogImage, suppressOg);
+      // twitter:card is a `name=` meta, not an `og:` property: the route-side
+      // ownership rule never suppresses it.
       fragments.push(metaTag({ name: 'twitter:card', content: 'summary_large_image' }));
     }
   },
@@ -239,19 +286,81 @@ function assertHeadSurfaceHandled(): void {
 /**
  * Document-head channel: favicon link plus the site-level Open Graph tags.
  * Page-level head data (title/description/canonical per route) is resolved by
- * the Document seam and emitted ahead of these fragments, so a page's own
- * `og:*` meta always wins for crawlers.
+ * the Document seam and emitted ahead of these fragments. A route whose
+ * resolved head.meta declares an `og:` property owns that property: the
+ * site-level default for the same property is not emitted at all
+ * (`suppressOgProperties`) instead of relying on first-tag-wins in the
+ * serialized <head>. Properties the route does not declare keep the
+ * site-level defaults.
  */
 function headFragmentsFor(input: {
   head: NonNullable<OpenElementUserConfig['head']> | undefined;
   title: string | null;
+  suppressOgProperties?: ReadonlySet<string>;
 }): string[] {
   assertHeadSurfaceHandled();
-  const { head, title } = input;
+  const { head, title, suppressOgProperties } = input;
   if (!head) return [];
   const fragments: string[] = [];
-  for (const emit of Object.values(HEAD_FRAGMENT_EMITTERS)) emit(head, title, fragments);
+  const suppressOg = suppressOgProperties ?? new Set<string>();
+  for (const emit of Object.values(HEAD_FRAGMENT_EMITTERS)) {
+    emit(head, title, fragments, suppressOg);
+  }
   return fragments;
+}
+
+/**
+ * The per-render face of the SAME serialization: the site-level head
+ * fragments for a page whose resolved document carries `routeMeta` (the
+ * Document seam's resolved head.meta). A declared `og:` property drops its
+ * site-level default; everything else serializes exactly like the config-time
+ * resolution. One emitter table owns og emission on every face (P6) — this is
+ * a suppression set threaded through it, never a second serializer.
+ */
+export function headFragmentsForRoute(
+  head: NonNullable<OpenElementUserConfig['head']> | undefined,
+  title: string | null,
+  routeMeta: ReadonlyArray<Record<string, string | number | boolean>> | undefined,
+): string[] {
+  return headFragmentsFor({
+    head,
+    title,
+    suppressOgProperties: routeDeclaredOgProperties(routeMeta),
+  });
+}
+
+/**
+ * The baked-string face of the SAME per-property suppression: the site-level
+ * headExtras string (already serialized once by the emitter table and baked
+ * per build — `__HEAD_EXTRAS__` at SSG, a quoted literal per handler at
+ * request time) with every `<meta property="og:X" …>` tag REMOVED for each
+ * `og:` property the route's resolved meta tags declare (`__doc.meta` — the
+ * Document seam's shape: `{ property, content }` records; `name=` entries
+ * never match, exactly like `routeDeclaredOgProperties`). Only the tag shape
+ * our own emitters produce is removed, together with the newline separator a
+ * removed fragment leaves behind (the baked join is `'\n  '`, so the
+ * filtered string stays clean like the emitter-side suppression) — this is a
+ * suppression filter over the serializer's own output, not a second
+ * serializer or a general HTML parser (P6: one writer beside the emitters).
+ *
+ * This module is build-host code (it reads config files), so the generated
+ * entries cannot import it: they carry an inline statement mirror
+ * (`routeHeadExtrasStatements` in entry-codegen.ts — the
+ * rendererScopeMatches ↔ `__matchingRenderers` keep-in-sync pattern), and
+ * consumer-form tests execute both faces against the same corpus
+ * (`__tests__/entry-og-dedup.test.ts`).
+ */
+export function filterHeadExtrasForRoute(headExtras: string, routeMetaTags: unknown): string {
+  const owned = routeDeclaredOgProperties(
+    Array.isArray(routeMetaTags)
+      ? (routeMetaTags as ReadonlyArray<Record<string, string | number | boolean>>)
+      : undefined,
+  );
+  if (owned.size === 0) return headExtras;
+  return headExtras.replace(
+    /(?:\n[ \t]*)?<meta property="(og:[^"]*)"[^>]*>/g,
+    (tag, property: string) => (owned.has(property) ? '' : tag),
+  );
 }
 
 /**

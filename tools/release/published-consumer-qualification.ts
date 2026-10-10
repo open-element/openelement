@@ -295,7 +295,9 @@ async function qualificationMain(): Promise<void> {
         }
       }
       await runStep('install starter dependencies', 'pnpm', ['install'], starter);
-      for (const task of ['check', 'test', 'build']) {
+      // The Vite+ lifecycle renames `check` to `typecheck` (`tsc --noEmit`);
+      // the retired `check` spelling never ran lint, so the rename is 1:1.
+      for (const task of ['typecheck', 'test', 'build']) {
         await runStep(`starter ${task}`, 'pnpm', ['run', task], starter);
       }
     }
@@ -530,8 +532,9 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
       }
     }
     await run('pnpm', ['install'], `${tmpDir}/starter`);
-    const check = await run('pnpm', ['run', 'check'], `${tmpDir}/starter`);
-    if (!check.success) throw new Error(`starter check failed:\n${check.output}`);
+    // The Vite+ lifecycle renames `check` to `typecheck` (`tsc --noEmit`).
+    const typecheck = await run('pnpm', ['run', 'typecheck'], `${tmpDir}/starter`);
+    if (!typecheck.success) throw new Error(`starter typecheck failed:\n${typecheck.output}`);
     console.log('  ok: generated package graph and typecheck use the released version');
   } finally {
     await rm(tmpDir, { recursive: true }).catch(() => undefined);

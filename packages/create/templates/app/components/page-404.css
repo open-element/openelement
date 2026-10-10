@@ -1,7 +1,21 @@
-
-    :host { display: block; }
-    h1 { font-size: 2.4rem; letter-spacing: -0.02em; margin: 0.75rem 0 0.5rem; font-weight: 700; }
-    p { color: var(--ink-soft); line-height: 1.6; }
-    a { color: var(--brand); font-weight: 600; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  
+:host {
+  display: block;
+}
+h1 {
+  font-size: 2.4rem;
+  letter-spacing: -0.02em;
+  margin: 0.75rem 0 0.5rem;
+  font-weight: 700;
+}
+p {
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+a {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}

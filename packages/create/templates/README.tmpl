@@ -22,13 +22,13 @@ without editing this file.
 
 ## The JS cost map
 
-| Surface | Ships JavaScript? | Why |
-| --- | --- | --- |
-| `/` hero + architecture sections | no | prerendered markup, styled with CSS |
-| `/` counter island (`my-counter`) | yes, hydrates on idle | the one interactive piece |
-| `/` live timer island (`live-timer`) | yes, client-only | a live clock has nothing to prerender |
-| `/about` | no islands at all | fully static SSG output |
-| `/api/ping` | no (server) | a plain `Request → Response` handler |
+| Surface                              | Ships JavaScript?     | Why                                   |
+| ------------------------------------ | --------------------- | ------------------------------------- |
+| `/` hero + architecture sections     | no                    | prerendered markup, styled with CSS   |
+| `/` counter island (`my-counter`)    | yes, hydrates on idle | the one interactive piece             |
+| `/` live timer island (`live-timer`) | yes, client-only      | a live clock has nothing to prerender |
+| `/about`                             | no islands at all     | fully static SSG output               |
+| `/api/ping`                          | no (server)           | a plain `Request → Response` handler  |
 
 The badge classes (`badge-static`, `badge-island`) live in
 `app/components/badges.css` — copy them onto new sections and keep the
@@ -48,12 +48,13 @@ Framework options have exactly one home: `openelement.config.ts`. It is
 optional and nearly empty — every option it omits comes from a file
 convention:
 
-| Option | Convention |
-| --- | --- |
-| design tokens | `app/styles/theme.css` (the @theme role sheet) |
-| document head content | `app/head.tsx` (meta tags, preloads, inline CSS) |
-| site title | the `name` field of `package.json` |
-| static-shape recipes | `app/styles/recipes.css` (zero-interaction badge/callout/card/tabs shapes as plain HTML+CSS — the @openelement/ui components retired to these recipes in #1557) |
+| Option                | Convention                                                                                                                                                      |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| design tokens         | `app/styles/theme.css` (the @theme role sheet)                                                                                                                  |
+| app shell             | `app/islands/app-shell.tsx` (the shared site chrome every page renders inside)                                                                                  |
+| document head content | `app/head.tsx` (meta tags, preloads, inline CSS)                                                                                                                |
+| site title            | the `name` field of `package.json`                                                                                                                              |
+| static-shape recipes  | `app/styles/recipes.css` (zero-interaction badge/callout/card/tabs shapes as plain HTML+CSS — the @openelement/ui components retired to these recipes in #1557) |
 
 Passing framework options inline to `openElement()` while the config file
 carries options is a hard error, and an unknown key fails the build with the
@@ -68,7 +69,16 @@ accepted-key list. `vite.config.ts` stays Vite-only: `plugins: [...openElement()
   array them in `static styles`, sharing `site-chrome.css`/`badges.css`).
 - `app/islands/` — client islands, the only code that ships JavaScript. Each
   island declares its hydration strategy (`idle`, `load`, `visible`,
-  client-only) through `defineIslandConfig`.
+  client-only) through `defineIslandConfig`. The directory also hosts
+  `app-shell.tsx` — not an island itself, but the auto-registered application
+  shell (see below).
+- `app/islands/app-shell.tsx` — the site chrome every page renders inside:
+  the header, the `main` content region, and the footer live here exactly
+  once instead of being copied onto each page. The build registers the shell
+  automatically and projects each page's render into its default slot, so a
+  page module carries only its own content. The shell is a convention: delete
+  the file and pages still render (carrying their own chrome again), or opt
+  out explicitly with `appShell: false` in `openelement.config.ts`.
 - `app/styles/theme.css` — the @theme role sheet: Tailwind-ON roles, the starter palette aliases, dark and forced-colors pairs. Dev serves it directly; the build compiles it through the router's Tailwind preset.
   Dark values ride `prefers-color-scheme`; no theme runtime.
 - `app/styles/recipes.css` — documented plain HTML+CSS recipes for the
@@ -79,29 +89,41 @@ accepted-key list. `vite.config.ts` stays Vite-only: `plugins: [...openElement()
 
 ## Scripts
 
-- `pnpm dev` — start the Vite dev server.
-- `pnpm check` — type-check every route/component file. The check covers the
-  whole `app/` directory (`tsconfig.json`), so new files are picked up
-  automatically.
+The starter runs on the Vite+ toolchain (`vite-plus`, the `vp` command):
+
+- `pnpm dev` — start the dev server (`vp dev`).
+- `pnpm fmt` — format the sources (`vp fmt`).
+- `pnpm lint` — lint the sources (`vp lint`).
+- `pnpm typecheck` — type-check every route/component file (`tsc --noEmit`).
+  The check covers the whole `app/` directory (`tsconfig.json`), so new files
+  are picked up automatically.
 - `pnpm test` — run Node's built-in test runner (the starter ships none).
 - `pnpm build` — production build into `dist/`: prerendered HTML for every
   static route, plus the request-time server when the app has one.
 - `pnpm start` — serve the production build.
 
-`build` and `start` run the `openelement` bin from the `@openelement/router`
-dependency (`openelement build` / `openelement start`); the router's CLI also
-carries a static-only `openelement start --mode=preview`, which refuses a
-build that has a request-time server.
+`build` and `start` run the router CLI's short `oe` bin from the
+`@openelement/router` dependency (`oe build` / `oe start`; the same entry is
+installed as `openelement`, so both spellings work). The CLI also carries a
+static-only `oe start --mode=preview`, which refuses a build that has a
+request-time server.
+
+The Vite tree itself is catalog-managed: `pnpm-workspace.yaml` points `vite`
+at the Vite+ core (`@voidzero-dev/vite-plus-core`) through a catalog entry
+and a `vite@*` override, so every peer that asks for vite resolves the same
+Vite+ build — there is no direct `vite` devDependency to pin.
 
 ## Styling ownership
 
 Global design tokens and the document baseline (`body`, `::selection`) live
-in `app/styles/theme.css`. Pages use light roots and own their rules in
-`static styles`, arrayed from imported `.css` files (#1558 — the one style
-authoring form): the server inlines each page's sheets into the SSR output as
-a `@scope(<page-tag>)` style block, so pages are fully styled with zero
-client JavaScript. Islands carry their own `.css` sheets the same way; in
-island chunks those ride the style-asset protocol as real `.css` assets.
+in `app/styles/theme.css`. The app shell owns the shared chrome sheet
+(`app/components/site-chrome.css`), arrayed in its `static styles`. Pages use
+light roots and own their rules in `static styles`, arrayed from imported
+`.css` files (#1558 — the one style authoring form): the server inlines each
+page's sheets into the SSR output as a `@scope(<page-tag>)` style block, so
+pages are fully styled with zero client JavaScript. Islands carry their own
+`.css` sheets the same way; in island chunks those ride the style-asset
+protocol as real `.css` assets.
 
 ## Brand assets
 
@@ -112,11 +134,13 @@ unused.
 ## Dependency notes
 
 `@openelement/element` and `@openelement/router` are the runtime dependencies
-your app imports. `@hono/vite-dev-server` and `hono` ride devDependencies:
-the Vite dev server needs the former (and the latter as its own node-adapter
-peer), it is loaded lazily, and `build`/`start` never resolve either — so
-`npm install --omit=dev` in a production image installs only the runtime pair.
-The generated server entry itself imports no
+your app imports. Everything else rides devDependencies: `vite-plus` (the
+`vp` toolchain the scripts run through; the Vite tree itself resolves through
+the `pnpm-workspace.yaml` catalog), the Tailwind-ON build-time pins, the
+dev-server pair — `@hono/vite-dev-server` (loaded lazily by the dev server)
+and its `hono` peer — and the `typescript` pin. None of them resolve under a
+production install: `npm install --omit=dev` in a production image installs
+only the runtime pair. The generated server entry itself imports no
 HTTP framework — it composes on the internal WinterCG layer (#1560); `hono`
 is an optional peer of `@openelement/router`, and `@openelement/router/hono`
 (`createHonoAdapter`) is the one opt-in if you ever want to mount the built
@@ -124,9 +148,10 @@ handler inside your own Hono app. For Nitro deployments, the built handler
 bridges through the `@openelement/router/nitro-mount` subpath of the one
 `@openelement/router` dependency. Do not remove them.
 
-pnpm manages a `pnpm-workspace.yaml` for this project. That file is pnpm's own
-bookkeeping, not starter output: it carries workspace membership and the
-package-manager settings that apply here — including `minimumReleaseAge`, the
-supply-chain window that withholds freshly published versions, and any
-exemptions pnpm records when you approve a package inside that window. Keep
-the file (pnpm rewrites it), and review the exemptions it lists.
+`pnpm-workspace.yaml` ships with the scaffold and is pnpm's own bookkeeping:
+it carries the Vite+ catalog and override pair, and `minimumReleaseAge` — the
+supply-chain window that withholds freshly published versions — with the
+exemptions this project starts with (the `@openelement` packages at the
+version it was generated from, plus `vite-plus`). pnpm rewrites the file when
+you approve more packages inside that window; keep it and review the
+exemptions it lists.

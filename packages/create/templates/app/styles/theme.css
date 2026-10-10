@@ -53,8 +53,8 @@
 
 /* Dark pairs (shadcn v4 convention; the selector matches the runtime theme
    attribute the ui package documents). */
-:root[data-theme='dark'],
-:host([data-theme='dark']) {
+:root[data-theme="dark"],
+:host([data-theme="dark"]) {
   --color-background: var(--color-zinc-950);
   --color-foreground: var(--color-zinc-50);
 

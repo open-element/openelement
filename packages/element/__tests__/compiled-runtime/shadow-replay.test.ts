@@ -10,6 +10,12 @@
  *   - shadow-open island: pre-hydration click replays exactly once
  *   - light-DOM island: the pre-existing replay contract still holds
  *   - two pending islands: a click never replays into the wrong island
+ *   - nested pending islands: whichever island activates first, the inner
+ *     island's record survives to replay after the INNER hydration (both
+ *     islands hydrate from one deferred callback, so module resolution — not
+ *     document order — decides which host claims first; the outer activation
+ *     must not dispatch, consume, or release the inner's pending record into a
+ *     tree whose handlers are not attached yet)
  *   - post-hydration clicks fire once and are never re-replayed
  *   - a target removed before hydration fails closed (no replay, no throw)
  *
@@ -204,6 +210,114 @@ test('shadow replay: a click never replays into the wrong island (#942)', () => 
   const elementA = upgradeShadowInPlace(hostA);
   expect(elementA.count, 'the clicked island still replays exactly once').toEqual(1);
   expect(elementB.count, 'the sibling island stays silent').toEqual(0);
+});
+
+/**
+ * Nested-island fixture: the outer island's compiled shadow tree contains the
+ * inner island's host as a plain template child (claimed by tag while the
+ * inner element is still un-upgraded), and the capture carries BOTH declared
+ * tags — the generated entry's form, unlike the no-tag legacy calls above.
+ */
+interface NestedOuterElement extends FacadeElement {
+  hydrated: number;
+}
+
+function defineNestedOuter(tag: string, innerTag: string): void {
+  const program = testProgram({
+    tag,
+    rootMode: 'shadow-open',
+    template: [{ k: 'el', tag: innerTag }],
+    parts: [],
+  });
+  class NestedOuter extends OpenElement {
+    static __partProgram = program;
+    static __compiledProperties = program.metadata.properties;
+    static __elementMetadata = program.metadata;
+    static observedAttributes = program.metadata.observedAttributes;
+    hydrated = 0;
+    protected override onDsdHydrated(): void {
+      this.hydrated++;
+    }
+  }
+  dom.registry.define(tag, NestedOuter as unknown as CustomElementConstructor);
+}
+
+/** The un-upgraded inner host inside the outer SSR host's declarative shadow. */
+function nestedFixture(
+  outerTag: string,
+  innerTag: string,
+): {
+  outerHost: FacadeElement;
+  innerHost: FacadeElement;
+} {
+  const innerHost = ssrShadowHost(innerTag);
+  const outerHost = new FacadeElement(outerTag, dom.document);
+  const outerRoot = outerHost.attachShadow({ mode: 'open' });
+  outerRoot.appendChild(innerHost);
+  dom.document.body.appendChild(outerHost);
+  return { outerHost, innerHost };
+}
+
+/** Delayed upgrade INSIDE a shadow root (upgradeShadowInPlace assumes body). */
+function upgradeWithin(parent: FacadeShadowRoot, ssrHost: FacadeElement): AnyElement {
+  const element = dom.document.createElement(ssrHost.localName);
+  for (const [name, value] of ssrHost.attributes) {
+    (element as unknown as FacadeElement).setAttribute(name, value);
+  }
+  const root = (element as unknown as FacadeElement).attachShadow({ mode: 'open' });
+  for (const child of [...ssrHost.shadowRoot!.childNodes]) root.appendChild(child);
+  parent.insertBefore(element, ssrHost);
+  parent.removeChild(ssrHost);
+  return element;
+}
+
+test('shadow replay: outer island activating first leaves the inner pending record for the inner hydration (#942 nested)', () => {
+  const innerTag = 'oe-nested-outer-first-inner';
+  const outerTag = 'oe-nested-outer-first-outer';
+  defineCounter(innerTag, 'shadow-open');
+  defineNestedOuter(outerTag, innerTag);
+  // The generated entry declares every island tag before any upgrade.
+  ensurePreHydrationClickCapture(dom.document, [outerTag, innerTag]);
+
+  const { outerHost, innerHost } = nestedFixture(outerTag, innerTag);
+  innerButton(innerHost).dispatchEvent(composedClick());
+
+  // The outer island's chunk wins the hydration race: it upgrades while the
+  // inner host is still un-upgraded. Its activation must not adopt (replay +
+  // consume + release) the record that belongs to the pending inner island.
+  const outer = upgradeShadowInPlace(outerHost) as unknown as NestedOuterElement;
+  expect(outer.hydrated, 'the outer island still claims its own tree').toEqual(1);
+
+  const innerSsrHost = outer.shadowRoot!.childNodes[0] as unknown as FacadeElement;
+  const inner = upgradeWithin(
+    outer.shadowRoot as unknown as FacadeShadowRoot,
+    innerSsrHost,
+  ) as unknown as ShadowCounterElement;
+  expect(inner.hydrated, 'the inner island claims after its own upgrade').toEqual(1);
+  expect(inner.count, 'the pre-hydration click replays at the inner hydration').toEqual(1);
+  expect(outer.hydrated, 'the outer activation ran exactly once').toEqual(1);
+});
+
+test('shadow replay: inner island activating first keeps the replay exactly once when the outer follows (#942 nested)', () => {
+  const innerTag = 'oe-nested-inner-first-inner';
+  const outerTag = 'oe-nested-inner-first-outer';
+  defineCounter(innerTag, 'shadow-open');
+  defineNestedOuter(outerTag, innerTag);
+  ensurePreHydrationClickCapture(dom.document, [outerTag, innerTag]);
+
+  const { outerHost, innerHost } = nestedFixture(outerTag, innerTag);
+  innerButton(innerHost).dispatchEvent(composedClick());
+
+  // The inner island's chunk wins instead: it upgrades inside the still
+  // un-upgraded outer SSR host, replays its record, and the later outer
+  // activation must not re-replay it.
+  const outerRoot = outerHost.shadowRoot as unknown as FacadeShadowRoot;
+  const inner = upgradeWithin(outerRoot, innerHost) as unknown as ShadowCounterElement;
+  expect(inner.count, 'the inner-first order replays exactly once').toEqual(1);
+
+  const outer = upgradeShadowInPlace(outerHost) as unknown as NestedOuterElement;
+  expect(outer.hydrated, 'the outer island claims after its own upgrade').toEqual(1);
+  expect(inner.count, 'the consumed record never replays again').toEqual(1);
 });
 
 test('shadow replay: post-hydration clicks fire once and are never re-replayed (#942)', () => {

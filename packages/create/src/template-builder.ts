@@ -85,6 +85,10 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['package.json.tmpl', 'package.json'],
   ['tsconfig.json.tmpl', 'tsconfig.json'],
   ['vite.config.ts.tmpl', 'vite.config.ts'],
+  // The Vite+ workspace form: the catalog/override pair that points the vite
+  // tree at the Vite+ core, plus the release-day supply-chain exemptions.
+  // pnpm treats the file as its own bookkeeping and rewrites it as needed.
+  ['pnpm-workspace.yaml.tmpl', 'pnpm-workspace.yaml'],
   // #1411: framework options live in openelement.config.ts; the starter ships
   // it near-empty, so every option comes from a file convention until the user
   // overrides one.
@@ -117,6 +121,9 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['app/islands/my-counter.css', 'app/islands/my-counter.css'],
   ['app/islands/live-timer.tsx.tmpl', 'app/islands/live-timer.tsx'],
   ['app/islands/live-timer.css', 'app/islands/live-timer.css'],
+  // The auto-registered application shell (the islands/app-shell.tsx
+  // convention): owns the shared site chrome every page renders inside.
+  ['app/islands/app-shell.tsx.tmpl', 'app/islands/app-shell.tsx'],
 ];
 
 function versionTokens(v: ProductVersions): Record<string, string> {

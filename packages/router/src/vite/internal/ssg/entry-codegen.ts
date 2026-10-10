@@ -31,6 +31,34 @@ interface RouteHandlerDocConfig {
   allowHeadExtrasScripts: boolean;
 }
 
+/**
+ * Inline statements (the generated entry declares no runtime helper
+ * function bodies — the generated-entry gate test pins the allowlist)
+ * binding `__routeHeadExtras` — the site-level
+ * headExtras expression with every `og:` meta tag the route's RESOLVED
+ * document owns removed, so the page's own `__doc.meta` tag is the only
+ * emission of that property (per-property og dedup; the site default for a
+ * declared property is dropped, undeclared properties keep it).
+ *
+ * The property-set derivation and the tag match mirror
+ * `filterHeadExtrasForRoute` (app-config.ts) — this build module is not
+ * importable by the generated runtime, so the generated entry carries the
+ * statement mirror (the rendererScopeMatches ↔ `__matchingRenderers`
+ * keep-in-sync pattern; both faces executed against one corpus by
+ * `__tests__/entry-og-dedup.test.ts`).
+ *
+ * Must be emitted AFTER the `const __doc = …` resolution of the SAME block
+ * (it reads `__doc.meta`); sites that serialize no route meta (status-page
+ * wraps) keep the raw expression — suppressing there would orphan the head
+ * of its og block without emitting the route's replacement.
+ */
+export function routeHeadExtrasStatements(headExtrasExpr: string, indent: string): string[] {
+  return [
+    `${indent}const __routeOgOwned = new Set(((__doc.meta) || []).filter((entry) => entry && typeof entry === "object" && typeof entry.property === "string" && entry.property.startsWith("og:")).map((entry) => entry.property));`,
+    `${indent}const __routeHeadExtras = __routeOgOwned.size === 0 ? ${headExtrasExpr} : String(${headExtrasExpr}).replace(/(?:\\n[ \\t]*)?<meta property="(og:[^"]*)"[^>]*>/g, (tag, property) => __routeOgOwned.has(property) ? "" : tag);`,
+  ];
+}
+
 interface RenderRouteHandlerOptions {
   method: 'get' | 'post';
   route: PageRouteDecl;
@@ -181,6 +209,9 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       actionDataExpr: 'undefined',
       indent: '    ',
     });
+    // Per-property og dedup: the streamed document serializes the route's
+    // __doc.meta, so the baked site string drops the og tags it owns.
+    lines.push(...routeHeadExtrasStatements(headExtrasExpr, '    '));
     lines.push(`    const __token = crypto.randomUUID();`);
     lines.push(`    const __instance = crypto.randomUUID();`);
     lines.push(
@@ -194,7 +225,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     for (const optionLine of documentWrapOptionsLines({
       titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
       langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
-      headExtrasExpr,
+      headExtrasExpr: '__routeHeadExtras',
       allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
       cspNonce: true,
     }))
@@ -215,6 +246,9 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       actionDataExpr: isAction ? '__actionData' : 'undefined',
       indent: '    ',
     });
+    // Per-property og dedup: this wrap serializes the route's __doc.meta, so
+    // the baked site string drops the og tags the route declares.
+    lines.push(...routeHeadExtrasStatements(headExtrasExpr, '    '));
 
     renderRouteContentLines(lines, ctx, `__pageProps(${ctx.route.varName}, __pageContext)`, '    ');
     lines.push('');
@@ -235,7 +269,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     for (const optionLine of documentWrapOptionsLines({
       titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
       langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
-      headExtrasExpr,
+      headExtrasExpr: '__routeHeadExtras',
       allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
       cspNonce: true,
     })) {
@@ -293,6 +327,9 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       actionDataExpr: 'undefined',
       indent: '        ',
     });
+    // Per-property og dedup on the boundary re-render too: the fresh __doc
+    // above re-resolves the route's meta, and the wrap below serializes it.
+    lines.push(...routeHeadExtrasStatements(headExtrasExpr, '        '));
     lines.push(
       `        let __errorHtml = __ssr(__tag, __pageErrorProps(${ctx.route.varName}, err, __pageContext), { route: ${pathLiteral} })`,
     );
@@ -308,7 +345,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     for (const optionLine of documentWrapOptionsLines({
       titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
       langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
-      headExtrasExpr,
+      headExtrasExpr: '__routeHeadExtras',
       allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
       cspNonce: true,
     })) {

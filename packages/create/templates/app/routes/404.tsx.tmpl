@@ -6,10 +6,10 @@
  * renderIntent line and the route becomes prerenderable — a build with no
  * other request-time route then writes the page to dist/404.html.
  */
-import { definePage } from '@openelement/router';
-import NotFoundPage from '../components/page-404.tsx';
+import { definePage } from "@openelement/router";
+import NotFoundPage from "../components/page-404.tsx";
 
 export default definePage(NotFoundPage, {
-  renderIntent: { mode: 'dynamic' },
-  head: { title: '404 — openElement' },
+  renderIntent: { mode: "dynamic" },
+  head: { title: "404 — openElement" },
 });

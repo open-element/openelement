@@ -1,18 +1,16 @@
 {
   "name": "${name}",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.8.1",
-  "engines": {
-    "node": ">=24.2"
-  },
   "scripts": {
-    "dev": "vite",
-    "check": "tsc --noEmit",
+    "dev": "vp dev",
+    "build": "oe build",
+    "start": "oe start",
     "test": "node --test",
-    "build": "openelement build",
-    "start": "openelement start"
+    "fmt": "vp fmt",
+    "lint": "vp lint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@openelement/element": "^${v.element}",
@@ -24,6 +22,10 @@
     "hono": "^4.12",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
-    "vite": "${v.vite}"
-  }
+    "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": ">=24.2"
+  },
+  "packageManager": "pnpm@12.8.1"
 }

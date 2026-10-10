@@ -668,7 +668,7 @@ test('starter template: vite.config.ts carries no CSS and no inline framework op
 
 test('starter template: openelement.config.ts validates against the accepted schema', () => {
   const source = readTemplate('openelement.config.ts.tmpl');
-  expect(source.includes("from '@openelement/router'"), source).toBeTruthy();
+  expect(source.includes('from "@openelement/router"'), source).toBeTruthy();
   expect(source.includes('defineConfig'), source).toBeTruthy();
   // Every top-level key the starter writes must be in the accepted set; the
   // template is a hand-written file, so this catches a typo before a user
@@ -691,10 +691,10 @@ test('starter template: openelement.config.ts validates against the accepted sch
     'theme.css must define --brand',
   ).toBeTruthy();
   expect(
-    readTemplate('app/islands/my-counter.tsx.tmpl').includes("@element('my-counter'"),
+    readTemplate('app/islands/my-counter.tsx.tmpl').includes('@element("my-counter"'),
   ).toBeTruthy();
   expect(
-    readTemplate('app/islands/live-timer.tsx.tmpl').includes("@element('live-timer'"),
+    readTemplate('app/islands/live-timer.tsx.tmpl').includes('@element("live-timer"'),
   ).toBeTruthy();
 });
 
