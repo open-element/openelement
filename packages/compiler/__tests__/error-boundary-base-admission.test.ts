@@ -292,11 +292,15 @@ test('a default-exported boundary subclass is discoverable as a compiled compone
   expect(facts.defaultCompiledTag).toEqual('my-boundary');
 });
 
-test('the README is unchanged by this admission (the doc is the contract)', () => {
-  // The lane's ruling: the compiler honors the README, the README is not
-  // edited to match the compiler. Pin the sentence this admission answers.
+test('the README documents the compilable shape (the doc is the contract)', () => {
+  // The lane's ruling: the compiler honors the README, the README teaches the
+  // shape that actually compiles. Pin the sentences this admission answers —
+  // the 2026-10-10 edit replaced the loose "branches on hasError" wording
+  // (which readers wrote as a two-return render and hit OEC9007) with the
+  // compilable form: re-declared @property, static ternary, single return.
   const readme = readFileSync(resolve(REPO_ROOT, 'packages/element/README.md'), 'utf8');
-  expect(readme).toContain('A subclass `render()` branches on `hasError`');
+  expect(readme).toContain('the subclass re-declares `hasError` as its own `@property`');
+  expect(readme).toContain('fully static JSX ternary inside a single-return `render()`');
   expect(readme).toContain(
     '`retry()` re-renders both the boundary and the captured source element',
   );

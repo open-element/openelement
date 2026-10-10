@@ -23,6 +23,7 @@ The compiler lowers every `@element` module into a Part Program — a serializab
 | Text reads properties | `{this.label}`, `{this.count}`, literal text | a method call or any other expression in a text position (`OEC9013`) |
 | Branches are fully static | `{this.flag ? <b>on</b> : <i>off</i>}`, `{this.count > 5 && <p>over</p>}` | a branch that is not a single static JSX element; a nested ternary (`OEC9012`) |
 | `render()` is one return | `render() { return <main>…</main>; }` | locals before the return, two root elements, a fragment root, text as the root (`OEC9007`) |
+| Failures happen at runtime | a `throw` inside a lifecycle method such as `connectedCallback()` | `if (…) throw` inside `render()` (`OEC9007`) — authored throws are not compilable; boundaries catch runtime failures |
 | Handlers are method references | `onClick={this.pick}` or a single-action arrow | `onClick={this.pick()}` and other inline call expressions (`OEC9016`) |
 | Attributes are static or property reads | literals, `this.<property>` sinks, the admitted boolean/class/style forms | spreads, computed expressions (`OEC9011`) |
 

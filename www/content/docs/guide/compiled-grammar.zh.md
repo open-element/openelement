@@ -23,6 +23,7 @@ section: 'Core'
 | 文本区读属性 | `{this.label}`、`{this.count}`、字面量文本 | 文本位置上的方法调用或任何其它表达式（`OEC9013`） |
 | 分支必须全静态 | `{this.flag ? <b>on</b> : <i>off</i>}`、`{this.count > 5 && <p>over</p>}` | 不是单个静态 JSX 元素的分支；嵌套三元（`OEC9012`） |
 | `render()` 单 return | `render() { return <main>…</main>; }` | return 前的局部变量、两个根元素、fragment 根、根为文本（`OEC9007`） |
+| 失败发生在运行时 | 在 `connectedCallback()` 等生命周期方法里 `throw` | `render()` 内的 `if (…) throw`（`OEC9007`）——手写 throw 不可编译；边界捕获的是运行时失败 |
 | 事件处理器是方法引用 | `onClick={this.pick}` 或单一动作箭头函数 | `onClick={this.pick()}` 等内联调用表达式（`OEC9016`） |
 | 属性值是字面量或属性读取 | 字面量、`this.<property>` sink、许可的 boolean/class/style 形态 | 展开属性、计算表达式（`OEC9011`） |
 
