@@ -1,5 +1,5 @@
 name: Setup Node Workspace
-description: Install the Node toolchain and pnpm, restore workspace dependencies, and materialize node_modules.
+description: Install the Node toolchain and pnpm, restore the pnpm store, and materialize node_modules from it.
 
 runs:
   using: composite
@@ -14,13 +14,39 @@ runs:
     - name: Install pnpm
       shell: bash
       run: npm install -g pnpm@12.8.1 # zizmor: ignore[adhoc-packages] — runner ships no preinstalled pnpm; corepack route awaits an ADR; exact pin integrity-verified over https against registry.npmjs.org
-    - name: Cache dependencies
-      # v4.3.0
+    # Cache the pnpm STORE, never node_modules. pnpm's node_modules is a
+    # symlink/junction forest into .pnpm; zipping and restoring that forest
+    # on Windows corrupts permissions and the following
+    # `pnpm install --frozen-lockfile` dies with
+    # ERR_PNPM_PACKAGE_MANAGER_INSPECT_OPTIONAL_DEPENDENCY ...
+    # "Access is denied (os error 5)" (twice-reproduced on windows-latest in
+    # published-consumers runs; mac/linux restores survived). The store is
+    # the cacheable artifact: install then materializes node_modules from it
+    # via hardlinks/copies, so no junction forest is ever restored.
+    # `pnpm store path` needs the pnpm binary from the step above, and
+    # actions/cache evaluates `path` at expansion time — hence this probe
+    # step's output feeding the cache step below.
+    - name: Resolve pnpm store path
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    - name: Cache pnpm store
+      # v4.3.0 — supports an absolute `path` sourced from a step output.
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
-        path: node_modules
-        key: ${{ runner.os }}-pnpm-${{ hashFiles('.node-version') }}-${{ hashFiles('pnpm-lock.yaml') }}
+        path: ${{ steps.pnpm-store.outputs.path }}
+        # New `-pnpm-store-` key namespace (the old poisoned keys were
+        # `<os>-pnpm-<hash>-<hash>` for node_modules): every restore-key
+        # prefix below contains the `-pnpm-store-` segment, so no old
+        # node_modules entry can ever prefix-match and be restored again.
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('.node-version') }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-${{ hashFiles('.node-version') }}-
+          ${{ runner.os }}-pnpm-store-
     - name: Install dependencies
+      # With the store restored, this recreates node_modules from it
+      # (hardlinks on linux, copies/junctions built fresh on windows) and
+      # the lockfile-diff guard below stays exactly as before.
       shell: bash
       run: |
         pnpm install --frozen-lockfile
