@@ -127,6 +127,11 @@ openelement build          # production build (SSG + client)
 openelement start          # serve built output
 ```
 
+The package declares a second bin, the short alias `oe`, pointing at the
+same CLI entry — every command and flag answers identically under either
+spelling, so `oe build`, `oe start`, and `oe version` behave exactly like
+their `openelement` counterparts.
+
 In a generated project the same commands are the package scripts
 `pnpm build` and `pnpm start` (plus `pnpm dev` for the Vite dev server; a
 static-only serve is `openelement start --mode=preview`, which refuses a

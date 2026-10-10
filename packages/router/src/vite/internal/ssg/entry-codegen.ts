@@ -32,8 +32,9 @@ interface RouteHandlerDocConfig {
 }
 
 /**
- * Inline statements (ADR-0160 rule a: the generated entry carries no runtime
- * helper function bodies) binding `__routeHeadExtras` — the site-level
+ * Inline statements (the generated entry declares no runtime helper
+ * function bodies — the generated-entry gate test pins the allowlist)
+ * binding `__routeHeadExtras` — the site-level
  * headExtras expression with every `og:` meta tag the route's RESOLVED
  * document owns removed, so the page's own `__doc.meta` tag is the only
  * emission of that property (per-property og dedup; the site default for a
