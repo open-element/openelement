@@ -281,6 +281,7 @@ async function qualificationMain(): Promise<void> {
       const starter = join(root, 'starter');
       const manifest = JSON.parse(await readFile(join(starter, 'package.json'), 'utf8')) as {
         dependencies: Record<string, string>;
+        devDependencies: Record<string, string>;
       };
       for (const pkg of ['router', 'element']) {
         const actual = manifest.dependencies[`@openelement/${pkg}`];
@@ -294,6 +295,30 @@ async function qualificationMain(): Promise<void> {
           );
         }
       }
+      // The published starter is the Vite+ toolchain form (alpha.14+): the
+      // manifest asks for `vite-plus: "catalog:"` and the scaffold's own
+      // pnpm-workspace.yaml catalog owns the version (a surviving `vite` pin
+      // is the retired form). Both halves are asserted BEFORE the install so
+      // a scaffold that drops either one fails the gate with the precise
+      // cause instead of dying inside pnpm's resolver.
+      if (manifest.devDependencies.vite !== undefined) {
+        throw new Error(
+          `starter is not the Vite+ form: devDependency vite=${manifest.devDependencies.vite} ` +
+            'must be gone (the vite tree is catalog-managed)',
+        );
+      }
+      if (manifest.devDependencies['vite-plus'] !== 'catalog:') {
+        throw new Error(
+          `starter is not the Vite+ form: devDependency vite-plus=` +
+            `${manifest.devDependencies['vite-plus'] ?? '<missing>'}, expected catalog:`,
+        );
+      }
+      // The catalog travels WITH pnpm-workspace.yaml: the install below runs
+      // in the scaffold's own directory, so the file must be present there
+      // and carry the catalog/override pair. This harness never rewrites it
+      // (the scaffold's bytes install verbatim — the catalog-preserving
+      // contract the packed-consumer gates enforce).
+      await assertStarterCarriesVitePlusWorkspace(starter, 'Published starter');
       await runStep('install starter dependencies', 'pnpm', ['install'], starter);
       // The Vite+ lifecycle renames `check` to `typecheck` (`tsc --noEmit`);
       // the retired `check` spelling never ran lint, so the rename is 1:1.
@@ -331,6 +356,74 @@ async function qualificationMain(): Promise<void> {
   }
 
   console.log(`[published-consumer] ${options.mode} qualification passed for ${options.version}`);
+}
+
+// ---------------------------------------------------------------------------
+// Scaffold workspace-form guard (the Vite+ catalog, alpha.14+)
+// ---------------------------------------------------------------------------
+
+/**
+ * The fragments every scaffolded starter's pnpm-workspace.yaml must carry in
+ * the Vite+ toolchain form: the catalog pair that resolves the manifest's
+ * `vite-plus: "catalog:"` and points the whole vite tree at the Vite+ core
+ * build, plus the `vite@*` override that routes every peer's vite through the
+ * same catalog entry. Same literal fragments the starter-smoke setup and the
+ * packed-consumer starter gates anchor.
+ */
+export const VITE_PLUS_WORKSPACE_FRAGMENTS = [
+  'npm:@voidzero-dev/vite-plus-core@1.1.0',
+  'vite-plus: 1.1.0',
+  'vite@*: "catalog:"',
+] as const;
+
+/**
+ * Assert a scaffolded starter's pnpm-workspace.yaml text is the Vite+ form.
+ * Pure so both entry surfaces (the qualification matrix and the exact-version
+ * smoke) funnel their scaffold reads through one check, and the tests can
+ * drive it directly.
+ */
+export function assertVitePlusWorkspaceYaml(yaml: string, context: string): void {
+  for (const fragment of VITE_PLUS_WORKSPACE_FRAGMENTS) {
+    if (!yaml.includes(fragment)) {
+      throw new Error(
+        `${context} pnpm-workspace.yaml is not the Vite+ form: missing ${fragment} ` +
+          '(the catalog must travel with the scaffold wherever pnpm install runs; ' +
+          'replacing or regenerating the file leaves vite-plus: "catalog:" unresolvable)',
+      );
+    }
+  }
+}
+
+/**
+ * Verify the scaffold's own pnpm-workspace.yaml is present in the directory
+ * where pnpm install runs and is the Vite+ form. The file is load-bearing:
+ * the starter manifest's `vite-plus: "catalog:"` resolves through its catalog
+ * block, so a harness step that replaces or drops it strands the spec and
+ * pnpm dies with ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC (the alpha.14
+ * published-consumers failure: a qualify harness rewrote the file to a bare
+ * `packages: []` before installing). Asserting here fails the gate with the
+ * precise diagnosis instead. The read is itself the existence check
+ * (read-and-expect-ENOENT, no shape probe before it), and this harness never
+ * writes the file — nothing to fold, the scaffold's bytes install verbatim.
+ */
+export async function assertStarterCarriesVitePlusWorkspace(
+  starterDir: string,
+  context: string,
+): Promise<void> {
+  let yaml: string;
+  try {
+    yaml = await readFile(join(starterDir, 'pnpm-workspace.yaml'), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      throw new Error(
+        `${context} is missing pnpm-workspace.yaml ` +
+          '(the Vite+ catalog/override form ships it; it must sit beside package.json ' +
+          'in the directory where pnpm install runs)',
+      );
+    }
+    throw error;
+  }
+  assertVitePlusWorkspaceYaml(yaml, context);
 }
 
 // ---------------------------------------------------------------------------
@@ -521,6 +614,7 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
     if (!create.success) throw new Error(`starter generation failed:\n${create.output}`);
     const manifest = (await readJson(`${tmpDir}/starter/package.json`)) as {
       dependencies: Record<string, string>;
+      devDependencies: Record<string, string>;
     };
     for (const pkg of ['router', 'element']) {
       // Caret range over the published version (owner ruling 2026-10-09):
@@ -531,6 +625,25 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
         throw new Error(`starter dependency @openelement/${pkg}=${actual}, expected=${expected}`);
       }
     }
+    // The Vite+ toolchain form (alpha.14+): the manifest must ask for
+    // `vite-plus: "catalog:"` — the retired `vite` pin means the pre-alpha.14
+    // scaffold, whose workspace file carries no catalog.
+    if (manifest.devDependencies.vite !== undefined) {
+      throw new Error(
+        `starter is not the Vite+ form: devDependency vite=${manifest.devDependencies.vite} ` +
+          'must be gone (the vite tree is catalog-managed)',
+      );
+    }
+    if (manifest.devDependencies['vite-plus'] !== 'catalog:') {
+      throw new Error(
+        `starter is not the Vite+ form: devDependency vite-plus=` +
+          `${manifest.devDependencies['vite-plus'] ?? '<missing>'}, expected catalog:`,
+      );
+    }
+    // The catalog travels with the scaffold: the install below runs inside
+    // the scaffold's own directory, so its pnpm-workspace.yaml must be there
+    // carrying the catalog/override pair — never rewritten by this harness.
+    await assertStarterCarriesVitePlusWorkspace(`${tmpDir}/starter`, 'Exact-version starter');
     await run('pnpm', ['install'], `${tmpDir}/starter`);
     // The Vite+ lifecycle renames `check` to `typecheck` (`tsc --noEmit`).
     const typecheck = await run('pnpm', ['run', 'typecheck'], `${tmpDir}/starter`);
