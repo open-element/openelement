@@ -21,9 +21,17 @@ import type { ComponentLayer, HydrationStrategy } from '../../framework.ts';
 import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import { createLogger } from '@openelement/element';
-import { buildError, ClientAssetErrorCode } from '../../../internal/error-codes.ts';
+import {
+  buildError,
+  ClientAssetErrorCode,
+  ClientBuildErrorCode,
+} from '../../../internal/error-codes.ts';
 import type { PageIslandManifest } from './island-manifest.ts';
-import { generateIslandManifests, writeIslandManifests } from './island-manifest.ts';
+import {
+  generateIslandManifests,
+  pageHasClientIslands,
+  writeIslandManifests,
+} from './island-manifest.ts';
 import { expandIslandDeliveryDecl, resolveIslandHydrate } from './island-scanner.ts';
 import {
   type IslandDeliveryMeta,
@@ -31,6 +39,8 @@ import {
   resolveIslandDeliveryTags,
 } from './delivery.ts';
 import { DEFAULT_OUT_DIR } from './../paths.ts';
+import { findElementRuntimeChunkFile } from '../element-runtime-chunk.ts';
+import { injectElementRuntimePreload } from './postprocess.ts';
 
 export { buildIslandPrefetchLinks } from './speculation-rules.ts';
 
@@ -53,6 +63,14 @@ export interface BuildContextView {
   };
   /** The Phase 2 client build's asset manifest (null when no client bundle shipped). */
   clientAssetManifest?: ClientAssetManifest | null;
+  /**
+   * Resolved framework options. Only the renderer is read here: whether an
+   * emitted graph must carry the shared element-runtime chunk is a
+   * renderer-level fact (native requires it, lit's entry is element-free,
+   * #1339), and the runtime-preload projection fails closed for a native
+   * island-bearing build whose chunk it cannot name.
+   */
+  options?: { renderer?: 'native' | 'lit' };
 }
 
 type DeliveryIslandMeta = Partial<IslandDecl> &
@@ -107,12 +125,17 @@ export function islandChunkMapFromAssetManifest(
  * Must only run after Phase 2 (client island build) has completed. The
  * client script tags themselves were already embedded at render time
  * (#1471) — this pass records the identity-driven chunk/strategy/layer
- * manifests only and stays read-only on the rendered HTML; the per-page
- * speculation-rules injection (#1561) is a separate lane fed by the
- * manifests this returns. Fail-closed: the chunk map is resolved — and any
- * missing island asset thrown — before a single page manifest is generated
- * or written, so the pass either writes the complete manifest set or none
- * of it, never a partial record that silently omits an admitted island.
+ * manifests and then feeds the one HTML write derived from them (B2/#1544):
+ * the shared element-runtime chunk's `<link rel="modulepreload">` on exactly
+ * the pages whose manifest carries a client-activatable island. The
+ * per-page speculation-rules injection (#1561) is a separate lane fed by
+ * the manifests this function returns. Fail-closed: the chunk map is
+ * resolved — and any missing island asset thrown — before a single page
+ * manifest is generated or written, so the pass either writes the complete
+ * manifest set or none of it, never a partial record that silently omits an
+ * admitted island; and an island-bearing native build whose emitted runtime
+ * chunk cannot be named fails the head projection instead of shipping pages
+ * with a cold runtime fetch.
  */
 export async function postProcessClientIslandBuild(
   ctx: BuildContextView,
@@ -172,6 +195,32 @@ export async function postProcessClientIslandBuild(
 
   const pageManifests = generateIslandManifests(outputDir, chunkMap, strategyMap, layerMap);
   await writeIslandManifests(outputDir, pageManifests);
+
+  // B2/#1544: project the same per-page facts onto the document head. The
+  // runtime chunk's address is the build's own emitted artifact (the client
+  // asset manifest's shared set); no second source of page→island knowledge
+  // exists here.
+  const bearingPages = pageManifests.filter((manifest) => pageHasClientIslands(manifest));
+  if (bearingPages.length > 0) {
+    const runtimeUrl = findElementRuntimeChunkFile(ctx.clientAssetManifest?.shared ?? []);
+    if (runtimeUrl === undefined) {
+      // Lit's entry is element-free (#1339) and legally has no runtime chunk.
+      if (ctx.options?.renderer !== 'lit') {
+        throw buildError(
+          ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
+          `Island-bearing pages (${bearingPages
+            .map((manifest) => manifest.route)
+            .join(
+              ', ',
+            )}) need the shared element-runtime chunk preloaded, but the emitted client ` +
+            `assets carry no element-runtime-<hash>.js chunk to name — the native client build ` +
+            `must ship the #1544 chunk before the per-page projection can point a modulepreload at it`,
+        );
+      }
+    } else {
+      injectElementRuntimePreload(outputDir, pageManifests, runtimeUrl);
+    }
+  }
   return pageManifests;
 }
 

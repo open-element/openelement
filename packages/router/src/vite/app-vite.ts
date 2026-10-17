@@ -13,11 +13,7 @@ import { OpenElementBuildContext } from './build-context.ts';
 import { createOpenPlugin } from './plugin.ts';
 import { assertNoRenamedInlineKeys } from './app-config.ts';
 import { hasInlineFrameworkOptions } from '../config.ts';
-import {
-  DEFAULT_COMPONENTS_DIR,
-  DEFAULT_ISLANDS_DIR,
-  DEFAULT_ROUTES_DIR,
-} from './internal/paths.ts';
+import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './internal/paths.ts';
 
 /**
  * Options for the openElement() unified Vite entry.
@@ -29,7 +25,7 @@ import {
  *    spelling `openelement.config.ts` uses — passing `html` fails closed and
  *    names the replacement;
  *  - the source roots keep their explicit spellings (`routesDir`,
- *    `islandsDir`, `componentsDir`), while a config file's `dirs` block is the
+ *    `islandsDir`), while a config file's `dirs` block is the
  *    spelling that also moves the file conventions.
  */
 export interface OpenElementOptions extends Omit<FrameworkOptions, 'html'> {
@@ -49,7 +45,6 @@ export function openElement(options: OpenElementOptions = {}): Plugin[] {
     ...options,
     routesDir: options.routesDir || DEFAULT_ROUTES_DIR,
     islandsDir: options.islandsDir || DEFAULT_ISLANDS_DIR,
-    componentsDir: options.componentsDir || DEFAULT_COMPONENTS_DIR,
   });
 
   // #1411: options passed here are user input and must be stated as such, so

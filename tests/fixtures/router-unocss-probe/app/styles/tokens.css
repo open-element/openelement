@@ -1,0 +1,29 @@
+/* The token source: Open Props (a design-token package with no relationship to
+   any utility generator) plus the small role table this app's components name.
+   The UnoCSS adapter inlines this file — and the Open Props import it carries —
+   verbatim into the document sheet. Nothing here is compiled by the engine: the
+   utilities reference these variables, the variables keep their own identity,
+   and swapping the token package swaps the whole palette. */
+
+@import 'open-props/style';
+
+:root {
+  --color-background: var(--gray-1);
+  --color-foreground: var(--gray-12);
+  --color-card: var(--gray-0);
+
+  --color-primary: var(--violet-7);
+  --color-primary-foreground: var(--gray-0);
+
+  --color-muted: var(--gray-3);
+  --color-border: var(--gray-5);
+  --color-ring: var(--violet-8);
+  --color-destructive: var(--red-7);
+}
+
+/* A relative asset reference beside the token file: the generated sheet is
+   delivered from elsewhere, so the reference must keep resolving against THIS
+   file's directory (the provider rebases it onto the sheet's compile base). */
+:root {
+  --probe-swatch: url('./probe-swatch.svg');
+}

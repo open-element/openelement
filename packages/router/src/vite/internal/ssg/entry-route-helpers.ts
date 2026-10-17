@@ -73,9 +73,23 @@ export function renderMatchingRenderersFn(lines: string[], renderers: RendererDe
  * through the setter seam) to the resolver, so the resolved document carries
  * them and `documentWrapOptionsLines` reads only `__doc` (#1471: the SSG
  * render pass embeds the final script tag through the same seam).
+ *
+ * `__documentStyles` is emitted beside it (alpha15 S lane, S-C1.2) because the
+ * two are the same lifespan: both are per-render products of the resolved
+ * document, and every call site that wraps a document with
+ * `documentWrapOptionsLines` already has `__doc` in scope. The page render
+ * reports its light-root components' external sheets into the collection; the
+ * wrap declares them in the head.
  */
-export function documentResolutionSetupLine(pageExpr: string, contextExpr: string): string {
-  return `const __doc = __resolvePageDocument(${pageExpr}.head, ${contextExpr}, __clientScriptDescriptors());`;
+export function documentResolutionSetupLines(
+  pageExpr: string,
+  contextExpr: string,
+  indent: string,
+): string[] {
+  return [
+    `${indent}const __doc = __resolvePageDocument(${pageExpr}.head, ${contextExpr}, __clientScriptDescriptors());`,
+    `${indent}const __documentStyles = createDocumentStyleResources();`,
+  ];
 }
 
 /**
@@ -91,7 +105,7 @@ export function requestTimePageContextLines(
   lines.push(
     `${options.indent}const __pageContext = { data: ${options.dataExpr}, actionData: ${options.actionDataExpr}, params: __params, request: c.req.raw, locale: __localeFromPath(__locales, c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };`,
   );
-  lines.push(`${options.indent}${documentResolutionSetupLine('__page', '__pageContext')}`);
+  lines.push(...documentResolutionSetupLines('__page', '__pageContext', options.indent));
 }
 
 /** wrapInDocument() options object shared by page handlers and the SSG renderRoute. */
@@ -118,6 +132,10 @@ export function documentWrapOptionsLines(options: {
     // (request-time handlers AND the SSG render pass) serializes the final
     // script tags from the same resolved field.
     `scripts: __doc.clientScripts || [],`,
+    // alpha15 S lane (S-C1.2): the light-root component stylesheets this
+    // render discovered, declared in the document head beside the site's own
+    // document stylesheet.
+    `styleLinks: __documentStyles.links,`,
   ];
   if (options.cspNonce) lines.push(`cspNonce: c.get('cspNonce'),`);
   return lines;

@@ -21,11 +21,11 @@ section: 'Core'
 | JSX 用标签名组合 | 小写内置元素与自定义元素宿主（`<my-counter>`） | 把类值当标签（`<ChildCard />`）（`OEC9010`） |
 | `innerHTML` 必须带显式信任手势 | `@property({ type: Object, reflect: false, attribute: false }) body = trustedHtml(...)`，且 `innerHTML={this.body} trustedHtml` | `String` 类型来源、普通字符串值、无 `trustedHtml()` 品牌的值（`OEC9026`） |
 | 文本区读属性 | `{this.label}`、`{this.count}`、字面量文本 | 文本位置上的方法调用或任何其它表达式（`OEC9013`） |
-| 分支必须全静态 | `{this.flag ? <b>on</b> : <i>off</i>}`、`{this.count > 5 && <p>over</p>}` | 不是单个静态 JSX 元素的分支；嵌套三元（`OEC9012`） |
+| 分支只绑定，不行动 | `{this.flag ? <b data-label={this.label}>on</b> : <i title={this.off}>off</i>}` —— 每个分支是一个静态元素，其属性可绑定 `this.<property>` | 不是单个静态 JSX 元素的分支；嵌套三元；分支内的事件处理器、`ref`、内联条件 class（`OEC9012`） |
 | `render()` 单 return | `render() { return <main>…</main>; }` | return 前的局部变量、两个根元素、fragment 根、根为文本（`OEC9007`） |
 | 失败发生在运行时 | 在 `connectedCallback()` 等生命周期方法里 `throw` | `render()` 内的 `if (…) throw`（`OEC9007`）——手写 throw 不可编译；边界捕获的是运行时失败 |
 | 事件处理器是方法引用 | `onClick={this.pick}` 或单一动作箭头函数 | `onClick={this.pick()}` 等内联调用表达式（`OEC9016`） |
-| 属性值是字面量或属性读取 | 字面量、`this.<property>` sink、许可的 boolean/class/style 形态 | 展开属性、计算表达式（`OEC9011`） |
+| 属性值是字面量或属性读取 | 字面量、`this.<property>` sink、许可的 boolean/class/style 形态，以及内置元素上的内联条件 class | 展开属性、计算表达式（`OEC9011`） |
 
 ## 一模块一编译类
 
@@ -327,9 +327,9 @@ export default class MyProfile extends OpenElement {
 render() { return <p>{this.name.trim()}</p>; }
 ```
 
-## 分支必须全静态
+## 分支只绑定，不行动
 
-条件降级为 `when` Region，因此每个分支必须恰好是一个静态 JSX 元素（可自带 Part）。形状依赖运行时数据的分支——三元落到非元素表达式、嵌套三元——无法表示；修法是用一个 `computed(...)` 布尔值来测试分支。
+条件降级为 `when` Block，因此每个分支必须恰好是一个静态 JSX 元素。分支元素的属性可以绑定 `this.<property>` —— 属性 sink 随分支走（SSR 序列化激活分支的值，hydration 与 CSR 把绑定挂在分支作用域上，信号翻转换支时不残留旧分支的 DOM）—— 但分支不能行动：不允许文本插值、嵌套三元，也不允许事件处理器、`ref`、内联条件 class 出现在分支内。这些留在 Block 外的外围元素上。形状依赖运行时数据的分支——三元落到非元素表达式——无法表示；修法是用一个 `computed(...)` 布尔值来测试分支。
 
 ```tsx
 import { element, OpenElement, property } from '@openelement/element';
@@ -339,17 +339,34 @@ export class MyStatus extends OpenElement {
   @property({ reflect: false, type: Boolean })
   ready = false;
 
+  @property({ reflect: false })
+  label = 'Status';
+
+  // 处理器挂在分支块之外的外围元素上。
+  pick(): void {}
+
   render() {
-    return <div>{this.ready ? <b>Ready</b> : <i>Waiting</i>}</div>;
+    return (
+      <div onClick={this.pick}>
+        {this.ready ? <b data-label={this.label}>Ready</b> : <i title={this.label}>Waiting</i>}
+      </div>
+    );
   }
 }
 ```
 
 ```text
-// 拒绝：分支必须是单个静态 JSX 元素 —— OEC9012
+// 拒绝：分支元素绑定属性，不做文本插值 —— OEC9012
+// （请把值绑成属性，例如 data-label={this.label}）
 render() { return <div>{this.ready ? <b>{this.label}</b> : <i>Waiting</i>}</div>; }
-// 纯文本三元甚至不是 Region：
+// 拒绝：事件处理器留在块外 —— OEC9012
+render() { return <div>{this.ready ? <b onClick={this.pick}>Ready</b> : <i>Waiting</i>}</div>; }
+// 纯文本三元甚至不是 Block —— 请在 computed(...) 属性里推导文本，
+// 再以 {this.<property>} 插值：
 render() { return <div>{this.ready ? 'yes' : 'no'}</div>; }
+// 嵌套三元同样失败 —— 每个 Block 只带一个条件；在 computed(...) 属性里
+// 推导判定值再测试它：
+render() { return <div>{this.ready ? (this.busy ? <b>a</b> : <b>b</b>) : <i>c</i>}</div>; }
 ```
 
 ## `render()` 单 return
@@ -412,7 +429,7 @@ render() { return <button onClick={this.toggle()}>x</button>; }
 
 ## 属性值是字面量或属性读取
 
-属性值由序列化器、全新挂载与认领三方共同求值，所以每个值要么是字面量，要么是单个 `this.<property>` sink（boolean/class/style 形态作为各自的 Part 被承认）。展开属性与计算表达式没有共同的可序列化形态。
+属性值由序列化器、全新挂载与认领三方共同求值，所以每个值要么是字面量，要么是单个 `this.<property>` sink（boolean/class/style 形态作为各自的 Part 被承认）。`class` 属性在内置元素上承认一种内联条件形态——`class={this.<property> ? 'on' : 'off'}`——两个分支都是字符串字面量，条件按 computed-body 文法只读已声明属性；编译器把它降级为一个绑定到 class Part 的合成 `computed(...)` 字段（自定义元素宿主保持字面量/属性形态）。展开属性与计算表达式没有共同的可序列化形态。
 
 ```tsx
 import { element, OpenElement, property } from '@openelement/element';
@@ -422,8 +439,11 @@ export class MyLink extends OpenElement {
   @property({ reflect: false })
   href = '/';
 
+  @property({ reflect: false, type: Boolean })
+  active = false;
+
   render() {
-    return <a class='link' href={this.href}>Docs</a>;
+    return <a class={this.active ? 'link link-active' : 'link'} href={this.href}>Docs</a>;
   }
 }
 ```
@@ -432,6 +452,8 @@ export class MyLink extends OpenElement {
 // 拒绝：展开属性与计算属性表达式 —— OEC9011
 render() { return <a {...this.props}>Docs</a>; }
 render() { return <a title={'See ' + this.href}>Docs</a>; }
+// 拒绝：条件 class 的分支必须是字符串字面量 —— OEC9011
+render() { return <a class={this.active ? this.tone : 'link'}>Docs</a>; }
 ```
 
 ## 另见

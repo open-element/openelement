@@ -113,10 +113,10 @@ export default defineConfig({
         test: {
           name: 'element',
           include: ['packages/element/__tests__/**/*.test.ts'],
-          // #1548: the Region builders reach the runtime through the regions
+          // #1548: the Block builders reach the runtime through the blocks
           // seam; tests driving the runtime internals install them exactly
-          // like the entries do (see install-regions-runtime.ts).
-          setupFiles: ['packages/element/__tests__/install-regions-runtime.ts'],
+          // like the entries do (see install-blocks-runtime.ts).
+          setupFiles: ['packages/element/__tests__/install-blocks-runtime.ts'],
           testTimeout: 20_000,
         },
       },
@@ -179,7 +179,7 @@ export default defineConfig({
         test: {
           name: 'benchmarks',
           include: ['benchmarks/micro/**/*.test.ts'],
-          // the self-checks drive real compiles and 1k-row Region ops
+          // the self-checks drive real compiles and 1k-row Block ops
           // (deterministic counts, but not free); the deno runner had no
           // per-test budget either
           testTimeout: 60_000,

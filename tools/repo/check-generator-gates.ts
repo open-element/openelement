@@ -45,8 +45,16 @@ const repoTasks =
  * both gates means the checklist can no longer be "is it in gate:source".
  */
 const GATE_LAYERS = ['gate:source', 'gate:release'] as const;
+// A gate command runs `node <gate-script> <step>...`: only the step argv is
+// gate wiring. Splitting the raw command would also admit `node` and the
+// script path as noise tokens, and an empty command would split to `['']`
+// and slip past the empty-gate guard below.
 const gateSteps = new Map<string, Set<string>>(
-  GATE_LAYERS.map((layer) => [layer, new Set(repoTasks[layer]?.split(/\s+/) ?? [])]),
+  GATE_LAYERS.map((layer) => {
+    const raw = (repoTasks[layer] ?? '').split(/\s+/).filter((token) => token.length > 0);
+    const argv = raw[0] === 'node' ? raw.slice(2) : raw;
+    return [layer, new Set(argv)];
+  }),
 );
 /**
  * Gate steps are package-qualified (`@openelement/www#check:content`), the

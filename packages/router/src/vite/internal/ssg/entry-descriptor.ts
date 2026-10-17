@@ -1,7 +1,7 @@
 /** Build the entry descriptor and SSR admission plan from scanned project metadata. */
 import type {
   ApiRouteDecl,
-  AppShellPlan,
+  LayoutPlan,
   CorsOriginConfig,
   DocumentConfig,
   EntryDescriptor,
@@ -10,12 +10,12 @@ import type {
   MiddlewareDecl,
   PageRouteDecl,
   RendererDecl,
-  ResolvedAppShell,
+  ResolvedLayout,
   SsrAdmissionPlan,
   StaticComponentDecl,
 } from '@openelement/protocol/ssg';
 import type {
-  AppShellConfig,
+  LayoutConfig,
   CompatibilityClassification,
   FrameworkOptions,
   HydrationStrategy,
@@ -42,32 +42,32 @@ import { compilerBehaviorDeclarations } from './client-admission.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
 import { buildError, DescriptorErrorCode } from '../../../internal/error-codes.ts';
 
-function normalizeAppShellImport(importPath: string): string {
+function normalizeLayoutImport(importPath: string): string {
   if (importPath.startsWith('./')) return `/${importPath.slice(2)}`;
   if (importPath.startsWith('../')) return importPath;
   return importPath;
 }
 
-function normalizeAppShell(config: AppShellConfig | undefined): ResolvedAppShell {
+function normalizeLayout(config: LayoutConfig | undefined): ResolvedLayout {
   if (config === false || config === undefined || config === 'default') return false;
   return {
     tagName: config.tagName,
-    importPath: normalizeAppShellImport(config.import),
+    importPath: normalizeLayoutImport(config.import),
     props: config.props ?? {},
   };
 }
 
-function buildAppShellPlan(options: {
-  appShell?: FrameworkOptions['appShell'];
+function buildLayoutPlan(options: {
+  layout?: FrameworkOptions['layout'];
   layouts?: FrameworkOptions['layouts'];
-}): AppShellPlan {
-  const defaultShell = normalizeAppShell(options.layouts?.default ?? options.appShell);
-  const layouts: Record<string, ResolvedAppShell> = {};
+}): LayoutPlan {
+  const defaultLayout = normalizeLayout(options.layouts?.default ?? options.layout);
+  const layouts: Record<string, ResolvedLayout> = {};
   for (const [name, config] of Object.entries(options.layouts ?? {})) {
     if (name === 'default' || config === undefined) continue;
-    layouts[name] = normalizeAppShell(config);
+    layouts[name] = normalizeLayout(config);
   }
-  return { default: defaultShell, layouts };
+  return { default: defaultLayout, layouts };
 }
 
 export function buildEntryDescriptor(
@@ -82,7 +82,7 @@ export function buildEntryDescriptor(
     islandFiles?: string[];
     /**
      * Page renderer (#1339). 'native' (default) renders pages via
-     * renderDsd; 'lit' renders LitElement pages via @openelement/router/lit-ssr.
+     * renderToString; 'lit' renders LitElement pages via @openelement/router/lit-ssr.
      * Explicit config only — never inferred from route sources.
      */
     renderer?: 'native' | 'lit';
@@ -105,7 +105,7 @@ export function buildEntryDescriptor(
     allowHeadExtrasScripts?: boolean;
     html?: { lang?: string; title?: string };
     upgradeStrategy?: HydrationStrategy;
-    appShell?: FrameworkOptions['appShell'];
+    layout?: FrameworkOptions['layout'];
     layouts?: FrameworkOptions['layouts'];
     /**
      * #1411: emit the default-CORS production advisory into the generated
@@ -160,6 +160,20 @@ export function buildEntryDescriptor(
       names: ['mergeChannelHeaders'],
       alias: '__mergeChannelHeaders',
     });
+    // The server function page render seam (alpha15 server lane): the
+    // compiled constructor function is called through the typed runtime
+    // module, which owns the two boundary checks (render is a function;
+    // props never carry the compiler-owned `children` channel). Renderer-
+    // neutral: a function page produces HTML directly, so the native and lit
+    // adapters emit the same call site. Emitted only when a function-page
+    // route exists, so a class-page-only entry stays byte-identical.
+    if (routes.some((route) => route.functionPage !== undefined)) {
+      imports.push({
+        from: '@openelement/router/server-runtime',
+        names: ['renderFunctionPage'],
+        alias: '__renderFunctionPage',
+      });
+    }
     // The action POST protocol (CSRF floor, dispatch, classification,
     // problem+json, PRG, the 303 coercion and the 500 error mapping) is the
     // imported runtime module; the entry
@@ -212,17 +226,17 @@ export function buildEntryDescriptor(
       });
       // The deferred-shell gate (Amendment 1): the typed runtime
       // factory the entry binds to its serialized stream manifests and its
-      // createDeferredDsdExecutor import; the handlers keep the call site.
+      // createStreamShellExecutor import; the handlers keep the call site.
       imports.push({
         from: '@openelement/router/server-runtime',
-        names: ['createDeferredPageShell'],
-        alias: '__createDeferredPageShellGate',
+        names: ['createStreamPageShell'],
+        alias: '__createStreamPageShellGate',
       });
     }
     // The page-render seam: page tag resolution and the
     // page-definition/route-meta/locale extractors are pure helpers the
     // emitted call sites reference; the runtime binding itself (renderer,
-    // props projection, status pages, app shell) happens inside the
+    // props projection, status pages, layout) happens inside the
     // generated-app factory per the renderer adapter (#1470 block e). The
     // adapter's startup stream guard is imported under the same
     // `__assertStreamRoute` binding for both renderers. Same page-handler
@@ -338,7 +352,7 @@ export function buildEntryDescriptor(
             'corsOriginModule, not both.',
         );
       }
-      corsOriginModule = normalizeAppShellImport(mw.corsOriginModule);
+      corsOriginModule = normalizeLayoutImport(mw.corsOriginModule);
     }
     middleware.push({
       kind: 'cors',
@@ -381,7 +395,7 @@ export function buildEntryDescriptor(
           "(e.g. './app/middleware/auth.ts') and pass the module path.",
       );
     }
-    return normalizeAppShellImport(entry);
+    return normalizeLayoutImport(entry);
   });
 
   // --- Routes ---
@@ -424,6 +438,10 @@ export function buildEntryDescriptor(
         importPath: `/${routesDir}/${r.filePath}`,
         isDynamic,
         paramNames,
+        // alpha15 server lane: a server function page carries no element
+        // class — the compiled component function is the render, and the
+        // entry registers nothing for the route.
+        ...(r.functionPage === undefined ? {} : { functionPage: r.functionPage }),
         ...(r.streamManifest ? { streamManifest: r.streamManifest } : {}),
       };
     });
@@ -546,12 +564,12 @@ export function buildEntryDescriptor(
     headExtras: options.headExtras || '',
     allowHeadExtrasScripts: options.allowHeadExtrasScripts || false,
   };
-  const appShell = buildAppShellPlan({
-    appShell: options.appShell,
+  const layout = buildLayoutPlan({
+    layout: options.layout,
     layouts: options.layouts,
   });
   // Streaming boundary, project-level by construction: the generated streamed
-  // document is flushed in parts and never passes through __renderAppShell
+  // document is flushed in parts and never passes through __renderLayout
   // (entry-codegen.ts emits __streamBody directly), so a resolved shell would
   // be silently dropped. The descriptor carries no per-route layout — the
   // scan records the manifest, not `route.layout` — so the check cannot be
@@ -561,40 +579,40 @@ export function buildEntryDescriptor(
   // route-level check for descriptors that reach the runtime by another path.
   if (
     pageRoutes.some((route) => route.streamManifest) &&
-    (appShell.default !== false || Object.values(appShell.layouts).some((shell) => shell !== false))
+    (layout.default !== false || Object.values(layout.layouts).some((shell) => shell !== false))
   ) {
     const streamRoutes = pageRoutes
       .filter((route) => route.streamManifest)
       .map((route) => `${route.path} (${route.filePath})`)
       .join(', ');
     throw buildError(
-      DescriptorErrorCode.STREAM_APP_SHELL,
-      '[openElement] streaming requires the compiled app shell/layout wrapper to be off for the ' +
-        'whole project: a streamed document is flushed in parts and cannot be wrapped by a shell. ' +
-        'Set openElement({ appShell: false }) and remove every layouts entry, or leave streaming ' +
+      DescriptorErrorCode.STREAM_LAYOUT,
+      '[openElement] streaming requires the compiled layout wrapper to be off for the ' +
+        'whole project: a streamed document is flushed in parts and cannot be wrapped by a layout. ' +
+        'Set openElement({ layout: false }) and remove every layouts entry, or leave streaming ' +
         'off. A per-route route: { layout: false } cannot satisfy this gate — the build cannot see ' +
         `a stream route's own layout. Streaming routes: ${streamRoutes}.`,
     );
   }
   if (
     renderer === 'lit' &&
-    (appShell.default !== false || Object.values(appShell.layouts).some((shell) => shell !== false))
+    (layout.default !== false || Object.values(layout.layouts).some((shell) => shell !== false))
   ) {
-    // #1339 boundary: the lit renderer supports appShell: false only — the
-    // shell composition renders through the compiled serializer, which the
+    // #1339 boundary: the lit renderer supports layout: false only — the
+    // layout composition renders through the compiled serializer, which the
     // lit path deliberately never imports. Fail the build loudly instead of
     // silently emitting a shell-less page.
     throw buildError(
-      DescriptorErrorCode.LIT_APP_SHELL,
-      `[openElement] renderer: 'lit' does not support a compiled appShell/layouts yet. ` +
-        `Set openElement({ renderer: 'lit', appShell: false }) and drop the layouts config.`,
+      DescriptorErrorCode.LIT_LAYOUT,
+      `[openElement] renderer: 'lit' does not support a compiled layout/layouts yet. ` +
+        `Set openElement({ renderer: 'lit', layout: false }) and drop the layouts config.`,
     );
   }
   const reservedTags = new Set([
     ...pageRoutes.map((route) => route.tagName),
     ...islands.map((island) => island.tagName),
-    ...(appShell.default ? [appShell.default.tagName] : []),
-    ...Object.values(appShell.layouts).flatMap((shell) => (shell ? [shell.tagName] : [])),
+    ...(layout.default ? [layout.default.tagName] : []),
+    ...Object.values(layout.layouts).flatMap((shell) => (shell ? [shell.tagName] : [])),
   ]);
   const staticComponents = (options.staticComponents ?? []).filter(
     (component) => !reservedTags.has(component.tagName),
@@ -622,7 +640,7 @@ export function buildEntryDescriptor(
     renderers,
     middlewareScopes,
     document,
-    appShell,
+    layout,
     upgradeStrategy: options.upgradeStrategy || 'idle',
     // Single-locale sites carry no i18n on the descriptor, so their generated
     // entry stays byte-identical to pre-i18n output.

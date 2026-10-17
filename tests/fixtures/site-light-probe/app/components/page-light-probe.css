@@ -1,0 +1,30 @@
+:host{display:block}
+
+/* The page's own scoped rules: the page is a light root too, so its sheet is
+   a distinct emitted asset in the same document head (S-C1.2). */
+.light-probe-page{font-family:system-ui,sans-serif}
+
+.document-probe{color:rgb(64,64,64)}
+
+/* S-C2/S-11: a registered custom property, asserted on the DOCUMENT-scope
+   delivery — the light root's sheet becomes a document `<link>`, and every
+   engine registers `@property` rules from document sheets only (including from
+   inside the generated `@scope (light-probe-page)` wrapper; a shadow-tree sheet
+   does not register, which `css-semantics.spec.ts` pins separately). */
+@property --probe-doc-ratio {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0.5;
+}
+
+/* The registration probes: one element sets nothing (`inherits: false` → the
+   registered initial value), one sets a value the registered syntax rejects
+   (→ the initial value again). */
+.doc-ratio-default,
+.doc-ratio-invalid {
+  color: rgb(64, 64, 64);
+}
+
+.doc-ratio-invalid {
+  --probe-doc-ratio: not-a-number;
+}

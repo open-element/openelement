@@ -97,6 +97,7 @@ async function writeRenderedPage(
   root: string,
   outDir: string,
   locale?: string,
+  written?: string[],
 ): Promise<'written' | 'skipped'> {
   const targetPath = locale ? '/' + locale + '/' + resolvedPath.replace(/^\//, '') : resolvedPath;
 
@@ -145,7 +146,9 @@ async function writeRenderedPage(
 
   const pageDir = join(root, outDir, targetPath);
   mkdirSync(pageDir, { recursive: true });
-  writeFileSync(join(pageDir, 'index.html'), outcome.html, 'utf8');
+  const pageFile = join(pageDir, 'index.html');
+  writeFileSync(pageFile, outcome.html, 'utf8');
+  written?.push(pageFile);
 
   log.info(
     locale
@@ -162,6 +165,9 @@ async function writeRenderedPage(
  * Returns a map of static path params keyed by route path, which is
  * consumed later when building the ISR manifest. Only params whose page
  * was actually written are registered.
+ *
+ * `written` collects the absolute path of every page document this call
+ * writes, so the caller can record the run's output (output-manifest.ts).
  */
 export async function expandDynamicRoutes(
   dynamicRoutes: RouteInfoItem[],
@@ -170,6 +176,7 @@ export async function expandDynamicRoutes(
   options: SsgRenderOptions,
   root: string,
   outDir: string,
+  written?: string[],
 ): Promise<Map<string, Array<Record<string, string>>>> {
   const staticPathParamsByRoute = new Map<string, Array<Record<string, string>>>();
   const policy = failurePolicy(options);
@@ -209,6 +216,8 @@ export async function expandDynamicRoutes(
             options,
             root,
             outDir,
+            undefined,
+            written,
           );
         } catch (e) {
           handleRenderFailure(policy, `dynamic route ${resolvedPath} could not be rendered`, e);
@@ -233,6 +242,9 @@ export async function expandDynamicRoutes(
  *
  * For each locale and each route, re-renders the route with the locale
  * parameter and writes output under /{locale}/{path}/index.html.
+ *
+ * `written` collects the absolute path of every page document this call
+ * writes, so the caller can record the run's output (output-manifest.ts).
  */
 export async function expandI18nLocales(
   evidence: SsgRenderEvidence,
@@ -242,6 +254,7 @@ export async function expandI18nLocales(
   options: SsgRenderOptions,
   root: string,
   outDir: string,
+  written?: string[],
 ): Promise<void> {
   const i18nOpts = evidence.i18nOptions || null;
   if (!i18nOpts || !renderRoute) return;
@@ -293,6 +306,7 @@ export async function expandI18nLocales(
             root,
             outDir,
             locale,
+            written,
           );
         } catch (e) {
           handleRenderFailure(

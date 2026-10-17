@@ -45,10 +45,16 @@ export function assertCompiledStreamRoute(
   const defer = (stream as { defer?: unknown[] } | undefined)?.defer;
   const expected = manifest?.fields.map((field) => field.field);
   const program = readPartProgram(module);
+  // Key-order-safe manifest compare (M-R4): the defer list is an authored
+  // SET of deferred fields, and the manifest projects it in program order —
+  // two orders of the same set must not trip STREAM_DECLARATION_MISMATCH.
+  // Sorted copies (never in-place: both arrays are caller-owned).
+  const sortedDefer = Array.isArray(defer) ? [...defer].sort() : defer;
+  const sortedExpected = Array.isArray(expected) ? [...expected].sort() : expected;
   if (
     !manifest ||
     !Array.isArray(defer) ||
-    JSON.stringify(defer) !== JSON.stringify(expected) ||
+    JSON.stringify(sortedDefer) !== JSON.stringify(sortedExpected) ||
     !program ||
     program.version !== manifest.program.version ||
     program.tag !== manifest.program.tag

@@ -47,15 +47,22 @@ export class OpenDropdown extends OpenElement {
   render(): unknown {
     return (
       <div>
+        {/* Presentation is Tailwind utilities (alpha15 S lane); the sheet keeps
+            only the coupled anchor-positioning block for the content. */}
         <span
-          class='trigger'
+          class='trigger contents'
           part='trigger'
           onPointerDown={this.onTriggerPointerDown}
           onClick={this.toggle}
         >
           <slot name='trigger'></slot>
         </span>
-        <div class='overlay content' part='content' popover='auto' style={this.anchorStyle}>
+        <div
+          class='overlay content min-w-48 p-2 font-sans'
+          part='content'
+          popover='auto'
+          style={this.anchorStyle}
+        >
           <slot></slot>
         </div>
       </div>

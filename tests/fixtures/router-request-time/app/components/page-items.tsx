@@ -2,12 +2,12 @@
  * /items page element — list morph continuity (compiled, v0.44).
  *
  * KNOWN GRAMMAR GAP (flagged in the alpha.8 integration report): the compiled
- * each-Region item templates carry exactly one {item.<field>} text slot and
+ * each-Block item templates carry exactly one {item.<field>} text slot and
  * no per-item attribute slots, so rows cannot emit id attributes
  * (`<li id="row-a">`). The morph client aligns id-keyed subtrees by element
  * id, so island identity across list reorder is positional here — the e2e
  * asserts island state survival and fresh-row hydration rather than id-keyed
- * identity until the Region schema gains item attribute slots.
+ * identity until the Block schema gains item attribute slots.
  */
 import { element, OpenElement, property } from '@openelement/element';
 

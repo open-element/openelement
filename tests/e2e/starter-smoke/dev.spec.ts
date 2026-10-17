@@ -57,26 +57,28 @@ test('dev island hydrates and handles clicks (#951)', async ({ page }) => {
 test('dev delivers the compiled theme tokens (#1582)', async ({ page }) => {
   // The acceptance criteria of #1582, on the packed starter surface: the
   // document must link the compiled theme sheet, and the computed tokens must
-  // resolve — `pnpm dev` used to serve every var(--paper/--brand/…) empty.
+  // resolve — `pnpm dev` used to serve every theme variable empty.
   await page.goto('/');
 
   // The theme sheet is served before the page's own @scope styles: the link
   // rides the document head while the page static styles sit in the body.
   const linkHref = await page.locator('head link[rel="stylesheet"]').first().getAttribute('href');
   expect(linkHref, 'the dev document head links the compiled theme sheet').toContain(
-    'tailwind-preset/entry.css',
+    '.openElement/tailwind.css',
   );
 
-  // --brand is the alias the starter's component sheets consume; it resolves
-  // only when the authored @theme block passed through the Tailwind compile.
+  // --color-brand is the palette entry the markup's utilities consume; it
+  // resolves only when the authored @theme block passed through the Tailwind
+  // compile.
   const brand = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
+    getComputedStyle(document.documentElement).getPropertyValue('--color-brand').trim(),
   );
-  expect(brand, '--brand must resolve to a compiled value').not.toBe('');
+  expect(brand, '--color-brand must resolve to a compiled value').not.toBe('');
 
-  // The panel's border/radius read var(--line)/var(--radius-l): zero values
-  // are the "token layer missing" signature the issue recorded.
-  const panel = page.locator('.panel').first();
+  // The island panel's border/radius read --color-line/--radius-l through its
+  // utility classes: zero values are the "token layer missing" signature the
+  // issue recorded.
+  const panel = page.locator('main section:has(my-counter)').first();
   const panelStyle = await panel.evaluate((element) => {
     const style = getComputedStyle(element);
     return { borderWidth: style.borderTopWidth, borderRadius: style.borderTopLeftRadius };

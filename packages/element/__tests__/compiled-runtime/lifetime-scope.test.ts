@@ -48,10 +48,10 @@ test('scope: disconnect preserves owned range and replacement removes it', () =>
 
   let removed = 0;
   const next = new LifetimeScope();
-  const region = next.child();
-  region.addRangeCleanup(() => removed++);
-  region.dispose(true);
-  region.addRangeCleanup(() => removed++);
+  const block = next.child();
+  block.addRangeCleanup(() => removed++);
+  block.dispose(true);
+  block.addRangeCleanup(() => removed++);
   expect(removed).toEqual(2);
   next.dispose();
 });

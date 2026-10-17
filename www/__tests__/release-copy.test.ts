@@ -162,8 +162,10 @@ test('release copy: Site sources do not claim a four-package version', async () 
     'routes/roadmap.tsx',
     'routes/index/index.tsx',
     'routes/docs/index.tsx',
-    'components/page-home.tsx',
-    'components/page-changelog.tsx',
+    // page-home.tsx retired into routes/index/index.tsx (server function page,
+    // alpha15): the page copy lives in the route module now, which is already
+    // listed above — this comment is the visible record of the former
+    // component's removal from the guarded set.
     // The home chrome dictionary carried the old 'four packages' / '四个包'
     // literal (P13: it was missing from this list, so a re-added hand-written
     // count there would have gone unguarded).

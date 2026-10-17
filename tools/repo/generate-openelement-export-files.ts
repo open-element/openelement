@@ -16,7 +16,7 @@
 
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import process from 'node:process';
-import { commandOutput } from './node-command.ts';
+import { spawnCommand } from './node-command.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
@@ -97,14 +97,14 @@ async function runFormatter(target: string): Promise<void> {
   // oxfmt is the repository formatter; the binary comes from the
   // pnpm-installed root node_modules.
   const oxfmt = new URL('../../node_modules/.bin/oxfmt', import.meta.url).pathname;
-  const status = await commandOutput(oxfmt, { args: [target] });
+  const status = await spawnCommand(oxfmt, { args: [target] });
   if (!status.success) {
     throw new Error(`oxfmt failed on ${target}`);
   }
 }
 
 async function gitDiffIsEmpty(target: string): Promise<boolean> {
-  const status = await commandOutput('git', { args: ['diff', '--quiet', '--', target] });
+  const status = await spawnCommand('git', { args: ['diff', '--quiet', '--', target] });
   return status.code === 0;
 }
 
@@ -119,7 +119,7 @@ async function main(args: string[]): Promise<void> {
   if (checkOnly) {
     const clean = await gitDiffIsEmpty(TARGET);
     if (!clean) {
-      const out = await commandOutput('git', {
+      const out = await spawnCommand('git', {
         args: ['--no-pager', 'diff', '--', TARGET],
       });
       console.error('export-files sync check failed: generated file is stale.');

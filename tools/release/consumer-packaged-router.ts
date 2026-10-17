@@ -15,7 +15,7 @@
  * version assumption.
  */
 import { tmpdir } from 'node:os';
-import { runProcess } from './consumer-packaged-shared.ts';
+import { assertPackedTarballsFresh, runProcess } from './consumer-packaged-shared.ts';
 import { existsSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -41,6 +41,7 @@ for (const tarball of [routerTarball, elementTarball, protocolTarball, compilerT
   if (!existsSync(tarball))
     throw new Error(`Missing ${tarball}; run pnpm --dir tools/release run pack:dry-run first`);
 }
+await assertPackedTarballsFresh([routerTarball, elementTarball, protocolTarball, compilerTarball]);
 
 async function run(command: string, args: string[], cwd: string): Promise<string> {
   const result = await runProcess(command, args, cwd);

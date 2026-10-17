@@ -6,13 +6,13 @@
  * compiled-runtime/facade.test.ts (facade-dom.ts harness), merging the
  * connected behavior of these source tests into one lifecycle journey:
  *   - 'facade: fresh connect renders the compiled program end to end'
- *   - 'facade: attribute writes convert and drive Parts and Regions'
+ *   - 'facade: attribute writes convert and drive Parts and Blocks'
  *   - 'facade: reflect properties mirror post-connect writes to attributes'
  *   - 'facade: event handlers wire to instance methods and survive reconnect
  *     once'
  * Node identity and observable behavior are asserted (not HTML snapshots);
  * the component is the byte-for-byte compiled output of the repo's canonical
- * compiler fixture packages/element/__fixtures__/compiled-element-v1/
+ * compiler fixture packages/element/__fixtures__/compiled-element-v2/
  * counter.tsx.
  */
 import { assert } from "chai";
@@ -40,10 +40,10 @@ describe("compiled element lifecycle", () => {
     assert.deepEqual(
       [...div.querySelectorAll("li")].map((li) => li.textContent),
       ["alpha", "beta"],
-      "each region renders the keyed items",
+      "each block renders the keyed items",
     );
 
-    // Attribute write converts to the property and drives Parts and Regions.
+    // Attribute write converts to the property and drives Parts and Blocks.
     element.setAttribute("count", "5");
     assert.strictEqual(element.count, 5);
     assert.include(h1.textContent, "Count: 5");

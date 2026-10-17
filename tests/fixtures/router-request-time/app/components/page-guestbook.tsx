@@ -3,7 +3,7 @@
  * v0.44): static prerendered GET + request-time action POST on one path.
  *
  * - `noteText` echoes the submitted value into the input (prop Part on value);
- * - `hasError` (0/1) drives the static-text error Region — the action's
+ * - `hasError` (0/1) drives the static-text error Block — the action's
  *   failure message is the constant 'note is required';
  * - `echoText` carries the PRG echo as one dynamic text Part so the raw HTML
  *   keeps the assertion-contiguous 'echo=<value>' string.

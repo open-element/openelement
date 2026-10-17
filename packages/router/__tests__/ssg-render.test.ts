@@ -1,7 +1,7 @@
 /**
  * @openelement/router - ssg-render.ts tests
  */
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -460,6 +460,128 @@ test('ssgRender - index route under a directory prefix gets a clean URL (#956)',
   ).toBeTruthy();
 
   await rm(outDir, { recursive: true }).catch(() => {});
+});
+
+/**
+ * A page-document build whose output is a function of the routes it renders,
+ * not of whatever the previous run left in the output directory.
+ *
+ * The gap these cover (alpha15 A01): the clean-URL conversion skipped when
+ * `about/index.html` already existed, so a second run left the NEW bytes in
+ * the flat `about.html` while the canonical URL kept serving the OLD page —
+ * the exact file a static host resolves for `/about`. A route that disappeared
+ * between runs kept its file too, because nothing recorded what the previous
+ * run had generated.
+ */
+test('ssgRender - a second run updates the canonical clean URL, not only the flat file', async () => {
+  const outDir = './dist-test-ssg-render-repeat-updates-url';
+  await rm(outDir, { recursive: true }).catch(() => {});
+  const options = { ...defaultOptions, outDir };
+  const build = (about: string) => {
+    const page = (body: string) =>
+      new Response(body, { headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+    const app = createWinterCgApp();
+    const served: Record<string, () => Response> = {
+      '/': () => page('home'),
+      '/about': () => page(about),
+    };
+    app.use('*', (request, next) => {
+      const respond = served[new URL(request.url).pathname];
+      return respond ? respond() : next();
+    });
+    return createMockBundle({ default: app });
+  };
+
+  await ssgRender(build('first'), options);
+  expect(await readFile(join(outDir, 'about/index.html'), 'utf8')).toContain('first');
+
+  await ssgRender(build('second'), options);
+  const canonical = await readFile(join(outDir, 'about/index.html'), 'utf8');
+  expect(canonical, 'the canonical URL must carry this run page').toContain('second');
+  expect(canonical, 'the previous run page must be gone from the canonical URL').not.toContain(
+    'first',
+  );
+  expect(
+    await pathExists(join(outDir, 'about.html')),
+    'no flat duplicate is left beside the canonical page',
+  ).toBe(false);
+
+  await rm(outDir, { recursive: true }).catch(() => {});
+});
+
+test('ssgRender - a route that disappears between runs does not leave its page behind', async () => {
+  const outDir = './dist-test-ssg-render-repeat-deletes';
+  await rm(outDir, { recursive: true }).catch(() => {});
+  const options = { ...defaultOptions, outDir };
+  const build = (paths: string[]) => {
+    const app = createWinterCgApp();
+    app.use('*', (request, next) => {
+      const path = new URL(request.url).pathname;
+      return paths.includes(path)
+        ? new Response(path, { headers: { 'Content-Type': 'text/html; charset=UTF-8' } })
+        : next();
+    });
+    return createMockBundle({
+      default: app,
+      routeInfo: paths.map((path) => ({
+        path,
+        tagName: 'page',
+        isDynamic: false,
+        paramNames: [],
+      })),
+    });
+  };
+
+  await ssgRender(build(['/', '/about', '/retired']), options);
+  expect(await pathExists(join(outDir, 'retired/index.html')), 'first run writes it').toBe(true);
+
+  await ssgRender(build(['/', '/about']), options);
+  expect(
+    await pathExists(join(outDir, 'retired/index.html')),
+    'a route this run no longer renders must not survive',
+  ).toBe(false);
+  expect(await pathExists(join(outDir, 'about/index.html'))).toBe(true);
+
+  await rm(outDir, { recursive: true }).catch(() => {});
+});
+
+test('ssgRender - pruning never reaches outside the output directory', async () => {
+  const outDir = './dist-test-ssg-render-prune-scope';
+  const outside = './dist-test-ssg-render-prune-outside';
+  await rm(outDir, { recursive: true }).catch(() => {});
+  await rm(outside, { recursive: true }).catch(() => {});
+  const options = { ...defaultOptions, outDir };
+  const build = () => {
+    const app = createWinterCgApp();
+    app.use('*', (request, next) =>
+      new URL(request.url).pathname === '/' ? new Response('home') : next(),
+    );
+    return createMockBundle({
+      default: app,
+      routeInfo: [{ path: '/', tagName: 'index-page', isDynamic: false, paramNames: [] }],
+    });
+  };
+
+  await ssgRender(build(), options);
+  // A manifest that has been tampered with (or written by another tool) must
+  // not become a delete-anything instruction.
+  await writeFile(
+    join(outDir, '.openelement/ssg-pages.json'),
+    JSON.stringify({ version: 1, pages: [`${outside}/keep.html`] }),
+    'utf8',
+  );
+  await mkdir(outside, { recursive: true });
+  await writeFile(join(outside, 'keep.html'), 'keep', 'utf8');
+
+  await ssgRender(build(), options);
+
+  expect(
+    await readFile(join(outside, 'keep.html'), 'utf8'),
+    'a path outside the output directory is never deleted',
+  ).toBe('keep');
+
+  await rm(outDir, { recursive: true }).catch(() => {});
+  await rm(outside, { recursive: true }).catch(() => {});
 });
 
 test('ssgRender - hybrid pages (static GET + action) prerender and emit server artifacts (ADR-0120 amendment)', async () => {

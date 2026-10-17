@@ -42,10 +42,12 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { formatJson } from '@openelement/element/build-utils';
+import { spawnCommand, type CommandResult } from '../repo/node-command.ts';
 import { runWithOutput } from './process.ts';
 import type { PackageInfo } from './package-graph.ts';
 
@@ -84,6 +86,15 @@ export const ROUTER_CLIENT_RUNTIME_ENTRIES = [
   'src/vite/internal/ssg/morph-focus-restore.ts',
   'src/vite/internal/ssg/morph-scroll-restore.ts',
   'src/vite/internal/ssg/morph-webkit-fix.ts',
+  // B2: the generated client entry reaches the element runtime through a
+  // DYNAMIC import whose specifier is emitted as a STRING by
+  // entry-client-codegen.ts, so the pack module graph has no import edge to
+  // these modules — exactly the island-scheduler case above. Without them the
+  // router tarball ships a client entry importing a module the package does
+  // not contain, which is what made `pack:dry-run` fail at HEAD.
+  'src/vite/internal/ssg/element-services-full.ts',
+  'src/vite/internal/ssg/element-services-client-only.ts',
+  'src/vite/internal/ssg/element-services-base.ts',
 ] as const;
 
 /** Strip ANSI color escapes for stable log scans. */
@@ -610,22 +621,68 @@ function copyPackageDir(src: string, dest: string): void {
  * staged package whose source reaches a vite-engine peer (the router's
  * tailwind preset since C2) cannot resolve at all.
  */
+/**
+ * The staging install argv.
+ *
+ * `--include=dev` is REQUIRED, not cosmetic: the staging pins its toolchain
+ * (`vite-plus` and the aliased vite-plus core) in `devDependencies` on purpose,
+ * so the toolchain can never leak into a published package's runtime deps — and
+ * npm derives `omit=dev` from an ambient `NODE_ENV=production` (a common CI /
+ * shell setting). Without the explicit include, npm installs successfully while
+ * silently skipping the toolchain, and the failure only surfaces later as an
+ * ENOENT spawn of `<staging>/node_modules/.bin/vp`. The staging install must
+ * therefore state its own environment instead of inheriting the caller's.
+ */
+export const VP_STAGING_INSTALL_ARGS: readonly string[] = [
+  'install',
+  '--include=dev',
+  '--ignore-scripts',
+  '--no-audit',
+  '--no-fund',
+  '--legacy-peer-deps',
+];
+
+/** The staged CLI `vp pack` runs; the host needs no global vp installation. */
+export function vpStagingCliPath(stagingRoot: string): string {
+  return `${stagingRoot}/node_modules/.bin/vp`;
+}
+
+/**
+ * Fail fast with an actionable message when the staging toolchain did not land.
+ * A missing binary must never reach the pack assembler as a bare spawn ENOENT.
+ */
+export function assertVpStagingCli(stagingRoot: string, installOutput = ''): void {
+  const cli = vpStagingCliPath(stagingRoot);
+  let usable = false;
+  try {
+    usable = statSync(cli).isFile() || statSync(cli).isSymbolicLink();
+  } catch {
+    usable = false;
+  }
+  if (usable) return;
+  throw new Error(
+    `[vp-pack] the staging toolchain CLI ${cli} is missing after npm install. ` +
+      'The staging manifest declares vite-plus and the aliased vite-plus core in devDependencies, ' +
+      'so an inherited production npm environment (NODE_ENV=production -> omit=dev) would skip them; ' +
+      `the install must include dev dependencies.${installOutput ? `\n${installOutput}` : ''}`,
+  );
+}
+
 export async function installVpStagingWorkspace(
   staged: VpStagedWorkspace,
   members: readonly PackageInfo[],
 ): Promise<void> {
-  const install = await runWithOutput(
-    'npm',
-    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--legacy-peer-deps'],
-    {
-      cwd: staged.stagingRoot,
-    },
-  );
+  const install = await runWithOutput('npm', [...VP_STAGING_INSTALL_ARGS], {
+    cwd: staged.stagingRoot,
+  });
   if (!install.success) {
     throw new Error(
       `[vp-pack] npm install failed in the vp staging workspace:\n${install.stdout}\n${install.stderr}`,
     );
   }
+  // Fail fast, before the tarball assembler: a silently-skipped toolchain must
+  // read as a toolchain error, not as an ENOENT from a later spawn.
+  assertVpStagingCli(staged.stagingRoot, `${install.stdout}\n${install.stderr}`);
   const scopeDir = `${staged.stagingRoot}/node_modules/@openelement`;
   mkdirSync(scopeDir, { recursive: true });
   for (const member of members) {
@@ -645,11 +702,63 @@ export async function installVpStagingWorkspace(
  * Run `vp pack` in the staged package directory and return the combined
  * output for classification. The CLI comes from the staged node_modules —
  * the host needs no global vp installation.
+ *
+ * This is the repository's ONE surviving vp BUILT-IN call (the `vp fmt` /
+ * `vp lint` / `vp check` built-ins are not the repo's tools: they discover
+ * their own config, report a different verdict on this tree, and are never
+ * invoked here). It is therefore also the one call that needs its own shield:
+ * `vp pack` reads no input, so the spawn closes stdin (an inherited terminal
+ * can turn an unexpected prompt into a release that hangs with no output) and
+ * carries a hard budget (a wedged toolchain must fail the release with a
+ * diagnosis, never block it). The abort kills the spawned CLI; a grandchild it
+ * left behind in another process group is not ours to reap — the budget bounds
+ * the wait, not the toolchain's internal process handling.
+ *
+ * Retirement condition (P5): this call, `vpStagingCliPath` and
+ * `installVpStagingWorkspace` are the whole of the vp-pack coupling. It is
+ * deletable the day a repository-owned Node packer (rolldown/tsdown configured
+ * in-tree) emits the same unbundled per-module dist + declaration shape; the
+ * verification is the existing tarball/manifest consumer checks, not a new
+ * harness. If a second vp built-in appears anywhere in this repository, the
+ * retirement did not happen — it spread.
  */
-export async function runVpPack(staged: VpStagedWorkspace): Promise<string> {
-  const vp = `${staged.stagingRoot}/node_modules/.bin/vp`;
-  const result = await runWithOutput(vp, ['pack'], { cwd: staged.packDir });
-  const output = `${result.stdout}\n${result.stderr}`;
+export const VP_PACK_TIMEOUT_MS = 10 * 60_000;
+
+export async function runVpPack(
+  staged: VpStagedWorkspace,
+  timeoutMs: number = VP_PACK_TIMEOUT_MS,
+): Promise<string> {
+  const vp = vpStagingCliPath(staged.stagingRoot);
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  let result: CommandResult;
+  try {
+    result = await spawnCommand(vp, {
+      args: ['pack'],
+      cwd: staged.packDir,
+      // Never the terminal: a build tool that waits on a stream must fail the
+      // release instead of hanging it.
+      stdin: 'null',
+      stdout: 'piped',
+      stderr: 'piped',
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+  const decoder = new TextDecoder();
+  const output = `${decoder.decode(result.stdout)}\n${decoder.decode(result.stderr)}`;
+  if (timedOut) {
+    throw new Error(
+      `[vp-pack] vp pack exceeded its ${timeoutMs} ms budget and was killed ` +
+        `(cwd=${staged.packDir}). The staged toolchain stopped producing output; ` +
+        `diagnose it before raising the budget:\n${stripPackAnsi(output)}`,
+    );
+  }
   if (!result.success) {
     throw new Error(`[vp-pack] vp pack exited ${result.code}:\n${stripPackAnsi(output)}`);
   }

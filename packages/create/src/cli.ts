@@ -12,9 +12,15 @@
  * other behavior is a flag with a default, so CI and packed consumers run
  * without a prompt.
  *
- * Post-scaffold lifecycle: git init (default), dependency install via the
- * detected package manager (pnpm first, then npm — default on), an optional
- * dev-server start (--start), and a boxed handoff naming the next commands.
+ * Post-scaffold lifecycle: git init (default), dependency install with the
+ * first package manager found on PATH — pnpm, npm, yarn, or bun (default on) —
+ * an optional dev-server start (--start), and a boxed handoff naming the next
+ * commands.
+ *
+ * Manager-neutral since alpha.15: the template carries explicit version pins
+ * and no `packageManager` field, so no install protocol is manager-specific
+ * and the scaffold installs with whichever of the four the host has. Only a
+ * PATH with none of them fails, and that message names all four.
  *
  * L9: every failure mode exits 1 with one actionable message — never a
  * runtime stack trace.
@@ -27,7 +33,7 @@ import process from 'node:process';
 import readline from 'node:readline/promises';
 import { buildTemplates, resolveVersions, validateProjectName } from './template-builder.ts';
 import { createInstallCommand } from './install-command.ts';
-import { detectPackageManager } from './pm.ts';
+import { detectPackageManager, PACKAGE_MANAGERS } from './pm.ts';
 import { CREATE_VERSION } from './version.ts';
 
 /** The one scaffold template (#1530). `-t/--template` pins it non-interactively. */
@@ -223,7 +229,10 @@ function initGitRepository(targetDir: string, relativeTarget: string): void {
  * the packed artifact.
  */
 function printHandoff(relativeTarget: string, pm: string | null, startRequested: boolean): void {
-  const devCommand = pm ? `${pm} run dev` : 'pnpm run dev';
+  // The detected manager's own spelling when one ran; with --no-install there
+  // is no detected manager, so the handoff names the universal `npm run dev`
+  // spelling (all four managers run the same script).
+  const devCommand = pm ? `${pm} run dev` : 'npm run dev';
   const lines = [
     'openElement project ready',
     `(@openelement/create ${CREATE_VERSION})`,
@@ -336,7 +345,22 @@ async function main(): Promise<void> {
 
   let pm: string | null = null;
   if (flags.install !== false) {
-    pm = detectPackageManager();
+    // The manager is DETECTED, not assumed: the template is manager-neutral
+    // (explicit version pins, no `packageManager` field, no workspace file),
+    // so the first of pnpm / npm / yarn / bun on PATH installs it. A host
+    // with none of the four fails here — before the install — with the whole
+    // list and one command to run, instead of an unrelated shell error.
+    const detected = detectPackageManager();
+    if (detected === null) {
+      fail(
+        `No package manager found: this project installs with any of ${PACKAGE_MANAGERS.join(
+          ', ',
+        )}, and none of them is on PATH. Install one of them, then run its install command ` +
+          `in ./${relativeTarget}/ (for example: cd ${relativeTarget} && npm install). ` +
+          'The project files are already complete there.',
+      );
+    }
+    pm = detected;
     console.info(`\nInstalling dependencies with ${pm}...`);
     const install = spawnSync(pm, ['install'], {
       cwd: targetDir,

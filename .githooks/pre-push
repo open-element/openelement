@@ -4,24 +4,32 @@
 # graph (oxfmt/oxlint); Markdown lint and typecheck stay on their pinned
 # OSS tools, and the OpenElement-specific push gates follow.
 #
+# One dispatch surface: `node_modules/.bin/vp run` in the fail-closed
+# `--filter` form, identical to the argv CI uses for the same gates
+# (autoflow-ci.yml) and to tools/repo/vp-dispatch.ts's vpTaskArgv (P6 — the
+# hook and CI are one gate graph, not two mechanisms). `vp run` owns no gate
+# logic, so retiring vp is an edit of these lines, not a re-derivation of the
+# gates (P5). The binary is spelled with its path because a git hook inherits
+# no node_modules/.bin PATH.
+#
 # Install: pnpm --filter @openelement/tools-repo run hooks:install
 
 set -e
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-pnpm run fmt:check
-pnpm run lint
-pnpm --dir tools/repo run lint:markdown
-pnpm run typecheck
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter openelement fmt:check
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter openelement lint
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo lint:markdown
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter openelement typecheck
 
 echo "=== pre-push gates for '$BRANCH' ==="
 
-pnpm --dir tools/release run graph:check
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-release graph:check
 # pack-surface:check reads the packed tarballs (pack:dry-run writes them); with
 # none present it fails closed and names that task itself (#1541).
-node_modules/.bin/vp run --fail-if-no-match @openelement/tools-release#pack-surface:check
-pnpm --dir tools/repo run export-files:check
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack-surface:check
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo export-files:check
 
 echo ""
 echo "All gates passed."

@@ -34,6 +34,27 @@ Two consequences worth writing down: never let a loader return a DOM node, a cla
 
 `renderIntent.mode` selects where a page renders: `'static'` (default) prerenders at build; `'dynamic'` skips prerendering and renders per request through the generated `dist/server` entry, running the route loader on every request. A page that exports an action may stay `'static'` — a hybrid page: its GET is prerendered and served from the static artifact, while its action POST is dispatched to the generated server entry at request time. Choose `'dynamic'` when the GET itself must run per request (per-request loaders, response headers, non-repeatable content). This behavior is frozen.
 
+## Server function pages
+
+When a page is one-shot static text — a legal notice, a landing section — the compiled-class machinery is more than it needs. A **server function page** is the route module's own exported TSX component function wrapped in `definePage(Component, descriptor?)`: the compiler lowers the function into a generative HTML constructor (the same semantic checks and the same escaping as every compiled component — text crosses one escape channel, attributes another), and the render output is server-only by construction. A server function page produces no Part Program, no `@property` state machinery, and never reaches the island, static-component, or client-chunk surfaces; with no island composed, the page ships zero client JS.
+
+```tsx
+// app/routes/about.tsx
+import { definePage } from '@openelement/router';
+
+export const loader = async () => ({ title: 'About' });
+
+export function AboutPage(props: { title: string }) {
+  return <main><h1>{props.title}</h1></main>;
+}
+
+export default definePage(AboutPage, { head: { title: 'About' } });
+```
+
+The component function must be an exported declaration of THIS module passed by identifier — an inline arrow or an unexported local is outside the compiler grammar (runtime JSX has no interpreter). Dynamic text interpolates through JSX (`{props.title}`) and is escaped by the compiler; `props.children` is the compiler-owned composition channel (a caller's JSX children arrive as final HTML), and a loader payload carrying a `children` key is refused before the render runs rather than injected.
+
+Everything around the page stays the same as the compiled-class path: the loader runs and the `props` projector (or the default projection) builds the props record; the render output flows through the same renderer wraps, layout wrap, and document wrap — so the HTTP/DSD contract, the head resolution, the redirect/not-found channels, and the error projector's 500 re-render (which hands the error-projected props to the same render function) behave exactly as they do for a compiled page. `renderIntent.stream` is a compiled-Part-Program channel and is rejected on server function pages; use a compiled `definePage` class route when a page must stream.
+
 ## Form actions
 
 A route may export an `action({ formData })` — plain HTML forms work without JavaScript: validation failures return `fail(4xx, data)` and re-render with the echo at `fail()`'s status (conventionally 422), successes answer 303 (PRG). Named actions dispatch via `formaction='?/name'`. Forms marked `data-open-enhance` submit via fetch and morph the returned document into place: hydrated islands whose light DOM did not change keep their state, `data-open-preserve` exempts a subtree, and the URL follows the PRG target. An action must be safe to re-run after a failed validation; these application-loop semantics are frozen.
@@ -146,11 +167,11 @@ export async function loader(ctx: { request: Request }): Promise<GuestbookData> 
 }
 ```
 
-This is ADR-0120's three-state status rule, frozen: a successful non-GET action answers 303, an action endpoint never answers 200 with a success document, and validation stays a `fail(4xx)` return. On the fetch channel the same success is the `redirect` ActionResult (`{ type: 'redirect', status: 303, location }`), whose body the built-in enhancement follows as a navigation.
+This is ADR-0120's three-state status rule, frozen: a successful non-GET action answers 303, an action endpoint never answers 200 with a success document, and validation stays a `fail(4xx)` return. The rule is about the NATIVE channel's status line — on the fetch channel the same success is HTTP **200** whose body is the `redirect` ActionResult (`{ type: 'redirect', status: 303, location }`), and the 303 is the value inside that body rather than the status of the response. The built-in enhancement follows it as a navigation; a programmatic caller reads it as data.
 
 ## Action fetch negotiation
 
-Fetch-based action posts are recognized by the `x-openelement-action` header (exported as `ACTION_FETCH_HEADER` from `@openelement/router`): the built-in morph enhancement sends `enhance` and receives the same full-HTML responses as the no-JS path; a programmatic caller sends `true` and receives the serialized `ActionResult` union — `failure` with `status`/`data`, or `redirect` with the PRG `status`/`location`; there is no success document, because a successful mutation answers 303 (see the Form actions section) — while error outcomes answer RFC 9457 `problem+json` (`type`/`title`/`status`/`detail`). No header means a plain browser form post.
+Fetch-based action posts are recognized by the `x-openelement-action` header (exported as `ACTION_FETCH_HEADER` from `@openelement/router`): the built-in morph enhancement sends `enhance` and receives the same full-HTML responses as the no-JS path; a programmatic caller sends `true` and receives the serialized `ActionResult` union — `failure` with `status`/`data`, or `redirect` with the PRG `status`/`location`. A validation failure comes back as `422` with `application/json` and the `failure` shape — the author's status and data, not a document. `application/problem+json` (`type`/`title`/`status`/`detail`) is the channel's PROTOCOL-error shape instead: a rejected cross-site post, an unknown action, an unparseable body. No header means a plain browser form post.
 
 ## Two loader/action chains
 

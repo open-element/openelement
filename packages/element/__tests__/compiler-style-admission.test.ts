@@ -50,14 +50,17 @@ const OPTIONS = { staticSidecars: [ISLAND_SIDECAR] } as const;
 function authoredSource(
   specifiers: string[],
   stylesExpression: string,
-  { island = true }: { island?: boolean } = {},
+  {
+    island = true,
+    root = 'shadow-open',
+  }: { island?: boolean; root?: 'light' | 'shadow-open' } = {},
 ): string {
   return [
     "import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';",
     ...(island ? ["import { defineIslandConfig } from '@openelement/router';"] : []),
     ...specifiers.map((specifier, index) => `import sheet${index} from '${specifier}';`),
     ...(island ? ['export const openElement = defineIslandConfig({ hydrate: "load" });'] : []),
-    "@element('oe-sheet-import', { root: 'shadow-open' })",
+    `@element('oe-sheet-import', { root: '${root}' })`,
     'export class SheetImportElement extends OpenElement {',
     `  static override styles: StyleSheetLike[] = ${stylesExpression};`,
     "  @property({ reflect: false }) label = '';",
@@ -284,6 +287,31 @@ describe('the style-edge registry (the intercept channel)', () => {
     expect(
       getStyleRequest(styleRequestModuleId('/proj/app/islands/no-styles.tsx', './x.css')),
     ).toBeUndefined();
+  });
+
+  test('a light-root edge carries its scope tag; a shadow-root edge does not', () => {
+    // S-C1.2: the emitted asset of a light-root component is scoped to the
+    // component's tag, so the tag is part of the edge's identity. The
+    // intercept resolves the key from `(importer, specifier)` alone, so the
+    // registration and the intercept must agree on that key — a disagreement
+    // fails closed at the intercept instead of emitting an unscoped asset.
+    const transform = transformOf();
+    const lightImporter = '/proj/app/islands/light-widget.tsx';
+    transform(authoredSource(['./light.css'], '[sheet0]', { root: 'light' }), lightImporter);
+    const lightKey = styleRequestModuleId(lightImporter, './light.css');
+    const light = getStyleRequest(lightKey);
+    expect(light?.scopeTag).toEqual('oe-sheet-import');
+    expect(light?.file).toEqual('/proj/app/islands/light.css');
+    expect(lightKey.startsWith(`${light?.file}\0`)).toEqual(true);
+    // The importer-only derivation (what `styleEdgeResolveId` performs) lands
+    // on the same key.
+    expect(getStyleRequest(styleRequestModuleId(lightImporter, './light.css'))).toBeDefined();
+
+    const shadowImporter = '/proj/app/islands/shadow-widget.tsx';
+    transform(authoredSource(['./shadow.css'], '[sheet0]'), shadowImporter);
+    const shadowKey = styleRequestModuleId(shadowImporter, './shadow.css');
+    expect(shadowKey).toEqual('/proj/app/islands/shadow.css');
+    expect(getStyleRequest(shadowKey)?.scopeTag).toEqual(undefined);
   });
 
   test('clearing empties the registry', () => {

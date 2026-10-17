@@ -16,10 +16,13 @@ import type { FrameworkOptions } from './framework.ts';
 import type { SsgBehaviorOptions } from '@openelement/protocol/ssg';
 import { OpenElementBuildContext } from './build-context.ts';
 import { buildPlugin } from './build.ts';
-import { islandTransformPlugin } from './island-transform.ts';
+import { islandTransformPlugin, layoutAdmissionFromOptions } from './island-transform.ts';
 import { devIslandClientPlugin } from './dev-island-client.ts';
 import { lazyHonoDevServer } from './dev-server.ts';
-import { devTailwindPresetPlugin } from './dev-tailwind.ts';
+import { devStylePlugin } from './dev-style.ts';
+import { devStyleComponentsPlugin } from './dev-style-components.ts';
+import { createDevStyleSession } from './internal/dev-style-session.ts';
+import { elementStyleLinksPlugin } from './internal/element-style-links.ts';
 import { mdxPlugin } from './plugin-mdx.ts';
 import { createConfigHooks, createOpenPluginState } from './plugin-config.ts';
 import { createCompilerHooks } from './plugin-hmr.ts';
@@ -70,20 +73,40 @@ export function createOpenPlugin(
   };
 
   const virtualEntryPlugin = createVirtualEntryPlugin(state);
+  /**
+   * ONE style session for the dev server (alpha15 A05): the document sheet and
+   * the component sheet are two views of the same engine, so they compile from
+   * the same provider and the same loaded configuration, and a configuration
+   * change rebuilds one generator that both channels hear about. Built lazily
+   * by the first channel that needs it, since the plan may only become visible
+   * after the manifest scan.
+   */
+  const styleSession = createDevStyleSession(state);
 
   const plugins: Plugin[] = [
     mdxPlugin({ routesDir: state.resolvedOptions.routesDir }),
     corePlugin,
     // the dev half of the island style asset protocol — the
-    // compiled-element transform above activates the protocol, and this
-    // plugin serves the sheet adapters (inline form; no emitted asset in dev).
+    // compiled-element transform above activates the protocol, and this plugin
+    // serves each authored edge as a real `text/css` dev resource plus the
+    // URL-carrying adapters (S-C1.3; no CSS text ever rides a dev module).
     devStyleAssetPlugin(),
-    // the dev half of the Tailwind preset (#1582, alpha.12): the same staged
-    // entry the build compiles, served as a module through the lazily-mounted
+    // the dev half of the Tailwind entry: the same generated entry the client
+    // build compiles, served as a module through the lazily-mounted
     // `@tailwindcss/vite` peer with a head `<link>` to it. `apply: 'serve'`
-    // keeps it out of `vite build` entirely, where the build's own
-    // closeBundle delivery owns the preset — the channels never coexist.
-    devTailwindPresetPlugin(state),
+    // keeps it out of `vite build` entirely, where the client build's own
+    // mount owns the compile. Both channels link through the same head
+    // channel, so they still never coexist in one artifact.
+    devStylePlugin(state, styleSession),
+    // alpha15 S lane (S5-A): the dev channel of the component stylesheet —
+    // serves the officially compiled sheet at a stable dev URL, feeds the dev
+    // DSD link, and hands the client its shared constructable sheet. Placed
+    // before the empty-list fallback so its resolutions win in dev.
+    devStyleComponentsPlugin(state, styleSession),
+    // alpha15 S lane: the generated SSR/dev entry imports the component
+    // stylesheet channel; the build that knows the emitted addresses provides
+    // them (the SSG build), and every other channel resolves the empty list.
+    elementStyleLinksPlugin([]),
     virtualEntryPlugin,
   ];
 
@@ -108,11 +131,18 @@ export function createOpenPlugin(
   );
 
   plugins.push(
-    islandTransformPlugin(state.resolvedOptions.islandsDir!),
+    // The layout convention module lives outside islandsDir
+    // (`app/layout.tsx`): the gate admits exactly the resolved layout
+    // module with its resolved tag (router-convention ↔ element-compile-gate
+    // seam, docs/architecture/seams.md).
+    islandTransformPlugin(
+      state.resolvedOptions.islandsDir!,
+      layoutAdmissionFromOptions(state.resolvedOptions.layout),
+    ),
     buildPlugin(state.resolvedOptions, state.ctx),
     // #951: dev-only serving of the island client entry at the same public
     // URL the production build emits (<base>client/islands/client.js).
-    devIslandClientPlugin(state.resolvedOptions, state.ctx),
+    devIslandClientPlugin(state.resolvedOptions, state.ctx, styleSession),
   );
 
   return plugins;

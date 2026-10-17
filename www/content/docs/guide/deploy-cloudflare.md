@@ -4,7 +4,7 @@ lede: 'One build decision picks the Cloudflare target: a pure-static `dist/` upl
 order: 101
 ---
 
-`pnpm build` decides the target for you. When it emits no `dist/server/`, the output is a plain file tree — upload it to Cloudflare Pages and no server code is involved. When any route stays request-time (a `'dynamic'` route or an action), the build also emits `dist/server/index.js`: the same `fetch(Request) -> Response` handler that `pnpm start` runs locally. That is the whole server contract — one handler, deployable to any fetch-native host — so moving from Pages to Workers is a host decision, not a rewrite.
+`npm run build` decides the target for you. When it emits no `dist/server/`, the output is a plain file tree — upload it to Cloudflare Pages and no server code is involved. When any route stays request-time (a `'dynamic'` route or an action), the build also emits `dist/server/index.js`: the same `fetch(Request) -> Response` handler that `npm start` runs locally. That is the whole server contract — one handler, deployable to any fetch-native host — so moving from Pages to Workers is a host decision, not a rewrite.
 
 ## Pure static: Cloudflare Pages
 
@@ -21,7 +21,7 @@ export default definePage(NotFoundPage, {
 That one line is why a starter build emits `dist/server/`: the request-time server renders the page with a real 404 status for unmatched paths, so no static 404 file is written. Delete the `renderIntent` line and the route becomes prerenderable — a build with no other request-time route then produces a pure-static `dist/`:
 
 ```bash
-pnpm build
+npm run build
 ls dist/
 # 404.html  assets/  index.html
 ```
@@ -45,7 +45,7 @@ echo 'Pages artifact answers: home 200, miss 404'
 
 ## Request-time routes: Workers through Nitro
 
-When `pnpm build` emits `dist/server/`, deploy the built handler to Cloudflare Workers behind a two-file Nitro host. The mount (`@openelement/router/nitro-mount`) is a near pass-through over the fetch-native seam: the event's standard `Request` goes in, the handler's `Response` comes out.
+When `npm run build` emits `dist/server/`, deploy the built handler to Cloudflare Workers behind a two-file Nitro host. The mount (`@openelement/router/nitro-mount`) is a near pass-through over the fetch-native seam: the event's standard `Request` goes in, the handler's `Response` comes out.
 
 ```ts
 // server/routes/[...path].ts
@@ -78,7 +78,7 @@ The `env` forwarding is what carries Workers bindings into your loaders and acti
 
 The deploy sequence:
 
-1. `pnpm build`
+1. `npm run build`
 2. Publish the prerendered tree for Nitro's static layer. `dist/server/` is server code, not a public asset, and must never be published as one:
 
    ```bash

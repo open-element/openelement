@@ -6,7 +6,8 @@
   "//": "The qualify harness runs on the node host (owner ruling 2026-10-03): scripts enter through node with type stripping.",
   "scripts": {
     "smoke": "node qualify.ts",
-    "snapshot:prototype": "node snapshot-prototype.ts"
+    "snapshot:prototype": "node snapshot-prototype.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@openelement/element": "workspace:*"

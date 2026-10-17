@@ -262,6 +262,16 @@ export async function scanRoutes(
         let tagName: string | undefined;
         let source: string | undefined;
         let isDefinePage = false;
+        // alpha15 server lane: a server function page — the module
+        // default-exports definePage(Component) over an exported function
+        // whose body is a single JSX return (the module facts' mirrored
+        // admission rule). The compiler lowers the function into HTML
+        // constructors; no element class exists to register, so the
+        // registration-coupled notes and gates below stay off it. The fact is
+        // recorded only for a plain identifier resolving to a component THIS
+        // module declares — an inline arrow or an unexported local never
+        // admits (a shape whose JSX would escape to runtime).
+        let functionPageName: string | undefined;
         let streamManifest: StreamRouteManifest | undefined;
         if (routeType === 'page') {
           // The compiler semantic core reads route meaning without executing the module.
@@ -274,6 +284,7 @@ export async function scanRoutes(
             });
             tagName = semantics.exportedTagName;
             isDefinePage = semantics.definePage;
+            functionPageName = semantics.pageComponentName;
             streamManifest = await scanStreamManifest(
               routePath,
               fullPath,
@@ -301,7 +312,12 @@ export async function scanRoutes(
             // modules USE the tag
             // (defineElement + <tag/> in the render) and stay silent — an
             // orphaned export gets a one-time note.
-            if (isDefinePage && tagName !== undefined && !semantics.usesExportedTagName) {
+            if (
+              isDefinePage &&
+              functionPageName === undefined &&
+              tagName !== undefined &&
+              !semantics.usesExportedTagName
+            ) {
               const resolvedPath = resolve(fullPath);
               if (!notedIgnoredTagName.has(resolvedPath)) {
                 notedIgnoredTagName.add(resolvedPath);
@@ -318,8 +334,12 @@ export async function scanRoutes(
             // render is bypassed — request/actionData context never reaches
             // the page. This shape has never worked correctly; fail the build
             // with the rename guidance instead of letting it ship silently.
+            // A server function page (alpha15) registers no page class at
+            // all, so there is nothing to shadow — the check stays scoped to
+            // routes that put a class under the fallback tag.
             if (
               isDefinePage &&
+              functionPageName === undefined &&
               tagName !== undefined &&
               tagName === fileToTagName(relativePath) &&
               semantics.usesExportedTagName
@@ -342,6 +362,7 @@ export async function scanRoutes(
           varName: pathToVarName(routePath),
           tagName,
           ...(isDefinePage ? { definePage: true } : {}),
+          ...(functionPageName === undefined ? {} : { functionPage: functionPageName }),
           ...(streamManifest ? { streamManifest } : {}),
           // #569: page sources carrying data-open-enhance require the client
           // enhancement layer even when the app has zero islands. The match

@@ -24,7 +24,8 @@ import {
   pageChunkMap,
   postProcessClientIslandBuild,
 } from './internal/ssg/index.ts';
-import { applyTailwindPreset, resolveTailwindPresetOptions } from './preset-tailwind.ts';
+import { stylePlanForApp } from './internal/style-plan.ts';
+import { stylesheetLinkTag } from './head-injection.ts';
 import {
   collectBuildArtifacts,
   createProductionBuildPlan,
@@ -135,8 +136,51 @@ export function buildPlugin(
       const hasEnhancedForms = (ctx.phase1.cachedRoutes ?? []).some(
         (route) => route.type === 'page' && route.hasEnhancedForms === true,
       );
-      if (totalIslands > 0 || hasEnhancedForms) {
+      // The style entry (alpha15 S lane; demand is DECLARED): the pipeline
+      // exists when the application declares it OR an admitted package
+      // declaration requires/offers it — so a declared requirement is itself a
+      // reason to run Phase 2 even when the app carries no islands, and which
+      // ENGINE compiles it is the application's own declaration.
+      const stylePlan = stylePlanForApp(
+        ctx,
+        ctx.phase3.root || process.cwd(),
+        options.tailwind,
+        options.unocss,
+      );
+      // S-C2/S-12: an app whose components are all server-rendered (no islands,
+      // no enhanced forms, no style entry) still needs Phase 2 — the client build
+      // is the ONE owner of the emitted style assets, and a server-rendered
+      // component's authored `.css` edge is declared by the SSR build as a URL
+      // (the inline fallback retired with S-C1.4). Without this term such an
+      // app skipped Phase 2 entirely and Phase 3 failed closed on every one of
+      // its sheets. buildClient's own shortcuts keep the "zero client JS"
+      // contract: it runs the emission stage and removes the delivery
+      // artifacts when the app turned out to own no sheet at all.
+      const hasServerRenderedPages = (ctx.phase1.cachedRoutes ?? []).some(
+        (route) => route.type === 'page',
+      );
+      if (totalIslands > 0 || hasEnhancedForms || stylePlan || hasServerRenderedPages) {
         await runClientIslandBuild(ctx);
+      }
+
+      // The document stylesheet: Phase 2 emitted it (content-hashed, in
+      // dist/client/assets/). Point the head artifact at it BEFORE Phase 3
+      // renders — the SSG pages and the request-time server bundle both bake
+      // `headExtras` at their own build step, so the link lands in every
+      // render channel from one serialization. Fail closed: a declared entry
+      // with no emitted stylesheet already failed in buildClient.
+      if (stylePlan) {
+        if (ctx.clientStyleAssets.length === 0) {
+          throw new Error(
+            `[${stylePlan.provider}] the style entry is enabled but Phase 2 recorded no document ` +
+              'stylesheet — the client build either did not run or emitted no CSS for the entry',
+          );
+        }
+        const base = ctx.phase3.base || '/';
+        const links = ctx.clientStyleAssets
+          .map((file) => stylesheetLinkTag(`${base}client/${file}`))
+          .join('\n  ');
+        ctx.phase3.headExtras = [ctx.phase3.headExtras, links].filter(Boolean).join('\n  ');
       }
 
       log.info('[3/3] Static site generation...');
@@ -149,6 +193,15 @@ export function buildPlugin(
             islandFiles: ssgIslandFiles,
             islandMeta: ctx.phase1.islandMeta,
             staticComponents: ctx.phase1.staticComponents,
+            // The SSG fallback scan (only reached when Phase 1 supplied no
+            // static components) uses this build's own resolver, so its
+            // reachability matches Phase 1's — never a narrower walk.
+            resolve: {
+              resolve: (specifier, importer) =>
+                this.resolve(specifier, importer) as ReturnType<
+                  import('./internal/module-graph-walk.ts').ModuleWalkResolver['resolve']
+                >,
+            },
             packageManifests: ctx.phase1.packageManifests,
             cemClassifications: ctx.phase1.cemClassifications,
             foreignTags: ctx.phase1.foreignTags,
@@ -205,24 +258,6 @@ export function buildPlugin(
         await cleanSsrArtifacts(ctx);
       } catch (error) {
         log.warn(`Failed to clean SSR artifacts: ${error}`);
-      }
-
-      // -- Tailwind preset (alpha9 C2 #1505, opt-in) --
-      // Runs last so the bundle compiles and the link emission sees the final
-      // rendered pages. OFF (the default) skips this whole block: the build
-      // stays byte-identical to a preset-less pipeline.
-      const tailwindOptions = resolveTailwindPresetOptions(options.tailwind);
-      if (tailwindOptions) {
-        try {
-          const presetOutDir = join(
-            config.root ?? process.cwd(),
-            config.build.outDir || DEFAULT_OUT_DIR,
-          );
-          await applyTailwindPreset(tailwindOptions, config, presetOutDir);
-        } catch (error) {
-          log.error(`Tailwind preset FAILED: ${error}`);
-          throw error;
-        }
       }
 
       log.info('Build complete.');

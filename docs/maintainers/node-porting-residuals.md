@@ -77,9 +77,11 @@ remains is dormant or textual, none of it an executed entry: the
 go through `node benchmarks/micro/micro.ts --write` (and the
 `keyed-reorder.ts` equivalent), while the vitest benchmarks project still
 exercises only the deterministic self-checks in `micro.test.ts`, never a
-standalone entry — and a few `tools/repo` script headers (clean-proof,
-run-in, check-release-version, check-esm-boundary) still carry stale
-`deno run` usage prose.
+standalone entry — and the script headers that once carried stale `deno run`
+usage prose (clean-proof, run-in, check-release-version, check-esm-boundary)
+were converted by the alpha8/alpha10 prose sweep; no `deno run` usage prose
+remains in the tree (the surviving `deno run`/`deno task` spellings are
+historical records in docs, test fixtures and the tripwire's own patterns).
 
 ## 4. Module resolution artifacts
 
@@ -96,44 +98,59 @@ no registry-mirror entries and the registry `.npmrc` bridge is deleted.
 
 No node:\* one-liner exists for a fetch-handler server. B1a replaced the
 router product usage with `packages/router/src/internal/node-http.ts`
-(fetch(Request): Response on node:http). B2/B3 retired the shared static
-server (`tools/lib/static-server.ts`), the pack qualification server
-(`tools/release/consumer-packaged-element.ts`), and the parity harness;
-B4 ported the JFB harness's `run.ts` onto `node:http` (that whole in-repo JFB
+(fetch(Request): Response on node:http). Correction (2026-10-13): the shared
+static server (`tools/lib/static-server.ts`) was **not** retired — it still
+exists and is imported by the site e2e wrapper
+(`www/e2e/static-server.ts`), the qualify harness
+(`tests/lib/qualify-harness/serve-static.ts`) and fixture servers. The pack
+qualification server (`tools/release/consumer-packaged-element.ts`) hosts its
+browser proof on the same `serveFetch` adapter. B4 ported the JFB harness's
+`run.ts` onto `node:http` (that whole in-repo JFB
 surface was removed on 2026-10-03, owner ruling — upstream lane on the fork —
 taking its unrunnable swap-repeat probe with it). The last executable call —
 the manual `benchmarks/streaming/measure.ts` fixture server — now runs the
 same `serveFetch` adapter (node:http carrying the standard fetch(Request):
 Response dispatch), so no executable `Deno.serve` remains in the repository.
 
-Comment-only mentions (no executable call), owned by the other lanes of the
-same sweep: `docs/adr/ADR-0154`; `www/content/docs/guide/deployment*.md` and
-one blog post teach it in prose.
+Comment-only mentions (no executable call, historical records):
+`docs/adr/ADR-0154` (annotated 2026-10-13 with its current status) and the
+2026-09-13 alpha baseline blog post (same annotation). Correction
+(2026-10-13): the deployment guides no longer teach `Deno.serve` —
+`www/content/docs/guide/deployment*.md` documents `pnpm start` serving
+`dist/` on Node's `node:http`.
 
 ## 6. Error taxonomy
 
 Call sites are now errno-based: the tools/repo production classifiers check
 `ENOENT` only (old `Deno.errors.NotFound`) — `clean.ts:159`,
-`check-release-state-machine.ts:241`, `check-workspace-links.ts:111`,
-`check-no-allow-all.test.ts:158`. `EACCES`/`EPERM` (old `PermissionDenied`)
-appears only in the test stub `check-no-allow-all.scope.test.ts:136` and in
-pre-B1a product code (`packages/create/src/cli.ts:33`).
+`check-release-state-machine.ts:299`, `check-workspace-links.ts:106`,
+`check-no-allow-all.test.ts:99`. `EACCES`/`EPERM` (old `PermissionDenied`)
+appears only in the test stub `check-no-allow-all.scope.test.ts:55` and in
+pre-B1a product code (`packages/create/src/cli.ts:48`).
 Residual: errors thrown by the Deno runtime itself (`NotCapable`, permission
 prompts) had no node shape and surfaced as Deno classes. Collected with S2:
 the expiry condition — the runtime stops being Deno — is satisfied, since
 every CI-reachable and production entry runs on node/pnpm (§3); no
 executable repository path can raise Deno runtime error classes anymore.
 
-## 7. Subprocess semantics deltas — centralized, probed
+## 7. Subprocess semantics — RESOLVED (N-1 reshape)
 
-`tools/repo/node-command.ts` is the single seam. Deltas it absorbs (all
-probed against this runtime during B1b): signal-killed children report
-`code = 128 + signal number` (Deno shape) instead of node's `code null`;
-`env` merges over the parent (Deno semantics) instead of replacing; default
-stdio `stdin inherit, stdout/stderr piped`; spawn failure rejects (Deno threw
-`NotFound`). The helper uses only node:\* APIs, so it runs unchanged on a real
-Node host. Residual: the abort path was verified under Deno only (kill +
-SIGTERM, no AbortError event); a Node-host run should re-verify that one path.
+`tools/repo/node-command.ts` was the single B1b seam preserving `Deno.Command`
+result shapes for the ported call sites. The N-1 reshape adopted it as the
+repository's first-party spawn helper: the module now documents node semantics
+directly (exit code, signal termination, abort, env merge, stdio), the
+Deno.Command-shaped naming facade was removed down to one async
+`spawnCommand` plus `spawnCommandSync`, and the `128 + signal number` exit
+convention was kept deliberately because callers depend on it —
+check-coverage's native-crash retry floors at 128 (`check-coverage.ts`, issue
+#1278), run-in/gate pass the code to `process.exit` (node's `code: null` would
+exit 0), and the release harnesses print it in failure diagnostics.
+`tools/repo/node-command.contract.test.ts` pins exit codes, SIGTERM/SIGKILL
+termination, abort propagation, env inheritance/merge and stdout/stderr
+capture. The residual recorded above — the abort path verified under Deno only
+— is closed: on Node 24 both a mid-run and a pre-run abort resolve with
+`SIGTERM`/code 143 (never reject), which is exactly what the packed-consumer
+timeout harness relies on.
 
 ## 8. Workers boundary
 

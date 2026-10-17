@@ -5,13 +5,13 @@
  * a real JSON round trip. Runtime-only instructions cannot enter this IR.
  */
 
-import { type PartProgramV1, validatePartProgram } from '@openelement/protocol/part-program';
+import { type PartProgramV2, validatePartProgram } from '@openelement/protocol/part-program';
 // Single error dialect (#1386 item 3): serializability failures carry a code.
 import { frameworkError, ProgramErrorCode } from '@openelement/protocol/errors';
 
 declare const runtimeProgramBrand: unique symbol;
 
-export type RuntimeProgramIR = PartProgramV1 & {
+export type RuntimeProgramIR = PartProgramV2 & {
   readonly [runtimeProgramBrand]: true;
 };
 

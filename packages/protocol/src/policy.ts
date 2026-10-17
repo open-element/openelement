@@ -24,7 +24,7 @@
 export const STREAM_MAX_FIELDS = 32;
 
 /**
- * Part/Region owners one stream route's manifest may address in total across
+ * Part/Block owners one stream route's manifest may address in total across
  * all deferred fields.
  */
 export const STREAM_MAX_OWNERS = 64;
@@ -45,7 +45,7 @@ export const STREAM_MAX_SEED_PROPERTIES = 64;
 export const STREAM_MAX_PAYLOAD_LENGTH = 256 * 1024;
 
 /**
- * Nested element expansion depth bound for `renderDsd`: cyclic component
+ * Nested element expansion depth bound for `renderToString`: cyclic component
  * composition fails closed instead of recursing without end.
  */
 export const MAX_COMPOSITION_DEPTH = 8;

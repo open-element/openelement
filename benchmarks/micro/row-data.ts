@@ -74,7 +74,7 @@ function _random(max: number): number {
 export interface BenchRow {
   id: number;
   label: string;
-  /** Carries selection state so the keyed Region diff writes class changes. */
+  /** Carries selection state so the keyed Block diff writes class changes. */
   cls: string;
 }
 

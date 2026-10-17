@@ -40,3 +40,12 @@ The core remains private; another bundler or a public compiler package requires 
 - Canonical inputs produce byte-stable programs, metadata, diagnostic codes, and locations.
 - Vite integration tests cover transforms, source maps, HMR, splitting, and manifests.
 - Cross-package fixtures pass server serialization, browser creation, and DOM claim.
+
+## Addendum (2026-10-11): public compiler package now exists
+
+The "requires a separate decision" branch for a public compiler package has
+been taken: the semantic core ships inside the public `@openelement/compiler`
+package (`packages/compiler`). The boundary itself is unchanged — compiler and
+Element runtime still meet only through the deterministic, serializable,
+versioned artifact, and generated graphs still contain no compiler
+implementation or Vite plugin.

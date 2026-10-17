@@ -1,0 +1,7 @@
+/* The non-root-base fixture's light-root page sheet (S-C2/S-12): emitted under
+   the configured base, `@scope`-projected, declared as a document link. */
+:host{display:block}
+
+.subpage-shell{font-family:system-ui,sans-serif}
+
+.subpage-document{color:rgb(20,40,60)}

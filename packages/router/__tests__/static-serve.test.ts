@@ -68,6 +68,38 @@ test('dispatchRequest shares mutating and styled-fallback production semantics (
   }
 });
 
+test('dispatchRequest answers malformed percent-encoding with 400 on every path (M-R7)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  let serverCalls = 0;
+  try {
+    await writeFile(join(root, 'index.html'), '<h1>static home</h1>');
+    const serverMod = {
+      // '/item/%zz' is admitted: without the edge check it would reach the
+      // server with raw params. Parity demands the same 400 the static
+      // layer answers for non-admitted paths.
+      isRequestTimePath: (pathname: string) => pathname === '/item/%zz',
+      default: () => {
+        serverCalls++;
+        return Promise.resolve(new Response('request-time'));
+      },
+    };
+    const admitted = await dispatchRequest(new Request('http://example.test/item/%zz'), {
+      distDir: root,
+      serverMod,
+    });
+    expect(admitted.status).toEqual(400);
+    expect(await admitted.text()).toEqual('Bad Request');
+    const staticSide = await dispatchRequest(new Request('http://example.test/%zz'), {
+      distDir: root,
+      serverMod,
+    });
+    expect(staticSide.status).toEqual(400);
+    expect(serverCalls).toEqual(0);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
 test('contentTypeFor uses the maintained mime database (#732)', () => {
   expect(contentTypeFor('/d/index.html')).toEqual('text/html; charset=UTF-8');
   expect(contentTypeFor('/d/app.js')).toEqual('text/javascript; charset=UTF-8');
@@ -383,14 +415,42 @@ test('malformed percent-encoding is a defined 400, never a crash (#823)', async 
 test('tryStatic cache-control: content-hashed assets immutable, HTML rechecked on deploy (#1039)', async () => {
   const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
-    await mkdir(join(root, 'assets'));
-    await writeFile(join(root, 'assets', 'index-Dq2gH8fM.js'), 'console.log(1)');
+    // The content-addressed namespace is the CLIENT build's output, which is
+    // where Vite's outDir puts it. A top-level `assets/` is the user's own
+    // `public/assets/` copied verbatim, and is covered by the rows below.
+    await mkdir(join(root, 'client', 'assets'), { recursive: true });
+    await mkdir(join(root, 'client', 'islands'), { recursive: true });
+    await writeFile(join(root, 'client', 'assets', 'index-Dq2gH8fM.js'), 'console.log(1)');
+    await writeFile(join(root, 'client', 'islands', 'island-open-button-Byhs7ngY.js'), 'export {}');
     await writeFile(join(root, 'index.html'), '<h1>home</h1>');
     await writeFile(join(root, 'favicon.ico'), 'ico');
 
-    const asset = tryStatic(root, '/assets/index-Dq2gH8fM.js');
+    const asset = tryStatic(root, '/client/assets/index-Dq2gH8fM.js');
     expect(asset).toBeTruthy();
     expect(asset.headers.get('cache-control')).toEqual('public, max-age=31536000, immutable');
+
+    // A hashed ISLAND chunk is content-addressed too. It used to revalidate
+    // because the matcher only looked under a top-level `assets/`.
+    const island = tryStatic(root, '/client/islands/island-open-button-Byhs7ngY.js');
+    expect(island).toBeTruthy();
+    expect(island.headers.get('cache-control')).toEqual('public, max-age=31536000, immutable');
+
+    // The style-asset protocol's bare content address (alpha15 S lane,
+    // S-C2/S-14): an emitted sheet is named `<12-hex>.css` in the same
+    // namespace, and it is a content-addressed resource like any other — a
+    // duplicate request (a client adapter's synchronous sheet creation can
+    // coincide with the declared link's parse) must be a cache hit, not a
+    // revalidation.
+    await writeFile(join(root, 'client', 'assets', 'd94222edbb02.css'), ':host{display:block}');
+    const sheet = tryStatic(root, '/client/assets/d94222edbb02.css');
+    expect(sheet).toBeTruthy();
+    expect(sheet.headers.get('cache-control')).toEqual('public, max-age=31536000, immutable');
+
+    // A short, human-named asset is NOT a content address: it must revalidate.
+    await writeFile(join(root, 'client', 'assets', 'admin.css'), 'body{}');
+    const named = tryStatic(root, '/client/assets/admin.css');
+    expect(named).toBeTruthy();
+    expect(named.headers.get('cache-control')).toEqual('no-cache');
 
     const html = tryStatic(root, '/');
     expect(html).toBeTruthy();
@@ -401,6 +461,52 @@ test('tryStatic cache-control: content-hashed assets immutable, HTML rechecked o
     const icon = tryStatic(root, '/favicon.ico');
     expect(icon).toBeTruthy();
     expect(icon.headers.get('cache-control')).toEqual('no-cache');
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('tryStatic cache-control: a public asset with a long hyphenated name revalidates', async () => {
+  // `public/` is copied to the output verbatim, `public/assets/` included, so a
+  // file name there is one a PERSON wrote. Keying the immutable decision on a
+  // top-level `assets/` read `-inverted` — eight letters of the allowed
+  // alphabet — as a content hash and shipped a public brand asset with a
+  // one-year `immutable` directive. A deploy that replaced that file under the
+  // same URL would then have left every client on the old bytes until the cache
+  // expired.
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    await mkdir(join(root, 'assets'));
+    for (const name of [
+      'open-favicon-inverted.svg',
+      'brand-background.svg',
+      'my-long-descriptive-name.svg',
+      'og-image.jpg',
+    ]) {
+      await writeFile(join(root, 'assets', name), 'x');
+      const served = tryStatic(root, `/assets/${name}`);
+      expect(served, name).toBeTruthy();
+      expect(served!.headers.get('cache-control'), name).toEqual('no-cache');
+    }
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('tryStatic cache-control: a same-URL public asset update is revalidated', async () => {
+  // The point of the row above, end to end: the bytes at the SAME URL change
+  // across a "deploy", so the answer must not be an immutable cache hit.
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    await mkdir(join(root, 'assets'));
+    await writeFile(join(root, 'assets', 'brand-background.svg'), 'first');
+    const before = tryStatic(root, '/assets/brand-background.svg')!;
+    expect(await before.text()).toBe('first');
+    expect(before.headers.get('cache-control')).toEqual('no-cache');
+
+    await writeFile(join(root, 'assets', 'brand-background.svg'), 'second');
+    const after = tryStatic(root, '/assets/brand-background.svg')!;
+    expect(await after.text(), 'the redeploy is what the same URL now serves').toBe('second');
   } finally {
     await rm(root, { recursive: true });
   }

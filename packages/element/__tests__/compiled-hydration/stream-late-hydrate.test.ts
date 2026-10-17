@@ -1,0 +1,129 @@
+import { expect, test } from 'vitest';
+import { createStreamServerExecutor } from '../../src/internal/compiled/server/index.ts';
+import {
+  hydrateExistingDom,
+  type CompiledRuntimeHost,
+  PartProgramHydrationError,
+} from '../../src/internal/compiled/runtime.ts';
+import { signal } from '../../src/internal/signal/framework.ts';
+import { testProgram } from '../compiled-runtime/test-program.ts';
+import { parseHtml, TestDocument, type TestElement, toHtml } from '../compiled-runtime/test-dom.ts';
+
+const program = testProgram({
+  tag: 'oe-stream-hydrate',
+  rootMode: 'light',
+  template: [
+    {
+      k: 'el',
+      tag: 'main',
+      attrs: [],
+      children: [
+        { k: 'text', value: 'Start ' },
+        { k: 'part', index: 0 },
+        { k: 'text', value: ' middle ' },
+        { k: 'part', index: 1 },
+        { k: 'text', value: ' end' },
+      ],
+    },
+  ],
+  parts: [
+    { k: 'text', index: 0, signal: 'title' },
+    {
+      k: 'when',
+      index: 1,
+      signal: 'enabled',
+      test: { signal: 'enabled', op: 'truthy', value: true },
+      on: [{ k: 'el', tag: 'strong', attrs: [], children: [{ k: 'text', value: 'Ready' }] }],
+      off: [{ k: 'text', value: 'Waiting' }],
+    },
+  ],
+});
+
+function setup() {
+  const title = signal('');
+  const enabled = signal(false);
+  const host = { signals: { title, enabled }, handlers: {} } as unknown as CompiledRuntimeHost;
+  const owner = { program, version: program.version, instanceId: 'one' };
+  const executor = createStreamServerExecutor(
+    program,
+    host,
+    { owner, pendingParts: [0, 1] },
+    { mode: 'light' },
+  );
+  const doc = new TestDocument();
+  const root = parseHtml(doc, executor.shell).childNodes[0] as TestElement;
+  const main = root.childNodes[0] as TestElement;
+  return { doc, root, main, host, title, enabled };
+}
+
+function endMarker(main: TestElement, index: number): Node {
+  const end = main.childNodes.find((node) => 'data' in node && node.data === `oe:/p${index}`);
+  if (!end) throw new Error(`missing test marker ${index}`);
+  return end as unknown as Node;
+}
+
+test('streamed text arriving before claim adopts the original node', () => {
+  const { doc, root, main, host, title } = setup();
+  title.value = 'Early';
+  const text = doc.createTextNode('Early');
+  main.insertBefore(text, endMarker(main, 0) as never);
+  const instance = hydrateExistingDom(program, host, root as unknown as Node, {
+    streamParts: [0, 1],
+    pendingParts: [1],
+  });
+  expect(main.childNodes[2]).toBe(text);
+  expect(main.childNodes.some((node) => 'data' in node && node.data === 'oe:p1')).toEqual(true);
+  title.value = 'Updated';
+  expect(text.data).toEqual('Updated');
+  instance.dispose();
+});
+
+test('pending text and Block adopt after claim without touching siblings', () => {
+  const { doc, root, main, host, title, enabled } = setup();
+  const staticNode = main.childNodes[0];
+  const instance = hydrateExistingDom(program, host, root as unknown as Node, {
+    streamParts: [0, 1],
+    pendingParts: [0, 1],
+  });
+  title.value = 'Late';
+  const text = doc.createTextNode('Late');
+  main.insertBefore(text, endMarker(main, 0) as never);
+  instance.resolveDeferred?.(0);
+  expect(main.childNodes[0]).toBe(staticNode);
+  expect(main.childNodes[2]).toBe(text);
+  title.value = 'Changed';
+  expect(text.data).toEqual('Changed');
+  expect(() => instance.resolveDeferred?.(0)).toThrow(PartProgramHydrationError);
+
+  enabled.value = true;
+  const strong = doc.createElement('strong');
+  strong.appendChild(doc.createTextNode('Ready'));
+  main.insertBefore(strong, endMarker(main, 1) as never);
+  instance.resolveDeferred?.(1);
+  expect(main.childNodes[0]).toBe(staticNode);
+  expect(main.childNodes.find((node) => node === strong)).toBe(strong);
+  enabled.value = false;
+  expect(toHtml(root).includes('Waiting<!--oe:/p1-->')).toEqual(true);
+  instance.dispose();
+});
+
+test('streamed Block drift recovers inside its anchors only when opted in', () => {
+  const { doc, root, main, host, enabled } = setup();
+  const staticNode = main.childNodes[0];
+  let mismatches = 0;
+  const instance = hydrateExistingDom(program, host, root as unknown as Node, {
+    streamParts: [0, 1],
+    pendingParts: [0, 1],
+    recovery: 'owning',
+    onMismatch: () => mismatches++,
+  });
+  enabled.value = true;
+  const wrong = doc.createElement('em');
+  main.insertBefore(wrong, endMarker(main, 1) as never);
+  instance.resolveDeferred?.(1);
+  expect(mismatches).toEqual(1);
+  expect(main.childNodes[0]).toBe(staticNode);
+  expect(toHtml(root).includes('<strong>Ready</strong><!--oe:/p1-->')).toEqual(true);
+  expect(toHtml(root).includes('<em>')).toEqual(false);
+  instance.dispose();
+});

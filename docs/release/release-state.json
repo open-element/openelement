@@ -60,7 +60,7 @@
     }
   ],
   "commonCompleteVersion": null,
-  "commonCompleteVersionNote": "No stable version is published for every published package. @openelement/router has only 0.41.0 prereleases, and @openelement/protocol and @openelement/compiler carry no stable release either; the 0.43.3 stable line covers element, create, and ui only. Any non-null value here must be present in every published package and is verified by release:registry-check. Schema v4 (#1557): packages awaiting their first publish carry status \"unpublished\" and no registry object; the alpha.11 release published all six packages, so no entry carries \"unpublished\" today.",
+  "commonCompleteVersionNote": "No stable version is published for any package: all six packages ride the 1.0.0-alpha.14 prerelease on both the alpha and latest dist-tags (registry read-back 2026-10-10, tools/release/registry-sync.ts). Any non-null value here must be present in every published package and is verified by release:registry-check. Schema v4 (#1557): packages awaiting their first publish carry status \"unpublished\" and no registry object; the alpha.11 release published all six packages, so no entry carries \"unpublished\" today.",
   "latestPrerelease": {
     "version": "1.0.0-alpha.14",
     "distTag": "latest",

@@ -17,11 +17,16 @@ import {
   publishRelease,
   type PublishReleaseIo,
   type ReleaseReceipt,
+  selectPackages,
 } from './publish-npm.ts';
 import {
+  DEFAULT_FIELD_DELAYS_MS,
+  NpmSlowPropagationError,
+  NpmVerifyTimeoutError,
   NpmViewError,
   prereleaseTag,
   previousPrerelease,
+  VERIFY_TOTAL_BUDGET_MS,
   verifyNpmRelease,
 } from './npm-release-verifier.ts';
 import type { PackageInfo } from '../lib/package-graph.ts';
@@ -43,6 +48,25 @@ const io: DeriveDepsIo = {
   readRootJson: () => ({ imports: {} }),
   readSrcFiles: () => [],
 };
+
+test('publish-npm: selectPackages keeps dependency order and rejects unknowns (T7)', () => {
+  const all = [
+    pkg('@openelement/protocol', '1.0.0-alpha.15'),
+    pkg('@openelement/element', '1.0.0-alpha.15'),
+    pkg('@openelement/router', '1.0.0-alpha.15'),
+  ];
+  // Listed order need not match publish order; the result keeps it.
+  expect(selectPackages(all, ['router', 'protocol']).map((p) => p.name)).toEqual([
+    '@openelement/protocol',
+    '@openelement/router',
+  ]);
+  // Scoped names and duplicates are accepted.
+  expect(selectPackages(all, ['@openelement/element', 'element']).map((p) => p.name)).toEqual([
+    '@openelement/element',
+  ]);
+  expect(() => selectPackages(all, ['nope'])).toThrow('unknown package "nope"');
+  expect(() => selectPackages(all, [])).toThrow('at least one package name');
+});
 
 test('npm publish tag: the 1.0 prerelease line rides latest; earlier lines keep the channel tag', () => {
   // Owner ruling 2026-10-07: from the 1.0 line onward the prerelease IS the
@@ -372,9 +396,9 @@ test('verifyNpmRelease retries transient registry misses and verifies the matchi
   expect(sleeps).toEqual([1, 2]);
 });
 
-test('verifyNpmRelease default retry schedule covers npm propagation delays', async () => {
+test('verifyNpmRelease default field budget bounds npm propagation waits (M-T6)', async () => {
   const sleeps: number[] = [];
-  let misses = 7;
+  let misses = 4;
   await verifyNpmRelease({
     version: '1.0.0',
     packages: ['element'],
@@ -387,8 +411,8 @@ test('verifyNpmRelease default retry schedule covers npm propagation delays', as
       return Promise.resolve('1.0.0');
     },
   });
-  expect(sleeps).toEqual([5_000, 15_000, 30_000, 60_000, 120_000, 180_000, 300_000]);
-  expect(sleeps.reduce((total, delay) => total + delay, 0)).toEqual(710_000);
+  expect(sleeps).toEqual([5_000, 15_000, 30_000, 60_000]);
+  expect(sleeps.reduce((total, delay) => total + delay, 0)).toEqual(110_000);
 });
 
 test('verifyNpmRelease does not require latest === prerelease (#607)', async () => {
@@ -458,7 +482,30 @@ test('verifyNpmRelease rejects a release whose predecessor is unpublished (#869-
   );
 });
 
-test('verifyNpmRelease reports the final observed state after exhausting retries', async () => {
+test('verifyNpmRelease reports slow propagation distinctly from a transport outage (M-T6)', async () => {
+  // Stale answers through the whole ladder: the registry works, the data is
+  // stale — NpmSlowPropagationError carries both sides for the retry-or-ship
+  // decision.
+  await assertRejectsIncludes(
+    () =>
+      verifyNpmRelease({
+        version: '0.41.0-alpha.13',
+        packages: ['router'],
+        delaysMs: [0, 1, 2],
+        sleep: () => Promise.resolve(),
+        query: (specifier, field) =>
+          field === 'versions'
+            ? Promise.resolve(VERSIONS_FIELD(['0.41.0-alpha.12']))
+            : Promise.resolve('0.41.0-alpha.12'),
+      }),
+    NpmSlowPropagationError,
+    'expected=0.41.0-alpha.13, observed=0.41.0-alpha.12',
+  );
+});
+
+test('verifyNpmRelease fails closed when the registry never answers (M-T6)', async () => {
+  // Every query throws retryable — including the predecessor read, which no
+  // longer silently takes the line-first exemption on a transport outage.
   await assertRejectsIncludes(
     () =>
       verifyNpmRelease({
@@ -470,12 +517,46 @@ test('verifyNpmRelease reports the final observed state after exhausting retries
           throw new NpmViewError('npm error E404', true);
         },
       }),
-    Error,
-    // A persistently E404 name reads as "no registry history" — the
-    // first-publish continuity exemption — and the failure surfaces at the
-    // version verification step with the observed registry state.
-    'version verification failed after 3 attempts: expected=0.41.0-alpha.13, observed=<query failed>',
+    NpmVerifyTimeoutError,
+    'registry never answered within 3 attempts',
   );
+});
+
+test('verifyNpmRelease enforces the total budget across packages and fields (M-T6)', async () => {
+  // A clock already past the deadline fails before any query: the whole
+  // phase — six packages times two fields — shares one budget, so stacked
+  // ladders cannot outrun the release job's ceiling.
+  let queries = 0;
+  await assertRejectsIncludes(
+    () =>
+      verifyNpmRelease({
+        version: '1.0.0-alpha.15',
+        packages: ['element', 'router'],
+        delaysMs: [0, 1, 2],
+        sleep: () => Promise.resolve(),
+        clock: () => 1_000_000,
+        totalBudgetMs: 0,
+        query: () => {
+          queries++;
+          return Promise.resolve('1.0.0-alpha.15');
+        },
+      }),
+    NpmVerifyTimeoutError,
+    'total verification budget exceeded',
+  );
+  expect(queries).toEqual(0);
+});
+
+test('verifyNpmRelease parallel worst case fits the total budget (M-T6)', () => {
+  // Six packages verify concurrently, two fields each: the wall-clock sleep
+  // worst is one package's two ladders, which must sit inside the total cap
+  // with room for publish, alias re-point, and registry sync. Query latency
+  // adds on top; a hung query is bounded by the workflow job timeout.
+  // The sum is a plain number, not one of the ladder's literal delay values:
+  // without the explicit accumulator type, `reduce` constrains it to the
+  // tuple's element union and rejects `total + delay`.
+  const fieldSum = DEFAULT_FIELD_DELAYS_MS.reduce<number>((total, delay) => total + delay, 0);
+  expect(2 * fieldSum).toBeLessThan(VERIFY_TOTAL_BUDGET_MS);
 });
 
 test('verifyNpmRelease does not retry malformed registry responses', async () => {

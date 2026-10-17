@@ -49,107 +49,88 @@ const PINNED_PARTS: Record<string, string[]> = Object.fromEntries(
 );
 
 const PINNED_VARS: Record<string, string[]> = {
+  // alpha15 S lane: the base treatment (layout, typography, radius, cursor,
+  // white-space), the focus ring and the disabled/aria-disabled states are
+  // Tailwind utilities on the control, so this pin tracks what the authored
+  // sheet still consumes — the host box, the size/variant surfaces
+  // (host-attribute scoped), the derived base surface and the
+  // form-associated disabled state.
   'open-button': [
     '--color-border',
     '--color-foreground',
     '--color-popover',
     '--color-primary',
     '--color-primary-foreground',
-    '--color-ring',
     '--color-violet-400',
     '--color-white',
     '--default-transition-duration',
     '--ease-out',
-    '--font-sans',
-    '--font-weight-extrabold',
-    '--radius-md',
     '--shadow-sm',
     '--spacing',
     '--text-base',
     '--text-sm',
     '--text-xl',
   ],
+  // alpha15 S lane: the wrapper layout, the label's typography, the control's
+  // box and the error message's ink are utilities, so the sheet keeps only the
+  // host box, the control's derived surfaces (the popover/border mixes, the
+  // violet hover border, the focus ring's box-shadow) and the disabled/invalid
+  // treatments scoped to the host's form state.
   'open-input': [
     '--color-border',
     '--color-destructive',
-    '--color-foreground',
     '--color-muted',
-    '--color-muted-foreground',
     '--color-popover',
     '--color-primary',
     '--color-violet-400',
-    '--font-sans',
-    '--font-weight-medium',
-    '--radius-md',
     '--spacing',
-    '--text-base',
-    '--text-sm',
-    '--text-xs',
-    '--tracking-normal',
   ],
+  // alpha15 S lane (owner decision, supersedes the no-utility-class ruling):
+  // component presentation is authored as Tailwind utilities wherever a class
+  // utility can express it — the shadow component stylesheet delivers them —
+  // so this pin tracks what the authored sheet still consumes directly. Only
+  // what a class utility cannot express stays in the sheet: host boxes,
+  // :host()/:state()/attribute-scoped rules, and the derived two-colour
+  // surfaces.
   'open-theme-toggle': [
     '--color-background',
     '--color-border',
-    '--color-foreground',
-    '--color-muted-foreground',
     '--color-popover',
     '--color-primary',
-    '--color-ring',
     '--color-violet-400',
-    '--default-transition-duration',
-    '--ease-in-out',
     '--spacing',
   ],
   // #1552 shrank open-code-block to the copy chip: the code surface and the
-  // token inks moved to the host's build-time highlight pipeline + stylesheet,
-  // so the component's var surface contracted deliberately (pin + doc updated
-  // together) and gained --color-foreground for the theme-aware chip ink.
-  'open-code-block': [
-    '--color-destructive',
-    '--color-foreground',
-    '--color-primary',
-    '--default-transition-duration',
-    '--ease-in-out',
-    '--font-sans',
-    '--font-weight-semibold',
-    '--radius-md',
-    '--spacing',
-    '--text-xs',
-    '--tracking-wider',
-  ],
+  // token inks moved to the host's build-time highlight pipeline + stylesheet.
+  // The alpha15 S lane moved the chip's presentation to utilities, so the sheet
+  // now consumes only the two status roles its :state() feedback paints.
+  'open-code-block': ['--color-destructive', '--color-success'],
+  // alpha15 S lane: the dialog box and the header/title/close/body/footer
+  // presentation are utilities, so this pin tracks the sheet's retained rules —
+  // the host box, the trigger slot, the native top-layer presentation and the
+  // derived frame/scrim/close-hover surfaces.
   'open-dialog': [
     '--color-border',
     '--color-foreground',
-    '--color-muted-foreground',
     '--color-popover',
     '--color-primary',
     '--color-white',
     '--color-zinc-950',
-    '--font-sans',
-    '--font-weight-semibold',
-    '--leading-normal',
-    '--leading-tight',
-    '--radius-md',
-    '--radius-xl',
     '--shadow-2xl',
     '--spacing',
-    '--text-base',
-    '--text-xl',
   ],
-  'open-dropdown': ['--font-sans', '--spacing'],
+  // The trigger's display and the content's min-width/padding/font moved to
+  // utilities (alpha15 S lane); the sheet keeps the anchor-positioning block,
+  // whose margin consumes --spacing.
+  'open-dropdown': ['--spacing'],
   'component-recipes': [
     '--color-border',
     '--color-card',
     '--color-foreground',
     '--color-popover',
     '--color-primary',
-    '--color-ring',
-    '--color-violet-400',
     '--color-white',
-    '--default-transition-duration',
-    '--ease-out',
     '--radius-lg',
-    '--radius-md',
     '--radius-xl',
     '--shadow-2xl',
     '--spacing',
@@ -184,9 +165,12 @@ const sourceOf = async (tag: string): Promise<string> => {
   }
 };
 
+// The shared recipe sheets still shipped: the control recipe retired with the
+// alpha15 utility migration (its surface is utilities plus each component's own
+// irreducible residue), so its vars moved into the components' own pins.
 const recipesSource = (
   await Promise.all(
-    ['control-recipe.css', 'surface-recipe.css', 'overlay-recipe.css'].map((file) =>
+    ['surface-recipe.css', 'overlay-recipe.css'].map((file) =>
       readFile(new URL(`../src/${file}`, import.meta.url), 'utf8'),
     ),
   )
@@ -216,16 +200,26 @@ test('every consumed var() set matches the C3 role-direct pin', async () => {
   );
 });
 
-test('recipes carry no utility-class vocabulary', async () => {
-  // Owner ruling: component internals never carry utility-class markers —
-  // the role variables ARE the styling contract. A Tailwind utility token
-  // (bg-…, text-…, rounded-… as literal values) inside a recipe fails here.
-  for (const decl of manifest.declarations) {
-    const source = await sourceOf(decl.tagName);
-    expect(
-      /class=['"][^'"]*\b(bg|text|border|rounded|p|m|gap|flex|grid)-[a-z0-9[\]./-]+/.test(source),
-      `${decl.tagName} recipes must not embed utility classes`,
-    ).toEqual(false);
+/**
+ * A colour written as a literal instead of read from a role. Declaration
+ * sites only, so an issue number in a prose comment (`#757`) never matches.
+ */
+const RAW_COLOUR =
+  /(?:color|background(?:-color)?|border(?:-[a-z]+)?|fill|stroke|box-shadow|outline(?:-color)?)\s*:\s*[^;{}]*?(#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|oklch\()/gi;
+
+test('component styling reads the role table, never a raw colour literal', async () => {
+  // Owner decision (alpha15 S lane, supersedes 'recipes carry no utility-class
+  // vocabulary'): presentation may be authored as Tailwind utilities — the
+  // shadow component stylesheet is what delivers them — but the COLOUR axis
+  // still belongs to the role table. A utility built from a role
+  // (`bg-primary/14` → color-mix on --color-primary) keeps the light / dark /
+  // forced-colors seats that theme.css guarantees; a literal escapes all three,
+  // so it fails here.
+  for (const decl of [...manifest.declarations.map((d) => d.tagName), 'component-recipes']) {
+    const source = decl === 'component-recipes' ? recipesSource : await sourceOf(decl);
+    expect(source.match(RAW_COLOUR) ?? [], `${decl} must not carry raw colour literals`).toEqual(
+      [],
+    );
   }
 });
 
@@ -243,6 +237,73 @@ test('CUSTOMIZATION.md documents exactly the pinned surface', async () => {
   for (const [tag, vars] of Object.entries(PINNED_VARS)) {
     for (const name of vars) {
       expect(doc.includes(`\`${name}\``), `doc must list ${tag} var ${name}`).toEqual(true);
+    }
+  }
+});
+
+/* ─── the internal hook contract: the sheet and the markup spell alike ───────
+   A component's sheet is adopted INSIDE its own shadow root, so a class
+   selector it carries is only live if the component's own markup puts that
+   class on an element. When only one side of the pair is renamed the rule dies
+   silently — the build succeeds, the sheet still ships, and the element just
+   loses its rule. That is the alpha15 S-lane defect this guard exists for:
+   open-input.css selected `.control` while the markup said `input`, so the
+   control's resting surface, hover border, focus ring and disabled treatment
+   all became dead CSS (and with `outline-none` in the class list, the focus
+   ring was the ONLY focus affordance left). */
+
+/**
+ * The class selectors a sheet selects: comments stripped, and only the text
+ * before each `{` is read, so declaration values (`0.25rem`, `url(a.png)`)
+ * can never be mistaken for selectors.
+ */
+const classSelectorsOf = (css: string): Set<string> => {
+  const names = new Set<string>();
+  const chunks = css.replace(/\/\*[\s\S]*?\*\//g, '').split('{');
+  for (const chunk of chunks.slice(0, -1)) {
+    const selector = chunk.slice(chunk.lastIndexOf('}') + 1);
+    for (const match of selector.matchAll(/\.(-?[A-Za-z_][A-Za-z0-9_-]*)/g)) {
+      names.add(match[1]!);
+    }
+  }
+  return names;
+};
+
+/**
+ * The static class tokens a component's markup carries. Fail closed on a
+ * dynamic binding: `class={…}` puts tokens beyond static analysis, so this
+ * guard would silently lose its meaning rather than report a defect.
+ */
+const classTokensOf = (tsx: string, tag: string): Set<string> => {
+  const tokens = new Set<string>();
+  let staticBindings = 0;
+  for (const match of tsx.matchAll(/\bclass=(?:'([^']*)'|"([^"]*)")/g)) {
+    staticBindings++;
+    for (const token of (match[1] ?? match[2] ?? '').split(/\s+/)) {
+      if (token !== '') tokens.add(token);
+    }
+  }
+  const anyBinding = (tsx.match(/\bclass=/g) ?? []).length;
+  expect(
+    staticBindings,
+    `${tag}.tsx carries ${anyBinding - staticBindings} non-literal class binding(s); the hook ` +
+      'guard can only decide literal class attributes',
+  ).toEqual(anyBinding);
+  return tokens;
+};
+
+test('every class hook a component sheet selects is carried by its own markup', async () => {
+  for (const decl of manifest.declarations) {
+    const tag = decl.tagName;
+    const tsx = await readFile(new URL(`../src/${tag}.tsx`, import.meta.url), 'utf8');
+    const css = await readFile(new URL(`../src/${tag}.css`, import.meta.url), 'utf8');
+    const tokens = classTokensOf(tsx, tag);
+    for (const hook of classSelectorsOf(css)) {
+      expect(
+        tokens.has(hook),
+        `${tag}.css selects .${hook}, but no literal class token in ${tag}.tsx carries it — ` +
+          'the rule is dead inside the shadow root',
+      ).toEqual(true);
     }
   }
 });

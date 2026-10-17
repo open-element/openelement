@@ -9,7 +9,7 @@
  * composed `openElementHandler` (with the middleware.use onion), the
  * runtime adapter exports, the island client-script plumbing (#951), the
  * SSR registration seam (security.ts), the page-render runtime
- * bindings (renderer/page-props/status/app-shell), and the action body-limit
+ * bindings (renderer/page-props/status/layout), and the action body-limit
  * middleware bound to the canonical policy constant.
  *
  * The generated entry still owns route wiring: it imports the route modules,
@@ -27,10 +27,10 @@
 
 import { MAX_ACTION_BODY_BYTES } from '@openelement/element/authoring';
 import { composeFetchMiddleware, createRuntimeAdapter } from '@openelement/element/build-utils';
-import type { AppShellPlan } from '@openelement/protocol/ssg';
+import type { LayoutPlan } from '@openelement/protocol/ssg';
 import { createActionBodyLimit } from './action-runtime.ts';
-import { createAppShellRuntime, createStatusHtml } from './document-runtime.ts';
-import type { AppShellRuntime, StatusHtmlRenderer } from './document-runtime.ts';
+import { createLayoutRuntime, createStatusHtml } from './document-runtime.ts';
+import type { LayoutRuntime, StatusHtmlRenderer } from './document-runtime.ts';
 import { createPagePropsRuntime } from './page-render.ts';
 import type { PagePropsRuntime } from './page-render.ts';
 import { createLitPageRenderer, createNativePageRenderer } from './renderer-runtime.ts';
@@ -60,7 +60,7 @@ export interface GeneratedPageRuntime {
   trustedHtml: (html: string) => TrustedHtmlValue;
   escapeHtml: (value: string) => string;
   /** native only: the compiled serializer and the SSR registry. */
-  renderDsd?: NativePageRendererDeps['renderDsd'];
+  renderToString?: NativePageRendererDeps['renderToString'];
   customElements?: { get(tag: string): unknown };
   /** lit only: the lit-ssr page renderer. */
   renderLitPageToHtml?: LitPageRendererDeps['renderLitPageToHtml'];
@@ -70,8 +70,8 @@ export interface GeneratedPageRuntime {
 export interface GeneratedAppConfig {
   /** Build-time island map: tag -> client module path (#951 upgrade URLs). */
   islands: Record<string, string>;
-  /** The build's shell plan (serialized generated data). */
-  appShellPlan: AppShellPlan;
+  /** The build's layout plan (serialized generated data). */
+  layoutPlan: LayoutPlan;
   /** Declared project locales (serialized generated data). */
   locales: readonly string[];
   /** Nav sections (serialized generated data; empty on the 1.0 surface). */
@@ -134,8 +134,8 @@ export interface GeneratedApp {
   pageProps?: PagePropsRuntime['pageProps'];
   pageErrorProps?: PagePropsRuntime['pageErrorProps'];
   statusHtml?: StatusHtmlRenderer;
-  resolveAppShell?: AppShellRuntime['resolveAppShell'];
-  renderAppShell?: AppShellRuntime['renderAppShell'];
+  resolveLayout?: LayoutRuntime['resolveLayout'];
+  renderLayout?: LayoutRuntime['renderLayout'];
 }
 
 /**
@@ -216,15 +216,15 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     const ssr =
       page.mode === 'native'
         ? createNativePageRenderer({
-            renderDsd: page.renderDsd!,
+            renderToString: page.renderToString!,
             customElements: page.customElements!,
             ssrRenderableTags: page.ssrRenderableTags,
           })
         : createLitPageRenderer({ renderLitPageToHtml: page.renderLitPageToHtml! });
-    const appShell = createAppShellRuntime({
+    const layout = createLayoutRuntime({
       ssr,
       trustedHtml: page.trustedHtml,
-      appShellPlan: config.appShellPlan,
+      layoutPlan: config.layoutPlan,
       locales: config.locales,
       navSections: config.navSections,
       headerNav: config.headerNav,
@@ -233,8 +233,8 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     const props = createPagePropsRuntime({ dangerousKeys: DANGEROUS_KEYS });
     generated.ssr = ssr;
     generated.statusHtml = createStatusHtml(page.escapeHtml);
-    generated.resolveAppShell = appShell.resolveAppShell;
-    generated.renderAppShell = appShell.renderAppShell;
+    generated.resolveLayout = layout.resolveLayout;
+    generated.renderLayout = layout.renderLayout;
     generated.pageProps = props.pageProps;
     generated.pageErrorProps = props.pageErrorProps;
   }

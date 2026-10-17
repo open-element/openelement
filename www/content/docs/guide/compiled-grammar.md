@@ -6,7 +6,7 @@ order: 15
 section: 'Core'
 ---
 
-The compiler lowers every `@element` module into a Part Program — a serializable artifact the server serializer, a fresh mount, and the existing-DOM claim all replay identically. That three-way identity is what the grammar buys, and it is why the grammar is closed: a construct the compiler cannot lower fails the build with an `OEC9xxx` diagnostic instead of shipping a runtime interpreter. This page is the cheat sheet — the laws in one table, then each law with a working example and the shape that fails.
+The compiler lowers every `@element` module into a Part Program — a serializable artifact the server serializer, a fresh mount, and the existing-DOM hydration all replay identically. That three-way identity is what the grammar buys, and it is why the grammar is closed: a construct the compiler cannot lower fails the build with an `OEC9xxx` diagnostic instead of shipping a runtime interpreter. This page is the cheat sheet — the laws in one table, then each law with a working example and the shape that fails.
 
 ## The laws
 
@@ -17,15 +17,15 @@ The compiler lowers every `@element` module into a Part Program — a serializab
 | The base class is canonical | `extends OpenElement` or `extends ErrorBoundary`, both runtime named imports of `@openelement/element` | a same-name local class, a foreign import, a namespace, a default or type-only import, a re-export (`OEC9003`) |
 | Every instance field is a `@property` | `@property({ ... }) name = <literal after the admitted initializer forms>` | an undecorated field, a constructor, a getter or accessor (`OEC9005`, `OEC9006`) |
 | The only static member is `styles` | `static override styles: StyleSheetLike[] = [sheet]`, arraying the module's `.css` imports | any other static member; an inline sheet string or a non-import sheet binding (`OEC9005`, `OEC9029`) |
-| No runtime top-level statements | imports, `type`/`interface`/`module`/`declare` declarations, and the island policy statement (`export const openElement = defineIslandConfig(...)`) | `const x = signal(0)`, `createContext(...)`, a module-level lookup table, any other executing statement (`OEC9008`) |
+| No runtime top-level statements | imports, `type`/`interface`/`module`/`declare` declarations, and the island policy statement (`export const openElement = defineIslandConfig(...)`) | `const x = signal(0)`, `createContext(...)`, a module-level lookup table, any other executing statement (`OEC9008`); an island policy that declares `root` contradicting the `@element` root (`OEC9030`) |
 | JSX composes by tag name | lowercase intrinsic elements and custom-element hosts (`<my-counter>`) | a class value as the tag (`<ChildCard />`) (`OEC9010`) |
 | `innerHTML` carries the explicit trust gesture | `@property({ type: Object, reflect: false, attribute: false }) body = trustedHtml(...)` plus `innerHTML={this.body} trustedHtml` | a `String`-typed source, a plain string value, a value with no `trustedHtml()` brand (`OEC9026`) |
 | Text reads properties | `{this.label}`, `{this.count}`, literal text | a method call or any other expression in a text position (`OEC9013`) |
-| Branches are fully static | `{this.flag ? <b>on</b> : <i>off</i>}`, `{this.count > 5 && <p>over</p>}` | a branch that is not a single static JSX element; a nested ternary (`OEC9012`) |
+| Branches bind, they don't act | `{this.flag ? <b data-label={this.label}>on</b> : <i title={this.off}>off</i>}` — each branch is one static element whose attributes may bind `this.<property>` | a branch that is not a single static JSX element; a nested ternary; an event handler, a `ref`, or an inline conditional class inside a branch (`OEC9012`) |
 | `render()` is one return | `render() { return <main>…</main>; }` | locals before the return, two root elements, a fragment root, text as the root (`OEC9007`) |
 | Failures happen at runtime | a `throw` inside a lifecycle method such as `connectedCallback()` | `if (…) throw` inside `render()` (`OEC9007`) — authored throws are not compilable; boundaries catch runtime failures |
 | Handlers are method references | `onClick={this.pick}` or a single-action arrow | `onClick={this.pick()}` and other inline call expressions (`OEC9016`) |
-| Attributes are static or property reads | literals, `this.<property>` sinks, the admitted boolean/class/style forms | spreads, computed expressions (`OEC9011`) |
+| Attributes are static or property reads | literals, `this.<property>` sinks, the admitted boolean/class/style forms, and the inline conditional class on intrinsic elements | spreads, computed expressions (`OEC9011`) |
 
 ## One compiled class per module
 
@@ -330,9 +330,9 @@ export default class MyProfile extends OpenElement {
 render() { return <p>{this.name.trim()}</p>; }
 ```
 
-## Branches are fully static
+## Branches bind, they don't act
 
-A conditional lowers to a `when` Region, so each branch must be exactly one static JSX element (optionally with its own Parts). A branch whose shape depends on runtime data — a ternary that lands on a non-element expression, a nested ternary — cannot be represented, and the fix is a `computed(...)` boolean that the branch tests.
+A conditional lowers to a `when` Block, so each branch must be exactly one static JSX element. A branch element's attributes may bind `this.<property>` — the attribute sink rides the branch (SSR serializes the active branch's value, hydration and CSR bind it branch-scoped, and a signal flip swaps branches without leaving the old branch's DOM behind) — but a branch cannot act: no text interpolation, no nested ternary, and no event handlers, `refs`, or inline conditional classes inside a branch. Those stay outside the Block, on the surrounding elements. A branch whose shape depends on runtime data — a ternary that lands on a non-element expression — cannot be represented, and the fix is a `computed(...)` boolean that the branch tests.
 
 ```tsx
 import { element, OpenElement, property } from '@openelement/element';
@@ -342,17 +342,34 @@ export class MyStatus extends OpenElement {
   @property({ reflect: false, type: Boolean })
   ready = false;
 
+  @property({ reflect: false })
+  label = 'Status';
+
+  // The handler lives on the surrounding element, outside the branch Block.
+  pick(): void {}
+
   render() {
-    return <div>{this.ready ? <b>Ready</b> : <i>Waiting</i>}</div>;
+    return (
+      <div onClick={this.pick}>
+        {this.ready ? <b data-label={this.label}>Ready</b> : <i title={this.label}>Waiting</i>}
+      </div>
+    );
   }
 }
 ```
 
 ```text
-// rejected: a branch must be one static JSX element — OEC9012
+// rejected: a branch element binds attributes, it does not interpolate text — OEC9012
+// (bind the value as an attribute, e.g. data-label={this.label})
 render() { return <div>{this.ready ? <b>{this.label}</b> : <i>Waiting</i>}</div>; }
-// and a text-only ternary is not a Region at all:
+// rejected: handlers stay outside blocks — OEC9012
+render() { return <div>{this.ready ? <b onClick={this.pick}>Ready</b> : <i>Waiting</i>}</div>; }
+// a text-only ternary is not a Block at all — derive the text in a computed(...)
+// property and interpolate {this.<property>}:
 render() { return <div>{this.ready ? 'yes' : 'no'}</div>; }
+// a nested ternary fails the same way — one condition per Block; derive the
+// decision in a computed(...) property and branch on it:
+render() { return <div>{this.ready ? (this.busy ? <b>a</b> : <b>b</b>) : <i>c</i>}</div>; }
 ```
 
 ## `render()` is one return
@@ -415,7 +432,7 @@ render() { return <button onClick={this.toggle()}>x</button>; }
 
 ## Attributes are static or property reads
 
-Attribute values are evaluated by the serializer, the fresh mount and the claim alike, so each one is either a literal or a single `this.<property>` sink (with the boolean, class and style forms admitted as their own Parts). Spreads and computed expressions have no common serializable form.
+Attribute values are evaluated by the serializer, the fresh mount and the claim alike, so each one is either a literal or a single `this.<property>` sink (with the boolean, class and style forms admitted as their own Parts). The `class` attribute admits one inline conditional form on intrinsic elements — `class={this.<property> ? 'on' : 'off'}` — where both branches are string literals and the condition reads declared properties under the computed-body grammar; the compiler lowers it to a synthesized `computed(...)` field bound to the class Part (custom-element hosts keep the literal/property forms). Spreads and computed expressions have no common serializable form.
 
 ```tsx
 import { element, OpenElement, property } from '@openelement/element';
@@ -425,8 +442,11 @@ export class MyLink extends OpenElement {
   @property({ reflect: false })
   href = '/';
 
+  @property({ reflect: false, type: Boolean })
+  active = false;
+
   render() {
-    return <a class='link' href={this.href}>Docs</a>;
+    return <a class={this.active ? 'link link-active' : 'link'} href={this.href}>Docs</a>;
   }
 }
 ```
@@ -435,6 +455,8 @@ export class MyLink extends OpenElement {
 // rejected: spreads and computed attribute expressions — OEC9011
 render() { return <a {...this.props}>Docs</a>; }
 render() { return <a title={'See ' + this.href}>Docs</a>; }
+// rejected: conditional class branches must be string literals — OEC9011
+render() { return <a class={this.active ? this.tone : 'link'}>Docs</a>; }
 ```
 
 ## See also

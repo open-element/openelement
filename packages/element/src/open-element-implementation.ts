@@ -7,7 +7,7 @@
  * @openelement/compiler `open:compiled-element` transform), which emits a
  * decorator-free class carrying the compiled statics this facade consumes:
  *
- *   - `static __partProgram`        — the validated Part Program v1 artifact
+ *   - `static __partProgram`        — the validated Part Program v2 artifact
  *   - `static __compiledProperties` — JSON property records
  *     ({ name, attribute, type, converter, reflect, default })
  *   - `static __elementMetadata`    — element metadata (tag, cem, ...)
@@ -26,7 +26,7 @@
  * OpenElementError (code `OE_PROGRAM_MISSING`).
  *
  * Lifecycle:
- *   Server: renderDsd() -> serializeCompiledProgram() -> deterministic HTML
+ *   Server: renderToString() -> serializeCompiledProgram() -> deterministic HTML
  *   Client (SSR DOM present): connectedCallback -> kernel.connect() claims
  *     the existing tree (mode 'claim') -> pre-upgrade replay -> onDsdHydrated()
  *   Client (no SSR DOM): connectedCallback -> kernel.connect() creates fresh
@@ -148,6 +148,11 @@ export class OpenElement extends OpenElementConfiguration {
       rootMode,
       delegatesFocus: ctor.delegatesFocus ?? false,
       styles: ctor.styles as never,
+      // The compiler's static-candidate flag (alpha15 S lane): a component
+      // whose TSX classes were admitted carries the framework's component
+      // stylesheet as a marked external link in its DSD template, so the claim
+      // expects leading static-style nodes even with no authored `styles`.
+      utilityStyleLinks: ctor.__oeUtilityClasses === true,
       formAssociated: ctor.formAssociated ?? false,
       errorBoundary:
         ctor.isErrorBoundary === true
@@ -210,7 +215,7 @@ export class OpenElement extends OpenElementConfiguration {
    * at compile time (P2: pay at compile time, minimal runtime delta), and the
    * runtime adds the two points compilation cannot see: synchronous
    * signal-graph evaluation at a property write (facade-host.ts) and the
-   * kernel's Region-update isolation (kernel.ts onUpdateError).
+   * kernel's Block-update isolation (kernel.ts onUpdateError).
    *
    * The climb starts at `this` (a boundary class may capture its own
    * author-code errors), then walks `parentElement`, crossing shadow
@@ -223,7 +228,7 @@ export class OpenElement extends OpenElementConfiguration {
    * Capture goes through the boundary's own `_errors.catchError(error, this)`
    * so publication rides the existing service options: a compiled boundary
    * subclass's kernel wires `onError` → `_publishErrorState()` → the
-   * `hasError` property write, so the fallback Region flips exactly as an
+   * `hasError` property write, so the fallback Block flips exactly as an
    * application `catchError()` call would. The captured `source` is `this`
    * (the failing element), so `retry()` re-activates the right host.
    *
@@ -358,12 +363,32 @@ export class OpenElement extends OpenElementConfiguration {
       this.#streamUnsubscribe = stream?.listen((part, field, outcome) => {
         if (outcome !== 'content') return;
         const seed = stream.properties[field];
+        if (!seed || seed.state !== 'resolved') return;
         const property = state.properties.find((item) => item.name === field);
-        if (!seed || seed.state !== 'resolved' || property?.type !== seed.type) return;
+        if (property?.type !== seed.type) {
+          // Late-frame type drift fails exactly like the connect-time seed
+          // check above (STREAM_TYPE_MISMATCH): the stream runtime reports a
+          // throwing listener loudly, so this frame is diagnosed instead of
+          // silently dropped while the signal keeps a stale value.
+          throw new OpenElementError(
+            `[openElement] streamed property "${field}" has a mismatched type.`,
+            { code: FacadeErrorCode.STREAM_TYPE_MISMATCH, phase: 'csr' },
+          );
+        }
         state.signals[field].value = seed.value;
         kernel.resolveStreamPart(part);
       });
-      if (activation.mode === 'claim') {
+      if (activation.resumed) {
+        // A reconnect re-arms the DOM this instance already owns. The one-time
+        // claim work (pre-upgrade replay) does not repeat, and the activation
+        // hook that matches the instance's ORIGIN fires: `onDsdHydrated` is
+        // shadow/DSD-only, while a CSR/light connection fires `onCsrRendered`
+        // on every activation — reconnect included. Per-instance
+        // work that must run once stays in the activation path that ran once;
+        // per-connection setup belongs in `clientActivate()` below.
+        if (activation.origin === 'claim') this.onDsdHydrated();
+        else this.onCsrRendered();
+      } else if (activation.mode === 'claim') {
         replayPreUpgradeCaptures(activation.root as unknown as Node);
         this.onDsdHydrated();
       } else {
@@ -392,7 +417,7 @@ export class OpenElement extends OpenElementConfiguration {
    *
    * Subclasses override this instead of relying on fragile
    * `super.connectedCallback()` call order. At this point the program's DOM
-   * is claimed and Parts/Regions are live.
+   * is claimed and Parts/Blocks are live.
    *
    * No-op by default.
    */

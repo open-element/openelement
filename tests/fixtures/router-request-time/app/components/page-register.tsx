@@ -1,7 +1,7 @@
 /**
  * /register page element — zod validation recipe (compiled, v0.44). The
  * route action validates with zod; the framework stays validation-agnostic.
- * The error Region carries the constant zod message as static branch text.
+ * The error Block carries the constant zod message as static branch text.
  */
 import { element, OpenElement, property } from '@openelement/element';
 

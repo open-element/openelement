@@ -1,7 +1,7 @@
-# ADR-0162: Element runtime/compiler package split — deferred to alpha10
+# ADR-0162: Element runtime/compiler package split — executed
 
-- Status: PROPOSED (verdict recorded for owner adjudication; this ADR does
-  not move any code)
+- Status: EXECUTED (the split this ADR deferred landed; see the
+  2026-10-11 addendum below)
 - Measured at: commit `230fcd669` (alpha9 C4), 2026-10-05, working tree
   clean except this ADR's own lane
 - Origin: issue #1508 scope item 3 ("runtime-vs-compiler package split
@@ -121,3 +121,12 @@ runtime dependency), and `typescript@6.0.3` installs to
 
 Final ruling rests with the owner; no structural change was made in this
 lane.
+
+## Addendum (2026-10-11): split executed
+
+The deferred split has landed: the compiler ships as the public
+`@openelement/compiler` package (`packages/compiler`), and the
+repository now publishes six packages, not five — the "fifth package"
+language in the analysis above reads stale. The historical measurement
+(156 KB source stake, `typescript` reclassification as the larger lever)
+is preserved as the evidence behind the decision.

@@ -8,7 +8,7 @@
  * imported). Covered behavior:
  *   - fresh connect renders the program (text/prop/event/when/each parts)
  *   - attribute -> property conversion and property -> attribute reflection
- *   - signal writes update only the subscribed Parts/Regions
+ *   - signal writes update only the subscribed Parts/Blocks
  *   - event handler wiring; reconnect never duplicates listeners
  *   - claim from serialized HTML preserves node identity (no re-allocation)
  *   - pre-upgrade capture + claim replay bootstrap
@@ -25,7 +25,7 @@ import { testProgram } from './test-program.ts';
 // The facade captures its HTMLElement base at module evaluation time.
 const dom = installFacadeDom();
 
-const { OpenElement, ErrorBoundary, ensurePreHydrationClickCapture, renderDsd } =
+const { OpenElement, ErrorBoundary, ensurePreHydrationClickCapture, renderToString } =
   await import('../../src/index.ts');
 const { jsx } = await import('../../src/jsx-runtime.ts');
 type BoundaryInstance = InstanceType<typeof ErrorBoundary>;
@@ -33,7 +33,7 @@ const { OpenElementError } = await import('../../src/internal/core/errors.ts');
 
 const FIXTURE_PROGRAM = JSON.parse(
   await readFile(
-    new URL('../../__fixtures__/compiled-element-v1/expected-program.json', import.meta.url),
+    new URL('../../__fixtures__/compiled-element-v2/expected-program.json', import.meta.url),
     'utf8',
   ),
 );
@@ -88,7 +88,7 @@ test('facade: fresh connect renders the compiled program end to end', () => {
   );
 });
 
-test('facade: attribute writes convert and drive Parts and Regions', () => {
+test('facade: attribute writes convert and drive Parts and Blocks', () => {
   const element = freshCounter() as AnyElement;
   element.setAttribute('count', '5');
   expect(element.count).toEqual(5);
@@ -137,10 +137,10 @@ test('facade: event handlers wire to instance methods and survive reconnect once
 });
 
 test('facade: claim from serialized HTML preserves node identity', () => {
-  const serialized = renderDsd('oe-program-counter', {
+  const serialized = renderToString('oe-program-counter', {
     componentClass: ProgramCounter as unknown as CustomElementConstructor,
     props: { count: 3 },
-  }).html;
+  });
   expect(serialized).toContain('<oe-program-counter count="3" data-oe-light>');
 
   let claimedDiv: unknown;
@@ -165,9 +165,9 @@ test('facade: claim from serialized HTML preserves node identity', () => {
 });
 
 test('facade: pre-upgrade capture replays one click after claim', () => {
-  const serialized = renderDsd('oe-program-counter', {
+  const serialized = renderToString('oe-program-counter', {
     componentClass: ProgramCounter as unknown as CustomElementConstructor,
-  }).html;
+  });
 
   // The generated client entry installs capture on an owning root before
   // upgrade; a click inside the serialized-but-not-yet-claimed subtree is
@@ -222,11 +222,11 @@ test('facade: the runtime JSX factory fails closed outside the compiler', () => 
   expect(error.message).toContain('compiler pipeline');
 });
 
-test('facade: renderDsd fails closed for uncompiled classes', () => {
+test('facade: renderToString fails closed for uncompiled classes', () => {
   class LegacyClass {}
   const error = assertThrowsIncludes(
     () =>
-      renderDsd('oe-legacy', {
+      renderToString('oe-legacy', {
         componentClass: LegacyClass as unknown as CustomElementConstructor,
       }),
     OpenElementError,
@@ -235,7 +235,7 @@ test('facade: renderDsd fails closed for uncompiled classes', () => {
   expect(error.message).toContain('oe-legacy');
 });
 
-test('facade: renderDsd serializes shadow programs per the program root kind', () => {
+test('facade: renderToString serializes shadow programs per the program root kind', () => {
   const shadowProgram = testProgram({
     tag: 'oe-facade-shadow',
     rootMode: 'shadow-open',
@@ -269,10 +269,10 @@ test('facade: renderDsd serializes shadow programs per the program root kind', (
   }
   dom.registry.define('oe-facade-shadow', ShadowElement as unknown as CustomElementConstructor);
 
-  const html = renderDsd('oe-facade-shadow', {
+  const html = renderToString('oe-facade-shadow', {
     componentClass: ShadowElement as unknown as CustomElementConstructor,
     props: { label: 'live' },
-  }).html;
+  });
   expect(html).toEqual(
     '<oe-facade-shadow label="live"><template shadowrootmode="open">' +
       '<span><!--oe:p0-->live</span>' +

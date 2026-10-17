@@ -15,7 +15,7 @@
 import {
   DATA_OE_LIGHT,
   PART_PROGRAM_VERSION,
-  type PartProgramV1,
+  type PartProgramV2,
   type ProgramEachPart,
   type ProgramTreeNode,
   type ProgramWhenPart,
@@ -38,24 +38,24 @@ import type { RuntimeProgramIR } from '../runtime-program.ts';
 // OpenElementError carrying a code from the catalogue.
 import { frameworkError, ProgramErrorCode } from '@openelement/protocol/errors';
 // Streamed-frame admission policy (canonical lists live in the protocol
-// module): the deferred executor must refuse any pending Region whose
+// module): the stream executor must refuse any pending Block whose
 // serialized frame the browser installer is contractually required to reject.
 import {
   STREAM_FRAME_FORBIDDEN_TAGS,
   unsafeStreamFrameAttribute,
 } from '@openelement/protocol/stream-frame-policy';
 // Canonical attribute-escape contract (issue #1220, L1): the server output is
-// the wire truth for claim parity, so both serializers share this one
+// the wire truth for hydration parity, so both serializers share this one
 // implementation (escapes & < > " ').
-import { escapeAttr } from '../../core/html-escape.ts';
-// Canonical each-Region item-key derivation (#1374): single source shared
+import { escapeAttr, isComponentStyleHref } from '../../core/html-escape.ts';
+// Canonical each-Block item-key derivation (#1374): single source shared
 // with the runtime executors; do not reintroduce a private copy.
-import { itemTemplateFields } from '../runtime/program-kernel.ts';
+import { displayValue, itemTemplateFields, itemValue } from '../runtime/program-kernel.ts';
 // The one facade-domain root-mode union, owned by the runtime kernel and
 // re-exported below for the server options surface.
 import type { CompiledRootMode } from '../runtime/kernel.ts';
 import { eachItemKey, EachKeyError } from '../each-key.ts';
-// Canonical when-Region condition evaluation (#1372): single source shared
+// Canonical when-Block condition evaluation (#1372): single source shared
 // with the runtime executors; do not reintroduce a private comparison.
 import { conditionHolds } from '../condition-holds.ts';
 // The ONE tree-walking serializer (issue #1469): the server
@@ -90,8 +90,8 @@ export interface CompiledNestedElement {
 }
 
 // The serializer emits the component's static styles as the first child of
-// the DSD template (renderDsd parity): never-upgrading hosts (pages)
-// need their styles in the SSR payload. The claim path skips exactly this
+// the DSD template (renderToString parity): never-upgrading hosts (pages)
+// need their styles in the SSR payload. The hydration path skips exactly this
 // marked element; the client style scope still adopts the live sheets.
 export { STATIC_STYLES_MARKER } from '@openelement/protocol/part-program';
 
@@ -109,10 +109,31 @@ export interface CompiledServerOptions {
    * into markup injection.
    */
   styleCss?: string;
+  /**
+   * External document stylesheet references for this component's shadow tree
+   * (alpha15 S lane): framework-generated component CSS ships as a real,
+   * content-hashed asset, and the DSD template declares it with a
+   * parser-visible `<link rel="stylesheet">` — never as inlined CSS text and
+   * never as a client-side DOM write. Each entry must be a site-absolute path
+   * (`/…`) or an absolute `http(s)` URL; anything else fails closed, so a
+   * malformed href can never reach the markup. The nodes carry
+   * {@linkcode STATIC_STYLES_MARKER}, which is what the claim recognizes (and
+   * keeps — these links are the delivery, not a fallback).
+   */
+  styleLinks?: readonly string[];
   /** Canonical nested-component seam; adapters supply registry/admission only. */
   renderNestedElement?: (element: CompiledNestedElement) => string | undefined;
   /** Light-root projection supplied by an owning compiled parent. */
   projectedChildren?: ReadonlyMap<string, string>;
+  /**
+   * Trusted light children emitted AFTER the host's DSD template (a
+   * shadow-root host's slotted content). The shadow-side sibling of
+   * {@link CompiledServerOptions.projectedChildren}: a light root substitutes
+   * projections into its own `<slot>` elements, a shadow root distributes
+   * appended light DOM natively. A value on a LIGHT root fails closed — a
+   * light root's children are projections, not appendages.
+   */
+  hostChildren?: string;
 }
 
 function serializeAttribute(name: string, value: string): string {
@@ -164,6 +185,18 @@ function serializeHostAttributes(
       );
     }
     seen.add(key);
+    // class/style carry the SAME semantics as every other sink: values
+    // normalize through the shared `classValueOf`/`styleValueOf` (array and
+    // record values space/semicolon-join, records sort, falsy entries drop)
+    // and an empty result omits the attribute — exactly like the class/style
+    // Part emissions and `__h`. Plain `String(value)` here would put "a,b" or
+    // "[object Object]" on the host tag for a value the element path renders
+    // as "a b" / "color:red".
+    if (key === 'class' || key === 'style') {
+      const serialized = key === 'class' ? classValueOf(value) : styleValueOf(value);
+      if (serialized !== '') result += serializeAttribute(name, serialized);
+      continue;
+    }
     if (value === false || value === null || value === undefined) continue;
     if (value === true) {
       result += ` ${name}`;
@@ -212,14 +245,14 @@ function serializeDsdAttributes(options: CompiledDsdOptions | undefined): string
 
 function itemsFor(part: ProgramEachPart, value: unknown): Array<Record<string, unknown>> {
   if (part.key === undefined) {
-    throw new CompiledProgramValidationError(`parts[${part.index}]`, 'each Region needs key');
+    throw new CompiledProgramValidationError(`parts[${part.index}]`, 'each Block needs key');
   }
   const keyField = part.key;
   const requiredFields = itemTemplateFields(part.item);
   if (!Array.isArray(value)) {
     throw new CompiledProgramValidationError(
       `parts[${part.index}].signal`,
-      'each Region dependency must contain an array',
+      'each Block dependency must contain an array',
     );
   }
   const seen = new Set<string>();
@@ -228,20 +261,20 @@ function itemsFor(part: ProgramEachPart, value: unknown): Array<Record<string, u
     if (!isRecordValue(item)) {
       throw new CompiledProgramValidationError(
         `parts[${part.index}].signal[${ordinal}]`,
-        'each Region items must be records',
+        'each Block items must be records',
       );
     }
     if (!Object.prototype.hasOwnProperty.call(item, keyField)) {
       throw new CompiledProgramValidationError(
         `parts[${part.index}].signal[${ordinal}]`,
-        `each Region item needs ${JSON.stringify(keyField)}`,
+        `each Block item needs ${JSON.stringify(keyField)}`,
       );
     }
     for (const field of requiredFields) {
       if (!Object.prototype.hasOwnProperty.call(item, field)) {
         throw new CompiledProgramValidationError(
           `parts[${part.index}].signal[${ordinal}]`,
-          `each Region item needs ${JSON.stringify(field)}`,
+          `each Block item needs ${JSON.stringify(field)}`,
         );
       }
     }
@@ -258,7 +291,7 @@ function itemsFor(part: ProgramEachPart, value: unknown): Array<Record<string, u
         // executor produced it.
         throw new CompiledProgramValidationError(
           `parts[${part.index}].signal[${ordinal}]`,
-          `each Region ${error.reason}`,
+          `each Block ${error.reason}`,
           error.code,
         );
       }
@@ -267,7 +300,7 @@ function itemsFor(part: ProgramEachPart, value: unknown): Array<Record<string, u
     if (seen.has(key)) {
       throw new CompiledProgramValidationError(
         `parts[${part.index}].signal`,
-        `duplicate each Region key ${JSON.stringify(item[keyField])}`,
+        `duplicate each Block key ${JSON.stringify(item[keyField])}`,
       );
     }
     seen.add(key);
@@ -300,7 +333,7 @@ function serializeItemAttribute(value: unknown): string | null {
  * The server serializer's seams over the shared tree-walking kernel
  * (serializer/serialize-program.ts): signal reads through the shared host
  * access, sink evaluations appended after the static attributes with bare
- * boolean presence, and full Region item admission.
+ * boolean presence, and full Block item admission.
  */
 function serializerSeams(
   host: unknown,
@@ -345,7 +378,11 @@ function serializerSeams(
           );
         }
       } else {
-        serialized = String(value);
+        // R.0-4: null/undefined omit like the seed path (attributeValueOf),
+        // so both serializers agree on plain-tag props too.
+        const coerced = attributeValueOf(value);
+        if (coerced === null) return { attribute: null, property: value };
+        serialized = coerced;
       }
       return { attribute: { name: part.name, value: serialized, bare: false }, property: value };
     },
@@ -353,19 +390,10 @@ function serializerSeams(
       const value = serializeItemAttribute((item as Record<string, unknown>)[field]);
       return value === null ? null : { name, value, bare: value === '' };
     },
-    itemTextValue: (part, node, item) => {
-      const field = node.field ?? part.field;
-      if (field === undefined) {
-        throw new CompiledProgramValidationError(
-          `parts[${part.index}].item`,
-          'item value slot needs a field',
-        );
-      }
-      return String((item as Record<string, unknown>)[field]);
-    },
-    textPartValue: (value) => String(value),
+    itemTextValue: (part, node, item) => displayValue(itemValue(part, item, node.field)),
+    textPartValue: displayValue,
     whenHolds: (part, value) => whenIsActive(part, value),
-    regionItems: (part, value) => itemsFor(part, value),
+    blockItems: (part, value) => itemsFor(part, value),
     escapeAttr,
     trustedHtml: trustedHtmlValue,
     renderNestedElement: options.renderNestedElement,
@@ -438,35 +466,87 @@ function serializeCompiledSnapshot(
     );
   }
   const styleElement = styleCss ? `<style ${STATIC_STYLES_MARKER}>${styleCss}</style>` : '';
+  // External component stylesheets (alpha15 S lane): declarative links in the
+  // shadow tree, emitted before the inline fallback so the sheet's rules and
+  // the legacy fallback keep a deterministic order. The href is validated
+  // here — the one serializer is the boundary where a malformed URL must fail
+  // closed instead of reaching markup.
+  const styleLinks = serializeStyleLinks(options.styleLinks);
+  const styleNodes = `${styleLinks}${styleElement}`;
+  // The compiled children channel's shadow-side half: a shadow-root host
+  // receives its light children after the DSD template (native slot
+  // distribution does the rest). A LIGHT root has no shadow boundary to
+  // distribute across, so the same value there is a caller defect — its
+  // children are projections into its own <slot> elements, never appendages.
+  const hostChildren = options.hostChildren ?? '';
   if (mode === 'light') {
-    return `<${program.tag}${hostAttrs}>${styleElement}${content}</${program.tag}>`;
+    if (hostChildren !== '') {
+      throw new CompiledProgramValidationError(
+        'hostChildren',
+        'hostChildren is for shadow-root hosts: a light root consumes its children ' +
+          'through projectedChildren',
+      );
+    }
+    return `<${program.tag}${hostAttrs}>${styleNodes}${content}</${program.tag}>`;
   }
   const dsdAttrs = serializeDsdAttributes(options.dsd);
-  return `<${program.tag}${hostAttrs}><template shadowrootmode="${mode}"${dsdAttrs}>${styleElement}${content}</template></${program.tag}>`;
+  return `<${program.tag}${hostAttrs}><template shadowrootmode="${mode}"${dsdAttrs}>${styleNodes}${content}</template>${hostChildren}</${program.tag}>`;
+}
+
+/**
+ * Serialize the component's external stylesheet references as marked
+ * `<link rel="stylesheet">` nodes. The href must be a site-absolute path or an
+ * absolute http(s) URL and may not carry whitespace or markup-significant
+ * characters — a framework-emitted asset address always satisfies this, and a
+ * value that does not is a defect that must fail closed (never escape into
+ * markup). The shape rule itself is shared with the document head's
+ * stylesheet-link sink (`isComponentStyleHref`): one rule, two sinks.
+ */
+/**
+ * The marked `<link rel="stylesheet" data-oe-static-styles>` tags for a set of
+ * component stylesheet URLs. Exported because the DSD serializer is not its
+ * only writer: a LIGHT-root component nested inside another component's shadow
+ * template delivers its sheets from the template too (the document head cannot
+ * reach a shadow tree), and it must use this one shape so the client's delivery
+ * check recognizes the resource.
+ */
+export function serializeStyleLinks(links: readonly string[] | undefined): string {
+  if (!links || links.length === 0) return '';
+  let markup = '';
+  for (const href of links) {
+    if (!isComponentStyleHref(href)) {
+      throw new CompiledProgramValidationError(
+        'styleLinks',
+        `component stylesheet href must be a site-absolute path or an absolute http(s) URL, got ${JSON.stringify(href)}`,
+      );
+    }
+    markup += `<link rel="stylesheet" href="${escapeAttr(href)}" ${STATIC_STYLES_MARKER} />`;
+  }
+  return markup;
 }
 
 /** A request-local owner; its program reference and object identity are never serialized. */
-export interface DeferredServerOwner {
-  readonly program: PartProgramV1;
+export interface StreamOwner {
+  readonly program: PartProgramV2;
   readonly version: number;
   readonly instanceId: string;
 }
 
-export interface DeferredServerSelection {
-  readonly owner: DeferredServerOwner;
+export interface StreamSelection {
+  readonly owner: StreamOwner;
   readonly pendingParts: readonly number[];
 }
 
-export interface DeferredServerExecutor {
+export interface StreamExecutor {
   readonly shell: string;
   /** Returns only the owned range's HTML, without anchors or transport framing. */
-  serializeResolved(owner: DeferredServerOwner, partIndex: number, value: unknown): string;
+  serializeResolved(owner: StreamOwner, partIndex: number, value: unknown): string;
 }
 
 const STREAM_FRAME_FORBIDDEN_TAG_SET: ReadonlySet<string> = new Set(STREAM_FRAME_FORBIDDEN_TAGS);
 
 /**
- * A pending Region whose range would carry a custom element, a slot, a
+ * A pending Block whose range would carry a custom element, a slot, a
  * stream-frame-forbidden tag, or an unsafe static attribute serializes into a
  * frame the browser installer rejects wholesale — the content would be lost.
  * Admission therefore enforces the same streamed-frame policy constants the
@@ -477,7 +557,7 @@ const STREAM_FRAME_FORBIDDEN_TAG_SET: ReadonlySet<string> = new Set(STREAM_FRAME
  * chains (anchorPathIsOpaque) with full source ownership knowledge, while
  * this check covers the shared policy over the program's static shape only.
  */
-function hasOpaqueRegionNode(nodes: readonly ProgramTreeNode[]): boolean {
+function hasOpaqueBlockNode(nodes: readonly ProgramTreeNode[]): boolean {
   return nodes.some(
     (node) =>
       node.k === 'el' &&
@@ -485,7 +565,7 @@ function hasOpaqueRegionNode(nodes: readonly ProgramTreeNode[]): boolean {
         node.tag === 'slot' ||
         STREAM_FRAME_FORBIDDEN_TAG_SET.has(node.tag) ||
         node.attrs.some(([name, value]) => unsafeStreamFrameAttribute(name, value)) ||
-        hasOpaqueRegionNode(node.children)),
+        hasOpaqueBlockNode(node.children)),
   );
 }
 
@@ -494,12 +574,12 @@ function hasOpaqueRegionNode(nodes: readonly ProgramTreeNode[]): boolean {
  * dependencies remains the compiler's job; this boundary rejects non-range
  * sinks and foreign owners before any pending shell can be emitted.
  */
-export function createDeferredServerExecutor(
-  raw: PartProgramV1,
+export function createStreamServerExecutor(
+  raw: PartProgramV2,
   host: unknown,
-  selection: DeferredServerSelection,
+  selection: StreamSelection,
   options: CompiledServerOptions = {},
-): DeferredServerExecutor {
+): StreamExecutor {
   const program = assertCompiledProgram(raw);
   const { owner } = selection;
   if (
@@ -508,7 +588,10 @@ export function createDeferredServerExecutor(
     !owner.instanceId ||
     typeof owner.instanceId !== 'string'
   ) {
-    throw new CompiledProgramValidationError('owner', 'wrong program, version, or instance');
+    throw new CompiledProgramValidationError(
+      'owner',
+      `wrong program, version (expected ${PART_PROGRAM_VERSION}, got ${JSON.stringify(owner.version)}), or instance`,
+    );
   }
   if (
     (options.mode ?? 'open') === 'closed' ||
@@ -532,7 +615,7 @@ export function createDeferredServerExecutor(
     if (part.k !== 'text' && part.k !== 'when' && part.k !== 'each') {
       throw new CompiledProgramValidationError(
         `parts[${index}]`,
-        'only anchor-owned text and Region Parts may be pending',
+        'only anchor-owned text and Block Parts may be pending',
       );
     }
     if (
@@ -551,12 +634,12 @@ export function createDeferredServerExecutor(
       );
     }
     if (
-      (part.k === 'when' && (hasOpaqueRegionNode(part.on) || hasOpaqueRegionNode(part.off))) ||
-      (part.k === 'each' && hasOpaqueRegionNode(part.item))
+      (part.k === 'when' && (hasOpaqueBlockNode(part.on) || hasOpaqueBlockNode(part.off))) ||
+      (part.k === 'each' && hasOpaqueBlockNode(part.item))
     ) {
       throw new CompiledProgramValidationError(
         `parts[${index}]`,
-        'deferred Region contains an opaque nested element or slot',
+        'deferred Block contains an opaque nested element or slot',
       );
     }
     pending.add(index);

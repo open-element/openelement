@@ -1,5 +1,5 @@
 import { normalize } from 'node:path';
-import { commandOutput } from '../repo/node-command.ts';
+import { spawnCommand } from '../repo/node-command.ts';
 
 const RELEASE_EVIDENCE_PATHS = Object.freeze({
   prefixes: ['docs/release/', 'vendor/', 'www/app/data/_generated-'],
@@ -38,7 +38,7 @@ export function filterNonEvidenceDirty(status: string): string[] {
  * the thrown error; the dirty paths follow on subsequent lines.
  */
 export async function assertCleanWorktree(refusal: string): Promise<void> {
-  const output = await commandOutput('git', {
+  const output = await spawnCommand('git', {
     args: ['status', '--porcelain'],
     stdout: 'piped',
     stderr: 'piped',

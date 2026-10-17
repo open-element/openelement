@@ -11,7 +11,9 @@ import { visibleBlogPosts } from '#site-ui/blog-stream.ts';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import { localizePath } from '#site-ui/link.ts';
-import BlogIndexPage from '../../components/page-blog-index.tsx';
+import '#site-ui/open-reading-shell.tsx';
+import '#site-ui/open-artifact-panel.tsx';
+import '../../islands/open-page-rail.tsx';
 
 // Blog, changelog, roadmap and contributing are the project's own pages, not
 // documentation chapters: they share the nameless group the sidebar labels
@@ -74,6 +76,107 @@ function postTags(post: (typeof posts)[number]): string[] {
 
 function padIndex(index: number): string {
   return String(index + 1).padStart(2, '0');
+}
+
+/**
+ * The dispatch index as a server function page (alpha15 server architecture):
+ * the route module's own exported TSX function, lowered by the compiler into
+ * a generative HTML constructor. The page hook class (`page-blog-index`)
+ * scopes the former component sheet's authored rules in the linked document
+ * stylesheet.
+ */
+export function BlogIndexPage(props: {
+  featuredHref: string;
+  featuredKicker: string;
+  featuredTitle: string;
+  featuredExcerpt: string;
+  rows: Array<{
+    slug: string;
+    href: string;
+    index: string;
+    title: string;
+    excerpt: string;
+    date: string;
+    langLabel: string;
+  }>;
+  mastheadEyebrow: string;
+  mastheadTitle: string;
+  mastheadLede: string;
+  originNote: string;
+  latestLabel: string;
+  readMoreLabel: string;
+  streamLabel: string;
+}) {
+  return (
+    <div class='page-blog-index' data-pagefind-body>
+      <header class='masthead relative isolate px-[clamp(1.5rem,5vw,4.5rem)] pt-[clamp(4rem,11vh,8rem)] pb-[clamp(2.5rem,6vh,4.5rem)]'>
+        <p class='eyebrow flex items-center gap-3 text-primary font-mono text-(length:--text-xs) font-extrabold tracking-[0.29em] uppercase [&:lang(zh)]:normal-case [&:lang(zh)]:tracking-[0.08em]'>
+          {props.mastheadEyebrow}
+        </p>
+        <h1 class='mt-[clamp(1.5rem,4vh,3rem)] font-serif italic font-normal text-[clamp(4.2rem,13vw,11rem)] leading-[0.92] tracking-[-0.02em] text-primary'>
+          {props.mastheadTitle}
+        </h1>
+        <p class='max-w-[38rem] mt-[clamp(1.25rem,3vh,2rem)] text-muted-foreground text-[clamp(1rem,1.2vw,1.1rem)] leading-[1.75]'>
+          {props.mastheadLede}
+        </p>
+        <p class='max-w-[38rem] mt-3 font-mono text-(length:--text-xs) leading-[1.75] text-muted-foreground empty:hidden'>
+          {props.originNote}
+        </p>
+      </header>
+
+      <a
+        class='group block border-y border-border bg-[color-mix(in_srgb,var(--color-popover)_55%,var(--color-background))] px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(2.5rem,6vh,4.5rem)] text-inherit no-underline'
+        href={props.featuredHref}
+      >
+        <p class='flex flex-wrap items-baseline gap-3 text-primary font-mono text-(length:--text-xs) font-extrabold tracking-[0.16em] uppercase'>
+          <span>{props.featuredKicker}</span>
+          <span class='ms-auto text-muted-foreground font-medium tracking-[0.08em]'>
+            {props.latestLabel}
+          </span>
+        </p>
+        <h2 class='max-w-[20ch] mt-5 font-serif font-normal text-[clamp(2.4rem,5.5vw,4.6rem)] leading-none tracking-[-0.01em] text-foreground transition-[color] duration-150 ease-[ease] group-hover:text-primary'>
+          {props.featuredTitle}
+        </h2>
+        <p class='max-w-[44rem] mt-4 font-mono text-(length:--text-sm) leading-[1.75] text-muted-foreground empty:hidden'>
+          {props.featuredExcerpt}
+        </p>
+        <span class='inline-block mt-5 text-primary font-mono text-(length:--text-sm) font-bold'>
+          {props.readMoreLabel}
+        </span>
+      </a>
+
+      <section class='grid pb-[clamp(3rem,8vh,6rem)]' aria-label={props.streamLabel}>
+        {props.rows.map((row) => (
+          <a
+            class='group grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-border px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(1.5rem,4vh,2.75rem)] text-inherit no-underline transition-[background] duration-150 ease-[ease] hover:bg-[linear-gradient(90deg,color-mix(in_srgb,var(--color-primary)_8%,transparent),transparent)] min-[721px]:grid-cols-[minmax(4rem,0.14fr)_minmax(0,1fr)_auto] min-[721px]:gap-[clamp(1rem,4vw,4rem)]'
+            key={row.slug}
+            href={row.href}
+          >
+            <span
+              class='font-mono text-[clamp(2.4rem,5vw,4rem)] font-[800] leading-none text-transparent [-webkit-text-stroke:1.5px_color-mix(in_srgb,var(--color-ring)_55%,transparent)]'
+              aria-hidden='true'
+            >
+              {row.index}
+            </span>
+            <div>
+              <span class='block font-serif font-normal text-[clamp(1.6rem,3vw,2.6rem)] leading-[1.05] text-foreground transition-[color] duration-150 ease-[ease] group-hover:text-primary'>
+                {row.title}
+              </span>
+              <span class='inline-block px-2 py-0 mt-2 border border-[color-mix(in_srgb,var(--color-ring)_45%,transparent)] rounded-md text-muted-foreground font-mono text-(length:--text-xs) tracking-[0.08em] empty:hidden'>
+                {row.langLabel}
+              </span>
+              <p class='mt-2 text-muted-foreground font-mono text-(length:--text-xs) leading-[1.6] empty:hidden'>
+                {row.excerpt}
+              </p>
+            </div>
+            <span class='text-muted-foreground font-mono text-(length:--text-xs) whitespace-nowrap justify-self-start min-[721px]:justify-self-auto'>
+              {row.date}
+            </span>
+          </a>
+        ))}
+      </section>
+    </div>
+  );
 }
 
 export default definePage(BlogIndexPage, {

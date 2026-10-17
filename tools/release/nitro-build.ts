@@ -16,7 +16,7 @@
  *   node tools/release/nitro-build.ts --root . --preset cloudflare_module \
  *     --out .output-workers --prune-public server
  */
-import { commandStatus } from '../repo/node-command.ts';
+import { spawnCommand } from '../repo/node-command.ts';
 import { rename, rm } from 'node:fs/promises';
 import { access } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
@@ -56,7 +56,7 @@ async function removeIfExists(path: string): Promise<void> {
 async function runNitro(): Promise<void> {
   // The pinned nitro CLI runs through npx on the node host (Rolldown loads
   // its native binding directly).
-  const { code } = await commandStatus('npx', {
+  const { code } = await spawnCommand('npx', {
     args: ['--yes', `nitro@${NITRO_VERSION}`, 'build', '--dir', root, '--preset', preset],
     stdin: 'inherit',
     stdout: 'inherit',

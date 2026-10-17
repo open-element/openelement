@@ -4,7 +4,7 @@
  * The legacy error() render function became the descriptor's error
  * projector: the route module maps the caught error onto the numeric
  * `boomNormal`/`boomLoader`/`boomAction` drivers, and the compiled markup
- * carries one static Region branch per variant (compiled conditional
+ * carries one static Block branch per variant (compiled conditional
  * branches are fully static — the boundary texts are the two constant
  * failure messages this page can raise).
  */

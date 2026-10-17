@@ -115,7 +115,6 @@ test('the C1 alias layer stays deleted — no retired name anywhere in the packa
     '--gray-11',
   ];
   for (const file of [
-    '../src/control-recipe.css',
     '../src/surface-recipe.css',
     '../src/overlay-recipe.css',
     '../src/open-button.css',
@@ -158,8 +157,10 @@ test('retired token exports stay gone', async () => {
 
 test('component recipe sheets are real .css files with rules (#1558)', async () => {
   // The one authoring form: the recipes ship as .css files next to the
-  // components; the import edge (not a JS string) carries the bytes.
-  for (const name of ['control-recipe.css', 'surface-recipe.css', 'overlay-recipe.css']) {
+  // components; the import edge (not a JS string) carries the bytes. The
+  // control recipe retired with the alpha15 utility migration: the control
+  // surface is utilities plus each component's own irreducible residue.
+  for (const name of ['surface-recipe.css', 'overlay-recipe.css']) {
     const css = await readFile(new URL(`../src/${name}`, import.meta.url), 'utf8');
     expect(css.trim().length > 0, `${name} carries rules`).toEqual(true);
     expect(css.includes('`'), `${name} is plain CSS, not a template literal`).toEqual(false);

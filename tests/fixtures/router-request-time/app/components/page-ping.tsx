@@ -1,7 +1,7 @@
 /**
  * /ping page element — named-only actions route (ADR-0121 protocol edges),
  * compiled v0.44. `movedText` carries the ?moved= echo; `hasError` drives the
- * static-text intent-error Region.
+ * static-text intent-error Block.
  */
 import { element, OpenElement, property } from '@openelement/element';
 

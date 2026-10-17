@@ -35,13 +35,41 @@ export function contentTypeFor(filePath: string): string {
   return type.startsWith('text/') ? `${type}; charset=UTF-8` : type;
 }
 
-const CONTENT_HASHED_ASSET_RE = /(?:^|\/)assets\/[^/]*-[0-9a-zA-Z_-]{8,}\.[^/]+$/;
+/**
+ * The framework's content-addressed asset identity.
+ *
+ * Only the CLIENT build's output is content-addressed, and it is emitted under
+ * `client/` (Vite's outDir for that phase): every file there carries either the
+ * bundler's `<name>-<hash>` name or the style-asset protocol's bare content
+ * address. That namespace is the framework's own, so anything in it that looks
+ * like a hash is one.
+ *
+ * The top level of the output is NOT that namespace — it is the user's
+ * `public/` copied verbatim, `assets/` included, because Vite copies
+ * `public/assets/` to `dist/assets/`. Keying the immutable decision on a
+ * top-level `assets/` therefore let a person's own file name read as a content
+ * hash: `open-favicon-inverted.svg` ends in `-inverted`, eight letters of the
+ * allowed alphabet, and shipped with a one-year `immutable` directive. An
+ * eight-letter word is not a hash, and a deploy that changed that file would
+ * have left every client on the old bytes until the cache expired.
+ */
+const CONTENT_HASHED_ASSET_RE =
+  /(?:^|\/)client\/(?:assets|islands)\/(?:[^/]*-[0-9a-zA-Z_-]{8,}|[0-9a-f]{12})\.[^/]+$/;
 
 /**
- * Cache-Control baseline for static output: content-hashed build assets are
+ * Cache-Control baseline for static output: content-addressed build assets are
  * immutable; HTML is the deployment boundary and must be rechecked. Every
- * other (unhashed) file — including the framework's own client runtime —
- * can change across deploys under the same URL, so it must be revalidated.
+ * other (unhashed) file — the framework's own client entry (`client.js`), a
+ * `public/` asset, a manifest — can change across deploys under the same URL,
+ * so it must be revalidated.
+ *
+ * Two content-addressed name shapes are recognized: the bundler's
+ * `<name>-<hash>` form, and the style-asset protocol's bare content address
+ * (`<12-hex>.css`, the emitted sheet's own hash — alpha15 S lane, S-C2/S-14).
+ * A sheet may legitimately be requested twice (a client adapter creates its
+ * sheet `CSSStyleSheet` synchronously, so its fetch can coincide with the
+ * declared link's parse); without the second shape the duplicate paid a network
+ * revalidation instead of a cache hit.
  */
 export function cacheControlFor(filePath: string): string | null {
   if (CONTENT_HASHED_ASSET_RE.test(filePath.replaceAll(SEP, '/'))) {
@@ -194,6 +222,20 @@ export async function dispatchRequest(
 ): Promise<Response> {
   const { distDir, serverMod, env, onHandlerError } = options;
   const url = new URL(request.url);
+
+  // Malformed-% parity (M-R7): the static layer answers a malformed
+  // percent-encoding with 400 (tryStatic below), while route params
+  // deliberately preserve the raw value for in-app/SPA matching (pinned by
+  // client-router and admission-parity tests — match() cannot answer HTTP
+  // statuses). At this HTTP edge the two must agree, so a malformed pathname
+  // is a 400 before the admitted/static split — including admitted
+  // request-time paths, which otherwise reached the server with raw params.
+  try {
+    decodeURIComponent(url.pathname);
+  } catch (err) {
+    if (isMalformedUrlError(err)) return new Response('Bad Request', { status: 400 });
+    throw err;
+  }
 
   const invokeServer = async (): Promise<Response> => {
     try {

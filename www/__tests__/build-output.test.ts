@@ -57,11 +57,13 @@ test('build output: artifact scan — no vendored highlighter, no CDN font refer
         violations.push(`vendored Prism artifact: ${rel}`);
       }
       if (entry.name.endsWith('.woff2')) {
-        const asset = `assets/${entry.name}`;
-        if (!rel.startsWith('assets/')) {
+        // The client build emits the stylesheet's url() assets into
+        // dist/client/assets/ (the document stylesheet lives there); a face
+        // anywhere else is a stray binary.
+        if (!rel.startsWith('assets/') && !rel.startsWith('client/assets/')) {
           violations.push(`font binary outside the emitted assets tree: ${rel}`);
         }
-        fontReferences.add(asset);
+        fontReferences.add(entry.name);
       }
       if (/\.(?:html|css|js|json|xml|txt|webmanifest)$/.test(entry.name)) {
         const text = readFileSync(path, 'utf8');
@@ -77,24 +79,47 @@ test('build output: artifact scan — no vendored highlighter, no CDN font refer
   };
   walk(DIST);
 
-  // The self-hosted contract (H lane): the face binaries ship, and the
-  // linked style bundle is what references them. A build that drops the
-  // preset font sources (or rewrites their url() targets wrongly) fails here
-  // instead of delivering fallback glyphs.
+  // The self-hosted contract (H lane): the face binaries ship, and an emitted
+  // client stylesheet references them. A build that drops the font sources
+  // (or rewrites their url() targets wrongly) fails here instead of delivering
+  // fallback glyphs. Two stylesheet owners exist: the document bundle the
+  // emitted head links, and the component sheets the Tailwind compile emits
+  // into client/assets/ (a component sheet must address its referenced bytes
+  // itself). A face below Vite's inline limit is a data URL in the document
+  // bundle and has NO document-side asset — its shipped file belongs to the
+  // component sheet — so a shipped face must be referenced by one of the
+  // emitted stylesheets, not necessarily the bundle.
   expect(
     fontReferences.size,
-    'no woff2 faces shipped under dist/assets — the self-hosted font sources ' +
+    'no woff2 faces shipped under dist — the self-hosted font sources ' +
       'did not reach the emitted style bundle',
   ).toBeGreaterThan(0);
-  const bundlePath = join(DIST, 'assets', 'open-tailwind.css');
+  const homeHtml = readFileSync(join(DIST, 'index.html'), 'utf8');
+  const stylesheetHref = homeHtml.match(/<link rel="stylesheet" href="([^"]+)"/)?.[1];
+  expect(stylesheetHref, 'the built head links a stylesheet').toBeTruthy();
+  const bundlePath = join(DIST, stylesheetHref!.replace(/^\//, ''));
   expect(existsSync(bundlePath), `linked style bundle is missing: ${bundlePath}`).toBeTruthy();
   const bundle = readFileSync(bundlePath, 'utf8');
-  for (const asset of fontReferences) {
+  const emittedSheets = [bundle];
+  for (const file of readdirSync(join(DIST, 'client', 'assets'))) {
+    if (file.endsWith('.css')) {
+      emittedSheets.push(readFileSync(join(DIST, 'client', 'assets', file), 'utf8'));
+    }
+  }
+  for (const face of fontReferences) {
     expect(
-      bundle.includes(asset.slice('assets/'.length)),
-      `shipped face ${asset} is not referenced by ${bundlePath}`,
+      emittedSheets.some((sheet) => sheet.includes(face)),
+      `shipped face ${face} is not referenced by any emitted stylesheet ` +
+        `(${bundlePath} or an emitted component sheet)`,
     ).toBe(true);
   }
+  // The document side still delivers self-hosted faces by name (not only
+  // inlined data URLs): the document stylesheet owns the document entry's
+  // @font-face rules.
+  expect(
+    [...fontReferences].some((face) => bundle.includes(face)),
+    `the linked bundle ${bundlePath} references no shipped face by name`,
+  ).toBe(true);
   expect(bundle.includes('@font-face'), 'the linked bundle carries no @font-face rule').toBe(true);
 
   const islandsDir = join(DIST, 'client', 'islands');
@@ -276,18 +301,81 @@ test('build output: the element runtime ships as the one shared chunk islands ne
     `Island chunks must not embed the element runtime: ${islandsEmbeddingRuntime.join(', ')}`,
   ).toEqual([]);
 
-  // The generated client entry statically imports the shared chunk (the
-  // import edge is recorded in the vite build manifest).
+  // B2/#1544: the generated client entry no longer statically imports the
+  // shared chunk itself — the runtime is reached through the entry's DYNAMIC
+  // import of the element-services surface module, whose one static import is
+  // the shared chunk. Both halves are asserted: the direct edge is gone, and
+  // the lazy edge still lands on the emitted chunk, so island hydration keeps
+  // its runtime.
   const manifest = JSON.parse(
     readFileSync(join(DIST, 'client', '.vite', 'manifest.json'), 'utf8'),
-  ) as Record<string, { imports?: string[] }>;
+  ) as Record<string, { imports?: string[]; dynamicImports?: string[] }>;
   const entry = manifest['virtual:open-client-entry'];
   if (!entry) throw new Error('client entry missing from the vite build manifest');
   const runtimeKey = `_${runtimeChunks[0]}`;
   expect(
     entry.imports ?? [],
-    `The client entry must statically import the shared element-runtime chunk (${runtimeKey})`,
+    `B2: the shared element-runtime chunk (${runtimeKey}) must not be a direct static import of the client entry`,
+  ).not.toContain(runtimeKey);
+  const servicesKey = (entry.dynamicImports ?? []).find((key) => /element-services/.test(key));
+  expect(
+    servicesKey,
+    `The entry must lazily import the element-services surface; dynamicImports: ${(
+      entry.dynamicImports ?? []
+    ).join(', ')}`,
+  ).toBeTruthy();
+  expect(
+    manifest[servicesKey!]?.imports ?? [],
+    `The lazily imported element-services module must statically import the shared runtime chunk (${runtimeKey})`,
   ).toContain(runtimeKey);
+
+  // B2 gap (a): the DIRECT edge being gone is not enough, and this is the
+  // assertion that says so. Vite homes its injected preload helper in
+  // whichever chunk first needs it; www's `open-search` island carries a
+  // nested dynamic import, so the helper landed in that ISLAND chunk, the
+  // entry statically imported the island chunk to reach the helper, and the
+  // runtime came back transitively — with the direct-edge assertion above
+  // still green. The real property is about the entry's whole STATIC closure,
+  // so walk it: over the vite manifest's `imports` keys only (`dynamicImports`
+  // is a different field and is deliberately not followed — the entry reaches
+  // the runtime through exactly those edges).
+  const staticClosure: string[] = [];
+  const queue = [...(entry.imports ?? [])];
+  while (queue.length > 0) {
+    const key = queue.shift()!;
+    if (staticClosure.includes(key)) continue;
+    staticClosure.push(key);
+    for (const next of manifest[key]?.imports ?? []) queue.push(next);
+  }
+  expect(
+    staticClosure,
+    `B2 gap (a): the client entry's static closure must not reach the shared element-runtime chunk ` +
+      `(${runtimeKey}); closure: ${staticClosure.join(', ') || '(empty)'}`,
+  ).not.toContain(runtimeKey);
+  // Nor an island chunk: an island in the entry's static closure is the exact
+  // shape that smuggles the runtime back in, and it is what the island chunk's
+  // own runtime import means the moment one appears.
+  const islandKeysInClosure = staticClosure.filter((key) => /^_island-/.test(key));
+  expect(
+    islandKeysInClosure,
+    `B2 gap (a): no island chunk may sit in the client entry's static closure; found: ${islandKeysInClosure.join(', ')}`,
+  ).toEqual([]);
+  // Guard against a vacuous pass: the closure walk must actually have found
+  // the one chunk the entry does import eagerly (the dedicated helper chunk).
+  // An empty closure would mean the walk read nothing, not that the graph is
+  // clean.
+  const helperKeys = staticClosure.filter((key) => /^_vite-helper-/.test(key));
+  expect(
+    helperKeys,
+    `The entry's static closure must carry the dedicated vite-helper chunk (the helper Vite injects for the ` +
+      `entry's own dynamic island imports); closure: ${staticClosure.join(', ') || '(empty)'}`,
+  ).toHaveLength(1);
+  // And the helper chunk itself must not carry the runtime either — it is the
+  // one eager import, so an edge from it would defeat the whole property.
+  expect(
+    manifest[helperKeys[0]]?.imports ?? [],
+    `The dedicated vite-helper chunk must be a leaf: ${helperKeys[0]} imports something`,
+  ).toEqual([]);
 });
 
 test('build output: zh pages keep in-content links inside the zh tree (#1031)', () => {
@@ -316,13 +404,12 @@ test('build output: zh pages keep in-content links inside the zh tree (#1031)', 
     const html = readFileSync(file, 'utf8');
     for (const match of html.matchAll(anchorRe)) {
       const [tag, href] = match;
-      // Layout chrome links carry data-nav and are localized client-side by
-      // open-layout (#816); only in-content links are asserted here.
-      if (tag.includes('data-nav')) continue;
-      // The locale switcher deliberately points at the *other* locale tree;
-      // it must not carry data-nav or the client-side localization would
-      // rewrite it back into the current locale.
-      if (tag.includes('locale-switch')) continue;
+      // The locale switcher deliberately points at the *other* locale tree,
+      // so it is the one layout anchor exempt from this rule. It marks itself
+      // with data-locale-switch rather than a presentation class, which the
+      // utility-first migration removed (the visual vocabulary is the class
+      // list; the behaviour hook stays an attribute).
+      if (tag.includes('data-locale-switch')) continue;
       if (href === '/zh' || href.startsWith('/zh/')) continue;
       failures.push(`${file}: ${href}`);
     }

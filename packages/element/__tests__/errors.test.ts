@@ -40,8 +40,8 @@ test('reportError falls back to console.error when no hook is set (#644)', () =>
   }
 });
 
-// The legacy renderDsd telemetry-routing and control-flow-rethrow tests were
-// deleted with the legacy renderer: the 0.44 renderDsd (public-runtime.ts)
+// The legacy renderToString telemetry-routing and control-flow-rethrow tests were
+// deleted with the legacy renderer: the 0.44 renderToString (public-runtime.ts)
 // fails closed for uncompiled classes and never invokes component code, so
 // there is no render error to route. Fail-closed coverage:
-// __tests__/compiled-runtime/facade.test.ts ('renderDsd fails closed').
+// __tests__/compiled-runtime/facade.test.ts ('renderToString fails closed').

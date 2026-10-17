@@ -2,7 +2,7 @@
  * @openelement/router/server-runtime — the page SSR renderer seam.
  *
  * `__ssr` renders one registered page/island host to HTML. The native fork
- * routes through Element's compiled serializer (`renderDsd`, which fails
+ * routes through Element's compiled serializer (`renderToString`, which fails
  * closed for unregistered or uncompiled classes); the lit fork (#1339)
  * routes through @lit-labs/ssr (`renderLitPageToHtml`). The fork point is the
  * renderer adapter (renderer-adapter.ts): each adapter picks which factory
@@ -26,10 +26,28 @@ export interface TrustedHtmlValue {
   readonly html: string;
 }
 
+/**
+ * The document stylesheet collection a page render reports its light-root
+ * components' external sheets into (alpha15 S lane, S-C1.2), declared
+ * structurally for the same reason {@linkcode TrustedHtmlValue} is: this seam
+ * injects Element functions, it never imports them. The generated entry
+ * creates the collection and lists it in `wrapInDocument`; the page render
+ * only ever adds to it.
+ */
+export interface DocumentStyleSink {
+  add(urls: readonly string[]): void;
+}
+
 /** Source metadata the serializer attributes to a render (the `{ route }` seam). */
 export interface PageSsrSourceInfo {
   route?: string;
   source?: string;
+  /**
+   * The render's document stylesheet collection. It rides this per-render
+   * object because every emitted `__ssr` call site already builds one, and the
+   * collection's lifetime IS the render's.
+   */
+  documentStyles?: DocumentStyleSink;
 }
 
 /** Trusted parent-owned light children keyed by slot name (the shell slot claim). */
@@ -38,7 +56,7 @@ export type ProjectedChildren = ReadonlyMap<string, TrustedHtmlValue>;
 /**
  * The generated entry's `__ssr` binding: render one registered host tag to
  * HTML. `depth` bounds nested island expansion; `projectedChildren` claims
- * external content (the app-shell slot). Fails closed per the forks below.
+ * external content (the layout slot). Fails closed per the forks below.
  */
 export type PageSsrRenderer = (
   tag: string,
@@ -50,8 +68,8 @@ export type PageSsrRenderer = (
 
 /** The subset of the Element serializer the native renderer needs. */
 export interface NativePageRendererDeps {
-  /** Element's sync compiled serializer (`renderDsd`). */
-  renderDsd: (
+  /** Element's sync compiled serializer (`renderToString`, returning HTML directly). */
+  renderToString: (
     tag: string,
     options: {
       componentClass?: unknown;
@@ -59,8 +77,9 @@ export interface NativePageRendererDeps {
       sourceInfo?: PageSsrSourceInfo;
       ssrRenderableTags?: readonly string[];
       projectedChildren?: ProjectedChildren;
+      documentStyles?: DocumentStyleSink;
     },
-  ) => { html: string };
+  ) => string;
   /** The SSR registry (the runtime's `customElements` global). */
   customElements: { get(tag: string): unknown };
   /** Build-admitted nested compiled tags (serialized generated data). */
@@ -75,7 +94,7 @@ export interface NativePageRendererDeps {
  * admission plan).
  */
 export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrRenderer {
-  const { renderDsd, customElements, ssrRenderableTags } = deps;
+  const { renderToString, customElements, ssrRenderableTags } = deps;
   return (tag, props = {}, sourceInfo = {}, __depth = 0, projectedChildren): string => {
     // Validate tag name - must be a valid Custom Element (contains hyphen)
     if (!tag || !tag.includes('-')) {
@@ -101,13 +120,18 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
           '> is not registered in the SSR registry. Generated entries register every admitted route/island class explicitly; an unknown OpenElement host cannot be server-rendered (client-only and foreign tags pass through per the admission plan).',
       );
     }
-    return renderDsd(tag, {
+    // The collection is a render-side channel, not render diagnostics: it is
+    // split out of sourceInfo so the serializer's source attribution stays
+    // exactly what the call site declared (alpha15 S lane, S-C1.2).
+    const { documentStyles, ...diagnostics } = sourceInfo ?? {};
+    return renderToString(tag, {
       componentClass: Cls,
       props,
-      sourceInfo,
+      sourceInfo: diagnostics,
+      documentStyles,
       ssrRenderableTags,
       projectedChildren,
-    }).html;
+    });
   };
 }
 
@@ -127,8 +151,12 @@ export interface LitPageRendererDeps {
  */
 export function createLitPageRenderer(deps: LitPageRendererDeps): PageSsrRenderer {
   const { renderLitPageToHtml } = deps;
-  // depth/projectedChildren are accepted for call-site compatibility and
-  // deliberately ignored: nested composition is lit-ssr's job, no adapter code.
+  // depth/projectedChildren/sourceInfo are accepted for call-site compatibility
+  // and deliberately ignored: nested composition is lit-ssr's job (no adapter
+  // code), there is no layout slot claim on this path (nothing to project),
+  // and lit-ssr carries no route/source diagnostics channel — so sourceInfo
+  // would have nowhere to go. If lit-ssr ever gains one, thread it here; until
+  // then the drop is explicit, not an oversight (H2余).
   return (tag, props = {}) => renderLitPageToHtml({ tag, props }).html;
 }
 

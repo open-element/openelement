@@ -1,6 +1,6 @@
 /**
  * Streamed-frame admission policy — the canonical deny lists a deferred
- * text/Region Part frame must satisfy for the browser installer to accept it.
+ * text/Block Part frame must satisfy for the browser installer to accept it.
  *
  * This module is import-free and host-free by design (same base-of-graph
  * contract as forbidden-sinks.ts) and is the single policy source for every

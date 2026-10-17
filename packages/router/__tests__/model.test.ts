@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { createRequestContext } from '../src/model.ts';
+import { createRequestContext, resolveRequestEnv } from '../src/model.ts';
 
 test('request context normalizes Web Request details', () => {
   const context = createRequestContext({
@@ -26,4 +26,21 @@ test('request context defaults optional params', () => {
   expect(context.method).toEqual('GET');
   expect(context.params).toEqual({});
   expect(context.platform).toEqual(undefined);
+});
+
+test('resolveRequestEnv is the single env precedence chain (M-R2)', () => {
+  // Runtime bindings win, then the per-event env, then the mount options.
+  expect(resolveRequestEnv({ stage: 'runtime' }, { stage: 'event' }, { stage: 'options' })).toEqual(
+    { stage: 'runtime' },
+  );
+  expect(resolveRequestEnv(undefined, { stage: 'event' }, { stage: 'options' })).toEqual({
+    stage: 'event',
+  });
+  expect(resolveRequestEnv(undefined, undefined, { stage: 'options' })).toEqual({
+    stage: 'options',
+  });
+  expect(resolveRequestEnv(undefined, undefined, undefined)).toEqual(undefined);
+  // `??` semantics: an explicitly-passed empty env is a configuration, not
+  // a missing link — it must not fall through to the next candidate.
+  expect(resolveRequestEnv({}, { stage: 'event' })).toEqual({});
 });

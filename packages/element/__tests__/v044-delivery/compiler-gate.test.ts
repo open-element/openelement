@@ -62,8 +62,9 @@ function compilerTransformHook(): TransformHook {
   return transformOf(compiledElementPlugin());
 }
 
-// '@element(' appears only inside a string literal and line/block comments —
-// the cheap substring prefilter matches, but no real decorator exists.
+// A decorator application appears only inside a string literal and
+// line/block comments — the cheap prefilter matches the shape, but no real
+// decorator exists, so the semantic layer decides against admission.
 const MENTION_ONLY_SOURCE = [
   'const docs = "decorate with @element(\'oe-string\') to opt in";',
   "// @element('oe-line-comment') is what a real opt-in looks like",

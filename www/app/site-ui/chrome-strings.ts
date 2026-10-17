@@ -1,7 +1,7 @@
 /**
  * Bilingual chrome copy for the long-form reading components
  * (open-reading-shell, open-page-rail). Kept out of open-layout-navigation.ts:
- * that module is the app-shell policy home, while these strings belong to the
+ * that module is the layout policy home, while these strings belong to the
  * reading components' own landmark/outline chrome. English strings are the
  * pre-i18n literals — e2e landmarks pin them, so they must not change.
  */

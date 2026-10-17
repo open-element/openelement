@@ -6,8 +6,8 @@ import { assertRejectsIncludes, assertThrowsIncludes } from '../../tests/lib/vit
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import {
   admitsRelease,
-  assertStarterCarriesVitePlusWorkspace,
-  assertVitePlusWorkspaceYaml,
+  assertPackageManagerNeutralManifest,
+  assertStarterIsPackageManagerNeutral,
   cdnAvailabilityDecision,
   classifyRegistryResponse,
   fail,
@@ -21,7 +21,6 @@ import {
   releaseGateExitCode,
   skipAllowed,
   unknown,
-  VITE_PLUS_WORKSPACE_FRAGMENTS,
   VITE_SMOKE_SOURCE,
 } from './published-consumer-qualification.ts';
 
@@ -335,69 +334,119 @@ test('node runtime smoke stays on the plain-Node core surface', () => {
   ).toBeTruthy();
 });
 
-// Scaffold workspace-form guard (the alpha.14 Vite+ catalog): both starter
-// legs run `pnpm install` inside the scaffolded project, whose manifest asks
-// for `vite-plus: "catalog:"` — a spec that resolves ONLY through the
-// scaffold's own pnpm-workspace.yaml catalog block. A harness step that
-// replaces or drops that file strands the spec and pnpm dies with
-// ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC (the alpha.14 published-consumers
-// failure). The guard must name the lost catalog before the install runs.
+// Scaffold package-manager-neutrality guard (alpha15+): both starter legs run
+// `pnpm install` inside the scaffolded project, so the harness must know the
+// shipped form before it runs anything. The Vite+ catalog form is retired —
+// the scaffold pins `vite` itself (at the router's own version), declares no
+// `packageManager`, carries no pnpm-only `catalog:`/`vite-plus` specifier, and
+// ships NO pnpm-workspace.yaml. A create-side regression to any of those makes
+// the generated project installable only under pnpm; the guard must name it
+// before the install runs.
 
 const repoRoot = join(import.meta.dirname!, '..', '..');
-const scaffoldWorkspaceTemplate = () =>
-  readFile(join(repoRoot, 'packages', 'create', 'templates', 'pnpm-workspace.yaml.tmpl'), 'utf8');
+const scaffoldManifestTemplate = () =>
+  readFile(join(repoRoot, 'packages', 'create', 'templates', 'package.json.tmpl'), 'utf8');
 
-test('starter workspace guard accepts the create template shipped form', async () => {
-  // The real template payload (placeholders included — the fragments do not
-  // touch the version lines) must satisfy the guard, so a create-side drift
-  // away from the anchored fragments fails here, on the repo surface.
-  const template = await scaffoldWorkspaceTemplate();
-  for (const fragment of VITE_PLUS_WORKSPACE_FRAGMENTS) {
-    expect(template, `template must carry ${fragment}`).toContain(fragment);
-  }
-  expect(() => assertVitePlusWorkspaceYaml(template, 'template starter')).not.toThrow();
+test('neutrality guard accepts the create template shipped manifest', async () => {
+  // The real template payload (placeholders included — the `${...}` tokens sit
+  // in string values, so it parses as JSON) must satisfy the guard, so a
+  // create-side drift in the vite pin, the packageManager field, or a
+  // reintroduced catalog specifier fails here, on the repo surface.
+  const template = await scaffoldManifestTemplate();
+  expect(() => assertPackageManagerNeutralManifest(template, 'template starter')).not.toThrow();
 });
 
-test('starter workspace guard rejects the harness clobber that lost the catalog in CI', () => {
-  // tests/lib/qualify-harness/workspace-alias.ts installAppDependencies wrote
-  // a bare `packages: []` over the scaffold's file before installing — the
-  // exact alpha.14 published-consumers failure. The guard must fail naming
-  // the missing catalog pair (not pnpm's resolver error), with the caller's
-  // context legible in the message.
+test('neutrality guard rejects a scaffold whose vite pin drifts from the router', () => {
   const err = assertThrowsIncludes(
-    () => assertVitePlusWorkspaceYaml('packages: []\n', 'clobbered starter'),
-    Error,
-    'is not the Vite+ form: missing npm:@voidzero-dev/vite-plus-core@1.1.0',
-  );
-  expect(err.message).toContain('clobbered starter');
-  expect(err.message).toContain('catalog must travel with the scaffold');
-});
-
-test('starter workspace guard rejects a catalog stripped of the vite override', () => {
-  // Full catalog entry, no `vite@*: "catalog:"` override: the guard must name
-  // the override specifically (the first fragment check that fails).
-  assertThrowsIncludes(
     () =>
-      assertVitePlusWorkspaceYaml(
-        'catalog:\n  vite: npm:@voidzero-dev/vite-plus-core@1.1.0\n  vite-plus: 1.1.0\n',
-        'stripped',
+      assertPackageManagerNeutralManifest(
+        JSON.stringify({ devDependencies: { vite: '8.0.17' } }),
+        'drifted starter',
       ),
     Error,
-    'missing vite@*: "catalog:"',
+    `expected the router's own pin ${VITE_DEV_PIN}`,
   );
-});
-
-test('starter workspace guard fails closed when the scaffold ships no workspace file', async () => {
-  const emptyScaffold = await mkdtemp(join(tmpdir(), 'pcq-workspace-guard-empty-'));
-  await assertRejectsIncludes(
-    () => assertStarterCarriesVitePlusWorkspace(emptyScaffold, 'bare starter'),
+  expect(err.message).toContain('drifted starter');
+  // A range is the same violation: the generated project must pin one version.
+  assertThrowsIncludes(
+    () =>
+      assertPackageManagerNeutralManifest(
+        JSON.stringify({ devDependencies: { vite: '^8.0.0' } }),
+        'ranged starter',
+      ),
     Error,
-    'missing pnpm-workspace.yaml',
+    `expected the router's own pin ${VITE_DEV_PIN}`,
   );
 });
 
-test('starter workspace guard passes the scaffold file in place beside package.json', async () => {
-  const scaffold = await mkdtemp(join(tmpdir(), 'pcq-workspace-guard-ok-'));
-  await writeFile(join(scaffold, 'pnpm-workspace.yaml'), await scaffoldWorkspaceTemplate());
-  await assertStarterCarriesVitePlusWorkspace(scaffold, 'in-place starter');
+test('neutrality guard rejects the retired Vite+ manifest forms', () => {
+  // The alpha.14 form: the pnpm-only catalog protocol plus the vite-plus
+  // toolchain dependency the catalog resolved.
+  assertThrowsIncludes(
+    () =>
+      assertPackageManagerNeutralManifest(
+        JSON.stringify({ devDependencies: { vite: VITE_DEV_PIN, 'vite-plus': 'catalog:' } }),
+        'vite-plus starter',
+      ),
+    Error,
+    'still declares the retired Vite+ dependency: vite-plus=catalog:',
+  );
+  // A manifest that keeps only the specifier is the same regression.
+  assertThrowsIncludes(
+    () =>
+      assertPackageManagerNeutralManifest(
+        JSON.stringify({ devDependencies: { vite: `catalog:vite` } }),
+        'catalog starter',
+      ),
+    Error,
+    `expected the router's own pin ${VITE_DEV_PIN}`,
+  );
+});
+
+test('neutrality guard rejects a packageManager pin on the scaffold', () => {
+  // vp's selection order is packageManager → lockfile → default pnpm, so a
+  // surviving field would pick the manager for the user again.
+  assertThrowsIncludes(
+    () =>
+      assertPackageManagerNeutralManifest(
+        JSON.stringify({ packageManager: 'pnpm@12.8.1', devDependencies: { vite: VITE_DEV_PIN } }),
+        'pinned starter',
+      ),
+    Error,
+    'pins a package manager (packageManager=pnpm@12.8.1)',
+  );
+});
+
+test('neutrality guard fails closed when the scaffold ships a pnpm-specific file', async () => {
+  const scaffold = await mkdtemp(join(tmpdir(), 'pcq-neutral-guard-file-'));
+  await writeFile(
+    join(scaffold, 'package.json'),
+    JSON.stringify({ devDependencies: { vite: VITE_DEV_PIN } }),
+  );
+  await writeFile(
+    join(scaffold, 'pnpm-workspace.yaml'),
+    'catalog:\n  vite-plus: 1.1.0\noverrides:\n',
+  );
+  const err = await assertRejectsIncludes(
+    () => assertStarterIsPackageManagerNeutral(scaffold, 'regressed starter'),
+    Error,
+    'ships a pnpm-workspace.yaml',
+  );
+  expect(err.message).toContain('regressed starter');
+});
+
+test('neutrality guard passes the neutral scaffold in place', async () => {
+  const scaffold = await mkdtemp(join(tmpdir(), 'pcq-neutral-guard-ok-'));
+  await writeFile(
+    join(scaffold, 'package.json'),
+    JSON.stringify({ devDependencies: { vite: VITE_DEV_PIN } }),
+  );
+  await assertStarterIsPackageManagerNeutral(scaffold, 'neutral starter');
+  // The same directory with a workspace file added is exactly the regression.
+  await writeFile(join(scaffold, 'pnpm-workspace.yaml'), 'packages: []\n');
+  await assertRejectsIncludes(
+    () => assertStarterIsPackageManagerNeutral(scaffold, 'neutral starter'),
+    Error,
+    'must carry no pnpm-specific file',
+  );
 });

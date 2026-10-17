@@ -3,7 +3,7 @@
  * upstream js-framework-benchmark keyed implementation.
  *
  * One meaningful component boundary manages ordinary table DOM: the rows are
- * plain <tr> nodes owned by a single keyed `each` Region — NOT one custom
+ * plain <tr> nodes owned by a single keyed `each` Block — NOT one custom
  * element per row. Row select/remove use one delegated click handler on the
  * table because grammar v1 admits no per-item event handlers; selection is
  * carried in row data (`cls`) so the keyed diff writes exactly the affected

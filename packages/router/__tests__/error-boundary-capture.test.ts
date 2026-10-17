@@ -268,8 +268,7 @@ async function bootDev(plugins: Plugin[]): Promise<DevHandle> {
 const OPTIONS = {
   routesDir: 'app/routes',
   islandsDir: 'app/islands',
-  componentsDir: 'app/components',
-  appShell: false as const,
+  layout: false as const,
 };
 
 /**

@@ -3,7 +3,7 @@
  *
  * Before this change four conventions coexisted: OEC structured compiler
  * diagnostics, `OpenElementError` with codes, ~40 bare `Error`s carrying
- * `[compiled-runtime]` / `[compiled-claim]` string prefixes, and dedicated
+ * `[compiled-runtime]` / `[compiled-hydration]` string prefixes, and dedicated
  * exception classes. A consumer could not catch a failure by code without
  * importing every class and pattern-matching the rest.
  *
@@ -187,7 +187,7 @@ test('#1386: the runtime raisers report their code through the wire entries', as
   });
   const document = new TestDocument();
 
-  // A non-array list Region: both executors raise the same code for the same
+  // A non-array list Block: both executors raise the same code for the same
   // failing authoring decision.
   const notArray = { signals: { rows: signal<unknown>('nope') }, handlers: {} };
   for (const [label, run] of [
@@ -240,8 +240,8 @@ test('#1386: the runtime raisers report their code through the wire entries', as
 });
 
 test('#1386: a claim mismatch is an OpenElementError with the released code', async () => {
-  const { PartProgramClaimError } = await import('../src/internal/compiled/runtime.ts');
-  const error = new PartProgramClaimError('template[0]', 'drifted', {
+  const { PartProgramHydrationError } = await import('../src/internal/compiled/runtime.ts');
+  const error = new PartProgramHydrationError('template[0]', 'drifted', {
     kind: 'root',
     root: {} as Node,
   });
@@ -330,6 +330,30 @@ test('#1386: lifecycle raisers carry their own family codes', async () => {
   }
   expect(typeof AuthoringErrorCode.INVALID_TAG_NAME).toEqual('string');
   expect(typeof KernelErrorCode.DISPOSED).toEqual('string');
-  expect(typeof StyleErrorCode.LIGHT_SINK_WITHOUT_DOCUMENT).toEqual('string');
+  expect(typeof StyleErrorCode.ADOPTED_STYLES_UNSUPPORTED).toEqual('string');
+  expect(typeof StyleErrorCode.INVALID_STYLE_HREF).toEqual('string');
+  expect(typeof StyleErrorCode.SHEET_RULES_UNREADABLE).toEqual('string');
   expect(typeof FacadeErrorCode.PROGRAM_MISSING).toEqual('string');
+});
+
+/**
+ * M-E3: deferred failures carry their own FacadeErrorCode values — budget,
+ * JSON-safety, and unknown-field conditions never impersonate PROGRAM_MISSING.
+ */
+test('M-E3: deferred FacadeErrorCode values are independent of PROGRAM_MISSING', () => {
+  const codes = [
+    FacadeErrorCode.STREAM_PENDING_READ,
+    FacadeErrorCode.STREAM_VALUE_NOT_SERIALIZABLE,
+    FacadeErrorCode.STREAM_MANIFEST_MALFORMED,
+    FacadeErrorCode.STREAM_MANIFEST_MISMATCH,
+    FacadeErrorCode.STREAM_RESERVED_PROPERTY,
+    FacadeErrorCode.STREAM_BUDGET_EXCEEDED,
+    FacadeErrorCode.STREAM_FIELD_INVALID,
+    FacadeErrorCode.STREAM_UNKNOWN_FIELD,
+  ];
+  for (const code of codes) {
+    expect(typeof code).toEqual('string');
+    expect(code).not.toEqual(FacadeErrorCode.PROGRAM_MISSING);
+  }
+  expect(new Set(codes).size).toEqual(codes.length);
 });

@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
+    "dev": "oe dev",
     "build": "oe build",
     "start": "oe start",
     "test": "node --test",
-    "fmt": "vp fmt",
-    "lint": "vp lint",
+    "fmt": "oxfmt",
+    "lint": "oxlint",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -20,12 +20,13 @@
     "@hono/vite-dev-server": "^0.25.3",
     "@tailwindcss/vite": "4.3.3",
     "hono": "^4.12",
+    "oxfmt": "0.70.0",
+    "oxlint": "1.85.0",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
-    "vite-plus": "catalog:"
+    "vite": "8.0.16"
   },
   "engines": {
     "node": ">=24.2"
-  },
-  "packageManager": "pnpm@12.8.1"
+  }
 }

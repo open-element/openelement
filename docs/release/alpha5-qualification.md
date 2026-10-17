@@ -1,5 +1,10 @@
 # Alpha5 framework qualification (candidate evidence)
 
+> Archived (2026-10-11): this map qualifies the alpha.5 candidate against the
+> alpha.4 tree on the retired Deno toolchain. It is retained as historical
+> evidence only; it no longer describes the build host, the package set, or
+> the release process.
+
 This is a candidate evidence map, not a release certificate. The source tree
 still reports `1.0.0-alpha.4`; `1.0.0-alpha.5` has not passed exact-SHA release
 CI, independent review, or human GO. An unpublished working-tree run does not
@@ -10,7 +15,7 @@ prove a packed or deployed artifact.
 | Term                      | Meaning                                                                                                                                                                                                        |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Rendered as data resolves | An opted-in dynamic document GET flushes a compiled shell after front-gate decisions, then backfills eligible Parts as their loader fields settle. It is not a new component or application programming model. |
-| Part Program              | One versioned compiled program used by server serialization, fresh DOM, and existing-DOM claim. No runtime JSX or VDOM fallback is admitted.                                                                   |
+| Part Program              | One versioned compiled program used by server serialization, fresh DOM, and existing-DOM hydration. No runtime JSX or VDOM fallback is admitted.                                                                   |
 | Part backfill             | Inert, version-bound document frames installed in owned Part ranges. It does not schedule island hydration.                                                                                                    |
 | Island hydration          | Independent `load`/`idle`/`visible`/`media`/`only` activation. A streamed page may have no island.                                                                                                             |
 | Nitro                     | Deployment exit for a Web `Request` to Web `Response` handler, not an application-facing API.                                                                                                                  |

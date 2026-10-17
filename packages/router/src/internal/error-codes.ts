@@ -21,10 +21,28 @@
 
 import { OpenElementError } from '@openelement/element/authoring';
 
-/** Stable codes for the page-authoring surface (`definePage`). */
+/**
+ * Stable codes for the page-authoring surfaces
+ * (`definePage` — class and server function forms — plus the server function
+ * page's render seam).
+ */
 export const PageErrorCode = {
-  /** First argument is not the compiled page element class. */
+  /** First argument is not the compiled page element class (or component function). */
   NOT_COMPILED_CLASS: 'OE_PAGE_NOT_COMPILED_CLASS',
+  /**
+   * The server function page render seam received a page whose render is
+   * not a function (a malformed descriptor, or a route module whose default
+   * export never went through definePage's function branch).
+   */
+  FUNCTION_RENDER: 'OE_PAGE_FUNCTION_RENDER',
+  /**
+   * The server function page props carried the reserved `children` key. The
+   * compiled `props.children` channel is trusted final HTML produced by the
+   * COMPILER from the caller's own JSX children; page props come from loader
+   * data, so a `children` key there is an injection attempt and is refused
+   * before the render function runs.
+   */
+  FUNCTION_PROPS: 'OE_PAGE_FUNCTION_PROPS',
   /** Descriptor is not an object, or carries a field the contract removed. */
   DESCRIPTOR_SHAPE: 'OE_PAGE_DESCRIPTOR_SHAPE',
   /** `route` intent is unsupported (`route.path`, mistyped `layout`). */
@@ -99,10 +117,10 @@ export const DescriptorErrorCode = {
   MIDDLEWARE_USE: 'OE_DESCRIPTOR_MIDDLEWARE_USE',
   /** A stream route reaches an opaque renderer wrapper. */
   STREAM_RENDERER: 'OE_DESCRIPTOR_STREAM_RENDERER',
-  /** Streaming conflicts with the compiled app shell/layout wrapper. */
-  STREAM_APP_SHELL: 'OE_DESCRIPTOR_STREAM_APP_SHELL',
-  /** The lit renderer does not support a compiled appShell/layouts. */
-  LIT_APP_SHELL: 'OE_DESCRIPTOR_LIT_APP_SHELL',
+  /** Streaming conflicts with the compiled layout wrapper. */
+  STREAM_LAYOUT: 'OE_DESCRIPTOR_STREAM_LAYOUT',
+  /** The lit renderer does not support a compiled layout/layouts. */
+  LIT_LAYOUT: 'OE_DESCRIPTOR_LIT_LAYOUT',
 } as const;
 
 /**
@@ -121,6 +139,14 @@ export const SsgRenderErrorCode = {
   STATIC_NON_200: 'OE_SSG_STATIC_NON_200',
   /** A prerender route path resolves outside the output directory. */
   PRERENDER_PATH_ESCAPED: 'OE_SSG_PRERENDER_PATH_ESCAPED',
+  /**
+   * A CSP policy was asked to ride a `<meta http-equiv>` in a shape that
+   * element cannot carry: the report-only variant (which has no `http-equiv`
+   * pragma at all) or a directive the meta delivery ignores. The static
+   * delivery cannot honour it, so the build says which directives and which
+   * delivery does instead of shipping a policy that is silently not enforced.
+   */
+  CSP_META_UNSUPPORTED: 'OE_SSG_CSP_META_UNSUPPORTED',
 } as const;
 
 /**
@@ -151,6 +177,27 @@ export const ClientBuildErrorCode = {
    * fired and per-island runtime copies would ship silently.
    */
   ELEMENT_RUNTIME_CHUNK_MISSING: 'OE_CLIENT_BUILD_ELEMENT_RUNTIME_CHUNK_MISSING',
+  /**
+   * The emitted client entry statically reaches the shared element-runtime
+   * chunk (B2 gap (a)). The entry is the ONE chunk every page loads — island
+   * manifest empty or not — so a static edge from it to the runtime makes the
+   * runtime floor unavoidable on pages that declared no island, which is
+   * exactly the download B2 exists to remove. The usual cause is the bundler
+   * homing Vite's injected preload helper inside a lazily-loaded island chunk
+   * that the entry then has to import; `vite-helper-chunk.ts` is the group
+   * that prevents it, and this guard is what makes that group's absence fatal
+   * instead of a silent regression to the pre-B2 graph.
+   */
+  ENTRY_STATIC_GRAPH_REACHES_RUNTIME: 'OE_CLIENT_BUILD_ENTRY_STATIC_GRAPH_REACHES_RUNTIME',
+  /**
+   * The emitted client graph carries Vite's injected preload helper modules,
+   * but they are not homed in the single `vite-helper` chunk
+   * (`vite-helper-chunk.ts`). Anywhere else — typically inside a lazily-loaded
+   * island chunk — is the chunk layout that gives the entry a static edge to
+   * that island (and through it to the runtime), so it fails rather than
+   * shipping.
+   */
+  VITE_HELPER_CHUNK_MISSING: 'OE_CLIENT_BUILD_VITE_HELPER_CHUNK_MISSING',
   /**
    * A `.css` style edge resolved in the client or SSR build with no entry in
    * the compiler's style-edge registry, or whose sheet file cannot be read.
@@ -192,6 +239,11 @@ export const ClientAssetErrorCode = {
    * resolve to the same asset and strategy, tag ownership is one-to-one.
    */
   ISLAND_TAG_DUPLICATE: 'OE_CLIENT_ASSET_ISLAND_TAG_DUPLICATE',
+  /**
+   * The Tailwind entry is enabled but the client entry chunk emitted no
+   * stylesheet — the document would ship unstyled (alpha15 S lane).
+   */
+  STYLESHEET_MISSING: 'OE_CLIENT_ASSET_STYLESHEET_MISSING',
 } as const;
 
 /**
@@ -286,6 +338,40 @@ export const PackageIslandErrorCode = {
   DELIVERY_WITHOUT_MEDIA: 'OE_PACKAGE_ISLAND_DELIVERY_WITHOUT_MEDIA',
   /** A package on the scan list is not installed (its import misses entirely). */
   PACKAGE_MISSING: 'OE_PACKAGE_ISLAND_PACKAGE_MISSING',
+  /** A declaration's `openElement.tailwind` block is malformed. */
+  TAILWIND_SHAPE: 'OE_PACKAGE_ISLAND_TAILWIND_SHAPE',
+} as const;
+
+/**
+ * Stable codes for the AUTO package admission derivation
+ * (`vite/internal/ssg/derived-admission.ts`). Phase `build`.
+ *
+ * The coded ERROR is a failed build. The two coded WARNINGS carry their code
+ * as a `[OE_PACKAGE_ADMISSION_…]` token in the diagnostic text — a warning is
+ * not an OpenElementError, and the token keeps the classification contract
+ * (a host matches by code, never by prose) for the report severity too.
+ */
+export const PackageAdmissionErrorCode = {
+  /**
+   * Two packages claim the same delivered tag and the derivation cannot pick
+   * an owner (neither claimant is explicitly declared). Declare the intended
+   * owner in `packageIslands` — an explicit entry outranks a derived claim.
+   */
+  TAG_CONFLICT: 'OE_PACKAGE_ADMISSION_TAG_CONFLICT',
+  /**
+   * A package-owned element module the app imports has no valid OpenElement
+   * manifest, so it can never deliver (the one true mistake class the
+   * unadmitted-package report keeps under auto). Fix the package (ship a
+   * `manifest` export through its `./manifest` subpath) or stop expecting
+   * component delivery from it.
+   */
+  MANIFEST_LESS: 'OE_PACKAGE_ADMISSION_MANIFEST_LESS',
+  /**
+   * A package element module is reached only through a dynamic `import()`,
+   * which the scan-time reachability contract cannot prove. Declare the
+   * package explicitly in `packageIslands` to admit it.
+   */
+  DYNAMIC_UNPROVEN: 'OE_PACKAGE_ADMISSION_DYNAMIC_UNPROVEN',
 } as const;
 
 /**
@@ -303,26 +389,64 @@ export const RouteScanErrorCode = {
 } as const;
 
 /**
- * Stable codes for the Tailwind preset seam (`vite/preset-tailwind.ts`).
- * Phase `build`: the preset is an opt-in build-layer delivery (alpha9 C2,
- * #1505) — it compiles the app's declared style sources through
- * `@tailwindcss/vite` into one linked bundle and injects the DSD/head
- * `<link>` emission, and every way that can fail carries a code.
+ * Stable codes for the Tailwind entry seam (`vite/tailwind.ts`). Phase
+ * `build`: the entry is an opt-in delivery (alpha9 C2 #1505; externalized in
+ * the alpha15 S lane) — the app's declared style sources are compiled by the
+ * OFFICIAL `@tailwindcss/vite` pipeline inside the client build and the
+ * emitted stylesheet is linked in the document head, so the only failure this
+ * seam owns is the peer's absence.
  */
 export const PresetErrorCode = {
-  /** The preset is enabled but `@tailwindcss/vite` is not resolvable. */
+  /** The entry is enabled but `@tailwindcss/vite` is not resolvable. */
   TAILWIND_UNRESOLVABLE: 'OE_PRESET_TAILWIND_UNRESOLVABLE',
-  /** The preset's bundle compile (an inner Vite build) failed. */
-  BUNDLE_COMPILE_FAILED: 'OE_PRESET_BUNDLE_COMPILE_FAILED',
   /**
-   * The preset is enabled while a rendered page still fully inlines the
-   * global sheet as an inline `<style>` (the `styleText()` full-inline
-   * delivery). The preset's link-not-inline seam is the only global-sheet
-   * channel while it is active: the build fails closed instead of shipping
-   * both deliveries. Per-component `<style data-oe-static-styles>` emission
-   * is not a full-sheet inline and stays legal.
+   * The application disabled the entry (`tailwind: false`) while an admitted
+   * component declaration requires the compile. Fails closed: the
+   * alternative is a component that ships without its presentation.
    */
-  GLOBAL_SHEET_INLINE_FORBIDDEN: 'OE_PRESET_GLOBAL_SHEET_INLINE_FORBIDDEN',
+  TAILWIND_REQUIRED_DISABLED: 'OE_PRESET_TAILWIND_REQUIRED_DISABLED',
+  /**
+   * A declaration's declared source is not package-relative, or names a file
+   * the installed package does not carry.
+   */
+  TAILWIND_SOURCE_UNRESOLVED: 'OE_PRESET_TAILWIND_SOURCE_UNRESOLVED',
+  /**
+   * The application declares both `tailwind` and `unocss`. The style entry has
+   * exactly one compiling engine and the winner must not depend on key order.
+   */
+  STYLE_PROVIDER_CONFLICT: 'OE_PRESET_STYLE_PROVIDER_CONFLICT',
+  /**
+   * An admitted component requires a utility dialect the selected provider
+   * does not implement. Checked before any compile: the alternative is a
+   * half-styled component.
+   */
+  STYLE_DIALECT_UNSUPPORTED: 'OE_PRESET_STYLE_DIALECT_UNSUPPORTED',
+  /**
+   * The UnoCSS entry is enabled but the `unocss` package is not resolvable
+   * from the application.
+   */
+  UNOCSS_UNRESOLVABLE: 'OE_PRESET_UNOCSS_UNRESOLVABLE',
+  /**
+   * The project's own `uno.config.ts` (or the declared config path) cannot be
+   * loaded, or does not export the configuration shape the loader expects.
+   */
+  UNOCSS_CONFIG_UNLOADABLE: 'OE_PRESET_UNOCSS_CONFIG_UNLOADABLE',
+  /**
+   * The UnoCSS compile produced no CSS for a sheet that cannot be empty: the
+   * provider is enabled and candidates were admitted, so an empty result is a
+   * defect of the adapter, never a silently unstyled document.
+   */
+  UNOCSS_EMPTY_COMPILE: 'OE_PRESET_UNOCSS_EMPTY_COMPILE',
+  /**
+   * The declared UnoCSS config path is not app-relative, or names a file the
+   * project does not carry.
+   */
+  UNOCSS_CONFIG_UNRESOLVED: 'OE_PRESET_UNOCSS_CONFIG_UNRESOLVED',
+  /**
+   * A declared UnoCSS `theme` source carries Tailwind's `@theme` at-rule,
+   * which UnoCSS does not compile: the roles would be silently absent.
+   */
+  UNOCSS_THEME_SOURCE_INCOMPATIBLE: 'OE_PRESET_UNOCSS_THEME_SOURCE_INCOMPATIBLE',
 } as const;
 
 /**

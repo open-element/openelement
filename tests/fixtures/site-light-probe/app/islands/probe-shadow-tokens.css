@@ -1,0 +1,8 @@
+/* Imported dependency of the shadow card's sheet (S-C1.3 follow-up).
+   A constructed stylesheet cannot `@import`, so the build must have INLINED
+   this file into the emitted asset before any consumer sees it. The token is
+   declared on `:host`, not `:root`: inside a shadow tree `:root` matches
+   nothing, so a document-level spelling would silently not apply. */
+.probe-shadow-imported{color:rgb(120,60,0)}
+
+:host{--probe-shadow-imported-token:rgb(0,90,90)}

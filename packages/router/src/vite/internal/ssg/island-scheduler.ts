@@ -12,6 +12,18 @@
  * it, and the import registers the island's custom element as its side
  * effect.
  *
+ * PAGE SCOPE (B2): an activation decision is also a page-scope decision. A
+ * tag activates only when the current page actually carries a host for it
+ * (deep query, #562). This is the runtime form of the fact the build already
+ * records per page in the island manifests (#1561): "an island that a page
+ * never reaches is never fetched" (guide/islands-and-ssr). Without it, an
+ * `idle`/`load`/`only` bucket imported every declared island chunk on every
+ * page, which also dragged the shared element runtime into pages whose island
+ * manifest is empty. A tag with no host keeps its factory (nothing is
+ * consumed), so a later decision — a media-query change — can still activate
+ * it. `open:ready` fires per strategy with the tags this page actually
+ * activated, never for a bucket that started no load here.
+ *
  * The generated client entry imports this module through the
  * virtual:open-client-runtime specifier (resolved by build-client.ts) and the
  * bundler wires it in: there is no parallel string copy to drift, and the
@@ -73,6 +85,22 @@ export interface IslandScheduler {
   observeVisible: () => void;
 }
 
+/**
+ * Whether `root` currently carries a host for `tag` anywhere in the composed
+ * tree. Islands live inside page-element DSD shadow roots (#562), so a
+ * document query alone is never enough; the walk descends into every
+ * element's shadow root and stops at the first match.
+ */
+function hasIslandHost(root: ParentNode, tag: string): boolean {
+  if (root.querySelectorAll(tag).length > 0) return true;
+  const all = root.querySelectorAll('*');
+  for (let i = 0; i < all.length; i++) {
+    const shadow = (all[i] as HTMLElement).shadowRoot;
+    if (shadow && hasIslandHost(shadow, tag)) return true;
+  }
+  return false;
+}
+
 export function createIslandScheduler(deps: IslandSchedulerDeps): IslandScheduler {
   const log = deps.log;
   const win = deps.win;
@@ -80,23 +108,35 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
   const map = deps.map;
   const strategies = deps.strategies;
 
-  function load(tag: string): void {
+  /**
+   * Start one island's import. Returns whether a load started HERE: false
+   * when the tag was already consumed or when this page carries no host for
+   * it (the page-scope decision in the module doc). The factory stays in the
+   * map in the no-host case.
+   */
+  function load(tag: string): boolean {
     const factory = map[tag];
-    if (factory) {
-      factory()
-        .then(() => {
-          // #584: late-hydrating islands create their shadow roots after the
-          // ready-time scan; let the enhance layer rescan so enhanced forms
-          // inside them are heard.
-          if (deps.onIslandLoaded) {
-            win.setTimeout(() => {
-              if (deps.onIslandLoaded) deps.onIslandLoaded();
-            }, 0);
-          }
-        })
-        .catch((e: unknown) => log.warn(tag, e));
-      map[tag] = null;
-    }
+    if (!factory) return false;
+    if (!hasIslandHost(doc, tag)) return false;
+    factory()
+      .then(() => {
+        // #584: late-hydrating islands create their shadow roots after the
+        // ready-time scan; let the enhance layer rescan so enhanced forms
+        // inside them are heard.
+        if (deps.onIslandLoaded) {
+          win.setTimeout(() => {
+            if (deps.onIslandLoaded) deps.onIslandLoaded();
+          }, 0);
+        }
+      })
+      .catch((e: unknown) => log.warn(tag, e));
+    map[tag] = null;
+    return true;
+  }
+
+  /** The subset of a bucket this page can activate. */
+  function loadAll(tags: readonly string[]): string[] {
+    return tags.filter(load);
   }
 
   function onReady(fn: () => void): void {
@@ -108,8 +148,8 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
   }
 
   function dispatchReady(strategy: string, tags: readonly string[]): void {
-    // #605: EVERY non-empty strategy bucket fires open:ready as its loads are
-    // initiated — load/only used to stay silent while idle/visible fired.
+    // #605: EVERY strategy bucket that starts a load here fires open:ready as
+    // its loads are initiated — the detail names exactly the activated tags.
     doc.dispatchEvent(
       new win.CustomEvent('open:ready', {
         detail: { strategy: strategy, islands: tags },
@@ -118,13 +158,11 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
   }
 
   // client:load islands - import immediately
-  const loadTags = strategies.load;
-  loadTags.forEach(load);
+  const loadTags = loadAll(strategies.load);
   if (loadTags.length > 0) dispatchReady('load', loadTags);
 
   // client:only islands - import immediately, no DSD/SSR expected
-  const onlyTags = strategies.only;
-  onlyTags.forEach(load);
+  const onlyTags = loadAll(strategies.only);
   if (onlyTags.length > 0) dispatchReady('only', onlyTags);
 
   // client:visible islands - load when their element enters viewport
@@ -149,8 +187,8 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
   function observeVisible(): void {
     if (visibleTags.length === 0) return;
     if (typeof win.IntersectionObserver !== 'function') {
-      visibleTags.forEach(load);
-      dispatchReady('visible', visibleTags);
+      const activated = loadAll(visibleTags);
+      if (activated.length > 0) dispatchReady('visible', activated);
       return;
     }
     // Release detached islands before scanning: their observers can never
@@ -176,8 +214,7 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
           (entries) => {
             entries.forEach((entry) => {
               if (entry.isIntersecting) {
-                load(tag);
-                dispatchReady('visible', [tag]);
+                if (load(tag)) dispatchReady('visible', [tag]);
                 obs.disconnect();
                 observedEls.delete(el);
               }
@@ -201,9 +238,9 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
   const mediaReady = new Set<string>();
 
   const dispatchMedia = (tag: string): void => {
-    if (mediaReady.has(tag) || !map[tag]) return;
+    if (mediaReady.has(tag)) return;
+    if (!load(tag)) return;
     mediaReady.add(tag);
-    load(tag);
     dispatchReady('media', [tag]);
   };
 
@@ -225,8 +262,8 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
   const idleTags = strategies.idle;
   if (idleTags.length > 0) {
     const deferred = (): void => {
-      idleTags.forEach(load);
-      dispatchReady('idle', idleTags);
+      const activated = loadAll(idleTags);
+      if (activated.length > 0) dispatchReady('idle', activated);
     };
     const schedule: (fn: () => void) => unknown =
       win.requestIdleCallback ||

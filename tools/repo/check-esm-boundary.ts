@@ -26,7 +26,7 @@
 import { readPackages } from '../lib/package-graph.ts';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
-import { commandOutput } from './node-command.ts';
+import { spawnCommand } from './node-command.ts';
 
 /** Non-package source roots covered by the pure-ESM boundary. Package src
  * trees are discovered from the workspace (readPackages) so a new package is
@@ -89,7 +89,7 @@ export function scanExportsConditions(
 }
 
 async function trackedFiles(): Promise<string[]> {
-  const command = await commandOutput('git', {
+  const command = await spawnCommand('git', {
     args: ['ls-files'],
     stdout: 'piped',
     stderr: 'null',

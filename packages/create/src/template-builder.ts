@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { CREATE_VERSION, VITE_STARTER_PIN } from './version.ts';
+import { CREATE_VERSION } from './version.ts';
 
 // npm package-name ceiling (validate-npm-package-name); a generated project
 // directory must stay a legal package name so `npm init`-style flows and
@@ -62,53 +62,60 @@ export function assertUnifiedProductVersions(versions: ProductVersions): Product
   return versions;
 }
 
-// [sourceTemplate, targetRelativePath] pairs. The starter manifest is stored
+// [sourceTemplate, targetRelativePath] pairs — the SINGLE source for the
+// starter file mapping (M-C2). The cli.test.ts toolchain gate consumes this
+// exact list instead of keeping its own 28-pair copy, so adding a template
+// file cannot pass the scaffold and fail the gate (or vice versa).
+//
+// The starter manifest is stored
 // as package.json.tmpl so the templates/ directory never looks like a nested
 // package root to npm tooling; pnpm scripts and the @openelement/* dependency
-// ranges (caret over the generated-from release — owner ruling 2026-10-09;
-// B5: the former deno.json import map) live in it when written.
+// ranges live in it when written.
 //
 // One template: the showcase starter, Tailwind-ON (the owner's single-default
 // ruling — one default, no variant pair, no flag; the demo pages and islands
 // from #1530 ride on top of the Tailwind role sheet).
-const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
+export const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   // npm tarballs omit dotfiles even when a directory is included. Keep the
   // template non-hidden and write the expected dotfile into generated apps.
   ['gitignore.tmpl', '.gitignore'],
   ['README.tmpl', 'README.md'],
   ['public/openelement-mark.svg', 'public/openelement-mark.svg'],
-  // B5 (ADR-0161): the starter is a plain Node/pnpm project. Framework
+  // B5 (ADR-0161): the starter is a plain Node project. Framework
   // consumption resolves through package.json dependencies (npm is the only
   // public registry; packed first-party modules carry no bare @std/*
   // specifiers, so no @jsr registry bridge is generated), the lifecycle is
-  // pnpm scripts, and tsconfig.json owns the `check` type-check surface.
+  // package.json scripts, and tsconfig.json owns the `check` type-check
+  // surface. Manager-neutral since alpha.15: the scripts are plain commands
+  // (`oe dev` / `oe build` / `oe start` / `oxfmt` / `oxlint` / `tsc` /
+  // `node --test`), the manifest declares no `packageManager`, and the
+  // scaffold ships NO pnpm-workspace.yaml — the file existed only to host the
+  // Vite+ catalog and its `vite@*` override, and `catalog:` is a pnpm-only
+  // protocol that made npm/yarn/bun installs fail outright
+  // (EUNSUPPORTEDPROTOCOL). With explicit version pins in this manifest there
+  // is nothing left for a workspace file to declare.
   ['package.json.tmpl', 'package.json'],
   ['tsconfig.json.tmpl', 'tsconfig.json'],
   ['vite.config.ts.tmpl', 'vite.config.ts'],
-  // The Vite+ workspace form: the catalog/override pair that points the vite
-  // tree at the Vite+ core, plus the release-day supply-chain exemptions.
-  // pnpm treats the file as its own bookkeeping and rewrites it as needed.
-  ['pnpm-workspace.yaml.tmpl', 'pnpm-workspace.yaml'],
   // #1411: framework options live in openelement.config.ts; the starter ships
   // it near-empty, so every option comes from a file convention until the user
   // overrides one.
   ['openelement.config.ts.tmpl', 'openelement.config.ts'],
   // The @theme role sheet — the ONE styling source (dev serves it directly,
-  // build compiles it through the router's Tailwind preset).
+  // build compiles it through the router's Tailwind entry). Every
+  // presentation value the scaffold renders is a Tailwind utility in markup;
+  // the per-component sheets below hold each root's own box rule, which has
+  // no markup to carry it.
   ['app/styles/theme.css', 'app/styles/theme.css'],
-  // #1557: the retired ui zero-interaction component shapes ship as plain
-  // HTML+CSS recipes the consumer deletes if unused (never an npm dep).
-  ['app/styles/recipes.css', 'app/styles/recipes.css'],
-  // alpha.4: the structural document-head convention. The config file carries
+  // The structural document-head convention. The config file carries
   // the structured `head` channel (title/description/favicon/scripts); this
   // module carries what a URL list cannot express (meta tags, preloads).
   ['app/head.tsx.tmpl', 'app/head.tsx'],
-  // #1558: page CSS is .css files — the one style authoring form. Pages
-  // import and array their sheets in `static styles`.
+  // The one authored rule left per component: the root box. Pages array
+  // their own sheet in `static styles`; the layout arrays the chrome sheet.
   ['app/components/page-home.css', 'app/components/page-home.css'],
   ['app/components/page-about.css', 'app/components/page-about.css'],
   ['app/components/page-404.css', 'app/components/page-404.css'],
-  ['app/components/badges.css', 'app/components/badges.css'],
   ['app/components/site-chrome.css', 'app/components/site-chrome.css'],
   ['app/components/page-home.tsx.tmpl', 'app/components/page-home.tsx'],
   ['app/components/page-about.tsx.tmpl', 'app/components/page-about.tsx'],
@@ -121,9 +128,9 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['app/islands/my-counter.css', 'app/islands/my-counter.css'],
   ['app/islands/live-timer.tsx.tmpl', 'app/islands/live-timer.tsx'],
   ['app/islands/live-timer.css', 'app/islands/live-timer.css'],
-  // The auto-registered application shell (the islands/app-shell.tsx
+  // The auto-registered layout (the app/layout.tsx
   // convention): owns the shared site chrome every page renders inside.
-  ['app/islands/app-shell.tsx.tmpl', 'app/islands/app-shell.tsx'],
+  ['app/layout.tsx.tmpl', 'app/layout.tsx'],
 ];
 
 function versionTokens(v: ProductVersions): Record<string, string> {
@@ -141,11 +148,8 @@ export async function buildTemplates(
   const invalid = validateProjectName(projectName);
   if (invalid) throw new Error(`Invalid project name "${projectName}". ${invalid}`);
   const templatesBase = new URL('../templates/', import.meta.url);
-  // The starter's Vite pin comes from the workspace-anchored VITE_STARTER_PIN
-  // (deps:vite-check), not from the product release version.
   const tokens = {
     ...versionTokens(v),
-    ['$' + '{v.vite}']: VITE_STARTER_PIN,
     ['$' + '{name}']: projectName,
   };
   const entries = await Promise.all(

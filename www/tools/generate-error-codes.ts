@@ -27,8 +27,12 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
 export const ERROR_CODES_ARTIFACT = 'www/app/data/_generated-error-codes.ts';
-/** The page whose table must project this artifact (never restate it). */
-const ERROR_CODES_PAGE = 'www/app/components/page-errors.tsx';
+/**
+ * The page whose table must project this artifact (never restate it). The
+ * server function page form (alpha15) puts the page component function in the
+ * route module itself, so the page and the route are one file — listed once.
+ */
+const ERROR_CODES_PAGE = 'www/app/routes/errors.tsx';
 /** The route that projects the generated inventory onto the page. */
 const ERROR_CODES_ROUTE = 'www/app/routes/errors.tsx';
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));

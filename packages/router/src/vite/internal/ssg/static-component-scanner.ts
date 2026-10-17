@@ -1,42 +1,16 @@
 /** Discover compiled static components reachable from local route imports. */
-import { readFile, stat } from 'node:fs/promises';
-import { dirname, extname, isAbsolute, join, relative, resolve } from 'pathe';
+import { readFile } from 'node:fs/promises';
+import { isAbsolute, relative, resolve } from 'pathe';
 import type { RouteEntry } from '../../framework.ts';
 import type { StaticComponentDecl } from '@openelement/protocol/ssg';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
-
-const SOURCE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'] as const;
+import { walkModuleGraph, type ModuleWalkResolver } from '../module-graph-walk.ts';
 
 function inside(root: string, candidate: string): boolean {
   const path = relative(root, candidate);
   return path === '' || (!path.startsWith('..') && !isAbsolute(path));
-}
-
-async function sourceFile(candidate: string): Promise<string | undefined> {
-  try {
-    const fileStat = await stat(candidate);
-    return fileStat.isFile() ? candidate : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function resolveLocalImport(from: string, specifier: string): Promise<string | undefined> {
-  if (!specifier.startsWith('.')) return undefined;
-  const base = resolve(dirname(from), specifier);
-  const candidates = extname(base)
-    ? [base]
-    : [
-        ...SOURCE_EXTENSIONS.map((extension) => base + extension),
-        ...SOURCE_EXTENSIONS.map((extension) => join(base, `index${extension}`)),
-      ];
-  for (const candidate of candidates) {
-    const found = await sourceFile(candidate);
-    if (found) return found;
-  }
-  return undefined;
 }
 
 export interface ScanStaticComponentsOptions {
@@ -44,12 +18,25 @@ export interface ScanStaticComponentsOptions {
   routesDir: string;
   islandsDir: string;
   routes: readonly RouteEntry[];
+  /**
+   * The BUNDLER's resolver (`this.resolve`), so reachability follows every
+   * specifier form the bundler itself understands — a relative path, a
+   * `package.json` `imports` subpath, a configured alias — exactly as the graph
+   * walk in the client build does (defect B: a component reached only through
+   * an alias was not inventoried here, so the server rendered its host tag with
+   * no DSD template while the build reported success).
+   */
+  resolve: ModuleWalkResolver;
 }
 
 /**
- * Follow only project-local static imports from page routes. The result is a
- * deterministic explicit registry input for the generated Vite SSR entry;
- * package imports and files outside root remain opaque.
+ * Every compiled static component the page routes can reach, following the
+ * BUNDLER-RESOLVED static import graph (`walkModuleGraph`, the same traversal
+ * the build's other discovery passes use). The result is a deterministic
+ * explicit registry input for the generated Vite SSR entry; modules outside
+ * this project root (package imports, linked packages) stay opaque — a
+ * package's components are admitted through its manifest, not through this
+ * scan.
  */
 export async function scanStaticComponents(
   options: ScanStaticComponentsOptions,
@@ -57,16 +44,14 @@ export async function scanStaticComponents(
   const root = resolve(options.root);
   const routeRoot = resolve(root, options.routesDir);
   const islandRoot = resolve(root, options.islandsDir);
-  const pending = options.routes
+  const seeds = options.routes
     .filter((route) => route.type === 'page' && !route.special)
     .map((route) => resolve(routeRoot, route.filePath));
-  const seen = new Set<string>();
+  const walk = await walkModuleGraph(options.resolve, seeds);
   const byTag = new Map<string, StaticComponentDecl>();
 
-  while (pending.length > 0) {
-    const file = pending.pop()!;
-    if (seen.has(file) || !inside(root, file)) continue;
-    seen.add(file);
+  for (const file of walk.files) {
+    if (!inside(root, file)) continue;
     let source: string;
     try {
       source = await readFile(file, 'utf8');
@@ -92,10 +77,6 @@ export async function scanStaticComponents(
         modulePath,
         compilerInteractionEvents: semantics.compilerInteractionEvents,
       });
-    }
-    for (const specifier of semantics.relativeImports) {
-      const imported = await resolveLocalImport(file, specifier);
-      if (imported && inside(root, imported) && !seen.has(imported)) pending.push(imported);
     }
   }
 

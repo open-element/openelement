@@ -239,7 +239,7 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
         !hasProjectedLightContent(newElement) &&
         containsSlot((oldElement as HTMLElement).shadowRoot as ShadowRoot)
       ) {
-        // A compiled app shell currently carries its route as <slot>
+        // A compiled layout currently carries its route as <slot>
         // fallback inside the shell DSD. Once the browser consumes the DSD,
         // both hosts have empty light DOM, so the normal island-preservation
         // check cannot see a route/action response change. Morph the live
@@ -271,7 +271,7 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
       if ((oldElement as HTMLElement).shadowRoot && newTemplate) {
         morphChildren((oldElement as HTMLElement).shadowRoot as ShadowRoot, newTemplate.content);
         // #937: a slot-based shell keeps its pages as light-DOM children
-        // (e.g. <app-shell><page-x>...</page-x></app-shell>); the shadow morph
+        // (e.g. <app-layout><page-x>...</page-x></app-layout>); the shadow morph
         // alone leaves slotted content stale, so descend into non-empty light
         // DOM too. An empty light DOM means the template was the whole story.
         if (oldElement.childNodes.length > 0) morphChildren(oldElement, newElement);

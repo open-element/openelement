@@ -6,9 +6,10 @@ adapt, scaffold, build, and distribute those products.
 - [Design principles](./design-principles.md) ([中文](./design-principles.zh.md))
 - [Product model](./product-model.md)
 - [Compiler and element runtime](./compiler-and-element-runtime.md)
-- [Rendering and claim](./rendering-and-claim.md)
+- [Rendering and hydration](./rendering-and-hydration.md)
 - [Router and server runtime](./router-and-server-runtime.md)
 - [Packages and distribution](./packages-and-distribution.md)
+- [Seams registry](./seams.md)
 - [Security and release engineering](./security-and-release-engineering.md)
 
 Active ADRs retain decisions that still constrain the implementation. Retired

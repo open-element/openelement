@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { dirname, join } from 'node:path';
 import ts from 'typescript';
-import { createDeferredDsdExecutor } from '@openelement/element';
+import { createStreamShellExecutor } from '@openelement/element';
 import { compileElementProgram } from '@openelement/compiler';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { renderEntry } from '../src/vite/internal/ssg/entry-orchestrator.ts';
@@ -51,7 +51,7 @@ test('stream manifest binds two loader fields to independent compiled Part owner
   await fixture(async (dir) => {
     const routes = await scanRoutes(dir, '', { root: dirname(dir) });
     const manifest = routes[0].streamManifest!;
-    expect(manifest.program.version).toEqual(1);
+    expect(manifest.program.version).toEqual(2);
     expect(manifest.program.tag).toEqual('stream-page');
     expect(manifest.program.sha256.length).toEqual(64);
     expect(manifest.fields.map((entry) => entry.field)).toEqual(['first', 'second']);
@@ -108,7 +108,7 @@ test('stream manifest binds two loader fields to independent compiled Part owner
     });
     await assertRejectsIncludes(
       () =>
-        createDeferredDsdExecutor({
+        createStreamShellExecutor({
           componentClass: ChangedPage as unknown as CustomElementConstructor,
           manifest,
           instanceId: 'changed-runtime-program',
@@ -125,16 +125,16 @@ test('stream manifest binds two loader fields to independent compiled Part owner
     expect(code).toContain(manifest.program.sha256);
     // ADR-0160 Amendment 1: the deferred-shell gate is the typed runtime
     // module — the entry imports the factory, binds it to the serialized
-    // manifests + createDeferredDsdExecutor import, and keeps the call site;
+    // manifests + createStreamShellExecutor import, and keeps the call site;
     // the gate's fail-closed contract is pinned by the behavior tests in
     // server-runtime-stream-runtime.test.ts instead of emitted text.
     expect(code).toContain(
-      "import { createDeferredPageShell as __createDeferredPageShellGate } from '@openelement/router/server-runtime'",
+      "import { createStreamPageShell as __createStreamPageShellGate } from '@openelement/router/server-runtime'",
     );
     expect(code).toContain(
-      'const __createDeferredPageShell = __createDeferredPageShellGate({ streamManifests: __streamManifests, createDeferredDsdExecutor });',
+      'const __createStreamPageShell = __createStreamPageShellGate({ streamManifests: __streamManifests, createStreamShellExecutor });',
     );
-    expect(code).toContain('await __createDeferredPageShell(');
+    expect(code).toContain('await __createStreamPageShell(');
     expect(code).toContain('"location":"p1"');
     expect(renderEntry(buildEntryDescriptor(routes))).toContain('export const __streamManifests =');
   });
@@ -153,7 +153,7 @@ test('ordinary routes do not gain stream metadata', async () => {
   );
 });
 
-test('bounded when/each Regions own their deferred field independently', async () => {
+test('bounded when/each Blocks own their deferred field independently', async () => {
   const whenPage = page.replace(
     '<h1>{this.first}</h1>',
     '{this.first ? <h1>on</h1> : <h1>off</h1>}',
@@ -698,7 +698,7 @@ test('generated entry rejects opaque stream descriptors before serving GET', asy
             openElementPage: {
               renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },
             },
-            __partProgram: { version: 1, tag: 'stream-page' },
+            __partProgram: { version: 2, tag: 'stream-page' },
           },
         };
         const error = assertThrowsIncludes(
@@ -725,17 +725,31 @@ test('generated entry rejects opaque stream descriptors before serving GET', asy
         openElementPage: {
           renderIntent: { stream: { defer: ['first', 'second'] } },
         },
-        __partProgram: { version: 1, tag: 'stream-page' },
+        __partProgram: { version: 2, tag: 'stream-page' },
       },
     };
     mod.__assertStreamRoute(pageModule, '/', 'index.tsx', routes[0].streamManifest);
+    // M-R4: the defer list is a SET — the same fields in authored-vs-program
+    // order must not trip STREAM_DECLARATION_MISMATCH (key-order drift used
+    // to false-positive here). A genuinely different set still throws.
+    mod.__assertStreamRoute(
+      {
+        default: {
+          ...pageModule.default,
+          openElementPage: { renderIntent: { stream: { defer: ['second', 'first'] } } },
+        },
+      },
+      '/',
+      'index.tsx',
+      routes[0].streamManifest,
+    );
     assertThrowsIncludes(
       () =>
         mod.__assertStreamRoute(
           {
             default: {
               ...pageModule.default,
-              openElementPage: { renderIntent: { stream: { defer: ['second', 'first'] } } },
+              openElementPage: { renderIntent: { stream: { defer: ['first', 'third'] } } },
             },
           },
           '/',
@@ -748,13 +762,13 @@ test('generated entry rejects opaque stream descriptors before serving GET', asy
   });
 });
 
-test('streaming requires the project-wide app shell to be off, and the gate says so', async () => {
+test('streaming requires the project-wide layout to be off, and the gate says so', async () => {
   const shell = { tagName: 'open-layout', import: '@acme/components/open-layout', props: {} };
   const cases: Array<[string, Parameters<typeof buildEntryDescriptor>[1], string]> = [
-    ['default appShell', { ssg: true, appShell: shell }, 'whole project'],
+    ['default layout', { ssg: true, layout: shell }, 'whole project'],
     [
       'named layout with no default shell',
-      { ssg: true, appShell: false, layouts: { post: shell } },
+      { ssg: true, layout: false, layouts: { post: shell } },
       'Streaming routes: / (index.tsx)',
     ],
     ['layouts.default', { ssg: true, layouts: { default: shell, post: false } }, 'whole project'],
@@ -767,7 +781,7 @@ test('streaming requires the project-wide app shell to be off, and the gate says
       // The gate is project-level, so the guidance must name the project-wide
       // action instead of a per-route opt-out the build cannot see.
       expect(error.message, name).toContain(expected);
-      expect(error.message, name).toContain('appShell: false');
+      expect(error.message, name).toContain('layout: false');
       expect(error.message, name).toContain('layouts');
       expect(error.message, name).toContain('cannot satisfy this gate');
       expect(error.message, name).toContain('route: { layout: false }');
@@ -778,9 +792,9 @@ test('streaming requires the project-wide app shell to be off, and the gate says
   await fixture(
     async (dir) => {
       const routes = await scanRoutes(dir);
-      const desc = buildEntryDescriptor(routes, { ssg: true, appShell: shell });
+      const desc = buildEntryDescriptor(routes, { ssg: true, layout: shell });
       expect(desc.pageRoutes[0].streamManifest).toEqual(undefined);
-      expect(desc.appShell.default === false).toEqual(false);
+      expect(desc.layout.default === false).toEqual(false);
     },
     page,
     route.replace("stream: { defer: ['first', 'second'] }", ''),
@@ -789,9 +803,9 @@ test('streaming requires the project-wide app shell to be off, and the gate says
   // configuration) and the gate stays silent.
   await fixture(async (dir) => {
     const routes = await scanRoutes(dir);
-    const desc = buildEntryDescriptor(routes, { ssg: true, appShell: false, layouts: {} });
+    const desc = buildEntryDescriptor(routes, { ssg: true, layout: false, layouts: {} });
     expect(desc.pageRoutes[0].streamManifest?.fields.length).toEqual(2);
-    expect(desc.appShell.default).toEqual(false);
+    expect(desc.layout.default).toEqual(false);
   });
 });
 

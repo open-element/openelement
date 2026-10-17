@@ -26,12 +26,34 @@ import { accessSync, constants } from 'node:fs';
 import { join } from 'node:path';
 
 /**
+ * The fail-closed selector flag, non-optional by construction for every
+ * tooling-spawned task.
+ *
+ * `vp run <pkg>#<task>` resolves the package part by exact package NAME and
+ * exits 0 without running anything when nothing matches — the same is true
+ * with `--fail-if-no-match` appended (measured against vp 1.0.0), because the
+ * flag is a property of `--filter`. Only `--filter <pkg>` plus this flag turns
+ * a no-match into a non-zero exit. The tooling therefore never dispatches the
+ * `pkg#task` specifier form: this argv, built here and nowhere else, is the
+ * fail-closed shape, and tools/repo/check-vp-selector-flags.ts is the tripwire
+ * for the hand-written call sites (workflow `run:` steps, hooks, package.json
+ * scripts) that do not go through it.
+ */
+const FAIL_IF_NO_MATCH = '--fail-if-no-match';
+
+/**
  * The canonical argv for one vp-dispatched task, with the literal `vp` at
  * position 0 (the executable basename evidence normalizes to). Spawn callers
  * replace that element with the real executable path from `vpExecutable`.
+ *
+ * The flag is emitted unconditionally: it is the policy, not an option a
+ * caller chooses, which is why no caller passes it and no caller can omit it.
+ * A task that had to tolerate an unmatched selector would require changing
+ * this function — one reviewed place that must explain itself, instead of one
+ * of seventy call sites silently dropping it.
  */
 export function vpTaskArgv(pkg: string, task: string): string[] {
-  return ['vp', 'run', '--no-cache', '--fail-if-no-match', '--filter', pkg, task];
+  return ['vp', 'run', '--no-cache', FAIL_IF_NO_MATCH, '--filter', pkg, task];
 }
 
 /**

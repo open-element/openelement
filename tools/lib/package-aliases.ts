@@ -38,7 +38,11 @@ export function allPackageAliases(repoRoot: string): Map<string, string> {
       );
     }
     const { name: packageName, exports: exportsField } = manifest;
-    if (!packageName) continue;
+    if (!packageName) {
+      // A member without a name is not resolvable — fail loudly (the
+      // manifest contract above), never silently skip it.
+      throw new Error(`package-aliases: ${join(pkgDir, 'package.json')} has no "name" field`);
+    }
 
     if (typeof exportsField === 'string') {
       entries.push([packageName, pathToFileURL(join(pkgDir, exportsField)).href]);

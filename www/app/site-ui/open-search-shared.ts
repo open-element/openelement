@@ -46,7 +46,7 @@ export type SearchHost = HTMLElement & {
 
 /**
  * Static element ids of the combobox graph (open-search.tsx renders them).
- * One island ships per page (the app shell header), so the fixed strings are
+ * One island ships per page (the layout header), so the fixed strings are
  * unambiguous and stable across hydration.
  */
 export const IDS = {

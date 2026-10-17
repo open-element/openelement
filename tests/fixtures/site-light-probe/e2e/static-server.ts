@@ -23,5 +23,5 @@ const PORT = Number(args.port ?? '4281');
 const ROOT = args.dir ?? '../dist';
 
 const port = await findPort(PORT);
-const server = serveStatic(ROOT, { port });
+const server = await serveStatic(ROOT, { port });
 console.log(`site-light-probe fixture static server listening on ${server.origin}`);

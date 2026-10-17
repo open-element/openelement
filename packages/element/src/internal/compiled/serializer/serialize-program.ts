@@ -5,7 +5,7 @@
  * (`internal/compiled/runtime.ts`) delegate every walk to this module; neither
  * keeps a private walker.
  *
- * The kernel owns the whole walk: template/Part/Region traversal, anchor
+ * The kernel owns the whole walk: template/Part/Block traversal, anchor
  * markers, item and slot interpretation, escaping, and attribute assembly. It
  * is host-free by design (same base-of-graph discipline as
  * `stream-frame-policy.ts`): zero DOM, zero Router, no module
@@ -19,7 +19,7 @@
  *   after statics and emits boolean presence as a bare `name`),
  * - the trusted-HTML capability check, the nested-element render callback,
  *   the slot projection source, and the pending streamed-marker set,
- * - Region item admission (the server validates item records and keys; the
+ * - Block item admission (the server validates item records and keys; the
  *   seed path renders order-preserving without keying).
  *
  * Both callers inject the canonical shared helpers (`escapeAttr`,
@@ -30,7 +30,7 @@
 import {
   partAnchorEndMarker,
   partAnchorMarker,
-  type PartProgramV1,
+  type PartProgramV2,
   type ProgramAttrPart,
   type ProgramBoolPart,
   type ProgramClassPart,
@@ -73,7 +73,7 @@ export type ProgramAttributeSink =
   | ProgramClassPart
   | ProgramStylePart;
 
-/** Item context while serializing an each Region's item template. */
+/** Item context while serializing an each Block's item template. */
 interface ItemContext {
   readonly part: ProgramEachPart;
   readonly item: unknown;
@@ -123,10 +123,10 @@ export interface SerializeProgramSeams {
   itemTextValue(part: ProgramEachPart, node: ProgramItemValueNode, item: unknown): string;
   /** One text Part's raw text; the kernel escapes it. */
   textPartValue(value: unknown): string;
-  /** when-Region branch selection; the mode owns evaluation errors. */
+  /** when-Block branch selection; the mode owns evaluation errors. */
   whenHolds(part: ProgramWhenPart, value: unknown): boolean;
-  /** each-Region item admission; the mode owns array/record/key validation. */
-  regionItems(part: ProgramEachPart, value: unknown): readonly unknown[];
+  /** each-Block item admission; the mode owns array/record/key validation. */
+  blockItems(part: ProgramEachPart, value: unknown): readonly unknown[];
   /** Canonical attribute escape (#1220) — injected, never re-implemented. */
   escapeAttr(value: string): string;
   /** Trusted-HTML capability check; untrusted values fail closed here. */
@@ -142,16 +142,22 @@ export interface SerializeProgramSeams {
 }
 
 interface WalkContext {
-  readonly program: PartProgramV1;
+  readonly program: PartProgramV2;
   readonly seams: SerializeProgramSeams;
-  /** attr/prop/bool/class/style sinks keyed by template path (part order). */
-  readonly sinksByPath: Map<string, ProgramAttributeSink[]>;
-  /** html content sinks keyed by template path. */
-  readonly htmlSinksByPath: Map<string, ProgramHtmlPart>;
+  /**
+   * attr/prop/bool/class/style sinks keyed by the sink's location element id
+   * (part order). Attribution is by element id, not by walk path: the ids are
+   * globally unique across the template and every Block branch tree, so a
+   * branch sink binds to exactly its own branch's element even where the two
+   * branches share a branch-relative suffix (alpha15).
+   */
+  readonly sinksByNode: Map<string, ProgramAttributeSink[]>;
+  /** html content sinks keyed by the sink's location element id. */
+  readonly htmlSinksByNode: Map<string, ProgramHtmlPart>;
   readonly consumedProjections: Set<string>;
 }
 
-function isAttributeSink(part: PartProgramV1['parts'][number]): part is ProgramAttributeSink {
+function isAttributeSink(part: PartProgramV2['parts'][number]): part is ProgramAttributeSink {
   return (
     part.k === 'attr' ||
     part.k === 'prop' ||
@@ -161,40 +167,54 @@ function isAttributeSink(part: PartProgramV1['parts'][number]): part is ProgramA
   );
 }
 
-function createWalkContext(program: PartProgramV1, seams: SerializeProgramSeams): WalkContext {
-  const sinksByPath = new Map<string, ProgramAttributeSink[]>();
-  const htmlSinksByPath = new Map<string, ProgramHtmlPart>();
-  for (const part of program.parts) {
-    if (isAttributeSink(part)) {
-      const key = part.path.join('.');
-      const sinks = sinksByPath.get(key) ?? [];
-      sinks.push(part);
-      sinksByPath.set(key, sinks);
-      continue;
-    }
-    if (part.k === 'html') {
-      // The validator rejects a second html sink on one path, so the first
-      // record is the single owner.
-      const key = part.path.join('.');
-      if (!htmlSinksByPath.has(key)) htmlSinksByPath.set(key, part);
-    }
-  }
-  return {
-    program,
-    seams,
-    sinksByPath,
-    htmlSinksByPath,
-    consumedProjections: seams.consumedProjections ?? new Set<string>(),
-  };
-}
-
 /** Fail closed on shapes the wire validator rejects before any walk runs. */
 function failUnreachable(code: string, message: string): never {
   raiseFrameworkError('render', code, message);
 }
 
-function orderedSinks(ctx: WalkContext, path: readonly number[]): readonly ProgramAttributeSink[] {
-  const sinks = ctx.sinksByPath.get(path.join('.')) ?? [];
+/** A validated sink location always names its target element (see validator). */
+function sinkNodeId(part: ProgramAttributeSink | ProgramHtmlPart): string {
+  const nodeId = part.location.node;
+  if (nodeId === undefined) {
+    failUnreachable(
+      RuntimeErrorCode.PATH_UNRESOLVED,
+      `[compiled-serializer] ${part.k} Part has no sink node`,
+    );
+  }
+  return nodeId;
+}
+
+function createWalkContext(program: PartProgramV2, seams: SerializeProgramSeams): WalkContext {
+  const sinksByNode = new Map<string, ProgramAttributeSink[]>();
+  const htmlSinksByNode = new Map<string, ProgramHtmlPart>();
+  for (const part of program.parts) {
+    if (isAttributeSink(part)) {
+      // The validator pins location.node to the path-resolved element, so the
+      // id is the sink's own target on the main template and inside branches.
+      const nodeId = sinkNodeId(part);
+      const sinks = sinksByNode.get(nodeId) ?? [];
+      sinks.push(part);
+      sinksByNode.set(nodeId, sinks);
+      continue;
+    }
+    if (part.k === 'html') {
+      // The validator rejects a second html sink on one path, so the first
+      // record is the single owner.
+      const nodeId = sinkNodeId(part);
+      if (!htmlSinksByNode.has(nodeId)) htmlSinksByNode.set(nodeId, part);
+    }
+  }
+  return {
+    program,
+    seams,
+    sinksByNode,
+    htmlSinksByNode,
+    consumedProjections: seams.consumedProjections ?? new Set<string>(),
+  };
+}
+
+function orderedSinks(ctx: WalkContext, node: ProgramElementNode): readonly ProgramAttributeSink[] {
+  const sinks = [...(ctx.sinksByNode.get(node.id) ?? [])];
   if (ctx.seams.sinkOrder === 'part-index') return sinks;
   // The server contract groups property sinks after the value sinks; both
   // groups keep part order.
@@ -249,7 +269,7 @@ function assembleElementAttributes(
   if (seams.attributeAssembly === 'merge-by-name') {
     const merged = new Map<string, SerializedAttribute>();
     for (const attr of statics) merged.set(attr.name, attr);
-    for (const sink of orderedSinks(ctx, path)) {
+    for (const sink of orderedSinks(ctx, node)) {
       const { attribute, property } = sinkAttribute(ctx, node, sink, path);
       if (sink.k === 'prop') properties[sink.name] = property;
       const name = sinkAttributeName(sink);
@@ -259,7 +279,7 @@ function assembleElementAttributes(
     attributes = [...merged.values()];
   } else {
     attributes = [...statics];
-    for (const sink of orderedSinks(ctx, path)) {
+    for (const sink of orderedSinks(ctx, node)) {
       const { attribute, property } = sinkAttribute(ctx, node, sink, path);
       if (sink.k === 'prop') properties[sink.name] = property;
       if (attribute !== null) attributes.push(attribute);
@@ -269,7 +289,7 @@ function assembleElementAttributes(
     if (!item) {
       failUnreachable(
         RuntimeErrorCode.ITEM_SLOT_OUTSIDE_REGION,
-        '[compiled-serializer] item attribute slot outside an each Region',
+        '[compiled-serializer] item attribute slot outside an each Block',
       );
     }
     for (const [name, field] of node.iattrs) {
@@ -289,7 +309,6 @@ function assembleElementAttributes(
 function slotNameOf(
   ctx: WalkContext,
   node: ProgramElementNode,
-  path: readonly number[],
   item: ItemContext | undefined,
   attributes: readonly SerializedAttribute[],
 ): string {
@@ -300,7 +319,7 @@ function slotNameOf(
     return named === undefined ? '' : String(named.bare ? true : named.value);
   }
   let name = node.attrs.find(([attribute]) => attribute === 'slot')?.[1] ?? '';
-  for (const sink of ctx.sinksByPath.get(path.join('.')) ?? []) {
+  for (const sink of ctx.sinksByNode.get(node.id) ?? []) {
     if (sink.k === 'attr' && sink.name === 'slot') {
       const emission = ctx.seams.attributeEmission(sink, ctx.seams.signalValue(sink.signal));
       name = emission?.value ?? '';
@@ -330,7 +349,7 @@ function serializeElement(
   if (VOID_TAGS.has(node.tag)) {
     html = `${open}>`;
   } else {
-    const htmlSink = ctx.htmlSinksByPath.get(path.join('.'));
+    const htmlSink = ctx.htmlSinksByNode.get(node.id);
     if (htmlSink) {
       html = `${open}>${seams.trustedHtml(seams.signalValue(htmlSink.signal))}</${node.tag}>`;
     } else {
@@ -358,17 +377,17 @@ function serializeElement(
       }
     }
   }
-  return { html, slotName: slotNameOf(ctx, node, path, item, attributes) };
+  return { html, slotName: slotNameOf(ctx, node, item, attributes) };
 }
 
-function regionItemsHtml(
+function blockItemsHtml(
   ctx: WalkContext,
   part: ProgramEachPart,
   value: unknown,
   anchorPath: readonly number[],
 ): string {
   return ctx.seams
-    .regionItems(part, value)
+    .blockItems(part, value)
     .map((item) => serializeNodes(ctx, part.item, anchorPath, { part, item }).html)
     .join('');
 }
@@ -406,7 +425,7 @@ function serializeNode(
     if (!item) {
       failUnreachable(
         RuntimeErrorCode.ITEM_SLOT_OUTSIDE_REGION,
-        '[compiled-serializer] item value slot outside an each Region',
+        '[compiled-serializer] item value slot outside an each Block',
       );
     }
     return {
@@ -435,10 +454,11 @@ function serializeNode(
   const end = `<!--${partAnchorEndMarker(part.index)}-->`;
   if (part.k === 'when') {
     const value = ctx.seams.signalValue(part.signal);
-    // Branch content keeps the anchor's canonical path prefix: Region
-    // subtrees hold no value sinks (the validator rejects fixed paths
-    // crossing or preceded by an anchor), and resetting to [] would collide
-    // with template-level sink paths and emit their values here.
+    // Branch content keeps the anchor's canonical path prefix: resetting to []
+    // would collide with template-level walk paths (propEmission diagnostics
+    // name them). Sinks inside the branch attribute themselves by their own
+    // element id (sinksByNode), so the shared suffix both branches may carry
+    // never crosses attribution (alpha15).
     const branch = ctx.seams.whenHolds(part, value) ? part.on : part.off;
     return {
       html: start + serializeNodes(ctx, branch, path, item).html + end,
@@ -447,7 +467,7 @@ function serializeNode(
   }
   if (part.k === 'each') {
     return {
-      html: start + regionItemsHtml(ctx, part, ctx.seams.signalValue(part.signal), path) + end,
+      html: start + blockItemsHtml(ctx, part, ctx.seams.signalValue(part.signal), path) + end,
       slotName: '',
     };
   }
@@ -462,7 +482,7 @@ function serializeNode(
  * serializer modes project from the same walk.
  */
 export function serializeProgramTemplate(
-  program: PartProgramV1,
+  program: PartProgramV2,
   seams: SerializeProgramSeams,
 ): string {
   const ctx = createWalkContext(program, seams);
@@ -475,8 +495,8 @@ export function serializeProgramTemplate(
  * markers or transport framing.
  */
 export function serializeProgramRange(
-  program: PartProgramV1,
-  part: PartProgramV1['parts'][number],
+  program: PartProgramV2,
+  part: PartProgramV2['parts'][number],
   value: unknown,
   seams: SerializeProgramSeams,
 ): string {
@@ -486,7 +506,7 @@ export function serializeProgramRange(
     const branch = seams.whenHolds(part, value) ? part.on : part.off;
     return serializeNodes(ctx, branch, part.location.path, undefined).html;
   }
-  if (part.k === 'each') return regionItemsHtml(ctx, part, value, part.location.path);
+  if (part.k === 'each') return blockItemsHtml(ctx, part, value, part.location.path);
   failUnreachable(
     RuntimeErrorCode.SERIALIZED_ANCHOR_MISSING,
     `[compiled-serializer] Part ${part.index} does not own a serializable range`,

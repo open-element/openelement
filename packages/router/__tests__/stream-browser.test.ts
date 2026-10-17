@@ -346,7 +346,7 @@ test('stream error is terminal and cannot be replaced by a later success frame',
   }
 });
 
-test('deferred Region rejects URL control-character obfuscation without mutating its range', async function fn() {
+test('deferred Block rejects URL control-character obfuscation without mutating its range', async function fn() {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();

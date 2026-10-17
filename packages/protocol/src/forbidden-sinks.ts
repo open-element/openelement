@@ -59,7 +59,7 @@ export function forbiddenSinkReason(kind: ForbiddenSinkKind, name: string): stri
       }
       return null;
     case 'tag':
-      if (RAW_TEXT_TAGS.has(name)) {
+      if (RAW_TEXT_TAGS.has(name.toLowerCase())) {
         return `raw-text element <${name}> is outside the compiled Part Program grammar`;
       }
       return null;

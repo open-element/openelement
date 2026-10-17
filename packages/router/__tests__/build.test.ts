@@ -137,7 +137,7 @@ describe('build - generateClientEntry', () => {
     expect(code).toContain('virtual:open-client-runtime/scheduler');
   });
 
-  test('capture installs after __tags with the declared list, before island imports', () => {
+  test('capture installs with the declared tag list before any island can define its element', () => {
     const islands = [
       {
         tagName: 'my-counter',
@@ -149,14 +149,20 @@ describe('build - generateClientEntry', () => {
     const captureCall = 'ensurePreHydrationClickCapture(document, __tags);';
     expect(code).toContain(captureCall);
     expect(code.includes('ensurePreHydrationClickCapture();')).toEqual(false);
-    const tagsIndex = code.indexOf('var __tags =');
+    // B2: the capture lives inside the lazy runtime load (the runtime is no
+    // longer in the entry's static graph), so an island factory must chain on
+    // that load — the customElements.define() that upgrades an existing host
+    // runs only after the capture is installed, while the island chunk itself
+    // still downloads in parallel.
+    const loadIndex = code.indexOf('var __loadElementRuntime');
     const captureIndex = code.indexOf(captureCall);
-    // The island import() strings live inside __map factories defined
-    // above; they only EXECUTE when the scheduler below invokes them, so
-    // execution order is capture-before-scheduler, not string order.
-    const schedulerIndex = code.indexOf('__schedule({');
-    expect(tagsIndex >= 0 && captureIndex > tagsIndex).toEqual(true);
-    expect(schedulerIndex > captureIndex).toEqual(true);
+    expect(loadIndex >= 0 && captureIndex > loadIndex).toEqual(true);
+    expect(code).toContain('var __island = import(');
+    expect(code).toContain('Promise.all([__island, __loadElementRuntime()])');
+    // The declared list is assigned before the island module can define, and
+    // the scheduler that starts activations comes after both.
+    expect(code.indexOf('var __tags =') < code.indexOf('var __scheduler')).toEqual(true);
+    expect(code.indexOf('var __loadElementRuntime') < code.indexOf('var __map')).toEqual(true);
   });
 });
 

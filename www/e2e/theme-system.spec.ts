@@ -13,7 +13,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 /**
  * The toggle button is the user-visible control ("Toggle theme"); Playwright
- * role locators pierce the open shadow roots of open-layout and
+ * role locators pierce the open shadow roots of app-layout and
  * open-theme-toggle natively, so no ad-hoc shadow walking is needed.
  */
 async function clickThemeToggle(page: Page): Promise<void> {

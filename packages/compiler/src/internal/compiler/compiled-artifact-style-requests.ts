@@ -76,6 +76,16 @@ function collectSheetBindings(sf: ts.SourceFile): Map<string, string> {
 }
 
 /**
+ * What one compiled artifact module declares about its style edges: the
+ * relative `.css` specifiers in authored order, and the light-root scope tag
+ * the module's Part Program names (undefined for a shadow-root artifact).
+ */
+export interface CompiledArtifactStyleRead {
+  readonly requests: readonly string[];
+  readonly scopeTag?: string;
+}
+
+/**
  * The `.css` style edges of one compiled artifact module, in authored order —
  * or undefined when the module is not a shape this recovery adopts. Never
  * throws and never guesses: a module without the Part Program marker, without
@@ -95,6 +105,20 @@ export function compiledArtifactStyleRequests(
   source: string,
   fileName: string,
 ): readonly string[] | undefined {
+  return readCompiledArtifactStyles(source, fileName)?.requests;
+}
+
+/**
+ * The same recovery, read once for both facts an artifact states: its edges
+ * and its root scope (alpha15 S lane, S-C1.2). The scope comes from the
+ * module's own Part Program literal — the emitter writes it verbatim, so the
+ * packed form needs no second source of truth and no assumption about which
+ * root kind a shipped package used.
+ */
+export function readCompiledArtifactStyles(
+  source: string,
+  fileName: string,
+): CompiledArtifactStyleRead | undefined {
   if (!source.includes(COMPILED_ARTIFACT_MARKER)) return undefined;
   if (!CSS_SPECIFIER_HINT.test(source)) return undefined;
   const { sourceFile: sf } = typescriptParser.parseModule(source, fileName);
@@ -114,7 +138,18 @@ export function compiledArtifactStyleRequests(
     return true;
   };
   let shapeFollowed = true;
+  let program: ts.Expression | undefined;
   const visit = (node: ts.Node): void => {
+    // The emitted Part Program literal (`const __partProgram = {...}`): the
+    // one place the artifact states its own tag and root kind.
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === PART_PROGRAM_BINDING &&
+      node.initializer !== undefined
+    ) {
+      program = node.initializer;
+    }
     // The compiler's emission declares the class as a class EXPRESSION bound
     // to a `var` (`var OpenButton = class extends OpenElement {...}`), so both
     // class forms carry the `static styles` member this read follows.
@@ -152,5 +187,43 @@ export function compiledArtifactStyleRequests(
   // sheet import means the module is not this grammar's shape, and a partial
   // adoption would leave the intercept to fail closed on the remaining edge.
   if (!shapeFollowed || claimed.size !== sheetBindings.size) return undefined;
-  return edges.length === 0 ? undefined : edges;
+  if (edges.length === 0) return undefined;
+  const scopeTag = programScopeTag(program);
+  return scopeTag === undefined ? { requests: edges } : { requests: edges, scopeTag };
+}
+
+/** The Part Program's module-local binding, as the emitter writes it. */
+const PART_PROGRAM_BINDING = '__partProgram';
+
+/**
+ * The light-root scope tag inside an artifact's Part Program literal. Only a
+ * statically visible `tag` string with `root.kind === "light"` counts; every
+ * other shape (a computed literal, a shadow root, a missing field) reads as
+ * "no scope", which is the shadow-root default.
+ */
+function programScopeTag(program: ts.Expression | undefined): string | undefined {
+  if (program === undefined) return undefined;
+  let expression = program;
+  while (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression)) {
+    expression = expression.expression;
+  }
+  if (!ts.isObjectLiteralExpression(expression)) return undefined;
+  const tag = propertyOf(expression, 'tag');
+  const root = propertyOf(expression, 'root');
+  if (tag === undefined || !ts.isStringLiteral(tag) || tag.text === '') return undefined;
+  if (root === undefined || !ts.isObjectLiteralExpression(root)) return undefined;
+  const kind = propertyOf(root, 'kind');
+  if (kind === undefined || !ts.isStringLiteral(kind) || kind.text !== 'light') return undefined;
+  return tag.text;
+}
+
+/** One property's initializer of an object literal, or undefined. */
+function propertyOf(object: ts.ObjectLiteralExpression, name: string): ts.Expression | undefined {
+  for (const property of object.properties) {
+    if (!ts.isPropertyAssignment(property)) continue;
+    if (ts.isIdentifier(property.name) && property.name.text === name) return property.initializer;
+    if (ts.isStringLiteral(property.name) && property.name.text === name)
+      return property.initializer;
+  }
+  return undefined;
 }

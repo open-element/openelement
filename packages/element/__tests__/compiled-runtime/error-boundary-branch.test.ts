@@ -14,12 +14,12 @@
  *     (catchError / retry / reset, plus the kernel's automatic captures);
  *   - a compiled subclass that declares `hasError` as its state property
  *     reads those writes through its signal-backed accessor, so a `when`
- *     Region over `this.hasError` swaps the fallback live;
+ *     Block over `this.hasError` swaps the fallback live;
  *   - the state survives a claim failure and clears on a successful retry.
  *
  * Harness: the real ErrorBoundary base class from the package, the compiled
  * kernel, and the program shape the compiler emits for the documented branch
- * (a `when` Region keyed on the hasError signal — asserted structurally by
+ * (a `when` Block keyed on the hasError signal — asserted structurally by
  * the compiler suite).
  */
 
@@ -39,7 +39,7 @@ const uniqueTag = makeUniqueTag('boundary-branch');
 
 /**
  * The Part Program the compiler emits for the documented render branch:
- * `{this.hasError ? <p>failed</p> : <slot/>}` lowers to one `when` Region
+ * `{this.hasError ? <p>failed</p> : <slot/>}` lowers to one `when` Block
  * over the hasError signal (compiler suite pins that lowering).
  */
 function boundaryBranchProgram(tag: string) {
@@ -87,7 +87,7 @@ function boundaryBranchProgram(tag: string) {
  * The compiled subclass the admission makes legal: the base class carries the
  * `hasError` field, the generated class declares it as a compiled property
  * (its statics assign the compiled accessor's backing metadata), and the
- * program carries the branch Region.
+ * program carries the branch Block.
  */
 function defineBoundary(tag: string) {
   const program = boundaryBranchProgram(tag);

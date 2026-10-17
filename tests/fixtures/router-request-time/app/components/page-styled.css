@@ -1,0 +1,4 @@
+@import '../site/styled-shared.css';
+
+:host { display: block; }
+.styled-page { padding: 3px 5px; color: rgb(10, 10, 10); }

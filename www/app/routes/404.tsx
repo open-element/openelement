@@ -1,10 +1,10 @@
 import { definePage } from '@openelement/router';
+import '@openelement/ui/open-button';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import { localizePath } from '#site-ui/link.ts';
 import type { SiteLocale } from '../../site-config.ts';
 import redirectTableJson from '../../tools/site-redirects.json' with { type: 'json' };
-import Page404 from '../components/page-404.tsx';
 
 const redirectTable = redirectTableJson as {
   redirects: Array<{ from: string; to: string; toZh?: string; status: number }>;
@@ -72,6 +72,105 @@ const content = {
     ],
   },
 } as const;
+
+/**
+ * The 404 page as a server function component (alpha15 server architecture):
+ * the route module's own exported TSX function, lowered by the compiler into
+ * a generative HTML constructor. The page hook class (`page-404`) scopes the
+ * former component sheet's authored rules in the linked document stylesheet.
+ */
+export function Page404(props: {
+  serifLine: string;
+  lede: string;
+  backHome: string;
+  readDocs: string;
+  searchHint: string;
+  popularLabel: string;
+  popular: Array<{ href: string; label: string }>;
+  suggestionsLabel: string;
+  suggestions: Array<{ href: string; label: string }>;
+  homeHref: string;
+  docsHref: string;
+  marqueeText: string;
+}) {
+  return (
+    <div class='page-404 bg-background text-foreground' data-pagefind-ignore>
+      <section class='stage relative isolate grid min-h-[calc(100svh-var(--nav-height)-calc(var(--spacing)*12))] content-center justify-items-center gap-5 px-6 py-[clamp(3rem,8vh,6rem)] text-center'>
+        <h1
+          class='code m-0 flex font-mono text-[clamp(9rem,26vw,24rem)] leading-[0.9] font-extrabold tracking-[-0.06em] text-transparent select-none'
+          aria-label='404'
+        >
+          <span aria-hidden='true'>4</span>
+          <span class='solid text-foreground' aria-hidden='true'>
+            {'0'}
+          </span>
+          <span aria-hidden='true'>4</span>
+        </h1>
+        <p class='serif-line m-0 font-serif text-[clamp(2rem,5vw,4rem)] font-normal italic tracking-[-0.01em] text-primary'>
+          {props.serifLine}
+        </p>
+        <p class='lede m-0 max-w-[34rem] font-mono text-sm leading-[1.75] text-muted-foreground'>
+          {props.lede}
+        </p>
+        <div class='mt-3 flex flex-wrap justify-center gap-3'>
+          <open-button variant='primary' href={props.homeHref}>
+            {props.backHome}
+          </open-button>
+          <open-button href={props.docsHref}>{props.readDocs}</open-button>
+        </div>
+        <p class='search-hint m-0 font-mono text-xs text-muted-foreground'>{props.searchHint}</p>
+        <nav
+          class='popular mt-2 flex flex-wrap items-baseline justify-center gap-x-4 gap-y-2'
+          aria-labelledby='popular-heading'
+        >
+          <p
+            class='popular-label m-0 font-mono text-xs tracking-[0.12em] text-muted-foreground uppercase'
+            id='popular-heading'
+          >
+            {props.popularLabel}
+          </p>
+          {props.popular.map((link) => (
+            <a
+              class='font-mono text-sm text-muted-foreground no-underline hover:text-primary hover:underline'
+              key={link.href}
+              href={link.href}
+            >
+              {link.label}
+            </a>
+          ))}
+        </nav>
+        <nav
+          class='popular mt-2 flex flex-wrap items-baseline justify-center gap-x-4 gap-y-2'
+          aria-labelledby='suggestions-heading'
+        >
+          <p
+            class='popular-label m-0 font-mono text-xs tracking-[0.12em] text-muted-foreground uppercase'
+            id='suggestions-heading'
+          >
+            {props.suggestionsLabel}
+          </p>
+          {props.suggestions.map((link) => (
+            <a
+              class='font-mono text-sm text-muted-foreground no-underline hover:text-primary hover:underline'
+              key={link.href}
+              href={link.href}
+            >
+              {link.label}
+            </a>
+          ))}
+        </nav>
+      </section>
+      <div
+        class='marquee overflow-hidden border-y border-border bg-(--surface-1) whitespace-nowrap'
+        aria-hidden='true'
+      >
+        <span class='inline-block py-3 font-mono text-sm font-medium tracking-[0.12em] text-primary'>
+          {props.marqueeText}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default definePage(Page404, {
   // Error document: og fields plus the siteHead robots noindex, and

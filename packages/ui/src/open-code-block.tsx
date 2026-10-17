@@ -39,7 +39,17 @@ export class OpenCodeBlock extends OpenElement {
     return (
       <div style='display:contents'>
         <slot></slot>
-        <button type='button' class='copy-btn' part='copy' onClick={this.copy}>
+        {/* The chip's presentation is Tailwind utilities (alpha15 S lane): the
+            compiler admits these static tokens and the build's component
+            stylesheet carries the generated rules into this shadow root.
+            `copy-btn` is the authored-state hook the sheet's :state() rules
+            target — no property has two owners. */}
+        <button
+          type='button'
+          class='copy-btn absolute top-2 right-2 z-10 cursor-pointer rounded-md border-[0.5px] border-transparent bg-primary/14 px-3 py-1 font-sans text-xs font-semibold tracking-wider text-foreground transition-all duration-150 ease-in-out hover:border-primary hover:bg-primary/23'
+          part='copy'
+          onClick={this.copy}
+        >
           {this.copyLabel}
         </button>
       </div>

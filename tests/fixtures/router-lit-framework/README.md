@@ -8,8 +8,8 @@ server-side by `@lit-labs/ssr` (DSD) and hydrated by `@lit-labs/ssr-client`.
 Routing, loaders, actions (ADR-0120), form enhancement and morphing are the
 shared framework machinery — only the page renderer forks.
 
-`renderer: 'lit'` supports `appShell: false` only (the compiled shell path is
-rejected by the build), so the fixture stays shell-free.
+`renderer: 'lit'` supports `layout: false` only (the compiled layout path is
+rejected by the build), so the fixture stays layout-free.
 
 ```bash
 pnpm --dir tests/fixtures/router-lit-framework run build

@@ -36,10 +36,10 @@ afterAll(async () => {
 
 /** The probe entry exercises both guarded messages through their real raisers. */
 function probeEntry(): string {
-  const regions = join(ELEMENT_SRC, 'internal/compiled/runtime/regions.ts');
+  const blocks = join(ELEMENT_SRC, 'internal/compiled/runtime/blocks.ts');
   const kernel = join(ELEMENT_SRC, 'internal/compiled/runtime/program-kernel.ts');
   return `
-import { expectsArrayMessage } from ${JSON.stringify(regions)};
+import { expectsArrayMessage } from ${JSON.stringify(blocks)};
 import { createContext, signalOf } from ${JSON.stringify(kernel)};
 
 const part = { k: 'each', index: 0, signal: 'rows', key: 'id', field: 'label', item: [] } as never;
@@ -93,7 +93,7 @@ test('the production define strips the prose and keeps the codes', async () => {
   const code = await buildProbe({ ...ELEMENT_RUNTIME_MESSAGES_DEFINE });
   expect(code).not.toContain('expects an array');
   expect(code).not.toContain('no host signal is registered');
-  expect(code).not.toContain('duplicate key in the list Region');
+  expect(code).not.toContain('duplicate key in the list Block');
   expect(code).toContain('OE_RUNTIME_LIST_VALUE_NOT_ARRAY');
   expect(code).toContain('OE_RUNTIME_HOST_SIGNAL_MISSING');
 }, 60_000);

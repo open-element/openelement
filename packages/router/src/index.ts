@@ -15,9 +15,11 @@ export {
 } from './authoring.ts';
 export type {
   ActionOutcome,
+  FunctionPageComponent,
   IslandConfig,
   IslandDeliveryStrategy,
   JsonValue,
+  OpenElementFunctionPageDescriptor,
   OpenElementPageDescriptor,
   PageComponentConstructor,
   PageErrorProjector,
@@ -25,6 +27,7 @@ export type {
   PageHeadResolver,
   PagePropsContext,
   PagePropsProjector,
+  ServerPageComponent,
   StructuredDataEntry,
 } from './authoring.ts';
 
@@ -58,9 +61,9 @@ export type { CreateRequestContextOptions, OpenElementRequestContext } from './m
 // imports no host APIs; loading lives in @openelement/router/vite and
 // @openelement/router/cli/*.
 export {
-  CONVENTION_APP_SHELL_PATH,
-  CONVENTION_APP_SHELL_SUFFIX,
-  CONVENTION_APP_SHELL_TAG,
+  CONVENTION_LAYOUT_PATH,
+  CONVENTION_LAYOUT_SUFFIX,
+  CONVENTION_LAYOUT_TAG,
   CONVENTION_BASE_DIR,
   CONVENTION_COMPONENTS_DIR,
   CONVENTION_HEAD_PATH,
@@ -70,11 +73,11 @@ export {
   CONVENTION_ROUTES_DIR,
   CONVENTION_STYLES_SUFFIX,
   CONVENTION_TOKENS_PATH,
-  conventionAppShellPath,
+  conventionLayoutPath,
   conventionHeadPath,
   conventionTokensPath,
   defineConfig,
-  OPEN_ELEMENT_APP_SHELL_KEYS,
+  OPEN_ELEMENT_LAYOUT_KEYS,
   OPEN_ELEMENT_BUILD_KEYS,
   OPEN_ELEMENT_CONFIG_FILE,
   OPEN_ELEMENT_CONFIG_KEYS,

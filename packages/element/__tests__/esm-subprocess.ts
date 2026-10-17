@@ -1,5 +1,5 @@
 /**
- * Shared node subprocess runner for the no-DOM and claim-entry suites.
+ * Shared node subprocess runner for the no-DOM and hydrate-entry suites.
  *
  * node --input-type=module -e: ESM eval resolving the workspace imports from
  * the element package root (cwd matters for bare-specifier lookup).

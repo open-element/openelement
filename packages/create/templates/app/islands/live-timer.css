@@ -1,23 +1,11 @@
+/* live-timer — the irreducible authored rule (alpha15 utility-first
+ * migration): the shadow host's own box. A custom element is display:inline
+ * by default and the host tag is not authored markup, so no utility can
+ * carry it. The row, the clock and the unit are authored as Tailwind
+ * utilities in live-timer.tsx — on the #elapsed span itself, which is what
+ * #1582 was about: the styling must sit on the element the render produces,
+ * not on a selector that can drift away from it.
+ * One owner per property: nothing here is also authored as a utility. */
 :host {
   display: inline-block;
-}
-.timer-row {
-  display: inline-flex;
-  gap: 0.6rem;
-  align-items: baseline;
-}
-/* #1582: the selector names the id the class renders (#elapsed) — a
-       `.value` selector matched nothing, so the clock lost its brand color
-       and tabular figures. */
-#elapsed {
-  min-width: 6ch;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  font-size: 1.4rem;
-  color: var(--brand);
-}
-.unit {
-  color: var(--ink-soft);
-  font-size: 0.85rem;
 }

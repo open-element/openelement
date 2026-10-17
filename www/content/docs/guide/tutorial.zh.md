@@ -9,7 +9,7 @@ order: 2
 
 ## 开始之前
 
-需要 **Node.js 24.2+** 与 pnpm，以及一个终端。唯一一条 bootstrap 命令是一次普通的 Node 调用（ADR-0161）——不涉及第二个运行时，之后的每一步都是 Node 与 pnpm。
+需要 **Node.js 24.2+** 与一个终端；任何包管理器都可以（npm、pnpm、yarn、bun——本指南统一写成 `npm run …`）。唯一一条 bootstrap 命令是一次普通的 Node 调用（ADR-0161）——不涉及第二个运行时，之后的每一步都是普通的 Node 工具链。
 
 本教程用五步做出一个小应用，每一步都以「看得见的结果」收尾：
 
@@ -26,24 +26,28 @@ order: 2
 ```bash
 {{INSTALL_COMMAND}}
 cd my-app
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 这条命令跑在普通 Node 工具链上：从 npm 拉取已发布的 `@openelement/create` 包——无 tag 的安装解析 `latest`，即当前 1.0 线——并以该版本为下限，把 `@openelement/*` 的 caret 范围写进项目。
 
-create CLI 每个文件打印一行 `created <path>`，随后打印后续命令：
+create CLI 每个文件打印一行 `created <path>`，随后是交接框：写明生成器版本与下一步（框里的 dev 命令按它检测到的包管理器拼写；加 `--no-install` 时打印通用的 `npm run dev`）：
 
 ```text
-openElement project created at ./my-app/
+openElement project created at ./my-app/ (template: showcase)
+  initialized git repository (with .gitignore)
 
-  cd my-app
-  pnpm install
-  pnpm dev
-  See README.md for all scripts (check/test/build/start)
+openElement project ready
+(@openelement/create <version>)
+
+cd my-app
+npm run dev      # start the dev server
+
+Docs: https://openelement.org
 ```
 
-`pnpm dev` 启动 Vite dev server，并打印要打开的地址：
+`npm run dev` 启动 Vite dev server，并打印要打开的地址：
 
 ```text
   VITE v8.0.16  ready in 412 ms
@@ -55,7 +59,7 @@ openElement project created at ./my-app/
 
 ```text
 my-app/
-  package.json      依赖与 pnpm 脚本：dev、check、test、build、start
+  package.json      依赖与脚本：dev、build、start、test、typecheck
   openelement.config.ts  框架选项（token、head、shell 约定）
   vite.config.ts    Vite 配置；插件调用不接受参数
   app/routes/       一个文件对应一个 URL
@@ -64,7 +68,7 @@ my-app/
   public/           静态资源，原样拷进 dist/
 ```
 
-`pnpm check` 会类型检查 starter 的 `app/` 目录以及 `vite.config.ts` 与 `openelement.config.ts`；新增的路由会被自动纳入。
+`npm run typecheck` 会类型检查 starter 的 `app/` 目录以及 `vite.config.ts` 与 `openelement.config.ts`；新增的路由会被自动纳入。
 
 ## 第 2 步：加第一个页面
 
@@ -118,7 +122,7 @@ curl -s http://localhost:5173/hello | grep -o 'Hello from a page'
 Hello from a page
 ```
 
-标题本来就在服务端发出的 HTML 里，不是脚本注入的。这个页面加载的客户端模块只有 starter 自带的 `app-shell`；这条路由本身没有引入任何 island。
+标题本来就在服务端发出的 HTML 里，不是脚本注入的。这个页面加载的客户端模块只有 starter 自带的 `app-layout`；这条路由本身没有引入任何 island。
 
 ## 第 3 步：加第一个 island
 
@@ -287,7 +291,7 @@ location: /notes?saved=hello
 ## 第 5 步：构建并起服务
 
 ```bash
-pnpm build
+npm run build
 ```
 
 构建会预渲染所有静态路由、为每个可达 island 打一个 chunk，并且——因为 `/notes` 是请求时的——同时写出服务端入口。预期输出（已截取：starter 自带的 island 也在同一张表里，逐页清单省略）：
@@ -324,7 +328,7 @@ server/index.js     请求时处理器：回答 POST /notes，并为未匹配路
 起服务：
 
 ```bash
-pnpm start
+npm start
 ```
 
 ```text
@@ -342,7 +346,7 @@ curl -i http://localhost:4173/hello | head -1
 HTTP/1.1 200 OK
 ```
 
-`/hello` 是磁盘上的文件；`/notes` 走到了服务端入口——未匹配路径的带样式 404 也一样。构建产物没有请求时路由的项目可以用 `openelement start --mode=preview` 只起静态产物，而这个项目有请求时路由，所以要用 `pnpm start` 起。
+`/hello` 是磁盘上的文件；`/notes` 走到了服务端入口——未匹配路径的带样式 404 也一样。构建产物没有请求时路由的项目可以用 `openelement start --mode=preview` 只起静态产物，而这个项目有请求时路由，所以要用 `npm start` 起。
 
 到这里你有了一个项目、一个页面、一个 island、一个表单 action，以及一份可以部署的构建产物。
 

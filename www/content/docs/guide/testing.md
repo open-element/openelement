@@ -9,12 +9,12 @@ order: 110
 The generated project wires a single fast signal against the real framework types:
 
 ```bash
-pnpm check   # tsc --noEmit over the tsconfig include: app/ + vite.config.ts + openelement.config.ts
+npm run typecheck   # tsc --noEmit over the tsconfig include: app/ + vite.config.ts + openelement.config.ts
 ```
 
 It type-checks every route and component source with the actual `@openelement/*` declarations, so a wrong option on `definePage`, a `props` projector that does not match its loader's data, an unsupported decorator option or a broken import fails here — before any build runs and without a browser.
 
-Loaders and actions are plain functions, which makes them cheap to test directly. One boundary shapes where they live: `pnpm test` runs Node's built-in runner, which loads `.ts` modules by type stripping but cannot load `.tsx` at all — JSX compiles at build time, and every route module's import graph ends in a `.tsx` page component. So keep the loader/action logic you want to unit-test in a `.ts` module under `app/lib/` (a `.ts` file under `app/routes/` would itself be admitted as a route), and re-export it from the route:
+Loaders and actions are plain functions, which makes them cheap to test directly. One boundary shapes where they live: `npm test` runs Node's built-in runner, which loads `.ts` modules by type stripping but cannot load `.tsx` at all — JSX compiles at build time, and every route module's import graph ends in a `.tsx` page component. So keep the loader/action logic you want to unit-test in a `.ts` module under `app/lib/` (a `.ts` file under `app/routes/` would itself be admitted as a route), and re-export it from the route:
 
 ```ts
 // app/lib/guestbook.ts — plain TypeScript; nothing JSX-shaped imports here
@@ -58,7 +58,7 @@ import { saveNote } from '../app/lib/guestbook.ts';
 
 test('an empty message fails validation', () => {
   const formData = new FormData();
-  formData.set('message', '');
+  formData.set('note', '');
   const failure = saveNote({ formData });
   assert.equal(failure.status, 422);
 });
@@ -76,7 +76,7 @@ import { saveNote } from '../app/lib/guestbook.ts';
 
 test('a valid message redirects to the echo', () => {
   const formData = new FormData();
-  formData.set('message', 'hello');
+  formData.set('note', 'hello');
   let thrown: unknown;
   try {
     saveNote({ formData });
@@ -86,7 +86,7 @@ test('a valid message redirects to the echo', () => {
   if (!(thrown instanceof OpenElementRedirect)) {
     throw new Error('a valid message must redirect');
   }
-  assert.equal(thrown.location, '/guestbook?echoed=hello');
+  assert.equal(thrown.location, '/guestbook?saved=hello');
 });
 ```
 
@@ -110,15 +110,15 @@ test('the loader returns the entry list', async () => {
 The build is the second gate, and it is the only place some contracts can be checked — prerendering, route discovery, static-path expansion and the request-time output all happen there:
 
 ```bash
-pnpm build
-pnpm start   # serves dist/; dispatch to dist/server when it exists
+npm run build
+npm start      # serves dist/; dispatch to dist/server when it exists
 ```
 
-Inspect the output rather than trusting the log. A pure-static project should produce HTML for every route and no `dist/server` directory at all; a project with a `'dynamic'` route or an action should produce `dist/server/index.js` (the portable `fetch(Request) -> Response` handler) and `dist/server/server-manifest.json` listing the request-time routes. `pnpm start` prints which mode it found, and serves exactly what was built, so a page that looks right in `pnpm dev` but wrong here has a build-time cause.
+Inspect the output rather than trusting the log. A pure-static project should produce HTML for every route and no `dist/server` directory at all; a project with a `'dynamic'` route or an action should produce `dist/server/index.js` (the portable `fetch(Request) -> Response` handler) and `dist/server/server-manifest.json` listing the request-time routes. `npm start` prints which mode it found, and serves exactly what was built, so a page that looks right in `npm run dev` but wrong here has a build-time cause.
 
 ## Visual checks
 
-Layout, DSD layers and hydration are browser facts. Serve a build (`pnpm start`) and point a browser automation run at it — Playwright and Web Test Runner both drive the built output directly — then assert on the rendered DOM instead of the HTML source: a shadow root's contents are only queryable once the page has parsed, and an upgrade only happens once the island's chunk has loaded.
+Layout, DSD layers and hydration are browser facts. Serve a build (`npm start`) and point a browser automation run at it — Playwright and Web Test Runner both drive the built output directly — then assert on the rendered DOM instead of the HTML source: a shadow root's contents are only queryable once the page has parsed, and an upgrade only happens once the island's chunk has loaded.
 
 Two assertions are worth having for any interactive component: the document is complete and styled before the island's module runs (the static-first contract), and after upgrade the component still responds to real user input. The repository's own site suite follows that shape — its end-to-end specs cover DSD layers, hydration behavior, island reactivity and navigation against the built output.
 

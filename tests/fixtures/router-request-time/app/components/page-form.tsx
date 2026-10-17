@@ -3,7 +3,7 @@
  *
  * Compiled-grammar shape of the legacy render():
  * - `message` echoes the submitted value into the input (prop Part on value);
- * - `hasError` (0/1) drives the static-text error Region — the compiled
+ * - `hasError` (0/1) drives the static-text error Block — the compiled
  *   grammar's conditional branches are fully static, and the action's
  *   failure message is the constant 'message is required';
  * - `echoText` carries the PRG echo as one dynamic text Part so the raw HTML

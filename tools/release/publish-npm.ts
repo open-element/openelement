@@ -78,6 +78,30 @@ export {
 
 const COMMANDS = new Set(['pack', 'pack:dry-run', 'publish:npm', 'publish:npm:dry-run']);
 
+/**
+ * Per-package subset selection (T7): keep dependency order, drop unlisted
+ * packages. Internal pins stay exact — a selected package depending on an
+ * unselected one materializes the tree's current version of that dependency
+ * (router@new on protocol@old is legal) — so no manifest rewriting is
+ * needed for a subset publish.
+ */
+export function selectPackages(all: PackageInfo[], names: readonly string[]): PackageInfo[] {
+  const shorts = new Map(all.map((pkg) => [pkg.name.replace('@openelement/', ''), pkg]));
+  const selected: PackageInfo[] = [];
+  for (const raw of names) {
+    const name = raw.trim().replace(/^@openelement\//, '');
+    const pkg = shorts.get(name);
+    if (!pkg) {
+      throw new Error(
+        `unknown package "${raw.trim()}" (expected ${[...shorts.keys()].join(', ')})`,
+      );
+    }
+    if (!selected.includes(pkg)) selected.push(pkg);
+  }
+  if (selected.length === 0) throw new Error('--packages needs at least one package name');
+  return all.filter((pkg) => selected.includes(pkg));
+}
+
 function cleanStaleTarballs(packages: PackageInfo[]): void {
   for (const pkg of packages) {
     for (const entry of readdirSync(pkg.dir, { withFileTypes: true })) {
@@ -641,21 +665,42 @@ function parseCommand(): {
   command: string;
   dryRun: boolean;
   publish: boolean;
+  packages: string[] | undefined;
 } {
   const command = process.argv[2];
   if (!COMMANDS.has(command)) {
-    throw new Error(`Usage: node tools/release/publish-npm.ts ${[...COMMANDS].join('|')}`);
+    throw new Error(
+      `Usage: node tools/release/publish-npm.ts ${[...COMMANDS].join('|')} [--packages a,b]`,
+    );
+  }
+  const packagesFlag = process.argv.findIndex(
+    (arg) => arg === '--packages' || arg.startsWith('--packages='),
+  );
+  let packages: string[] | undefined;
+  if (packagesFlag !== -1) {
+    const flag = process.argv[packagesFlag];
+    const value = flag.includes('=')
+      ? flag.slice('--packages='.length)
+      : process.argv[packagesFlag + 1];
+    if (!value || value.startsWith('--')) {
+      throw new Error('publish-npm: --packages needs a comma-separated package list.');
+    }
+    packages = value.split(',');
   }
   const dryRun = command.endsWith(':dry-run');
   const publish = command.startsWith('publish:');
-  return { command, dryRun, publish };
+  return { command, dryRun, publish, packages };
 }
 
 async function main(): Promise<void> {
-  const { command, dryRun, publish } = parseCommand();
+  const { command, dryRun, publish, packages: selectedNames } = parseCommand();
   const allPackages = await readPackages();
-  const packages = releasePublishOrder(allPackages);
-  const dependencyMap = deriveAllDependencies(packages);
+  const packages = selectedNames
+    ? selectPackages(releasePublishOrder(allPackages), selectedNames)
+    : releasePublishOrder(allPackages);
+  // Dependency versions resolve against the FULL tree even for a subset pack:
+  // an unselected dependency's tree version is what the packed manifest pins.
+  const dependencyMap = deriveAllDependencies(allPackages);
   if (packages.length === 0) {
     throw new Error('No packages found under packages/.');
   }

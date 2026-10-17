@@ -4,9 +4,38 @@
 # (oxfmt/oxlint) through the repository script graph; heavier gates run
 # pre-push and in CI.
 #
+# One dispatch surface: `node_modules/.bin/vp run`, the same fail-closed argv
+# CI and tools/repo/vp-dispatch.ts use against the same package.json scripts
+# (P6 — a `pnpm run` copy here would be a second mechanism for one gate graph,
+# with its own selector semantics and no shared tripwire). The choice costs no
+# deletability: vp run resolves scripts and owns no gate logic, so retiring vp
+# means editing these lines, not re-deriving the gates (P5). The binary is
+# spelled with its path because a git hook inherits no node_modules/.bin PATH.
+#
 # Install: pnpm --filter @openelement/tools-repo run hooks:install
 
 set -e
 
-pnpm run fmt:check
-pnpm run lint
+# --- Commit identity guard --------------------------------------------------
+# The commit's identity is whatever the effective git identity resolves to:
+# repo-local `user.name`/`user.email`, or GIT_AUTHOR_*/GIT_COMMITTER_*. A
+# teammate identity left in .git/config mis-credits every commit silently (22
+# went out that way); nothing else checks it. Reading `git var` (not the config
+# keys) is what makes this the identity the commit would actually carry. Cheap,
+# non-interactive, and it prints the fix. A deliberate foreign author (`git am`,
+# GIT_AUTHOR_* exported on purpose) is a reviewed act, not the default path.
+expected_identity='Zhi <146103794+SisyphusZheng@users.noreply.github.com>'
+actual_author=$(git var GIT_AUTHOR_IDENT | sed -E 's/ [0-9]+ [+-][0-9]{4}$//')
+actual_committer=$(git var GIT_COMMITTER_IDENT | sed -E 's/ [0-9]+ [+-][0-9]{4}$//')
+if [ "$actual_author" != "$expected_identity" ] || [ "$actual_committer" != "$expected_identity" ]; then
+  echo "pre-commit: refusing this commit — its identity is not the expected one." >&2
+  echo "  author    : $actual_author" >&2
+  echo "  committer : $actual_committer" >&2
+  echo "  expected  : $expected_identity" >&2
+  echo "  fix       : git config user.name 'Zhi'" >&2
+  echo "              git config user.email '146103794+SisyphusZheng@users.noreply.github.com'" >&2
+  exit 1
+fi
+
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter openelement fmt:check
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter openelement lint

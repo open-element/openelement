@@ -148,15 +148,15 @@ function makeHarness(
   return { align, doc, incomingQueue, instantiated };
 }
 
-test('morph: a preserved slot-fallback app shell receives the new route document', () => {
+test('morph: a preserved slot-fallback layout receives the new route document', () => {
   const { align, doc, incomingQueue } = makeHarness({
-    tags: ['app-shell'],
+    tags: ['app-layout'],
     // The legacy light-surface comparison sees both hosts as empty and would
     // preserve the stale shell wholesale without the slot-fallback path.
     islandIntact: () => true,
   });
 
-  const host = el('app-shell');
+  const host = el('app-layout');
   const liveShadow = new FakeNode();
   liveShadow.appendChild(el('main', el('slot', el('contact-page', el('p', text('before'))))));
   host.shadowRoot = liveShadow;
@@ -167,7 +167,7 @@ test('morph: a preserved slot-fallback app shell receives the new route document
     body: el(
       'body',
       el(
-        'app-shell',
+        'app-layout',
         shadowTemplate(el('main', el('slot', el('contact-page', el('p', text('after')))))),
       ),
     ),

@@ -9,6 +9,11 @@
  * - open-button type="submit" runs the composed-submit choreography.
  * The form-probe island wires the observable: it writes the submission's
  * FormData entries into #form-output.
+ *
+ * `#invalid` and `#native-disabled` sit OUTSIDE the form on purpose: they
+ * qualify the control surface's invalid and disabled seats
+ * (e2e/ui-input-control.spec.ts), and a form-associated control inside
+ * #dogfood-form would change the FormData the participation specs assert.
  */
 import { element, OpenElement } from '@openelement/element';
 import '@openelement/ui/open-button';
@@ -37,6 +42,8 @@ export default class FormPage extends OpenElement {
           <button id='submit-native' type='submit'>Native submit</button>
           <button id='reset-native' type='reset'>Native reset</button>
         </form>
+        <open-input id='invalid' label='Invalid' error='Required field'></open-input>
+        <open-input id='native-disabled' label='Off' disabled></open-input>
         <form-probe></form-probe>
         <output id='form-output'></output>
       </main>

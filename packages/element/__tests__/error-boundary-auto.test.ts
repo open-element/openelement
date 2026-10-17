@@ -2,7 +2,7 @@
  * ErrorBoundary automatic capture tests (ADR-0053 Layer 2, #919), restated
  * over the compiled kernel (0.44).
  *
- * The legacy SSR shapes (renderDsdTree subtree capture, bare-tag degradation)
+ * The legacy SSR shapes (renderToStringTree subtree capture, bare-tag degradation)
  * were deleted with the legacy renderer. In the compiled model:
  *   - the kernel captures connect/claim failures into the element-local
  *     CompiledErrorBoundary service;
@@ -10,7 +10,7 @@
  *     catchError, retry, reset);
  *   - retry() re-activates the captured source element; a still-failing
  *     source recaptures through its own activation path;
- *   - fallback presentation is program-defined (a Region over error state),
+ *   - fallback presentation is program-defined (a Block over error state),
  *     not a VNode swap.
  *
  * The DOM harness (compiled-runtime/facade-dom.ts) installs browser globals
@@ -25,7 +25,7 @@ import { makeUniqueTag } from './compiled-runtime/light-counter-harness.ts';
 const dom = installFacadeDom();
 
 const { ErrorBoundary } = await import('@openelement/element');
-const { renderDsd } = await import('@openelement/element');
+const { renderToString } = await import('@openelement/element');
 
 // oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
@@ -90,13 +90,13 @@ test('compiled boundary captures connect-time claim failures automatically', () 
   const el = connectDrifted(tag);
   expect(el.hasError).toEqual(true);
   expect(el.error).toBeInstanceOf(Error);
-  expect(el.error?.message ?? '').toContain('compiled-claim');
+  expect(el.error?.message ?? '').toContain('compiled-hydration');
 });
 
 test('boundary without failure stays clean and renders normally', () => {
   const tag = uniqueTag('clean');
   const { ctor } = defineBoundary(tag);
-  const html = renderDsd(tag, { componentClass: ctor, props: { count: 4 } }).html;
+  const html = renderToString(tag, { componentClass: ctor, props: { count: 4 } });
   const parsed = parseHtml(dom.document, html);
   const parsedHost = parsed.childNodes[0] as AnyElement;
   const el = dom.document.createElement(tag) as AnyElement;
@@ -114,7 +114,7 @@ test('retry re-activates the captured source after the drift is fixed', () => {
   expect(el.hasError).toEqual(true);
 
   // Repair the DOM to match the program's expectation for count=2.
-  const html = renderDsd(tag, { componentClass: ctor, props: { count: 2 } }).html;
+  const html = renderToString(tag, { componentClass: ctor, props: { count: 2 } });
   const parsed = parseHtml(dom.document, html);
   const parsedHost = parsed.childNodes[0] as AnyElement;
   for (const child of [...el.childNodes]) el.removeChild(child);

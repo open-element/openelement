@@ -19,7 +19,6 @@ export default defineConfig({
     ...openElement({
       routesDir: 'app/routes',
       islandsDir: 'app/islands',
-      componentsDir: 'app/components',
       appShell: {
         tagName: 'ref-layout',
         import: new URL('./app/shell.tsx', import.meta.url).pathname,

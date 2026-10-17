@@ -68,7 +68,7 @@ test.describe('open-input / open-button form participation', () => {
 
   test('required + empty maps to valueMissing and blocks native submission', async ({ page }) => {
     await page.locator('#submit-native').click();
-    const validity = await page.evaluate(`(() => {
+    const validity = await page.evaluate<{ invalid: boolean; formValid: boolean }>(`(() => {
       const host = ${deepFirstExpr('#username')};
       const form = ${deepFirstExpr('#dogfood-form')};
       return {

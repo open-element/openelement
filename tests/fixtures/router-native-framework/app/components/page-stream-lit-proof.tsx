@@ -1,6 +1,6 @@
 /**
  * /stream-lit-proof page element (#1451 T2) — Lit survival inside a streamed
- * deferred-Region page (compiled).
+ * deferred-Block page (compiled).
  *
  * Layout pins the T2 placement contract:
  * - the slow `message` field owns the deferred text Part in #delayed, so the

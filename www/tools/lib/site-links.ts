@@ -155,7 +155,25 @@ export function resolveBuiltPath(path: string, exists: (file: string) => boolean
   return exists(asFile) ? asFile : null;
 }
 
-/** True when the target document anchors the fragment. */
+/**
+ * True when the target document anchors the fragment.
+ *
+ * A URL fragment is percent-encoded while an `id` attribute is the text the
+ * document carries, so comparing the two as written only works while every
+ * anchor is ASCII. The first non-Latin heading — a zh translation's `#部署在代理之后`
+ * arrives as `#%E9%83%A8%E7%BD%B2%E5%9C%A8%E4%BB%A3%E7%90%86%E4%B9%8B%E5%90%8E` —
+ * made this report a perfectly good anchor as broken. Both spellings are tried,
+ * and a fragment that is not valid percent-encoding is compared as written.
+ */
 export function anchorsFragment(html: string, fragment: string): boolean {
-  return html.includes(`id="${fragment}"`) || html.includes(`name="${fragment}"`);
+  const candidates = new Set([fragment]);
+  try {
+    candidates.add(decodeURIComponent(fragment));
+  } catch {
+    // Not percent-encoded: the literal form above is the only one to try.
+  }
+  for (const candidate of candidates) {
+    if (html.includes(`id="${candidate}"`) || html.includes(`name="${candidate}"`)) return true;
+  }
+  return false;
 }

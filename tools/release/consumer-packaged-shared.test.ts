@@ -1,9 +1,24 @@
 import { expect, test } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import {
   DECLARATION_LEAK_PATTERN,
+  assertPackedTarballsFresh,
   consumerPnpmOverridesYaml,
   declarationTypeEdges,
 } from './consumer-packaged-shared.ts';
+
+const repoRoot = resolve(import.meta.dirname!, '../..');
+
+/** HEAD's committer time in epoch ms — the same source freshness reads. */
+function headCommitMs(): number {
+  const seconds = execFileSync('git', ['-C', repoRoot, 'log', '-1', '--format=%ct', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+  return Number(seconds) * 1000;
+}
 
 test('declarationTypeEdges follows type-bearing edges and skips side-effect-only imports', () => {
   const edges = declarationTypeEdges(
@@ -72,5 +87,40 @@ test('consumerPnpmOverridesYaml seals every packed package to its file: tarball'
     { name: '@openelement/ui', path: '/tmp/packs/ui.tgz' },
   ]) {
     expect(yaml).toContain(`'${name}': 'file:${path}'`);
+  }
+});
+
+test('assertPackedTarballsFresh accepts tarballs written after HEAD', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'packed-freshness-fresh-'));
+  try {
+    const tarball = join(dir, 'openelement-element-0.0.0.tgz');
+    const writtenAt = new Date(headCommitMs() + 60_000);
+    await writeFile(tarball, 'packed bytes');
+    await utimes(tarball, writtenAt, writtenAt);
+    await expect(assertPackedTarballsFresh([tarball])).resolves.toBeUndefined();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('assertPackedTarballsFresh fails closed on a tarball older than HEAD and names it', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'packed-freshness-stale-'));
+  try {
+    const tarball = join(dir, 'openelement-element-0.0.0.tgz');
+    const writtenAt = new Date(headCommitMs() - 60 * 60_000);
+    await writeFile(tarball, 'pre-freeze bytes');
+    await utimes(tarball, writtenAt, writtenAt);
+    const error = await assertPackedTarballsFresh([tarball]).then(
+      () => undefined,
+      (cause: unknown) => cause,
+    );
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain('Stale packed release artifact');
+    expect(message).toContain(tarball);
+    expect(message).toContain(writtenAt.toISOString());
+    expect(message).toContain('pack:dry-run');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });

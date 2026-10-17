@@ -23,6 +23,24 @@ export interface CreateRequestContextOptions<
   platform?: unknown;
 }
 
+/**
+ * Single source for the request-env precedence chain (M-R2): the hosting
+ * runtime's live bindings win, then an explicit per-event env, then the
+ * mount's static options env. Every adapter resolves through this — the
+ * chain used to be re-spelled per adapter (nitro-mount carried the 3-link
+ * chain while model.ts carried none), so two copies could drift on which
+ * link wins. `??` (not `||`): an explicitly-passed empty env object is a
+ * real configuration, not a missing one.
+ */
+export function resolveRequestEnv<Env extends Record<string, unknown> = Record<string, unknown>>(
+  ...candidates: Array<Env | undefined>
+): Env | undefined {
+  for (const candidate of candidates) {
+    if (candidate !== undefined) return candidate;
+  }
+  return undefined;
+}
+
 /** Build the canonical OpenElement request context from a platform request event. */
 export function createRequestContext<Env extends Record<string, unknown> = Record<string, unknown>>(
   options: CreateRequestContextOptions<Env>,

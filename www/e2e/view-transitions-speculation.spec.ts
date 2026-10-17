@@ -1,45 +1,155 @@
 /**
  * E2E: View Transitions & Speculation Rules
  *
- * Verifies that the SSG post-processing pipeline correctly injects
- * View Transitions meta tag and Speculation Rules script tag into
- * all built HTML pages.
+ * Verifies the SSG post-processing pipeline's declarations in the built HTML:
+ * the cross-document View Transition opt-in (the `@view-transition` at-rule,
+ * CSS View Transitions Level 2) and the Speculation Rules script.
  *
  * Core SSG output contract — critical to validate in e2e.
+ *
+ * Two facts are kept apart, because only one of them is the product's: the
+ * built document CARRIES the opt-in (true in every engine — it is what the
+ * pipeline emits), and a given engine PARSES it and then actually performs a
+ * cross-document transition (a platform capability, measured where it exists).
+ * An engine without the at-rule ignores it, exactly as it ignored the legacy
+ * meta tag, so the unsupported rows record N/A and assert that degradation
+ * instead of asserting around it.
  */
 
 import { expect, test } from '@playwright/test';
+
+/** The declaration the pipeline injects, and the injection guard's own marker. */
+const OPT_IN_MARKER = '@view-transition { navigation: auto; }';
 
 test.describe('View Transitions', () => {
   const pages = ['/', '/guide/getting-started', '/architecture', '/blog', '/changelog'];
 
   for (const path of pages) {
-    test(`"${path}" has <meta name="view-transition">`, async ({ page }) => {
+    test(`"${path}" carries the cross-document opt-in exactly once`, async ({ page }) => {
+      // `goto` waits for `load`; the declaration is part of the parsed head,
+      // so `networkidle` would only add a race with the page's own background
+      // requests (search index, counters) and never change the answer.
       await page.goto(path);
-      await page.waitForLoadState('networkidle');
 
-      const meta = page.locator('meta[name="view-transition"]');
-      await expect(meta).toHaveAttribute('content', 'same-origin');
+      const shape = await page.evaluate((marker) => {
+        const styles = [...document.querySelectorAll('head style')];
+        return {
+          carrier: styles.some((style) => style.textContent?.includes(marker)),
+          occurrences: (
+            document.head.innerHTML.match(/@view-transition \{ navigation: auto; \}/g) ?? []
+          ).length,
+          legacyMeta: document.querySelectorAll('meta[name="view-transition"]').length,
+        };
+      }, OPT_IN_MARKER);
+      expect(shape.carrier, 'the declaration rides a head <style>').toBe(true);
+      expect(shape.occurrences, 'injected exactly once').toBe(1);
+      expect(shape.legacyMeta, 'the legacy meta spelling is gone').toBe(0);
     });
   }
 
-  test('view-transition meta tag is in <head>', async ({ page }) => {
+  test('the engine parses the opt-in where it has the at-rule', async ({ page }, testInfo) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
 
-    const isInHead = await page.evaluate(() => {
-      const meta = document.querySelector('meta[name="view-transition"]');
-      return meta?.parentElement?.tagName === 'HEAD';
+    const observed = await page.evaluate((marker) => {
+      const parsed: string[] = [];
+      for (const sheet of document.styleSheets) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of rules) {
+          if (rule.cssText.includes(marker)) parsed.push(rule.cssText);
+        }
+      }
+      // A rule the engine cannot parse is dropped from `cssRules` entirely,
+      // which is exactly how an unsupported engine shows the at-rule.
+      return { parsed, text: document.head.innerHTML.includes(marker) };
+    }, OPT_IN_MARKER);
+    testInfo.annotations.push({
+      type: 'cross-document view transitions',
+      description: `parsedRules=${observed.parsed.length} presentAsText=${observed.text}`,
     });
-    expect(isInHead).toBe(true);
+    expect(observed.text, 'the declaration is in the document either way').toBe(true);
+    if (observed.parsed.length === 0) {
+      testInfo.annotations.push({
+        type: 'N/A',
+        description:
+          'this engine has no `@view-transition` at-rule; the parsed-rule row is not measured on it (the declaration is ignored, which is the intended degradation)',
+      });
+      return;
+    }
+    expect(observed.parsed.join(' '), 'the parsed rule is the navigation opt-in').toContain(
+      'navigation: auto',
+    );
   });
 
-  test('only one view-transition meta tag per page', async ({ page }) => {
+  test('a real cross-document navigation runs a view transition, where the engine can', async ({
+    page,
+  }, testInfo) => {
+    // `pagereveal` fires on the DESTINATION document, and only when a
+    // cross-document view transition is actually active — the platform's own
+    // confirmation that the opt-in took effect, not a restatement of the
+    // declaration. The listener is installed by `addInitScript`, which runs in
+    // every document of this page.
+    //
+    // The navigation is a history traversal (`goBack`): the spec runs a
+    // transition for `traverse`, `push` and `replace`, and a `page.goto` is
+    // none of those. A link click would not do either — the client Router
+    // intercepts same-origin clicks, so that is a SAME-document navigation
+    // with its own acceptance.
+    await page.addInitScript(() => {
+      (window as unknown as { __reveal: number }).__reveal = 0;
+      window.addEventListener('pagereveal', () => {
+        (window as unknown as { __reveal: number }).__reveal += 1;
+      });
+    });
     await page.goto('/');
+    await page.goto('/roadmap');
+    await page.goBack();
     await page.waitForLoadState('networkidle');
 
-    const count = await page.locator('meta[name="view-transition"]').count();
-    expect(count).toBe(1);
+    const observed = await page.evaluate((marker) => {
+      // The prerequisite for the CROSS-DOCUMENT row is the at-rule, not the
+      // same-document `ViewTransition` interface: an engine can ship
+      // `startViewTransition` for a single document and still have no
+      // `@view-transition` for navigations between them (Firefox does exactly
+      // that today). Probing the interface would have counted that engine as
+      // capable and then failed it for the engine's own limitation.
+      let atRule = false;
+      for (const sheet of document.styleSheets) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of rules) if (rule.cssText.includes(marker)) atRule = true;
+      }
+      return {
+        atRule,
+        sameDocument:
+          typeof (window as unknown as { ViewTransition?: unknown }).ViewTransition === 'function',
+        revealed: (window as unknown as { __reveal: number }).__reveal,
+        path: location.pathname,
+      };
+    }, OPT_IN_MARKER);
+    testInfo.annotations.push({
+      type: 'cross-document view transitions',
+      description: `atRule=${observed.atRule} sameDocumentApi=${observed.sameDocument} pagereveal=${observed.revealed} at=${observed.path}`,
+    });
+    if (!observed.atRule) {
+      testInfo.annotations.push({
+        type: 'N/A',
+        description:
+          'this engine has no `@view-transition` at-rule, so no cross-document transition is possible; the row is not measured on it',
+      });
+      expect(observed.revealed, 'an engine without the at-rule fires no reveal').toBe(0);
+      return;
+    }
+    expect(observed.path, 'the traversal landed on the previous document').toBe('/');
+    expect(observed.revealed, 'the traversal ran the cross-document transition').toBe(1);
   });
 });
 

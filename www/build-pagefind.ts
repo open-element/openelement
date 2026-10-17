@@ -10,8 +10,8 @@
  * lossy transform before indexing: unwrap every `<template>` tag so page
  * prose becomes indexable light-DOM text.
  *
- * Chrome exclusion is NOT done by string surgery here: the app shell renders
- * light-DOM (there is no shell DSD template to drop), so repeated chrome —
+ * Chrome exclusion is NOT done by string surgery here: the layout renders
+ * light-DOM (there is no layout DSD template to drop), so repeated chrome —
  * header/sidebar/footer, skip link, search overlay, the hidden 404 blocks —
  * carries `data-pagefind-ignore` in the source components, and article/blog
  * prose is scoped with `data-pagefind-body` (which also makes pagefind take

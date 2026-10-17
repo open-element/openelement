@@ -1,0 +1,52 @@
+/**
+ * The hydration executor seam (#1416).
+ *
+ * The compiled kernel must reach the existing-DOM hydration without a static
+ * import of it, or every bundle that merely links the kernel — including one
+ * for a page where no island can hydrate server DOM — carries the whole hydration
+ * machinery. `hydrateExistingDom` stays the single definition and single owner
+ * (`runtime.ts`, the one module that implements it); this seam only decides
+ * where a given graph gets it from:
+ *
+ * - the default `@openelement/element` entry imports
+ *   `runtime/hydrate-install.ts`, whose evaluation installs the executor;
+ * - the `@openelement/element/client-only` entry does not, and a bundler then
+ *   drops the hydration cluster as unreferenced (measured: 9.4 KB on the upstream
+ *   js-framework-benchmark keyed-table harness).
+ *
+ * The executor is a module-level binding rather than a global: installation is
+ * an ordinary module side effect, so it happens before any element can
+ * connect (the entry module evaluates first) and no host global is written.
+ */
+
+import type { PartProgramV2 } from '@openelement/protocol/part-program';
+import type { LifetimeScope } from '../lifetime-scope.ts';
+import type {
+  CompiledHydrationOptions,
+  CompiledProgramInstance,
+  CompiledRuntimeHost,
+} from '../runtime.ts';
+
+/**
+ * The hydration entry point's signature. Local to this seam so neither the kernel
+ * nor this module needs a value import of the hydration implementation.
+ */
+export type HydrationExecutor = (
+  program: PartProgramV2,
+  host: CompiledRuntimeHost,
+  root: Node,
+  options?: CompiledHydrationOptions,
+  ownerScope?: LifetimeScope,
+) => CompiledProgramInstance;
+
+let installed: HydrationExecutor | undefined;
+
+/** Install the one hydration executor. Called by the full entry's install module. */
+export function installHydrationExecutor(executor: HydrationExecutor): void {
+  installed = executor;
+}
+
+/** The installed executor, or `undefined` on a client-only graph. */
+export function hydrationExecutor(): HydrationExecutor | undefined {
+  return installed;
+}

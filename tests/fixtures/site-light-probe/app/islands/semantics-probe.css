@@ -1,0 +1,60 @@
+/* CSS-semantics probe sheet (alpha15 S lane, S-C2/S-11).
+
+   One shadow component's authored sheet carrying the constructs a component
+   stylesheet must survive the build's processing with:
+
+     - CSS nesting (`& .nested-target` inside `.nested-owner`);
+     - a `@keyframes` animation applied on the host;
+     - a registered custom property (`@property --probe-ratio`) with a typed
+       syntax and an initial value, plus an invalid-value sibling that must fall
+       back to that initial value;
+     - `:host` and `:host ::slotted(...)` rules.
+
+   A shadow tree IS the boundary, so this sheet is emitted WITHOUT a scope
+   wrapper — asserted by `css-semantics.spec.ts`, which measures the COMPUTED
+   result in every configured engine. */
+
+@property --probe-ratio {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0.5;
+}
+
+@keyframes probe-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.25;
+  }
+}
+
+:host {
+  display: block;
+  --probe-ratio: 0.25;
+  animation: probe-pulse 3s linear infinite;
+}
+
+:host ::slotted(.probe-slot) {
+  color: rgb(1, 2, 3);
+}
+
+.nested-owner {
+  color: rgb(9, 8, 7);
+
+  & .nested-target {
+    color: rgb(4, 5, 6);
+  }
+}
+
+/* Registered-property probes: the first element sets nothing (inherits: false),
+   the second sets a value its registered syntax rejects. Both must compute to
+   the registered initial value. */
+.ratio-default,
+.ratio-invalid {
+  color: rgb(7, 7, 7);
+}
+
+.ratio-invalid {
+  --probe-ratio: not-a-number;
+}

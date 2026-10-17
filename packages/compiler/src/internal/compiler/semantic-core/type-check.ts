@@ -6,7 +6,7 @@
  * that text: a compiler change could emit a program that fails `tsc` or a
  * consumer's `tsgo` run, and the first evidence was a consumer's
  * build — the reason the "strict emission" corpus in
- * `__tests__/compiled-element-v1.test.ts` had to pin individual `static`
+ * `__tests__/compiled-element-v2.test.ts` had to pin individual `static`
  * annotations by string match.
  *
  * The check compiles the emitted text as a real TypeScript program and returns

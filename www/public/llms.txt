@@ -1,0 +1,27 @@
+# OpenElement
+
+> OpenElement is an open-source compiled-element web framework: author
+> components with JSX-like element syntax, compile them into custom elements
+> with server-side rendering and islands hydration, and ship them through the
+> framework's own router and docs site engine. The workspace ships the
+> `@openelement/*` packages, the `openelement` CLI, and this site.
+
+## Start here
+
+- [Home](https://openelement.org/): the framework overview and the published version line.
+- [Getting started](https://openelement.org/guide/getting-started): install and scaffold a first project.
+- [Core concepts](https://openelement.org/guide/core-concepts): elements, blocks, islands, and the compiled-element model.
+- [Tutorial](https://openelement.org/guide/tutorial): a full walk through authoring, routing, and deployment.
+
+## Reference
+
+- [API reference](https://openelement.org/reference): the public exports, generated from the real package surface.
+- [Error codes](https://openelement.org/errors): every `OEC####` / `OE_*` diagnostic code with its message, generated from the code registries.
+- [Error handling](https://openelement.org/guide/error-handling): the machine-readable diagnostics envelope (`openelement.diagnostics/1`).
+
+## For coding agents
+
+- [Agent development contract](https://github.com/open-element/openelement/blob/main/docs/maintainers/agent-contract.md): the standard contract — canonical commands (derived from package.json), the generated-file map (never hand-edit), gate semantics, diagnostics consumption, and the ritual checklist. Mechanically enforced by a conformance test.
+- [Contributing](https://github.com/open-element/openelement/blob/main/CONTRIBUTING.md): the repository's contribution doctrine — the vp task entry, the gate architecture, and the release path.
+- [Build diagnostics](https://github.com/open-element/openelement/blob/main/packages/protocol/src/diagnostics.ts): the envelope types — parse build failures with `parseDiagnosticReport` from `@openelement/protocol/diagnostics`, never by grepping logs.
+- [Architecture](https://github.com/open-element/openelement/blob/main/docs/architecture/): design principles, package boundaries, and the seam registry.

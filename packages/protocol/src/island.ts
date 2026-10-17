@@ -44,6 +44,20 @@ export interface IslandTransformOptions {
   islandsDir: string;
   /** Absolute or relative file path of the source being processed */
   filePath: string;
+  /**
+   * Layout-convention admission (alpha15 R batch 3): the resolved layout
+   * module the router convention owns (`app/layout.tsx`, tag `app-layout`,
+   * or a project-relative custom `layout: { import }` override). The gate
+   * admits this one path with its resolved tag even though it lives outside
+   * `islandsDir`. Absent when the project configures no layout module
+   * (`layout: false`, or the deletable convention file is gone).
+   */
+  layout?: {
+    /** Project-relative layout module path (e.g. "app/layout.tsx") */
+    path: string;
+    /** Resolved layout tag (e.g. "app-layout") */
+    tagName: string;
+  };
 }
 
 /** The island transform output: rewritten source plus extracted facts. */

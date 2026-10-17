@@ -13,8 +13,8 @@
 
 export type {
   ApiRouteDecl,
-  AppShellDecl,
-  AppShellPlan,
+  LayoutDecl,
+  LayoutPlan,
   BuildArtifacts,
   BuildClientAsset,
   BuildI18nOptions,
@@ -36,7 +36,7 @@ export type {
   MiddlewareScopeDecl,
   PageRouteDecl,
   RendererDecl,
-  ResolvedAppShell,
+  ResolvedLayout,
   SpeculationRulesOptions,
   SsgBehaviorOptions,
   SsgPageOutput,
@@ -50,12 +50,15 @@ export type {
 export { ssgRender } from './ssg-render.ts';
 
 export {
+  buildElementRuntimePreloadLink,
   buildSpeculationRulesJson,
+  ELEMENT_RUNTIME_PRELOAD_ATTRIBUTE,
   extractLinkHrefs,
   injectCspMeta,
+  injectElementRuntimePreload,
   injectIslandPrefetchRules,
   injectSpeculationRules,
-  injectViewTransitionMeta,
+  injectViewTransitionOptIn,
 } from './postprocess.ts';
 export { buildIslandPrefetchLinks, type SpeculationEagerness } from './speculation-rules.ts';
 
@@ -102,6 +105,7 @@ export {
   extractCustomElementTags,
   generateIslandManifests,
   pageChunkMap,
+  pageHasClientIslands,
   routeFromRelativePath,
   writeIslandManifests,
 } from './island-manifest.ts';
@@ -113,12 +117,16 @@ export type {
   PageIslandManifest,
 } from './island-manifest.ts';
 
-export { generateClientEntry } from './entry-client-codegen.ts';
 export {
-  islandsMightUseRegions,
-  elementRuntimeRegionsAlias,
-  type IslandsRegionsScanInput,
-} from './island-regions-scan.ts';
+  clientEntryNeedsElementRuntime,
+  elementServicesSpecifier,
+  generateClientEntry,
+} from './entry-client-codegen.ts';
+export {
+  islandsMightUseBlocks,
+  elementRuntimeBlocksAlias,
+  type IslandsBlocksScanInput,
+} from './island-blocks-scan.ts';
 export { validateClientIslandEntry } from './entry-generators.ts';
 export {
   isIslandDeliveryStrategy,

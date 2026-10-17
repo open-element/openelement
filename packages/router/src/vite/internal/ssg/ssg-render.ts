@@ -31,7 +31,8 @@ import {
 } from '@openelement/protocol/client-assets';
 import { createLogger } from '@openelement/element';
 import { expandDynamicRoutes, expandI18nLocales } from './ssg-dynamic.ts';
-import { findHtmlFiles, renderRequestTimeServerModule } from './ssg-helpers.ts';
+import { renderRequestTimeServerModule } from './ssg-helpers.ts';
+import { pruneSsgPages, writeSsgPageManifest } from './output-manifest.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, SsgRenderErrorCode } from '../../../internal/error-codes.ts';
 import { SSG_PRERENDER_ENV_KEY } from '../server-runtime/response-channel.ts';
@@ -193,14 +194,50 @@ export async function ssgRender(
         : ''),
   );
 
-  await expandDynamicRoutes(dynamicRoutes, renderRoute, getStaticPaths, options, root, outDir);
+  // ── Output ownership ────────────────────────────────────────
+  // The pages of THIS run are the authority on the URLs they cover: a page
+  // generated last time and not regenerated now is stale and must not survive
+  // (a removed route would otherwise keep serving), and a page generated last
+  // time under the same URL must not be mistaken for a conflict when this run
+  // puts the fresh bytes in place. Both follow from one record of what the
+  // previous run wrote — see output-manifest.ts for why this is a record
+  // rather than a wipe of the output directory.
+  //
+  // This runs before the first write of the run, including the dynamic-route
+  // expansion below.
+  const outputDir = join(root, outDir);
+  const pruned = pruneSsgPages(outputDir);
+  if (pruned.length > 0) {
+    log.info(`Pruned ${pruned.length} page(s) from the previous build`);
+  }
+  /** Absolute paths of every page document this run generates. */
+  const generatedPages: string[] = [];
+  /**
+   * Replace one recorded path with another (the clean-URL and 404 renames move
+   * files after they are written, and the record has to follow them or the
+   * next run would prune the wrong names).
+   */
+  const recordRename = (from: string, to: string) => {
+    const index = generatedPages.indexOf(from);
+    if (index === -1) generatedPages.push(to);
+    else generatedPages[index] = to;
+  };
+
+  await expandDynamicRoutes(
+    dynamicRoutes,
+    renderRoute,
+    getStaticPaths,
+    options,
+    root,
+    outDir,
+    generatedPages,
+  );
 
   // ── Main SSG through the internal static generator (#1560) ──────
   // The entry's default export is the WinterCG app; the generator drives
   // app.fetch per eligible static path — the same dispatch every runtime
   // serves, so the prerendered bytes carry the same middleware semantics.
 
-  const outputDir = join(root, outDir);
   const app = module.default as SsgDispatchApp | undefined;
   if (!app || typeof app.fetch !== 'function') {
     throw buildError(
@@ -235,13 +272,15 @@ export async function ssgRender(
     (path) => !hostMountPaths.has(path) && !requestTimePaths.has(path),
   );
 
-  await prerenderStaticPages(app, prerenderTargets, outputDir, {
-    onRequestTimeExcluded: (path) => requestTimePaths.has(path),
-    onNon200: (path, status) => staticNon200.push({ path, status }),
-    onError: (error) => {
-      throw error;
-    },
-  });
+  generatedPages.push(
+    ...(await prerenderStaticPages(app, prerenderTargets, outputDir, {
+      onRequestTimeExcluded: (path) => requestTimePaths.has(path),
+      onNon200: (path, status) => staticNon200.push({ path, status }),
+      onError: (error) => {
+        throw error;
+      },
+    })),
+  );
 
   // Emit the request-time server artifacts when any route needs the server at
   // request time: a 'dynamic' route (GET + POST) or any page with an action
@@ -314,10 +353,19 @@ export async function ssgRender(
 
   // ── Post-processing ─────────────────────────────────────────
 
-  // Convert flat HTML files to clean URLs: about.html -> about/index.html
-  const allHtmlFiles = findHtmlFiles(outputDir);
-  for (const filePath of allHtmlFiles) {
+  // Convert flat HTML files to clean URLs: about.html -> about/index.html.
+  //
+  // The list is this run's own output, not a walk of the directory: a page the
+  // previous run left behind is not this run's to reason about (the prune above
+  // already removed it), and reading the directory is how a stale
+  // `about/index.html` came to look like a conflict with the fresh
+  // `about.html` — which left the canonical URL serving the previous build.
+  // Snapshot: `recordRename` rewrites entries as the files move on disk.
+  // Only HTML documents are converted — the prerender extension map also
+  // produces .xml/.yaml/.txt siblings, and those keep their flat URLs.
+  for (const filePath of [...generatedPages]) {
     const rel = relative(outputDir, filePath);
+    if (!rel.endsWith('.html')) continue;
     if (rel.endsWith('index.html') || rel === '404.html' || rel.endsWith('/404.html')) continue;
     const baseName = rel.replace(/\.html$/, '');
     const urlBaseName = normalizeSeparators(baseName);
@@ -325,11 +373,13 @@ export async function ssgRender(
     const indexPath = join(dirPath, 'index.html');
     // #956: an existing directory is not a conflict — /blog coexists with the
     // /blog/<article> pages under it. Skipping on the directory left index
-    // routes flat (blog.html), which dropped them from the sitemap. Only an
-    // existing index.html is a real clash.
-    if (existsSync(indexPath)) continue;
+    // routes flat (blog.html), which dropped them from the sitemap. Only a
+    // page this run already put at the same URL is a real clash, and that
+    // means two routes map to one clean URL.
+    if (generatedPages.includes(indexPath)) continue;
     mkdirSync(dirPath, { recursive: true });
     renameSync(filePath, indexPath);
+    recordRename(filePath, indexPath);
     log.info(`Clean URL: /${urlBaseName} -> ${urlBaseName}/index.html`);
   }
 
@@ -346,6 +396,7 @@ export async function ssgRender(
     options,
     root,
     outDir,
+    generatedPages,
   );
 
   // Rename 404/index.html -> 404.html for GitHub Pages — at the root and for
@@ -361,6 +412,7 @@ export async function ssgRender(
       rmSync(html);
     }
     renameSync(index, html);
+    recordRename(index, html);
     const dir404 = join(dir, '404');
     if (existsSync(dir404)) {
       rmSync(dir404, { recursive: true });
@@ -379,17 +431,25 @@ export async function ssgRender(
     }
   }
 
+  // The run's own record of what it generated: the authority the next run's
+  // prune and the acceptance of a removed route both rest on. Written after
+  // every rename above so it names the files that are actually on disk.
+  writeSsgPageManifest(outputDir, generatedPages);
+
   // ── Post-processing modules ─────────────────────────────────
   const {
     injectCspMeta,
-    injectViewTransitionMeta,
+    injectViewTransitionOptIn,
     injectSpeculationRules,
     buildSpeculationRulesJson,
   } = await import('./postprocess.ts');
 
   if (options.viewTransition !== false) {
-    injectViewTransitionMeta(outputDir);
-    log.info('View Transitions meta tag injected');
+    injectViewTransitionOptIn(outputDir);
+    // Not a meta tag: the injection is the `@view-transition` at-rule in a
+    // plain <style> block, which is the only form that can carry the
+    // reduced-motion opt-out (see injectViewTransitionOptIn's own doc).
+    log.info('View Transitions opt-in style block injected');
   }
 
   if (options.speculation) {

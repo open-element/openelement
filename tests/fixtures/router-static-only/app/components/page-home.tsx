@@ -5,7 +5,7 @@
  * in definePage(); the compiled Part Program is the render — there is no
  * runtime JSX path. The compile-time-only element binding is a canonical
  * named import (the open:compiled-element transform strips it from the
- * generated module); see __fixtures__/compiled-element-v1/counter.tsx.
+ * generated module); see __fixtures__/compiled-element-v2/counter.tsx.
  */
 import { element, OpenElement } from '@openelement/element';
 

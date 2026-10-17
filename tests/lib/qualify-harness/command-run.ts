@@ -39,14 +39,21 @@ export async function runStep(
     env: options.env === undefined ? process.env : { ...process.env, ...options.env },
     stdio: [options.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
   });
-  if (options.stdin !== undefined) {
+  if (options.stdin !== undefined && child.stdin !== null) {
     child.stdin.write(options.stdin);
     child.stdin.end();
   }
+  // Async-iterate the streams directly: Array.fromAsync needs an ESNext lib
+  // entry, and this runner typechecks under every consumer's baseline lib.
+  const collect = async (stream: AsyncIterable<unknown>): Promise<Uint8Array[]> => {
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of stream) chunks.push(chunk as Uint8Array);
+    return chunks;
+  };
   const [code, stdoutBuf, stderrBuf] = await Promise.all([
     new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1))),
-    Array.fromAsync(child.stdout!),
-    Array.fromAsync(child.stderr!),
+    collect(child.stdout!),
+    collect(child.stderr!),
   ]);
   // Buffer.concat, never Buffer.from(chunk[]): the latter coerces each chunk
   // to a single number, collapsing captured output to NUL bytes (surfaced by

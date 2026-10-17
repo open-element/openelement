@@ -7,13 +7,13 @@
  * entry codegen resolves the SSR registration/render tag from the route
  * module's compiled program (`default.__partProgram.tag`) at generated-entry
  * evaluation time, with the path-derived tag kept only as the fallback for
- * classes that carry no compiled program (renderDsd still fails closed on
+ * classes that carry no compiled program (renderToString still fails closed on
  * those, exactly as before).
  *
  * Pre-fix, definePage routes registered/rendered under the bare path-derived
  * tag, so a page element whose @element tag differed from the file-derived
  * tag (e.g. routes/workspace-records.tsx -> @element('workspace-records-page'))
- * failed closed at REQUEST time: renderDsd tag "workspace-records" does not
+ * failed closed at REQUEST time: renderToString tag "workspace-records" does not
  * match the compiled program tag "workspace-records-page" (OE_PROGRAM_MISSING)
  * → HTTP 500. Covered by the request-time and framework-mode fixtures.
  */
@@ -131,7 +131,7 @@ test('the generated entry imports the tag resolvers per renderer and never forks
   expect(nativeEntry.includes('resolveLitPageTag')).toEqual(false);
 
   const litEntry = renderEntry(
-    buildEntryDescriptor(definePageRoutes, { renderer: 'lit', appShell: false }),
+    buildEntryDescriptor(definePageRoutes, { renderer: 'lit', layout: false }),
   );
   expect(litEntry).toContain(
     "import { resolveLitPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",

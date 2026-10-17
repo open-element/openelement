@@ -77,7 +77,7 @@ export default class ArticlePage extends OpenElement {
 - 路由描述符不得携带自定义 `props` 投影器或依赖请求的 head；`renderIntent` 只能包含字面量的 `mode` 与 `stream` 赋值。
 - 只接受原生编译页面；`defineLitPage` 会被拒绝。
 
-有两个项目级约束容易漏掉。流式渲染要求应用壳在**整个项目范围内关闭**（`openElement({ appShell: false })`，且不得有 `layouts`）：流式文档是分片冲刷的，无法被壳包裹，因此单个路由写 `route: { layout: false }` 并不能满足这道门禁。并且 loader 仍然只返回**一个对象**——没有第二个 loader，也没有新的数据形状。
+有两个项目级约束容易漏掉。流式渲染要求应用壳在**整个项目范围内关闭**（`openElement({ layout: false })`，且不得有 `layouts`）：流式文档是分片冲刷的，无法被壳包裹，因此单个路由写 `route: { layout: false }` 并不能满足这道门禁。并且 loader 仍然只返回**一个对象**——没有第二个 loader，也没有新的数据形状。
 
 ## 前置门禁决定一切 HTTP 结果
 
@@ -91,7 +91,7 @@ export default class ArticlePage extends OpenElement {
 
 编译器根据 `defer` 列表、编译属性元数据以及页面程序既有的 signal→Part 依赖，派生出路由专属的清单，然后检查该 signal 的每一个消费点。只要存在任何不合格的用法，整个字段就会被拒绝——没有部分延迟。
 
-合格：锚点拥有的**文本 Part**，以及有界的 `when`/`each` **Region**。Region 的 item 模板仅当其动态取值完全由该 Region 拥有、且通过常规序列化转义时才合格。
+合格：锚点拥有的**文本 Part**，以及有界的 `when`/`each` **Block**。Block 的 item 模板仅当其动态取值完全由该 Block 拥有、且通过常规序列化转义时才合格。
 
 不合格，每一项都会带路由、字段、源码位置与确切的违规 sink 报错：
 
@@ -99,14 +99,14 @@ export default class ArticlePage extends OpenElement {
 - attribute、boolean、class、style、raw HTML、ref、事件或 slot 路由 sink；
 - 壳/布局或 head 取值；
 - 宿主或子节点的开标签，以及锚点路径跨越 slot 或自定义元素宿主的任何 sink；
-- item 模板中含有自定义元素（不透明宿主）或帧不安全标签/属性的 Region；
+- item 模板中含有自定义元素（不透明宿主）或帧不安全标签/属性的 Block；
 - 不透明的 renderer 或外部组件包装。
 
 诊断会以 `field -> computed total -> text p3` 或 `field -> attribute p4` 的形式点名 sink，补救方式总是三者之一：把该字段放回前置门禁、移除这个 sink，或关闭流式渲染。普通非流式路由完全不受这些规则影响。
 
 ## 预算
 
-延迟是有界的，而且这个上界在四个地方镜像——构建扫描、生成的处理器、浏览器安装器，以及公开的手写清单执行器（`createDeferredDsdExecutor`）——因此超预算的路由会构建失败，而不是在 hydration 时静默失败：
+延迟是有界的，而且这个上界在四个地方镜像——构建扫描、生成的处理器、浏览器安装器，以及公开的手写清单执行器（`createStreamShellExecutor`）——因此超预算的路由会构建失败，而不是在 hydration 时静默失败：
 
 - 每个路由最多 **32 个延迟字段**；
 - 这些字段合计最多 **64 个 Part owner**。

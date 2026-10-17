@@ -4,7 +4,7 @@
  *
  * Every failure raised by this package is an {@linkcode OpenElementError}
  * carrying `code`, `severity`, `phase` and `recoverable`; the dedicated
- * exception classes below (`PartProgramClaimError`,
+ * exception classes below (`PartProgramHydrationError`,
  * `CompiledProgramValidationError`, `EachKeyError`) only ADD their own
  * provenance fields on top of that contract, so a consumer catches by code
  * through the one class.
@@ -139,7 +139,7 @@ export type ErrorTelemetryHook = (error: OpenElementError) => void;
  * reject data before any DOM work starts.
  */
 export const ProgramErrorCode = {
-  /** A Part Program v1 failed structural validation. */
+  /** A Part Program v2 failed structural validation. */
   INVALID_PROGRAM: 'OE_PROGRAM_INVALID',
   /** A Part Program cannot be serialized to JSON, so it is not a wire artifact. */
   NOT_SERIALIZABLE: 'OE_PROGRAM_NOT_SERIALIZABLE',
@@ -161,7 +161,7 @@ export const EachKeyErrorCode = {
   ITEM_NOT_A_RECORD: 'OE_EACH_ITEM_NOT_A_RECORD',
   /** A key value cannot round-trip (an object, function or symbol has no stable identity). */
   KEY_NOT_ROUND_TRIPPABLE: 'OE_EACH_KEY_NOT_ROUND_TRIPPABLE',
-  /** Two items in one list Region derived the same key. */
+  /** Two items in one list Block derived the same key. */
   DUPLICATE_KEY: 'OE_EACH_KEY_DUPLICATE',
 } as const;
 
@@ -170,7 +170,7 @@ export const EachKeyErrorCode = {
  * built into fresh DOM, or re-read on a signal write (phase `render`).
  */
 export const RuntimeErrorCode = {
-  /** A list Region's signal does not hold an array. */
+  /** A list Block's signal does not hold an array. */
   LIST_VALUE_NOT_ARRAY: 'OE_RUNTIME_LIST_VALUE_NOT_ARRAY',
   /** render() reads a signal that is not registered on the host. */
   HOST_SIGNAL_MISSING: 'OE_RUNTIME_HOST_SIGNAL_MISSING',
@@ -188,9 +188,9 @@ export const RuntimeErrorCode = {
   PATH_UNRESOLVED: 'OE_RUNTIME_PATH_UNRESOLVED',
   /** A compiled node path resolved to a non-element node. */
   PATH_NOT_ELEMENT: 'OE_RUNTIME_PATH_NOT_ELEMENT',
-  /** An item value/attribute slot appears outside an `each` Region. */
+  /** An item value/attribute slot appears outside an `each` Block. */
   ITEM_SLOT_OUTSIDE_REGION: 'OE_RUNTIME_ITEM_SLOT_OUTSIDE_REGION',
-  /** An item slot found no owning `each` Region. */
+  /** An item slot found no owning `each` Block. */
   ITEM_SLOT_WITHOUT_REGION: 'OE_RUNTIME_ITEM_SLOT_WITHOUT_REGION',
   /** An item slot has no owner document to create nodes from. */
   ITEM_SLOT_WITHOUT_DOCUMENT: 'OE_RUNTIME_ITEM_SLOT_WITHOUT_DOCUMENT',
@@ -200,8 +200,8 @@ export const RuntimeErrorCode = {
   FRESH_ROOT_NOT_EMPTY: 'OE_RUNTIME_FRESH_ROOT_NOT_EMPTY',
   /** A fixed Part has no serialized anchor to bind. */
   SERIALIZED_ANCHOR_MISSING: 'OE_RUNTIME_SERIALIZED_ANCHOR_MISSING',
-  /** A when/each Region Part needs the Region builders, which this entry does not install (#1548). */
-  REGION_BUILDERS_MISSING: 'OE_RUNTIME_REGION_BUILDERS_MISSING',
+  /** A when/each Block Part needs the Block builders, which this entry does not install (#1548). */
+  BLOCK_BUILDERS_MISSING: 'OE_RUNTIME_BLOCK_BUILDERS_MISSING',
 } as const;
 
 /** Element-lifecycle failures: the kernel was driven outside its contract (phase `csr`). */
@@ -210,7 +210,7 @@ export const KernelErrorCode = {
   DISPOSED: 'OE_KERNEL_DISPOSED',
   /** `__partProgram.tag` does not match the host element's tag. */
   TAG_MISMATCH: 'OE_KERNEL_TAG_MISMATCH',
-  /** Existing DOM needs the claim executor, which this entry does not install. */
+  /** Existing DOM needs the hydration executor, which this entry does not install. */
   CLAIM_EXECUTOR_MISSING: 'OE_KERNEL_CLAIM_EXECUTOR_MISSING',
   /** A supplied root is not owned by the element it was passed for. */
   ROOT_NOT_OWNED: 'OE_KERNEL_ROOT_NOT_OWNED',
@@ -226,23 +226,37 @@ export const ContextErrorCode = {
 
 /** Compiled-style application failures (phase `csr`). */
 export const StyleErrorCode = {
-  /** The shadow root has no `adoptedStyleSheets` support. */
-  ADOPTED_STYLES_UNSUPPORTED: 'OE_STYLES_ADOPTED_SHEETS_UNSUPPORTED',
-  /** A light-DOM style sink needs an owner document with a usable head. */
-  LIGHT_SINK_WITHOUT_DOCUMENT: 'OE_STYLES_LIGHT_SINK_WITHOUT_DOCUMENT',
+  /** The target root (shadow root or document) has no `adoptedStyleSheets` support. */
+  ADOPTED_STYLES_UNSUPPORTED: 'OE_STYLES_ADOPTED_STYLES_UNSUPPORTED',
+  /** A generated sheet adapter could not fill its sheet (request or replace failed). */
+  SHEET_LOAD_FAILED: 'OE_STYLES_SHEET_LOAD_FAILED',
+  /**
+   * A component stylesheet resource href is not a site-absolute path or an
+   * absolute http(s) URL — the one shape rule both stylesheet-link sinks (the
+   * document head and a DSD template) enforce.
+   */
+  INVALID_STYLE_HREF: 'OE_STYLES_INVALID_HREF',
+  /**
+   * A URL-less (author-owned in-memory, or shim) stylesheet's rules could not
+   * be read while serializing server output (phase `ssr`): the sheet is
+   * skipped and reported, and the renderer never invents an external URL for
+   * author-owned data. A cross-origin `CSSStyleSheet` handed to
+   * `static styles` is the reachable cause.
+   */
+  SHEET_RULES_UNREADABLE: 'OE_STYLES_SHEET_RULES_UNREADABLE',
 } as const;
 
 /**
  * Claim failures: the existing DOM does not match the program that would own
  * it. The value shipped in 1.0.0-alpha.3 and is kept verbatim; consumers match
- * on it, and `PartProgramClaimError` is its only raiser.
+ * on it, and `PartProgramHydrationError` is its only raiser.
  */
 export const ClaimErrorCode = {
   /** Claimed DOM structure or node identity drifted from the compiled program. */
   STRUCTURE_MISMATCH: 'OPEN_ELEMENT_COMPILED_CLAIM_MISMATCH',
   /** A pre-upgrade event capture argument was neither an array nor a capture object. */
   PRE_UPGRADE_EVENTS_INVALID: 'OE_CLAIM_PRE_UPGRADE_EVENTS_INVALID',
-  /** Bounded recovery met a dynamic node inside a static Region. */
+  /** Bounded recovery met a dynamic node inside a static Block. */
   DYNAMIC_NODE_IN_STATIC_REGION: 'OE_CLAIM_DYNAMIC_NODE_IN_STATIC_REGION',
   /** An each item template carries Part anchors, which cannot be rebuilt statically. */
   ITEM_TEMPLATE_ANCHOR: 'OE_CLAIM_ITEM_TEMPLATE_ANCHOR',
@@ -278,6 +292,19 @@ export const AuthoringErrorCode = {
   INVALID_TAG_NAME: 'OE_INVALID_TAG_NAME',
   /** A `wrapInDocument` meta entry uses an attribute name HTML forbids. */
   UNSAFE_META_ATTRIBUTE: 'OE_UNSAFE_META_ATTRIBUTE',
+  /**
+   * A server constructor (`__h`) attribute name is unsafe: it fails the one
+   * canonical safe-attribute-name predicate (event handlers and forbidden
+   * sinks included). The compiler-generated call sites cannot produce one —
+   * the runtime check is the boundary for direct helper misuse.
+   */
+  UNSAFE_ATTRIBUTE_NAME: 'OE_UNSAFE_ATTRIBUTE_NAME',
+  /**
+   * A URL-carrying attribute value (`href`, `src`, `action`, `formaction`,
+   * `xlink:href`) carries a script-bearing scheme, screened by the ONE shared
+   * stream-frame URL policy. The value never reaches markup.
+   */
+  UNSAFE_URL_SINK: 'OE_UNSAFE_URL_SINK',
   /** A `wrapInDocument` structuredData entry is not a JSON-LD document. */
   INVALID_STRUCTURED_DATA: 'OE_INVALID_STRUCTURED_DATA',
   /** An `html` sink received a string that was not marked trusted. */
@@ -310,6 +337,22 @@ export const FacadeErrorCode = {
   STREAM_TYPE_MISMATCH: 'OE_STREAM_TYPE_MISMATCH',
   /** An `HTMLElement` member was reached during SSR, where no DOM exists. */
   SSR_DOM_ACCESS_UNSUPPORTED: 'SSR_DOM_ACCESS_UNSUPPORTED',
+  /** A deferred shell read a pending property before it resolved. */
+  STREAM_PENDING_READ: 'OE_STREAM_PENDING_READ',
+  /** A deferred seed value is not JSON-safe (cyclic, bigint, or class instance). */
+  STREAM_VALUE_NOT_SERIALIZABLE: 'OE_STREAM_VALUE_NOT_SERIALIZABLE',
+  /** A deferred route manifest is malformed. */
+  STREAM_MANIFEST_MALFORMED: 'OE_STREAM_MANIFEST_MALFORMED',
+  /** A deferred route manifest does not match the compiled program. */
+  STREAM_MANIFEST_MISMATCH: 'OE_STREAM_MANIFEST_MISMATCH',
+  /** A reserved property name cannot enter a deferred seed. */
+  STREAM_RESERVED_PROPERTY: 'OE_STREAM_RESERVED_PROPERTY',
+  /** A deferred manifest or seed exceeds its bounded budget. */
+  STREAM_BUDGET_EXCEEDED: 'OE_STREAM_BUDGET_EXCEEDED',
+  /** A deferred field or Part owner is invalid or not deferrable. */
+  STREAM_FIELD_INVALID: 'OE_STREAM_FIELD_INVALID',
+  /** An unknown deferred field was resolved or serialized. */
+  STREAM_UNKNOWN_FIELD: 'OE_STREAM_UNKNOWN_FIELD',
 } as const;
 
 /**

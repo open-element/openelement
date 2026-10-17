@@ -4,7 +4,7 @@ OpenElement has exactly two public core products: **Element** and **Router**.
 
 | Product | Responsibility                                                                                                                 | Independent boundary                                                   |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| Element | Compiled Custom Elements, reactivity, lifecycle, server serialization, fresh DOM, and existing-DOM claim/update                | Installs, builds, and runs without Router                              |
+| Element | Compiled Custom Elements, reactivity, lifecycle, server serialization, fresh DOM, and existing-DOM hydration/update                | Installs, builds, and runs without Router                              |
 | Router  | Route selection, HTTP semantics, navigation, loaders/actions, Document resolution, and Native/Lit Framework Mode orchestration | Route Mode runs without Element; renderer integrations remain explicit |
 
 A standard Custom Element is the durable component boundary. JSX is compiled input, not a public runtime virtual-DOM contract. Explicit and file-generated routes share one route authority; URLPattern owns pattern syntax while Router owns ordered winner selection, method dispatch, cancellation, and application outcomes.

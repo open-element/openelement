@@ -19,6 +19,8 @@
  * the narrow runtime reads mirror the generated helpers exactly.
  */
 
+import { PageErrorCode, serveError } from '../../../internal/error-codes.ts';
+
 /** The page descriptor a definePage/defineLitPage route module carries on its default export. */
 export type PageDefinition = Record<string, unknown>;
 
@@ -113,6 +115,49 @@ export interface PagePropsRuntimeDeps {
    * kernel-free /authoring leaf): one rule, no second copy.
    */
   dangerousKeys: ReadonlySet<string>;
+}
+
+/**
+ * The server function page render seam (alpha15 server lane).
+ *
+ * A function-page descriptor's `render` is the compiled server constructor
+ * function (the component lane lowered the authored TSX into `__h`/`__t`
+ * composed code) — props in, final HTML out. Two boundary checks live here
+ * because this is the ONE place loader-projected props meet the compiled
+ * render:
+ *
+ * - the render must be a function (`OE_PAGE_FUNCTION_RENDER`) — a descriptor
+ *   whose render never went through the compiler has nothing to call;
+ * - the props must NOT carry the reserved `children` key
+ *   (`OE_PAGE_FUNCTION_PROPS`). The compiled `props.children` channel is
+ *   trusted final HTML produced by the COMPILER from a caller's own JSX
+ *   children (the same trust level as an `__ssr` result); page props come
+ *   from loader/params data, so a `children` key there is a smuggling
+ *   attempt and is refused before the render function runs.
+ *
+ * The render function returns a string (the constructors always do); the
+ * type is widened to `unknown` so a hostile loader cannot make this seam
+ * trust a descriptor the compiler never produced.
+ */
+export function renderFunctionPage(page: unknown, props: ProjectedProps): string {
+  const descriptor = (page ?? {}) as { render?: unknown };
+  if (typeof descriptor.render !== 'function') {
+    throw serveError(
+      PageErrorCode.FUNCTION_RENDER,
+      '[openElement] the server function page render is not a function — the route module must ' +
+        'default-export definePage(Component), and the compiler must have compiled the ' +
+        'component function into the route module.',
+    );
+  }
+  if (Object.hasOwn(props, 'children')) {
+    throw serveError(
+      PageErrorCode.FUNCTION_PROPS,
+      '[openElement] the server function page props carry the reserved "children" key, which is ' +
+        'the compiler-owned composition channel — rename the loader field; HTML never arrives ' +
+        'through page props.',
+    );
+  }
+  return String((descriptor.render as (props: ProjectedProps) => unknown)(props));
 }
 
 /**

@@ -8,7 +8,7 @@ type RendererMode = 'native' | 'lit';
  * @openelement/router/server-runtime functions the generated entry imports
  * and how its `createGeneratedApp` config binds the page-render runtime to
  * the entry's own Element imports. The emitted call sites (`__ssr`,
- * `__pageProps`, `__renderAppShell`, …) are identical for both renderers —
+ * `__pageProps`, `__renderLayout`, …) are identical for both renderers —
  * only this seam forks. The runtime binding itself moved into the factory
  * (server-runtime/app.ts, #1470 block e); the entry keeps only the
  * adapter-selected imports and the `pageRuntime` config lines.
@@ -28,7 +28,7 @@ interface RuntimeSeam {
 
 interface RendererAdapter {
   readonly mode: RendererMode;
-  readonly hydration: 'compiled-claim' | 'lit-adoption';
+  readonly hydration: 'compiled-hydration' | 'lit-adoption';
   readonly supportsCompiledStream: boolean;
   readonly firstServerImport?: string;
   serverImports(hasStreamRoute: boolean): ImportDecl[];
@@ -39,16 +39,17 @@ const RUNTIME_MODULE = '@openelement/router/server-runtime';
 
 const native: RendererAdapter = {
   mode: 'native',
-  hydration: 'compiled-claim',
+  hydration: 'compiled-hydration',
   supportsCompiledStream: true,
   serverImports(hasStreamRoute) {
     return [
       {
         from: '@openelement/element',
         names: [
-          'createDeferredDsdExecutor',
+          'createDocumentStyleResources',
+          'createStreamShellExecutor',
           ...(hasStreamRoute ? ['documentStreamParts', 'escapeAttr'] : []),
-          'renderDsd',
+          'renderToString',
           'trustedHtml',
           'escapeHtml',
           'wrapInDocument',
@@ -71,7 +72,7 @@ const native: RendererAdapter = {
       },
       pageRuntimeLines: [
         `mode: 'native',`,
-        `renderDsd,`,
+        `renderToString,`,
         `customElements,`,
         `trustedHtml,`,
         `escapeHtml,`,
@@ -89,7 +90,7 @@ const lit: RendererAdapter = {
     return [
       {
         from: '@openelement/element/html',
-        names: ['trustedHtml', 'escapeHtml', 'wrapInDocument'],
+        names: ['createDocumentStyleResources', 'trustedHtml', 'escapeHtml', 'wrapInDocument'],
       },
       {
         from: '@openelement/router/lit-ssr',

@@ -4,16 +4,16 @@
  * These measure the canonical compiled path (one Part Program through the
  * real runtime and the real @preact/signals-core engine) against the
  * counting fake DOM in ./counting-dom.ts. The fake DOM
- * contributes no layout/paint cost, so these numbers isolate kernel/region
+ * contributes no layout/paint cost, so these numbers isolate kernel/block
  * algorithmic behavior — the upstream js-framework-benchmark lane (on the
  * fork) owns layout-inclusive numbers. SSR serialization uses the CANONICAL
  * server serializer (serializeCompiledProgram); the test-only serializeToHtml
  * in runtime.ts
- * diverges for multi-field each Regions (serializes ival slots as
+ * diverges for multi-field each Blocks (serializes ival slots as
  * "[object Object]") and is deliberately not used — see the packet report.
  *
  * Diagnostics targeted (per the packet): Signal -> single Part latency,
- * attribute/property Part writes, keyed Region behavior at 1k-row scale, SSR
+ * attribute/property Part writes, keyed Block behavior at 1k-row scale, SSR
  * serialize / claim / fresh costs, and listener/subscription stability under
  * churn.
  *
@@ -37,12 +37,12 @@ import { promisify } from 'node:util';
 
 const execFile = promisify(execFileCallback);
 import { compileElementProgram } from '../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
-// #1548: the Region builders reach the runtime through the regions seam — a
+// #1548: the Block builders reach the runtime through the blocks seam — a
 // graph installs them exactly like an element entry does. The keyed-table
-// benchmark renders each-Regions, so this graph installs.
-import '../../packages/element/src/internal/compiled/runtime/regions-install.ts';
+// benchmark renders each-Blocks, so this graph installs.
+import '../../packages/element/src/internal/compiled/runtime/blocks-install.ts';
 import {
-  claimExistingDom,
+  hydrateExistingDom,
   createFreshDom,
 } from '../../packages/element/src/internal/compiled/runtime.ts';
 import { serializeCompiledProgram } from '../../packages/element/src/internal/compiled/server/index.ts';
@@ -302,7 +302,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   });
   gInstance.dispose();
 
-  // ── Keyed Region + SSR claim at 1,000-row scale ──────────────────
+  // ── Keyed Block + SSR claim at 1,000-row scale ──────────────────
   const makeTableHost = (rows: ReturnType<typeof buildData>): AnyHost => ({
     signals: { rows: signal(rows) },
     handlers: {
@@ -358,20 +358,20 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   const claimHost = makeTableHost(sharedRows.map((row) => ({ ...row })));
   const claim = {
     ...timed('claim-1k', 1, claimDoc, () => {
-      claimExistingDom(...runtimeArgs(tableProgram, claimHost, claimRoot));
+      hydrateExistingDom(...runtimeArgs(tableProgram, claimHost, claimRoot));
     }),
     claimToFreshRatio: 0,
   };
   claim.claimToFreshRatio = round3(claim.totalMs / Math.max(fresh.totalMs, 0.001));
 
-  // Region ops run against the fresh instance (freshHost owns its signal).
+  // Block ops run against the fresh instance (freshHost owns its signal).
   const rowsSignal = freshHost.signals.rows;
   const currentRows = () => rowsSignal.value as ReturnType<typeof buildData>;
 
-  const replace1k = timed('region-replace-1k', 1, freshDoc, () => {
+  const replace1k = timed('block-replace-1k', 1, freshDoc, () => {
     rowsSignal.value = buildData(1000);
   });
-  const update10th = timed('region-update-10th', 1, freshDoc, () => {
+  const update10th = timed('block-update-10th', 1, freshDoc, () => {
     const data = currentRows().slice();
     for (let i = 0; i < data.length; i += 10) {
       const row = data[i];
@@ -379,7 +379,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
     }
     rowsSignal.value = data;
   });
-  const swap1k = timed('region-swap-1k', 1, freshDoc, () => {
+  const swap1k = timed('block-swap-1k', 1, freshDoc, () => {
     const data = currentRows().slice();
     const tmp = data[1];
     data[1] = data[998];
@@ -401,18 +401,18 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   const domOrder = rowIdsInDomOrder();
   const modelOrder = currentRows().map((row) => String(row.id));
   if (domOrder.join('|') !== modelOrder.join('|')) {
-    throw new Error('[micro] keyed Region DOM order diverges from model after swap');
+    throw new Error('[micro] keyed Block DOM order diverges from model after swap');
   }
   const swapOrderProbe: [string, string, string] = [domOrder[0], domOrder[1], domOrder[2]];
 
-  const remove1 = timed('region-remove-1', 1, freshDoc, () => {
+  const remove1 = timed('block-remove-1', 1, freshDoc, () => {
     const data = currentRows();
     rowsSignal.value = data.slice(1);
   });
-  const append1k = timed('region-append-1k', 1, freshDoc, () => {
+  const append1k = timed('block-append-1k', 1, freshDoc, () => {
     rowsSignal.value = currentRows().concat(buildData(1000));
   });
-  const clear1k = timed('region-clear', 1, freshDoc, () => {
+  const clear1k = timed('block-clear', 1, freshDoc, () => {
     rowsSignal.value = [];
   });
 
@@ -456,7 +456,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
       // host runtime version — Node, the only supported host
       node: process.version,
       note:
-        'fake-DOM kernel/region numbers isolate algorithmic behavior (no layout/paint); ' +
+        'fake-DOM kernel/block numbers isolate algorithmic behavior (no layout/paint); ' +
         'browser-inclusive numbers come from the upstream js-framework-benchmark ' +
         'lane on the fork (the in-repo harness was removed 2026-10-03)',
     },

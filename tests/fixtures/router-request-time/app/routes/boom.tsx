@@ -3,7 +3,7 @@
  * the page declares an error variant through the descriptor's error
  * projector. GET and POST must both render the boundary with status 500
  * (POST parity is the alpha.5 fix). v0.44: the boundary markup is a static
- * Region branch of the compiled page program (components/page-boom.tsx).
+ * Block branch of the compiled page program (components/page-boom.tsx).
  */
 import { definePage, fail, type OpenElementActionFailure } from '@openelement/router';
 import BoomPage from '../components/page-boom.tsx';

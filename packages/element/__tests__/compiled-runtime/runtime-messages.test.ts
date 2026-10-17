@@ -3,7 +3,7 @@
  * the author's vocabulary, not the compiler's.
  *
  * Alpha.2 shipped three internal-jargon sites: a missing host signal, a list
- * Region whose property held a non-array, and a duplicate item key all named
+ * Block whose property held a non-array, and a duplicate item key all named
  * `[compiled-runtime] part <n>` — an index the author cannot map back to a
  * line of their own TSX. Each message now names the compiled module and the
  * authored property, and says what to change. The Part index stays in the
@@ -37,7 +37,7 @@ function eachProgram(): ReturnType<typeof testProgram> {
   });
 }
 
-test('#1413 runtime messages: a non-array list Region names the module and property', () => {
+test('#1413 runtime messages: a non-array list Block names the module and property', () => {
   const program = eachProgram();
   const rows = signal<unknown>('not-an-array');
   const host = { signals: { rows }, handlers: {} } as unknown as CompiledRuntimeHost;

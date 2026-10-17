@@ -1,7 +1,7 @@
 /**
  * /boom page element — loader always throws; the descriptor's error projector
  * maps the failure onto the numeric drivers and the compiled markup carries
- * one static Region branch per variant (ADR-0121 §7, status 500).
+ * one static Block branch per variant (ADR-0121 §7, status 500).
  */
 import { element, OpenElement, property } from '@openelement/element';
 

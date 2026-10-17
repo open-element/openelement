@@ -1,7 +1,7 @@
 /**
  * JSX → Part Program lowering for the compiled grammar (#1473 split): the
  * {@link Lowering} walk turns
- * the analyzed render() tree into fixed Parts, Regions, locations and source
+ * the analyzed render() tree into fixed Parts, Blocks, locations and source
  * records with stable compiler-owned paths.
  */
 
@@ -26,7 +26,7 @@ import {
   type ProgramLocation,
   type ProgramLocationRecord,
   type ProgramPart,
-  type ProgramRegionRecord,
+  type ProgramBlockRecord,
   type ProgramSourceRecord,
   type ProgramTreeNode,
   type PropertyValueType,
@@ -50,6 +50,25 @@ export interface GeneratedHandler {
  */
 export const SYNTHESIZED_COMPUTED_LOCAL = '__openelementComputed';
 
+/**
+ * The server function component binding surface (alpha15 server lane): when
+ * set, the ONE lowering walk reads component state from the component
+ * function's `props` parameter instead of `this`, resolves uppercase JSX tags
+ * against the imported server function components, and records which
+ * custom-element hosts the host build admitted as compiled components
+ * (rendered through `__ssr`). Every other rule — attribute-name safety, sink
+ * denial, the trustedHtml boundary, the single-return grammar, the OEC
+ * diagnostics — is exactly the @element class path's: one semantic authority.
+ */
+export interface ServerComponentBindings {
+  /** The component function's single parameter (fixed `props` by admission). */
+  readonly parameter: string;
+  /** JSX identifier tag → the local binding the generated call targets. */
+  readonly components: ReadonlyMap<string, string>;
+  /** Custom-element host tags the build admitted as compiled components (`__ssr`). */
+  readonly compiledTags: ReadonlySet<string>;
+}
+
 /** Lowering inputs beyond the analyzed module shape. */
 export interface LoweringOptions {
   /**
@@ -59,6 +78,11 @@ export interface LoweringOptions {
    * {@linkcode SYNTHESIZED_COMPUTED_LOCAL} and adds the import.
    */
   readonly computedLocal: string | null;
+  /**
+   * Server function component mode (alpha15 server lane). Absent: the walk
+   * behaves byte-identically to the @element class path.
+   */
+  readonly server?: ServerComponentBindings;
 }
 
 /** Distributive input union for addPart (Omit<union> collapses; do not use). */
@@ -125,12 +149,22 @@ const DOM_PROPERTY_NAMES = new Set([
   'value',
 ]);
 
+/**
+ * The one boundary sentence every when-branch rejection names (alpha15):
+ * a branch element admits `this.<property>` attribute sinks, but event
+ * handlers, refs and inline conditional classes stay outside blocks — a
+ * branch has no anchor of its own, so only attribute-bound state is
+ * representable inside it.
+ */
+const BRANCH_BOUNDARY =
+  'Block branches admit attribute bindings; events and refs stay outside blocks';
+
 function isIdentifier(value: string): boolean {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value);
 }
 
 /**
- * Token→operator map for when-Region conditions (#1372). Only strict
+ * Token→operator map for when-Block conditions (#1372). Only strict
  * equality tokens are admitted; `==`/`!=` fail closed with OEC9013 so the
  * coercion difference cannot ride in unnoticed.
  */
@@ -202,7 +236,7 @@ function hasMeaningfulJsxChild(sf: ts.SourceFile, child: ts.JsxChild): boolean {
 
 export class Lowering {
   readonly parts: ProgramPart[] = [];
-  readonly regions: ProgramRegionRecord[] = [];
+  readonly blocks: ProgramBlockRecord[] = [];
   readonly dependencies: ProgramDependencyRecord[] = [];
   readonly locations: ProgramLocationRecord[] = [];
   readonly sourceRecords: ProgramSourceRecord[] = [];
@@ -221,6 +255,29 @@ export class Lowering {
   readonly synthesizedFields: CompiledField[] = [];
   /** True when the authored module binds the canonical `computed` import. */
   readonly sourceBindsComputed: boolean;
+  /**
+   * The component's statically admitted class tokens (alpha15 S lane): every
+   * whitespace-separated token of every compile-time `class` value the
+   * lowering admits — static literals, primitive-literal attributes, both
+   * branches of an admitted conditional class, and `each` item-template
+   * literals. The compiler collects them as OPAQUE STRINGS: it never
+   * interprets Tailwind's class grammar, and the build layer hands the list
+   * to the official Tailwind compiler as explicit candidates.
+   */
+  readonly classCandidates = new Set<string>();
+  /**
+   * Server mode side tables (alpha15 server lane): the nested server function
+   * component calls (element id → the recorded call shape, props entries as
+   * verbatim value texts) and the custom-element hosts the build admitted as
+   * compiled components (`__ssr`). The tree stays Part Program vocabulary —
+   * the code generator consumes these alongside it.
+   */
+  readonly componentCalls = new Map<
+    string,
+    { component: string; propsEntries: Array<[string, string]>; children: ProgramTreeNode[] }
+  >();
+  readonly ssrCalls = new Set<string>();
+  private readonly server?: ServerComponentBindings;
   private readonly plainFieldNames: Set<string>;
   private readonly computedFieldNames: Set<string>;
   private readonly sf: ts.SourceFile;
@@ -245,10 +302,24 @@ export class Lowering {
     this.computedFieldNames = new Set(this.computedNames);
     this.sourceBindsComputed = options.computedLocal !== null;
     this.options = options;
+    this.server = options.server;
   }
 
   fail(node: ts.Node, code: string, message: string): never {
     throw new CompiledElementError([diagnosticAt(this.sf, node, code, message)]);
+  }
+
+  /**
+   * Record one compile-time class value's whitespace-separated tokens as
+   * Tailwind candidates (alpha15 S lane). The values are provably finite at
+   * compile time — the compiler's grammar admits no other shape — so the
+   * tokens are FACTS, not guesses: no runtime class interpolation ever
+   * contributes, and the compiler attaches no Tailwind semantics to them.
+   */
+  private collectClassCandidates(value: string): void {
+    for (const token of value.split(/\s+/)) {
+      if (token !== '') this.classCandidates.add(token);
+    }
   }
 
   private addSource(id: string, kind: ProgramSourceRecord['kind'], node: ts.Node): void {
@@ -310,7 +381,7 @@ export class Lowering {
     const sourceKind = part.k === 'when' || part.k === 'each' ? 'region' : 'part';
     this.addSource(`p${index}`, sourceKind, node);
     if (part.k === 'when' || part.k === 'each') {
-      this.regions.push({
+      this.blocks.push({
         id: `r${index}`,
         index,
         kind: part.k,
@@ -345,6 +416,18 @@ export class Lowering {
     if (
       ts.isPropertyAccessExpression(value) &&
       value.expression.kind === ts.SyntaxKind.ThisKeyword &&
+      this.fieldNames.has(value.name.text)
+    ) {
+      return value.name.text;
+    }
+    // Server mode: the component function's `props` parameter plays the
+    // field role — the same field-name table, the same sink classification,
+    // one accessor spelling difference.
+    if (
+      this.server !== undefined &&
+      ts.isPropertyAccessExpression(value) &&
+      ts.isIdentifier(value.expression) &&
+      value.expression.text === this.server.parameter &&
       this.fieldNames.has(value.name.text)
     ) {
       return value.name.text;
@@ -394,6 +477,15 @@ export class Lowering {
     staticOnly = false,
   ): ProgramTreeNode {
     const tag = tagNameNode.getText(this.sf);
+    // Server function components (alpha15 server lane): an uppercase JSX tag
+    // is a nested server function component — composed by a DIRECT function
+    // call to the imported binding, resolved at compile time from the
+    // authored imports. The class grammar rejects identifier tags
+    // (composition by tag name); the server lane's composition channel is the
+    // import, so the same walk branches here before the intrinsic-tag rule.
+    if (this.server !== undefined && ts.isIdentifier(tagNameNode) && /^[A-Z]/.test(tag)) {
+      return this.lowerComponentElement(tagNameNode, attributes, children, path, sourceNode);
+    }
     // alpha.8: custom-element hosts (<x-y>) are admitted as nested hosts — the
     // page/layout composition renders them as host tags that the server entry
     // expands per the SSR admission plan. They carry static literal attributes
@@ -414,6 +506,12 @@ export class Lowering {
     if (tagReason !== null) this.fail(tagNameNode, 'OEC9010', tagReason);
     const attrs: Array<[string, string]> = [];
     const elementId = this.reserveElement(tag, path, sourceNode);
+    // Server function components: a build-admitted compiled host renders
+    // through `__ssr` — the component path's literal runtime function. The
+    // recording rides the ordinary host walk (attributes cross as raw props).
+    if (this.server !== undefined && isCustomHost && this.server.compiledTags.has(tag)) {
+      this.ssrCalls.add(elementId);
+    }
     const attributeNames = new Set<string>();
     let trustedHtmlCapability = false;
     for (const prop of attributes.properties) {
@@ -429,7 +527,12 @@ export class Lowering {
     }
     for (const prop of attributes.properties) {
       if (ts.isJsxSpreadAttribute(prop)) {
-        this.fail(prop, 'OEC9011', 'spread attributes are not supported by the compiler grammar');
+        this.fail(
+          prop,
+          'OEC9011',
+          'spread attributes are not supported by the compiler grammar — write each attribute ' +
+            'explicitly (a literal or a this.<property> sink)',
+        );
       }
       const name = this.normalizeAttributeName(prop.name.getText(this.sf));
       const init = prop.initializer;
@@ -439,11 +542,33 @@ export class Lowering {
         init !== undefined &&
         ts.isJsxExpression(init) &&
         init.expression !== undefined;
+      // Server function components render static HTML: event handlers are a
+      // client-only construct, refused with the server-lane code (the class
+      // path's handler lowering never runs here).
+      if (this.server !== undefined && /^on[A-Z]/.test(name)) {
+        this.fail(
+          prop,
+          'OEC9031',
+          `event handlers are a client-only construct — a server function component renders ` +
+            `static HTML and may not carry ${name}; interactivity belongs to an @element island ` +
+            '(a compiled component), not to server markup',
+        );
+      }
       if (isCustomHost && (isDynamicEvent || /^on[A-Z]/.test(name))) {
-        this.fail(prop, 'OEC9017', `custom-element host <${tag}> may not carry event handlers`);
+        this.fail(
+          prop,
+          'OEC9017',
+          `custom-element host <${tag}> may not carry event handlers — bind the handler on an ` +
+            'intrinsic element, or attach the listener imperatively in a lifecycle method',
+        );
       }
       if (!isSafeAttributeName(name) && !isDynamicEvent && name !== 'innerHTML') {
-        this.fail(prop, 'OEC9011', `attribute name "${name}" is unsafe`);
+        this.fail(
+          prop,
+          'OEC9011',
+          `attribute name "${name}" is unsafe — names must be valid HTML attribute names, not ` +
+            'event handlers (on*) or forbidden sinks; use an admitted attribute name',
+        );
       }
       // innerHTML is exempt from the generic name check only so the dynamic
       // trusted-HTML sink path below can admit it; every static or non-field
@@ -457,11 +582,22 @@ export class Lowering {
           this.fieldAccess(unwrapExpression(init.expression)) !== null
         )
       ) {
-        this.fail(prop, 'OEC9011', `attribute name "${name}" is unsafe`);
+        this.fail(
+          prop,
+          'OEC9011',
+          'attribute name "innerHTML" is unsafe as a static attribute — innerHTML opens only ' +
+            'through the trusted-HTML sink: bind an Object-typed trustedHtml(...) property and ' +
+            'carry the literal trustedHtml marker',
+        );
       }
       const attributeKey = name.toLowerCase();
       if (attributeNames.has(attributeKey)) {
-        this.fail(prop, 'OEC9011', `duplicate attribute "${name}" is unsupported`);
+        this.fail(
+          prop,
+          'OEC9011',
+          `duplicate attribute "${name}" is unsupported — remove one; an element admits each ` +
+            'attribute once',
+        );
       }
       attributeNames.add(attributeKey);
       if (!init) {
@@ -470,6 +606,7 @@ export class Lowering {
       }
       if (ts.isStringLiteral(init)) {
         attrs.push([name, init.text]);
+        if (name === 'class') this.collectClassCandidates(init.text);
         continue;
       }
       if (!ts.isJsxExpression(init) || !init.expression) {
@@ -481,31 +618,69 @@ export class Lowering {
       }
       const expr = unwrapExpression(init.expression);
       if (/^on[A-Z]/.test(name)) {
-        if (staticOnly) this.fail(prop, 'OEC9012', 'Region branches must be fully static');
+        if (staticOnly) {
+          this.fail(
+            prop,
+            'OEC9012',
+            `${BRANCH_BOUNDARY} — an event handler cannot bind inside a branch`,
+          );
+        }
         this.lowerEvent(name, expr, path, prop, elementId);
         continue;
       }
       if (name === 'ref') {
-        if (isCustomHost) {
-          this.fail(prop, 'OEC9017', `custom-element host <${tag}> may not carry a ref`);
+        if (this.server !== undefined) {
+          this.fail(
+            prop,
+            'OEC9031',
+            'refs are a client-only construct — a server function component renders static HTML ' +
+              'and may not carry a ref; element access belongs to an @element island (a compiled ' +
+              'component), not to server markup',
+          );
         }
-        if (staticOnly) this.fail(prop, 'OEC9012', 'Region branches must be fully static');
+        if (isCustomHost) {
+          this.fail(
+            prop,
+            'OEC9017',
+            `custom-element host <${tag}> may not carry a ref — query the host imperatively ` +
+              'in a lifecycle method (e.g. connectedCallback)',
+          );
+        }
+        if (staticOnly) {
+          this.fail(prop, 'OEC9012', `${BRANCH_BOUNDARY} — a ref cannot bind inside a branch`);
+        }
         const ref = this.fieldAccess(expr);
         if (!ref) this.fail(prop, 'OEC9011', 'ref must reference this.<field>');
         this.addPart({ k: 'ref', ref, path }, path, prop, elementId);
         continue;
       }
       // Inline conditional class (#1556): admitted on intrinsic elements in
-      // the dynamic grammar. Region branches keep their fully-static rule and
-      // custom-element hosts keep today's diagnostics — both fall through to
-      // the unchanged admission below, so fail-closed is untouched.
-      if (name === 'class' && !staticOnly && !isCustomHost && ts.isConditionalExpression(expr)) {
-        this.lowerConditionalClass(expr, path, prop, elementId);
-        continue;
+      // the dynamic grammar. Block branches keep their boundary — a branch
+      // admits plain attribute sinks only, and a synthesized conditional-class
+      // computed is one dynamic form too many inside one — and
+      // custom-element hosts keep today's diagnostics. Both fail closed here
+      // with the located boundary diagnostic instead of the generic
+      // unsupported-expression one.
+      if (name === 'class' && ts.isConditionalExpression(expr)) {
+        if (staticOnly) {
+          this.fail(
+            prop,
+            'OEC9012',
+            `${BRANCH_BOUNDARY} — an inline conditional class cannot bind inside a branch`,
+          );
+        }
+        if (!isCustomHost) {
+          this.lowerConditionalClass(expr, path, prop, elementId);
+          continue;
+        }
       }
       const field = this.fieldAccess(expr);
       if (field) {
-        if (staticOnly) this.fail(prop, 'OEC9012', 'Region branches must be fully static');
+        // alpha15: a when-branch element admits `this.<property>` attribute
+        // sinks — the sink Part's path is branch-relative (the branch tree has
+        // no anchors of its own), the runtime binds it branch-scoped, and the
+        // serializer attributes it by the branch element's own id. Events and
+        // refs failed above; this is the whole widening.
         // Security sinks are classified before host lowering: an innerHTML sink
         // is the same TrustedHtml boundary on an intrinsic element and on a
         // custom-element host, so the custom-host prop lowering below must not
@@ -528,7 +703,12 @@ export class Lowering {
           // emits it and the client claim assigns it as a JS property.
           const propReason = forbiddenSinkReason('prop', name);
           if (propReason !== null) {
-            this.fail(prop, 'OEC9011', `property sink name "${name}" is unsafe`);
+            this.fail(
+              prop,
+              'OEC9011',
+              `property sink name "${name}" is unsafe — prototype-pollution primitives are on ` +
+                'the shared deny list on every boundary; rename the attribute',
+            );
           }
           this.addPart({ k: 'prop', signal: field, name, path }, path, prop, elementId);
           continue;
@@ -546,10 +726,16 @@ export class Lowering {
       }
       const text = primitiveText(literal);
       if (text === null) {
-        this.fail(prop, 'OEC9011', `attribute "${name}" only accepts primitive literal values`);
+        this.fail(
+          prop,
+          'OEC9011',
+          `attribute "${name}" only accepts primitive literal values — use a string, number or ` +
+            'boolean literal (objects and arrays have no attribute form)',
+        );
       }
       if (literal === false || literal === null) continue;
       attrs.push([name, literal === true ? '' : (text ?? '')]);
+      if (name === 'class' && literal !== true && text !== null) this.collectClassCandidates(text);
     }
 
     const hasHtmlSink = this.parts.some(
@@ -573,9 +759,30 @@ export class Lowering {
       );
     }
 
+    const lowered = this.lowerChildren(children, staticOnly, path);
+    if (VOID_TAGS.has(tag)) {
+      const child = children.find((candidate) => hasMeaningfulJsxChild(this.sf, candidate));
+      if (child) {
+        this.fail(child, 'OEC9013', `void element <${tag}> may not have children`);
+      }
+    }
+    return this.addElement(elementId, tag, attrs, lowered);
+  }
+
+  /**
+   * The one children walk both the class path and the server component
+   * branch share: JSX text cleaning, expression children (field read /
+   * literal / when / each), nested elements, and the fragments-and-spreads
+   * rejection. `elementPath` is the owning element's own address.
+   */
+  private lowerChildren(
+    children: ts.JsxChild[],
+    staticOnly: boolean,
+    elementPath: number[],
+  ): ProgramTreeNode[] {
     const lowered: ProgramTreeNode[] = [];
     for (const child of children) {
-      const childPath = [...path, lowered.length];
+      const childPath = [...elementPath, lowered.length];
       if (ts.isJsxText(child)) {
         const value = cleanJsxText(child.text);
         if (value === '') continue;
@@ -606,15 +813,104 @@ export class Lowering {
         );
         continue;
       }
-      this.fail(child, 'OEC9013', 'JSX fragments and spreads are outside the compiler grammar');
+      this.fail(
+        child,
+        'OEC9013',
+        "JSX fragments and spreads are outside the compiler grammar — wrap the fragment's " +
+          'children in a single element',
+      );
     }
-    if (VOID_TAGS.has(tag)) {
-      const child = children.find((candidate) => hasMeaningfulJsxChild(this.sf, candidate));
-      if (child) {
-        this.fail(child, 'OEC9013', `void element <${tag}> may not have children`);
+    return lowered;
+  }
+
+  /**
+   * Server function components: one uppercase JSX tag — a nested server
+   * function component reference. The call composes by DIRECT function call
+   * to the imported binding: attribute values cross as raw props (literals
+   * or `props.<field>` reads — the callee's own compiled body escapes at its
+   * sinks), and JSX children compose the `children` prop through the same
+   * children walk every other element takes.
+   */
+  private lowerComponentElement(
+    tagNameNode: ts.JsxTagNameExpression,
+    attributes: ts.JsxAttributes,
+    children: ts.JsxChild[],
+    path: number[],
+    sourceNode: ts.Node,
+  ): ProgramTreeNode {
+    const name = tagNameNode.getText(this.sf);
+    const local = this.server!.components.get(name);
+    if (local === undefined) {
+      this.fail(
+        tagNameNode,
+        'OEC9032',
+        `<${name}> is not a server function component — import it from the module that exports ` +
+          'it (a server function component composes only by direct call to another server ' +
+          'function component; @element components compose by tag name)',
+      );
+    }
+    const elementId = this.reserveElement(local!, path, sourceNode);
+    const propsEntries: Array<[string, string]> = [];
+    for (const prop of attributes.properties) {
+      if (ts.isJsxSpreadAttribute(prop)) {
+        this.fail(
+          prop,
+          'OEC9011',
+          'spread attributes are not supported by the compiler grammar — write each attribute ' +
+            'explicitly (a literal or a this.<property> sink)',
+        );
       }
+      if (!ts.isIdentifier(prop.name)) {
+        this.fail(prop, 'OEC9032', 'component prop names must be plain identifiers');
+      }
+      const propName = prop.name.text;
+      if (/^on[A-Z]/.test(propName)) {
+        this.fail(
+          prop,
+          'OEC9031',
+          `event handlers are a client-only construct — a server function component renders ` +
+            `static HTML and may not carry ${propName}; interactivity belongs to an @element ` +
+            'island (a compiled component), not to server markup',
+        );
+      }
+      const initializer = prop.initializer;
+      if (initializer === undefined) {
+        propsEntries.push([propName, 'true']);
+        continue;
+      }
+      if (ts.isStringLiteral(initializer)) {
+        propsEntries.push([propName, JSON.stringify(initializer.text)]);
+        continue;
+      }
+      if (!ts.isJsxExpression(initializer) || !initializer.expression) {
+        this.fail(
+          prop,
+          'OEC9032',
+          `component prop "${propName}" must be a literal or a props.<field> read`,
+        );
+      }
+      const expr = unwrapExpression(initializer.expression!);
+      const field = this.fieldAccess(expr);
+      if (field !== null) {
+        propsEntries.push([propName, `${this.server!.parameter}.${field}`]);
+        continue;
+      }
+      const literal = literalValue(expr, this.sf);
+      if (literal === undefined) {
+        this.fail(
+          prop,
+          'OEC9032',
+          `component prop "${propName}" must be a literal or a props.<field> read — arbitrary ` +
+            'expressions are outside the server function grammar',
+        );
+      }
+      propsEntries.push([propName, JSON.stringify(literal)]);
     }
-    return this.addElement(elementId, tag, attrs, lowered);
+    const childNodes = this.lowerChildren(children, false, path);
+    this.componentCalls.set(elementId, { component: local!, propsEntries, children: childNodes });
+    // The tree node is a placeholder: the code generator emits the recorded
+    // call, never a tag.
+    return this.addElement(elementId, local!, [], []);
   }
 
   private lowerEvent(
@@ -768,6 +1064,10 @@ export class Lowering {
           "conditional class branches must be string literals: class={this.<cond> ? 'a' : 'b'}",
         );
       }
+      // Both branches are compile-time literals: the compiler's own grammar
+      // makes the candidate set provably finite, so both ride the Tailwind
+      // candidates (alpha15 S lane) exactly like a static class attribute.
+      this.collectClassCandidates(value.text);
     }
     const { deps, bodyText } = validateComputedExpressionBody(
       expr,
@@ -780,12 +1080,15 @@ export class Lowering {
         single: 'conditional class condition',
         plural: 'conditional class conditions',
       },
+      this.server === undefined ? undefined : { parameter: this.server.parameter },
     );
     if (deps.length === 0) {
       this.fail(
         sourceNode,
         'OEC9011',
-        'conditional class conditions must read at least one this.<property>',
+        `conditional class conditions must read at least one ${
+          this.server === undefined ? 'this' : this.server.parameter
+        }.<property>`,
       );
     }
     const computedName = this.options.computedLocal ?? SYNTHESIZED_COMPUTED_LOCAL;
@@ -855,27 +1158,47 @@ export class Lowering {
         );
       }
       if (VOID_TAGS.has(tag)) {
-        this.fail(sourceNode, 'OEC9026', `void element <${tag}> cannot carry an innerHTML sink`);
+        this.fail(
+          sourceNode,
+          'OEC9026',
+          `void element <${tag}> cannot carry an innerHTML sink — move the sink to a ` +
+            'container element (e.g. <div>)',
+        );
       }
       this.addPart({ k: 'html', signal, path }, path, sourceNode, elementId);
       return;
     }
     if (BOOLEAN_ATTRIBUTES.has(lowerName)) {
       if (forbiddenSinkReason('bool', name) !== null) {
-        this.fail(sourceNode, 'OEC9011', `attribute name "${name}" is unsafe`);
+        this.fail(
+          sourceNode,
+          'OEC9011',
+          `attribute name "${name}" is unsafe — names must be valid HTML attribute names, not ` +
+            'event handlers (on*) or forbidden sinks; use an admitted attribute name',
+        );
       }
       this.addPart({ k: 'bool', signal, name, path }, path, sourceNode, elementId);
       return;
     }
     if (name === 'value' || DOM_PROPERTY_NAMES.has(name) || (tag === 'input' && name === 'value')) {
       if (forbiddenSinkReason('prop', name) !== null) {
-        this.fail(sourceNode, 'OEC9011', `property sink name "${name}" is unsafe`);
+        this.fail(
+          sourceNode,
+          'OEC9011',
+          `property sink name "${name}" is unsafe — prototype-pollution primitives are on the ` +
+            'shared deny list on every boundary; rename the sink',
+        );
       }
       this.addPart({ k: 'prop', signal, name, path }, path, sourceNode, elementId);
       return;
     }
     if (forbiddenSinkReason('attr', name) !== null) {
-      this.fail(sourceNode, 'OEC9011', `attribute name "${name}" is unsafe`);
+      this.fail(
+        sourceNode,
+        'OEC9011',
+        `attribute name "${name}" is unsafe — names must be valid HTML attribute names, not ` +
+          'event handlers (on*) or forbidden sinks; use an admitted attribute name',
+      );
     }
     this.addPart({ k: 'attr', signal, name, path }, path, sourceNode, elementId);
   }
@@ -887,9 +1210,39 @@ export class Lowering {
   ): ProgramTreeNode | null {
     if (!child.expression) return null;
     const expr = unwrapExpression(child.expression);
+    // Server function components: the composition channel is the `children`
+    // prop — an UNDECLARED read gets its own fix instead of the generic
+    // unsupported-expression rejection; a declared read lowers through the
+    // ordinary field path and the code generator emits it raw (compiler-
+    // produced final HTML).
+    if (
+      this.server !== undefined &&
+      ts.isPropertyAccessExpression(expr) &&
+      ts.isIdentifier(expr.expression) &&
+      expr.expression.text === this.server.parameter &&
+      expr.name.text === 'children' &&
+      !this.fieldNames.has('children')
+    ) {
+      this.fail(
+        child,
+        'OEC9032',
+        `${this.server.parameter}.children is not declared — add \`children?: string\` to the ` +
+          'props type: the JSX children a caller nests compose it as one final-HTML string',
+      );
+    }
     const field = this.fieldAccess(expr);
     if (field) {
-      if (staticOnly) this.fail(child, 'OEC9012', 'Region branches must be fully static');
+      // alpha15 widened branches to admit this.<property> attribute sinks; text
+      // interpolation is the one binding a branch still cannot carry, so the
+      // message names the now-legal attribute spelling (#1614).
+      if (staticOnly) {
+        this.fail(
+          child,
+          'OEC9012',
+          `${BRANCH_BOUNDARY} — a branch cannot interpolate text; bind the value as an ` +
+            'attribute (e.g. data-label={this.<property>})',
+        );
+      }
       const index = this.addPart({ k: 'text', signal: field }, path, child);
       return { k: 'part', id: `p${index}`, index };
     }
@@ -904,7 +1257,7 @@ export class Lowering {
     }
     if (ts.isConditionalExpression(expr)) {
       if (staticOnly) {
-        this.fail(child, 'OEC9012', 'nested Regions are outside the compiler grammar');
+        this.fail(child, 'OEC9012', 'nested Blocks are outside the compiler grammar');
       }
       const test = this.parseCondition(expr.condition, child);
       const on = this.lowerStaticBranch(expr.whenTrue, child);
@@ -918,7 +1271,7 @@ export class Lowering {
     }
     if (ts.isCallExpression(expr)) {
       if (staticOnly) {
-        this.fail(child, 'OEC9012', 'nested Regions are outside the compiler grammar');
+        this.fail(child, 'OEC9012', 'nested Blocks are outside the compiler grammar');
       }
       return this.lowerEach(expr, child, path);
     }
@@ -959,7 +1312,7 @@ export class Lowering {
     this.fail(
       near,
       'OEC9013',
-      'conditional Regions support this.<property> compared with a numeric literal (>, >=, <, <=), ' +
+      'conditional Blocks support this.<property> compared with a numeric literal (>, >=, <, <=), ' +
         'a number/string/boolean equality (===, !==), or a bare this.<property> (optionally negated) truthiness test',
     );
   }
@@ -971,15 +1324,44 @@ export class Lowering {
         branch.openingElement.tagName,
         branch.openingElement.attributes,
         [...branch.children],
-        [],
+        // The branch root's address within the branch node list — the same
+        // node-list indexing the main template root uses ([0]). Branch sinks
+        // derive their runtime/serializer addresses from it, and the branch
+        // element locations record the same convention.
+        [0],
         branch,
         true,
       );
     }
     if (ts.isJsxSelfClosingElement(branch)) {
-      return this.lowerElement(branch.tagName, branch.attributes, [], [], branch, true);
+      return this.lowerElement(branch.tagName, branch.attributes, [], [0], branch, true);
     }
-    this.fail(near, 'OEC9012', 'conditional Region branches must be single static JSX elements');
+    // The two near-misses an author (or agent) actually writes get their own
+    // nearest-legal-spelling hint (#1614): a nested ternary fails because one
+    // Block carries one condition, and a text-only ternary fails because a
+    // Block swaps elements, not text — both resolve through computed(...).
+    if (ts.isConditionalExpression(branch)) {
+      this.fail(
+        near,
+        'OEC9012',
+        'nested ternaries are outside the compiler grammar — one condition per Block; derive ' +
+          'the decision in a computed(...) property and branch on it',
+      );
+    }
+    if (literalValue(branch, this.sf) !== undefined) {
+      this.fail(
+        near,
+        'OEC9012',
+        'a text-only ternary is not a Block — Blocks swap elements; derive the text in a ' +
+          'computed(...) property and interpolate {this.<property>}',
+      );
+    }
+    this.fail(
+      near,
+      'OEC9012',
+      'conditional Block branches must be single static JSX elements — each branch is exactly ' +
+        'one element (bind its values as this.<property> attributes)',
+    );
   }
 
   private lowerEach(expr: ts.CallExpression, near: ts.Node, path: number[]): ProgramTreeNode {
@@ -989,34 +1371,39 @@ export class Lowering {
       callee.name.text !== 'map' ||
       expr.arguments.length !== 1
     ) {
-      this.fail(near, 'OEC9013', 'list Regions support exactly this.<property>.map(...)');
+      this.fail(near, 'OEC9013', 'list Blocks support exactly this.<property>.map(...)');
     }
     const signal = this.fieldAccess(callee.expression);
-    if (!signal) this.fail(near, 'OEC9013', 'list Regions must map over this.<property>');
+    if (!signal) this.fail(near, 'OEC9013', 'list Blocks must map over this.<property>');
     const arrow = expr.arguments[0];
     if (
       !ts.isArrowFunction(arrow) ||
       arrow.parameters.length !== 1 ||
       !ts.isIdentifier(arrow.parameters[0].name)
     ) {
-      this.fail(near, 'OEC9013', 'list Region mapper must be a single-parameter arrow function');
+      this.fail(near, 'OEC9013', 'list Block mapper must be a single-parameter arrow function');
     }
     if (ts.isBlock(arrow.body)) {
-      this.fail(near, 'OEC9013', 'list Region mapper must return one JSX element');
+      this.fail(near, 'OEC9013', 'list Block mapper must return one JSX element');
     }
     const body = unwrapExpression(arrow.body);
     if (!ts.isJsxElement(body) && !ts.isJsxSelfClosingElement(body)) {
-      this.fail(near, 'OEC9013', 'list Region mapper must return one JSX element');
+      this.fail(near, 'OEC9013', 'list Block mapper must return one JSX element');
     }
     const param = arrow.parameters[0].name.text;
     const attributes = ts.isJsxElement(body) ? body.openingElement.attributes : body.attributes;
     let key: string | null = null;
     for (const prop of attributes.properties) {
       if (!ts.isJsxAttribute(prop)) {
-        this.fail(prop, 'OEC9011', 'list Region items do not support spread attributes');
+        this.fail(
+          prop,
+          'OEC9011',
+          'list Block items do not support spread attributes — write each attribute ' +
+            'explicitly (a literal or {<item>.<field>})',
+        );
       }
       if (prop.name.getText(this.sf) !== 'key') continue;
-      if (key !== null) this.fail(prop, 'OEC9014', 'list Region items may declare key only once');
+      if (key !== null) this.fail(prop, 'OEC9014', 'list Block items may declare key only once');
       if (
         !prop.initializer ||
         !ts.isJsxExpression(prop.initializer) ||
@@ -1036,7 +1423,7 @@ export class Lowering {
         this.fail(prop, 'OEC9014', `key must reference ${param}.<field>`);
       }
     }
-    if (!key) this.fail(body, 'OEC9014', 'list Region items require key={<item>.<field>}');
+    if (!key) this.fail(body, 'OEC9014', 'list Block items require key={<item>.<field>}');
 
     const itemFields: string[] = [];
     // Per-item event bindings (#1556 IR v2): `on<event>={this.<method>}` (or a
@@ -1051,7 +1438,7 @@ export class Lowering {
       this.fail(
         body,
         'OEC9013',
-        'list Region items must bind at least one {<item>.<field>} value or attribute slot',
+        'list Block items must bind at least one {<item>.<field>} value or attribute slot',
       );
     }
     const index = this.addPart(
@@ -1059,7 +1446,7 @@ export class Lowering {
         k: 'each',
         signal: signal!,
         key: key!,
-        // Single-field templates keep the Region-level field restatement;
+        // Single-field templates keep the Block-level field restatement;
         // multi-field templates omit it — every ival/iattrs slot owns its own.
         ...(uniqueFields.length === 1 ? { field: uniqueFields[0] } : {}),
         item: [item],
@@ -1091,7 +1478,12 @@ export class Lowering {
     // them verbatim and the client instantiates them per item.
     const isCustomHost = /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(tag);
     if (!/^[a-z][a-z0-9]*$/.test(tag) && !isCustomHost) {
-      this.fail(tagName, 'OEC9010', 'list Region item must be an intrinsic lowercase element');
+      this.fail(
+        tagName,
+        'OEC9010',
+        'list Block item must be an intrinsic lowercase element or a custom-element host — ' +
+          'compose by tag name, not class values',
+      );
     }
     const itemTagReason = forbiddenSinkReason('tag', tag);
     if (itemTagReason !== null) this.fail(tagName, 'OEC9010', itemTagReason);
@@ -1101,12 +1493,17 @@ export class Lowering {
     const attributeNames = new Set<string>();
     for (const prop of attributes.properties) {
       if (!ts.isJsxAttribute(prop)) {
-        this.fail(prop, 'OEC9011', 'spread attributes are not supported in item templates');
+        this.fail(
+          prop,
+          'OEC9011',
+          'spread attributes are not supported in item templates — write each attribute ' +
+            'explicitly (a literal or {<item>.<field>})',
+        );
       }
       const name = this.normalizeAttributeName(prop.name.getText(this.sf));
       if (name === 'key') {
         if (!allowKey) {
-          this.fail(prop, 'OEC9011', 'key is only supported on the list Region item root');
+          this.fail(prop, 'OEC9011', 'key is only supported on the list Block item root');
         }
         continue;
       }
@@ -1120,11 +1517,21 @@ export class Lowering {
         ts.isJsxExpression(prop.initializer) &&
         prop.initializer.expression !== undefined;
       if (!isSafeAttributeName(name) && !isItemEvent) {
-        this.fail(prop, 'OEC9011', `attribute name "${name}" is unsafe`);
+        this.fail(
+          prop,
+          'OEC9011',
+          `attribute name "${name}" is unsafe — names must be valid HTML attribute names, not ` +
+            'event handlers (on*) or forbidden sinks; use an admitted attribute name',
+        );
       }
       const attributeKey = name.toLowerCase();
       if (attributeNames.has(attributeKey)) {
-        this.fail(prop, 'OEC9011', `duplicate attribute "${name}" is unsupported`);
+        this.fail(
+          prop,
+          'OEC9011',
+          `duplicate attribute "${name}" is unsupported — remove one; an element admits each ` +
+            'attribute once',
+        );
       }
       attributeNames.add(attributeKey);
       if (!prop.initializer) {
@@ -1133,10 +1540,15 @@ export class Lowering {
       }
       if (ts.isStringLiteral(prop.initializer)) {
         attrs.push([name, prop.initializer.text]);
+        if (name === 'class') this.collectClassCandidates(prop.initializer.text);
         continue;
       }
       if (!ts.isJsxExpression(prop.initializer) || !prop.initializer.expression) {
-        this.fail(prop, 'OEC9011', 'item template attributes must be static literals');
+        this.fail(
+          prop,
+          'OEC9011',
+          `item template attribute "${name}" must be a static literal or {${param}.<field>}`,
+        );
       }
       // Per-item event handlers (#1556 IR v2): `on<event>={this.<method>}` (or
       // a single-action arrow) lowers to an ItemEventBinding on the each part
@@ -1144,14 +1556,28 @@ export class Lowering {
       // item and dispatches with (event, item). Custom-element hosts inside
       // item templates stay handler-free, matching the host rule above.
       if (/^on[A-Z]/.test(name)) {
+        if (this.server !== undefined) {
+          this.fail(
+            prop,
+            'OEC9031',
+            `event handlers are a client-only construct — a server function component renders ` +
+              `static HTML and may not carry ${name}; interactivity belongs to an @element island ` +
+              '(a compiled component), not to server markup',
+          );
+        }
         if (isCustomHost) {
-          this.fail(prop, 'OEC9017', `custom-element host <${tag}> may not carry event handlers`);
+          this.fail(
+            prop,
+            'OEC9017',
+            `custom-element host <${tag}> may not carry event handlers — bind the handler on an ` +
+              'intrinsic element, or attach the listener imperatively in a lifecycle method',
+          );
         }
         if (itemEvents === undefined) {
           this.fail(
             prop,
             'OEC9012',
-            'event handlers are only supported on list Region item templates',
+            'event handlers are only supported on list Block item templates',
           );
         }
         const action = this.eventAction(unwrapExpression(prop.initializer.expression), prop);
@@ -1187,10 +1613,16 @@ export class Lowering {
       }
       const text = primitiveText(literal);
       if (text === null) {
-        this.fail(prop, 'OEC9011', 'item template attributes must use primitive literals');
+        this.fail(
+          prop,
+          'OEC9011',
+          'item template attributes must use primitive literals — use a string, number or ' +
+            `boolean literal, or bind {${param}.<field>}`,
+        );
       }
       if (literal === false || literal === null) continue;
       attrs.push([name, literal === true ? '' : (text ?? '')]);
+      if (name === 'class' && literal !== true && text !== null) this.collectClassCandidates(text);
     }
     const children: ProgramTreeNode[] = [];
     const rawChildren = ts.isJsxElement(element) ? [...element.children] : [];

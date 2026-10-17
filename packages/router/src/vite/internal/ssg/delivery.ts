@@ -3,7 +3,7 @@
  *
  * Delivery is deliberately a build-side concern. The generated client entry
  * knows only which capability module to import and which custom-element names
- * it can register; it does not know anything about Parts, Regions, Signals or
+ * it can register; it does not know anything about Parts, Blocks, Signals or
  * rendering. A capability module may expose one or many element constructors.
  */
 

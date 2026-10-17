@@ -66,10 +66,9 @@ publish; a missing environment fails the job closed instead of publishing:
   line publishes onto `latest` and rides the channel tag as a re-pointed alias
   (`npmPublishTag`, tested — see "Public 1.0 prerelease baseline"). A pre-1.0
   prerelease still never moves `latest` onto itself.
-- Required checks for `dev` and `main` (repository ruleset `21775463`):
-  `fast-checks`, `source-matrix`, `fresh-clone`, and `packed-consumers` from
-  AutoFlow CI, plus `dependency-review`, `CodeQL`, and the strict required
-  status-check policy. These producer checks are individually required; the
+- Required checks for `dev` and `main` (repository ruleset `24288967`):
+  `lint`, `test`, `e2e`, and `pack` from AutoFlow CI, plus `CodeQL` and the
+  strict required status-check policy. These producer checks are individually required; the
   `autoflow-ci` aggregate still validates the complete evidence bundle and
   does not re-run the suite. Compatibility probes and the independently
   governed `apps/saas` application are not part of every PR run; use their
@@ -89,16 +88,23 @@ publish; a missing environment fails the job closed instead of publishing:
 The candidate gate is split so a pull request gets fast, honest feedback
 without giving up any release-time proof.
 
-- `@openelement/tools-repo#gate:source` — the PR source layer (ten steps):
-  `generate:all`,
-  `typecheck`, the dependency-age quarantine check, the Element and Router
-  unit suites, markdown lint, the
-  content-dates manifest check, the public-interface snapshot, the
-  request-time fixture gate, and the Element browser gate (Chromium). The
-  separate packed producer owns `@openelement/tools-release#gate:packed`; the
-  independent
-  fresh-clone lane runs source and packed once each with cold pnpm/npm caches.
-  A green `pnpm run verify:core` runs source plus packed locally.
+- `@openelement/tools-repo#gate:source` — the local source gate (twelve
+  steps): `generate:all`, `typecheck`, the dependency-age quarantine check,
+  the Element and Router unit suites, markdown lint, the vp-selector-flags
+  check, the content-dates manifest check, the public-interface snapshot, the
+  request-time and base-path fixture gates, and the Element browser gate
+  (Chromium). No
+  workflow invokes this task; `pnpm run verify` and `pnpm run verify:core`
+  are its entry points. Ten of its twelve steps also run in AutoFlow CI
+  through the `lint`, `test`, `e2e`, and `pack` jobs, including
+  `@openelement/tools-repo#typecheck` (the `tools/` project), which the `lint`
+  job runs; the request-time and base-path fixture gates run only in the
+  `e2e-full` full-qualification layer (main pushes and `full_qualification`
+  dispatches) — so a PR can be green while they are unexercised. The separate
+  packed producer owns
+  `@openelement/tools-release#gate:packed`; the independent fresh-clone lane
+  runs source and packed once each with cold pnpm/npm caches. A green
+  `pnpm run verify:core` runs source plus packed locally.
 - `@openelement/tools-repo#gate:release` — the release train: Site build and every `www`
   check, coverage, all deploy/framework fixture gates, the boundary and
   provenance scans, the generator/floor/classification gates, the

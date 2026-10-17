@@ -39,6 +39,8 @@ export interface ViteClientManifestEntry {
   file?: string;
   name?: string;
   isEntry?: boolean;
+  /** The emitted CSS files of this entry's chunk (Vite's manifest schema). */
+  css?: string[];
 }
 
 /** The Rollup output-chunk fields the builder reads (module metadata). */
@@ -46,6 +48,19 @@ export interface ClientBuildChunk {
   fileName: string;
   facadeModuleId?: string | null;
   modules?: Record<string, unknown>;
+  /**
+   * Whether this chunk is a build entry (`OutputChunk.isEntry`). B2's
+   * entry-graph guard needs to name the entry chunk, and an entry is the one
+   * chunk whose static closure is the page's floor.
+   */
+  isEntry?: boolean;
+  /**
+   * The chunk file names of this chunk's STATIC imports
+   * (`OutputChunk.imports`), never its dynamic ones. This is the edge list
+   * B2's guard walks: a dynamic `import()` is an edge only once it executes,
+   * so only the static half can make the runtime an unconditional download.
+   */
+  imports?: readonly string[];
 }
 
 /** One compile-time island identity handed to the builder. */
@@ -104,12 +119,21 @@ export function collectClientBuildChunks(buildResult: unknown): ClientBuildChunk
         fileName?: string;
         facadeModuleId?: string | null;
         modules?: Record<string, unknown>;
+        isEntry?: boolean;
+        imports?: unknown;
       };
       if (chunk?.type !== 'chunk' || typeof chunk.fileName !== 'string') continue;
       chunks.push({
         fileName: chunk.fileName,
         facadeModuleId: chunk.facadeModuleId,
         modules: chunk.modules,
+        isEntry: chunk.isEntry === true,
+        // Static imports only: `OutputChunk.imports` is the static edge list,
+        // while `dynamicImports` is a separate field this record never reads
+        // (a dynamic edge is not part of the page's unconditional floor).
+        imports: Array.isArray(chunk.imports)
+          ? chunk.imports.filter((entry): entry is string => typeof entry === 'string')
+          : [],
       });
     }
   }
@@ -133,20 +157,43 @@ export function findClientEntryFile(
   viteManifest: Record<string, ViteClientManifestEntry>,
   manifestPath?: string,
 ): string | null {
-  const candidates: Array<[src: string, file: string]> = [];
+  return findClientEntryRecord(viteManifest, manifestPath)?.file ?? null;
+}
+
+/** The client entry's own manifest record (see {@linkcode findClientEntryFile}). */
+function findClientEntryRecord(
+  viteManifest: Record<string, ViteClientManifestEntry>,
+  manifestPath?: string,
+): ViteClientManifestEntry | null {
+  const candidates: Array<[src: string, entry: ViteClientManifestEntry]> = [];
   for (const [src, entry] of Object.entries(viteManifest)) {
-    if (isClientEntrySourceKey(src) && entry.file) candidates.push([src, entry.file]);
+    if (isClientEntrySourceKey(src) && entry.file) candidates.push([src, entry]);
   }
   if (candidates.length > 1) {
     const where = manifestPath ? ` (manifest: ${manifestPath})` : '';
     throw buildError(
       ClientAssetErrorCode.ENTRY_AMBIGUOUS,
       `Client asset manifest is ambiguous${where}: ${candidates.length} records claim the ` +
-        `client entry (${candidates.map(([src, file]) => `${src} -> ${file}`).join(', ')}) — ` +
+        `client entry (${candidates.map(([src, file]) => `${src} -> ${file.file}`).join(', ')}) — ` +
         `exactly one "virtual:open-client-entry" record must carry the emitted entry file`,
     );
   }
   return candidates[0]?.[1] ?? null;
+}
+
+/**
+ * The emitted stylesheet files of the client entry's chunk. The client entry
+ * statically imports exactly one CSS module — the Tailwind document entry
+ * (alpha15 S lane); island sheets ride the style-asset protocol and never
+ * enter Vite's CSS pipeline — so these files ARE the document stylesheet
+ * assets, base-joined by the caller. Empty when the app declares no Tailwind
+ * entry.
+ */
+export function findClientEntryStyles(
+  viteManifest: Record<string, ViteClientManifestEntry>,
+  manifestPath?: string,
+): string[] {
+  return findClientEntryRecord(viteManifest, manifestPath)?.css ?? [];
 }
 
 /** Strip query suffixes and normalize separators so module ids compare exactly. */

@@ -158,6 +158,18 @@ async function buildFixture(): Promise<Fixture> {
     join(appDir, 'app', 'shared', 'tag.ts'),
     "export const sharedTag = 'shared-alias-target';\n",
   );
+  // B2 gap (a) fixture shape: a module this island reaches ONLY through a
+  // nested dynamic `import()` of its own. This is the www `open-search` shape
+  // — it is what makes the bundler inject the preload helper into the ISLAND
+  // chunk rather than leaving it to the entry, and therefore what makes the
+  // entry acquire a static island edge (and the runtime with it) unless the
+  // helper is given its own eager chunk. Deliberately NOT under `app/islands/`
+  // so the island-directory grouping rule does not claim it: the point is a
+  // nested dynamic edge, not a new island.
+  await write(
+    join(appDir, 'app', 'shared', 'proof-lazy-gadget.ts'),
+    "export const lazyGadgetMarker = 'proof-lazy-gadget-target';\n",
+  );
   await write(
     join(appDir, 'app', 'islands', 'oe-proof-counter.tsx'),
     [
@@ -180,6 +192,9 @@ async function buildFixture(): Promise<Fixture> {
       '  connectedCallback(): void {',
       '    super.connectedCallback();',
       "    this.setAttribute('data-proof', `${conditionTarget}:${sharedTag}:${flavor}`);",
+      '    // The nested dynamic import itself (B2 gap (a)). Never awaited by the',
+      '    // assertions — its only job is to exist in the emitted island chunk.',
+      "    void import('@shared/proof-lazy-gadget.ts');",
       '  }',
       '',
       '  render() {',
@@ -251,6 +266,36 @@ async function buildFixture(): Promise<Fixture> {
       '    return {};',
       '  },',
       '});',
+      '',
+    ].join('\n'),
+  );
+
+  // #1544/B2: a PRERENDERED page with no island at all — the zero-island
+  // half of the runtime-preload projection. Its own page class (definePage
+  // attaches the descriptor to the class), and no island tag anywhere in its
+  // render.
+  await write(
+    join(appDir, 'app', 'components', 'proof-static-page.tsx'),
+    [
+      '/** Static-route page component with no island (its own class). */',
+      "import { element, OpenElement } from '@openelement/element';",
+      '',
+      "@element('oe-proof-static-page', { root: 'shadow-open' })",
+      'export default class ProofStaticPage extends OpenElement {',
+      '  render() {',
+      "    return <div class='proof-static'>zero-island proof</div>;",
+      '  }',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  await write(
+    join(appDir, 'app', 'routes', 'proof-static.tsx'),
+    [
+      "import { definePage } from '@openelement/router';",
+      "import ProofStaticPage from '../components/proof-static-page.tsx';",
+      '',
+      "export default definePage(ProofStaticPage, { renderIntent: { mode: 'static' } });",
       '',
     ].join('\n'),
   );
@@ -372,4 +417,66 @@ test('external consumer: the SSR bundle and prerendered HTML carry the import co
   const homeHtml = await readFile(join(distDir, 'index.html'), 'utf8');
   expect(homeHtml).toContain('proof-counter-source');
   expect(homeHtml).not.toContain('condition-browser-target');
+});
+
+/**
+ * Every JS file reachable from `entry` through STATIC module edges
+ * (`import … from '…'`, `import '…'`, `export … from '…'`), resolved
+ * relatively inside the emitted client islands directory.
+ *
+ * Dynamic `import()` edges are deliberately NOT followed: B2's whole contract
+ * is that the element runtime is reached only through them, so folding them
+ * in would make the assertion vacuous.
+ */
+async function staticImportGraph(islandsDir: string, entry: string): Promise<Set<string>> {
+  const staticEdge = /(?:^|[;\n])\s*(?:import\s*(?!\()|export\s+[^'"]*?\sfrom\s*)["']([^"']+)["']/g;
+  const seen = new Set<string>();
+  const queue = [entry];
+  while (queue.length > 0) {
+    const file = queue.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const code = await readFile(join(islandsDir, file), 'utf8');
+    for (const match of code.matchAll(staticEdge)) {
+      const specifier = match[1]!;
+      if (!specifier.startsWith('.')) continue;
+      queue.push(specifier.replace(/^\.\//, ''));
+    }
+  }
+  return seen;
+}
+
+test('external consumer (#1544/B2): the runtime preload is a per-page projection and the runtime leaves the entry static graph', async () => {
+  const distDir = join(fixture.appDir, 'dist');
+  const islandsDir = join(distDir, 'client', 'islands');
+  const clientIslands = await readdir(islandsDir);
+  const runtimeFile = clientIslands.find((file) => /^element-runtime-.+\.js$/.test(file));
+  expect(runtimeFile, `client islands: ${clientIslands.join(', ')}`).toBeTruthy();
+
+  // Island-bearing prerendered page: exactly one modulepreload, naming the
+  // chunk this build actually emitted (no hand-maintained runtime list).
+  const homeHtml = await readFile(join(distDir, 'index.html'), 'utf8');
+  const preloads = homeHtml.match(/<link rel="modulepreload"[^>]*>/g) ?? [];
+  expect(preloads).toEqual([
+    `<link rel="modulepreload" href="/client/islands/${runtimeFile}" data-open-element-runtime-preload>`,
+  ]);
+
+  // Zero-island prerendered page: the projection gives it NO runtime preload.
+  const staticHtml = await readFile(join(distDir, 'proof-static', 'index.html'), 'utf8');
+  expect(staticHtml.includes('modulepreload')).toEqual(false);
+  // It still carries the client entry (the projection removes a resource
+  // hint, never the entry).
+  expect(staticHtml).toContain('<script type="module" src="/client/islands/client.js">');
+
+  // The preload is a warm START, not the graph edge: the entry the zero-island
+  // page loads must not reach the runtime chunk statically either — only the
+  // dynamic `__loadElementRuntime()` import may. This is the property the
+  // modulepreload link above cannot prove on its own.
+  const staticGraph = await staticImportGraph(islandsDir, 'client.js');
+  expect([...staticGraph]).not.toContain(runtimeFile);
+  // Guard against a vacuous pass: the same entry does carry the island wiring
+  // and its dynamic island imports.
+  const entryCode = await readFile(join(islandsDir, 'client.js'), 'utf8');
+  expect(entryCode).toContain('oe-proof-counter');
+  expect(entryCode).toMatch(/import\(`?["']?\.\//);
 });

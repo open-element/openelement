@@ -4,7 +4,7 @@ import {
   type CompiledRuntimeHost,
   createFreshDom,
 } from '../runtime.ts';
-import { claimExecutor } from './claim-seam.ts';
+import { hydrationExecutor } from './hydrate-seam.ts';
 import { streamHostState } from '../stream-state.ts';
 import { CompiledErrorBoundary, type CompiledErrorBoundaryOptions } from './error-boundary.ts';
 import { CompiledContextService } from './context.ts';
@@ -13,15 +13,45 @@ import { LifetimeScope } from '../lifetime-scope.ts';
 import {
   type CompiledStyleRoot,
   CompiledStyleScope,
+  staticStyleReadiness,
   themeManager,
 } from '../../../open-element-styles.ts';
 import type { StyleSheetLike } from '@openelement/protocol/style-sheet';
+import { sheetResourceUrls } from '../style-links.ts';
 // Single error dialect (#1386 item 3): kernel lifecycle failures carry codes.
 import { ClaimErrorCode, KernelErrorCode, raiseFrameworkError } from '@openelement/protocol/errors';
 
 /** Raise one kernel lifecycle failure with its catalogued code. */
 function fail(code: string, message: string): never {
   raiseFrameworkError('csr', code, message);
+}
+
+/**
+ * The message for a streamed host whose typed seed was not admitted. Seed
+ * ADMISSION stays owned by `stream-state.ts`; this only attributes an
+ * already-failed admission (alpha15 R5). The server stamps the Part Program
+ * format version it rendered under into `data-oe-stream-program`
+ * (`<version>:<sha256>`, `router/.../stream-runtime.ts`), so a stamp the client
+ * does not implement is a mixed-build deployment — worth an expected-vs-actual
+ * diagnostic instead of a generic missing-seed report. Every other admission
+ * failure keeps the existing message.
+ */
+function streamedSeedFailureMessage(element: HTMLElement, program: PartProgram): string {
+  const declared = element.getAttribute('data-oe-stream-program');
+  const separator = declared?.indexOf(':') ?? -1;
+  if (declared !== null && separator > 0) {
+    const declaredVersion = declared.slice(0, separator);
+    if (declaredVersion !== String(program.version)) {
+      return (
+        `[compiled-hydration] streamed host <${program.tag}> was server-rendered by Part Program ` +
+        `v${declaredVersion} (data-oe-stream-program=${JSON.stringify(declared)}) but this client ` +
+        `compiled <${program.tag}>@v${program.version}: the server artifact and the client bundle ` +
+        'are from different builds. Hydration is refused and the server-rendered DOM is kept; ' +
+        'regenerate the artifacts and deploy one build.'
+      );
+    }
+  }
+  return '[compiled-hydration] streamed host has no matching typed seed for its Part Program.';
 }
 
 /**
@@ -85,7 +115,7 @@ export type CompiledRootMode = 'light' | 'open' | 'closed';
  * OpenElement) — the same path the compiler-emitted lifecycle wrappers and
  * the facade property setter call. Structural, not imported: the kernel must
  * stay usable with host shapes that never carry the facade (the bare runtime
- * hosts of the region/kernel suites), where the optional call is simply
+ * hosts of the block/kernel suites), where the optional call is simply
  * absent and routing degrades to the element-local capture above.
  */
 interface ErrorRoutingHost {
@@ -100,10 +130,21 @@ interface ErrorRoutingHost {
  */
 export type CompiledActivationMode = 'claim' | 'fresh';
 
-/** Truth of one successful kernel activation: the mode and the root it ran against. */
+/**
+ * Truth of one successful kernel activation: the mode and the root it ran
+ * against, plus whether this connect re-bound the DOM of an already-activated
+ * instance (a reconnect). A reconnect reports `mode: 'claim'` — it binds
+ * existing DOM — and `resumed: true` identifies it, together with the
+ * `origin` activation that produced the DOM the instance owns. The facade
+ * derives its lifecycle hooks from these facts: `onDsdHydrated` is
+ * shadow/DSD-only, while a CSR/light connection keeps `onCsrRendered` on
+ * every activation, reconnect included.
+ */
 export interface CompiledKernelActivation {
   readonly mode: CompiledActivationMode;
   readonly root: CompiledStyleRoot;
+  readonly resumed: boolean;
+  readonly origin: CompiledActivationMode;
 }
 
 export interface CompiledElementKernelOptions extends CompiledRuntimeHost {
@@ -112,6 +153,14 @@ export interface CompiledElementKernelOptions extends CompiledRuntimeHost {
   root?: CompiledStyleRoot;
   delegatesFocus?: boolean;
   styles?: StyleSheetLike | StyleSheetLike[];
+  /**
+   * True when the compiler admitted static class candidates for this class
+   * (alpha15 S lane): its SSR/DSD template may carry a marked
+   * `<link rel="stylesheet">` for the framework's component stylesheet, so the
+   * claim must expect (and skip) leading static-style nodes even when the
+   * class itself declares no `styles`.
+   */
+  utilityStyleLinks?: boolean;
   formAssociated?: boolean;
   errorBoundary?: CompiledErrorBoundaryOptions;
 }
@@ -131,6 +180,21 @@ export class CompiledElementKernel {
   #program: PartProgram;
   #options: CompiledElementKernelOptions;
   #styleScope = new CompiledStyleScope();
+  /**
+   * True only after a complete successful activation. The next connect of the
+   * same instance is a RESUME: the runtime binds the DOM it already produced
+   * instead of claiming server markup again (which would fail closed on the
+   * component's own runtime changes and tear the activation down). A failed
+   * first activation never sets it, and a destroyed kernel keeps its DISPOSED
+   * semantics.
+   */
+  #activatedOnce = false;
+  /**
+   * The activation that produced the DOM this instance owns ('fresh' for CSR
+   * creation, 'claim' for server/DSD markup). A reconnect re-binds that same
+   * DOM, so its activation hook is the origin's hook, not a new claim's.
+   */
+  #origin: CompiledActivationMode | undefined;
   #lifecycle = new LifetimeScope();
   #root?: CompiledStyleRoot;
   #instance?: CompiledProgramInstance;
@@ -205,11 +269,35 @@ export class CompiledElementKernel {
       // survived parsing still mounts fresh instead of failing a claim that
       // could not match. Real content — an element, an anchor comment, or
       // visible text — keeps the fail-closed claim path.
+      const retained = this.#activatedOnce ? this.#instance : undefined;
+      if (retained?.revive) {
+        // A reconnect is a RESUME: bind the DOM this instance already owns.
+        // It needs no SSR hydration executor — the retained bindings ARE the
+        // record of that DOM — so the same path serves every entry, and the
+        // verification inside fails closed on structure damage before
+        // anything is mutated.
+        retained.revive();
+        this.context.connect();
+        if (this.errors.hasError) this.errors.reset();
+        this.#activation = {
+          mode: 'claim',
+          root,
+          resumed: true,
+          origin: this.#origin ?? 'claim',
+        };
+        this.#active = true;
+        return this.#activation;
+      }
       const hasContent = Array.from(root.childNodes).some(isClaimableNode);
-      const mode: CompiledActivationMode = hasContent ? 'claim' : 'fresh';
+      // An activated instance always resumes: if its program-owned nodes are
+      // gone, that is external structure damage and the resume must fail closed
+      // (unresolved node) — never silently restart the component as a first CSR
+      // activation. A root with no recognizable content on a *first* connect is
+      // still the documented fresh path.
+      const mode: CompiledActivationMode = this.#activatedOnce || hasContent ? 'claim' : 'fresh';
       if (!hasContent && root.childNodes.length > 0) clearFormattingWhitespace(root);
       // Update-phase failures (#1375) land in the same element-local boundary
-      // as connect failures: this element owns the Region subscriptions, so it
+      // as connect failures: this element owns the Block subscriptions, so it
       // is the nearest boundary for their update errors — when it IS a
       // boundary. When it is not (the common case: a plain element failing
       // inside a boundary's subtree), the failure additionally routes to the
@@ -235,8 +323,10 @@ export class CompiledElementKernel {
           : this.#claim(host, root, styleCount);
       this.context.connect();
       if (this.errors.hasError) this.errors.reset();
-      this.#activation = { mode, root };
+      this.#origin = mode;
+      this.#activation = { mode, root, resumed: false, origin: mode };
       this.#active = true;
+      this.#activatedOnce = true;
       return this.#activation;
     } catch (error) {
       try {
@@ -250,11 +340,18 @@ export class CompiledElementKernel {
         // Preserve the original construction/claim error.
       }
       try {
-        this.#instance?.dispose();
+        if (this.#activatedOnce) {
+          // A failed RESUME keeps the retained instance: the reconnect mutated
+          // nothing, the damage is repairable, and a later connect can revive
+          // the same DOM (K-Final-2).
+          this.#instance?.suspend?.();
+        } else {
+          this.#instance?.dispose();
+          this.#instance = undefined;
+        }
       } catch {
         // Preserve the original construction/claim error.
       }
-      this.#instance = undefined;
       if (themeConnected) themeManager.disconnect(this.#element);
       this.#styleScope.disconnect();
       this.#lifecycle = new LifetimeScope();
@@ -278,8 +375,9 @@ export class CompiledElementKernel {
       }
     };
     attempt(() => this.#lifecycle.dispose());
-    attempt(() => this.#instance?.dispose());
-    this.#instance = undefined;
+    // Suspend, do not destroy: the instance keeps the DOM it produced and the
+    // ownership record a reconnect re-arms (revive.ts).
+    attempt(() => this.#instance?.suspend?.());
     attempt(() => this.context.disconnect());
     attempt(() => themeManager.disconnect(this.#element));
     attempt(() => this.#styleScope.disconnect());
@@ -296,6 +394,12 @@ export class CompiledElementKernel {
   dispose(): void {
     if (this.#destroyed) return;
     this.disconnect();
+    try {
+      this.#instance?.dispose();
+    } catch {
+      // A destroyed kernel still releases every other service below.
+    }
+    this.#instance = undefined;
     this.context.dispose();
     this.form.dispose();
     this.errors.dispose();
@@ -305,7 +409,7 @@ export class CompiledElementKernel {
   /**
    * Claim the root's existing content through the executor seam (#1416). The
    * kernel never imports the claim implementation: the full entry installs it
-   * (claim-install.ts), the client-only entry does not. An uninstalled claim
+   * (hydrate-install.ts), the client-only entry does not. An uninstalled claim
    * is fail-closed — a connected element that finds content in its root has
    * server-rendered (or light-mode) DOM that only the full entry can hydrate,
    * so this throws instead of building a second tree beside it.
@@ -315,11 +419,11 @@ export class CompiledElementKernel {
     root: CompiledStyleRoot,
     styleCount: number,
   ): CompiledProgramInstance {
-    const executor = claimExecutor();
+    const executor = hydrationExecutor();
     if (!executor) {
       fail(
         KernelErrorCode.CLAIM_EXECUTOR_MISSING,
-        '[compiled-kernel] existing DOM in the resolved root needs the claim executor: ' +
+        '[compiled-kernel] existing DOM in the resolved root needs the hydration executor: ' +
           "the element was connected from the '@openelement/element/client-only' entry, " +
           "which omits it. Import '@openelement/element' for any element that can " +
           'hydrate server-rendered content.',
@@ -329,7 +433,7 @@ export class CompiledElementKernel {
     if (this.#element.hasAttribute('data-oe-stream-request') && !stream) {
       fail(
         ClaimErrorCode.STRUCTURE_MISMATCH,
-        '[compiled-claim] streamed host has no matching typed seed for its Part Program.',
+        streamedSeedFailureMessage(this.#element, this.#program),
       );
     }
     return executor(
@@ -337,7 +441,12 @@ export class CompiledElementKernel {
       host,
       root,
       {
-        expectStaticStyle: styleCount > 0,
+        expectStaticStyle: styleCount > 0 || this.#options.utilityStyleLinks === true,
+        expectedStyleLinks: [
+          ...sheetResourceUrls(this.#options.styles),
+          ...sheetResourceUrls(themeManager.getStyles()),
+        ],
+        staticStyleReady: staticStyleReadiness(this.#options.styles),
         streamParts: stream?.parts,
         pendingParts: stream ? [...stream.pending] : undefined,
         recovery: stream ? 'owning' : 'throw',

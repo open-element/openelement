@@ -1,11 +1,11 @@
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
-// The claim executor is installed by the package entry, not by the kernel
+// The hydration executor is installed by the package entry, not by the kernel
 // (#1416): the kernel resolves it through the claim seam. This file reaches
 // the kernel directly, so it installs it exactly as the default
 // '@openelement/element' entry does — the kernel case below reconnects into
 // retained content, which is a claim.
-import '../../src/internal/compiled/runtime/claim-install.ts';
+import '../../src/internal/compiled/runtime/hydrate-install.ts';
 import { CompiledElementKernel } from '../../src/internal/compiled/runtime/kernel.ts';
 import { CompiledContextService } from '../../src/internal/compiled/runtime/context.ts';
 import { createContext } from '../../src/internal/core/signal-context.ts';

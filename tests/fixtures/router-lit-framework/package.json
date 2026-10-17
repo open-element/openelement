@@ -7,7 +7,8 @@
     "build": "node ../../../tools/repo/clean.ts dist && node ../../../packages/router/src/cli/build.ts",
     "e2e": "playwright test --config e2e/playwright.config.ts --project=chromium",
     "e2e:browsers": "playwright test --config e2e/playwright.config.ts",
-    "gate": "node ../../../tools/repo/gate.ts @openelement/fixture-router-lit-framework#build @openelement/fixture-router-lit-framework#e2e:browsers"
+    "gate": "node ../../../tools/repo/gate.ts @openelement/fixture-router-lit-framework#typecheck @openelement/fixture-router-lit-framework#build @openelement/fixture-router-lit-framework#e2e:browsers",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@lit-labs/ssr": "4.1.0",

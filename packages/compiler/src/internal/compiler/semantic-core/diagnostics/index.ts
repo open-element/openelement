@@ -11,6 +11,9 @@ import ts from 'typescript';
 // code like every other failure this package raises. The error contract is an
 // import-free protocol base owner, so the semantic core stays bundler-neutral.
 import { CompilerErrorCode, OpenElementError } from '@openelement/protocol/errors';
+// The unified machine-readable consumption surface (#1612): the compiler keeps
+// its own OEC registry; the envelope is the one shape every consumer reads.
+import type { DiagnosticEnvelope } from '@openelement/protocol/diagnostics';
 
 export interface CompilerDiagnostic {
   code: string;
@@ -78,6 +81,76 @@ export function diagnosticAt(
 /** Flatten a TypeScript parse diagnostic without leaking compiler internals. */
 export function diagnosticMessage(diagnostic: ts.Diagnostic): string {
   return ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ');
+}
+
+// ─── Envelope projection (#1612) ─────────────────────────────────────
+//
+// The structured record above stays the producer's truth; the envelope is the
+// one shape a build exit aggregates for machine consumption. The projection
+// never mutates the record: the 1-based `line`/`character` position maps onto
+// the envelope's `line`/`column` verbatim, the compile is a build-phase
+// failure, and the OEC code rides through untouched (the compiler owns its
+// registry — the envelope never re-codes it).
+
+/**
+ * The record fields the envelope projection reads — the structural subset
+ * both a full {@linkcode CompilerDiagnostic} and the build-carried record
+ * (the `this.error()` projection, which drops the compiler-internal range)
+ * satisfy.
+ */
+export type ProjectableCompilerDiagnostic = Pick<
+  CompilerDiagnostic,
+  'code' | 'message' | 'file' | 'line' | 'character'
+>;
+
+/**
+ * Project the compiler's already-structured diagnostics onto the protocol's
+ * {@linkcode DiagnosticEnvelope} shape. An empty list projects to an empty
+ * list — the caller keeps its own fallback rather than inventing a record.
+ */
+export function compilerDiagnosticsToEnvelopes(
+  diagnostics: ReadonlyArray<ProjectableCompilerDiagnostic>,
+): DiagnosticEnvelope[] {
+  return diagnostics.map((diagnostic) => ({
+    code: diagnostic.code,
+    severity: 'error',
+    phase: 'build',
+    message: diagnostic.message,
+    file: diagnostic.file,
+    line: diagnostic.line,
+    column: diagnostic.character,
+  }));
+}
+
+// ─── Exit-side record (#1612) ────────────────────────────────────────
+//
+// Rolldown flattens `this.error()`'s structured record into a display error —
+// the thrown build error carries neither the diagnostics array nor the OEC
+// codes — so the build exit cannot read the record off the THROWN error. The
+// hosts of the projection therefore record the envelopes at the `this.error()`
+// boundary, BEFORE the flattening, and the host CLI drains them into the exit
+// aggregate. Discipline matches `style-requests.ts`: one build per process,
+// the exit drains exactly once, and a fresh build clears before it starts.
+
+let exitRecord: DiagnosticEnvelope[] = [];
+
+/** Record one compile failure's envelopes for the build exit (#1612). */
+export function recordCompilerDiagnostics(
+  diagnostics: ReadonlyArray<ProjectableCompilerDiagnostic>,
+): void {
+  exitRecord.push(...compilerDiagnosticsToEnvelopes(diagnostics));
+}
+
+/** Drain the recorded envelopes: the exit reads them exactly once. */
+export function takeCompilerDiagnostics(): DiagnosticEnvelope[] {
+  const drained = exitRecord;
+  exitRecord = [];
+  return drained;
+}
+
+/** Clear without reading — the hygiene a fresh build invocation starts with. */
+export function clearCompilerDiagnostics(): void {
+  exitRecord = [];
 }
 
 // ─── Adapter hand-off (#1413) ────────────────────────────────────────

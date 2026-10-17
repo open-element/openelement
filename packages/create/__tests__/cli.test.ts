@@ -5,23 +5,26 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { OPEN_ELEMENT_CONFIG_KEYS } from '../../router/src/config.ts';
 import { CREATE_VERSION } from '../src/version.ts';
 import { createInstallCommand } from '../src/install-command.ts';
-import { detectPackageManager } from '../src/pm.ts';
+import { detectPackageManager, PACKAGE_MANAGERS } from '../src/pm.ts';
 import {
   assertUnifiedProductVersions,
   buildTemplates,
   resolveVersions,
+  TEMPLATE_FILES,
   validateProjectName,
 } from '../src/template-builder.ts';
 
@@ -98,23 +101,26 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
     '@openelement/element',
     '@openelement/router',
   ]);
-  // The Vite+ toolchain form (alpha.14): the scripts run through vp, and the
-  // Vite tree itself is catalog-managed (pnpm-workspace.yaml) — there is no
-  // direct `vite` devDependency to pin. Dev-side packages: the vp toolchain
-  // (vite-plus through the catalog), the Tailwind-ON single default pins
-  // (#1524 form restored as the ONE scaffold), the lazy dev-server pair, and
-  // the type-check pin. No browser-automation dependency ships: the starter
-  // has no Playwright surface (owner ruling 2026-10-09).
+  // Manager-neutral (alpha.15): the Vite tree is a direct devDependency pin
+  // (aligned with the router's own), formatting/linting are the two tools the
+  // scripts name, and no `catalog:` / `vite-plus` / `vp` specifier is left for
+  // a non-pnpm manager to reject. Dev-side packages: the Vite pin, the
+  // Tailwind-ON single default pins (#1524 form restored as the ONE scaffold),
+  // the lazy dev-server pair, the two toolchain tools, and the type-check pin.
+  // No browser-automation dependency ships: the starter has no Playwright
+  // surface (owner ruling 2026-10-09).
   expect(Object.keys(manifest.devDependencies).sort()).toEqual([
     '@hono/vite-dev-server',
     '@tailwindcss/vite',
     'hono',
+    'oxfmt',
+    'oxlint',
     'tailwindcss',
     'typescript',
-    'vite-plus',
+    'vite',
   ]);
-  expect(manifest.devDependencies.vite).toEqual(undefined);
-  expect(manifest.devDependencies['vite-plus']).toEqual('catalog:');
+  expect(manifest.devDependencies['vite-plus']).toEqual(undefined);
+  expect(manifest.devDependencies['vite']).toEqual('8.0.16');
   expect(Object.keys(manifest.scripts).sort()).toEqual([
     'build',
     'dev',
@@ -124,12 +130,16 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
     'test',
     'typecheck',
   ]);
-  // The starter scripts run the Vite+ toolchain and the router CLI's short
-  // `oe` bin (the same entry is installed as `openelement`; the scripts use
-  // the short spelling the handoff teaches).
-  expect(manifest.scripts.dev).toEqual('vp dev');
-  expect(manifest.scripts.fmt).toEqual('vp fmt');
-  expect(manifest.scripts.lint).toEqual('vp lint');
+  // The starter scripts run the router CLI's short `oe` bin (the same entry is
+  // installed as `openelement`; the scripts use the short spelling the handoff
+  // teaches) and the two formatter/linter tools directly — never a wrapper CLI.
+  expect(manifest.scripts.dev).toEqual('oe dev');
+  expect(manifest.scripts.fmt).toEqual('oxfmt');
+  expect(manifest.scripts.lint).toEqual('oxlint');
+  // No manager is pinned: without a `packageManager` field the project
+  // installs under whichever manager runs first (`vp install` then follows
+  // the lockfile that install wrote).
+  expect('packageManager' in manifest).toBeFalsy();
   expect(manifest.scripts.typecheck).toEqual('tsc --noEmit');
   // The starter ships no test files today; the runner must permit that
   // (the Node counterpart of the retired --permit-no-files task).
@@ -159,12 +169,163 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
   expect(tsconfig.include).toEqual(['app', 'vite.config.ts', 'openelement.config.ts']);
 });
 
+// ── The two alpha.15 guards ─────────────────────────────────────────────
+// Both are structural (no behavior is executed), both run over the REAL
+// tree, and both ship their own negative case so a green run means "clean",
+// never "the check stopped looking".
+
+const repoRoot = join(packageDir, '..', '..');
+
+/** The dependency blocks a published manifest can declare a package in. */
+const DEPENDENCY_FIELDS = [
+  'dependencies',
+  'devDependencies',
+  'peerDependencies',
+  'optionalDependencies',
+] as const;
+
+/**
+ * Does this manifest declare `vite-plus` in any dependency block? The repo
+ * root's own devDependencies are the ONE allowed home (vite-plus is the
+ * repository's development toolchain) and are deliberately not scanned.
+ */
+function declaresVitePlus(manifest: Record<string, unknown>): boolean {
+  return DEPENDENCY_FIELDS.some((field) => {
+    const block = manifest[field];
+    return typeof block === 'object' && block !== null && Object.hasOwn(block, 'vite-plus');
+  });
+}
+
+/** Every workspace manifest a release can publish: packages/* and tools/*. */
+function publishedManifests(): Array<{ path: string; manifest: Record<string, unknown> }> {
+  const found: Array<{ path: string; manifest: Record<string, unknown> }> = [];
+  for (const group of ['packages', 'tools']) {
+    const base = join(repoRoot, group);
+    for (const entry of readdirSync(base)) {
+      const manifestPath = join(base, entry, 'package.json');
+      if (!existsSync(manifestPath)) continue;
+      found.push({
+        path: `${group}/${entry}/package.json`,
+        manifest: JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>,
+      });
+    }
+  }
+  return found;
+}
+
+/** Every raw template payload on disk (not just the ones TEMPLATE_FILES maps). */
+function templatePayloadFiles(): Record<string, string> {
+  const base = join(packageDir, 'templates');
+  const files: Record<string, string> = {};
+  for (const entry of readdirSync(base, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const absolute = join(entry.parentPath, entry.name);
+    files[absolute.slice(base.length + 1)] = readFileSync(absolute, 'utf8');
+  }
+  return files;
+}
+
+/**
+ * The manager-specific markers a consumer-visible template file must not
+ * carry: the pnpm-only `catalog:` protocol, any `vite-plus` reference (the
+ * repo's own toolchain, never the consumer's), and a `vp` command in any
+ * package.json script. Prose may still explain `vp` (the README documents who
+ * reads a `packageManager` field) — a SCRIPT may not run it.
+ */
+function templateNeutralityViolations(files: Record<string, string>): string[] {
+  const violations: string[] = [];
+  for (const [path, content] of Object.entries(files)) {
+    if (content.includes('catalog:')) {
+      violations.push(`${path}: carries a pnpm-only \`catalog:\` specifier`);
+    }
+    if (content.includes('vite-plus')) {
+      violations.push(`${path}: references vite-plus (a repo-only dev toolchain)`);
+    }
+  }
+  const manifestSource = files['package.json'];
+  if (manifestSource !== undefined) {
+    let scripts: Record<string, string> = {};
+    try {
+      scripts = (JSON.parse(manifestSource) as { scripts?: Record<string, string> }).scripts ?? {};
+    } catch {
+      violations.push('package.json: unparseable, so its scripts cannot be checked');
+    }
+    for (const [name, command] of Object.entries(scripts)) {
+      if (/(^|[\s&|;])vp([\s&|;]|$)/.test(command)) {
+        violations.push(`package.json: script "${name}" runs vp (${command})`);
+      }
+    }
+  }
+  return violations;
+}
+
+test('guard: no published package declares vite-plus', () => {
+  const manifests = publishedManifests();
+  // A real walk, not an empty list that trivially passes: every publishable
+  // package group is present.
+  const paths = manifests.map((m) => m.path).sort();
+  for (const required of [
+    'packages/compiler/package.json',
+    'packages/create/package.json',
+    'packages/element/package.json',
+    'packages/protocol/package.json',
+    'packages/router/package.json',
+    'packages/ui/package.json',
+  ]) {
+    expect(paths, `the walk must include ${required}`).toContain(required);
+  }
+  const offenders = manifests.filter((m) => declaresVitePlus(m.manifest)).map((m) => m.path);
+  expect(
+    offenders,
+    "vite-plus is the OpenElement repository's own development toolchain and is " +
+      'publishable nowhere: it must not appear in any packaged manifest. ' +
+      "The repository root's devDependencies are the one allowed home.",
+  ).toEqual([]);
+  // Negative half: the detector flags each dependency block a pack could ship,
+  // so the green run above cannot be a detector that never fires.
+  for (const field of DEPENDENCY_FIELDS) {
+    expect(
+      declaresVitePlus({ [field]: { 'vite-plus': '1.0.0' } }),
+      `${field} must be scanned`,
+    ).toBe(true);
+  }
+  expect(declaresVitePlus({ dependencies: { vite: '8.0.16' } })).toBe(false);
+  expect(declaresVitePlus({})).toBe(false);
+});
+
+test('guard: the template carries no catalog:, no vite-plus, and no vp script', async () => {
+  const generated = await buildTemplates(resolveVersions(), 'sample-app');
+  const payloads = templatePayloadFiles();
+  // Both surfaces: the raw payloads (every file the tarball ships) AND the
+  // generated project (after token substitution), because a payload could be
+  // clean while a substituted value is not, or a stray file could ship
+  // without ever reaching TEMPLATE_FILES.
+  expect(templateNeutralityViolations(payloads)).toEqual([]);
+  expect(templateNeutralityViolations(generated)).toEqual([]);
+  expect(Object.keys(payloads).length).toBeGreaterThanOrEqual(TEMPLATE_FILES.length);
+  // Negative half: each marker shape fires, and the `vp` rule stays scoped to
+  // scripts (prose may discuss the Vite+ CLI, as the README's packageManager
+  // note does).
+  expect(
+    templateNeutralityViolations({
+      'package.json': JSON.stringify({ devDependencies: { 'vite-plus': 'catalog:' } }),
+    }).length,
+  ).toEqual(2);
+  expect(
+    templateNeutralityViolations({
+      'package.json': JSON.stringify({ scripts: { dev: 'vp dev' } }),
+    }),
+  ).toEqual(['package.json: script "dev" runs vp (vp dev)']);
+  expect(
+    templateNeutralityViolations({ 'README.md': '`vp install` follows the lockfile.' }),
+  ).toEqual([]);
+});
+
 test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner single-default ruling): static-first surfaces, two islands', async () => {
   const templates = await buildTemplates(resolveVersions(), 'sample-app');
   const expectedTargets = [
     '.gitignore',
     'README.md',
-    'app/components/badges.css',
     'app/components/page-404.css',
     'app/components/page-404.tsx',
     'app/components/page-about.css',
@@ -173,7 +334,7 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
     'app/components/page-home.tsx',
     'app/components/site-chrome.css',
     'app/head.tsx',
-    'app/islands/app-shell.tsx',
+    'app/layout.tsx',
     'app/islands/live-timer.css',
     'app/islands/live-timer.tsx',
     'app/islands/my-counter.css',
@@ -182,11 +343,9 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
     'app/routes/about.tsx',
     'app/routes/api/ping.ts',
     'app/routes/index.tsx',
-    'app/styles/recipes.css',
     'app/styles/theme.css',
     'openelement.config.ts',
     'package.json',
-    'pnpm-workspace.yaml',
     'public/openelement-mark.svg',
     'tsconfig.json',
     'vite.config.ts',
@@ -196,34 +355,17 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
   // ruling 2026-10-08): exact build-time pins in devDependencies, the @theme
   // role sheet on disk, and the preset wiring in the vite config.
   const manifest = JSON.parse(
-    templates['package.json'].replace(/\$\{v\.[a-z]+\}/g, '1.0.0-alpha.10'),
+    templates['package.json'].replace(/\$\{v\.[a-z]+\}/g, CREATE_VERSION),
   ) as { devDependencies: Record<string, string> };
   expect(manifest.devDependencies['@tailwindcss/vite']).toEqual('4.3.3');
   expect(manifest.devDependencies.tailwindcss).toEqual('4.3.3');
   expect(templates['app/styles/theme.css']).toContain('@theme');
   expect(templates['vite.config.ts']).toContain('plugins: [...openElement()]');
   expect(templates['openelement.config.ts']).toContain('tailwind: { theme: [');
-  // The Vite+ workspace form: the catalog points the whole vite tree at the
-  // Vite+ core build through the `vite@*` override, and the supply-chain
-  // cooldown exempts the release-day packages (the @openelement four at the
-  // generated-from version plus vite-plus itself).
-  const workspace = templates['pnpm-workspace.yaml'];
-  expect(workspace).toContain('npm:@voidzero-dev/vite-plus-core@1.1.0');
-  expect(workspace).toContain('vite-plus: 1.1.0');
-  expect(workspace).toContain('vite@*: "catalog:"');
-  const releaseVersion = resolveVersions().router;
-  for (const pkg of [
-    '@openelement/compiler',
-    '@openelement/element',
-    '@openelement/protocol',
-    '@openelement/router',
-  ]) {
-    expect(
-      workspace.includes(`"${pkg}@${releaseVersion}"`),
-      `${pkg} rides the generated-from exemption`,
-    ).toBeTruthy();
-  }
-  expect(workspace).toContain('"vite-plus@1.1.0"');
+  // No workspace file ships: it existed only to host the Vite+ catalog and its
+  // `vite@*` override (both gone with the direct `vite` pin), and a
+  // pnpm-workspace.yaml is a pnpm-only signal in a manager-neutral scaffold.
+  expect('pnpm-workspace.yaml' in templates).toBeFalsy();
   // The landing page is the showcase: framework name, tagline, both islands,
   // the static architecture section, and JS-cost badges naming each section.
   const home = templates['app/components/page-home.tsx'];
@@ -231,12 +373,15 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
   expect(home).toContain('Rendered before JavaScript arrives');
   expect(home).toContain('<my-counter></my-counter>');
   expect(home).toContain('<live-timer></live-timer>');
-  expect(home).toContain('badge-static');
-  expect(home).toContain('badge-island');
+  // The JS-cost badges are utility strings on the span itself (utility-first):
+  // a static section wears the --color-ok pair, an interactive one the brand
+  // pair. Nothing about them lives in a sheet.
+  expect(home).toContain('bg-ok/8');
+  expect(home).toContain('bg-brand-soft');
   expect(home).toContain('The architecture');
   // Nav links across the chrome: home, about, and the API surface. The
-  // chrome lives in the app shell now — the page itself carries none.
-  const shell = templates['app/islands/app-shell.tsx'];
+  // chrome lives in the layout now — the page itself carries none.
+  const shell = templates['app/layout.tsx'];
   for (const target of ['href="/"', 'href="/about"', 'href="/api/ping"']) {
     expect(shell.includes(target), target).toBeTruthy();
   }
@@ -259,7 +404,7 @@ test('starter pages are compiled elements with light roots and shared chrome', (
     'app/components/page-home.tsx',
     'app/components/page-about.tsx',
     'app/components/page-404.tsx',
-    'app/islands/app-shell.tsx',
+    'app/layout.tsx',
     'app/islands/my-counter.tsx',
     'app/islands/live-timer.tsx',
   ]) {
@@ -309,22 +454,28 @@ test('starter islands are single-module compiled classes with declared strategie
   expect(timer.includes('elapsed = '), timer).toBeTruthy();
   expect(timer.includes('data-signal'), timer).toBeFalsy();
 
-  // #1582: the island's sheet and the id it renders are one fact — the sheet
-  // selected `.value` while the class renders <span id="elapsed">, so the
-  // clock lost its brand color and tabular figures.
-  const timerCss = readTemplate('app/islands/live-timer.css');
+  // #1582: the clock's styling and the element it renders are one fact. The
+  // sheet used to select `.value` while the class renders <span
+  // id="elapsed">, so the clock lost its brand color and tabular figures.
+  // The styling is now a utility string ON that span: there is no selector
+  // left that could drift away from the element.
   expect(timer.includes('id="elapsed"'), timer).toBeTruthy();
-  expect(timerCss.includes('#elapsed'), timerCss).toBeTruthy();
+  const clockTag = timer.slice(timer.indexOf('id="elapsed"'));
+  const clockSpan = clockTag.slice(0, clockTag.indexOf('>'));
+  expect(clockSpan, `the clock span carries its styling: ${clockSpan}`).toContain('tabular-nums');
+  expect(clockSpan, `the clock span carries its styling: ${clockSpan}`).toContain('text-brand');
+  const timerCss = readTemplate('app/islands/live-timer.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  expect(timerCss.includes('#elapsed'), timerCss).toBeFalsy();
   expect(/\.value\s*\{/.test(timerCss), `no .value rule: ${timerCss}`).toBeFalsy();
 });
 
-test('the app shell owns the site chrome every page renders inside (T2)', () => {
-  const shell = readTemplate('app/islands/app-shell.tsx');
+test('the layout owns the site chrome every page renders inside (T2)', () => {
+  const shell = readTemplate('app/layout.tsx');
   // The convention path is the contract: the build registers the compiled
-  // class under the app-shell tag and projects each page into the default
+  // class under the layout tag and projects each page into the default
   // slot. The tag name must match the derived convention tag exactly — the
   // generated entry fails closed on a mismatch.
-  expect(shell).toContain('@element("app-shell"');
+  expect(shell).toContain('@element("app-layout"');
   // The projection requires a shadow root: slotted page content stays in the
   // page element's light DOM while the chrome renders in the shell's shadow
   // tree, styled by the shared chrome sheet.
@@ -364,19 +515,37 @@ test('the app shell owns the site chrome every page renders inside (T2)', () => 
 test('starter pages ship exactly one H1 each (duplicate-H1 regression class)', () => {
   for (const path of ['app/components/page-home.tsx', 'app/components/page-about.tsx']) {
     const page = readTemplate(path);
-    expect(page.split('<h1>').length - 1, path).toEqual(1);
+    expect((page.match(/<h1[\s>]/g) ?? []).length, path).toEqual(1);
   }
 });
 
-test('starter pages own their styles via static styles, not the global baseline', () => {
+test('starter styling is utility-first: the palette in @theme, markup for the rules', () => {
   const tokens = readTemplate('app/styles/theme.css');
-  // The @theme role sheet is the one styling source: roles, palette aliases,
-  // and the document base all ride it; vite.config.ts carries no CSS at all.
-  // Bare `--token:value` declarations at stylesheet top level are dropped by
-  // CSS error recovery and take the following body rule down with them.
+  // The @theme role sheet is the one styling source for VALUES: roles, the
+  // starter palette, and the document base all ride it; vite.config.ts
+  // carries no CSS at all. Bare `--token:value` declarations at stylesheet
+  // top level are dropped by CSS error recovery and take the following body
+  // rule down with them.
+  expect(tokens.includes('@theme static {'), tokens).toBeTruthy();
   expect(tokens.includes(':root {'), tokens).toBeTruthy();
   expect(tokens.includes('body {'), tokens).toBeTruthy();
   expect(tokens.includes('::selection {'), tokens).toBeTruthy();
+  // The palette entries the markup's utilities read are theme variables, so
+  // a `bg-paper`/`text-brand`/`border-line` utility resolves against a
+  // declared role.
+  for (const entry of [
+    '--color-paper:',
+    '--color-surface:',
+    '--color-ink:',
+    '--color-ink-soft:',
+    '--color-line:',
+    '--color-brand:',
+    '--color-brand-ink:',
+    '--color-brand-soft:',
+    '--color-ok:',
+  ]) {
+    expect(tokens.includes(entry), `@theme must declare ${entry}`).toBeTruthy();
+  }
   // The dark palette rides the platform media query (P1), not a runtime.
   expect(tokens.includes('@media (prefers-color-scheme: dark)'), tokens).toBeTruthy();
   for (const tag of ['index-page', 'about-page', 'el-404']) {
@@ -390,23 +559,46 @@ test('starter pages own their styles via static styles, not the global baseline'
     'vite.config.ts must not carry style/CSS strings (#1411)',
   ).toBeFalsy();
 
-  // Page rules live in .css files (#1558 — the one style authoring form):
-  // the shared chrome sheet (arrayed by the app shell), the badge vocabulary,
-  // and one sheet per page.
-  for (const sheet of [
+  // The residue is one rule per component: the root box. A custom element is
+  // display:inline by default and the host tag is not authored markup, so no
+  // utility can carry it. Everything else the scaffold renders is a utility
+  // in the markup — a re-introduced presentation rule fails right here.
+  const sheets = [
     'app/components/site-chrome.css',
-    'app/components/badges.css',
     'app/components/page-home.css',
     'app/components/page-about.css',
     'app/components/page-404.css',
-  ]) {
-    expect(readTemplate(sheet).trim().length, `${sheet} carries rules`).toBeTruthy();
+    'app/islands/my-counter.css',
+    'app/islands/live-timer.css',
+  ];
+  for (const sheet of sheets) {
+    const css = readTemplate(sheet)
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .trim();
+    expect(css, `${sheet} carries exactly its host box rule`).toMatch(/^:host\s*\{[^{}]*\}$/);
   }
-  // The badge vocabulary is CSS only and is part of the zero-JS surface.
-  const badges = readTemplate('app/components/badges.css');
-  expect(badges).toContain('.badge');
-  expect(badges).toContain('.badge-static');
-  expect(badges).toContain('.badge-island');
+  // …and the markup actually carries the presentation, on the palette names.
+  const markup = [
+    'app/layout.tsx',
+    'app/components/page-home.tsx',
+    'app/components/page-about.tsx',
+    'app/components/page-404.tsx',
+    'app/islands/my-counter.tsx',
+    'app/islands/live-timer.tsx',
+  ]
+    .map((path) => readTemplate(path))
+    .join('\n');
+  for (const utility of [
+    'max-w-(--content-width)',
+    'text-ink-soft',
+    'text-brand',
+    'border-line',
+    'bg-paper',
+    'rounded-(--radius-m)',
+    'tabular-nums',
+  ]) {
+    expect(markup.includes(utility), `markup must author ${utility}`).toBeTruthy();
+  }
   // No page module carries CSS strings — the sheets are files.
   for (const page of ['page-home.tsx', 'page-about.tsx', 'page-404.tsx']) {
     const source = readTemplate(`app/components/${page}`);
@@ -430,18 +622,18 @@ test('starter pages import their sheets from .css files', () => {
       source.includes(specifier),
       `${path} must import its sheet from the .css file`,
     ).toBeTruthy();
-    // The chrome sheet moved to the app shell with the chrome markup (T2):
+    // The chrome sheet moved to the layout with the chrome markup (T2):
     // a page arrays only the sheets its own content consumes.
     expect(
       source.includes('site-chrome.css'),
-      `${path} must not array the chrome sheet — the app shell owns it`,
+      `${path} must not array the chrome sheet — the layout owns it`,
     ).toBeFalsy();
   }
   // The shell arrays the shared chrome sheet: the header/footer/main rules
   // style the shell's own shadow tree.
-  const shell = readTemplate('app/islands/app-shell.tsx');
+  const shell = readTemplate('app/layout.tsx');
   expect(
-    shell.includes('from "../components/site-chrome.css"'),
+    shell.includes('from "./components/site-chrome.css"'),
     'the shell imports the chrome sheet',
   ).toBeTruthy();
   expect(
@@ -462,35 +654,43 @@ test('the About route is a static page route; the landing route stays static', (
   expect(home).toContain('Rendered before JavaScript arrives');
 });
 
-test('starter owns a concrete --brand role without a UI package dependency', () => {
-  // Tailwind-ON form: --brand is an alias seated on the --color-primary role,
-  // and the role itself sits on a concrete Tailwind scale step (violet).
+test('starter owns a concrete --color-brand palette entry without a UI package dependency', () => {
+  // Tailwind-ON form: --color-brand seats on the --color-primary role, and
+  // the role itself sits on a concrete Tailwind scale step (violet).
   const theme = readTemplate('app/styles/theme.css');
-  expect(theme).toContain('--brand: var(--color-primary)');
+  expect(theme).toContain('--color-brand: var(--color-primary)');
   expect(theme).toContain('--color-primary: var(--color-violet-700)');
 });
 
-test('dark prefers-color-scheme block re-seats the brand aliases (#1582)', () => {
-  // The dark block redefined only --paper/--surface/--ink/--ink-soft/--line,
-  // so the light violet-700 brand rode into OS dark mode at ≈2.8:1 on
-  // zinc-950. Every alias a sheet consumes for the brand channel re-seats in
-  // the dark block, on a step that clears 4.5:1 (violet-400 on zinc-950:
-  // 6.98:1; violet-950 ink on violet-400: 5.36:1).
+test('dark prefers-color-scheme block re-seats the brand palette (#1582)', () => {
+  // The dark block redefined only the neutral surfaces, so the light
+  // violet-700 brand rode into OS dark mode at ≈2.8:1 on zinc-950. Every
+  // palette entry a utility consumes for the brand channel re-seats in the
+  // dark block, on a step that clears 4.5:1 (violet-400 on zinc-950: 6.98:1;
+  // violet-950 ink on violet-400: 5.36:1). --color-ok re-seats on the dark
+  // *-foreground ink for the same reason: the badge reads it as text on a
+  // low-% tint of itself, and the light ink on a dark page is unreadable.
   const theme = readTemplate('app/styles/theme.css');
   const dark = theme.slice(theme.indexOf('@media (prefers-color-scheme: dark)'));
   expect(dark.length > 0, 'theme.css carries a prefers-color-scheme dark block').toBeTruthy();
-  for (const alias of ['--brand:', '--brand-ink:', '--brand-soft:', '--ok:']) {
-    expect(dark.includes(alias), `dark block must re-seat ${alias}`).toBeTruthy();
+  for (const entry of [
+    '--color-brand:',
+    '--color-brand-ink:',
+    '--color-brand-soft:',
+    '--color-ok:',
+  ]) {
+    expect(dark.includes(entry), `dark block must re-seat ${entry}`).toBeTruthy();
   }
-  expect(dark).toContain('--brand: var(--color-violet-400)');
-  expect(dark).toContain('--brand-ink: var(--color-violet-950)');
+  expect(dark).toContain('--color-brand: var(--color-violet-400)');
+  expect(dark).toContain('--color-brand-ink: var(--color-violet-950)');
+  expect(dark).toContain('--color-ok: var(--color-zinc-100)');
 });
 
 test('TypeScript starter sources are pack-safe template payloads', () => {
   for (const path of [
     'vite.config.ts',
     'app/head.tsx',
-    'app/islands/app-shell.tsx',
+    'app/layout.tsx',
     'app/islands/my-counter.tsx',
     'app/islands/live-timer.tsx',
     'app/components/page-home.tsx',
@@ -510,49 +710,23 @@ test('TypeScript starter sources are pack-safe template payloads', () => {
 });
 
 // The template payload must survive the SAME toolchain the generated app
-// runs: the scaffold ships pre-formatted (the oxfmt defaults `vp fmt`
-// applies — the config block in vite.config.ts.tmpl keeps those defaults),
-// so `vp fmt --check` and `vp lint` pass on a fresh scaffold out of the box.
-// This gate re-materializes every template under its logical name and runs
-// the repo's own vp over the copy. Skipped where the vp binary is absent
-// (the CI lane always has it).
-const repoVpBin = join(packageDir, '..', '..', 'node_modules', '.bin', 'vp');
-const vpAvailable = existsSync(repoVpBin);
+// runs: the scaffold ships pre-formatted, so `npm run fmt` (oxfmt) and
+// `npm run lint` (oxlint) are clean on a fresh scaffold out of the box. This
+// gate re-materializes every template under its logical name into a scratch
+// tree that carries NO config file — exactly what a scaffold is — and runs
+// the repo's own oxfmt/oxlint over the copy, so the tools' DEFAULTS are what
+// gets asserted (the scaffold ships no .oxfmtrc.json / .oxlintrc.json, and
+// the two template files that used to pin vp's formatter defaults are gone).
+// Skipped where the binaries are absent (the CI lane always has them).
+const repoOxfmtBin = join(packageDir, '..', '..', 'node_modules', '.bin', 'oxfmt');
+const repoOxlintBin = join(packageDir, '..', '..', 'node_modules', '.bin', 'oxlint');
+const oxToolsAvailable = existsSync(repoOxfmtBin) && existsSync(repoOxlintBin);
 
 /** [template payload, logical scaffold path] — the template-builder mapping. */
-const TMPL_TO_LOGICAL: Array<[string, string]> = [
-  ['gitignore.tmpl', '.gitignore'],
-  ['README.tmpl', 'README.md'],
-  ['package.json.tmpl', 'package.json'],
-  ['pnpm-workspace.yaml.tmpl', 'pnpm-workspace.yaml'],
-  ['tsconfig.json.tmpl', 'tsconfig.json'],
-  ['vite.config.ts.tmpl', 'vite.config.ts'],
-  ['openelement.config.ts.tmpl', 'openelement.config.ts'],
-  ['app/head.tsx.tmpl', 'app/head.tsx'],
-  ['app/styles/theme.css', 'app/styles/theme.css'],
-  ['app/styles/recipes.css', 'app/styles/recipes.css'],
-  ['app/components/site-chrome.css', 'app/components/site-chrome.css'],
-  ['app/components/badges.css', 'app/components/badges.css'],
-  ['app/components/page-home.css', 'app/components/page-home.css'],
-  ['app/components/page-about.css', 'app/components/page-about.css'],
-  ['app/components/page-404.css', 'app/components/page-404.css'],
-  ['app/components/page-home.tsx.tmpl', 'app/components/page-home.tsx'],
-  ['app/components/page-about.tsx.tmpl', 'app/components/page-about.tsx'],
-  ['app/components/page-404.tsx.tmpl', 'app/components/page-404.tsx'],
-  ['app/routes/index.tsx.tmpl', 'app/routes/index.tsx'],
-  ['app/routes/about.tsx.tmpl', 'app/routes/about.tsx'],
-  ['app/routes/404.tsx.tmpl', 'app/routes/404.tsx'],
-  ['app/routes/api/ping.ts.tmpl', 'app/routes/api/ping.ts'],
-  ['app/islands/app-shell.tsx.tmpl', 'app/islands/app-shell.tsx'],
-  ['app/islands/my-counter.tsx.tmpl', 'app/islands/my-counter.tsx'],
-  ['app/islands/my-counter.css', 'app/islands/my-counter.css'],
-  ['app/islands/live-timer.tsx.tmpl', 'app/islands/live-timer.tsx'],
-  ['app/islands/live-timer.css', 'app/islands/live-timer.css'],
-  ['public/openelement-mark.svg', 'public/openelement-mark.svg'],
-];
+const TMPL_TO_LOGICAL: ReadonlyArray<readonly [string, string]> = TEMPLATE_FILES;
 
-test.skipIf(!vpAvailable)(
-  'the template payload passes the vp toolchain it ships to (fmt + lint on logical copies)',
+test.skipIf(!oxToolsAvailable)(
+  'the template payload passes the toolchain it ships to (oxfmt --check + oxlint on logical copies)',
   () => {
     const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-tmpl-lint-'));
     try {
@@ -563,23 +737,30 @@ test.skipIf(!vpAvailable)(
         mkdirSync(join(target, '..'), { recursive: true });
         copyFileSync(source, target);
       }
-      // vp's own config load follows its CWD, while the oxfmt defaults
-      // resolve from the TARGET tree: run from the workspace root (no
-      // vite.config.ts at the repo root, so vp uses the defaults) and point
-      // it at the copy — the same defaults a scaffolded app's `pnpm fmt
-      // --check` applies (its vite.config.ts carries an empty fmt block).
-      // Pointing the run INTO the copy would make vp load the copy's
-      // vite.config.ts, which imports packages a scratch dir has no
-      // node_modules to resolve.
-      const fmt = spawnSync(repoVpBin, ['fmt', tmpRoot, '--check'], { encoding: 'utf8' });
+      // Both tools resolve their config from the working directory they are
+      // started in — and the copy has none, so running from INSIDE it is the
+      // default-configuration run a scaffold gets from `npm run fmt --check` /
+      // `npm run lint`. (Running from the repository root would apply THIS
+      // repo's .oxfmtrc.json / .oxlintrc.json instead: measured, and not what
+      // a consumer sees.) An explicit /dev/null stdin plus a hard timeout keep
+      // a tool that waits on a stream from wedging the vitest project; the
+      // assertion itself — a fresh scaffold is format-clean and lint-clean
+      // under the tools it ships — is unchanged from the vp-era gate.
+      const spawnOpts = {
+        cwd: tmpRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'] as const,
+        timeout: 120_000,
+      };
+      const fmt = spawnSync(repoOxfmtBin, ['--check', '.'], spawnOpts);
       expect(
         fmt.status,
-        `vp fmt --check flagged unformatted template payload:\n${fmt.stdout}${fmt.stderr}`,
+        `oxfmt --check flagged unformatted template payload:\n${fmt.stdout}${fmt.stderr}`,
       ).toEqual(0);
-      const lint = spawnSync(repoVpBin, ['lint', tmpRoot], { encoding: 'utf8' });
+      const lint = spawnSync(repoOxlintBin, [], spawnOpts);
       expect(
         lint.status,
-        `vp lint flagged the template payload:\n${lint.stdout}${lint.stderr}`,
+        `oxlint flagged the template payload:\n${lint.stdout}${lint.stderr}`,
       ).toEqual(0);
     } finally {
       rmSync(tmpRoot, { recursive: true });
@@ -629,7 +810,7 @@ test('generated starter README maps the JS cost of every surface', async () => {
   const readme = templates['README.md'];
   // The cost map is the starter's contract with its reader: every page and
   // island appears with an honest JS answer.
-  for (const surface of ['/', '/about', '/api/ping', 'my-counter', 'live-timer']) {
+  for (const surface of ['/', '/about', '/404', '/api/ping', 'my-counter', 'live-timer']) {
     expect(readme.includes(surface), `README must map ${surface}`).toBeTruthy();
   }
   // The app-wide island-client honesty note is present, not marketing.
@@ -756,14 +937,15 @@ test('generated starter carries no JSR bridge', async () => {
   expect(/@jsr\//.test(serialized), 'starter must not use @jsr scopes').toBeFalsy();
 });
 
-test('generated starter is a Node project: no deno.json, pnpm lifecycle', async () => {
+test('generated starter is a Node project: no deno.json, manager-neutral lifecycle', async () => {
   const templates = await buildTemplates(resolveVersions(), 'sample-app');
   // B5 (ADR-0161): the Deno-native starter manifest is gone; the scaffold is
-  // a plain Node/pnpm project.
+  // a plain Node project. alpha.15: the lifecycle is plain scripts any manager
+  // can run (`oe dev` through the router bin), not a manager-specific wrapper.
   expect('deno.json' in templates).toBeFalsy();
   expect('tsconfig.json' in templates).toBeTruthy();
   const pkg = JSON.parse(templates['package.json']);
-  expect(pkg.scripts.dev).toEqual('vp dev');
+  expect(pkg.scripts.dev).toEqual('oe dev');
   expect(pkg.scripts.typecheck).toEqual('tsc --noEmit');
 });
 
@@ -778,30 +960,26 @@ test('generated starter floats the OpenElement dependencies on the caret release
   expect(pkg.dependencies['@openelement/element']).toEqual(`^${versions.element}`);
 });
 
-test('starter resolves the Vite tree through the Vite+ catalog, aligned with the router', async () => {
+test('starter pins the Vite tree directly, aligned with the router', async () => {
   const raw = JSON.parse(readTemplate('package.json.tmpl'));
   expect(
     '@deno/vite-plugin' in raw.devDependencies,
     'starter must not depend on @deno/vite-plugin',
   ).toBeFalsy();
-  // The Vite+ toolchain form (alpha.14): no direct vite devDependency exists —
-  // the whole vite tree resolves through the pnpm-workspace.yaml catalog, so
-  // a single Vite+ copy is guaranteed by the workspace file rather than a
-  // manifest pin. The catalog entry is an exact pin (the T0 battery ran the
-  // starter on this build): `vite` maps to the Vite+ core, and the override
-  // redirects every specifier that asks for vite to it.
+  // The direct-pin form (alpha.15): `vite` is a plain devDependency at the
+  // exact version the router itself resolves (its own `vite` dependency), so
+  // a single Vite copy is guaranteed by the pin plus the router's aligned
+  // dependency — no workspace catalog, no `vite@*` override, and no Vite+
+  // build to alias onto.
   const generated = JSON.parse(
     (await buildTemplates(resolveVersions(), 'sample-app'))['package.json'],
   );
-  expect(generated.devDependencies.vite).toEqual(undefined);
-  expect(raw.devDependencies['vite-plus']).toEqual('catalog:');
-  expect(generated.devDependencies['vite-plus']).toEqual('catalog:');
-  const workspace = readTemplate('pnpm-workspace.yaml.tmpl');
-  expect(workspace).toContain('vite: npm:@voidzero-dev/vite-plus-core@1.1.0');
-  expect(workspace).toContain('vite-plus: 1.1.0');
-  expect(workspace).toContain('vite@*: "catalog:"');
-  // The build-time TypeScript pin stays aligned with the router's own.
   const routerManifest = JSON.parse(readFileSync(join(packageDir, '..', 'router', 'package.json')));
+  expect(raw.devDependencies.vite).toEqual(routerManifest.dependencies.vite);
+  expect(generated.devDependencies.vite).toEqual(routerManifest.dependencies.vite);
+  expect(raw.devDependencies['vite-plus']).toEqual(undefined);
+  expect(generated.devDependencies['vite-plus']).toEqual(undefined);
+  // The build-time TypeScript pin stays aligned with the router's own.
   expect(raw.devDependencies.typescript).toEqual(routerManifest.dependencies.typescript);
   // The dev-server pair stays a devDependency pair whose ranges match the
   // router's own optional peers (one contract, two surfaces): the starter the
@@ -810,6 +988,13 @@ test('starter resolves the Vite tree through the Vite+ catalog, aligned with the
     routerManifest.peerDependencies['@hono/vite-dev-server'],
   );
   expect(raw.devDependencies.hono).toEqual(routerManifest.peerDependencies.hono);
+  // The two formatter/linter tools are the repo's own pins, so the scaffold
+  // formats and lints exactly like the repository it was generated from.
+  const repoManifest = JSON.parse(
+    readFileSync(join(packageDir, '..', '..', 'package.json'), 'utf8'),
+  );
+  expect(raw.devDependencies.oxfmt).toEqual(repoManifest.devDependencies.oxfmt);
+  expect(raw.devDependencies.oxlint).toEqual(repoManifest.devDependencies.oxlint);
   // No browser-automation dependency ships with the starter (owner ruling
   // 2026-10-09): the packed starter-browser gate adds its own Playwright pin to
   // the scaffolded manifest before installing
@@ -832,8 +1017,8 @@ test('source CLI generates the showcase starter with git init and the boxed hand
     if (gitAvailable) {
       expect(existsSync(join(appDir, '.git')), 'default run must git init').toBeTruthy();
     }
-    // B5 (ADR-0161): the scaffold is a Node/pnpm project — package.json
-    // manifest, generated tsconfig, no Deno config anywhere.
+    // B5 (ADR-0161): the scaffold is a Node project — package.json manifest,
+    // generated tsconfig, no Deno config anywhere.
     expect(existsSync(join(appDir, 'deno.json'))).toBeFalsy();
     const manifest = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8'));
     expect(JSON.stringify(manifest).includes('${v.')).toBeFalsy();
@@ -848,21 +1033,20 @@ test('source CLI generates the showcase starter with git init and the boxed hand
     expect(existsSync(join(appDir, 'app', 'routes', 'contact.tsx'))).toBeFalsy();
     expect(existsSync(join(appDir, 'app', 'styles', 'theme.css'))).toBeTruthy();
     expect(existsSync(join(appDir, 'README.md'))).toBeTruthy();
-    // The Vite+ scaffold artifacts: the auto-registered app shell and the
-    // workspace bookkeeping with the catalog/exemption form (scaffold product
-    // assertions — the same surface the starter-smoke gate drives).
-    expect(existsSync(join(appDir, 'app', 'islands', 'app-shell.tsx'))).toBeTruthy();
-    expect(existsSync(join(appDir, 'pnpm-workspace.yaml'))).toBeTruthy();
-    const workspace = readFileSync(join(appDir, 'pnpm-workspace.yaml'), 'utf8');
-    expect(workspace).toContain('npm:@voidzero-dev/vite-plus-core@1.1.0');
-    expect(workspace).toContain('vite@*: "catalog:"');
-    expect(workspace).toContain('@openelement/router@');
+    // The auto-registered layout and the manager-neutral surface: no
+    // workspace file, no `packageManager` pin, no manager-specific specifier
+    // anywhere on disk (scaffold product assertions — the same surface the
+    // starter-smoke gate drives).
+    expect(existsSync(join(appDir, 'app', 'layout.tsx'))).toBeTruthy();
+    expect(existsSync(join(appDir, 'pnpm-workspace.yaml'))).toBeFalsy();
+    expect('packageManager' in manifest).toBeFalsy();
     // The boxed handoff names the next commands, the docs, and the generator
     // version (a cached `npx` run resolves whatever copy it first downloaded,
-    // so the box is where a stale generator announces itself — #1634).
+    // so the box is where a stale generator announces itself — #1634). The
+    // per-file `created …` listing is asserted with the scaffold output; this
+    // block asserts the BOX itself.
     expect(stdout.includes('cd sample-app'), stdout).toBeTruthy();
     expect(stdout.includes('run dev'), stdout).toBeTruthy();
-    expect(stdout.includes('README.md'), stdout).toBeTruthy();
     expect(
       stdout.includes(`@openelement/create ${CREATE_VERSION}`),
       `handoff box must carry the generator version:\n${stdout}`,
@@ -884,7 +1068,7 @@ test.skipIf(process.platform === 'win32')(
     try {
       // A fake pnpm earlier on PATH records its argv and exits 0: the default
       // (--install) path runs without network, and the detection order (pnpm
-      // beats npm) is observable in the recorded invocation.
+      // ahead of the other three) is observable in the recorded invocation.
       const binDir = join(tmpRoot, 'bin');
       mkdirSync(binDir);
       const invocationLog = join(tmpRoot, 'invocations.log');
@@ -909,6 +1093,47 @@ test.skipIf(process.platform === 'win32')(
         `expected an install invocation: ${invocations.join('\n')}`,
       ).toBeTruthy();
       expect(stdout.includes('Installing dependencies with pnpm'), stdout).toBeTruthy();
+    } finally {
+      rmSync(tmpRoot, { recursive: true });
+    }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'detection falls through pnpm to npm when pnpm is not on PATH (fake-PM probe)',
+  async () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-npm-'));
+    try {
+      // PATH carries node plus a fake npm and NOTHING else: pnpm, yarn and bun
+      // cannot be probed, so the install must run through npm — the alpha.15
+      // fall-through the pnpm-only template made impossible.
+      const binDir = join(tmpRoot, 'bin');
+      mkdirSync(binDir);
+      symlinkSync(process.execPath, join(binDir, 'node'));
+      const invocationLog = join(tmpRoot, 'invocations.log');
+      writeFileSync(join(binDir, 'npm'), `#!/bin/sh\necho "$@" >> ${invocationLog}\nexit 0\n`, {
+        mode: 0o755,
+      });
+      const child = spawn(process.execPath, [join(packageDir, 'src', 'cli.ts'), 'npm-app'], {
+        cwd: tmpRoot,
+        env: { ...process.env, PATH: resolve(binDir) },
+      });
+      const [out, err] = await Promise.all([
+        Array.fromAsync(child.stdout!),
+        Array.fromAsync(child.stderr!),
+      ]);
+      const code = await new Promise<number>((resolve) =>
+        child.once('exit', (c) => resolve(c ?? -1)),
+      );
+      const stdout = Buffer.concat(out).toString();
+      expect(code, `${stdout}\n${Buffer.concat(err).toString()}`).toEqual(0);
+      const invocations = readFileSync(invocationLog, 'utf8').trim().split('\n');
+      expect(invocations[0], invocations.join('\n')).toContain('--version');
+      expect(
+        invocations.some((line) => line.includes('install')),
+        `expected an npm install invocation: ${invocations.join('\n')}`,
+      ).toBeTruthy();
+      expect(stdout.includes('Installing dependencies with npm'), stdout).toBeTruthy();
     } finally {
       rmSync(tmpRoot, { recursive: true });
     }
@@ -1019,9 +1244,65 @@ test('no arguments: usage on stdout, exit 1, canonical command first', async () 
   expect(Buffer.concat(err).toString().includes('a project name is required')).toBeTruthy();
 });
 
-test('detectPackageManager probes pnpm before npm and answers a real manager', () => {
-  const pm = detectPackageManager();
-  expect(['pnpm', 'npm']).toContain(pm);
+test('manager detection prefers pnpm, then npm, yarn, bun — and answers null when none exists', () => {
+  // The order is the contract (pnpm first for the repository's own tooling
+  // habit), the fall-through is what makes the scaffold manager-neutral, and
+  // an empty PATH is the ONE failure case. Injected probes pin all three
+  // without touching the host's PATH.
+  const only = (available: string) => (pm: string) => pm === available;
+  expect(detectPackageManager(only('pnpm'))).toEqual('pnpm');
+  expect(detectPackageManager(() => true)).toEqual('pnpm');
+  expect(detectPackageManager((pm) => pm !== 'pnpm')).toEqual('npm');
+  expect(detectPackageManager((pm) => pm === 'yarn' || pm === 'bun')).toEqual('yarn');
+  expect(detectPackageManager((pm) => pm === 'bun')).toEqual('bun');
+  expect(detectPackageManager(() => false)).toEqual(null);
+  // Every candidate is offered the probe, in the documented order.
+  const probed: string[] = [];
+  detectPackageManager((pm) => {
+    probed.push(pm);
+    return false;
+  });
+  expect(probed).toEqual([...PACKAGE_MANAGERS]);
+});
+
+test('a host without any package manager fails naming all four, with the files intact', async () => {
+  // PATH keeps node (already running this process) and nothing else, so none
+  // of the four probes resolves. The scaffold must still be written — the
+  // message has to leave the user something to install into — and the run
+  // must name every manager it accepts instead of demanding one of them.
+  const binDir = `node${process.pid}-bin`;
+  mkdirSync(binDir, { recursive: true });
+  symlinkSync(process.execPath, join(binDir, 'node'));
+  const tmpRoot = `node${process.pid}-no-pm`;
+  mkdirSync(tmpRoot, { recursive: true });
+  try {
+    const child = spawn(process.execPath, [join(packageDir, 'src', 'cli.ts'), 'no-pm-app'], {
+      cwd: tmpRoot,
+      env: { ...process.env, PATH: resolve(binDir) },
+    });
+    const writes = await Promise.all([
+      Array.fromAsync(child.stdout!),
+      Array.fromAsync(child.stderr!),
+    ]);
+    const code = await new Promise<number>((resolve) =>
+      child.once('exit', (c) => resolve(c ?? -1)),
+    );
+    const stderr = Buffer.concat(writes[1]!).toString();
+    expect(code).toEqual(1);
+    expect(stderr.includes('No package manager found'), stderr).toBeTruthy();
+    for (const pm of PACKAGE_MANAGERS) {
+      expect(stderr.includes(pm), `${pm} must be named in: ${stderr}`).toBeTruthy();
+    }
+    expect(stderr.includes('npm install'), stderr).toBeTruthy();
+    assertCleanError(stderr);
+    // The files survive: the message tells the user to install in place, and
+    // nothing manager-specific is required to do it.
+    expect(existsSync(join(tmpRoot, 'no-pm-app', 'package.json'))).toBeTruthy();
+    expect(existsSync(join(tmpRoot, 'no-pm-app', 'node_modules'))).toBeFalsy();
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
+  }
 });
 
 test('L11: project name validation enforces npm-name and traversal rules', () => {
@@ -1162,6 +1443,9 @@ test.skipIf(!pnpmAvailable)(
       ) as { scripts: Record<string, string> };
       expect(manifest.scripts.build).toEqual('oe build');
       expect(manifest.scripts.start).toEqual('oe start');
+      // The dev entry rides the same bin: `oe dev` is the router lifecycle
+      // subcommand the packed dispatcher has to expose (alpha.15).
+      expect(manifest.scripts.dev).toEqual('oe dev');
       expect(manifest.scripts.preview).toEqual(undefined);
     } finally {
       rmSync(tmpRoot, { recursive: true });
@@ -1196,13 +1480,12 @@ test.skipIf(!pnpmAvailable)(
       expect(
         existsSync(join(tmpRoot, 'sample-app', 'app', 'components', 'page-home.tsx')),
       ).toBeTruthy();
-      // The Vite+ scaffold artifacts survive the pack too.
-      expect(
-        existsSync(join(tmpRoot, 'sample-app', 'app', 'islands', 'app-shell.tsx')),
-      ).toBeTruthy();
-      expect(existsSync(join(tmpRoot, 'sample-app', 'pnpm-workspace.yaml'))).toBeTruthy();
+      // The manager-neutral scaffold survives the pack too: the layout ships,
+      // and no pnpm-only workspace file does.
+      expect(existsSync(join(tmpRoot, 'sample-app', 'app', 'layout.tsx'))).toBeTruthy();
+      expect(existsSync(join(tmpRoot, 'sample-app', 'pnpm-workspace.yaml'))).toBeFalsy();
       // No JSR bridge may ship in packed scaffolds, not just workspace runs.
-      // B5 (ADR-0161): the packed scaffold is a Node/pnpm project — the
+      // B5 (ADR-0161): the packed scaffold is a Node project — the
       // manifest and tsconfig ship, no Deno config does.
       expect(existsSync(join(tmpRoot, 'sample-app', 'package.json'))).toBeTruthy();
       expect(existsSync(join(tmpRoot, 'sample-app', 'tsconfig.json'))).toBeTruthy();

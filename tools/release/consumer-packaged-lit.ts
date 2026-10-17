@@ -447,10 +447,9 @@ export default defineConfig({
       renderer: 'lit',
       routesDir: 'app/routes',
       islandsDir: 'app/islands',
-      componentsDir: 'app/components',
-      // renderer: 'lit' supports appShell: false only; the packed consumer
+      // renderer: 'lit' supports layout: false only; the packed consumer
       // stays minimal and shell-free.
-      appShell: false,
+      layout: false,
       head: {
         title: 'packed-app-lit',
       },

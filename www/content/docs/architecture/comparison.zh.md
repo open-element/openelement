@@ -83,23 +83,23 @@ OpenElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权
 
 ### 产物体积
 
-以下数字于 2026-10-07 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。alpha6 之后数字变动过五次：alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）；alpha8 的 B2 manifest 转换（pnpm workspaces，不再有 `deno.json` workspace 标记）重新切分了应用侧 island chunk；alpha8 的客户端构建现在会在 chunk 分组前把每个包 island 声明的身份解析到真实模块 id（#1471 fail-closed）；alpha9 的样式列车让站点落座 @theme 角色表并接入 Zag 驱动的 open-search 岛（#1502），带动了下方 island chunk 与路由载荷的增长，因此每个 island chunk 都以 `island-open-<tag>-<hash>.js` 命名，而共享的编译元素运行时单独成块、由 `client.js` 在每个 island 页面上即时加载；alpha10 列车把 island 组件样式做了压缩（#1543），让共享的编译元素运行时从寄居的 island chunk 挪进独立的 `element-runtime-<hash>.js` chunk（#1544），再把 island 样式表整体从 chunk 中抽出、成为按内容寻址的 `client/assets/*.css` 资源（#1553、ADR-0164）。alpha.11 的样式列车（#1558、ADR-0164）随后把包 island 与站点页面剩余的内联样式表迁到同一 `.css` import 形态，下方 island 行与路由载荷随之再次重切。下方的路由载荷按路由 manifest chunk 集合的即时导入闭包测量，因此无论共享代码落在哪个 chunk 文件里，数字都保持诚实。
+以下数字于 2026-10-14 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。alpha6 之后数字变动过五次：alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）；alpha8 的 B2 manifest 转换（pnpm workspaces，不再有 `deno.json` workspace 标记）重新切分了应用侧 island chunk；alpha8 的客户端构建现在会在 chunk 分组前把每个包 island 声明的身份解析到真实模块 id（#1471 fail-closed）；alpha9 的样式列车让站点落座 @theme 角色表并接入 Zag 驱动的 open-search 岛（#1502），带动了下方 island chunk 与路由载荷的增长，因此每个 island chunk 都以 `island-open-<tag>-<hash>.js` 命名，而共享的编译元素运行时单独成块、由 `client.js` 在每个 island 页面上即时加载；alpha10 列车把 island 组件样式做了压缩（#1543），让共享的编译元素运行时从寄居的 island chunk 挪进独立的 `element-runtime-<hash>.js` chunk（#1544），再把 island 样式表整体从 chunk 中抽出、成为按内容寻址的 `client/assets/*.css` 资源（#1553、ADR-0164）。alpha.11 的样式列车（#1558、ADR-0164）随后把包 island 与站点页面剩余的内联样式表迁到同一 `.css` import 形态。alpha15 候选构建在“表现从手写样式表迁到标记中的工具类”之后重切了 island chunk：先是 `@openelement/ui` 的六个组件（`island-open-button`、`island-open-code-block`），本轮则是站点自己的 island（`island-open-page-rail`、`island-open-dragon-live-gaze`）——类字符串比它们替换掉的类名更长，这与组件付出的是同一种代价。下方每一行都量自该构建。下方的路由载荷按路由 manifest chunk 集合的即时导入闭包测量，因此无论共享代码落在哪个 chunk 文件里，数字都保持诚实。
 
 | 指标                 | 数值                                             |
 | -------------------- | ------------------------------------------------ |
-| 预渲染文档           | 72 个 HTML 文件                                  |
-| `sitemap.xml` URL 数 | 70                                               |
-| 静态产物总量         | 8.6 MB                                           |
-| island manifest      | 72 份——每页一份                                  |
-| 搜索索引             | 每个语言 35 页（en、zh），70 个 fragment，1.3 MB |
+| 预渲染文档           | 74 个 HTML 文件                                  |
+| `sitemap.xml` URL 数 | 72                                               |
+| 静态产物总量         | 8.5 MB                                           |
+| island manifest      | 74 份——每页一份                                  |
+| 搜索索引             | 每个语言 36 页（en、zh），72 个 fragment，1.5 MB |
 
 ```bash
 pnpm run site:build                         # 先重新生成以下全部内容
-find www/dist -name '*.html' | wc -l        # 72
-grep -c '<loc>' www/dist/sitemap.xml        # 70
-du -sh www/dist                             # 9.3M（随平台变化；上表 8.6 MB 是字节总和）
-ls www/dist/island-manifests | wc -l        # 72
-cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 35
+find www/dist -name '*.html' | wc -l        # 74
+grep -c '<loc>' www/dist/sitemap.xml        # 72
+du -sh www/dist                             # 9.2M（随平台变化；上表 8.5 MB 是字节总和）
+ls www/dist/island-manifests | wc -l        # 74
+cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 36
 ```
 
 ### Island bundle
@@ -108,14 +108,14 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `element-runtime`              | 83,172   | 26,038  |
-| `island-open-button`           | 13,323   | 2,398   |
-| `island-open-dragon-live-gaze` | 10,988   | 4,063   |
-| `island-open-page-rail`        | 9,461    | 2,863   |
-| `island-open-cinematic-scroll` | 7,013    | 2,809   |
-| `island-open-code-block`       | 3,323    | 1,229   |
-| `island-open-hero-polish`      | 5,359    | 2,254   |
-| `client.js`                    | 6,293    | 1,919   |
+| `element-runtime`              | 91,005   | 28,157  |
+| `island-open-button`           | 14,495   | 2,731   |
+| `island-open-dragon-live-gaze` | 13,053   | 4,548   |
+| `island-open-page-rail`        | 11,553    | 3,257   |
+| `island-open-cinematic-scroll` | 7,841    | 3,092   |
+| `island-open-code-block`       | 4,120    | 1,574   |
+| `island-open-hero-polish`      | 5,644    | 2,326   |
+| `client.js`                    | 6,522    | 1,965   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
@@ -128,11 +128,11 @@ island 入口（`client.js`）承载 island import 工厂与错误串，字节�
 
 | 路由                     | 客户端载荷（原始） | 不同 chunk 数 |
 | ------------------------ | ------------------ | ------------- |
-| `/guide/mdx`             | 150,163 B          | 8             |
-| `/guide/getting-started` | 150,163 B          | 8             |
-| `/`                      | 166,510 B          | 10             |
+| `/guide/mdx`             | 166,734 B          | 9             |
+| `/guide/getting-started` | 166,734 B          | 9             |
+| `/`                      | 185,431 B          | 11            |
 
-72 份页面 manifest 合计声明了 9 个 island 标签、342 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 62 页，`open-code-block` 出现在 50 页，其余标签只在少数页面上。#1557 的 B8 退役移除了 `open-badge` 包 island（roadmap 上的用法已改为纯 HTML+CSS recipe），而参考页新增了两个拆分包的文档，使载荷行发生移动。
+74 份页面 manifest 合计声明了 9 个 island 标签、352 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 64 页，`open-code-block` 出现在 52 页，其余标签只在少数页面上。#1557 的 B8 退役移除了 `open-badge` 包 island（roadmap 上的用法已改为纯 HTML+CSS recipe），而参考页新增了两个拆分包的文档，使载荷行发生移动。
 
 ```bash
 cat www/dist/island-manifests/page-<hash>.json   # 单页的 island 集合：标签、chunk、策略、层级

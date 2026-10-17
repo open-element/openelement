@@ -2,10 +2,9 @@
  * Current-doc retired-API scan (1.0.0-alpha.1): fail when current guides,
  * architecture pages, maintainer docs, package READMEs, starter templates,
  * or site chrome teach a retired package, subpath, or public symbol.
- * History stays allowed only where it is explicitly labeled as history: the
- * migration archive and version-titled blog posts. docs/adr stays out of
- * scope on purpose: ADRs are the historical record and may name retired
- * decisions.
+ * History is kept out of scope rather than allowlisted: docs/adr is
+ * deliberately unscanned (the historical record may name retired decisions),
+ * and the version-titled blog posts live outside the scanned trees.
  *
  * Symbol entries are DERIVED, not hand-listed: the public interface snapshot
  * at the newest release tag that ships one is diffed against the current
@@ -17,20 +16,8 @@
 import { readdir } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
-import { commandOutput } from './node-command.ts';
-
-const RETIRED = [
-  '@openelement/app',
-  '@openelement/adapter-vite',
-  'adapter-vite',
-  '@openelement/core',
-  '@openelement/signal',
-  '@openelement/protocol',
-  '@openelement/content',
-  '@openelement/ssg',
-  '/preact',
-  'preact-render-to-string',
-];
+import { spawnCommand } from './node-command.ts';
+import { RETIRED_API_TOKENS } from './retired-api-tokens.ts';
 
 const SCAN_DIRS = [
   'www/content/docs/guide',
@@ -44,8 +31,6 @@ const SCAN_DIRS = [
   // Starter template sources ship as .tmpl; the extension list covers them.
   'packages/create/templates',
 ];
-
-const HISTORY_ALLOWLIST = ['migration.md', 'migration.zh.md'];
 
 const seen = new Set<string>();
 const files: string[] = [];
@@ -78,7 +63,18 @@ for (const entry of await readdir('packages', { recursive: true, withFileTypes: 
 
 // ─── Derived retired symbols (release snapshot diff) ────────────────────
 
-const ADDITIONAL_RETIRED_SYMBOLS = ['toRootCss'];
+// Symbols that never reached a release tag, so the snapshot-diff derivation
+// below cannot see them. defineHtmlPage and the template-page descriptor
+// types (added and removed inside the alpha15 server-architecture rewrite)
+// are the canonical entries: the rewrite retired the string-template page
+// surface in the same development window that introduced it.
+const ADDITIONAL_RETIRED_SYMBOLS = [
+  'toRootCss',
+  'defineHtmlPage',
+  'HtmlPageRender',
+  'HtmlPageModule',
+  'OpenElementHtmlPageDescriptor',
+];
 
 interface SnapshotLike {
   packages: Array<{ declarations?: Record<string, { publicSymbols?: string[] }> }>;
@@ -96,7 +92,7 @@ function symbolNames(snapshot: SnapshotLike): Set<string> {
 
 async function gitShow(ref: string): Promise<string | undefined> {
   try {
-    const output = await commandOutput('git', {
+    const output = await spawnCommand('git', {
       args: ['show', `${ref}:docs/release/public-interface-snapshot.json`],
       stdin: 'null',
       stdout: 'piped',
@@ -112,7 +108,7 @@ async function gitShow(ref: string): Promise<string | undefined> {
 /** Names present at the newest tagged release snapshot but gone today. */
 async function deriveRetiredSymbols(): Promise<Set<string>> {
   const retired = new Set<string>(ADDITIONAL_RETIRED_SYMBOLS);
-  const tags = await commandOutput('git', {
+  const tags = await spawnCommand('git', {
     args: ['tag', '--list', 'v*', '--sort=-creatordate'],
     stdin: 'null',
     stdout: 'piped',
@@ -159,7 +155,6 @@ const NAMED_IMPORT =
 
 let failures = 0;
 for (const file of files) {
-  if (HISTORY_ALLOWLIST.some((allowed) => file.endsWith(allowed))) continue;
   // Generated data modules are derived from scanned sources (content
   // collections, package exports); version-titled blog history may name
   // retired APIs, so scan sources rather than serialized output.
@@ -181,7 +176,7 @@ for (const file of files) {
       logical.push(line);
     }
   }
-  for (const token of RETIRED) {
+  for (const token of RETIRED_API_TOKENS) {
     if (text.includes(token)) {
       // A retired list that names the token as retired is documentation,
       // not teaching: allow "Retired:" / "已退役" lines only.

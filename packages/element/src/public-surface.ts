@@ -3,9 +3,9 @@
  * entry of this package re-exports, spelled out exactly once (#1416).
  *
  * Two entries re-export this module and differ in exactly one thing: the
- * claim executor install. `index.ts` (the default `.` entry) installs it, so
+ * hydration executor install. `index.ts` (the default `.` entry) installs it, so
  * elements may hydrate server-rendered roots. `client-only.ts` does not, so a
- * bundle for a page where no island can hydrate server DOM carries no claim
+ * bundle for a page where no island can hydrate server DOM carries no hydration
  * machinery at all. Keeping the list here rather than in each entry is what
  * stops the two surfaces from drifting apart.
  *
@@ -24,24 +24,39 @@ export { collectPublicProps } from './public-runtime.ts';
 
 // ─── Server render + client bootstrap (compiled pipeline) ──────────
 
-// renderDsd serializes a compiled class to deterministic HTML for generated
+// renderToString serializes a compiled class to deterministic HTML for generated
 // server entries; ensurePreHydrationClickCapture installs the pre-upgrade
-// capture that the compiled claim replays after upgrade (generated client
+// capture that the compiled hydration replays after upgrade (generated client
 // entries call it).
 export {
-  createDeferredDsdExecutor,
+  createStreamShellExecutor,
   ensurePreHydrationClickCapture,
-  renderDsd,
+  renderToString,
 } from './public-runtime.ts';
-export type { RenderDsdOptions } from './public-runtime.ts';
+// alpha15 S lane: the component-stylesheet URL channel the router's generated
+// SSR/SSG entry feeds before rendering (the DSD templates of components whose
+// classes were statically admitted declare the emitted assets as external
+// `<link rel="stylesheet">` nodes). Internal by convention (`__` prefix):
+// application code never calls it; the generated entry does, and the deployed
+// request-time server re-applies it at startup.
+export { __setRequestTimeStyleSheetUrls } from './internal/compiled/server/style-links.ts';
+// alpha15 S lane (S-C1.2): the per-render document stylesheet collection. The
+// generated entry creates one per document render, hands it to the page render
+// (light-root components report their external sheets into it) and to
+// wrapInDocument (which declares them as marked head links). One collection
+// per render is what keeps one page's component stylesheets out of another
+// page's head.
+export { createDocumentStyleResources } from './public-runtime.ts';
+export type { DocumentStyleResources } from './public-runtime.ts';
+export type { RenderToStringOptions } from './public-runtime.ts';
 export type {
-  CreateDeferredDsdOptions,
-  DeferredDsdExecutor,
-  DeferredDsdManifest,
+  CreateStreamShellOptions,
+  StreamShellExecutor,
+  StreamShellManifest,
 } from './public-runtime.ts';
 
 // Explicit type-only surface for build adapters (#488).
-export type { RenderOutput, SsrAdmissionDecision } from './public-runtime.ts';
+export type { SsrAdmissionDecision } from './public-runtime.ts';
 export { assertValidTagName } from './public-runtime.ts';
 
 // ─── Context (re-export from core) ───────────────────────
@@ -91,9 +106,9 @@ export { DANGEROUS_KEYS, injectPropsSafe, isDangerousKey } from './public-runtim
 // ─── Streamed-frame policy (re-export from core) ───────────────────
 
 // The streamed-frame admission policy: one deny list for the build manifest
-// scan, the deferred executor admission, and the generated browser installer.
+// scan, the stream executor admission, and the generated browser installer.
 // Consumed by the router's streaming pipeline and available to custom
-// deferred executors.
+// stream executors.
 export {
   STREAM_FRAME_FORBIDDEN_TAGS,
   STREAM_FRAME_UNSAFE_URL,
@@ -147,7 +162,7 @@ export type {
 } from './public-contracts.ts';
 export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from './public-contracts.ts';
 export type {
-  AppShellConfig,
+  LayoutConfig,
   CompatibilityClassification,
   CompatibilityTier,
   ComponentLayer,

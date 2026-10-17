@@ -4,7 +4,9 @@
  * Hydrates on idle; the buttons increment/decrement through the compiled
  * event Parts and the count renders through the compiled text Part. The
  * shadow root keeps the island a DSD citizen. Design tokens from
- * app/styles/theme.css inherit through the shadow boundary.
+ * app/styles/theme.css inherit through the shadow boundary; the presentation
+ * is authored as Tailwind utilities below, and the component stylesheet the
+ * build emits carries the generated rules into this shadow root.
  */
 import { defineIslandConfig } from "@openelement/router";
 import { element, OpenElement, property } from "@openelement/element";
@@ -29,12 +31,22 @@ export default class MyCounter extends OpenElement {
 
   render() {
     return (
-      <div class="counter-row">
-        <button type="button" onClick={this.decrement}>
+      <div class="inline-flex items-center gap-3">
+        <button
+          class="size-8 cursor-pointer rounded-(--radius-s) border border-line bg-paper text-[1rem] leading-none text-ink transition-[border-color,color] duration-150 ease-out hover:border-brand hover:text-brand"
+          type="button"
+          onClick={this.decrement}
+        >
           -
         </button>
-        <span id="count">{this.count}</span>
-        <button type="button" onClick={this.increment}>
+        <span id="count" class="min-w-[2ch] text-center font-semibold tabular-nums">
+          {this.count}
+        </span>
+        <button
+          class="size-8 cursor-pointer rounded-(--radius-s) border border-line bg-paper text-[1rem] leading-none text-ink transition-[border-color,color] duration-150 ease-out hover:border-brand hover:text-brand"
+          type="button"
+          onClick={this.increment}
+        >
           +
         </button>
       </div>

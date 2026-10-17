@@ -2,7 +2,7 @@
  * @openelement/router/lit-ssr - Server-only Lit page rendering (#1339).
  *
  * renderLitPageToHtml() is the lit-mode replacement for the native compiled
- * __ssr/renderDsd page render: it renders one registered LitElement page class
+ * __ssr/renderToString page render: it renders one registered LitElement page class
  * to DSD HTML through @lit-labs/ssr. Nested custom elements (Lit islands
  * embedded in the page template) compose through the same SSR registry.
  *

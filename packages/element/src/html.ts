@@ -10,11 +10,14 @@
  * renderer runtime.
  */
 export {
+  createDocumentStyleResources,
   escapeAttr,
   escapeAttrValue,
   escapeHtml,
+  isComponentStyleHref,
   wrapInDocument,
 } from './internal/core/html-escape.ts';
+export type { DocumentStyleResources } from './internal/core/html-escape.ts';
 export { trustedHtml } from './internal/core/security.ts';
 export type { TrustedHtml } from './internal/core/security.ts';
 export type { SafeHtml, UnsafeHtml } from '@openelement/protocol/framework';

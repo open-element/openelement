@@ -431,9 +431,8 @@ export default defineConfig({
     ...openElement({
       routesDir: 'app/routes',
       islandsDir: 'app/islands',
-      componentsDir: 'app/components',
-      // No app shell: the packed consumer stays minimal and does not pull @acme/components.
-      appShell: false,
+      // No layout: the packed consumer stays minimal and does not pull @acme/components.
+      layout: false,
       head: {
         title: 'packed-app-native',
       },

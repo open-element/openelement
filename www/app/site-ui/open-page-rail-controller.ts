@@ -12,7 +12,10 @@ const states = new WeakMap<RailHost, RailState>();
 
 function railLinks(host: RailHost): HTMLAnchorElement[] {
   const root = host.shadowRoot ?? host;
-  return [...root.querySelectorAll<HTMLAnchorElement>('nav.links a[href^="#"]')];
+  // Structural selector: the outline is the desktop nav plus the nav inside
+  // the mobile details; the alpha15 utility migration dropped the former
+  // `nav.links` class, so the class hook is gone and `nav` is the contract.
+  return [...root.querySelectorAll<HTMLAnchorElement>('nav a[href^="#"]')];
 }
 
 function markCurrent(state: RailState, hash: string): void {

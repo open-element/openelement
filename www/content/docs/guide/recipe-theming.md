@@ -27,7 +27,7 @@ Pages read semantic roles (`--brand`, `--text-primary`, `--bg-base`); components
 }
 ```
 
-Adopt it as a document-level stylesheet (or inline it in the app shell head). Every shadow tree inherits the new ink on next paint — no component rebuild.
+Adopt it as a document-level stylesheet (or inline it in the layout head). Every shadow tree inherits the new ink on next paint — no component rebuild.
 
 ## The checklist
 

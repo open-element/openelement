@@ -147,7 +147,7 @@ test.describe('Accessibility', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    // open-theme-toggle is nested inside open-layout's shadow DOM.
+    // open-theme-toggle is nested inside app-layout's shadow DOM.
     // Playwright locators pierce shadow DOM automatically.
     const toggle = page.locator('open-theme-toggle');
     if ((await toggle.count()) > 0) {
@@ -199,7 +199,7 @@ test.describe('Performance', () => {
   test('homepage loads within 5 seconds', async ({ page }) => {
     const start = Date.now();
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await page.locator('open-layout').waitFor({ state: 'attached' });
+    await page.locator('app-layout').waitFor({ state: 'attached' });
     const loadTime = Date.now() - start;
 
     expect(loadTime).toBeLessThan(LOAD_THRESHOLD_MS);
@@ -208,7 +208,7 @@ test.describe('Performance', () => {
   test('guide page loads within 5 seconds', async ({ page }) => {
     const start = Date.now();
     await page.goto('/guide/getting-started', { waitUntil: 'domcontentloaded' });
-    await page.locator('open-layout').waitFor({ state: 'attached' });
+    await page.locator('app-layout').waitFor({ state: 'attached' });
     const loadTime = Date.now() - start;
 
     expect(loadTime).toBeLessThan(LOAD_THRESHOLD_MS);
@@ -228,8 +228,8 @@ test.describe('Performance', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForFunction(() => {
-      const layout = document.querySelector('open-layout');
-      // The compiled app shell is a light-root static artifact. It is usable
+      const layout = document.querySelector('app-layout');
+      // The compiled layout is a light-root static artifact. It is usable
       // before upgrade when its provenance marker and main landmark exist.
       return layout?.hasAttribute('data-oe-light') && !!layout.querySelector('main');
     });

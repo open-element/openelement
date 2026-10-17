@@ -111,7 +111,7 @@ test.describe('Public IA route coverage', () => {
       expect(response!.status()).toBeLessThan(400);
 
       await expect(page.locator('html')).toHaveAttribute('lang', expectedLocale(route));
-      // Nested mains exist (app shell + page body); the first is the shell's.
+      // Nested mains exist (layout + page body); the first is the layout's.
       await expect(page.getByRole('main').first()).toBeVisible();
       // Some pages render more than one level-1 heading (blog posts carry the
       // post header h1 plus the article body h1) — assert one is visible.

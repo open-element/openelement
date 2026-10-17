@@ -78,12 +78,12 @@ const ENGINES: Record<string, Record<string, string>> = {
  * it scaffolds on import — so that module stays flagged.
  *
  * `@openelement/element` cannot be a flat `false` (#1425). The default entry
- * installs the compiled claim executor through an import-time seam: the entry
- * performs `import './internal/compiled/runtime/claim-install.js'` and that
- * module calls `installClaimExecutor(...)` at module scope. A bundler that
+ * installs the compiled hydration executor through an import-time seam: the entry
+ * performs `import './internal/compiled/runtime/hydrate-install.js'` and that
+ * module calls `installHydrationExecutor(...)` at module scope. A bundler that
  * reads `sideEffects: false` removes BOTH halves — the bare import inside the
  * entry (an unused statement in a side-effect-free module) and the installer
- * body (a side-effect-free module with no used exports) — so the claim
+ * body (a side-effect-free module with no used exports) — so the hydration
  * executor is missing at runtime and every island that must adopt
  * server-rendered DOM throws instead of hydrating. Declaring an array is not
  * enough to name one side of that edge: the importer and installer entries
@@ -91,10 +91,10 @@ const ENGINES: Record<string, Record<string, string>> = {
  * (tools/release#consumer:packaged leg 6), which fails 3/3 browsers when
  * either entry is removed from this list.
  *
- * #1548 adds the regions axis to the same contract: the default entry and
- * `./client-only` also import `regions-install.js` (`installRegionBuilders(...)`
- * at module scope), so the when/each Region builders ship on those entries and
- * are droppable on `./no-regions` and `./base`. The flagged set is therefore
+ * #1548 adds the blocks axis to the same contract: the default entry and
+ * `./client-only` also import `blocks-install.js` (`installBlockBuilders(...)`
+ * at module scope), so the when/each Block builders ship on those entries and
+ * are droppable on `./no-blocks` and `./base`. The flagged set is therefore
  * the three importing entries plus both installers; the source-side mirror
  * lives in packages/element/package.json `sideEffects` and the walker shared
  * by both guards is packages/element/__tests__/side-effects-declaration.test.ts.
@@ -104,9 +104,9 @@ const SIDE_EFFECTS: Record<string, false | string[]> = {
   '@openelement/element': [
     './src/index.js',
     './src/client-only.js',
-    './src/no-regions.js',
-    './src/internal/compiled/runtime/claim-install.js',
-    './src/internal/compiled/runtime/regions-install.js',
+    './src/no-blocks.js',
+    './src/internal/compiled/runtime/hydrate-install.js',
+    './src/internal/compiled/runtime/blocks-install.js',
   ],
   '@openelement/compiler': false,
   '@openelement/router': false,
@@ -122,6 +122,8 @@ const SIDE_EFFECTS: Record<string, false | string[]> = {
 const PACKAGE_DESCRIPTIONS: Record<string, string> = {
   '@openelement/protocol':
     'Cross-system contracts and tiny pure predicates for the OpenElement framework.',
+  '@openelement/compiler':
+    'Build-time compiler for OpenElement: transforms TSX with @element decorators into Part Program modules.',
   '@openelement/router':
     'Routing, application runtime, and lifecycle tooling for the OpenElement framework.',
   '@openelement/create': 'Project generator for the OpenElement Web Components framework.',

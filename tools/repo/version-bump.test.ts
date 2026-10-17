@@ -26,6 +26,7 @@ import {
   readGeneratedManifestVersion,
   RELEASE_STATE,
   README_SOURCE_LINES,
+  resolvePackageSubset,
   rewriteAdmittedTarget,
   rewriteConfigVersion,
   rewriteCreateVersion,
@@ -79,10 +80,10 @@ test('version-bump: rewriters move only the version token', () => {
     `{\n  "name": "@openelement/element",\n  "version": "1.0.0-alpha.3",\n  "description": "1.0.0-alpha.2 stays"\n}`,
   );
   const anchor =
-    "/** The published CLI version. */\nexport const CREATE_VERSION = '1.0.0-alpha.2';\n\nexport const VITE_STARTER_PIN = '8.0.16';\n";
+    "/** The published CLI version. */\nexport const CREATE_VERSION = '1.0.0-alpha.2';\n\nexport const TAILWIND_STARTER_PIN = '4.3.3';\n";
   const rewritten = rewriteCreateVersion(anchor, '1.0.0-alpha.2', '1.0.0-alpha.3');
   expect(rewritten.includes("CREATE_VERSION = '1.0.0-alpha.3'"), rewritten).toBeTruthy();
-  expect(rewritten.includes("VITE_STARTER_PIN = '8.0.16'"), rewritten).toBeTruthy();
+  expect(rewritten.includes("TAILWIND_STARTER_PIN = '4.3.3'"), rewritten).toBeTruthy();
 });
 
 test('version-bump: the release-state rewriter moves bookkeeping, never registry truth', () => {
@@ -306,6 +307,51 @@ test('version-bump: consistency check reports the points that lag', async () => 
   expect(atNext.filter((line) => memberPaths.some((path) => line.startsWith(path))).length).toEqual(
     laggingAtNext,
   );
+});
+
+test('version-bump: per-package subset stamps only the selected manifests (T7)', async () => {
+  expect(resolvePackageSubset(['router', '@openelement/ui'])).toEqual([
+    'packages/router/package.json',
+    'packages/ui/package.json',
+  ]);
+  expect(() => resolvePackageSubset(['nope'])).toThrow('unknown package "nope"');
+  expect(() => resolvePackageSubset([])).toThrow('at least one package name');
+
+  const root = await mkdtemp(join(tmpdir(), 'opx-test-'));
+  try {
+    const version = '1.0.0-alpha.2';
+    const next = '1.0.0-alpha.3';
+    for (const path of PACKAGE_CONFIGS) {
+      await mkdir(join(root, path, '..'), { recursive: true });
+      await writeFile(join(root, path), `{\n  "name": "x",\n  "version": "${version}"\n}`);
+    }
+    const selected = resolvePackageSubset(['router', 'ui']);
+    const plan = await planVersionBump(root, next, selected);
+    // Only the two selected manifests move, from their own versions; the
+    // shared single-line points and the member walk stay out of a subset.
+    expect(plan.edits.map((edit) => edit.path)).toEqual([
+      'packages/router/package.json',
+      'packages/ui/package.json',
+    ]);
+    expect(plan.edits.every((edit) => edit.point === 'package-config')).toBe(true);
+    expect(plan.members).toEqual([]);
+    for (const edit of plan.edits) {
+      expect(edit.before).toContain(`"version": "${version}"`);
+      expect(edit.after).toContain(`"version": "${next}"`);
+      await writeFile(join(root, edit.path), edit.after, 'utf8');
+    }
+    // Unselected manifests keep their version; selected carry the target.
+    expect(
+      readConfigVersion(await readFile(join(root, 'packages/element/package.json'), 'utf8')),
+    ).toEqual(version);
+    expect(
+      readConfigVersion(await readFile(join(root, 'packages/router/package.json'), 'utf8')),
+    ).toEqual(next);
+    // A subset plan against the converged subset is empty.
+    expect((await planVersionBump(root, next, selected)).edits).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true });
+  }
 });
 
 test('version-bump: the allowlist matcher scopes the shipped-source scan', () => {

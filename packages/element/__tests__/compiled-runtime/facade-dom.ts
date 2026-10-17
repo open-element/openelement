@@ -517,6 +517,12 @@ export class FacadeDocument extends FacadeNodeBase {
   readonly documentElement: FacadeElement;
   readonly head: FacadeElement;
   readonly body: FacadeElement;
+  /**
+   * The document's adopted stylesheet list — where a light-root component's
+   * sheets land (alpha15 S lane, S-C1.2). The fake mirrors
+   * `Document.adoptedStyleSheets`; no `<style>` node is ever created.
+   */
+  readonly adoptedStyleSheets: unknown[] = [];
   readonly listeners = new Map<string, FacadeListener[]>();
 
   constructor() {

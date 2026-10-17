@@ -1,5 +1,5 @@
 /**
- * #1455 keyed Region measurement. Fake DOM excludes layout/paint; this
+ * #1455 keyed Block measurement. Fake DOM excludes layout/paint; this
  * measures the compiled runtime and counts actual insertBefore operations.
  * Timings are evidence, never a CI threshold or a claim about an old build.
  *
@@ -135,7 +135,8 @@ if (import.meta.main) {
       node: process.version,
       os: process.platform,
       arch: process.arch,
-      logicalCores: navigator.hardwareConcurrency,
+      // ponytail: evidence metadata only; 0 means "unavailable", not "zero cores".
+      logicalCores: globalThis.navigator?.hardwareConcurrency ?? 0,
       dom: 'counting fake DOM; no browser layout or paint',
     },
     sampleCount,

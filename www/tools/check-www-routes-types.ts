@@ -35,7 +35,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scanRoutes } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
 import process from 'node:process';
-import { commandOutput } from '../../tools/repo/node-command.ts';
+import { spawnCommand } from '../../tools/repo/node-command.ts';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const routesDir = join(repoRoot, 'www/app/routes');
@@ -70,7 +70,7 @@ async function generatedModuleHint(output: string, importerFile: string): Promis
         ? resolve(dirname(importerFile), specifier)
         : null;
     if (!abs) continue;
-    const check = await commandOutput('git', {
+    const check = await spawnCommand('git', {
       args: ['check-ignore', '-q', abs],
       cwd: repoRoot,
       stdin: 'null',
@@ -84,7 +84,7 @@ async function generatedModuleHint(output: string, importerFile: string): Promis
 }
 
 const tsc = join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
-const check = await commandOutput(process.execPath, {
+const check = await spawnCommand(process.execPath, {
   args: [
     tsc,
     '--noEmit',

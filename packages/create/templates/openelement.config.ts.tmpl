@@ -4,8 +4,9 @@
 // file conventions:
 //   - design tokens: app/styles/theme.css (the @theme role sheet; dev compiles
 //     it through the `tailwind` key below and serves the result as a linked
-//     sheet, the build emits the same compile as /assets/open-tailwind.css)
-//   - app shell:     app/islands/app-shell.tsx (auto-registered; the file is
+//     sheet, the build emits the same compile as a content-hashed document
+//     stylesheet the head links)
+//   - layout:        app/layout.tsx (auto-registered; the file is
 //                    deletable and pages still render)
 //   - document head: app/head.tsx (structural head content: meta tags, font
 //                    preloads, icons, inline CSS — the entries a URL list
@@ -13,9 +14,9 @@
 //   - site title:    the "name" field of package.json
 //
 // The conventions follow `dirs`: give the three roots a shared leading
-// directory (src/routes, src/islands, src/components) and the tokens/app-shell/
+// directory (src/routes, src/islands, src/components) and the tokens/layout/
 // head conventions resolve under that same directory (src/styles/tokens.css,
-// src/islands/app-shell.tsx, src/head.tsx).
+// src/layout.tsx, src/head.tsx).
 //
 // Passing framework options inline to openElement() while this file carries
 // options is a hard error: framework options cannot have two homes. Unknown
@@ -23,13 +24,13 @@
 import { defineConfig } from "@openelement/router";
 
 export default defineConfig({
-  // The Tailwind preset — the single-default scaffold form. The roles in
-  // app/styles/theme.css compile into the preset's deliverable both ways: dev
-  // serves the compile from /.openElement/tailwind-preset/entry.css and links
-  // it in the document head, the build emits the same compile as the
-  // layer-ordered /assets/open-tailwind.css after the SSG render. The path is
-  // app-relative (resolved against the app root); package CSS specifiers such
-  // as '@openelement/ui/theme.css' also work here.
+  // The Tailwind entry — the single-default scaffold form. The roles in
+  // app/styles/theme.css compile through the OFFICIAL @tailwindcss/vite
+  // pipeline: dev serves the same compile at /.openElement/tailwind.css and
+  // links it in the document head, the build emits it as the content-hashed
+  // document stylesheet the head links. The path is app-relative (resolved
+  // against the app root); package CSS specifiers such as
+  // '@openelement/ui/theme.css' also work here.
   tailwind: { theme: ["app/styles/theme.css"] },
   head: {
     // Titles default to the package.json "name"; this overrides the document

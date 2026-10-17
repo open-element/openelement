@@ -47,7 +47,7 @@ SSR、（使用时的）流式路由以及延迟 hydration/升级检查。如果
 
 当前的第三方 tag 语料对 native、Lit、FAST 与 Stencil 探针检查的是 T0 形态的
 输出：宿主与创作的 light 子节点存在，第三方 DSD 缺席，并在 Chromium、
-Firefox 与 WebKit 中实际执行浏览器升级。Lit Framework Mode 单独对显式注册的
+Firefox 与 WebKit 中实际执行浏览器升级。Lit 文件路由单独对显式注册的
 Lit 页面/island 做服务端渲染；native openElement 组件走编译后的程序。构建期
 无头快照与第三方 Lit T2 自动准入仍是**提案**，不是当前的普遍保证。
 

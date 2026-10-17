@@ -14,7 +14,7 @@
  * The child exit code passes through; a spawn failure exits 127.
  */
 
-import { commandStatus } from './node-command.ts';
+import { spawnCommand } from './node-command.ts';
 import process from 'node:process';
 
 export interface RunInOptions {
@@ -53,8 +53,8 @@ export async function execute(options: RunInOptions): Promise<number> {
   const [command, ...commandArgs] = options.command;
   try {
     // node's raw env option replaces the parent environment (dropping PATH),
-    // so commandStatus merges `env` over the parent instead.
-    const status = await commandStatus(command, {
+    // so spawnCommand merges `env` over the parent instead.
+    const status = await spawnCommand(command, {
       args: commandArgs,
       cwd: options.root,
       env: options.env,

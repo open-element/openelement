@@ -1,0 +1,16 @@
+:host{display:block}
+
+/* The card's own color for the shared class name — distinct from the probe
+   island's and from the document element's (S-C1.2 scope isolation). */
+.probe-shared{color:rgb(0,128,0)}
+
+/* A real asset beside the sheet (S-C1.3 follow-up): the emitted CSS asset must
+   reference the RESOLVED url Vite emits, or the browser resolves the relative
+   path against the asset directory and requests a file that does not exist. */
+.card-shell{padding:2px 4px;background-image:url('./probe-texture.png')}
+
+.card-mark{font-style:italic;font-family:'ProbeCard',monospace}
+
+/* A local font beside the sheet: same resolution rule as the image, through a
+   different Vite asset branch (`@font-face` src). */
+@font-face{font-family:'ProbeCard';src:url('./probe-font.woff2') format('woff2')}

@@ -98,7 +98,7 @@ the Nitro production entry run one handler. Hono is used only as a thin
 composition layer over these primitives and must periodically re-justify its
 place.
 
-Litmus: _Does it run unchanged on Deno, Workers, and the Nitro mount?_
+Litmus: _Does it run unchanged on Node, Workers, and the Nitro mount?_
 
 ## P4 — HTTP fidelity and progressive enhancement
 

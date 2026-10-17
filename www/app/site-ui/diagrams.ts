@@ -35,7 +35,7 @@ export const diagramElement: string = `${open}<rect x="14" y="18" width="66" hei
 /** §2 DSD — server HTML across the wire to browser upgrade. */
 export const diagramDsd: string = `${open}<rect x="8" y="24" width="40" height="40" rx="8"/><rect x="96" y="24" width="40" height="40" rx="8"/>${accentOpen}<path d="M54 44h34"/><path d="M80 36l9 8-9 8"/>${close}`;
 
-/** §3 Islands — a static page with two interactive regions awake. */
+/** §3 Islands — a static page with two interactive blocks awake. */
 export const diagramIslands: string = `${open}<rect x="8" y="12" width="128" height="64" rx="10" stroke-dasharray="6 6"/>${accentOpen}<rect x="24" y="28" width="34" height="20" rx="5"/>${dot(
   112,
   38,

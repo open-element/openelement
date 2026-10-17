@@ -1,7 +1,7 @@
 /**
  * /notes — DYNAMIC list (renderIntent mode 'dynamic'): the loader lists all
  * notes from the module-level store on every request. Rows carry per-item
- * href slots (compiled each-Region iattr grammar, alpha.8) linking to the
+ * href slots (compiled each-Block iattr grammar, alpha.8) linking to the
  * detail pages; a note-counter island proves activation on dynamic pages.
  */
 import { definePage, type PagePropsContext } from '@openelement/router';

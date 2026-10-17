@@ -10,7 +10,7 @@ import process from 'node:process';
 import { chromium } from '@playwright/test';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { commandOutput } from '../../tools/repo/node-command.ts';
+import { spawnCommand } from '../../tools/repo/node-command.ts';
 import { serveFetch } from '../../packages/router/src/internal/node-http.ts';
 import {
   dispatchRequest,
@@ -47,7 +47,7 @@ function median(values: number[]): number {
 }
 
 async function git(args: string[]): Promise<string> {
-  const result = await commandOutput('git', { args, cwd: fixture.pathname });
+  const result = await spawnCommand('git', { args, cwd: fixture.pathname });
   if (!result.success) throw new Error(`git ${args.join(' ')} failed`);
   return new TextDecoder().decode(result.stdout).trim();
 }

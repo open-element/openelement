@@ -1,5 +1,5 @@
 /**
- * Canonical each-Region item-key derivation (issue #1374, P6).
+ * Canonical each-Block item-key derivation (issue #1374, P6).
  *
  * The server serializer's duplicate detection and the client runtime's
  * keyed-reuse maps must derive the identical key from the identical item —
@@ -28,7 +28,7 @@ export class EachKeyError extends OpenElementError {
   readonly reason: string;
 
   constructor(partIndex: number, code: string, reason: string) {
-    super(`${reason} (list Region ${partIndex})`, {
+    super(`${reason} (list Block ${partIndex})`, {
       code,
       severity: 'error',
       phase: 'validation',

@@ -9,12 +9,22 @@
  * or be removed before 1.0; the declared `::part` names follow the
  * CUSTOMIZATION.md contract (`::part` names never shrink).
  *
- * Compiled authoring. The anchor/button switch is compiled
- * as two sibling controls, exactly one visible: `linkMode`/`buttonMode`
- * computeds read the `href` property, and `hidden` sinks pick the visible
- * branch — so SSR emits a working link (no-JS navigation) and the claim
- * preserves it. Variant/size styling follows the reflected host attributes
- * (:host([variant=...]) selectors); click/form behavior lives in methods.
+ * Compiled authoring. The control is ONE when Block with a single default
+ * slot per branch: `buttonMode` picks `<button>` or `<a>`, so exactly one
+ * control element exists in any state and the slot carries no same-name
+ * competition. The earlier two-sibling shape (both controls always mounted,
+ * `hidden` sinks picking the visible one) measured broken in the PR #1611
+ * audit: same-name default slots assign by tree order — the first slot in
+ * the shadow tree wins regardless of visibility, and `hidden` is not a slot
+ * force — so button mode assigned the user's text into the HIDDEN anchor's
+ * slot, leaving the visible button blank with no accessible name. The single
+ * slot removes that competition outright. Clicks bubble from either branch
+ * to the delegated listener on the static display:contents wrapper, and
+ * `handleClick` keeps the control semantics (open-click, form submit/reset,
+ * the #757 disabled guard). Variant/size styling follows the reflected host
+ * attributes (:host([variant=...]) selectors). SSR semantics are unchanged:
+ * in link mode the server serializes a navigable `<a>` (attribute sinks in
+ * the branch bind the computed href/target/rel/aria-disabled).
  *
  * Variants: default (outlined), primary (filled), ghost (no border), accent (gradient)
  * Sizes: sm, md (default), lg
@@ -38,7 +48,6 @@ import {
   type StyleSheetLike,
 } from '@openelement/element';
 import { closestFormOf, syncDisabledState } from './component-recipes.ts';
-import controlRecipe from './control-recipe.css';
 import openButtonStyles from './open-button.css';
 
 @element('open-button', {
@@ -47,7 +56,7 @@ import openButtonStyles from './open-button.css';
   formAssociated: true,
 })
 export class OpenButton extends OpenElement {
-  static override styles: StyleSheetLike[] = [controlRecipe, openButtonStyles];
+  static override styles: StyleSheetLike[] = [openButtonStyles];
 
   @property({ reflect: true })
   variant = 'default';
@@ -67,10 +76,6 @@ export class OpenButton extends OpenElement {
 
   @property({ reflect: true })
   type = 'button';
-
-  /** True when the anchor branch is the visible control. */
-  @property({ reflect: false, attribute: false, type: Boolean })
-  linkMode: ReadonlySignal<boolean> = computed(() => this.href !== '');
 
   /** True when the button branch is the visible control. */
   @property({ reflect: false, attribute: false, type: Boolean })
@@ -97,30 +102,29 @@ export class OpenButton extends OpenElement {
 
   render(): unknown {
     return (
-      <span style='display:contents'>
-        <a
-          class='control btn'
-          part='control'
-          href={this.linkHref}
-          target={this.linkTarget}
-          rel={this.linkRel}
-          aria-disabled={this.linkAriaDisabled}
-          hidden={this.buttonMode}
-          onClick={this.handleClick}
-        >
-          <slot></slot>
-        </a>
-        <button
-          class='control btn'
-          part='control'
-          // oxlint-disable-next-line button-has-type -- dynamic type is a validated public prop
-          type={this.type}
-          disabled={this.disabled}
-          hidden={this.linkMode}
-          onClick={this.handleClick}
-        >
-          <slot></slot>
-        </button>
+      <span style='display:contents' onClick={this.handleClick}>
+        {this.buttonMode ? (
+          <button
+            class='btn inline-flex items-center justify-center gap-2 font-sans font-extrabold no-underline cursor-pointer rounded-md whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none aria-disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:pointer-events-none'
+            part='control'
+            // oxlint-disable-next-line button-has-type -- type always set from the type prop (default 'button'); only submit/reset act on a form in handleClick
+            type={this.type}
+            disabled={this.disabled}
+          >
+            <slot></slot>
+          </button>
+        ) : (
+          <a
+            class='btn inline-flex items-center justify-center gap-2 font-sans font-extrabold no-underline cursor-pointer rounded-md whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-ring aria-disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:pointer-events-none'
+            part='control'
+            href={this.linkHref}
+            target={this.linkTarget}
+            rel={this.linkRel}
+            aria-disabled={this.linkAriaDisabled}
+          >
+            <slot></slot>
+          </a>
+        )}
       </span>
     );
   }

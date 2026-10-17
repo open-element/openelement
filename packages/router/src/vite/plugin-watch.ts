@@ -9,24 +9,42 @@
 
 import process from 'node:process';
 import type { Plugin, ViteDevServer } from 'vite';
-import { createLogger, formatError } from '@openelement/element';
+import { createLogger } from '@openelement/element';
 import { relative, resolve } from 'pathe';
 import { DEFAULT_ISLANDS_DIR } from './internal/paths.ts';
+import { reportRecoveryFailure } from './internal/build-diagnostics.ts';
 import { RESOLVED_CLIENT_ENTRY_ID } from './dev-island-client.ts';
-import { rescanIslands, rescanRoutes } from './plugin-scanners.ts';
+import { rescanIslands, rescanRoutes, scanPackageIslandsInto } from './plugin-scanners.ts';
 import { RESOLVED_ENTRY_ID } from './plugin-virtual-modules.ts';
 import type { OpenPluginState } from './plugin-config.ts';
+import { realPathKey } from './internal/real-path-key.ts';
 
 const log = createLogger('router-vite');
 
 /** Create the `configureServer` hook of `open:core` over the shared state. */
 export function createConfigureServerHook(state: OpenPluginState): Pick<Plugin, 'configureServer'> {
   return {
-    configureServer(server: ViteDevServer) {
-      const absoluteRoutesDir = resolve(process.cwd(), state.resolvedOptions.routesDir!);
-      const absoluteIslandsDir = resolve(
-        process.cwd(),
-        state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
+    async configureServer(server: ViteDevServer) {
+      // Vite runs this hook BEFORE `buildStart`, and the Tailwind dev channels
+      // resolve their plan in their own `configureServer` — so the package
+      // manifest scan runs here first: a declared compilation requirement
+      // (a declared or scan-derived package requirement) must be visible before
+      // those hooks decide the pipeline exists. Same function as buildStart's
+      // scan (idempotent): the routes have not been scanned yet, so the
+      // derivation walks the islands/layouts it can see, and buildStart's pass
+      // completes the set from the full graph. The dev server's own plugin
+      // container stands in for the buildStart resolver capture.
+      await scanPackageIslandsInto(state, [], {
+        resolve: (specifier, importer) =>
+          server.pluginContainer.resolveId(specifier, importer) as ReturnType<
+            import('./internal/module-graph-walk.ts').ModuleWalkResolver['resolve']
+          >,
+      });
+      const absoluteRoutesDir = realPathKey(
+        resolve(process.cwd(), state.resolvedOptions.routesDir!),
+      );
+      const absoluteIslandsDir = realPathKey(
+        resolve(process.cwd(), state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR),
       );
       server.watcher.add(absoluteRoutesDir);
       server.watcher.add(absoluteIslandsDir);
@@ -92,7 +110,11 @@ export function createConfigureServerHook(state: OpenPluginState): Pick<Plugin, 
             .catch((err: unknown) => {
               // A broken source must not poison the queue: the next edit chains
               // after this handled rejection and gets a fresh rescan attempt.
-              log.error(`Descriptor rescan failed: ${formatError(err)}`);
+              // The handled rejection is the dev channel's only report of the
+              // failure (#1616): it names the failure's code per the envelope
+              // when the failure carries one, and the served entry keeps the
+              // last good descriptor.
+              reportRecoveryFailure(log, 'Descriptor rescan failed', err);
             });
         }, 25);
       };
@@ -101,7 +123,7 @@ export function createConfigureServerHook(state: OpenPluginState): Pick<Plugin, 
       // admission, so change events require the same descriptor rebuild as
       // add/unlink—not only normal client HMR.
       const onRouteChanged = (file: string) => {
-        if (!file.startsWith(absoluteRoutesDir)) return;
+        if (!realPathKey(file).startsWith(absoluteRoutesDir)) return;
         if (!/\.(ts|tsx|js|jsx|mdx)$/.test(file)) return;
         scheduleDescriptorRescan('route', file);
       };
@@ -111,7 +133,7 @@ export function createConfigureServerHook(state: OpenPluginState): Pick<Plugin, 
       // must be invalidated alongside the SSR entry — otherwise the browser
       // re-requests the cached client map and new islands never hydrate.
       const onIslandChanged = (file: string) => {
-        if (!file.startsWith(absoluteIslandsDir)) return;
+        if (!realPathKey(file).startsWith(absoluteIslandsDir)) return;
         if (!/\.(ts|tsx|js|jsx)$/.test(file)) return;
         scheduleDescriptorRescan('island', file);
       };
@@ -150,7 +172,7 @@ export function createConfigureServerHook(state: OpenPluginState): Pick<Plugin, 
         // No restart hook (older Vite): surface the need instead of serving
         // stale options.
         log.warn(
-          'Restart the dev server (`pnpm dev` / `npm run dev`) to apply the new openelement.config.ts options.',
+          'Restart the dev server (`oe dev`, or the equivalent dev script of your package manager) to apply the new openelement.config.ts options.',
         );
       };
       if (state.resolvedConfigFile !== null) server.watcher.add(state.resolvedConfigFile);

@@ -42,18 +42,22 @@ export class OpenThemeToggle extends OpenElement {
   @property({ reflect: false })
   theme: 'dark' | 'light' = 'dark';
 
+  // Element-level presentation is Tailwind utilities (alpha15 S lane): the
+  // compiler admits these static tokens and the build's component stylesheet
+  // carries the generated rules into this shadow root. The sheet keeps the
+  // derived surface and the [data-theme] icon swap.
   render(): unknown {
     return (
       <button
         type='button'
-        class='theme-toggle'
+        class='theme-toggle inline-flex size-[38px] cursor-pointer items-center justify-center rounded-full p-0 text-muted-foreground transition-all duration-150 ease-in-out hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-ring'
         part='toggle'
         data-theme={this.theme}
         aria-label='Toggle theme'
         onClick={this.handleToggle}
       >
         <svg
-          class='icon-sun'
+          class='icon-sun size-4'
           part='icon-sun'
           viewBox='0 0 16 16'
           fill='none'
@@ -72,7 +76,7 @@ export class OpenThemeToggle extends OpenElement {
           <line x1='11.54' y1='4.46' x2='12.95' y2='3.05' />
         </svg>
         <svg
-          class='icon-moon'
+          class='icon-moon size-4'
           part='icon-moon'
           viewBox='0 0 16 16'
           fill='none'

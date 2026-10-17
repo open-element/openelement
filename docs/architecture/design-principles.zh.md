@@ -85,7 +85,7 @@ fetch middleware 是方言无关的 WinterCG 形态
 `start` CLI、fixture server 与 Nitro 生产入口跑同一个 handler。Hono
 只被当作这些原语之上的薄组合层使用，且必须定期重新证明其位置。
 
-判别问句：_它在 Deno、Workers、Nitro mount 上不改一字能跑吗？_
+判别问句：_它在 Node、Workers、Nitro mount 上不改一字能跑吗？_
 
 ## P4 — HTTP 保真与渐进增强
 

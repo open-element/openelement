@@ -33,8 +33,12 @@ function assertEntrySyntax(code: string): void {
 // #868 budget: the client entry must stay a thin wiring shell. Before the
 // virtual-module refactor the runtime was inlined via toString() (client.js
 // 13.7KB -> 10.5KB); this pins the entry generator so the runtime cannot
-// creep back inline. 2KB covers the wiring plus the ADR-0120 enhance layer.
-const CLIENT_ENTRY_BUDGET_BYTES = 2048;
+// creep back inline. B2 (#1544) added the lazy-runtime block — the dynamic
+// import, the document-service calls it makes and the inlined logger that
+// replaces the former static element import — so the shell grew by ~0.9KB
+// while the runtime it used to drag in unconditionally (86KB raw / 27KB
+// gzip) left the graph entirely. 3KB keeps the shell honest.
+const CLIENT_ENTRY_BUDGET_BYTES = 3072;
 
 test('#868 client entry stays within the wiring budget', () => {
   const code = generateClientEntry([
@@ -176,12 +180,12 @@ test('#1416: a page with only client-only islands imports the client-only entry'
   ]);
 
   expect(
-    code.includes("from '@openelement/element/client-only'"),
-    'client-only entry is imported when no island can hydrate server DOM',
+    elementServicesImport(code).endsWith('element-services-client-only.ts'),
+    'client-only surface is loaded when no island can hydrate server DOM',
   ).toBeTruthy();
   expect(
-    code.includes("from '@openelement/element'"),
-    'the full entry must not also be imported',
+    importLines(code).some((line) => line.includes('@openelement/element')),
+    'and the entry still carries no static element import of its own',
   ).toEqual(false);
   assertEntrySyntax(code);
 });
@@ -208,18 +212,34 @@ test('#1416: a page with any dsd island never takes the client-only entry', () =
   ]);
 
   expect(
-    code.includes("from '@openelement/element'"),
-    'full entry for a hydrating page',
+    elementServicesImport(code).endsWith('element-services-full.ts'),
+    'full surface for a hydrating page',
   ).toBeTruthy();
   expect(
-    code.includes("'@openelement/element/client-only'"),
-    'the claim-free entry must never appear on a page that can hydrate',
+    elementServicesImport(code).includes('client-only'),
+    'the claim-free surface must never be selected on a page that can hydrate',
   ).toEqual(false);
 });
 
 /** Import prologue lines only: the header comments mention module names. */
 function importLines(code: string): string[] {
   return code.split('\n').filter((line) => line.startsWith('import'));
+}
+
+/**
+ * The element-runtime surface module the entry loads LAZILY (B2/#1544): the
+ * stable virtual id of the selected `element-services-*` wrapper, read out of
+ * the emitted dynamic import. The two-axis choice lives here now — the entry
+ * carries no static element import at all, so `importLines` can no longer
+ * witness it. The id keeps the wrapper's file name (the `.ts` tail included)
+ * and is resolved to the real module by the two client-entry hosts, so the
+ * assertions below read like the pre-virtual path form while the emitted bytes
+ * stay machine-independent (red A).
+ */
+function elementServicesImport(code: string): string {
+  const match = code.match(/import\('([^']*element-services-[^']*)'\)/);
+  if (!match) throw new Error('generated entry carries no element-services dynamic import');
+  return match[1];
 }
 
 test('#1416: an island that declares nothing keeps the full entry (conservative)', () => {
@@ -230,23 +250,19 @@ test('#1416: an island that declares nothing keeps the full entry (conservative)
   const silent = generateClientEntry([
     { tagName: 'x-silent', modulePath: './silent.ts', strategy: 'idle' },
   ]);
-  expect(
-    importLines(silent).some((line) => line.endsWith("from '@openelement/element';")),
-  ).toBeTruthy();
-  expect(importLines(silent).some((line) => line.includes('client-only'))).toEqual(false);
+  expect(elementServicesImport(silent).endsWith('element-services-full.ts')).toBeTruthy();
+  expect(elementServicesImport(silent).includes('client-only')).toEqual(false);
 
   const halfDeclared = generateClientEntry([
     { tagName: 'x-half', modulePath: './half.ts', strategy: 'idle', ssr: false },
   ]);
-  expect(
-    importLines(halfDeclared).some((line) => line.endsWith("from '@openelement/element';")),
-  ).toBeTruthy();
+  expect(elementServicesImport(halfDeclared).endsWith('element-services-full.ts')).toBeTruthy();
 
   const dsdOnly = generateClientEntry([
     { tagName: 'x-dsd-only', modulePath: './dsd-only.ts', strategy: 'idle', ssr: false, dsd: true },
   ]);
   expect(
-    importLines(dsdOnly).some((line) => line.endsWith("from '@openelement/element';")),
+    elementServicesImport(dsdOnly).endsWith('element-services-full.ts'),
     'dsd alone keeps the claim: only both flags false prove client-only',
   ).toBeTruthy();
 });
@@ -261,18 +277,12 @@ test('#1416: both ssr and dsd false is client-only even off the "only" strategy'
   const explicit = generateClientEntry([
     { tagName: 'x-load', modulePath: './load.ts', strategy: 'load', ssr: false, dsd: false },
   ]);
-  expect(
-    importLines(explicit).some((line) => line.includes("'@openelement/element/client-only'")),
-  ).toBeTruthy();
+  expect(elementServicesImport(explicit)).toContain('element-services-client-only');
 
   const onlyWithoutFlags = generateClientEntry([
     { tagName: 'x-only', modulePath: './only.ts', strategy: 'only' },
   ]);
-  expect(
-    importLines(onlyWithoutFlags).some((line) =>
-      line.includes("'@openelement/element/client-only'"),
-    ),
-  ).toBeTruthy();
+  expect(elementServicesImport(onlyWithoutFlags)).toContain('element-services-client-only');
 });
 
 test('#1416: the lit renderer entry imports no element entry at all', () => {
@@ -283,27 +293,31 @@ test('#1416: the lit renderer entry imports no element entry at all', () => {
   expect(importLines(code).some((line) => line.includes('@openelement/element'))).toEqual(false);
 });
 
-// #1548: the regions axis. The entry carries the when/each Region builders
-// unless the island regions scan proved no island module lowers one — the
+// #1548: the blocks axis. The entry carries the when/each Block builders
+// unless the island blocks scan proved no island module lowers one — the
 // codegen only translates that proof into the subpath choice.
 
-test('#1548: includeRegionsRuntime:false picks the no-regions entry for a hydrating page', () => {
+test('#1548: includeBlocksRuntime:false picks the no-blocks entry for a hydrating page', () => {
   const code = generateClientEntry(
     [{ tagName: 'x-counter', modulePath: './counter.ts', strategy: 'idle', ssr: true, dsd: true }],
-    { includeRegionsRuntime: false },
+    { includeBlocksRuntime: false },
   );
+  // The blocks-free row rides the full wrapper: elementRuntimeBlocksAlias
+  // rewrites the wrapper's bare '@openelement/element' specifier to the
+  // blocks-free entry for the whole client graph (#1548's emission half), so
+  // the entry's dynamic specifier does not name it. What the entry must NOT
+  // do is pick the claim-free surface.
+  expect(elementServicesImport(code).endsWith('element-services-full.ts')).toBeTruthy();
+  expect(elementServicesImport(code).includes('client-only')).toEqual(false);
+  expect(elementServicesImport(code).includes('base')).toEqual(false);
   expect(
-    importLines(code).some((line) => line.includes("from '@openelement/element/no-regions'")),
-    'the claim stays (the page hydrates) while the Region builders drop',
-  ).toBeTruthy();
-  expect(importLines(code).some((line) => line.endsWith("from '@openelement/element';"))).toEqual(
-    false,
-  );
-  expect(importLines(code).some((line) => line.includes('client-only'))).toEqual(false);
+    importLines(code).some((line) => line.includes('@openelement/element')),
+    'no static element import either way',
+  ).toEqual(false);
   assertEntrySyntax(code);
 });
 
-test('#1548: includeRegionsRuntime:false picks the base entry for a client-only page', () => {
+test('#1548: includeBlocksRuntime:false picks the base entry for a client-only page', () => {
   const code = generateClientEntry(
     [
       {
@@ -314,44 +328,36 @@ test('#1548: includeRegionsRuntime:false picks the base entry for a client-only 
         dsd: false,
       },
     ],
-    { includeRegionsRuntime: false },
+    { includeBlocksRuntime: false },
   );
   expect(
-    importLines(code).some((line) => line.includes("from '@openelement/element/base'")),
-    'neither claim nor regions on a page that can hydrate nothing and use no Regions',
+    elementServicesImport(code).endsWith('element-services-base.ts'),
+    'neither claim nor blocks on a page that can hydrate nothing and use no Blocks',
   ).toBeTruthy();
-  expect(importLines(code).some((line) => line.includes('client-only'))).toEqual(false);
-  expect(importLines(code).some((line) => line.includes('no-regions'))).toEqual(false);
   assertEntrySyntax(code);
 });
 
-test('#1548: the regions default keeps the full entry (conservative)', () => {
+test('#1548: the blocks default keeps the full entry (conservative)', () => {
   // No option = the scan did not run or proved nothing: the default entry
   // stands, exactly like the #1416 claim default.
   const code = generateClientEntry([
     { tagName: 'x-counter', modulePath: './counter.ts', strategy: 'idle' },
   ]);
-  expect(importLines(code).some((line) => line.endsWith("from '@openelement/element';"))).toBe(
-    true,
-  );
-  expect(importLines(code).some((line) => line.includes('no-regions'))).toBe(false);
-  expect(importLines(code).some((line) => line.includes('/base'))).toBe(false);
+  expect(elementServicesImport(code).endsWith('element-services-full.ts')).toBe(true);
 });
 
-test('#1548: includeRegionsRuntime:true is explicit and equivalent to the default', () => {
+test('#1548: includeBlocksRuntime:true is explicit and equivalent to the default', () => {
   const code = generateClientEntry(
     [{ tagName: 'x-counter', modulePath: './counter.ts', strategy: 'idle' }],
-    { includeRegionsRuntime: true },
+    { includeBlocksRuntime: true },
   );
-  expect(importLines(code).some((line) => line.endsWith("from '@openelement/element';"))).toBe(
-    true,
-  );
+  expect(elementServicesImport(code).endsWith('element-services-full.ts')).toBe(true);
 });
 
-test('#1548: the lit renderer ignores the regions axis (no element entry either way)', () => {
+test('#1548: the lit renderer ignores the blocks axis (no element entry either way)', () => {
   const code = generateClientEntry(
     [{ tagName: 'x-lit', modulePath: './lit.ts', strategy: 'idle' }],
-    { renderer: 'lit', includeRegionsRuntime: false },
+    { renderer: 'lit', includeBlocksRuntime: false },
   );
   expect(importLines(code).some((line) => line.includes('@openelement/element'))).toEqual(false);
 });
@@ -403,7 +409,7 @@ test('client entry safely escapes tag names and module paths', () => {
     },
   ]);
 
-  expect(code.includes('"x-safe": () => import("./safe-module.ts")')).toBeTruthy();
+  expect(code.includes('var __island = import("./safe-module.ts")')).toBeTruthy();
   assertEntrySyntax(code);
 });
 

@@ -308,7 +308,7 @@ function manifestForProgram(
       if (!sink) diagnostic(route, field, at, `missing source ownership for ${dep.location}`);
       owners.push({ ...dep.owner, location: dep.location, source: sink });
     }
-    if (owners.length === 0) diagnostic(route, field, at, 'no eligible Part or Region consumer');
+    if (owners.length === 0) diagnostic(route, field, at, 'no eligible Part or Block consumer');
     result.push({ field, signal: field, owners });
   }
   // Build-time mirror of the runtime/browser seed and frame budget

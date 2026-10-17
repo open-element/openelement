@@ -199,6 +199,13 @@ const COMPUTED_FIELD_SUBJECTS: ComputedBodySubjects = {
  * fields, and nested non-arrow functions fail closed (OEC9024). Returns the
  * source-signal dependency list (declaration order) and the body text with
  * every `this.<field>` read rewritten to `__s.<field>.value`.
+ *
+ * `binding` (alpha15 server lane) switches the read accessor from
+ * `this.<field>` to `<parameter>.<field>` (a server function component's
+ * props parameter): the same declared-field table and the same messages —
+ * only the accessor spelling differs, and no signal-record rewrite applies
+ * (the generated constructor reads the props object directly). The default
+ * keeps the class path's behavior and messages byte-identical.
  */
 export function validateComputedExpressionBody(
   body: ts.Expression,
@@ -207,17 +214,55 @@ export function validateComputedExpressionBody(
   computedFieldNames: ReadonlySet<string>,
   fail: CompilerFail,
   subjects: ComputedBodySubjects = COMPUTED_FIELD_SUBJECTS,
+  binding?: { readonly parameter: string },
 ): { deps: string[]; bodyText: string } {
   const deps: string[] = [];
   const replacements: Array<{ start: number; end: number; name: string }> = [];
   const visit = (node: ts.Node): void => {
     if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) {
-      fail(node, 'OEC9024', `${subjects.actor} may not nest non-arrow functions`);
+      fail(
+        node,
+        'OEC9024',
+        `${subjects.actor} may not nest non-arrow functions — hoist the function to module ` +
+          'scope and import it',
+      );
+    }
+    if (binding !== undefined) {
+      if (
+        ts.isPropertyAccessExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === binding.parameter
+      ) {
+        const name = node.name.text;
+        if (computedFieldNames.has(name)) {
+          fail(
+            node,
+            'OEC9024',
+            `${subjects.single} may not read computed field "${name}" — read its source ` +
+              `${binding.parameter}.<property> inputs instead (computed fields cannot chain)`,
+          );
+        }
+        if (!plainFieldNames.has(name)) {
+          fail(
+            node,
+            'OEC9024',
+            `${subjects.plural} may only read ${binding.parameter}.<declared property> (found ` +
+              `${binding.parameter}.${name})`,
+          );
+        }
+        if (!deps.includes(name)) deps.push(name);
+        return;
+      }
     }
     if (ts.isPropertyAccessExpression(node) && node.expression.kind === ts.SyntaxKind.ThisKeyword) {
       const name = node.name.text;
       if (computedFieldNames.has(name)) {
-        fail(node, 'OEC9024', `${subjects.single} may not read computed field "${name}"`);
+        fail(
+          node,
+          'OEC9024',
+          `${subjects.single} may not read computed field "${name}" — read its source ` +
+            'this.<property> inputs instead (computed fields cannot chain)',
+        );
       }
       if (!plainFieldNames.has(name)) {
         fail(
@@ -458,7 +503,12 @@ function propertyFields(
       }
       names.add(member.name.text);
       if (!member.initializer) {
-        fail(member, 'OEC9005', 'compiled fields require a literal initializer');
+        fail(
+          member,
+          'OEC9005',
+          'compiled fields require an admitted initializer — a serializable literal, ' +
+            'computed(...), or trustedHtml(...)',
+        );
       }
       // alpha.8: computed fields derive their signal from other properties.
       // They never carry attributes, never reflect, and hold no serialized
@@ -515,7 +565,12 @@ function propertyFields(
           } else if (ts.isStringLiteral(entry.initializer)) {
             attribute = camelToKebab(entry.initializer.text);
             if (!isSafeAttributeName(attribute)) {
-              fail(entry, 'OEC9023', 'property attribute name is unsafe');
+              fail(
+                entry,
+                'OEC9023',
+                `property attribute name "${attribute}" is unsafe — use a valid HTML attribute ` +
+                  'name (no on* handlers, no forbidden sinks)',
+              );
             }
           } else {
             fail(entry, 'OEC9023', 'property attribute must be a string literal or false');
@@ -528,7 +583,12 @@ function propertyFields(
           else explicitConverter = type.label;
           continue;
         }
-        fail(entry, 'OEC9022', `unsupported @property option "${optionName}"`);
+        fail(
+          entry,
+          'OEC9022',
+          `unsupported @property option "${optionName}" — admitted options are type, ` +
+            'converter, reflect and attribute',
+        );
       }
       const inferred = explicitType ?? inferPropertyType(member, defaultValue, sf);
       const converter = explicitConverter ?? inferred.label;
@@ -631,7 +691,8 @@ function propertyFields(
     fail(
       member,
       'OEC9006',
-      'constructors, accessors and undecorated fields are outside the compiler grammar',
+      'constructors, accessors and undecorated fields are outside the compiler grammar — ' +
+        'declare state as @property fields and behavior as methods',
     );
   }
   if (!render) fail(classNode, 'OEC9007', 'compiled classes must declare render()');
@@ -690,6 +751,42 @@ function isIslandConfigStatement(
 /** The `@element` root ownership mode (alpha.8). */
 export type ElementRootKind = 'light' | 'shadow-open' | 'shadow-closed';
 
+/**
+ * The root family an admitted island config declares, or `undefined` when the
+ * descriptor does not pin one. The config speaks the user-facing
+ * `'light' | 'shadow'` pair while the decorator keeps the precise
+ * `shadow-open`/`shadow-closed` modes. Validated here so the cross-check below
+ * can trust the value it compares.
+ */
+function islandConfigDeclaredRoot(
+  statement: ts.Statement,
+  sf: ts.SourceFile,
+  fail: CompilerFail,
+): 'light' | 'shadow' | undefined {
+  if (!ts.isVariableStatement(statement)) return undefined;
+  const declaration = statement.declarationList.declarations[0];
+  const initializer = declaration?.initializer;
+  if (!initializer || !ts.isCallExpression(initializer)) return undefined;
+  const descriptor = initializer.arguments[0];
+  if (!descriptor || !ts.isObjectLiteralExpression(descriptor)) return undefined;
+  for (const entry of descriptor.properties) {
+    if (!ts.isPropertyAssignment(entry) || entry.name.getText(sf) !== 'root') continue;
+    if (!ts.isStringLiteral(entry.initializer)) {
+      fail(entry, 'OEC9030', 'island config root must be a string literal');
+    }
+    const value = entry.initializer.text;
+    if (value !== 'light' && value !== 'shadow') {
+      fail(
+        entry,
+        'OEC9030',
+        `island config root "${value}" is unsupported; use "light" or "shadow"`,
+      );
+    }
+    return value;
+  }
+  return undefined;
+}
+
 /** Everything the lowering and emission stages consume from one authored module. */
 export interface AnalyzedModule {
   /** Runtime statements admitted as verbatim passthrough (the island policy). */
@@ -742,6 +839,7 @@ export function analyzeCompiledModule(
   // styles` initializer must array exactly these bindings.
   const sheetImports = collectSheetImports(sf, fail);
   const passthroughStatements: ts.Statement[] = [];
+  let islandConfigStatement: ts.Statement | undefined;
   for (const statement of sf.statements) {
     if (
       ts.isImportDeclaration(statement) ||
@@ -756,12 +854,16 @@ export function analyzeCompiledModule(
     // compiled module may carry; it is validated and copied verbatim below.
     if (isIslandConfigStatement(statement, intrinsics)) {
       passthroughStatements.push(statement);
+      islandConfigStatement = statement;
       continue;
     }
     fail(
       statement,
       'OEC9008',
-      'runtime top-level statements are outside the compiled module grammar',
+      'runtime top-level statements are outside the compiled module grammar — keep shared ' +
+        'state in a plain module and import it; the island policy statement ' +
+        '(export const openElement = defineIslandConfig(...)) is the one admitted runtime ' +
+        'statement',
     );
   }
 
@@ -843,7 +945,12 @@ export function analyzeCompiledModule(
   }
   tag = expr.arguments[0].text;
   if (!/^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(tag)) {
-    fail(decorator, 'OEC9002', `@element tag "${tag}" is not a custom-element name`);
+    fail(
+      decorator,
+      'OEC9002',
+      `@element tag "${tag}" is not a custom-element name — use a lowercase name with at ` +
+        'least one dash (my-element)',
+    );
   }
   // alpha.8: `@element(tag, { root: 'light' | 'shadow-open' | 'shadow-closed' })`
   // selects the program root ownership mode (light content vs DSD). Pages and
@@ -900,6 +1007,24 @@ export function analyzeCompiledModule(
         entry,
         'OEC9002',
         '@element options support only root, delegatesFocus and formAssociated',
+      );
+    }
+  }
+  // The island config's `root` is a declaration, not a second source of truth:
+  // the decorator above already decided the compiled program's root, so a
+  // disagreeing config fails the build here rather than shipping an island
+  // whose documented delivery contradicts the program it compiles to.
+  if (islandConfigStatement !== undefined) {
+    const declaredRoot = islandConfigDeclaredRoot(islandConfigStatement, sf, fail);
+    const compiledRoot = rootKind === 'light' ? 'light' : 'shadow';
+    if (declaredRoot !== undefined && declaredRoot !== compiledRoot) {
+      fail(
+        islandConfigStatement,
+        'OEC9030',
+        `the island config declares root "${declaredRoot}" but @element('${tag}', ` +
+          `{ root: '${rootKind}' }) compiles a ${compiledRoot}-rooted program. The @element ` +
+          'decorator owns the root — point the config at the light component ' +
+          "(@element(tag, { root: 'light' })) or drop the config's root field so the two agree.",
       );
     }
   }

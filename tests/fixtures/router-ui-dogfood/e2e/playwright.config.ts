@@ -20,6 +20,8 @@ const baseURL = `http://127.0.0.1:${PORT}`;
 export default defineConfig({
   testDir: '.',
   testMatch: '*.spec.ts',
+  // The dev-server acceptance has its own config + server (playwright.dev.config.ts).
+  testIgnore: 'shadow-tailwind-dev.spec.ts',
   // Serial by design (#1232): one fixture server owns one port, so
   // fullyParallel and workers agree on sequential execution.
   fullyParallel: false,

@@ -11,7 +11,7 @@
  *     real `.css` assets under `client/assets/` and is adopted via
  *     `adoptedStyleSheets` (ADR-0164), so the old "island size dominated by
  *     inlined critical CSS" accounting is gone. The largest `island-*` chunk
- *     is the compiled app shell (`open-layout`) at 81.6 KiB raw; islandKB
+ *     is the compiled layout (`open-layout`) at 81.6 KiB raw; islandKB
  *     moved 102 → 84, keeping the same ~2.5 KiB headroom over the largest
  *     chunk that the 99.5 → 102 raising precedent established. (The ~99 KiB
  *     combobox runtime is not an `island-*` chunk, so islandKB does not apply

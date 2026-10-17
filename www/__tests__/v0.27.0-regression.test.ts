@@ -40,17 +40,19 @@ test('v0.44 regression: compiled reading shell and page rail are present in guid
   expect(html, 'Page rail must be present').toContain('<open-page-rail');
 });
 
-test('v0.27.0 regression: open-layout has DSD template', () => {
+test('v0.27.0 regression: the layout shell is present and expanded', () => {
   const html = readPage(DOCS_PAGE);
-  // The light-root app shell and static article chain must be expanded, while
+  // The light-root layout and static article chain must be expanded, while
   // admitted shadow-root islands retain native DSD. Article-embedded components
   // (open-code-block inside the article's Trusted HTML) stay SSR-inert on
-  // purpose: trusted content is opaque to nested composition, so only shell
+  // purpose: trusted content is opaque to nested composition, so only layout
   // admitted islands compose server-side. The inert host must not gain a
   // server DSD template from an opaque string.
   const count = (html.match(/shadowrootmode="open"/g) || []).length;
   expect(count >= 1, `Expected >= 1 DSD template in docs page, got ${count}`).toBeTruthy();
-  expect(html, 'App shell host must be present').toContain('<open-layout');
+  // The shell is the layout convention component (app/layout.tsx) — the
+  // former open-layout island retired with the server function page lane.
+  expect(html, 'Layout host must be present').toContain('<app-layout');
   expect(html, 'Compiled light roots must be expanded').toContain('data-oe-light');
   expect(html, 'Admitted shadow islands must keep native DSD').toContain(
     '<open-theme-toggle><template shadowrootmode="open"',
@@ -180,11 +182,11 @@ test('v0.40.0 cleanup: registry output is not built', () => {
 
 // ─── Custom element count sanity ─────────────────────────────────────
 
-test('v0.27.0 regression: open-layout tags not duplicated', () => {
+test('v0.27.0 regression: app-layout tags not duplicated', () => {
   const html = readPage(DOCS_PAGE);
-  // open-layout should appear exactly once as the wrapper (opening + closing)
-  const opens = (html.match(/<open-layout/g) || []).length;
-  const closes = (html.match(/<\/open-layout>/g) || []).length;
-  expect(opens, 'Mismatched open-layout tags').toEqual(closes);
-  expect(opens >= 1 && opens <= 3, `open-layout appears ${opens} times, expected 1-3`).toBeTruthy();
+  // The shell appears exactly once as the wrapper (opening + closing).
+  const opens = (html.match(/<app-layout/g) || []).length;
+  const closes = (html.match(/<\/app-layout>/g) || []).length;
+  expect(opens, 'Mismatched app-layout tags').toEqual(closes);
+  expect(opens >= 1 && opens <= 3, `app-layout appears ${opens} times, expected 1-3`).toBeTruthy();
 });

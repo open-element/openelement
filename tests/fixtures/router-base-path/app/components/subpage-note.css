@@ -1,0 +1,6 @@
+/* Nested LIGHT component sheet (S-C2/S-12): its emitted asset link must be
+   declared in the ORIGINAL document head — including the response the
+   request-time server streams (head first, deferred frames later). */
+:host{display:block}
+
+.subpage-note{color:rgb(10,120,40)}

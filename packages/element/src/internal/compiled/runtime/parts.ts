@@ -30,6 +30,7 @@ import {
   fail,
   isElement,
   type MountContext,
+  type ProgramBranchSinkPart,
   signalOf,
   subscribeWrites,
 } from './program-kernel.ts';
@@ -41,10 +42,8 @@ export interface TextPartSlot {
   current: string;
 }
 
-export function updateTextPart(slot: TextPartSlot, value: unknown): void {
-  if (slot.scope.disposed) return;
-  const next = displayValue(value);
-  if (next === slot.current) return;
+/** The canonical anchor/value-node write of one text Part. */
+function writeTextPart(slot: TextPartSlot, next: string): void {
   const parent = slot.anchor.parentNode;
   if (!parent) {
     slot.current = next;
@@ -54,12 +53,29 @@ export function updateTextPart(slot: TextPartSlot, value: unknown): void {
     slot.text?.parentNode?.removeChild(slot.text);
     slot.text = undefined;
   } else if (slot.text) {
-    slot.text.data = next;
+    if (slot.text.data !== next) slot.text.data = next;
   } else {
     slot.text = slot.anchor.ownerDocument.createTextNode(next);
     parent.insertBefore(slot.text, slot.anchor.nextSibling);
   }
   slot.current = next;
+}
+
+export function updateTextPart(slot: TextPartSlot, value: unknown): void {
+  if (slot.scope.disposed) return;
+  const next = displayValue(value);
+  if (next === slot.current) return;
+  writeTextPart(slot, next);
+}
+
+/**
+ * Reconcile the slot's owned node to `value` unconditionally (resume
+ * reconciliation): the reconnect path cannot trust its `current` baseline,
+ * because the DOM it owned may carry a write that never reached a
+ * subscription.
+ */
+export function reconcileTextPart(slot: TextPartSlot, value: unknown): void {
+  writeTextPart(slot, displayValue(value));
 }
 
 export function buildTextPart(
@@ -82,6 +98,9 @@ export function buildTextPart(
     slot.text = undefined;
   });
   subscribeWrites(ctx, scope, part.signal, (value) => updateTextPart(slot, value));
+  // The ownership record a reconnect re-arms (revive.ts): this slot is the
+  // single owner of the anchor and the value node for this Part index.
+  ctx.bindings.set(part.index, slot);
   return [anchor, ...(slot.text ? [slot.text] : [])];
 }
 
@@ -105,6 +124,37 @@ export function resolvePath(root: Node, path: number[], where: string, rootOffse
       );
     }
     node = child;
+  }
+  if (!isElement(node)) {
+    fail(
+      RuntimeErrorCode.PATH_NOT_ELEMENT,
+      `[compiled-runtime] ${where}: path [${path.join(',')}] is not an element`,
+    );
+  }
+  return node;
+}
+
+/**
+ * Resolve a fixed Part's path against an explicit top-level node list — the
+ * branch-sink form of {@linkcode resolvePath}: the first index selects from
+ * `nodes` (the mounted branch's own node list), deeper indexes walk
+ * childNodes. A when branch mounts detached, so its sinks cannot resolve from
+ * the mount root; their paths are branch-relative addresses into this list.
+ */
+function resolvePathInList(nodes: readonly Node[], path: number[], where: string): Element {
+  if (path.length === 0) {
+    fail(RuntimeErrorCode.PATH_UNRESOLVED, `[compiled-runtime] ${where}: path [] unresolved`);
+  }
+  let node: Node | undefined = nodes[path[0]];
+  for (let depth = 1; depth < path.length; depth++) {
+    if (!node) break;
+    node = node.childNodes[path[depth]];
+  }
+  if (!node) {
+    fail(
+      RuntimeErrorCode.PATH_UNRESOLVED,
+      `[compiled-runtime] ${where}: path [${path.join(',')}] unresolved`,
+    );
   }
   if (!isElement(node)) {
     fail(
@@ -158,12 +208,33 @@ function installValuePart(
   rootOffset = 0,
 ): void {
   const element = resolvePath(root, part.path, `${part.k} Part`, rootOffset);
-  const scope = ctx.rootScope.child();
+  installValuePartOn(ctx, element, part, mode, ctx.rootScope.child());
+}
+
+/**
+ * Bind one value sink to its resolved element on the given scope. The scope
+ * is the install's lifetime: the root attach installs on a root-scope child,
+ * a when-branch install on the branch scope, so the subscription dies exactly
+ * when the DOM it binds dies.
+ */
+function installValuePartOn(
+  ctx: MountContext,
+  element: Element,
+  part:
+    | ProgramAttrPart
+    | ProgramPropPart
+    | ProgramBoolPart
+    | ProgramClassPart
+    | ProgramStylePart
+    | ProgramHtmlPart,
+  mode: 'fresh' | 'claim',
+  scope: LifetimeScope,
+): void {
   const initial = signalOf(ctx, part.signal).value;
+  if (mode === 'fresh') applyInitialSink(element, part, initial);
 
   if (part.k === 'html') {
     let current = trustedHtmlValue(initial);
-    if (mode === 'fresh') (element as Element).innerHTML = current;
     subscribeWrites(ctx, scope, part.signal, (value) => {
       const next = trustedHtmlValue(value);
       if (Object.is(next, current)) return;
@@ -175,7 +246,6 @@ function installValuePart(
 
   if (part.k === 'attr') {
     let current = attributeValueOf(initial);
-    if (mode === 'fresh') applyAttribute(element, part.name, current);
     subscribeWrites(ctx, scope, part.signal, (value) => {
       const next = attributeValueOf(value);
       if (Object.is(next, current)) return;
@@ -187,7 +257,6 @@ function installValuePart(
 
   if (part.k === 'prop') {
     let current = initial;
-    if (mode === 'fresh') applyProperty(element, part.name, current, true);
     subscribeWrites(ctx, scope, part.signal, (value) => {
       if (Object.is(value, current)) return;
       applyProperty(element, part.name, value, false);
@@ -198,7 +267,6 @@ function installValuePart(
 
   if (part.k === 'bool') {
     let current = Boolean(initial);
-    if (mode === 'fresh') applyBoolean(element, part.name, current);
     subscribeWrites(ctx, scope, part.signal, (value) => {
       const next = Boolean(value);
       if (Object.is(next, current)) return;
@@ -210,7 +278,6 @@ function installValuePart(
 
   if (part.k === 'class') {
     let current = classValueOf(initial);
-    if (mode === 'fresh') applyAttribute(element, 'class', current || null);
     subscribeWrites(ctx, scope, part.signal, (value) => {
       const next = classValueOf(value);
       if (Object.is(next, current)) return;
@@ -221,13 +288,41 @@ function installValuePart(
   }
 
   let current = styleValueOf(initial);
-  if (mode === 'fresh') applyAttribute(element, 'style', current || null);
   subscribeWrites(ctx, scope, part.signal, (value) => {
     const next = styleValueOf(value);
     if (Object.is(next, current)) return;
     applyAttribute(element, 'style', next || null);
     current = next;
   });
+}
+
+/**
+ * Apply one value sink's initial value without subscribing — the fresh-mode
+ * half of {@linkcode installValuePartOn}, reused by the bounded recovery
+ * build (no live resources before the retried claim).
+ */
+function applyInitialSink(element: Element, part: ProgramBranchSinkPart, initial: unknown): void {
+  if (part.k === 'html') {
+    (element as Element).innerHTML = trustedHtmlValue(initial);
+    return;
+  }
+  if (part.k === 'attr') {
+    applyAttribute(element, part.name, attributeValueOf(initial));
+    return;
+  }
+  if (part.k === 'prop') {
+    applyProperty(element, part.name, initial, true);
+    return;
+  }
+  if (part.k === 'bool') {
+    applyBoolean(element, part.name, Boolean(initial));
+    return;
+  }
+  if (part.k === 'class') {
+    applyAttribute(element, 'class', classValueOf(initial) || null);
+    return;
+  }
+  applyAttribute(element, 'style', styleValueOf(initial) || null);
 }
 
 function installEventPart(
@@ -277,6 +372,11 @@ export function attachFixedParts(
   rootOffset = 0,
 ): void {
   for (const part of ctx.program.parts) {
+    // A branch-owned sink binds when its branch mounts (installBranchValueParts),
+    // not from the mount root: its path is a branch-relative address and the
+    // root walk would resolve it against the wrong nodes (or fail on the
+    // inactive branch).
+    if (ctx.branchParts.owned.has(part.index)) continue;
     if (
       part.k === 'attr' ||
       part.k === 'prop' ||
@@ -291,5 +391,45 @@ export function attachFixedParts(
     } else if (part.k === 'ref') {
       installRefPart(ctx, root, part, rootOffset);
     }
+  }
+}
+
+/**
+ * Bind the value sinks one when-Block branch owns, scoped to the branch's
+ * lifetime (alpha15). `nodes` is the branch's mounted top-level node list —
+ * the address space the branch-relative sink paths index. Claim mode keeps
+ * the served values (no initial write); fresh mode applies the signal's
+ * current value.
+ */
+export function installBranchValueParts(
+  ctx: MountContext,
+  scope: LifetimeScope,
+  nodes: readonly Node[],
+  whenIndex: number,
+  which: 'on' | 'off',
+  mode: 'fresh' | 'claim',
+): void {
+  const sinks = ctx.branchParts.byWhen.get(whenIndex)?.[which] ?? [];
+  for (const part of sinks) {
+    const element = resolvePathInList(nodes, part.path, `${part.k} Part`);
+    installValuePartOn(ctx, element, part, mode, scope);
+  }
+}
+
+/**
+ * Apply the branch sinks' initial values without subscribing — the bounded
+ * recovery build's shape: the rebuilt branch DOM carries its sink values, and
+ * the retried claim re-arms the live bindings.
+ */
+export function applyBranchSinkInitials(
+  ctx: MountContext,
+  nodes: readonly Node[],
+  whenIndex: number,
+  which: 'on' | 'off',
+): void {
+  const sinks = ctx.branchParts.byWhen.get(whenIndex)?.[which] ?? [];
+  for (const part of sinks) {
+    const element = resolvePathInList(nodes, part.path, `${part.k} Part`);
+    applyInitialSink(element, part, signalOf(ctx, part.signal).value);
   }
 }

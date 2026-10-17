@@ -13,12 +13,11 @@ import { defineConfig } from '@openelement/router';
 import { SITE_BUDGET } from './site-budget.ts';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from './site-config.ts';
 import { SITE_FONT_SOURCES } from './site-fonts.ts';
-import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 
 export default defineConfig({
   // The framework's documented defaults, stated explicitly: the Site pins its
   // source roots so a future default change cannot silently move them. The
-  // tokens/app-shell/head conventions resolve under the shared base of the
+  // tokens/layout/head conventions resolve under the shared base of the
   // three roots, which is `app` — where app/head.tsx lives.
   dirs: {
     routes: 'app/routes',
@@ -39,53 +38,42 @@ export default defineConfig({
     // Prism runtime).
     scripts: [{ src: '/theme-init.js' }],
   },
-  // The shell's tag name (`open-layout`) is derived from the import's basename.
-  appShell: {
-    import: './app/islands/open-layout.tsx',
-    props: {
-      footerText: 'Built with OpenElement — Web Components-native application framework',
-      // Router 1.0 keeps the app-shell nav contract in the consumer: the Site
-      // projects its route-meta nav tree into the shell (Nav items are
-      // static; the router injects currentPath/locale per route).
-      navItems: navSections,
-      headerNav,
-    },
-  },
+  // The site shell is the layout.tsx convention (app/layout.tsx): the
+  // compiled `app-layout` component carries the header/nav/sidebar/footer
+  // chrome and projects every page render through its default slot — the
+  // same wrap channel at SSG and request time. The convention path is the
+  // whole registration; the former `layout:` block (and its open-layout
+  // app-shell island) retired with it. The nav data that block handed over
+  // as props is imported by the layout module directly (the convention
+  // passes no props of its own).
   // Listing the UI package admits its island modules AND derives the SSR
   // externalization list: a package whose islands the build renders must be
   // bundled, not imported at run time. There is no separate `ssr` key.
   packageIslands: ['@openelement/ui'],
   viewTransition: true,
-  // The Tailwind preset (alpha9 C2 #1505; moved here from a build-only
-  // consumer plugin in the alpha.13 F lane): the framework compiles the
-  // declared sources into one bundle and delivers it on BOTH channels — dev
-  // serves the compile from /.openElement/tailwind-preset/entry.css and links
-  // it in the document head, the build emits the same compile as the
-  // layer-ordered /assets/open-tailwind.css after the SSG render.
+  // The Tailwind entry (alpha9 C2 #1505; externalized alpha15 S lane). The
+  // declared sources compile through the OFFICIAL @tailwindcss/vite pipeline
+  // inside the client build into one linked document stylesheet — dev serves
+  // the same compile at /.openElement/tailwind.css, the build emits it as the
+  // content-hashed /client/assets/<hash>.css the head links.
   //
-  // The theme source is the ui package's real @theme role table (C3 made the
-  // recipes and the site read the role names directly), compiled into the
-  // bundle's `theme` layer alongside Tailwind's own defaults. No `components`
-  // layer and no `@scope` face: the site's own components keep their compiled
-  // shadow sheets and the page layer is light DOM, so the plain bundle covers
-  // both adoptions.
+  // ADR-0167: the ui package's own theme source is no longer repeated here —
+  // admitting @openelement/ui brings its declared requirement and its
+  // package-owned role sheet into this plan automatically. What remains
+  // application-owned is the font layer.
   //
   // The self-hosted @font-face faces (www/site-fonts.ts, the H lane's
   // replacement for #1554's four jsDelivr stylesheet links) ride the same
-  // bundle: the declared fontsource stylesheets compile in, their woff2 files
-  // emit as content-hashed assets beside the bundle and the bundle's url()
-  // references are rewritten to those shipped names — the #1535 path this
-  // preset already owns for compile-referenced assets. One linked same-origin
-  // stylesheet carries theme + fonts, so no font request can leave the
-  // origin and no CDN outage can stall first paint.
+  // entry: the declared fontsource stylesheets compile in, their woff2 files
+  // emit as content-hashed assets beside the stylesheet and the url()
+  // references are rewritten by Vite's own asset graph — one linked
+  // same-origin stylesheet carries theme + fonts, so no font request can leave
+  // the origin and no CDN outage can stall first paint.
   tailwind: {
-    theme: ['@openelement/ui/theme.css', ...SITE_FONT_SOURCES],
-    // The Site's compiled DSD islands claim their shadow DOM exactly (the
-    // compiled-claim walk requires the shadow root's children to equal the
-    // Part Program's own nodes), so the per-shadow-template link injection is
-    // off: the head link alone reaches every shadow tree — the theme layer is
-    // custom properties, which inherit across the shadow boundary.
-    injectDsdLinks: false,
+    // site-chrome.css is the shell's linked authored-CSS layer: the host
+    // boxes, pseudo-elements and keyframes the retired component sheets
+    // owned, compiled into the same linked document stylesheet as the fonts.
+    theme: [...SITE_FONT_SOURCES, './site-chrome.css'],
   },
   speculation: true,
   // One shared official-Site SLO (www/site-budget.ts): the build manifest

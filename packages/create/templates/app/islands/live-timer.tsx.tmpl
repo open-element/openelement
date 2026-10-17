@@ -6,6 +6,10 @@
  * clock in connectedCallback. Elapsed time is measured from the document's
  * time origin (performance.now()), so the number is honest page time, and
  * disconnectedCallback stops the interval when the host leaves the tree.
+ *
+ * The clock's presentation is authored as Tailwind utilities on the same
+ * span the render produces (#1582: the styling must sit on the element that
+ * exists, never on a selector that can drift away from it).
  */
 import { defineIslandConfig } from "@openelement/router";
 import { element, OpenElement, property } from "@openelement/element";
@@ -22,7 +26,7 @@ export default class LiveTimer extends OpenElement {
   static override styles = [timerStyles];
 
   /** Elapsed seconds as preformatted text (compiled text Parts bind plain
-   * properties — no method calls in a text region, OEC9013). */
+   * properties — no method calls in a text block, OEC9013). */
   @property({ reflect: false, attribute: false })
   elapsed = "0.0";
 
@@ -45,9 +49,14 @@ export default class LiveTimer extends OpenElement {
 
   render() {
     return (
-      <div class="timer-row">
-        <span id="elapsed">{this.elapsed}</span>
-        <span class="unit">seconds on this page</span>
+      <div class="inline-flex items-baseline gap-[0.6rem]">
+        <span
+          id="elapsed"
+          class="min-w-[6ch] text-right text-[1.4rem] font-semibold text-brand tabular-nums"
+        >
+          {this.elapsed}
+        </span>
+        <span class="text-[0.85rem] text-ink-soft">seconds on this page</span>
       </div>
     );
   }

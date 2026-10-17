@@ -69,7 +69,8 @@ test('v0.44 compiler behavior metadata controls exact client output', () => {
     upgradeStrategy: 'idle',
   });
   const code = generateClientEntry(entries);
-  expect(code).toContain('"oe-menu-button": () => import("/app/components/menu-button.tsx")');
+  expect(code).toContain('"oe-menu-button": function () {');
+  expect(code).toContain('import("/app/components/menu-button.tsx")');
   expect(code).toContain('idle: ["oe-menu-button"]');
   expect(code.includes('oe-static-card')).toEqual(false);
 });
@@ -94,6 +95,8 @@ test('v0.44 media delivery loads once when the query first matches', () => {
     doc: {
       readyState: 'complete',
       addEventListener: () => {},
+      // B2 page scope: the page carries the island host, so activation starts.
+      querySelectorAll: (selector: string) => (selector === 'oe-media' ? [{}] : []),
       dispatchEvent: (event: { type: string; detail: { strategy: string; islands: string[] } }) => {
         if (event.type === 'open:ready') readyEvents.push(event.detail);
         return true;
@@ -398,7 +401,7 @@ test('v0.44 client delivery follows islands imported through a route component',
       },
     ];
 
-    const reachable = findReachableIslandTags(ctx, root, 'dist', ['oe-used', 'oe-unused']);
+    const reachable = findReachableIslandTags(ctx, root, 'dist', ['oe-used', 'oe-unused']).tags;
     expect([...reachable]).toEqual(['oe-used']);
   } finally {
     await rm(root, { recursive: true });
@@ -441,7 +444,7 @@ test('v0.44 client delivery keeps an explicitly imported island capability', asy
       },
     ];
 
-    const reachable = findReachableIslandTags(ctx, root, 'dist', ['oe-late-child']);
+    const reachable = findReachableIslandTags(ctx, root, 'dist', ['oe-late-child']).tags;
     expect([...reachable]).toEqual(['oe-late-child']);
   } finally {
     await rm(root, { recursive: true });

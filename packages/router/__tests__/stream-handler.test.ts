@@ -1,14 +1,15 @@
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import {
-  createDeferredDsdExecutor,
+  createDocumentStyleResources,
+  createStreamShellExecutor,
   documentStreamParts,
   escapeAttr,
   escapeHtml,
   MAX_ACTION_BODY_BYTES,
   wrapInDocument,
 } from '@openelement/element';
-import type { PartProgramV1 } from '../../element/src/internal/protocol/part-program.ts';
+import type { PartProgramV2 } from '@openelement/protocol/part-program';
 import { testProgram } from '../../element/__tests__/compiled-runtime/test-program.ts';
 import {
   ACTION_FETCH_HEADER,
@@ -21,7 +22,7 @@ import {
   mergeChannelHeaders,
 } from '../src/vite/internal/server-runtime/response-channel.ts';
 import {
-  createDeferredPageShell,
+  createStreamPageShell,
   createStreamBody,
   createStreamRequestScope,
   STREAM_BROWSER_BOOTSTRAP,
@@ -56,7 +57,7 @@ const program = testProgram({
     reflect: false,
     default: '',
   })),
-}) as PartProgramV1;
+}) as PartProgramV2;
 
 class Page {}
 Object.assign(Page, { __partProgram: program, __compiledProperties: program.metadata.properties });
@@ -100,7 +101,7 @@ function deferred<T>() {
  * import declarations, so the REAL production implementations are bound in
  * through `deps` instead — the assertions below still execute the shipped
  * modules, never a harness-local copy. The deferred-shell gate binds the same
- * way since ADR-0160 Amendment 1 (the typed `createDeferredPageShell` factory
+ * way since ADR-0160 Amendment 1 (the typed `createStreamPageShell` factory
  * over the serialized manifests + the real executor import), so the gate runs
  * as shipped too. The action POST wiring never executes here (only the GET
  * handler is driven), but the harness binds the real scope/body-limit so the
@@ -124,8 +125,8 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
   renderActionRoute(post, route, [], config, false);
   expect(!post.join('\n').includes('__streamBody(')).toBeTruthy();
   const source = `
-    const { routeModule, manifest, createDeferredDsdExecutor, documentStreamParts,
-      escapeAttr, escapeHtml, wrapInDocument } = deps;
+    const { routeModule, manifest, createDocumentStyleResources, createStreamShellExecutor,
+      documentStreamParts, escapeAttr, escapeHtml, wrapInDocument } = deps;
     const __mergeChannelHeaders = deps.mergeChannelHeaders;
     const __streamHeaderChannel = deps.createStreamHeaderChannel;
     const __streamRequestScope = deps.createStreamRequestScope;
@@ -137,9 +138,9 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __actionFetchHeader = deps.ACTION_FETCH_HEADER;
     const $Route_Index = routeModule;
     const __streamManifests = { '/': manifest };
-    const __createDeferredPageShell = deps.createDeferredPageShell({
+    const __createStreamPageShell = deps.createStreamPageShell({
       streamManifests: __streamManifests,
-      createDeferredDsdExecutor,
+      createStreamShellExecutor,
     });
     const __pageHandlers = { '/': {} };
     const __isOpenElementRedirect = error => error?.redirect === true;
@@ -162,8 +163,8 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __pageErrorProps = () => ({});
     const __statusHtml = (title, text) => '<h1>' + escapeHtml(title) + '</h1><p>' + escapeHtml(text) + '</p>';
     const __clientScriptDescriptors = () => [{ src: '/client.js', type: 'module' }];
-    const __resolveAppShell = () => deps.resolvedAppShell ?? false;
-    const __renderAppShell = html => html;
+    const __resolveLayout = () => deps.resolvedLayout ?? false;
+    const __renderLayout = html => html;
     const __ssr = () => '<p>error</p>';
     ${lines.join('\n').replaceAll('import.meta.env.PROD', 'false')}
     return __pageHandlers['/'].GET[0];
@@ -189,8 +190,9 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
   const deps = {
     routeModule,
     manifest: route.streamManifest,
-    createDeferredDsdExecutor,
-    createDeferredPageShell,
+    createDocumentStyleResources,
+    createStreamShellExecutor,
+    createStreamPageShell,
     documentStreamParts,
     escapeAttr,
     escapeHtml,
@@ -206,7 +208,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     createActionBodyLimit,
     maxActionBodyBytes: MAX_ACTION_BODY_BYTES,
     ACTION_FETCH_HEADER,
-    resolvedAppShell: undefined as unknown,
+    resolvedLayout: undefined as unknown,
   };
   const generated = new Function('deps', source)(deps) as (
     request: Request,
@@ -222,8 +224,8 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
   return {
     fetch,
     routeModule,
-    setResolvedAppShell: (shell: unknown) => {
-      deps.resolvedAppShell = shell;
+    setResolvedLayout: (shell: unknown) => {
+      deps.resolvedLayout = shell;
     },
   };
 }
@@ -317,19 +319,19 @@ test('the real channel merge keeps protocol headers and the streamed body', asyn
   expect(frames.join('')).toContain('part&quot;:0');
 });
 
-test('the generated GET refuses a resolved app shell with route-level guidance', async () => {
+test('the generated GET refuses a resolved layout with route-level guidance', async () => {
   // Descriptors built outside buildEntryDescriptor (or reaching the runtime by
   // another path) still hit the generated route guard. It is the route-level
   // counterpart of the build gate and must name the same project-wide fix
   // rather than a route-local one that cannot work.
-  const { fetch, routeModule, setResolvedAppShell } = await handler();
-  setResolvedAppShell({ tagName: 'open-layout' });
+  const { fetch, routeModule, setResolvedLayout } = await handler();
+  setResolvedLayout({ tagName: 'open-layout' });
   routeModule.loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });
   const response = await fetch(new Request('https://example.test/'));
   expect(response.status).toEqual(500);
   const body = await response.text();
-  expect(body).toContain('resolved a compiled app shell');
-  expect(body).toContain('appShell: false');
+  expect(body).toContain('resolved a compiled layout');
+  expect(body).toContain('layout: false');
   expect(body).toContain('leave streaming off');
 });
 
@@ -709,7 +711,7 @@ test('front gate answers 500 when the loader itself returns a rejected promise',
 });
 
 test('stream budget front gate observes loader rejections before its diagnostic throw', async () => {
-  // The budget diagnostic fires in __streamFields before the deferred shell is
+  // The budget diagnostic fires in __streamFields before the stream shell is
   // created, so an over-budget manifest alone is enough to reach it through
   // the real generated handler.
   const overBudget: StreamRouteManifest = {

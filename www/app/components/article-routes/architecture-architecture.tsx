@@ -17,7 +17,7 @@ export default class ArchitecturePage extends OpenElement {
     articleHtml: '',
   };
 
-  // Same base-field redeclaration as open-layout: the compiled @property
+  // Same base-field redeclaration as the layout shell: the compiled @property
   // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
   // attribute); tsc's `override` demand is rejected by the compiled grammar.
   @property({ reflect: false })

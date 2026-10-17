@@ -14,8 +14,9 @@
  *
  * The module is compiled by the build, so it can import CSS by URL
  * (`import css from './site.css?raw'`) and pull constants from local modules.
- * It must not use host APIs (no Deno, no Node): its output is a build artifact,
- * so a runtime read would make the document depend on the build machine.
+ * It must not use host APIs (no filesystem, no process): its output is a
+ * build artifact, so a runtime read would make the document depend on the
+ * build machine.
  *
  * `head` in openelement.config.ts already covers the title, description,
  * favicon and the og:/twitter: pairs; `head.scripts` / `head.stylesheets`

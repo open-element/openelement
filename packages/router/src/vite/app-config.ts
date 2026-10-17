@@ -11,7 +11,7 @@
  *
  * This module deliberately does NOT import Vite: only the plugin path hands in
  * an already-loaded module. File conventions (`app/styles/tokens.css`,
- * `app/islands/app-shell.tsx`, the package.json `name`) are resolved here so
+ * `app/layout.tsx`, the package.json `name`) are resolved here so
  * every consumer agrees on what "configured" means.
  */
 
@@ -21,7 +21,7 @@ import { join } from 'pathe';
 import { pathToFileURL } from 'node:url';
 import { escapeAttr } from '@openelement/element/html';
 import { OpenElementError } from '@openelement/element/authoring';
-import { conventionAppShellPath } from '../config.ts';
+import { conventionLayoutPath, CONVENTION_LAYOUT_PATH } from '../config.ts';
 import { conventionHeadPath } from '../config.ts';
 import { conventionTokensPath } from '../config.ts';
 import { resolveDirs } from '../config.ts';
@@ -29,7 +29,7 @@ import { headScriptsToInject } from './head-channel.ts';
 import { headStylesheetsToInject } from './head-channel.ts';
 import {
   assertValidUserConfig,
-  CONVENTION_APP_SHELL_TAG,
+  CONVENTION_LAYOUT_TAG,
   CONVENTION_PACKAGE_JSON,
   frameworkOptionsConflict,
   hasInlineFrameworkOptions,
@@ -45,7 +45,7 @@ export interface ConventionUse {
   /** Project-relative convention path. */
   path: string;
   /** What the convention provided. */
-  provides: 'tokens' | 'appShell' | 'title' | 'head';
+  provides: 'tokens' | 'layout' | 'title' | 'head';
 }
 
 /** Resolution result handed back to the consumers. */
@@ -80,28 +80,38 @@ export interface ResolveAppConfigInput {
   inlineOptionsPresent?: boolean;
 }
 
-/** The inline framework-options key that was renamed to `head` (see below). */
-export const RENAMED_INLINE_HEAD_KEY = 'html';
-
 /**
- * The inline `openElement({ ... })` face spells the document-head channel
- * `head`, exactly like `openelement.config.ts` does. The old inline name `html`
- * had two spellings for one channel; accepting both would let a build read a
- * key the config file rejects, so passing it fails closed and names the
- * replacement.
+ * Inline `openElement({ ... })` keys this face no longer carries, each mapped
+ * to the guidance that names its replacement.
  *
- * Only the framework-options face is checked here: `FrameworkOptions.html` is
- * the internal transfer shape the resolved options carry, and the low-level
- * `createOpenPlugin()` (not public API) keeps reading it.
+ * The inline face spells each channel the way `openelement.config.ts` does.
+ * An old spelling had two names for one channel; accepting both would let a
+ * build read a key the config file rejects, so passing one fails closed
+ * instead of being silently ignored.
+ *
+ * Only the framework-options face is checked here: `FrameworkOptions.html`
+ * and `FrameworkOptions.layout` are the internal transfer shapes the resolved
+ * options carry, and the low-level `createOpenPlugin()` (not public API)
+ * keeps reading them.
  */
+const RENAMED_INLINE_KEYS: Readonly<Record<string, string>> = {
+  html:
+    `the document-head channel is spelled "head" both inline and in ${OPEN_ELEMENT_CONFIG_FILE}. ` +
+    `Move the value to openElement({ head: { title, description, lang, favicon, ogImage, stylesheets, scripts } }) ` +
+    `— or, for framework options in a project with a config file, into ` +
+    `${OPEN_ELEMENT_CONFIG_FILE} itself and call openElement() with no arguments.`,
+  appShell:
+    `the layout is spelled "layout" both inline and in ${OPEN_ELEMENT_CONFIG_FILE}: ` +
+    `openElement({ layout: { import, props } }). The app-shell convention was renamed in alpha15 — ` +
+    `an ${CONVENTION_LAYOUT_PATH} convention module needs no option at all.`,
+};
+
 export function assertNoRenamedInlineKeys(options: Record<string, unknown> | undefined): void {
-  if (!options || options[RENAMED_INLINE_HEAD_KEY] === undefined) return;
+  if (!options) return;
+  const renamed = Object.keys(RENAMED_INLINE_KEYS).find((key) => options[key] !== undefined);
+  if (renamed === undefined) return;
   throw new OpenElementError(
-    `[openElement] openElement({ ${RENAMED_INLINE_HEAD_KEY}: … }) was renamed: the document-head ` +
-      `channel is spelled "head" both inline and in ${OPEN_ELEMENT_CONFIG_FILE}. Move the value ` +
-      `to openElement({ head: { title, description, lang, favicon, ogImage, stylesheets, scripts } }) ` +
-      `— or, for framework options in a project with a config file, into ` +
-      `${OPEN_ELEMENT_CONFIG_FILE} itself and call openElement() with no arguments.`,
+    `[openElement] openElement({ ${renamed}: … }) was renamed: ${RENAMED_INLINE_KEYS[renamed]}`,
     { code: 'CONFIG_RENAMED_KEY', severity: 'error', phase: 'build', recoverable: false },
   );
 }
@@ -397,29 +407,29 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
   const headBlock: OpenElementUserConfig['head'] | undefined = overrides.head ?? inlineHead;
 
   const inlineInject = (inline['inject'] ?? undefined) as FrameworkOptions['inject'];
-  const inlineAppShell = inline['appShell'] as FrameworkOptions['appShell'];
+  const inlineLayout = inline['layout'] as FrameworkOptions['layout'];
 
-  // --- app shell: override > inline > convention ---
-  let appShell: FrameworkOptions['appShell'];
-  if (overrides.appShell === false) {
-    appShell = false;
-  } else if (overrides.appShell) {
-    appShell = {
-      tagName: tagNameFromModule(overrides.appShell.import),
-      import: overrides.appShell.import,
-      props: overrides.appShell.props ?? {},
+  // --- layout: override > inline > convention ---
+  let layout: FrameworkOptions['layout'];
+  if (overrides.layout === false) {
+    layout = false;
+  } else if (overrides.layout) {
+    layout = {
+      tagName: tagNameFromModule(overrides.layout.import),
+      import: overrides.layout.import,
+      props: overrides.layout.props ?? {},
     };
-  } else if (inlineAppShell !== undefined) {
-    appShell = inlineAppShell;
+  } else if (inlineLayout !== undefined) {
+    layout = inlineLayout;
   } else {
-    const conventionPath = conventionAppShellPath(dirs.base);
+    const conventionPath = conventionLayoutPath(dirs.base);
     if (existsSync(join(root, conventionPath))) {
-      appShell = {
-        tagName: CONVENTION_APP_SHELL_TAG,
+      layout = {
+        tagName: CONVENTION_LAYOUT_TAG,
         import: `./${conventionPath}`,
         props: {},
       };
-      conventions.push({ path: conventionPath, provides: 'appShell' });
+      conventions.push({ path: conventionPath, provides: 'layout' });
     }
   }
 
@@ -441,6 +451,21 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
 
   // --- token stylesheet: override > convention ---
   const tokenSource = overrides.styles?.tokens ?? conventionTokensPath(dirs.base);
+  /**
+   * One owner per token file. A file the application's own style entry
+   * declares (`tailwind.theme` / `unocss.theme`) is compiled into the document
+   * sheet by the engine, so the INLINE token convention must not carry it too:
+   * the two channels would deliver one file twice, and an engine source talks
+   * the engine's own language (`@theme` blocks, bare `@import`s) which the
+   * inline `<style>` channel rejects as unsafe CSS by design. The declared
+   * source wins — the application asked the engine for it.
+   */
+  const engineThemeSources = [
+    ...(typeof overrides.tailwind === 'object' ? (overrides.tailwind.theme ?? []) : []),
+    ...(typeof overrides.unocss === 'object' ? (overrides.unocss.theme ?? []) : []),
+  ];
+  const declaredByEngine = (source: string): boolean =>
+    source === tokenSource || join(root, source) === join(root, tokenSource);
   let tokensFragment: string | undefined;
   if (overrides.styles?.tokens !== undefined) {
     const css = readTextFileIfPresent(join(root, tokenSource));
@@ -452,7 +477,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
       );
     }
     tokensFragment = tokensFragmentFor(css);
-  } else {
+  } else if (!engineThemeSources.some(declaredByEngine)) {
     const css = readTextFileIfPresent(join(root, tokenSource));
     if (css !== null) {
       tokensFragment = tokensFragmentFor(css);
@@ -475,9 +500,8 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
   if (overrides.dirs !== undefined) {
     options.routesDir = dirs.routes;
     options.islandsDir = dirs.islands;
-    options.componentsDir = dirs.components;
   }
-  if (appShell !== undefined) options.appShell = appShell;
+  if (layout !== undefined) options.layout = layout;
   if (overrides.i18n !== undefined) {
     options.i18n = {
       locales: [...overrides.i18n.locales],
@@ -486,6 +510,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
   }
   if (overrides.viewTransition !== undefined) options.viewTransition = overrides.viewTransition;
   if (overrides.tailwind !== undefined) options.tailwind = overrides.tailwind;
+  if (overrides.unocss !== undefined) options.unocss = overrides.unocss;
   if (overrides.speculation !== undefined) options.speculation = overrides.speculation;
   if (overrides.build?.manifestBudget !== undefined) {
     options.build = { ...options.build, manifestBudget: { ...overrides.build.manifestBudget } };
@@ -509,13 +534,19 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
   // `inject` channel that owns the one script/link serializer. `packageIslands`
   // additionally becomes the SSR externalization list: a package whose island
   // modules the build admits must be BUNDLED, not imported at run time, and the
-  // config surface deliberately has no separate key for that derivation.
+  // config surface deliberately has no separate key for that derivation. The
+  // EXPLICIT entries derive it here; scan-time-derived packages are appended by
+  // the scan (plugin-scanners) once the derivation knows them.
   const headScripts = HEAD_INJECT_FIELDS.scripts(headBlock?.scripts);
   const headStylesheets = HEAD_INJECT_FIELDS.stylesheets(headBlock?.stylesheets);
   const packageIslands =
-    overrides.packageIslands ?? (inline['packageIslands'] as string[] | undefined);
-  const derivedNoExternal =
-    packageIslands && packageIslands.length > 0 ? packageIslands : undefined;
+    overrides.packageIslands ??
+    (inline['packageIslands'] as string[] | 'auto' | 'manual' | undefined);
+  // Only an array carries explicit packages; 'auto' and 'manual' name the
+  // derivation mode and contribute none (spreading the string would smear its
+  // characters into the list).
+  const explicitPackageIslands = Array.isArray(packageIslands) ? packageIslands : [];
+  const derivedNoExternal = explicitPackageIslands.length > 0 ? explicitPackageIslands : undefined;
   const inlineFragments = inlineInject?.headFragments ?? [];
   const inlineScripts = inlineInject?.scripts ?? [];
   const inlineStylesheets = inlineInject?.stylesheets ?? [];
@@ -534,7 +565,9 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
         : { stylesheets: [...inlineStylesheets, ...headStylesheets] }),
     };
   }
-  if (packageIslands !== undefined) options.packageIslands = [...packageIslands];
+  if (packageIslands !== undefined) {
+    options.packageIslands = Array.isArray(packageIslands) ? [...packageIslands] : packageIslands;
+  }
   if (derivedNoExternal !== undefined) {
     // The derivation ADDS: a caller that stated its own `ssr.noExternal` on
     // the inline face keeps every entry, with the declared packages appended

@@ -5,7 +5,7 @@
  *   - Default locale (en) pages are accessible at root
  *   - The default English locale uses canonical unprefixed routes
  *   - Chinese locale pages are accessible at /zh/
- *   - The app shell projects locale-aware home and navigation links
+ *   - The layout projects locale-aware home and navigation links
  *   - Pages have correct lang attribute per locale
  */
 
@@ -80,7 +80,7 @@ test.describe('Locale Routes', () => {
   });
 });
 
-test.describe('Localized app shell', () => {
+test.describe('Localized layout', () => {
   test('default shell uses canonical unprefixed links', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');

@@ -376,13 +376,26 @@ test.describe('protocol hardening (ADR-0121, 0.42.0-alpha.5)', () => {
       form: {},
       headers: { 'x-openelement-action': 'true' },
     });
-    expect(response.status()).toBe(500);
-    expect(response.headers()['content-type']).toContain('application/problem+json');
-    const body = await response.json();
-    expect(body.type).toBe('about:blank');
-    expect(body.title).toBe('Internal Server Error');
+    // Every assertion carries the serving-state evidence: a recurrence must
+    // name the status, the media type and the body the fixture actually
+    // answered. A `detail` carrying the thrown message means the served server
+    // bundle was not built in production mode (`import.meta.env.PROD` not
+    // inlined true) — a build-artifact property, not a per-request race.
+    const contentType = response.headers()['content-type'] ?? '(absent)';
+    const raw = await response.text();
+    const evidence = `status=${response.status()} content-type=${contentType} body=${raw}`;
+    let body: { type?: unknown; title?: unknown; detail?: unknown };
+    try {
+      body = JSON.parse(raw) as typeof body;
+    } catch {
+      body = {};
+    }
+    expect(response.status(), evidence).toBe(500);
+    expect(contentType, evidence).toContain('application/problem+json');
+    expect(body.type, evidence).toBe('about:blank');
+    expect(body.title, evidence).toBe('Internal Server Error');
     // The fixture is a production build: internals never leak.
-    expect(body.detail).toBe('Internal Server Error');
+    expect(body.detail, evidence).toBe('Internal Server Error');
   });
 
   test('a thrown action renders the error boundary on the HTML channel (#551)', async ({

@@ -7,7 +7,7 @@
  * boundary state observed here and by the runtime never diverges.
  *
  * Fallback presentation is program-defined in the compiled architecture: a
- * boundary's Part Program expresses its fallback as a Region (a `when` over
+ * boundary's Part Program expresses its fallback as a Block (a `when` over
  * the `hasError` state), not as a VNode returned from render(). The legacy
  * VNode `onError()`/`render()` fallback machinery was removed with the legacy
  * renderer.

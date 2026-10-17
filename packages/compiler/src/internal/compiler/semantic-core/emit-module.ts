@@ -17,7 +17,7 @@ import { type CompiledElementSourceMap, SourceMapSegmentBuilder } from './source
 import {
   COMPILED_MODULE_ABI_VERSION,
   PART_PROGRAM_VERSION,
-  type PartProgramV1,
+  type PartProgramV2,
 } from '@openelement/protocol/part-program';
 
 /**
@@ -108,7 +108,7 @@ export interface EmitModuleInput {
   fileName: string;
   analyzed: AnalyzedModule;
   lowering: Lowering;
-  program: PartProgramV1;
+  program: PartProgramV2;
   programJson: string;
   propertiesJson: string;
   metadataJson: string;
@@ -360,10 +360,27 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
   );
   if (delegatesFocus) push('  static override delegatesFocus: boolean = true;');
   if (formAssociated) push('  static override formAssociated: boolean = true;');
+  // The static-candidate flag (alpha15 S lane): a shadow-root component whose
+  // classes were admitted needs the framework's component stylesheet, and the
+  // server serializer reads this flag to declare it as a marked external
+  // `<link>` in the DSD template. Emitted only when the flag is true, so a
+  // class with no candidates stays byte-identical to before.
+  if (analyzed.rootKind !== 'light' && lowering.classCandidates.size > 0) {
+    push('  static __oeUtilityClasses: boolean = true;');
+    // The candidate FACT itself (S5-B): a consumer build that resolves this
+    // emitted module cannot re-derive it from TSX, so the tokens ride the
+    // artifact and the router's recovery reads them (one writer, one fact —
+    // the same list the authored path registers).
+    push(
+      `  static __oeClassCandidates: readonly string[] = ${JSON.stringify([
+        ...lowering.classCandidates,
+      ])};`,
+    );
+  }
   const computedFields = fields.filter((field) => field.computed);
   if (computedFields.length > 0) {
     // Derived-signal factories: each builds the field's read-only computed
-    // over the instance's plain property signals (facade + renderDsd run the
+    // over the instance's plain property signals (facade + renderToString run the
     // same factories, so server output and client claim read one value set).
     // The outer annotation gives every factory an explicit function type
     // (consumer:packaged gate): the return is the authored field type, the

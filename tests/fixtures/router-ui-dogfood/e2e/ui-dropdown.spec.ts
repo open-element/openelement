@@ -43,7 +43,8 @@ test.describe('open-dropdown', () => {
   });
 
   test('assigns the per-instance anchor pair at activation', async ({ page }) => {
-    const anchor = await page.evaluate(`(() => {
+    const anchor = await page.evaluate<{ name: string; style: string; popover: string }>(
+      `(() => {
       const host = ${deepFirstExpr('#main-dropdown')};
       const content = host?.shadowRoot?.querySelector('.content');
       return {
@@ -51,7 +52,8 @@ test.describe('open-dropdown', () => {
         style: content?.getAttribute('style') ?? '',
         popover: content?.getAttribute('popover') ?? '',
       };
-    })()`);
+    })()`,
+    );
     expect(anchor.name).toMatch(/^--open-dropdown-trigger-/);
     expect(anchor.style).toContain(`position-anchor: ${anchor.name}`);
     expect(anchor.popover).toBe('auto');

@@ -447,7 +447,7 @@ test('matrix — postProcessClientIslandBuild honors the manifest on a real temp
       islands: {
         'open-counter': { file: '/client/islands/chunk-9f3e2a.js', strategy: 'idle' },
       },
-      shared: [],
+      shared: ['/client/islands/element-runtime-3c1d.js'],
       styles: [],
     };
     await postProcessClientIslandBuild({
@@ -470,10 +470,15 @@ test('matrix — postProcessClientIslandBuild honors the manifest on a real temp
     ) as { islands: Array<{ tagName: string; chunkUrl: string }> };
     expect(pageManifest.islands[0].tagName).toEqual('open-counter');
     expect(pageManifest.islands[0].chunkUrl).toEqual('/client/islands/chunk-9f3e2a.js');
-    // HTML untouched: scripts were embedded at render time, not spliced here.
-    expect(readFileSync(join(dist, 'index.html'), 'utf8')).toEqual(
-      '<html><body><open-counter></open-counter></body></html>',
+    // No script surgery: scripts were embedded at render time, not spliced
+    // here. The ONE HTML write this pass owns is the #1544/B2 runtime
+    // modulepreload on the island-bearing page.
+    const html = readFileSync(join(dist, 'index.html'), 'utf8');
+    expect(html).toContain(
+      '<link rel="modulepreload" href="/client/islands/element-runtime-3c1d.js" data-open-element-runtime-preload>',
     );
+    expect(html).toContain('<body><open-counter></open-counter></body>');
+    expect(html.includes('<script')).toEqual(false);
   } finally {
     await rm(tmp, { recursive: true });
   }

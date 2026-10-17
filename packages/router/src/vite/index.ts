@@ -8,7 +8,7 @@
  * - SSG build pipeline (Phase 1/2/3)
  * - Core subpath resolution
  *
- * Runtime code (renderDsd, escapeHtml, etc.) lives in @openelement/element;
+ * Runtime code (renderToString, escapeHtml, etc.) lives in @openelement/element;
  * the island authoring helper (defineIslandConfig) is exported from the
  * @openelement/router root entry.
  * This package only contains Vite-specific build orchestration.
@@ -22,12 +22,11 @@
 import { build as viteBuild, type InlineConfig, type Plugin } from 'vite';
 import type { FrameworkOptions } from './framework.ts';
 import { createOpenPlugin } from './plugin.ts';
-import { DEFAULT_COMPONENTS_DIR, DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './paths.ts';
+import { resetBuildExitRecords } from './internal/build-diagnostics.ts';
+import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './paths.ts';
 
 /** Options for the low-level {@linkcode openPipeline} Vite plugin pipeline. */
 export interface OpenPipelineConfig {
-  /** Build/dev mode. 'ssg' (default) enables SSR dev server + static generation. */
-  mode?: 'ssg';
   routes?: { dir?: string };
   output?: { outDir?: string };
   island?: { dir?: string; upgradeStrategy?: string };
@@ -38,10 +37,8 @@ export interface OpenPipelineConfig {
 /** Low-level Vite plugin pipeline: SSR dev server, SSG and islands without the content/i18n conveniences of `openElement()`. */
 export function openPipeline(config: OpenPipelineConfig = {}): Plugin[] {
   const options: FrameworkOptions = {
-    mode: config.mode,
     routesDir: config.routes?.dir || DEFAULT_ROUTES_DIR,
     islandsDir: config.island?.dir || DEFAULT_ISLANDS_DIR,
-    componentsDir: DEFAULT_COMPONENTS_DIR,
     viewTransition: config.viewTransition ?? true,
     headExtras: config.headExtras,
     island: config.island as FrameworkOptions['island'],
@@ -61,6 +58,10 @@ export function openPipeline(config: OpenPipelineConfig = {}): Plugin[] {
  * phases or Vite plugin ordering.
  */
 export async function buildApp(config: InlineConfig = {}): Promise<unknown> {
+  // One build, one process, one set of exit records: the diagnostics envelope
+  // exit (#1612) reads only THIS invocation's recorded diagnostics, never a
+  // previous run's.
+  resetBuildExitRecords();
   return await viteBuild({ configLoader: 'native', ...config });
 }
 
@@ -93,18 +94,11 @@ export type { HeadExtrasResult } from './head-injection.ts';
 export { mdxPlugin } from './plugin-mdx.ts';
 export type { OpenMdxPluginOptions } from './plugin-mdx.ts';
 
-// Tailwind preset (alpha9 C2 #1505): opt-in build-layer seams
-export {
-  TAILWIND_BUNDLE_ASSET,
-  TAILWIND_LAYER_ORDER,
-  TAILWIND_SCOPE_ASSET,
-  applyTailwindPreset,
-  renderTailwindPresetEntry,
-  renderTailwindScopeFace,
-  resolveTailwindPresetOptions,
-  scopePresetComponentCss,
-} from './preset-tailwind.ts';
-export type { TailwindBundleResult, TailwindPresetOptions } from './preset-tailwind.ts';
+// Tailwind entry (alpha9 C2 #1505; externalized alpha15 S lane): the option
+// type lives on the host-neutral config surface, the implementation is the
+// official @tailwindcss/vite pipeline mounted by the build/dev channels.
+export type { ResolvedTailwindOptions } from './tailwind.ts';
+export type { TailwindOptions } from '../config.ts';
 
 // Default export
 export { openPipeline as default };

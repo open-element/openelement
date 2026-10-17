@@ -6,9 +6,9 @@
  * runtime-free packages free of Deno.readDirSync/Deno.readFileSync.
  *
  * Usage:
- *   deno run --allow-read --allow-write tools/generate-ui-manifest.ts
+ *   node tools/generate-ui-manifest.ts
  *     -> (re)write the manifest.
- *   deno run --allow-read --allow-write tools/generate-ui-manifest.ts --check
+ *   node tools/generate-ui-manifest.ts --check
  *     -> regenerate in memory and fail (exit 1) when the tracked manifest is
  *        missing or stale. Wired into `gate:release` as ui-manifest:check.
  */
@@ -284,16 +284,25 @@ function parseDescription(text: string): string {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line.startsWith('* @openelement/ui')) {
-      // The header line is followed by a blank comment line before the prose
-      // description — skip blank lines instead of giving up on the first one.
+      // Collect the first prose paragraph, joining wrapped lines: component
+      // docstrings wrap at ~80 cols, so the first *line* is usually a
+      // sentence fragment (open-input/open-theme-toggle/open-button).
+      const paragraph: string[] = [];
       for (let j = i + 1; j < lines.length; j++) {
         const next = lines[j].replace(/^\s*\*\s?/, '').trim();
-        if (!next) continue;
+        if (!next) {
+          if (paragraph.length) break;
+          continue;
+        }
         // Stop at the tag block (@csspart/@slot/...) or the comment end
         // without finding prose.
-        if (next.startsWith('@') || next.startsWith('/')) return '';
-        return next;
+        if (next.startsWith('@') || next.startsWith('/')) break;
+        paragraph.push(next);
       }
+      const joined = paragraph.join(' ');
+      // First *sentence*, not first line.
+      const sentence = joined.match(/^(.+?[.!?])(\s|$)/);
+      return sentence ? sentence[1] : joined;
     }
   }
   return '';
@@ -363,6 +372,18 @@ function buildDeclaration(meta: ComponentMeta): OpenElementDeclaration {
       status: meta.status,
       module: `@openelement/ui/${meta.file.replace(/\.tsx$/, '')}`,
       export: meta.className,
+      // ADR-0167: every component's internals author Tailwind utilities
+      // directly (alpha15 S lane), so the compile is a REQUIREMENT of this
+      // package — the component stylesheet is what carries the utilities into
+      // the shadow roots — and the package owns the theme source that compile
+      // needs. A consumer that admits this package declares NO Tailwind
+      // configuration and still gets styled components; a consumer that
+      // disables the entry fails closed with a coded diagnostic instead of
+      // shipping unstyled components.
+      tailwind: {
+        required: true,
+        sources: ['./src/theme.css'],
+      },
     },
   };
 }

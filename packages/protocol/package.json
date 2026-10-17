@@ -17,6 +17,7 @@
     "./app-model": "./src/app-model.ts",
     "./client-assets": "./src/client-assets.ts",
     "./data": "./src/data.ts",
+    "./diagnostics": "./src/diagnostics.ts",
     "./errors": "./src/errors.ts",
     "./forbidden-sinks": "./src/forbidden-sinks.ts",
     "./framework": "./src/framework.ts",

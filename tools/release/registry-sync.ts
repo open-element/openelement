@@ -57,7 +57,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { compare } from 'semver';
-import { commandOutput } from '../repo/node-command.ts';
+import { spawnCommand } from '../repo/node-command.ts';
 import { npmPublishTag } from './npm-publisher.ts';
 import { tryParseLineVersion } from '../lib/version.ts';
 import process from 'node:process';
@@ -108,7 +108,7 @@ function decode(value: Uint8Array): string {
 }
 
 async function npmViewJson(packageName: string, field: string): Promise<unknown> {
-  const result = await commandOutput('npm', {
+  const result = await spawnCommand('npm', {
     args: ['view', packageName, field, '--json'],
     stdin: 'null',
     stdout: 'piped',
@@ -369,7 +369,7 @@ export async function syncRegistryState(options: {
     const runGenerator =
       options.runGenerator ??
       (async (script: string) => {
-        const result = await commandOutput(process.execPath, {
+        const result = await spawnCommand(process.execPath, {
           args: [script],
           cwd: options.root,
           stdin: 'null',

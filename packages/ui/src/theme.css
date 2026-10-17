@@ -21,7 +21,7 @@
    No carried ramp step other than zinc-50 changed value between the two
    versions. With the alpha9 C5 twin removal this file has no compiled
    shadow form: the installed Tailwind defaults are the only scale
-   evaluation, reached exclusively through the preset's build.
+   evaluation, reached exclusively through the Tailwind entry's build.
 
    Rules the roles obey (umbrella rulings, do not relitigate):
 
@@ -29,7 +29,7 @@
      (var(--color-<ramp>-<step>)); no role carries a color literal.
    - Dark pairs follow the shadcn v4 convention; the '.dark' selector is
      re-pointed at this repo's theme mechanism
-     (:root[data-theme='dark'], :host([data-theme='dark'])) — the preset's
+     (:root[data-theme='dark'], :host([data-theme='dark'])) — the entry's
      Tailwind build compiles no @custom-variant here yet.
    - One deliberate divergence from the shadcn default palette: light
      --color-destructive sits on red-700, not red-600 — red-600 clears 4.5:1
@@ -44,14 +44,32 @@
      destructive — high-contrast palettes own hue, so status is carried by
      the label and the border, not by color.
 
-   Consumption: the @openelement/router tailwind preset compiles this file
-   into the bundle's theme layer (`tailwind: { theme: [...] }`). The ui
-   package emits no values itself (the theme-tokens twin is deleted): a
-   consumer without the preset writes its own table using these role names
-   — the OFF contract in CUSTOMIZATION.md ("Value delivery").
+   Consumption: the @openelement/router Tailwind entry compiles this file —
+   declared in `tailwind: { theme: [...] }` — through the OFFICIAL
+   `@tailwindcss/vite` pipeline into the app's document stylesheet, in dev
+   and in the build alike. The ui package emits no values itself (the
+   theme-tokens twin is deleted): a consumer without the entry writes its own
+   table using these role names — the OFF contract in CUSTOMIZATION.md
+   ("Value delivery").
+
+   `@theme static` — load-bearing, not a preference. A plain `@theme` block is
+   emitted only for the variables some generated UTILITY RULE references, and
+   the rules that consume these roles are the components' own authored sheets
+   (`.control`'s `color-mix(in srgb, var(--color-popover) …)`,
+   `:host(:state(disabled)) .control`'s `var(--color-muted)`), which the engine
+   never sees: they are adopted into the shadow root through the style-asset
+   channel, not compiled into the Tailwind entry. Under a plain `@theme` the
+   roles those rules name (popover, border, muted, background, …) were pruned
+   from BOTH entries, so the declarations computed to nothing and the control
+   fell back to the UA surface — the tree-shaking defect the alpha15 S-lane
+   acceptance missed by measuring padding and width only. `static` is the
+   engine's own documented escape hatch for exactly this case ("always include
+   these theme variables in the output"), so the emitted table matches the
+   inventory this document promises, whatever a given build happens to use.
+   Guarded by `__tests__/theme-delivery.test.ts`.
    ═══════════════════════════════════════════════════════════════════════ */
 
-@theme {
+@theme static {
   /* ── shadcn semantic roles (light), over the TW4 default scale.
      Violet-anchored roles (the brand reads violet); neutral surfaces stay
      zinc so the page base keeps its near-neutral paper feel. ── */

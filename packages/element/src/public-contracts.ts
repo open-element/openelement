@@ -11,7 +11,7 @@ export type {
 } from '@openelement/protocol/data';
 export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/protocol/data';
 export type {
-  AppShellConfig,
+  LayoutConfig,
   CompatibilityClassification,
   CompatibilityTier,
   ComponentLayer,

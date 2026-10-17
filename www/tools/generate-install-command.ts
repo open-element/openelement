@@ -54,7 +54,6 @@ const DISPLAY_FILES: readonly string[] = [
   'www/content/docs/guide/tutorial.md',
   'www/content/docs/guide/tutorial.zh.md',
   'www/app/routes/index/index.tsx',
-  'www/app/components/page-home.tsx',
   'www/e2e/cinematic-home.spec.ts',
 ];
 

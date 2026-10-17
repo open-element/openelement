@@ -1,8 +1,8 @@
 /**
- * @openelement/element — serializable Part Program v1 protocol.
+ * @openelement/element — serializable Part Program v2 protocol.
  *
  * The canonical exchange artifact shared by the compiler semantic core, the
- * server serializer, fresh DOM creation, and existing-DOM claim. Its only
+ * server serializer, fresh DOM creation, and existing-DOM hydration. Its only
  * imports are the import-free, host-free canonical owners — VOID_TAGS,
  * forbidden sinks, and the error contract (#1386 item 3); all three are
  * import-free, so the artifact keeps its freedom from runtime/host edges. The
@@ -18,8 +18,8 @@ import { VOID_TAGS } from './void-tags.ts';
 
 export { VOID_TAGS };
 
-/** The Part Program IR version this package defines (currently v1). */
-export const PART_PROGRAM_VERSION = 1 as const;
+/** The Part Program IR version this package defines (currently v2). */
+export const PART_PROGRAM_VERSION = 2 as const;
 
 /**
  * Version of the compiled-module ABI: the statics a generated module carries
@@ -264,7 +264,7 @@ export interface ProgramCondition {
 }
 
 /**
- * Operator/literal compatibility for when-Region tests (issue #1372). Both
+ * Operator/literal compatibility for when-Block tests (issue #1372). Both
  * wire validators (this module and the server serializer's shared validator)
  * close the space through this one predicate:
  * - ordering operators require a finite numeric literal;
@@ -301,8 +301,8 @@ export interface ProgramWhenPart {
 }
 
 /**
- * An event binding scoped to each item of an `each` region. The runtime
- * attaches this listener to every item root node created by the region,
+ * An event binding scoped to each item of an `each` block. The runtime
+ * attaches this listener to every item root node created by the block,
  * making per-item handlers (onClick={this.select(row.id)}) expressible
  * without fixed-path event parts.
  */
@@ -352,8 +352,8 @@ export type ProgramPart =
   | ProgramWhenPart
   | ProgramEachPart;
 
-/** One region the program tracks: the boundaries of a dynamic subtree. */
-export interface ProgramRegionRecord {
+/** One block the program tracks: the boundaries of a dynamic subtree. */
+export interface ProgramBlockRecord {
   id: string;
   index: number;
   kind: 'when' | 'each';
@@ -420,13 +420,13 @@ export interface CompiledElementMetadata {
 }
 
 /** The one deterministic program consumed by all execution modes. */
-export interface PartProgramV1 {
+export interface PartProgramV2 {
   version: typeof PART_PROGRAM_VERSION;
   tag: string;
   root: ProgramRoot;
   template: ProgramTreeNode[];
   parts: ProgramPart[];
-  regions: ProgramRegionRecord[];
+  blocks: ProgramBlockRecord[];
   dependencies: ProgramDependencyRecord[];
   locations: ProgramLocationRecord[];
   /**
@@ -439,8 +439,8 @@ export interface PartProgramV1 {
   metadata: CompiledElementMetadata;
 }
 
-/** The serializable Part Program v1: one compiled component as data. */
-export type PartProgram = PartProgramV1;
+/** The serializable Part Program v2: one compiled component as data. */
+export type PartProgram = PartProgramV2;
 
 /** Anchor marker payloads shared by seed runtime consumers. */
 export function partAnchorMarker(index: number): string {
@@ -454,7 +454,7 @@ export function partAnchorEndMarker(index: number): string {
 
 /**
  * The one `<style>` element the server serializer emits as the first DSD
- * template child when the class carries static styles (renderDsd
+ * template child when the class carries static styles (renderToString
  * parity — pages never upgrade, so their styles must ship in the payload).
  * The claim path skips exactly this marked node; a marked node on a
  * style-less class is claim drift and fails closed.
@@ -481,7 +481,7 @@ function fail(reason: string): never {
   raiseFrameworkError(
     'validation',
     ProgramErrorCode.INVALID_PROGRAM,
-    `[compiled-program] invalid Part Program v1: ${reason}`,
+    `[compiled-program] invalid Part Program v2: ${reason}`,
   );
 }
 
@@ -496,7 +496,7 @@ function validateKeys(
 ): void {
   const keys = new Set(allowed);
   for (const key of Object.keys(value)) {
-    if (!keys.has(key)) fail(`${where}.${key} is not part of Part Program v1`);
+    if (!keys.has(key)) fail(`${where}.${key} is not part of Part Program v2`);
   }
 }
 
@@ -737,7 +737,7 @@ function validateItemValueFields(
 ): void {
   nodes.forEach((node, position) => {
     if (node.k === 'ival') {
-      // A Region-level `field` restatement (single-field templates) constrains
+      // A Block-level `field` restatement (single-field templates) constrains
       // every slot; multi-field templates omit it and slots own their fields.
       if (field !== undefined && node.field !== field) {
         fail(`${where}[${position}] must use item field ${field}`);
@@ -750,23 +750,72 @@ function validateItemValueFields(
   });
 }
 
-function validatePartPath(
-  template: ProgramTreeNode[],
-  path: unknown,
-  where: string,
-  elementIds: Set<string>,
-): string {
-  if (!isIntegerArray(path) || path.length === 0) fail(`${where}.path must target an element`);
-  let nodes = template;
+/** Non-throwing walk of one node list: the node a fixed-Part path lands on. */
+function probePath(nodes: ProgramTreeNode[], path: number[]): ProgramTreeNode | undefined {
+  let list = nodes;
   let node: ProgramTreeNode | undefined;
   for (const index of path) {
-    node = nodes[index];
-    if (!node) fail(`${where}.path [${path.join(',')}] is unresolved`);
-    nodes = node.k === 'el' ? node.children : [];
+    node = list[index];
+    if (!node) return undefined;
+    list = node.k === 'el' ? node.children : [];
   }
-  if (!node || node.k !== 'el') fail(`${where}.path must target an element`);
-  if (!elementIds.has(node.id)) fail(`${where}.path targets an unknown element`);
-  return node.id;
+  return node;
+}
+
+/**
+ * True when `path` resolves within some when-Block branch tree to the element
+ * `nodeId` names — the branch-sink attribution test. Element ids are globally
+ * unique across the template and every branch tree, so the id match is exact:
+ * the same branch-relative suffix can exist in both branches, but only the
+ * owning branch's element carries the sink's location node id.
+ */
+function branchTreeOwnsPath(
+  parts: ProgramPart[],
+  path: number[],
+  nodeId: string,
+): ProgramElementNode | undefined {
+  for (const part of parts) {
+    if (part.k !== 'when') continue;
+    for (const tree of [part.on, part.off]) {
+      const node = probePath(tree, path);
+      if (node && node.k === 'el' && node.id === nodeId) return node;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Where one fixed Part's path lives: on the main template (anchor-precedence
+ * rules apply) or inside a when-Block branch (branch-relative; the branch
+ * tree holds no anchors by construction, so precedence is structural).
+ * Fail-closed on every shape that resolves to neither. `nodeId` is validated
+ * present for sink locations by {@linkcode validateLocation} before this runs;
+ * the guard keeps the optional wire shape honest.
+ */
+function validateFixedPartTarget(
+  template: ProgramTreeNode[],
+  parts: ProgramPart[],
+  path: number[],
+  where: string,
+  nodeId: string | undefined,
+  allowBranch: boolean,
+): { site: 'template' | 'branch'; node: ProgramElementNode } {
+  if (nodeId === undefined) fail(`${where} location node is invalid`);
+  if (!isIntegerArray(path) || path.length === 0) fail(`${where}.path must target an element`);
+  const templateNode = probePath(template, path);
+  if (templateNode && templateNode.k === 'el' && templateNode.id === nodeId) {
+    validateFixedPartPath(template, path, where);
+    return { site: 'template', node: templateNode };
+  }
+  if (allowBranch) {
+    const branchNode = branchTreeOwnsPath(parts, path, nodeId);
+    if (branchNode) return { site: 'branch', node: branchNode };
+  } else if (branchTreeOwnsPath(parts, path, nodeId)) {
+    fail(`${where} targets a Block-branch element; events and refs stay outside blocks`);
+  }
+  if (!templateNode) fail(`${where}.path [${path.join(',')}] is unresolved`);
+  if (templateNode.k !== 'el') fail(`${where}.path must target an element`);
+  fail(`${where} location node does not match path`);
 }
 
 function validateAnchorPath(
@@ -831,7 +880,7 @@ function hasSignal(
   );
 }
 
-function isRegion(part: ProgramPart): part is ProgramWhenPart | ProgramEachPart {
+function isBlock(part: ProgramPart): part is ProgramWhenPart | ProgramEachPart {
   return part.k === 'when' || part.k === 'each';
 }
 
@@ -869,7 +918,7 @@ function validateEventAction(value: unknown, where: string): void {
 }
 
 /**
- * Validate an unknown value as a Part Program v1. The validator is intentionally
+ * Validate an unknown value as a Part Program v2. The validator is intentionally
  * strict: unknown instruction kinds, missing ownership records and unsafe paths
  * fail before a runtime can guess at their meaning.
  */
@@ -883,7 +932,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
       'root',
       'template',
       'parts',
-      'regions',
+      'blocks',
       'dependencies',
       'locations',
       'sourceMap',
@@ -891,7 +940,11 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     ],
     'program',
   );
-  if (raw.version !== PART_PROGRAM_VERSION) fail('version must be 1');
+  if (raw.version !== PART_PROGRAM_VERSION) {
+    fail(
+      `version must be ${PART_PROGRAM_VERSION} (got ${JSON.stringify(raw.version)}): regenerate the program with the current compiler; v1 artifacts are refused, never coerced`,
+    );
+  }
   if (typeof raw.tag !== 'string' || !/^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(raw.tag)) {
     fail('tag must be a custom-element tag name');
   }
@@ -922,6 +975,10 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
   if (!Array.isArray(raw.parts)) fail('parts must be an array');
   const parts = raw.parts as ProgramPart[];
   const anchorPartCounts = new Map<number, number>();
+  // Fixed Parts whose target lives inside a when-Block branch tree: their
+  // branch-relative paths never walk the main template, so the closing
+  // anchor-precedence pass skips them (it re-derives nothing they own).
+  const branchOwnedParts = new Set<number>();
   parts.forEach((part, position) => {
     if (!isRecord(part)) fail(`parts[${position}] must be an object`);
     if (part.index !== position) fail(`parts[${position}].index must equal its position`);
@@ -942,7 +999,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
         break;
       case 'prop':
       case 'attr':
-      case 'bool':
+      case 'bool': {
         validateKeys(
           part,
           ['k', 'index', 'signal', 'name', 'path', 'location'],
@@ -963,89 +1020,85 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
         }
         if (part.location.kind !== 'sink') fail(`parts[${position}] ${part.k} must own a sink`);
         if (
-          validatePartPath(
+          validateFixedPartTarget(
             raw.template as ProgramTreeNode[],
+            parts,
             part.path,
             `parts[${position}]`,
-            elementIds,
-          ) !== part.location.node
+            part.location.node,
+            true,
+          ).site === 'branch'
         ) {
-          fail(`parts[${position}] location node does not match path`);
+          branchOwnedParts.add(part.index);
         }
         if (!samePath(part.location.path, part.path)) {
           fail(`parts[${position}] location path does not match path`);
         }
         break;
+      }
       case 'class':
-      case 'style':
+      case 'style': {
         validateKeys(part, ['k', 'index', 'signal', 'path', 'location'], `parts[${position}]`);
         if (!isIdentifier(part.signal) || part.location.kind !== 'sink') {
           fail(`parts[${position}] ${part.k} is invalid`);
         }
         if (
-          validatePartPath(
+          validateFixedPartTarget(
             raw.template as ProgramTreeNode[],
+            parts,
             part.path,
             `parts[${position}]`,
-            elementIds,
-          ) !== part.location.node
+            part.location.node,
+            true,
+          ).site === 'branch'
         ) {
-          fail(`parts[${position}] location node does not match path`);
+          branchOwnedParts.add(part.index);
         }
         if (!samePath(part.location.path, part.path)) {
           fail(`parts[${position}] location path does not match path`);
         }
         break;
+      }
       case 'html': {
         validateKeys(part, ['k', 'index', 'signal', 'path', 'location'], `parts[${position}]`);
         if (!isIdentifier(part.signal) || part.location.kind !== 'sink') {
           fail(`parts[${position}] html is invalid`);
         }
-        const htmlTargetId = validatePartPath(
+        const htmlTarget = validateFixedPartTarget(
           raw.template as ProgramTreeNode[],
+          parts,
           part.path,
           `parts[${position}]`,
-          elementIds,
+          part.location.node,
+          true,
         );
-        if (htmlTargetId !== part.location.node) {
-          fail(`parts[${position}] location node does not match path`);
-        }
-        if (!samePath(part.location.path, part.path)) {
-          fail(`parts[${position}] location path does not match path`);
-        }
+        if (htmlTarget.site === 'branch') branchOwnedParts.add(part.index);
         // The HTML sink owns its target's whole content: the target must be a
         // childless element (the serializer would overwrite program children).
-        let htmlTarget: ProgramTreeNode | undefined;
-        let htmlNodes = raw.template as ProgramTreeNode[];
-        for (const pathIndex of part.path) {
-          htmlTarget = htmlNodes[pathIndex];
-          htmlNodes = htmlTarget?.k === 'el' ? htmlTarget.children : [];
-        }
-        if (htmlTarget?.k !== 'el' || htmlTarget.children.length > 0) {
+        if (htmlTarget.node.children.length > 0) {
           fail(`parts[${position}] html sink target must be a childless element`);
         }
         break;
       }
-      case 'ref':
+      case 'ref': {
         validateKeys(part, ['k', 'index', 'ref', 'path', 'location'], `parts[${position}]`);
         if (!isIdentifier(part.ref) || part.location.kind !== 'sink') {
           fail(`parts[${position}] ref is invalid`);
         }
-        if (
-          validatePartPath(
-            raw.template as ProgramTreeNode[],
-            part.path,
-            `parts[${position}]`,
-            elementIds,
-          ) !== part.location.node
-        ) {
-          fail(`parts[${position}] location node does not match path`);
-        }
+        validateFixedPartTarget(
+          raw.template as ProgramTreeNode[],
+          parts,
+          part.path,
+          `parts[${position}]`,
+          part.location.node,
+          false,
+        );
         if (!samePath(part.location.path, part.path)) {
           fail(`parts[${position}] location path does not match path`);
         }
         break;
-      case 'event':
+      }
+      case 'event': {
         validateKeys(
           part,
           ['k', 'index', 'event', 'handler', 'action', 'path', 'location'],
@@ -1063,20 +1116,19 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
         }
         validateEventAction(part.action, `parts[${position}].action`);
         if (part.location.kind !== 'sink') fail(`parts[${position}] event must own a sink`);
-        if (
-          validatePartPath(
-            raw.template as ProgramTreeNode[],
-            part.path,
-            `parts[${position}]`,
-            elementIds,
-          ) !== part.location.node
-        ) {
-          fail(`parts[${position}] event location node does not match path`);
-        }
+        validateFixedPartTarget(
+          raw.template as ProgramTreeNode[],
+          parts,
+          part.path,
+          `parts[${position}]`,
+          part.location.node,
+          false,
+        );
         if (!samePath(part.location.path, part.path)) {
           fail(`parts[${position}] location path does not match path`);
         }
         break;
+      }
       case 'when':
         validateKeys(
           part,
@@ -1096,7 +1148,11 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
           new Map(),
           elementLocations,
           [],
-          [],
+          // Branch element locations record the branch node-list address —
+          // root at [0], the same node-list indexing a fixed branch sink's
+          // path uses (alpha15). (each item templates keep the historical
+          // subtree-root [] form; they carry no fixed sinks.)
+          [0],
         );
         validateTreeNodes(
           part.off,
@@ -1107,7 +1163,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
           new Map(),
           elementLocations,
           [],
-          [],
+          [0],
         );
         validateAnchorPath(
           raw.template as ProgramTreeNode[],
@@ -1185,53 +1241,58 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
 
   for (const part of parts) {
     if (part.k === 'text' || part.k === 'when' || part.k === 'each') continue;
+    // A branch-owned sink's path is branch-relative and never walks the main
+    // template; the branch tree holds no anchors (allowAnchors is false), so
+    // the anchor-precedence rule is structural there and the pass re-derives
+    // nothing it owns.
+    if (branchOwnedParts.has(part.index)) continue;
     validateFixedPartPath(raw.template as ProgramTreeNode[], part.path, `parts[${part.index}]`);
   }
 
   for (const [index, id] of anchorIds) {
     const part = parts[index];
-    if (!part || (!isRegion(part) && part.k !== 'text')) {
-      fail(`anchor ${id} must reference a text or Region part`);
+    if (!part || (!isBlock(part) && part.k !== 'text')) {
+      fail(`anchor ${id} must reference a text or Block part`);
     }
     if ((anchorPartCounts.get(index) ?? 0) !== 1) {
       fail(`part ${index} must have exactly one anchor`);
     }
   }
   for (const part of parts) {
-    if (isRegion(part) || part.k === 'text') {
+    if (isBlock(part) || part.k === 'text') {
       if (!anchorIds.has(part.index)) fail(`part ${part.index} is missing its template anchor`);
     } else if (anchorIds.has(part.index)) {
       fail(`fixed part ${part.index} may not have a template anchor`);
     }
   }
 
-  if (!Array.isArray(raw.regions)) fail('regions must be an array');
-  const regions = raw.regions as ProgramRegionRecord[];
-  const regionParts = parts.filter(isRegion);
-  if (regions.length !== regionParts.length) {
-    fail('regions must describe every Region part exactly once');
+  if (!Array.isArray(raw.blocks)) fail('blocks must be an array');
+  const blocks = raw.blocks as ProgramBlockRecord[];
+  const blockParts = parts.filter(isBlock);
+  if (blocks.length !== blockParts.length) {
+    fail('blocks must describe every Block part exactly once');
   }
-  regions.forEach((region, position) => {
-    if (isRecord(region)) {
+  blocks.forEach((block, position) => {
+    if (isRecord(block)) {
       validateKeys(
-        region,
+        block,
         ['id', 'index', 'kind', 'anchor', 'end', 'source'],
-        `regions[${position}]`,
+        `blocks[${position}]`,
       );
     }
     if (
-      !isRecord(region) ||
-      region.id !== `r${region.index}` ||
-      region.index !== regionParts[position].index ||
-      (region.kind !== 'when' && region.kind !== 'each') ||
-      region.anchor !== `p${region.index}` ||
-      region.end !== `p${region.index}:end` ||
-      region.source !== `p${region.index}`
+      !isRecord(block) ||
+      block.id !== `r${block.index}` ||
+      block.index !== blockParts[position].index ||
+      (block.kind !== 'when' && block.kind !== 'each') ||
+      block.anchor !== `p${block.index}` ||
+      block.end !== `p${block.index}:end` ||
+      block.source !== `p${block.index}`
     ) {
-      fail(`regions[${position}] has an invalid Region record`);
+      fail(`blocks[${position}] has an invalid Block record`);
     }
-    if (region.kind !== regionParts[position].k) {
-      fail(`regions[${position}] kind mismatches its part`);
+    if (block.kind !== blockParts[position].k) {
+      fail(`blocks[${position}] kind mismatches its part`);
     }
   });
 
@@ -1239,7 +1300,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
   const dependencies = raw.dependencies as ProgramDependencyRecord[];
   const dependencyOwners = new Set<string>();
   const expectedDependencyOwners = new Set(
-    parts.filter(hasSignal).map((part) => `${isRegion(part) ? 'region' : 'part'}:${part.index}`),
+    parts.filter(hasSignal).map((part) => `${isBlock(part) ? 'region' : 'part'}:${part.index}`),
   );
   for (const [position, dependency] of dependencies.entries()) {
     if (!isRecord(dependency) || !isIdentifier(dependency.signal) || !isRecord(dependency.owner)) {
@@ -1257,7 +1318,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     if (
       !owner ||
       !hasSignal(owner) ||
-      (isRegion(owner) ? 'region' : 'part') !== dependency.owner.kind
+      (isBlock(owner) ? 'region' : 'part') !== dependency.owner.kind
     ) {
       fail(`dependencies[${position}] points at a non-signal owner`);
     }
@@ -1303,7 +1364,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
       const part = Number.isInteger(location.part) ? parts[location.part] : undefined;
       if (
         !part ||
-        (!isRegion(part) && part.k !== 'text') ||
+        (!isBlock(part) && part.k !== 'text') ||
         location.id !== `p${location.part}` ||
         !samePath(location.path, part.location.path)
       ) {
@@ -1313,7 +1374,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
       const part = Number.isInteger(location.part) ? parts[location.part] : undefined;
       if (
         !part ||
-        isRegion(part) ||
+        isBlock(part) ||
         part.k === 'text' ||
         location.id !== `p${location.part}` ||
         !elementIds.has(location.node) ||
@@ -1560,7 +1621,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
       'root',
       ...metadataProperties.map((property) => `property:${property.name}`),
       ...locations.map((location) => location.id),
-      ...regions.map((region) => region.id),
+      ...blocks.map((block) => block.id),
     ]);
     for (const sourceId of expectedSourceIds) {
       if (!sourceIds.has(sourceId)) fail(`sourceMap is missing record ${sourceId}`);

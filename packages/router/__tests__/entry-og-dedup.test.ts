@@ -69,6 +69,21 @@ function wrapInDocument(content, opts) {
 }
 `;
 
+/**
+ * Faithful miniature of Element's document stylesheet collection (alpha15 S
+ * lane, S-C1.2): one per render, deduplicated in discovery order. Each
+ * generated call site creates one before the page render.
+ */
+const CREATE_DOCUMENT_STYLE_RESOURCES_MINIATURE = `
+function createDocumentStyleResources() {
+  const links = [];
+  return {
+    get links() { return links; },
+    add(urls) { for (const url of urls) if (!links.includes(url)) links.push(url); },
+  };
+}
+`;
+
 // ─── SSG: the generated renderRoute filters the site fallback ───────────────
 
 const ssgRoutes: RouteEntry[] = [
@@ -95,6 +110,7 @@ function __isOpenElementRedirect(e) { return e && e.__openRedirect === true; }
 function __isOpenElementNotFound(e) { return e && e.__openNotFound === true; }
 function __statusHtml(title, message) { return '<main><h1>' + title + '</h1></main>'; }
 ${WRAP_IN_DOCUMENT_MINIATURE}
+${CREATE_DOCUMENT_STYLE_RESOURCES_MINIATURE}
 function __ssr(tag, props) { return '<main>' + tag + '</main>'; }
 function __pageProps(routeModule, context) { return {}; }
 function __pageErrorProps(routeModule, error, context) { return {}; }
@@ -103,7 +119,7 @@ function __resolvePageDocument(head, context, clientScripts) {
   const resolved = typeof head === 'function' ? head(context) : head;
   return Object.assign({ links: [] }, resolved);
 }
-function __renderAppShell(pageHtml, routePath) { return pageHtml; }
+function __renderLayout(pageHtml, routePath) { return pageHtml; }
 ${renderSsgSection(desc)}
 `;
   const mod = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(harness));
@@ -197,10 +213,11 @@ const __locales = [];
 function __getDefaultLocale() { return 'en'; }
 function __localeFromPath(locales, path, fallback) { return fallback; }
 ${WRAP_IN_DOCUMENT_MINIATURE}
+${CREATE_DOCUMENT_STYLE_RESOURCES_MINIATURE}
 function __ssr(tag, props) { return '<main>' + tag + '</main>'; }
 function __pageProps(routeModule, context) { return {}; }
 function __pageErrorProps(routeModule, error, context) { return {}; }
-function __renderAppShell(content) { return content; }
+function __renderLayout(content) { return content; }
 function __clientScriptDescriptors() { return []; }
 function __resolvePageDocument(head, context, clientScripts) {
   const resolved = typeof head === 'function' ? head(context) : head;

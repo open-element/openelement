@@ -72,8 +72,8 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { commandOutput } from '../repo/node-command.ts';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { spawnCommand } from '../repo/node-command.ts';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { formatJson } from '@openelement/element/build-utils';
@@ -169,7 +169,7 @@ export interface ProcessRunOptions {
 /**
  * The one timeout/AbortSignal subprocess runner for the packed-consumer
  * harnesses (app legs, starter, node-serve, router, ui all delegate here).
- * commandOutput resolves — not rejects — when the abort signal kills the
+ * spawnCommand resolves — not rejects — when the abort signal kills the
  * subprocess, so the timeout is tracked explicitly to report it instead of
  * an empty failure.
  */
@@ -190,7 +190,7 @@ export async function runProcess(
           controller.abort();
         }, timeoutMs);
   try {
-    const result = await commandOutput(command, {
+    const result = await spawnCommand(command, {
       args,
       cwd,
       stdout: 'piped',
@@ -1169,10 +1169,104 @@ interface PackedAppTarball {
   path: string;
 }
 
+/** HEAD identity the packed-artifact freshness guard compares against. */
+interface HeadCommit {
+  sha: string;
+  committedAtMs: number;
+}
+
+/**
+ * Read the current HEAD commit id and committer time (epoch ms).
+ *
+ * Fail-closed: a checkout without readable git history cannot prove the
+ * tarballs correspond to it, so the consumer leg refuses to run.
+ */
+async function readHeadCommit(): Promise<HeadCommit> {
+  let result: Awaited<ReturnType<typeof spawnCommand>>;
+  try {
+    result = await spawnCommand('git', {
+      args: ['-C', repoRoot, 'log', '-1', '--format=%H %ct', 'HEAD'],
+      stdout: 'piped',
+      stderr: 'piped',
+    });
+  } catch (cause) {
+    throw new Error(
+      `cannot read HEAD commit time (git is unavailable): ${(cause as Error).message} — ` +
+        'the packed-consumer freshness guard needs a git checkout to compare against',
+    );
+  }
+  const stdout = new TextDecoder().decode(result.stdout).trim();
+  const stderr = new TextDecoder().decode(result.stderr).trim();
+  const [sha, seconds] = stdout.split(' ');
+  const committedAtMs = Number(seconds) * 1000;
+  if (!result.success || !/^[0-9a-f]{40}$/.test(sha ?? '') || !Number.isFinite(committedAtMs)) {
+    throw new Error(
+      `cannot read HEAD commit time from this checkout (git log exited ${result.code}): ` +
+        `${stderr || stdout || '<no output>'}`,
+    );
+  }
+  return { sha: sha!, committedAtMs };
+}
+
+/**
+ * Fail-closed freshness guard for the pack:dry-run tarballs every consumer leg
+ * installs BY PATH.
+ *
+ * The only existing binding between a tarball and the checkout is its write
+ * time: `pack:dry-run` writes the tarballs after checking out HEAD, so a
+ * tarball older than HEAD's committer time cannot have been built from this
+ * checkout. Without this guard a local consumer leg (which, unlike CI, has no
+ * step ordering behind `pack:dry-run`) would happily install pre-freeze
+ * artifacts and go green attesting an older tree. The check is intentionally
+ * derived from the tarball mtime and the already-available git HEAD metadata —
+ * no second manifest/registry and no new config knob.
+ *
+ * Every stale tarball is named with its write time and HEAD's identity; the
+ * remedy is the one pack step that already exists.
+ */
+export async function assertPackedTarballsFresh(tarballs: readonly string[]): Promise<void> {
+  if (tarballs.length === 0) return;
+  const head = await readHeadCommit();
+  const stale: Array<{ path: string; mtimeMs: number }> = [];
+  for (const path of tarballs) {
+    let mtimeMs: number;
+    try {
+      mtimeMs = (await stat(path)).mtimeMs;
+    } catch (cause) {
+      throw new Error(
+        `Missing packed release artifact: ${path} (run \`pnpm --dir tools/release run pack:dry-run\` in this checkout first)` +
+          `\n  ${(cause as Error).message}`,
+      );
+    }
+    if (mtimeMs < head.committedAtMs) stale.push({ path, mtimeMs });
+  }
+  if (stale.length === 0) {
+    console.log(
+      `Packed tarball freshness: ${tarballs.length} artifact(s) written after HEAD ` +
+        `${head.sha.slice(0, 12)}`,
+    );
+    return;
+  }
+  const headAt = new Date(head.committedAtMs).toISOString();
+  const details = stale
+    .map(
+      ({ path, mtimeMs }) =>
+        `  ${path}\n    written ${new Date(mtimeMs).toISOString()}, before HEAD ` +
+        `${head.sha.slice(0, 12)} (${headAt})`,
+    )
+    .join('\n');
+  throw new Error(
+    `Stale packed release artifact${stale.length === 1 ? '' : 's'} — the consumer leg would ` +
+      `qualify a tree older than the current checkout:\n${details}\n` +
+      'Run `pnpm --dir tools/release run pack:dry-run` in this checkout, then re-run the consumer leg.',
+  );
+}
+
 /**
  * Resolve the pack:dry-run tarballs for the canonical retained package line
  * (#828) through the shared tarball naming helper (#793) so a new package
- * cannot escape the proof. Fails fast when pack:dry-run has not run.
+ * cannot escape the proof. Fails fast when pack:dry-run has not run or when
+ * the tarballs predate HEAD.
  */
 async function resolvePackedAppTarballs(): Promise<PackedAppTarball[]> {
   const workspacePackages = await readPackages();
@@ -1188,6 +1282,7 @@ async function resolvePackedAppTarballs(): Promise<PackedAppTarball[]> {
       );
     }
   }
+  await assertPackedTarballsFresh(tarballs.map((tarball) => tarball.path));
   return tarballs;
 }
 

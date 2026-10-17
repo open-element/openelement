@@ -46,14 +46,14 @@ test('readWorkspaces: reads every member with its script graph', async () => {
     {
       'pnpm-workspace.yaml': 'packages:\n  - packages/*\n',
       'packages/alpha/package.json': workspaceManifest({
-        'generate:x': 'deno run --allow-read x.ts',
+        'generate:x': 'node tools/generate-x.ts',
       }),
       'packages/beta/package.json': JSON.stringify({ name: 'beta' }),
     },
     async (root) => {
       const workspaces = await readWorkspaces(root);
       expect(workspaces.map((ws) => ws.workspace)).toEqual(['packages/alpha', 'packages/beta']);
-      expect(workspaces[0].tasks['generate:x']).toEqual('deno run --allow-read x.ts');
+      expect(workspaces[0].tasks['generate:x']).toEqual('node tools/generate-x.ts');
       expect(workspaces[1].tasks).toEqual({});
     },
   );
@@ -110,7 +110,7 @@ test('readWorkspaces: broken workspaces fail closed with their path', async () =
     [
       {
         'pnpm-workspace.yaml': 'packages:\n  - packages/alpha\n',
-        'packages/alpha/package.json': JSON.stringify({ scripts: { '': 'deno run x.ts' } }),
+        'packages/alpha/package.json': JSON.stringify({ scripts: { '': 'node x.ts' } }),
       },
     ],
     [
@@ -168,7 +168,7 @@ test('readWorkspaces: failure never degrades into a partial list', async () => {
   await withFixture(
     {
       'pnpm-workspace.yaml': 'packages:\n  - good\n  - broken\n',
-      'good/package.json': workspaceManifest({ 'generate:x': 'deno run --allow-read x.ts' }),
+      'good/package.json': workspaceManifest({ 'generate:x': 'node tools/generate-x.ts' }),
       'broken/package.json': '{ nope',
     },
     async (root) => {
@@ -187,10 +187,10 @@ test('generator and emitter discovery derive from the script graph', async () =>
     {
       'pnpm-workspace.yaml': 'packages:\n  - pkg\n',
       'pkg/package.json': workspaceManifest({
-        'generate:foo': 'deno run --allow-read --allow-write tools/generate-foo.ts',
-        'check:foo': 'deno run --allow-read tools/generate-foo.ts --check',
-        'emit:bar': 'deno run --allow-read tools/emit-bar.ts',
-        build: 'deno run --allow-read build.ts',
+        'generate:foo': 'node tools/generate-foo.ts',
+        'check:foo': 'node tools/generate-foo.ts --check',
+        'emit:bar': 'node tools/emit-bar.ts',
+        build: 'node build.ts',
       }),
     },
     async (root) => {

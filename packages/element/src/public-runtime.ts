@@ -1,24 +1,33 @@
 /**
  * Deliberate root-facade implementation boundary. Not a package subpath.
  *
- * This facade exposes the server-render entry (`renderDsd`, implemented over
+ * This facade exposes the server-render entry (`renderToString`, implemented over
  * the compiled Part Program serializer) and the pre-upgrade capture bootstrap
  * (implemented over the compiled claim capture/replay seam), alongside the
  * shared core/protocol/signal surface re-exported below.
  */
 import {
-  createDeferredServerExecutor,
-  type DeferredServerOwner,
+  createStreamServerExecutor,
+  type StreamOwner,
   serializeCompiledProgram,
 } from './internal/compiled/server/index.ts';
 import { convertToAttribute } from './internal/compiled/facade-host.ts';
-import { scopeCompiledLightCss } from './internal/compiled/style.ts';
+import { sheetResourceUrls } from './internal/compiled/style-links.ts';
+import { requestTimeStyleLinks } from './internal/compiled/server/style-links.ts';
+import type { DocumentStyleResources } from './internal/core/html-escape.ts';
 import type {
   CompiledElementMetadata,
   CompiledPropertyMetadata,
   PartProgram,
 } from '@openelement/protocol/part-program';
-import { FacadeErrorCode, OpenElementError, raiseFrameworkError } from './internal/core/errors.ts';
+import {
+  FacadeErrorCode,
+  frameworkError,
+  OpenElementError,
+  raiseFrameworkError,
+  reportError,
+  StyleErrorCode,
+} from './internal/core/errors.ts';
 import {
   MAX_COMPOSITION_DEPTH,
   STREAM_MAX_FIELDS,
@@ -26,12 +35,12 @@ import {
   STREAM_MAX_SEED_PROPERTIES,
 } from '@openelement/protocol/policy';
 import { signal } from './internal/signal/index.ts';
+import { serializeStyleLinks } from './internal/compiled/server/index.ts';
 import type { CompiledProgramHost } from './internal/compiled/server/index.ts';
-import type { RenderOutput } from '@openelement/protocol/render';
 import { type TrustedHtml, trustedHtmlValue } from './internal/core/security.ts';
 
 export { collectPublicProps } from './internal/core/props-utils.ts';
-export type { RenderOutput, SsrAdmissionDecision } from '@openelement/protocol/render';
+export type { SsrAdmissionDecision } from '@openelement/protocol/render';
 export { consumeContext, createContext, provideContext } from './internal/core/index.ts';
 export type { Context, RenderError } from './internal/core/index.ts';
 export { assertValidTagName, isValidTagName } from './internal/core/tag-utils.ts';
@@ -55,13 +64,15 @@ export {
 export { injectPropsSafe } from './internal/core/security.ts';
 export type { TrustedHtml } from './internal/core/security.ts';
 export {
+  createDocumentStyleResources,
   documentStreamParts,
   escapeAttr,
   escapeHtml,
   wrapInDocument,
 } from './internal/core/html-escape.ts';
+export type { DocumentStyleResources } from './internal/core/html-escape.ts';
 // Streamed-frame admission policy (#1412 companion): the single source the
-// build manifest scan, the deferred executor admission, and the generated
+// build manifest scan, the stream executor admission, and the generated
 // browser installer all consume.
 export {
   STREAM_FRAME_FORBIDDEN_TAGS,
@@ -111,13 +122,66 @@ interface CompiledComponentConstructor extends CustomElementConstructor {
   delegatesFocus?: boolean;
   /** Marks a compiled ErrorBoundary subclass (the public base sets it). */
   isErrorBoundary?: boolean;
+  /**
+   * True when the compiler admitted static class candidates for this component
+   * (alpha15 S lane, emitted by the compiler on shadow-root components that
+   * carry utility classes). The SSR serializer then declares the server
+   * build's component stylesheet as external `<link>` nodes in the DSD
+   * template; a false/absent flag means the component needs none.
+   */
+  __oeUtilityClasses?: boolean;
 }
 
 /**
- * Collect a compiled class's static styles as CSS text for the DSD template
- * (DSD template contract): the serializer inlines the result as one
- * marked <style> element so never-upgrading hosts (pages) still ship their
- * component styles in the SSR payload.
+ * The declarative external stylesheet links this component's DSD template
+ * declares (alpha15 S lane, S5-C).
+ *
+ * Two sources, in cascade order: the component's OWN sheets that an external
+ * asset delivers (each adapter records its resource URL under
+ * {@linkcode STYLE_SHEET_URL} — authored `.css` files and generated utility
+ * sheets alike), then the framework's shared component stylesheet when the
+ * compiler admitted classes for this component (utilities last — the Tailwind
+ * convention). Light-root components take no links in their subtree: see
+ * {@linkcode documentStyleResourcesOf}.
+ */
+function declaredStyleLinks(
+  ctor: CompiledComponentConstructor,
+  mode: 'light' | 'open' | 'closed',
+): readonly string[] {
+  if (mode === 'light') return [];
+  const links = sheetResourceUrls(ctor.styles);
+  if (ctor.__oeUtilityClasses === true) links.push(...requestTimeStyleLinks());
+  return links;
+}
+
+/**
+ * The external stylesheets a LIGHT-root component delivers (alpha15 S lane,
+ * S-C1.2): its own sheets' resource URLs, reported to the render's document
+ * so the document head declares them.
+ *
+ * A light root's content is the document's content, so the document — not the
+ * component's subtree — is the only owner that can deliver its CSS: the head
+ * link reaches the styled content without client JavaScript, and the client
+ * adopts the same resource only when the document did not already link it.
+ * The shared component (utility) sheet is deliberately absent: the compiler
+ * excludes a light root's class candidates from it (its utility classes are
+ * the document entry's job), so there is no per-component utility resource to
+ * declare.
+ */
+function documentStyleResourcesOf(
+  ctor: CompiledComponentConstructor,
+  mode: 'light' | 'open' | 'closed',
+): readonly string[] {
+  return mode === 'light' ? sheetResourceUrls(ctor.styles) : [];
+}
+
+/**
+ * A compiled class's static styles for the DSD template: the CSS TEXT a sheet
+ * carries WITHOUT an external identity — an app-provided in-memory sheet,
+ * never a framework-generated resource (those always ship as linked assets).
+ * The links ride the serializer's `styleLinks` option; this text node is the
+ * one remaining legitimate inline path, and it is author-owned data, not
+ * framework stylesheet delivery.
  */
 function collectStaticStyleCss(ctor: CompiledComponentConstructor): string | undefined {
   const styles = ctor.styles;
@@ -125,24 +189,54 @@ function collectStaticStyleCss(ctor: CompiledComponentConstructor): string | und
   const sheets = Array.isArray(styles) ? styles : [styles];
   let css = '';
   for (const sheet of sheets) {
-    const rules = (sheet as { cssRules?: ArrayLike<{ cssText: string }> } | undefined)?.cssRules;
-    if (!rules) continue;
+    if (sheetResourceUrls(sheet).length > 0) continue; // delivered by a link
+    // The property ACCESS is part of the read, not setup: a cross-origin sheet
+    // object throws from `cssRules` itself, and that must not take the whole
+    // render down (alpha15 S lane, S-C2/S-10).
     try {
+      const rules = (sheet as { cssRules?: ArrayLike<{ cssText: string }> } | undefined)?.cssRules;
+      if (!rules) continue;
       for (const rule of Array.from(rules)) css += rule.cssText + '\n';
-    } catch {
-      // Cross-origin or otherwise unreadable sheets are skipped.
+    } catch (cause) {
+      // Reported, never silent (S-C2/S-10): author-owned URL-less data whose
+      // bytes this renderer cannot read is SKIPPED with a diagnostic — the
+      // renderer must not invent an external URL for it, and a page must not
+      // fail because one component's sheet object is unreadable.
+      reportError(
+        frameworkError(
+          StyleErrorCode.SHEET_RULES_UNREADABLE,
+          `[compiled-styles] the URL-less style sheet of ${tagNameOf(ctor)} could not be read ` +
+            `for server rendering and is skipped: ${
+              cause instanceof Error ? cause.message : String(cause)
+            }`,
+          { phase: 'ssr', cause: cause instanceof Error ? cause : undefined },
+        ),
+      );
     }
   }
   return css === '' ? undefined : css;
 }
 
+/** The compiled tag a diagnostic names, or `<unknown>` for a foreign class. */
+function tagNameOf(ctor: CompiledComponentConstructor): string {
+  const tag = (ctor as { __partProgram?: { tag?: unknown } }).__partProgram?.tag;
+  return typeof tag === 'string' && tag !== '' ? `<${tag}>` : '<unknown>';
+}
+
 /**
- * Options for one `renderDsd()` call: the compiled component class to
+ * The half of {@linkcode DocumentStyleResources} a render needs: it only ever
+ * reports the sheets it discovered, so the seam is typed by that one method
+ * and stays assignable from any structurally identical collector.
+ */
+export type DocumentStyleSink = Pick<DocumentStyleResources, 'add'>;
+
+/**
+ * Options for one `renderToString()` call: the compiled component class to
  * serialize, the values projected onto its compiled properties, optional
  * route/source diagnostics metadata, the nested compiled tags the build
  * admitted, and trusted parent-owned light children keyed by slot name.
  */
-export interface RenderDsdOptions {
+export interface RenderToStringOptions {
   componentClass?: CustomElementConstructor;
   props?: Record<string, unknown>;
   sourceInfo?: { route?: string; source?: string };
@@ -150,12 +244,43 @@ export interface RenderDsdOptions {
   ssrRenderableTags?: readonly string[];
   /** Trusted parent-owned light children keyed by slot name. */
   projectedChildren?: ReadonlyMap<string, TrustedHtml>;
+  /**
+   * Trusted parent-owned light children emitted AFTER the host's DSD template
+   * (a shadow-root host's slotted content). This is the shadow-side sibling of
+   * `projectedChildren`: a light root substitutes projections into its own
+   * `<slot>` elements, a shadow root distributes appended light DOM natively.
+   * Both are the compiled children channel — compiler-produced final HTML
+   * carrying the trustedHtml brand, never loader data — and a value on a LIGHT
+   * root fails closed (its children are projections, not appendages).
+   */
+  hostChildren?: TrustedHtml;
+  /**
+   * The render's document stylesheet collection (alpha15 S lane, S-C1.2).
+   * Every light-root component serialized in this render reports its external
+   * sheet URLs here, and the document wrapper declares them in the head. The
+   * caller owns the collection's lifetime — one per document render — so
+   * styles discovered for one page can never reach another page's head.
+   */
+  documentStyles?: DocumentStyleSink;
 }
 
 /** Element-private normalized options used while recursively composing components. */
-interface InternalRenderDsdOptions extends Omit<RenderDsdOptions, 'projectedChildren'> {
+interface InternalRenderToStringOptions extends Omit<
+  RenderToStringOptions,
+  'projectedChildren' | 'hostChildren'
+> {
   hostAttrs?: readonly (readonly [string, unknown])[];
   projectedChildren?: ReadonlyMap<string, string>;
+  /** The brand-checked, reserved form of {@linkcode RenderToStringOptions.hostChildren}. */
+  hostChildren?: string;
+  /**
+   * Whether the markup being rendered lands inside a SHADOW TREE — the DSD
+   * template of an ancestor component. A light-root component's sheets are
+   * delivered by the tree its content lands in, and a document-head link
+   * cannot reach a shadow tree, so the nested call carries the fact instead of
+   * assuming `ownerDocument`.
+   */
+  enclosingShadowRoot?: boolean;
 }
 
 function classNameOf(ctor: object): string {
@@ -167,7 +292,7 @@ function failUncompiled(ctor: object, tag: string): never {
     'ssr',
     FacadeErrorCode.PROGRAM_MISSING,
     `[openElement] <${tag}> (${classNameOf(ctor)}) has no compiled Part Program. ` +
-      'renderDsd only serializes classes produced by the OpenElement compiler ' +
+      'renderToString only serializes classes produced by the OpenElement compiler ' +
       '(@openelement/compiler open:compiled-element transform).',
   );
 }
@@ -182,7 +307,13 @@ function coerceServerProp(
   if (value === null || value === undefined) return record.default;
   switch (record.converter) {
     case 'boolean':
-      return Boolean(value);
+      // The empty string is the canonical bare-attribute encoding a `__ssr`
+      // call carries (`<open-reading-shell rail>` lowers to `"rail": ""`):
+      // attribute presence means TRUE, exactly as `convertFromAttribute`
+      // reads it on the client and as the nested-class expansion at
+      // `renderToStringAtDepth` guards it. `Boolean('')` would read false and
+      // silently drop the flag on a nested host.
+      return value === '' ? true : Boolean(value);
     case 'number': {
       if (typeof value === 'number') return value;
       const parsed = Number(value);
@@ -253,8 +384,8 @@ function seedCompiledProperties(
       signals[record.name] = {
         get value(): never {
           throw new OpenElementError(
-            `[openElement] pending property "${record.name}" was read while creating a deferred shell.`,
-            { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+            `[openElement] pending property "${record.name}" was read while creating a stream shell.`,
+            { code: FacadeErrorCode.STREAM_PENDING_READ, phase: 'ssr' },
           );
         },
         subscribe: () => () => {},
@@ -292,8 +423,8 @@ function seedCompiledProperties(
   return { signals, hostAttrs };
 }
 
-/** Maps route-local deferred fields to the compiled Part or Region owners they update. */
-export interface DeferredDsdManifest {
+/** Maps route-local deferred fields to the compiled Part or Block owners they update. */
+export interface StreamShellManifest {
   program: { version: number; tag: string; sha256: string };
   fields: readonly {
     field: string;
@@ -302,19 +433,21 @@ export interface DeferredDsdManifest {
   }[];
 }
 
-/** Inputs for a request-scoped deferred DSD server executor. */
-export interface CreateDeferredDsdOptions {
+/** Inputs for a request-scoped stream shell executor. */
+export interface CreateStreamShellOptions {
   componentClass: CustomElementConstructor;
   props?: Record<string, unknown>;
-  manifest: DeferredDsdManifest;
+  manifest: StreamShellManifest;
   instanceId: string;
   documentToken?: string;
+  /** The streamed document's stylesheet collection (see RenderToStringOptions). */
+  documentStyles?: DocumentStyleSink;
 }
 
-/** Initial shell, typed seed, and bounded updates for a deferred DSD request. */
-export interface DeferredDsdExecutor {
+/** Initial shell, typed seed, and bounded updates for a stream shell request. */
+export interface StreamShellExecutor {
   readonly shell: string;
-  readonly owner: DeferredServerOwner;
+  readonly owner: StreamOwner;
   readonly seed: Record<
     string,
     | { state: 'resolved'; type: string; value: unknown }
@@ -335,7 +468,7 @@ function jsonSeed(value: unknown, field: string): unknown {
   const reject = (): never => {
     throw new OpenElementError(
       `[openElement] deferred property "${field}" is not a JSON-safe typed value.`,
-      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+      { code: FacadeErrorCode.STREAM_VALUE_NOT_SERIALIZABLE, phase: 'ssr' },
     );
   };
   const seen = new Set<object>();
@@ -372,13 +505,13 @@ function jsonSeed(value: unknown, field: string): unknown {
 }
 
 /**
- * Create one request-local deferred shell from a generated route manifest.
+ * Create one request-local stream shell from a generated route manifest.
  * The manifest hash is checked against the exact runtime wire program before
  * any shell can be produced.
  */
-export async function createDeferredDsdExecutor(
-  options: CreateDeferredDsdOptions,
-): Promise<DeferredDsdExecutor> {
+export async function createStreamShellExecutor(
+  options: CreateStreamShellOptions,
+): Promise<StreamShellExecutor> {
   const ctor = options.componentClass as CompiledComponentConstructor;
   const program = ctor.__partProgram;
   if (!program) failUncompiled(ctor, '<unknown>');
@@ -389,7 +522,7 @@ export async function createDeferredDsdExecutor(
     typeof options.manifest.program.sha256 !== 'string'
   ) {
     throw new OpenElementError('[openElement] deferred route manifest is malformed.', {
-      code: FacadeErrorCode.PROGRAM_MISSING,
+      code: FacadeErrorCode.STREAM_MANIFEST_MALFORMED,
       phase: 'ssr',
     });
   }
@@ -406,8 +539,8 @@ export async function createDeferredDsdExecutor(
     manifest.program.sha256 !== sha256
   ) {
     throw new OpenElementError(
-      `[openElement] deferred route manifest does not match compiled program <${program.tag}>.`,
-      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+      `[openElement] deferred route manifest does not match compiled program <${program.tag}> (manifest ${manifest.program.tag}@v${manifest.program.version} vs compiled ${program.tag}@v${program.version}).`,
+      { code: FacadeErrorCode.STREAM_MANIFEST_MISMATCH, phase: 'ssr' },
     );
   }
   const properties = Array.isArray(ctor.__compiledProperties)
@@ -421,7 +554,7 @@ export async function createDeferredDsdExecutor(
   ) {
     throw new OpenElementError(
       '[openElement] reserved compiled property name cannot enter a deferred seed.',
-      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+      { code: FacadeErrorCode.STREAM_RESERVED_PROPERTY, phase: 'ssr' },
     );
   }
   // Same bounded budget the build manifest scan and the runtime/browser
@@ -438,7 +571,7 @@ export async function createDeferredDsdExecutor(
         `deferred budget: ${manifest.fields.length} fields (max ${STREAM_MAX_FIELDS}), ` +
         `${manifestOwnerTotal} Part owners (max ${STREAM_MAX_OWNERS}). Defer fewer fields, reduce ` +
         'the deferred sinks per field, or split the page.',
-      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+      { code: FacadeErrorCode.STREAM_BUDGET_EXCEEDED, phase: 'ssr' },
     );
   }
   const propertyNames = new Set(properties.map((record) => record.name));
@@ -454,14 +587,14 @@ export async function createDeferredDsdExecutor(
     ) {
       throw new OpenElementError(
         `[openElement] invalid deferred field "${field.field}" in route manifest.`,
-        { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+        { code: FacadeErrorCode.STREAM_FIELD_INVALID, phase: 'ssr' },
       );
     }
     const record = properties.find((property) => property.name === field.field)!;
     if (record.computed || record.attribute !== null || record.reflect) {
       throw new OpenElementError(
         `[openElement] deferred property "${field.field}" must be writable and nonreflecting.`,
-        { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+        { code: FacadeErrorCode.STREAM_FIELD_INVALID, phase: 'ssr' },
       );
     }
     pending.add(field.field);
@@ -477,7 +610,7 @@ export async function createDeferredDsdExecutor(
       ) {
         throw new OpenElementError(
           `[openElement] deferred field "${field.field}" has an invalid Part owner ${owner.index}.`,
-          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+          { code: FacadeErrorCode.STREAM_FIELD_INVALID, phase: 'ssr' },
         );
       }
       selectedParts.push(owner.index);
@@ -485,13 +618,13 @@ export async function createDeferredDsdExecutor(
     if (field.owners.length === 0) {
       throw new OpenElementError(
         `[openElement] deferred field "${field.field}" has no Part owners.`,
-        { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+        { code: FacadeErrorCode.STREAM_FIELD_INVALID, phase: 'ssr' },
       );
     }
   }
   const props = options.props ?? {};
   const { signals, hostAttrs } = seedCompiledProperties(ctor, props, pending, true);
-  const seed: DeferredDsdExecutor['seed'] = {};
+  const seed: StreamShellExecutor['seed'] = {};
   for (const record of properties) {
     if (record.computed) continue;
     if (pending.has(record.name)) {
@@ -519,7 +652,7 @@ export async function createDeferredDsdExecutor(
         Object.keys(seed).length
       } properties; the browser seed contract accepts at most ${STREAM_MAX_SEED_PROPERTIES}. ` +
         'Trim the component property surface or the seed is silently rejected at hydration.',
-      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+      { code: FacadeErrorCode.STREAM_BUDGET_EXCEEDED, phase: 'ssr' },
     );
   }
   if (options.documentToken) {
@@ -536,13 +669,17 @@ export async function createDeferredDsdExecutor(
       : program.root.kind === 'shadow-open'
         ? 'open'
         : 'closed';
-  const owner: DeferredServerOwner = {
+  const owner: StreamOwner = {
     program,
     version: program.version,
     instanceId: options.instanceId,
   };
   const styleCss = collectStaticStyleCss(ctor);
-  const executor = createDeferredServerExecutor(
+  // The shell's light-root stylesheets belong to the streamed document, not to
+  // the shell (S-C1.2): they are reported before the document halves are
+  // serialized, exactly as a synchronous render reports them.
+  options.documentStyles?.add(documentStyleResourcesOf(ctor, mode));
+  const executor = createStreamServerExecutor(
     program,
     { signals, handlers: {} },
     { owner, pendingParts: selectedParts },
@@ -550,8 +687,8 @@ export async function createDeferredDsdExecutor(
       mode,
       hostAttrs,
       dsd: ctor.delegatesFocus === true ? { delegatesFocus: true } : undefined,
-      styleCss:
-        mode === 'light' && styleCss ? scopeCompiledLightCss(program.tag, styleCss) : styleCss,
+      styleCss,
+      styleLinks: declaredStyleLinks(ctor, mode),
     },
   );
   return {
@@ -562,7 +699,7 @@ export async function createDeferredDsdExecutor(
       const record = deferredProperties.get(field);
       if (!record) {
         throw new OpenElementError(`[openElement] unknown deferred field "${field}".`, {
-          code: FacadeErrorCode.PROGRAM_MISSING,
+          code: FacadeErrorCode.STREAM_UNKNOWN_FIELD,
           phase: 'ssr',
         });
       }
@@ -572,7 +709,7 @@ export async function createDeferredDsdExecutor(
       const entry = manifest.fields.find((candidate) => candidate.field === field);
       if (!entry) {
         throw new OpenElementError(`[openElement] unknown deferred field "${field}".`, {
-          code: FacadeErrorCode.PROGRAM_MISSING,
+          code: FacadeErrorCode.STREAM_UNKNOWN_FIELD,
           phase: 'ssr',
         });
       }
@@ -597,11 +734,11 @@ export async function createDeferredDsdExecutor(
  * Fails closed with `OE_PROGRAM_MISSING` for unregistered or uncompiled
  * classes — there is no runtime JSX fallback renderer.
  */
-function renderDsdAtDepth(
+function renderToStringAtDepth(
   input: string | CustomElementConstructor,
-  options: InternalRenderDsdOptions = {},
+  options: InternalRenderToStringOptions = {},
   depth = 0,
-): RenderOutput {
+): string {
   if (depth > MAX_COMPOSITION_DEPTH) {
     throw new OpenElementError(
       '[openElement] nested element expansion exceeded the depth bound; cyclic component composition is not renderable.',
@@ -616,7 +753,7 @@ function renderDsdAtDepth(
       : input)) as CompiledComponentConstructor | undefined;
   if (!resolvedClass) {
     throw new OpenElementError(
-      `[openElement] renderDsd(${
+      `[openElement] renderToString(${
         typeof input === 'string' ? JSON.stringify(input) : 'class'
       }) found no compiled class: pass options.componentClass or register the tag. ` +
         'The serializer reads the compiled statics from the class and fails ' +
@@ -629,7 +766,7 @@ function renderDsdAtDepth(
   const tag = program.tag;
   if (typeof input === 'string' && input !== tag) {
     throw new OpenElementError(
-      `[openElement] renderDsd tag "${input}" does not match the compiled program tag "${tag}".`,
+      `[openElement] renderToString tag "${input}" does not match the compiled program tag "${tag}".`,
       { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
     );
   }
@@ -651,6 +788,18 @@ function renderDsdAtDepth(
         : 'closed';
   const host: CompiledProgramHost = { signals, handlers: {} };
   const staticStyleCss = collectStaticStyleCss(resolvedClass);
+  // A light root's external sheets are the resources of the TREE its content
+  // lands in (S-C1.2): the document for a document-level component, whose owner
+  // writes them into the head — or the ENCLOSING SHADOW ROOT when an ancestor's
+  // DSD template owns the subtree, where the head link cannot reach them and the
+  // nested render declares them inside that template instead (see
+  // `renderNestedElement`). Either way the component's own subtree carries no
+  // scoped text: `collectStaticStyleCss` already skips every sheet that has a
+  // URL, and the URL-less sheets that remain are the in-memory/dev shims, whose
+  // bytes the build (or the author) already scoped.
+  if (!(mode === 'light' && options.enclosingShadowRoot === true)) {
+    options.documentStyles?.add(documentStyleResourcesOf(resolvedClass, mode));
+  }
   const admitted = new Set(options.ssrRenderableTags ?? []);
   /** Serialize this element's program once (re-run by the boundary capture below). */
   const serializeOnce = (): string =>
@@ -662,11 +811,19 @@ function renderDsdAtDepth(
       // matching shadowrootdelegatesfocus marker or the claimed shadow root
       // silently loses focus delegation.
       dsd: resolvedClass.delegatesFocus === true ? { delegatesFocus: true } : undefined,
-      styleCss:
-        mode === 'light' && staticStyleCss
-          ? scopeCompiledLightCss(tag, staticStyleCss)
-          : staticStyleCss,
+      // The static style TEXT an in-memory (URL-less) sheet carries, verbatim.
+      // Scoping is not applied here: a light root's boundary is written into
+      // its emitted asset at build time, and a sheet without an external
+      // identity is author-provided data this renderer has no mandate to
+      // rewrite (S-C1.2).
+      styleCss: staticStyleCss,
+      styleLinks: declaredStyleLinks(resolvedClass, mode),
       projectedChildren: options.projectedChildren,
+      // The compiled children channel's shadow-side half: light children a
+      // compiled parent (or a server function page's __ssr call) hands a
+      // shadow-root host ride after the DSD template. The serializer fails
+      // closed if the root is light — projections, not appendages.
+      ...(options.hostChildren === undefined ? {} : { hostChildren: options.hostChildren }),
       renderNestedElement:
         admitted.size === 0
           ? undefined
@@ -706,7 +863,7 @@ function renderDsdAtDepth(
                 ([name]) => !propertyAttributes.has(name),
               );
               const nestedMode = nestedClass.__partProgram.root.kind;
-              const rendered = renderDsdAtDepth(
+              const rendered = renderToStringAtDepth(
                 nested.tag,
                 {
                   componentClass: nestedClass,
@@ -715,10 +872,38 @@ function renderDsdAtDepth(
                   ssrRenderableTags: options.ssrRenderableTags,
                   hostAttrs: passthrough,
                   projectedChildren: nestedMode === 'light' ? nested.projectedChildren : undefined,
+                  // A nested light-root component's sheets belong to the same
+                  // render's sink as its parent's (S-C1.2) — unless this parent
+                  // is itself a shadow template, in which case the child's
+                  // content lands in a tree the document head cannot reach and
+                  // its links are emitted below.
+                  documentStyles: options.documentStyles,
+                  enclosingShadowRoot: mode !== 'light',
                 },
                 depth + 1,
-              ).html;
-              if (nestedMode === 'light') return rendered;
+              );
+              if (nestedMode === 'light') {
+                // This parent renders into a DSD template, so the child's
+                // content is shadow-tree content: declare its sheets as marked
+                // links INSIDE that template, the one place a stylesheet can
+                // reach it. Same link shape as every other component sheet, so
+                // the client's delivery check recognizes the resource and does
+                // not adopt a second copy.
+                if (mode === 'light') return rendered;
+                const nestedLinks = serializeStyleLinks(sheetResourceUrls(nestedClass.styles));
+                if (nestedLinks === '') return rendered;
+                // LEADING style nodes, not trailing ones: the light root's own
+                // claim tolerates only leading marked style nodes
+                // (`leadingStaticStyleNodeCount`) and fails closed on a trailing
+                // one — the island's activation would die behind its own
+                // delivery node. The serializer's light-root shape already
+                // emits its style nodes before the content, so match it. The
+                // `>` searched for here is the opening tag's terminator: host
+                // attribute values are escaped at emission
+                // (`serializeAttribute`), so no raw `>` can occur before it.
+                const openEnd = rendered.indexOf('>') + 1;
+                return rendered.slice(0, openEnd) + nestedLinks + rendered.slice(openEnd);
+              }
               const closing = `</${nested.tag}>`;
               return nested.children === ''
                 ? rendered
@@ -733,53 +918,46 @@ function renderDsdAtDepth(
   // recursion inside renderNestedElement surfaces here at the nearest
   // boundary because non-boundary elements rethrow. The repair re-serializes
   // the same program with the `hasError` signal forced true: a compiled
-  // boundary's fallback is a `when` Region over that signal (the same
+  // boundary's fallback is a `when` Block over that signal (the same
   // dependency the client's publication flips), so the re-run takes the
   // fallback branch and never re-enters the failed subtree. The signals
   // record is per-call, so the override cannot leak into sibling renders;
   // an element without the declared property simply carries an unread
   // signal. P7 prior art: React SSR error boundaries substitute fallback
   // UI for a failed subtree; the compiled difference is that the branch is
-  // the program's own Region, not a second renderer.
+  // the program's own Block, not a second renderer.
   let html: string;
-  let captured = false;
   try {
     html = serializeOnce();
   } catch (error) {
     if (resolvedClass.isErrorBoundary !== true) throw error;
     signals.hasError = signal(true);
     html = serializeOnce();
-    captured = true;
   }
-
-  return {
-    html,
-    errors: [],
-    metrics: {
-      tagName: tag,
-      renderTimeMs: 0,
-      templateSize: html.length,
-      layer: mode === 'light' ? 'light-dom' : 'dsd-interactive',
-      hasError: captured,
-      nestingDepth: 0,
-    },
-    hydrationHints: [],
-  };
+  // Fail-closed boundary capture is observable through the branch taken, not
+  // through a metrics field (alpha15 R.0-3 deleted the RenderOutput shell and
+  // its hardcoded-zero metrics with it): a captured render carries the
+  // fallback branch bytes, an uncaught throw still propagates.
+  return html;
 }
 
-/** Server-render one compiled element through canonical Element composition. */
-export function renderDsd(
+/** Server-render one compiled element through canonical Element composition:
+ * returns the serialized DSD `html` string directly. */
+export function renderToString(
   input: string | CustomElementConstructor,
-  options: RenderDsdOptions = {},
-): RenderOutput {
-  const { projectedChildren, ...publicOptions } = options;
+  options: RenderToStringOptions = {},
+): string {
+  const { projectedChildren, hostChildren, ...publicOptions } = options;
   const normalizedProjectedChildren = projectedChildren
     ? new Map(
         [...projectedChildren].map(([slot, value]) => [slot, trustedHtmlValue(value)] as const),
       )
     : undefined;
-  return renderDsdAtDepth(input, {
+  return renderToStringAtDepth(input, {
     ...publicOptions,
     projectedChildren: normalizedProjectedChildren,
+    // The shadow-side sibling goes through the same ONE brand check: only
+    // compiler-produced trusted HTML may append light children to a host.
+    ...(hostChildren === undefined ? {} : { hostChildren: trustedHtmlValue(hostChildren) }),
   });
 }

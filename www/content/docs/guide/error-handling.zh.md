@@ -102,7 +102,47 @@ export default definePage(PostPage, {
 
 ## 构建期诊断
 
-以上都是运行时通道。编译器另有回答：超出创作语法的模块在构建期失败，并给出带源码位置、携带稳定 `OEC####` 码的诊断——即编译元素边界强制执行的 attribute、Region、装饰器与 provenance 规则。[错误码](/zh/errors) 逐条列出每个码触发的消息与确切的源码调用点，且由诊断本身生成，因此这张表既不会描述构建已经不再产生的码，也不会漏掉仍在产生的码。
+以上都是运行时通道。编译器另有回答：超出创作语法的模块在构建期失败，并给出带源码位置、携带稳定 `OEC####` 码的诊断——即编译元素边界强制执行的 attribute、Block、装饰器与 provenance 规则。[错误码](/zh/errors) 逐条列出每个码触发的消息与确切的源码调用点，且由诊断本身生成，因此这张表既不会描述构建已经不再产生的码，也不会漏掉仍在产生的码。
+
+### 机器可读的诊断信封
+
+每一类构建失败——编译器诊断、样式方案拒绝、admission 警告、SSG 失败——都可以在同一个机器可读通道上作答：一个 JSON 信封，携带 `code`、`severity`、`phase`、`message`，在生产者有源码位置时再携带 `file`、`line`（1 起）、`column`；在生产者能给出修复办法时携带 `hint`。信封类型由 `@openelement/protocol` 拥有；各生产者保留自己的码表（`OEC####`、`OE_PRESET_*`、`OE_SSG_*`），因此码永远是生产者自己的，未知的码也能原样往返。
+
+`openelement build` 按需输出聚合结果，人读输出与退出码不变：
+
+```sh
+openelement build --diagnostics=json          # stderr 上一行 JSON 报告
+openelement build --diagnostics-file=diagnostics.json   # 同一文档写入文件
+```
+
+构建未产生任何诊断时什么都不写。报告是一个文档：
+
+```json
+{
+  "format": "openelement.diagnostics/1",
+  "ok": false,
+  "diagnostics": [
+    {
+      "code": "OE_COMPILER_DIAGNOSTICS",
+      "severity": "error",
+      "phase": "build",
+      "message": "Build failed with 1 error",
+      "file": "app/components/broken-page.tsx"
+    },
+    {
+      "code": "OEC9020",
+      "severity": "error",
+      "phase": "build",
+      "message": "property defaults must be serializable literals",
+      "file": "app/components/broken-page.tsx",
+      "line": 8,
+      "column": 11
+    }
+  ]
+}
+```
+
+`format` 是契约标签：消费方依据它分支，而不是靠猜；未来的形状变更会铸新标签，而不是重新解释旧字节。任何一个诊断携带 `error` 级别，`ok` 即为 false。一次失败的构建输出且仅输出一份聚合，包含该失败产生的每一个码——编译器的家族分类与每条带作者位置的 `OEC####` 记录——由消费方 harness 以 JSON 读取，而不是从日志里 grep。构建过程中记录的警告（admission 扫描的报告类）进入同一份聚合；只有警告的构建回答 `ok: true`。
 
 ## 另见
 

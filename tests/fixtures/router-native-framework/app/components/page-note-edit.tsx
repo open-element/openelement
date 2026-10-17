@@ -1,7 +1,7 @@
 /**
  * /notes/:id/edit page element — edit form (compiled), pre-filled from the
  * store via the loader (`title` value Part, `body` textarea text Part).
- * `hasError` drives the static-text error Region like on /notes/new.
+ * `hasError` drives the static-text error Block like on /notes/new.
  */
 import { element, OpenElement, property } from '@openelement/element';
 

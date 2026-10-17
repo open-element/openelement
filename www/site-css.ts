@@ -28,15 +28,13 @@
  * ('Inter Variable', 'JetBrains Mono Variable', 'Instrument Serif').
  *
  * Token delivery (alpha9 C4, #1507; twin retired alpha9 C5): the site build
- * enables the router's Tailwind preset (see vite.config.ts), so the @theme
- * role table (packages/ui/src/theme.css) ships through the preset's linked,
- * layer-ordered bundle — NOT as an inline copy here. The ui package carries
- * no scale values of its own (the compiled theme-tokens twin is deleted), so
- * there is no fallback sheet to inline: if the preset ever turns off, the
- * site must supply its own role table first (the OFF contract,
- * packages/ui/CUSTOMIZATION.md "Value delivery") — carrying a duplicated
- * table inline would also trip the preset's full-inline prohibition
- * (assertNoGlobalSheetInline).
+ * enables the router's Tailwind entry (see openelement.config.ts), so the
+ * @theme role table (packages/ui/src/theme.css) ships through the entry's
+ * compiled, head-linked stylesheet — NOT as an inline copy here. The ui
+ * package carries no scale values of its own (the compiled theme-tokens twin
+ * is deleted), so there is no fallback sheet to inline: if the entry ever
+ * turns off, the site must supply its own role table first (the OFF contract,
+ * packages/ui/CUSTOMIZATION.md "Value delivery").
  */
 
 /**
@@ -103,6 +101,17 @@ html[data-theme="light"],
   --hero-gold: #e3cf9f;
   --hero-gold-muted: #b9ad93;
   --hero-gold-line: #d8c49a;
+  /* Theme-invariant inks the linked authored layer (www/site-chrome.css)
+     consumes by name. That sheet is scanned by the site theme-token gate, so
+     its bare palette citations live HERE, in the site alias layer, never at
+     the call site: --scrim-ink is the open-search dialog scrim's ink (no role
+     is theme-invariant dark — --color-foreground flips to zinc-50 in dark),
+     and --grid-ink is the fixed violet of the page-hook grid hairline (the
+     violet roles --color-ring/--color-primary flip shade per theme, which
+     would change the drawn line). Both are defined once, in this block, so
+     neither flips with the theme. */
+  --scrim-ink: var(--color-zinc-950);
+  --grid-ink: var(--color-violet-600);
   /* Site override: real sans for prose. The shared token sheet maps
      --font-sans to JetBrains Mono (brand choice for the component layer);
      long-form reading on this site needs a true sans. Mono stays on
@@ -225,23 +234,15 @@ open-code-block pre {
    links carry their target so the paper copy stays navigable. Token
    remapping (not selector enumeration) carries the whole prose surface —
    h2/h3, code, strong, tables — including dark mode, where near-white ink
-   would otherwise vanish on paper. */
+   would otherwise vanish on paper. The layout's own chrome (header, sidebar,
+   mobile menu, footer, the search island) is not enumerated here: each of
+   those elements carries the print:hidden! utility in its own markup — the
+   layout chrome and the reading shell's breadcrumb/pager/rail alike. */
 @media print {
   :root, :root[data-theme='dark'] {
     --color-foreground: #000; --color-muted-foreground: #000;
     --color-background: #fff; --color-muted: #fff; --color-card: #fff;
     --color-popover: #fff;
-  }
-  .app-header,
-  .docs-sidebar,
-  .sidebar-mobile-panel,
-  .mobile-menu-panel,
-  aside.rail,
-  nav.breadcrumb,
-  nav.pager,
-  .app-footer,
-  open-search {
-    display: none !important;
   }
   body {
     background: #fff !important;
@@ -272,8 +273,8 @@ open-code-block pre {
   }
 }`;
 
-// Token note (see the module doc): the theme layer comes from the preset's
-// linked bundle asset, so nothing here re-declares it. Shadow trees keep
+// Token note (see the module doc): the theme layer comes from the entry's
+// head-linked stylesheet asset, so nothing here re-declares it. Shadow trees keep
 // inheriting the variables from the document root the same as before — the
 // delivery changed, the inheritance contract did not.
 
@@ -283,10 +284,10 @@ open-code-block pre {
  * this text is inlined into the head, where a relative font URL would
  * resolve against the page, and the raw-<style> head contract rejects
  * `@import` outright. They ride the site's linked style bundle instead
- * (www/site-fonts.ts → www/openelement.config.ts `tailwind.theme` →
- * /assets/open-tailwind.css), whose same-origin woff2 siblings are emitted
- * and URL-rewritten by the preset's asset shipping (#1535). The theme token
- * table is not part of this body either — the same linked bundle carries it
- * (see the module doc). app/head.tsx wraps this in one <style> entry.
+ * (www/site-fonts.ts → www/openelement.config.ts `tailwind.theme` → the
+ * head-linked document stylesheet), whose same-origin woff2 siblings are
+ * emitted and URL-rewritten by Vite's own asset graph. The theme token
+ * table is not part of this body either — the same linked stylesheet
+ * carries it (see the module doc). app/head.tsx wraps this in one <style> entry.
  */
 export const documentStyle = `body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;

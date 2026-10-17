@@ -47,7 +47,7 @@ import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
-import { commandOutput } from './node-command.ts';
+import { spawnCommand } from './node-command.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
 
@@ -106,7 +106,7 @@ async function run(
     controller.abort();
   }, timeoutMs);
   try {
-    const result = await commandOutput(command, {
+    const result = await spawnCommand(command, {
       args,
       cwd,
       stdout: 'piped',

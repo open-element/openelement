@@ -85,23 +85,23 @@ What we measure, and the commands that reproduce each row.
 
 ### Output size
 
-Numbers measured on 2026-10-07 from the docs site's own build (`www/dist`, built with `pnpm run site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. The figures moved five times since alpha6: the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160); the alpha8 B2 manifest conversion (pnpm workspaces, no `deno.json` workspace marker) re-cut the app-side island chunks; the alpha8 client build now resolves each package island's declared identity to its real module id before chunk grouping (#1471 fail-closed), so every island chunk is named `island-open-<tag>-<hash>.js` and the shared compiled-element runtime ships as one chunk that `client.js` loads eagerly on every island page; the alpha9 styling train seated the site on the @theme role sheet with the Zag-powered open-search island (#1502), which grows the island chunks and route payloads measured below; and the alpha10 train minified the island component styles (#1543), gave the shared compiled-element runtime its own `element-runtime-<hash>.js` chunk instead of a berth inside an island chunk (#1544), and then extracted the island stylesheets out of the chunks entirely as content-addressed `client/assets/*.css` resources (#1553, ADR-0164). The alpha.11 style train (#1558, ADR-0164) has since moved the package islands' and the site pages' remaining inline style sheets onto the same `.css` import form, re-cutting the island rows and route payloads below once more. Route payloads below are measured as the eager import closure of the route's manifest chunk set, so they stay honest no matter which chunk file hosts shared code.
+Numbers measured on 2026-10-14 from the docs site's own build (`www/dist`, built with `pnpm run site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. The figures moved five times since alpha6: the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160); the alpha8 B2 manifest conversion (pnpm workspaces, no `deno.json` workspace marker) re-cut the app-side island chunks; the alpha8 client build now resolves each package island's declared identity to its real module id before chunk grouping (#1471 fail-closed), so every island chunk is named `island-open-<tag>-<hash>.js` and the shared compiled-element runtime ships as one chunk that `client.js` loads eagerly on every island page; the alpha9 styling train seated the site on the @theme role sheet with the Zag-powered open-search island (#1502), which grows the island chunks and route payloads measured below; and the alpha10 train minified the island component styles (#1543), gave the shared compiled-element runtime its own `element-runtime-<hash>.js` chunk instead of a berth inside an island chunk (#1544), and then extracted the island stylesheets out of the chunks entirely as content-addressed `client/assets/*.css` resources (#1553, ADR-0164). The alpha.11 style train (#1558, ADR-0164) has since moved the package islands' and the site pages' remaining inline style sheets onto the same `.css` import form. The alpha15 candidate re-cut the island chunks when presentation moved from authored sheets into the markup as utility classes: the `@openelement/ui` components first (`island-open-button`, `island-open-code-block`), and this round the site's own islands (`island-open-page-rail`, `island-open-dragon-live-gaze`), whose class strings are longer than the class names they replaced — the same trade the components made. Every row below is re-measured from that build. Route payloads below are measured as the eager import closure of the route's manifest chunk set, so they stay honest no matter which chunk file hosts shared code.
 
 | Metric                 | Value                                              |
 | ---------------------- | -------------------------------------------------- |
-| Pre-rendered documents | 72 HTML files                                      |
-| URLs in `sitemap.xml`  | 70                                                 |
-| Total static output    | 8.6 MB                                             |
-| Island manifests       | 72 — one per page                                  |
-| Search index           | 35 pages per locale (en, zh), 70 fragments, 1.3 MB |
+| Pre-rendered documents | 74 HTML files                                      |
+| URLs in `sitemap.xml`  | 72                                                 |
+| Total static output    | 8.5 MB                                             |
+| Island manifests       | 74 — one per page                                  |
+| Search index           | 36 pages per locale (en, zh), 72 fragments, 1.5 MB |
 
 ```bash
 pnpm run site:build                         # regenerate everything below first
-find www/dist -name '*.html' | wc -l        # 72
-grep -c '<loc>' www/dist/sitemap.xml        # 70
-du -sh www/dist                             # 9.3M (platform-dependent; the 8.6 MB above is the byte sum)
-ls www/dist/island-manifests | wc -l        # 72
-cat www/dist/pagefind/pagefind-entry.json   # page_count 35 per language
+find www/dist -name '*.html' | wc -l        # 74
+grep -c '<loc>' www/dist/sitemap.xml        # 72
+du -sh www/dist                             # 9.2M (platform-dependent; the 8.5 MB above is the byte sum)
+ls www/dist/island-manifests | wc -l        # 74
+cat www/dist/pagefind/pagefind-entry.json   # page_count 36 per language
 ```
 
 ### Island bundles
@@ -110,14 +110,14 @@ The docs site is a normal openElement app, islands included, so its client outpu
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `element-runtime`              | 83,172    | 26,038  |
-| `island-open-button`           | 13,323    | 2,398   |
-| `island-open-dragon-live-gaze` | 10,988    | 4,063   |
-| `island-open-page-rail`        | 9,461     | 2,863   |
-| `island-open-cinematic-scroll` | 7,013     | 2,809   |
-| `island-open-code-block`       | 3,323     | 1,229   |
-| `island-open-hero-polish`      | 5,359     | 2,254   |
-| `client.js`                    | 6,293     | 1,919   |
+| `element-runtime`              | 91,005    | 28,157  |
+| `island-open-button`           | 14,495    | 2,731   |
+| `island-open-dragon-live-gaze` | 13,053    | 4,548   |
+| `island-open-page-rail`        | 11,553     | 3,257   |
+| `island-open-cinematic-scroll` | 7,841     | 3,092   |
+| `island-open-code-block`       | 4,120     | 1,574   |
+| `island-open-hero-polish`      | 5,644     | 2,326   |
+| `client.js`                    | 6,522     | 1,965   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
@@ -130,11 +130,11 @@ What a page actually downloads follows from its island manifest plus the entry's
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 150,163 B            | 8               |
-| `/guide/getting-started` | 150,163 B            | 8               |
-| `/`                      | 166,510 B            | 10              |
+| `/guide/mdx`             | 166,734 B            | 9               |
+| `/guide/getting-started` | 166,734 B            | 9               |
+| `/`                      | 185,431 B            | 11              |
 
-Across all 72 page manifests the site declares 9 island tags in 342 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 62, `open-code-block` on 50, and the remaining tags on a handful of pages each. The #1557 B8 retirement removed the `open-badge` package island (its roadmap usage is a plain HTML+CSS recipe now), and the reference page documents the two new split packages, which moved the payload rows.
+Across all 74 page manifests the site declares 9 island tags in 352 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 64, `open-code-block` on 52, and the remaining tags on a handful of pages each. The #1557 B8 retirement removed the `open-badge` package island (its roadmap usage is a plain HTML+CSS recipe now), and the reference page documents the two new split packages, which moved the payload rows.
 
 ```bash
 cat www/dist/island-manifests/page-<hash>.json   # one page's island set: tag, chunk, strategy, layer

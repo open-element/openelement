@@ -209,16 +209,17 @@ test('#1556: the inline conditional class fails closed outside its admitted shap
     expectCompilerFailure(component(fields, render), code, fragment);
   }
 
-  // Region branches stay fully static: the conditional class keeps today's
-  // generic unsupported-expression diagnostic there (OEC9012 territory is
-  // reserved for dynamic branch content, unchanged from before #1556).
+  // Block branches keep their boundary: an inline conditional class is one
+  // dynamic form too many inside a branch, so it fails with the located
+  // boundary diagnostic (alpha15 — the branch admits plain attribute sinks
+  // only; the message names what stays outside).
   expectCompilerFailure(
     component(
       fields,
       `<main>{this.flag ? <p class={this.flag ? 'a' : 'b'}>x</p> : <p>y</p>}</main>`,
     ),
-    'OEC9011',
-    'must be a literal, this.<property>, or a supported expression',
+    'OEC9012',
+    'an inline conditional class cannot bind inside a branch',
   );
 
   // Custom-element hosts keep today's diagnostics for a conditional class

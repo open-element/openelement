@@ -7,7 +7,7 @@
  * first paint until the browser gave up. The faces now come from the same
  * fontsource packages as ordinary npm dependencies: `SITE_FONT_SOURCES` is the
  * one writer of the package stylesheet specifiers, `openelement.config.ts`
- * compiles them into the site's Tailwind preset bundle, and Vite emits each
+ * compiles them into the site's document stylesheet, and Vite emits each
  * referenced woff2 as a content-hashed asset next to the bundle. No font
  * request leaves the site's origin.
  *

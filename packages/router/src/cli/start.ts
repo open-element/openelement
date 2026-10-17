@@ -7,8 +7,9 @@
  *                      fetch(Request): Response dispatch. When
  *                      dist/server/index.js exists, dynamic routes and
  *                      mutations dispatch to it.
- *                      (`pnpm start` in a generated project — its script
- *                      runs `openelement start`.)
+ *                      (`oe start` in a generated project — its script runs
+ *                      this subcommand through the router's short bin; the
+ *                      long alias `openelement start` is the same dispatcher.)
  *   preview          - static-only serving through the SAME dispatch: the
  *                      mode refuses dist/server/index.js up front (a build
  *                      with request-time routes is a `start` deployment),
@@ -38,7 +39,7 @@ import { existsSync } from 'node:fs';
 import process from 'node:process';
 import { join } from 'pathe';
 import type { Server } from 'node:http';
-import { serveFetch, type FetchHandler } from '../internal/node-http.ts';
+import { serveFetch, type FetchHandler, type RequestOriginPolicy } from '../internal/node-http.ts';
 import { formatError } from '@openelement/element';
 import { DEFAULT_OUT_DIR } from '../vite/internal/paths.ts';
 import { extractServeMode, type ServeMode } from '../internal/serve-mode.ts';
@@ -53,19 +54,48 @@ import {
   resolveAppConfig,
 } from '../vite/app-config.ts';
 
-const root = process.cwd();
-const distDir = join(root, DEFAULT_OUT_DIR);
-const serverEntry = join(distDir, 'server', 'index.js');
-const hostname = process.env['OPEN_ELEMENT_HOST'] ?? '0.0.0.0';
+// Resolved per-invocation, never snapshotted at module load (M-R5): a
+// module-level `process.cwd()` goes stale when the CLI is reused
+// programmatically (imported and called after chdir). Pure CLI runs are
+// unaffected — main() runs once — but laziness costs nothing here.
+function resolveServePaths(): { root: string; distDir: string; serverEntry: string } {
+  const root = process.cwd();
+  const distDir = join(root, DEFAULT_OUT_DIR);
+  return { root, distDir, serverEntry: join(distDir, 'server', 'index.js') };
+}
+
+function resolveHostname(): string {
+  return process.env['OPEN_ELEMENT_HOST'] ?? '0.0.0.0';
+}
+
+/**
+ * The origin policy for the node bridge (node-http.ts): two explicit operator
+ * declarations, because the request origin decides whether the same-origin
+ * CSRF floor admits a browser's form POST and neither knob may be guessed.
+ *
+ * `OPEN_ELEMENT_PUBLIC_ORIGIN` states the origin the site is reachable at;
+ * `OPEN_ELEMENT_TRUST_PROXY=1` declares that only a proxy the operator
+ * controls can reach this port, which is what makes the `Forwarded` /
+ * `X-Forwarded-*` headers readable. A directly reachable server sets neither,
+ * and keeps the plain `http://<Host>` origin.
+ */
+function resolveOriginPolicy(): RequestOriginPolicy {
+  const publicOrigin = process.env['OPEN_ELEMENT_PUBLIC_ORIGIN'];
+  return {
+    ...(publicOrigin === undefined || publicOrigin === '' ? {} : { publicOrigin }),
+    ...(process.env['OPEN_ELEMENT_TRUST_PROXY'] === '1' ? { trustProxy: true } : {}),
+  };
+}
 
 /**
  * #1411: `cli/start` is the third reader of `openelement.config.ts`. It reads
  * the file through the host runtime (a plain dynamic import) and never through
  * Vite, so serving a built app needs no Vite config bundling. Nothing else in
  * this CLI consumes framework options: `dist/` already carries the built
- * document (head, shells, middleware) from the build-time resolution.
+ * document (head, layouts, middleware) from the build-time resolution.
  */
 async function loadProductionConfig(mode: ServeMode): Promise<void> {
+  const { root } = resolveServePaths();
   const configFile = detectAppConfigFile(root);
   if (configFile === null) return;
   try {
@@ -95,9 +125,10 @@ async function main(argv: string[]): Promise<void> {
   }
   cliDebug = parsed.debug;
 
+  const { distDir } = resolveServePaths();
   if (!existsSync(distDir)) {
     console.error(
-      `[openElement ${parsed.mode}] ${DEFAULT_OUT_DIR}/ not found. Run \`pnpm build\` first.`,
+      `[openElement ${parsed.mode}] ${DEFAULT_OUT_DIR}/ not found. Run \`oe build\` first.`,
     );
     process.exit(1);
   }
@@ -251,11 +282,12 @@ function parsePreviewFlags(rest: string[]): PreviewListen {
 }
 
 async function runPreview(rest: string[]): Promise<void> {
+  const { distDir, serverEntry } = resolveServePaths();
   if (existsSync(serverEntry)) {
     console.error(
       `[openElement preview] This project has request-time routes (${DEFAULT_OUT_DIR}/server).\n` +
         '  A static-only preview cannot serve dynamic loader/action routes.\n' +
-        '  Use: pnpm start\n' +
+        '  Use: oe start\n' +
         '  (or: openelement start)',
     );
     process.exit(1);
@@ -281,7 +313,12 @@ async function runPreview(rest: string[]): Promise<void> {
   // vite-preview parity: a busy port probes the next one upward until one
   // binds (strictPort turns the probe into the actionable failure instead).
   for (let port = listen.port; port <= 65535; port++) {
-    const server = serveFetch({ hostname: listen.hostname, port, handler });
+    const server = serveFetch({
+      hostname: listen.hostname,
+      port,
+      handler,
+      ...resolveOriginPolicy(),
+    });
     const failure = await new Promise<NodeJS.ErrnoException | null>((resolve) => {
       server.once('listening', () => resolve(null));
       server.once('error', (error: NodeJS.ErrnoException) => resolve(error));
@@ -308,6 +345,8 @@ async function runPreview(rest: string[]): Promise<void> {
 }
 
 async function runStart(): Promise<void> {
+  const { distDir, serverEntry } = resolveServePaths();
+  const hostname = resolveHostname();
   const rawPort = process.env['OPEN_ELEMENT_PORT'] ?? process.env['PORT'] ?? '4173';
   const port = parsePortValue(rawPort, 'OPEN_ELEMENT_PORT / PORT', 'start');
 
@@ -329,7 +368,7 @@ async function runStart(): Promise<void> {
     env: processEnvRecord(),
   });
 
-  const server: Server = serveFetch({ hostname, port, handler });
+  const server: Server = serveFetch({ hostname, port, handler, ...resolveOriginPolicy() });
   // The bind outcome is asynchronous (serveFetch returns before listen
   // settles), so the success line waits for 'listening' and a failed bind
   // answers with one actionable line (#1413 style, no raw stack) instead of

@@ -65,7 +65,7 @@ serve({
     return dispatchRequest(request, {
       distDir: ROOT,
       serverMod: serverEntry,
-      env: process.env,
+      env: process.env as Record<string, string>,
       onHandlerError: (error) => console.error('[app-flow-lit server] handler error:', error),
     });
   },

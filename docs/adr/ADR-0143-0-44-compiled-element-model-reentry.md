@@ -38,3 +38,11 @@ Conformance fixtures must cover serialization, creation, claim, updates, events,
 foreign custom elements, and mismatch behavior in Chromium, Firefox, and WebKit. Packed Element
 qualification must start from an author project and run in an ordinary HTML consumer without a
 workspace alias or Router dependency.
+
+## Addendum (2026-10-11): public compiler package now exists
+
+The "not a public compiler package" statement above is stale: the compiler
+ships as the public `@openelement/compiler` package (`packages/compiler`).
+The decision itself is unchanged — the compiler is still mandatory tooling
+reached through the official Element/Vite path, and unsupported syntax still
+fails at build time with source-located diagnostics.

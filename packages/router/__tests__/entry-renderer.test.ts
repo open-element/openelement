@@ -12,7 +12,7 @@
 import { expect, test } from 'vitest';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { resetCorsOriginWarningForTests } from '../src/vite/internal/ssg/entry-server-codegen.ts';
-import { createAppShellRuntime } from '../src/vite/internal/server-runtime/document-runtime.ts';
+import { createLayoutRuntime } from '../src/vite/internal/server-runtime/document-runtime.ts';
 import { routeMeta } from '../src/vite/internal/server-runtime/page-render.ts';
 import type { RouteEntry } from '@openelement/protocol/framework';
 
@@ -355,20 +355,20 @@ test('renderEntry: imports DSD renderer; Hono assembly is the factory (#1470 blo
   expect(code).toContain('const __app = createGeneratedApp({');
   expect(code).toContain('export default app');
   // v0.5.0: DSD renderer replaces @lit-labs/ssr; v0.44: the compiled sync
-  // renderDsd is the only serializer — no runtime JSX or tree renderer.
+  // renderToString is the only serializer — no runtime JSX or tree renderer.
   expect(code).toContain(
-    "import { createDeferredDsdExecutor, renderDsd, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
+    "import { createDocumentStyleResources, createStreamShellExecutor, renderToString, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
   );
-  expect(code.includes('renderDsdTree')).toBeFalsy();
+  expect(code.includes('renderToStringTree')).toBeFalsy();
   expect(code.includes("import { jsx } from '@openelement/element'")).toBeFalsy();
   // Element owns document/head/body semantics; generated entries only call it.
   expect(code.includes('function wrapInDocument(html, options = {}) {')).toBeFalsy();
 });
 
-test('renderEntry: app shell composes the page host through the compiled serializer', () => {
+test('renderEntry: layout composes the page host through the compiled serializer', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     ssg: true,
-    appShell: { tagName: 'open-layout', import: '@acme/components/open-layout', props: {} },
+    layout: { tagName: 'open-layout', import: '@acme/components/open-layout', props: {} },
   });
   const code = renderEntry(desc);
 
@@ -376,15 +376,15 @@ test('renderEntry: app shell composes the page host through the compiled seriali
   // in the factory config and the factory binds the runtime (ADR-0160 rule a,
   // #1470 block e — the wiring line moved into createGeneratedApp).
   expect(code).toContain('"tagName": "open-layout"');
-  expect(code).toContain('import * as __shell_0 from "@acme/components/open-layout";');
-  expect(code).toContain('appShellPlan: {');
+  expect(code).toContain('import * as __layout_0 from "@acme/components/open-layout";');
+  expect(code).toContain('layoutPlan: {');
   // The slot claim contract stays pinned on the shipped runtime: the shell
   // renders through the page renderer with the content as trusted slot HTML.
   const { runtime, ssrCalls } = loadLayoutRuntime({
     default: { tagName: 'open-layout', props: { brand: 'acme' } },
     layouts: {},
   });
-  const composed = runtime.renderAppShell('<page></page>', '/guide');
+  const composed = runtime.renderLayout('<page></page>', '/guide');
   expect(composed).toEqual('<shell>open-layout</shell>');
   expect(ssrCalls).toEqual([
     {
@@ -401,12 +401,32 @@ test('renderEntry: app shell composes the page host through the compiled seriali
         brand: 'acme',
       },
       route: '/guide',
+      // No collection passed: the layout render still runs (an unresolved sink
+      // is the caller's choice), it simply declares nothing.
+      documentStyles: undefined,
     },
   ]);
   expect(code.includes('layoutHtml.slice')).toBeFalsy();
 });
 
-test('renderEntry: unconfigured appShell defaults to false (no import)', () => {
+test('renderLayout: the layout render reports into the document style collection (alpha15 Q-CI)', () => {
+  // The layout is a light-root component like any page component (S-C1.2):
+  // its external sheets can only reach the browser through the document head,
+  // so the per-render collection must be forwarded into the layout's own
+  // __ssr call. Dropping the sink shipped the layout unstyled — the desktop
+  // docs sidebar stopped collapsing at mobile widths and the hero media sat
+  // below the fold (alpha15 Q-CI Site E2E failures C/D).
+  const { runtime, ssrCalls } = loadLayoutRuntime({
+    default: { tagName: 'open-layout', props: {} },
+    layouts: {},
+  });
+  const sink = { add() {} };
+  runtime.renderLayout('<page></page>', '/guide', { documentStyles: sink });
+  expect(ssrCalls).toHaveLength(1);
+  expect(ssrCalls[0]?.documentStyles).toBe(sink);
+});
+
+test('renderEntry: unconfigured layout defaults to false (no import)', () => {
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true });
   const code = renderEntry(desc);
 
@@ -414,25 +434,67 @@ test('renderEntry: unconfigured appShell defaults to false (no import)', () => {
   expect(code).toContain('"default": false');
   // An unresolved shell returns route content unchanged (shipped runtime).
   const { runtime, ssrCalls } = loadLayoutRuntime({ default: false, layouts: {} });
-  expect(runtime.renderAppShell('<page></page>', '/')).toEqual('<page></page>');
+  expect(runtime.renderLayout('<page></page>', '/')).toEqual('<page></page>');
   expect(ssrCalls).toEqual([]);
 });
 
-test('renderEntry: appShell false renders route content without default layout import', () => {
-  const desc = buildEntryDescriptor(basicRoutes, { ssg: true, appShell: false });
+test('renderEntry: layout false renders route content without default layout import', () => {
+  const desc = buildEntryDescriptor(basicRoutes, { ssg: true, layout: false });
   const code = renderEntry(desc);
 
   expect(code.includes('import "@acme/components/open-layout";')).toBeFalsy();
   expect(code).toContain('"default": false');
   const { runtime, ssrCalls } = loadLayoutRuntime({ default: false, layouts: {} });
-  expect(runtime.renderAppShell('<page></page>', '/')).toEqual('<page></page>');
+  expect(runtime.renderLayout('<page></page>', '/')).toEqual('<page></page>');
   expect(ssrCalls).toEqual([]);
 });
 
-test('renderEntry: custom appShell import and props are generated from config', () => {
+test('renderEntry: every emitted __renderLayout call forwards the document style collection (alpha15 Q-CI)', () => {
+  // The layout's light-root sheets are declared by the document head, and the
+  // head is serialized from the render's collection (S-C1.2). Every emitted
+  // call site — SSG success/error boundary, request-time success/error, and
+  // the styled-404 fallback — must hand the layout render the same collection
+  // the page render reports into.
+  const routes: RouteEntry[] = [
+    { path: '/', filePath: 'index.ts', type: 'page', varName: 'pageIndex' },
+    { path: '/404', filePath: '404.tsx', type: 'page', varName: 'page404' },
+  ];
+  const requestTime = renderEntry(buildEntryDescriptor(routes));
+  const staticSite = renderEntry(
+    buildEntryDescriptor(routes, {
+      ssg: true,
+      layout: { tagName: 'open-layout', import: '@acme/components/open-layout' },
+    }),
+  );
+
+  for (const code of [requestTime, staticSite]) {
+    const calls = code.split('__renderLayout(').slice(1);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(
+        call.slice(0, 200),
+        '__renderLayout must forward documentStyles: __documentStyles',
+      ).toContain('documentStyles: __documentStyles');
+    }
+  }
+  expect(staticSite).toContain(
+    'content = __renderLayout(content, routePath, { locale, routeMeta, documentStyles: __documentStyles });',
+  );
+  expect(requestTime).toContain(
+    '__renderLayout(__content, c.req.path || "/", { routeMeta: __routeMetaValue, documentStyles: __documentStyles })',
+  );
+  expect(requestTime).toContain(
+    '__renderLayout(__errorHtml, c.req.path || "/", { routeMeta: __routeMetaValue, documentStyles: __documentStyles })',
+  );
+  expect(requestTime).toContain(
+    '__renderLayout(__content, c.req.path || "/404", { routeMeta: __routeMetaValue, documentStyles: __documentStyles })',
+  );
+});
+
+test('renderEntry: custom layout import and props are generated from config', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     ssg: true,
-    appShell: {
+    layout: {
       tagName: 'blog-layout',
       import: './app/components/blog-layout.tsx',
       props: { siteName: 'Field Notes' },
@@ -440,7 +502,7 @@ test('renderEntry: custom appShell import and props are generated from config', 
   });
   const code = renderEntry(desc);
 
-  expect(code).toContain('import * as __shell_0 from "/app/components/blog-layout.tsx";');
+  expect(code).toContain('import * as __layout_0 from "/app/components/blog-layout.tsx";');
   expect(code).toContain('"tagName": "blog-layout"');
   expect(code).toContain('"siteName": "Field Notes"');
 });
@@ -458,30 +520,36 @@ test('renderEntry: route meta layout can select named layouts', () => {
   });
   const code = renderEntry(desc);
 
-  expect(code).toContain('import * as __shell_0 from "/app/components/post-layout.tsx";');
-  // The named-layout lookup lives in the typed app-shell runtime; the entry
+  expect(code).toContain('import * as __layout_0 from "/app/components/post-layout.tsx";');
+  // The named-layout lookup lives in the typed layout runtime; the entry
   // pins the plan data in the factory config (ADR-0160 rule a, #1470 block e).
   expect(code).toContain('"post-layout"');
-  expect(code).toContain('appShellPlan: {');
+  expect(code).toContain('layoutPlan: {');
   expect(code).toContain('module: $pageIndex');
 });
 
 // Behavior-level proof for the named-layout wiring: execute the shipped typed
-// runtime (routeMeta + the app-shell runtime) with the same plan shape the
+// runtime (routeMeta + the layout runtime) with the same plan shape the
 // entry binds (ADR-0160 rule a).
-function loadLayoutRuntime(appShellPlan: { default: unknown; layouts: Record<string, unknown> }) {
-  const ssrCalls: Array<{ tag: string; props: Record<string, unknown>; route: string }> = [];
-  const runtime = createAppShellRuntime({
+function loadLayoutRuntime(layoutPlan: { default: unknown; layouts: Record<string, unknown> }) {
+  const ssrCalls: Array<{
+    tag: string;
+    props: Record<string, unknown>;
+    route: string;
+    documentStyles?: unknown;
+  }> = [];
+  const runtime = createLayoutRuntime({
     ssr: (tag, props, sourceInfo) => {
       ssrCalls.push({
         tag,
         props: props ?? {},
         route: sourceInfo?.route ?? '',
+        documentStyles: sourceInfo?.documentStyles,
       });
       return '<shell>' + tag + '</shell>';
     },
     trustedHtml: (html) => ({ html }),
-    appShellPlan: appShellPlan as never,
+    layoutPlan: layoutPlan as never,
     locales: ['en'],
     navSections: [],
     headerNav: [],
@@ -498,32 +566,32 @@ function pageModule(layout: string | false | undefined): unknown {
   };
 }
 
-test('routeMeta surfaces route.layout and resolveAppShell selects the named layout', () => {
-  const defaultShell = { tagName: 'main-shell' };
+test('routeMeta surfaces route.layout and resolveLayout selects the named layout', () => {
+  const defaultLayout = { tagName: 'main-shell' };
   const postShell = { tagName: 'post-layout' };
   const { runtime } = loadLayoutRuntime({
-    default: defaultShell,
+    default: defaultLayout,
     layouts: { post: postShell },
   });
   const meta = routeMeta(pageModule('post'));
   expect(meta.layout).toEqual('post');
-  expect(runtime.resolveAppShell(meta)).toEqual({ tagName: 'post-layout' });
+  expect(runtime.resolveLayout(meta)).toEqual({ tagName: 'post-layout' });
 });
 
-test('resolveAppShell: layout false disables the shell, unknown names fall back to default', () => {
-  const defaultShell = { tagName: 'main-shell' };
+test('resolveLayout: layout false disables the layout, unknown names fall back to default', () => {
+  const defaultLayout = { tagName: 'main-shell' };
   const { runtime } = loadLayoutRuntime({
-    default: defaultShell,
+    default: defaultLayout,
     layouts: { post: { tagName: 'post-layout' } },
   });
-  expect(runtime.resolveAppShell(routeMeta(pageModule(false)))).toEqual(false);
-  expect(runtime.resolveAppShell(routeMeta(pageModule('no-such-layout')))).toEqual({
+  expect(runtime.resolveLayout(routeMeta(pageModule(false)))).toEqual(false);
+  expect(runtime.resolveLayout(routeMeta(pageModule('no-such-layout')))).toEqual({
     tagName: 'main-shell',
   });
   // Unset layout: no layout key in the meta, default shell applies.
   const meta = routeMeta(pageModule(undefined));
   expect('layout' in meta).toEqual(false);
-  expect(runtime.resolveAppShell(meta)).toEqual({ tagName: 'main-shell' });
+  expect(runtime.resolveLayout(meta)).toEqual({ tagName: 'main-shell' });
 });
 
 test('renderEntry: definePage descriptor feeds load and metadata wiring', () => {
@@ -553,7 +621,7 @@ test('renderEntry: definePage descriptor feeds load and metadata wiring', () => 
   expect(code.includes('__openElementData')).toBeFalsy();
   expect(code.includes('module?.meta')).toEqual(false);
   // Named layouts (ADR-0123): the descriptor's route.layout is the producer
-  // for the routeMeta.layout the app-shell resolver reads. The extractor is
+  // for the routeMeta.layout the layout resolver reads. The extractor is
   // imported runtime (ADR-0160 rule a); the entry pins the import binding.
   expect(code).toContain(
     "import { routeMeta as __routeMeta } from '@openelement/router/server-runtime'",
@@ -614,7 +682,14 @@ test('renderEntry: SSG renderRoute renders the page error component on failure',
   // RenderError (no silent normal-page write).
   expect(code).toContain('if (typeof page.error === "function") {');
   expect(code).toContain('__pageErrorProps(info.module, error,');
-  expect(code).toContain('__renderAppShell(__ssr(info.tagName,');
+  // The boundary re-render forks on the page kind only when a server function
+  // page exists (alpha15). This descriptor has only class pages, so the entry
+  // keeps the plain __ssr expression with no kind check at all.
+  expect(code).not.toContain('page.kind === "function-page"');
+  expect(code).toContain(
+    'const __errorPageHtml = __ssr(info.tagName, __pageErrorProps(info.module, error,',
+  );
+  expect(code).toContain('__renderLayout(__errorPageHtml, routePath,');
   expect(code).toContain(
     'return { html: errorHtml, status: 500, errors: [renderError], componentCount: errorComponentCount, renderTimeMs };',
   );
@@ -1086,9 +1161,9 @@ test('renderEntry: private,no-cache is emitted only after a successful render (#
   const code = renderEntry(desc);
 
   // The Cache-Control relaxation must sit between the shell render and the
-  // response return: emitted BEFORE __renderAppShell it leaks onto the
+  // response return: emitted BEFORE __renderLayout it leaks onto the
   // redirect/notFound/error responses produced by the catch block below.
-  const renderIndex = code.indexOf('__renderAppShell(__content,');
+  const renderIndex = code.indexOf('__renderLayout(__content,');
   const relaxIndex = code.indexOf("c.header('Cache-Control', 'private, no-cache');");
   const returnIndex = code.indexOf('return c.html(wrapInDocument(content, {', relaxIndex);
   expect(renderIndex > 0, 'shell render must be emitted').toEqual(true);
@@ -1269,7 +1344,7 @@ test('renderEntry: /404 page route emits the styled notFound fallback (#923)', (
   expect(code).toContain('app.notFound(async (request) => {');
   expect(code).toContain('// Styled 404 (#923)');
   expect(code).toContain('page404.loader === "function"');
-  expect(code).toContain('__renderAppShell(__content, c.req.path || "/404",');
+  expect(code).toContain('__renderLayout(__content, c.req.path || "/404",');
   // Fallback renders with a forced 404 status and degrades to the plain
   // status page on failure — never a 500 from the fallback itself.
   expect(code).toContain('wrapInDocument(content, {');

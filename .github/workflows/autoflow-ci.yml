@@ -1,26 +1,143 @@
 name: AutoFlow CI
 
-# Redesigned 2026-10-07 (#1566). PR layer: 6 parallel jobs, target 10 min.
-# Main push layer: +3 jobs (full e2e, cold install, consumer matrix).
+# Redesigned 2026-10-07 (#1566). Base layer: four qualification jobs (lint,
+# test, e2e, pack) plus the sha-guard. Main push layer: the five heavy jobs
+# below (e2e-full, bfcache, node-serve-smoke, packed-consumer-matrix,
+# fresh-install).
 # Full audit trail: PR #1567 review + issue #1566.
+#
+# Two-tier qualification (alpha15 consolidation, Q-CI):
+#   Base CI — the four base jobs (lint, test, e2e, pack) run on every push
+#              (main and alpha15-consolidation) and on PRs. On a plain
+#              alpha15-consolidation push the five heavy jobs stay skipped
+#              *by design*: that run is Base CI, not full qualification.
+#   Full qualification — a main push still runs every qualification job
+#              (unchanged), and workflow_dispatch with
+#              full_qualification=true runs them on the dispatched ref's
+#              SHA, re-runnably. expected_sha is REQUIRED for a full
+#              dispatch: the sha-guard job refuses an unbound full
+#              qualification before any other job starts, and refuses a
+#              candidate SHA that does not match the SHA the jobs actually
+#              build, so a dispatch can never qualify a different commit.
+#
+# Qualification contract: the run conclusion is not the evidence. The
+# contract is the individual conclusions of ten logical jobs — the sha-guard
+# plus nine qualification job IDs — which expand to thirteen job instances:
+#   sha-guard (1), lint (1), test (1), e2e (1), pack (1),
+#   e2e-full (2 legs: `site-e2e` and `fixture-gates`),
+#   bfcache (1), node-serve-smoke (2 Node versions),
+#   packed-consumer-matrix (2 operating systems), fresh-install (1).
+# All thirteen instances must conclude `success` on the candidate SHA. A
+# green run with the five heavy jobs skipped is Base CI only; a skipped job
+# is a *skipped conclusion* and must never be read as a success (GitHub's
+# run-level green can hide it, so read the job-instance conclusions, never
+# the run conclusion alone).
+#
+# The re-runnable Full path covers the packed proof set, not just the
+# starter: `packed-consumer-matrix` runs the starter + ui-app consumers and
+# the element, router, ui, unocss and app consumers (the declaration walks
+# `walkPackedDeclarations`, `walkRouterDeclarations` and
+# `assertPackedElementLeavesKernelFree` run inside those consumers), and
+# `pack` runs `package-artifacts:check:prepacked`, `graph:check` and
+# `export-files:check`. These are the same packed proofs the release
+# workflow's publish path runs, so Full qualification is not a narrower
+# proof set than publish.
 
 on:
   push:
-    branches: [main]
+    # main keeps its existing layer; alpha15-consolidation is the Base CI
+    # branch for the alpha15 line. No path filters: they would create
+    # evidence gaps on exactly the changes that need the proof.
+    branches: [main, alpha15-consolidation]
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      full_qualification:
+        description: 'Run full qualification (nine job IDs / thirteen instances); requires expected_sha. false = four base jobs only'
+        required: false
+        type: boolean
+        default: false
+      expected_sha:
+        description: 'Candidate SHA to bind this dispatch to (required when full_qualification=true; must equal the SHA the jobs build)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # One lane per (ref, qualification mode). The mode is the same predicate the
+  # five heavy jobs use below, so a Base run and a Full run on one ref can
+  # never cancel each other: a full_qualification dispatch on
+  # alpha15-consolidation lands in ci-…-full while the running Base CI push
+  # stays in ci-…-base (and the reverse), instead of the old single
+  # ci-${{ github.ref }} lane destroying one another's evidence. Correct for
+  # both events: push never reads a dispatch input (mode = full on main, base
+  # elsewhere, matching the heavy-job gate), dispatch uses full_qualification.
+  # Same-mode runs on a ref (push→push, or dispatch→dispatch of one mode) keep
+  # today's cancel-in-progress semantics — the newer run supersedes the older
+  # one in its own lane only.
+  group: >-
+    ci-${{ github.ref }}-${{
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true))
+      && 'full' || 'base'
+    }}
   cancel-in-progress: true
 
 jobs:
+  # ── Job 0: Exact-SHA guard (runs before every other job, every event) ──
+  # Deliberately has no `if:` — it must be scheduled on every event so it can
+  # never be skipped by a condition. All nine qualification jobs `needs` it
+  # and use a plain `if:` (no always()/status function), so a failed or
+  # skipped guard skips them all: no job can report success unless the guard
+  # concluded success. This job is the single enforcement point for the two
+  # fail-closed SHA rules — the qualification jobs carry no copy of them:
+  #   1. full_qualification=true requires expected_sha: an unbound full
+  #      dispatch is refused before any job starts, so "full qualification"
+  #      can never mean "whatever the ref happens to point at".
+  #   2. expected_sha must equal the SHA the jobs will actually build, which
+  #      is `github.event.pull_request.head.sha || github.sha` — exactly the
+  #      base jobs' checkout ref. On a pull_request, github.sha names the
+  #      synthetic merge commit while the jobs build the PR head SHA, so
+  #      comparing against github.sha alone would reject a PR run for the
+  #      wrong reason; on push and workflow_dispatch there is no
+  #      pull_request payload, the expression reduces to github.sha, and the
+  #      guard binds the dispatch to exactly the commit the qualification
+  #      jobs check out (a mismatch is refused, never accepted for the wrong
+  #      commit).
+  sha-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Bind the run to the expected candidate SHA (fail closed)
+        env:
+          FULL_QUALIFICATION: ${{ inputs.full_qualification }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          RUN_SHA: ${{ github.sha }}
+          BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ "${FULL_QUALIFICATION}" = "true" ] && [ -z "${EXPECTED_SHA}" ]; then
+            echo "::error::full_qualification=true requires expected_sha; refusing an unbound full qualification (fail closed)."
+            exit 1
+          fi
+          if [ -z "${EXPECTED_SHA}" ]; then
+            echo "No expected_sha supplied (push/PR or unbound base dispatch); build SHA is ${BUILD_SHA} (github.sha ${RUN_SHA})."
+            exit 0
+          fi
+          if [ "${EXPECTED_SHA}" != "${BUILD_SHA}" ]; then
+            echo "::error::Refusing to run: expected_sha=${EXPECTED_SHA} != build SHA ${BUILD_SHA} (the SHA the jobs check out)"
+            exit 1
+          fi
+          echo "Bound to candidate SHA ${BUILD_SHA}."
+
   # ── Job 1: Lint, Security & Governance ────────────────────────────────
   lint:
+    needs: [sha-guard]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -53,19 +170,72 @@ jobs:
       - uses: ./.github/actions/setup-node-workspace
       - name: Fast checks (fmt, lint, typecheck, markdown)
         run: vp run check
+      - name: Formatting left the tree unchanged
+        # WHY this exists (do not delete it as "redundant with fmt:check"):
+        # oxfmt's ignore list covers every md/json/yml/css file (plus
+        # www/content and the fixtures), and formatter output that merely
+        # *differs in style* still satisfies `oxfmt --check`. An unrelated
+        # `npx prettier --write .` therefore rewrote hundreds of files while
+        # `fmt:check` stayed green — it happened, and the damage was only
+        # found later from an mtime window and reverted by hand. `oxfmt
+        # --check` cannot see that class of change; only "the tree did not
+        # change" can. Assert the checkout is still pristine after the
+        # format/check step, so any writer that touches a tracked or
+        # untracked file in this job fails here instead of shipping a silent
+        # repo-wide reformat.
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::This job rewrote tracked files (see the diff above). oxfmt's ignore list covers md/json/yml/css, so formatter output that only differs in style still passes 'oxfmt --check' — that is exactly how a repo-wide reformat ships with a green fmt:check. Revert the reformat; do not relax this assertion."
+            exit 1
+          fi
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::This job left files in the checkout that are not part of the commit; 'git status --porcelain' must be empty. A formatter or generator writing here is a silent reformat that 'oxfmt --check' cannot see (oxfmt ignores md/json/yml/css). Left behind:"
+            git status --porcelain
+            exit 1
+          fi
       - name: Generate all artifacts
         run: vp run generate:all
+      - name: Tools typecheck (gate:source)
+        # `gate:source` runs `@openelement/tools-repo#typecheck` (which compiles
+        # tools/tsconfig.json: tools/repo, tools/lib, tools/release), and no CI
+        # step did. The root `typecheck` filters protocol/element/compiler/
+        # router/create/ui, no package tsconfig references tools/, and the only
+        # other caller is `tools/release#typecheck` — so it was the one
+        # gate:source step left with no automated path at all. The selector
+        # resolves by exact package name and `--fail-if-no-match` turns a
+        # renamed task into a red step instead of a silent no-op.
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo typecheck
+      - name: Dependency age gate (gate:source)
+        # `grep -rn "gate:source" .github/` used to return nothing, so this
+        # gate:source step never ran in CI. It verifies every version resolved
+        # in pnpm-lock.yaml was published at least 3 days ago, and fails
+        # closed on missing/unknown registry metadata (check-dependency-age.ts).
+        run: vp run check:dep-age
+      - name: Content-date manifest check (gate:source)
+        # Read-only validation of the hand-maintained manifest against the
+        # docs tree; also orphaned from gate:source until now.
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/www check:content-dates
       - name: Interface snapshot check
-        run: vp run --fail-if-no-match @openelement/tools-repo#interface:snapshot
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot
       - name: Governance checks (boundaries, provenance, state machine)
         run: |
-          vp run --fail-if-no-match @openelement/tools-repo#esm:boundary-check
-          vp run --fail-if-no-match @openelement/tools-repo#signals:check-protocol-boundary
-          vp run --fail-if-no-match @openelement/tools-repo#validation:boundary-check
-          vp run --fail-if-no-match @openelement/tools-repo#assets:check-provenance
-          vp run --fail-if-no-match @openelement/tools-repo#release:state-machine:check
-          vp run --fail-if-no-match @openelement/tools-repo#workspace:links:check
-          vp run --fail-if-no-match @openelement/tools-repo#deps:vite-check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo esm:boundary-check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo signals:check-protocol-boundary
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo validation:boundary-check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo assets:check-provenance
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo release:state-machine:check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo workspace:links:check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo deps:vite-check
+      - name: vp selector flags (fail-closed task dispatch)
+        # `vp run <pkg>#<task>` resolves the package part by exact package NAME
+        # and exits 0 without running anything when nothing matches, so a
+        # mistyped or renamed selector is a green gate that never ran. This
+        # check scans the workflow run steps, the git hooks and every
+        # package.json script for a package-qualified invocation that cannot
+        # report a no-match (flag missing, or a selector that resolves to no
+        # workspace package/task). Tooling-spawned dispatch already injects the
+        # flag unconditionally in tools/repo/vp-dispatch.ts vpTaskArgv.
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo vp:selector-flags:check
       - name: Dependency review (PR only)
         if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
@@ -74,6 +244,7 @@ jobs:
 
   # ── Job 2: Unit Tests + Browser Gate (3 engines) ──────────────────────
   test:
+    needs: [sha-guard]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -90,9 +261,9 @@ jobs:
       - name: Install all browser engines
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Element tests
-        run: vp run --fail-if-no-match @openelement/element#test
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/element test
       - name: Router tests (includes 3-engine browser tests)
-        run: vp run --fail-if-no-match @openelement/router#test
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/router test
       - name: UI, create and tools tests
         # The review gap: the PR layer ran only element+router, so ui/create/
         # tools reds (style shells, stale schedule assertions) were invisible
@@ -100,17 +271,28 @@ jobs:
         # The tools suites ride the root vitest "tools" project (the repo
         # package has no aggregate test task by design).
         run: |
-          vp run --fail-if-no-match @openelement/ui#test
-          vp run --fail-if-no-match @openelement/create#test
+          vp run --no-cache --fail-if-no-match --filter @openelement/ui test
+          vp run --no-cache --fail-if-no-match --filter @openelement/create test
           # The tools suites read www's generated data modules (release-line,
           # content) — a fresh checkout carries none until this runs.
-          vp run --fail-if-no-match @openelement/www#generate:content
+          vp run --no-cache --fail-if-no-match --filter @openelement/www generate:content
           ./node_modules/.bin/vitest run --project tools
-      - name: Element browser gate (full matrix)
-        run: vp run --fail-if-no-match @openelement/element#browser:gate
+      - name: Compiler tests (independent suite)
+        # The PR layer ran element+router+ui+create+www+tools but never the
+        # compiler's own suite, so a lowering/candidate regression was invisible
+        # until the release train. It is the package the whole compiled-authoring
+        # contract rests on; it gates the PR now.
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/compiler test
+      - name: Element browser gate (chromium)
+        # Deliberately the single-engine gate: this is the fast layer. Its name
+        # says which engines it ran — the three-engine matrix is
+        # `browser:gate:full`, wired into the e2e-full job below, and this step
+        # used to be called "full matrix" while running chromium alone.
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/element browser:gate
 
   # ── Job 3: Site E2E (chromium-only in PR; full on main) ───────────────
   e2e:
+    needs: [sha-guard]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -131,21 +313,23 @@ jobs:
         # ran it — only the release train's coverage step did — yet it carries
         # the guards registered in seams.md (#1544 shared element-runtime
         # chunk, #1552 eager-script budget, #1555 pagefind filter).
-        run: vp run --fail-if-no-match @openelement/www#test
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/www test
       - name: Site E2E (chromium only — full 3-engine on main push)
-        run: vp run --fail-if-no-match @openelement/www#e2e:chromium
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/www e2e:chromium
       - name: Light-probe E2E (build fixture first)
         run: |
-          vp run --fail-if-no-match @openelement/fixture-site-light-probe#build
-          vp run --fail-if-no-match @openelement/fixture-site-light-probe#e2e
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-site-light-probe typecheck
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-site-light-probe build
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-site-light-probe e2e
       - name: Web component interop
-        run: vp run --fail-if-no-match @openelement/fixture-web-component-interop#test
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/fixture-web-component-interop test
 
   # ── Job 4: Pack & Consumer Verification ────────────────────────────────
   # 40 minutes (measured): the starter smoke alone runs pack, scaffold,
   # install, SSG build and the bfcache probe; shared runners need 2-3x the
   # local wall clock (runs timed out at exactly 15, then at 25).
   pack:
+    needs: [sha-guard]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -165,21 +349,60 @@ jobs:
         # drives all three engines (the old workflow's install-deps step).
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Pack dry-run
-        run: vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack:dry-run
+      - name: Prepacked artifact check (publint + attw)
+        # The release train's gate:packed checks the tarball surface with
+        # publint/attw; the Full path previously never inspected the published
+        # artifact shape. Needs the tarballs the dry-run wrote above.
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release package-artifacts:check:prepacked
       - name: Pack surface check
-        run: vp run --fail-if-no-match @openelement/tools-release#pack-surface:check
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack-surface:check
+      - name: Package graph and export-files checks
+        # gate:release checks; wiring them here puts the package-graph and
+        # generated-export-map proof on the re-runnable Full path as well.
+        run: |
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-release graph:check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo export-files:check
       - name: Publish dry-run (no-op against real registry)
-        run: vp run --fail-if-no-match @openelement/tools-release#publish:npm:dry-run
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release publish:npm:dry-run
       - name: Starter smoke (needs packed workspace)
-        run: vp run --fail-if-no-match @openelement/e2e-starter-smoke#gate
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke gate
 
-  # ── Main push only: Full E2E + BFCache + Node Smoke + Cold Install ────
+  # ── Heavy qualification layer (5 jobs) ────────────────────────────────
+  # Runs on a main push (unchanged) and on a workflow_dispatch with
+  # full_qualification=true (the re-runnable Full qualification path on the
+  # dispatched SHA). A plain push to alpha15-consolidation skips all five by
+  # design: that push is Base CI. Every job needs sha-guard, so none of them
+  # can run — let alone report success — without the guard's success.
   e2e-full:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [sha-guard]
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45, not 30: the pre-split job was killed by the 30-minute cap once (run
+    # 38341586388 ran 30m17s and concluded `cancelled`), and its 17 successful
+    # completions ranged 20m15s–29m28s. The split below removes the serial
+    # tail from the critical path: the site-E2E step alone measured
+    # 958–1461 s (15m58–24m21) while the element-browser gate (28–39 s),
+    # fixture gates (113–212 s) and Nitro proofs (19–27 s) ran after it. They
+    # now run on a parallel leg, so this instance is the site leg — worst
+    # successful measurement 26m19 including checkout/install/build, with the
+    # site proof itself still the 16–24 min irreducible block. The cap stays a
+    # runner-variance guard, not the fix.
+    timeout-minutes: 45
     permissions:
       contents: read
+    # Two legs, one job ID. The ID must stay `e2e-full` because the release
+    # workflow's ci-evidence requires the nine qualification job IDs verbatim;
+    # a matrix leg is still a separate job instance, and ci-evidence requires
+    # every instance of a required job (`e2e-full (...)`) to conclude success,
+    # so splitting here strengthens the contract instead of loosening it.
+    # `site-e2e` is an irreducible full-suite proof (site-e2e-run.ts rejects
+    # `--project`/`--grep` filters and audits one complete 3-engine report), so
+    # the parallel leg takes everything that is not that proof.
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [site-e2e, fixture-gates]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -188,23 +411,54 @@ jobs:
       - uses: ./.github/actions/setup-node-workspace
       - name: Install all browser engines
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      # Both legs keep the build: the fixture gates and the element browser
+      # gate read the same generated/build-time workspace artifacts the site
+      # proof does, and a duplicated ~35 s build is cheaper than a hidden
+      # ordering dependency between the legs.
       - name: Build site
-        run: vp run site:build
+        run: vp run --fail-if-no-match site:build
       - name: Site E2E (3 engines)
-        run: vp run @openelement/www#e2e:browsers
+        if: matrix.leg == 'site-e2e'
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/www e2e:browsers
+      - name: Element browser gate (full matrix, chromium+firefox+webkit)
+        # The qualified candidate needs the browser conformance suite and its
+        # per-engine negative proofs on all three engines. `browser:gate:full`
+        # sets OE_BROWSER_MATRIX=full for both halves; the base layer keeps the
+        # chromium-only `browser:gate`.
+        if: matrix.leg == 'fixture-gates'
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/element browser:gate:full
       - name: Fixture gates
+        if: matrix.leg == 'fixture-gates'
         run: |
-          vp run --fail-if-no-match @openelement/fixture-router-native-framework#gate
-          vp run --fail-if-no-match @openelement/fixture-router-lit-framework#gate
-          vp run --fail-if-no-match @openelement/fixture-router-ui-dogfood#gate
-          vp run --fail-if-no-match @openelement/fixture-router-static-only#build
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-native-framework gate
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-lit-framework gate
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-ui-dogfood gate
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-static-only gate
+          # The second style engine (alpha15 stage 2B): the probe reads its own
+          # build's artifacts through computed styles in all three engines, so
+          # the qualified candidate covers the UnoCSS document and component
+          # sheets the same way it covers the Tailwind ones.
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-unocss-probe gate
+          # The two gate:source steps that had no CI path at all (base-path and
+          # request-time modes: typecheck + build + the 3-engine browser
+          # proof). The request-time suite spent alpha15 red on a real defect —
+          # nested light-root style links were emitted AFTER the host's closing
+          # tag, so every light-root island failed the claim with 'unexpected
+          # trailing nodes' and never hydrated — and is wired here now that the
+          # delivery is leading and the shared static-style predicate is single
+          # owner; 318/318 three-engine.
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-base-path gate
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-request-time gate
       - name: Nitro proofs
+        if: matrix.leg == 'fixture-gates'
         run: |
-          vp run --fail-if-no-match @openelement/fixture-router-nitro#proof:node
-          vp run --fail-if-no-match @openelement/fixture-router-nitro#proof:workers
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-nitro typecheck
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-nitro proof:node
+          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-nitro proof:workers
 
   bfcache:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [sha-guard]
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -221,12 +475,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb
       - name: Build the packed starter
-        run: vp run --fail-if-no-match @openelement/e2e-starter-smoke#setup
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke setup
       - name: BFCache restore (Chrome channel, headed)
-        run: xvfb-run -a vp run --fail-if-no-match @openelement/e2e-starter-smoke#test:bfcache
+        run: xvfb-run -a vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke test:bfcache
 
   node-serve-smoke:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [sha-guard]
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -245,14 +500,22 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Pack the release tarballs
-        run: vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack:dry-run
       - name: Packed serve proof under Node ${{ matrix.node }}
         run: node tools/release/consumer-packaged-node-serve.ts node
 
   packed-consumer-matrix:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [sha-guard]
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # 60, not 30: the Full path now runs the whole packed proof set here, not
+    # just the starter + ui-app pair. The release train's gate:packed exercises
+    # the same consumers: its `release:check` completed in 2074 s while also
+    # carrying the ~1400 s 3-engine Site E2E (run 37570682317, "Qualify
+    # candidate" step), so the packed consumer set itself is well under
+    # ~11 min on Linux; macOS is the slower half of this matrix, so the old
+    # 30-minute cap no longer matched the work.
+    timeout-minutes: 60
     permissions:
       contents: read
     strategy:
@@ -274,12 +537,38 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo ./node_modules/.bin/playwright install-deps chromium firefox webkit
       - name: Pack the release tarballs
-        run: vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack:dry-run
       - name: Fresh packed-starter consumer proof
-        run: vp run --fail-if-no-match @openelement/tools-release#consumer:packaged
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release consumer:packaged
+      # The remaining packed consumers the release train's gate:packed runs.
+      # Each installs the packed tarballs into an isolated consumer and proves
+      # the published surface, never workspace source; the declaration-walk
+      # proofs run inside the element/ui/app legs (see the step comments).
+      - name: Packed element consumer proof
+        # consumer-packaged-element.ts walks the packed element declaration
+        # graph (walkPackedDeclarations) and rejects undeclared browser-tooling
+        # edges.
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release consumer:packaged-element
+      - name: Packed router consumer proof
+        # Route Mode with Element absent and Framework Mode with it present,
+        # strict tsc with skipLibCheck: false against the tarballs.
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release consumer:packaged-router
+      - name: Packed ui consumer proof
+        # The UI consumer's own packed declaration walk
+        # (walkPackedDeclarations).
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release consumer:packaged-ui
+      - name: Packed unocss consumer proof
+        # The second style engine's packed artifact proof (dev + build +
+        # per-engine probes).
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release consumer:packaged-unocss
+      - name: Packed app consumer proof (native + lit)
+        # qualifyPackedAppLeg runs walkRouterDeclarations and
+        # assertPackedElementLeavesKernelFree for each renderer leg.
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release consumer:packaged-app
 
   fresh-install:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [sha-guard]
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

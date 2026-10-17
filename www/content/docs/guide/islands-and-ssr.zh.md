@@ -26,9 +26,21 @@ export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, d
 
 upgrade 本身是浏览器的 Custom Element 机制。服务端把编译后的 Part Program 序列化为 Declarative Shadow DOM；类被定义后，生成的 claim 产物对已经存在的 DOM 重放同一份程序，绑定模板声明过的处理器，并用宿主 attribute 还原 `@property` 字段。不会重建树，不会用字符串查找绑定，也不会从 attribute 合成事件。[流式渲染](/zh/guide/streaming)路由是这条序列化承诺的例外——见上文。
 
+## Light islands
+
+island 的 root 由其组件决定：`@element(tag, { root: 'light' })` 编译出的程序，其子节点落在文档树中；默认的 shadow 模式则序列化 Declarative Shadow DOM。island 配置可以重申该模块属于哪个家族：
+
+```tsx
+export const openElement = defineIslandConfig({ hydrate: 'visible', root: 'light' });
+```
+
+这份声明是被校验的，不是被服从的。装饰器仍是唯一事实来源，与之矛盾的配置会以 `OEC9030` 中止构建；声明它只是让 island 的 root 与其投递策略并排可读，并不会打开组件。
+
+Light island 是 utility-first 样式的实际路径。shadow root 是一道样式边界——在其外部编写的类选择器到不了组件的子节点——所以 shadow island 需要编译器侧的 utility 提取来跨越它；而 light island 的子节点是普通文档节点，页面已编译的样式表本就覆盖它们。代价是放弃了 shadow root 本会提供的隔离。
+
 ## 小运行时
 
-发出的内容是页面声明的那组 island chunk 加上生成的 claim 代码——不存在每个页面都必须加载的框架运行时。没有任何交互模块的页面完全不加载框架 JavaScript；island 全是 `'visible'` 的页面，在读者滚动到之前不付出任何代价。
+发出的内容是页面声明的那组 island chunk 加上生成的 claim 代码——不存在每个页面都必须加载的框架运行时。没有任何交互模块的页面不加载任何 island chunk；只要应用存在任意 island（或增强表单），一个约 2 KB（gzip）的 claim 引导脚本是这类页面唯一的脚本。island 全是 `'visible'` 的页面，在读者滚动到之前不付出任何代价。
 
 这个预算正是静态表面重要的原因。凡是能用标记表达的——内容、布局、文档，甚至样式完整、看起来可交互的组件——都应保持静态 DSD；island 只留给状态与浏览器 API。两种情况下的组件代码完全相同，所以这个决定是一次声明而不是一次重写，也可以在组件真实需求明确后再回来调整。
 

@@ -1,18 +1,18 @@
 /**
- * Shared validation and host access for the compiled server and claim modes.
+ * Shared validation and host access for the compiled server and hydration modes.
  *
- * This module deliberately consumes the unified Part Program v1 shape defined
+ * This module deliberately consumes the unified Part Program v2 shape defined
  * in `../../protocol/part-program.ts`. It owns no DOM discovery and performs no rendering
  * fallback: malformed programs and unsafe values are rejected before either
- * execution mode can produce or attach to output. The server/claim grammar is
+ * execution mode can produce or attach to output. The server/hydration grammar is
  * the compiler-emitted vocabulary — fixed `prop`/`attr`/`bool`/`class`/`style`/
- * `html` sinks, `event` sinks, `text` Parts, and `when`/`each` Regions with
+ * `html` sinks, `event` sinks, `text` Parts, and `when`/`each` Blocks with
  * static branches; other unified-schema kinds fail closed here.
  */
 
 import {
   conditionLiteralAllowed,
-  type PartProgramV1,
+  type PartProgramV2,
   type ProgramPart,
   type ProgramTreeNode,
 } from '@openelement/protocol/part-program';
@@ -39,8 +39,8 @@ export interface CompiledProgramHost {
 }
 
 /**
- * One compiled server/claim validation failure (#1386 item 3): an
- * `OpenElementError` carrying the caller's code, so the whole server/claim
+ * One compiled server/hydration validation failure (#1386 item 3): an
+ * `OpenElementError` carrying the caller's code, so the whole server/hydration
  * grammar boundary is catchable as one type. `path` names the program record
  * that failed; it stays a field rather than moving into the code, because the
  * path is per-site data and the code is the contract.
@@ -121,7 +121,7 @@ function validateStaticNodes(
       return;
     }
     if (node.k === 'ival') {
-      if (!allowItemValue) fail(nodePath, 'item value slot is outside an each Region');
+      if (!allowItemValue) fail(nodePath, 'item value slot is outside an each Block');
       return;
     }
     if (node.k === 'part') {
@@ -137,7 +137,7 @@ function validateStaticNodes(
     validateTag(node.tag, `${nodePath}.tag`);
     validateAttributes(node.attrs, `${nodePath}.attrs`);
     if (node.iattrs !== undefined) {
-      if (!allowItemValue) fail(`${nodePath}.iattrs`, 'item attribute slots need an each Region');
+      if (!allowItemValue) fail(`${nodePath}.iattrs`, 'item attribute slots need an each Block');
       validateAttributes(
         node.iattrs.map(([name, field]) => [name, field]),
         `${nodePath}.iattrs`,
@@ -208,7 +208,7 @@ function validatePart(part: ProgramPart, index: number): void {
       }
       return;
     case 'when':
-      if (!part.signal) fail(path, 'conditional Region needs a non-empty signal name');
+      if (!part.signal) fail(path, 'conditional Block needs a non-empty signal name');
       if (!conditionLiteralAllowed(part.test.op, part.test.value)) {
         fail(
           `${path}.test`,
@@ -220,7 +220,7 @@ function validatePart(part: ProgramPart, index: number): void {
       return;
     case 'each':
       if (!part.signal || !part.key) {
-        fail(path, 'list Region needs signal and key names');
+        fail(path, 'list Block needs signal and key names');
       }
       validateStaticNodes(part.item, `${path}.item`, true);
       return;
@@ -230,7 +230,7 @@ function validatePart(part: ProgramPart, index: number): void {
 }
 
 function resolveTemplateNode(
-  program: PartProgramV1,
+  program: PartProgramV2,
   path: number[],
   where: string,
 ): ProgramTreeNode {
@@ -248,7 +248,7 @@ function resolveTemplateNode(
   return node;
 }
 
-function validateLocations(program: PartProgramV1): void {
+function validateLocations(program: PartProgramV2): void {
   const anchorCounts = new Map<number, number>();
   const walkAnchors = (nodes: ProgramTreeNode[], path: string): void => {
     nodes.forEach((node, index) => {
@@ -263,7 +263,7 @@ function validateLocations(program: PartProgramV1): void {
       }
       const part = program.parts[node.index];
       if (part.k !== 'text' && part.k !== 'when' && part.k !== 'each') {
-        fail(nodePath, 'anchor must reference a text Part or Region');
+        fail(nodePath, 'anchor must reference a text Part or Block');
       }
       const count = (anchorCounts.get(node.index) ?? 0) + 1;
       anchorCounts.set(node.index, count);
@@ -275,7 +275,7 @@ function validateLocations(program: PartProgramV1): void {
   program.parts.forEach((part) => {
     if (part.k === 'text' || part.k === 'when' || part.k === 'each') {
       if (anchorCounts.get(part.index) !== 1) {
-        fail(`parts[${part.index}]`, 'every dynamic Part/Region must have exactly one anchor');
+        fail(`parts[${part.index}]`, 'every dynamic Part/Block must have exactly one anchor');
       }
       return;
     }
@@ -341,7 +341,7 @@ function validateLocations(program: PartProgramV1): void {
   });
 }
 
-/** Validate the unified program plus the server/claim security and ownership invariants. */
+/** Validate the unified program plus the server/hydration security and ownership invariants. */
 export function assertCompiledProgram(raw: unknown): RuntimeProgramIR {
   let program: RuntimeProgramIR;
   try {
@@ -409,7 +409,7 @@ export function isRecordValue(value: unknown): value is Record<string, unknown> 
 
 /**
  * Shared sink coercions consumed identically by the server serializer, fresh
- * DOM creation, and the claim recovery builder. Keeping them here (not in a
+ * DOM creation, and the hydration recovery builder. Keeping them here (not in a
  * mode-local module) is what makes the three modes byte-identical for the
  * same program + signal state.
  */

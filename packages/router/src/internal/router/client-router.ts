@@ -544,7 +544,11 @@ export function createRouter(options: RouterOptions): RouterInstance {
       return new URLSearchParams(currentSearchParams);
     },
     get params(): Record<string, string> {
-      return currentParams;
+      // Same copy contract as searchParams above: every reader gets its own
+      // copy, so user code can never rewrite the router's canonical match
+      // state (a mutation used to stick, silently forking later navigations
+      // that re-read currentParams).
+      return { ...currentParams };
     },
   };
 }

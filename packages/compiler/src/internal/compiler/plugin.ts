@@ -7,11 +7,14 @@
  * declaration (#1209: the decorator identifier must resolve to a runtime
  * named import of `element` from '@openelement/element'; a bare or same-name
  * spelling never admits the module); everything else passes through
- * untouched. Admission is two-staged: a cheap `@element(` substring prefilter
- * keeps plain modules off the AST path, then the semantic core's binding
- * analysis decides — a module that merely mentions the marker inside a string
- * literal or comment, or spells it through a foreign binding, is not
- * compiled. A module whose decorator provenance is unsupported or ambiguous
+ * untouched. Admission is two-staged: a cheap prefilter (a supported module id
+ * whose source contains the decorator's '@' character) keeps plain modules off
+ * the AST path, then the semantic core's binding analysis decides — a module
+ * that merely mentions the marker inside a string literal or comment, or spells
+ * it through a foreign binding, is not
+ * compiled. The prefilter is a SUPERSET of what the core admits and of what it
+ * rejects: a spelling the core would reject must reach it to fail closed.
+ * A module whose decorator provenance is unsupported or ambiguous
  * (type-only import, namespace access, conflicting bindings, re-export) is
  * routed to the compiler so the build fails closed with a source-located
  * OEC9027 diagnostic; other unsupported grammar in a genuinely decorated
@@ -25,7 +28,7 @@
  * recovers exactly those edges (compiled-artifact-style-requests.ts) so the
  * packed and workspace-source forms of one package admit identically.
  *
- * Internal Part Program v1 pipeline: not part of the public adapter API.
+ * Internal Part Program v2 pipeline: not part of the public adapter API.
  */
 
 import type { Plugin } from 'vite';
@@ -39,28 +42,63 @@ import {
   type SemanticCoreOptions,
   type StaticSidecarDescriptor,
 } from './semantic-core/module-analysis.ts';
-import { diagnosticPluginError } from './semantic-core/diagnostics/index.ts';
+import { compileServerComponentIfAdmitted } from './semantic-core/server-component.ts';
+import {
+  diagnosticPluginError,
+  recordCompilerDiagnostics,
+} from './semantic-core/diagnostics/index.ts';
 import { typeCheckEmittedModule } from './semantic-core/type-check.ts';
-import { compiledArtifactStyleRequests } from './compiled-artifact-style-requests.ts';
-import { registerStyleRequest, styleRequestFile, styleRequestModuleId } from './style-requests.ts';
-
-/** The authored substring every compiled element module contains (`@element(`), used as the cheap prefilter. */
-export const COMPILED_ELEMENT_MARKER = '@element(';
+import { compiledArtifactClassCandidates } from './compiled-artifact-class-candidates.ts';
+import { readCompiledArtifactStyles } from './compiled-artifact-style-requests.ts';
+import {
+  lightRootScopeTag,
+  registerStyleRequest,
+  styleRequestFile,
+  styleRequestModuleId,
+} from './style-requests.ts';
+import { type ClassCandidateRegistry } from './tailwind-candidates.ts';
 
 /**
- * Cheap first stage only — NOT a recognizer. The substring match exists to
- * keep plain modules off the AST path and may false-positive (string literals
- * and comments match); it may also false-negative on namespace-qualified
- * spellings (`@ns.element(...)`), which are unsupported by the grammar anyway
- * (#1209). Binding provenance and admission are decided exclusively by the
- * semantic core.
+ * The cheap first stage — NOT a recognizer.
+ *
+ * It answers one question: could this module be a compiled element module? The
+ * one grammar-independent fact every authored form shares is the '@' character
+ * of its decorator application. Every spelling of the authored form contains
+ * it — `@element(...)`, an aliased binding (`import { element as
+ * defineElement }` with `@defineElement(...)`), a Unicode alias
+ * (`import { element as 元件 }` with `@元件(...)`) — and so does every spelling
+ * the semantic layer REJECTS but must still see in order to fail closed with
+ * its provenance diagnostic (the namespace form, OEC9027). JavaScript lexing
+ * makes any finer shape un-modelable in a prefilter: identifiers are not ASCII
+ * (Unicode aliases are legal), and the lexer skips comments, so a block comment
+ * between the decorator name and its argument list is a legal decorator
+ * application no identifier-shaped regex admits.
+ *
+ * The stages this replaced modeled the decorator-application SHAPE — a literal
+ * `@element(` substring, then an ASCII-identifier-plus-whitespace regex — and
+ * therefore answered "does this module spell the decorator this way?" instead
+ * of "could this module be a compiled element module?", narrowing the CONTRACT
+ * rather than the AST path: legal spellings the semantic core admits never
+ * reached the layer that admits them. Admission has exactly one authority; a
+ * prefilter may only decide whether a module is worth parsing. A false positive
+ * here (any '@' in a string literal, comment, or import specifier) costs one
+ * parse and nothing else; a false negative hides a legal module from its only
+ * admission authority.
+ */
+const SUPPORTED_MODULE_ID = /\.tsx(?:\?|$)/;
+
+/**
+ * Cheap first stage only — NOT a recognizer. The match keeps plain modules off
+ * the AST path and may false-positive (any '@' — inside a string literal,
+ * comment, or import specifier — matches); binding provenance and admission
+ * are decided exclusively by the semantic core.
  */
 export function isCompiledElementModule(code: string, id: string): boolean {
-  return /\.tsx(?:\?|$)/.test(id) && code.includes(COMPILED_ELEMENT_MARKER);
+  return SUPPORTED_MODULE_ID.test(id) && code.includes('@');
 }
 
 /**
- * Precise second stage behind the substring prefilter: a canonically bound
+ * Precise second stage behind the prefilter: a canonically bound
  * `@element(...)` decorator application on a class declaration (provenance
  * decided by the semantic core's intrinsic-binding model). Modules that only
  * mention the marker in a string literal or comment, or spell it through a
@@ -161,6 +199,62 @@ export interface CompiledElementPluginOptions {
    * sidecar policy statement fails closed with OEC9008.
    */
   staticSidecars?: readonly StaticSidecarDescriptor[];
+  /**
+   * The class-candidate registry this plugin instance writes its compiled
+   * modules' statically admitted class tokens into (alpha15 S lane). The
+   * registry is OWNED by the host that created it — one per build, one per dev
+   * server — so two live builds in one process never inherit each other's
+   * facts (defect C). Omitted: this instance collects no candidates, which is
+   * the right shape for a build that consumes none (e.g. the SSR half).
+   */
+  candidates?: ClassCandidateRegistry;
+  /**
+   * Host-supplied resolver for the server function component lane's nested
+   * imports (`resolveModule` of {@link compileServerComponentModule}): given
+   * a specifier and the importing module id, return that module's SOURCE so
+   * a nested server function component composes by direct call. Omitting it
+   * (or answering undefined) keeps nested composition a coded rejection.
+   * The compiler itself never reads the filesystem — resolution stays the
+   * host's job, so this option carries the host's capability rather than a
+   * path convention.
+   */
+  resolveServerComponentModule?: (specifier: string, importer: string) => string | null;
+  /**
+   * The custom-element host tags the host build admitted as @element compiled
+   * components: JSX children in a server function component ride
+   * `__ssr(tag, props)` for those tags and an emitted-as-is tag otherwise.
+   */
+  compiledTags?: readonly string[];
+}
+
+/**
+ * Register one module's style edges (the registry's one write path, S-C1.4).
+ *
+ * The importing component's root scope is part of every edge it registers
+ * (alpha15 S lane, S-C1.2): a light-root component's sheets leave the build
+ * wrapped in `@scope (<tag>)`, so the tag travels to the intercept through the
+ * registry key. A shipped artifact states the same fact in its Part Program
+ * literal.
+ *
+ * The Vite transform is the caller for a module the bundler processes; a build
+ * host that admits a module for its ADMISSION FACTS alone (a Page or Layout the
+ * server renders and no island imports) calls the same step with the same
+ * compiled program — no second writer, no second registry.
+ */
+export function registerStyleEdges(
+  id: string,
+  specifiers: readonly string[],
+  scopeTag: string | undefined,
+): void {
+  for (const specifier of specifiers) {
+    registerStyleRequest({
+      moduleId: styleRequestModuleId(id, specifier, scopeTag),
+      importer: id,
+      specifier,
+      file: styleRequestFile(id, specifier),
+      ...(scopeTag === undefined ? {} : { scopeTag }),
+    });
+  }
 }
 
 /**
@@ -190,27 +284,108 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
         const compiled = compileElementModule(code, moduleId, {
           staticSidecars: options.staticSidecars,
         });
+        // The server function component lane (alpha15): the class lane
+        // declined (no compiled-element decorator), so the module may still
+        // be a server function page/component — an exported JSX-returning
+        // function the compiler lowers into __h/__t/__ssr constructors. The
+        // class candidates a function module proves are LIGHT-root facts
+        // (no element class, no shadow root). Style edges are honestly
+        // SKIPPED: a function page owns no element class to hang the DSD
+        // `<link>` on, and a registered edge with no consumer would emit an
+        // orphan CSS asset (the demand-shape discipline the style pipeline
+        // documents).
+        const serverCompiled =
+          compiled === null
+            ? compileServerComponentIfAdmitted(code, moduleId, {
+                ...(options.resolveServerComponentModule === undefined
+                  ? {}
+                  : {
+                      resolveModule: (specifier: string) => {
+                        const resolved = options.resolveServerComponentModule!(specifier, moduleId);
+                        return resolved ?? undefined;
+                      },
+                    }),
+                ...(options.compiledTags === undefined
+                  ? {}
+                  : { compiledTags: options.compiledTags }),
+              })
+            : null;
         // An ALREADY-compiled artifact (a package's shipped module) has no
         // authored grammar left to compile, but its `.css` imports are the
         // same style edges the authored path registers — recovered through the
         // artifact read (compiled-artifact-style-requests.ts) so the packed
         // form is admitted identically to the workspace-source form (#1558/
         // KR-10). This transform stays the registry's one writer.
-        const styleRequests = compiled?.styleRequests ?? compiledArtifactStyleRequests(code, id);
+        const artifact =
+          compiled || serverCompiled ? undefined : readCompiledArtifactStyles(code, id);
+        const styleRequests = compiled?.styleRequests ?? artifact?.requests;
         // The compiled module's `.css` edges travel to the intercepting host
         // plugin through the style-edge registry — keyed by the id the
         // bundler's resolver lands on for the authored import. The compiler
         // never writes files or reads sheet bytes; the host build owns the
         // emitted artifacts from here.
         if (styleRequests !== undefined) {
-          for (const specifier of styleRequests) {
-            registerStyleRequest({
-              moduleId: styleRequestModuleId(id, specifier),
-              importer: id,
-              specifier,
-              file: styleRequestFile(id, specifier),
+          registerStyleEdges(
+            id,
+            styleRequests,
+            compiled ? lightRootScopeTag(compiled.program) : artifact?.scopeTag,
+          );
+        }
+        // The compiled component's statically admitted class tokens (alpha15 S
+        // lane) travel through the candidate registry: the host build hands
+        // them to the OFFICIAL Tailwind compiler as explicit candidates and
+        // emits the generated CSS as an external stylesheet asset. The
+        // compiler attaches no Tailwind semantics to them (opaque strings).
+        //
+        // The registration is AUTHORITATIVE for the module, including "none":
+        // a module re-transformed to carry no static class token drops its
+        // previous facts, so an edit that deleted every class cannot leave a
+        // stale candidate in the next stylesheet (defect C).
+        if (options.candidates !== undefined) {
+          if (compiled !== null) {
+            options.candidates.register(id, compiled.classCandidates ?? [], {
+              // The root scope is part of the fact: only a shadow-root
+              // component's classes need the component stylesheet — light-root
+              // classes live in document DOM and the document entry covers them.
+              shadow: compiled.program.root.kind !== 'light',
+            });
+          } else if (serverCompiled !== null) {
+            // A server function component has no element class and no root —
+            // its output is document DOM, so its classes are LIGHT facts.
+            options.candidates.register(id, serverCompiled.classCandidates ?? [], {
+              shadow: false,
+            });
+          } else {
+            // An already-compiled artifact (a shipped package module): its
+            // candidates were proven at pack time and travel in the module
+            // (S5-B), so the same registry admits the packed form exactly as the
+            // authored form — no second parser over the shipped markup.
+            options.candidates.register(id, compiledArtifactClassCandidates(code, id) ?? [], {
+              shadow: true,
             });
           }
+        }
+        if (serverCompiled !== null) {
+          if (options.typeCheckEmitted) {
+            const diagnostics = typeCheckEmittedModule(serverCompiled.code, moduleId, {
+              paths: options.resolutionPaths,
+            });
+            const first = diagnostics[0];
+            if (first) {
+              this.error({
+                id,
+                loc: { file: id, line: first.line, column: first.character },
+                message:
+                  `[open:compiled-element] the server component lane emitted a module that does ` +
+                  `not type-check (${diagnostics.length} diagnostic(s); TS${first.code}: ` +
+                  `${first.message}). This is a compiler defect — report it with the authored ` +
+                  'module that triggered it.',
+              });
+            }
+          }
+          // The lane emits no inline map comment (the artifact is standalone
+          // TS without a map tail), so no strip is needed.
+          return { code: serverCompiled.code, map: serverCompiled.map };
         }
         // The edge registration above is the whole job for an adopted
         // artifact: it ships as its own emitted module, nothing to compile or
@@ -228,7 +403,8 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
             // location the build overlay underlines.
             this.error({
               id,
-              loc: { file: id, line: first.line - 1, column: first.character - 1 },
+              // 1-based, the same base diagnosticPluginError reports — one loc shape.
+              loc: { file: id, line: first.line, column: first.character },
               message:
                 `[open:compiled-element] the compiler emitted a module that does not ` +
                 `type-check (${diagnostics.length} diagnostic(s); TS${first.code}: ` +
@@ -245,6 +421,10 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
           // pre-joined display string — the overlay underlines the authored
           // line, and a programmatic consumer reads the location instead of
           // parsing a message back apart.
+          // #1612: rolldown flattens the record off the THROWN error, so the
+          // envelopes are recorded at this boundary and the build exit drains
+          // them — the machine-readable aggregate keeps every OEC code.
+          recordCompilerDiagnostics(error.diagnostics);
           this.error(diagnosticPluginError(error.diagnostics, code, id) ?? error.message);
         }
         throw error;

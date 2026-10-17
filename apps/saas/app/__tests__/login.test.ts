@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
-import { renderDsd } from '@openelement/element';
+import { renderToString } from '@openelement/element';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
 // authoring module's compile-time-only decorators; SSR assertions compile the
@@ -74,7 +74,7 @@ test('login success redirects with PRG', async () => {
 
 test('login SSR includes the action error mount point contract', async () => {
   const LoginPage = await compileComponentClass('../components/page-login.tsx');
-  const out = renderDsd('login-page', {
+  const html = renderToString('login-page', {
     componentClass: LoginPage,
     props: loginPageProps({
       data: { oauthProviders: [] },
@@ -84,9 +84,11 @@ test('login SSR includes the action error mount point contract', async () => {
       meta: {},
     }),
   });
-  expect(out.errors).toEqual([]);
-  expect(out.html.includes("id='error'") || out.html.includes('id="error"'), out.html).toBeTruthy();
-  expect(out.html.includes('>x<'), out.html).toBeTruthy();
+  // renderToString returns the serialized markup directly; a render error
+  // propagates as a throw (the retired result object's `errors` field was a
+  // hardcoded empty array), so reaching these assertions is the guarantee.
+  expect(html.includes("id='error'") || html.includes('id="error"'), html).toBeTruthy();
+  expect(html.includes('>x<'), html).toBeTruthy();
 });
 
 function oauthClient(
@@ -164,13 +166,13 @@ test('login projects one flag per configured provider instead of the placeholder
 test('login SSR renders the provider branches and placeholder from the projection', async () => {
   const LoginPage = await compileComponentClass('../components/page-login.tsx');
   const base = { actionData: undefined, params: {}, route: { path: '/login' }, meta: {} };
-  const none = renderDsd('login-page', {
+  const none = renderToString('login-page', {
     componentClass: LoginPage,
     props: loginPageProps({ ...base, data: { oauthProviders: [] } }),
   });
-  expect(none.html.includes('OAuth providers: not configured'), none.html).toBeTruthy();
-  expect(!none.html.includes('Continue with'), none.html).toBeTruthy();
-  const both = renderDsd('login-page', {
+  expect(none.includes('OAuth providers: not configured'), none).toBeTruthy();
+  expect(!none.includes('Continue with'), none).toBeTruthy();
+  const both = renderToString('login-page', {
     componentClass: LoginPage,
     props: loginPageProps({
       ...base,
@@ -182,9 +184,9 @@ test('login SSR renders the provider branches and placeholder from the projectio
       },
     }),
   });
-  expect(both.html.includes('Continue with Google'), both.html).toBeTruthy();
-  expect(both.html.includes('Continue with GitHub'), both.html).toBeTruthy();
-  expect(!both.html.includes('not configured'), both.html).toBeTruthy();
+  expect(both.includes('Continue with Google'), both).toBeTruthy();
+  expect(both.includes('Continue with GitHub'), both).toBeTruthy();
+  expect(!both.includes('not configured'), both).toBeTruthy();
 });
 
 test('oauth action fails closed without 500 when the provider is not configured', async () => {

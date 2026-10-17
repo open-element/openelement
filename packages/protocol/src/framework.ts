@@ -1,5 +1,5 @@
 /**
- * framework.ts - Framework, build, app-shell, routing, and plugin
+ * framework.ts - Framework, build, layout, routing, and plugin
  * metadata contracts.
  */
 
@@ -87,13 +87,13 @@ export interface LocalePath {
 }
 
 /**
- * Application shell declaration: `false` disables the shell entirely,
- * `'default'` uses the built-in shell, and the object form names a tag with the
+ * Layout declaration: `false` disables the layout entirely,
+ * `'default'` uses the built-in layout, and the object form names a tag with the
  * module path that defines it (`import`, resolved like a
- * {@link FrameworkOptions.middleware.use} entry) plus the compiled shell
+ * {@link FrameworkOptions.middleware.use} entry) plus the compiled layout
  * properties the router injects per route.
  */
-export type AppShellConfig =
+export type LayoutConfig =
   | false
   | 'default'
   | {
@@ -101,7 +101,7 @@ export type AppShellConfig =
       import: string;
       props?: Record<string, unknown>;
     };
-type LayoutsConfig = Record<string, AppShellConfig | undefined>;
+type LayoutsConfig = Record<string, LayoutConfig | undefined>;
 
 /**
  * One route admitted by the scanner: URL `path`, source `filePath`, the
@@ -125,6 +125,17 @@ export interface RouteEntry {
    * registration tag.
    */
   definePage?: boolean;
+  /**
+   * The server function page fact (alpha15 server lane): the exported server
+   * function component the route's `export default definePage(Component)` was
+   * called over. Present only when the argument is a plain identifier
+   * resolving to a component THIS module declares — an inline arrow or an
+   * unexported local never records it (the R1 admission rule mirrored, so a
+   * shape whose JSX would escape to runtime is never admitted). The generated
+   * entry registers nothing for the route and renders it through the
+   * descriptor's compiled render function.
+   */
+  functionPage?: string;
   /** Source text captured during scanning when includeSource is enabled. */
   source?: string;
   /**
@@ -158,8 +169,8 @@ export interface RouteEntry {
 export type Middleware = (request: Request, next: () => Promise<Response>) => Promise<Response>;
 
 /**
- * The adapter-facing framework options: where routes, islands and components
- * live, which renderer serializes pages, the application shell and layout
+ * The adapter-facing framework options: where routes and islands
+ * live, which renderer serializes pages, the default layout and named-layout
  * declarations, the document `<html>`/head injection channels, and the
  * request-time middleware switches.
  *
@@ -171,27 +182,42 @@ export interface FrameworkOptions {
   /**
    * Page renderer selection (Beta.2.2, #1339). EXPLICIT, never inferred:
    * 'native' (default) renders pages through the compiled Part Program
-   * serializer (renderDsd); 'lit' renders LitElement pages through
+   * serializer (renderToString); 'lit' renders LitElement pages through
    * @lit-labs/ssr and hydrates them with @lit-labs/ssr-client. Routing,
    * loaders, actions, form enhancement and morphing are shared; only page
    * rendering and the client claim layer fork. 'lit' currently requires
-   * `appShell: false` (no compiled shell); the build fails closed otherwise.
+   * `layout: false` (no compiled layout); the build fails closed otherwise.
    */
   renderer?: 'native' | 'lit';
   /** Directory the route scanner walks, relative to the Vite root. Defaults to `app/routes`. */
   routesDir?: string;
   /** Directory island modules are discovered in. Defaults to `app/islands`. */
   islandsDir?: string;
-  /** Directory non-route components live in. Defaults to `app/components`. */
-  componentsDir?: string;
-  /** Extra package names whose island modules the build admits, e.g. `['@openelement/ui']`. */
-  packageIslands?: string[];
-  /** Application shell declaration; `false` disables the shell, `'default'` uses the built-in one. */
-  appShell?: AppShellConfig;
-  /** Per-layout shell declarations keyed by layout name. */
+  /**
+   * How the build admits component packages whose modules the application
+   * imports.
+   *
+   * - omitted or `'auto'` (the default): the scan derives the admitted set at
+   *   scan time — every package-owned element module the app's routes, pages,
+   *   layouts, islands and components really reach (bundler-resolved) is
+   *   attributed to its owner package (nearest `package.json`), and a package
+   *   with a valid OpenElement manifest is admitted. An array value merges with
+   *   the derivation; an explicit entry outranks a derived claim when two
+   *   packages claim the same tag.
+   * - `'manual'`: derivation off — the pre-auto behavior. Nothing is admitted
+   *   unless listed, and an imported-but-unlisted component package is
+   *   reported with the explicit fix.
+   * - `string[]`: admitted explicitly, on top of the derivation (auto mode).
+   *
+   * A package whose modules the app imports but which carries no valid
+   * manifest is never admitted (there is nothing to admit) and is reported —
+   * the one true mistake class the report keeps under auto.
+   */
+  packageIslands?: string[] | 'auto' | 'manual';
+  /** Layout declaration; `false` disables the layout, `'default'` uses the built-in one. */
+  layout?: LayoutConfig;
+  /** Named layout declarations keyed by layout name. */
   layouts?: LayoutsConfig;
-  /** Build mode. 'ssg' (default) generates static HTML. */
-  mode?: 'ssg';
   /** @dangerous injected as-is, only use with controlled content */
   headExtras?: string;
   /** Document `<html>` attributes: the `lang` the document declares and the default `<title>`. */
@@ -267,7 +293,7 @@ export interface FrameworkOptions {
       };
   /** Request-time middleware switches, composed outside the framework handler. */
   middleware?: {
-    /** Enable the built-in CORS middleware. */
+    /** Built-in CORS middleware. Default-ON; pass `false` to disable. */
     cors?: boolean;
     /**
      * Static CORS allowlist data, serialized into the generated entry as JSON.
@@ -279,15 +305,15 @@ export interface FrameworkOptions {
      * `(origin: string) => string | undefined`. The generated entry imports
      * the module — the callback is never serialized — so it may close over
      * module scope and import dependencies. Resolved with the same idiom as
-     * `appShell.import` (e.g. './app/cors-origin.ts'). Mutually exclusive
+     * `layout.import` (e.g. './app/cors-origin.ts'). Mutually exclusive
      * with `corsOrigin`.
      */
     corsOriginModule?: string;
-    /** Emit and honor a per-request id header. */
+    /** Emit and honor a per-request id header. Default-ON; pass `false` to disable. */
     requestId?: boolean;
-    /** Log each request through the built-in logger. */
+    /** Log each request through the built-in logger. Default-ON; pass `false` to disable. */
     logger?: boolean;
-    /** Attach the built-in security response headers. */
+    /** Attach the built-in security response headers. Default-ON; pass `false` to disable. */
     securityHeaders?: boolean;
     /** Content-Security-Policy emission: the policy string, nonce generation, and report-only mode. */
     csp?: {
@@ -299,7 +325,7 @@ export interface FrameworkOptions {
      * Fetch middleware chain (#858), composed around the
      * framework handler in onion order (`use[0]` outermost), outside all
      * built-in middleware above. Each entry is a MODULE PATH (same resolution
-     * idiom as `appShell.import`, e.g. './app/middleware/auth.ts') whose
+     * idiom as `layout.import`, e.g. './app/middleware/auth.ts') whose
      * default export is a {@link Middleware}; the generated entry emits
      * `import * as __mw_N from '<path>'` and composes `__mw_N.default` in
      * configured order.

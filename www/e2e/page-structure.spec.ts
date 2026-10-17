@@ -64,7 +64,7 @@ test.describe('Unified page structure', () => {
 
   test('404 remains a compact recovery scene without WebGL', async ({ page }) => {
     await page.goto('/404');
-    const scene = page.locator('el-404');
+    const scene = page.locator('.page-404');
     await expect(scene.locator('h1')).toHaveText('404');
     await expect(scene).toContainText('Lost in the shadow DOM.');
     await expect(scene.locator('open-button[href="/"]')).toHaveCount(1);
@@ -73,8 +73,9 @@ test.describe('Unified page structure', () => {
 
   test('docs landing is a v4 manual index with five entrances', async ({ page }) => {
     await page.goto('/docs');
-    await expect(page.locator('docs-index h1')).toContainText('MANUAL.');
-    const entrances = page.locator('docs-index').getByRole('link');
+    const hub = page.locator('.page-docs');
+    await expect(hub.locator('h1')).toContainText('MANUAL.');
+    const entrances = hub.getByRole('link');
     await expect(entrances).toHaveCount(5);
     await expect(entrances.first()).toHaveAttribute('href', '/guide/getting-started');
     // The tutorial is the guided second step, not just a sidebar entry.
@@ -83,15 +84,21 @@ test.describe('Unified page structure', () => {
 
   test('blog index is a v4 dispatch journal with a featured band', async ({ page, request }) => {
     await page.goto('/blog');
-    await expect(page.locator('blog-index h1')).toHaveText('Dispatches.');
+    // The retired <blog-index> host became the page hook class (page-blog-index)
+    // when the route migrated to a server function page (alpha15).
+    const index = page.locator('.page-blog-index');
+    await expect(index.locator('h1')).toHaveText('Dispatches.');
     // The 1.0 baseline ships one dispatch; it is the featured band and the
     // stream renders any earlier dispatches. Assert the featured post is real
     // and that every post link on the index resolves.
-    const featured = page.locator('blog-index .featured');
+    // The featured band is the index's only post anchor that carries an h2
+    // (stream rows carry h3); the presentation class it used to be found by
+    // went away with the utility-first migration.
+    const featured = index.locator('a:has(h2)').first();
     await expect(featured).toHaveAttribute('href', /\/blog\/.+/);
     await expect(featured.locator('h2')).toBeVisible();
-    const hrefs = await page
-      .locator('blog-index a[href^="/blog/"]')
+    const hrefs = await index
+      .locator('a[href^="/blog/"]')
       .evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? ''));
     expect(hrefs.length).toBeGreaterThan(0);
     for (const href of hrefs) {
@@ -102,10 +109,11 @@ test.describe('Unified page structure', () => {
 
   test('contributing is a v4 lab page with terminal, checklist and help rows', async ({ page }) => {
     await page.goto('/contributing');
-    await expect(page.locator('contributing-page h1')).toContainText('BUILD IT');
-    await expect(page.locator('contributing-page open-code-block')).toHaveCount(1);
-    expect(await page.locator('contributing-page .checklist li').count()).toBeGreaterThan(0);
-    expect(await page.locator('contributing-page .help-row').count()).toBe(3);
+    const lab = page.locator('.page-contributing');
+    await expect(lab.locator('h1')).toContainText('BUILD IT');
+    await expect(lab.locator('open-code-block')).toHaveCount(1);
+    expect(await lab.locator('.checklist li').count()).toBeGreaterThan(0);
+    expect(await lab.locator('.help-row').count()).toBe(3);
   });
 
   test('former hero pages render content-first, without a mega hero', async ({ page }) => {
@@ -135,16 +143,20 @@ test.describe('Unified page structure', () => {
     page,
   }) => {
     await page.goto('/reference');
-    const frames = page.locator('reference-page open-section-frame[data-oe-light]');
-    // Light DOM only: the locator 'reference-page open-section-frame' is a
-    // descendant combinator that does not pierce shadow roots; frames rendered
-    // inside the reference-page's own shadow template are intentionally
-    // invisible to it. The remaining 5 are the page's light-DOM frames.
+    // The retired <reference-page> host became the page hook class
+    // (page-reference) with the server function page migration (alpha15);
+    // the frame locator is rooted at it so frames of other routes cannot match.
+    const frames = page.locator('.page-reference open-section-frame[data-oe-light]');
+    // Light DOM only: the page hook is a class on a light-div (no shadow root
+    // to pierce), so every one of the page's frames is addressable.
     await expect(frames).toHaveCount(5);
-    await expect(frames.first().locator('.frame .title')).toContainText(
+    await expect(frames.first().locator('h2')).toContainText(
       'Authoring starts at product packages.',
     );
-    await expect(frames.nth(1).locator('.frame .body .registry')).toBeVisible();
+    // The second frame's body is the package registry; `.registry` went away
+    // with the utility-first migration, and the generated rows now carry their
+    // kind as data (the generated anchor id is not stable across packages).
+    await expect(frames.nth(1).locator('[data-kind]').first()).toBeVisible();
   });
 
   test('reference renders the generated export and element reference with stable anchors (#1307)', async ({
@@ -155,18 +167,22 @@ test.describe('Unified page structure', () => {
     // (adapter-vite anchors retired with the package; use a current export.)
     const exportRow = page.locator('#api-element-root-Action');
     await expect(exportRow).toBeVisible();
-    await expect(exportRow.locator('.ref-name')).toHaveText('Action');
+    // The row leads with its name cell; `.ref-name` went away with the
+    // utility-first migration.
+    await expect(exportRow.locator('span').first()).toHaveText('Action');
     const elementRow = page.locator('#ce-open-button');
     await expect(elementRow).toBeVisible();
-    await expect(elementRow.locator('.ce-tag')).toHaveText('<open-button>');
-    expect(await page.locator('.ref-row').count()).toBeGreaterThan(150);
+    await expect(elementRow.locator('span').first()).toHaveText('<open-button>');
+    // Export rows are the generated `api-*` anchors.
+    expect(await page.locator('[id^="api-"]').count()).toBeGreaterThan(150);
     // #1557 retired the four zero-interaction ui components: the element
     // reference table carries the frozen six-component roster.
-    expect(await page.locator('.ce-row').count()).toBe(6);
+    // Element rows are the generated `ce-*` anchors.
+    expect(await page.locator('[id^="ce-"]').count()).toBe(6);
     // zh renders the same generated anchors with zh chrome.
     await page.goto('/zh/reference');
     await expect(page.locator('#ce-open-input')).toBeVisible();
-    await expect(page.locator('.ref-row').first()).toBeVisible();
+    await expect(page.locator('[id^="api-"]').first()).toBeVisible();
   });
 
   test('roadmap standards visual renders through the compiled light root', async ({ page }) => {
@@ -289,9 +305,9 @@ test.describe('Unified page structure', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     for (const route of ['/reference', '/changelog', '/contributing', '/guide/configuration']) {
       await page.goto(route);
-      // The app shell is the one landmark every page shares (contributing has
-      // no reading shell — its h1 lives in the page component's shadow root).
-      await expect(page.locator('open-layout').first()).toBeVisible();
+      // The layout is the one landmark every page shares (the app-layout
+      // convention shell replaced the retired open-layout island).
+      await expect(page.locator('app-layout').first()).toBeVisible();
       // Wrap points depend on font metrics: measure after the faces settle.
       await page.evaluate(() => document.fonts.ready);
       const state = await page.evaluate(() => ({

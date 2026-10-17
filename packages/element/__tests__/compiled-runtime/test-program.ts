@@ -1,10 +1,10 @@
 /**
- * Test-only builder for valid Part Program v1 values.
+ * Test-only builder for valid Part Program v2 values.
  *
  * Runtime tests declare the executable core of a program (tag, template,
  * parts) and this builder derives the compiler-owned identity records exactly
  * the way the canonical encoding requires: stable element/anchor ids, per-part
- * locations, region/dependency/location records, and a consistent source map
+ * locations, block/dependency/location records, and a consistent source map
  * and metadata envelope. Every built value is round-tripped through
  * `validatePartProgram`, so a spec mistake fails at build time with the real
  * validator diagnostic.
@@ -119,7 +119,11 @@ function buildNodes(
     const plainPath = [...plainPrefix, position];
     if (node.k === 'el') {
       const id = `e${state.nextElementId++}`;
-      const elementPath = subtreeRoot && position === 0 ? [] : [...elementPrefix, position];
+      // A subtree root sits at its node-list address: [] for an each item
+      // template (historical form), [0] for a when branch (alpha15 — the
+      // node-list indexing a fixed branch sink's path uses).
+      const elementPath =
+        subtreeRoot && position === 0 ? [...elementPrefix] : [...elementPrefix, position];
       state.elements.push({ id, tag: node.tag as string, path: elementPath });
       return {
         k: 'el',
@@ -141,43 +145,53 @@ function buildNodes(
 }
 
 function resolveElementId(template: BuiltNode[], path: number[], partIndex: number): string {
-  let nodes = template;
+  const direct = resolveElementIdIn(template, path);
+  if (direct !== undefined) return direct;
+  // Branch-relative sink path (alpha15): the target lives in a when branch.
+  throw new Error(`test program spec: parts[${partIndex}].path is unresolved`);
+}
+
+function resolveElementIdIn(nodes: BuiltNode[], path: number[]): string | undefined {
+  let list = nodes;
   let node: BuiltNode | undefined;
   for (const index of path) {
-    node = nodes[index];
-    if (!node) {
-      throw new Error(`test program spec: parts[${partIndex}].path is unresolved`);
-    }
-    nodes = node.children ?? [];
+    node = list[index];
+    if (!node) return undefined;
+    list = node.children ?? [];
   }
-  if (!node || node.k !== 'el' || node.id === undefined) {
-    throw new Error(`test program spec: parts[${partIndex}].path must target an element`);
-  }
+  if (!node || node.k !== 'el' || node.id === undefined) return undefined;
   return node.id;
 }
 
 const FIXED_KINDS = new Set(['prop', 'attr', 'bool', 'class', 'style', 'html', 'ref', 'event']);
-const REGION_KINDS = new Set(['when', 'each']);
+const BLOCK_KINDS = new Set(['when', 'each']);
 
-function sourceKind(recordId: string, regionPartIds: Set<string>): string {
+function sourceKind(recordId: string, blockPartIds: Set<string>): string {
   if (recordId === 'root') return 'root';
   if (recordId.startsWith('e')) return 'element';
-  if (regionPartIds.has(recordId) || recordId.startsWith('r')) return 'region';
+  if (blockPartIds.has(recordId) || recordId.startsWith('r')) return 'region';
   return 'part';
 }
 
-/** Build one validated Part Program v1 from the executable core of a spec. */
+/** Build one validated Part Program v2 from the executable core of a spec. */
 export function testProgram(spec: TestProgramSpec): PartProgram {
   const state: BuildState = { nextElementId: 0, elements: [], anchors: [] };
   const template = buildNodes(spec.template, [], [], false, state);
 
-  // Region subtrees are walked in part order, after the template, matching the
-  // compiler's identity assignment discipline.
+  // Block subtrees are walked in part order, after the template, matching the
+  // compiler's identity assignment discipline. when-Branch element locations
+  // record the branch node-list address (root at [0] — alpha15, the same
+  // convention a fixed branch sink's path uses); each item templates keep the
+  // historical subtree-root [] form.
+  const builtWhenTrees: BuiltNode[][] = [];
   const parts = spec.parts.map((part) => {
     const built: Record<string, unknown> = { ...part };
     if (part.k === 'when') {
-      built.on = buildNodes(part.on ?? [], [], [], true, state);
-      built.off = buildNodes(part.off ?? [], [], [], true, state);
+      const on = buildNodes(part.on ?? [], [], [0], true, state);
+      const off = buildNodes(part.off ?? [], [], [0], true, state);
+      built.on = on;
+      built.off = off;
+      builtWhenTrees.push(on, off);
     } else if (part.k === 'each') {
       built.item = buildNodes(part.item ?? [], [], [], true, state);
     }
@@ -188,14 +202,27 @@ export function testProgram(spec: TestProgramSpec): PartProgram {
   for (const element of state.elements) {
     locations.push({ id: element.id, kind: 'element', tag: element.tag, path: element.path });
   }
-  const regionPartIds = new Set<string>();
-  const regions: Array<Record<string, unknown>> = [];
+  const blockPartIds = new Set<string>();
+  const blocks: Array<Record<string, unknown>> = [];
   const dependencies: Array<Record<string, unknown>> = [];
+
+  // Sink-target resolution: a spec path names a template address, or (alpha15)
+  // a branch-relative address into one of the when trees built above.
+  const resolveSinkNodeId = (path: number[], partIndex: number): string => {
+    const direct = resolveElementIdIn(template, path);
+    if (direct !== undefined) return direct;
+    for (const tree of builtWhenTrees) {
+      const nested = resolveElementIdIn(tree, path);
+      if (nested !== undefined) return nested;
+    }
+    return resolveElementId(template, path, partIndex);
+  };
+
   for (const part of spec.parts) {
     const locationId = `p${part.index}`;
     if (FIXED_KINDS.has(part.k)) {
       const path = part.path as number[];
-      const node = resolveElementId(template, path, part.index);
+      const node = resolveSinkNodeId(path, part.index);
       parts[part.index].location = { id: locationId, kind: 'sink', path, node };
       locations.push({ id: locationId, kind: 'sink', part: part.index, node, path });
     } else {
@@ -204,9 +231,9 @@ export function testProgram(spec: TestProgramSpec): PartProgram {
       parts[part.index].location = { id: locationId, kind: 'anchor', path };
       locations.push({ id: locationId, kind: 'anchor', part: part.index, path });
     }
-    if (REGION_KINDS.has(part.k)) {
-      regionPartIds.add(locationId);
-      regions.push({
+    if (BLOCK_KINDS.has(part.k)) {
+      blockPartIds.add(locationId);
+      blocks.push({
         id: `r${part.index}`,
         index: part.index,
         kind: part.k,
@@ -218,7 +245,7 @@ export function testProgram(spec: TestProgramSpec): PartProgram {
     if (part.signal !== undefined) {
       dependencies.push({
         signal: part.signal,
-        owner: { kind: REGION_KINDS.has(part.k) ? 'region' : 'part', index: part.index },
+        owner: { kind: BLOCK_KINDS.has(part.k) ? 'region' : 'part', index: part.index },
         location: locationId,
       });
     }
@@ -231,14 +258,14 @@ export function testProgram(spec: TestProgramSpec): PartProgram {
     'root',
     ...properties.map((property) => `property:${property.name}`),
     ...locations.map((location) => location.id as string),
-    ...regions.map((region) => region.id as string),
+    ...blocks.map((block) => block.id as string),
   ];
   const sourceMap = {
     version: 1,
     file: sourceFile,
     records: recordIds.map((id, position) => ({
       id,
-      kind: id.startsWith('property:') ? 'property' : sourceKind(id, regionPartIds),
+      kind: id.startsWith('property:') ? 'property' : sourceKind(id, blockPartIds),
       source: {
         file: sourceFile,
         start: { offset: position * 16, line: position + 1, column: 1 },
@@ -284,12 +311,12 @@ export function testProgram(spec: TestProgramSpec): PartProgram {
     .filter((node) => node.k === 'el')
     .map((node) => node.id as string);
   const raw: unknown = {
-    version: 1,
+    version: 2,
     tag: spec.tag,
     root: { id: 'root', kind: spec.rootMode ?? 'light', nodes: topLevelElements },
     template,
     parts,
-    regions,
+    blocks,
     dependencies,
     locations,
     sourceMap,

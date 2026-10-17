@@ -1,5 +1,5 @@
 /**
- * /notes page element — dynamic list (compiled). The compiled each-Region
+ * /notes page element — dynamic list (compiled). The compiled each-Block
  * item template binds two per-item slots: an iattr href ({note.href}) and an
  * ival title ({note.title}) — the alpha.8 multi-field grammar. A note-counter
  * island proves load-time activation on a request-time page.

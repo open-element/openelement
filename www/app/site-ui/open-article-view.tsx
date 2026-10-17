@@ -20,10 +20,15 @@ export default class OpenArticleView extends OpenElement {
     railItems: [],
     articleHtml: '',
   };
+  // Visibility is the native `hidden` attribute now: the retired sheet's
+  // `.is-hidden` rule is gone, and the generated route bindings (the model
+  // shape lives in article-page-model.ts + generate-site-article-routes.ts,
+  // outside this batch) still carry the state as class-string tokens, so the
+  // component reads the token it encoded and re-delivers it as `hidden`.
   @property({ reflect: false, attribute: false })
-  notFoundClass = computed(() => this.model.notFoundClass);
+  notFoundHidden = computed(() => this.model.notFoundClass.includes('is-hidden'));
   @property({ reflect: false, attribute: false })
-  articleClass = computed(() => this.model.articleClass);
+  articleHidden = computed(() => this.model.articleClass.includes('is-hidden'));
   @property({ reflect: false, attribute: false })
   slug = computed(() => this.model.slug);
   @property({ reflect: false, attribute: false })
@@ -47,13 +52,19 @@ export default class OpenArticleView extends OpenElement {
   render() {
     return (
       <div>
-        <div class={this.notFoundClass} data-pagefind-ignore>
-          <p class='nf-code'>404</p>
-          <p>
+        <div
+          class='relative mx-auto max-w-(--site-container-reading) px-4 pt-6 pb-10 wrap-break-word [word-break:normal] [background:linear-gradient(90deg,transparent,color-mix(in_srgb,var(--color-border)_20%,transparent),transparent)_top/100%_1px_no-repeat] min-[481px]:px-5 min-[481px]:pt-8 min-[481px]:pb-12 min-[901px]:px-6 min-[901px]:pt-[clamp(2rem,5vh,3.5rem)] min-[901px]:pb-[clamp(6rem,14vh,11rem)]'
+          hidden={this.notFoundHidden}
+          data-pagefind-ignore
+        >
+          <p class='my-2 font-mono text-(length:--text-6xl) leading-[1.72] text-muted-foreground'>
+            404
+          </p>
+          <p class='my-2 text-sm leading-[1.72] text-foreground min-[901px]:text-(length:--text-base)'>
             {this.notFoundMessage}: {this.slug}
           </p>
         </div>
-        <div class={this.articleClass} data-pagefind-body>
+        <div hidden={this.articleHidden} data-pagefind-body>
           <open-reading-shell
             rail
             footer

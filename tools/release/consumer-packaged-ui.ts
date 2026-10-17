@@ -1,6 +1,10 @@
 /** Packed UI consumer: fresh TypeScript project installs the UI tarball and typechecks. */
 import { tmpdir } from 'node:os';
-import { runProcess, walkPackedDeclarations } from './consumer-packaged-shared.ts';
+import {
+  assertPackedTarballsFresh,
+  runProcess,
+  walkPackedDeclarations,
+} from './consumer-packaged-shared.ts';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -29,13 +33,20 @@ const elementTarball = join(
   'element',
   `openelement-element-${PACKAGE_VERSION}.tgz`,
 );
-for (const tarball of [uiTarball, elementTarball]) {
+const protocolTarball = join(
+  repoRoot,
+  'packages',
+  'protocol',
+  `openelement-protocol-${PACKAGE_VERSION}.tgz`,
+);
+for (const tarball of [uiTarball, elementTarball, protocolTarball]) {
   if (!existsSync(tarball)) {
     throw new Error(
       `Missing packed release artifact: ${tarball} (run \`pnpm --dir tools/release run pack:dry-run\` first)`,
     );
   }
 }
+await assertPackedTarballsFresh([uiTarball, elementTarball, protocolTarball]);
 
 const tmp = await mkdtemp(join(tmpdir(), 'openelement-packaged-ui-'));
 try {
@@ -49,7 +60,7 @@ try {
         '@openelement/ui': `file:${uiTarball}`,
         '@openelement/element': `file:${elementTarball}`,
         // element's #1557 transitive workspace pin, satisfied locally.
-        '@openelement/protocol': `file:${repoRoot}/packages/protocol/openelement-protocol-${PACKAGE_VERSION}.tgz`,
+        '@openelement/protocol': `file:${protocolTarball}`,
         typescript: '6.0.3',
       },
     }),

@@ -84,7 +84,7 @@ function generatedEntries(): Array<{ label: string; code: string }> {
             corsOrigin: 'https://example.com',
             securityHeaders: true,
           },
-          appShell: { tagName: 'open-layout', import: './app/shell.tsx', props: {} },
+          layout: { tagName: 'open-layout', import: './app/shell.tsx', props: {} },
           i18n: { locales: ['en', 'de'], defaultLocale: 'de' },
         }),
       ),
@@ -95,7 +95,7 @@ function generatedEntries(): Array<{ label: string; code: string }> {
         buildEntryDescriptor(fullRoutes, {
           renderer: 'lit',
           ssg: true,
-          appShell: false,
+          layout: false,
         }),
       ),
     },
@@ -198,10 +198,10 @@ test('gate: retired helper emissions never reappear in generated entries', () =>
     'function __pageProps(',
     'function __pageDefinition(',
     'function __localeFromPath(',
-    'function __localizeShellHref(',
+    'function __localizeLayoutHref(',
     'function __statusHtml(',
-    'function __resolveAppShell(',
-    'function __renderAppShell(',
+    'function __resolveLayout(',
+    'function __renderLayout(',
     // action protocol (block c)
     'async function __runActionProtocol(',
     'function __asFetchHandler(',
@@ -221,7 +221,7 @@ test('gate: retired helper emissions never reappear in generated entries', () =>
     'const __maxActionBodyBytes =',
     'const __actionBodyLimit = __createActionBodyLimit(',
     // the deferred-shell gate (Amendment 1 — the typed stream-runtime factory)
-    'async function __createDeferredPageShell(',
+    'async function __createStreamPageShell(',
   ];
   for (const { label, code } of generatedEntries()) {
     for (const head of retiredHeads) {

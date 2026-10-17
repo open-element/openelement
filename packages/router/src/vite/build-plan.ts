@@ -66,7 +66,11 @@ export function createProductionBuildPlan(ctx: OpenElementBuildContext): BuildPl
           defaultLocale: ctx.plugins.i18nOptions.defaultLocale,
         }
       : undefined,
-    packageIslands: { packages: ctx.options.packageIslands ?? [] },
+    // The build-plan evidence carries the EXPLICIT package list; the
+    // scan-derived set is recorded through the manifests themselves.
+    packageIslands: {
+      packages: Array.isArray(ctx.options.packageIslands) ? ctx.options.packageIslands : [],
+    },
   };
 }
 

@@ -2,10 +2,10 @@
 // esm-boundary:scanner — this file scans for CJS constructs, so it names them.
 /**
  * Release gate: verify packed npm artifacts stay ESM-only and keep host APIs
- * out of all four published packages — runtime-free element/router/ui bar
- * Node AND Deno APIs, the node-hosted create CLI bars Deno APIs,
- * and every packed module is checked for CJS syntax, undeclared imports, and
- * the JSR bridge.
+ * out of the runtime-face packages — protocol/element/compiler/router/ui bar
+ * Node APIs AND the retired host's API surface, the node-hosted create CLI
+ * bars the retired host's API surface only, and every packed module is
+ * checked for CJS syntax, undeclared imports, and the JSR bridge.
  */
 
 import { dirname, join } from 'node:path';
@@ -24,13 +24,18 @@ const ATTW_VERSION = '0.18.4';
 const RUNTIME_FREE_PACKAGES = new Set([
   '@openelement/protocol',
   '@openelement/element',
+  // The compiler ships no node:* import, process/Buffer use, or retired host
+  // API — only the `typescript` compiler API (a plain JS dependency) and
+  // type-only vite imports — so it scans under the same strict policy as the
+  // runtime packages instead of skipping host checks entirely (M-T4).
+  '@openelement/compiler',
   '@openelement/router',
   '@openelement/ui',
 ]);
 
 /**
- * The node-hosted create CLI: its packed artifact bars the Deno API surface
- * (unlike the runtime-free trio above, which also bars `node:*` /
+ * The node-hosted create CLI: its packed artifact bars the retired host's API
+ * surface (unlike the runtime-free packages above, which also bar `node:*` /
  * process / Buffer).
  */
 const NODE_FREE_PACKAGES = new Set(['@openelement/create']);
@@ -114,9 +119,9 @@ const NODE_PATTERNS: Array<[RegExp, string]> = [
   [/\bclearImmediate\b/, 'Node clearImmediate global'],
 ];
 
-const DENO_PATTERNS: Array<[RegExp, string]> = [[/\bDeno\.[A-Za-z_]/, 'Deno API']];
+const RETIRED_HOST_PATTERNS: Array<[RegExp, string]> = [[/\bDeno\.[A-Za-z_]/, 'retired host API']];
 
-const HOST_PATTERNS: Array<[RegExp, string]> = [...NODE_PATTERNS, ...DENO_PATTERNS];
+const HOST_PATTERNS: Array<[RegExp, string]> = [...NODE_PATTERNS, ...RETIRED_HOST_PATTERNS];
 
 // #1273: dead v0.43 renderer/binding/hydration residue must not silently
 // reappear in PUBLISHED artifacts (the packages ship src/**, so a removed
@@ -410,16 +415,18 @@ function pushPackageJsonViolations(
   return packageJson;
 }
 
-type HostPolicy = 'runtime-free' | 'deno-free' | 'none';
+type HostPolicy = 'runtime-free' | 'retired-host-free' | 'none';
 
 /**
  * Runtime-free packages: the request-time runtime face always scans strict,
  * confirmed host tooling scans with no host patterns, and everything else
- * stays fail-closed strict. create's packed CLI is Deno-barred only.
+ * stays fail-closed strict. No retained package resolves to 'none' outside
+ * the router host-tooling allowlist below: create's packed CLI bars the
+ * retired host API only.
  */
 function hostPolicyFor(packageName: string, relative: string): HostPolicy {
   if (!RUNTIME_FREE_PACKAGES.has(packageName)) {
-    return NODE_FREE_PACKAGES.has(packageName) ? 'deno-free' : 'none';
+    return NODE_FREE_PACKAGES.has(packageName) ? 'retired-host-free' : 'none';
   }
   if (RUNTIME_SURFACE_PATHS[packageName]?.test(relative)) return 'runtime-free';
   if (HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative)) return 'none';
@@ -444,10 +451,14 @@ function scanRuntimeFile(
 
   const text = readFileSync(path, 'utf8');
   const firstCodeLine = text.split('\n').find((l) => l.trim() !== '') ?? '';
-  const hostScanAllowed = !firstCodeLine.trim().startsWith('// deno-api-free:ignore');
+  const hostScanAllowed = !firstCodeLine.trim().startsWith('// retired-host-api-free:ignore');
   const lines = stripComments(text).split('\n');
   const hostPatterns =
-    hostPolicy === 'runtime-free' ? HOST_PATTERNS : hostPolicy === 'deno-free' ? DENO_PATTERNS : [];
+    hostPolicy === 'runtime-free'
+      ? HOST_PATTERNS
+      : hostPolicy === 'retired-host-free'
+        ? RETIRED_HOST_PATTERNS
+        : [];
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];

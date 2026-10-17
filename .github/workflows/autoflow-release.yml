@@ -1,31 +1,104 @@
 name: Release
 
-# Redesigned 2026-10-07 (#1566): auto-triggered by main-push CI success.
-# Reads version from package.json, checks all 4 packages for idempotency,
-# publishes via OIDC, creates GitHub Release. ~5 minutes.
+# Owner policy (2026-10-13, Q-Release): Continuous Integration · Explicit
+# Release Intent · Automated Verified Publishing.
 #
-# A manual dispatch is the channel re-point path (owner-run backstop): the
-# alias re-point inside the publish path is best-effort — dist-tag writes over
-# OIDC need npm >= 12.2.0 while the runner's bundled CLI is older — and the
-# packages' trusted-publisher entries match this workflow file's OIDC identity
-# only, so a separate re-point workflow's writes fail E401. A dispatch from
-# here repairs a channel tag riding that same identity (see
-# docs/release/release-state.json).
+# A push, a merge, a CI success or a version bump NEVER publishes npm. The
+# former `workflow_run: [AutoFlow CI]` trigger (AutoFlow CI → Release) is
+# REMOVED; the only trigger left is workflow_dispatch, so a Main CI success
+# can no longer enter the release path. The previously proposed "Main CI
+# success → auto publish" design is withdrawn and is not implemented here.
+#
+# Operations (required dispatch input, no default implies publish):
+#   publish — the ONLY path that may enter the real new-version publish. It
+#             verifies, in order: the dispatch is main's exact SHA
+#             (ci-evidence), the official AutoFlow CI run for that same SHA
+#             concluded success with every required job-instance conclusion
+#             success — nine job IDs, twelve instances, because e2e-full,
+#             node-serve-smoke and packed-consumer-matrix each expand to two
+#             (ci-evidence, discovered over the API — never supplied), the
+#             same-SHA release train gate:release (release-gate), and then
+#             re-verifies operation/SHA/version/package set immediately
+#             before the irreversible npm publish (release). The option must
+#             be selected explicitly; an empty or unknown value fails closed
+#             in the dispatch-guard job and never falls through to publish.
+#   repoint — channel dist-tag repair only, strictly separated from
+#             new-version publishing (the T7 owner backstop). Explicitly
+#             selected, requires tag + version + packages inputs, verifies
+#             the target version genuinely exists in the registry before
+#             touching anything, and never publishes a new version, never
+#             creates Git tags or GitHub Releases. It rides the same OIDC
+#             identity and environment approval as the publish path.
+#
+# Release state machine — the states and where each transition is enforced:
+#   DEVELOPMENT           ordinary commits; nothing in this file runs.
+#   CI_VERIFIED           the AutoFlow CI push run on main concluded success
+#                         with every required job-instance conclusion success
+#                         (nine job IDs / twelve instances; enforced in
+#                         autoflow-ci.yml, re-discovered and re-checked for
+#                         the dispatched SHA in `ci-evidence`).
+#   RELEASE_CANDIDATE     the CI-verified main commit carrying the version
+#                         bump; candidate = main's HEAD at dispatch time.
+#   OWNER_INITIATED       the explicit dispatch with operation=publish
+#                         (`dispatch-guard`) plus the openelement-release
+#                         environment approval on the `release` job.
+#   RELEASE_GATE_PASSED   `gate:release` succeeded on that exact SHA in
+#                         `release-gate` (a dispatch can no longer skip it).
+#   PUBLISHING            the "Publish to npm (OIDC trusted publishing)" step.
+#   PUBLISHED             registry verification inside publish:npm, then the
+#                         per-package tag/Release step.
+#   POST_PUBLISH_VERIFIED published-consumers.yml (3 OS) and the
+#                         registry-state read-back artifact.
+#   Fail-closed rule: a missing piece — no push CI run for the SHA, a
+#   non-success, skipped, cancelled or missing required CI job, a failed or
+#   skipped release gate, an empty/unknown operation — aborts before any
+#   publish side effect.
+#
+# Event → job → side-effect matrix:
+#
+# | event / dispatch                              | jobs that run                    | side effects                          |
+# |-----------------------------------------------|----------------------------------|---------------------------------------|
+# | any push / merge / version bump / CI success  | (none — no trigger reaches here) | none                                  |
+# | dispatch, operation missing or unknown        | dispatch-guard (RED)             | none (every other job is skipped)     |
+# | dispatch, operation=repoint                   | dispatch-guard → repoint         | dist-tag writes only                  |
+# | dispatch, operation=publish, evidence or gate | dispatch-guard → ci-evidence →   | none (publish-side jobs stay skipped) |
+# | red                                           | release-gate                     |                                       |
+# | dispatch, operation=publish, all gates green  | dispatch-guard → ci-evidence →   | npm publish + per-package tags +      |
+# |                                               | release-gate → release →         | GitHub Releases + registry read-back  |
+# |                                               | post-publish-consumers           | + published-consumer qualification    |
+#
+# The single-file shape is deliberate: each package's npm Trusted Publisher
+# entry binds to this workflow file's OIDC identity, so the publish and
+# re-point paths cannot move into a second workflow.
 
 on:
-  workflow_run:
-    workflows: [AutoFlow CI]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
+      operation:
+        description: >-
+          Explicit operation — publish: ship the selected version to npm after
+          same-SHA CI evidence + release gate; repoint: move a channel
+          dist-tag on already-published versions only.
+        required: true
+        type: choice
+        # No `default:` — and the non-publishing option is listed first so the
+        # UI's initial selection never implies `publish`. An empty or unknown
+        # value (possible through the API) is refused by dispatch-guard.
+        options:
+          - repoint
+          - publish
       tag:
-        description: Channel dist-tag to re-point
+        description: Channel dist-tag to re-point (repoint operation)
         required: false
         default: alpha
         type: string
       version:
-        description: Published version to point the tag at (empty = packages/element/package.json)
+        description: 'Version: publish ships it (empty = first selected package manifest); repoint requires the published version'
+        required: false
+        default: ''
+        type: string
+      packages:
+        description: 'Subset, e.g. "router,ui" — publish: empty means auto-detect from the registry; repoint: required'
         required: false
         default: ''
         type: string
@@ -35,14 +108,173 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ── Job 0: Explicit-operation guard (every dispatch, fail closed) ──────
+  # Deliberately has no `if:` — it must be scheduled on every event so it can
+  # never be skipped by a condition. Every other job `needs` it and uses a
+  # plain `if:` (no always()/status function), so a failed guard skips them
+  # all. This is the single place the empty/unknown rule is enforced: no job
+  # in this file can act unless the dispatcher selected publish or repoint.
+  dispatch-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Require an explicit publish/repoint selection
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          case "${OPERATION}" in
+            publish|repoint)
+              echo "operation=${OPERATION} explicitly selected."
+              ;;
+            *)
+              echo "::error::operation '${OPERATION}' is not one of publish|repoint; refusing to act (an empty or unknown operation never falls through to publish)."
+              exit 1
+              ;;
+          esac
+
+  # ── Job 1: Same-SHA CI evidence (publish only) ─────────────────────────
+  # The official AutoFlow CI run for exactly the dispatched SHA is discovered
+  # here over the API — the dispatcher never supplies a run id as proof — and
+  # its nine required job IDs (twelve instances: e2e-full, node-serve-smoke
+  # and packed-consumer-matrix each expand to two) are checked one by one.
+  # The run-level conclusion alone is not evidence: a run can be green with
+  # the heavy jobs skipped on a non-qualifying lane, and skipped, cancelled,
+  # failure, a missing job ID or any non-success instance is a refusal (the
+  # qualification contract of autoflow-ci.yml, read from the API instead of
+  # trusted from a report).
+  ci-evidence:
+    needs: [dispatch-guard]
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify the dispatched candidate is main's exact SHA
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          if [ "${DISPATCH_REF}" != "refs/heads/main" ]; then
+            echo "::error::a publish dispatch must run on refs/heads/main, got '${DISPATCH_REF}'; refusing"
+            exit 1
+          fi
+          HEAD=$(git rev-parse HEAD)
+          if [ "${HEAD}" != "${DISPATCH_SHA}" ]; then
+            echo "::error::the checked-out candidate ${HEAD} is not the dispatched github.sha ${DISPATCH_SHA}; refusing"
+            exit 1
+          fi
+          echo "candidate verified: main at ${HEAD}"
+
+      - name: Discover the AutoFlow CI evidence for this exact SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: |
+          # Discovery, not a supplied run id: query the official AutoFlow CI
+          # workflow's runs by exact head_sha in THIS repository. The canonical
+          # evidence is the main push run — every main commit carries one.
+          gh api "repos/${REPOSITORY}/actions/workflows/autoflow-ci.yml/runs?head_sha=${CANDIDATE_SHA}&per_page=100" > /tmp/ci-runs.json
+          RUN_ID=$(jq -r '[.workflow_runs[] | select(.event == "push" and .head_branch == "main")] | sort_by(.created_at) | reverse | .[0].id // empty' /tmp/ci-runs.json)
+          if [ -z "${RUN_ID}" ]; then
+            echo "::error::no AutoFlow CI push run found for ${CANDIDATE_SHA} in ${REPOSITORY}; publish refused (missing CI evidence)"
+            exit 1
+          fi
+          gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}" > /tmp/ci-run.json
+          RUN_SHA=$(jq -r '.head_sha' /tmp/ci-run.json)
+          RUN_CONCLUSION=$(jq -r '.conclusion' /tmp/ci-run.json)
+          if [ "${RUN_SHA}" != "${CANDIDATE_SHA}" ]; then
+            echo "::error::CI run ${RUN_ID} is bound to ${RUN_SHA}, not ${CANDIDATE_SHA}; publish refused"
+            exit 1
+          fi
+          if [ "${RUN_CONCLUSION}" != "success" ]; then
+            echo "::error::CI run ${RUN_ID} for ${CANDIDATE_SHA} concluded '${RUN_CONCLUSION}'; publish refused"
+            exit 1
+          fi
+          gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" > /tmp/ci-jobs.json
+          TOTAL=$(jq -r '.total_count' /tmp/ci-jobs.json)
+          LISTED=$(jq -r '.jobs | length' /tmp/ci-jobs.json)
+          if [ "${TOTAL}" != "${LISTED}" ]; then
+            echo "::error::the CI jobs listing for run ${RUN_ID} is incomplete (${LISTED}/${TOTAL}); publish refused"
+            exit 1
+          fi
+          # One line per refusal: a missing required job, or any entry of a
+          # required (matrix) job whose conclusion is not success.
+          FAILURES=$(jq -r --arg run "${RUN_ID}" --arg required "lint test e2e pack e2e-full bfcache node-serve-smoke packed-consumer-matrix fresh-install" '
+            ($required | split(" ")) as $jobs |
+            [ $jobs[] as $job |
+                ([ .jobs[] | select(.name == $job or (.name | startswith($job + " ("))) ]) as $entries |
+                if ($entries | length) == 0 then "required CI job \($job) is missing from run \($run)"
+                else ($entries[] | select(.conclusion != "success") | "required CI job \($job) concluded \(.conclusion)")
+                end ] | .[]' /tmp/ci-jobs.json)
+          if [ -n "${FAILURES}" ]; then
+            while IFS= read -r failure; do echo "::error::${failure}"; done <<< "${FAILURES}"
+            echo "::error::CI evidence for ${CANDIDATE_SHA} is not a passing full qualification (nine job IDs / twelve instances); publish refused"
+            exit 1
+          fi
+          echo "CI evidence verified: run ${RUN_ID} (push, ${CANDIDATE_SHA}) success; all twelve required job-instance conclusions (nine job IDs) success."
+          {
+            echo "run_id=${RUN_ID}"
+            echo "sha=${CANDIDATE_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+  # ── Job 2: Release gate on the exact evidence SHA (publish only) ───────
+  # M-T7b: the release train (site build, every www check, coverage, fixture
+  # gates, boundary scans, full browser matrices) runs only after the same-SHA
+  # CI evidence above passed, on exactly that SHA. Its success is the
+  # RELEASE_GATE_PASSED transition; a failed or skipped gate means the
+  # `release` job never runs — a dispatch can no longer bypass the train.
+  release-gate:
+    needs: [dispatch-guard, ci-evidence]
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-workspace
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Install all browser engines
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      # -w pins the workspace ROOT's gate:release: the bare task name would
+      # also match @openelement/tools-repo#gate:release and run the train
+      # twice.
+      - name: Run the release train gate
+        run: vp run --fail-if-no-match -w gate:release
+
   release:
-    if: github.event.workflow_run.conclusion == 'success'
+    needs: [dispatch-guard, release-gate]
+    # Publish path only: an explicit publish selection and a gate that
+    # concluded success on this SHA. No always()/skipped bypass exists any
+    # more — a skipped gate (evidence refused, or anything upstream red)
+    # skips this job, so publishing is unreachable without the full chain.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.operation == 'publish' &&
+      needs.release-gate.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: openelement-release
     outputs:
       version: ${{ steps.version.outputs.version }}
       published: ${{ steps.check.outputs.already_published }}
+      packages: ${{ steps.check.outputs.packages }}
     permissions:
       contents: write
       actions: read
@@ -50,8 +282,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          # Dispatch-only workflow: the dispatched SHA IS the CI-verified,
+          # gate-passed candidate (ci-evidence refused anything else).
+          # Tags ride along explicitly: the per-package Release notes read
+          # the previous package tag for the round's commit list.
+          ref: ${{ github.sha }}
           fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -59,49 +296,180 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Read and verify version (all 6 packages must agree)
+      # The candidate-evidence reverify, in machine form: the checkout must be
+      # the dispatched (CI-verified, gate-passed) SHA, and the operation must
+      # still be publish. Structural before, fail-closed here.
+      - name: Re-verify the candidate checkout is the dispatched SHA
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          if [ "${OPERATION}" != "publish" ]; then
+            echo "::error::operation '${OPERATION}' is not publish; refusing"
+            exit 1
+          fi
+          HEAD=$(git rev-parse HEAD)
+          if [ "${HEAD}" != "${EXPECTED_SHA}" ]; then
+            echo "::error::checkout HEAD ${HEAD} != dispatched SHA ${EXPECTED_SHA}"
+            exit 1
+          fi
+          echo "candidate checkout verified at ${HEAD} (same-SHA CI evidence + release gate already passed)"
+
+      - name: Read and verify version
         id: version
         env:
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PACKAGES: ${{ inputs.packages }}
         run: |
-          VERSION=$(node -e "console.log(require('./packages/element/package.json').version)")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-          echo "Publishing @openelement/*@$VERSION from $HEAD_SHA"
-          # Six-package consistency (the ten-stamp lesson from #1508)
-          node tools/repo/check-release-version.ts "$VERSION"
+          if [ -n "${INPUT_PACKAGES}" ]; then
+            SELECTED=$(echo "${INPUT_PACKAGES}" | tr ',' ' ' | xargs)
+          else
+            SELECTED="protocol element compiler router create ui"
+          fi
+          echo "selected packages: ${SELECTED}"
+          if [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
+          else
+            FIRST=$(echo "${SELECTED}" | cut -d' ' -f1)
+            VERSION=$(node -e "console.log(require('./packages/${FIRST}/package.json').version)")
+          fi
+          {
+            echo "version=${VERSION}"
+            echo "sha=$(git rev-parse HEAD)"
+            echo "selected=${SELECTED}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Publishing @openelement/*@${VERSION} from $(git rev-parse HEAD) (packages: ${SELECTED})"
+          # Lockstep trains keep the six-way agreement check; a dispatch
+          # subset checks only its selected manifests.
+          if [ -n "${INPUT_PACKAGES}" ]; then
+            node tools/repo/check-release-version.ts "${VERSION}" --packages "${INPUT_PACKAGES}"
+          else
+            node tools/repo/check-release-version.ts "${VERSION}"
+          fi
 
-      - name: Check if all 6 packages already published (idempotent)
+      - name: Detect the per-package publish set (T7)
         id: check
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          INPUT_PACKAGES: ${{ inputs.packages }}
         run: |
-          # Check ALL six packages — partial publish state must NOT skip
-          # (#1557 split: protocol and compiler publish from this line on).
-          ALL_PUBLISHED=true
+          # Registry truth per package, three-way and fail-closed:
+          #   PRESENT — npm answered the exact version; nothing to publish.
+          #   ABSENT  — npm answered E404: the registry confirmed this version
+          #             is not published. The ONLY state that makes a version
+          #             a publish candidate.
+          #   ERROR   — any other query failure (network, auth, HTTP, parse):
+          #             a refusal. An error is never read as "not yet
+          #             published", and a mismatched answer for a version that
+          #             does exist is never published over.
+          MISSING=""
           for PKG in protocol element compiler router create ui; do
-            RESULT=$(npm view "@openelement/$PKG@$VERSION" version 2>/dev/null || echo "not-found")
-            if [ "$RESULT" != "$VERSION" ]; then
-              ALL_PUBLISHED=false
-              echo "$PKG not yet at $VERSION"
+            REGISTRY_ERR=$(mktemp)
+            set +e
+            FOUND=$(npm view "@openelement/${PKG}@${VERSION}" version 2>"${REGISTRY_ERR}")
+            STATUS=$?
+            set -e
+            if [ "${STATUS}" -eq 0 ]; then
+              if [ "${FOUND}" != "${VERSION}" ]; then
+                echo "::error::registry answered '${FOUND}' for @openelement/${PKG}@${VERSION}; refusing (fail closed)"
+                exit 1
+              fi
+              echo "${PKG} already at ${VERSION}"
+            elif grep -q 'E404' "${REGISTRY_ERR}"; then
+              echo "${PKG} not yet at ${VERSION} (registry confirmed absent)"
+              MISSING="${MISSING} ${PKG}"
+            else
+              echo "::error::registry query failed for @openelement/${PKG}@${VERSION}; not a confirmed absence — refusing (fail closed): $(head -c 400 "${REGISTRY_ERR}")"
+              exit 1
             fi
           done
-          if [ "$ALL_PUBLISHED" = "true" ]; then
-            echo "already_published=true" >> "$GITHUB_OUTPUT"
-            echo "All 4 packages already at $VERSION — skipping."
+          MISSING=$(echo "${MISSING}" | xargs)
+          if [ -n "${INPUT_PACKAGES}" ]; then
+            # Declared subset: unknown names fail closed; declared-but-
+            # published packages are skipped per-package (idempotent), the
+            # rest ship. Declaring a subset never publishes an unlisted
+            # package — publish-npm gets the same list below.
+            SHIPPED=""
+            for P in $(echo "${INPUT_PACKAGES}" | tr ',' ' '); do
+              case " protocol element compiler router create ui " in
+                *" ${P} "*) ;;
+                *) echo "::error::unknown package in packages input: ${P}"; exit 1;;
+              esac
+              case " ${MISSING} " in
+                *" ${P} "*) SHIPPED="${SHIPPED} ${P}";;
+                *) echo "${P} already at ${VERSION}; skipping";;
+              esac
+            done
+            SHIPPED=$(echo "${SHIPPED}" | xargs)
           else
-            echo "already_published=false" >> "$GITHUB_OUTPUT"
+            SHIPPED="${MISSING}"
           fi
+          if [ -z "${SHIPPED}" ]; then
+            ALREADY=true
+            echo "Every selected package already at ${VERSION} — skipping."
+          else
+            ALREADY=false
+            echo "Shipping: ${SHIPPED}"
+          fi
+          {
+            echo "packages=${SHIPPED}"
+            echo "already_published=${ALREADY}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Pack and verify
         if: steps.check.outputs.already_published != 'true'
         run: |
-          vp run --fail-if-no-match @openelement/tools-release#pack:dry-run
-          vp run --fail-if-no-match @openelement/tools-release#pack-surface:check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack:dry-run
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack-surface:check
+
+      # Last gate before the irreversible step: operation, SHA, version and
+      # the exact publish set are re-checked immediately before npm receives
+      # anything. Drifted state (or an operation that is not publish) aborts
+      # here, with no publish side effect.
+      - name: Re-verify operation, SHA, version and package set (pre-publish)
+        if: steps.check.outputs.already_published != 'true'
+        env:
+          OPERATION: ${{ inputs.operation }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHIPPED: ${{ steps.check.outputs.packages }}
+          EXPECTED_SHA: ${{ github.sha }}
+          INPUT_PACKAGES: ${{ inputs.packages }}
+        run: |
+          if [ "${OPERATION}" != "publish" ]; then
+            echo "::error::operation '${OPERATION}' is not publish; refusing the publish step"
+            exit 1
+          fi
+          HEAD=$(git rev-parse HEAD)
+          if [ "${HEAD}" != "${EXPECTED_SHA}" ]; then
+            echo "::error::checkout HEAD ${HEAD} != dispatched SHA ${EXPECTED_SHA}; refusing the publish step"
+            exit 1
+          fi
+          if [ -z "${VERSION}" ] || [ -z "${SHIPPED}" ]; then
+            echo "::error::empty version or publish set (version='${VERSION}' packages='${SHIPPED}'); refusing the publish step"
+            exit 1
+          fi
+          for P in ${SHIPPED}; do
+            case " protocol element compiler router create ui " in
+              *" ${P} "*) ;;
+              *) echo "::error::publish set carries an unknown package: ${P}"; exit 1;;
+            esac
+          done
+          # The same lockstep/subset version agreement the version step ran,
+          # re-checked at the last moment against the checked-out manifests.
+          if [ -n "${INPUT_PACKAGES}" ]; then
+            node tools/repo/check-release-version.ts "${VERSION}" --packages "${INPUT_PACKAGES}"
+          else
+            node tools/repo/check-release-version.ts "${VERSION}"
+          fi
+          echo "pre-publish re-verification passed: operation=publish, sha=${HEAD}, version=${VERSION}, packages=${SHIPPED}"
 
       - name: Publish to npm (OIDC trusted publishing)
         if: steps.check.outputs.already_published != 'true'
-        run: vp run --fail-if-no-match @openelement/tools-release#publish:npm
+        env:
+          SHIPPED: ${{ steps.check.outputs.packages }}
+        run: |
+          CSV=$(echo "${SHIPPED}" | tr ' ' ',')
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-release publish:npm -- --packages "${CSV}"
 
       # dist-tag writes over OIDC trusted publishing need npm >= 12.2.0 (npm docs);
       # the runner's bundled npm is older, so the CLI is pinned in its own step
@@ -115,18 +483,23 @@ jobs:
       # alias re-point rides trusted publishing's manage-dist-tags permission
       # (checked on each package's trusted-publisher entry); without it the
       # step warns and @alpha stays on its previous release. Best-effort by
-      # design: warning, never failure.
+      # design: warning, never failure. T7: only the shipped packages move —
+      # re-pointing an unshipped package at a version it does not carry would
+      # corrupt its channel alias.
       - name: Re-point the alpha channel alias at this version
         if: steps.check.outputs.already_published != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHIPPED: ${{ steps.check.outputs.packages }}
         run: |
           # Without pipefail the pipeline's exit status came from tee, so an npm
           # dist-tag failure was swallowed and the ::warning:: branch below was
           # unreachable; pipefail surfaces the real exit code while the step
           # stays best-effort (warning, never failure).
           set -o pipefail
-          for PKG in protocol element compiler router create ui; do
-            if ! npm dist-tag add "@openelement/$PKG@$VERSION" alpha 2>&1 | tee /tmp/disttag.log; then
-              echo "::warning::could not re-point alpha alias for $PKG (latest is already set)"
+          for PKG in ${SHIPPED}; do
+            if ! npm dist-tag add "@openelement/${PKG}@${VERSION}" alpha 2>&1 | tee /tmp/disttag.log; then
+              echo "::warning::could not re-point alpha alias for ${PKG} (latest is already set)"
             fi
           done
 
@@ -141,7 +514,7 @@ jobs:
       # tracked truth is only worth keeping if a read or write failure is red.
       - name: Re-read the registry after the alias re-point
         if: always() && steps.check.outputs.already_published != 'true'
-        run: vp run --fail-if-no-match @openelement/tools-release#sync:registry
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release sync:registry
 
       # What the publish train writes: docs/release/release-state.json and the
       # site's display constants, both set to what npm answers, so the tracked
@@ -162,25 +535,64 @@ jobs:
             www/app/data/_generated-release-line.ts
           if-no-files-found: error
 
-      - name: Create GitHub Release
+      # T7 per-package tags + format-A notes: one Release object per shipped
+      # package on its own `<pkg>-v<version>` tag (the single `v<version>`
+      # umbrella tag is retired). Each body carries that package's round
+      # (package-path commits since its last tag, falling back to the last
+      # umbrella tag on the first split) plus the one "unchanged" sentence
+      # naming the packages that did not ship. gh creates the tag
+      # server-side — the job holds no push identity for `git push`.
+      - name: Create per-package GitHub Releases
         if: steps.check.outputs.already_published != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ steps.version.outputs.sha }}
+          SHIPPED: ${{ steps.check.outputs.packages }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v$VERSION"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists."
-            exit 0
+          UNCHANGED=""
+          for PKG in protocol element compiler router create ui; do
+            case " ${SHIPPED} " in
+              *" ${PKG} "*) ;;
+              *) UNCHANGED="${UNCHANGED} ${PKG}";;
+            esac
+          done
+          UNCHANGED=$(echo "${UNCHANGED}" | xargs | tr ' ' ',')
+          if [ -z "${UNCHANGED}" ]; then
+            UNCHANGED_LINE="Unchanged in this round: none — all six packages shipped."
+          else
+            UNCHANGED_LINE="Unchanged in this round: ${UNCHANGED}."
           fi
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "${{ steps.version.outputs.sha }}" \
-            --prerelease \
-            --title "$VERSION" \
-            --generate-notes
+          for PKG in ${SHIPPED}; do
+            TAG="${PKG}-v${VERSION}"
+            if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              echo "Release ${TAG} already exists."
+              continue
+            fi
+            LAST_TAG=$(git tag --list "${PKG}-v*" --sort=-v:refname | head -n 1)
+            if [ -z "${LAST_TAG}" ]; then
+              LAST_TAG=$(git tag --list "v*" --sort=-v:refname | head -n 1)
+            fi
+            if [ -n "${LAST_TAG}" ]; then
+              ROUND_LOG=$(git log --format='- %h %s' "${LAST_TAG}..${SHA}" -- "packages/${PKG}")
+              if [ -z "${ROUND_LOG}" ]; then
+                ROUND_LOG="(no package-path commits since ${LAST_TAG})"
+              fi
+            else
+              ROUND_LOG="(first per-package release; no prior tag)"
+            fi
+            NOTES="## @openelement/${PKG} ${VERSION}"$'\n\n'"${ROUND_LOG}"$'\n\n'"${UNCHANGED_LINE}"
+            gh release create "${TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${SHA}" \
+              --prerelease \
+              --title "@openelement/${PKG}@${VERSION}" \
+              --notes "${NOTES}"
+          done
 
-  # Post-publish consumer verification (3 OS, from the published registry)
+  # Post-publish consumer verification (3 OS, from the published registry).
+  # Only reachable after `release` succeeded with at least one shipped
+  # package; a rejected/absent publish leaves it skipped.
   post-publish-consumers:
     needs: release
     if: needs.release.result == 'success' && needs.release.outputs.published != 'true'
@@ -190,11 +602,17 @@ jobs:
     with:
       version: ${{ needs.release.outputs.version }}
 
-  # Manual-dispatch path: re-point a channel dist-tag at a published version
-  # for all six packages. The `release` job's `if` never matches a dispatch,
-  # so this is the only job a manual run executes.
+  # ── Repoint path (operation=repoint, dispatch only) ────────────────────
+  # Channel dist-tag repair, strictly separated from new-version publishing:
+  # it requires explicit tag + version + packages inputs, verifies the
+  # version is genuinely published for every selected package before touching
+  # anything (a registry query error is a refusal, never "absent"), and it
+  # can only write dist-tags: it never publishes a version, never creates Git
+  # tags or GitHub Releases. Environment approval and the OIDC identity are
+  # the same as the publish path (dist-tag writes ride trusted publishing).
   repoint:
-    if: github.event_name == 'workflow_dispatch'
+    needs: [dispatch-guard]
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'repoint'
     runs-on: ubuntu-latest
     # A hung dist-tag write must not hold a runner slot indefinitely (#1402).
     timeout-minutes: 10
@@ -207,6 +625,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -214,35 +633,70 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - name: Install pinned npm (dist-tag OIDC floor)
         run: npm install -g npm@12.2.0 # zizmor: ignore[adhoc-packages] — pinned exact version; npm dist-tag over trusted publishing requires npm >= 12.2.0 (npm docs), and the runner's bundled npm is older
-      - name: Re-point the channel tag for all six packages
+      - name: Re-point the channel tag for the selected packages
         # Inputs travel through env, never interpolated into the script body
         # (zizmor template-injection): a dispatch input is arbitrary text.
         env:
+          OPERATION: ${{ inputs.operation }}
           TAG: ${{ inputs.tag }}
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PACKAGES: ${{ inputs.packages }}
         run: |
           # pipefail so the pipeline reports npm's exit status, not tee's — the
           # same trap the Release alias step hit; here a failure is counted and
           # summarized, and any failure fails the run.
           set -o pipefail
-          VERSION="$INPUT_VERSION"
-          if [ -z "$VERSION" ]; then
-            # The element manifest is the line's version anchor — Release reads
-            # the same file, and check-release-version.ts keeps all six equal.
-            VERSION=$(node -e "console.log(require('./packages/element/package.json').version)")
+          if [ "${OPERATION}" != "repoint" ]; then
+            echo "::error::operation '${OPERATION}' is not repoint; refusing"
+            exit 1
           fi
-          echo "Re-pointing $TAG at @openelement/*@$VERSION"
+          if [ -z "${TAG}" ] || [ -z "${INPUT_VERSION}" ] || [ -z "${INPUT_PACKAGES}" ]; then
+            echo "::error::repoint requires explicit tag, version and packages inputs (tag='${TAG}' version='${INPUT_VERSION}' packages='${INPUT_PACKAGES}'); refusing"
+            exit 1
+          fi
+          VERSION="${INPUT_VERSION}"
+          SELECTED=$(echo "${INPUT_PACKAGES}" | tr ',' ' ' | xargs)
+          for P in ${SELECTED}; do
+            case " protocol element compiler router create ui " in
+              *" ${P} "*) ;;
+              *) echo "::error::unknown package in packages input: ${P}"; exit 1;;
+            esac
+          done
+          # Registry truth before any write: the target version must be
+          # genuinely published for every selected package. E404 means the
+          # registry confirmed the version is absent → refusal. Any other
+          # query failure is a transport/auth/HTTP error → also a refusal:
+          # an error is never read as "does not exist", and never as "exists"
+          # either.
+          REGISTRY_ERR=$(mktemp)
+          for PKG in ${SELECTED}; do
+            set +e
+            FOUND=$(npm view "@openelement/${PKG}@${VERSION}" version 2>"${REGISTRY_ERR}")
+            STATUS=$?
+            set -e
+            if [ "${STATUS}" -eq 0 ] && [ "${FOUND}" = "${VERSION}" ]; then
+              continue
+            fi
+            if [ "${STATUS}" -ne 0 ] && grep -q 'E404' "${REGISTRY_ERR}"; then
+              echo "::error::@openelement/${PKG}@${VERSION} is not published; refusing to re-point ${TAG}"
+              exit 1
+            fi
+            echo "::error::registry query failed for @openelement/${PKG}@${VERSION} (never treated as absent); refusing to re-point ${TAG}: $(head -c 400 "${REGISTRY_ERR}")"
+            exit 1
+          done
+          echo "Registry confirmed ${VERSION} for: ${SELECTED}"
+          echo "Re-pointing ${TAG} at @openelement/*@${VERSION} (packages: ${SELECTED})"
           SUCCEEDED=0
           FAILED=0
-          for PKG in protocol element compiler router create ui; do
-            if npm dist-tag add "@openelement/$PKG@$VERSION" "$TAG" 2>&1 | tee "/tmp/disttag-$PKG.log"; then
+          for PKG in ${SELECTED}; do
+            if npm dist-tag add "@openelement/${PKG}@${VERSION}" "${TAG}" 2>&1 | tee "/tmp/disttag-${PKG}.log"; then
               SUCCEEDED=$((SUCCEEDED + 1))
             else
-              echo "::warning::could not re-point $TAG for $PKG at $VERSION"
+              echo "::warning::could not re-point ${TAG} for ${PKG} at ${VERSION}"
               FAILED=$((FAILED + 1))
             fi
           done
-          echo "re-point summary: $SUCCEEDED ok, $FAILED failed (tag $TAG at $VERSION)"
-          if [ "$FAILED" -ne 0 ]; then
+          echo "re-point summary: ${SUCCEEDED} ok, ${FAILED} failed (tag ${TAG} at ${VERSION})"
+          if [ "${FAILED}" -ne 0 ]; then
             exit 1
           fi

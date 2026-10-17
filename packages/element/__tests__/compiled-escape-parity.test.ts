@@ -147,6 +147,113 @@ test('escape parity: text contract escapes & < > and passes quotes and non-ASCII
 });
 
 /**
+ * Null-text parity (M-E1): a null/undefined text Part renders as empty on
+ * both serializers (runtime displayValue null→''), never the string "null".
+ */
+test('escape parity: null text Part is empty on both serializers', () => {
+  for (const value of [null, undefined]) {
+    const program = testProgram({
+      tag: 'x-parity',
+      template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
+      parts: [{ k: 'text', index: 0, signal: 'v' }],
+    });
+    const runtime = serializeRuntime(program, hostWith(value) as unknown as RuntimeHost);
+    const server = serializeServer(program, hostWith(value));
+    expect(runtime, `serializers diverged for ${String(value)}`).toEqual(server);
+    expect(runtime).toEqual('<div><!--oe:p0--></div>');
+  }
+});
+
+/**
+ * Null item-text parity (M-E1): a null each-item value renders as empty on
+ * both serializers.
+ */
+test('escape parity: null item text is empty on both serializers', () => {
+  const program = testProgram({
+    tag: 'x-parity',
+    template: [
+      {
+        k: 'el',
+        tag: 'div',
+        attrs: [],
+        children: [{ k: 'part', index: 0 }],
+      },
+    ],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'items',
+        key: 'id',
+        item: [{ k: 'el', tag: 'span', attrs: [], children: [{ k: 'ival', field: 'label' }] }],
+      },
+    ],
+  });
+  const host = {
+    signals: {
+      items: { value: [{ id: 'one', label: null }], subscribe: () => () => {} },
+    },
+    handlers: {},
+  };
+  const runtime = serializeRuntime(program, host as unknown as RuntimeHost);
+  const server = serializeServer(program, host);
+  expect(runtime, 'serializers diverged for null item text').toEqual(server);
+  expect(runtime).toContain('<span></span>');
+});
+
+/**
+ * Object-prop parity (M-E2, R.0-4): non-string props on a custom element
+ * serialize as JSON-in-attribute on BOTH serializers (the server contract in
+ * compiled-server.test.ts:353-381 is the pinned truth; the runtime seed path
+ * regresses to it, never "[object Object]").
+ */
+test('escape parity: non-string props on custom elements are JSON on both serializers', () => {
+  const cases: Array<{ value: unknown; encoded: string }> = [
+    {
+      value: { title: 'safe & exact', items: [1, 2] },
+      encoded: '{"title":"safe & exact","items":[1,2]}',
+    },
+    { value: [1, 2], encoded: '[1,2]' },
+    { value: 42, encoded: '42' },
+    { value: false, encoded: 'false' },
+    { value: null, encoded: 'null' },
+  ];
+  for (const { value, encoded } of cases) {
+    const program = testProgram({
+      tag: 'oe-parent',
+      template: [{ k: 'el', tag: 'oe-child', attrs: [], children: [] }],
+      parts: [{ k: 'prop', index: 0, signal: 'v', name: 'model', path: [0] }],
+    });
+    const runtime = serializeRuntime(program, hostWith(value) as unknown as RuntimeHost);
+    const server = serializeServer(program, hostWith(value));
+    expect(runtime, `serializers diverged for ${JSON.stringify(value)}`).toEqual(server);
+    expect(runtime, `non-string prop must be JSON for ${JSON.stringify(value)}`).toEqual(
+      `<oe-child model="${escapeAttr(encoded)}"></oe-child>`,
+    );
+  }
+});
+
+/**
+ * Null-prop parity (M-E2, R.0-4 gap probe 2026-10-11): a null/undefined prop
+ * on a plain tag omits the attribute on BOTH serializers. The server path
+ * used to emit `name="null"`/`name="undefined"` via String() while the seed
+ * path omitted via attributeValueOf; the server regresses to the shared
+ * omission so one program renders one HTML.
+ */
+test('escape parity: nullish props on plain elements are omitted on both serializers', () => {
+  for (const value of [null, undefined]) {
+    const program = testProgram({
+      tag: 'oe-parent',
+      template: [{ k: 'el', tag: 'div', attrs: [], children: [] }],
+      parts: [{ k: 'prop', index: 0, signal: 'v', name: 'model', path: [0] }],
+    });
+    const runtime = serializeRuntime(program, hostWith(value) as unknown as RuntimeHost);
+    const server = serializeServer(program, hostWith(value));
+    expect(runtime, `serializers diverged for ${String(value)}`).toEqual(server);
+    expect(runtime, `nullish prop must omit for ${String(value)}`).toEqual('<div></div>');
+  }
+});
+/**
  * Single-walker boundary (issue #1469, ADR-0160 rule b): both execution
  * modules route serialization through the shared kernel and carry no private
  * template walk. The kernel is the only module that walks the template and

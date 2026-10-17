@@ -9,7 +9,7 @@ order: 2
 
 ## Before you start
 
-You need **Node.js 24.2+** with pnpm, and a terminal. The one bootstrap command is a plain Node invocation (ADR-0161) — no second runtime is involved, and everything after it is Node and pnpm.
+You need **Node.js 24.2+** and a terminal; any package manager works (npm, pnpm, yarn, or bun — this guide spells the commands as `npm run …`). The one bootstrap command is a plain Node invocation (ADR-0161) — no second runtime is involved, and everything after it is plain Node tooling.
 
 The tutorial builds one app in five steps, and every step ends with something you can see:
 
@@ -26,24 +26,28 @@ The TypeScript and TSX blocks on this page are not sketches: CI type-checks them
 ```bash
 {{INSTALL_COMMAND}}
 cd my-app
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 The command runs on plain Node tooling: it fetches the published `@openelement/create` package from npm — a versionless install resolves `latest`, the current 1.0 line — and scaffolds the project with `@openelement/*` caret ranges over that release.
 
-The create CLI prints one `created <path>` line per file, then the next steps:
+The create CLI prints one `created <path>` line per file, then the handoff box naming the generator version and the next step (the box spells the dev command for the package manager it detected; with `--no-install` it prints the universal `npm run dev`):
 
 ```text
-openElement project created at ./my-app/
+openElement project created at ./my-app/ (template: showcase)
+  initialized git repository (with .gitignore)
 
-  cd my-app
-  pnpm install
-  pnpm dev
-  See README.md for all scripts (check/test/build/start)
+openElement project ready
+(@openelement/create <version>)
+
+cd my-app
+npm run dev      # start the dev server
+
+Docs: https://openelement.org
 ```
 
-`pnpm dev` starts the Vite dev server and prints the URL to open:
+`npm run dev` starts the Vite dev server and prints the URL to open:
 
 ```text
   VITE v8.0.16  ready in 412 ms
@@ -55,7 +59,7 @@ That page is the starter's home route. Its layout is the whole architecture:
 
 ```text
 my-app/
-  package.json      dependencies + pnpm scripts: dev, check, test, build, start
+  package.json      dependencies + scripts: dev, build, start, test, typecheck
   openelement.config.ts  framework options (tokens, head, shell conventions)
   vite.config.ts    Vite configuration; the plugin call takes no arguments
   app/routes/       one file per URL
@@ -64,7 +68,7 @@ my-app/
   public/           static assets, copied into dist/ as-is
 ```
 
-`pnpm check` type-checks the starter's `app/` directory together with `vite.config.ts` and `openelement.config.ts`; new routes are picked up automatically.
+`npm run typecheck` type-checks the starter's `app/` directory together with `vite.config.ts` and `openelement.config.ts`; new routes are picked up automatically.
 
 ## Step 2: Add your first page
 
@@ -118,7 +122,7 @@ curl -s http://localhost:5173/hello | grep -o 'Hello from a page'
 Hello from a page
 ```
 
-The heading was in the HTML the server sent — it is not injected by script. The only client module this page loads is the starter's own `app-shell`; the route itself adds no island.
+The heading was in the HTML the server sent — it is not injected by script. The only client module this page loads is the starter's own `app-layout`; the route itself adds no island.
 
 ## Step 3: Add your first island
 
@@ -287,7 +291,7 @@ Without the `x-openelement-action` header the same POST is an ordinary browser s
 ## Step 5: Build and serve
 
 ```bash
-pnpm build
+npm run build
 ```
 
 The build prerenders every static route, bundles one chunk per reachable island, and — because `/notes` is request-time — writes the server entry too. Expected output (trimmed: the starter's own islands appear in the same table, and the per-page list is elided):
@@ -325,7 +329,7 @@ server/index.js     the request-time handler: it answers POST /notes and
 Serve the artifact:
 
 ```bash
-pnpm start
+npm start
 ```
 
 ```text
@@ -343,7 +347,7 @@ curl -i http://localhost:4173/hello | head -1
 HTTP/1.1 200 OK
 ```
 
-`/hello` is a file on disk; `/notes` reached the server entry — as does the styled 404 for an unmatched path. A project whose build has no request-time route can be served static-only with `openelement start --mode=preview`, which is why this one, which has one, is served with `pnpm start`.
+`/hello` is a file on disk; `/notes` reached the server entry — as does the styled 404 for an unmatched path. A project whose build has no request-time route can be served static-only with `openelement start --mode=preview`, which is why this one, which has one, is served with `npm start`.
 
 You now have a project, a page, an island, a form action, and a build you can deploy.
 

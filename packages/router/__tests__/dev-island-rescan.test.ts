@@ -54,6 +54,25 @@ async function waitFor(predicate: () => boolean, what: string): Promise<void> {
   }
 }
 
+/**
+ * CI-forensics helper (island-rescan flake on linux runners): on timeout,
+ * snapshot the observable pipeline state so the failure says WHICH stage
+ * stalled — no reload sent (queue never ran) vs reload sent but count off.
+ */
+function pipelineSnapshot(
+  ctx: OpenElementBuildContext,
+  sent: unknown[],
+  invalidated: string[],
+): string {
+  return JSON.stringify({
+    sentCount: sent.length,
+    sentFirst: sent[0] ?? null,
+    invalidated,
+    islandTags: ctx.phase1.islandTagNames ?? null,
+    cwd: process.cwd(),
+  });
+}
+
 test('openPlugin: island file added during dev triggers descriptor + client map rescan (#1062)', async () => {
   const dir = realpathSync(await mkdtemp(join(tmpdir(), 'oe-island-rescan-')));
   const previousCwd = process.cwd();
@@ -86,7 +105,12 @@ test('openPlugin: island file added during dev triggers descriptor + client map 
     const watcher = new TestFileWatcher();
     const sent: unknown[] = [];
     const invalidated: string[] = [];
-    core.configureServer!({
+    // Awaited: a rejection here (the hook's first act awaits the package
+    // admission scan) would otherwise float and the watcher registrations
+    // below it would silently never install — the CI timeout with a dead
+    // pipeline is exactly that signature, and awaiting surfaces the real
+    // error instead of a two-second-later mystery.
+    await core.configureServer!({
       config: { root: dir },
       watcher,
       hot: { send: (payload: unknown) => sent.push(payload) },
@@ -101,7 +125,18 @@ test('openPlugin: island file added during dev triggers descriptor + client map 
     await writeFile(join(islandsDir, 'my-counter.ts'), COUNTER_ISLAND);
     watcher.emit('add', join(islandsDir, 'my-counter.ts'));
 
-    await waitFor(() => sent.length === 1, 'full-reload after island rescan');
+    try {
+      await waitFor(() => sent.length === 1, 'full-reload after island rescan');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Timed out')) {
+        // Give a straggler rescan one more second, then report the pipeline
+        // state: CI reproduces this deterministically where local machines
+        // never do, and the snapshot names the stalled stage.
+        await new Promise((r) => setTimeout(r, 1000));
+        error.message += ` [pipeline: ${pipelineSnapshot(ctx, sent, invalidated)}]`;
+      }
+      throw error;
+    }
     expect(sent[0]).toEqual({ type: 'full-reload' });
     // Both virtual entries must be invalidated: the SSR entry carries the
     // island map/admission plan, the client entry the hydration map.
@@ -114,7 +149,10 @@ test('openPlugin: island file added during dev triggers descriptor + client map 
     expect(ctx.phase1.ssrAdmissionPlan.renderableTags.join(',')).toContain('my-counter');
     const entryAfter = String(virtualEntry.load!(RESOLVED_ENTRY_ID));
     expect(entryAfter).toContain('my-counter');
-    const clientAfter = String(devIslandClient.load!(RESOLVED_CLIENT_ENTRY_ID));
+    // The client entry's load resolves the style session before generating
+    // (the component-sheet adapter comes from the selected provider), so it is
+    // async like every other load hook that awaits state.
+    const clientAfter = String(await devIslandClient.load!(RESOLVED_CLIENT_ENTRY_ID));
     expect(clientAfter).toContain('my-counter');
 
     // Removing the island re-scans back down.
@@ -124,7 +162,7 @@ test('openPlugin: island file added during dev triggers descriptor + client map 
     expect(ctx.phase1.islandTagNames).toEqual(['first-island']);
     const entryFinal = String(virtualEntry.load!(RESOLVED_ENTRY_ID));
     expect(entryFinal.includes('my-counter')).toEqual(false);
-    const clientFinal = String(devIslandClient.load!(RESOLVED_CLIENT_ENTRY_ID));
+    const clientFinal = String(await devIslandClient.load!(RESOLVED_CLIENT_ENTRY_ID));
     expect(clientFinal.includes('my-counter')).toEqual(false);
   } finally {
     process.chdir(previousCwd);

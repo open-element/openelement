@@ -62,17 +62,18 @@ export class OpenDialog extends OpenElement {
       <div style='display:contents'>
         <slot name='trigger' onClick={this.handleTrigger}></slot>
         <dialog
+          class='p-6 rounded-xl max-w-[min(90vw,480px)] font-sans'
           open={this.open}
           aria-label={this.label}
           part='overlay'
           onCancel={this.handleCancel}
           onClose={this.handleNativeClose}
         >
-          <div class='dialog-header' part='header'>
-            <h2 class='dialog-title'>{this.label}</h2>
+          <div class='dialog-header mb-4 flex items-center justify-between' part='header'>
+            <h2 class='dialog-title m-0 text-xl font-semibold text-foreground'>{this.label}</h2>
             <button
               type='button'
-              class='dialog-close'
+              class='dialog-close cursor-pointer rounded-md border-0 bg-transparent p-1 text-xl leading-tight text-muted-foreground transition-colors duration-150 ease-out'
               part='close'
               aria-label='Close'
               onClick={this.handleClose}
@@ -80,10 +81,10 @@ export class OpenDialog extends OpenElement {
               ×
             </button>
           </div>
-          <div class='dialog-body' part='body'>
+          <div class='dialog-body text-base leading-normal text-muted-foreground' part='body'>
             <slot></slot>
           </div>
-          <div class='dialog-footer' part='footer'>
+          <div class='dialog-footer mt-5 flex justify-end gap-2' part='footer'>
             <slot name='footer'></slot>
           </div>
         </dialog>

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SITE_LOCALES } from '../site-config.ts';
 import { loadRedirectTable } from './lib/site-retired.ts';
-import { writeFile } from 'node:fs/promises';
+import { rename, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -30,16 +30,13 @@ for (const mapping of mappings) {
   }
 }
 
-// EAFP (CodeQL js/toctou-race-condition): open the output with O_EXCL ('wx')
-// instead of stat-then-write, so there is no check/act window for the file to
-// change through — the kernel rejects an existing target atomically with EEXIST.
-try {
-  await writeFile(outFile, lines.join('\n') + '\n', { flag: 'wx' });
-} catch (error) {
-  if ((error as { code?: string }).code === 'EEXIST') {
-    console.error(`site:redirects: ${outFile} already exists — refusing to overwrite.`);
-    process.exit(1);
-  }
-  throw error;
-}
+// Idempotent, and atomic. The generator runs on every site:build, and a build
+// that runs twice over the same output directory must produce the same table
+// rather than fail on its own previous output. Writing a process-unique
+// temporary and renaming it into place gives that without a check-then-act
+// window (the previous O_EXCL open traded idempotence away for the same
+// guarantee — CodeQL js/toctou-race-condition never required that trade).
+const tempFile = `${outFile}.${process.pid}.tmp`;
+await writeFile(tempFile, lines.join('\n') + '\n', 'utf8');
+await rename(tempFile, outFile);
 console.log(`site redirects written: ${lines.length} rules (${outFile}).`);

@@ -29,11 +29,11 @@
     "ui-manifest:check": "node tools/generate-ui-manifest.ts --check"
   },
   "dependencies": {
-    "@openelement/element": "workspace:*",
-    "typescript": "6.0.3"
+    "@openelement/element": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "26.5.0",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3"
   }
 }

@@ -101,7 +101,10 @@ test('start cli: both modes refuse when dist/ is missing', async () => {
     for (const args of [[], ['--mode=preview']]) {
       const { code, output } = await runCli(dir, args);
       expect(code).toEqual(1);
-      expect(output).toContain('not found. Run `pnpm build` first.');
+      // The guidance names the router's own manager-neutral build command
+      // (`oe build`), not a package-manager shorthand: the scaffold ships no
+      // packageManager pin, so a `pnpm build` spelling would be wrong advice.
+      expect(output).toContain('not found. Run `oe build` first.');
     }
   } finally {
     await rm(dir, { recursive: true });
@@ -117,7 +120,11 @@ test('start cli: preview mode refuses when dist/server exists and points at star
     const { code, output } = await runCli(dir, ['--mode=preview']);
     expect(code).toEqual(1);
     expect(output).toContain('request-time routes');
-    expect(output).toContain('pnpm start');
+    // The refusal points at the router bin's own start subcommand (`oe start`,
+    // with the `openelement start` long alias on the next line) — the
+    // manager-neutral spelling the generated starter's `start` script uses.
+    expect(output).toContain('Use: oe start');
+    expect(output).toContain('(or: openelement start)');
   } finally {
     await rm(dir, { recursive: true });
   }

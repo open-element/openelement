@@ -20,7 +20,7 @@
  */
 import { expect, test } from 'vitest';
 import {
-  claimExistingDom,
+  hydrateExistingDom,
   createFreshDom,
   serializeToHtml,
 } from '../../src/internal/compiled/runtime.ts';
@@ -131,7 +131,7 @@ test('#1416: a same-reference item is not re-read, a new item still is', () => {
   );
 
   // Third generation, this time starting from an empty slot: the lazy
-  // region-reference path must still produce a correctly ordered text node
+  // block-reference path must still produce a correctly ordered text node
   // after a remove-then-add cycle on the same entry.
   items.value = [{ id: 'a', text: '', cls: 'three' }];
   expect(toHtml(root)).toEqual(
@@ -188,7 +188,7 @@ test('#1416: claim carries item identity through to the first update', () => {
   const html = serializeToHtml(PROGRAM, host);
   const claimDoc = new TestDocument();
   const claimRoot = parseHtml(claimDoc, html);
-  const claimed = claimExistingDom(PROGRAM, host, node(claimRoot));
+  const claimed = hydrateExistingDom(PROGRAM, host, node(claimRoot));
   const list = listOf(claimRoot);
   expect(textOf(list, 1)).toEqual('alpha');
 

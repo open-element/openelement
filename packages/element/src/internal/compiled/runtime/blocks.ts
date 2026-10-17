@@ -1,0 +1,697 @@
+/**
+ * when/each Block machinery of the compiled Part Program runtime: keyed
+ * list reconciliation with LIS moves, when-branch swapping, and the
+ * per-item value/attribute slot projections. The Block builders re-enter
+ * the template walk in fresh-dom.ts (mountNodes), while fresh-dom's Part
+ * dispatch calls back into buildWhen/buildEach — a function-level ESM cycle
+ * between hoisted declarations with no top-level evaluation, which is safe.
+ */
+
+// Canonical each-Block item-key derivation (#1374) — single source shared
+// with the server serializer; do not reintroduce a private copy.
+import { eachItemKey } from '../each-key.ts';
+// Canonical when-Block condition evaluation (#1372) — single source shared
+// with the server serializer; do not reintroduce a private comparison.
+import { conditionHolds } from '../condition-holds.ts';
+import {
+  partAnchorEndMarker,
+  partAnchorMarker,
+  type ProgramEachPart,
+  type ProgramWhenPart,
+} from '@openelement/protocol/part-program';
+import {
+  EachKeyErrorCode,
+  RUNTIME_MESSAGES_ENABLED,
+  RuntimeErrorCode,
+} from '@openelement/protocol/errors';
+import type { LifetimeScope } from '../lifetime-scope.ts';
+import type { MountContext } from './program-kernel.ts';
+import {
+  displayValue,
+  fail,
+  guardedUpdate,
+  insertNodesBefore,
+  isElement,
+  itemAttrValue,
+  itemValue,
+  NO_ITEM,
+  origin,
+  removeNodes,
+  signalOf,
+  subscribeWrites,
+} from './program-kernel.ts';
+import { installBranchValueParts } from './parts.ts';
+import { mountNodes } from './fresh-dom.ts';
+
+/**
+ * A list Block's authored name: the compiler's Block identity is a numeric
+ * part index, which an author cannot map back to source. The signal name is
+ * the authored `this.<property>` the Block renders.
+ */
+function regionName(part: ProgramEachPart | ProgramWhenPart): string {
+  return `this.${part.signal}`;
+}
+
+/**
+ * A list Block's signal must hold an array at every write. Naming the
+ * authored property and the received value is what makes the failure
+ * actionable; the compiler cannot reject it because the property type is an
+ * authoring decision, and the Block is re-read on every signal write.
+ *
+ * The strip seam (#1546) sits before the template: in a production client
+ * build {@linkcode RUNTIME_MESSAGES_ENABLED} is a literal `false`, so the
+ * early return keeps only the code and the minifier drops the prose. The
+ * origin prefix stays in both halves — it names the failing module and tag,
+ * which is runtime data, not payload prose.
+ */
+export function expectsArrayMessage(where: string, part: ProgramEachPart, value: unknown): string {
+  if (!RUNTIME_MESSAGES_ENABLED) return `${where}: ${RuntimeErrorCode.LIST_VALUE_NOT_ARRAY}`;
+  const received = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+  return (
+    `${where}: the list Block over ${regionName(part)} expects an array, got ` +
+    `${received} — it renders ${regionName(part)}.map(...), so initialize that property to [] ` +
+    `instead of null/undefined.`
+  );
+}
+
+/** Two items in one list Block derived the same item key (#1546 seam: see expectsArrayMessage). */
+function duplicateKeyMessage(ctx: MountContext, part: ProgramEachPart, key: string): string {
+  if (!RUNTIME_MESSAGES_ENABLED) {
+    return `${origin(ctx)}: ${EachKeyErrorCode.DUPLICATE_KEY}`;
+  }
+  return (
+    `${origin(ctx)}: duplicate key in the list Block over ${regionName(part)} — two items ` +
+    `share ${JSON.stringify(part.key)} = ${key}. A key is the item's DOM identity and must be ` +
+    `unique within one list; give each item a unique ${part.key}.`
+  );
+}
+
+export interface WhenBlock {
+  ctx: MountContext;
+  part: ProgramWhenPart;
+  scope: LifetimeScope;
+  anchor: Comment;
+  end: Comment;
+  current: boolean;
+  branchScope: LifetimeScope;
+  nodes: Node[];
+  item: unknown;
+  itemPart?: ProgramEachPart;
+}
+
+export interface ItemValueSlot {
+  text?: Text;
+  parent?: Node;
+  before?: Node | null;
+  position?: number;
+  /** Item field this slot renders (multi-field item templates). */
+  field?: string;
+}
+
+/** Per-item attribute slot tracked for keyed-reuse updates. */
+export interface ItemAttrSlot {
+  element: Element;
+  name: string;
+  field: string;
+}
+
+export interface EachEntry {
+  key: string;
+  scope: LifetimeScope;
+  nodes: Node[];
+  valueSlots: ItemValueSlot[];
+  attrSlots: ItemAttrSlot[];
+  /**
+   * The item value this entry was last rendered from (#1416). Every slot in an
+   * entry is a pure projection of one item, so an identical reference
+   * means the projection cannot have changed and `updateEach` skips the whole
+   * slot walk for that entry. Mutating an item in place is therefore outside
+   * the reactive contract — the same object-identity boundary the canonical
+   * key derivation draws (each-key.ts): the store replaces items, it does not
+   * rewrite them.
+   */
+  item: unknown;
+  /**
+   * The live item holder this entry's per-item event listeners dispatch with
+   * (#1556 IR v2). `item` above stays the rendered-from reference; the box is
+   * what a listener reads at dispatch time, refreshed on keyed reuse.
+   */
+  itemBox: ItemBox;
+}
+
+export interface EachBlock {
+  ctx: MountContext;
+  part: ProgramEachPart;
+  scope: LifetimeScope;
+  anchor: Comment;
+  end: Comment;
+  entries: EachEntry[];
+  byKey: Map<string, EachEntry>;
+  item: unknown;
+}
+
+export function whenActive(part: ProgramWhenPart, value: unknown): boolean {
+  // Canonical condition evaluation (#1372) — shared with the server
+  // serializer; do not reintroduce a private comparison.
+  return conditionHolds(part.test, value);
+}
+
+export function buildItem(
+  ctx: MountContext,
+  blockScope: LifetimeScope,
+  doc: Document,
+  part: ProgramEachPart,
+  item: unknown,
+  parent?: Node,
+): {
+  nodes: Node[];
+  valueSlots: ItemValueSlot[];
+  attrSlots: ItemAttrSlot[];
+  itemBox: ItemBox;
+  scope: LifetimeScope;
+} {
+  const scope = blockScope.child();
+  const valueSlots: ItemValueSlot[] = [];
+  const attrSlots: ItemAttrSlot[] = [];
+  // The mutable item holder every per-item listener reads at dispatch time:
+  // keyed reuse replaces an entry's item without rebuilding its DOM, so a
+  // listener closing over the item value directly would dispatch a stale one.
+  const itemBox: ItemBox = { item };
+  try {
+    const nodes = mountNodes(ctx, scope, doc, part.item, item, part, valueSlots, parent, attrSlots);
+    attachItemEvents(ctx, part, nodes, scope, itemBox);
+    return { nodes, valueSlots, attrSlots, itemBox, scope };
+  } catch (error) {
+    try {
+      scope.dispose();
+    } catch {
+      // Preserve the item construction error after attempting every cleanup.
+    }
+    throw error;
+  }
+}
+
+/** The per-entry live item value per-item event listeners dispatch with. */
+export interface ItemBox {
+  item: unknown;
+}
+
+/**
+ * Per-item event wiring (#1556 IR v2): attach each ItemEventBinding to the
+ * item's root (or a `selector` match within it). Listeners are registered on
+ * the item's LifetimeScope — they are removed when the item is destroyed —
+ * and read the item from `itemBox` at dispatch time so keyed-reuse updates
+ * keep them current without re-attaching.
+ */
+export function attachItemEvents(
+  ctx: MountContext,
+  part: ProgramEachPart,
+  nodes: Node[],
+  scope: LifetimeScope,
+  itemBox: ItemBox,
+): void {
+  const bindings = part.itemEvents;
+  if (!bindings?.length) return;
+  for (const node of nodes) {
+    if (!isElement(node)) continue;
+    for (const binding of bindings) {
+      const target = binding.selector ? node.querySelector(binding.selector) : node;
+      if (!target) continue;
+      const listener = (event: Event) => {
+        dispatchItemAction(ctx, binding, itemBox.item, event);
+      };
+      target.addEventListener(binding.event, listener);
+      scope.add(() => target.removeEventListener(binding.event, listener));
+    }
+  }
+}
+
+function dispatchItemAction(
+  ctx: MountContext,
+  binding: { handler: string },
+  item: unknown,
+  event: Event,
+): void {
+  // Item handlers receive (event, item) — the widened dispatch contract of
+  // ItemEventBinding; fixed-path handlers keep their single-event signature.
+  const handler = ctx.host.handlers[binding.handler] as
+    | ((event: unknown, item?: unknown) => void)
+    | undefined;
+  if (typeof handler === 'function') {
+    handler(event, item);
+  }
+}
+
+export function buildWhen(
+  ctx: MountContext,
+  parentScope: LifetimeScope,
+  doc: Document,
+  part: ProgramWhenPart,
+  item: unknown,
+  itemPart?: ProgramEachPart,
+  parent?: Node,
+): Node[] {
+  const scope = parentScope.child();
+  const anchor = doc.createComment(partAnchorMarker(part.index));
+  const end = doc.createComment(partAnchorEndMarker(part.index));
+  const current = whenActive(part, signalOf(ctx, part.signal).value);
+  const block: WhenBlock = {
+    ctx,
+    part,
+    scope,
+    anchor,
+    end,
+    current,
+    branchScope: scope.child(),
+    nodes: [],
+    item,
+    itemPart,
+  };
+  scope.addRangeCleanup(() => removeNodes(block.nodes));
+  // The ownership record a reconnect re-arms (revive.ts).
+  ctx.bindings.set(part.index, block);
+  block.nodes = mountNodes(
+    ctx,
+    block.branchScope,
+    doc,
+    current ? part.on : part.off,
+    item,
+    itemPart,
+    undefined,
+    parent,
+  );
+  // The active branch's own value sinks bind here, on the branch scope —
+  // they die with the branch and re-bind when the other one mounts (alpha15).
+  installBranchValueParts(
+    ctx,
+    block.branchScope,
+    block.nodes,
+    part.index,
+    current ? 'on' : 'off',
+    'fresh',
+  );
+  subscribeWrites(
+    ctx,
+    scope,
+    part.signal,
+    guardedUpdate(ctx, (value) => updateWhen(block, value)),
+  );
+  return [anchor, ...block.nodes, end];
+}
+
+export function updateWhen(block: WhenBlock, value: unknown): void {
+  if (block.scope.disposed) return;
+  const next = whenActive(block.part, value);
+  if (next === block.current) return;
+  const parent = block.end.parentNode;
+  // A detached anchor/end pair means the Block's owning boundary is gone;
+  // updates stop rather than rebuilding outside the owned range.
+  if (!parent || block.anchor.parentNode !== parent) return;
+  try {
+    block.branchScope.dispose(true);
+  } finally {
+    removeNodes(block.nodes);
+  }
+  const branchScope = block.scope.child();
+  let nodes: Node[];
+  try {
+    nodes = mountNodes(
+      block.ctx,
+      branchScope,
+      block.end.ownerDocument,
+      next ? block.part.on : block.part.off,
+      block.item,
+      block.itemPart,
+      undefined,
+      parent,
+    );
+    // The new branch carries its own sinks; the old branch's died with its
+    // scope above, so no stale binding or dirty DOM survives the swap.
+    installBranchValueParts(
+      block.ctx,
+      branchScope,
+      nodes,
+      block.part.index,
+      next ? 'on' : 'off',
+      'fresh',
+    );
+    insertNodesBefore(parent, nodes, block.end);
+  } catch (error) {
+    try {
+      branchScope.dispose();
+    } catch {
+      // Preserve the branch construction error.
+    }
+    block.branchScope = branchScope;
+    block.nodes = [];
+    block.current = next;
+    throw error;
+  }
+  block.branchScope = branchScope;
+  block.nodes = nodes;
+  block.current = next;
+}
+
+export function buildEach(
+  ctx: MountContext,
+  parentScope: LifetimeScope,
+  doc: Document,
+  part: ProgramEachPart,
+  parent?: Node,
+): Node[] {
+  const scope = parentScope.child();
+  const anchor = doc.createComment(partAnchorMarker(part.index));
+  const end = doc.createComment(partAnchorEndMarker(part.index));
+  const block: EachBlock = {
+    ctx,
+    part,
+    scope,
+    anchor,
+    end,
+    entries: [],
+    byKey: new Map(),
+    item: NO_ITEM,
+  };
+  scope.addRangeCleanup(() => {
+    for (const entry of block.entries) removeNodes(entry.nodes);
+  });
+  const value = signalOf(ctx, part.signal).value;
+  if (!Array.isArray(value)) {
+    fail(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, expectsArrayMessage(origin(ctx), part, value));
+  }
+  const nodes: Node[] = [];
+  const seen = new Set<string>();
+  for (let index = 0; index < value.length; index++) {
+    const key = eachItemKey(part, value[index]);
+    if (seen.has(key)) {
+      fail(EachKeyErrorCode.DUPLICATE_KEY, duplicateKeyMessage(ctx, part, key));
+    }
+    seen.add(key);
+    const entry = buildItem(ctx, scope, doc, part, value[index], parent);
+    const stored = {
+      key,
+      scope: entry.scope,
+      nodes: entry.nodes,
+      valueSlots: entry.valueSlots,
+      attrSlots: entry.attrSlots,
+      itemBox: entry.itemBox,
+      item: value[index],
+    };
+    block.entries.push(stored);
+    block.byKey.set(key, stored);
+    nodes.push(...entry.nodes);
+  }
+  // The ownership record a reconnect re-arms (revive.ts).
+  ctx.bindings.set(part.index, block);
+  subscribeWrites(
+    ctx,
+    scope,
+    part.signal,
+    guardedUpdate(ctx, (next) => updateEach(block, next)),
+  );
+  return [anchor, ...nodes, end];
+}
+
+function recordDirectItemValueNode(entry: EachEntry, slot: ItemValueSlot, text: Text): void {
+  const parent = slot.parent;
+  if (!parent) return;
+  const hasDirectEntryNode = entry.nodes.some((node) => node.parentNode === parent);
+  if (!hasDirectEntryNode && entry.nodes.length > 0) return;
+  if (entry.nodes.includes(text)) return;
+
+  const reference = slot.before;
+  const position = reference ? entry.nodes.indexOf(reference) : -1;
+  if (position >= 0) entry.nodes.splice(position, 0, text);
+  else entry.nodes.push(text);
+}
+
+function insertItemValue(
+  entry: EachEntry,
+  slotIndex: number,
+  text: Text,
+  blockParent: Node,
+  blockReference: Node,
+): void {
+  const slot = entry.valueSlots[slotIndex];
+  const parent = slot.parent;
+  if (!parent) return;
+
+  let reference: Node | null = null;
+  for (let index = slotIndex + 1; index < entry.valueSlots.length; index++) {
+    const later = entry.valueSlots[index].text;
+    if (later?.parentNode === parent) {
+      reference = later;
+      break;
+    }
+  }
+  if (!reference && slot.before?.parentNode === parent) reference = slot.before;
+  if (!reference && parent === blockParent && blockReference.parentNode === parent) {
+    reference = blockReference;
+  }
+  if (reference) parent.insertBefore(text, reference);
+  else parent.appendChild(text);
+  recordDirectItemValueNode(entry, slot, text);
+}
+
+function removeItemValue(entry: EachEntry, slot: ItemValueSlot, text: Text): void {
+  const replacement = slot.before ?? null;
+  text.parentNode?.removeChild(text);
+  for (const other of entry.valueSlots) {
+    if (other.before === text) other.before = replacement;
+  }
+  const position = entry.nodes.indexOf(text);
+  if (position >= 0) entry.nodes.splice(position, 1);
+  slot.text = undefined;
+}
+
+function updateItemValues(
+  entry: EachEntry,
+  projection: { values: string[]; attrs: Array<string | null> },
+  blockParent: Node,
+  resolveBlockReference: () => Node,
+): void {
+  // The fallback insertion reference is a scan over the Block's later
+  // entries. It is only reachable when a slot that currently has no text must
+  // gain one, so resolve it once, on demand (#1416) — an update that only
+  // rewrites or removes existing text never pays for the scan.
+  let blockReference: Node | undefined;
+  const blockReferenceForInsert = (): Node => (blockReference ??= resolveBlockReference());
+  for (const [index, slot] of entry.valueSlots.entries()) {
+    const next = projection.values[index];
+    if (next.length === 0) {
+      if (slot.text) removeItemValue(entry, slot, slot.text);
+      continue;
+    }
+    if (slot.text) {
+      if (slot.text.data !== next) slot.text.data = next;
+      continue;
+    }
+    const parent = slot.parent ?? blockParent;
+    slot.parent = parent;
+    const document = parent.ownerDocument;
+    if (!document) {
+      fail(
+        RuntimeErrorCode.ITEM_SLOT_WITHOUT_DOCUMENT,
+        '[compiled-runtime] item value slot has no owner document',
+      );
+    }
+    const text = document.createTextNode(next);
+    slot.text = text;
+    insertItemValue(entry, index, text, blockParent, blockReferenceForInsert());
+  }
+  for (const [index, slot] of entry.attrSlots.entries()) {
+    const next = projection.attrs[index];
+    if (next === null) {
+      if (slot.element.hasAttribute(slot.name)) slot.element.removeAttribute(slot.name);
+    } else if (slot.element.getAttribute(slot.name) !== next) {
+      slot.element.setAttribute(slot.name, next);
+    }
+  }
+}
+
+function disposeEntry(entry: EachEntry): void {
+  try {
+    entry.scope.dispose(true);
+  } finally {
+    removeNodes(entry.nodes);
+  }
+}
+
+function moveEntries(
+  block: EachBlock,
+  parent: Node,
+  entries: EachEntry[],
+  previousPositions: Map<EachEntry, number>,
+  mounted: Set<EachEntry>,
+): void {
+  // A physically ordered suffix already touches the Block end anchor.
+  // Leave it in place and keep the LIS work confined to the changed prefix.
+  let limit = entries.length;
+  let reference: Node = block.end;
+  while (limit > 0) {
+    const nodes = entries[limit - 1].nodes;
+    let next = reference;
+    let contiguous = true;
+    for (let index = nodes.length - 1; index >= 0; index--) {
+      if (nodes[index].parentNode !== parent || nodes[index].nextSibling !== next) {
+        contiguous = false;
+        break;
+      }
+      next = nodes[index];
+    }
+    if (!contiguous) break;
+    reference = next;
+    limit--;
+  }
+
+  // Keep the longest already-ordered subsequence in place. New entries and
+  // formerly empty entries have no mounted position to preserve.
+  const tails: number[] = [];
+  const predecessors = new Int32Array(limit).fill(-1);
+  for (let index = 0; index < limit; index++) {
+    const entry = entries[index];
+    const position = previousPositions.get(entry);
+    const nodes = entry.nodes;
+    if (
+      position === undefined ||
+      !mounted.has(entry) ||
+      nodes.length === 0 ||
+      nodes.some(
+        (node, nodeIndex) =>
+          node.parentNode !== parent ||
+          (nodeIndex > 0 && nodes[nodeIndex - 1].nextSibling !== node),
+      )
+    )
+      continue;
+    let low = 0;
+    let high = tails.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (previousPositions.get(entries[tails[middle]])! < position) low = middle + 1;
+      else high = middle;
+    }
+    if (low > 0) predecessors[index] = tails[low - 1];
+    tails[low] = index;
+  }
+  const stationary = new Set<number>();
+  for (let index = tails.at(-1) ?? -1; index >= 0; index = predecessors[index]) {
+    stationary.add(index);
+  }
+
+  for (let index = limit - 1; index >= 0; index--) {
+    const nodes = entries[index].nodes;
+    if (stationary.has(index)) {
+      if (nodes.length > 0) reference = nodes[0];
+      continue;
+    }
+    for (let nodeIndex = nodes.length - 1; nodeIndex >= 0; nodeIndex--) {
+      const node = nodes[nodeIndex];
+      if (node.parentNode !== parent || node.nextSibling !== reference) {
+        parent.insertBefore(node, reference);
+      }
+      reference = node;
+    }
+  }
+}
+
+export function updateEach(block: EachBlock, value: unknown): void {
+  if (block.scope.disposed) return;
+  if (!Array.isArray(value)) {
+    fail(
+      RuntimeErrorCode.LIST_VALUE_NOT_ARRAY,
+      expectsArrayMessage(origin(block.ctx), block.part, value),
+    );
+  }
+  const parent = block.end.parentNode;
+  // A detached anchor/end pair means the Block's owning boundary is gone;
+  // updates stop rather than rebuilding outside the owned range.
+  if (!parent || block.anchor.parentNode !== parent) return;
+  const previousPositions = new Map(block.entries.map((entry, index) => [entry, index]));
+  const mounted = new Set(
+    block.entries.filter((entry) => entry.nodes.some((node) => node.parentNode === parent)),
+  );
+
+  const descriptors: Array<{
+    key: string;
+    item: unknown;
+    existing?: EachEntry;
+    projection?: { values: string[]; attrs: Array<string | null> };
+  }> = [];
+  const seen = new Set<string>();
+  for (let index = 0; index < value.length; index++) {
+    const item = value[index];
+    const key = eachItemKey(block.part, item);
+    if (seen.has(key)) {
+      fail(EachKeyErrorCode.DUPLICATE_KEY, duplicateKeyMessage(block.ctx, block.part, key));
+    }
+    seen.add(key);
+    descriptors.push({ key, item, existing: block.byKey.get(key) });
+  }
+  for (const descriptor of descriptors) {
+    const entry = descriptor.existing;
+    if (!entry || entry.item === descriptor.item) continue;
+    descriptor.projection = {
+      values: entry.valueSlots.map((slot) =>
+        displayValue(itemValue(block.part, descriptor.item, slot.field)),
+      ),
+      attrs: entry.attrSlots.map((slot) => itemAttrValue(descriptor.item, slot.field)),
+    };
+  }
+
+  // Membership only: `created` exists to tell a freshly built entry (already
+  // rendered from its item by `buildItem`) from a reused one. The separate
+  // Set keeps the `updateItemValues` guard O(1) instead of an array scan
+  // (#1416) while `created` keeps its insertion order for the rollback loop.
+  const created: EachEntry[] = [];
+  const createdSet = new Set<EachEntry>();
+  try {
+    for (const descriptor of descriptors) {
+      if (descriptor.existing) continue;
+      const built = buildItem(
+        block.ctx,
+        block.scope,
+        block.end.ownerDocument,
+        block.part,
+        descriptor.item,
+        parent,
+      );
+      const entry = { key: descriptor.key, ...built, item: descriptor.item };
+      descriptor.existing = entry;
+      created.push(entry);
+      createdSet.add(entry);
+    }
+  } catch (error) {
+    for (const entry of created) disposeEntry(entry);
+    throw error;
+  }
+
+  for (const entry of block.entries) {
+    if (seen.has(entry.key)) continue;
+    disposeEntry(entry);
+  }
+  const nextEntries = descriptors.map((descriptor) => descriptor.existing!);
+  for (let descriptorIndex = 0; descriptorIndex < descriptors.length; descriptorIndex++) {
+    const descriptor = descriptors[descriptorIndex];
+    const entry = descriptor.existing;
+    if (!entry || createdSet.has(entry)) continue;
+    // Unchanged item reference: every slot value is a pure projection of the
+    // item, so re-deriving them cannot change any node. Skip the walk
+    // entirely (#1416); the reference is refreshed below for every entry that
+    // does re-render, so the next update compares against what is on screen.
+    if (entry.item === descriptor.item) continue;
+    updateItemValues(entry, descriptor.projection!, parent, () => {
+      for (let nextIndex = descriptorIndex + 1; nextIndex < nextEntries.length; nextIndex++) {
+        const nextNode = nextEntries[nextIndex].nodes.find((node) => node.parentNode === parent);
+        if (nextNode) return nextNode;
+      }
+      return block.end;
+    });
+    entry.item = descriptor.item;
+    // Keyed reuse replaced the item without rebuilding DOM: refresh the box
+    // the entry's per-item listeners dispatch with (#1556 IR v2).
+    entry.itemBox.item = descriptor.item;
+  }
+  block.entries = nextEntries;
+  block.byKey = new Map(nextEntries.map((entry) => [entry.key, entry]));
+  moveEntries(block, parent, nextEntries, previousPositions, mounted);
+}

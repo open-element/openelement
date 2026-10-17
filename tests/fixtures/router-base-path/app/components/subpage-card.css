@@ -1,0 +1,6 @@
+/* Nested SHADOW component sheet (S-C2/S-12): a shadow tree already is the
+   boundary, so the asset ships unscoped and the DSD template declares it as a
+   marked link — under the configured base, like every other resource URL. */
+:host{display:block}
+
+.subpage-card{color:rgb(120,40,10)}

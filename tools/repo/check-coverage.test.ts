@@ -1,10 +1,31 @@
 import { expect, test } from 'vitest';
+import { relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { assertRejectsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import {
   classifyTestExit,
+  COVERAGE_INCLUDES,
   describeNativeCrash,
   runTestSuiteWithCrashRetry,
 } from './check-coverage.ts';
+import {
+  enumerateCoverageFiles,
+  isPackageSource,
+  isToolsLibSource,
+  isWwwToolsSource,
+} from './coverage-summary.ts';
+
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+
+/** Picomatch-shaped match for the two wildcards the include set uses. */
+function globToRegExp(glob: string): RegExp {
+  const pattern = glob
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replaceAll('**', '\u0000')
+    .replaceAll('*', '[^/]*')
+    .replaceAll('\u0000', '.*');
+  return new RegExp(`^${pattern}$`);
+}
 
 function scriptedRunner(codes: number[]): {
   runner: () => Promise<{ code: number }>;
@@ -94,6 +115,28 @@ test('crash exhaustion fails loudly after the bounded attempt count', async () =
     { attempt: 2, maxAttempts: 3, code: 139 },
     { attempt: 3, maxAttempts: 3, code: 139 },
   ]);
+});
+
+test('the instrumentation includes instrument every source the denominator counts', async () => {
+  // The denominator is the scope predicate (every in-scope source on disk);
+  // the include set decides what vitest actually profiles. A source the
+  // predicate counts but the includes ignore never reaches the LCOV report,
+  // so it is folded in at 0% — the six-package split left 22 protocol and 19
+  // compiler files in exactly that state (3276 estimated uncovered lines).
+  const inScope = (path: string): boolean =>
+    isPackageSource(path) || isToolsLibSource(path) || isWwwToolsSource(path);
+  const denominator = await enumerateCoverageFiles(repoRoot, inScope);
+  const matchers = COVERAGE_INCLUDES.map((glob) => globToRegExp(glob));
+  const uninstrumented = denominator.filter((path) => {
+    const repoRelative = relative(repoRoot, path).replaceAll('\\', '/');
+    return !matchers.some((matcher) => matcher.test(repoRelative));
+  });
+
+  expect(
+    uninstrumented,
+    'denominator-only sources (counted at 0% because no include instruments them): ' +
+      uninstrumented.slice(0, 5).join(', '),
+  ).toEqual([]);
 });
 
 test('different crash signals across attempts still count toward the same bound', async () => {

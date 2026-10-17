@@ -45,23 +45,33 @@ test.describe('DSD Layers', () => {
     expect(fallbackCount).toBe(0);
   });
 
-  test('static styles arrive via adoptedStyleSheets, not DSD style nodes', async ({ page }) => {
-    // Island style asset protocol (#1553, ADR-0164): the runtime claims the
-    // DSD <style data-oe-static-styles> node and deletes it only after the
-    // staged plan attaches, so after hydration the marked node must be gone
-    // and the kernel-applied adopted sheet is the remaining style channel.
-    const probe: { markedStyles: number; adoptedRoots: number } = await page.evaluate(
-      `(${deepQueryAllInPage.toString()})(document, '*').reduce(
-        (acc, el) => {
-          if (el.shadowRoot?.querySelector('style[data-oe-static-styles]')) acc.markedStyles++;
-          if ((el.shadowRoot?.adoptedStyleSheets?.length ?? 0) > 0) acc.adoptedRoots++;
-          return acc;
-        },
-        { markedStyles: 0, adoptedRoots: 0 },
-      )`,
-    );
+  test('static styles arrive as declared links, not DSD style nodes', async ({ page }) => {
+    // Island style asset protocol (#1553, ADR-0164; S5-C + S-C1.2): an emitted
+    // sheet is declared as a marked `<link rel="stylesheet">`. The runtime KEEPS
+    // that link as the delivery and never re-delivers the same resource as an
+    // adopted sheet — one stylesheet resource, one delivery — so after
+    // hydration a link-declared root carries no adopted copy and no marked
+    // `<style>` node survives (the inline fallback is retired for every
+    // URL-addressable sheet).
+    const probe: { markedStyles: number; declaredLinks: number; linkAndAdopted: number } =
+      await page.evaluate(
+        `(${deepQueryAllInPage.toString()})(document, '*').reduce(
+          (acc, el) => {
+            const root = el.shadowRoot;
+            if (!root) return acc;
+            if (root.querySelector('style[data-oe-static-styles]')) acc.markedStyles++;
+            if (root.querySelector('link[data-oe-static-styles]')) {
+              acc.declaredLinks++;
+              if ((root.adoptedStyleSheets?.length ?? 0) > 0) acc.linkAndAdopted++;
+            }
+            return acc;
+          },
+          { markedStyles: 0, declaredLinks: 0, linkAndAdopted: 0 },
+        )`,
+      );
     expect(probe.markedStyles).toBe(0);
-    expect(probe.adoptedRoots).toBeGreaterThan(0);
+    expect(probe.declaredLinks).toBeGreaterThan(0);
+    expect(probe.linkAndAdopted).toBe(0);
   });
 
   test('DSD content is not exposed as raw text', async ({ page }) => {

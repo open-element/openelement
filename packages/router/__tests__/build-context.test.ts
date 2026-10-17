@@ -45,7 +45,6 @@ test('OpenElementBuildContext populatePhase3 sets phase3 invariants', () => {
     build: { outDir: 'custom-dist' },
     routesDir: 'src/routes',
     islandsDir: 'src/islands',
-    componentsDir: 'src/components',
     middleware: { cors: true },
     html: { lang: 'zh', title: 'Test' },
     island: { upgradeStrategy: 'load' as const },
@@ -53,7 +52,7 @@ test('OpenElementBuildContext populatePhase3 sets phase3 invariants', () => {
     speculation: { prerender: ['/guide/*'] },
     headExtras: '<meta name="theme-color" content="#000">',
     allowHeadExtrasScripts: true,
-    appShell: 'default' as const,
+    layout: 'default' as const,
     layouts: { docs: 'default' as const },
   };
   const config = { root: '/project', base: '/base/', command: 'build' as const };
@@ -72,7 +71,6 @@ test('OpenElementBuildContext populatePhase3 sets phase3 invariants', () => {
   expect(ctx.phase3.base).toEqual('/base/');
   expect(ctx.phase3.routesDir).toEqual('src/routes');
   expect(ctx.phase3.islandsDir).toEqual('src/islands');
-  expect(ctx.phase3.componentsDir).toEqual('src/components');
   expect(ctx.phase3.middleware).toEqual({ cors: true });
   expect(ctx.phase3.html).toEqual({ lang: 'zh', title: 'Test' });
   expect(ctx.phase3.upgradeStrategy).toEqual('load');
@@ -80,7 +78,7 @@ test('OpenElementBuildContext populatePhase3 sets phase3 invariants', () => {
   expect(ctx.phase3.speculation).toEqual({ prerender: ['/guide/*'] });
   expect(ctx.phase3.headExtras).toEqual('<meta name="theme-color" content="#000">');
   expect(ctx.phase3.allowHeadExtrasScripts).toEqual(true);
-  expect(ctx.phase3.appShell).toEqual('default');
+  expect(ctx.phase3.layout).toEqual('default');
   expect(ctx.phase3.layouts).toEqual({ docs: 'default' });
   expect(ctx.phase3.ssrNoExternal.length).toEqual(2);
 });

@@ -38,7 +38,7 @@ const {
   MAX_PRE_UPGRADE_CAPTURED_EVENTS,
 } = await import('../../src/internal/compiled/runtime.ts');
 
-const { OpenElement, ensurePreHydrationClickCapture, renderDsd } =
+const { OpenElement, ensurePreHydrationClickCapture, renderToString } =
   await import('../../src/index.ts');
 
 // oxlint-disable-next-line no-explicit-any
@@ -237,9 +237,9 @@ interface CounterElement extends FacadeElement {
 function mountSsr(tag: string): { host: FacadeElement; button: AnyElement } {
   // An un-upgraded SSR host: same tag and content nodes as the serialized
   // markup, but a plain element (its chunk has not arrived yet).
-  const serialized = renderDsd(tag, {
+  const serialized = renderToString(tag, {
     componentClass: dom.registry.get(tag) as CustomElementConstructor,
-  }).html;
+  });
   const host = new FacadeElement(tag, dom.document);
   const match = /<button type="button"><!--oe:p0-->(.*?)<\/button>/.exec(serialized);
   const button = new FacadeElement('button', dom.document);

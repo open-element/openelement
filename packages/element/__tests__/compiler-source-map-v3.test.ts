@@ -30,7 +30,7 @@ const FILE = '/project/app/components/map-fixture.tsx';
  *   - attr sink, JSX text part, prop sink, bool sink, method handler
  *   - two arrow handlers with identical `this.count++;` bodies (the MANDATORY
  *     duplicate-location vector)
- *   - a conditional (when) region and a keyed each region at nested tree paths
+ *   - a conditional (when) block and a keyed each block at nested tree paths
  */
 const SOURCE = `import { computed, element, OpenElement, property } from '@openelement/element';
 import { defineIslandConfig as island } from '@openelement/router';
@@ -351,7 +351,7 @@ test('A10.2 segments carry original identifier names where the compiler knows th
 
 test('A10.2 diagnostics keep pointing at authored positions', () => {
   const nested = `import { element, OpenElement, property } from '@openelement/element';
-@element('oe-nested-region')
+@element('oe-nested-block')
 export class NestedRegion extends OpenElement {
   @property({ reflect: true }) count = 0;
   render() {
@@ -363,14 +363,14 @@ export class NestedRegion extends OpenElement {
   }
 }
 `;
-  const file = '/project/app/components/nested-region.tsx';
+  const file = '/project/app/components/nested-block.tsx';
   let caught: unknown;
   try {
     compileElementProgram(nested, file);
   } catch (error) {
     caught = error;
   }
-  expect(caught instanceof CompiledElementError, 'nested regions must fail closed').toBeTruthy();
+  expect(caught instanceof CompiledElementError, 'nested blocks must fail closed').toBeTruthy();
   const diagnostic = caught.diagnostics[0];
   expect(diagnostic.code).toEqual('OEC9012');
   const expected = positionOf(nested, '{this.count > 1 ?');

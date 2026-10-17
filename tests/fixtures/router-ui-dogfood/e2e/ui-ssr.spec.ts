@@ -18,17 +18,20 @@ test.describe('ui dogfood SSR/DSD output', () => {
     expect(html).toContain(
       '<open-dialog label="Dogfood dialog"><template shadowrootmode="open" shadowrootdelegatesfocus>',
     );
-    expect(html).toContain('<dialog part="overlay"');
+    // The atomic facts, not an attribute-order literal: the native dialog
+    // element carries the documented `overlay` part (its class list is the
+    // alpha15 utility authoring, which may grow).
+    expect(html).toMatch(/<dialog [^>]*part="overlay"/);
     expect(html).toContain('aria-label="Dogfood dialog"');
     // Trigger/footer slots stay in the light DOM (slot projection).
     expect(html).toContain('<button slot="trigger" id="dialog-trigger" type="button">');
     // The SSR-open dialog: host `open` attribute + bool sink opened the inner
     // dialog at render time (#1030 choreography input state).
     expect(html).toContain('<open-dialog id="ssr-open-dialog" open="" label="SSR open dialog">');
-    expect(html).toContain('<dialog part="overlay" open aria-label="SSR open dialog">');
+    expect(html).toMatch(/<dialog [^>]*part="overlay"[^>]*open[^>]*aria-label="SSR open dialog"/);
   });
 
-  test('/dropdown emits open-dropdown DSD with a native popover content region', async ({
+  test('/dropdown emits open-dropdown DSD with a native popover content block', async ({
     request,
   }) => {
     const response = await request.get('/dropdown');
@@ -72,33 +75,50 @@ test.describe('ui dogfood SSR/DSD output', () => {
 });
 
 /**
- * Tailwind preset delivery over compiled DSD (the C-seam integration proof).
+ * Tailwind entry delivery over compiled DSD (the C-seam integration proof).
  *
  * The fixture is preset-ON with `injectDsdLinks` explicitly false — the
  * exact-claim contract: the compiled bundle reaches the document through the
  * head link, every DSD template stays byte-exact Part Program children (the
- * compiled-claim walk fails closed on an injected node), and shadow trees
+ * compiled-hydration walk fails closed on an injected node), and shadow trees
  * take the theme through CSS custom property inheritance. Verified here end
  * to end: SSR bytes, then real hydration on the prerendered page.
  */
-test.describe('tailwind preset delivery (preset-on + compiled DSD)', () => {
-  const BUNDLE_LINK = '<link rel="stylesheet" href="/assets/open-tailwind.css" />';
+test.describe('tailwind entry delivery (entry-on + compiled DSD)', () => {
+  /** The compiled document stylesheet: a content-hashed client asset. */
+  const BUNDLE_HREF = /^\/client\/assets\/.+\.css$/;
 
-  test('the bundle is head-linked exactly once and no DSD template carries an injected link', async ({
+  test('the document stylesheet is head-linked exactly once and no DSD template carries an injected link', async ({
     request,
   }) => {
     const response = await request.get('/dialog');
     expect(response.ok()).toBe(true);
     const html = await response.text();
-    // Document adoption: exactly one bundle link, inside <head> (the @scope
-    // face rides next to it as its own head link when configured).
-    const escaped = BUNDLE_LINK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    expect(html.match(new RegExp(escaped, 'g'))?.length).toBe(1);
-    expect(html).toMatch(new RegExp(`<head>[\\s\\S]*?${BUNDLE_LINK}`));
-    // Shadow adoption rides inheritance, not injection: every DSD template's
-    // children are exactly the Part Program's nodes.
+    // Document adoption: exactly one compiled-stylesheet link in the HEAD.
+    // (Shadow templates carry their own marked links — see the loop below.)
+    const head = html.slice(0, html.indexOf('</head>'));
+    const headStylesheetHrefs = [...head.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map(
+      (match) => match[1]!,
+    );
+    expect(
+      headStylesheetHrefs.filter((href) => BUNDLE_HREF.test(href)),
+      `exactly one document stylesheet link, got ${headStylesheetHrefs.join(', ')}`,
+    ).toHaveLength(1);
+    expect(html).toMatch(/<head>[\s\S]*?<link rel="stylesheet" href="\/client\/assets\//);
+    // Shadow adoption: every DSD template link must be the framework's MARKED
+    // component-stylesheet declaration (alpha15 S lane) — a declarative
+    // external resource the serializer wrote, never an unmarked node and never
+    // a runtime-injected one. Unmarked links in templates stay structural
+    // drift.
     for (const match of html.matchAll(/<template shadowrootmode=[^>]*>([\s\S]*?)<\/template>/g)) {
-      expect(match[1], 'a DSD template must stay claim-exact').not.toContain('<link');
+      for (const link of match[1].matchAll(/<link\b[^>]*>/g)) {
+        expect(link[0], 'a DSD template link must be the marked stylesheet').toContain(
+          'data-oe-static-styles',
+        );
+        expect(link[0], 'a DSD template link must be a stylesheet reference').toContain(
+          'rel="stylesheet"',
+        );
+      }
     }
   });
 
@@ -116,7 +136,7 @@ test.describe('tailwind preset delivery (preset-on + compiled DSD)', () => {
 
     // The theme layer is custom properties delivered by the head link: a
     // shadow-tree element resolves a bundle token through inheritance.
-    const inherited = await page.evaluate(`(() => {
+    const inherited = await page.evaluate<{ card: string; border: string } | null>(`(() => {
       const host = ${deepFirstExpr('open-dialog')};
       const inner = host?.shadowRoot?.querySelector('dialog');
       if (!inner) return null;
@@ -126,9 +146,9 @@ test.describe('tailwind preset delivery (preset-on + compiled DSD)', () => {
         border: style.getPropertyValue('--color-border').trim(),
       };
     })()`);
-    expect(inherited).not.toBeNull();
-    expect(inherited.card).not.toBe('');
-    expect(inherited.border).not.toBe('');
+    expect(inherited, 'the dialog shadow tree resolved').not.toBeNull();
+    expect(inherited!.card).not.toBe('');
+    expect(inherited!.border).not.toBe('');
   });
 });
 

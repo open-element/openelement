@@ -279,6 +279,10 @@ const CONSTANT_MESSAGES: Readonly<Record<string, string>> = {
   OE_PAGE_ROUTE_INTENT: 'definePage route.layout must be a layout name string or false',
   OE_PAGE_PROJECTOR: 'definePage() props must be a projector function',
   OE_PAGE_RENDER_MODE: "renderIntent.mode must be 'static' or 'dynamic'",
+  OE_PAGE_FUNCTION_RENDER:
+    'the server function page render is not a function — the route module must default-export definePage(Component)',
+  OE_PAGE_FUNCTION_PROPS:
+    'the server function page props carry the reserved "children" key, which is the compiler-owned composition channel',
   OE_ISLAND_DESCRIPTOR_SHAPE: 'defineIslandConfig() requires an object descriptor',
   OE_ISLAND_HYDRATE: 'Invalid island hydrate strategy',
   OE_ISLAND_TAGS: 'defineIslandConfig() tags must be a non-empty array',

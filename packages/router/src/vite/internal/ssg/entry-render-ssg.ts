@@ -10,7 +10,7 @@ import type { EntryDescriptor } from '@openelement/protocol/ssg';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import { routeHeadExtrasStatements } from './entry-codegen.ts';
 import {
-  documentResolutionSetupLine,
+  documentResolutionSetupLines,
   documentWrapOptionsLines,
   pageRouteTagExpr,
   renderMatchingRenderersFn,
@@ -113,18 +113,41 @@ export function renderSsgSection(desc: EntryDescriptor): string {
     '    const __pageContext = { data, actionData: undefined, params, request: options.request, locale, route: loadContext.route, meta: routeMeta };',
   );
   lines.push('    const props = __pageProps(info.module, __pageContext);');
-  lines.push(`    ${documentResolutionSetupLine('page', '__pageContext')}`);
+  lines.push(...documentResolutionSetupLines('page', '__pageContext', '    '));
   // Per-property og dedup: the wrap below serializes this page's __doc.meta,
   // so the site-level fallback drops the og tags the route declares. Status
   // pages below keep the raw headExtrasValue — they emit no route meta, so
   // filtering there would orphan the head of its og block.
   lines.push(...routeHeadExtrasStatements('headExtrasValue', '    '));
   lines.push('    if (locale) props.locale = locale;');
-  lines.push('    let content = __ssr(info.tagName, props, { route: routePath });');
+  // alpha15 server lane: a server function page owns no element class — its
+  // render IS the compiled constructor function, and the output flows through
+  // the same renderer wraps, layout wrap, and document wrap the compiled path
+  // feeds, so the HTTP/DSD contract is byte-for-byte the same shape. The
+  // function-page arm is emitted only when such a route exists — the seam
+  // import is gated the same way, and an app with no function pages keeps the
+  // exact compiled-only render expression.
+  const hasFunctionPages = desc.pageRoutes.some((route) => route.functionPage !== undefined);
+  lines.push('    let content;');
+  if (hasFunctionPages) {
+    lines.push('    if (page.kind === "function-page") {');
+    lines.push('      content = __renderFunctionPage(page, props);');
+    lines.push('    } else {');
+    lines.push(
+      '      content = __ssr(info.tagName, props, { route: routePath, documentStyles: __documentStyles });',
+    );
+    lines.push('    }');
+  } else {
+    lines.push(
+      '    content = __ssr(info.tagName, props, { route: routePath, documentStyles: __documentStyles });',
+    );
+  }
   lines.push('    for (const renderer of __matchingRenderers(routePath)) {');
   lines.push('      content = await renderer.wrap(content, __rendererContext(routePath, params));');
   lines.push('    }');
-  lines.push('    content = __renderAppShell(content, routePath, { locale, routeMeta });');
+  lines.push(
+    '    content = __renderLayout(content, routePath, { locale, routeMeta, documentStyles: __documentStyles });',
+  );
   lines.push(
     '    const renderTimeMs = typeof performance !== "undefined" ? performance.now() - startTime : 0;',
   );
@@ -202,13 +225,33 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push(
     '        const __errorPageContext = { data: undefined, actionData: undefined, params, request: options.request, locale, route: loadContext.route, meta: routeMeta };',
   );
-  lines.push(
-    '        const errorContent = __renderAppShell(__ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath }), routePath, { locale, routeMeta });',
-  );
-  lines.push(`        ${documentResolutionSetupLine('page', '__errorPageContext')}`);
-  // Per-property og dedup on the boundary re-render: the fresh __doc above
-  // re-resolves the route's meta, and the wrap below serializes it.
+  // The resolved document is set up BEFORE the boundary re-render: the
+  // render reports its light-root stylesheets into `__documentStyles`
+  // (alpha15 S lane, S-C1.2), and the wrap below reads both. Same context
+  // object, same order as the success path.
+  lines.push(...documentResolutionSetupLines('page', '__errorPageContext', '        '));
   lines.push(...routeHeadExtrasStatements('headExtrasValue', '        '));
+  // Same fork on the boundary re-render: the alpha15 server function page
+  // takes the typed seam — the error channel re-renders through the compiled
+  // component function with the error-projected props. Armed exactly when the
+  // success path is (hasFunctionPages above), so the seam import cannot be
+  // referenced unbound.
+  if (hasFunctionPages) {
+    lines.push('        const __errorPageHtml = page.kind === "function-page"');
+    lines.push(
+      '          ? __renderFunctionPage(page, __pageErrorProps(info.module, error, __errorPageContext))',
+    );
+    lines.push(
+      '          : __ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath, documentStyles: __documentStyles });',
+    );
+  } else {
+    lines.push(
+      '        const __errorPageHtml = __ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath, documentStyles: __documentStyles });',
+    );
+  }
+  lines.push(
+    '        const errorContent = __renderLayout(__errorPageHtml, routePath, { locale, routeMeta, documentStyles: __documentStyles });',
+  );
   lines.push(
     '        const errorComponentCount = (errorContent.match(/<template shadowrootmode="open"/g) || []).length;',
   );

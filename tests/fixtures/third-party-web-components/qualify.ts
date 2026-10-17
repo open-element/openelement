@@ -71,12 +71,12 @@ const THIRD_PARTY_IMPORTS = {
 
 async function readEventCount(page: Page): Promise<number> {
   return await page.evaluate(() => {
-    // The route element composes through the starter's app-shell shadow root
-    // (the alpha.14 starter ships the shell island); the probe pierces it.
+    // The route element composes through the starter's layout shadow root
+    // (the alpha.15 starter ships the layout); the probe pierces it.
     const pierce = (sel: string): Element | null => {
       const flat = document.querySelector(sel);
       if (flat) return flat;
-      for (const shell of document.querySelectorAll('app-shell')) {
+      for (const shell of document.querySelectorAll('app-layout')) {
         const hit = (shell.shadowRoot ?? shell).querySelector(sel);
         if (hit) return hit;
       }
@@ -95,12 +95,12 @@ async function interactAndVerifyEventCount(page: Page, startCount: number): Prom
   const expectCount = async (expected: number, label: string): Promise<void> => {
     await page.waitForFunction((target) => {
       // The compiled page class renders under the path-derived tag; with the
-      // starter's app-shell island the page element composes through the
-      // shell's shadow root, so the probe pierces the shell.
+      // starter's layout the page element composes through the
+      // layout's shadow root, so the probe pierces the layout.
       const pierce = (sel: string): Element | null => {
         const flat = document.querySelector(sel);
         if (flat) return flat;
-        for (const shell of document.querySelectorAll('app-shell')) {
+        for (const shell of document.querySelectorAll('app-layout')) {
           const hit = (shell.shadowRoot ?? shell).querySelector(sel);
           if (hit) return hit;
         }
@@ -212,13 +212,13 @@ export async function verifyBrowser(distDir: string): Promise<{
       const tags = ['wc-lit-counter', 'sl-button', 'md-filled-button'];
       const observed = new Set<Node>();
       const watch = new MutationObserver(() => {
-        // The route element is body-level (no shell island, #1530): body is
+        // The route element is body-level (no layout island, #1530): body is
         // the outermost node the pre-upgrade capture watches.
         const appRoot = document.body;
         const pierce = (sel: string): Element | null => {
           const flat = document.querySelector(sel);
           if (flat) return flat;
-          for (const shell of document.querySelectorAll('app-shell')) {
+          for (const shell of document.querySelectorAll('app-layout')) {
             const hit = (shell.shadowRoot ?? shell).querySelector(sel);
             if (hit) return hit;
           }
@@ -287,11 +287,11 @@ export async function verifyBrowser(distDir: string): Promise<{
 
     const thirdPartyReady = (diagnostic = false) => {
       // Browser-evaluable end to end: the page element composes through the
-      // starter's app-shell shadow root, so the probe pierces the shell.
+      // starter's layout shadow root, so the probe pierces the layout.
       const pierce = (sel: string): Element | null => {
         const flat = document.querySelector(sel);
         if (flat) return flat;
-        for (const shell of document.querySelectorAll('app-shell')) {
+        for (const shell of document.querySelectorAll('app-layout')) {
           const hit = (shell.shadowRoot ?? shell).querySelector(sel);
           if (hit) return hit;
         }
@@ -327,11 +327,11 @@ export async function verifyBrowser(distDir: string): Promise<{
     }
 
     const summary = await page.evaluate(() => {
-      // The page element composes through the starter's app-shell shadow root.
+      // The page element composes through the starter's layout shadow root.
       const pierce = (sel: string): Element | null => {
         const flat = document.querySelector(sel);
         if (flat) return flat;
-        for (const shell of document.querySelectorAll('app-shell')) {
+        for (const shell of document.querySelectorAll('app-layout')) {
           const hit = (shell.shadowRoot ?? shell).querySelector(sel);
           if (hit) return hit;
         }
@@ -392,7 +392,7 @@ export async function verifyBrowser(distDir: string): Promise<{
       const pierce = (sel: string): Element | null => {
         const flat = document.querySelector(sel);
         if (flat) return flat;
-        for (const shell of document.querySelectorAll('app-shell')) {
+        for (const shell of document.querySelectorAll('app-layout')) {
           const hit = (shell.shadowRoot ?? shell).querySelector(sel);
           if (hit) return hit;
         }

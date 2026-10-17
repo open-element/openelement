@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { formatJson } from '@openelement/element/build-utils';
-import { serveStatic } from '../../../tools/lib/static-server.ts';
+import { serveStatic, type StaticServer } from '../../../tools/lib/static-server.ts';
 import { prepareFixtureApp } from './qualify.ts';
 
 const fixtureDir = dirname(fileURLToPath(import.meta.url));
@@ -68,7 +68,7 @@ async function readSnapshotRecord(path: string): Promise<SnapshotRecord | undefi
 async function main(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'openelement-lit-snapshot-'));
   const keep = process.env.OPEN_ELEMENT_KEEP_T1_PROTOTYPE === '1';
-  let server: ReturnType<typeof serveStatic> | undefined;
+  let server: StaticServer | undefined;
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     const app = await prepareFixtureApp(root);

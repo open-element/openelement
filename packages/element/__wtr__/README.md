@@ -31,7 +31,7 @@ __wtr__/
 │   ├── wtr-shadow-button.tsx   shadow-open event source
 │   └── wtr-field.tsx           minimal FACE (distilled from packages/ui open-input)
 ├── generated/                  OFFICIAL compiler output, committed (regenerable)
-│   ├── oe-program-counter.ts   from packages/element/__fixtures__/compiled-element-v1/counter.tsx
+│   ├── oe-program-counter.ts   from packages/element/__fixtures__/compiled-element-v2/counter.tsx
 │   ├── wtr-shadow-button.ts
 │   ├── wtr-field.ts
 │   ├── open-dialog.ts          production packages/ui component (#1339 case 8)

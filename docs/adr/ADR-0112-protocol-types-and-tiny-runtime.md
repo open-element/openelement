@@ -10,6 +10,12 @@
   (`packages/element/src/public-surface.ts`), which the retired-API gate
   (`tools/repo/check-retired-api-refs.ts`) bars from re-emerging as a
   package.
+- Addendum (2026-10-11): the package this note declared gone has returned
+  and shipped — `@openelement/protocol` is published again
+  (`packages/protocol`), alongside the new `@openelement/compiler`
+  (`packages/compiler`). The six-package layout is recorded in
+  `docs/architecture/packages-and-distribution.md`; the supersession by
+  ADR-0152 still stands for the boundary shape this ADR decided.
 
 ## Context
 

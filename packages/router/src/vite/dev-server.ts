@@ -2,7 +2,7 @@
  * Lazy @hono/vite-dev-server registration for the openElement Vite plugin.
  *
  * @hono/vite-dev-server is an OPTIONAL peer of @openelement/router: only the
- * Vite dev server (`vite dev` — `pnpm dev` in a generated project) needs it —
+ * Vite dev server (`oe dev` in a generated project; it boots Vite) needs it —
  * `build`, `start`
  * and Route Mode never touch it. A top-level import in plugin.ts made every
  * consumer of the ./vite plugin resolve the package at config-load time, so a
@@ -18,13 +18,18 @@
  * peer out of `vite build` entirely.
  */
 
-import type { Plugin } from 'vite';
+import type { Plugin, ViteDevServer } from 'vite';
 import type { DevServerOptions } from '@hono/vite-dev-server';
+import { installDevHostDelegation } from './internal/dev-host-delegation.ts';
 
 type HonoDevServerModule = typeof import('@hono/vite-dev-server');
 
 type ProxiedHook = 'config' | 'configResolved' | 'configureServer' | 'handleHotUpdate';
 
+/**
+ * The peer's hooks are proxied unchanged; the two dev-host gaps a peer pattern
+ * list cannot express are closed by the router's own middlewares.
+ */
 export function lazyHonoDevServer(options: (mod: HonoDevServerModule) => DevServerOptions): Plugin {
   let pending: Promise<Plugin> | undefined;
   const load = (): Promise<Plugin> => {
@@ -35,7 +40,7 @@ export function lazyHonoDevServer(options: (mod: HonoDevServerModule) => DevServ
       } catch (cause) {
         throw new Error(
           'openElement dev mode requires @hono/vite-dev-server (an optional peer of ' +
-            '@openelement/router). Install it into your app to use `pnpm dev`: add ' +
+            '@openelement/router). Install it into your app to use `oe dev`: add ' +
             '"@hono/vite-dev-server": "^0.25.3" to the package.json dependencies ' +
             '(`npm install --save-dev @hono/vite-dev-server` does the same).',
           { cause },
@@ -60,13 +65,25 @@ export function lazyHonoDevServer(options: (mod: HonoDevServerModule) => DevServ
       return (fn as (this: unknown, ...hookArgs: unknown[]) => unknown).apply(this, args);
     } as unknown as NonNullable<Plugin[H]>;
 
+  const configureServer = function (this: unknown, server: ViteDevServer) {
+    installDevHostDelegation(server);
+    return (proxy('configureServer') as (server: ViteDevServer) => Promise<unknown>).call(
+      this,
+      server,
+    );
+  };
+
   return {
     name: '@hono/vite-dev-server',
     // The SSR dev server exists only in `vite dev`; builds must not load the peer.
     apply: 'serve',
     config: proxy('config'),
     configResolved: proxy('configResolved'),
-    configureServer: proxy('configureServer'),
+    // Kept in Vite's pre phase (the peer's own order): Vite's HTML fallback
+    // middleware REWRITES `req.url`, so an app middleware running after it
+    // would receive the wrong route path. The two delegations a pattern list
+    // cannot express run just before the peer's own middleware.
+    configureServer: configureServer as unknown as NonNullable<Plugin['configureServer']>,
     handleHotUpdate: proxy('handleHotUpdate'),
   };
 }

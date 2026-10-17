@@ -6,7 +6,7 @@ order: 70
 
 ## openPipeline()
 
-The lean Vite plugin entry, configured in `vite.config.ts`: `openPipeline({ mode, routes: { dir }, island: { dir, upgradeStrategy }, output: { outDir }, viewTransition, headExtras })`. Defaults: routes `app/routes`, islands `app/islands`, components `app/components`, `viewTransition` on. `headExtras` is developer-trusted input passed through verbatim at the `trustedHtml` trust level — the framework does not sanitize it. `<script>` tags are rejected outright (use `inject.scripts` for scripts), and `<style>` blocks must not carry executable CSS; anything else, including `base` and `meta http-equiv`, is the fragment author's responsibility.
+The lean Vite plugin entry, configured in `vite.config.ts`: `openPipeline({ routes: { dir }, island: { dir, upgradeStrategy }, output: { outDir }, viewTransition, headExtras })`. Defaults: routes `app/routes`, islands `app/islands`, `viewTransition` on. `headExtras` is developer-trusted input passed through verbatim at the `trustedHtml` trust level — the framework does not sanitize it. `<script>` tags are rejected outright (use `inject.scripts` for scripts), and `<style>` blocks must not carry executable CSS; anything else, including `base` and `meta http-equiv`, is the fragment author's responsibility.
 
 ### vite.config.ts
 
@@ -17,7 +17,6 @@ import { openPipeline } from '@openelement/router/vite';
 export default defineConfig({
   plugins: [
     openPipeline({
-      mode: 'ssg', // default
       routes: { dir: 'app/routes' },
       island: { dir: 'app/islands', upgradeStrategy: 'visible' },
       output: { outDir: 'dist' },
@@ -39,27 +38,40 @@ The optional, near-empty config file: `export default defineConfig({ ... })` fro
 | --- | --- |
 | `dirs` | routes `app/routes`, islands `app/islands`, components `app/components` |
 | design tokens | `<shared base>/styles/tokens.css` (inlined into every document `<head>`) |
-| app shell | `<shared base>/islands/app-shell.tsx` (auto-registered; deleting the file is supported) |
+| layout | `<shared base>/layout.tsx` (auto-registered; deleting the file is supported) |
 | document head content | `<shared base>/head.tsx` |
 | site title | the `name` field of `package.json` |
 
-The shared base is the three roots' longest common directory: `dirs: { routes: 'src/routes', islands: 'src/islands', components: 'src/components' }` moves the tokens file to `src/styles/tokens.css`, the shell to `src/islands/app-shell.tsx` and the head module to `src/head.tsx`. A partial `dirs` has no shared segment left (`src/pages` against the default `app/*`), so it moves only what it names and the conventions stay at `app`.
+The shared base is the three roots' longest common directory: `dirs: { routes: 'src/routes', islands: 'src/islands', components: 'src/components' }` moves the tokens file to `src/styles/tokens.css`, the layout to `src/layout.tsx` and the head module to `src/head.tsx`. A partial `dirs` has no shared segment left (`src/pages` against the default `app/*`), so it moves only what it names and the conventions stay at `app`.
 
 ### tokens.css or theme.css
 
 The two sheets serve different roles:
 
 - `tokens.css` is the generic token convention above: a plain stylesheet the framework inlines into every document `<head>`, no build step and no Tailwind involved. Its presence is what triggers it — create the file and it is inlined on every page; `styles: { tokens }` points the convention at a different file.
-- `theme.css` is the starter's Tailwind sheet. It is not a framework convention — the scaffold names it explicitly through `tailwind: { theme: ['app/styles/theme.css'] }` in `openelement.config.ts`. That key is independent of the convention above: dev compiles the declared sources and serves the compiled sheet through a head link, and the build emits the same compile as the linked `/assets/open-tailwind.css`. Roles land in the Tailwind `theme` layer rather than as a raw inlined block.
+- `theme.css` is the starter's Tailwind sheet. It is not a framework convention — the scaffold names it explicitly through `tailwind: { theme: ['app/styles/theme.css'] }` in `openelement.config.ts`. That key is independent of the convention above: dev compiles the declared sources and serves the compiled sheet through a head link, and the build emits the same compile as a content-addressed asset under `client/assets/` (`/client/assets/<hash>.css`, the name read from the build's own manifest — never a hand-written file name). Roles land in the Tailwind `theme` layer rather than as a raw inlined block.
 
-A starter project keeps its tokens in the `theme.css` sheet it declares, so there is one token source rather than two — but that is a project choice, not a rule the framework enforces. What it does enforce is one *home* for framework options: passing options inline to `openElement()` while `openelement.config.ts` carries them is a hard error. If you keep both a `tokens.css` convention file and a `tailwind.theme` sheet, both take effect (both are compiled/inlined) and you own keeping them consistent.
+A starter project keeps its tokens in the `theme.css` sheet it declares, so there is one token source rather than two — but that is a project choice, not a rule the framework enforces. What it does enforce is one *home* for framework options: passing options inline to `openElement()` while `openelement.config.ts` carries them is a hard error. If you keep both a `tokens.css` convention file and a `tailwind.theme` sheet, both take effect and you own keeping them consistent.
+
+### One policy, two stylesheet channels
+
+The styling surface is two deliveries, and which one a sheet takes is decided by its ROLE rather than by the file it lives in:
+
+| channel | what it carries | how it is delivered |
+| --- | --- | --- |
+| document | the token/role table, the engine's preflight layers, and the utilities the light DOM uses | a compiled, content-addressed stylesheet linked from every document's `<head>` (the engine's own compile, driven by the selected provider) |
+| component | the utilities a SHADOW ROOT's admitted classes need | the same provider's compile of the shadow candidate set, delivered through the framework's style-asset protocol — declared by each DSD template, adopted as one shared `CSSStyleSheet` per realm |
+
+The split is not a packaging detail: a reset or a token table inside a component's shadow tree would change how every existing component renders, so the component sheet carries utilities only and the document sheet owns everything global. A `.css` file the app authors follows its own import path; a sheet the ENGINE compiles is placed by the provider the plan selected.
+
+`tailwind` decides whether the pipeline exists at all, and a package can declare that need itself. With the key omitted, Tailwind compiles **only when an admitted package declares it**: an `openElement.tailwind` block (`OpenElementExtensions`, the framework's namespaced extension to the standard package manifest — not a second metadata format, and not `custom-elements.json`: the Custom Elements Manifest remains the generic interchange authority for tags, attributes, members, events, slots and parts) in an admitted package — declared explicitly or derived from the app's real imports, see `packageIslands` below — either requires the compile (`required: true` — disabling the entry then fails the build with a coded diagnostic instead of shipping unstyled components) or offers the package-owned sources that compile with it (`sources: ['./theme.css']`, package-relative, resolved inside the installed package). A consumer never repeats an owner's source: declared sources compile first, the application's `theme` entries after them, and a source reached twice under different spellings compiles once (deduplicated by the file it resolves to). Local application classes never turn the pipeline on by themselves — an application that authors its own utilities declares `tailwind` itself. `true` compiles the declared sources with none of the application's; `false` switches the pipeline off entirely (no peer is loaded, nothing is compiled, no stylesheet is emitted) and fails closed when an admitted component requires it.
 
 Accepted keys — anything else fails the build with this list:
 
 - `renderer` — `'native'` (default, the compiled Part Program serializer) or `'lit'`.
 - `dirs` — `{ routes, islands, components }`.
-- `appShell` — `false` to opt out, or `{ import, props }`. The tag name is derived from the import's basename, so it is not configurable.
-- `packageIslands` — extra package names whose island modules the build admits, e.g. `['@openelement/ui']`. The loader folds the list into the SSR externalization list (a listed package is bundled, not imported at run time), which is why there is no `ssr.noExternal` key.
+- `layout` — `false` to opt out, or `{ import, props }`. The tag name is derived from the import's basename, so it is not configurable.
+- `packageIslands` — how component packages are admitted. Omitted or `'auto'` (the default): the build derives the admitted set at scan time — every package-owned element module your routes, pages, layouts, islands and components really import (bundler-resolved) is attributed to its owner package, and a package with a valid OpenElement manifest is admitted with no configuration. An array adds explicit entries on top of the derivation (e.g. `['@openelement/ui']`); an explicit entry outranks a derived claim when two packages declare the same tag. `'manual'` turns the derivation off: only listed packages are admitted, and an imported-but-unlisted component package is reported with the explicit fix. A package whose element modules the app imports but which carries no valid manifest is never admitted (there is nothing to admit) and is reported — the one true mistake class. The derivation also folds every admitted package into the SSR externalization list (an admitted package is bundled, not imported at run time), which is why there is no `ssr.noExternal` key.
 - `head` — the structured document-head channel: `title`, `description`, `lang`, `favicon`, `ogImage`, `stylesheets: string[]` and `scripts: { src, defer?, crossOrigin?, integrity? }[]`. Scripts and stylesheets serialize through the framework's own link/script writer, so a config entry and an inline `inject` entry emit identical bytes. `inject` itself — the framework's raw-HTML channel — deliberately has no home here.
 - `styles` — `{ tokens }` to point the token convention at another file.
 - `i18n` — `{ locales, defaultLocale }`; the build expands every route under each additional locale prefix.
@@ -221,7 +233,7 @@ Custom renderer output stays within the same first-party trust boundary.
 
 ## middleware.use
 
-`middleware.use` registers fetch middleware with the WinterCG shape `(request, next) => Promise<Response>` — no HTTP-framework dialect. The chain is composed around the generated handler in onion order (`use[0]` is outermost: first to see the request, last to see the response), outside the built-in `requestId`/`logger`/`cors`/`securityHeaders`/`csp` middleware. Middleware semantics are request-time only: a static GET/HEAD is served straight from the built artifacts (`tryStatic`) and never passes through the `middleware.use` chain or the built-in middleware, so do not rely on middleware to guard prerendered pages. On the request-time dispatch path (dynamic routes, POSTs, and non-static fallbacks) the same chain runs in the dev server, the `start` CLI, the e2e fixture server, and the Nitro production entry (locked by the request-time parity contract test). A middleware may short-circuit by returning a `Response` without calling `next()`. Each entry is a **module path** (resolved like `appShell.import`): the module default-exports the middleware, and the generated server entry imports it — so middleware may close over module scope and import local helpers and third-party packages. Route-scoped `_middleware.ts` files use the same WinterCG shape: a root or nested `_middleware.ts` default-exports `(request, next) => Promise<Response>`, applied to its route subtree.
+`middleware.use` registers fetch middleware with the WinterCG shape `(request, next) => Promise<Response>` — no HTTP-framework dialect. The chain is composed around the generated handler in onion order (`use[0]` is outermost: first to see the request, last to see the response), outside the built-in `requestId`/`logger`/`cors`/`securityHeaders`/`csp` middleware. Middleware semantics are request-time only: a static GET/HEAD is served straight from the built artifacts (`tryStatic`) and never passes through the `middleware.use` chain or the built-in middleware, so do not rely on middleware to guard prerendered pages. On the request-time dispatch path (dynamic routes, POSTs, and non-static fallbacks) the same chain runs in the dev server, the `start` CLI, the e2e fixture server, and the Nitro production entry (locked by the request-time parity contract test). A middleware may short-circuit by returning a `Response` without calling `next()`. Each entry is a **module path** (resolved like `layout.import`): the module default-exports the middleware, and the generated server entry imports it — so middleware may close over module scope and import local helpers and third-party packages. Route-scoped `_middleware.ts` files use the same WinterCG shape: a root or nested `_middleware.ts` default-exports `(request, next) => Promise<Response>`, applied to its route subtree.
 
 ### vite.config.ts — middleware.use
 

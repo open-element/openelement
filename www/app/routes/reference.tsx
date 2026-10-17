@@ -2,17 +2,94 @@
 import { definePage } from '@openelement/router';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
+import '#site-ui/open-reading-shell.tsx';
+import '../site-ui/open-section-frame.tsx';
+import '../islands/open-page-rail.tsx';
 import type { SiteLocale } from '../../site-config.ts';
 import { OPENELEMENT_VERSION, sourceLineStamp } from '../data/version.ts';
 import { apiReference } from '../data/_generated-api-reference.ts';
-import ReferencePage, {
-  type ApiElementItem,
-  type ApiOptionRow,
-  type ApiPackageItem,
-  type ApiReferenceItem,
-} from '../components/page-reference.tsx';
 
 export const meta = { section: 'Reference', label: 'API Reference', order: 5 };
+
+/** One generated package record projected onto the registry row grammar. */
+export interface ApiPackageItem {
+  id: string;
+  name: string;
+  importPath: string;
+  copy: string;
+  note1: string;
+  note2: string;
+  note3: string;
+  export1: string;
+  export2: string;
+  export3: string;
+  export4: string;
+  export5: string;
+  kind: string;
+  kindClass: string;
+  kindLabel: string;
+}
+
+/** One generated export entry; `anchor` is the generated searchRecord anchor. */
+export interface ApiReferenceItem {
+  key: string;
+  anchor: string;
+  name: string;
+  container: string;
+  kind: string;
+  stability: string;
+  summary: string;
+  /** Declared call shape rendered from the source declaration. */
+  signature: string;
+  /**
+   * The export's option-bag members as one display line (`name: type —
+   * description`, `; `-joined): a list Block item template admits
+   * `{item.<field>}` values and nested elements, not a nested Block, so the
+   * per-export table renders as text while the config section below renders as
+   * a real table (it is a top-level Block).
+   */
+  options: string;
+  source: string;
+}
+
+/** One row of the generated config-option table (an each Block item). */
+export interface ApiOptionRow {
+  key: string;
+  name: string;
+  type: string;
+  required: string;
+  defaultValue: string;
+  description: string;
+}
+
+/** One generated custom-element record with its detail lists inlined. */
+export interface ApiElementItem {
+  key: string;
+  anchor: string;
+  tag: string;
+  className: string;
+  description: string;
+  layer: string;
+  hydrate: string;
+  module: string;
+  /** Locale label shown only for manifest status 'experimental'; else empty. */
+  status: string;
+  attributes: string;
+  events: string;
+  slots: string;
+  cssParts: string;
+  attributesLabel: string;
+  eventsLabel: string;
+  slotsLabel: string;
+  partsLabel: string;
+}
+
+/** The shell metadata record (breadcrumb/title/lede). */
+export interface ApiMetadata {
+  breadcrumb: string;
+  title: string;
+  lede: string;
+}
 
 /** The consumer-package count is generated truth, never a hand-written number. */
 const packageCount = apiReference.packages.length;
@@ -41,12 +118,12 @@ const authoredCopy: Record<string, AuthoredPackageCopy> = {
       en: [
         'Zero dependencies, contracts only: no logic grows here by charter.',
         'You normally consume these through the packages that re-export them.',
-        'Repository baseline — awaiting its first publish on the alpha.11 train.',
+        'Repository baseline — published on the alpha train.',
       ],
       zh: [
         '零依赖、仅装契约：章程禁止逻辑在此生长。',
         '通常通过转售这些契约的包间接消费。',
-        '仓库基线——等待 alpha.11 列车的首次发布。',
+        '仓库基线——已随 alpha 列车发布。',
       ],
     },
     kind: 'core',
@@ -79,12 +156,12 @@ const authoredCopy: Record<string, AuthoredPackageCopy> = {
       en: [
         'Build tooling only — never part of a browser/runtime graph.',
         'You normally drive it through the `@openelement/router` build; the standalone plugin is `@openelement/compiler/vite`.',
-        'Repository baseline — awaiting its first publish on the alpha.11 train.',
+        'Repository baseline — published on the alpha train.',
       ],
       zh: [
         '仅构建期工具——绝不进入浏览器/运行期依赖图。',
         '通常通过 `@openelement/router` 构建驱动；独立插件在 `@openelement/compiler/vite`。',
-        '仓库基线——等待 alpha.11 列车的首次发布。',
+        '仓库基线——已随 alpha 列车发布。',
       ],
     },
     kind: 'build',
@@ -201,9 +278,9 @@ function projectReferenceEntries(labels: {
   requiredLabel: string;
   optionalLabel: string;
 }): ApiReferenceItem[] {
-  // A list Region item template admits `{item.<field>}` values and nested
-  // elements, not a nested Region, so an export's options render as one line
-  // while the config section below renders as a real table (top-level Region).
+  // A list Block item template admits `{item.<field>}` values and nested
+  // elements, not a nested Block, so an export's options render as one line
+  // while the config section below renders as a real table (top-level Block).
   const optionLine = (
     options: readonly {
       name: string;
@@ -414,6 +491,350 @@ const content = {
   },
 } as const;
 
+/**
+ * The API reference as a server function page (alpha15 server architecture):
+ * the route module's own exported TSX function, lowered by the compiler into
+ * a generative HTML constructor. The page hook class (`page-reference`) scopes
+ * the former component sheet's authored rules in the linked document
+ * stylesheet; the package registry, the export reference, the config-option
+ * table and the element reference are each Block entries mapped from props.
+ */
+export function ReferencePage(props: {
+  metadata: { breadcrumb: string; title: string; lede: string };
+  railItems: Array<{ id: string; href: string; label: string; depth: string }>;
+  s1Index: string;
+  s1Title: string;
+  s1Copy: string;
+  s2Index: string;
+  s2Title: string;
+  s2Copy: string;
+  headPackage: string;
+  headSubpaths: string;
+  headKind: string;
+  footnote: string;
+  footnoteCheckPre: string;
+  footnoteCheckPost: string;
+  packages: Array<{
+    id: string;
+    name: string;
+    importPath: string;
+    copy: string;
+    note1: string;
+    note2: string;
+    note3: string;
+    export1: string;
+    export2: string;
+    export3: string;
+    export4: string;
+    export5: string;
+    kind: string;
+    kindClass: string;
+    kindLabel: string;
+  }>;
+  s3Index: string;
+  s3Title: string;
+  s3Copy: string;
+  headExport: string;
+  headSummary: string;
+  headSource: string;
+  referenceEntries: Array<{
+    key: string;
+    anchor: string;
+    name: string;
+    container: string;
+    kind: string;
+    stability: string;
+    summary: string;
+    signature: string;
+    options: string;
+    source: string;
+  }>;
+  s5Index: string;
+  s5Title: string;
+  s5Copy: string;
+  headOption: string;
+  headOptionType: string;
+  headOptionRequired: string;
+  configOptions: Array<{
+    key: string;
+    name: string;
+    type: string;
+    required: string;
+    defaultValue: string;
+    description: string;
+  }>;
+  s4Index: string;
+  s4Title: string;
+  s4Copy: string;
+  elementEntries: Array<{
+    key: string;
+    anchor: string;
+    tag: string;
+    className: string;
+    description: string;
+    layer: string;
+    hydrate: string;
+    module: string;
+    status: string;
+    attributes: string;
+    events: string;
+    slots: string;
+    cssParts: string;
+    attributesLabel: string;
+    eventsLabel: string;
+    slotsLabel: string;
+    partsLabel: string;
+  }>;
+  locale: string;
+}) {
+  return (
+    // Without data-pagefind-body the page is absent from the index entirely:
+    // pagefind stops indexing every page that lacks the attribute. The shell
+    // already renders the one <main> landmark (#main-content).
+    <div class='page-reference text-foreground' data-pagefind-body>
+      <open-reading-shell rail footer metadata={props.metadata} locale={props.locale}>
+        <div slot='rail'>
+          <open-page-rail items={props.railItems} locale={props.locale}></open-page-rail>
+        </div>
+        <open-section-frame>
+          <span slot='index'>{props.s1Index}</span>
+          <span slot='title'>{props.s1Title}</span>
+          <span slot='copy'>{props.s1Copy}</span>
+        </open-section-frame>
+        <open-section-frame>
+          <span slot='index'>{props.s2Index}</span>
+          <span slot='title'>{props.s2Title}</span>
+          <span slot='copy'>{props.s2Copy}</span>
+          <div class='border-t border-border'>
+            <div
+              class='hidden grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_auto] items-start gap-[clamp(1rem,4vw,3rem)] border-b border-border py-3 text-(length:--font-size-micro) font-bold tracking-[0.18em] text-muted-foreground uppercase min-[861px]:grid'
+              aria-hidden='true'
+            >
+              <span>{props.headPackage}</span>
+              <span>{props.headSubpaths}</span>
+              <span>{props.headKind}</span>
+            </div>
+            {props.packages.map((pkg) => (
+              <div
+                class='group grid grid-cols-[minmax(0,1fr)] items-start gap-3 border-b border-border py-6 min-[861px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_auto] min-[861px]:gap-[clamp(1rem,4vw,3rem)]'
+                id={pkg.id}
+                data-kind={pkg.kind}
+                key={pkg.id}
+              >
+                <div>
+                  <span class='block text-primary text-[length:clamp(1.7rem,2.8vw,2.5rem)] font-extrabold leading-none tracking-[-0.03em] group-data-[kind=optional]:text-muted-foreground'>
+                    {pkg.name}
+                  </span>
+                  <span class='mt-2 block text-(length:--text-xs) text-muted-foreground'>
+                    {pkg.importPath}
+                  </span>
+                  <p class='mt-3 mb-0 text-(length:--text-sm) leading-normal text-muted-foreground'>
+                    {pkg.copy}
+                  </p>
+                  <span class='mt-2 block text-(length:--text-xs) leading-normal text-muted-foreground empty:hidden'>
+                    {pkg.note1}
+                  </span>
+                  <span class='mt-2 block text-(length:--text-xs) leading-normal text-muted-foreground empty:hidden'>
+                    {pkg.note2}
+                  </span>
+                  <span class='mt-2 block text-(length:--text-xs) leading-normal text-muted-foreground empty:hidden'>
+                    {pkg.note3}
+                  </span>
+                </div>
+                <div class='flex flex-wrap gap-2'>
+                  <span class='rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
+                    {pkg.export1}
+                  </span>
+                  <span class='rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
+                    {pkg.export2}
+                  </span>
+                  <span class='rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
+                    {pkg.export3}
+                  </span>
+                  <span class='rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
+                    {pkg.export4}
+                  </span>
+                  <span class='rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
+                    {pkg.export5}
+                  </span>
+                </div>
+                <span class={pkg.kindClass}>{pkg.kindLabel}</span>
+              </div>
+            ))}
+            <footer class='pt-6 text-(length:--text-xs) leading-normal text-muted-foreground'>
+              <p class='m-0'>{props.footnote}</p>
+              <p class='mt-3 mb-0'>
+                {props.footnoteCheckPre}
+                <code class='text-primary'>pnpm --dir tools/repo run interface:snapshot</code>
+                {props.footnoteCheckPost}
+              </p>
+            </footer>
+          </div>
+        </open-section-frame>
+        <open-section-frame>
+          <span slot='index'>{props.s3Index}</span>
+          <span slot='title'>{props.s3Title}</span>
+          <span slot='copy'>{props.s3Copy}</span>
+          <div class='border-t border-border' id='api-reference'>
+            <div
+              class='hidden grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_auto] items-start gap-[clamp(1rem,4vw,3rem)] border-b border-border py-3 text-(length:--font-size-micro) font-bold tracking-[0.18em] text-muted-foreground uppercase min-[1101px]:grid'
+              aria-hidden='true'
+            >
+              <span>{props.headExport}</span>
+              <span>{props.headSummary}</span>
+              <span>{props.headSource}</span>
+            </div>
+            {props.referenceEntries.map((entry) => (
+              <div
+                class='grid grid-cols-[minmax(0,1fr)] items-start gap-2 border-b border-border py-4 min-[1101px]:grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)_minmax(0,1.2fr)] min-[1101px]:gap-[clamp(1rem,4vw,3rem)]'
+                id={entry.anchor}
+                key={entry.key}
+              >
+                <div>
+                  <span class='inline text-primary font-mono text-(length:--text-base) font-bold wrap-anywhere'>
+                    {entry.name}
+                  </span>
+                  <span class='mt-1 block text-(length:--text-xs) text-muted-foreground wrap-anywhere'>
+                    {entry.container}
+                  </span>
+                  <span class='me-1 rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
+                    {entry.kind}
+                  </span>
+                  <span class='me-1 rounded-md bg-transparent px-2 py-1 text-(length:--text-xs) text-primary empty:hidden shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-ring)_55%,transparent)]'>
+                    {entry.stability}
+                  </span>
+                </div>
+                <div>
+                  <p class='m-0 text-(length:--text-sm) leading-normal text-muted-foreground wrap-anywhere'>
+                    {entry.summary}
+                  </p>
+                  <code class='mt-2 block font-mono text-(length:--text-xs) leading-snug text-primary wrap-anywhere'>
+                    {entry.signature}
+                  </code>
+                  <p class='mt-3 mb-0 wrap-anywhere'>{entry.options}</p>
+                </div>
+                <span class='font-mono text-(length:--text-xs) text-muted-foreground wrap-anywhere'>
+                  {entry.source}
+                </span>
+              </div>
+            ))}
+          </div>
+        </open-section-frame>
+        <open-section-frame>
+          <span slot='index'>{props.s5Index}</span>
+          <span slot='title'>{props.s5Title}</span>
+          <span slot='copy'>{props.s5Copy}</span>
+          <div class='border-t border-border' id='config-options'>
+            <div
+              class='hidden grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_auto] items-start gap-[clamp(1rem,4vw,3rem)] border-b border-border py-3 text-(length:--font-size-micro) font-bold tracking-[0.18em] text-muted-foreground uppercase min-[1101px]:grid'
+              aria-hidden='true'
+            >
+              <span>{props.headOption}</span>
+              <span>{props.headOptionType}</span>
+              <span>{props.headOptionRequired}</span>
+            </div>
+            {props.configOptions.map((option) => (
+              <div
+                class='grid grid-cols-[minmax(0,1fr)] items-start gap-2 border-b border-border py-4 min-[1101px]:grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)_minmax(0,1.2fr)] min-[1101px]:gap-[clamp(1rem,4vw,3rem)]'
+                id={option.key}
+                key={option.key}
+              >
+                <div>
+                  <span class='inline text-primary font-mono text-(length:--text-base) font-bold wrap-anywhere'>
+                    {option.name}
+                  </span>
+                  <span class='mt-1 block text-(length:--text-xs) text-muted-foreground wrap-anywhere'>
+                    {option.defaultValue}
+                  </span>
+                </div>
+                <div>
+                  <code class='mt-2 block font-mono text-(length:--text-xs) leading-snug text-primary wrap-anywhere'>
+                    {option.type}
+                  </code>
+                  <p class='m-0 text-(length:--text-sm) leading-normal text-muted-foreground wrap-anywhere'>
+                    {option.description}
+                  </p>
+                </div>
+                <span class='font-mono text-(length:--text-xs) text-muted-foreground wrap-anywhere'>
+                  {option.required}
+                </span>
+              </div>
+            ))}
+          </div>
+        </open-section-frame>
+        <open-section-frame>
+          <span slot='index'>{props.s4Index}</span>
+          <span slot='title'>{props.s4Title}</span>
+          <span slot='copy'>{props.s4Copy}</span>
+          <div class='border-t border-border' id='element-reference'>
+            {props.elementEntries.map((element) => (
+              // Compiled list-Block grammar (OEC9013): item children are
+              // static text, {element.<field>} values or intrinsic elements —
+              // no conditional JSX. Stable rows carry status:'' and the
+              // `empty:hidden` utility on the status chip hides it.
+              <div
+                class='grid grid-cols-[minmax(0,1fr)] items-start gap-2 border-b border-border py-4 min-[1101px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] min-[1101px]:gap-[clamp(1rem,4vw,3rem)]'
+                id={element.anchor}
+                key={element.key}
+              >
+                <div>
+                  <span class='inline text-primary font-mono text-(length:--text-base) font-bold wrap-anywhere'>
+                    {element.tag}
+                  </span>
+                  <span class='mt-1 block text-(length:--text-xs) text-muted-foreground wrap-anywhere'>
+                    {element.className}
+                  </span>
+                  <span class='me-1 rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
+                    {element.layer}
+                  </span>
+                  <span class='me-1 rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
+                    {element.hydrate}
+                  </span>
+                  <span class='me-1 rounded-md bg-transparent px-2 py-1 text-(length:--text-xs) text-primary empty:hidden shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-ring)_55%,transparent)]'>
+                    {element.status}
+                  </span>
+                </div>
+                <p class='m-0 text-(length:--text-sm) leading-normal text-muted-foreground'>
+                  {element.description}
+                </p>
+                <span class='font-mono text-(length:--text-xs) text-muted-foreground wrap-anywhere'>
+                  {element.module}
+                </span>
+                <div class='col-span-full grid gap-2'>
+                  <span class='block text-(length:--text-xs) leading-normal text-muted-foreground wrap-anywhere'>
+                    <b class='me-2 font-bold tracking-[0.08em] text-muted-foreground uppercase'>
+                      {element.attributesLabel}
+                    </b>
+                    {element.attributes}
+                  </span>
+                  <span class='block text-(length:--text-xs) leading-normal text-muted-foreground wrap-anywhere'>
+                    <b class='me-2 font-bold tracking-[0.08em] text-muted-foreground uppercase'>
+                      {element.eventsLabel}
+                    </b>
+                    {element.events}
+                  </span>
+                  <span class='block text-(length:--text-xs) leading-normal text-muted-foreground wrap-anywhere'>
+                    <b class='me-2 font-bold tracking-[0.08em] text-muted-foreground uppercase'>
+                      {element.slotsLabel}
+                    </b>
+                    {element.slots}
+                  </span>
+                  <span class='block text-(length:--text-xs) leading-normal text-muted-foreground wrap-anywhere'>
+                    <b class='me-2 font-bold tracking-[0.08em] text-muted-foreground uppercase'>
+                      {element.partsLabel}
+                    </b>
+                    {element.cssParts}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </open-section-frame>
+      </open-reading-shell>
+    </div>
+  );
+}
+
 export default definePage(ReferencePage, {
   head({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
@@ -512,6 +933,7 @@ export default definePage(ReferencePage, {
         parts: t.partsLabel,
         experimental: t.experimentalLabel,
       }),
+      locale: resolved,
     };
   },
 });

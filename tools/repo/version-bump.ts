@@ -34,6 +34,10 @@
  *   pnpm --dir tools/repo run version-bump 1.0.0-alpha.9               # dry run (default)
  *   pnpm --dir tools/repo run version-bump 1.0.0-alpha.9 --dry-run     # explicit dry run
  *   pnpm --dir tools/repo run version-bump 1.0.0-alpha.9 --write       # apply
+ *   pnpm --dir tools/repo run version-bump 1.0.0-alpha.10 --packages router,ui --write
+ *     # per-package mode (T7): stamp only the listed manifests from their own
+ *     # versions; shared single-line points stay untouched and only the
+ *     # selected packages are consistency-checked afterwards.
  *
  * The dry run prints the diff for every pending text point plus the
  * generated-output preview so the stamp can be reviewed before anything is
@@ -68,7 +72,7 @@ import process from 'node:process';
 import fastGlob from 'fast-glob';
 import { wwwReleaseAnchorDrift } from './www-release-anchor.ts';
 import { readWorkspaceGlobs } from './workspace-tasks.ts';
-import { commandStatus } from './node-command.ts';
+import { spawnCommand } from './node-command.ts';
 
 /** Packages whose package.json carries the release line version. */
 export const PACKAGE_CONFIGS: readonly string[] = [
@@ -115,7 +119,10 @@ export const WORKSPACE_MANIFEST = 'pnpm-workspace.yaml';
  * The workspace root's own manifest (#1534). It rides the same release train
  * as the members but is named by no `packages:` glob, so the member walk
  * appends it explicitly under the same fail-soft contract (a tree without a
- * root manifest has no root stamp).
+ * root manifest has no root stamp). Since the T7 per-package split the root
+ * is private and versionless (no `version` field): the walk reports it as
+ * skipped, and a reintroduced root version would be stamped again — the
+ * append stays as the tripwire.
  */
 export const WORKSPACE_ROOT_CONFIG = 'package.json';
 
@@ -353,7 +360,7 @@ export interface GeneratedOutputPreview {
 }
 
 export interface VersionBumpPlan {
-  /** Version the tree carries now (from packages/element/package.json). */
+  /** Version the tree carries now (from the release-line anchor, PACKAGE_CONFIGS[0]). */
   currentVersion: string;
   targetVersion: string;
   /** Text-point edits (the ten release-line points + lagging member stamps). */
@@ -407,7 +414,7 @@ export function rewriteConfigVersion(text: string, from: string, to: string): st
   return text.replace(pattern, `$1${to}$2`);
 }
 
-/** Rewrite the CREATE_VERSION anchor, leaving VITE_STARTER_PIN alone. */
+/** Rewrite the CREATE_VERSION anchor; the other embedded starter pins stay put. */
 export function rewriteCreateVersion(text: string, from: string, to: string): string {
   const pattern = new RegExp(`(CREATE_VERSION = ')${escapeRegExp(from)}(')`);
   if (!pattern.test(text)) {
@@ -479,13 +486,43 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Resolve a `--packages` name list to PACKAGE_CONFIGS paths (T7 per-package mode). */
+export function resolvePackageSubset(names: readonly string[]): string[] {
+  const byShort = new Map(PACKAGE_CONFIGS.map((path) => [path.split('/')[1], path] as const));
+  // Explicit <string, string> keys: the lookup value is a user-typed `--packages`
+  // name, so the map must accept any string — the inferred
+  // `@openelement/${string}` key type made `get(name)` a type error while the
+  // runtime lookup (and its error message below) is exactly this general.
+  const byFull = new Map<string, string>(
+    PACKAGE_CONFIGS.map((path) => [`@openelement/${path.split('/')[1]}`, path] as const),
+  );
+  const resolved: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    const path = byShort.get(name) ?? byFull.get(name);
+    if (!path) {
+      throw new Error(
+        `unknown package "${name}" (expected ${[...byShort.keys()].join(', ')}, ` +
+          'optionally @openelement/-scoped)',
+      );
+    }
+    if (!resolved.includes(path)) resolved.push(path);
+  }
+  if (resolved.length === 0) throw new Error('--packages needs at least one package name');
+  return resolved;
+}
+
 /** Build the stamp plan without touching the filesystem beyond reads. */
 export async function planVersionBump(
   root: string,
   targetVersion: string,
+  selectedConfigs: readonly string[] = PACKAGE_CONFIGS,
 ): Promise<VersionBumpPlan> {
-  const elementConfig = await readFile(join(root, PACKAGE_CONFIGS[0]), 'utf8');
-  const currentVersion = readConfigVersion(elementConfig);
+  // The release-line anchor: PACKAGE_CONFIGS[0] (protocol) carries the line
+  // version while the line is lockstep — any member would do, and the
+  // six-way agreement itself is enforced by check-release-version.ts.
+  const lineAnchorConfig = await readFile(join(root, PACKAGE_CONFIGS[0]), 'utf8');
+  const currentVersion = readConfigVersion(lineAnchorConfig);
   if (currentVersion === null) {
     throw new Error(`${PACKAGE_CONFIGS[0]} declares no version`);
   }
@@ -495,14 +532,22 @@ export async function planVersionBump(
     if (after !== before) edits.push({ path, point, before, after });
   };
 
-  for (const path of PACKAGE_CONFIGS) {
+  const subset = selectedConfigs.length !== PACKAGE_CONFIGS.length;
+  // Per-package mode (T7): each selected manifest moves from its OWN version
+  // to the target — after a split the selected packages need not share the
+  // anchor's version. The shared single-line points (anchor, release-state,
+  // admitted pair, READMEs, member walk) move only in full-line mode: they
+  // cannot name two lines at once, so a subset stamp leaves them untouched.
+  for (const path of selectedConfigs) {
     const before = await readFile(join(root, path), 'utf8');
-    pushEdit(
-      path,
-      'package-config',
-      before,
-      rewriteConfigVersion(before, currentVersion, targetVersion),
-    );
+    const own = readConfigVersion(before);
+    if (own === null) {
+      throw new Error(`${path} declares no version; cannot stamp a package subset`);
+    }
+    pushEdit(path, 'package-config', before, rewriteConfigVersion(before, own, targetVersion));
+  }
+  if (subset) {
+    return { currentVersion, targetVersion, edits, members: [], generated: [] };
   }
 
   // Workspace members ride the same train: each laggard is rewritten from its
@@ -590,9 +635,9 @@ export async function inconsistencyFailures(root: string, expected: string): Pro
     }
   }
   // Members riding the tree's release train must be AT the expected version;
-  // non-release-line members (the fixtures' 0.0.0) stay exempt. The shape
-  // anchor is the tree's own line version, so the exemption is a property of
-  // the member, not of the expected value being probed.
+  // The shape anchor is the line anchor's own version (PACKAGE_CONFIGS[0]),
+  // so the exemption is a property of the member, not of the expected value
+  // being probed.
   const lineVersion = readConfigVersion(await readFile(join(root, PACKAGE_CONFIGS[0]), 'utf8'));
   for (const member of await workspaceMemberConfigPaths(root)) {
     const version = readConfigVersion(await readFile(join(root, member), 'utf8'));
@@ -691,7 +736,7 @@ export function renderDiff(edit: VersionEdit, limit = 12): string {
  * script so the generator set is never duplicated here.
  */
 export async function regenerateTrackedOutputs(root: string): Promise<void> {
-  const { code } = await commandStatus(process.execPath, {
+  const { code } = await spawnCommand(process.execPath, {
     args: [join(root, 'tools/repo/generate-all.ts')],
     cwd: root,
     stdin: 'null',
@@ -712,11 +757,32 @@ async function main(): Promise<void> {
     console.error('version-bump: --write and --dry-run are mutually exclusive.');
     process.exit(2);
   }
+  // Per-package mode (T7): --packages router,ui stamps only those manifests.
+  // Shared single-line points stay untouched; a subset --write verifies only
+  // the selected packages afterwards instead of the whole-line consistency.
+  const packagesFlag = argv.find((arg) => arg.startsWith('--packages'));
+  let selected: readonly string[] | undefined;
+  if (packagesFlag !== undefined) {
+    const value = packagesFlag.includes('=')
+      ? packagesFlag.slice('--packages='.length)
+      : argv[argv.indexOf(packagesFlag) + 1];
+    if (!value || value.startsWith('--')) {
+      console.error('version-bump: --packages needs a comma-separated package list.');
+      process.exit(2);
+    }
+    try {
+      selected = resolvePackageSubset(value.split(','));
+    } catch (error) {
+      console.error(`version-bump: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(2);
+    }
+  }
   const root = process.cwd();
   const target = args[0];
   if (!target) {
     console.error(
       'usage: pnpm --dir tools/repo run version-bump <version> [--write]\n' +
+        '       pnpm --dir tools/repo run version-bump <version> --packages router,ui [--write]\n' +
         '       (dry run by default; --write applies the release-line + workspace-member stamp + generate:all)',
     );
     process.exit(2);
@@ -739,7 +805,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const plan = await planVersionBump(root, target);
+  const plan = await planVersionBump(root, target, selected);
+  const subset = selected !== undefined && selected.length !== PACKAGE_CONFIGS.length;
   const memberStamps = plan.members.filter((member) => member.status === 'stamped');
   if (plan.edits.length === 0) {
     console.log(`version-bump: tree already at ${target}; nothing to do.`);
@@ -752,6 +819,9 @@ async function main(): Promise<void> {
 
   console.log(
     `version-bump: ${plan.currentVersion} -> ${target} (${write ? 'WRITE' : 'dry run'})` +
+      (subset
+        ? ` — per-package subset: ${selected!.join(', ')} (shared line points untouched)`
+        : '') +
       (lineLags
         ? ''
         : ` — release line already at ${target}; ${memberStamps.length} workspace member stamp(s) pending`),
@@ -787,6 +857,23 @@ async function main(): Promise<void> {
   }
 
   await regenerateTrackedOutputs(root);
+
+  if (subset) {
+    // No whole-line consistency in subset mode by design (unselected packages
+    // and shared points keep their versions) — verify exactly the selected
+    // manifests instead.
+    const failures: string[] = [];
+    for (const path of selected!) {
+      const version = readConfigVersion(await readFile(join(root, path), 'utf8'));
+      if (version !== target) failures.push(`${path}: version ${String(version)} != ${target}`);
+    }
+    if (failures.length > 0) {
+      console.error(`version-bump: subset stamp did not converge:\n  ${failures.join('\n  ')}`);
+      process.exit(1);
+    }
+    console.log(`version-bump: subset ${selected!.join(', ')} stamped at ${target}.`);
+    return;
+  }
 
   const failures = await inconsistencyFailures(root, target);
   if (failures.length > 0) {

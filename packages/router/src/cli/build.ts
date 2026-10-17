@@ -7,20 +7,28 @@
  *
  * Usage:
  *   openelement build  (or: node <this module> — the bin's build subcommand)
+ *
+ * The machine-readable exit (#1612): `--diagnostics=json` prints one JSON
+ * diagnostics report line on stderr, and `--diagnostics-file=<path>` writes
+ * the same document to a file — alongside the unchanged human output, only
+ * when the build actually produced diagnostics.
  */
 
 import process from 'node:process';
 import { formatError } from '@openelement/element';
 import { buildApp } from '../vite/index.ts';
+import { parseDiagnosticsChannels, writeDiagnosticsExit } from './diagnostics-exit.ts';
 
 /**
  * Run the production build and exit with the build's verdict. Shared by the
  * `openelement build` bin subcommand (cli.ts) and this module's own main
  * block, so both faces behave identically.
  */
-export async function runBuildCli(): Promise<void> {
+export async function runBuildCli(argv: string[] = []): Promise<void> {
+  const channels = parseDiagnosticsChannels(argv);
   try {
     await buildApp();
+    writeDiagnosticsExit(channels, undefined);
     process.exit(0);
   } catch (error) {
     console.error(
@@ -29,10 +37,11 @@ export async function runBuildCli(): Promise<void> {
       }`,
     );
     if (error instanceof Error && error.cause) console.error('Caused by:', error.cause);
+    writeDiagnosticsExit(channels, error);
     process.exit(1);
   }
 }
 
 if (import.meta.main) {
-  await runBuildCli();
+  await runBuildCli(process.argv.slice(2));
 }

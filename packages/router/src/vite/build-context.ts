@@ -37,12 +37,7 @@ import type {
   StaticComponentDecl,
 } from '@openelement/protocol/ssg';
 import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
-import {
-  DEFAULT_COMPONENTS_DIR,
-  DEFAULT_ISLANDS_DIR,
-  DEFAULT_OUT_DIR,
-  DEFAULT_ROUTES_DIR,
-} from './internal/paths.ts';
+import { DEFAULT_ISLANDS_DIR, DEFAULT_OUT_DIR, DEFAULT_ROUTES_DIR } from './internal/paths.ts';
 
 export type Phase = 1 | 2 | 3;
 
@@ -65,11 +60,19 @@ class Phase1Meta {
   /** Local island metadata indexed by tag name. */
   islandMeta: Record<string, Partial<IslandDecl>> = {};
 
-  /** Package manifests discovered from npm packages */
+  /** Package manifests discovered from npm packages (explicit and scan-derived alike) */
   packageManifests: OpenElementPackageManifest[] = [];
 
   /** Package island declarations extracted from manifests */
   packageIslandDecls: IslandDecl[] = [];
+
+  /**
+   * The resolved admission mode (`packageIslands`): 'auto' (the default — the
+   * scan derives the set) or 'manual' (derivation off). The client build reads
+   * it to pick the unadmitted-package report's owner: under auto the scan
+   * reports, under manual the discovery walk does.
+   */
+  packageAdmissionMode: 'auto' | 'manual' = 'auto';
 
   /** SSR admission plan produced before SSR entry generation. */
   ssrAdmissionPlan: SsrAdmissionPlan | null = null;
@@ -134,8 +137,8 @@ class Phase3Meta {
   /** Whether headExtras scripts were produced by structured injection APIs. */
   allowHeadExtrasScripts: boolean = false;
 
-  /** Application shell rendered around routes. */
-  appShell: FrameworkOptions['appShell'] = undefined;
+  /** Layout rendered around routes. */
+  layout: FrameworkOptions['layout'] = undefined;
 
   /** Named route layouts selected by route meta. */
   layouts: FrameworkOptions['layouts'] = undefined;
@@ -150,9 +153,6 @@ class Phase3Meta {
 
   /** Islands directory */
   islandsDir: string = DEFAULT_ISLANDS_DIR;
-
-  /** Components directory */
-  componentsDir: string = DEFAULT_COMPONENTS_DIR;
 }
 
 /**
@@ -189,6 +189,34 @@ export class OpenElementBuildContext {
    * metadata. Null until the client build produces a client bundle.
    */
   clientAssetManifest: ClientAssetManifest | null = null;
+
+  /**
+   * Phase 2 output (alpha15 S lane): the document stylesheet's emitted files,
+   * dist/client-relative, read from the client entry chunk's manifest record
+   * (the Tailwind entry is the client entry's only CSS module). The build
+   * links them into the Phase 3 head artifact — SSG pages and the
+   * request-time server alike. Empty when the app declares no Tailwind entry.
+   */
+  clientStyleAssets: string[] = [];
+
+  /**
+   * Phase 2 output (alpha15 S lane): the emitted component stylesheet — the
+   * CSS generated from the compiler's shadow-root class candidates, compiled
+   * by the official Tailwind pipeline and content-addressed like the island
+   * sheets. Phase 3 injects its URL into the SSR bundle
+   * (`COMPONENT_STYLE_LINKS_DEFINE`), so every DSD template of a component
+   * whose classes were admitted declares it as a marked external `<link>`.
+   * Null when the app declares no Tailwind entry or no shadow candidates.
+   */
+  componentStyleSheet: { fileName: string } | null = null;
+
+  /**
+   * Phase 2 output (alpha15 S lane, S5-C): the emitted authored-sheet files,
+   * keyed by the style-edge registry key (the sheet's resolved path). Phase 3
+   * hands them to the SSR adapter, which then declares each authored sheet as
+   * an external `<link>` in the DSD template instead of inlining its text.
+   */
+  clientStyleAssetFiles: Map<string, string> = new Map();
 
   /**
   /** Canonical result consumed by release evidence and deployment adapters. */
@@ -283,7 +311,6 @@ export class OpenElementBuildContext {
     this.phase3.ssrNoExternal = ssrNoExternal;
     this.phase3.routesDir = options.routesDir || DEFAULT_ROUTES_DIR;
     this.phase3.islandsDir = options.islandsDir || DEFAULT_ISLANDS_DIR;
-    this.phase3.componentsDir = options.componentsDir || DEFAULT_COMPONENTS_DIR;
     this.phase3.middleware = options.middleware || null;
     this.phase3.html = options.html || null;
     this.phase3.upgradeStrategy = options.island?.upgradeStrategy || 'idle';
@@ -292,7 +319,7 @@ export class OpenElementBuildContext {
     this.phase3.headExtras = options.headExtras || '';
     this.phase3.manifestBudget = options.build?.manifestBudget;
     this.phase3.allowHeadExtrasScripts = options.allowHeadExtrasScripts || false;
-    this.phase3.appShell = options.appShell;
+    this.phase3.layout = options.layout;
     this.phase3.layouts = options.layouts;
   }
 

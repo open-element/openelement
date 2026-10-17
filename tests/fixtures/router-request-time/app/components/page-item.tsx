@@ -1,7 +1,7 @@
 /**
  * /item/:id page element — request-time param route (#556), compiled v0.44.
  * `idText` echoes params.id (via the loader + props projector); `note` echoes
- * the 422-submitted value; `hasError` drives the static-text error Region;
+ * the 422-submitted value; `hasError` drives the static-text error Block;
  * `notedText` carries the PRG echo.
  */
 import { element, OpenElement, property } from '@openelement/element';

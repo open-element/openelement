@@ -8,14 +8,6 @@
 import { normalizeRoutePatternForURLPattern } from '@openelement/router/router';
 import { buildError, SsgDynamicErrorCode } from '../../../internal/error-codes.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
-import { walkHtmlFileEntries } from '../html-files.ts';
-
-// ─── Path / URL helpers ────────────────────────────────────────
-
-/** Recursively find all .html files under a directory. */
-export function findHtmlFiles(dir: string): string[] {
-  return walkHtmlFileEntries(dir).map((entry) => entry.absolutePath);
-}
 
 // ─── Route helpers ─────────────────────────────────────────────
 
@@ -126,6 +118,13 @@ function renderRequestTimeAdmissionPatterns(routes: RequestTimeRoutePattern[]): 
  * dist artifact without workspace packages installed.
  *
  * Runtime: Web Standard URLPattern.
+ *
+ * Env precedence inside the emitted `nitroHandler` (`runtimeEnv ?? event.env`)
+ * mirrors {@linkcode resolveRequestEnv} minus the mount-options link: the
+ * generated entry has no mount options, so the 2-link chain is the complete
+ * chain there — not a second spelling of it. Keep it that way; if a third
+ * link ever exists at this site, route it through the model helper instead
+ * of extending the inline chain.
  *
  * The named `isRequestTimePath` export (#1215) is a DERIVED admission
  * predicate generated from the request-time route table: it answers only

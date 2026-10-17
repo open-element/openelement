@@ -48,7 +48,6 @@
     "@openelement/router": "workspace:*",
     "@openelement/ui": "workspace:*",
     "gray-matter": "^4.0.3",
-    "hono": "^4.12",
     "marked": "^15.0.0",
     "vite": "8.0.16"
   },

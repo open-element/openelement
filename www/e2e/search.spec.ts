@@ -330,8 +330,12 @@ test.describe('Search session races', () => {
       dialog: page.getByRole('dialog', { name: 'Search' }),
       input: page.getByRole('combobox', { name: 'Search documentation' }),
       results: page.getByRole('listbox', { name: 'Search results' }),
-      skeleton: page.locator('#open-search-results .skeleton'),
-      empty: page.locator('#open-search-results .empty'),
+      // The loading placeholder marks itself with data-skeleton: the class
+      // that used to carry it went away with the utility-first migration.
+      skeleton: page.locator('#open-search-results [data-skeleton]'),
+      // The idle message marks itself with data-empty (the class that used
+      // to carry it went away with the utility-first migration).
+      empty: page.locator('#open-search-results [data-empty]'),
       overlay: page.locator('open-search .overlay'),
     };
   }

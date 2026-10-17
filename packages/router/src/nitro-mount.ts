@@ -1,5 +1,6 @@
 import type { OpenElementRequestHandler, RuntimeContext } from '@openelement/element/build-utils';
 import type { OpenElementRequestContext } from './model.ts';
+import { createRequestContext, resolveRequestEnv } from './model.ts';
 
 /**
  * Minimal Nitro v3 route event shape (#857). Nitro v3 is fetch-native: its h3
@@ -36,20 +37,15 @@ function createNitroRequestContext<Env extends Record<string, unknown>>(
 ): OpenElementRequestContext<Env> {
   // Keep this runtime-local. Nitro node output imports this module directly, so
   // a value import from the package root would leave an unresolved bare
-  // package in generated server output. The type-only import above still pins
-  // this shape to the app model contract.
-  const url = new URL(request.url);
-
-  return {
+  // package in generated server output. The relative value import from
+  // ./model.ts above is safe (resolved at build time) and keeps the context
+  // shape single-sourced instead of re-spelled here.
+  return createRequestContext({
     request,
-    url,
-    path: url.pathname,
-    method: request.method,
-    params: context.params ?? {},
-    searchParams: url.searchParams,
+    params: context.params,
     env: context.env,
     platform: context.platform,
-  };
+  });
 }
 
 /**
@@ -72,7 +68,7 @@ export function createOpenElementNitroHandler<
     const runtimeEnv = (request as Request & { runtime?: { cloudflare?: { env?: Env } } }).runtime
       ?.cloudflare?.env;
     const context: RuntimeContext<Env> = {
-      env: runtimeEnv ?? event.env ?? options.env,
+      env: resolveRequestEnv(runtimeEnv, event.env, options.env),
       platform: event.platform ?? options.platform,
       params: event.context?.params,
     };

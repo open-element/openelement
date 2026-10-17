@@ -3,73 +3,99 @@
  *
  * Compiled page with the default static renderIntent: prerendered to HTML at
  * build time (SSG). There are NO islands on this page — everything below is
- * prerendered markup and CSS. The page renders inside the auto-registered
- * app shell (app/islands/app-shell.tsx), which owns the header, main region
- * and footer; the badges come from ./badges.css (light root, inlined into
- * SSR as @scope(about-page)). The compiled grammar lowers one root per
- * render, so the page returns a single content wrapper.
+ * prerendered markup. Presentation is authored directly as Tailwind utility
+ * classes, which compile into the document stylesheet; the one rule in
+ * `static styles` is the root's own box, which has no markup to carry it.
+ * The page renders inside the auto-registered layout (app/layout.tsx), which
+ * owns the header, main block and footer. The compiled grammar lowers one
+ * root per render, so the page returns a single content wrapper.
  */
 import { element, OpenElement } from "@openelement/element";
 import aboutPageStyles from "./page-about.css";
-import badgeStyles from "./badges.css";
 
 @element("about-page", { root: "light" })
 export default class AboutPage extends OpenElement {
-  static override styles = [aboutPageStyles, badgeStyles];
+  static override styles = [aboutPageStyles];
 
   render() {
     return (
       <div class="page-content">
-        <span class="badge badge-static">static · no islands on this page</span>
-        <p class="eyebrow">About</p>
-        <h1>Static first, interactive where it counts</h1>
-        <p class="lede">
+        <span class="inline-flex items-center gap-[0.4em] rounded-full border border-ok/35 bg-ok/8 px-[0.65rem] py-[0.2rem] text-[0.72rem] font-semibold tracking-[0.04em] text-ok uppercase">
+          static · no islands on this page
+        </span>
+        <p class="m-0 text-[0.78rem] font-semibold tracking-[0.14em] text-brand uppercase">About</p>
+        <h1 class="mt-3 mb-4 text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.15] font-bold tracking-[-0.02em]">
+          Static first, interactive where it counts
+        </h1>
+        <p class="mb-8 max-w-[58ch] text-[1.08rem] text-ink-soft">
           openElement prerenders pages to plain HTML and CSS at build time and hydrates compiled
           islands only where a page needs interactivity. This page is the first half of that story:
           it ships no islands at all.
         </p>
-        <h2>What happened when you opened this page</h2>
-        <p>
-          The server sent HTML — prerendered at build time by SSG — plus one inlined stylesheet per
-          page scope. No framework runtime executed to produce what you are reading; the markup is
-          the artifact.
+        <h2 class="mt-9 mb-[0.6rem] text-[1.25rem] tracking-[-0.01em]">
+          What happened when you opened this page
+        </h2>
+        <p class="my-[0.6rem] max-w-[62ch]">
+          The server sent HTML — prerendered at build time by SSG — plus the stylesheet the page's
+          utility classes compile into. No framework runtime executed to produce what you are
+          reading; the markup is the artifact.
         </p>
-        <h2>Where things live</h2>
-        <ul class="conventions">
-          <li>
-            <code>app/routes/</code>
-            <span>page routes — one file per URL, prerendered by default</span>
+        <h2 class="mt-9 mb-[0.6rem] text-[1.25rem] tracking-[-0.01em]">Where things live</h2>
+        <ul class="mt-4 list-none border-t border-line p-0">
+          <li class="flex flex-wrap gap-4 border-b border-line py-[0.7rem]">
+            <code class="min-w-[15rem] font-mono text-[0.85rem] text-brand">app/routes/</code>
+            <span class="text-[0.92rem] text-ink-soft">
+              page routes — one file per URL, prerendered by default
+            </span>
           </li>
-          <li>
-            <code>app/routes/api/</code>
-            <span>request-time server routes — plain Request → Response handlers</span>
+          <li class="flex flex-wrap gap-4 border-b border-line py-[0.7rem]">
+            <code class="min-w-[15rem] font-mono text-[0.85rem] text-brand">app/routes/api/</code>
+            <span class="text-[0.92rem] text-ink-soft">
+              request-time server routes — plain Request → Response handlers
+            </span>
           </li>
-          <li>
-            <code>app/components/</code>
-            <span>compiled page elements and shared style sheets</span>
+          <li class="flex flex-wrap gap-4 border-b border-line py-[0.7rem]">
+            <code class="min-w-[15rem] font-mono text-[0.85rem] text-brand">app/components/</code>
+            <span class="text-[0.92rem] text-ink-soft">
+              compiled page elements and the shared style sheets they array
+            </span>
           </li>
-          <li>
-            <code>app/islands/</code>
-            <span>client islands — the only code that ships JavaScript</span>
+          <li class="flex flex-wrap gap-4 border-b border-line py-[0.7rem]">
+            <code class="min-w-[15rem] font-mono text-[0.85rem] text-brand">app/islands/</code>
+            <span class="text-[0.92rem] text-ink-soft">
+              client islands — the only code that ships JavaScript
+            </span>
           </li>
-          <li>
-            <code>app/islands/app-shell.tsx</code>
-            <span>the shared site chrome wrapped around every page</span>
+          <li class="flex flex-wrap gap-4 border-b border-line py-[0.7rem]">
+            <code class="min-w-[15rem] font-mono text-[0.85rem] text-brand">app/layout.tsx</code>
+            <span class="text-[0.92rem] text-ink-soft">
+              the shared site chrome wrapped around every page
+            </span>
           </li>
-          <li>
-            <code>app/styles/theme.css</code>
-            <span>design tokens, inlined into every document head</span>
+          <li class="flex flex-wrap gap-4 border-b border-line py-[0.7rem]">
+            <code class="min-w-[15rem] font-mono text-[0.85rem] text-brand">
+              app/styles/theme.css
+            </code>
+            <span class="text-[0.92rem] text-ink-soft">
+              design tokens — the @theme role sheet every utility reads
+            </span>
           </li>
-          <li>
-            <code>app/head.tsx</code>
-            <span>structural document-head content (meta tags, preloads)</span>
+          <li class="flex flex-wrap gap-4 border-b border-line py-[0.7rem]">
+            <code class="min-w-[15rem] font-mono text-[0.85rem] text-brand">app/head.tsx</code>
+            <span class="text-[0.92rem] text-ink-soft">
+              structural document-head content (meta tags, preloads)
+            </span>
           </li>
         </ul>
-        <h2>See it working</h2>
-        <p>
-          The <a href="/">home page</a> carries the interactive half: a counter island that hydrates
-          on idle and a client-only live timer. Open the browser DevTools on both pages and compare
-          the network panels — the badge on each section names what it costs.
+        <h2 class="mt-9 mb-[0.6rem] text-[1.25rem] tracking-[-0.01em]">See it working</h2>
+        <p class="my-[0.6rem] max-w-[62ch]">
+          The{" "}
+          <a class="text-brand no-underline hover:underline" href="/">
+            home page
+          </a>{" "}
+          carries the interactive half: a counter island that hydrates on idle and a client-only
+          live timer. Open the browser DevTools on both pages and compare the network panels — the
+          badge on each section names what it costs.
         </p>
       </div>
     );

@@ -1,11 +1,14 @@
 /** Changelog route: request projection over the generated CHANGELOG.md archive. */
 import { definePage } from '@openelement/router';
-import { trustedHtml } from '@openelement/element';
+import { trustedHtml, type TrustedHtml } from '@openelement/element';
+import '@openelement/ui/open-button';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import { localizePath } from '#site-ui/link.ts';
 import { changelogArchiveHtml } from '../data/_generated-changelog-archive.ts';
-import PageChangelog from '../components/page-changelog.tsx';
+import '#site-ui/open-reading-shell.tsx';
+import '../islands/open-page-rail.tsx';
+import '#site-ui/open-artifact-panel.tsx';
 import {
   COMMON_PUBLISHED_LABEL,
   COMMON_PUBLISHED_VERSION,
@@ -94,12 +97,13 @@ const content = {
 
 /**
  * The archive body is the English original on every locale: disclose that
- * with the same lang-notice pattern the blog uses (page-blog-post.tsx), and
- * carry the content language on the wrapper since page-changelog.tsx owns
- * the outer container. The rendered HTML itself comes from the generated
- * module (www/tools/generate-site-content-data.ts) — the same build-time
- * markdown pipeline as the article collections, so a missing CHANGELOG.md
- * fails generation instead of shipping a fallback page, and no renderer or
+ * with the same lang-notice pattern the blog route uses
+ * (www/app/routes/blog/[slug].tsx), and carry the content language on the
+ * wrapper since this module owns the outer container. The rendered HTML
+ * itself comes from the generated module
+ * (www/tools/generate-site-content-data.ts) — the same build-time markdown
+ * pipeline as the article collections, so a missing CHANGELOG.md fails
+ * generation instead of shipping a fallback page, and no renderer or
  * filesystem access runs at request time.
  */
 function changelogArchiveDocument(copy: { archiveSource: string; langNotice: string }): string {
@@ -108,6 +112,130 @@ function changelogArchiveDocument(copy: { archiveSource: string; langNotice: str
       ? ''
       : `<p class="lang-notice" role="note" style="max-width:640px;margin:0 0 calc(var(--spacing) * 4);padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);border-inline-start:calc(var(--spacing) * 0.5) solid var(--color-ring);color:var(--color-muted-foreground);font-size:var(--text-sm);line-height:1.65;">${copy.langNotice}</p>`;
   return `<p class="archive-source">${copy.archiveSource}</p>${notice}<div lang="en">${changelogArchiveHtml}</div>`;
+}
+
+/**
+ * The changelog page as a server function page (alpha15 server architecture):
+ * the route module's own exported TSX function, lowered by the compiler into
+ * a generative HTML constructor. The page hook class (`page-changelog`) scopes
+ * the former component sheet's authored rules in the linked document
+ * stylesheet.
+ */
+export function PageChangelog(props: {
+  eyebrow: string;
+  pageTitle: string;
+  lede: string;
+  metaPrefix: string;
+  registryNote: string;
+  metaSuffix: string;
+  railItems: Array<{ id: string; href: string; label: string; depth: string }>;
+  publishedIntro: string;
+  stampCurrent: string;
+  regCurrentSummary: string;
+  stableHeading: string;
+  commonVersionLabel: string;
+  stableBody: string;
+  withdrawnHeading: string;
+  withdrawnBody: string;
+  footnote: string;
+  changelogHtml: TrustedHtml;
+  roadmapHref: string;
+  roadmapLabel: string;
+  gettingStartedHref: string;
+  gettingStartedLabel: string;
+  locale: string;
+}) {
+  return (
+    <div class='page-changelog' data-pagefind-body>
+      <open-reading-shell meta rail footer locale={props.locale}>
+        <div slot='meta'>
+          <p class='mb-4 flex flex-wrap items-baseline gap-2 font-mono text-(length:--text-xs) leading-[1.72] font-extrabold tracking-[0.1em] text-muted-foreground uppercase'>
+            <span>Project</span>
+            <span>/</span>
+            <span class='text-primary'>{props.eyebrow}</span>
+          </p>
+          <h1 class='m-0 font-sans text-[clamp(2.1rem,4.6vw,3.4rem)] leading-[1.05] font-extrabold tracking-[-0.035em] wrap-break-word text-balance text-foreground'>
+            {props.pageTitle}
+          </h1>
+          <p class='mt-4 max-w-[640px] text-[clamp(var(--text-base),1.4vw,var(--text-xl))] leading-[1.65] text-muted-foreground'>
+            {props.lede}
+          </p>
+          <p class='mt-4 text-(length:--text-sm) leading-[1.72] text-muted-foreground'>
+            {props.metaPrefix}{' '}
+            <code class='rounded-md border border-[color-mix(in_srgb,var(--color-primary)_18%,var(--color-border))] bg-muted px-2 py-1 font-mono text-(length:--text-xs) text-primary'>
+              {props.registryNote}
+            </code>
+            {props.metaSuffix}
+          </p>
+        </div>
+        <div slot='rail'>
+          <open-page-rail items={props.railItems} locale={props.locale}></open-page-rail>
+        </div>
+        <p
+          id='published'
+          class='my-2 text-sm leading-[1.72] text-foreground min-[901px]:text-(length:--text-base)'
+        >
+          {props.publishedIntro}
+        </p>
+        <div class='mt-8 mb-10 border-t border-border' aria-label='Release register'>
+          <div class='border-b border-border bg-primary/14 p-5 shadow-[inset_4px_0_0_var(--color-primary)]'>
+            <div class='flex flex-wrap items-baseline gap-3'>
+              <span class='text-[clamp(1.9rem,3.4vw,2.8rem)] leading-none font-extrabold tracking-[-0.02em] text-foreground'>
+                {props.commonVersionLabel}
+              </span>
+              <span class='rounded-md bg-primary px-3 py-1 text-(length:--text-xs) font-bold tracking-[0.08em] text-primary-foreground uppercase'>
+                {props.stampCurrent}
+              </span>
+            </div>
+            <p class='mt-2 max-w-[640px] truncate text-(length:--text-xs) leading-normal text-muted-foreground'>
+              {props.regCurrentSummary}
+            </p>
+          </div>
+        </div>
+        <section id='candidate'>
+          <h2 class='mt-10 mb-4 border-b border-b-border pb-2 text-(length:--text-2xl) leading-[1.12] font-extrabold text-foreground min-[481px]:text-(length:--text-4xl) min-[901px]:text-(length:--text-5xl)'>
+            {props.stableHeading}
+          </h2>
+          <p class='my-2 text-sm leading-[1.72] text-foreground min-[901px]:text-(length:--text-base)'>
+            {props.stableBody}
+          </p>
+        </section>
+        <section id='withdrawn'>
+          <h2 class='mt-10 mb-4 border-b border-b-border pb-2 text-(length:--text-2xl) leading-[1.12] font-extrabold text-foreground min-[481px]:text-(length:--text-4xl) min-[901px]:text-(length:--text-5xl)'>
+            {props.withdrawnHeading}
+          </h2>
+          <p class='my-2 text-sm leading-[1.72] text-foreground min-[901px]:text-(length:--text-base)'>
+            {props.withdrawnBody}
+          </p>
+        </section>
+        <p class='my-2 text-(length:--text-xs) leading-[1.72] text-muted-foreground'>
+          {props.footnote}
+        </p>
+        <div
+          id='historical'
+          class='changelog-content'
+          innerHTML={props.changelogHtml}
+          trustedHtml
+        />
+        <div
+          slot='footer'
+          class='mt-10 flex flex-col justify-between gap-3 border-t border-border pt-4 min-[901px]:flex-row'
+        >
+          <open-button class='no-underline' variant='ghost' size='sm' href={props.roadmapHref}>
+            {props.roadmapLabel}
+          </open-button>
+          <open-button
+            class='no-underline'
+            variant='ghost'
+            size='sm'
+            href={props.gettingStartedHref}
+          >
+            {props.gettingStartedLabel}
+          </open-button>
+        </div>
+      </open-reading-shell>
+    </div>
+  );
 }
 
 export default definePage(PageChangelog, {
@@ -152,6 +280,7 @@ export default definePage(PageChangelog, {
       roadmapLabel: text.navRoadmap,
       gettingStartedHref: localizePath('/guide/getting-started', resolved),
       gettingStartedLabel: text.navGettingStarted,
+      locale: resolved,
     };
   },
 });

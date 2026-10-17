@@ -41,6 +41,8 @@
     "marked": "^15.0.0",
     "mime": "^4.1.0",
     "pathe": "^2.0.3",
+    "postcss": "^8.5.28",
+    "postcss-value-parser": "^4.2.0",
     "typescript": "6.0.3",
     "vite": "8.0.16"
   },
@@ -52,7 +54,8 @@
     "hono": "^4.12",
     "@hono/vite-dev-server": "^0.25.3",
     "marked": "^15.0.0",
-    "@tailwindcss/vite": "^4.3.0"
+    "@tailwindcss/vite": "^4.3.0",
+    "unocss": "^66.10.0"
   },
   "peerDependenciesMeta": {
     "lit": {
@@ -77,6 +80,9 @@
       "optional": true
     },
     "@tailwindcss/vite": {
+      "optional": true
+    },
+    "unocss": {
       "optional": true
     }
   },

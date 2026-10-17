@@ -30,11 +30,86 @@ import type { ReadableStream as NodeWebReadableStream } from 'node:stream/web';
 /** Standard fetch handler contract shared with the Nitro mount. */
 export type FetchHandler = (request: Request) => Promise<Response>;
 
+/**
+ * How this bridge reconstructs the origin of the Request it hands the fetch
+ * handler.
+ *
+ * The origin is not cosmetic: the same-origin CSRF floor compares a browser's
+ * `Origin` header against the request URL's own origin, so an origin this
+ * bridge invents decides whether a legitimate form POST is admitted. Behind a
+ * TLS-terminating proxy the browser's scheme is `https` while this process
+ * only ever sees plain HTTP, so a hardcoded `http://<Host>` made every
+ * same-origin POST from the public site compare unequal and answer 403.
+ *
+ * Both knobs are the OPERATOR's declaration, and neither reads a header unless
+ * the operator has said the peer is a proxy — a forwarded header is client
+ * input on a directly reachable port, and honouring it there would let a
+ * caller choose the origin the CSRF comparison is made against.
+ */
+export interface RequestOriginPolicy {
+  /**
+   * The origin the deployment is reachable at, as the browser sees it
+   * (`https://example.test`). Wins over every header, because it is the answer
+   * the operator states rather than one the caller supplies.
+   */
+  readonly publicOrigin?: string;
+  /**
+   * Read `Forwarded` / `X-Forwarded-Proto` / `X-Forwarded-Host` because the
+   * only thing that can reach this port is a proxy the operator controls.
+   */
+  readonly trustProxy?: boolean;
+}
+
+/** The first value of a possibly-repeated, possibly-comma-joined header. */
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const first = raw?.split(',')[0]?.trim();
+  return first === undefined || first === '' ? undefined : first;
+}
+
+/**
+ * Reconstruct the request origin under the declared policy. With neither knob
+ * set the answer is `http://<Host>` — unchanged, and correct for a
+ * deployment served directly.
+ */
+function requestOrigin(
+  req: IncomingMessage,
+  fallbackHost: string,
+  policy: RequestOriginPolicy,
+): string {
+  if (policy.publicOrigin !== undefined) return policy.publicOrigin.replace(/\/+$/, '');
+  const host = req.headers.host ?? fallbackHost;
+  if (policy.trustProxy !== true) return `http://${host}`;
+  // RFC 7239 `Forwarded: for=…;proto=https;host=example.test`, falling back to
+  // the de-facto X-Forwarded-* pair. Both are only read under trustProxy.
+  let forwardedProto: string | undefined;
+  let forwardedHost: string | undefined;
+  const forwarded = firstHeaderValue(req.headers.forwarded);
+  if (forwarded !== undefined) {
+    for (const parameter of forwarded.split(';')) {
+      const [rawName, ...rest] = parameter.split('=');
+      const name = rawName?.trim().toLowerCase();
+      const value = rest.join('=').trim().replace(/^"|"$/g, '');
+      if (name === 'proto') forwardedProto = value;
+      if (name === 'host') forwardedHost = value;
+    }
+  }
+  const proto = (
+    forwardedProto ?? firstHeaderValue(req.headers['x-forwarded-proto'])
+  )?.toLowerCase();
+  const authority = forwardedHost || firstHeaderValue(req.headers['x-forwarded-host']) || host;
+  // Only the two schemes an origin can carry; anything else is not a scheme a
+  // browser could have used, so the header is ignored rather than trusted.
+  const scheme = proto === 'https' ? 'https' : 'http';
+  return `${scheme}://${authority}`;
+}
+
 /** Build a fetch Request from a node IncomingMessage. */
 function requestFromIncoming(
   req: IncomingMessage,
   fallbackHost: string,
   signal: AbortSignal,
+  policy: RequestOriginPolicy,
 ): Request {
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers)) {
@@ -44,7 +119,6 @@ function requestFromIncoming(
       headers.set(name, value);
     }
   }
-  const host = req.headers.host ?? fallbackHost;
   const method = req.method ?? 'GET';
   const init: RequestInit & { duplex?: 'half' } = { method, headers, signal };
   if (method !== 'GET' && method !== 'HEAD') {
@@ -53,7 +127,8 @@ function requestFromIncoming(
     init.body = Readable.toWeb(req) as unknown as ReadableStream<Uint8Array>;
     init.duplex = 'half';
   }
-  return new Request(`http://${host}${req.url ?? '/'}`, init);
+  const origin = requestOrigin(req, fallbackHost, policy);
+  return new Request(`${origin}${req.url ?? '/'}`, init);
 }
 
 /** Write a fetch Response onto a node ServerResponse. */
@@ -100,12 +175,18 @@ function sendResponse(res: ServerResponse, response: Response, method: string): 
  * (`src/cli/start.ts`) attaches one that answers EADDRINUSE/EACCES with an
  * actionable line.
  */
-export function serveFetch(options: {
-  hostname: string;
-  port: number;
-  handler: FetchHandler;
-}): Server {
+export function serveFetch(
+  options: {
+    hostname: string;
+    port: number;
+    handler: FetchHandler;
+  } & RequestOriginPolicy,
+): Server {
   const fallbackHost = `${options.hostname}:${options.port}`;
+  const policy: RequestOriginPolicy = {
+    ...(options.publicOrigin === undefined ? {} : { publicOrigin: options.publicOrigin }),
+    ...(options.trustProxy === undefined ? {} : { trustProxy: options.trustProxy }),
+  };
   const server = createServer((req, res) => {
     void (async () => {
       // Disconnect detection is wired BEFORE the handler runs. The Request
@@ -115,7 +196,7 @@ export function serveFetch(options: {
       const abort = new AbortController();
       let request: Request;
       try {
-        request = requestFromIncoming(req, fallbackHost, abort.signal);
+        request = requestFromIncoming(req, fallbackHost, abort.signal, policy);
       } catch {
         res.statusCode = 400;
         res.end('Bad Request');

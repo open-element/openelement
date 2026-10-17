@@ -1,0 +1,16 @@
+/* The page's irreducible authored rules: the host box (a shadow-tree element's
+   `:host` display), the two role-derived surfaces, and the one descendant
+   selector the utility set does not reach. Everything else is a utility on the
+   page element. */
+:host {
+  display: block;
+  background: var(--color-background);
+}
+
+.host-panel {
+  min-height: 100vh;
+}
+
+.host-panel :is(h1, p) {
+  max-width: 60ch;
+}

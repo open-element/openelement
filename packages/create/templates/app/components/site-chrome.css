@@ -1,68 +1,9 @@
+/* site-chrome — the irreducible authored rule (alpha15 utility-first
+ * migration): the shadow host's own box. A custom element is display:inline
+ * by default and the host tag is not authored markup, so no utility can
+ * carry it. Everything else the chrome needs (bars, brand, nav links) is
+ * authored as Tailwind utilities on the elements in layout.tsx.
+ * One owner per property: nothing here is also authored as a utility. */
 :host {
   display: block;
-}
-.site-head {
-  border-bottom: 1px solid var(--line);
-  background: var(--paper);
-}
-.site-head .bar {
-  max-width: var(--content-width);
-  margin: 0 auto;
-  padding: 1rem 1.25rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
-}
-.site-brand {
-  font-weight: 700;
-  font-size: 1.1rem;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-  text-decoration: none;
-}
-.site-brand:hover {
-  color: var(--brand);
-  text-decoration: none;
-}
-.site-head nav {
-  display: flex;
-  gap: 1.25rem;
-}
-.site-head nav a {
-  color: var(--ink-soft);
-  font-size: 0.95rem;
-  font-weight: 500;
-  text-decoration: none;
-}
-.site-head nav a:hover {
-  color: var(--brand);
-  text-decoration: none;
-}
-main {
-  max-width: var(--content-width);
-  margin: 0 auto;
-  padding: 3rem 1.25rem 4rem;
-}
-.site-foot {
-  border-top: 1px solid var(--line);
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-}
-.site-foot .bar {
-  max-width: var(--content-width);
-  margin: 0 auto;
-  padding: 1.25rem;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-.site-foot a {
-  color: var(--ink-soft);
-  text-decoration: none;
-}
-.site-foot a:hover {
-  color: var(--brand);
-  text-decoration: none;
 }

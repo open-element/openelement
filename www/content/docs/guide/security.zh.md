@@ -8,6 +8,8 @@ order: 95
 
 生成的 action POST 处理器内置 fail-closed 同源地板：当 `Sec-Fetch-Site` 为 `cross-site`、`Origin` 存在且与请求 URL 的源不一致，或 `Sec-Fetch-Site` 为 `same-site` 但 `Origin` 缺失或为 `null` 时拒绝请求——最后一种是伪造头，因为浏览器 POST 总会带 `Origin`；loopback 主机别名（`localhost` / `127.0.0.1` / `[::1]`）视同同源。两个头都省略的客户端（典型的非浏览器工具）放行。在请求 env 绑定（`c.env` / Nitro runtime env）上设置 `OPEN_ELEMENT_DISABLE_CSRF=1` 可选择退出。框架自有 session API 不在当前契约内；服务提供方配方负责 cookie/session 传输，并必须应用相同的同源地板与显式 cookie 属性。
 
+这里说的“请求 URL 的源”，是服务端为这条请求推导出的源——当 TLS 终止代理挡在前面时，它与浏览器实际使用的 scheme 与 host 并不相同：服务端看到的是明文 HTTP。这类部署需要声明自己的公开源（`OPEN_ELEMENT_PUBLIC_ORIGIN`，或对只有可信代理能访问的端口用 `OPEN_ELEMENT_TRUST_PROXY=1`），见[部署在代理之后](/zh/guide/deployment#部署在代理之后)。不声明的话，合法的同源 POST 会被拒绝而不是放行；地板本身从不放松。
+
 ## 隐式身份验证
 
 使用隐式凭据（HTTP Basic、mTLS，或 `SameSite=None` 的 cookie）的应用无法依赖 Lax 默认值：浏览器会在跨站请求中附带这些凭据。内置同源地板已覆盖生成的 action POST，但这类应用还应在每个会改变状态的 API 路由上校验请求来源。

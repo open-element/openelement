@@ -1,7 +1,7 @@
 /**
  * site theme-token gate: theme values in the site must come from the
  * @theme role source (packages/ui/src/theme.css, delivered by the
- * @openelement/router Tailwind preset) or the site alias layer
+ * @openelement/router Tailwind entry) or the site alias layer
  * (www/site-css.ts), never from hardcoded literals.
  *
  * Rules for sources under www/app/ (routes, islands, components):
@@ -20,10 +20,24 @@
  * theme.css itself (single source, P6), so a new role needs no checker edit.
  * Genuine exceptions go in BARE_PALETTE_ALLOWLIST with a reason.
  *
+ * Scope (alpha15 A5): the scan covers every CSS-in-TS sheet under www/app
+ * (all rules) AND every authored `.css` sheet — the ones under www/app (the
+ * page-owned component sheets) and the linked www/site-chrome.css layer, with
+ * the bare-palette rule included. A plain `.css` file is not CSS-in-TS, so the
+ * source filter alone left them unscanned: the #1569 migration moved the
+ * shell/pseudo-element rules out of the scanned CSS-in-TS set into
+ * site-chrome.css, whose own header recorded that plain `.css` files sat
+ * outside this gate. That gap is closed here: a rule moved into an authored
+ * sheet is checked by the same gate as the sheet it came from. The linked
+ * sheet's two theme-invariant inks are site aliases in www/site-css.ts
+ * (--scrim-ink, --grid-ink), which is where their palette citation lives — so
+ * the allowlist stays empty.
+ *
  * Token definitions belong in packages/ui/src/theme.css (the single role
- * source, consumed through the preset) or www/site-css.ts (site aliases).
- * The ui package itself emits no values — the retired theme-tokens twin is
- * not an acceptance source.
+ * source, consumed through the preset) or www/site-css.ts (site aliases, the
+ * citation site). Both are DEFINITION layers and are deliberately not scanned
+ * as consumers; the ui package itself emits no values — the retired
+ * theme-tokens twin is not an acceptance source.
  */
 
 import { join } from 'node:path';
@@ -34,7 +48,17 @@ import process from 'node:process';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const SCAN_ROOTS = [join(repoRoot, 'www/app')];
-const SOURCE = /\.(ts|tsx)$/;
+/**
+ * The site's linked authored stylesheet(s) — plain `.css` delivered through
+ * the `tailwind.theme` source list (www/openelement.config.ts), not
+ * CSS-in-TS. They are scanned with EVERY rule below, bare palette included:
+ * the sheet is a consumer with no role protection of its own, and the #1569
+ * migration moved rules here from the scanned CSS-in-TS set. Adding a linked
+ * authored sheet is adding it to this list — the gate never skips one
+ * silently (an unreadable target fails the check).
+ */
+export const LINKED_STYLE_SHEETS: readonly string[] = [join(repoRoot, 'www/site-chrome.css')];
+export const SOURCE = /\.(ts|tsx)$/;
 const HEX_LONG = /#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
 const HEX_SHORT = /#(?:[0-9a-fA-F]{3,4})\b/;
 const CSS_KEYWORD = /\b(?:color|background|border|shadow|fill|stroke|gradient|outline)\b/i;
@@ -95,14 +119,13 @@ const ROLE_DEFINITION = /^\s*--color-([a-z0-9-]+):/gm;
  * cannot move to a role token yet. Empty entries are deleted, not tolerated.
  */
 export const BARE_PALETTE_ALLOWLIST: Readonly<Record<string, string>> = {
-  // Dialog scrim: must stay dark in both themes. The dark-in-light roles
-  // (--color-foreground, --color-popover-foreground, …) flip light under
-  // data-theme="dark", so a role swap regresses. Leaves the allowlist when a
-  // --surface-scrim alias exists in site-css.ts (cf. --surface-code).
-  // (#1553: the sheet moved into the open-search island module; #1558 moved
-  // it again into the island's open-search.css — the gate followed it.)
-  'open-search.css:--color-zinc-950':
-    'theme-invariant dark dialog scrim; no role token is theme-invariant dark',
+  // Empty by design. The retired `open-search.css:--color-zinc-950` entry
+  // (theme-invariant dark dialog scrim, then the retired open-search page
+  // sheet) never came back: the scrim rule now lives in the linked
+  // www/site-chrome.css layer, which IS scanned (LINKED_STYLE_SHEETS), and it
+  // consumes the site alias --scrim-ink (www/site-css.ts) — the alias layer is
+  // where a theme-invariant palette citation lives, so the allowlist stays
+  // empty rather than carrying a permanent exception.
 };
 
 /** Role color names from packages/ui/src/theme.css — the single role source. */
@@ -196,26 +219,87 @@ export function findBreakpointFailures(file: string, lines: string[]): ThemeToke
   return failures;
 }
 
-async function main(): Promise<void> {
+/** Every failure the ALL-RULES sheet surface raises: hex, font, tier, bare palette. */
+export function findAuthoredSheetFailures(
+  file: string,
+  lines: string[],
+  roleTokens: ReadonlySet<string>,
+): ThemeTokenFailure[] {
+  return [
+    ...findThemeTokenFailures(file, lines),
+    ...findBreakpointFailures(file, lines),
+    ...findBarePaletteFailures(file, lines, roleTokens),
+  ];
+}
+
+export interface AppScanTarget {
+  path: string;
+  /** Bare-palette rule applies: an authored `.css` sheet, or a CSS-in-TS file in a segment it gates. */
+  palette: boolean;
+}
+
+/**
+ * The CSS-in-TS sources AND the authored `.css` sheets under one www/app root.
+ * A plain `.css` file is not CSS-in-TS, so the SOURCE filter alone left it
+ * unscanned — that was the A5 gap (www/site-chrome.css, and the page-owned
+ * sheet www/app/site-ui/open-article-view.css under this root). Sheets get
+ * every rule, bare palette included.
+ */
+export async function collectAppScanTargets(root: string): Promise<AppScanTarget[]> {
+  const targets: AppScanTarget[] = [];
+  for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory()) continue;
+    const entryPath = `${entry.parentPath}/${entry.name}`;
+    if (entryPath.includes('/data/_generated-')) continue;
+    if (entry.name.endsWith('.css')) {
+      targets.push({ path: entryPath, palette: true });
+      continue;
+    }
+    if (!SOURCE.test(entryPath)) continue;
+    targets.push({
+      path: entryPath,
+      palette: BARE_PALETTE_SEGMENTS.some((segment) => entryPath.includes(segment)),
+    });
+  }
+  return targets;
+}
+
+/**
+ * Every failure the gate raises, over both scan surfaces: the www/app targets
+ * (all rules; bare palette only where {@linkcode collectAppScanTargets} says
+ * so) and LINKED_STYLE_SHEETS (all rules, bare palette included). Exported so
+ * the test suite can run the gate's own surface list instead of re-deriving it.
+ */
+export async function findSiteThemeTokenFailures(): Promise<ThemeTokenFailure[]> {
   const failures: ThemeTokenFailure[] = [];
   const roleTokens = await loadRoleColorTokens();
   for (const root of SCAN_ROOTS) {
-    for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
-      if (entry.isDirectory() || (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx'))) {
-        continue;
-      }
-      const entryPath = `${entry.parentPath}/${entry.name}`;
-      if (!SOURCE.test(entryPath)) continue;
-      if (entryPath.includes('/data/_generated-')) continue;
-      const text = await readFile(entryPath, 'utf8');
-      const lines = text.split('\n');
-      failures.push(...findThemeTokenFailures(entryPath, lines));
-      failures.push(...findBreakpointFailures(entryPath, lines));
-      if (BARE_PALETTE_SEGMENTS.some((segment) => entryPath.includes(segment))) {
-        failures.push(...findBarePaletteFailures(entryPath, lines, roleTokens));
+    for (const target of await collectAppScanTargets(root)) {
+      const lines = (await readFile(target.path, 'utf8')).split('\n');
+      failures.push(...findThemeTokenFailures(target.path, lines));
+      failures.push(...findBreakpointFailures(target.path, lines));
+      if (target.palette) {
+        failures.push(...findBarePaletteFailures(target.path, lines, roleTokens));
       }
     }
   }
+  for (const sheet of LINKED_STYLE_SHEETS) {
+    let text: string;
+    try {
+      text = await readFile(sheet, 'utf8');
+    } catch {
+      throw new Error(
+        `${sheet} is a linked authored sheet of this site (LINKED_STYLE_SHEETS) but could not be ` +
+          'read — a scan target must never be skipped silently.',
+      );
+    }
+    failures.push(...findAuthoredSheetFailures(sheet, text.split('\n'), roleTokens));
+  }
+  return failures;
+}
+
+async function main(): Promise<void> {
+  const failures = await findSiteThemeTokenFailures();
   if (failures.length > 0) {
     console.error('site theme token check failed:');
     for (const failure of failures) {

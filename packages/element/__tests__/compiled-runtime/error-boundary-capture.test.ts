@@ -14,7 +14,7 @@
  *     emission);
  *   - the facade property setter (signal-graph evaluation is synchronous at
  *     the write);
- *   - the kernel's update-error sink (Region update failures after
+ *   - the kernel's update-error sink (Block update failures after
  *     activation).
  *
  * The composed ancestor semantics the audit demanded: a descendant's failure
@@ -38,7 +38,7 @@ type AnyElement = any;
 const uniqueTag = makeUniqueTag('capture');
 
 /**
- * The README's boundary shape: a `when` Region over the declared `hasError`
+ * The README's boundary shape: a `when` Block over the declared `hasError`
  * property swapping a fallback branch in place of the slot.
  */
 function boundaryProgram(tag: string) {
@@ -346,7 +346,7 @@ test('a kernel update failure in a non-boundary descendant routes to the enclosi
   const boundaryTag = uniqueTag('update-outer');
   const childTag = uniqueTag('update-child');
   defineBoundary(boundaryTag);
-  // The child carries an `each` Region over an array property: a poisoned
+  // The child carries an `each` Block over an array property: a poisoned
   // array (an item getter that throws during the update preflight) drives the
   // kernel's onUpdateError — the seam that must route past the element-local
   // service to the ancestor boundary.

@@ -134,7 +134,7 @@ function graphRootsFromGenerated(source: string): string[] {
 
 test('lit server entry: module graph never reaches the Native runtime kernel', () => {
   const litEntry = renderEntry(
-    buildEntryDescriptor(litRoutes, { renderer: 'lit', appShell: false, ssg: true }),
+    buildEntryDescriptor(litRoutes, { renderer: 'lit', layout: false, ssg: true }),
   );
   const graph = walkModuleGraph(graphRootsFromGenerated(litEntry));
   assertKernelFree(graph, 'lit server entry graph');

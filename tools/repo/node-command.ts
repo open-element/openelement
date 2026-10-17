@@ -1,24 +1,32 @@
 /**
- * Deno.Command-shaped subprocess helpers over node:child_process (B1b port).
+ * First-party subprocess helper over node:child_process.
  *
- * The evidence machinery previously called `new Deno.Command(...).output()`
- * and `.spawn()`. This module ports those call sites to `node:child_process`
- * while preserving the exact shapes the call sites check:
+ * `spawnCommand` / `spawnCommandSync` wait for a child process and resolve
+ * with the repository's canonical status shape. The semantics are explicit
+ * here because importers depend on them:
  *
- * - `commandOutput` mirrors `.output()`: it resolves with
- *   `{ success, code, signal, stdout, stderr }` and never throws for a child
- *   that exits or is killed by a signal (stdout/stderr are empty Buffers when
- *   that stream is inherited/ignored).
- * - `commandStatus` mirrors `.spawn()` + `await child.status`.
- * - Default stdio mirrors Deno.Command: stdin `inherit`, stdout/stderr `piped`.
- * - A passed `env` merges over the parent environment (Deno.Command
- *   semantics); node's raw `env` option would replace it wholesale and drop
- *   `PATH`, so the merge is done here.
- * - A child killed by a signal reports Deno's status shape: `code` is the
- *   shell-conventional `128 + signal number` (SIGTERM -> 143) and `signal`
- *   carries the signal name; `success` stays false.
- * - A child that cannot be spawned (missing binary) REJECTS, matching
- *   Deno.Command throwing `NotFound` at the call site.
+ * - A child that exits non-zero or is killed by a signal resolves with
+ *   `success: false`; only a spawn failure (missing binary, ENOENT/EACCES)
+ *   rejects (async) or throws (sync). Callers treat "could not start"
+ *   differently from "ran and failed".
+ * - `code` is the child's exit code, or the shell-conventional
+ *   `128 + signal number` when a signal killed it (SIGTERM -> 143, SIGKILL ->
+ *   137). The arithmetic is kept deliberately, not as residue: check-coverage's
+ *   native-crash retry classifies exits >= 128 (`check-coverage.ts`, issue
+ *   #1278), run-in/gate pass `code` to process.exit where node's `code: null`
+ *   would exit 0, and the release harnesses print it in failure diagnostics.
+ *   node-command.contract.test.ts pins the numbers and the classifier link.
+ * - `signal` carries the terminating signal name, else null.
+ * - A passed `env` merges over the parent environment (node's raw option
+ *   replaces it wholesale and would drop PATH); an absent/empty env inherits
+ *   the parent untouched.
+ * - Default stdio: stdin `inherit`, stdout/stderr `piped`. Piped streams are
+ *   collected into `stdout`/`stderr`; inherited/ignored streams yield empty
+ *   Uint8Arrays.
+ * - Aborting the `signal` option kills the child with SIGTERM and the wait
+ *   STILL RESOLVES (status 128 + SIGTERM); the packed-consumer timeout harness
+ *   depends on that to report a timeout instead of an AbortError. Re-verified
+ *   on Node 24 by node-command.contract.test.ts.
  * - On win32 only, extension-less commands resolve through PATH x PATHEXT
  *   (planWin32Spawn below) so `.cmd` shims like npm/pnpm execute; POSIX
  *   behavior is untouched.
@@ -32,7 +40,9 @@ import process from 'node:process';
 
 export interface CommandResult {
   success: boolean;
+  /** Exit code, or 128 + signal number when a signal terminated the child. */
   code: number;
+  /** Terminating signal name, else null. */
   signal: string | null;
   stdout: Uint8Array;
   stderr: Uint8Array;
@@ -44,12 +54,11 @@ export interface CommandOptions {
   args?: string[];
   cwd?: string;
   /**
-   * Merged over the parent environment (Deno.Command semantics). Undefined
-   * values (possible when spreading process.env) are omitted, matching node's
-   * own child_process env handling.
+   * Merged over the parent environment; undefined values are omitted,
+   * matching node's own child_process env handling.
    */
   env?: Record<string, string | undefined>;
-  /** Abort kills the child (SIGTERM), mirroring Deno.Command's signal option. */
+  /** Abort kills the child (SIGTERM); the wait resolves, it does not reject. */
   signal?: AbortSignal;
   stdin?: 'inherit' | 'null';
   stdout?: CommandStdio;
@@ -62,30 +71,26 @@ const NODE_STDIO: Record<CommandStdio, 'pipe' | 'inherit' | 'ignore'> = {
   null: 'ignore',
 };
 
-function toSignalNumber(signal: string): number {
+function signalNumber(signal: string): number {
   const signals = constants.signals as Record<string, number>;
   return signals[signal] ?? 0;
 }
 
-function denoStatus(
+/**
+ * node close-status -> repository status shape. See the module header for why
+ * `128 + signal` stays: the mapping is a proven caller dependency, pinned by
+ * node-command.contract.test.ts.
+ */
+function exitStatus(
   code: number | null,
   signal: string | null,
 ): { code: number; signal: string | null; success: boolean } {
   if (signal !== null) {
-    return { code: 128 + toSignalNumber(signal), signal, success: false };
+    return { code: 128 + signalNumber(signal), signal, success: false };
   }
   return { code: code ?? 1, signal: null, success: code === 0 };
 }
 
-/**
- * Deno.Command merges a passed `env` over the parent environment natively,
- * without the caller needing env permission (run-in spawns under bare
- * --allow-run). Reading process.env from JS trips that permission, so an
- * empty/absent env omits the option entirely — node then inherits the parent
- * environment natively, exactly like Deno. A NON-empty env spreads
- * process.env (Deno merge semantics) and therefore requires --allow-env on
- * the caller, which every non-empty caller's task already grants.
- */
 function mergedEnv(env: CommandOptions['env']): NodeJS.ProcessEnv | undefined {
   if (!env || Object.keys(env).length === 0) return undefined;
   return { ...process.env, ...env };
@@ -206,7 +211,10 @@ function spawnPlanFor(
   return planWin32Spawn(command, args, process.platform, mergedEnv(env) ?? process.env, isFile);
 }
 
-async function runCommand(command: string, options: CommandOptions): Promise<CommandResult> {
+export async function spawnCommand(
+  command: string,
+  options: CommandOptions = {},
+): Promise<CommandResult> {
   const {
     args = [],
     cwd,
@@ -233,9 +241,10 @@ async function runCommand(command: string, options: CommandOptions): Promise<Com
   const status = await new Promise<{ code: number | null; signal: string | null }>(
     (resolve, reject) => {
       child.on('error', (error: Error) => {
-        // An aborted child surfaces as kill+SIGTERM (verified against this
-        // runtime); a spawn failure (ENOENT/EACCES) rejects like
-        // Deno.Command throwing NotFound at the call site.
+        // An aborted child on node 24 emits an ABORT_ERR 'error' event and a
+        // SIGTERM 'close' (observed in both orders); the wait below must resolve
+        // with the SIGTERM status, so the abort path never rejects. A genuine
+        // spawn failure (ENOENT/EACCES) rejects.
         if (!signal?.aborted) reject(error);
       });
       child.on('close', (code, sig) => {
@@ -243,7 +252,7 @@ async function runCommand(command: string, options: CommandOptions): Promise<Com
       });
     },
   );
-  const result = denoStatus(status.code, status.signal);
+  const result = exitStatus(status.code, status.signal);
   return {
     ...result,
     stdout: stdout === 'piped' ? Buffer.concat(stdoutChunks) : new Uint8Array(0),
@@ -251,22 +260,8 @@ async function runCommand(command: string, options: CommandOptions): Promise<Com
   };
 }
 
-export function commandOutput(
-  command: string,
-  options: CommandOptions = {},
-): Promise<CommandResult> {
-  return runCommand(command, options);
-}
-
-export function commandStatus(
-  command: string,
-  options: CommandOptions = {},
-): Promise<CommandResult> {
-  return runCommand(command, options);
-}
-
-/** Mirrors `.outputSync()`: same shape, throws when the child cannot spawn. */
-export function commandOutputSync(command: string, options: CommandOptions = {}): CommandResult {
+/** Synchronous sibling of `spawnCommand`: same shape, throws on spawn failure. */
+export function spawnCommandSync(command: string, options: CommandOptions = {}): CommandResult {
   const {
     args = [],
     cwd,
@@ -284,9 +279,9 @@ export function commandOutputSync(command: string, options: CommandOptions = {})
     stdio: [NODE_STDIO[stdin], NODE_STDIO[stdout], NODE_STDIO[stderr]],
     ...(plan?.verbatim ? { windowsVerbatimArguments: true } : {}),
   });
-  // A spawn failure (ENOENT/EACCES) throws like Deno.Command.outputSync.
+  // A spawn failure (ENOENT/EACCES) throws with the underlying node error.
   if (result.error) throw result.error;
-  const status = denoStatus(result.status, result.signal);
+  const status = exitStatus(result.status, result.signal);
   return {
     ...status,
     stdout: stdout === 'piped' ? (result.stdout ?? new Uint8Array(0)) : new Uint8Array(0),

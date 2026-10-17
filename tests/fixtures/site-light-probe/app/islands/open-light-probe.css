@@ -1,0 +1,8 @@
+:host{display:block}
+
+/* The overlapping class: the same name the card component and an unrelated
+   document element use. Each of the three must keep its own color, which is
+   only true when every component sheet carries its own `@scope` (S-C1.2). */
+.probe-shared{color:rgb(200,0,0)}
+
+.probe-count{color:rgb(0,0,200)}

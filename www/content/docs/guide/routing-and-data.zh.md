@@ -34,6 +34,27 @@ Routes 应当能从仓库目录树中被发现。`definePage` 路由默认导出
 
 `renderIntent.mode` 决定页面在哪里渲染:`'static'`(默认)在构建时预渲染;`'dynamic'` 跳过预渲染,通过生成的 `dist/server` 入口按请求渲染,每次请求都会运行路由 loader。导出 action 的页面可以保持 `'static'`——即混合页:其 GET 被预渲染并由静态产物伺服,而其 action POST 在请求时分派给生成的服务器入口。当 GET 本身必须按请求执行时(按请求的 loader、响应头、不可重复的内容)才选择 `'dynamic'`。该行为已冻结。
 
+## 服务端函数页
+
+当页面只是一次性的静态文本——法律条款、落地段落——编译类的机制就显得多余。**服务端函数页**就是路由模块自己导出的 TSX 组件函数,包在 `definePage(Component, descriptor?)` 里:编译器把该函数降阶为一个生成式 HTML 构造器(与所有编译组件共用同一套语义检查与转义——文本走一条转义通道、属性走另一条),渲染输出在设计上就是纯服务端的。服务端函数页不产生 Part Program、不产生 `@property` 状态机,也永远不会进入 island、静态组件或客户端 chunk 表面;只要没有组合任何 island,页面就零客户端 JS 出货。
+
+```tsx
+// app/routes/about.tsx
+import { definePage } from '@openelement/router';
+
+export const loader = async () => ({ title: '关于' });
+
+export function AboutPage(props: { title: string }) {
+  return <main><h1>{props.title}</h1></main>;
+}
+
+export default definePage(AboutPage, { head: { title: '关于' } });
+```
+
+组件函数必须是**本模块导出的声明**并以标识符形式传入——内联箭头或未导出的本地函数在编译器文法之外(运行时 JSX 没有解释器)。动态文本经 JSX 插值(`{props.title}`)由编译器转义;`props.children` 是编译器持有的组合通道(调用方的 JSX children 以终态 HTML 到达),而 loader 载荷若携带 `children` 键会在渲染运行前被拒绝,而不是被注入。
+
+页面之外的一切都与编译类路径完全相同:loader 照常运行,`props` 投影器(或默认投影)构建 props 记录;render 输出流经同一套 renderer 包装、布局包装和文档包装——因此 HTTP/DSD 契约、head 解析、redirect/not-found 通道,以及错误投影器的 500 重渲染(把错误投影后的 props 交给同一个 render 函数)都与编译页面一致。`renderIntent.stream` 是编译 Part Program 的通道,在服务端函数页上会被拒绝;页面需要流式渲染时请使用编译式 `definePage` 类路由。
+
 ## 表单 action
 
 路由可导出 `action({ formData })`——纯 HTML 表单无需 JavaScript 即可工作:校验失败返回 `fail(4xx, data)`,以 `fail()` 的状态码(惯例为 422)重渲染并回显;成功则以 303 应答(PRG)。命名 action 通过 `formaction='?/name'` 分派。标记 `data-open-enhance` 的表单经 fetch 提交并把返回的文档 morph 就位:light DOM 未变化的已水合 island 状态保留,`data-open-preserve` 豁免子树,URL 跟随 PRG 目标。action 在校验失败后必须可安全重跑；这些应用闭环语义已冻结。
@@ -144,11 +165,11 @@ export async function loader(ctx: { request: Request }): Promise<GuestbookData> 
 }
 ```
 
-这正是已冻结的 ADR-0120 三态状态规则：成功的非 GET action 以 303 应答，action 端点绝不会以 200 返回成功文档，校验失败保持 `fail(4xx)` 返回。在 fetch 通道上，同一个成功就是 `redirect` ActionResult（`{ type: 'redirect', status: 303, location }`），内置增强会把该 body 当作导航跟随。
+这正是已冻结的 ADR-0120 三态状态规则：成功的非 GET action 以 303 应答，action 端点绝不会以 200 返回成功文档，校验失败保持 `fail(4xx)` 返回。这条规则说的是 NATIVE 通道的状态行——在 fetch 通道上，同一个成功是 HTTP **200**，其 body 是 `redirect` ActionResult（`{ type: 'redirect', status: 303, location }`）：303 是 body 里的值，不是响应的状态。内置增强把它当作导航跟随，编程调用方则把它当数据读取。
 
 ## Action fetch 协商
 
-基于 fetch 的 action 提交通过 `x-openelement-action` 头识别（从 `@openelement/router` 导出为 `ACTION_FETCH_HEADER`）：内置 morph 增强发送 `enhance`，收到与无 JS 路径相同的完整 HTML 响应；编程调用方发送 `true`，收到序列化的 `ActionResult` 联合类型——`failure`（带 `status`/`data`）或 `redirect`（带 PRG 的 `status`/`location`）；不存在成功文档，因为成功的变更以 303 应答（见「Form actions」一节）；错误结果则以 RFC 9457 `problem+json` 应答（`type`/`title`/`status`/`detail`）。没有该头即视为普通浏览器表单提交。
+基于 fetch 的 action 提交通过 `x-openelement-action` 头识别（从 `@openelement/router` 导出为 `ACTION_FETCH_HEADER`）：内置 morph 增强发送 `enhance`，收到与无 JS 路径相同的完整 HTML 响应；编程调用方发送 `true`，收到序列化的 `ActionResult` 联合类型——`failure`（带 `status`/`data`）或 `redirect`（带 PRG 的 `status`/`location`）。校验失败以 `422`、`application/json` 与 `failure` 形状返回——是作者的状态与数据，不是一份文档。`application/problem+json`（`type`/`title`/`status`/`detail`）则是该通道的协议错误形状：被拒的跨站提交、未知 action、无法解析的请求体。没有该头即视为普通浏览器表单提交。
 
 ## 两条 loader/action 链
 

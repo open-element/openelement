@@ -569,7 +569,7 @@ export async function buildApiReference(): Promise<ApiReferenceBuild> {
         failures.push(`${info.name}: subpath '${subpath}' has no exports target`);
         continue;
       }
-      // Non-module targets (the CSS style assets the Tailwind preset and
+      // Non-module targets (the CSS style assets the Tailwind entry and
       // plain-CSS consumers import, #1505) declare no symbols: there is no
       // export surface to enumerate, so they are skipped rather than failed.
       // Ambient-declaration targets (#1558's `./css-modules` — a wildcard

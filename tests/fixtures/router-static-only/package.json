@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "node ../../../tools/repo/clean.ts dist && node ../../../packages/router/src/cli/build.ts"
+    "build": "node ../../../tools/repo/clean.ts dist && node ../../../packages/router/src/cli/build.ts",
+    "gate": "node ../../../tools/repo/gate.ts @openelement/fixture-router-static-only#build @openelement/fixture-router-static-only#typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@openelement/element": "workspace:*",

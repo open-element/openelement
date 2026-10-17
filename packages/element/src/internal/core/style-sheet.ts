@@ -3,7 +3,7 @@
  *
  * In browsers this delegates to the native CSSStyleSheet API. In SSR runtimes
  * it falls back to a minimal in-memory implementation that exposes the subset
- * used by OpenElement and renderDsd().
+ * used by OpenElement and renderToString().
  */
 
 import type { StyleSheetLike, StyleSheetRule } from '@openelement/protocol/style-sheet';
@@ -25,7 +25,7 @@ function parseRules(css: string): StyleSheetRule[] {
       continue;
     }
 
-    const openBrace = css.indexOf('{', i);
+    const openBrace = nextStructural(css, i, (c) => c === '{');
     if (openBrace === -1) break;
 
     let depth = 0;
@@ -36,7 +36,7 @@ function parseRules(css: string): StyleSheetRule[] {
         depth--;
         if (depth === 0) break;
       }
-      j++;
+      j = skipProtected(css, j);
     }
     if (depth !== 0) break;
 
@@ -49,6 +49,49 @@ function parseRules(css: string): StyleSheetRule[] {
     rules.push({ cssText: css.trim() });
   }
   return rules;
+}
+
+/**
+ * The next position at or after `from` holding `match` at a STRUCTURAL
+ * position — outside CSS strings (single/double quoted) and comments. Rules
+ * are found by brace counting, and a `}` inside `content: "}"`, a quoted
+ * string or a comment is content, never a rule boundary: counting raw brace
+ * characters truncates the rule text and corrupts the inline text the SSR
+ * serializer reads back (alpha15 N-2A).
+ */
+function nextStructural(css: string, from: number, match: (char: string) => boolean): number {
+  let i = from;
+  while (i < css.length) {
+    if (match(css[i]!)) return i;
+    i = skipProtected(css, i);
+  }
+  return -1;
+}
+
+/**
+ * The first index at or after `from` not inside a string or comment: skips a
+ * quoted string to its closing quote (honouring backslash escapes) and a
+ * comment to its terminator; every other character advances by one.
+ */
+function skipProtected(css: string, from: number): number {
+  const char = css[from];
+  if (char === '/' && css[from + 1] === '*') {
+    const end = css.indexOf('*/', from + 2);
+    return end === -1 ? css.length : end + 2;
+  }
+  if (char === '"' || char === "'") {
+    let i = from + 1;
+    while (i < css.length) {
+      if (css[i] === '\\') {
+        i += 2;
+        continue;
+      }
+      if (css[i] === char) return i + 1;
+      i++;
+    }
+    return css.length;
+  }
+  return from + 1;
 }
 
 class ShimStyleSheet implements StyleSheetLike {

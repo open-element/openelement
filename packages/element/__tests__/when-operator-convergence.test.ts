@@ -1,7 +1,7 @@
 /**
- * `when` Region operator convergence guard (issue #1220, M3; widened by #1372).
+ * `when` Block operator convergence guard (issue #1220, M3; widened by #1372).
  *
- * The `when` test is evaluated by the runtime/claim path and the server
+ * The `when` test is evaluated by the runtime/hydrate path and the server
  * serializer (packages/element/src/internal/compiled/runtime.ts and
  * .../server/index.ts), and the canonical Part Program validator plus the
  * server wire validator close the operator/literal space. Since #1372 both

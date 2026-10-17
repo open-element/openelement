@@ -9,7 +9,7 @@
  * page-lifetime entry table).
  */
 
-import type { CompiledClaimOptions } from './claim.ts';
+import type { CompiledHydrationOptions } from './hydrate.ts';
 import { ClaimErrorCode } from '@openelement/protocol/errors';
 import { fail } from './program-kernel.ts';
 
@@ -97,7 +97,7 @@ function resolveCaptureTarget(event: Event): EventTarget | null {
  * fresh, success or failure). The facade marks its host element here; the
  * document-level capture then skips ordinary traffic inside settled islands
  * while still capturing for nested still-pending islands. Kernel-level
- * callers (claimExistingDom tests, non-facade hosts) never consult this set:
+ * callers (hydrateExistingDom tests, non-facade hosts) never consult this set:
  * their capture contract is "everything inside the claim root".
  */
 const settledIslandHosts = new WeakSet<object>();
@@ -433,7 +433,7 @@ function isInsideRoot(root: Node, target: EventTarget): target is Node {
 }
 
 export function preUpgradeEventList(
-  source: CompiledClaimOptions['preUpgradeEvents'],
+  source: CompiledHydrationOptions['preUpgradeEvents'],
 ): readonly PreUpgradeEvent[] {
   if (!source) return [];
   if (Array.isArray(source)) return source;
@@ -443,7 +443,7 @@ export function preUpgradeEventList(
   }
   fail(
     ClaimErrorCode.PRE_UPGRADE_EVENTS_INVALID,
-    '[compiled-claim] preUpgradeEvents: expected an event array or capture object',
+    '[compiled-hydration] preUpgradeEvents: expected an event array or capture object',
   );
 }
 

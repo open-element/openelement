@@ -1,9 +1,6 @@
 # Dependencies
 node_modules/
 
-# Deno local cache (the toolchain retired the Deno host; the rule stays as a guard)
-.deno/
-
 # Local security-scanner hook state (written into the repo by the session's
 # pre-push hook; pure tool state, not project source). Root-anchored and
 # ignored so oxfmt/oxlint stay hermetic.

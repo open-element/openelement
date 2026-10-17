@@ -5,12 +5,6 @@ import { themeManager } from './open-element-styles.ts';
 /** Static component configuration shared by every OpenElement subclass. */
 export class OpenElementConfiguration extends OpenElementBase {
   static styles?: StyleSheetLike | StyleSheetLike[];
-  /**
-   * Compile-time hint for the intended root mode. The runtime derives
-   * the actual root mode from the compiled program's `root.kind`; this static
-   * remains part of the authoring-time configuration contract.
-   */
-  static renderMode?: 'shadow' | 'light';
   static isErrorBoundary?: boolean;
   static head?: { title?: string; description?: string; ogImage?: string };
   /** @internal — use openPipeline({ island: { upgradeStrategy } }) instead. */

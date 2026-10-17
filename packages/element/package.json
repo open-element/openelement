@@ -2,7 +2,7 @@
   "name": "@openelement/element",
   "version": "1.0.0-alpha.14",
   "type": "module",
-  "//": "ADR-0155 (docs/adr/ADR-0155-client-only-entry-subpath.md) governs the \"./client-only\" export below: it is the full public surface minus the compiled claim executor, pinned to the same publicShapeSha256 as \".\", and is deletable as one unit when its written retirement condition is met. ADR-0166 (docs/adr/ADR-0166-regions-axis-entry-subpaths.md) governs \"./no-regions\" and \"./base\" the same way for the when/each Region builders axis (#1548). Recorded as a JSON annotation key rather than a `//` comment because the package-graph reader (tools/lib/package-graph.ts) fails loud on JSONC.",
+  "//": "ADR-0155 (docs/adr/ADR-0155-client-only-entry-subpath.md) governs the \"./client-only\" export below: it is the full public surface minus the compiled hydration executor, pinned to the same publicShapeSha256 as \".\", and is deletable as one unit when its written retirement condition is met. ADR-0166 (docs/adr/ADR-0166-regions-axis-entry-subpaths.md) governs \"./no-blocks\" and \"./base\" the same way for the when/each Block builders axis (#1548). Recorded as a JSON annotation key rather than a `//` comment because the package-graph reader (tools/lib/package-graph.ts) fails loud on JSONC.",
   "exports": {
     ".": "./src/index.ts",
     "./css-modules": "./src/css-modules.d.ts",
@@ -10,19 +10,20 @@
     "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
     "./authoring": "./src/authoring.ts",
     "./html": "./src/html.ts",
+    "./server": "./src/server.ts",
     "./logger": "./src/logger.ts",
     "./build-utils": "./src/build-utils.ts",
     "./client-only": "./src/client-only.ts",
-    "./no-regions": "./src/no-regions.ts",
+    "./no-blocks": "./src/no-blocks.ts",
     "./base": "./src/base.ts"
   },
-  "//sideEffects": "The paths name three install edges (#1425 class): the default entry is flagged as the importer — a side-effect-free module loses its bare `import './internal/compiled/runtime/claim-install.ts'` and `regions-install.ts` — together with the installers claim-install.ts (`installClaimExecutor(...)`) and regions-install.ts (`installRegionBuilders(...)`), both module-scope calls; `./client-only` imports the regions install, `./no-regions` the claim install, so those importers are flagged too. A tree-shaking bundler therefore cannot drop server-DOM hydration or when/each Region execution. Everything else in src/ evaluates pure and stays tree-shakeable. The packed artifact mirrors these paths with compiled .js names in the release manifest (tools/release/npm-manifest.ts SIDE_EFFECTS) — change the two together; the guard is packages/element/__tests__/side-effects-declaration.test.ts.",
+  "//sideEffects": "The paths name three install edges (#1425 class): the default entry is flagged as the importer — a side-effect-free module loses its bare `import './internal/compiled/runtime/hydrate-install.ts'` and `blocks-install.ts` — together with the installers hydrate-install.ts (`installHydrationExecutor(...)`) and blocks-install.ts (`installBlockBuilders(...)`), both module-scope calls; `./client-only` imports the blocks install, `./no-blocks` the hydration install, so those importers are flagged too. A tree-shaking bundler therefore cannot drop server-DOM hydration or when/each Block execution. Everything else in src/ evaluates pure and stays tree-shakeable. The packed artifact mirrors these paths with compiled .js names in the release manifest (tools/release/npm-manifest.ts SIDE_EFFECTS) — change the two together; the guard is packages/element/__tests__/side-effects-declaration.test.ts.",
   "sideEffects": [
     "./src/index.ts",
     "./src/client-only.ts",
-    "./src/no-regions.ts",
-    "./src/internal/compiled/runtime/claim-install.ts",
-    "./src/internal/compiled/runtime/regions-install.ts"
+    "./src/no-blocks.ts",
+    "./src/internal/compiled/runtime/hydrate-install.ts",
+    "./src/internal/compiled/runtime/blocks-install.ts"
   ],
   "files": [
     "src/**",

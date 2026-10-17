@@ -363,6 +363,48 @@ test('provenance: type-only element imports are unsupported and fail closed (OEC
   }
 });
 
+test('provenance: an aliased decorator import passes the plugin gate, not just the core', () => {
+  // The alias itself is legal provenance (the test above) and the semantic
+  // core admits it — but the plugin gate has its own cheap prefilter in front,
+  // and a prefilter keyed on the literal `@element(` dropped this module
+  // before the semantic layer could answer. Admission has exactly one
+  // authority; a prefilter may only narrow the AST path, never the contract.
+  const source = [
+    "import { element as defineElement, OpenElement, property } from '@openelement/element';",
+    "@defineElement('oe-gate-alias-decorator')",
+    'export class GateAlias extends OpenElement {',
+    '  render() { return <div>ok</div>; }',
+    '}',
+  ].join('\n');
+  expect(analyzeModuleSemantics(source, FILE).compiledElementDecorator).toEqual(true);
+  const compiled = compileElementModule(source, FILE);
+  expect(compiled, 'the plugin gate must admit what the semantic core admits').not.toEqual(null);
+  expect(compiled!.program.tag).toEqual('oe-gate-alias-decorator');
+  // The compiled output still carries a source map and the runtime import.
+  expect(compiled!.code).toContain("from '@openelement/element'");
+  expect(compiled!.map ?? compiled!.code).toBeTruthy();
+});
+
+test('provenance: a module with no element decorator still passes the gate untouched', () => {
+  const plain = [
+    "import { OpenElement } from '@openelement/element';",
+    'export class Plain extends OpenElement {',
+    '  render() { return <div>ok</div>; }',
+    '}',
+  ].join('\n');
+  expect(compileElementModule(plain, FILE)).toEqual(null);
+  // A foreign same-name binding is not the intrinsic and must not be compiled.
+  const foreign = [
+    "import { element } from '@third-party/decorators';",
+    "@element('oe-foreign')",
+    'export class Foreign {',
+    '  render() { return <div>ok</div>; }',
+    '}',
+  ].join('\n');
+  expect(analyzeModuleSemantics(foreign, FILE).compiledElementDecorator).toEqual(false);
+  expect(compileElementModule(foreign, FILE)).toEqual(null);
+});
+
 test('provenance: namespace imports are unsupported and fail closed (OEC9027)', () => {
   const source = [
     "import * as OE from '@openelement/element';",
@@ -372,12 +414,11 @@ test('provenance: namespace imports are unsupported and fail closed (OEC9027)', 
     '}',
   ].join('\n');
   expect(analyzeModuleSemantics(source, FILE).compiledElementDecorator).toEqual(false);
-  // The cheap plugin prefilter matches '@element(' literally, so a
-  // namespace-qualified decorator never even reaches analysis — the module
-  // passes through untouched rather than entering the grammar.
-  expect(compileElementModule(source, FILE)).toEqual(null);
-  // The compiler boundary itself still fails closed with the provenance
-  // diagnostic when invoked directly.
+  // A spelling the semantic layer REJECTS must still reach it: the module is
+  // compiled so the boundary fails closed with the provenance diagnostic. The
+  // earlier prefilter matched `@element(` literally and let this module pass
+  // through untouched, which routed around the fail-closed mechanism entirely.
+  assertThrowsIncludes(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9027');
   const error = compileError(source);
   expect(String(error)).toContain('OEC9027');
   expect(String(error)).toContain('namespace');

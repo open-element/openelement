@@ -42,6 +42,7 @@ function emptyFacts(): ModuleSemanticFacts {
     relativeImports: [],
     compiledElementDecorator: false,
     definePage: false,
+    serverFunctionComponents: [],
     usesExportedTagName: false,
     enhancedForm: false,
     definedCustomElementTags: [],

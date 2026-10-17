@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import process from 'node:process';
-import { commandOutput } from '../../tools/repo/node-command.ts';
+import { spawnCommand } from '../../tools/repo/node-command.ts';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const dist = join(repoRoot, 'www/dist');
@@ -45,7 +45,7 @@ function check(name: string, expected: number, actual: number, tolerance = 0): v
 async function gzipSize(file: string): Promise<number> {
   // Must be gzip -9: the doc figures are measured that way and
   // CompressionStream would produce different bytes.
-  const child = await commandOutput('gzip', {
+  const child = await spawnCommand('gzip', {
     args: ['-9', '-c', file],
     stdin: 'null',
     stdout: 'piped',

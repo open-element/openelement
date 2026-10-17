@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { FDocument, FElement, type FNode } from '../../../../benchmarks/micro/counting-dom.ts';
 import {
-  claimExistingDom,
+  hydrateExistingDom,
   createFreshDom,
   serializeToHtml,
 } from '../../src/internal/compiled/runtime.ts';
@@ -182,7 +182,7 @@ test('#1455: claimed keyed entries also preserve stationary node identity', () =
   const state = host(items);
   const doc = new TestDocument();
   const root = parseHtml(doc, serializeToHtml(program, state));
-  const claimed = claimExistingDom(program, state, root as unknown as Node);
+  const claimed = hydrateExistingDom(program, state, root as unknown as Node);
   const list = root.childNodes[0] as TestElement;
   const original = [...list.childNodes];
 

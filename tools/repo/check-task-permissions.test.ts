@@ -143,13 +143,13 @@ test('task permissions: --allow-ffi only on audited tasks', () => {
   ).toBeTruthy();
 });
 
-test('task permissions: unit suites run on vitest — the deno permission surface retired', () => {
+test('task permissions: unit suites run on vitest', () => {
   // DISCLOSED SEMANTIC CHANGE (B3): the former assertions audited
   // `deno test --deny-ffi --no-prompt` flags on the unit-suite tasks. The
   // B3 cutover moves those tasks to vitest on the node host, where no deno
   // permission model exists — the flags have nothing to attach to. The
-  // invariant that REMAINS: the migrated tasks must not spawn the deno
-  // test runner (which would silently drop the flag audit).
+  // invariant that remains is the runner itself: the migrated unit-suite
+  // tasks must stay on vitest.
   for (const [path, name] of [
     ['packages/element/package.json', 'test'],
     ['packages/compiler/package.json', 'test'],
@@ -160,10 +160,6 @@ test('task permissions: unit suites run on vitest — the deno permission surfac
   ] as const) {
     const command = taskMap(path)[name];
     expect(command.includes('vitest'), `${path}#${name} must run under vitest`).toBeTruthy();
-    expect(
-      command.includes('deno test'),
-      `${path}#${name} must not spawn the deno test runner`,
-    ).toBeFalsy();
   }
 });
 

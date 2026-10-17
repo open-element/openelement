@@ -70,6 +70,18 @@ island 的 chunk 何时拉取：`load`（立即，用于首屏控件）、`idle`
 
 向编译模板注入已消毒、非交互 HTML 的显式边界。除此之外，动态 island 内容来自 signal 驱动的 `@property` 状态。
 
+## Alpha15 改名
+
+alpha15 收敛的公开名（无向后兼容别名）：
+
+- `renderDsd()` → `renderToString()`（`@openelement/element`；同样的字符串契约）。
+- `PartProgramV1` → `PartProgramV2`（`PartProgram` 即当前 V2 类型；`PART_PROGRAM_VERSION` 为 2；v1 产物直接拒绝，不做兼容）。
+- `FacadeErrorCode.DEFERRED_*` → `STREAM_*`（码字符串 `OE_DEFERRED_*` → `OE_STREAM_*`）。
+- `createDeferredDsdExecutor` → `createStreamShellExecutor`；`createDeferredServerExecutor` → `createStreamServerExecutor`（选项/执行器/manifest 类型同随 `Stream*` 改名）。
+- `createDeferredPageShell` → `createStreamPageShell`（`@openelement/router/server-runtime`）。
+
+保持不变：线格式值（`owner.kind: 'region'`、block id `rN`）与 deferred 字段生命周期词汇（`defer` 意图、pending/resolved/missing seed 状态）。
+
 ## 另见
 
 - [核心概念](/zh/guide/core-concepts)——这些术语所属的创作模型。

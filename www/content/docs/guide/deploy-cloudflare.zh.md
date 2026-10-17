@@ -4,7 +4,7 @@ lede: '一个构建决策决定 Cloudflare 目标：纯静态的 `dist/` 以文�
 order: 101
 ---
 
-`pnpm build` 会替你决定目标。当它不产出 `dist/server/` 时，产物就是一棵普通文件树——上传到 Cloudflare Pages 即可，完全不涉及服务端代码。当任何路由保持请求时行为（`'dynamic'` 路由或 action）时，构建还会产出 `dist/server/index.js`：与 `pnpm start` 本地运行的同一个 `fetch(Request) -> Response` 处理器。这就是全部服务器契约——一个处理器，可部署到任何 fetch 原生宿主——因此从 Pages 换到 Workers 是宿主决策，不是重写。
+`npm run build` 会替你决定目标。当它不产出 `dist/server/` 时，产物就是一棵普通文件树——上传到 Cloudflare Pages 即可，完全不涉及服务端代码。当任何路由保持请求时行为（`'dynamic'` 路由或 action）时，构建还会产出 `dist/server/index.js`：与 `npm start` 本地运行的同一个 `fetch(Request) -> Response` 处理器。这就是全部服务器契约——一个处理器，可部署到任何 fetch 原生宿主——因此从 Pages 换到 Workers 是宿主决策，不是重写。
 
 ## 纯静态：Cloudflare Pages
 
@@ -21,7 +21,7 @@ export default definePage(NotFoundPage, {
 这一行正是 starter 构建产出 `dist/server/` 的原因：请求时服务器对未匹配路径以真实 404 状态渲染该页，因此不会写出静态 404 文件。删掉 `renderIntent` 一行，该路由即变为可预渲染——没有其它请求时路由的构建随之产出纯静态的 `dist/`：
 
 ```bash
-pnpm build
+npm run build
 ls dist/
 # 404.html  assets/  index.html
 ```
@@ -45,7 +45,7 @@ echo 'Pages artifact answers: home 200, miss 404'
 
 ## 请求时路由：经 Nitro 上 Workers
 
-当 `pnpm build` 产出 `dist/server/` 时，把构建出的处理器部署到 Cloudflare Workers，宿主是两文件的 Nitro 工程。挂载（`@openelement/router/nitro-mount`）在 fetch 原生接缝上近乎透传：event 的标准 `Request` 进，handler 的 `Response` 出。
+当 `npm run build` 产出 `dist/server/` 时，把构建出的处理器部署到 Cloudflare Workers，宿主是两文件的 Nitro 工程。挂载（`@openelement/router/nitro-mount`）在 fetch 原生接缝上近乎透传：event 的标准 `Request` 进，handler 的 `Response` 出。
 
 ```ts
 // server/routes/[...path].ts
@@ -77,7 +77,7 @@ export default defineNitroConfig({
 
 部署顺序：
 
-1. `pnpm build`
+1. `npm run build`
 2. 把预渲染树发布给 Nitro 的静态层。`dist/server/` 是服务端代码，不是公开资源，绝不能作为公开资源发布：
 
    ```bash

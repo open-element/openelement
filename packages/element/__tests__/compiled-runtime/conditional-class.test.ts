@@ -4,7 +4,7 @@
  *
  * Consumer-form proof for the compiler seam: the class below carries the
  * Part Program the compiler emitted for `class={this.flag ? 'on' : 'off'}`
- * (the emission contract is pinned in compiled-element-v1.test.ts), and the
+ * (the emission contract is pinned in compiled-element-v2.test.ts), and the
  * computed factory is built FROM the emitted module text — this suite
  * executes what the compiler shipped, so emission drift fails here instead
  * of drifting into a hand-copied parallel. Covered behavior:
@@ -19,7 +19,7 @@ import { installFacadeDom, mountSerialized, toHtml } from './facade-dom.ts';
 
 const dom = installFacadeDom();
 
-const { OpenElement, renderDsd } = await import('../../src/index.ts');
+const { OpenElement, renderToString } = await import('../../src/index.ts');
 const { computed } = await import('../../src/internal/signal/index.ts');
 
 const SOURCE = [
@@ -90,10 +90,10 @@ test('#1556: a source-signal write re-derives the class through the computed', (
 });
 
 test('#1556: the server serializer and the claim agree with fresh creation', () => {
-  const serialized = renderDsd('oe-conditional-class-e2e', {
+  const serialized = renderToString('oe-conditional-class-e2e', {
     componentClass: ConditionalClassE2E as unknown as CustomElementConstructor,
     props: { flag: true },
-  }).html;
+  });
   expect(serialized).toContain('<main class="on">x</main>');
 
   let claimedMain: unknown;

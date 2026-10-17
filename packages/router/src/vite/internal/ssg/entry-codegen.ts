@@ -65,7 +65,7 @@ interface RenderRouteHandlerOptions {
   renderers: RendererDecl[];
   docConfig: RouteHandlerDocConfig;
   isSSG: boolean;
-  /** Page renderer fork (#1339); absent/'native' keeps compiled renderDsd emission. */
+  /** Page renderer fork (#1339); absent/'native' keeps compiled renderToString emission. */
   renderer?: 'native' | 'lit';
 }
 
@@ -164,6 +164,28 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
   }
 }
 
+/**
+ * Emit the content expression for one route render: a server function page
+ * (alpha15) renders through the typed renderFunctionPage seam — the compiled
+ * constructor function IS the render, and the seam fails closed on a
+ * malformed descriptor and on props carrying the compiler-owned `children`
+ * channel; a compiled page renders its registered host element through
+ * __ssr. Both feed the same renderer/layout/document wraps.
+ */
+function routeRenderStatement(
+  ctx: RouteHandlerEmitContext,
+  propsExpr: string,
+  indent: string,
+): string {
+  if (ctx.route.functionPage !== undefined) {
+    // The handler preamble binds __page to the page descriptor; the server
+    // function descriptor carries the compiled component function as its
+    // render (alpha15 server lane).
+    return `${indent}let __content = __renderFunctionPage(__page, ${propsExpr})`;
+  }
+  return `${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${ctx.pathLiteral}, documentStyles: __documentStyles })`;
+}
+
 /** Emissions shared by the success path and the error-boundary channel. */
 function renderRouteContentLines(
   lines: string[],
@@ -178,7 +200,7 @@ function renderRouteContentLines(
   // (the lit page-data side channel — embedded JSON no
   // client consumed — was removed; page-state restoration needs a real
   // consumer contract first.)
-  lines.push(`${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${pathLiteral} })`);
+  lines.push(routeRenderStatement(ctx, propsExpr, indent));
   if (matchingRenderers.length > 0) {
     lines.push(`${indent}// Renderer tree wrapping (outer -> inner)`);
     for (const renderer of matchingRenderers) {
@@ -186,7 +208,7 @@ function renderRouteContentLines(
     }
   }
   lines.push(
-    `${indent}const content = __renderAppShell(__content, c.req.path || ${pathLiteral}, { routeMeta: __routeMetaValue })`,
+    `${indent}const content = __renderLayout(__content, c.req.path || ${pathLiteral}, { routeMeta: __routeMetaValue, documentStyles: __documentStyles })`,
   );
 }
 
@@ -215,10 +237,10 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     lines.push(`    const __token = crypto.randomUUID();`);
     lines.push(`    const __instance = crypto.randomUUID();`);
     lines.push(
-      `    const __executor = await __createDeferredPageShell(${pathLiteral}, ${ctx.route.varName}, __pageProps(${ctx.route.varName}, __pageContext), __instance, __token);`,
+      `    const __executor = await __createStreamPageShell(${pathLiteral}, ${ctx.route.varName}, __pageProps(${ctx.route.varName}, __pageContext), __instance, __token, __documentStyles);`,
     );
     lines.push(
-      `    if (__resolveAppShell(__routeMetaValue)) throw new Error('stream route ' + ${pathLiteral} + ' resolved a compiled app shell, and a streamed document is flushed in parts so it cannot be wrapped: build the project with appShell: false and no layouts entries, or leave streaming off for this route.');`,
+      `    if (__resolveLayout(__routeMetaValue)) throw new Error('stream route ' + ${pathLiteral} + ' resolved a compiled layout, and a streamed document is flushed in parts so it cannot be wrapped: build the project with layout: false and no layouts entries, or leave streaming off for this route.');`,
     );
     lines.push(`    const __document = documentStreamParts({`);
     lines.push(`      streamBootstrap: __streamBrowserBootstrap,`);
@@ -330,16 +352,26 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     // Per-property og dedup on the boundary re-render too: the fresh __doc
     // above re-resolves the route's meta, and the wrap below serializes it.
     lines.push(...routeHeadExtrasStatements(headExtrasExpr, '        '));
-    lines.push(
-      `        let __errorHtml = __ssr(__tag, __pageErrorProps(${ctx.route.varName}, err, __pageContext), { route: ${pathLiteral} })`,
-    );
+    if (ctx.route.functionPage !== undefined) {
+      // alpha15 server lane: the error channel re-renders through the same
+      // compiled component function — the error projector maps the failure
+      // onto props and the function's own compiled markup decides the 500
+      // body. No host element exists to __ssr.
+      lines.push(
+        `        let __errorHtml = __renderFunctionPage(__page, __pageErrorProps(${ctx.route.varName}, err, __pageContext))`,
+      );
+    } else {
+      lines.push(
+        `        let __errorHtml = __ssr(__tag, __pageErrorProps(${ctx.route.varName}, err, __pageContext), { route: ${pathLiteral}, documentStyles: __documentStyles })`,
+      );
+    }
     if (matchingRenderers.length > 0) {
       for (const renderer of matchingRenderers) {
         lines.push(`        __errorHtml = await ${renderer.varName}.default.wrap(__errorHtml, c)`);
       }
     }
     lines.push(
-      `        const errorContent = __renderAppShell(__errorHtml, c.req.path || ${pathLiteral}, { routeMeta: __routeMetaValue })`,
+      `        const errorContent = __renderLayout(__errorHtml, c.req.path || ${pathLiteral}, { routeMeta: __routeMetaValue, documentStyles: __documentStyles })`,
     );
     lines.push(`        return c.html(wrapInDocument(errorContent, {`);
     for (const optionLine of documentWrapOptionsLines({

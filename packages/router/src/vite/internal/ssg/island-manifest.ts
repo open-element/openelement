@@ -145,6 +145,20 @@ export function pageChunkMap(manifests: readonly PageIslandManifest[]): Map<stri
 }
 
 /**
+ * Whether a page carries at least one island whose module the client can
+ * activate. This is the projection the element-runtime preload lane reads
+ * (B2/#1544): an island-bearing page keeps the shared runtime's warm start
+ * through one `<link rel="modulepreload">`, and a page with no island — or
+ * only `hydrate: 'none'` islands, which never enter the client bundle —
+ * gets no preload, so the runtime stays out of its fetch graph. Derived from
+ * the manifest entry the build already recorded; never re-derived by
+ * scanning output files.
+ */
+export function pageHasClientIslands(manifest: PageIslandManifest): boolean {
+  return manifest.islands.some((island) => island.strategy !== 'none');
+}
+
+/**
  * Generate island manifests for all HTML files in the output directory.
  */
 export function generateIslandManifests(

@@ -19,7 +19,7 @@
 // --- Public API re-exports -----------------------------------------
 
 export type {
-  AppShellConfig,
+  LayoutConfig,
   ComponentLayer,
   FrameworkOptions,
   HydrationStrategy,

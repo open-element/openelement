@@ -109,7 +109,7 @@ test('buildSidebarRows flattens the filtered section tree into heading and link 
   // Heading rows carry no link affordance; link rows carry no heading.
   expect(rows[0].href).toEqual(false);
   expect(rows[2].heading).toEqual('');
-  // Row keys are unique and stable for the keyed Region.
+  // Row keys are unique and stable for the keyed Block.
   expect(new Set(rows.map((row) => row.key)).size).toEqual(rows.length);
 });
 

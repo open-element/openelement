@@ -1,7 +1,6 @@
 {
   "name": "openelement",
   "private": true,
-  "version": "1.0.0-alpha.14",
   "type": "module",
   "packageManager": "pnpm@12.8.1",
   "engines": {
@@ -30,7 +29,7 @@
     "gate:release": "node tools/repo/gate.ts @openelement/tools-repo#gate:release @openelement/tools-release#gate:packed",
     "saas:workers": "node tools/repo/gate.ts @openelement/saas#build @openelement/saas#nitro:build-workers @openelement/tools-repo#workers:boundary-check",
     "verify:core": "node tools/repo/gate.ts @openelement/tools-repo#gate:source @openelement/tools-release#gate:packed",
-    "prepare": "vp run --fail-if-no-match @openelement/tools-repo#hooks:install"
+    "prepare": "vp run --fail-if-no-match --filter @openelement/tools-repo hooks:install"
   },
   "devDependencies": {
     "@openelement/compiler": "workspace:*",

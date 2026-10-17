@@ -7,14 +7,14 @@
  * projectors) to the compiled element class the route module default-exports.
  * The render coverage of the legacy suite (VNode rendering, render-scope data
  * hooks) is replaced by the compiled serializer path — the hand-built
- * compiled class below renders through the public renderDsd(), and the
+ * compiled class below renders through the public renderToString(), and the
  * request-time fixture (tests/fixtures/router-request-time)
  * covers loader/action data reaching rendered HTML end-to-end.
  */
 
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { OpenElement, OpenElementError, renderDsd } from '@openelement/element';
+import { OpenElement, OpenElementError, renderToString } from '@openelement/element';
 import { IslandErrorCode, PageErrorCode } from '../src/internal/error-codes.ts';
 import {
   classifyActionResult,
@@ -32,7 +32,7 @@ import * as appSurface from '../src/index.ts';
 /** A minimal valid compiled statics set for a static <main> page program. */
 function makeCompiledPageClass(tag: string, text: string): CustomElementConstructor {
   const program = {
-    version: 1,
+    version: 2,
     tag,
     root: { id: 'root', kind: 'light', nodes: ['e0'] },
     template: [
@@ -45,7 +45,7 @@ function makeCompiledPageClass(tag: string, text: string): CustomElementConstruc
       },
     ],
     parts: [],
-    regions: [],
+    blocks: [],
     dependencies: [],
     locations: [{ id: 'e0', kind: 'element', tag: 'main', path: [0] }],
     sourceMap: {
@@ -171,16 +171,34 @@ test('definePage() descriptor renders through the compiled serializer', () => {
   const Page = makeCompiledPageClass('rendered-page', 'Hello from definePage');
   definePage(Page, { head: { title: 'Rendered' } });
 
-  const out = renderDsd('rendered-page', { componentClass: Page });
+  const out = renderToString('rendered-page', { componentClass: Page });
 
-  expect(out.errors.length).toEqual(0);
-  expect(out.html.includes('Hello from definePage')).toEqual(true);
+  expect(out.includes('Hello from definePage')).toEqual(true);
 });
 
-test('definePage() requires the compiled class as its first argument', () => {
+test('definePage() admits a plain function as a server function page (alpha15)', () => {
+  // The contract change: an arrow/function first argument is now the server
+  // function page form — the compiler lowers the exported component function
+  // to HTML constructors and definePage records the function-page descriptor.
+  const render = (props: { title: string }) => `<main>${props.title}</main>`;
+  const page = definePage(render as never) as unknown as {
+    openElementPage: { kind: string; render: unknown };
+  };
+  expect(page.openElementPage.kind).toEqual('function-page');
+  expect(page.openElementPage.render).toEqual(render);
+});
+
+test('definePage() still requires a function — non-function arguments keep NOT_COMPILED_CLASS', () => {
   assertThrowsIncludes(
     () => {
-      definePage((() => null) as never);
+      definePage({} as never);
+    },
+    Error,
+    'requires the compiled page element class',
+  );
+  assertThrowsIncludes(
+    () => {
+      definePage(42 as never);
     },
     Error,
     'requires the compiled page element class',
@@ -391,6 +409,21 @@ test('defineIslandConfig() bounds media delivery queries', () => {
   );
 });
 
+test('defineIslandConfig() carries the declared root family', () => {
+  expect(defineIslandConfig({ root: 'light' }).root).toEqual('light');
+  expect(defineIslandConfig({ root: 'shadow', hydrate: 'load' }).root).toEqual('shadow');
+  // Declaring nothing stays valid: the compiled program's root is the source
+  // of truth, and the field is a declaration next to the delivery policy.
+  expect(defineIslandConfig({ hydrate: 'load' }).root).toBeUndefined();
+  assertThrowsIncludes(
+    () => {
+      defineIslandConfig({ root: 'sideways' } as never);
+    },
+    Error,
+    'root must be "light" or "shadow"',
+  );
+});
+
 test('defineIslandConfig() rejects non-canonical island metadata', () => {
   assertThrowsIncludes(
     () => {
@@ -425,7 +458,9 @@ test('defineIslandConfig() rejects non-canonical island metadata', () => {
 test('#1413 authoring errors: definePage() failure modes carry codes and remediation', () => {
   const Page = makeCompiledPageClass('classified-page', 'classified');
   const cases: Array<[() => unknown, string]> = [
-    [() => definePage((() => null) as never), PageErrorCode.NOT_COMPILED_CLASS],
+    // The non-function shape keeps NOT_COMPILED_CLASS (the function shape is
+    // the alpha15 server function page now — its own admission below).
+    [() => definePage(42 as never), PageErrorCode.NOT_COMPILED_CLASS],
     [() => definePage(Page, [] as never), PageErrorCode.DESCRIPTOR_SHAPE],
     [() => definePage(Page, { render: () => null } as never), PageErrorCode.DESCRIPTOR_SHAPE],
     [() => definePage(Page, { route: { path: '/x' } } as never), PageErrorCode.ROUTE_INTENT],

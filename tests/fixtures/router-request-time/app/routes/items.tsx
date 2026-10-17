@@ -1,6 +1,6 @@
 /**
  * /items — islands in a dynamic list (ADR-0121 §9). v0.44 compiled shape:
- * rows render through the compiled each-Region with per-row identity keys;
+ * rows render through the compiled each-Block with per-row identity keys;
  * see page-items.tsx for the item-attribute grammar gap note.
  */
 import { definePage, type PagePropsContext, redirect } from '@openelement/router';

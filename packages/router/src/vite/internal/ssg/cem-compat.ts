@@ -5,7 +5,14 @@ import type {
 } from '../../framework.ts';
 import { formatError, isValidTagName } from '@openelement/element';
 
-export interface OpenElementExtensions {
+/**
+ * The `openElement` extension block as it arrives in THIRD-PARTY CEM JSON —
+ * read loosely on purpose (`layer` is an unvalidated string here). The
+ * published contract is `@openelement/protocol/manifest`'s
+ * `OpenElementExtensions`; this parser never trusts it, so it does not borrow
+ * the narrow spelling.
+ */
+export interface CemOpenElementExtensions {
   ssr?: boolean;
   dsd?: boolean;
   layer?: string;
@@ -23,7 +30,7 @@ interface CemCustomElement extends CemBase {
   kind: 'custom-element';
   tagName?: string;
   superClass?: { name?: string };
-  openElement?: OpenElementExtensions;
+  openElement?: CemOpenElementExtensions;
 }
 interface CemModule {
   kind?: string;

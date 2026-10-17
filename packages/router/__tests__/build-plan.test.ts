@@ -13,7 +13,7 @@ import {
 test('production BuildPlan reuses Phase 1 discoveries and collects emitted artifacts', async () => {
   const root = await mkdtemp(join(tmpdir(), 'oe-build-plan-'));
   try {
-    const ctx = new OpenElementBuildContext({ mode: 'ssg' });
+    const ctx = new OpenElementBuildContext({});
     ctx.phase3.root = root;
     ctx.phase3.outDir = 'dist';
     ctx.phase3.islandsDir = 'app/islands';
@@ -48,7 +48,7 @@ test('production BuildPlan reuses Phase 1 discoveries and collects emitted artif
 });
 
 test('production BuildPlan returns typed failure evidence for a missing output', () => {
-  const ctx = new OpenElementBuildContext({ mode: 'ssg' });
+  const ctx = new OpenElementBuildContext({});
   ctx.phase3.root = '/definitely/missing/openelement-build';
   const result = collectBuildArtifacts(createProductionBuildPlan(ctx));
   expect(result.success).toEqual(false);
@@ -62,7 +62,7 @@ test('production BuildPlan returns typed failure evidence for a missing output',
 test('writeBuildEvidence writes the build artifacts manifest', async () => {
   const root = await mkdtemp(join(tmpdir(), 'oe-build-plan-evidence-'));
   try {
-    const ctx = new OpenElementBuildContext({ mode: 'ssg' });
+    const ctx = new OpenElementBuildContext({});
     ctx.phase3.root = root;
     ctx.phase3.outDir = 'dist';
     ctx.phase1.cachedRoutes = [
@@ -96,7 +96,7 @@ test('writeBuildEvidence writes the build artifacts manifest', async () => {
 test('writeBuildEvidence creates the evidence dir on a clean tree (#741)', async () => {
   const root = await mkdtemp(join(tmpdir(), 'oe-build-plan-evidence-clean-'));
   try {
-    const ctx = new OpenElementBuildContext({ mode: 'ssg' });
+    const ctx = new OpenElementBuildContext({});
     ctx.phase3.root = root;
     ctx.phase3.outDir = 'dist';
     ctx.phase1.cachedRoutes = [
@@ -133,7 +133,7 @@ test('build-plan defaults the output root to the current working directory', asy
   const root = await mkdtemp(join(tmpdir(), 'oe-build-plan-cwd-'));
   try {
     process.chdir(root);
-    const ctx = new OpenElementBuildContext({ mode: 'ssg' });
+    const ctx = new OpenElementBuildContext({});
     ctx.phase3.outDir = 'dist';
     const plan = createProductionBuildPlan(ctx);
     await mkdir(join(root, 'dist'), { recursive: true });

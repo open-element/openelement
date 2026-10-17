@@ -5,34 +5,42 @@ scaffold it elsewhere with `npm create @openelement <project-name>` —
 a static-first openElement app that shows its own costs. The landing page
 carries two islands (`my-counter`, an interactive counter, and `live-timer`,
 a client-only elapsed-time readout); every other page, including `/about`,
-is prerendered HTML and CSS with no islands at all. The badge on each
-section names what it costs the client.
+is prerendered HTML and CSS with no islands of its own — no island chunk is
+fetched there; the only script such a page carries is the app-wide claim
+bootstrap (about 2 KB gzipped) that runs while the app has any island. The
+badge on each section names what it costs the client.
 
 Docs and guides: https://openelement.org
 
 One directory is generated rather than source: `.openElement/` at the project
 root holds the build's internal state (head-convention bookkeeping and build
-plans). `pnpm dev` and `pnpm build` write it as needed; the `.gitignore`
+plans). The dev server and the build write it as needed; the `.gitignore`
 excludes it and deleting it is safe — the next run recreates it.
 
 The `@openelement/element` and `@openelement/router` dependencies carry caret
-ranges over the `1.0.0` release this starter was generated from, so
-`pnpm update` picks up later `1.0.0` prereleases (and the final `1.0.0`)
+ranges over the `1.0.0` prerelease this starter was generated from, so a
+dependency update picks up later `1.0.0` prereleases (and the final `1.0.0`)
 without editing this file.
+
+Nothing here is tied to one package manager: the manifest declares no
+`packageManager`, every script is a plain command, and the scaffold ships no
+`pnpm-workspace.yaml`. Install with npm, pnpm, yarn, or bun — whichever one
+runs first writes its lockfile, and every command below works the same.
 
 ## The JS cost map
 
-| Surface                              | Ships JavaScript?     | Why                                   |
-| ------------------------------------ | --------------------- | ------------------------------------- |
-| `/` hero + architecture sections     | no                    | prerendered markup, styled with CSS   |
-| `/` counter island (`my-counter`)    | yes, hydrates on idle | the one interactive piece             |
-| `/` live timer island (`live-timer`) | yes, client-only      | a live clock has nothing to prerender |
-| `/about`                             | no islands at all     | fully static SSG output               |
-| `/api/ping`                          | no (server)           | a plain `Request → Response` handler  |
+| Surface                              | Ships JavaScript?     | Why                                      |
+| ------------------------------------ | --------------------- | ---------------------------------------- |
+| `/` hero + architecture sections     | no                    | prerendered markup, styled with CSS      |
+| `/` counter island (`my-counter`)    | yes, hydrates on idle | the one interactive piece                |
+| `/` live timer island (`live-timer`) | yes, client-only      | a live clock has nothing to prerender    |
+| `/about`                             | no islands of its own | fully static SSG output, no island chunk |
+| `/api/ping`                          | no (server)           | a plain `Request → Response` handler     |
+| `/404` (unmatched paths)             | no (server)           | dynamic 404 from the styled 404 page     |
 
-The badge classes (`badge-static`, `badge-island`) live in
-`app/components/badges.css` — copy them onto new sections and keep the
-map honest.
+The badge on each section is a Tailwind utility string on the span itself
+(`bg-ok/8 text-ok` for a static section, `bg-brand-soft text-brand` for an
+interactive one) — copy the span onto new sections and keep the map honest.
 
 > Cost honesty: the island client is emitted app-wide today. A page without
 > islands (like `/about`) carries no island hosts and renders nothing
@@ -48,13 +56,12 @@ Framework options have exactly one home: `openelement.config.ts`. It is
 optional and nearly empty — every option it omits comes from a file
 convention:
 
-| Option                | Convention                                                                                                                                                      |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| design tokens         | `app/styles/theme.css` (the @theme role sheet)                                                                                                                  |
-| app shell             | `app/islands/app-shell.tsx` (the shared site chrome every page renders inside)                                                                                  |
-| document head content | `app/head.tsx` (meta tags, preloads, inline CSS)                                                                                                                |
-| site title            | the `name` field of `package.json`                                                                                                                              |
-| static-shape recipes  | `app/styles/recipes.css` (zero-interaction badge/callout/card/tabs shapes as plain HTML+CSS — the @openelement/ui components retired to these recipes in #1557) |
+| Option                | Convention                                                          |
+| --------------------- | ------------------------------------------------------------------- |
+| design tokens         | `app/styles/theme.css` (the @theme role sheet)                      |
+| layout                | `app/layout.tsx` (the shared site chrome every page renders inside) |
+| document head content | `app/head.tsx` (meta tags, preloads, inline CSS)                    |
+| site title            | the `name` field of `package.json`                                  |
 
 Passing framework options inline to `openElement()` while the config file
 carries options is a hard error, and an unknown key fails the build with the
@@ -64,66 +71,99 @@ accepted-key list. `vite.config.ts` stays Vite-only: `plugins: [...openElement()
   `static`: prerendered at build time (SSG). `/about` and `/` are static.
 - `app/routes/api/` — request-time server routes. `/api/ping` is a plain
   WinterCG-shaped handler returning `Response.json`.
-- `app/components/` — compiled page elements and their style sheets
-  (page CSS lives in `.css` files next to each element; pages import and
-  array them in `static styles`, sharing `site-chrome.css`/`badges.css`).
+- `app/components/` — compiled page elements. Presentation is authored as
+  Tailwind utility classes in the markup; each element's `.css` sheet carries
+  only its root's box rule, which has no markup to carry it.
 - `app/islands/` — client islands, the only code that ships JavaScript. Each
   island declares its hydration strategy (`idle`, `load`, `visible`,
-  client-only) through `defineIslandConfig`. The directory also hosts
-  `app-shell.tsx` — not an island itself, but the auto-registered application
-  shell (see below).
-- `app/islands/app-shell.tsx` — the site chrome every page renders inside:
-  the header, the `main` content region, and the footer live here exactly
-  once instead of being copied onto each page. The build registers the shell
-  automatically and projects each page's render into its default slot, so a
-  page module carries only its own content. The shell is a convention: delete
-  the file and pages still render (carrying their own chrome again), or opt
-  out explicitly with `appShell: false` in `openelement.config.ts`.
-- `app/styles/theme.css` — the @theme role sheet: Tailwind-ON roles, the starter palette aliases, dark and forced-colors pairs. Dev serves it directly; the build compiles it through the router's Tailwind preset.
+  client-only) through `defineIslandConfig`.
+- `app/layout.tsx` — the auto-registered layout, not an island itself: the
+  site chrome every page renders inside. The header, the `main` content
+  block, and the footer live here exactly once instead of being copied onto
+  each page. The build registers the layout automatically and projects each
+  page's render into its default slot, so a page module carries only its own
+  content. The layout is a convention: delete the file and pages still render
+  (carrying their own chrome again), or opt out explicitly with `layout: false`
+  in `openelement.config.ts`.
+- `app/styles/theme.css` — the @theme role sheet: Tailwind-ON roles, the
+  starter palette (`bg-paper`, `text-brand`, `border-line`, …), dark and
+  forced-colors pairs, and the document base (`body`, `::selection`). Dev
+  serves the compiled result at `/.openElement/tailwind.css` and the build
+  emits it as the content-hashed document stylesheet the head links — both
+  through the official `@tailwindcss/vite` pipeline.
   Dark values ride `prefers-color-scheme`; no theme runtime.
-- `app/styles/recipes.css` — documented plain HTML+CSS recipes for the
-  zero-interaction shapes (badge, callout, card, CSS-only tabs) that retired
-  from `@openelement/ui` (#1557). Delete the blocks you do not use: static
-  content never justifies a custom element.
 - `app/head.tsx` — structural head content the URL list cannot express.
 
 ## Scripts
 
-The starter runs on the Vite+ toolchain (`vite-plus`, the `vp` command):
+Every script is a plain command, so every one of them runs under any package
+manager (`npm run dev`, `pnpm run dev`, `yarn run dev`, `bun run dev` — this
+file spells them as `npm run …`):
 
-- `pnpm dev` — start the dev server (`vp dev`).
-- `pnpm fmt` — format the sources (`vp fmt`).
-- `pnpm lint` — lint the sources (`vp lint`).
-- `pnpm typecheck` — type-check every route/component file (`tsc --noEmit`).
+- `npm run dev` — start the Vite dev server (`oe dev`).
+- `npm run fmt` — format the sources (`oxfmt`).
+- `npm run lint` — lint the sources (`oxlint`).
+- `npm run typecheck` — type-check every route/component file (`tsc --noEmit`).
   The check covers the whole `app/` directory (`tsconfig.json`), so new files
   are picked up automatically.
-- `pnpm test` — run Node's built-in test runner (the starter ships none).
-- `pnpm build` — production build into `dist/`: prerendered HTML for every
+- `npm test` — run Node's built-in test runner (the starter ships none).
+- `npm run build` — production build into `dist/`: prerendered HTML for every
   static route, plus the request-time server when the app has one.
-- `pnpm start` — serve the production build.
+- `npm start` — serve the production build.
 
-`build` and `start` run the router CLI's short `oe` bin from the
-`@openelement/router` dependency (`oe build` / `oe start`; the same entry is
-installed as `openelement`, so both spellings work). The CLI also carries a
-static-only `oe start --mode=preview`, which refuses a build that has a
-request-time server.
+`dev`, `build`, and `start` run the router CLI's short `oe` bin from the
+`@openelement/router` dependency (`oe dev` / `oe build` / `oe start`; the same
+entry is installed as `openelement`, so both spellings work). `oe dev` boots the
+framework's own dev server — the SSR dev middleware, HMR, and the Tailwind
+pipeline — with no extra wrapper, and `oe start --mode=preview` is the
+static-only serve mode that refuses a build carrying a request-time server.
 
-The Vite tree itself is catalog-managed: `pnpm-workspace.yaml` points `vite`
-at the Vite+ core (`@voidzero-dev/vite-plus-core`) through a catalog entry
-and a `vite@*` override, so every peer that asks for vite resolves the same
-Vite+ build — there is no direct `vite` devDependency to pin.
+`oxfmt` and `oxlint` run with their defaults: both skip markdown, JSON, YAML,
+and CSS, so `npx oxfmt --check` and `npx oxlint` pass on a fresh scaffold.
+
+The Vite tree is one direct devDependency pin (`"vite": "8.0.16"` — the same
+version `@openelement/router` resolves against), so every peer that asks for
+Vite gets that copy. There is no workspace catalog and no `vite@*` override:
+a pin plus the router's own aligned dependency is what keeps the tree single.
+
+### Package manager
+
+Install with whichever manager you prefer; the first install decides the
+lockfile and everything afterwards follows it. The manifest deliberately
+carries no `packageManager` field.
+
+If you add one, note who reads it: the Vite+ CLI's `vp install` picks its
+manager from `packageManager` first, then from the lockfile already present,
+and falls back to pnpm when neither answers — measured, including the two
+surprises. With `"packageManager": "pnpm@12.8.1"` and only npm installed,
+`vp install` still runs pnpm 12.8.1 (vp fetches that version itself), and with
+neither a field nor a lockfile it runs pnpm even when npm is installed. So the
+field is a pin, not a preference: leave it out, and make your FIRST install the
+manager you intend to keep. (`vp install` still needs the manager it picked for
+the lockfile-detected case — a `package-lock.json` with npm off the PATH fails
+with `error: Cannot find binary path for command 'npm'`.)
 
 ## Styling ownership
 
-Global design tokens and the document baseline (`body`, `::selection`) live
-in `app/styles/theme.css`. The app shell owns the shared chrome sheet
-(`app/components/site-chrome.css`), arrayed in its `static styles`. Pages use
-light roots and own their rules in `static styles`, arrayed from imported
-`.css` files (#1558 — the one style authoring form): the server inlines each
-page's sheets into the SSR output as a `@scope(<page-tag>)` style block, so
-pages are fully styled with zero client JavaScript. Islands carry their own
-`.css` sheets the same way; in island chunks those ride the style-asset
-protocol as real `.css` assets.
+Styling is utility-first: presentation is authored as Tailwind utility
+classes directly in the markup, and nothing else in the app spells it out.
+The compiler admits those static tokens and the build generates the CSS — the
+document stylesheet for light-root pages and the layout, one shared component
+stylesheet for the shadow-root islands — so every page is fully styled with
+zero client JavaScript and no CSS text ships inside JavaScript.
+
+Two things stay CSS, and each has a reason:
+
+- `app/styles/theme.css` — the design tokens and the document base (`body`,
+  `::selection`, the dark and forced-colors pairs). The document shell's
+  `body` is not authored markup, so no class can carry it.
+- the per-element `.css` sheet — one `:host` rule for the element's own box.
+  A custom element is `display: inline` by default and the host tag is not
+  authored markup either.
+
+The `.css` + `static styles` authoring path stays fully available — array any
+sheet you want and the server inlines it into the SSR output as a
+`@scope(<tag>)` block — the starter simply has no need for it.
 
 ## Brand assets
 
@@ -134,24 +174,16 @@ unused.
 ## Dependency notes
 
 `@openelement/element` and `@openelement/router` are the runtime dependencies
-your app imports. Everything else rides devDependencies: `vite-plus` (the
-`vp` toolchain the scripts run through; the Vite tree itself resolves through
-the `pnpm-workspace.yaml` catalog), the Tailwind-ON build-time pins, the
-dev-server pair — `@hono/vite-dev-server` (loaded lazily by the dev server)
-and its `hono` peer — and the `typescript` pin. None of them resolve under a
-production install: `npm install --omit=dev` in a production image installs
-only the runtime pair. The generated server entry itself imports no
+your app imports. Everything else rides devDependencies: `vite` (the tree the
+router's `oe dev` / `oe build` drive), `oxfmt` and `oxlint` (the `fmt` / `lint`
+scripts), the Tailwind-ON build-time pins, the dev-server pair —
+`@hono/vite-dev-server` (loaded lazily by the dev server) and its `hono` peer —
+and the `typescript` pin. None of them resolve under a production install:
+`npm install --omit=dev` in a production image installs only the runtime pair.
+The generated server entry itself imports no
 HTTP framework — it composes on the internal WinterCG layer (#1560); `hono`
 is an optional peer of `@openelement/router`, and `@openelement/router/hono`
 (`createHonoAdapter`) is the one opt-in if you ever want to mount the built
 handler inside your own Hono app. For Nitro deployments, the built handler
 bridges through the `@openelement/router/nitro-mount` subpath of the one
 `@openelement/router` dependency. Do not remove them.
-
-`pnpm-workspace.yaml` ships with the scaffold and is pnpm's own bookkeeping:
-it carries the Vite+ catalog and override pair, and `minimumReleaseAge` — the
-supply-chain window that withholds freshly published versions — with the
-exemptions this project starts with (the `@openelement` packages at the
-version it was generated from, plus `vite-plus`). pnpm rewrites the file when
-you approve more packages inside that window; keep it and review the
-exemptions it lists.

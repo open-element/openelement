@@ -41,7 +41,7 @@ interface RenderedPage {
  * replaced the same way Vite's define would at bundle time.
  */
 async function loadGeneratedRenderRoute(options: {
-  renderAppShellBody: string;
+  renderLayoutBody: string;
   loaderBody?: string;
   prod?: boolean;
 }): Promise<(path: string, opts?: Record<string, unknown>) => Promise<RenderedPage>> {
@@ -66,7 +66,10 @@ function __isOpenElementRedirect(e) { return e && e.__openRedirect === true; }
 function __isOpenElementNotFound(e) { return e && e.__openNotFound === true; }
 function __statusHtml(title, message) { return "<main><h1>" + title + "</h1><p>" + message + "</p></main>"; }
 function wrapInDocument(content, opts) {
-  return "<!DOCTYPE html><html lang=\\"" + opts.lang + "\\\"><head><title>" + opts.title + "</title></head><body>" + content + "</body></html>";
+  const styleLinks = (opts.styleLinks || [])
+    .map((href) => '<link rel="stylesheet" href="' + href + '" data-oe-static-styles />')
+    .join("");
+  return "<!DOCTYPE html><html lang=\\"" + opts.lang + "\\"><head><title>" + opts.title + "</title>" + styleLinks + "</head><body>" + content + "</body></html>";
 }
 function __ssr(tag, props) { return tag + (props.context.locale ? ":" + props.context.locale : ""); }
 function __pageProps(routeModule, context) { return { context: context }; }
@@ -85,7 +88,17 @@ function __resolvePageDocument(head, context, clientScripts) {
   if (clientScripts && clientScripts.length > 0) doc.clientScripts = clientScripts;
   return doc;
 }
-function __renderAppShell(pageHtml, routePath) { ${options.renderAppShellBody} }
+function __renderLayout(pageHtml, routePath) { ${options.renderLayoutBody} }
+// Faithful miniature of Element's document stylesheet collection (alpha15 S
+// lane, S-C1.2): one per render, deduplicated in discovery order, serialized
+// by the wrap above. The page render reports light-root sheets into it.
+function createDocumentStyleResources() {
+  const links = [];
+  return {
+    get links() { return links; },
+    add(urls) { for (const url of urls) if (!links.includes(url)) links.push(url); },
+  };
+}
 `;
 
   const mod = await import(
@@ -96,7 +109,7 @@ function __renderAppShell(pageHtml, routePath) { ${options.renderAppShellBody} }
 
 test('renderRoute: happy path returns html with empty errors', async () => {
   const renderRoute = await loadGeneratedRenderRoute({
-    renderAppShellBody: 'return "<div>ok " + pageHtml + "</div>";',
+    renderLayoutBody: 'return "<div>ok " + pageHtml + "</div>";',
   });
   const result = await renderRoute('/boom');
   expect(result.html).toContain('<div>ok boom-page</div>');
@@ -106,7 +119,7 @@ test('renderRoute: happy path returns html with empty errors', async () => {
 
 test('renderRoute: locale reaches the page props projector', async () => {
   const renderRoute = await loadGeneratedRenderRoute({
-    renderAppShellBody: 'return "<div>" + pageHtml + "</div>";',
+    renderLayoutBody: 'return "<div>" + pageHtml + "</div>";',
   });
   const result = await renderRoute('/boom', { locale: 'zh-CN' });
   expect(result.html).toContain('<div>boom-page:zh-CN</div>');
@@ -114,7 +127,7 @@ test('renderRoute: locale reaches the page props projector', async () => {
 
 test('renderRoute: render failure produces defined 500 and collects a RenderError', async () => {
   const renderRoute = await loadGeneratedRenderRoute({
-    renderAppShellBody: 'throw new Error("render exploded");',
+    renderLayoutBody: 'throw new Error("render exploded");',
   });
   const result = await renderRoute('/boom');
   expect(result.status).toEqual(500);
@@ -129,7 +142,7 @@ test('renderRoute: render failure produces defined 500 and collects a RenderErro
 
 test('renderRoute: loader failure produces defined 500 and collects a RenderError', async () => {
   const renderRoute = await loadGeneratedRenderRoute({
-    renderAppShellBody: 'return "unreachable";',
+    renderLayoutBody: 'return "unreachable";',
     loaderBody: 'async () => { throw new Error("loader exploded"); }',
   });
   const result = await renderRoute('/boom');
@@ -140,7 +153,7 @@ test('renderRoute: loader failure produces defined 500 and collects a RenderErro
 
 test('renderRoute: production mode hides the error stack from the 500 page', async () => {
   const renderRoute = await loadGeneratedRenderRoute({
-    renderAppShellBody: 'throw new Error("render exploded");',
+    renderLayoutBody: 'throw new Error("render exploded");',
     prod: true,
   });
   const result = await renderRoute('/boom');
@@ -155,14 +168,14 @@ test('renderRoute: production mode hides the error stack from the 500 page', asy
 
 test('renderRoute: redirect and not-found still short-circuit with status pages', async () => {
   const redirect = await loadGeneratedRenderRoute({
-    renderAppShellBody: 'throw { __openRedirect: true, location: "/login", status: 302 };',
+    renderLayoutBody: 'throw { __openRedirect: true, location: "/login", status: 302 };',
   });
   const redirectResult = await redirect('/boom');
   expect(redirectResult.status).toEqual(302);
   expect(redirectResult.errors).toEqual([]);
 
   const notFound = await loadGeneratedRenderRoute({
-    renderAppShellBody: 'throw { __openNotFound: true, message: "gone" };',
+    renderLayoutBody: 'throw { __openNotFound: true, message: "gone" };',
   });
   const notFoundResult = await notFound('/boom');
   expect(notFoundResult.status).toEqual(404);

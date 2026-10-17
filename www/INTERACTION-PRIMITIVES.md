@@ -10,8 +10,8 @@ do not relitigate per feature.
 
 | Verdict | Owns | Does NOT own | Site instances |
 | --- | --- | --- | --- |
-| **Native-first** | Semantics the platform already ships: links, buttons, `details`/`summary`, `dialog` semantics via ARIA on the static markup, `:focus-visible`, scroll anchoring, view transitions | Anything needing a state machine beyond the UA's | Skip-link (`.skip-link` → `#main-content`, open-layout), disclosure rail (`<details>` in open-page-rail), heading anchors, theme toggle's `aria-pressed` surface |
-| **Zag = state machine** (`@zag-js/combobox` + `@zag-js/vanilla`, pinned 1.43.3) | Keyboard traversal (arrows/Home/End/Enter/Escape), the ARIA graph (`role=combobox` input, `role=listbox` results, `aria-activedescendant`, `aria-expanded`, `aria-autocomplete`), open/close/highlight state, the live-region announcements | DOM ownership (the compiled island keeps rendering its declarative markup), the dialog-level modal state, styling | `open-search` — the one island that was already an island (static components gain no new mandatory client JS) |
+| **Native-first** | Semantics the platform already ships: links, buttons, `details`/`summary`, `dialog` semantics via ARIA on the static markup, `:focus-visible`, scroll anchoring, view transitions | Anything needing a state machine beyond the UA's | Skip link (`a[href="#main-content"]` in open-layout's markup, hidden until focused), disclosure rail (`<details>` in open-page-rail), heading anchors, theme toggle's `data-theme` surface |
+| **Zag = state machine** (`@zag-js/combobox` + `@zag-js/vanilla`, pinned 1.43.3) | Keyboard traversal (arrows/Home/End/Enter/Escape), the ARIA graph (`role=combobox` input, `role=listbox` results, `aria-activedescendant`, `aria-expanded`, `aria-autocomplete`), open/close/highlight state, the live-block announcements | DOM ownership (the compiled island keeps rendering its declarative markup), the dialog-level modal state, styling | `open-search` — the one island that was already an island (static components gain no new mandatory client JS) |
 | **Floating = positioning** (`@floating-ui/dom`) | Popup geometry only: anchor, placement, same-width, strategy | Visibility, focus, semantics — and on this site it runs *through* Zag's `positioning` channel (`@zag-js/popper` wraps Floating UI), so there is exactly one positioning brain, not two | The search results popup (bottom-start of the control row, fixed strategy, offset 6) |
 | **Static = zero JS** | Everything whose behavior is CSS or markup | Any runtime | Cinematic hero, scene reveals (scroll-timeline, CSS only), page cards/tables, all `@openelement/ui` recipe components (DSD shadow, styles compiled at build) |
 
@@ -61,14 +61,21 @@ coexist. Reference implementation: `open-search-combobox.ts` (`sync()`).
 
 - **Site-wide `:focus-visible` baseline** (site-css.ts): one ring shape —
   `2px solid var(--color-ring)`, offset 2 — for every light-DOM focusable
-  (document links, search trigger/input). Shadow components carry the same
-  pair in their own sheets (page-styles seats it per page tag; article-body
-  for prose links); custom properties inherit across the shadow boundary, so
+  (document links, search trigger/input). The site's own components seat the
+  same pair as UTILITIES on the element they ring
+  (`focus-visible:outline-2 focus-visible:outline-ring
+  focus-visible:outline-offset-[3px]` — open-layout's skip link, logo, locale
+  switch and repository link; the page components' links), and the generated
+  prose content seats its own pair in `article-prose.css`, rooted at the
+  content containers. Custom properties inherit across the shadow boundary, so
   the ring role is the single indicator token in both themes. forced-colors
-  remaps the ring to `Highlight`.
-- **Skip link**: pre-existing (`.skip-link` → `#main-content` with
-  `tabindex="-1"` on the main landmark, open-layout) — kept as the native
-  anchor it is.
+  remaps the ring to `Highlight`. Measured in three engines: the ring is
+  painted, is 2px, and carries the ring role
+  (`www/e2e/ui-behaviour-matrix.spec.ts`).
+- **Skip link**: pre-existing (`a[href="#main-content"]` with `tabindex="-1"`
+  on the main landmark, open-layout) — kept as the native anchor it is. Its
+  hidden-until-focused state is the `sr-only focus-visible:not-sr-only` utility
+  pair on the anchor, not a class rule.
 - **Search dialog trap**: one `preventDefault` on `Tab` (above) — no focus
   looping library; the trap is single-stopper by construction.
 

@@ -1,80 +1,58 @@
-/* open-input — authored component styles, ported verbatim from the pre-#1558
- * recipe() sheet (the alpha.9 design system). The #1558 migration had
- * replaced this with a placeholder shell under the false note that the
- * component "carried no authored styles"; it did — this is that sheet. */
-    :host {
-      display: block;
-    }
+/* open-input — the irreducible authored rules (alpha15 S lane).
+ *
+ * The wrapper layout, the label's typography, the control's box (width,
+ * padding, font, radius, transition, outline) and the error message's ink are
+ * authored as Tailwind utilities in open-input.tsx: the compiler admits those
+ * static tokens and the build's component stylesheet carries the generated
+ * rules into this shadow root.
+ *
+ * What stays here, and why (CUSTOMIZATION.md → "Why the residue is CSS"): each
+ * block below has a real utility spelling — `[:host(:state(invalid))_&]:border-destructive`
+ * compiles to exactly the rule kept here — and the sheet keeps it because one
+ * owned rule reads as the component's state contract, where the utility form
+ * embeds an escaped ancestor selector in the class attribute.
+ *   - the host box;
+ *   - the control's DERIVED surfaces: the popover/border mixes of its resting
+ *     border and background, the violet-400 hover border, and the focus ring's
+ *     doubled box-shadow, each computed from pairs of role variables;
+ *   - the disabled and invalid treatments, which are scoped to the HOST's form
+ *     state (`:host(:state(disabled))` / `:host(:state(invalid))`) — the state
+ *     lives on the host, so the selector is what ties the rule to it.
+ * The `hidden` attributes need no rules: nothing here sets `display` on the
+ * label or the error message, so the platform's own `[hidden]` behavior holds.
+ * One owner per property: nothing here is also authored as a utility.
+ */
+:host {
+  display: block;
+}
 
-    .input-wrapper {
-      display: flex;
-      flex-direction: column;
-      gap: calc(var(--spacing) * 2);
-    }
+.control {
+  background: color-mix(in srgb, var(--color-popover) 78%, transparent);
+  border: calc(var(--spacing) * 0.25) solid
+    color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
+}
 
-    label {
-      font-size: var(--text-sm);
-      font-weight: var(--font-weight-medium);
-      color: var(--color-muted-foreground);
-      letter-spacing: var(--tracking-normal);
-    }
+.control:hover {
+  border-color: color-mix(in srgb, var(--color-violet-400) 74%, var(--color-border));
+}
 
-    label[hidden] {
-      display: none;
-    }
+.control:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
 
-    .input {
-      width: 100%;
-      padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
-      font-family: var(--font-sans);
-      font-size: var(--text-base);
-      color: var(--color-foreground);
-      background: color-mix(in srgb, var(--color-popover) 78%, transparent);
-      border: calc(var(--spacing) * 0.25) solid color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
-      border-radius: var(--radius-md);
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-      outline: none;
-    }
+.control:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--color-muted);
+}
 
-    .input::placeholder {
-      color: var(--color-muted-foreground);
-    }
+:host(:state(disabled)) .control {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--color-muted);
+}
 
-    .input:hover {
-      border-color: color-mix(in srgb, var(--color-violet-400) 74%, var(--color-border));
-    }
-
-    .input:focus {
-      border-color: var(--color-primary);
-      box-shadow: 0 0 0 1px var(--color-primary);
-    }
-
-    .input:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      background: var(--color-muted);
-    }
-
-    .input--error {
-      border-color: var(--color-destructive);
-    }
-
-    :host(:state(disabled)) .input {
-      opacity: 0.5;
-      cursor: not-allowed;
-      background: var(--color-muted);
-    }
-
-    :host(:state(invalid)) .input {
-      border-color: var(--color-destructive);
-    }
-
-    .error-message {
-      font-size: var(--text-xs);
-      color: var(--color-destructive);
-    }
-
-    .error-message[hidden] {
-      display: none;
-    }
-  
+:host(:state(invalid)) .control {
+  border-color: var(--color-destructive);
+}

@@ -10,11 +10,11 @@
  *   node tools/repo/clean-proof.ts --sha <40hex> --tree <40hex> --phase before|after
  */
 
-import { commandOutput } from './node-command.ts';
+import { spawnCommand } from './node-command.ts';
 import process from 'node:process';
 
 async function git(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
-  const output = await commandOutput('git', {
+  const output = await spawnCommand('git', {
     args,
     cwd: process.cwd(),
     stdout: 'piped',

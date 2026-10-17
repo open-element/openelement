@@ -19,7 +19,6 @@
 
 import { element, OpenElement } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
-import openHeroPolishStyles from './open-hero-polish.css';
 import { HERO_CURSOR_CSS } from '../site-ui/hero-cursor-css.ts';
 import { readInstanceState, writeInstanceState } from '@openelement/ui/instance-state';
 
@@ -27,7 +26,7 @@ export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });
 
 @element('open-hero-polish')
 export default class HeroPolish extends OpenElement {
-  static override styles = [openHeroPolishStyles];
+  // Rules moved to the linked document stylesheet (www/site-chrome.css).
   override connectedCallback(): void {
     super.connectedCallback();
     const root = this.getRootNode();

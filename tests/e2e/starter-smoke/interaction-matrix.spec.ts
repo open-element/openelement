@@ -39,14 +39,14 @@ test.describe('hydration timing', () => {
     await page.addInitScript(() => {
       const original = globalThis.requestIdleCallback;
       globalThis.requestIdleCallback = ((fn: unknown) =>
-        globalThis.setTimeout(() => (fn as () => void)(), 2500)) as typeof original;
+        globalThis.setTimeout(() => (fn as () => void)(), 2500)) as unknown as typeof original;
     });
     await page.goto('/');
     const counter = page.locator('my-counter');
     await expect(counter).toBeVisible();
     await page.evaluate(() => {
       // Island hosts are light-DOM descendants of the page element, which
-      // itself sits in the app-shell's light DOM (slotted content), so the
+      // itself sits in the layout's light DOM (slotted content), so the
       // direct document query finds the host; the descent only crosses open
       // shadow roots to be robust against either tree the framework renders
       // (#562).
@@ -79,7 +79,7 @@ test.describe('hydration timing', () => {
     await page.addInitScript(() => {
       const original = globalThis.requestIdleCallback;
       globalThis.requestIdleCallback = ((fn: unknown) =>
-        globalThis.setTimeout(() => (fn as () => void)(), 2500)) as typeof original;
+        globalThis.setTimeout(() => (fn as () => void)(), 2500)) as unknown as typeof original;
     });
     await page.goto('/');
     const counter = page.locator('my-counter');

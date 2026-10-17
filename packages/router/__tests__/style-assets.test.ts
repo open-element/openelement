@@ -5,7 +5,8 @@
  * Unit coverage of the router-side seam: the fail-closed intercept of a
  * compiled module's authored `.css` edges, the client build's `.css` emission
  * (content-hashed file name, verbatim file bytes, emission records), the
- * sheet adapter forms (fetch + TLA today; the native form behind the recorded
+ * sheet adapter forms (fetch today — synchronous sheet, asynchronous readiness
+ * recorded under the protocol key; the native form behind the recorded
  * capability verdict), the SSR half reading the same authored file, and the
  * dev inline adapter. The real-build consumer form — island JS without
  * component CSS text, the emitted asset, the manifest styles field,
@@ -24,6 +25,7 @@ import {
 } from '@openelement/compiler';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { OpenElementError } from '@openelement/element';
+import { STYLE_SHEET_READY } from '@openelement/protocol/style-sheet';
 import { ClientBuildErrorCode } from '../src/internal/error-codes.ts';
 import {
   type StyleAssetRecord,
@@ -47,12 +49,30 @@ interface EmittedAsset {
   source: string;
 }
 
-/** A hook harness: the plugin context shape the hooks actually touch. */
-function harness(emitted: EmittedAsset[]) {
+/**
+ * A hook harness: the plugin context shape the hooks actually touch. The sheet
+ * text arrives from Vite's `?inline` CSS module (the build's own processing of
+ * the authored file), so the harness stubs that module exactly as Vite serves
+ * it — a module whose first statement is the CSS text as a JSON string.
+ */
+function harness(emitted: EmittedAsset[], sheetText: string = SHEET) {
+  const requested: string[] = [];
   return {
+    requested,
     emitFile(file: { type: string; fileName: string; source: string }): string {
       emitted.push({ fileName: file.fileName, source: file.source });
       return `ref-${emitted.length}`;
+    },
+    load(options: { id: string }): Promise<unknown> {
+      // Recorded, not ignored: the plugin reads the sheet through Vite's
+      // `?inline` CSS module, never from the file itself.
+      requested.push(options.id);
+      return Promise.resolve(undefined);
+    },
+    getModuleInfo(id: string): { code?: string } | null {
+      return id.endsWith('?inline')
+        ? { code: `export default ${JSON.stringify(sheetText)}` }
+        : null;
     },
   };
 }
@@ -143,18 +163,24 @@ test('the client build emits the authored file bytes under a content-hashed name
     this: { emitFile(file: unknown): string },
     id: string,
   ) => Promise<string | null>;
-  const adapter = (await load.call(harness(emitted), styleAssetGraphId(registryKey))) as string;
+  const sheetText = SHEET;
+  const context = harness(emitted, sheetText);
+  const adapter = (await load.call(context, styleAssetGraphId(registryKey))) as string;
+  expect(context.requested, 'the sheet text comes from Vite`s ?inline CSS module').toEqual([
+    `${sheetFile}?inline`,
+  ]);
 
   expect(emitted).toHaveLength(1);
-  // The artifact owner is the client build; the bytes are the authored
-  // file's own — the DSD text and the runtime replace() text derive from
-  // exactly these bytes.
+  // The artifact owner is the client build; the bytes are Vite's processing of
+  // the authored file — the same text the dev resource endpoint serves, and
+  // what the runtime's replace() parses.
   expect(emitted[0].source).toEqual(SHEET);
+  expect(emitted[0].source).toEqual(sheetText);
   expect(emitted[0].fileName).toEqual(styleAssetFileName(SHEET));
   expect(emitted[0].fileName).toMatch(/^assets\/[0-9a-f]{12}\.css$/);
   expect(records.get(registryKey)).toEqual({
     fileName: emitted[0].fileName,
-    hash: styleAssetHash(SHEET),
+    hash: styleAssetHash(sheetText),
   });
   // The fetch adapter references the emission for the sheet.
   expect(adapter).toContain(`import.meta.ROLLUP_FILE_URL_ref-1`);
@@ -194,19 +220,84 @@ test('identical sheet bytes deduplicate into one emission (multi-island reuse)',
   expect(secondUrl).toEqual(firstUrl);
 });
 
-test('the fetch adapter exports the sheet, TLA-guarded, with no document.head', () => {
+test('the asset placeholder grammar is the installed Vite writer`s own (bare and postfix forms)', () => {
+  // Verified against the installed toolchain, not a comment: Vite 8.0.16
+  // writes `__VITE_ASSET__${referenceId}__${postfix ? `$_${postfix}__` : ``}`
+  // (node_modules/.pnpm/vite@8.0.16…/vite/dist/node/chunks/node.js:19285) and
+  // reads it back with /__VITE_ASSET__([\w$]+)__(?:\$_(.*?)__)?/g (node.js:19078)
+  // — the same literal this module carries. A reader that required a different
+  // trailing spelling would leave the placeholder in the shipped sheet.
+  const plugin = clientStyleAssetPlugin(new Map<string, StyleAssetRecord>());
+  const bundle: Record<string, { type: string; source: string }> = {
+    'assets/sheet.css': {
+      type: 'asset',
+      source:
+        "@font-face { src: url(__VITE_ASSET__ref$1__) format('woff2'); }\n" +
+        "@font-face { src: url(__VITE_ASSET__ref$2__$_?v=2__) format('woff2'); }\n",
+    },
+  };
+  const generateBundle = plugin.generateBundle as (
+    this: unknown,
+    options: unknown,
+    bundle: unknown,
+  ) => void;
+  const names = new Map([
+    ['ref$1', 'assets/proof-a1b2c3.woff2'],
+    ['ref$2', 'assets/proof-d4e5f6.woff2'],
+  ]);
+  generateBundle.call(
+    {
+      environment: { config: { base: '/client/' } },
+      getFileName: (referenceId: string) => names.get(referenceId),
+    },
+    {},
+    bundle,
+  );
+  expect(bundle['assets/sheet.css'].source).toContain('url(/client/assets/proof-a1b2c3.woff2)');
+  // The writer's postfix rides after the mapped file name, exactly as Vite's
+  // own CSS pass appends it.
+  expect(bundle['assets/sheet.css'].source).toContain('url(/client/assets/proof-d4e5f6.woff2?v=2)');
+  expect(bundle['assets/sheet.css'].source).not.toContain('__VITE_ASSET__');
+
+  // The relative-base spelling is the other half of the same rule: the URL is
+  // the emitted file's path relative to the sheet's own directory.
+  const relative: Record<string, { type: string; source: string }> = {
+    'assets/sheet.css': { type: 'asset', source: 'a{background:url(__VITE_ASSET__ref$3__)}' },
+  };
+  generateBundle.call(
+    { environment: { config: { base: '' } }, getFileName: () => 'assets/font-aa.woff2' },
+    {},
+    relative,
+  );
+  expect(relative['assets/sheet.css'].source).toEqual('a{background:url(./font-aa.woff2)}');
+});
+
+test('the fetch adapter exports the sheet synchronously and records readiness', () => {
   const adapter = fetchSheetAdapterModule('ref-1');
   expect(adapter).toContain('import.meta.ROLLUP_FILE_URL_ref-1');
-  expect(adapter).toContain('await fetch(sheetUrl)');
-  expect(adapter).toContain('await sheet.replace(await response.text())');
+  // The sheet exists synchronously: the compiled class binds it in `static
+  // styles`, so the class export must not sit behind the asset's evaluation
+  // (the WebKit overlapping-evaluation race, KR-2).
+  expect(adapter).not.toContain('await fetch(sheetUrl)');
+  expect(adapter).not.toContain('await sheet.replace(');
+  expect(adapter.indexOf('const sheet = new CSSStyleSheet();')).toBeLessThan(
+    adapter.indexOf('const ready = fetch(sheetUrl)'),
+  );
+  expect(adapter).toContain('.then((css) => sheet.replace(css));');
   expect(adapter).toContain('export default sheet;');
+  // Readiness rides the protocol's one canonical key, and the stored promise
+  // keeps its rejected state: the catch only prevents an unhandled rejection
+  // before a root consumes it.
+  expect(adapter).toContain(`sheet['${STYLE_SHEET_READY}'] = ready;`);
+  expect(adapter).toContain('void ready.catch(() => {});');
   // No document-head sink of any kind: the adapter's only CSS channel is the
   // constructable sheet it exports.
   expect(adapter).not.toContain('appendChild');
   expect(adapter).not.toContain("createElement('style')");
   expect(adapter).not.toContain('createElement("style")');
-  // Fail-closed failure mode: a non-ok response throws, so the importing
-  // island module never evaluates against an empty sheet (ADR-0164 App. D).
+  // Fail-closed failure mode: a non-ok response and a failed replace both reject
+  // the readiness promise the runtime gates on (ADR-0164 App. D).
+  expect(adapter).toContain('if (!response.ok)');
   expect(adapter).toContain('throw new Error');
 });
 
@@ -220,30 +311,57 @@ test('the native adapter form is the import-attribute shape and stays behind the
   expect(sheetAdapterForm()).toEqual('fetch');
 });
 
-test('the SSR half embeds the authored file bytes — one fact, no reconciliation', async () => {
-  const plugin = serverStyleAssetPlugin();
+test("the SSR half declares the client build's emitted asset, never its text", async () => {
+  const plugin = serverStyleAssetPlugin({
+    files: new Map([[registryKey, 'assets/0123456789ab.css']]),
+    base: '/sub/',
+  });
   const load = plugin.load as (this: unknown, id: string) => Promise<string | null>;
   const adapter = (await load.call({}, styleAssetGraphId(registryKey))) as string;
-  // The sheet text is the authored file's own bytes — the same bytes the
-  // client build emitted content-hashed — so the DSD text cannot drift from
-  // the client sheet.
-  expect(adapter).toContain(`sheet.replaceSync(${JSON.stringify(SHEET)});`);
-  expect(adapter).toContain("import { StyleSheet } from '@openelement/element';");
+  // One resource, one delivery: the server half names the emitted asset under
+  // the configured base and carries NO sheet text — the DSD template then
+  // declares a parser-visible link instead of an inline stylesheet.
+  expect(adapter).toContain('/sub/client/assets/0123456789ab.css');
+  expect(adapter).not.toContain('replaceSync');
+  expect(adapter).not.toContain(SHEET.trim());
   expect(adapter).not.toContain('document.head');
 });
 
-test('the SSR half fails closed when the sheet file is missing', async () => {
-  await rm(sheetFile);
+test('a registered in-root edge with no emitted asset fails closed', async () => {
   const plugin = serverStyleAssetPlugin();
   const load = plugin.load as (this: unknown, id: string) => Promise<string | null>;
+  // Discovery walks every server-rendered source through the bundler resolver,
+  // so an in-root sheet without an emitted asset is a build defect: it is
+  // reported with a stable code instead of being inlined.
+  const context = {
+    environment: { config: { root: sheetDir } },
+    warn(): void {},
+  };
   const error = await assertRejectsIncludes(
-    () => load.call({}, styleAssetGraphId(registryKey)),
+    () => load.call(context, styleAssetGraphId(registryKey)),
     OpenElementError,
   );
   expect(error.code).toEqual(ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED);
+  expect(error.message).toContain('has no emitted asset');
 });
 
-test('the dev plugin serves the inline adapter from the authored file, fail-closed', async () => {
+test('an out-of-root package sheet keeps the diagnosed text path', async () => {
+  const plugin = serverStyleAssetPlugin();
+  const load = plugin.load as (this: unknown, id: string) => Promise<string | null>;
+  const warnings: string[] = [];
+  const context = {
+    // A root that does NOT contain the sheet: the package case.
+    environment: { config: { root: join(sheetDir, 'elsewhere') } },
+    warn(message: string): void {
+      warnings.push(message);
+    },
+  };
+  const adapter = (await load.call(context, styleAssetGraphId(registryKey))) as string;
+  expect(adapter).toContain('replaceSync');
+  expect(warnings.join('\n')).toContain('outside the project root');
+});
+
+test('the dev plugin serves the resource-URL adapter, fail-closed', async () => {
   const plugin = devStyleAssetPlugin();
   const resolveId = plugin.resolveId as (
     this: unknown,
@@ -265,14 +383,31 @@ test('the dev plugin serves the inline adapter from the authored file, fail-clos
   );
   expect(error.code).toEqual(ClientBuildErrorCode.STYLE_ASSET_UNREGISTERED);
 
-  // The dev adapter rides the module (no emitted asset to fetch): element's
-  // cross-realm StyleSheet + replaceSync with the authored bytes, no
-  // document-head sink.
+  // The client half carries the dev resource URL and the live-sheet holder —
+  // never the authored bytes, never a `replaceSync` of text, never a node.
   const load = plugin.load as (this: unknown, id: string) => Promise<string | null>;
-  const adapter = (await load.call({}, styleAssetGraphId(registryKey))) as string;
-  expect(adapter).toContain("import { StyleSheet } from '@openelement/element';");
-  expect(adapter).toContain(`sheet.replaceSync(${JSON.stringify(SHEET)});`);
-  expect(adapter).toContain('export default sheet;');
-  expect(adapter).not.toContain('appendChild');
-  expect(adapter).not.toContain('await fetch(');
+  const clientAdapter = (await load.call(
+    { environment: { name: 'client' } },
+    styleAssetGraphId(registryKey),
+  )) as string;
+  expect(clientAdapter).toContain('fetch(');
+  expect(clientAdapter).toMatch(/\/\.openElement\/authored-css\.[0-9a-f]{16}\.css/);
+  expect(clientAdapter).toContain('__openElementDevStyleSheets');
+  expect(clientAdapter, 'the live flag makes an edit reach connected roots').toContain(
+    '__openElementStyleSheetLive',
+  );
+  expect(clientAdapter, 'no authored CSS text rides the module').not.toContain(SHEET);
+  expect(clientAdapter).not.toContain('replaceSync');
+  expect(clientAdapter).not.toContain('appendChild');
+  expect(clientAdapter).toContain('export default sheet;');
+
+  // The server half declares the same resource and never fetches it: its
+  // delivery is the parser-visible link the DSD template / head carries.
+  const serverAdapter = (await load.call({}, styleAssetGraphId(registryKey))) as string;
+  expect(serverAdapter).toContain("import { StyleSheet } from '@openelement/element';");
+  expect(serverAdapter).toMatch(
+    /sheet\['__openElementStyleSheetUrl'\] = "\/\.openElement\/authored-css\.[0-9a-f]{16}\.css";/,
+  );
+  expect(serverAdapter, 'no authored CSS text rides the shim').not.toContain(SHEET);
+  expect(serverAdapter).not.toContain('fetch(');
 });

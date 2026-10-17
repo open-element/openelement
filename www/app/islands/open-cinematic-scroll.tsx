@@ -4,13 +4,12 @@
 import { element, OpenElement } from '@openelement/element';
 import { readInstanceState, writeInstanceState } from '@openelement/ui/instance-state';
 import { defineIslandConfig } from '@openelement/router';
-import openCinematicScrollStyles from './open-cinematic-scroll.css';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 
 @element('open-cinematic-scroll')
 export default class CinematicScroll extends OpenElement {
-  static override styles = [openCinematicScrollStyles];
+  // Rules moved to the linked document stylesheet (www/site-chrome.css).
   override connectedCallback(): void {
     super.connectedCallback();
     const root = this.getRootNode();

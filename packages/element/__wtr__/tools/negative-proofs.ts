@@ -101,7 +101,7 @@
  */
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { commandOutput } from '../../../../tools/repo/node-command.ts';
+import { spawnCommand } from '../../../../tools/repo/node-command.ts';
 import process from 'node:process';
 
 // tools/ → __wtr__ → element → packages → repo root
@@ -403,7 +403,7 @@ try {
   for (const engine of engineList) {
     for (const { name, sentinel, write, args, env, expect } of CASES) {
       write(SCRATCH_DIR);
-      const result = await commandOutput(VITEST, {
+      const result = await spawnCommand(VITEST, {
         args: args(SCRATCH_DIR),
         cwd: REPO_ROOT,
         // Pin the report shape at the source: vitest colorizes piped output

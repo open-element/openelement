@@ -207,7 +207,7 @@ export function closeSearchOnBackdrop(host: SearchHost, event: Event): void {
 
 /**
  * Result-click dismissal, delegated from the results container: the compiled
- * list Region cannot carry per-item event handlers, so the view binds one
+ * list Block cannot carry per-item event handlers, so the view binds one
  * onClick on `.results` and this handler closes the search when the click
  * lands on a result link (the machine's Enter-path navigation also lands
  * here — clickIfLink dispatches a real click on the highlighted anchor).

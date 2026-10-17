@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
-import { renderDsd } from '@openelement/element';
+import { renderToString } from '@openelement/element';
 import { NOTES_HTML_BUDGET_BYTES, NOTES_PAGE_SIZE } from '../../lib/notes-pagination.ts';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
@@ -22,8 +22,8 @@ type NotesSupabaseClient = import('../route-logic/notes.ts').NotesSupabaseClient
 const NotesPage = await compileComponentClass('../components/page-notes.tsx');
 
 /** Project loader data through the route's props projector, then serialize. */
-async function renderNotesPage(data: Record<string, unknown>) {
-  return await renderDsd('notes-page', {
+function renderNotesPage(data: Record<string, unknown>) {
+  return renderToString('notes-page', {
     componentClass: NotesPage,
     props: notesPageProps({
       data: data as never,
@@ -165,23 +165,24 @@ test('notes loader applies a fixed keyset page and emits a stable next cursor', 
   expect(cursorFilter.includes(`id.lt.${notes[9].id}`)).toBeTruthy();
 });
 
-test('bounded Notes page stays under its SSR budget at database maxima', async () => {
+test('bounded Notes page stays under its SSR budget at database maxima', () => {
   const notes = Array.from({ length: NOTES_PAGE_SIZE }, (_, index) => ({
     id: `123e4567-e89b-42d3-a456-${String(426614174000 + index).padStart(12, '0')}`,
     title: 't'.repeat(MAX_NOTE_TITLE_LENGTH),
     body: '&<>"'.repeat(MAX_NOTE_BODY_LENGTH / 4),
     created_at: new Date(Date.UTC(2026, 7, 23, 0, 0, 20 - index)).toISOString(),
   }));
-  const out = await renderNotesPage({ denied: false, notes });
-  expect(out.errors).toEqual([]);
-  const bytes = new TextEncoder().encode(out.html).byteLength;
+  const html = renderNotesPage({ denied: false, notes });
+  // renderToString throws on a render error; the retired result object's
+  // `errors` field it used to assert on was a hardcoded empty array.
+  const bytes = new TextEncoder().encode(html).byteLength;
   expect(bytes <= NOTES_HTML_BUDGET_BYTES, `${bytes} > ${NOTES_HTML_BUDGET_BYTES}`).toBeTruthy();
 });
 
-test('authenticated SSR places the user JWT only on the one-shot Realtime handoff', async () => {
+test('authenticated SSR places the user JWT only on the one-shot Realtime handoff', () => {
   const token =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsInJvbGUiOiJhdXRoZW50aWNhdGVkIn0.signature';
-  const out = await renderNotesPage({
+  const html = renderNotesPage({
     denied: false,
     notes: [],
     live: {
@@ -191,10 +192,10 @@ test('authenticated SSR places the user JWT only on the one-shot Realtime handof
       accessToken: token,
     },
   });
-  expect(out.errors).toEqual([]);
-  expect(out.html.split(token).length - 1).toEqual(1);
-  expect(out.html.includes(`livetoken="${token}"`), out.html).toBeTruthy();
-  expect(out.html.includes(`data-ssr-props="${token}`)).toEqual(false);
+  // renderToString throws on a render error (the retired `errors` field was []).
+  expect(html.split(token).length - 1).toEqual(1);
+  expect(html.includes(`livetoken="${token}"`), html).toBeTruthy();
+  expect(html.includes(`data-ssr-props="${token}`)).toEqual(false);
 });
 
 test('create note rejects anonymous writes with 401', async () => {

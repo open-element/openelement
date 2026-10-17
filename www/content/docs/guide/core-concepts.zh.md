@@ -39,11 +39,11 @@ export default class MyCounter extends OpenElement {
 
 `@element(tag, { root })` 为自定义元素命名并决定内容渲染到哪里：`'light'` 是默认值，渲染进 light DOM，因此文档级样式直接生效；`'shadow-open'` 与 `'shadow-closed'` 则挂载 shadow root。`@property({ reflect })` 声明响应式字段。attribute 是默认通道，名称取属性名的 kebab-case 形式（`attribute: 'my-name'` 可覆盖）；`attribute: false` 用于绝不能序列化进标记的值。派生值是 `computed(...)` 字段，编译器要求它必须是 `reflect: false, attribute: false`，因为派生值没有 attribute 通道。这两者背后都是 `signal()`——`computed()` 从它派生，`effect()` 订阅它；三者都由 `@openelement/element` 导出。
 
-状态变化只会重渲染读取了该值的 Part。模板里写下的事件处理器（`onClick`、`onInput`）在 upgrade 时绑定；运行时不会用字符串做任何查找。列表 Region 的 item 模板里，同一套处理器语法会带上条目本身：`this.items.map((item) => <li key={item.id} onClick={this.pick}>{item.label}</li>)` 会编译为逐条目绑定，`pick` 收到被点击那一行的 `(event, item)`。逐条目监听在岛的客户模块 claim DOM 时才挂上：在那之前对服务端渲染行的点击不会被重放（固定路径事件 Part 带有升级前重放；逐条目绑定还没有）。服务端由 `renderDsd` 序列化同一个编译类，因此两种输出背后是同一份程序，而不是两个会互相漂移的渲染器。
+状态变化只会重渲染读取了该值的 Part。模板里写下的事件处理器（`onClick`、`onInput`）在 upgrade 时绑定；运行时不会用字符串做任何查找。列表 Block 的 item 模板里，同一套处理器语法会带上条目本身：`this.items.map((item) => <li key={item.id} onClick={this.pick}>{item.label}</li>)` 会编译为逐条目绑定，`pick` 收到被点击那一行的 `(event, item)`。逐条目监听在岛的客户模块 claim DOM 时才挂上：在那之前对服务端渲染行的点击不会被重放（固定路径事件 Part 带有升级前重放；逐条目绑定还没有）。服务端由 `renderToString` 序列化同一个编译类，因此两种输出背后是同一份程序，而不是两个会互相漂移的渲染器。
 
 ### shadow root 行为：delegatesFocus
 
-`@element('my-dialog', { root: 'shadow-open', delegatesFocus: true })` 会生成对应的 class static，因此挂载的 shadow root 以 `delegatesFocus` 创建。聚焦进入宿主时会被委派到 shadow 树中的第一个可聚焦元素，且宿主自身匹配 `:focus`——这正是 dialog、menu 或复合字段这类包装组件无需手写 focus trap 即可键盘可用的原因。它只对 shadow root 生效（`'light'` root 没有可配置的 shadow root），且编译器只接受字面量：`@element(..., { delegatesFocus: <布尔字面量> })`，其他写法以 `OEC9002` fail closed。
+`@element('my-dialog', { root: 'shadow-open', delegatesFocus: true })` 会生成对应的 class static，因此挂载的 shadow root 以 `delegatesFocus` 创建。聚焦进入宿主时会被委派到 shadow 树中的第一个可聚焦元素，且宿主自身匹配 `:focus`。它带来的是复合控件焦点体系中的「进入」那一半，也只有那一半：初始焦点落在控件希望的位置，而不是宿主元素本身。它不是 focus trap——Tab 仍会离开宿主、走向文档中的下一个可聚焦项——也不是键盘模型。必须把焦点关在里面的 dialog、响应方向键的 menu、管理 roving tabindex 的复合字段，这些仍然要在委派之上自己写。它只对 shadow root 生效（`'light'` root 没有可配置的 shadow root），且编译器只接受字面量：`@element(..., { delegatesFocus: <布尔字面量> })`，其他写法以 `OEC9002` fail closed。
 
 ### 表单参与：formAssociated
 
@@ -73,7 +73,7 @@ export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd:
 
 ## 条件区域与语法边界
 
-条件区域（conditional region）把 JSX 里的条件编译进 Part Program，而不是把一段比较逻辑随 JavaScript 下发。编译器恰好接受以下形式，每条都是一个 `@property` 与一个字面量的比较：
+条件区域（conditional block）把 JSX 里的条件编译进 Part Program，而不是把一段比较逻辑随 JavaScript 下发。编译器恰好接受以下形式，每条都是一个 `@property` 与一个字面量的比较：
 
 - `{this.count > 5 && <p>over</p>}` —— 用 `>`、`>=`、`<`、`<=` 与有限数字比较（信号值经 `Number()` 强制转换）。
 - `{this.status === 'pending' && <Spinner />}` —— 与数字、字符串或布尔字面量做严格 `===` / `!==`。相等判断刻意保持严格：`1` 永远不等于 `"1"`。

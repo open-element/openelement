@@ -77,7 +77,7 @@ The declaration is deliberately literal. The build rejects anything it cannot re
 - The route descriptor may not carry a custom `props` projector or a request-dependent head, and `renderIntent` must contain only the literal `mode` and `stream` assignments.
 - Only native compiled pages are admitted; `defineLitPage` is rejected.
 
-Two project-level constraints are easy to miss. Streaming requires the app shell to be **off for the whole project** (`openElement({ appShell: false })`, no `layouts`): a streamed document is flushed in parts and cannot be wrapped by a shell, so a per-route `route: { layout: false }` does not satisfy the gate. And the loader still returns **one object** — no second loader, no new data shape.
+Two project-level constraints are easy to miss. Streaming requires the layout to be **off for the whole project** (`openElement({ layout: false })`, no `layouts`): a streamed document is flushed in parts and cannot be wrapped by a layout, so a per-route `route: { layout: false }` does not satisfy the gate. And the loader still returns **one object** — no second loader, no new data shape.
 
 ## The front gate decides everything HTTP
 
@@ -91,7 +91,7 @@ Because headers settle before the shell, the usual loader conventions still hold
 
 The compiler derives a route-specific manifest from the `defer` list, the compiled property metadata, and the page program's existing signal-to-Part dependencies, then checks every consumer of that signal. A field with any ineligible use is rejected as a whole — there is no partial deferral.
 
-Eligible: anchor-owned **text Parts** and bounded `when`/`each` **Regions**. A Region's item template qualifies only when its dynamic values are wholly owned by that Region and pass the normal serializer escaping.
+Eligible: anchor-owned **text Parts** and bounded `when`/`each` **Blocks**. A Block's item template qualifies only when its dynamic values are wholly owned by that Block and pass the normal serializer escaping.
 
 Not eligible, each rejected with the route, field, source location and the exact offending sink:
 
@@ -99,14 +99,14 @@ Not eligible, each rejected with the route, field, source location and the exact
 - an attribute, boolean, class, style, raw HTML, ref, event, or slot-routing sink;
 - a shell/layout or head value;
 - a host or child opening tag, or any sink whose anchor path crosses a slot or a custom-element host;
-- a Region whose item template contains a custom element (an opaque host) or a frame-unsafe tag or attribute;
+- a Block whose item template contains a custom element (an opaque host) or a frame-unsafe tag or attribute;
 - an opaque renderer or foreign component wrapper.
 
 The diagnostic names the sink in the form `field -> computed total -> text p3` or `field -> attribute p4`, and the remedy is always one of: keep the field in the front gate, remove the sink, or leave streaming off. Ordinary non-streaming routes are unaffected by any of this.
 
 ## The budget
 
-Deferral is bounded, and the bound is mirrored in four places — the build scan, the generated handler, the browser installer, and the public hand-written-manifest executor (`createDeferredDsdExecutor`) — so an over-budget route fails the build instead of failing silently at hydration:
+Deferral is bounded, and the bound is mirrored in four places — the build scan, the generated handler, the browser installer, and the public hand-written-manifest executor (`createStreamShellExecutor`) — so an over-budget route fails the build instead of failing silently at hydration:
 
 - at most **32 deferred fields** per route;
 - at most **64 Part owners** in total across those fields.

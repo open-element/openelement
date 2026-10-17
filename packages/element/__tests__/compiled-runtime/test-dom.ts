@@ -254,6 +254,13 @@ export class TestShadowRoot extends TestNodeBase {
 
 export class TestDocument {
   readonly head: TestElement;
+  /**
+   * The document's adopted stylesheet list — the light-root style sink
+   * (alpha15 S lane, S-C1.2): a light-root component's sheets are adopted on
+   * the document that holds its DOM, never injected as a `<style>` node. The
+   * fake mirrors the platform's `Document.adoptedStyleSheets`.
+   */
+  readonly adoptedStyleSheets: unknown[] = [];
   readonly counts: TestDomCounts = {
     elements: 0,
     texts: 0,

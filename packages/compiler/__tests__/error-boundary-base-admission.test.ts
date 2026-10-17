@@ -21,7 +21,7 @@
  *
  * This suite pins the full documented pattern as a consumer writes it:
  * compile in, emitted module type-checks against the workspace declarations
- * out, the `hasError` branch lowers to a `when` Region over the declared
+ * out, the `hasError` branch lowers to a `when` Block over the declared
  * signal, and `catchError`/`retry` ride the generated class verbatim.
  */
 
@@ -117,7 +117,7 @@ test('the README pattern compiles: subclass ErrorBoundary, branch on hasError', 
   // The heritage the README teaches is the admitted one, and the generated
   // class extends exactly the authored binding.
   expect(result.code).toContain('export class MyBoundary extends ErrorBoundary {');
-  // The branch is a compiled `when` Region over the declared hasError signal.
+  // The branch is a compiled `when` Block over the declared hasError signal.
   const whenParts = result.program.parts.filter((part) => part.k === 'when');
   expect(whenParts.length).toEqual(1);
   expect(whenParts[0]).toMatchObject({

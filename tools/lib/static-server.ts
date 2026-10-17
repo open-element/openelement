@@ -16,7 +16,7 @@ import { readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { serveFetch } from '../../packages/router/src/internal/node-http.ts';
 
-interface StaticServer {
+export interface StaticServer {
   origin: string;
   close(): Promise<void>;
 }
@@ -73,7 +73,9 @@ async function readCandidate(
     if (error instanceof URIError) return new Response('Bad Request', { status: 400 });
     throw error;
   }
-  if (safePath.includes('..') || safePath.includes('\0')) {
+  // Traversal means a `..` path SEGMENT — a substring test would also reject
+  // innocent names like `a..b.txt`.
+  if (safePath.includes('\0') || safePath.split('/').includes('..')) {
     return new Response('Forbidden', { status: 403 });
   }
 
@@ -96,14 +98,17 @@ interface ServeStaticOptions {
 }
 
 /**
- * Try to find an available loopback port starting from `preferred`.
- * Returns `preferred` when every candidate is occupied.
+ * Try to find an available loopback port starting from `preferred`. Throws
+ * when every candidate is occupied — returning the occupied `preferred` port
+ * only moves the EADDRINUSE to the caller, disguised as a usable answer.
  */
 export async function findPort(preferred: number, maxAttempts = 20): Promise<number> {
   for (let port = preferred; port < preferred + maxAttempts; port++) {
     if (await portFree(port)) return port;
   }
-  return preferred;
+  throw new Error(
+    `static server: no free loopback port in [${preferred}, ${preferred + maxAttempts})`,
+  );
 }
 
 /** Bind-and-close probe: `true` when the loopback port accepts a listener. */

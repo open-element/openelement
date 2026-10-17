@@ -52,8 +52,8 @@ const GLOBAL_WRITE_PATTERN =
 
 /**
  * A seam install at module scope: an `install<Something>(...)` call. The
- * naming is the codebase's install convention (`installClaimExecutor` in
- * claim-seam.ts), and it is the shape a tree-shaking bundler silently drops
+ * naming is the codebase's install convention (`installHydrationExecutor` in
+ * hydrate-seam.ts), and it is the shape a tree-shaking bundler silently drops
  * (#1425): the call has no used export to keep it, so a package that declares
  * the module side-effect-free loses the install while still shipping. Narrow
  * on purpose — a module-scope factory call (`createLogger()`) is not an
@@ -131,6 +131,13 @@ export function findMetadataViolations(
     });
   };
   if (packageJson.homepage !== metadata.homepage) fail('homepage', metadata.homepage);
+  // H6: description rides the same parity — a package missing from
+  // PACKAGE_DESCRIPTIONS packed with the key dropped (JSON.stringify omits
+  // undefined), which this assertion catches. Guarded: a future package with
+  // no declared description stays exempt rather than failing closed here.
+  if (metadata.description !== undefined && packageJson.description !== metadata.description) {
+    fail('description', metadata.description);
+  }
   if (JSON.stringify(packageJson.keywords) !== JSON.stringify(metadata.keywords)) {
     fail('keywords', metadata.keywords);
   }

@@ -4,7 +4,7 @@
  * Verifies that currently rendered island components are available without
  * fixed sleeps. The homepage no longer renders the historical home-console island, so
  * this suite follows the current layout shell instead:
- *   - open-layout owns a compiled light-root shell
+ *   - app-layout owns a compiled light-root shell
  *   - layout header islands are present inside that shell
  *   - island client script is present
  */
@@ -14,7 +14,7 @@ import { getShadowRootCount } from './helpers.js';
 
 async function waitForLayoutReady(page: Page): Promise<void> {
   await page.waitForFunction(() => {
-    const layout = document.querySelector('open-layout');
+    const layout = document.querySelector('app-layout');
     // The shell's main landmark is the user-visible readiness signal.
     return !!layout?.querySelector('main');
   });
@@ -27,14 +27,14 @@ test.describe('Layout Island Shell', () => {
   });
 
   test('layout element exists in DOM', async ({ page }) => {
-    await expect(page.locator('open-layout')).toHaveCount(1);
+    await expect(page.locator('app-layout')).toHaveCount(1);
   });
 
   test('layout retains its compiled light-root marker and SSR shell', async ({ page }) => {
     await waitForLayoutReady(page);
 
     const state = await page.evaluate(() => {
-      const layout = document.querySelector('open-layout');
+      const layout = document.querySelector('app-layout');
       return {
         light: layout?.hasAttribute('data-oe-light') ?? false,
         // Landmark structure is the shell contract: banner + main + footer.
@@ -50,7 +50,7 @@ test.describe('Layout Island Shell', () => {
   test('layout header islands are rendered inside the static shell', async ({ page }) => {
     await waitForLayoutReady(page);
 
-    const headerIslands = await page.locator('open-layout').evaluate((layout) => {
+    const headerIslands = await page.locator('app-layout').evaluate((layout) => {
       return {
         search: !!layout.querySelector('open-search'),
         themeToggle: !!layout.querySelector('open-theme-toggle'),

@@ -1,28 +1,22 @@
-/* open-dropdown — authored component styles, ported verbatim from the pre-#1558
- * recipe() sheet (the alpha.9 design system). The #1558 migration had
- * replaced this with a placeholder shell under the false note that the
- * component "carried no authored styles"; it did — this is that sheet. */
-    :host {
-      display: inline-block;
-    }
+/* open-dropdown — the irreducible authored rules (alpha15 S lane).
+ *
+ * The trigger's `display: contents` and the content's min-width/padding/font
+ * are authored as Tailwind utilities in open-dropdown.tsx. What stays here is
+ * the coupled placement block: the CSS Anchor Positioning longhands plus the
+ * explicit inset fallback for engines without anchor support (Firefox only
+ * applies `anchor()` longhands on top of an explicit inset), and the gap that
+ * must ride on margin-top — `calc(anchor() + length)` resolves without the
+ * added length there. It is one ownership block, so no utility may set
+ * position/inset/margin on the same element. */
+:host {
+  display: inline-block;
+}
 
-    .trigger {
-      display: contents;
-    }
+.content {
+  position: absolute;
+  inset: 100% auto auto 0;
+  top: anchor(bottom);
+  left: anchor(left);
+  margin: calc(var(--spacing) * 2) 0 0;
+}
 
-    .content {
-      /* The base inset is the placement fallback for engines without CSS Anchor
-         Positioning; it must stay present because Firefox's anchor resolution
-         only applies anchor() longhands on top of an explicit inset. */
-      position: absolute;
-      inset: 100% auto auto 0;
-      top: anchor(bottom);
-      left: anchor(left);
-      min-width: 12rem;
-      /* The gap rides on margin-top: calc(anchor() + length) resolves without
-         the added length in Firefox. */
-      margin: calc(var(--spacing) * 2) 0 0;
-      padding: calc(var(--spacing) * 2);
-      font-family: var(--font-sans);
-    }
-  

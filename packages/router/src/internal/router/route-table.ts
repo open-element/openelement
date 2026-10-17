@@ -145,6 +145,11 @@ function decodeComponent(value: string, plusAsSpace = false): string {
   try {
     return decodeURIComponent(normalized);
   } catch {
+    // Raw fallback is deliberate and layer-scoped (M-R7): match() is a pure
+    // value matcher shared with the SPA router, which has no HTTP status to
+    // answer with. At the HTTP edge the canonical dispatch (static-serve
+    // dispatchRequest) 400s malformed pathnames before matching, so wires
+    // agree while in-app matching never throws.
     return normalized;
   }
 }

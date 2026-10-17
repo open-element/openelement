@@ -30,7 +30,11 @@ test.describe('root boundaries', () => {
     await page.goto('/boundaries');
     await page.waitForFunction(() => customElements.get('open-button') !== undefined);
 
-    const boundaries = await page.evaluate(`(() => {
+    const boundaries = await page.evaluate<{
+      openShadow: boolean;
+      lightShadow: ShadowRoot | null;
+      closedShadow: ShadowRoot | null;
+    }>(`(() => {
       const badge = ${deepFirstExpr('#open-boundary')};
       const light = ${deepFirstExpr('dogfood-light')};
       const closed = ${deepFirstExpr('dogfood-closed')};

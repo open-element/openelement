@@ -15,6 +15,8 @@ import type { WarnScope } from './logger.ts';
 
 import { AuthoringErrorCode, frameworkError } from './errors.ts';
 import { isSafeAttributeName } from './security.ts';
+import { STATIC_STYLES_MARKER } from '@openelement/protocol/part-program';
+import { StyleErrorCode } from '@openelement/protocol/errors';
 
 const log = createLogger('html-escape');
 
@@ -99,6 +101,94 @@ export interface DocumentWrapOptions {
   cspNonce?: string;
   /** Trusted framework bootstrap emitted synchronously in the document head. */
   streamBootstrap?: string;
+  /**
+   * The document's light-root component stylesheets: external resource URLs
+   * (alpha15 S lane, S-C1.2) serialized as marked `<link rel="stylesheet">`
+   * nodes after `headExtras`, so a light component is styled by the document
+   * that contains it — without JavaScript and without a runtime style node.
+   */
+  styleLinks?: readonly string[];
+}
+
+/**
+ * The document-level stylesheet resources ONE server render discovered
+ * (alpha15 S lane, S-C1.2).
+ *
+ * A light-root component's DOM lives in the document, so its sheet cannot
+ * ride the component's own subtree the way a shadow template's link does: the
+ * document owns it. This object is the one carrier between the two halves of
+ * that render — the compiled serializer, which discovers a component's
+ * external sheets while serializing the component, and the document
+ * serializer, which writes the head. It is created per render and never
+ * shared, so one page's stylesheets can never reach another page's head.
+ */
+export interface DocumentStyleResources {
+  /** Discovered resource URLs, deduplicated, in discovery (cascade) order. */
+  readonly links: readonly string[];
+  /** Record the external stylesheet URLs one rendered component contributes. */
+  add(urls: readonly string[]): void;
+}
+
+/** Create the per-render document stylesheet collection. */
+export function createDocumentStyleResources(): DocumentStyleResources {
+  const links: string[] = [];
+  const seen = new Set<string>();
+  return {
+    get links(): readonly string[] {
+      return [...links];
+    },
+    add(urls: readonly string[]): void {
+      for (const url of urls) {
+        if (typeof url !== 'string' || url === '' || seen.has(url)) continue;
+        seen.add(url);
+        links.push(url);
+      }
+    },
+  };
+}
+
+/**
+ * True when an href has the shape a framework-emitted component stylesheet
+ * address takes: a site-absolute path or an absolute http(s) URL, without
+ * whitespace or markup-significant characters. ONE rule for both sinks that
+ * serialize such an address — the DSD template's links and the document
+ * head's — so a component's stylesheet reaches a browser the same way
+ * whichever root kind the component has.
+ */
+export function isComponentStyleHref(href: string): boolean {
+  return /^(?:\/[^/\s]|https?:\/\/[^\s])/.test(href) && !/["'<>\s]/.test(href);
+}
+
+/**
+ * Serialize the document's light-root component stylesheets as marked
+ * stylesheet `<link>` nodes. Marked (`data-oe-static-styles`) for the same
+ * reason the DSD template's links are: the client's adoption guard
+ * (`sheetDeliveredByLink`) reads that marker to keep ONE delivery per
+ * resource — a document that already links this stylesheet must not adopt a
+ * second constructable copy of it.
+ *
+ * The href rule is the S protocol's own (`isComponentStyleHref`): a
+ * framework-emitted asset address always satisfies it, and a value that does
+ * not is a defect that fails the render instead of escaping into markup.
+ */
+function buildStyleLinkTags(links: readonly string[]): string {
+  const tags: string[] = [];
+  const seen = new Set<string>();
+  for (const href of links) {
+    if (typeof href !== 'string' || href === '' || seen.has(href)) continue;
+    if (!isComponentStyleHref(href)) {
+      throw frameworkError(
+        StyleErrorCode.INVALID_STYLE_HREF,
+        `wrapInDocument: styleLinks href must be a site-absolute path or an absolute http(s) URL, got ${JSON.stringify(
+          href,
+        )}`,
+        { phase: 'ssr' },
+      );
+    }
+    seen.add(href);
+    tags.push(`  <link rel="stylesheet" href="${escapeAttr(href)}" ${STATIC_STYLES_MARKER} />`);
+  }
+  return tags.length === 0 ? '' : '\n' + tags.join('\n');
 }
 
 /**
@@ -134,6 +224,7 @@ export function documentStreamParts(options: DocumentWrapOptions = {}): {
     structuredData = [],
     cspNonce,
     streamBootstrap,
+    styleLinks = [],
   } = options;
   // CSP nonce format validation per the CSP spec (base64 value)
   const NONCE_RE = /^[A-Za-z0-9+/=_-]+$/;
@@ -159,6 +250,11 @@ export function documentStreamParts(options: DocumentWrapOptions = {}): {
   const streamBootstrapBlock = streamBootstrap
     ? `\n  ${buildScriptTags([{ code: streamBootstrap }], validNonce)}`
     : '';
+  // The document's own component stylesheets (light roots, S-C1.2) sit after
+  // headExtras: the site's document stylesheet is declared there, and a
+  // component's rules must be able to win an equal-specificity tie against it
+  // — the order the retired in-document style sink produced.
+  const styleLinkBlock = buildStyleLinkTags(styleLinks);
 
   const prefix = `<!DOCTYPE html>
 <html lang="${safeLang}">
@@ -166,7 +262,7 @@ export function documentStreamParts(options: DocumentWrapOptions = {}): {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${safeTitle}</title>${metaBlock}${linkBlock}${structuredDataBlock}
-  ${safeHeadExtras}${dangerousHeadBlock}${streamBootstrapBlock}
+  ${safeHeadExtras}${styleLinkBlock}${dangerousHeadBlock}${streamBootstrapBlock}
 </head>
 <body>
   `;

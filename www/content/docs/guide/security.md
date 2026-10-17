@@ -8,6 +8,8 @@ order: 95
 
 Generated action POST handlers ship with a fail-closed same-origin floor: a request is rejected when `Sec-Fetch-Site` is `cross-site`, when `Origin` is present and does not match the request URL origin, or when `Sec-Fetch-Site` is `same-site` but `Origin` is missing or `null` — a forged header, since browsers always send `Origin` on POST. Loopback hostname aliases (`localhost` / `127.0.0.1` / `[::1]`) count as the same origin. Clients that omit both headers (typical non-browser tools) are allowed. Set `OPEN_ELEMENT_DISABLE_CSRF=1` on the request env binding (`c.env` / Nitro runtime env) to opt out. Framework-owned session APIs are not in the current contract; provider recipes own their cookie/session transport and must apply the same-origin floor plus explicit cookie attributes.
 
+"The request URL origin" is the origin the server derives for the incoming request, which is not the same thing as the scheme and host a browser used when a TLS-terminating proxy sits in front: the server sees plain HTTP. A deployment behind one states its public origin (`OPEN_ELEMENT_PUBLIC_ORIGIN`, or `OPEN_ELEMENT_TRUST_PROXY=1` for a port only a trusted proxy can reach) — see [Behind a proxy](/guide/deployment#behind-a-proxy). Without that, a genuine same-origin POST is rejected rather than admitted; the floor itself never relaxes.
+
 ## Ambient authentication
 
 Apps authenticated by ambient credentials — HTTP Basic, mTLS, or cookies set with `SameSite=None` — cannot rely on the Lax default: the browser attaches those credentials to cross-site requests. The built-in same-origin floor covers generated action POSTs, but such apps should validate the request origin on every state-changing API route as well.

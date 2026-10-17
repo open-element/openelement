@@ -7,7 +7,10 @@
     "build": "node ../../../tools/repo/clean.ts dist && node ../../../packages/router/src/cli/build.ts",
     "e2e": "playwright test --config e2e/playwright.config.ts --project=chromium",
     "e2e:browsers": "playwright test --config e2e/playwright.config.ts",
-    "gate": "node ../../../tools/repo/gate.ts @openelement/fixture-router-ui-dogfood#build @openelement/fixture-router-ui-dogfood#e2e:browsers"
+    "gate": "node ../../../tools/repo/gate.ts @openelement/fixture-router-ui-dogfood#typecheck @openelement/fixture-router-ui-dogfood#build @openelement/fixture-router-ui-dogfood#e2e:browsers",
+    "e2e:dev": "playwright test --config e2e/playwright.dev.config.ts --project=chromium",
+    "e2e:dev:browsers": "playwright test --config e2e/playwright.dev.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@hono/node-server": "2.1.1",

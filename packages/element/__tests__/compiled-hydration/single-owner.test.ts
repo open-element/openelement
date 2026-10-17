@@ -1,0 +1,60 @@
+/**
+ * Single-owner assertion for the compiled hydration executor (#1211).
+ *
+ * Constitution 4.2: exactly one hydration executor owns existing-DOM hydration. This
+ * test mechanically proves that `hydrateExistingDom` and `PartProgramHydrationError`
+ * each have exactly one definition across packages/element/src — no parallel
+ * or "backup" engine may exist.
+ */
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
+import { readdirSync } from 'node:fs';
+
+const SRC_ROOT = new URL('../../src/', import.meta.url);
+
+async function sourceFiles(dir: URL): Promise<URL[]> {
+  const out: URL[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
+    if (entry.isDirectory()) out.push(...(await sourceFiles(child)));
+    else if (entry.name.endsWith('.ts')) out.push(child);
+  }
+  return out;
+}
+
+const DEFINITION_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  {
+    label: 'hydrateExistingDom function definition',
+    pattern: /export function hydrateExistingDom\(/g,
+  },
+  {
+    label: 'PartProgramHydrationError class definition',
+    pattern: /class PartProgramHydrationError extends /g,
+  },
+  {
+    label: 'pre-upgrade event capture definition',
+    pattern: /export function capturePreUpgradeEvents\(/g,
+  },
+];
+
+test('exactly one canonical hydration executor exists across packages/element/src', async () => {
+  const files = await sourceFiles(SRC_ROOT);
+  const sources = await Promise.all(
+    files.map(async (file) => ({
+      file: file.pathname,
+      text: await readFile(file, 'utf8'),
+    })),
+  );
+  for (const { label, pattern } of DEFINITION_PATTERNS) {
+    const owners = sources
+      .filter(({ text }) => {
+        pattern.lastIndex = 0;
+        return pattern.test(text);
+      })
+      .map(({ file }) => file);
+    expect(
+      owners.length,
+      `${label} must have exactly one owner, found: ${owners.join(', ') || '(none)'}`,
+    ).toEqual(1);
+  }
+});

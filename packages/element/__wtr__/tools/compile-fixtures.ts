@@ -36,7 +36,7 @@ interface FixtureSpec {
 const fixtures: FixtureSpec[] = [
   {
     // The repo's canonical compiler-v1 fixture, consumed byte-for-byte.
-    source: join(elementPkg, '__fixtures__/compiled-element-v1/counter.tsx'),
+    source: join(elementPkg, '__fixtures__/compiled-element-v2/counter.tsx'),
     id: 'counter.tsx',
     out: 'oe-program-counter.ts',
   },

@@ -2,11 +2,11 @@ import { expect, test } from 'vitest';
 import { ElementParams } from '../src/open-element-params.ts';
 import { LifetimeScope } from '../src/internal/compiled/lifetime-scope.ts';
 import { attachFormInternals } from '../src/open-element-form.ts';
-// The claim executor is installed by the package entry, not by the kernel
+// The hydration executor is installed by the package entry, not by the kernel
 // (#1416); the kernel case below reconnects into retained content, which is a
 // claim. This file reaches the kernel directly, so it installs it exactly as
 // the default '@openelement/element' entry does.
-import '../src/internal/compiled/runtime/claim-install.ts';
+import '../src/internal/compiled/runtime/hydrate-install.ts';
 import { CompiledElementKernel } from '../src/internal/compiled/runtime/kernel.ts';
 import { signal } from '../src/internal/signal/framework.ts';
 import { TestDocument } from './compiled-runtime/test-dom.ts';

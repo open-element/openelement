@@ -16,12 +16,15 @@ import {
   defaultClientConditions,
   loadConfigFromFile,
   type Plugin,
+  type ResolvedConfig,
 } from 'vite';
 import type { FrameworkOptions } from './framework.ts';
 import type { SsgBehaviorOptions } from '@openelement/protocol/ssg';
 
 import { formatError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
+import { type ClassCandidateRegistry, createClassCandidateRegistry } from '@openelement/compiler';
+import type { ModuleWalkResolver } from './internal/module-graph-walk.ts';
 import { hasInlineFrameworkOptions } from '../config.ts';
 import { normalizeViteAliases } from './alias-utils.ts';
 import { detectAppConfigFile, resolveAppConfig } from './app-config.ts';
@@ -33,7 +36,6 @@ import {
 } from './internal/ssg/critical-assets.ts';
 import {
   CHUNK_SIZE_WARNING_LIMIT_KB,
-  DEFAULT_COMPONENTS_DIR,
   DEFAULT_ISLANDS_DIR,
   DEFAULT_ROUTES_DIR,
 } from './internal/paths.ts';
@@ -135,6 +137,13 @@ export interface OpenPluginState {
   headExtrasValue: string | undefined;
   allowHeadExtrasValue: boolean;
   /**
+   * The document stylesheet hrefs THIS plugin instance contributed (the dev
+   * Tailwind entry's compiled sheet). Kept apart from the user's own
+   * `inject.stylesheets` so a re-resolution re-points the framework's link
+   * instead of accumulating one per content hash.
+   */
+  frameworkStylesheets: string[];
+  /**
    * Whether the caller supplied framework options inline. `openElement()`
    * forwards the user object verbatim, so it can be derived; `openPipeline()`
    * builds a full options object from its own config shape and must state it.
@@ -155,6 +164,29 @@ export interface OpenPluginState {
   // shared between the emitted virtual entry code (renderEntry) and
   // ctx.phase1.ssrAdmissionPlan, so both carry the same options.
   entryDescriptor: EntryDescriptor | null;
+  /**
+   * This plugin instance's class-candidate registry (alpha15 S lane, defect C).
+   * One per instance — i.e. one per dev server or build — so the compiled
+   * modules' class facts cannot leak between two live projects in one process;
+   * the dev transform is the writer and the dev component-sheet channel the
+   * reader.
+   */
+  readonly classCandidates: ClassCandidateRegistry;
+  /**
+   * The plugin context's own module resolver, captured in `buildStart` (the
+   * phase that owns route/static-component discovery). Reachability follows it
+   * for every specifier form the bundler understands — relative, `package.json`
+   * imports, alias (defect B) — both on the first scan and on a dev rescan.
+   */
+  resolveModule?: ModuleWalkResolver;
+  /**
+   * The RESOLVED Vite config, captured in `configResolved`. The scan-time
+   * package admission derivation runs AFTER this hook returned (in
+   * `buildStart`), so the derived packages' SSR externalization cannot ride
+   * the `config` hook's return value — it is appended to this live config's
+   * `ssr.noExternal`, the same list the dev server's SSR environment reads.
+   */
+  resolvedConfig?: ResolvedConfig;
 }
 
 function applyResolvedOptions(state: OpenPluginState, merged: FrameworkOptions): void {
@@ -174,21 +206,26 @@ function applyResolvedOptions(state: OpenPluginState, merged: FrameworkOptions):
 }
 
 /**
- * Append one stylesheet to the resolved `inject.stylesheets` channel and
- * re-serialize the head artifact. The single late-contribution path: the dev
- * Tailwind preset's theme link joins the user's own declared stylesheets here,
- * so the raw user `headExtras` stays the only re-validation input, the channel
- * is validated exactly once per append, and the link is built by
- * `buildHeadExtras`'s own serializer — one `<link>` emitter, whose href passes
- * the protocol blocklist.
+ * Point the framework's own document stylesheet links at `hrefs` — the
+ * single late-contribution path (the dev Tailwind entry's compiled sheet; the
+ * build's emitted asset joins Phase 3's head artifact directly).
+ *
+ * The setter re-points rather than accumulates: a re-resolution (dev server
+ * restart, or a rebuild in one process) replaces the hrefs this function
+ * contributed, so a content hash change never leaves a stale link behind. The
+ * link is built by `buildHeadExtras`'s own serializer — one `<link>` emitter,
+ * whose href passes the protocol blocklist.
  */
-export function appendInjectStylesheets(state: OpenPluginState, hrefs: string[]): void {
+export function setFrameworkStylesheets(state: OpenPluginState, hrefs: readonly string[]): void {
   if (hrefs.length === 0) return;
+  const previous = new Set(state.frameworkStylesheets);
   const existing = state.resolvedOptions.inject?.stylesheets ?? [];
-  const missing = hrefs.filter((href) => !existing.includes(href));
-  if (missing.length === 0) return;
+  const kept = existing.filter(
+    (entry) => !previous.has(typeof entry === 'string' ? entry : entry.href),
+  );
+  state.frameworkStylesheets = [...hrefs];
   applyResolvedOptions(state, {
-    inject: { ...state.resolvedOptions.inject, stylesheets: [...existing, ...missing] },
+    inject: { ...state.resolvedOptions.inject, stylesheets: [...kept, ...hrefs] },
   });
 }
 
@@ -288,7 +325,6 @@ export function createOpenPluginState(
     ...options,
     routesDir: options.routesDir || DEFAULT_ROUTES_DIR,
     islandsDir: options.islandsDir || DEFAULT_ISLANDS_DIR,
-    componentsDir: options.componentsDir || DEFAULT_COMPONENTS_DIR,
     headExtras: headExtrasValue,
     allowHeadExtrasScripts: allowHeadExtrasValue,
   };
@@ -317,12 +353,14 @@ export function createOpenPluginState(
     rawHeadExtras,
     headExtrasValue,
     allowHeadExtrasValue,
+    frameworkStylesheets: [],
     inlineOptionsPresent,
     produceMode: 'build',
     resolvedConfigFile: null,
     viteRoot: undefined,
     workspaceRoot,
     entryDescriptor: null,
+    classCandidates: createClassCandidateRegistry(),
   };
 }
 
@@ -410,6 +448,11 @@ export function createConfigHooks(
 
     configResolved(cfg) {
       state.viteRoot = cfg.root;
+      // Captured for the scan-time admission derivation: the derived packages'
+      // SSR externalization is appended to this live config's `ssr.noExternal`
+      // in buildStart (after this hook returned), the same list the dev
+      // server's SSR environment externalizes by (see the state field's note).
+      state.resolvedConfig = cfg;
       // The resolved config's alias table is the ACTUAL one — the user config
       // merged with every plugin's `config` hook output and normalized by
       // Vite. Save it unconditionally: an earlier partial state (only what

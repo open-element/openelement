@@ -12,14 +12,29 @@
 import { definePage } from '@openelement/router';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
+import '#site-ui/open-reading-shell.tsx';
+import '../site-ui/open-section-frame.tsx';
+import '../islands/open-page-rail.tsx';
 import type { SiteLocale } from '../../site-config.ts';
 import { errorCodes } from '../data/_generated-error-codes.ts';
 import { sourceLineStamp } from '../data/version.ts';
-import ErrorsPage, { type ErrorCodeItem } from '../components/page-errors.tsx';
 
 export const meta = { section: 'Reference', label: 'Error codes', order: 6 };
 
 type Locale = SiteLocale;
+
+/** One diagnostic code row, projected from the generated inventory. */
+export interface ErrorCodeItem {
+  key: string;
+  code: string;
+  family: string;
+  gloss: string;
+  /** Every distinct normalized message the code raises, joined for display. */
+  variants: string;
+  /** `path:line` of every source call site, joined for display. */
+  sites: string;
+  runtime: string;
+}
 
 /**
  * The OEC code families, keyed by the numeric range each occupies. A range
@@ -84,8 +99,8 @@ const content = {
 
 /**
  * Project the generated inventory onto the page's fixed row grammar. Row
- * fields are strings: the compiled list Region admits `{item.<field>}` values
- * and elements, not a nested list Region, so the multi-value columns are
+ * fields are strings: the compiled list Block admits `{item.<field>}` values
+ * and elements, not a nested list Block, so the multi-value columns are
  * joined here (the generator already sorted them deterministically).
  */
 function projectCodes(locale: Locale): ErrorCodeItem[] {
@@ -104,7 +119,104 @@ function projectCodes(locale: Locale): ErrorCodeItem[] {
   }));
 }
 
-export default definePage(ErrorsPage, {
+/**
+ * The error-code reference as a server function page (alpha15 server
+ * architecture): the route module's own exported TSX function, lowered by the
+ * compiler into a generative HTML constructor. The nested `open-reading-shell`
+ * / `open-page-rail` / `open-section-frame` hosts are build-admitted compiled
+ * components, so they expand through `__ssr` with their slot children — the
+ * same composition the retired class form produced. The page hook class
+ * (`page-errors`) is the former component's scoping hook (www/site-chrome.css).
+ */
+export function PageErrors(props: {
+  metadata: { breadcrumb: string; title: string; lede: string };
+  railItems: Array<{ id: string; href: string; label: string; depth: string }>;
+  locale: string;
+  s1Index: string;
+  s1Title: string;
+  s1Copy: string;
+  headCode: string;
+  headGloss: string;
+  headSites: string;
+  codes: Array<{
+    key: string;
+    code: string;
+    family: string;
+    gloss: string;
+    variants: string;
+    sites: string;
+    runtime: string;
+  }>;
+  footnote: string;
+  footnoteCheckPre: string;
+  footnoteCheckPost: string;
+}) {
+  return (
+    // Without data-pagefind-body the page is absent from the index entirely:
+    // pagefind stops indexing every page that lacks the attribute. The shell
+    // already renders the one <main> landmark (#main-content).
+    <div class='page-errors text-foreground' data-pagefind-body>
+      <open-reading-shell rail footer metadata={props.metadata} locale={props.locale}>
+        <div slot='rail'>
+          <open-page-rail items={props.railItems} locale={props.locale}></open-page-rail>
+        </div>
+        <open-section-frame>
+          <span slot='index'>{props.s1Index}</span>
+          <span slot='title'>{props.s1Title}</span>
+          <span slot='copy'>{props.s1Copy}</span>
+          <div class='border-t border-border' id='error-codes'>
+            <div
+              class='grid grid-cols-[minmax(0,0.35fr)_minmax(0,1.4fr)_minmax(0,1.25fr)] items-start gap-[clamp(1rem,4vw,3rem)] border-b border-border py-3 text-(length:--font-size-micro) font-bold tracking-[0.18em] text-muted-foreground uppercase max-[1100px]:hidden'
+              aria-hidden='true'
+            >
+              <span>{props.headCode}</span>
+              <span>{props.headGloss}</span>
+              <span>{props.headSites}</span>
+            </div>
+            {props.codes.map((code) => (
+              <div
+                class='grid grid-cols-[minmax(0,0.35fr)_minmax(0,1.4fr)_minmax(0,1.25fr)] items-start gap-[clamp(1rem,4vw,3rem)] border-b border-border py-4 data-[runtime=true]:bg-border/45 max-[1100px]:grid-cols-[minmax(0,1fr)] max-[1100px]:gap-2'
+                id={code.code}
+                data-runtime={code.runtime}
+                key={code.key}
+              >
+                <div>
+                  <span class='inline font-mono text-base font-bold text-primary wrap-anywhere'>
+                    {code.code}
+                  </span>
+                  <span class='mt-1 block text-xs text-muted-foreground wrap-anywhere'>
+                    {code.family}
+                  </span>
+                </div>
+                <div>
+                  <p class='m-0 text-sm leading-normal text-muted-foreground wrap-anywhere'>
+                    {code.gloss}
+                  </p>
+                  <p class='m-0 text-xs leading-normal text-muted-foreground wrap-anywhere'>
+                    {code.variants}
+                  </p>
+                </div>
+                <span class='font-mono text-xs leading-normal text-muted-foreground wrap-anywhere'>
+                  {code.sites}
+                </span>
+              </div>
+            ))}
+            <footer class='pt-6 text-xs leading-normal text-muted-foreground'>
+              <p class='m-0'>{props.footnote}</p>
+              <p class='mt-3 mb-0'>
+                {props.footnoteCheckPre}
+                <code class='text-primary'>pnpm --dir www run check:error-codes</code>
+                {props.footnoteCheckPost}
+              </p>
+            </footer>
+          </div>
+        </open-section-frame>
+      </open-reading-shell>
+    </div>
+  );
+}
+
+export default definePage(PageErrors, {
   head({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const copy = content[resolved];

@@ -22,9 +22,8 @@ export default defineConfig({
     ...openElement({
       routesDir: 'app/routes',
       islandsDir: 'app/islands',
-      componentsDir: 'app/components',
-      // No app shell: the fixture stays minimal and does not pull @acme/components.
-      appShell: false,
+      // No layout: the fixture stays minimal and does not pull @acme/components.
+      layout: false,
       head: {
         title: 'request-time fixture',
       },

@@ -20,11 +20,14 @@
 import '@openelement/element';
 import { element, OpenElement, property } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
+import probeStyles from './open-light-probe.css';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 
 @element('open-light-probe', { root: 'light' })
 export default class OpenLightProbe extends OpenElement {
+  static override styles = [probeStyles];
+
   @property({ reflect: true, attribute: 'class' })
   hostClass = '';
 
@@ -37,8 +40,11 @@ export default class OpenLightProbe extends OpenElement {
     // The span is signal-bound text: SSR renders
     // <span data-signal="count">0</span>; activation binds the surviving
     // node, proving live reactivity.
+    // `.probe-shared` is the overlapping class this component's sheet shares
+    // with the card component and an unrelated document element (S-C1.2).
     return (
       <div class='light-probe'>
+        <p class='probe-shared'>probe text</p>
         <input type='text' class='probe-input' aria-label='Light probe input' />
         <button
           type='button'

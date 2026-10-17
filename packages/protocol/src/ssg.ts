@@ -7,7 +7,7 @@
 
 import type { CompatibilityClassification, HydrationStrategy } from './framework.ts';
 import type { RenderError, SsrAdmissionDecision } from './render.ts';
-import type { PartProgramV1 } from './part-program.ts';
+import type { PartProgramV2 } from './part-program.ts';
 
 /** Build-only route projection bound to a specific compiled page program. */
 export interface StreamRouteManifest {
@@ -21,8 +21,8 @@ export interface StreamRouteManifest {
       location: string;
       // The program source map's record origin, projected from the Part Program
       // IR (protocol-owned): the compiler's CompileElementResult.program IS a
-      // PartProgramV1, so the projection reads the contract type directly.
-      source: PartProgramV1['sourceMap']['records'][number]['source'];
+      // PartProgramV2, so the projection reads the contract type directly.
+      source: PartProgramV2['sourceMap']['records'][number]['source'];
     }>;
   }>;
 }
@@ -42,7 +42,7 @@ export interface SsgRenderOptions {
   middleware?: {
     csp?: { policy?: string; reportOnly?: boolean; nonce?: boolean };
   };
-  upgradeStrategy?: string;
+  upgradeStrategy?: HydrationStrategy;
   viewTransition?: boolean;
   speculation?: boolean | Record<string, unknown>;
   islandTagNames?: string[];
@@ -86,11 +86,23 @@ export interface SsgRenderSummary {
 
 // ─── Entry generator types ───────────────────────────────────
 
-/** Client island entry shape passed to entry generator. */
-export interface ClientIslandEntry {
+/**
+ * Shared island module identity (CL-3 convergence: one base, three shapes). Every island record names the same module the same way — the tag
+ * it registers as, the module path that owns it, and whether that module is
+ * a package (CEM-derived named export) rather than a local file (default
+ * export) — so a rename of the identity touches one declaration, not three.
+ * The delivery-strategy fields intentionally stay per-shape (`strategy` on
+ * the client entry vs `hydrate` on the build decls): they are different
+ * stages' vocabularies, not one field spelled two ways.
+ */
+export interface IslandModuleIdentity {
   tagName: string;
   modulePath: string;
   isPackage?: boolean;
+}
+
+/** Client island entry shape passed to entry generator. */
+export interface ClientIslandEntry extends IslandModuleIdentity {
   /**
    * Optional named export to register as the custom element constructor.
    * When set (package islands whose chunk dropped `export default` per #638),
@@ -168,13 +180,19 @@ export interface PageRouteDecl {
   isDynamic?: boolean;
   paramNames?: string[];
   streamManifest?: StreamRouteManifest;
+  /**
+   * The server function page fact (alpha15 server lane): the exported server
+   * function component the route's `export default definePage(Component)`
+   * named — compiled into the module by the server component lane. No element
+   * class exists to register; both render channels render through the
+   * descriptor's render function (the compiled constructor) and feed the same
+   * renderer/layout/document wraps.
+   */
+  functionPage?: string;
 }
 
 /** One island the build admits: tag, module path, and delivery facts. */
-export interface IslandDecl {
-  tagName: string;
-  modulePath: string;
-  isPackage?: boolean;
+export interface IslandDecl extends IslandModuleIdentity {
   /**
    * Optional named export to register as the custom element constructor.
    * Set for package islands from the manifest declaration's `className`
@@ -244,28 +262,28 @@ export interface DocumentConfig {
   allowHeadExtrasScripts: boolean;
 }
 
-/** The app shell module a build resolves: tag, import path, and serialized props. */
-export interface AppShellDecl {
+/** The layout module a build resolves: tag, import path, and serialized props. */
+export interface LayoutDecl {
   tagName: string;
   importPath: string;
   props: Record<string, unknown>;
 }
 
-/** The resolved shell for one plan slot: disabled (false) or a full declaration. */
-export type ResolvedAppShell = false | AppShellDecl;
+/** The resolved layout for one plan slot: disabled (false) or a full declaration. */
+export type ResolvedLayout = false | LayoutDecl;
 
-/** The resolved app shells a build ships: the default shell plus named layouts. */
-export interface AppShellPlan {
-  default: ResolvedAppShell;
-  layouts: Record<string, ResolvedAppShell>;
+/** The resolved layouts a build ships: the default layout plus named layouts. */
+export interface LayoutPlan {
+  default: ResolvedLayout;
+  layouts: Record<string, ResolvedLayout>;
 }
 
-/** The full build-time description of one generated entry: routes, islands, renderers, middleware, document, and app-shell plans. */
+/** The full build-time description of one generated entry: routes, islands, renderers, middleware, document, and layout plans. */
 export interface EntryDescriptor {
   isSSG: boolean;
   /**
    * Page renderer selection (#1339). Absent/'native' keeps the
-   * compiled renderDsd page path byte-identical; 'lit' forks page tag
+   * compiled renderToString page path byte-identical; 'lit' forks page tag
    * resolution, page SSR and the client entry onto @lit-labs/ssr.
    * Loader/action/protocol codegen never forks.
    */
@@ -296,7 +314,7 @@ export interface EntryDescriptor {
   renderers: RendererDecl[];
   middlewareScopes: MiddlewareScopeDecl[];
   document: DocumentConfig;
-  appShell: AppShellPlan;
+  layout: LayoutPlan;
   upgradeStrategy?: HydrationStrategy;
   /**
    * Declared project locales. Absent for a single-locale site: the generated
@@ -350,7 +368,7 @@ export interface RouteInfoEntry {
   isDynamic: boolean;
   paramNames: string[];
   /** Rendering mode declared via renderIntent.mode ("static" when unset; the "auto" alias is rejected, #609). */
-  rendering?: string;
+  rendering?: 'static' | 'dynamic';
   /** True when the route module exports an action (request-time form POST). */
   hasAction?: boolean;
   streamManifest?: StreamRouteManifest;
@@ -433,10 +451,7 @@ export interface BuildRouteInput {
 }
 
 /** A single island input to the build pipeline. */
-export interface BuildIslandInput {
-  tagName: string;
-  modulePath: string;
-  isPackage?: boolean;
+export interface BuildIslandInput extends IslandModuleIdentity {
   hydrate?: IslandDeliveryStrategy;
   ssr?: boolean;
   dsd?: boolean;

@@ -3,7 +3,7 @@
  *
  * The compiler emits the compiled module as TypeScript text and the bundler
  * lowers it. Before this check existed nothing type-checked that text, so the
- * "strict emission" corpus in `compiled-element-v1.test.ts` had to pin
+ * "strict emission" corpus in `compiled-element-v2.test.ts` had to pin
  * individual `static` annotations by string match — a proxy for the real
  * question, and one that only covers the annotations somebody remembered.
  *
@@ -70,7 +70,7 @@ function emittedDiagnostics(source: string, id: string): EmittedModuleDiagnostic
 
 test('#1386: the compiled module for the canonical counter fixture type-checks', async () => {
   const source = await readFile(
-    join(REPO_ROOT, 'packages/element/__fixtures__/compiled-element-v1/counter.tsx'),
+    join(REPO_ROOT, 'packages/element/__fixtures__/compiled-element-v2/counter.tsx'),
     'utf8',
   );
   const diagnostics = emittedDiagnostics(source, '/project/app/islands/counter.tsx');
@@ -85,14 +85,14 @@ test('#1386: the compiled module for the canonical counter fixture type-checks',
 test('#1386: the emitted module type-checks across the authoring grammar', () => {
   // One case per construct the emitter synthesizes around: a property with a
   // converter, a computed field, an event handler reference, a keyed list, a
-  // conditional Region, and a styles annotation. These are exactly the sites
+  // conditional Block, and a styles annotation. These are exactly the sites
   // where the emitter writes `static`/`const` declarations of its own.
   const sources: Array<[string, string]> = [
     [
-      'properties + handlers + regions',
+      'properties + handlers + blocks',
       [
         "import { element, OpenElement, property } from '@openelement/element';",
-        "@element('oe-check-regions')",
+        "@element('oe-check-blocks')",
         'export class CheckRegions extends OpenElement {',
         '  @property({ reflect: true }) count = 0;',
         '  @property({ reflect: false }) items: Array<{ id: string; text: string }> = [];',

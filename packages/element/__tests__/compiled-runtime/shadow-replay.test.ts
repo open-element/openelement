@@ -39,7 +39,7 @@ import { testProgram } from './test-program.ts';
 // The facade captures its HTMLElement base at module evaluation time.
 const dom: FacadeDom = installFacadeDom();
 
-const { OpenElement, ensurePreHydrationClickCapture, renderDsd } =
+const { OpenElement, ensurePreHydrationClickCapture, renderToString } =
   await import('../../src/index.ts');
 
 // oxlint-disable-next-line no-explicit-any
@@ -109,9 +109,9 @@ interface ShadowCounterElement extends FacadeElement {
  * composedPath() keeps reporting the true target (#942).
  */
 function ssrShadowHost(tag: string): FacadeElement {
-  const serialized = renderDsd(tag, {
+  const serialized = renderToString(tag, {
     componentClass: dom.registry.get(tag) as CustomElementConstructor,
-  }).html;
+  });
   const parsedHost = parseHtml(dom.document, serialized).childNodes[0] as FacadeElement;
   const host = new FacadeElement(tag, dom.document);
   for (const [name, value] of parsedHost.attributes) host.setAttribute(name, value);

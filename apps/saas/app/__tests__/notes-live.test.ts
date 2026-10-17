@@ -7,11 +7,11 @@
  *
  * v0.44: the island module's decorators are compile-time-only input, so the
  * pure logic lives in app/components/notes-live-shared.ts and the class is
- * compiled here through the real compiler before renderDsd.
+ * compiled here through the real compiler before renderToString.
  */
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
-import { renderDsd } from '@openelement/element';
+import { renderToString } from '@openelement/element';
 import { compileComponentClass } from './compile-page.ts';
 import {
   fetchNotesSnapshot,
@@ -28,15 +28,12 @@ import {
 
 test('notes-live SSR render includes the status and event mount points', async () => {
   const NotesLive = await compileComponentClass('../islands/notes-live.tsx');
-  const out = renderDsd('notes-live', { componentClass: NotesLive });
-  expect(out.errors).toEqual([]);
-  expect(
-    out.html.includes("id='live-status'") || out.html.includes('id="live-status"'),
-    out.html,
-  ).toBeTruthy();
-  expect(out.html.includes('realtime:'), out.html).toBeTruthy();
-  expect(out.html.includes('live-events'), out.html).toBeTruthy();
-  expect(out.html.includes('Reconnect'), out.html).toBeTruthy();
+  const html = renderToString('notes-live', { componentClass: NotesLive });
+  // renderToString throws on a render error (the retired `errors` field was []).
+  expect(html.includes("id='live-status'") || html.includes('id="live-status"'), html).toBeTruthy();
+  expect(html.includes('realtime:'), html).toBeTruthy();
+  expect(html.includes('live-events'), html).toBeTruthy();
+  expect(html.includes('Reconnect'), html).toBeTruthy();
 });
 
 test('notes-live deduplicates INSERT delivery by stable row id', () => {

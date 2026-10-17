@@ -187,7 +187,8 @@ test.describe('plain links keep browser behavior', () => {
       page.click('#download-link'),
     ]);
     expect(download.url()).toContain('/notes');
-    await expect(page).toHaveURL(/\/guards#frag-target$/, 'still on the guards page');
+    // still on the guards page
+    await expect(page).toHaveURL(/\/guards#frag-target$/);
     await markerIntact(page, '__preLinks');
 
     expect(enhancedRequests).toEqual([]);

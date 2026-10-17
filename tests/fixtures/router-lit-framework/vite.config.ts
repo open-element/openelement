@@ -8,8 +8,8 @@
  * Routing, loaders, actions (ADR-0120), form enhancement and morphing are the
  * shared framework machinery — only the page renderer forks.
  *
- * renderer: 'lit' supports appShell: false only (the compiled shell path is
- * rejected by the build); the fixture stays minimal and shell-free.
+ * renderer: 'lit' supports layout: false only (the compiled layout path is
+ * rejected by the build); the fixture stays minimal and layout-free.
  */
 import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
@@ -27,8 +27,7 @@ export default defineConfig({
       renderer: 'lit',
       routesDir: 'app/routes',
       islandsDir: 'app/islands',
-      componentsDir: 'app/components',
-      appShell: false,
+      layout: false,
       head: {
         title: 'app-flow-lit fixture',
       },

@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import {
-  claimExistingDom,
+  hydrateExistingDom,
   type CompiledRuntimeHost,
   createFreshDom,
   serializeToHtml,
@@ -117,7 +117,7 @@ test('fixed Parts share normalized commits across fresh and claim paths', () => 
   const claimInput = fixedRoot(claimRoot).childNodes[0] as TestElement;
   claimInput.simulateUserInput('typed before claim');
   claimDoc.resetCounts();
-  const claimed = claimExistingDom(FIXED_PROGRAM, claimHost.host, asNode(claimRoot));
+  const claimed = hydrateExistingDom(FIXED_PROGRAM, claimHost.host, asNode(claimRoot));
   expect(fixedRoot(claimRoot).childNodes[0] as TestElement).toBe(claimInput);
   expect(claimInput.value).toEqual('typed before claim');
   expect(claimDoc.counts.valueWrites, 'claim never performs initial property writes').toEqual(0);
@@ -165,7 +165,7 @@ test('TrustedHtml is required across serialization, fresh DOM, claim, and update
   const claimDocument = new TestDocument();
   const claimRoot = parseHtml(claimDocument, html);
   const claimedBody = signal<unknown>(trustedHtml('<strong>safe</strong>'));
-  const claimed = claimExistingDom(
+  const claimed = hydrateExistingDom(
     program,
     { signals: { body: claimedBody }, handlers: {} } as CompiledRuntimeHost,
     asNode(claimRoot),
@@ -189,7 +189,7 @@ test('TrustedHtml is required across serialization, fresh DOM, claim, and update
     'requires a value created by trustedHtml()',
   );
   assertThrowsIncludes(
-    () => claimExistingDom(program, plain, asNode(parseHtml(new TestDocument(), html))),
+    () => hydrateExistingDom(program, plain, asNode(parseHtml(new TestDocument(), html))),
     Error,
     'requires a value created by trustedHtml()',
   );
@@ -242,7 +242,7 @@ test('fixed Part errors are explicit and unsupported claim shapes fail closed', 
   const root = parseHtml(doc, html);
   (fixedRoot(root).childNodes[1] as TestElement).setAttribute('extra', 'unsafe');
   const error = assertThrowsIncludes(
-    () => claimExistingDom(FIXED_PROGRAM, host.host, asNode(root)),
+    () => hydrateExistingDom(FIXED_PROGRAM, host.host, asNode(root)),
     Error,
   );
   expect(error.message).toContain('unexpected attribute');
@@ -272,7 +272,7 @@ test('a fixed-Part path of [0] targets the sole template root; an empty path fai
 
   const claimDoc = new TestDocument();
   const claimRoot = parseHtml(claimDoc, html);
-  const claimed = claimExistingDom(program, host, asNode(claimRoot));
+  const claimed = hydrateExistingDom(program, host, asNode(claimRoot));
   const claimedDiv = claimRoot.childNodes[0] as TestElement;
   expect(claimedDiv.getAttribute('title')).toEqual('initial');
   expect(claimRoot.getAttribute('title')).toEqual(null);

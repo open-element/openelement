@@ -1,8 +1,10 @@
 # Packages and distribution
 
-The repository publishes four public packages for two core products:
+The repository publishes six public packages for two core products:
 
+- `@openelement/protocol` — shared contract types both products build on.
 - `@openelement/element` — Element.
+- `@openelement/compiler` — the Element compiler (semantic core plus Vite integration).
 - `@openelement/router` — Router Route Mode, Framework Mode, and the application lifecycle
   tooling (Vite orchestration under `./vite`, Nitro mount under `./nitro-mount`, and the
   `dev`/`build`/`start`/`preview` CLI under `./cli/*`). Host-tooling dependencies are optional

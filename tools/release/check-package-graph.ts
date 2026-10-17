@@ -75,8 +75,9 @@ export const ALLOWED_DEPENDENCY_DIRECTION: Readonly<Record<string, readonly stri
     '@openelement/url-pattern-list',
   ],
   // ui consumes element's StyleSheet/logger/manifest contracts (1.0 baseline —
-  // the rule predated ui's re-entry onto the publish surface).
-  '@openelement/ui': ['@openelement/element'],
+  // the rule predated ui's re-entry onto the publish surface) and may share
+  // protocol's contracts like every other package (M-T5).
+  '@openelement/ui': ['@openelement/element', '@openelement/protocol'],
   '@openelement/create': [],
 };
 

@@ -13,7 +13,7 @@ The build lowers the file to a compiled page module before the compiled-element 
 Markdown parsing is the one dependency this path adds, and it is an optional peer of `@openelement/router` — it is only resolved when an `.mdx` file actually enters the build. Install it in the app:
 
 ```sh
-pnpm add marked@^15.0.0
+npm install marked@^15.0.0
 ```
 
 If an `.mdx` route exists without that dependency, the build fails with install guidance instead of emitting a broken page.
@@ -26,9 +26,9 @@ Sites that need richer authoring keep the pipeline site-owned. The router ships 
 
 ## Build path
 
-`pnpm build` compiles `.mdx` routes together with the rest of the route tree. They follow the same rendering rules as any page — the default `renderIntent` mode is static, so they are prerendered into `dist/` at their route path and appear in the sitemap like every other route.
+`npm run build` compiles `.mdx` routes together with the rest of the route tree. They follow the same rendering rules as any page — the default `renderIntent` mode is static, so they are prerendered into `dist/` at their route path and appear in the sitemap like every other route.
 
-Failures surface at build time, not at request time: an unsupported construct, an unresolvable `marked` import or an undeclarable tag all stop the build with a source-located message. `pnpm check` type-checks the app's TypeScript sources alongside the build, so authored `.tsx` pages keep their own fast signal while `.mdx` pages are covered by the build itself.
+Failures surface at build time, not at request time: an unsupported construct, an unresolvable `marked` import or an undeclarable tag all stop the build with a source-located message. `npm run typecheck` type-checks the app's TypeScript sources alongside the build, so authored `.tsx` pages keep their own fast signal while `.mdx` pages are covered by the build itself.
 
 ## See also
 

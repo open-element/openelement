@@ -27,7 +27,7 @@ import {
   STREAM_MAX_SEED_PROPERTIES,
 } from '@openelement/element/authoring';
 import {
-  createDeferredPageShell,
+  createStreamPageShell,
   createStreamBody,
   createStreamRequestScope,
   STREAM_BROWSER_BOOTSTRAP,
@@ -158,9 +158,9 @@ test('stream front gate attaches both observers per declared field', async () =>
 });
 
 test('deferred-shell gate fails closed when the route has no build manifest', async () => {
-  const gate = createDeferredPageShell({
+  const gate = createStreamPageShell({
     streamManifests: {},
-    createDeferredDsdExecutor: () => Promise.resolve(executor()),
+    createStreamShellExecutor: () => Promise.resolve(executor()),
   });
   const error = await assertRejectsIncludes(
     () => gate('/', { default: { __partProgram: { tag: 'oe-unit', version: 1 } } }, {}, 'i', 't'),
@@ -172,9 +172,9 @@ test('deferred-shell gate fails closed when the route has no build manifest', as
 });
 
 test('deferred-shell gate fails closed on a program tag or version mismatch', async () => {
-  const gate = createDeferredPageShell({
+  const gate = createStreamPageShell({
     streamManifests: { '/': manifest(1) },
-    createDeferredDsdExecutor: () => Promise.resolve(executor()),
+    createStreamShellExecutor: () => Promise.resolve(executor()),
   });
   const routeModule = { default: { __partProgram: { tag: 'other-unit', version: 1 } } };
   await assertRejectsIncludes(
@@ -202,9 +202,9 @@ test('deferred-shell gate delegates to the entry executor import on a match', as
   const routeModule = { default: { __partProgram: { tag: 'oe-unit', version: 1 } } };
   const calls: unknown[] = [];
   const produced = executor();
-  const gate = createDeferredPageShell({
+  const gate = createStreamPageShell({
     streamManifests: { '/': manifest(1) },
-    createDeferredDsdExecutor: (options) => {
+    createStreamShellExecutor: (options) => {
       calls.push(options);
       return Promise.resolve(produced);
     },

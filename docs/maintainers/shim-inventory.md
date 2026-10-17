@@ -34,7 +34,7 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 9 | Nitro mount 适配 | `packages/router/src/nitro-mount.ts` | 保留为平台边缘（P5 明示的部署边界） |
 | 10 | node:http `serveFetch` 适配 | `packages/router/src/internal/node-http.ts` | 保留为平台边缘 |
 | 11 | Workers `nodeCompat`（unenv） | `apps/saas/nitro.config.ts`、fixture 同形 | 保留为平台边缘 |
-| 12 | `Deno.Command` 形状仿真（deno→node 残余） | `tools/repo/node-command.ts` | 条件到即删（工具车道重塑调用点后删） |
+| 12 | `Deno.Command` 形状仿真（deno→node 残余） | ~~`tools/repo/node-command.ts`~~ | **已删（N-1：重塑为一等 spawn 助手，2026-10-13）** |
 | 13 | TypeScript `ParserPort` 后端 | `packages/element/src/internal/compiler/semantic-core/parse-module.ts` | 保留为平台边缘（双触发器已写死） |
 | 14 | signal 引擎 Preact 适配 | `packages/element/src/internal/signal/` | 保留为平台边缘 |
 | 15 | `@openelement/url-pattern-list` 维护 fork | `packages/router/src/internal/router/route-table.ts` | 保留为平台边缘（附评估结论） |
@@ -43,7 +43,8 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法
 散文）已在 alpha8/alpha10 清理；其余命中要么已含书面退役条件，要么是
-平台缺口本身。
+平台缺口本身。（2026-10-13 追加：第 12 项的退役条件随后到期并由 N-1 重塑
+执行——形状仿真已删，模块改为一等 spawn 助手，见条目详情；其余结论不变。）
 
 ## 条目详情
 
@@ -84,17 +85,31 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
   变成"现在删"。
 - 处置：条件到即删（(a)）；(b) 批准则立即删原生形态一侧。
 
-### 4. dev/SSR 内联 sheet 适配器——条件到即删
+### 4. dev/SSR 内联 sheet 适配器——dev 半边已删除（S-C1.3），SSR 文本形态保留为边界
 
-- 所有者：router（`inlineSheetAdapterModule` / `serverStyleAssetPlugin`，
-  同在 `style-assets.ts`）。
+- 历史所有者：router（`inlineSheetAdapterModule`（已删除）/
+  `serverStyleAssetPlugin`（保留），同在原 `style-assets.ts`）。
 - 方向：dev server / SSR build → 模块图内联的 sheet 文本。
-- 存在原因：dev 与 SSR 没有可供 fetch 的已产出资产；内联是这两个通道的
-  过渡形态。
-- 退役条件（已写在 `style-assets.ts:181-184`）：#3 的原生判定翻转，或
-  dev 学会用 HTTP 服务协议资产——届时 dev 通道塌缩进生产适配器形态，
-  本生成器随同一判定删除。
-- 处置：条件到即删（与 #3 同一批执行）。
+- 退役条件之一已经兑现（alpha15 S-C1.3，"dev 学会用 HTTP 服务协议资产"）：
+  dev 通道现在把每条 authored 边服务为真实的 `text/css` 资源
+  （`<base>.openElement/authored-css.<digest>.css`，字节 = Vite 自身
+  `?inline` 处理后再做 S-C1.2 作用域投影），客户端适配器只携带 URL 并
+  `fetch()` + `replace()` 到按 realm/边持有的共享 `CSSStyleSheet`
+  （`STYLE_SHEET_LIVE` 使其在 markup 已声明同一链接时仍被 adopt，HMR 才能
+  就地更新已连接的根）。`inlineSheetAdapterModule` 与其
+  `replaceSync(<内联 CSS>)` 生成物、以及 `.css` 编辑触发的 full-reload
+  分支都随之删除。
+- 仍保留的一侧：SSR 构建对"没有产出资产的 sheet"（客户端图看不见的组件，
+  如非 island 的页面组件；应用自带的内存 sheet）继续内联其文本
+  —— 这是 S-C1.2 记录的边界，不是 dev 通道的退路，且文本本身就是构建期
+  `@scope` 投影。dev 下这类 sheet 不再内联（dev 端点覆盖每条 edge）。
+- 同源修正（S-C1.3 follow-up）：BUILD 侧发出的 `.css` 资产也不再是
+  "作者原字节"而是同一条 Vite `?inline` 处理链的产物（`@import` 展开、
+  `url()` 由 Vite 资产图产出并改写、随后做作用域投影），文件名哈希仍取自
+  最终文本；SSR 文本形态是唯一保留作者原字节的一侧。退役条件不变
+  （server-only CSS 资产发现）。
+- 处置：dev 半边已删（S-C1.3）；SSR 文本形态保持"保留为边界"，其删除
+  条件是 server-only CSS 资产发现（剩余 S 收口项）。
 
 ### 5. `ShimStyleSheet`（SSR 侧 CSSStyleSheet）——保留为平台边缘
 
@@ -189,25 +204,30 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
   白名单成员消失），`nodeCompat: true` 即可关掉，unenv 从产物消失。
 - 处置：保留为平台边缘。
 
-### 12. `Deno.Command` 形状仿真——条件到即删
+### 12. `Deno.Command` 形状仿真——已删（N-1 重塑，2026-10-13）
 
-- 所有者：repo 工具（`tools/repo/node-command.ts`；21 个消费文件、33
-  个调用点，横跨 `tools/repo` 与 `tools/release`）。
-- 方向：node:child_process 之上仿真 `Deno.Command` 的结果形状
-  （`{success, code, signal, stdout, stderr}`、信号杀进程报
-  `128 + 信号号`、env 合并非替换、spawn 失败 reject）。
-- 存在原因：B1b 机械移植时保持调用点逐字不动。这是全仓唯一存活的
-  deno→node 兼容层
-  （[node-porting-residuals.md](./node-porting-residuals.md) §7"the
-  single seam"；§1–§6、§8–§9 均已 RESOLVED；create 预设/模板侧的
-  deno→node 残余已随 owner ruling 2026-10-03 清零，
-  `packages/create/src/install-command.ts:47-49`）。
-- 退役条件：宿主已退（Deno），形状保持的理由随之失效——一次机械清扫
-  把调用点改成 node 原生语义（或反过来：正式承认这些形状为本仓规范
-  spawn 助手，重写该文件头删除 Deno 叙事——二选一，不许维持"仿真"
-  名分）。附带债务：§7 记录的 abort 路径仅在 Deno 主机下验证过，重塑
-  时须在 Node 重新验证。
-- 处置：条件到即删（工具车道的一次机械重塑；本车道不执行）。
+- 所有者：repo 工具（`tools/repo/node-command.ts`；重塑覆盖 27 个消费文件，
+  横跨 `tools/repo`、`tools/lib`、`tools/release`、`www/tools`、
+  `benchmarks/streaming` 与 element `__wtr__`）。
+- 退役条件已执行：宿主已退（Deno），形状保持的理由随之失效。N-1 工具车道按
+  "正式承认这些形状为本仓规范 spawn 助手、重写文件头删除 Deno 叙事"一路执行：
+  - 删除 `denoStatus` 与整段 Deno.Command 叙事；模块头就地写明信号/退出码/
+    中止/env/stdio 语义与理由；
+  - `commandOutput` 与 `commandStatus` 合并为单一异步 `spawnCommand`（原二分只
+    镜像 `.output()/.spawn()`，实现本就同体）；`commandOutputSync` 改名
+    `spawnCommandSync`；全部调用点随改。
+- **保留的契约（有意为之，非残余）**：信号杀进程仍报 `128 + 信号号`
+  （SIGTERM→143）——`check-coverage.ts` 的 native-crash 重试以 ≥128 为界
+  （#1278），`run-in.ts`/`gate.ts` 把 `code` 交给 `process.exit`（node 的
+  `code: null` 会退出 0），release harness 的失败诊断也打印该值；env 合并、
+  spawn 失败 reject/throw 的形状不变。依赖由新增契约测试
+  `tools/repo/node-command.contract.test.ts`（退出码、SIGTERM/SIGKILL、中止、
+  env、stdio、spawn 失败）钉住。
+- 附带债务已清：abort 路径已在 Node 24 上重新验证——运行中与运行前中止均以
+  `SIGTERM`/143 resolve（不 reject），正是 packed-consumer 超时 harness 依赖的
+  行为。
+- 处置：**已删**（形状仿真）；`tools/repo/node-command.ts` 作为一等 spawn
+  助手保留（工具车道的一次机械重塑，本分支执行）。
 
 ### 13. TypeScript `ParserPort` 后端——保留为平台边缘
 

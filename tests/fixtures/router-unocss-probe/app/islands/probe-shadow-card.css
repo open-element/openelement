@@ -1,0 +1,19 @@
+/* The shadow component's irreducible authored rule: a shadow-tree element's
+   `hidden` attribute needs an explicit rule once `display` is set, and the
+   embedded frame is one owned formula. Everything else is a utility on the
+   host element (see the .tsx header). */
+:host {
+  display: inline-block;
+}
+
+.card {
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-card) 86%, transparent);
+}
+
+.probe-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+}

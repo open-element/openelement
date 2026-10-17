@@ -70,6 +70,18 @@ One JSON artifact per page, emitted next to the HTML, carrying the route and eac
 
 The explicit boundary for pre-sanitized, non-interactive HTML injection into a compiled template. Dynamic island content otherwise comes from signal-driven `@property` state.
 
+## Alpha15 renames
+
+Public names consolidated in alpha15 (no backward-compatible aliases):
+
+- `renderDsd()` → `renderToString()` (`@openelement/element`; same string contract).
+- `PartProgramV1` → `PartProgramV2` (`PartProgram` is the current V2 type; `PART_PROGRAM_VERSION` is 2; v1 artifacts are refused, never coerced).
+- `FacadeErrorCode.DEFERRED_*` → `STREAM_*` (code strings `OE_DEFERRED_*` → `OE_STREAM_*`).
+- `createDeferredDsdExecutor` → `createStreamShellExecutor`; `createDeferredServerExecutor` → `createStreamServerExecutor` (option/executor/manifest types follow the same `Stream*` names).
+- `createDeferredPageShell` → `createStreamPageShell` (`@openelement/router/server-runtime`).
+
+Unchanged: wire values (`owner.kind: 'region'`, block ids `rN`) and the deferred-field lifecycle vocabulary (`defer` intent, pending/resolved/missing seed states).
+
 ## See also
 
 - [Core Concepts](/guide/core-concepts) — the authoring model these terms belong to.

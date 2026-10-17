@@ -136,3 +136,23 @@ both the request-time handlers and the SSG render route; the public interface
 snapshot is regenerated. First consumer: the product site emits `BlogPosting`
 on blog dispatches and `WebSite` + `Organization` on the front page, from site
 truth only (no invented logo, `sameAs`, or social profiles).
+
+## Addendum (2026-10-13): two Deno-era statements no longer describe current behaviour
+
+The historical body above is left unchanged. A later retirement overtook two
+of its statements: the product no longer carries Deno-specific support (the
+Deno/`@std/*` tier retired with the Deno-free baseline — ADR-0161 and its
+2026-10-03 amendment), and it ships a first-party Node HTTP bridge
+(`packages/router/src/internal/node-http.ts`, `fetch(Request) -> Response` on
+`node:http`) instead.
+
+1. §1 names "Deno 2.9" among the live Alpha targets carrying native
+   `URLPattern`. Deno is not a shipped target anymore: the supported target is
+   Node.js 24 plus the current Chromium/Firefox/WebKit engines. The native-
+   `URLPattern`-only decision and its fail-closed `TypeError` stand on that
+   baseline unchanged.
+2. The 2026-09-13 addendum records local preview as "served by the start CLI
+   from TypeScript source (`Deno.serve` over the shared fetch handler in
+   `static-serve.ts`)". That sentence describes the retired host. Local preview
+   is served by the start CLI through the first-party Node HTTP bridge above;
+   production deploys still go through the Nitro mount.

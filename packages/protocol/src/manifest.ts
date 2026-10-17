@@ -40,6 +40,34 @@ export interface OpenElementCssPart {
   description?: string;
 }
 
+/**
+ * A declaration's utility-compilation requirement and the package-owned style
+ * sources that requirement compiles (the declared-compilation contract; see
+ * the router's `style-plan` module for the resolution rules).
+ *
+ * `required` is the mandatory-compilation dependency: the component's
+ * presentation cannot be delivered without the compile, so an application that
+ * disables the entry (`tailwind: false`) fails the build with a coded
+ * diagnostic instead of shipping an unstyled component. Merely offering a theme
+ * source is NOT a requirement — leave `required` unset for a source a consumer
+ * may adopt on its own.
+ *
+ * `sources` are package-relative paths (e.g. `./theme.css`) resolved against
+ * THIS package, so a consumer never repeats the owner's declaration. They must
+ * exist in the installed package (i.e. ship in the tarball).
+ *
+ * `dialect` names the CLASS LANGUAGE this component's utility tokens are
+ * written in, not the engine that compiles them: the declaration stays
+ * provider-neutral, and a selected provider that does not implement the
+ * dialect fails the build before any compile. Omitted means `tailwind4` — the
+ * language every declaration written before this field existed uses.
+ */
+export interface OpenElementTailwindDeclaration {
+  required?: boolean;
+  sources?: string[];
+  dialect?: 'tailwind4';
+}
+
 /** The openElement-specific extension block of a package manifest declaration. */
 export interface OpenElementExtensions {
   ssr?: boolean;
@@ -50,6 +78,7 @@ export interface OpenElementExtensions {
   status?: 'stable' | 'experimental';
   module?: string;
   export?: string;
+  tailwind?: OpenElementTailwindDeclaration;
 }
 
 /** One custom element declaration in a package manifest: tag, members and delivery metadata. */

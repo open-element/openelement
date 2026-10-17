@@ -28,7 +28,7 @@ import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
-import { runProcess } from './consumer-packaged-shared.ts';
+import { assertPackedTarballsFresh, runProcess } from './consumer-packaged-shared.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
@@ -62,13 +62,26 @@ const elementTarball = join(
   'element',
   `openelement-element-${PACKAGE_VERSION}.tgz`,
 );
-for (const tarball of [routerTarball, elementTarball]) {
+const protocolTarball = join(
+  repoRoot,
+  'packages',
+  'protocol',
+  `openelement-protocol-${PACKAGE_VERSION}.tgz`,
+);
+const compilerTarball = join(
+  repoRoot,
+  'packages',
+  'compiler',
+  `openelement-compiler-${PACKAGE_VERSION}.tgz`,
+);
+for (const tarball of [routerTarball, elementTarball, protocolTarball, compilerTarball]) {
   if (!existsSync(tarball)) {
     throw new Error(
       `Missing packed release artifact: ${tarball} (run \`pnpm --dir tools/release run pack:dry-run\` first)`,
     );
   }
 }
+await assertPackedTarballsFresh([routerTarball, elementTarball, protocolTarball, compilerTarball]);
 
 const tmp = await mkdtemp(join(tmpdir(), `openelement-packed-serve-${runtime}-`));
 let server: import('node:child_process').ChildProcess | undefined;
@@ -88,8 +101,8 @@ try {
       dependencies: {
         '@openelement/router': `file:${routerTarball}`,
         '@openelement/element': `file:${elementTarball}`,
-        '@openelement/protocol': `file:${repoRoot}/packages/protocol/openelement-protocol-${PACKAGE_VERSION}.tgz`,
-        '@openelement/compiler': `file:${repoRoot}/packages/compiler/openelement-compiler-${PACKAGE_VERSION}.tgz`,
+        '@openelement/protocol': `file:${protocolTarball}`,
+        '@openelement/compiler': `file:${compilerTarball}`,
         vite: VITE_DEV_PIN,
         hono: '4.12.0',
         nitro: NITRO_VERSION,
@@ -152,8 +165,7 @@ export default defineConfig({
   plugins: [
     openElement({
       routesDir: 'app/routes',
-      componentsDir: 'app/components',
-      appShell: false,
+      layout: false,
       head: { title: 'packed serve proof' },
     }),
   ],

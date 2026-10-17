@@ -14,11 +14,18 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
  * projector and the error projector) to that class as the `openElementPage`
  * static the pipeline reads; it never creates classes and never holds a
  * render function. There is no runtime JSX render path.
+ *
+ * The server function page form (alpha15) is the SAME call over the module's
+ * exported TSX component function: the compiler has lowered it to a
+ * generative HTML constructor, and definePage admits it as a
+ * `kind: 'function-page'` descriptor whose render IS that function. This is
+ * the only page form that carries a render function, and the function is
+ * always compiler output — never authored HTML strings.
  */
 
 import { isDangerousKey, isValidTagName, OpenElementError } from '@openelement/element/authoring';
 import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
-import type { HydrationStrategy } from '@openelement/element/authoring';
+import type { IslandDeliveryStrategy } from '@openelement/protocol/ssg';
 import { hasControlCharacter } from './internal/control-characters.ts';
 import { isInvalidIslandMedia, ISLAND_MEDIA_QUERY_MAX_LENGTH } from './internal/island-media.ts';
 import { authoringError, IslandErrorCode, PageErrorCode } from './internal/error-codes.ts';
@@ -46,7 +53,7 @@ interface PageRouteIntent {
   /**
    * Named layout selection (decision 0123): a string picks one of the
    * `openElement({ layouts })` entries by name (unknown names fall back to
-   * the default shell); `false` renders the page without any app shell.
+   * the default layout); `false` renders the page without any layout.
    * Unset means the default shell.
    */
   layout?: string | false;
@@ -312,7 +319,7 @@ export interface PagePropsContext<
 /**
  * Maps the request-scoped context onto the page's compiled properties.
  * Declared as part of the page descriptor; the generated server entry and the
- * SPA bootstrap call it per render and feed the result to renderDsd() props
+ * SPA bootstrap call it per render and feed the result to renderToString() props
  * (server) or pre-connect property sets (SPA).
  */
 export type PagePropsProjector<
@@ -379,7 +386,63 @@ export type PageComponentConstructor<
   openElementPage: OpenElementPageDescriptor<Data, Params>;
 };
 
+/**
+ * A compiled server page component function (alpha15 server lane): the route
+ * module's exported TSX component after the server component lane compiled it
+ * — props in, final HTML out. While authoring, the TSX function's inferred
+ * type is JSX.Element-returning (the compiler owns the body), so this type
+ * admits every function shape; the runtime discriminant in definePage() is
+ * the authority on which branch a value takes.
+ */
+export type ServerPageComponent = (...args: never[]) => unknown;
+
+/**
+ * The function-page descriptor the pipeline reads
+ * (`module.default.openElementPage` with `kind: 'function-page'`): same
+ * metadata/projector shape as {@link OpenElementPageDescriptor} plus the
+ * compiled component function — no element class exists, so the generated
+ * entry registers nothing and renders through the render function.
+ */
+export interface OpenElementFunctionPageDescriptor<
+  Data = unknown,
+  Params extends Record<string, string> = Record<string, string>,
+> {
+  kind: 'function-page';
+  route?: PageRouteIntent;
+  head?: PageHead | PageHeadResolver<Data, Params>;
+  renderIntent: NormalizedPageRenderIntent;
+  props?: PagePropsProjector<Data, Params>;
+  error?: PageErrorProjector<Data, Params>;
+  render: ServerPageComponent;
+}
+
+/** The route-module default export shape a definePage() component call produces. */
+export type FunctionPageComponent<
+  Data = unknown,
+  Params extends Record<string, string> = Record<string, string>,
+> = ServerPageComponent & {
+  openElementPage: OpenElementFunctionPageDescriptor<Data, Params>;
+};
+
 const PAGE_DESCRIPTOR_FIELDS = new Set(['route', 'head', 'renderIntent', 'props', 'error']);
+
+/**
+ * The class-branch discriminant of definePage()'s first argument. Two shapes
+ * are element CLASSES: a value carrying the compiled Part Program
+ * (`__partProgram` — the field every class the compiled-element transform
+ * emits declares, so a compiled page class is recognized structurally), and
+ * an ES class (class syntax defines `prototype` as a NON-writable own
+ * property; a plain function's `prototype` is writable and an arrow function
+ * has none). The second arm preserves the class path for classes that
+ * legitimately carry no compiled program — the LitElement page classes
+ * defineLitPage() funnels through this same definePage(). Everything else
+ * function-shaped is a server function page.
+ */
+function isElementPageClass(component: (...args: never[]) => unknown): boolean {
+  if ((component as { __partProgram?: unknown }).__partProgram !== undefined) return true;
+  const prototype = Object.getOwnPropertyDescriptor(component, 'prototype');
+  return prototype !== undefined && prototype.writable === false;
+}
 
 /**
  * Attach a page descriptor to a compiled page element class.
@@ -397,6 +460,24 @@ const PAGE_DESCRIPTOR_FIELDS = new Set(['route', 'head', 'renderIntent', 'props'
  *     head: { title: 'Home' },
  *     props: ({ data }) => ({ heading: data?.heading ?? '' }),
  *   });
+ *
+ * The server function page form (alpha15 server lane) passes the module's
+ * exported TSX component function instead — the compiler has already lowered
+ * it to a generative HTML constructor, so the same call admits it as a
+ * `kind: 'function-page'` descriptor whose render IS that function:
+ *
+ *   export function Home(props: { heading: string }) {
+ *     return <main><h1>{props.heading}</h1></main>;
+ *   }
+ *   export const loader = async () => ({ heading: 'Home' });
+ *   export default definePage(Home, { head: { title: 'Home' } });
+ *
+ * Runtime discriminant (one rule, no text sniffing): a first argument that is
+ * an element CLASS — a value carrying `__partProgram` (what the compiled-
+ * element transform emits) or class syntax (its `prototype` is a non-writable
+ * own property; plain functions and arrows are not classes) — takes the class
+ * branch; any other function takes the function-page branch. Non-functions
+ * fail closed with NOT_COMPILED_CLASS.
  */
 export function definePage<
   Data = unknown,
@@ -404,13 +485,22 @@ export function definePage<
 >(
   componentClass: CustomElementConstructor,
   descriptor?: PageDescriptorInput<Data, Params>,
-): PageComponentConstructor<Data, Params> {
-  if (
-    typeof componentClass !== 'function' ||
-    // Arrow functions are not constructors (no prototype): the compiled page
-    // element class must be one.
-    !componentClass.prototype
-  ) {
+): PageComponentConstructor<Data, Params>;
+export function definePage<
+  Data = unknown,
+  Params extends Record<string, string> = Record<string, string>,
+>(
+  component: ServerPageComponent,
+  descriptor?: PageDescriptorInput<Data, Params>,
+): FunctionPageComponent<Data, Params>;
+export function definePage<
+  Data = unknown,
+  Params extends Record<string, string> = Record<string, string>,
+>(
+  componentOrClass: CustomElementConstructor | ServerPageComponent,
+  descriptor?: PageDescriptorInput<Data, Params>,
+): PageComponentConstructor<Data, Params> | FunctionPageComponent<Data, Params> {
+  if (typeof componentOrClass !== 'function') {
     throw authoringError(
       PageErrorCode.NOT_COMPILED_CLASS,
       `${ERROR_PREFIX} definePage() requires the compiled page element class as its first ` +
@@ -420,6 +510,7 @@ export function definePage<
         'never definePage(HomePage(), …).',
     );
   }
+  const isClass = isElementPageClass(componentOrClass as (...args: never[]) => unknown);
   if (descriptor !== undefined) {
     if (typeof descriptor !== 'object' || descriptor === null || Array.isArray(descriptor)) {
       throw authoringError(
@@ -514,9 +605,22 @@ export function definePage<
           'or remove stream to keep the existing render path.',
       );
     }
+    // Streaming is a compiled-Part-Program channel: the deferred-field front
+    // gate rides the compiled program's Part owners. A server function page
+    // owns no program, so the declaration is rejected HERE — at the authoring
+    // surface, naming the real reason — instead of surfacing later as an
+    // unrelated scan/compile diagnostic.
+    if (!isClass) {
+      throw authoringError(
+        PageErrorCode.RENDER_MODE,
+        `${ERROR_PREFIX} renderIntent.stream is not supported on a server function page: ` +
+          'streaming is a compiled-Part-Program channel (the deferred-field front gate rides ' +
+          'the compiled program), and a server function page has none. Remove stream, or move ' +
+          'the page to a compiled @element class route for a streamed page.',
+      );
+    }
   }
-  const pageDescriptor: OpenElementPageDescriptor<Data, Params> = {
-    kind: 'page',
+  const sharedDescriptor = {
     ...(descriptor?.route !== undefined ? { route: descriptor.route } : {}),
     ...(descriptor?.head !== undefined ? { head: descriptor.head } : {}),
     renderIntent: {
@@ -527,12 +631,34 @@ export function definePage<
     ...(descriptor?.error !== undefined ? { error: descriptor.error } : {}),
   };
 
-  Object.defineProperty(componentClass, 'openElementPage', {
+  if (isClass) {
+    const pageDescriptor: OpenElementPageDescriptor<Data, Params> = {
+      kind: 'page',
+      ...sharedDescriptor,
+    };
+    Object.defineProperty(componentOrClass, 'openElementPage', {
+      value: pageDescriptor,
+      writable: true,
+      configurable: true,
+    });
+    return componentOrClass as PageComponentConstructor<Data, Params>;
+  }
+
+  // Server function page (alpha15 server lane): the compiled component
+  // function IS the render. The descriptor attaches to the function itself —
+  // the route module's default export.
+  const render = componentOrClass as ServerPageComponent;
+  const pageDescriptor: OpenElementFunctionPageDescriptor<Data, Params> = {
+    kind: 'function-page',
+    ...sharedDescriptor,
+    render,
+  };
+  Object.defineProperty(render, 'openElementPage', {
     value: pageDescriptor,
     writable: true,
     configurable: true,
   });
-  return componentClass as PageComponentConstructor<Data, Params>;
+  return render as FunctionPageComponent<Data, Params>;
 }
 
 /**
@@ -568,8 +694,12 @@ export function projectPageProps(context: {
   return props;
 }
 
-/** Delivery strategy for an island: a hydration trigger or media-gated loading. */
-export type IslandDeliveryStrategy = HydrationStrategy | 'media';
+/**
+ * Delivery strategy for an island: a hydration trigger or media-gated loading.
+ * The protocol package owns the contract (`@openelement/protocol/ssg`); this
+ * face re-exports it rather than restating the union.
+ */
+export type { IslandDeliveryStrategy };
 
 /** Per-island delivery configuration (SSR/DSD participation and hydration strategy). */
 export interface IslandConfig {
@@ -584,6 +714,19 @@ export interface IslandConfig {
   hydrate?: IslandDeliveryStrategy;
   /** Media query required by the `media` delivery strategy. */
   media?: string;
+  /**
+   * The root family this island is delivered in: `'shadow'` (the compiled
+   * default, DSD markup in a shadow root) or `'light'` (the component's
+   * children live in the document tree, which is what lets a light island use
+   * utility classes without a shadow-boundary workaround).
+   *
+   * Declarative only: `@element(tag, { root: 'light' })` on the component
+   * class is the single source of truth, and the build fails closed when this
+   * declaration disagrees with the compiled program's root. Declaring it here
+   * puts the island's root next to its delivery policy so a reader does not
+   * have to open the component to learn it.
+   */
+  root?: 'light' | 'shadow';
   /** Custom-element tags delivered by this one capability module. */
   tags?: readonly string[];
   /** Alias accepted by generated artifact producers. */
@@ -597,6 +740,7 @@ const ISLAND_CONFIG_FIELDS = new Set([
   'dsd',
   'hydrate',
   'media',
+  'root',
   'tags',
   'tagNames',
   'exportNames',
@@ -653,8 +797,8 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
     throw authoringError(
       IslandErrorCode.DESCRIPTOR_SHAPE,
       `${ERROR_PREFIX} defineIslandConfig() requires an object descriptor. ` +
-        'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, tags, ' +
-        'tagNames, exportNames }).',
+        'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, root, ' +
+        'tags, tagNames, exportNames }).',
     );
   }
   for (const key of Object.keys(config)) {
@@ -662,7 +806,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       throw authoringError(
         IslandErrorCode.DESCRIPTOR_SHAPE,
         `${ERROR_PREFIX} defineIslandConfig() does not accept "${key}". ` +
-          'Use only ssr, dsd, hydrate, media, tags, tagNames, and exportNames. ' +
+          'Use only ssr, dsd, hydrate, media, root, tags, tagNames, and exportNames. ' +
           `Remove "${key}" from the descriptor.`,
       );
     }
@@ -678,7 +822,9 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
     throw authoringError(
       IslandErrorCode.DESCRIPTOR_SHAPE,
       `${ERROR_PREFIX} defineIslandConfig() dsd must be a boolean. ` +
-        'Write dsd: true to emit Declarative Shadow DOM markup, or dsd: false to omit it.',
+        'Write dsd: true to keep this island in the client entry, or dsd: false to leave it out. ' +
+        'This flag only feeds the client-entry predicate — it never adds or omits DSD markup. ' +
+        "To omit DSD markup, declare the component light-DOM via @element(tag, { root: 'light' }).",
     );
   }
   if (config.hydrate !== undefined && !HYDRATION_STRATEGY_SET.has(config.hydrate)) {
@@ -701,6 +847,14 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       IslandErrorCode.HYDRATE,
       `${ERROR_PREFIX} defineIslandConfig() media is only valid with hydrate "media". ` +
         "Either set hydrate: 'media' or remove the media field — the two must agree.",
+    );
+  }
+  if (config.root !== undefined && config.root !== 'light' && config.root !== 'shadow') {
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() root must be "light" or "shadow". ` +
+        "Write root: 'light' for a component compiled with @element(tag, { root: 'light' }), " +
+        "or root: 'shadow' for the DSD default — the build fails closed when the two disagree.",
     );
   }
   const tags = config.tags === undefined ? undefined : validateIslandTags(config.tags, 'tags');

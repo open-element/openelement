@@ -21,7 +21,7 @@ import { compare } from 'semver';
 import { readdir, readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { wwwReleaseAnchorFailures } from './www-release-anchor.ts';
-import { commandOutput } from './node-command.ts';
+import { spawnCommand } from './node-command.ts';
 
 export type RegistryTags = Record<string, string>;
 
@@ -318,7 +318,7 @@ async function main(): Promise<void> {
     const evidence: RegistryEvidence = { versions: {}, distTags: {} };
     for (const entry of state.packages) {
       if (entry.status !== 'published') continue;
-      const versionsResult = await commandOutput('npm', {
+      const versionsResult = await spawnCommand('npm', {
         args: ['view', entry.name, 'versions', '--json'],
         stdout: 'piped',
         stderr: 'piped',
@@ -329,7 +329,7 @@ async function main(): Promise<void> {
       }
       const parsed = JSON.parse(new TextDecoder().decode(versionsResult.stdout));
       evidence.versions[entry.name] = Array.isArray(parsed) ? parsed.map(String) : [String(parsed)];
-      const tagsResult = await commandOutput('npm', {
+      const tagsResult = await spawnCommand('npm', {
         args: ['view', entry.name, 'dist-tags', '--json'],
         stdout: 'piped',
         stderr: 'piped',

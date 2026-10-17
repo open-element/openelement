@@ -48,7 +48,6 @@ import {
   type StyleSheetLike,
 } from '@openelement/element';
 import { nextInstanceId, syncDisabledState } from './component-recipes.ts';
-import controlRecipe from './control-recipe.css';
 import openInputStyles from './open-input.css';
 
 @element('open-input', {
@@ -57,7 +56,7 @@ import openInputStyles from './open-input.css';
   formAssociated: true,
 })
 export class OpenInput extends OpenElement {
-  static override styles: StyleSheetLike[] = [controlRecipe, openInputStyles];
+  static override styles: StyleSheetLike[] = [openInputStyles];
 
   @property({ reflect: false })
   type = 'text';
@@ -94,11 +93,6 @@ export class OpenInput extends OpenElement {
   noError: ReadonlySignal<boolean> = computed(() => this.error === '');
 
   @property({ reflect: false, attribute: false, type: String })
-  inputClass: ReadonlySignal<string> = computed(() =>
-    this.error === '' ? 'control input' : 'control input input--error',
-  );
-
-  @property({ reflect: false, attribute: false, type: String })
   idAttr: ReadonlySignal<string | null> = computed(() =>
     this.inputId === '' ? null : this.inputId,
   );
@@ -124,14 +118,26 @@ export class OpenInput extends OpenElement {
 
   render(): unknown {
     return (
-      <div class='input-wrapper' part='wrapper'>
-        <label part='label' for={this.idAttr} hidden={this.noLabel}>
+      <div class='flex flex-col gap-2' part='wrapper'>
+        <label
+          class='text-sm font-medium text-muted-foreground tracking-normal'
+          part='label'
+          for={this.idAttr}
+          hidden={this.noLabel}
+        >
           {this.label}
-          <span class='req'>{this.requiredMark}</span>
+          <span>{this.requiredMark}</span>
         </label>
         <input
           id={this.idAttr}
-          class={this.inputClass}
+          // Authored presentation as Tailwind utilities (alpha15 S lane): the
+          // compiler admits these STATIC tokens and the build's component
+          // stylesheet carries the generated rules into this shadow root. The
+          // error state is a `:host(:state(invalid))` rule the sheet owns — one
+          // owner per property, so no dynamic class carries utilities. The
+          // `control` token is the hook open-input.css selects (it is not a
+          // utility); it must stay spelled as the class the sheet owns.
+          class='control w-full px-3 py-2 font-sans text-base text-foreground rounded-md outline-none transition-[border-color,box-shadow] duration-200 ease-out placeholder:text-muted-foreground'
           part='control'
           type={this.type}
           placeholder={this.placeholder}
@@ -150,7 +156,7 @@ export class OpenInput extends OpenElement {
         <small
           id={this.errorIdAttr}
           role='alert'
-          class='error-message'
+          class='text-xs text-destructive'
           part='error'
           hidden={this.noError}
         >

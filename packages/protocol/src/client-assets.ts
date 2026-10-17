@@ -57,6 +57,8 @@ export const EMPTY_CLIENT_ASSET_MANIFEST: ClientAssetManifest = {
   shared: [],
   styles: [],
 };
+// ponytail: shared empty sentinel — frozen so no consumer can mutate the commons.
+Object.freeze(EMPTY_CLIENT_ASSET_MANIFEST);
 
 /**
  * Serialize the manifest as the generated dist/server/client-assets.js

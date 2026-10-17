@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
-import type { PartProgramV1 } from '@openelement/protocol/part-program';
+import type { PartProgramV2 } from '@openelement/protocol/part-program';
 import { trustedHtml } from '../../src/internal/core/security.ts';
 import { testProgram } from '../compiled-runtime/test-program.ts';
 
@@ -62,11 +62,11 @@ test('compiled server requires the TrustedHtml capability for html Parts', async
   );
 });
 
-// One canonical compiled-counter program: compiled-claim owns the fixture and
+// One canonical compiled-counter program: compiled-hydration owns the fixture and
 // the server suite renders the same bytes, so the program cannot drift into a
 // second copy (audit P3-02).
 const FIXTURE_PROGRAM_URL = new URL(
-  '../../__fixtures__/compiled-claim/program.json',
+  '../../__fixtures__/compiled-hydration/program.json',
   import.meta.url,
 );
 
@@ -85,8 +85,8 @@ const STATIC_ONLY_EXPECTED_URL = new URL(
   import.meta.url,
 );
 
-async function readFixtureProgram(): Promise<PartProgramV1> {
-  return JSON.parse(await readFile(FIXTURE_PROGRAM_URL, 'utf8')) as PartProgramV1;
+async function readFixtureProgram(): Promise<PartProgramV2> {
+  return JSON.parse(await readFile(FIXTURE_PROGRAM_URL, 'utf8')) as PartProgramV2;
 }
 
 function fixtureHost() {
@@ -246,7 +246,7 @@ test('alpha.3 server output escapes values, supports native DSD flags, and fails
       }),
     Error,
   );
-  expect(inheritedError.message).toContain('each Region item needs');
+  expect(inheritedError.message).toContain('each Block item needs');
 
   const unsafeProperty = structuredClone(PROGRAM);
   const propertyPart = unsafeProperty.parts[0];
@@ -307,7 +307,7 @@ test('alpha.3 static-only server fixture needs no client signal artifact', async
 
 test('compiled server validation rejects the shared forbidden-sink deny list', async () => {
   const { assertCompiledProgram } = await import('../../src/internal/compiled/server/index.ts');
-  const forge = (mutate: (program: PartProgramV1) => void): PartProgramV1 => {
+  const forge = (mutate: (program: PartProgramV2) => void): PartProgramV2 => {
     const program = structuredClone(PROGRAM);
     mutate(program);
     return program;

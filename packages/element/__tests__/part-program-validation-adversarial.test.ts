@@ -2,15 +2,15 @@ import { readFile } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { compileElementProgram } from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
-import { validatePartProgram } from '@openelement/protocol/part-program';
+import { PART_PROGRAM_VERSION, validatePartProgram } from '@openelement/protocol/part-program';
 import { normalizePartProgram } from '../src/internal/compiled/runtime-program.ts';
 
 /** The validator surface under test (one canonical module since ADR-0148 unification). */
 const PART_PROGRAM_VALIDATORS = [validatePartProgram] as const;
 
-const FIXTURE = new URL('../__fixtures__/compiled-element-v1/counter.tsx', import.meta.url);
+const FIXTURE = new URL('../__fixtures__/compiled-element-v2/counter.tsx', import.meta.url);
 const GOLDEN = new URL(
-  '../__fixtures__/compiled-element-v1/expected-program.json',
+  '../__fixtures__/compiled-element-v2/expected-program.json',
   import.meta.url,
 );
 type Path = readonly (string | number)[];
@@ -30,7 +30,7 @@ interface Fault {
 }
 
 const faults: Fault[] = [
-  { label: 'version', path: ['version'], value: 2 },
+  { label: 'version', path: ['version'], value: 3 },
   { label: 'tag', path: ['tag'], value: 'invalid' },
   { label: 'root record', path: ['root'], value: null },
   { label: 'root id', path: ['root', 'id'], value: 'other' },
@@ -96,16 +96,17 @@ const faults: Fault[] = [
   { label: 'each item type', path: ['parts', 4, 'item'], value: null },
   { label: 'each key field', path: ['parts', 4, 'key'], value: 'not valid' },
   { label: 'runtime-only keyed selector', path: ['parts', 4, 'keyed'], value: false },
-  { label: 'runtime-only child Region', path: ['parts', 4, 'k'], value: 'child' },
+  { label: 'runtime-only child Block', path: ['parts', 4, 'k'], value: 'child' },
   { label: 'each anchor path', path: ['parts', 4, 'location', 'path'], value: [0] },
-  { label: 'regions type', path: ['regions'], value: null },
-  { label: 'region id', path: ['regions', 0, 'id'], value: 'r9' },
-  { label: 'region index', path: ['regions', 0, 'index'], value: 4 },
-  { label: 'region kind', path: ['regions', 0, 'kind'], value: 'each' },
-  { label: 'region anchor', path: ['regions', 0, 'anchor'], value: 'p9' },
-  { label: 'region end', path: ['regions', 0, 'end'], value: 'p9:end' },
-  { label: 'region source', path: ['regions', 0, 'source'], value: 'p0' },
-  { label: 'unknown region field', path: ['regions', 0, 'future'], value: true },
+  { label: 'blocks type', path: ['blocks'], value: null },
+  { label: 'block id', path: ['blocks', 0, 'id'], value: 'r9' },
+  { label: 'block index', path: ['blocks', 0, 'index'], value: 4 },
+  { label: 'block kind', path: ['blocks', 0, 'kind'], value: 'each' },
+  { label: 'block anchor', path: ['blocks', 0, 'anchor'], value: 'p9' },
+  { label: 'block end', path: ['blocks', 0, 'end'], value: 'p9:end' },
+  { label: 'block source', path: ['blocks', 0, 'source'], value: 'p0' },
+  { label: 'unknown block field', path: ['blocks', 0, 'future'], value: true },
+  { label: 'stale regions key refused', path: ['regions'], value: [] },
   { label: 'dependencies type', path: ['dependencies'], value: null },
   { label: 'dependency record', path: ['dependencies', 0], value: null },
   { label: 'dependency signal', path: ['dependencies', 0, 'signal'], value: 'not valid' },
@@ -582,9 +583,9 @@ test('Part Program ownership tables reject duplicate, missing, and misplaced rec
       },
     },
     {
-      label: 'missing region',
+      label: 'missing block',
       mutate(value) {
-        value.regions = value.regions.slice(1);
+        value.blocks = value.blocks.slice(1);
       },
     },
     {
@@ -614,4 +615,19 @@ test('Part Program ownership tables reject duplicate, missing, and misplaced rec
       assertThrowsIncludes(() => validate(corrupted), Error, undefined, candidate.label);
     }
   }
+});
+
+test('Part Program v2 consistency: current version accepted, v1 refused with expected-vs-actual', async () => {
+  const source = await readFile(FIXTURE, 'utf8');
+  const program = compileElementProgram(source, '/project/app/islands/counter.tsx').program;
+  expect(program.version).toEqual(PART_PROGRAM_VERSION);
+  for (const validate of PART_PROGRAM_VALIDATORS) validate(program);
+  const stale = structuredClone(program);
+  (stale as { version: unknown }).version = 1;
+  const error = assertThrowsIncludes(
+    () => validatePartProgram(stale),
+    Error,
+    `version must be ${PART_PROGRAM_VERSION} (got 1)`,
+  );
+  expect(error.message).toContain('v1 artifacts are refused');
 });

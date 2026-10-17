@@ -8,18 +8,21 @@
  */
 import { join } from 'node:path';
 import { readdir } from 'node:fs/promises';
+import { fileToRoutePath } from '../../lib/route-path.ts';
 import type { SiteRouteCatalogEntry } from './site-sitemap.ts';
 
-function fileToRoutePath(relativePath: string): string {
-  const withoutExtension = relativePath.replace(/\.tsx?$/, '');
-  const segments = withoutExtension.split('/');
-  const mapped: string[] = [];
-  for (const segment of segments) {
-    if (segment === 'index') continue;
-    const dynamic = /^\[([A-Za-z0-9_]+)\]$/.exec(segment);
-    mapped.push(dynamic ? `:${dynamic[1]}` : segment);
-  }
-  return `/${mapped.join('/')}`;
+/**
+ * Scan-local projection over the shared fileToRoutePath rule (CL-36: no
+ * second spelling of the index-vanish/extension/static-segment rule here).
+ * Dynamic `[param]` segments project to `:param` placeholders the sitemap
+ * enumeration resolves explicitly; a file the shared rule cannot map is a
+ * fail-closed error, never a silently skipped route.
+ */
+function scanRoutePath(relativePath: string): string {
+  const mapped = fileToRoutePath(relativePath, { dynamic: (name) => `:${name}` });
+  if (mapped === undefined)
+    throw new Error(`site route scan cannot map route file: ${relativePath}`);
+  return mapped;
 }
 
 /** Scan a routes directory into sitemap catalog entries (sorted by path). */
@@ -33,7 +36,7 @@ export async function scanSiteRoutes(routesDir: string): Promise<SiteRouteCatalo
       } else if (!dirEntry.isSymbolicLink() && /\.tsx?$/.test(dirEntry.name)) {
         // Symlinks are skipped on purpose: a linked route file would resolve
         // outside the scanned tree.
-        entries.push({ path: fileToRoutePath(relativePath), type: 'page' });
+        entries.push({ path: scanRoutePath(relativePath), type: 'page' });
       }
     }
   }

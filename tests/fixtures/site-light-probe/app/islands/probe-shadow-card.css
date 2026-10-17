@@ -1,0 +1,16 @@
+/* Shadow-root sheet of the resource-resolution probe (S-C1.3 follow-up).
+
+   A shadow tree already IS the boundary, so this sheet is emitted WITHOUT a
+   scope wrapper — but its `@import` and its `url()` references must be resolved
+   by the same processing path the light sheet uses: a constructed sheet parses
+   the emitted bytes directly, so an unresolved import or a relative url is
+   simply broken CSS. */
+@import './probe-shadow-tokens.css';
+
+:host{display:block}
+
+.shadow-card{
+  padding:3px 6px;
+  background-image:url('./probe-texture.png');
+  border:2px solid var(--probe-shadow-imported-token);
+}

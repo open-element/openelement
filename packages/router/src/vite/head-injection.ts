@@ -45,6 +45,19 @@ function assertSafeAttributeName(name: string, context: string): void {
 }
 
 /**
+ * Serialize one plain `<link rel="stylesheet">` — the same emitter
+ * `buildHeadExtras` uses for the string entries of `inject.stylesheets`, so a
+ * framework-contributed link (the Tailwind entry's emitted sheet) is escaped
+ * and URL-validated by the one stylesheet channel instead of hand-written
+ * markup.
+ */
+export function stylesheetLinkTag(href: string): string {
+  return `<link rel="stylesheet" href="${escapeHtmlAttr(
+    validateSafeUrl(href, 'inject.stylesheets'),
+  )}" />`;
+}
+
+/**
  * Serialize an attribute record into escaped `name="value"` tokens.
  * `undefined`/`false` values are dropped; `true` renders as a bare
  * (boolean) attribute. Names are validated against `context`.
@@ -159,16 +172,18 @@ export function buildHeadExtras(options: FrameworkOptions): HeadExtrasResult {
   // Stylesheets second
   for (const entry of options.inject.stylesheets || []) {
     const isObj = typeof entry === 'object';
-    const href = isObj ? entry.href : entry;
+    if (!isObj) {
+      fragments.push(stylesheetLinkTag(entry));
+      continue;
+    }
+    const href = entry.href;
     const safeHref = escapeHtmlAttr(validateSafeUrl(href, 'inject.stylesheets'));
     const linkAttrs: string[] = [`rel="stylesheet"`, `href="${safeHref}"`];
-    if (isObj) {
-      if (entry.integrity) linkAttrs.push(`integrity="${escapeHtmlAttr(entry.integrity)}"`);
-      if (entry.crossorigin) linkAttrs.push(`crossorigin="${escapeHtmlAttr(entry.crossorigin)}"`);
-      if (entry.integrity && !entry.crossorigin) linkAttrs.push('crossorigin="anonymous"');
-      if (entry.attrs) {
-        linkAttrs.push(...serializeAttrList(entry.attrs, 'inject.stylesheets.attrs'));
-      }
+    if (entry.integrity) linkAttrs.push(`integrity="${escapeHtmlAttr(entry.integrity)}"`);
+    if (entry.crossorigin) linkAttrs.push(`crossorigin="${escapeHtmlAttr(entry.crossorigin)}"`);
+    if (entry.integrity && !entry.crossorigin) linkAttrs.push('crossorigin="anonymous"');
+    if (entry.attrs) {
+      linkAttrs.push(...serializeAttrList(entry.attrs, 'inject.stylesheets.attrs'));
     }
     fragments.push(`<link ${linkAttrs.join(' ')} />`);
   }

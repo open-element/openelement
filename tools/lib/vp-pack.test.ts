@@ -1,8 +1,8 @@
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
-import { assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
+import { assertRejectsIncludes, assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -19,6 +19,12 @@ import {
   VP_TOOLCHAIN,
   vpPackConfigFile,
   vpPackEntries,
+  VP_STAGING_INSTALL_ARGS,
+  VP_PACK_TIMEOUT_MS,
+  assertVpStagingCli,
+  runVpPack,
+  vpStagingCliPath,
+  type VpStagedWorkspace,
 } from './vp-pack.ts';
 import type { PackageInfo } from './package-graph.ts';
 
@@ -448,24 +454,39 @@ interface RuntimeExtraction {
 }
 
 /**
+ * Every router source that resolves a runtime module BY PATH for a consumer
+ * build. One seed is not enough: the element-services wrappers are selected in
+ * entry-client-codegen.ts (the generated entry reaches them through an import
+ * STRING, so the pack module graph has no edge to follow), while the
+ * scheduler/enhance specifiers are mapped in the two build hosts. A file added
+ * here contributes its literal resolutions to the union the entries list must
+ * cover.
+ */
+const RUNTIME_CONSUMPTION_SEEDS = [
+  'src/cli/build-client.ts',
+  'src/vite/dev-island-client.ts',
+  'src/vite/internal/ssg/entry-client-codegen.ts',
+] as const;
+
+/**
  * Extract the consumer-side path-consumed runtime set from the router's OWN
  * sources — never from vp-pack.ts, so the guard cannot self-certify. The
  * roots are the `runtimeModulePath('...')` literal resolutions in
- * cli/build-client.ts (#868: the virtual runtime specifiers resolve to real
- * modules the bundler inlines from the packed payload); the rest of the set
- * is the transitive closure of their static value imports (type-only imports
- * add nothing). This mirrors the vp-pack.ts header's definition of the entry
- * list: the two roots resolved directly, the siblings riding along as value
- * imports (G0.5 §2).
+ * {@linkcode RUNTIME_CONSUMPTION_SEEDS} (#868: the virtual runtime specifiers
+ * resolve to real modules the bundler inlines from the packed payload; B2
+ * added the element-services wrappers, selected by the generated entry's own
+ * codegen); the rest of the set is the transitive closure of their static
+ * value imports (type-only imports add nothing). This mirrors the vp-pack.ts
+ * header's definition of the entry list: the roots resolved directly, the
+ * siblings riding along as value imports (G0.5 §2).
  *
  * Literal arguments resolve the way the shared helper resolves them:
  * relative to runtime-module-path.ts's own directory (src/vite/internal/),
- * not relative to the call site — build-client.ts and dev-island-client.ts
- * both pass './ssg/...' for that reason.
+ * not relative to the call site — every seed passes './ssg/...' for that
+ * reason.
  */
 function consumerPathConsumedModules(packageDir: string): RuntimeExtraction {
   const problems: string[] = [];
-  const entry = join(packageDir, 'src', 'cli', 'build-client.ts');
   const runtimeModulePathModule = join(
     packageDir,
     'src',
@@ -482,33 +503,45 @@ function consumerPathConsumedModules(packageDir: string): RuntimeExtraction {
       ],
     };
   }
-  const source = readFileSync(entry, 'utf8');
-  const literalArgs = [...source.matchAll(/runtimeModulePath\(\s*(['"])(.*?)\1\s*\)/g)].map(
-    (match) => match[2],
-  );
-  const callSites =
-    (source.match(/runtimeModulePath\(/g) ?? []).length -
-    (source.match(/function runtimeModulePath\(/g) ?? []).length;
-  if (literalArgs.length !== callSites) {
-    problems.push(
-      `build-client.ts has ${callSites} runtimeModulePath call site(s) but only ` +
-        `${literalArgs.length} literal string argument(s); the extraction only sees ` +
-        'string literals — pass the module path as a literal or extend this guard ' +
-        'deliberately',
-    );
-  }
   const modules = new Set<string>();
   const queue: string[] = [];
-  for (const argument of literalArgs) {
-    const resolved = resolve(dirname(runtimeModulePathModule), argument.split(/[?#]/, 1)[0]);
-    if (!isWithin(resolved, packageDir) || !isFile(resolved)) {
-      problems.push(`runtimeModulePath('${argument}') does not resolve to a file in the package`);
+  for (const seed of RUNTIME_CONSUMPTION_SEEDS) {
+    const seedPath = join(packageDir, seed);
+    if (!isFile(seedPath)) {
+      problems.push(
+        `${seed} not found — a runtime-consumption seed moved or was renamed; ` +
+          'update RUNTIME_CONSUMPTION_SEEDS deliberately',
+      );
       continue;
     }
-    const modulePath = relative(packageDir, resolved);
-    if (!modules.has(modulePath)) {
-      modules.add(modulePath);
-      queue.push(resolved);
+    const source = readFileSync(seedPath, 'utf8');
+    const literalArgs = [...source.matchAll(/runtimeModulePath\(\s*(['"])(.*?)\1\s*\)/g)].map(
+      (match) => match[2],
+    );
+    const callSites =
+      (source.match(/runtimeModulePath\(/g) ?? []).length -
+      (source.match(/function runtimeModulePath\(/g) ?? []).length;
+    if (literalArgs.length !== callSites) {
+      problems.push(
+        `${seed} has ${callSites} runtimeModulePath call site(s) but only ` +
+          `${literalArgs.length} literal string argument(s); the extraction only sees ` +
+          'string literals — pass the module path as a literal or extend this guard ' +
+          'deliberately',
+      );
+    }
+    for (const argument of literalArgs) {
+      const resolved = resolve(dirname(runtimeModulePathModule), argument.split(/[?#]/, 1)[0]);
+      if (!isWithin(resolved, packageDir) || !isFile(resolved)) {
+        problems.push(
+          `runtimeModulePath('${argument}') in ${seed} does not resolve to a file in the package`,
+        );
+        continue;
+      }
+      const modulePath = relative(packageDir, resolved);
+      if (!modules.has(modulePath)) {
+        modules.add(modulePath);
+        queue.push(resolved);
+      }
     }
   }
   while (queue.length > 0) {
@@ -526,12 +559,27 @@ function consumerPathConsumedModules(packageDir: string): RuntimeExtraction {
   return { modules, problems };
 }
 
+/**
+ * The guard's verdict over one extraction: entries no seed consumes (stale)
+ * and seed-consumed modules the entries list does not cover (missing).
+ * Extracted so the negative test below can prove the stale direction fails
+ * closed on a genuinely unconsumed entry.
+ */
+function packEntryDrift(
+  modules: ReadonlySet<string>,
+  entries: readonly string[],
+): { missing: string[]; stale: string[] } {
+  return {
+    missing: [...modules].filter((module) => !entries.includes(module)).sort(),
+    stale: entries.filter((entry) => !modules.has(entry)).sort(),
+  };
+}
+
 test('ROUTER_CLIENT_RUNTIME_ENTRIES covers every consumer path-resolved runtime module', () => {
   const { modules, problems } = consumerPathConsumedModules(ROUTER_PACKAGE_DIR);
   expect(problems).toEqual([]);
   const entries: string[] = [...ROUTER_CLIENT_RUNTIME_ENTRIES];
-  const missing = [...modules].filter((module) => !entries.includes(module)).sort();
-  const stale = entries.filter((entry) => !modules.has(entry)).sort();
+  const { missing, stale } = packEntryDrift(modules, entries);
   expect(
     missing,
     'path-consumed runtime modules missing from ROUTER_CLIENT_RUNTIME_ENTRIES — the ' +
@@ -540,9 +588,55 @@ test('ROUTER_CLIENT_RUNTIME_ENTRIES covers every consumer path-resolved runtime 
   expect(
     stale,
     'ROUTER_CLIENT_RUNTIME_ENTRIES entries no longer consumed by path from ' +
-      'cli/build-client.ts — remove them from the entries list',
+      `${RUNTIME_CONSUMPTION_SEEDS.join(', ')} — remove them from the entries list`,
   ).toEqual([]);
   expect([...modules].sort()).toEqual(entries.sort());
+});
+
+test('the guard fails an entry no seed file consumes (negative)', async () => {
+  // The stale direction, on a synthetic package: every seed contributes one
+  // root, and an entry named by none of them must surface as stale. Without
+  // the RUNTIME_CONSUMPTION_SEEDS union the codegen seed's wrapper would also
+  // show up as missing, which is the second half of the same assertion.
+  const root = await mkdtemp(join(tmpdir(), 'vp-pack-stale-entry-'));
+  try {
+    const cli = join(root, 'src', 'cli');
+    const vite = join(root, 'src', 'vite');
+    const internal = join(vite, 'internal');
+    const ssg = join(internal, 'ssg');
+    mkdirSync(cli, { recursive: true });
+    mkdirSync(ssg, { recursive: true });
+    writeFileSync(
+      join(internal, 'runtime-module-path.ts'),
+      'export const runtimeModulePath = (p: string): string => p;\n',
+    );
+    writeFileSync(
+      join(cli, 'build-client.ts'),
+      "export const scheduler = runtimeModulePath('./ssg/island-scheduler.ts');\n",
+    );
+    writeFileSync(
+      join(vite, 'dev-island-client.ts'),
+      '// no path-resolved roots in this fixture\n',
+    );
+    writeFileSync(
+      join(ssg, 'entry-client-codegen.ts'),
+      "export const surface = runtimeModulePath('./ssg/element-services-full.ts');\n",
+    );
+    writeFileSync(join(ssg, 'island-scheduler.ts'), 'export const schedule = 1;\n');
+    writeFileSync(join(ssg, 'element-services-full.ts'), 'export const surface = 1;\n');
+
+    const { modules, problems } = consumerPathConsumedModules(root);
+    expect(problems).toEqual([]);
+    const drift = packEntryDrift(modules, [
+      'src/vite/internal/ssg/island-scheduler.ts',
+      'src/vite/internal/ssg/element-services-full.ts',
+      'src/vite/internal/ssg/element-services-retired.ts',
+    ]);
+    expect(drift.missing).toEqual([]);
+    expect(drift.stale).toEqual(['src/vite/internal/ssg/element-services-retired.ts']);
+  } finally {
+    await rm(root, { recursive: true });
+  }
 });
 
 test('runtime extraction captures a ninth value-consumed module and skips type-only edges', async () => {
@@ -564,6 +658,11 @@ test('runtime extraction captures a ninth value-consumed module and skips type-o
         "export const second = runtimeModulePath('./ssg/root-b.ts');",
       ].join('\n'),
     );
+    // The other two seeds exist but contribute no roots: the fixture is about
+    // the build host's closure walk, not about the seed union (the negative
+    // test below covers that).
+    writeFileSync(join(internal, '..', 'dev-island-client.ts'), '// no roots\n');
+    writeFileSync(join(ssg, 'entry-client-codegen.ts'), '// no roots\n');
     writeFileSync(join(ssg, 'root-a.ts'), 'export const rootA = 1;\n');
     writeFileSync(
       join(ssg, 'root-b.ts'),
@@ -611,6 +710,9 @@ test('runtime extraction fails closed on a non-literal runtimeModulePath argumen
       join(cli, 'build-client.ts'),
       'export const mapped = runtimeModulePath(dynamicArgument);\n',
     );
+    writeFileSync(join(internal, '..', 'dev-island-client.ts'), '// no roots\n');
+    mkdirSync(join(internal, 'ssg'), { recursive: true });
+    writeFileSync(join(internal, 'ssg', 'entry-client-codegen.ts'), '// no roots\n');
     const { modules, problems } = consumerPathConsumedModules(root);
     expect(modules.size).toEqual(0);
     expect(problems.length).toEqual(1);
@@ -636,4 +738,100 @@ test('runtime extraction fails closed when the runtimeModulePath helper is missi
   } finally {
     await rm(root, { recursive: true });
   }
+});
+
+// ─── S-C1.4 toolchain recovery: the staging install must state its own env ──
+
+test('the staging install includes dev dependencies regardless of the caller environment', () => {
+  // RED before the fix: npm derives `omit=dev` from an ambient
+  // NODE_ENV=production, and the staging toolchain (vite-plus + the aliased
+  // vite-plus core) lives in devDependencies by design — so the install
+  // succeeded while silently skipping the toolchain, and the failure surfaced
+  // later as an ENOENT spawn of <staging>/node_modules/.bin/vp.
+  expect(VP_STAGING_INSTALL_ARGS).toContain('--include=dev');
+  // The rest of the recipe is unchanged: lifecycle scripts stay off, the peer
+  // check stays relaxed for the vite alias, and nothing becomes online-only.
+  expect(VP_STAGING_INSTALL_ARGS).toContain('--ignore-scripts');
+  expect(VP_STAGING_INSTALL_ARGS).toContain('--legacy-peer-deps');
+  expect(VP_STAGING_INSTALL_ARGS).not.toContain('--omit=dev');
+});
+
+test('a staging root without the toolchain CLI fails fast with an actionable error', async () => {
+  const stagingRoot = await mkdtemp(join(tmpdir(), 'vp-staging-guard-'));
+  try {
+    // RED before the fix: this condition reached the pack assembler as a bare
+    // spawn ENOENT with no explanation of the staging root or the cause.
+    const error = assertThrowsIncludes(
+      () => assertVpStagingCli(stagingRoot, 'npm install (exit 0)'),
+      Error,
+    );
+    expect(error.message).toContain('staging toolchain CLI');
+    expect(error.message).toContain(stagingRoot);
+    expect(error.message).toContain('include dev dependencies');
+
+    // GREEN: an installed CLI (file or link) satisfies the guard.
+    const binDir = join(stagingRoot, 'node_modules', '.bin');
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(join(binDir, 'vp'), '#!/bin/sh\nexit 0\n', 'utf8');
+    expect(() => assertVpStagingCli(stagingRoot)).not.toThrow();
+    expect(vpStagingCliPath(stagingRoot)).toEqual(join(binDir, 'vp'));
+  } finally {
+    await rm(stagingRoot, { recursive: true, force: true });
+  }
+});
+
+// ─── The vp pack shield: closed stdin and a hard budget ─────────────────────
+
+/** A staged workspace whose `vp` is a fake script, rooted in a temp dir. */
+async function fakeStagedWorkspace(script: string): Promise<VpStagedWorkspace> {
+  const stagingRoot = await mkdtemp(join(tmpdir(), 'vp-pack-shield-'));
+  const binDir = join(stagingRoot, 'node_modules', '.bin');
+  mkdirSync(binDir, { recursive: true });
+  const vp = join(binDir, 'vp');
+  writeFileSync(vp, `#!/bin/sh\n${script}\n`, 'utf8');
+  chmodSync(vp, 0o755);
+  return {
+    stagingRoot,
+    packDir: stagingRoot,
+    distDir: join(stagingRoot, 'dist'),
+    cleanup: async () => {},
+  };
+}
+
+// The fakes are POSIX shell scripts; the tools project runs on the ubuntu lane.
+const posixOnly = test.skipIf(process.platform === 'win32');
+
+posixOnly('runVpPack closes stdin: the pack tool cannot block on a stream', async () => {
+  // `read` returns EOF immediately on the null device and blocks on an
+  // inherited pipe; the shield's budget turns that block into the failure
+  // below instead of a hung test.
+  const staged = await fakeStagedWorkspace(
+    'if read -r line; then echo "stdin had data"; exit 3; fi\necho "stdin closed"',
+  );
+  try {
+    const output = await runVpPack(staged, 5_000);
+    expect(output).toContain('stdin closed');
+    expect(output).not.toContain('stdin had data');
+  } finally {
+    await rm(staged.stagingRoot, { recursive: true, force: true });
+  }
+});
+
+posixOnly('runVpPack enforces its budget instead of waiting forever', async () => {
+  const staged = await fakeStagedWorkspace('exec sleep 30');
+  const startedAt = Date.now();
+  try {
+    const error = await assertRejectsIncludes(() => runVpPack(staged, 400), Error);
+    const elapsed = Date.now() - startedAt;
+    expect(elapsed, `took ${elapsed}ms`).toBeLessThan(5_000);
+    expect(error.message).toContain('exceeded its 400 ms budget');
+    expect(error.message).toContain(staged.packDir);
+  } finally {
+    await rm(staged.stagingRoot, { recursive: true, force: true });
+  }
+});
+
+test('runVpPack has a finite default budget', () => {
+  expect(Number.isFinite(VP_PACK_TIMEOUT_MS)).toBeTruthy();
+  expect(VP_PACK_TIMEOUT_MS).toBeGreaterThan(0);
 });

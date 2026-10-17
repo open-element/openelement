@@ -376,6 +376,32 @@ test('client router dispose removes event listeners and double dispose is safe',
   }
 });
 
+test('client router params getter returns a copy: mutating it never rewrites canonical match state (M-R6)', () => {
+  const browser = installFakeBrowser('/items/42');
+  const router = createRouter({
+    mode: 'history',
+    routes: [{ path: '/items/:id', tagName: 'item-page' }],
+  });
+  try {
+    expect(router.params).toEqual({ id: '42' });
+    router.params.id = 'rewritten';
+    (router.params as Record<string, string>).injected = 'nope';
+    expect(router.params).toEqual({ id: '42' });
+    const first = router.params;
+    const second = router.params;
+    expect(first).not.toBe(second);
+    expect(first).toEqual(second);
+    // Same copy contract as searchParams: readers can freely mutate the
+    // returned object without touching router state.
+    const search = router.searchParams;
+    search.set('q', 'mutated');
+    expect(router.searchParams.get('q')).toBeNull();
+  } finally {
+    router.dispose();
+    browser.restore();
+  }
+});
+
 test('client router guard redirect limit rejects redirect loops', async () => {
   const loop: RouteConfig[] = [
     {

@@ -31,69 +31,20 @@ for (const [tagName, path] of siteModules) {
   });
 }
 
-test('open-layout is an SSR-only compiled app-shell island (hydrate: none)', async () => {
-  const url = new URL('../app/islands/open-layout.tsx', import.meta.url);
+test('app/layout.tsx is the compiled shell convention (no island declaration)', async () => {
+  const url = new URL('../app/layout.tsx', import.meta.url);
   const source = await readFile(url, 'utf8');
-  expect(source).toContain("defineIslandConfig({ hydrate: 'none', ssr: true })");
-  expect(source).toContain("@element('open-layout')");
-  expect(source).toContain('export default class OpenLayout extends OpenElement');
-  const result = compileElementProgram(source, url.pathname, {
-    staticSidecars: ISLAND_SIDECARS,
-  });
-  expect(result.program.tag).toEqual('open-layout');
-  // Regions: header nav (desktop + mobile panel), sidebar rows (desktop +
+  // The convention module carries no island admission — a compiled light-root
+  // component with no island declaration ships zero client JS. (The former
+  // open-layout island, hydrate: 'none', retired with this migration.)
+  expect(source).not.toContain('defineIslandConfig');
+  expect(source).toContain("@element('app-layout')");
+  expect(source).toContain('export default class Layout extends OpenElement');
+  const result = compileElementProgram(source, url.pathname);
+  expect(result.program.tag).toEqual('app-layout');
+  // Blocks: header nav (desktop + mobile panel), sidebar rows (desktop +
   // mobile disclosure panel) and the four footer link columns.
-  expect(result.program.regions.length).toEqual(8);
-  // Injected shell props plus the derived chrome state as computed signal
-  // properties (the list-Region grammar requires `.map()` over
-  // `this.<property>`, so the derived sidebar rows / footer columns are
-  // compiled computed fields rather than render locals or accessors).
-  expect(result.program.metadata.properties.map((property) => property.name)).toEqual([
-    'headerNav',
-    'footerText',
-    'siteName',
-    'homeHref',
-    'navItems',
-    'currentPath',
-    'locale',
-    'locales',
-    'home',
-    'headerNavItems',
-    'sidebarLabel',
-    'sidebarToggle',
-    'skipToMain',
-    'menuOpen',
-    'primaryNavLabel',
-    'mobileNavLabel',
-    'repositoryHref',
-    'repositoryLabel',
-    'switchLocaleHref',
-    'switchLocaleLabel',
-    'switchLocaleNote',
-    'sidebarRows',
-    'sidebarHidden',
-    'footerTagline',
-    'footerCopyright',
-    'searchTriggerLabel',
-    'searchDialogLabel',
-    'searchInputLabel',
-    'searchPlaceholder',
-    'searchResultsLabel',
-    'searchEmptyMessage',
-    'footerProductLabel',
-    'footerProductLinks',
-    'footerResourcesLabel',
-    'footerResourcesLinks',
-    'footerCompanyLabel',
-    'footerCompanyLinks',
-    'footerLegalLabel',
-    'footerLegalLinks',
-  ]);
-  expect(
-    result.program.metadata.properties.find((property) => property.name === 'headerNav')?.attribute,
-  ).toEqual('header-nav');
-  // The header repository link is a literal default (module-scope identifiers
-  // are not allowed there), so pin it to the shared constant the footer uses.
+  expect(result.program.blocks.length).toEqual(8);
   expect(
     result.program.metadata.properties.find((property) => property.name === 'repositoryHref')
       ?.default,
@@ -113,7 +64,7 @@ test('open-search keeps its view compiler-owned and its browser state external',
   // The view is property-driven (C-5): the shell passes the page-locale chrome
   // copy as attributes (searchChromeStrings), while the empty/error message
   // and the hit list are compiled properties the controller writes; hits
-  // render through one list Region with container-delegated click dismissal.
+  // render through one list Block with container-delegated click dismissal.
   expect(result.program.metadata.properties.map((property) => property.name)).toEqual([
     'locale',
     'triggerLabel',

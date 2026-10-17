@@ -30,7 +30,7 @@ import { slugifyHeadingId, stripHtmlToText } from '../../app/site-ui/article-bod
 import { SITE_LOCALES, type SiteLocale } from '../../site-config.ts';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { commandOutput } from '../../../tools/repo/node-command.ts';
+import { spawnCommand } from '../../../tools/repo/node-command.ts';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const routesRel = 'www/app/routes';
@@ -58,7 +58,7 @@ export interface BaselineManifest {
 }
 
 async function git(args: string[]): Promise<{ code: number; out: string; err: string }> {
-  const command = await commandOutput('git', {
+  const command = await spawnCommand('git', {
     args,
     cwd: repoRoot,
     stdout: 'piped',
@@ -386,7 +386,7 @@ export async function refreshBaseline(ref: string): Promise<void> {
   const tmp = await mkdtemp(join(tmpdir(), 'retired-urls-base-'));
   let baseline: Set<string>;
   try {
-    const archive = await commandOutput('git', {
+    const archive = await spawnCommand('git', {
       args: ['archive', sha, routesRel],
       cwd: repoRoot,
       stdout: 'piped',
@@ -395,7 +395,7 @@ export async function refreshBaseline(ref: string): Promise<void> {
     const { code, stdout } = archive;
     if (code !== 0) throw new Error(`git archive of ${sha} failed`);
     await writeFile(join(tmp, 'routes.tar'), stdout);
-    const untar = await commandOutput('tar', {
+    const untar = await spawnCommand('tar', {
       args: ['-x', '-f', join(tmp, 'routes.tar'), '-C', tmp],
       stdin: 'null',
       stdout: 'null',

@@ -216,12 +216,12 @@ test('renderEntry: produces valid module code', () => {
   expect(code.includes("from 'hono'")).toBeFalsy();
   expect(code.includes('new Hono()')).toBeFalsy();
   expect(code).toContain('const __app = createGeneratedApp({');
-  // v0.44 (ADR-0143): the sync compiled renderDsd is the only serializer
+  // v0.44 (ADR-0143): the sync compiled renderToString is the only serializer
   // import — the legacy VNode tree renderer is gone.
   expect(code).toContain(
-    "import { createDeferredDsdExecutor, renderDsd, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
+    "import { createDocumentStyleResources, createStreamShellExecutor, renderToString, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
   );
-  expect(code.includes('renderDsdTree')).toEqual(false);
+  expect(code.includes('renderToStringTree')).toEqual(false);
   expect(code).toContain('export default app');
 });
 

@@ -13,7 +13,7 @@
  */
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
-import { commandStatus } from './node-command.ts';
+import { spawnCommand } from './node-command.ts';
 import { generatorEntries, readWorkspaces } from './workspace-tasks.ts';
 import { vpExecutable, vpTaskArgv } from './vp-dispatch.ts';
 
@@ -41,7 +41,7 @@ for (const { workspace, taskKey } of entries) {
         `vp dispatch requires exact package names.`,
     );
   }
-  const { code } = await commandStatus(executable, {
+  const { code } = await spawnCommand(executable, {
     args: vpTaskArgv(ws.name, taskKey).slice(1),
     cwd: repoRoot,
     stdin: 'null',

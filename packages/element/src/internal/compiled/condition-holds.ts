@@ -1,5 +1,5 @@
 /**
- * Canonical when-Region condition evaluation (issue #1372, P6).
+ * Canonical when-Block condition evaluation (issue #1372, P6).
  *
  * The `when` test is evaluated by the fresh-DOM runtime, the claim path, and
  * the server serializer. Before #1372 every site carried its own

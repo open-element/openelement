@@ -20,4 +20,8 @@ and request-time pins the `@zag-js/*`/`valibot`/`zod` request-time stack.
 | `router-lit-framework`    | Lit SSR integration (adds `lit`/`@lit-labs`)                       |
 | `router-ui-dogfood`       | UI dogfood (adds `@openelement/ui` subpaths)                       |
 | `router-nitro`            | real Nitro node-server + cloudflare_module proof                   |
+| `router-static-only`      | static routes only (no dynamic renderIntent, no request-time entry) |
+| `site-light-probe`        | compiled light-root rendering acceptance probe                     |
+| `third-party-web-components` | third-party custom-element interop qualification                |
+| `url-pattern-list-audit`  | lockfile-only provenance/signature audit for the url-pattern-list fork |
 | `web-component-interop`   | third-party custom-element interop corpus                          |

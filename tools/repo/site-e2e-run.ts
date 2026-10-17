@@ -31,7 +31,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import process from 'node:process';
-import { commandOutput } from './node-command.ts';
+import { spawnCommand } from './node-command.ts';
 import {
   auditSiteE2e,
   type PlaywrightReport,
@@ -92,7 +92,7 @@ export function checkRunnerArgs(args: readonly string[]): string | null {
 }
 
 async function gitHead(): Promise<string> {
-  const output = await commandOutput('git', {
+  const output = await spawnCommand('git', {
     args: ['rev-parse', 'HEAD'],
     cwd: repoRoot,
     stdout: 'piped',
@@ -121,7 +121,7 @@ async function main(): Promise<void> {
   await mkdir(artifactsDir, { recursive: true });
   await rm(reportPath).catch(() => undefined);
   // The Playwright CLI comes from the workspace install (www devDependencies).
-  const status = await commandOutput(join(repoRoot, 'node_modules', '.bin', 'playwright'), {
+  const status = await spawnCommand(join(repoRoot, 'node_modules', '.bin', 'playwright'), {
     args: [
       'test',
       '--config',

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
-import { renderDsd } from '../../src/public-runtime.ts';
+import { renderToString } from '../../src/public-runtime.ts';
 import { trustedHtml } from '../../src/internal/core/security.ts';
 import type { PartProgram } from '@openelement/protocol/part-program';
 import { testProgram } from '../compiled-runtime/test-program.ts';
@@ -121,10 +121,10 @@ test('Element server owns nested composition, slots, DSD, and foreign passthroug
     ['oe-page-rail', compiledClass(rail)],
   ]);
   withRegistry(registry, () => {
-    const html = renderDsd('oe-guide-page', {
+    const html = renderToString('oe-guide-page', {
       componentClass: compiledClass(page),
       ssrRenderableTags: ['oe-reading-shell', 'oe-page-rail'],
-    }).html;
+    });
     expect((html.match(/<oe-reading-shell/g) ?? []).length).toEqual(1);
     expect((html.match(/<oe-page-rail/g) ?? []).length).toEqual(1);
     expect(html).toContain('<slot name="meta"><span slot="meta">Projected meta</span></slot>');
@@ -160,11 +160,11 @@ test('Trusted HTML remains opaque to nested component composition', () => {
   });
 
   withRegistry(new Map([['oe-safe-child', compiledClass(child)]]), () => {
-    const html = renderDsd('oe-html-parent', {
+    const html = renderToString('oe-html-parent', {
       componentClass: compiledClass(parent),
       props: { body: trustedHtml('<oe-safe-child>opaque</oe-safe-child>') },
       ssrRenderableTags: ['oe-safe-child'],
-    }).html;
+    });
     expect(html).toContain('<oe-safe-child>opaque</oe-safe-child>');
     expect(html.includes('executed')).toEqual(false);
   });
@@ -202,10 +202,10 @@ test('nested compiled boolean host attributes preserve presence semantics', () =
   });
 
   withRegistry(new Map([['oe-boolean-child', compiledClass(child)]]), () => {
-    const html = renderDsd('oe-boolean-parent', {
+    const html = renderToString('oe-boolean-parent', {
       componentClass: compiledClass(parent),
       ssrRenderableTags: ['oe-boolean-child'],
-    }).html;
+    });
     expect(html).toContain('<oe-boolean-child active="" data-oe-light>');
   });
 });
@@ -220,7 +220,7 @@ test('public light-child projection rejects forged TrustedHtml values', () => {
 
   assertThrowsIncludes(
     () => {
-      renderDsd('oe-safe-shell', {
+      renderToString('oe-safe-shell', {
         componentClass: compiledClass(shell),
         projectedChildren: new Map([['', { html: '<script>forged</script>' }]]),
       });
@@ -230,7 +230,7 @@ test('public light-child projection rejects forged TrustedHtml values', () => {
   );
 });
 
-test('renderDsd threads the compiled delegatesFocus static into the DSD template (#1226)', () => {
+test('renderToString threads the compiled delegatesFocus static into the DSD template (#1226)', () => {
   const program = testProgram({
     tag: 'oe-focusable',
     rootMode: 'shadow-open',
@@ -241,10 +241,132 @@ test('renderDsd threads the compiled delegatesFocus static into the DSD template
   const plain = compiledClass(program);
   // The client kernel passes the static to attachShadow; the DSD template
   // must carry the matching marker or the claimed root loses delegation.
-  expect(renderDsd('oe-focusable', { componentClass: focusable }).html).toContain(
+  expect(renderToString('oe-focusable', { componentClass: focusable })).toContain(
     '<template shadowrootmode="open" shadowrootdelegatesfocus>',
   );
-  expect(renderDsd('oe-focusable', { componentClass: plain }).html).toContain(
+  expect(renderToString('oe-focusable', { componentClass: plain })).toContain(
     '<template shadowrootmode="open">',
   );
+});
+
+test('a bare boolean prop reads TRUE from its empty-string presence encoding', () => {
+  // A server function page composes an admitted host with bare JSX attributes
+  // (`<open-reading-shell rail>`), which the constructor lowers to the
+  // canonical presence encoding `{ "rail": "" }`. Attribute presence means
+  // TRUE — exactly how `convertFromAttribute` reads it on the client and how
+  // the nested-class expansion guards it — so the seed must not run the empty
+  // string through `Boolean('')` and silently drop the flag.
+  const shell = testProgram({
+    tag: 'oe-flag-shell',
+    rootMode: 'light',
+    template: [
+      {
+        k: 'el',
+        tag: 'aside',
+        attrs: [],
+        children: [{ k: 'part', index: 0 }],
+      },
+    ],
+    parts: [
+      {
+        k: 'when',
+        index: 0,
+        signal: 'rail',
+        test: { signal: 'rail', op: 'truthy', value: true },
+        on: [
+          {
+            k: 'el',
+            tag: 'span',
+            attrs: [],
+            children: [{ k: 'text', value: 'RAIL-ON' }],
+          },
+        ],
+        off: [
+          {
+            k: 'el',
+            tag: 'span',
+            attrs: [],
+            children: [{ k: 'text', value: 'RAIL-OFF' }],
+          },
+        ],
+      },
+    ],
+    properties: [
+      {
+        name: 'rail',
+        attribute: 'rail',
+        type: 'boolean',
+        converter: 'boolean',
+        reflect: true,
+        default: false,
+      },
+    ],
+  });
+
+  expect(renderToString('oe-flag-shell', { componentClass: compiledClass(shell) })).toContain(
+    'RAIL-OFF',
+  );
+  expect(
+    renderToString('oe-flag-shell', {
+      componentClass: compiledClass(shell),
+      props: { rail: '' },
+    }),
+  ).toContain('RAIL-ON');
+  expect(
+    renderToString('oe-flag-shell', {
+      componentClass: compiledClass(shell),
+      props: { rail: false },
+    }),
+  ).toContain('RAIL-OFF');
+});
+
+test('an undeclared prop rides the __ssr host tag as a host attribute', async () => {
+  // A server function page passes `class` to an admitted host
+  // (`<open-button class='no-underline'>`); the compiled property seed only
+  // reads declared records, so an undeclared key would silently vanish — the
+  // exact regression the changelog page's footer buttons showed. The nested
+  // class expansion forwards such keys as `hostAttrs`; the `__ssr` call site
+  // must agree, or the two composition channels emit different host tags.
+  const { __ssr } = await import('../../src/server.ts');
+  const btn = testProgram({
+    tag: 'oe-btn',
+    rootMode: 'shadow-open',
+    template: [
+      {
+        k: 'el',
+        tag: 'a',
+        attrs: [['part', 'control']],
+        children: [{ k: 'el', tag: 'slot', attrs: [], children: [] }],
+      },
+    ],
+    parts: [],
+    properties: [
+      {
+        name: 'variant',
+        attribute: 'variant',
+        type: 'string',
+        converter: 'string',
+        reflect: true,
+        default: '',
+      },
+    ],
+  });
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'customElements');
+  Object.defineProperty(globalThis, 'customElements', {
+    configurable: true,
+    value: { get: (tag: string) => (tag === 'oe-btn' ? compiledClass(btn) : undefined) },
+  });
+  try {
+    const html = __ssr('oe-btn', { class: 'no-underline', variant: 'ghost' }, undefined, {
+      groups: [['', 'X']],
+    });
+    expect(html).toContain('class="no-underline"');
+    expect(html).toContain('variant="ghost"');
+    // The declared prop is consumed as the compiled property, not repeated as
+    // an anonymous passthrough attribute.
+    expect(html.match(/variant=/g)?.length).toBe(1);
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'customElements', original);
+    else delete (globalThis as Record<string, unknown>).customElements;
+  }
 });

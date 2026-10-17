@@ -11,6 +11,14 @@ import ts from 'typescript';
  */
 export interface ModuleSemanticFacts {
   relativeImports: string[];
+  /**
+   * Every static import/export specifier the module spells, relative or not —
+   * present only when the caller asks for it (`collectSpecifiers`), because a
+   * host that walks a module graph through its own resolver (S-C1.4's
+   * server-rendered style-edge pass) needs the aliased and package specifiers
+   * too, while every other consumer's facts stay exactly as they were.
+   */
+  moduleSpecifiers?: string[];
   compiledElementDecorator: boolean;
   /**
    * Set when a class decorator spells the `element` intrinsic through
@@ -29,6 +37,31 @@ export interface ModuleSemanticFacts {
    * (no injected vocabulary) never recognizes another package's factories.
    */
   definePage: boolean;
+  /**
+   * The server function page fact (alpha15 server lane): the first argument
+   * of a default-exported `definePage(…)` call when that argument is an
+   * identifier resolving to a server function component THIS module
+   * declares. A function component never carries a Part Program, so the
+   * route cannot be a compiled class page; the host build renders it through
+   * the component function. Spread-conditional: absent for class pages and
+   * non-page modules. The scan is order-independent (the module's server
+   * function components are collected before the page call is judged), so a
+   * default export written above its component declaration admits
+   * identically. An inline arrow or an unexported local — the shapes whose
+   * JSX would otherwise escape to runtime — never records the fact.
+   */
+  pageComponentName?: string;
+  /**
+   * The exported functions whose body is a single return of JSX — the
+   * server-only TSX function components this module declares (alpha15 server
+   * lane). Discovery is structural and deterministic: `export function`
+   * declarations (named, not default) with exactly one return statement of a
+   * JSX element, or `export const` arrows with a JSX expression body. The
+   * fact is the cheap graph-walker face; admission and lowering stay the
+   * compile entry's job (`compileServerComponentModule`), which fails closed
+   * on everything this scan only reports. Sorted alphabetically.
+   */
+  serverFunctionComponents: string[];
   usesExportedTagName: boolean;
   enhancedForm: boolean;
   defaultCompiledTag?: string;
@@ -99,6 +132,8 @@ export interface ModuleSemanticsOptions {
    * the host injects its descriptor.
    */
   readonly vocabulary?: readonly ModuleVocabularyDescriptor[];
+  /** Collect {@link ModuleSemanticFacts.moduleSpecifiers} (opt-in). */
+  readonly collectSpecifiers?: boolean;
 }
 
 /**
@@ -162,6 +197,12 @@ export interface ModuleIntrinsicBindings {
     module: string | readonly string[],
     imported: string,
   ): boolean;
+  /**
+   * True when the module binds the name itself (top-level local declaration
+   * or any import): such a spelling never refers to a platform global. Same
+   * top-level-only shadowing discipline the intrinsic resolution uses.
+   */
+  hasModuleScopeBinding(localName: string): boolean;
 }
 
 /**
@@ -391,6 +432,9 @@ export function createModuleIntrinsicBindings(
         !bindings[0].typeOnly
       );
     },
+    hasModuleScopeBinding(localName) {
+      return locals.has(localName) || imports.has(localName);
+    },
   };
 }
 
@@ -398,11 +442,99 @@ function isCustomElementTag(value: string): boolean {
   return /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(value);
 }
 
+/**
+ * The exported name of a function declaration / single-declarator variable
+ * statement that {@link isExportedServerComponentDeclaration} admitted.
+ */
+export function serverComponentName(statement: ts.Statement): string {
+  if (ts.isFunctionDeclaration(statement)) return statement.name?.text ?? '';
+  const declaration = (statement as ts.VariableStatement).declarationList.declarations[0];
+  return ts.isIdentifier(declaration.name) ? declaration.name.text : '';
+}
+
+function returnsJsx(expression: ts.Expression | undefined): boolean {
+  const value =
+    expression && ts.isParenthesizedExpression(expression) ? expression.expression : expression;
+  return value !== undefined && (ts.isJsxElement(value) || ts.isJsxSelfClosingElement(value));
+}
+
+/**
+ * The structural server function component shapes the fact scan reports:
+ * a named `export function` whose body is exactly one `return <jsx>` or an
+ * `export const` arrow whose expression body is JSX. The compile entry
+ * (`compileServerComponentModule`) re-derives the same shapes with
+ * fail-closed diagnostics; this scan only answers "is there something to
+ * compile here" for the module graph walker.
+ */
+export function isExportedServerComponentDeclaration(statement: ts.Statement): boolean {
+  const modifiers = ts.canHaveModifiers(statement) ? (ts.getModifiers(statement) ?? []) : [];
+  const exported = modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+  if (!exported) return false;
+  if (ts.isFunctionDeclaration(statement)) {
+    if (
+      statement.name === undefined ||
+      modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword) ||
+      statement.body === undefined ||
+      !ts.isBlock(statement.body)
+    ) {
+      return false;
+    }
+    const returns = statement.body.statements.filter(ts.isReturnStatement);
+    return (
+      statement.body.statements.length === 1 &&
+      returns.length === 1 &&
+      returnsJsx(returns[0].expression)
+    );
+  }
+  if (ts.isVariableStatement(statement)) {
+    const declarations = statement.declarationList.declarations;
+    if (declarations.length !== 1 || !ts.isIdentifier(declarations[0].name)) return false;
+    const initializer = declarations[0].initializer;
+    return (
+      initializer !== undefined &&
+      ts.isArrowFunction(initializer) &&
+      !ts.isBlock(initializer.body) &&
+      returnsJsx(initializer.body)
+    );
+  }
+  return false;
+}
+
 function stringArgument(call: ts.CallExpression, index = 0): string | undefined {
   const argument = call.arguments[index];
   return argument && (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument))
     ? argument.text
     : undefined;
+}
+
+/**
+ * Whether a `.define(...)` callee object is the platform CustomElementRegistry:
+ * a bare module-unbound `customElements` global, or the registry reached
+ * through an unambiguous unbound global qualifier
+ * (`window.`/`globalThis.`/`self.`). Raw text matching misfires both ways — a
+ * module-scope `customElements` binding (import or local) is a shadow, not the
+ * registry, while a qualified global spelling is the registry and must count.
+ */
+function isCustomElementsRegistry(
+  object: ts.Expression,
+  imports: ModuleIntrinsicBindings,
+): boolean {
+  if (ts.isIdentifier(object)) {
+    return object.text === 'customElements' && !imports.hasModuleScopeBinding(object.text);
+  }
+  if (
+    ts.isPropertyAccessExpression(object) &&
+    object.name.text === 'customElements' &&
+    ts.isIdentifier(object.expression) &&
+    !imports.hasModuleScopeBinding(object.expression.text)
+  ) {
+    return (
+      object.expression.text === 'window' ||
+      object.expression.text === 'globalThis' ||
+      object.expression.text === 'self'
+    );
+  }
+  return false;
 }
 
 /**
@@ -436,26 +568,42 @@ export function analyzeModuleSemantics(
     (descriptor) => descriptor.kind === 'element-registration',
   );
   const relativeImports = new Set<string>();
+  const moduleSpecifiers = new Set<string>();
   for (const statement of sourceFile.statements) {
     if (
       (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
       statement.moduleSpecifier &&
-      ts.isStringLiteral(statement.moduleSpecifier) &&
-      statement.moduleSpecifier.text.startsWith('.')
-    )
-      relativeImports.add(statement.moduleSpecifier.text);
+      ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      moduleSpecifiers.add(statement.moduleSpecifier.text);
+      if (statement.moduleSpecifier.text.startsWith('.'))
+        relativeImports.add(statement.moduleSpecifier.text);
+    }
   }
 
   let exportedTagName: string | undefined;
   let compiledElementDecorator = false;
   let unsupportedElementDecorator: string | undefined;
   let definePage = fileName.endsWith('.mdx');
+  let pageComponentName: string | undefined;
   let usesExportedTagName = false;
   let enhancedForm = false;
   let defaultCompiledTag: string | undefined;
   const defined = new Set<string>();
   const referenced = new Set<string>();
   const interactionEvents = new Set<string>();
+  const serverComponents = new Set<string>();
+
+  // The server-function-component set is collected BEFORE the page-call
+  // judgement so the pageComponentName fact is order-independent: a default
+  // export written above its component declaration admits identically (the
+  // pre-pass is the same isExportedServerComponentDeclaration predicate the
+  // main loop reports from — one shape authority).
+  for (const statement of sourceFile.statements) {
+    if (isExportedServerComponentDeclaration(statement)) {
+      serverComponents.add(serverComponentName(statement));
+    }
+  }
 
   for (const statement of sourceFile.statements) {
     if (
@@ -483,16 +631,36 @@ export function analyzeModuleSemantics(
       // (The lit renderer's factory lives on a subpath; the router injects
       // both specifiers, the core stays package-blind, #1339.)
       const pageFactory = statement.expression.expression.text;
-      if (
-        pageDefinitionBindings.some((descriptor) =>
-          imports.isRuntimeNamedImport(
-            pageFactory,
-            descriptor.moduleSpecifier,
-            descriptor.exportName,
-          ),
-        )
-      )
+      const matchedPageBinding = pageDefinitionBindings.find((descriptor) =>
+        imports.isRuntimeNamedImport(
+          pageFactory,
+          descriptor.moduleSpecifier,
+          descriptor.exportName,
+        ),
+      );
+      if (matchedPageBinding) {
         definePage = true;
+        // The server function page (alpha15): only the native definePage
+        // binding (not the lit factory whose first argument is a tag string)
+        // can admit a component function. The first argument must be a plain
+        // identifier that resolves to a server function component THIS module
+        // declares — an inline arrow or an unexported local would ship runtime
+        // JSX, and the server lane has no interpreter (the R1 admission rule
+        // mirrored).
+        if (
+          matchedPageBinding.kind === 'page-definition' &&
+          matchedPageBinding.exportName === 'definePage'
+        ) {
+          const firstArgument = statement.expression.arguments[0];
+          if (
+            firstArgument !== undefined &&
+            ts.isIdentifier(firstArgument) &&
+            serverComponents.has(firstArgument.text)
+          ) {
+            pageComponentName = firstArgument.text;
+          }
+        }
+      }
     }
 
     if (!ts.isClassDeclaration(statement)) continue;
@@ -586,8 +754,8 @@ export function analyzeModuleSemantics(
         }
       } else if (
         ts.isPropertyAccessExpression(expression) &&
-        expression.expression.getText(sourceFile) === 'customElements' &&
-        expression.name.text === 'define'
+        expression.name.text === 'define' &&
+        isCustomElementsRegistry(expression.expression, imports)
       ) {
         const tag = stringArgument(node);
         if (tag && isCustomElementTag(tag)) defined.add(tag);
@@ -629,10 +797,13 @@ export function analyzeModuleSemantics(
 
   return {
     relativeImports: [...relativeImports],
+    ...(options.collectSpecifiers === true ? { moduleSpecifiers: [...moduleSpecifiers] } : {}),
     compiledElementDecorator,
     ...(unsupportedElementDecorator === undefined ? {} : { unsupportedElementDecorator }),
     ...(exportedTagName === undefined ? {} : { exportedTagName }),
     definePage,
+    ...(pageComponentName === undefined ? {} : { pageComponentName }),
+    serverFunctionComponents: [...serverComponents].sort(),
     usesExportedTagName,
     enhancedForm,
     ...(defaultCompiledTag === undefined ? {} : { defaultCompiledTag }),

@@ -5,7 +5,8 @@
  * shapes (runCommand throwing on non-zero exit, runWithOutput capturing
  * stdio, runCaptured's error copy) are shared by the release-flow call sites.
  */
-import { commandOutput, commandStatus } from '../repo/node-command.ts';
+import { spawnCommand } from '../repo/node-command.ts';
+import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
 /** Read the value of a `--flag value` pair from process.argv, or null. */
@@ -18,7 +19,11 @@ export function getArg(flag: string): string | null {
 export interface RunCommandOptions {
   cwd?: string | URL;
   env?: Record<string, string>;
-  stdin?: 'inherit' | 'piped' | 'null';
+  // 'piped' is deliberately absent: the spawn layer only supports
+  // inherit/null for stdin, and the old 'piped'->'inherit' coercion silently
+  // changed caller intent (M-T3). A caller that needs piped stdin must do its
+  // own spawn instead of silently getting inheritance.
+  stdin?: 'inherit' | 'null';
   stdout?: 'inherit' | 'piped' | 'null';
   stderr?: 'inherit' | 'piped' | 'null';
   signal?: AbortSignal;
@@ -31,6 +36,13 @@ export interface RunWithOutputResult {
   stderr: string;
 }
 
+/** Resolve a string|URL cwd to the string the spawn layer takes. A URL cwd is
+ * honored via fileURLToPath — never silently dropped (M-T3). */
+function resolveCwd(cwd: string | URL | undefined): string | undefined {
+  if (cwd === undefined) return undefined;
+  return typeof cwd === 'string' ? cwd : fileURLToPath(cwd);
+}
+
 /** Run a command and stream stdio by default. Throws on non-zero exit. */
 export async function runCommand(
   command: string,
@@ -38,13 +50,14 @@ export async function runCommand(
   options: RunCommandOptions = {},
 ): Promise<void> {
   const { cwd, env, stdin = 'inherit', stdout = 'inherit', stderr = 'inherit', signal } = options;
-  console.log(`$ ${[command, ...args].join(' ')}${cwd ? `  # cwd=${cwd}` : ''}`);
-  const status = await commandStatus(command, {
+  const effectiveCwd = resolveCwd(cwd);
+  console.log(`$ ${[command, ...args].join(' ')}${effectiveCwd ? `  # cwd=${effectiveCwd}` : ''}`);
+  const status = await spawnCommand(command, {
     args,
-    cwd: cwd === undefined ? undefined : typeof cwd === 'string' ? cwd : undefined,
+    cwd: effectiveCwd,
     env,
     signal,
-    stdin: stdin === 'piped' ? 'inherit' : stdin,
+    stdin,
     stdout,
     stderr,
   });
@@ -66,9 +79,9 @@ export async function runWithOutput(
   options: RunWithOutputOptions = {},
 ): Promise<RunWithOutputResult> {
   const { cwd, env, signal } = options;
-  const result = await commandOutput(command, {
+  const result = await spawnCommand(command, {
     args,
-    cwd: cwd === undefined ? undefined : typeof cwd === 'string' ? cwd : undefined,
+    cwd: resolveCwd(cwd),
     env,
     signal,
     stdout: 'piped',

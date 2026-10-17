@@ -32,7 +32,7 @@ The strategy decides when the chunk is fetched — `load`, `idle`, `visible`, `m
 
 ## Upgrade Model
 
-Islands are the only client JavaScript units in openElement. The public model is the compiled element class: server serialization, fresh DOM and existing-DOM claim share one Part Program.
+Islands are the only client JavaScript units in openElement. The public model is the compiled element class: server serialization, fresh DOM and existing-DOM hydration share one Part Program.
 
 openElement uses the browser Custom Element upgrade mechanism. SSG writes HTML first, then the generated client entry imports only the island modules used by the current page and registers their compiled classes.
 

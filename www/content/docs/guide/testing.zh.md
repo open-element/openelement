@@ -9,12 +9,12 @@ order: 110
 生成的项目用一个快速信号对着真实的框架类型做检查：
 
 ```bash
-pnpm check   # tsc --noEmit，检查 tsconfig include：app/ + vite.config.ts + openelement.config.ts
+npm run typecheck   # tsc --noEmit，检查 tsconfig include：app/ + vite.config.ts + openelement.config.ts
 ```
 
 它用真实的 `@openelement/*` 声明检查每个 route 与 component 源文件，因此 `definePage` 上写错的选项、与 loader 数据不匹配的 `props` 投影器、不受支持的装饰器选项或断掉的 import 都会在这里失败——在任何构建运行之前，且不需要浏览器。
 
-loader 与 action 都是普通函数，因此可以直接测试。有一个边界决定它们住在哪里：`pnpm test` 运行的是 Node 内置 test runner，它靠类型剥离加载 `.ts` 模块，但完全无法加载 `.tsx`——JSX 在构建期编译，而每条路由模块的 import 图最终都会落到 `.tsx` 页面组件上。所以把想直接单测的 loader/action 逻辑放进 `app/lib/` 下的 `.ts` 模块（放在 `app/routes/` 下的 `.ts` 文件会被识别为一条路由），再由路由模块 re-export：
+loader 与 action 都是普通函数，因此可以直接测试。有一个边界决定它们住在哪里：`npm test` 运行的是 Node 内置 test runner，它靠类型剥离加载 `.ts` 模块，但完全无法加载 `.tsx`——JSX 在构建期编译，而每条路由模块的 import 图最终都会落到 `.tsx` 页面组件上。所以把想直接单测的 loader/action 逻辑放进 `app/lib/` 下的 `.ts` 模块（放在 `app/routes/` 下的 `.ts` 文件会被识别为一条路由），再由路由模块 re-export：
 
 ```ts
 // app/lib/guestbook.ts —— 纯 TypeScript；这里不 import 任何 JSX 形态的东西
@@ -58,7 +58,7 @@ import { saveNote } from '../app/lib/guestbook.ts';
 
 test('空消息在校验阶段失败', () => {
   const formData = new FormData();
-  formData.set('message', '');
+  formData.set('note', '');
   const failure = saveNote({ formData });
   assert.equal(failure.status, 422);
 });
@@ -76,7 +76,7 @@ import { saveNote } from '../app/lib/guestbook.ts';
 
 test('合法消息跳转到回显', () => {
   const formData = new FormData();
-  formData.set('message', 'hello');
+  formData.set('note', 'hello');
   let thrown: unknown;
   try {
     saveNote({ formData });
@@ -86,7 +86,7 @@ test('合法消息跳转到回显', () => {
   if (!(thrown instanceof OpenElementRedirect)) {
     throw new Error('合法消息必须跳转');
   }
-  assert.equal(thrown.location, '/guestbook?echoed=hello');
+  assert.equal(thrown.location, '/guestbook?saved=hello');
 });
 ```
 
@@ -110,15 +110,15 @@ test('loader 返回条目列表', async () => {
 构建是第二道门禁，也是某些契约唯一能检查的地方——预渲染、路由发现、静态路径展开与请求时输出都只在这里发生：
 
 ```bash
-pnpm build
-pnpm start   # 伺服 dist/；dist/server 存在时向它分派
+npm run build
+npm start      # 伺服 dist/；dist/server 存在时向它分派
 ```
 
-要检查产物本身，而不只是相信日志。纯静态项目应当为每个路由产出 HTML，且完全不产出 `dist/server` 目录；含 `'dynamic'` 路由或 action 的项目应当产出 `dist/server/index.js`（可移植的 `fetch(Request) -> Response` 处理器）与列出请求时路由的 `dist/server/server-manifest.json`。`pnpm start` 会打印它发现的是哪种模式，并且只伺服被构建出来的东西，所以在 `pnpm dev` 里正常、在这里不对的页面，原因一定在构建期。
+要检查产物本身，而不只是相信日志。纯静态项目应当为每个路由产出 HTML，且完全不产出 `dist/server` 目录；含 `'dynamic'` 路由或 action 的项目应当产出 `dist/server/index.js`（可移植的 `fetch(Request) -> Response` 处理器）与列出请求时路由的 `dist/server/server-manifest.json`。`npm start` 会打印它发现的是哪种模式，并且只伺服被构建出来的东西，所以在 `npm run dev` 里正常、在这里不对的页面，原因一定在构建期。
 
 ## 视觉检查
 
-布局、DSD 层与 hydration 都是浏览器事实。伺服一次构建（`pnpm start`），让浏览器自动化跑在它上面——Playwright 与 Web Test Runner 都能直接驱动构建产物——然后断言渲染后的 DOM，而不是 HTML 源码：shadow root 的内容只有页面解析之后才能查询，upgrade 也只有 island 的 chunk 加载之后才会发生。
+布局、DSD 层与 hydration 都是浏览器事实。伺服一次构建（`npm start`），让浏览器自动化跑在它上面——Playwright 与 Web Test Runner 都能直接驱动构建产物——然后断言渲染后的 DOM，而不是 HTML 源码：shadow root 的内容只有页面解析之后才能查询，upgrade 也只有 island 的 chunk 加载之后才会发生。
 
 任何交互组件都值得有的两条断言：在 island 的模块运行之前文档已完整且已样式化（static-first 契约）；upgrade 之后组件仍能响应真实的用户输入。本仓库自己的站点测试套件就是这种形态——端到端用例针对构建产物覆盖 DSD 层、hydration 行为、island 响应性与导航。
 

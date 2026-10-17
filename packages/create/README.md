@@ -14,7 +14,12 @@ Docs and guides: <https://openelement.org>.
 the showcase starter: a static-first landing page with two islands, a fully
 static About page, an `/api/ping` server route, and a Tailwind-ON design-token
 sheet (the `@theme` role table; one template, no variants). The generated
-project is a plain Node/pnpm project.
+project is a plain Node project with no package-manager pin: every script is a
+plain command, the manifest declares no `packageManager` field, and the
+scaffold ships no `pnpm-workspace.yaml`, so npm, pnpm, yarn, and bun can all
+create → install → dev → build → test → fmt/lint it. The repository's own
+development flow (Vite+ / `vp`) stays in this repository and appears nowhere in
+the generated project.
 
 ## Usage (1.0 Alpha)
 
@@ -22,9 +27,11 @@ project is a plain Node/pnpm project.
 npm create @openelement my-app
 ```
 
-The CLI scaffolds, initializes git (when git is available), detects a package
-manager (pnpm first, then npm), installs dependencies, and prints a boxed
-handoff with the next commands. Flags (all optional):
+The CLI scaffolds, initializes git (when git is available), detects the first
+package manager on PATH (pnpm, then npm, then yarn, then bun — failing only
+when none of the four exists, with a message naming all four), installs
+dependencies with it, and prints a boxed handoff with the next commands. Flags
+(all optional):
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
@@ -56,7 +63,7 @@ npm create @openelement@1.0.0-alpha.14 my-app
 ```
 
 The generated starter depends on `@openelement/*` through caret ranges over
-the release it was generated from, so `pnpm update` picks up later `1.0.0`
+the release it was generated from, so a dependency update picks up later `1.0.0`
 prereleases without a manifest edit.
 
 The canonical install command is exported from `@openelement/create/install-command` (one builder, every documented copy derives from it).
@@ -75,8 +82,8 @@ npx @openelement/create my-app
 pnpm dlx --package=@openelement/create openelement-create my-app
 ```
 
-The scaffolded project itself is Node-native: Node.js 24.2+ and
-pnpm run its scripts.
+The scaffolded project itself is Node-native: Node.js 24.2+ runs it, and any of
+npm, pnpm, yarn, or bun runs its scripts.
 
 ## Stable 0.43 (maintenance line)
 
@@ -94,7 +101,8 @@ npm create @openelement@0.43 my-app
   the verified floor this repository exercises in CI.
 - **Generated project:** Node.js 24.2+ (the floor the packed `@openelement/*`
   engines declare and CI exercises; `.node-version` pins the development
-  line) and pnpm for the lifecycle scripts.
+  line) and any one of npm, pnpm, yarn, or bun for the lifecycle scripts —
+  nothing in the scaffold requires a specific manager.
 - **git (optional):** `git init` runs by default and skips silently when git
   is not on PATH.
 
@@ -102,9 +110,10 @@ npm create @openelement@0.43 my-app
 
 - `package.json` - starter dependencies (`@openelement/*` with caret ranges
   over the generated-from release)
-  and the lifecycle scripts (`dev`/`check`/`test`/`build`/`start`; `build` and
-  `start` run the `openelement` bin from `@openelement/router`)
-- `tsconfig.json` - the type-check surface for `pnpm check`: JSX authoring
+  and the lifecycle scripts
+  (`dev`/`fmt`/`lint`/`typecheck`/`test`/`build`/`start`; `dev`, `build` and
+  `start` run the router's `oe` bin, `fmt`/`lint` run `oxfmt`/`oxlint`)
+- `tsconfig.json` - the type-check surface for `npm run typecheck`: JSX authoring
   through the element import source, whole-`app/` coverage
 - `vite.config.ts` - Vite build configuration only; framework options still
   have exactly one home:

@@ -7,11 +7,12 @@
  * every option it omits is provided by a file convention:
  *
  *   - design tokens: `app/styles/tokens.css` (inlined into the document head;
- *     a generic token channel — apps on the Tailwind preset typically name
- *     their sheet `theme.css` instead and reach it through `tailwind.theme`,
- *     which replaces this convention for them: dev serves the compiled theme
- *     sheet and links it, the build emits it as the linked bundle asset)
- *   - app shell:     `app/islands/app-shell.tsx` (auto-registered, deletable)
+ *     a generic token channel — an app on the Tailwind entry typically names
+ *     its sheet `theme.css` instead and reaches it through `tailwind.theme`,
+ *     which replaces this convention for it: the sources compile through the
+ *     official `@tailwindcss/vite` pipeline and the emitted stylesheet is
+ *     linked as the document stylesheet, in dev and in the build alike)
+ *   - layout:        `app/layout.tsx` (auto-registered, deletable)
  *   - site title:    the `name` field of `package.json`
  *   - document head: `app/head.tsx` (structural head content, see below)
  *
@@ -21,14 +22,14 @@
  *
  * ## `dirs` — where the conventions resolve
  *
- * `dirs` moves the framework's source roots. The tokens.css and app-shell.tsx
+ * `dirs` moves the framework's source roots. The tokens.css and layout.tsx
  * conventions FOLLOW the move: they resolve under the SHARED base directory of
  * the three configured roots — their longest common leading path — so
  *
  *   dirs: { routes: 'src/routes', islands: 'src/islands', components: 'src/components' }
  *
  * resolves the conventions as `src/styles/tokens.css` and
- * `src/islands/app-shell.tsx` (and, for a site that keeps one, `src/data/...`).
+ * `src/layout.tsx` (and, for a site that keeps one, `src/data/...`).
  * A partial override that leaves the three roots without a shared leading
  * segment (`dirs: { routes: 'src/pages' }` against the default `app/islands`
  * and `app/components`) moves only the overridden root and leaves the
@@ -70,7 +71,7 @@ export const CONVENTION_ISLANDS_DIR = 'app/islands';
 export const CONVENTION_COMPONENTS_DIR = 'app/components';
 
 /**
- * Default convention base: the directory the tokens/app-shell/data conventions
+ * Default convention base: the directory the tokens/layout/data conventions
  * resolve under when `dirs` is omitted (or has no shared leading segment).
  */
 export const CONVENTION_BASE_DIR = 'app';
@@ -78,8 +79,8 @@ export const CONVENTION_BASE_DIR = 'app';
 /** Convention-relative suffix of the design-token stylesheet. */
 export const CONVENTION_STYLES_SUFFIX = 'styles/tokens.css';
 
-/** Convention-relative suffix of the auto-registered application shell. */
-export const CONVENTION_APP_SHELL_SUFFIX = 'islands/app-shell.tsx';
+/** Convention-relative suffix of the auto-registered layout. */
+export const CONVENTION_LAYOUT_SUFFIX = 'layout.tsx';
 
 /** Convention-relative suffix of the structural document-head module. */
 export const CONVENTION_HEAD_SUFFIX = 'head.tsx';
@@ -87,14 +88,14 @@ export const CONVENTION_HEAD_SUFFIX = 'head.tsx';
 /** Convention path for the design-token stylesheet. */
 export const CONVENTION_TOKENS_PATH = `${CONVENTION_BASE_DIR}/${CONVENTION_STYLES_SUFFIX}`;
 
-/** Convention path for the auto-registered application shell. */
-export const CONVENTION_APP_SHELL_PATH = `${CONVENTION_BASE_DIR}/${CONVENTION_APP_SHELL_SUFFIX}`;
+/** Convention path for the auto-registered layout. */
+export const CONVENTION_LAYOUT_PATH = `${CONVENTION_BASE_DIR}/${CONVENTION_LAYOUT_SUFFIX}`;
 
 /** Convention path for the structural document-head module (`app/head.tsx`). */
 export const CONVENTION_HEAD_PATH = `${CONVENTION_BASE_DIR}/${CONVENTION_HEAD_SUFFIX}`;
 
-/** The tag name the convention shell is registered under. */
-export const CONVENTION_APP_SHELL_TAG = 'app-shell';
+/** The tag name the convention layout is registered under. */
+export const CONVENTION_LAYOUT_TAG = 'app-layout';
 
 /** The site-title convention source (the package.json `name` field). */
 export const CONVENTION_PACKAGE_JSON = 'package.json';
@@ -161,31 +162,86 @@ export interface OpenElementBuildConfig {
   manifestBudget?: Record<string, number>;
 }
 
+/**
+ * Options for the opt-in Tailwind entry (alpha15 S lane; the pre-S "preset"
+ * compiled the sources itself — this shape only declares them).
+ *
+ * `tailwind: true` enables the entry with no declared sources: the document
+ * stylesheet is Tailwind's own default compile (`@import 'tailwindcss'`).
+ *
+ * The shape lives here, on the host-neutral config surface, and the Vite
+ * build layer consumes it — the Framework-root declaration graph packed
+ * consumers typecheck must never name `vite` (the packed-consumer gate's
+ * declaration leak pattern).
+ */
+export interface TailwindOptions {
+  /**
+   * The style sources the entry `@import`s after Tailwind itself: package CSS
+   * specifiers (`@openelement/ui/theme.css`, `tailwindcss/theme.css`) or
+   * app-relative paths. Their `@theme` blocks, `@import`s and `url()` assets
+   * compile through the official `@tailwindcss/vite` pipeline into the
+   * document stylesheet — the router neither scans for classes nor transforms
+   * the compiled CSS.
+   */
+  theme?: string[];
+}
+
+/**
+ * Options for the UnoCSS entry (alpha15 stage 2B) — the sibling of
+ * {@linkcode TailwindOptions}, with the same shape and the same meaning of
+ * every field. Declaring it selects UnoCSS as the application's style engine;
+ * declaring it alongside `tailwind` is a conflict and fails closed.
+ *
+ * UnoCSS compiles from a configuration rather than from CSS entry text, so
+ * the engine-specific half of the declaration lives in the project's own
+ * `uno.config.ts` (presets, `theme`, shortcuts, extractors) — the router
+ * loads it through the official `@unocss/config` loader and never
+ * re-interprets it. What this key owns is the provider-neutral half:
+ * `theme` names the token/role sources that ship in the document sheet.
+ *
+ * `unocss: true` enables the entry with no declared sources: the framework's
+ * default preset (`presetWind4`, the `tailwind4` dialect) supplies the scale
+ * layer and the declared utilities are compiled from the admitted candidates.
+ */
+export interface UnocssOptions {
+  /**
+   * The style sources the document sheet carries after the preset's own theme
+   * layer: package CSS specifiers or app-relative paths. Plain CSS — an
+   * UnoCSS-generated document sheet is real CSS by the time it exists, so a
+   * role/token file (`open-props`, a package's `:root` block) is included
+   * verbatim and needs no engine-specific transform.
+   */
+  theme?: string[];
+  /** The project's own UnoCSS configuration file, app-relative. */
+  config?: string;
+}
+
 /** Overrides accepted by an `openelement.config.ts` file (unknown keys fail closed). */
 export interface OpenElementUserConfig {
   /** Page renderer. Omit to keep the compiled native renderer. */
   renderer?: 'native' | 'lit';
-  /** Source roots; moves the tokens/app-shell/head conventions with them. */
+  /** Source roots; moves the tokens/layout/head conventions with them. */
   dirs?: OpenElementDirsConfig;
   /**
-   * Application shell. `false` opts out of the `app-shell.tsx` convention; an
+   * Layout. `false` opts out of the `layout.tsx` convention; an
    * object registers the named module. `tagName` is derived from the import's
    * basename, so it is not part of the surface.
    */
-  appShell?:
+  layout?:
     | false
     | {
         import: string;
         props?: Record<string, unknown>;
       };
   /**
-   * Extra package names whose island modules the build admits (e.g.
-   * `['@openelement/ui']`). The loader folds this list into the SSR
-   * externalization list the bundler needs, so a package listed here is
-   * bundled rather than imported at run time; there is no separate
-   * `ssr.noExternal` key.
+   * How component packages are admitted. Omitted or `'auto'` (the default):
+   * the scan derives the set from the package element modules the app really
+   * imports, and an array adds explicit entries (explicit outranks a derived
+   * claim on a shared tag). `'manual'`: the escape hatch — derivation off,
+   * only listed packages are admitted, an imported-but-unlisted package is
+   * reported with the explicit fix.
    */
-  packageIslands?: string[];
+  packageIslands?: string[] | 'auto' | 'manual';
   /** Document head channel (structured entries only). */
   head?: OpenElementHeadConfig;
   /** Stylesheet channel. */
@@ -201,13 +257,20 @@ export interface OpenElementUserConfig {
    */
   viewTransition?: boolean;
   /**
-   * The Tailwind preset (alpha9 C2 #1505, opt-in): the config-file home for
-   * the same option the inline `openElement(...)` face takes. `true` enables
-   * the preset with defaults; an object names the theme/components sources,
-   * the `@scope` face tags, and the DSD link injection — see
-   * `TailwindPresetOptions` (@openelement/router/vite).
+   * The Tailwind entry (alpha15 S lane, opt-in): the config-file home for the
+   * same option the inline `openElement(...)` face takes. `true` enables the
+   * entry with no declared sources; an object names the style sources that
+   * compile into the document stylesheet — see `TailwindOptions`
+   * (@openelement/router/vite).
    */
-  tailwind?: boolean | import('./vite/preset-tailwind.ts').TailwindPresetOptions;
+  tailwind?: boolean | TailwindOptions;
+  /**
+   * The UnoCSS entry (alpha15 stage 2B, opt-in): the sibling of `tailwind`.
+   * Declaring it selects UnoCSS as this application's style engine; declaring
+   * both keys is a conflict and fails closed — see `UnocssOptions`
+   * (@openelement/router/vite).
+   */
+  unocss?: boolean | UnocssOptions;
   /**
    * Speculation Rules emission. Boolean for now: `true` uses the framework
    * route-derived defaults, `false` emits none. An object form (explicit
@@ -239,25 +302,24 @@ export function defineConfig(config: OpenElementUserConfig): OpenElementUserConf
 export const OPEN_ELEMENT_CONFIG_KEYS: readonly string[] = [
   'renderer',
   'dirs',
-  'appShell',
+  'layout',
   'packageIslands',
   'head',
   'styles',
   'i18n',
   'viewTransition',
   'tailwind',
+  'unocss',
   'speculation',
   'build',
   'middleware',
 ];
 
-/** Accepted keys inside the `tailwind` preset object. */
-export const OPEN_ELEMENT_TAILWIND_KEYS: readonly string[] = [
-  'theme',
-  'components',
-  'scopeTags',
-  'injectDsdLinks',
-];
+/** Accepted keys inside the `tailwind` options object. */
+export const OPEN_ELEMENT_TAILWIND_KEYS: readonly string[] = ['theme'];
+
+/** Accepted keys inside the `unocss` options object. */
+export const OPEN_ELEMENT_UNOCSS_KEYS: readonly string[] = ['theme', 'config'];
 
 /** Accepted keys inside `head`. */
 export const OPEN_ELEMENT_HEAD_KEYS: readonly string[] = [
@@ -290,8 +352,8 @@ export const OPEN_ELEMENT_HEAD_STRING_KEYS: readonly string[] = [
 /** Accepted keys inside `dirs`. */
 export const OPEN_ELEMENT_DIRS_KEYS: readonly string[] = ['routes', 'islands', 'components'];
 
-/** Accepted keys inside `appShell`. */
-export const OPEN_ELEMENT_APP_SHELL_KEYS: readonly string[] = ['import', 'props'];
+/** Accepted keys inside `layout`. */
+export const OPEN_ELEMENT_LAYOUT_KEYS: readonly string[] = ['import', 'props'];
 
 /** Accepted keys inside `styles`. */
 export const OPEN_ELEMENT_STYLES_KEYS: readonly string[] = ['tokens'];
@@ -386,13 +448,14 @@ export function assertValidUserConfig(value: unknown): asserts value is OpenElem
   const {
     renderer,
     dirs,
-    appShell,
+    layout,
     packageIslands,
     head,
     styles,
     i18n,
     viewTransition,
     tailwind,
+    unocss,
     speculation,
     build,
     middleware,
@@ -409,17 +472,24 @@ export function assertValidUserConfig(value: unknown): asserts value is OpenElem
     }
   }
 
-  if (appShell !== undefined && appShell !== false) {
-    if (!isPlainObject(appShell)) throw typeError('appShell', 'false or an object', appShell);
-    assertKnownKeys(appShell, 'appShell', OPEN_ELEMENT_APP_SHELL_KEYS);
-    assertStringKey('appShell.import', appShell.import);
-    if (appShell.props !== undefined && !isPlainObject(appShell.props)) {
-      throw typeError('appShell.props', 'an object', appShell.props);
+  if (layout !== undefined && layout !== false) {
+    if (!isPlainObject(layout)) throw typeError('layout', 'false or an object', layout);
+    assertKnownKeys(layout, 'layout', OPEN_ELEMENT_LAYOUT_KEYS);
+    assertStringKey('layout.import', layout.import);
+    if (layout.props !== undefined && !isPlainObject(layout.props)) {
+      throw typeError('layout.props', 'an object', layout.props);
     }
   }
 
   if (packageIslands !== undefined) {
-    assertStringArray('packageIslands', packageIslands);
+    if (
+      packageIslands !== 'auto' &&
+      packageIslands !== 'manual' &&
+      !Array.isArray(packageIslands)
+    ) {
+      throw typeError('packageIslands', `'auto', 'manual', or an array of strings`, packageIslands);
+    }
+    if (Array.isArray(packageIslands)) assertStringArray('packageIslands', packageIslands);
   }
 
   if (head !== undefined) {
@@ -478,14 +548,19 @@ export function assertValidUserConfig(value: unknown): asserts value is OpenElem
       throw typeError('tailwind', 'true or an object', tailwind);
     }
     assertKnownKeys(tailwind, 'tailwind', OPEN_ELEMENT_TAILWIND_KEYS);
-    for (const key of ['theme', 'components', 'scopeTags'] as const) {
-      const list = tailwind[key];
-      if (list !== undefined) assertStringArray(`tailwind.${key}`, list);
+    const theme = (tailwind as { theme?: unknown }).theme;
+    if (theme !== undefined) assertStringArray('tailwind.theme', theme);
+  }
+
+  if (unocss !== undefined && unocss !== true) {
+    if (!isPlainObject(unocss)) {
+      throw typeError('unocss', 'true or an object', unocss);
     }
-    const injectDsdLinks = (tailwind as { injectDsdLinks?: unknown }).injectDsdLinks;
-    if (injectDsdLinks !== undefined) {
-      assertBooleanKey('tailwind.injectDsdLinks', injectDsdLinks);
-    }
+    assertKnownKeys(unocss, 'unocss', OPEN_ELEMENT_UNOCSS_KEYS);
+    const theme = (unocss as { theme?: unknown }).theme;
+    if (theme !== undefined) assertStringArray('unocss.theme', theme);
+    const config = (unocss as { config?: unknown }).config;
+    if (config !== undefined) assertStringKey('unocss.config', config);
   }
 
   if (build !== undefined) {
@@ -549,7 +624,7 @@ export function frameworkOptionsConflict(): OpenElementError {
   );
 }
 
-/** Derive the shell tag name from its module basename (`app-shell.tsx` -> `app-shell`). */
+/** Derive the layout tag name from its module basename (`open-layout.tsx` -> `open-layout`). */
 export function tagNameFromModule(importPath: string): string {
   const base = importPath.split('/').pop() ?? importPath;
   const withoutExtension = base.replace(/\.(tsx|ts|jsx|js)$/u, '');
@@ -604,9 +679,9 @@ export function conventionTokensPath(base: string): string {
   return `${base}/${CONVENTION_STYLES_SUFFIX}`;
 }
 
-/** The app-shell convention path for a resolved `dirs` block. */
-export function conventionAppShellPath(base: string): string {
-  return `${base}/${CONVENTION_APP_SHELL_SUFFIX}`;
+/** The layout convention path for a resolved `dirs` block. */
+export function conventionLayoutPath(base: string): string {
+  return `${base}/${CONVENTION_LAYOUT_SUFFIX}`;
 }
 
 /** The structural document-head convention path for a resolved `dirs` block. */

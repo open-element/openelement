@@ -1,0 +1,7 @@
+/* Streamed request-time page sheet (S-C2/S-12). The request-time response is a
+   streamed document: this sheet's emitted asset must be declared in the
+   ORIGINAL head — the first flush — not appended after `</head>` once the
+   deferred field resolves. */
+:host{display:block}
+
+.subpage-live{color:rgb(70,20,120)}

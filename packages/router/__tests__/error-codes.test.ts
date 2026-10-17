@@ -19,8 +19,10 @@ import type { PagePropsContext } from '../src/index.ts';
 import { packageIslandIdentity } from '../src/cli/build-client.ts';
 import {
   requireElementRuntimeChunk,
+  requireEntryStaticGraphFreeOfRuntime,
   resolveElementRuntimeIdentity,
 } from '../src/vite/internal/element-runtime-chunk.ts';
+import { requireViteHelperChunk } from '../src/vite/internal/vite-helper-chunk.ts';
 import {
   authoringError,
   buildError,
@@ -53,7 +55,7 @@ import { resolveDynamicRoutePath } from '../src/vite/internal/ssg/ssg-helpers.ts
 import { mdxToCompiledPageSource } from '../src/vite/plugin-mdx-lower.ts';
 import { assertLitStreamRoute } from '../src/vite/internal/server-runtime/route-dispatch.ts';
 import {
-  createDeferredPageShell,
+  createStreamPageShell,
   streamFields,
 } from '../src/vite/internal/server-runtime/stream-runtime.ts';
 import { createNativePageRenderer } from '../src/vite/internal/server-runtime/renderer-runtime.ts';
@@ -268,6 +270,56 @@ test('error codes: the client island build reports build-phase codes', () => {
   );
   expect(chunkError.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
   expect(chunkError.phase).toEqual('build');
+
+  // B2 gap (a): the two guards that keep the emitted entry out of the runtime's
+  // static closure report their own codes — the helper-grouping guard (Vite's
+  // injected preload helper homed anywhere but its dedicated chunk), and the
+  // property guard (the entry statically reaching the runtime at all).
+  const helperError = assertThrowsIncludes(
+    () =>
+      requireViteHelperChunk([
+        {
+          fileName: 'islands/island-open-search-BRyKVKhp.js',
+          facadeModuleId: null,
+          modules: { '/site/app/islands/open-search.tsx': {}, '\0vite/preload-helper.js': {} },
+        },
+      ]),
+    OpenElementError,
+    'instead of the shared vite-helper chunk',
+  );
+  expect(helperError.code).toEqual(ClientBuildErrorCode.VITE_HELPER_CHUNK_MISSING);
+  expect(helperError.phase).toEqual('build');
+  const entryGraphError = assertThrowsIncludes(
+    () =>
+      requireEntryStaticGraphFreeOfRuntime(
+        [
+          {
+            fileName: 'islands/client.js',
+            facadeModuleId: '\0virtual:open-client-entry',
+            modules: {},
+            isEntry: true,
+            imports: ['islands/island-open-search-BRyKVKhp.js'],
+          },
+          {
+            fileName: 'islands/island-open-search-BRyKVKhp.js',
+            facadeModuleId: '/site/app/islands/open-search.tsx',
+            modules: {},
+            imports: ['islands/element-runtime-Bh4sh.js'],
+          },
+          {
+            fileName: 'islands/element-runtime-Bh4sh.js',
+            facadeModuleId: '/site/packages/element/src/index.ts',
+            modules: { '/site/packages/element/src/index.ts': {} },
+            imports: [],
+          },
+        ],
+        { packageRoot: '/site/packages/element' },
+      ),
+    OpenElementError,
+    'statically reaches the shared element runtime',
+  );
+  expect(entryGraphError.code).toEqual(ClientBuildErrorCode.ENTRY_STATIC_GRAPH_REACHES_RUNTIME);
+  expect(entryGraphError.phase).toEqual('build');
 });
 
 /** The minimal delivery entry the raiser proofs above need. */
@@ -296,9 +348,9 @@ test('error codes: the streaming pump reports ssr-phase codes', async () => {
   expect(loader.message).toEqual('stream loader must return one object');
 
   // The deferred-shell gate fails closed on a route/manifest/program mismatch.
-  const gate = createDeferredPageShell({
+  const gate = createStreamPageShell({
     streamManifests: {},
-    createDeferredDsdExecutor: () => Promise.reject(new Error('unreached')),
+    createStreamShellExecutor: () => Promise.reject(new Error('unreached')),
   });
   const mismatch = await assertRejectsIncludes(
     () => gate('/', { default: {} }, {}, 'i', 't'),
@@ -324,7 +376,7 @@ test('error codes: the dispatch guards and the renderer seam report ssr-phase co
   expect(litStream.phase).toEqual('ssr');
 
   const renderer = createNativePageRenderer({
-    renderDsd: () => ({ html: '' }),
+    renderToString: () => ({ html: '' }),
     customElements: { get: () => undefined },
     ssrRenderableTags: [],
   });

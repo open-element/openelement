@@ -233,7 +233,7 @@ async function readConfigObject(
   return parsed as Record<string, unknown>;
 }
 
-/** The first `.ts` path a script command references, if any. */
+/** The last `.ts` path a script command references, if any. */
 export function scriptInCommand(command: string): string | undefined {
   // The LAST `.ts` argument: commands may route through run-in.ts first.
   const matches = [...command.matchAll(/(?:^|\s)([A-Za-z0-9._/-]+\.ts)(?=\s|$)/g)];

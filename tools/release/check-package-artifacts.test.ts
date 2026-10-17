@@ -81,7 +81,7 @@ test('package artifacts: rejects CJS and host APIs in runtime-free packages', as
   );
 });
 
-test('package artifacts: bars Node and Deno APIs in packed ui modules', async () => {
+test('package artifacts: bars Node APIs and the retired host API in packed ui modules', async () => {
   await withPackage(
     '@openelement/ui',
     {
@@ -97,14 +97,15 @@ test('package artifacts: bars Node and Deno APIs in packed ui modules', async ()
       );
       expect(messages.includes('node:* import')).toBeTruthy();
       expect(messages.includes('Node process global')).toBeTruthy();
-      expect(messages.includes('Deno API')).toBeTruthy();
+      expect(messages.includes('retired host API')).toBeTruthy();
     },
   );
 });
 
-test('package artifacts: create CLI is node-hosted, so it bars Deno APIs', async () => {
-  // The create CLI runs on node:*, so its packed artifact bars the Deno API
-  // surface only (the runtime-free trio bars the Node surface as well).
+test('package artifacts: create CLI is node-hosted, so it bars the retired host API', async () => {
+  // The create CLI runs on node:*, so its packed artifact bars the retired
+  // host's API surface only (the runtime-free trio bars the Node surface as
+  // well).
   await withPackage(
     '@openelement/create',
     {
@@ -121,7 +122,7 @@ test('package artifacts: create CLI is node-hosted, so it bars Deno APIs', async
       );
       expect(!messages.includes('node:* import')).toBeTruthy();
       expect(!messages.includes('Node process global')).toBeTruthy();
-      expect(messages.includes('Deno API')).toBeTruthy();
+      expect(messages.includes('retired host API')).toBeTruthy();
     },
   );
 });
@@ -133,7 +134,7 @@ test('package artifacts: allows documented host API escape hatches', async () =>
       'README.md': 'router',
       LICENSE: 'MIT',
       'build-tool.js': `
-        // deno-api-free:ignore build-time plugin
+        // retired-host-api-free:ignore build-time plugin
         import process from 'node:process';
         export const cwd = process.cwd();
       `,
@@ -153,7 +154,7 @@ test('package artifacts: rejects a non-leading host API escape directive', async
       LICENSE: 'MIT',
       'build-tool.js': `
         import process from 'node:process';
-        // deno-api-free:ignore build-time plugin
+        // retired-host-api-free:ignore build-time plugin
         export const cwd = process.cwd();
       `,
     },

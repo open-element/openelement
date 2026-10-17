@@ -29,9 +29,13 @@ follows the release train.
 Every release candidate must survive independent packed consumers: the published
 tarballs — never the monorepo sources — build a minimal Element app, a Router
 SSR/SSG app, and browser claim/hydration checks on current Chromium, Firefox,
-and WebKit. Deployment targets are Deno 2.9 and Node.js 24 via the Nitro
-server adapter; local preview serves through `Deno.serve` from TypeScript
-source. There is no first-party Node HTTP bridge.
+and WebKit. At publication (2026-09-13) the deployment targets were Deno 2.9 and
+Node.js 24 via the Nitro server adapter, and local preview served through
+`Deno.serve` from TypeScript source. **Update (2026-10-13):** the Deno host
+retired with the Node/pnpm platform train (ADR-0161 and its 2026-10-03
+amendment) — the supported targets are Node.js 24 and the Nitro adapters, and
+local preview is served by the start CLI through the first-party Node HTTP
+bridge (`packages/router/src/internal/node-http.ts`).
 
 ## What to expect next
 
