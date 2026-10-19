@@ -377,7 +377,7 @@ final state.
      (www/tools/generate-site-content-data.ts) and the consumer-form test is
      www/__tests__/release-copy.test.ts, so this is a description update, not a
      new seam.
-   - docs/maintainers/known-reds-ledger.md: no new known-red required (the
+   - internal working ledger (not published): no new known-red required (the
      alerts are closed or fix-pending); if the ledger tracks CodeQL state,
      record "#4238 dismissed false positive 2026-10-19; #4241 fixed-by-code
      pending re-analysis".

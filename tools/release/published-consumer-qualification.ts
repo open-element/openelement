@@ -367,7 +367,7 @@ async function qualificationMain(): Promise<void> {
 // - Alias EXECUTION cannot be covered pre-publish: npm resolves the package
 //   from the registry, so with the candidate version unpublished the only
 //   honest pre-publish outcome is the cold-cache failure the probe records
-//   (see docs/maintainers/known-reds-ledger.md). The post-publish smoke runs
+//   (see the internal working ledger, not published). The post-publish smoke runs
 //   the real alias where the registry exists.
 // - Equivalent EXECUTION: `npm exec --yes --package=<local tarball> -- <bin>`
 //   is the install-and-run mechanism npm's own init uses, fed the packed

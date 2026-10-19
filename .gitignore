@@ -7,6 +7,10 @@ node_modules/
 /.mimosa/
 **/.mimosa/
 
+# Local agent workspace: consolidated tool configs/sessions and archived plans.
+# Project-serving and local-only — never published.
+/.agent/
+
 # Generated Web Components interop qualification evidence. corpus.json is the
 # canonical corpus; the qualifier regenerates both artifacts on every run.
 tests/fixtures/web-component-interop/compiler-output.cem.json

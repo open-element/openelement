@@ -43,7 +43,7 @@ test.describe('Direct URL Access', () => {
       // point is to keep Firefox's navigation coverage of the page, not to
       // dodge it. Tracked as the local Firefox large-page trap (§1.4/R7) and
       // the Firefox flake class recorded as KR-18 in
-      // docs/maintainers/known-reds-ledger.md.
+      // the internal working ledger (not published).
       if (route.path === '/reference') test.setTimeout(420_000);
       const response = await page.goto(route.path);
       // A ceiling that expires here is an engine load timeout, not an

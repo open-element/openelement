@@ -102,7 +102,7 @@ fixture 形状（`tests/fixtures/third-party-web-components/`）：
 
 **另一个时序事实**：即使 `observeVisible()` 在该页被调用（例如页面有 enhance 表单），它也只会在 morph 之后跑一次；而此处 morph 发生在 t1 之前，`wc-client.ts` chunk 在 t2/t3 才落地 —— **仍然错过**。所以机制必须是「时间/活动驱动」，不能只是「morph 驱动」。
 
-**现状（已核实，t3-release handoff）**：前序 harness 陷阱（scaffold 未带 `--no-install` ⇒ `ERR_PNPM_NO_MATCHING_VERSION`）**已由 t3-release 修复并落地**（`6d52fa580`；`qualify.ts:583-589`）。修复后的 smoke 顺序是 `create --no-install` → `pnpm install --no-frozen-lockfile` → `pnpm run build`（**全绿**）→ 浏览器阶段**恰好在 `missing=wc-open-child` 失败，且 `browserErrors` 为空**。这正面确认了本节的根因判断：失败**不是** chunk/模块加载错误，而是**注册门控**本身。残余即 committed ledger 的 **KR-17**（`docs/maintainers/known-reds-ledger.md:55-78`），其退休条件是「T8 的三引擎、多库用例全绿」——**该条件已并入 §10 验收清单**。
+**现状（已核实，t3-release handoff）**：前序 harness 陷阱（scaffold 未带 `--no-install` ⇒ `ERR_PNPM_NO_MATCHING_VERSION`）**已由 t3-release 修复并落地**（`6d52fa580`；`qualify.ts:583-589`）。修复后的 smoke 顺序是 `create --no-install` → `pnpm install --no-frozen-lockfile` → `pnpm run build`（**全绿**）→ 浏览器阶段**恰好在 `missing=wc-open-child` 失败，且 `browserErrors` 为空**。这正面确认了本节的根因判断：失败**不是** chunk/模块加载错误，而是**注册门控**本身。残余即 committed ledger 的 **KR-17**（the internal working ledger (not published)），其退休条件是「T8 的三引擎、多库用例全绿」——**该条件已并入 §10 验收清单**。
 
 ### 1.3 为什么这是泛用互操作缺陷，不是 Lit 问题
 
@@ -615,7 +615,7 @@ function makeTimers() {
    - `expectedTags`（`:256-269`）扩展；`thirdPartyReady`/`summary` 增加新探针；**新增 `open:island-host-timeout` 监听并把 `pending` 折进失败消息**（比今天的 `missing=` 更有诊断力）。
    - A3 需要在 `prepareFixtureApp`（`:578-602`）里加 `stencil build` 步骤，并在 app 里 `defineCustomElement()` 注册。
    - **三引擎**：`verifyBrowser(distDir)`（`:172-177`）改为接受 `browserName`，`main()` 里 build 一次后对 chromium/firefox/webkit 各开一个 session（§8.4）；结果按引擎并入 record 与 tierReport。
-   - **KR-17 退休**：全绿后更新／摘除 `docs/maintainers/known-reds-ledger.md:55-78`（ledger 的 `Retirement condition` 就是本条；摘钩需给出三引擎证据）。
+   - **KR-17 退休**：全绿后更新／摘除 the internal working ledger (not published)（ledger 的 `Retirement condition` 就是本条；摘钩需给出三引擎证据）。
 2. 体积/依赖声明：`docs/integrations/using-third-party-web-components.md` 的支持矩阵（`:129-134`）与「Library Evidence」段（`:108-127`）需要补 A/B 组条目；新增一条**明确的 late-host 支持声明**与 **closed shadow root 不支持声明**；三引擎结果需要一条说明（含 `null` 语义）。
 
 ---
@@ -658,7 +658,7 @@ function makeTimers() {
 - [ ] `pnpm --dir tests/fixtures/third-party-web-components run smoke` 在 `wc-open-child` 上**由红转绿**（当前失败信息是 `custom-element registration failed; missing=wc-open-child; browserErrors=`，三引擎都要绿）。
 - [ ] C4 负向用例（unused tag 0 fetch）为绿。
 - [ ] C2 closed root 记为 gap（`null`），**不得**转成 pass。
-- [ ] **KR-17 退休**：`docs/maintainers/known-reds-ledger.md` 的 KR-17 条目 `Latest observation` 更新为「已修复」并摘钩（或按 ledger 惯例保留条目 + 标注 retired），证据 = 三引擎 smoke 全绿的日志。
+- [ ] **KR-17 退休**：the internal working ledger (not published) 的 KR-17 条目 `Latest observation` 更新为「已修复」并摘钩（或按 ledger 惯例保留条目 + 标注 retired），证据 = 三引擎 smoke 全绿的日志。
 - [ ] 不 revert t3-release 已落地的 `--no-install`（`qualify.ts:583-589`）。
 - [ ] 新增直接依赖仅 `@stencil/core@4.43.5`，且确认它为 0 额外体积；在 PR body 记录该事实与验证方式（`@ionic/core@8.8.18` 的 dependencies 已含同版本）。
 
@@ -767,7 +767,7 @@ vp run --no-cache --fail-if-no-match --filter @openelement/fixture-third-party-w
 **上游记录**
 
 - `.zcode/plans/alpha15-external-audit-verification-2026-10-18.md:15,75,88,104,128`（P1-1 与 `missing=wc-open-child` 的核实结论；owner 决策建议 a/b/c）。
-- `docs/maintainers/known-reds-ledger.md` 的 **KR-17** 条目（committed；`Owner: alpha15 batch — T8 takes the fixture follow-up`；`Retirement condition: T8's three-engine, multi-library cases green`；`Latest observation: 2026-10-18, lane/t3-release @ f395b1e1f`——smoke 到达浏览器阶段且恰好 `missing=wc-open-child`、browser errors 为空）。同文件 KR-18（firefox fixture flake；`retries=0` 为已批准策略、禁止 retry 掩盖）直接约束 §8.4 的三引擎方案。
+- the internal working ledger (not published) 的 **KR-17** 条目（committed；`Owner: alpha15 batch — T8 takes the fixture follow-up`；`Retirement condition: T8's three-engine, multi-library cases green`；`Latest observation: 2026-10-18, lane/t3-release @ f395b1e1f`——smoke 到达浏览器阶段且恰好 `missing=wc-open-child`、browser errors 为空）。同文件 KR-18（firefox fixture flake；`retries=0` 为已批准策略、禁止 retry 掩盖）直接约束 §8.4 的三引擎方案。
 - t3-release handoff（lane/t3-release，未 push）：`6d52fa580` fix(tests): keep the pre-publish registry install out of qualify scaffolds；`36c60cdd1` test(release): qualify the create initializer alias before and after publish；`ed50abeaa` docs(release): commit the known-reds ledger for release readers（三者均为 lane 历史提交，不是主分支祖先；主分支落地提交见 KR-17 条目）。lane 报告：`.zcode/scratch/t3-release/REPORT.md`（§1 harness 修复 + 正/负向证明；handoff notes；「no gate currently runs `fixture-web-component-interop#qualify`」记为 alpha16 候选）。
 - git：`c27f1ae6b`（F01）、`3c472f08f` / `82792403d`（toString 自包含不变量及其后的注释改写；F01 已把 `hasIslandHost` 提升回模块作用域，inline 路径退役 —— `tests/fixtures/router-request-time/app/routes/visible-probe.tsx:6` 明示改为 virtual module）。
 

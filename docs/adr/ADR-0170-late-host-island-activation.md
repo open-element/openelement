@@ -175,7 +175,7 @@ trusted. The measurements taken for this decision (2026-10-19):
   named by the event; unused-tag zero-fetch control with a positive control).
 - Decision record and approved deviations D-1…D-4:
   `docs/release/late-host-island-activation-design.md`.
-- Retired known red: KR-17 in `docs/maintainers/known-reds-ledger.md`.
+- Retired known red: KR-17 (internal working ledger, not published).
 
 ## Amendment (2026-10-19, PR #1611 review FR-02/FR-03)
 

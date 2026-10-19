@@ -171,9 +171,9 @@ a flaky-accounting divergence — the precise classification error FR-05C calls 
 None of this loosens a product assertion: the ceilings and the assertions stay,
 only the failure label and the accounting identity changed.
 
-## 4. Proposed known-reds row (for `docs/maintainers/known-reds-ledger.md`)
+## 4. Proposed known-reds row (for `internal working ledger (not published)`)
 
-`docs/maintainers/known-reds-ledger.md` is Lead/Lane-F-owned; text proposed here,
+`internal working ledger (not published)` is Lead/Lane-F-owned; text proposed here,
 next free number assumed to be KR-21:
 
 ```md

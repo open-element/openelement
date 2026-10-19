@@ -266,7 +266,7 @@ admission contract is correct; only the removal's error handling was not.
 
 ## 6. Proposed known-reds ledger row (Lead-owned file)
 
-`docs/maintainers/known-reds-ledger.md` — proposed row text, not applied here:
+`internal working ledger (not published)` — proposed row text, not applied here:
 
 > **FR-08 / A6 (alpha15)** — *environment-specific observation; removal path
 > fixed in this batch*. On node 24.18.0 / pnpm 12.8.1 the A6 file passes 6/6

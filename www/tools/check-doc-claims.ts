@@ -650,13 +650,13 @@ const PLACEHOLDER = /[<>{}$…]|\.\.\./;
  * would let a typo (`firefox 999.999.999`) pass. So this class is exempt BY
  * SHAPE — any engine build number passes, whatever its digits — and BY SCOPE:
  * the exemption holds only in the evidence files that record qualification
- * results (`docs/maintainers/known-reds-ledger.md` and `docs/release/**`).
+ * results (`docs/release/**`).
  * Everywhere else an engine number stays a red unknown-version finding, with a
  * message that names this class and where it belongs. That keeps the rule's
  * default intact: a version literal no manifest can explain must fail unless it
  * is a browser build in an evidence record.
  */
-export const ENGINE_EVIDENCE_FILES: readonly string[] = ['docs/maintainers/known-reds-ledger.md'];
+export const ENGINE_EVIDENCE_FILES: readonly string[] = [];
 
 /** Whether a file may state engine build numbers as evidence. */
 export function isEngineEvidenceFile(file: string): boolean {
@@ -1089,7 +1089,6 @@ export function checkGateCounts(files: Map<string, string>, corpus: Corpus): Fin
 export function checkCiClaims(files: Map<string, string>, corpus: Corpus): Finding[] {
   const findings: Finding[] = [];
   const a = corpus.authorities;
-  const instances = [...a.ciJobs.values()].reduce((sum, count) => sum + count, 0);
   const requiredInstances = a.requiredCiJobs.reduce(
     (sum, job) => sum + (a.ciJobs.get(job) ?? 0),
     0,
@@ -1124,13 +1123,6 @@ export function checkCiClaims(files: Map<string, string>, corpus: Corpus): Findi
       expected: [a.requiredCiJobs.length, requiredInstances],
       rule: 'ci-job',
       what: 'release-train qualification set',
-    },
-    {
-      file: 'docs/maintainers/known-reds-ledger.md',
-      pattern: /\((\d+)\/(\d+) job instances\)/,
-      expected: [instances, instances],
-      rule: 'ci-instances',
-      what: 'CI job instances',
     },
   ];
   for (const site of sites) {

@@ -115,17 +115,17 @@ describe('version literals', () => {
   });
 
   test('engine build numbers pass in an evidence record, whatever their digits', () => {
-    const ledger = 'docs/maintainers/known-reds-ledger.md';
+    const evidence = 'docs/release/evidence.md';
     // The real shape: the three engines a qualification run used.
     expect(
       pick(
-        run({ [ledger]: 'every engine (chromium 147.0.7727.15, firefox 148.0.2, webkit 26.4)' }),
+        run({ [evidence]: 'every engine (chromium 147.0.7727.15, firefox 148.0.2, webkit 26.4)' }),
         'version',
       ),
     ).toEqual([]);
     // The class is a SHAPE, not a value: an unseen build still passes here, so
     // the exemption cannot rot into a list of blessed numbers.
-    expect(pick(run({ [ledger]: 'firefox 999.999.999' }), 'version')).toEqual([]);
+    expect(pick(run({ [evidence]: 'firefox 999.999.999' }), 'version')).toEqual([]);
     // docs/release holds qualification evidence too.
     expect(pick(run({ 'docs/release/evidence.md': 'chromium 147.0.7727.15' }), 'version')).toEqual(
       [],
@@ -143,7 +143,7 @@ describe('version literals', () => {
 
   test('a tree version stays red even inside the evidence record', () => {
     const findings = pick(
-      run({ 'docs/maintainers/known-reds-ledger.md': 'the source line is 1.0.0-alpha.99' }),
+      run({ 'docs/release/evidence.md': 'the source line is 1.0.0-alpha.99' }),
       'version',
     );
     expect(findings).toHaveLength(1);

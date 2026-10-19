@@ -197,5 +197,4 @@ gate, so the pinned workflow step counts are unchanged:
 
 The reproducible toolchain image recipe is `tools/release/toolchain/Dockerfile` +
 `tools/release/toolchain/README.md` (build it, record the resolved image digests, then
-run the gates with the repository bind-mounted). The retrospective for the batch
-that introduced these entry points is `docs/release/alpha15-retrospective.md`.
+run the gates with the repository bind-mounted). The batch retrospective is an internal working record and is not published.
