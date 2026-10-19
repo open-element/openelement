@@ -6,7 +6,7 @@
   "maturity": "alpha",
   "registry": {
     "source": "registry.npmjs.org",
-    "verifiedAt": "2026-10-10",
+    "verifiedAt": "2026-10-19",
     "method": "read-only npm view versions + dist-tags"
   },
   "packages": [
@@ -14,55 +14,55 @@
       "name": "@openelement/protocol",
       "status": "published",
       "registry": {
-        "alpha": "1.0.0-alpha.14",
-        "latest": "1.0.0-alpha.14"
+        "alpha": "1.0.0-alpha.15",
+        "latest": "1.0.0-alpha.15"
       }
     },
     {
       "name": "@openelement/element",
       "status": "published",
       "registry": {
-        "alpha": "1.0.0-alpha.14",
-        "latest": "1.0.0-alpha.14"
+        "alpha": "1.0.0-alpha.15",
+        "latest": "1.0.0-alpha.15"
       }
     },
     {
       "name": "@openelement/compiler",
       "status": "published",
       "registry": {
-        "alpha": "1.0.0-alpha.14",
-        "latest": "1.0.0-alpha.14"
+        "alpha": "1.0.0-alpha.15",
+        "latest": "1.0.0-alpha.15"
       }
     },
     {
       "name": "@openelement/router",
       "status": "published",
       "registry": {
-        "alpha": "1.0.0-alpha.14",
-        "latest": "1.0.0-alpha.14"
+        "alpha": "1.0.0-alpha.15",
+        "latest": "1.0.0-alpha.15"
       }
     },
     {
       "name": "@openelement/create",
       "status": "published",
       "registry": {
-        "alpha": "1.0.0-alpha.14",
-        "latest": "1.0.0-alpha.14"
+        "alpha": "1.0.0-alpha.15",
+        "latest": "1.0.0-alpha.15"
       }
     },
     {
       "name": "@openelement/ui",
       "status": "published",
       "registry": {
-        "alpha": "1.0.0-alpha.14",
-        "latest": "1.0.0-alpha.14"
+        "alpha": "1.0.0-alpha.15",
+        "latest": "1.0.0-alpha.15"
       }
     }
   ],
   "commonCompleteVersion": null,
-  "commonCompleteVersionNote": "No stable version is published for any package: all six packages ride the 1.0.0-alpha.14 prerelease on both the alpha and latest dist-tags (registry read-back 2026-10-10, tools/release/registry-sync.ts). Any non-null value here must be present in every published package and is verified by release:registry-check. Schema v4 (#1557): packages awaiting their first publish carry status \"unpublished\" and no registry object; the alpha.11 release published all six packages, so no entry carries \"unpublished\" today.",
+  "commonCompleteVersionNote": "No stable version is published for any package: all six packages ride the 1.0.0-alpha.15 prerelease on both the alpha and latest dist-tags (registry read-back 2026-10-19, tools/release/registry-sync.ts). Any non-null value here must be present in every published package and is verified by release:registry-check. Schema v4 (#1557): packages awaiting their first publish carry status \"unpublished\" and no registry object; the alpha.11 release published all six packages, so no entry carries \"unpublished\" today.",
   "latestPrerelease": {
-    "version": "1.0.0-alpha.14",
+    "version": "1.0.0-alpha.15",
     "distTag": "latest",
     "state": "complete",
     "publishedPackages": [
@@ -74,6 +74,6 @@
       "@openelement/ui"
     ],
     "missingPackages": [],
-    "note": "Registry read-back on 2026-10-10 (tools/release/registry-sync.ts): the per-package registry blocks record the dist-tags npm served, and 1.0.0-alpha.14 is the newest version of the 1.0.0 line served on latest."
+    "note": "Registry read-back on 2026-10-19 (tools/release/registry-sync.ts): the per-package registry blocks record the dist-tags npm served, and 1.0.0-alpha.15 is the newest version of the 1.0.0 line served on latest."
   }
 }

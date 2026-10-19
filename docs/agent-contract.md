@@ -9,12 +9,13 @@ the contract in the same commit that changes the behavior it describes, then
 regenerate the derived blocks (`node tools/repo/check-agent-contract.ts
 --write`) and run the conformance check.
 
-Verified against the alpha.15 candidate tree (#1613); the tree's release stamp
+Verified against the alpha.15 release tree (#1613); the tree's release stamp
 is `1.0.0-alpha.15` (all six package manifests, `CREATE_VERSION`,
 `release-state.json`'s `sourceVersion`, and the state machine's
-`ADMITTED_ACTIVE_TARGET`), while the registry still serves `1.0.0-alpha.14` on
-both dist-tags and no `v1.0.0-alpha.15` Git tag exists — source version and
-published line are separate facts. The published
+`ADMITTED_ACTIVE_TARGET`). The registry serves `1.0.0-alpha.15` on both the
+`alpha` and `latest` dist-tags, and the `v1.0.0-alpha.15` tag and GitHub
+Release exist, so the source version and the published line are the same fact
+on this release. The published
 consumer index is [llms.txt](https://openelement.org/llms.txt).
 
 ## Repository entry points
