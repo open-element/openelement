@@ -1,0 +1,35 @@
+# Canonical contributor identities (owner ruling 2026-10-20).
+#
+# Commits in this repository were authored under several automation, agent and
+# local-machine identities over the alpha line. They are all the owner's: the
+# entries below map every non-bot identity to the canonical GitHub account so
+# git tooling and GitHub attribution report one human contributor instead of
+# unlinked aliases. Bot accounts (github-actions[bot], dependabot[bot], the
+# Copilot Autofix bots) are intentionally NOT mapped: their commits stay
+# attributed to the bots.
+#
+# Syntax: Proper Name <proper@email> Commit Name <commit@email>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> Zhi <freemanzheng@hotmail.com>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> Zhi <146103794+SisyphusZheng@users.noreply.github.com>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <freemanzheng@hotmail.com>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> Zhi <zhi@openelement.org>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <zhi@openelement.org>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> DevBot <devbot@openelement.dev>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> lessjs-bot <bot@lessjs.run>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> LessJS Bot <dev@lessjs.org>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> LessJS CI <dev@lessjs.run>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <dev@lessjs.run>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <dev@lessjs.org>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <bot@lessjs.run>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> 郑治 <zhengzhi@zhengzhis-MacBook-Air.local>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <zhengzhi@zhengzhis-MacBook-Air.local>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> ab-evidence <ab-evidence@localhost>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> codex <codex@local>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <codex@local>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> Codex <codex@openai.com>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <codex@openai.com>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> CommandCodeBot <noreply@commandcode.ai>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <noreply@commandcode.ai>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <design@openelement.org>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> <dev@openelement.local>
+SisyphusZheng <146103794+SisyphusZheng@users.noreply.github.com> Senior Developer <dev@openelement.local>
