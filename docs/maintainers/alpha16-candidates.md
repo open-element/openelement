@@ -29,6 +29,7 @@ not by priority; each row names where the evidence lives.
 | X36 | the CI fast layer does not run the shims reader, the ADR-index reader or the doc-claims gate | CONTRIBUTING records them as local-only | wire into the PR layer or keep the release-only policy explicit |
 | X37 | the seams registry has no lower bound on row content | seams reader | guard against thin rows |
 | X42 | CI WebKit `enhance-guards` response wait timed out in one qualification attempt (KR-18 class) | known-reds ledger KR-18 | flake accounting, never retries-based masking |
+| X45 | the PR/base CI layer still runs the full three-engine site E2E and the whole fixture/browser matrix, so an ordinary PR — even a docs-only one — pays the giant browser suites | `.github/workflows/autoflow-ci.yml`; main push run 39291529070 (the `site-e2e` job alone ran ~25 min) | owner ruling 2026-10-20: daily/PR CI should carry a fast subset only; move the giant E2E to the release train or a scheduled lane, keep a smoke subset plus affected-suite selection on PRs. Do not delete the proof — re-tier it |
 
 ## Release evidence and measurement pipeline
 
