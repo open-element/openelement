@@ -20,6 +20,8 @@ permissions:
   contents: read
 
 jobs:
+  # Browser-installing legs pin ubuntu-24.04: Playwright 1.59.1 does not
+  # support ubuntu-26.04, which `ubuntu-latest` resolves to from 2026-10-28.
   starter:
     name: Starter (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -30,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-24.04, macos-latest, windows-latest]  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -55,7 +57,7 @@ jobs:
 
   runtime:
     name: Published runtimes and deployment boundaries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
     timeout-minutes: 60
     steps:
       # v7.0.1

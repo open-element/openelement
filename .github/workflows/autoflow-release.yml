@@ -232,11 +232,13 @@ jobs:
   # gates, boundary scans, full browser matrices) runs only after the same-SHA
   # CI evidence above passed, on exactly that SHA. Its success is the
   # RELEASE_GATE_PASSED transition; a failed or skipped gate means the
+  # Browser-installing jobs pin ubuntu-24.04: Playwright 1.59.1 does not
+  # support ubuntu-26.04, which `ubuntu-latest` resolves to from 2026-10-28.
   # `release` job never runs — a dispatch can no longer bypass the train.
   release-gate:
     needs: [dispatch-guard, ci-evidence]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'publish'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
     timeout-minutes: 60
     permissions:
       contents: read
