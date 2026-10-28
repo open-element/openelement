@@ -44,7 +44,7 @@
     "postcss": "^8.5.28",
     "postcss-value-parser": "^4.2.0",
     "typescript": "6.0.3",
-    "vite": "8.0.16"
+    "vite": "8.1.6"
   },
   "peerDependencies": {
     "lit": "^3.3.3",

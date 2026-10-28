@@ -130,7 +130,7 @@ static-only serve mode that refuses a build carrying a request-time server.
 `oxfmt` and `oxlint` run with their defaults: both skip markdown, JSON, YAML,
 and CSS, so `npx oxfmt --check` and `npx oxlint` pass on a fresh scaffold.
 
-The Vite tree is one direct devDependency pin (`"vite": "8.0.16"` — the same
+The Vite tree is one direct devDependency pin (`"vite": "8.1.6"` — the same
 version `@openelement/router` resolves against), so every peer that asks for
 Vite gets that copy. There is no workspace catalog and no `vite@*` override:
 a pin plus the router's own aligned dependency is what keeps the tree single.
