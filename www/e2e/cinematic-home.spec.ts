@@ -205,7 +205,7 @@ test.describe('Cinematic homepage', () => {
         '04 — Output',
         '05 — Begin',
       ],
-      '/zh': ['01 — Element', '02 — 声明式 Shadow DOM', '03 — Islands', '04 — 输出', '05 — 开始'],
+      '/zh/': ['01 — Element', '02 — 声明式 Shadow DOM', '03 — Islands', '04 — 输出', '05 — 开始'],
     };
     for (const [path, labels] of Object.entries(expected)) {
       await page.goto(path);
@@ -254,15 +254,15 @@ test.describe('Cinematic homepage', () => {
         lede: 'Build static-first web apps with native Web Components.',
         support: 'Render HTML on the server, and activate only the interactive regions you need.',
         alpha: /1\.0 alpha prerelease — breaking changes possible between alphas/,
-        guide: '/guide/getting-started',
+        guide: '/guide/getting-started/',
         secondaryLabel: 'Explore the architecture',
       },
       {
-        path: '/zh',
+        path: '/zh/',
         lede: '用原生 Web Components 构建静态优先的 Web 应用。',
         support: 'HTML 在服务端渲染，只激活真正需要交互的区域。',
         alpha: /1\.0 alpha 预发布——alpha 之间可能存在破坏性变更/,
-        guide: '/zh/guide/getting-started',
+        guide: '/zh/guide/getting-started/',
         secondaryLabel: '探索架构',
       },
     ];
@@ -349,21 +349,21 @@ test.describe('Cinematic homepage', () => {
       await external.focus();
       await expect(external).toBeFocused();
     }
-    await expect(dsd).toHaveAttribute('href', '/architecture/dsd');
+    await expect(dsd).toHaveAttribute('href', '/architecture/dsd/');
     await expect(dsd).not.toHaveAttribute('target', '');
     await dsd.focus();
     await expect(dsd).toBeFocused();
     // The internal evidence target is a real built page in both locales.
-    for (const href of ['/architecture/dsd', '/zh/architecture/dsd']) {
+    for (const href of ['/architecture/dsd/', '/zh/architecture/dsd/']) {
       const response = await page.request.get(href);
       expect(response.status(), `${href} must exist`).toBe(200);
     }
     // The zh homepage localizes the evidence link instead of leaving the reader
     // on the English page.
-    await page.goto('/zh');
+    await page.goto('/zh/');
     await expect(page.locator('.page-home .spec-strip a.spec-fact').nth(2)).toHaveAttribute(
       'href',
-      '/zh/architecture/dsd',
+      '/zh/architecture/dsd/',
     );
   });
 
@@ -505,7 +505,7 @@ test.describe('Cinematic homepage', () => {
     // whole device pixels, so assert non-zero rather than the raw string).
     expect(parseFloat(blockSurface.border)).toBeGreaterThan(0);
 
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     const fence = page.locator('open-reading-shell .article-content pre').first();
     await expect(fence).toBeVisible();
     // The invariant that makes the two surfaces one look: identical computed
@@ -552,11 +552,11 @@ test.describe('Cinematic homepage', () => {
   test('renders a transparent theme-aware logo linked to the current locale home', async ({
     page,
   }) => {
-    await page.goto('/zh/guide/getting-started');
+    await page.goto('/zh/guide/getting-started/');
     // The logo is the site-name link inside the banner landmark.
     const logo = page.getByRole('banner').getByRole('link', { name: 'openElement' });
     await expect(logo).toBeVisible();
-    await expect(logo).toHaveAttribute('href', '/zh');
+    await expect(logo).toHaveAttribute('href', '/zh/');
     await expect
       .poll(() => logo.evaluate((element) => getComputedStyle(element).backgroundImage))
       .toBe('none');

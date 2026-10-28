@@ -10,7 +10,7 @@ import '../../islands/open-dragon-live-gaze.tsx';
 import '../../islands/open-hero-polish.tsx';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
-import { localizePath } from '#site-ui/link.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import { homeStrings } from '../../site-ui/chrome-strings.ts';
 import {
   diagramDsd,
@@ -773,7 +773,7 @@ export default definePage(PageHome, {
       // the reader's locale and the same tab.
       enginesHref: SPEC_EVIDENCE.engines,
       depsHref: SPEC_EVIDENCE.deps,
-      outputHref: localizePath(SPEC_EVIDENCE.dsd, resolved),
+      outputHref: siteHref(SPEC_EVIDENCE.dsd, resolved),
       // The hero's alpha-status note names the line from release truth; only
       // the prose half lives in the content map. The major.minor is derived
       // here (a function body) — the compiled route-module grammar keeps
@@ -797,15 +797,15 @@ export default definePage(PageHome, {
       // Two copies by construction — the translateX(-50%) keyframe's seam
       // math (see the `marquee` constant above).
       marqueeText: marquee + marquee,
-      startBuildingHref: localizePath('/guide/getting-started', resolved),
-      getStartedHref: localizePath('/guide/getting-started', resolved),
-      docsHref: localizePath('/docs', resolved),
+      startBuildingHref: siteHref('/guide/getting-started', resolved),
+      getStartedHref: siteHref('/guide/getting-started', resolved),
+      docsHref: siteHref('/docs', resolved),
       strategies: [...strategies[resolved]],
       outputs: [...outputs[resolved]],
       references: references[resolved].map(([index, title, href, copy]) => ({
         index,
         title,
-        href: localizePath(href, resolved),
+        href: siteHref(href, resolved),
         copy,
       })),
     };

@@ -10,7 +10,7 @@ import { posts } from '#generated/blog-data';
 import { visibleBlogPosts } from '#site-ui/blog-stream.ts';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
-import { localizePath } from '#site-ui/link.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import '#site-ui/open-reading-shell.tsx';
 import '#site-ui/open-artifact-panel.tsx';
 import '../../islands/open-page-rail.tsx';
@@ -198,7 +198,7 @@ export default definePage(BlogIndexPage, {
     const featured = visiblePosts[0];
     const rows: BlogIndexRow[] = visiblePosts.slice(1, 5).map((post, index) => ({
       slug: post.slug,
-      href: localizePath(`/blog/${post.slug}`, resolved),
+      href: siteHref(`/blog/${post.slug}`, resolved),
       index: padIndex(index),
       title: post.frontmatter.title,
       excerpt: post.frontmatter.excerpt ?? '',
@@ -214,7 +214,7 @@ export default definePage(BlogIndexPage, {
       latestLabel: t.latestLabel,
       readMoreLabel: t.readMoreLabel,
       streamLabel: t.streamLabel,
-      featuredHref: featured ? localizePath(`/blog/${featured.slug}`, resolved) : '',
+      featuredHref: featured ? siteHref(`/blog/${featured.slug}`, resolved) : '',
       featuredKicker: featured
         ? `${t.featuredPrefix} — ${featured.frontmatter.date}${
             postTags(featured)[0] ? ` · ${postTags(featured)[0]}` : ''

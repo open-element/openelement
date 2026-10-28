@@ -1,5 +1,6 @@
 import { localizePathIn } from './link.ts';
 import { normalizeLocalePath } from './i18n.ts';
+import { normalizeSiteHref } from './site-url.ts';
 
 const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:', 'sms:']);
 
@@ -99,6 +100,25 @@ export function localizeLayoutPath(
   return localizePathIn(path, locale, locales, defaultLocale);
 }
 
+/**
+ * Href emission for the chrome: the locale math above plus the outward
+ * trailing-slash form (owner decision D-02). Kept separate from
+ * localizeLayoutPath because current-page comparisons compare identity paths.
+ */
+function layoutSiteHref(
+  path: string,
+  locale: string,
+  locales: string[],
+  defaultLocale: string,
+): string {
+  return normalizeSiteHref(localizePathIn(path, locale, locales, defaultLocale));
+}
+
+/** Route identity for comparisons: strip a canonical trailing slash (not root). */
+function bareIdentity(path: string): string {
+  return path === '/' ? path : path.replace(/\/+$/, '');
+}
+
 export function localeSwitchPath(
   currentPath: string,
   currentLocale: string,
@@ -122,7 +142,7 @@ export function localeSwitchPath(
       : staticSegments.length > 0
         ? `/${staticSegments.join('/')}`
         : '/';
-  return localizeLayoutPath(safeBare, other, locales, defaultLocale);
+  return layoutSiteHref(safeBare, other, locales, defaultLocale);
 }
 
 export function localeSwitchLabel(currentLocale: string): string {
@@ -225,20 +245,19 @@ export function decorateHeaderNav(
     defaultLocale,
   }).path;
   const localizedCurrent = localizeLayoutPath(bare, locale, localeList, defaultLocale);
+  const currentIdentity = bareIdentity(localizedCurrent);
   return links.map((link) => {
     const raw = typeof link.href === 'string' && isSafeLayoutUrl(link.href) ? link.href.trim() : '';
     const external = isExternalLayoutUrl(raw);
     // Router 1.0 leaves the shell nav contract to the consumer, so this Site
     // builder owns localization (the router still localizes homeHref).
-    const href = external
-      ? raw
-      : raw
-        ? localizeLayoutPath(raw, locale, localeList, defaultLocale)
-        : '';
+    const href = external ? raw : raw ? layoutSiteHref(raw, locale, localeList, defaultLocale) : '';
+    const hrefIdentity = bareIdentity(href);
     const isCurrent =
       !external &&
       href !== '' &&
-      (localizedCurrent === href || (href !== '/' && localizedCurrent.startsWith(`${href}/`)));
+      (currentIdentity === hrefIdentity ||
+        (hrefIdentity !== '/' && currentIdentity.startsWith(`${hrefIdentity}/`)));
     return {
       key: href || link.label,
       href,
@@ -270,6 +289,7 @@ export function buildSidebarRows(
   // Items localize their targets; compare against the localized current path
   // (currentPath arrives as the canonical bare route path from the adapter).
   const localizedCurrent = localizeLayoutPath(barePath, locale, localeList, defaultLocale);
+  const currentIdentity = bareIdentity(localizedCurrent);
   const rows: SidebarRow[] = [];
   for (const section of filterNavSections([...sections], barePath)) {
     rows.push({
@@ -290,7 +310,7 @@ export function buildSidebarRows(
       const href = external
         ? safe
         : safe
-          ? localizeLayoutPath(safe, locale, localeList, defaultLocale)
+          ? layoutSiteHref(safe, locale, localeList, defaultLocale)
           : false;
       rows.push({
         key: `link:${safe || item.label}`,
@@ -298,7 +318,8 @@ export function buildSidebarRows(
         heading: '',
         href,
         label: localizedLabel(item.label, item.labelZh, locale),
-        current: !external && href !== false && href === localizedCurrent ? 'page' : false,
+        current:
+          !external && href !== false && bareIdentity(href) === currentIdentity ? 'page' : false,
         rel: external ? EXTERNAL_REL : false,
         headingHidden: true,
         linkHidden: false,
@@ -371,9 +392,7 @@ export function footerColumn(
       const external = isExternalLayoutUrl(link.path);
       return {
         key: link.path,
-        href: external
-          ? link.path
-          : localizeLayoutPath(link.path, locale, localeList, defaultLocale),
+        href: external ? link.path : layoutSiteHref(link.path, locale, localeList, defaultLocale),
         label: zh ? link.zh : link.en,
         rel: external ? EXTERNAL_REL : false,
       };

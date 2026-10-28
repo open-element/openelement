@@ -77,7 +77,7 @@ const computedContrast = (element: Element): number => {
 test.describe('Accessibility', () => {
   test('shared prose and mobile rail color pairs meet WCAG AA', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     const codeRatio = await page
       .locator('open-reading-shell code')
       .first()
@@ -109,7 +109,7 @@ test.describe('Accessibility', () => {
     await expect(footer.getByRole('navigation')).toHaveCount(4);
     await expect(
       footer.getByRole('navigation', { name: 'Resources' }).getByRole('link', { name: 'Guide' }),
-    ).toHaveAttribute('href', '/guide/getting-started');
+    ).toHaveAttribute('href', '/guide/getting-started/');
     await expect(
       footer.getByRole('navigation', { name: 'Company' }).getByRole('link', { name: 'GitHub' }),
     ).toHaveAttribute('href', 'https://github.com/open-element/openelement');
@@ -207,7 +207,7 @@ test.describe('Performance', () => {
 
   test('guide page loads within 5 seconds', async ({ page }) => {
     const start = Date.now();
-    await page.goto('/guide/getting-started', { waitUntil: 'domcontentloaded' });
+    await page.goto('/guide/getting-started/', { waitUntil: 'domcontentloaded' });
     await page.locator('app-layout').waitFor({ state: 'attached' });
     const loadTime = Date.now() - start;
 

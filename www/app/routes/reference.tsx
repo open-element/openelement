@@ -1,6 +1,7 @@
 /** WWW supported API reference page. */
 import { definePage } from '@openelement/router';
 import { siteHead } from '#site-ui/head.ts';
+import { normalizeSiteHref } from '#site-ui/site-url.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import '#site-ui/open-reading-shell.tsx';
 import '../site-ui/open-section-frame.tsx';
@@ -953,7 +954,7 @@ export default definePage(ReferencePage, {
       s1Index: t.s1Index,
       s1Title: t.s1Title,
       s1Copy: t.s1Copy,
-      s1Links: t.s1Links,
+      s1Links: t.s1Links.map((link) => ({ ...link, href: normalizeSiteHref(link.href) })),
       s2Index: t.s2Index,
       s2Title: t.s2Title,
       s2Copy: t.s2Copy,

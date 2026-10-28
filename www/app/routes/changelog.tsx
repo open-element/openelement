@@ -4,7 +4,7 @@ import { trustedHtml, type TrustedHtml } from '@openelement/element';
 import '@openelement/ui/open-button';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
-import { localizePath } from '#site-ui/link.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import { changelogArchiveHtml } from '../data/_generated-changelog-archive.ts';
 import '#site-ui/open-reading-shell.tsx';
 import '../islands/open-page-rail.tsx';
@@ -284,9 +284,9 @@ export default definePage(PageChangelog, {
         depth: '2',
       })),
       changelogHtml: trustedHtml(changelogArchiveDocument(text)),
-      roadmapHref: localizePath('/roadmap', resolved),
+      roadmapHref: siteHref('/roadmap', resolved),
       roadmapLabel: text.navRoadmap,
-      gettingStartedHref: localizePath('/guide/getting-started', resolved),
+      gettingStartedHref: siteHref('/guide/getting-started', resolved),
       gettingStartedLabel: text.navGettingStarted,
       locale: resolved,
     };

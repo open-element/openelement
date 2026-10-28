@@ -25,6 +25,7 @@
  */
 
 import { Marked, type Tokens } from 'marked';
+import { normalizeSiteHref } from '../app/site-ui/site-url.ts';
 import {
   createCssVariablesTheme,
   createHighlighter,
@@ -97,6 +98,15 @@ function loadSiteMarkdown(): Promise<Marked> {
       new Marked({
         renderer: {
           code: (token: Tokens.Code): string | false => renderFence(token, highlighter),
+          // Site-internal links in authored Markdown reach the document in the
+          // outward canonical form (D-02). Returning false keeps marked's own
+          // link serializer (escaping, title, autolinks); mutating the token
+          // first makes that fallback render the normalized target.
+          link: (token: Tokens.Link): string | false => {
+            const normalized = normalizeSiteHref(token.href);
+            if (normalized !== token.href) token.href = normalized;
+            return false;
+          },
         },
       }),
   ));

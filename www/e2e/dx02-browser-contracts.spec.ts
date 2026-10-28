@@ -357,7 +357,7 @@ test.describe('DX-02 keyboard at 390px: the documentation disclosure', () => {
     page,
   }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const capability = await walkTabPathForLinks(page);
@@ -370,7 +370,7 @@ test.describe('DX-02 keyboard at 390px: the documentation disclosure', () => {
       expect(capability.stops.some((stop) => stop.key === 'a')).toBe(false);
       return;
     }
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const summary = await tabUntil(

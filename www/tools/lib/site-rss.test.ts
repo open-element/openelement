@@ -8,7 +8,13 @@ import {
   loadCollectionData,
   validateCollectionFrontmatter,
 } from '../../lib/content.ts';
-import { blogPostUrl, feedFailures, renderBlogFeedXml, SITE_FEED_PATH } from './site-rss.ts';
+import {
+  blogPostCanonicalUrl,
+  blogPostUrl,
+  feedFailures,
+  renderBlogFeedXml,
+  SITE_FEED_PATH,
+} from './site-rss.ts';
 
 /** Build a collection entry exactly as the loader does (filename date prefix and all). */
 function entry(fileName: string, raw: Record<string, unknown>): CollectionEntry {
@@ -67,13 +73,18 @@ test('renderBlogFeedXml: absolute permalinks, guid and RFC 822 dates', () => {
   expect(items(xml)[0]).toEqual(
     '    <item>\n' +
       '      <title>Newer &amp; &lt;unsafe&gt; dispatch</title>\n' +
-      '      <link>https://openelement.org/blog/newer-dispatch</link>\n' +
+      '      <link>https://openelement.org/blog/newer-dispatch/</link>\n' +
       '      <guid isPermaLink="true">https://openelement.org/blog/newer-dispatch</guid>\n' +
       '      <description>Nanoseconds &amp; &lt;tags&gt; are escaped.</description>\n' +
       '      <pubDate>Mon, 14 Sep 2026 00:00:00 GMT</pubDate>\n' +
       '    </item>',
   );
-  expect(xml.includes(`<link>${blogPostUrl('older-dispatch')}</link>`)).toBeTruthy();
+  expect(xml.includes(`<link>${blogPostCanonicalUrl('older-dispatch')}</link>`)).toBeTruthy();
+  // GUID stability: the guid is the frozen legacy permalink and must not
+  // change with the canonical form, or feed readers treat history as new.
+  expect(
+    xml.includes(`<guid isPermaLink="true">${blogPostUrl('older-dispatch')}</guid>`),
+  ).toBeTruthy();
   expect(!xml.includes('<link>/blog/'), 'links are absolute, never site-relative').toBeTruthy();
 });
 
@@ -91,7 +102,7 @@ test('renderBlogFeedXml: well-formed RSS 2.0 document, deterministic output', ()
   expect((xml.match(/<item>/g) ?? []).length).toEqual((xml.match(/<\/item>/g) ?? []).length);
   expect(!/&(?!(amp|lt|gt|quot|apos);)/.test(xml), 'every & is an entity').toBeTruthy();
   expect(
-    xml.includes('<link>https://example.test/blog</link>'),
+    xml.includes('<link>https://example.test/blog/</link>'),
     'trailing host slash is normalized',
   ).toBeTruthy();
   expect(renderBlogFeedXml(POSTS, { hostname: 'https://example.test/' })).toEqual(xml);

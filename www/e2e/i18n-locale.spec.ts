@@ -40,7 +40,7 @@ test.describe('Locale Routes', () => {
   });
 
   test('canonical guide route loads the default English locale', async ({ page }) => {
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const lang = await page.getAttribute('html', 'lang');
@@ -56,7 +56,7 @@ test.describe('Locale Routes', () => {
   });
 
   test('canonical English guide page loads correctly', async ({ page }) => {
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const lang = await page.getAttribute('html', 'lang');
@@ -67,7 +67,7 @@ test.describe('Locale Routes', () => {
   });
 
   test('zh guide page loads correctly', async ({ page }) => {
-    await page.goto('/zh/guide/getting-started');
+    await page.goto('/zh/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const lang = await page.getAttribute('html', 'lang');
@@ -90,7 +90,7 @@ test.describe('Localized layout', () => {
     expect(state.homeHref).toBe('/');
     // The header carries the same four entrances in every locale (E2 §4):
     // Docs / API / Roadmap / Blog, unprefixed on the default locale.
-    expect(state.navHrefs).toEqual(['/docs', '/reference', '/roadmap', '/blog']);
+    expect(state.navHrefs).toEqual(['/docs/', '/reference/', '/roadmap/', '/blog/']);
     expect(state.navHrefs?.some((href) => href?.startsWith('/zh/'))).toBe(false);
   });
 
@@ -100,26 +100,26 @@ test.describe('Localized layout', () => {
 
     const state = await readShellState(page);
     expect(state.htmlLang).toBe('zh');
-    expect(state.homeHref).toBe('/zh');
-    expect(state.navHrefs).toEqual(['/zh/docs', '/zh/reference', '/zh/roadmap', '/zh/blog']);
+    expect(state.homeHref).toBe('/zh/');
+    expect(state.navHrefs).toEqual(['/zh/docs/', '/zh/reference/', '/zh/roadmap/', '/zh/blog/']);
   });
 
   test('switching locale via URL changes page language', async ({ page }) => {
     // Start on Chinese page
-    await page.goto('/zh/guide/getting-started');
+    await page.goto('/zh/guide/getting-started/');
     await page.waitForLoadState('networkidle');
     const zhLang = await page.getAttribute('html', 'lang');
     expect(zhLang).toBe('zh');
 
     // Navigate to English version
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
     const enLang = await page.getAttribute('html', 'lang');
     expect(enLang).toBe('en');
   });
 
   test('localized logo returns to the current locale home', async ({ page }) => {
-    await page.goto('/zh/guide/getting-started');
+    await page.goto('/zh/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     await page.getByRole('banner').getByRole('link', { name: 'openElement' }).click();
@@ -127,7 +127,7 @@ test.describe('Localized layout', () => {
     const after = await readShellState(page);
 
     expect(after.htmlLang).toBe('zh');
-    expect(after.homeHref).toBe('/zh');
+    expect(after.homeHref).toBe('/zh/');
     expect(after.title).toBeTruthy();
   });
 });
@@ -135,16 +135,16 @@ test.describe('Localized layout', () => {
 test.describe('i18n SSG Output', () => {
   test('both locale versions of blog exist', async ({ page }) => {
     // Check Chinese blog
-    const zhRes = await page.goto('/zh/blog');
+    const zhRes = await page.goto('/zh/blog/');
     expect(zhRes?.ok()).toBe(true);
 
     // Check English blog
-    const enRes = await page.goto('/blog');
+    const enRes = await page.goto('/blog/');
     expect(enRes?.ok()).toBe(true);
   });
 
   test('English blog post pages contain no /zh/ links', async ({ page }) => {
-    const res = await page.goto('/blog/1-0-0-alpha-1-baseline');
+    const res = await page.goto('/blog/1-0-0-alpha-1-baseline/');
     expect(res?.status()).toBeLessThan(400);
     await page.waitForLoadState('networkidle');
 
@@ -158,23 +158,23 @@ test.describe('i18n SSG Output', () => {
       .first()
       .getByRole('link')
       .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
-    const zhHrefs = hrefs.filter((href) => href?.startsWith('/zh/blog'));
+    const zhHrefs = hrefs.filter((href) => href?.startsWith('/zh/blog/'));
     expect(zhHrefs).toEqual([]);
   });
 
   test('both locale versions of changelog exist', async ({ page }) => {
-    const zhRes = await page.goto('/zh/changelog');
+    const zhRes = await page.goto('/zh/changelog/');
     expect(zhRes?.ok()).toBe(true);
 
-    const enRes = await page.goto('/changelog');
+    const enRes = await page.goto('/changelog/');
     expect(enRes?.ok()).toBe(true);
   });
 
   test('both locale versions of roadmap exist', async ({ page }) => {
-    const zhRes = await page.goto('/zh/roadmap');
+    const zhRes = await page.goto('/zh/roadmap/');
     expect(zhRes?.ok()).toBe(true);
 
-    const enRes = await page.goto('/roadmap');
+    const enRes = await page.goto('/roadmap/');
     expect(enRes?.ok()).toBe(true);
   });
 });
