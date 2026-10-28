@@ -247,6 +247,7 @@ test.describe('Cinematic homepage', () => {
       support: string;
       alpha: RegExp;
       guide: string;
+      secondaryLabel: string;
     }> = [
       {
         path: '/',
@@ -254,6 +255,7 @@ test.describe('Cinematic homepage', () => {
         support: 'Render HTML on the server, and activate only the interactive regions you need.',
         alpha: /1\.0 alpha prerelease — breaking changes possible between alphas/,
         guide: '/guide/getting-started',
+        secondaryLabel: 'Explore the architecture',
       },
       {
         path: '/zh',
@@ -261,6 +263,7 @@ test.describe('Cinematic homepage', () => {
         support: 'HTML 在服务端渲染，只激活真正需要交互的区域。',
         alpha: /1\.0 alpha 预发布——alpha 之间可能存在破坏性变更/,
         guide: '/zh/guide/getting-started',
+        secondaryLabel: '探索架构',
       },
     ];
     for (const item of cases) {
@@ -275,6 +278,7 @@ test.describe('Cinematic homepage', () => {
       await expect(primary).toBeVisible();
       await expect(primary).toHaveAttribute('href', item.guide);
       await expect(secondary).toBeVisible();
+      await expect(secondary).toHaveText(item.secondaryLabel);
       await expect(secondary).toHaveAttribute('href', '#element');
       // The secondary target is a real in-document section, and clicking it
       // lands there.

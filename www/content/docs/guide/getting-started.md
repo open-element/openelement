@@ -10,6 +10,12 @@ This page gets a new project running, then walks one page, one extra element and
 
 ## Install
 
+**Before you start:** Node.js 24.2 or newer and a package manager (`npm`, `pnpm`, `yarn`, or `bun`). Check the runtime first:
+
+```text
+node --version   # must print v24.2.0 or newer
+```
+
 Three commands to a running app — the generator installs the dependencies
 itself (with the invoking package manager, or the first one it finds on `PATH`),
 so there is no separate install step:

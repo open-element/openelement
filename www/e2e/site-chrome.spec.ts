@@ -196,6 +196,19 @@ test.describe('Site chrome: footer', () => {
       await expect(
         footer.getByRole('navigation', { name: 'Resources' }).getByRole('link', { name: 'Guide' }),
       ).toHaveAttribute('href', '/guide/getting-started');
+      // The footer's API entry points are explicit: the reference table and the
+      // API-routes guide are different destinations (they used to share the
+      // bare label "API", which disagreed with the header's /reference entry).
+      await expect(
+        footer
+          .getByRole('navigation', { name: 'Resources' })
+          .getByRole('link', { name: 'API Reference' }),
+      ).toHaveAttribute('href', '/reference');
+      await expect(
+        footer
+          .getByRole('navigation', { name: 'Resources' })
+          .getByRole('link', { name: 'API Routes' }),
+      ).toHaveAttribute('href', '/guide/api');
       await expect(
         footer.getByRole('navigation', { name: 'Company' }).getByRole('link', { name: 'GitHub' }),
       ).toHaveAttribute('href', 'https://github.com/open-element/openelement');

@@ -93,6 +93,10 @@ test.describe('Unified page structure', () => {
     await expect(examples.locator('h2')).toHaveText('Examples');
     await expect(examples.locator('ol > li')).toHaveCount(4);
     await expect(examples.locator('a[target="_blank"]')).toHaveCount(4);
+    // Run location and first-time preparation are stated, not implied: the
+    // commands are repository fixture scripts, not app-local commands.
+    await expect(examples).toContainText('Run (repo root)');
+    await expect(examples).toContainText('clone https://github.com/open-element/openelement');
   });
 
   test('blog index is a v4 dispatch journal with a featured band', async ({ page, request }) => {

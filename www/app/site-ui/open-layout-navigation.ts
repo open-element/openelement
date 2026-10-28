@@ -327,7 +327,8 @@ const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
     labels: { en: 'Resources', zh: '资源' },
     links: [
       { path: '/guide/getting-started', en: 'Guide', zh: '指南' },
-      { path: '/guide/api', en: 'API', zh: 'API' },
+      { path: '/reference', en: 'API Reference', zh: 'API 参考' },
+      { path: '/guide/api', en: 'API Routes', zh: 'API 路由' },
       { path: '/errors', en: 'Error Codes', zh: '错误码' },
       { path: '/architecture', en: 'Architecture', zh: '架构' },
       { path: '/blog', en: 'Blog', zh: '博客' },
