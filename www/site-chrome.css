@@ -1521,6 +1521,14 @@ open-hero-polish{position:absolute;width:1px;height:1px;overflow:hidden;pointer-
   background: var(--color-card);
 }
 
+/* A table is its own horizontal scroll container, so it is focusable
+   (tabindex added by article-body.ts); paint the site focus ring. */
+.article-content table:focus-visible,
+.blog-content table:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
 /* Tables carry their own scroll container: a comparison table's min-content
    exceeds the reading column below ~1280px, and at 390px it pushed the
    document to 722px. overflow is ignored on a display:table box, so the

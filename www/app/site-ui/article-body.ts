@@ -316,5 +316,15 @@ export function prepareArticle(
         /^<pre[^>]*\stabindex=/i.test(block) ? block : block.replace(/^<pre/i, '<pre tabindex="0"')
       }</open-code-block>`,
   );
-  return { html: withCodeBlocks, outline };
+  // The linked document stylesheet turns article/blog tables into their own
+  // horizontal scroll container (display:block + overflow:auto), so a table
+  // that overflows is a scrollable region and needs keyboard access
+  // (axe `scrollable-region-focusable`, WCAG 2.1.1). The width is only known
+  // after layout, so every article table is focusable; the stylesheet paints
+  // a focus ring for the focused table.
+  const withFocusableTables = withCodeBlocks.replace(
+    /<table(?![^>]*\btabindex=)/gi,
+    '<table tabindex="0"',
+  );
+  return { html: withFocusableTables, outline };
 }
