@@ -32,7 +32,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-latest, windows-latest]  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+        # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -57,7 +58,8 @@ jobs:
 
   runtime:
     name: Published runtimes and deployment boundaries
-    runs-on: ubuntu-24.04  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       # v7.0.1

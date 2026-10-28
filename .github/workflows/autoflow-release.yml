@@ -238,7 +238,8 @@ jobs:
   release-gate:
     needs: [dispatch-guard, ci-evidence]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'publish'
-    runs-on: ubuntu-24.04  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read

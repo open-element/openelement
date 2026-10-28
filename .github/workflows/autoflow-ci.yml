@@ -259,8 +259,9 @@ jobs:
   # published-consumer workflows carry the same pin.
   # ── Job 2: Unit Tests + Browser Gate (3 engines) ──────────────────────
   test:
+    # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
     needs: [sha-guard]
-    runs-on: ubuntu-24.04  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
@@ -307,8 +308,9 @@ jobs:
 
   # ── Job 3: Site E2E (chromium-only in PR; full on main) ───────────────
   e2e:
+    # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
     needs: [sha-guard]
-    runs-on: ubuntu-24.04  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -349,8 +351,9 @@ jobs:
   # qualification contract's job IDs/instance counts stay untouched (Lead
   # ruling 2026-10-19; see docs/release/evidence/alpha15/tpl03-starter-quality-gate.md).
   pack:
+    # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
     needs: [sha-guard]
-    runs-on: ubuntu-24.04  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: read
@@ -409,7 +412,8 @@ jobs:
   e2e-full:
     needs: [sha-guard]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
-    runs-on: ubuntu-24.04  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    runs-on: ubuntu-24.04
     # 45, not 30: the pre-split job was killed by the 30-minute cap once (run
     # 38341586388 ran 30m17s and concluded `cancelled`), and its 17 successful
     # completions ranged 20m15s–29m28s. The split below removes the serial
@@ -491,7 +495,8 @@ jobs:
   bfcache:
     needs: [sha-guard]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
-    runs-on: ubuntu-24.04  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -553,7 +558,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-latest]  # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+        # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
+        os: [ubuntu-24.04, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
