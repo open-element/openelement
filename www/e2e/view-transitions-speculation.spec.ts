@@ -22,7 +22,7 @@ import { expect, test } from '@playwright/test';
 const OPT_IN_MARKER = '@view-transition { navigation: auto; }';
 
 test.describe('View Transitions', () => {
-  const pages = ['/', '/guide/getting-started', '/architecture', '/blog', '/changelog'];
+  const pages = ['/', '/guide/getting-started/', '/architecture/', '/blog/', '/changelog/'];
 
   for (const path of pages) {
     test(`"${path}" carries the cross-document opt-in exactly once`, async ({ page }) => {
@@ -106,7 +106,7 @@ test.describe('View Transitions', () => {
       });
     });
     await page.goto('/');
-    await page.goto('/roadmap');
+    await page.goto('/roadmap/');
     await page.goBack();
     await page.waitForLoadState('networkidle');
 
@@ -217,7 +217,7 @@ test.describe('Speculation Rules', () => {
   });
 
   test('guide page also has speculation rules', async ({ page }) => {
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const script = page.locator('script[type="speculationrules"]');

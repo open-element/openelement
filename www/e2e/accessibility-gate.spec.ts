@@ -15,7 +15,7 @@ import { observeWithTimeoutClassification } from './helpers.ts';
 import { HOME_AXE_EXCLUSIONS } from './axe-home-exclusions.ts';
 
 /** Routes the gate scans: one per page template, plus the zh variant. */
-const SCANNED_ROUTES = ['/', '/guide/getting-started', '/docs', '/reference'] as const;
+const SCANNED_ROUTES = ['/', '/guide/getting-started/', '/docs/', '/reference/'] as const;
 
 /**
  * Node exclusions per route (selector under the route page), each with the
@@ -63,7 +63,7 @@ test.describe('Accessibility gate (axe)', () => {
       // /reference is the one generated mega-page (~13k elements across the
       // 6-package API surface): axe's rule×node walk takes minutes on a shared
       // CI runner, so that scan alone carries a wider ceiling.
-      test.setTimeout(route === '/reference' ? 420_000 : 120_000);
+      test.setTimeout(route === '/reference/' ? 420_000 : 120_000);
       await page.goto(route);
       // Let hydration settle: the islands upgrade synchronously after the
       // module loads, and the scan should see the page a reader sees. A
@@ -97,7 +97,7 @@ test.describe('Accessibility gate (axe)', () => {
   }
 
   test('the zh article template passes the same scan', async ({ page }) => {
-    await page.goto('/zh/guide/getting-started');
+    await page.goto('/zh/guide/getting-started/');
     await page.waitForLoadState('networkidle');
     await scrollThroughAndSettle(page);
     const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();

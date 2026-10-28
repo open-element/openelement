@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test.describe('Docs Layout Structure', () => {
   test('getting started renders as a linear article with copyable code', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     // The guide section is Markdown-authored through content collections (#1087), not a

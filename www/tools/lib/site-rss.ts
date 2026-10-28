@@ -19,7 +19,7 @@
  * Pure functions only; IO lives in ../emit-site-rss.ts.
  */
 
-import { SITE_ORIGIN } from '../../app/site-ui/head.ts';
+import { normalizeSiteHref, SITE_ORIGIN } from '../../app/site-ui/site-url.ts';
 import type { BlogPost } from '../../lib/content.ts';
 import { isCalendarDate } from './calendar-date.ts';
 import { escapeXml } from './xml-escape.ts';
@@ -58,9 +58,19 @@ function siteUrl(path: string, hostname: string): string {
   return `${hostname.replace(/\/$/, '')}${path}`;
 }
 
-/** Absolute post permalink; the same URL the route's canonical tag emits. */
+/**
+ * The post's frozen legacy permalink — the RSS `<guid>` value every published
+ * item has always carried. It stays slash-less on purpose: changing a GUID
+ * makes readers treat existing posts as new content. The host 308s it to the
+ * canonical URL.
+ */
 export function blogPostUrl(slug: string, hostname: string = SITE_ORIGIN): string {
   return siteUrl(`/blog/${slug}`, hostname);
+}
+
+/** The post's canonical URL (D-02); the feed's `<link>` uses this form. */
+export function blogPostCanonicalUrl(slug: string, hostname: string = SITE_ORIGIN): string {
+  return siteUrl(normalizeSiteHref(`/blog/${slug}`), hostname);
 }
 
 /**
@@ -95,7 +105,11 @@ export function renderBlogFeedXml(
   const hostname = options.hostname ?? SITE_ORIGIN;
   const items = posts
     .map((post) => {
-      const url = blogPostUrl(post.slug, hostname);
+      // <link> moves to the canonical trailing-slash form; <guid> stays the
+      // frozen legacy URL (see blogPostUrl) so existing subscribers keep
+      // recognising historical items.
+      const url = blogPostCanonicalUrl(post.slug, hostname);
+      const guid = blogPostUrl(post.slug, hostname);
       const pubDate = rssPubDate(post.frontmatter.date);
       if (pubDate === undefined) {
         // feedFailures() is the fail-closed gate in front of this renderer; an
@@ -108,7 +122,7 @@ export function renderBlogFeedXml(
         `    <item>\n` +
         `      <title>${escapeXml(post.frontmatter.title)}</title>\n` +
         `      <link>${escapeXml(url)}</link>\n` +
-        `      <guid isPermaLink="true">${escapeXml(url)}</guid>\n` +
+        `      <guid isPermaLink="true">${escapeXml(guid)}</guid>\n` +
         `      <description>${escapeXml(post.frontmatter.excerpt ?? '')}</description>\n` +
         `      <pubDate>${escapeXml(pubDate)}</pubDate>\n` +
         `    </item>`
@@ -118,7 +132,7 @@ export function renderBlogFeedXml(
   const channel =
     `  <channel>\n` +
     `    <title>${escapeXml(SITE_FEED_TITLE)}</title>\n` +
-    `    <link>${escapeXml(siteUrl('/blog', hostname))}</link>\n` +
+    `    <link>${escapeXml(siteUrl(normalizeSiteHref('/blog'), hostname))}</link>\n` +
     `    <description>${escapeXml(SITE_FEED_DESCRIPTION)}</description>\n` +
     (items.length > 0 ? `${items}\n` : '') +
     `  </channel>`;

@@ -5,34 +5,34 @@ import { expect, test } from '@playwright/test';
 // this spec needs no CDN route abort.
 
 const readingRoutes = [
-  '/guide/getting-started',
-  '/guide/routing-and-data',
-  '/architecture/dsd',
-  '/architecture/islands',
+  '/guide/getting-started/',
+  '/guide/routing-and-data/',
+  '/architecture/dsd/',
+  '/architecture/islands/',
 ];
 
 const guideRoutes = [
-  '/guide/getting-started',
-  '/guide/core-concepts',
+  '/guide/getting-started/',
+  '/guide/core-concepts/',
   '/guide/compiled-grammar',
-  '/guide/routing-and-data',
+  '/guide/routing-and-data/',
   '/guide/streaming',
   '/guide/mdx',
-  '/guide/api',
-  '/guide/configuration',
-  '/guide/error-handling',
-  '/guide/islands-and-ssr',
-  '/guide/deployment',
+  '/guide/api/',
+  '/guide/configuration/',
+  '/guide/error-handling/',
+  '/guide/islands-and-ssr/',
+  '/guide/deployment/',
   '/guide/testing',
   '/guide/security',
 ];
 
 const architectureRoutes = [
-  '/architecture',
-  '/architecture/dsd',
-  '/architecture/comparison',
-  '/architecture/islands',
-  '/architecture/design-system',
+  '/architecture/',
+  '/architecture/dsd/',
+  '/architecture/comparison/',
+  '/architecture/islands/',
+  '/architecture/design-system/',
 ];
 
 test.describe('Unified page structure', () => {
@@ -57,7 +57,7 @@ test.describe('Unified page structure', () => {
   }
 
   test('changelog renders content-first with a railed reading surface', async ({ page }) => {
-    await page.goto('/changelog');
+    await page.goto('/changelog/');
     await expect(page.locator('open-reading-shell[rail]')).toHaveCount(1);
     await expect(page.locator('open-reading-shell h1:visible')).toHaveCount(1);
   });
@@ -68,11 +68,11 @@ test.describe('Unified page structure', () => {
     await expect(scene.locator('h1')).toHaveText('404');
     await expect(scene).toContainText('Lost in the shadow DOM.');
     await expect(scene.locator('open-button[href="/"]')).toHaveCount(1);
-    await expect(scene.locator('open-button[href="/docs"]')).toHaveCount(1);
+    await expect(scene.locator('open-button[href="/docs/"]')).toHaveCount(1);
   });
 
   test('docs landing is a v4 manual index with five entrances', async ({ page }) => {
-    await page.goto('/docs');
+    await page.goto('/docs/');
     const hub = page.locator('.page-docs');
     await expect(hub.locator('h1')).toContainText('MANUAL.');
     // The five entrances are the page's entrance navigation, not every link on
@@ -83,9 +83,9 @@ test.describe('Unified page structure', () => {
       .getByRole('navigation', { name: 'Documentation entrances' })
       .getByRole('link');
     await expect(entrances).toHaveCount(5);
-    await expect(entrances.first()).toHaveAttribute('href', '/guide/getting-started');
+    await expect(entrances.first()).toHaveAttribute('href', '/guide/getting-started/');
     // The tutorial is the guided second step, not just a sidebar entry.
-    await expect(entrances.nth(1)).toHaveAttribute('href', '/guide/tutorial');
+    await expect(entrances.nth(1)).toHaveAttribute('href', '/guide/tutorial/');
     // WEB-201: the honest Examples entry sits below the entrances — four
     // scenario cards, each bound to a real repository source and an in-site doc.
     const examples = hub.getByRole('region', { name: 'Example scenarios' });
@@ -100,7 +100,7 @@ test.describe('Unified page structure', () => {
   });
 
   test('blog index is a v4 dispatch journal with a featured band', async ({ page, request }) => {
-    await page.goto('/blog');
+    await page.goto('/blog/');
     // The retired <blog-index> host became the page hook class (page-blog-index)
     // when the route migrated to a server function page (alpha15).
     const index = page.locator('.page-blog-index');
@@ -125,7 +125,7 @@ test.describe('Unified page structure', () => {
   });
 
   test('contributing is a v4 lab page with terminal, checklist and help rows', async ({ page }) => {
-    await page.goto('/contributing');
+    await page.goto('/contributing/');
     const lab = page.locator('.page-contributing');
     await expect(lab.locator('h1')).toContainText('BUILD IT');
     await expect(lab.locator('open-code-block')).toHaveCount(1);
@@ -137,10 +137,10 @@ test.describe('Unified page structure', () => {
     // The editorial mega hero pushed all content below the fold; these pages
     // now lead with the compact reading-shell/article header (#1087 cleanup).
     for (const route of [
-      '/reference',
-      '/roadmap',
-      '/architecture',
-      '/architecture/design-system',
+      '/reference/',
+      '/roadmap/',
+      '/architecture/',
+      '/architecture/design-system/',
     ]) {
       await page.goto(route);
       await expect(page.locator('h1:visible')).toHaveCount(1);
@@ -150,7 +150,7 @@ test.describe('Unified page structure', () => {
   test('data-driven entry pages compose their body with shared section frames', async ({
     page,
   }) => {
-    for (const route of ['/reference', '/roadmap']) {
+    for (const route of ['/reference/', '/roadmap/']) {
       await page.goto(route);
       expect(await page.locator('open-section-frame').count()).toBeGreaterThan(0);
     }
@@ -159,7 +159,7 @@ test.describe('Unified page structure', () => {
   test('compiled light section frames project named and default content in place', async ({
     page,
   }) => {
-    await page.goto('/reference');
+    await page.goto('/reference/');
     // The retired <reference-page> host became the page hook class
     // (page-reference) with the server function page migration (alpha15);
     // the frame locator is rooted at it so frames of other routes cannot match.
@@ -179,7 +179,7 @@ test.describe('Unified page structure', () => {
   test('reference renders the generated export and element reference with stable anchors (#1307)', async ({
     page,
   }) => {
-    await page.goto('/reference');
+    await page.goto('/reference/');
     // Every generated searchRecord anchor resolves to a rendered entry.
     // (adapter-vite anchors retired with the package; use a current export.)
     const exportRow = page.locator('#api-element-root-Action');
@@ -197,13 +197,13 @@ test.describe('Unified page structure', () => {
     // Element rows are the generated `ce-*` anchors.
     expect(await page.locator('[id^="ce-"]').count()).toBe(6);
     // zh renders the same generated anchors with zh chrome.
-    await page.goto('/zh/reference');
+    await page.goto('/zh/reference/');
     await expect(page.locator('#ce-open-input')).toBeVisible();
     await expect(page.locator('[id^="api-"]').first()).toBeVisible();
   });
 
   test('roadmap standards visual renders through the compiled light root', async ({ page }) => {
-    await page.goto('/roadmap');
+    await page.goto('/roadmap/');
     const visual = page.locator('open-standards-visual');
     await expect(visual).toHaveAttribute('data-oe-light', '');
     expect(await visual.locator(':scope > *').count()).toBeGreaterThan(0);
@@ -234,7 +234,7 @@ test.describe('Unified page structure', () => {
 
   test('mobile rail is a native details drawer', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     const details = page.locator('open-page-rail details');
     await expect(details).toBeVisible();
     await expect(details).not.toHaveAttribute('open', '');
@@ -245,7 +245,7 @@ test.describe('Unified page structure', () => {
   test('deep fragments scroll inside DSD on click, direct load, and history', async ({ page }) => {
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     const first = page.locator('open-page-rail a[href^="#"]').first();
     const hash = await first.getAttribute('href');
     expect(hash).toBeTruthy();
@@ -282,7 +282,7 @@ test.describe('Unified page structure', () => {
         configurable: true,
       });
     });
-    await page.goto('/guide/core-concepts');
+    await page.goto('/guide/core-concepts/');
     await expect(page.locator('open-reading-shell').locator('h1')).toContainText('Core Concepts');
     // The rail outline is the 'On this page' complementary landmark; the
     // persistent desktop outline links are the ones outside the mobile
@@ -302,7 +302,7 @@ test.describe('Unified page structure', () => {
 
   test('reading shell remains usable at 200 percent zoom', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.evaluate(() => {
       document.documentElement.style.zoom = '2';
     });
@@ -320,7 +320,7 @@ test.describe('Unified page structure', () => {
     // equals its clientWidth) so a new long token or a re-flowed grid fails
     // here instead of shipping a page that pans.
     await page.setViewportSize({ width: 390, height: 844 });
-    for (const route of ['/reference', '/changelog', '/contributing', '/guide/configuration']) {
+    for (const route of ['/reference/', '/changelog/', '/contributing/', '/guide/configuration/']) {
       await page.goto(route);
       // The layout is the one landmark every page shares (the app-layout
       // convention shell replaced the retired open-layout island).

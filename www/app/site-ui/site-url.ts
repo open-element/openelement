@@ -125,7 +125,8 @@ export function siteHref(route: string, locale: string): string {
   const prefixed = (identity: string): string =>
     resolvedLocale === SITE_DEFAULT_LOCALE ? identity : `/${resolvedLocale}${identity}`;
   if (path === '/' || isStaticPathname(path)) {
-    const root = path === '/' ? (resolvedLocale === SITE_DEFAULT_LOCALE ? '/' : `/${resolvedLocale}/`) : path;
+    const root =
+      path === '/' ? (resolvedLocale === SITE_DEFAULT_LOCALE ? '/' : `/${resolvedLocale}/`) : path;
     return `${root}${suffix}`;
   }
   if (FLAT_ROUTES.has(path)) return `${prefixed(path)}${suffix}`;

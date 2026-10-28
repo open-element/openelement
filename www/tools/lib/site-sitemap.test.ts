@@ -71,12 +71,12 @@ test('renderSitemapXml: stable schema, home priority, per-route lastmod', () => 
   expect(xml.includes('<loc>https://openelement.org/</loc>')).toBeTruthy();
   expect(xml.includes('<lastmod>2026-09-18</lastmod>')).toBeTruthy();
   expect(xml.includes('<priority>1.0</priority>')).toBeTruthy();
-  expect(xml.includes('<loc>https://openelement.org/docs</loc>')).toBeTruthy();
+  expect(xml.includes('<loc>https://openelement.org/docs/</loc>')).toBeTruthy();
   expect(xml.includes('<priority>0.7</priority>')).toBeTruthy();
   expect(xml.includes('<changefreq>weekly</changefreq>')).toBeTruthy();
   // Routes without a known source date omit <lastmod> entirely instead of
   // falling back to the build clock.
-  const docsBlock = xml.split('<loc>https://openelement.org/docs</loc>')[1].split('</url>')[0];
+  const docsBlock = xml.split('<loc>https://openelement.org/docs/</loc>')[1].split('</url>')[0];
   expect(docsBlock.includes('<lastmod>')).toEqual(false);
   expect(xml.match(/<lastmod>/g)?.length).toEqual(1);
   // No locales passed: the document stays the plain single-tree sitemap (no
@@ -100,17 +100,17 @@ test('renderSitemapXml: every URL carries its locale alternates plus x-default',
     '<xhtml:link rel="alternate" hreflang="en" href="https://openelement.org/"/>',
   );
   expect(rootBlock).toContain(
-    '<xhtml:link rel="alternate" hreflang="zh" href="https://openelement.org/zh"/>',
+    '<xhtml:link rel="alternate" hreflang="zh" href="https://openelement.org/zh/"/>',
   );
   expect(rootBlock).toContain(
     '<xhtml:link rel="alternate" hreflang="x-default" href="https://openelement.org/"/>',
   );
   // A locale-prefixed URL names the same pair: the zh page's alternates are
   // still the en canonical and the zh tree, not a second localized copy.
-  const zhBlock = xml.split('<loc>https://openelement.org/zh/docs</loc>')[1]!.split('</url>')[0]!;
-  expect(zhBlock).toContain('hreflang="en" href="https://openelement.org/docs"');
-  expect(zhBlock).toContain('hreflang="zh" href="https://openelement.org/zh/docs"');
-  expect(zhBlock).toContain('hreflang="x-default" href="https://openelement.org/docs"');
+  const zhBlock = xml.split('<loc>https://openelement.org/zh/docs/</loc>')[1]!.split('</url>')[0]!;
+  expect(zhBlock).toContain('hreflang="en" href="https://openelement.org/docs/"');
+  expect(zhBlock).toContain('hreflang="zh" href="https://openelement.org/zh/docs/"');
+  expect(zhBlock).toContain('hreflang="x-default" href="https://openelement.org/docs/"');
   // Two alternates + x-default per URL, for all four enumerated URLs.
   expect(xml.match(/rel="alternate"/g)?.length).toEqual(12);
 });

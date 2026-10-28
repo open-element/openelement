@@ -1,7 +1,7 @@
 import { definePage } from '@openelement/router';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
-import { localizePath } from '#site-ui/link.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import { packageCountModifier, sourceLineStamp } from '../../data/version.ts';
 import { quickstartCommandCountPhrase } from '../../data/quickstart.ts';
 
@@ -425,13 +425,13 @@ export default definePage(PageDocs, {
         index: String(position + 1).padStart(2, '0'),
         title,
         copy,
-        href: localizePath(href, resolved),
+        href: siteHref(href, resolved),
       })),
       // The Examples cards keep their repository links absolute (they leave the
       // site) and localize only the related in-site doc route.
       examples: examples.map((example) => ({
         ...example,
-        docHref: localizePath(example.docHref, resolved),
+        docHref: siteHref(example.docHref, resolved),
         // Each-item children in the compiled grammar must be {item.<field>}
         // (OEC9013), so the localized field labels ride on every card rather
         // than being read from props.* inside the mapped item.

@@ -42,12 +42,12 @@ const SITE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
  * page" half while the guide/architecture routes pin the removed markup.
  */
 const VALID_ROUTES = [
-  '/guide/getting-started',
-  '/architecture',
-  '/errors',
-  '/zh/guide/getting-started',
-  '/zh/architecture',
-  '/zh/errors',
+  '/guide/getting-started/',
+  '/architecture/',
+  '/errors/',
+  '/zh/guide/getting-started/',
+  '/zh/architecture/',
+  '/zh/errors/',
 ] as const;
 
 /** A path that must never resolve to an article or a success status. */
@@ -58,27 +58,27 @@ const MISSING_ARTICLE_ROUTE = '/guide/definitely-missing-page';
  * version/date, so the freshness row has nothing to show and must not exist.
  */
 const NON_ARTICLE_ROUTES = [
-  '/reference',
-  '/roadmap',
-  '/errors',
-  '/zh/reference',
-  '/zh/roadmap',
-  '/zh/errors',
+  '/reference/',
+  '/roadmap/',
+  '/errors/',
+  '/zh/reference/',
+  '/zh/roadmap/',
+  '/zh/errors/',
 ] as const;
 
 /** Article pages that must keep the visible "Applies to <version> · Updated" row. */
 const FRESHNESS_ARTICLE_ROUTES = [
-  '/guide/getting-started',
-  '/architecture',
-  '/zh/guide/getting-started',
-  '/zh/architecture',
+  '/guide/getting-started/',
+  '/architecture/',
+  '/zh/guide/getting-started/',
+  '/zh/architecture/',
 ] as const;
 
 /** The locale's freshness label, authored in www/app/site-ui/chrome-strings.ts. */
 const FRESHNESS_LABEL: Record<'en' | 'zh', string> = { en: 'Applies to', zh: '适用于' };
 
 function localeOf(route: string): 'en' | 'zh' {
-  return route.startsWith('/zh') ? 'zh' : 'en';
+  return route.startsWith('/zh/') ? 'zh' : 'en';
 }
 
 /**

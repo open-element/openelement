@@ -6,7 +6,7 @@ import { prepareArticle } from '#site-ui/article-body.ts';
 import { visibleBlogPosts } from '#site-ui/blog-stream.ts';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
-import { localizePath } from '#site-ui/link.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import '#site-ui/open-reading-shell.tsx';
 import '../../islands/open-page-rail.tsx';
 import '#site-ui/open-artifact-panel.tsx';
@@ -171,7 +171,7 @@ export default definePage(PageBlogPost, {
   props({ locale, params }) {
     const resolved = contentLocale(locale ?? 'en');
     const slug = params.slug ?? '';
-    const blogHref = localizePath('/blog', resolved);
+    const blogHref = siteHref('/blog', resolved);
     const post = getPostBySlug(slug);
     const shared = {
       slug,

@@ -511,11 +511,16 @@ export async function validateLlmsTxt(
   return failures;
 }
 
-/** The site origin, read from the site's own head module (never restated here). */
+/**
+ * The site origin, read from the site's own URL module (never restated here).
+ * SITE_ORIGIN moved from head.ts to site-url.ts when the outward URL vocabulary
+ * gained its single home (owner decision D-02, 2026-10-29); head.ts re-exports
+ * it for its existing consumers.
+ */
 export async function readSiteOrigin(repoRootDir: string): Promise<string> {
-  const source = await readFile(join(repoRootDir, 'www/app/site-ui/head.ts'), 'utf8');
+  const source = await readFile(join(repoRootDir, 'www/app/site-ui/site-url.ts'), 'utf8');
   const match = /SITE_ORIGIN = '([^']+)'/.exec(source);
-  if (!match) throw new Error('check-agent-contract: www/app/site-ui/head.ts lost SITE_ORIGIN');
+  if (!match) throw new Error('check-agent-contract: www/app/site-ui/site-url.ts lost SITE_ORIGIN');
   return match[1];
 }
 

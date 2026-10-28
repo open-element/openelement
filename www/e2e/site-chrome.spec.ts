@@ -29,7 +29,7 @@ test.describe('Site chrome: docs sidebar', () => {
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const sidebar = page.getByRole('navigation', { name: 'Documentation navigation' });
@@ -60,7 +60,7 @@ test.describe('Site chrome: docs sidebar', () => {
 
   test('architecture pages filter the sidebar to the architecture family', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
-    await page.goto('/architecture/dsd');
+    await page.goto('/architecture/dsd/');
     await page.waitForLoadState('networkidle');
 
     const sidebar = page.getByRole('navigation', { name: 'Documentation navigation' });
@@ -87,7 +87,7 @@ test.describe('Site chrome: docs sidebar', () => {
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
-    await page.goto('/zh/guide/getting-started');
+    await page.goto('/zh/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const sidebar = page.getByRole('navigation', { name: '文档导航' });
@@ -95,11 +95,11 @@ test.describe('Site chrome: docs sidebar', () => {
     // Sidebar labels follow the zh content titles (快速开始 / API 路由).
     // Integration review: confirm final zh nav copy with the content agent.
     const current = sidebar.getByRole('link', { name: '快速开始' });
-    await expect(current).toHaveAttribute('href', '/zh/guide/getting-started');
+    await expect(current).toHaveAttribute('href', '/zh/guide/getting-started/');
     await expect(current).toHaveAttribute('aria-current', 'page');
     await expect(sidebar.getByRole('link', { name: 'API 路由' })).toHaveAttribute(
       'href',
-      '/zh/guide/api',
+      '/zh/guide/api/',
     );
     await expect(sidebar.getByRole('link', { name: 'Getting Started' })).toHaveCount(0);
   });
@@ -108,7 +108,7 @@ test.describe('Site chrome: docs sidebar', () => {
     page,
   }) => {
     await page.setViewportSize(MOBILE);
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     // The desktop sidebar is out of the accessibility tree at mobile width; the
@@ -122,7 +122,7 @@ test.describe('Site chrome: docs sidebar', () => {
     await expect(panel.getByRole('link', { name: 'Getting Started' })).toBeVisible();
     await expect(panel.getByRole('link', { name: 'API Routes' })).toHaveAttribute(
       'href',
-      '/guide/api',
+      '/guide/api/',
     );
   });
 });
@@ -164,7 +164,9 @@ test.describe('Site chrome: the header always offers one navigation affordance',
         await expect(target, 'the disclosure carries the primary links').toBeVisible();
         await target.focus();
         await page.keyboard.press('Enter');
-        await expect.poll(() => new URL(page.url()).pathname, { timeout: 10_000 }).toBe('/roadmap');
+        await expect
+          .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
+          .toBe('/roadmap/');
         return;
       }
 
@@ -175,13 +177,13 @@ test.describe('Site chrome: the header always offers one navigation affordance',
       const target = pill.getByRole('link', { name: 'Roadmap' });
       await target.focus();
       await page.keyboard.press('Enter');
-      await expect.poll(() => new URL(page.url()).pathname, { timeout: 10_000 }).toBe('/roadmap');
+      await expect.poll(() => new URL(page.url()).pathname, { timeout: 10_000 }).toBe('/roadmap/');
     });
   }
 });
 
 test.describe('Site chrome: footer', () => {
-  for (const route of ['/', '/guide/getting-started', '/architecture/dsd']) {
+  for (const route of ['/', '/guide/getting-started/', '/architecture/dsd/']) {
     test(`footer on ${route} exposes the four labeled navigation columns`, async ({ page }) => {
       await page.setViewportSize(DESKTOP);
       await page.goto(route);
@@ -195,7 +197,7 @@ test.describe('Site chrome: footer', () => {
       // Column link targets resolve to real routes; externals are explicit.
       await expect(
         footer.getByRole('navigation', { name: 'Resources' }).getByRole('link', { name: 'Guide' }),
-      ).toHaveAttribute('href', '/guide/getting-started');
+      ).toHaveAttribute('href', '/guide/getting-started/');
       // The footer's API entry points are explicit: the reference table and the
       // API-routes guide are different destinations (they used to share the
       // bare label "API", which disagreed with the header's /reference entry).
@@ -203,12 +205,12 @@ test.describe('Site chrome: footer', () => {
         footer
           .getByRole('navigation', { name: 'Resources' })
           .getByRole('link', { name: 'API Reference' }),
-      ).toHaveAttribute('href', '/reference');
+      ).toHaveAttribute('href', '/reference/');
       await expect(
         footer
           .getByRole('navigation', { name: 'Resources' })
           .getByRole('link', { name: 'API Routes' }),
-      ).toHaveAttribute('href', '/guide/api');
+      ).toHaveAttribute('href', '/guide/api/');
       await expect(
         footer.getByRole('navigation', { name: 'Company' }).getByRole('link', { name: 'GitHub' }),
       ).toHaveAttribute('href', 'https://github.com/open-element/openelement');
@@ -223,7 +225,7 @@ test.describe('Site chrome: footer', () => {
 
   test('zh pages render the footer bilingually with localized targets', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
-    await page.goto('/zh/guide/getting-started');
+    await page.goto('/zh/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const footer = page.getByRole('contentinfo');
@@ -232,10 +234,10 @@ test.describe('Site chrome: footer', () => {
     }
     await expect(
       footer.getByRole('navigation', { name: '资源' }).getByRole('link', { name: '指南' }),
-    ).toHaveAttribute('href', '/zh/guide/getting-started');
+    ).toHaveAttribute('href', '/zh/guide/getting-started/');
     await expect(
       footer.getByRole('navigation', { name: '项目' }).getByRole('link', { name: '路线图' }),
-    ).toHaveAttribute('href', '/zh/roadmap');
+    ).toHaveAttribute('href', '/zh/roadmap/');
   });
 
   test('mobile viewports keep the full footer chrome', async ({ page }) => {
@@ -255,7 +257,7 @@ test.describe('Site chrome: skip link and language switcher', () => {
   // Integration review: the skip link and the header language switcher land
   // with the parallel app-layout header work; selectors here pin the
   // contract (href targets), not the final visible copy.
-  for (const route of ['/', '/guide/getting-started', '/zh/guide/getting-started']) {
+  for (const route of ['/', '/guide/getting-started/', '/zh/guide/getting-started/']) {
     test(`skip link on ${route} targets #main-content`, async ({ page }) => {
       await page.goto(route);
       await page.waitForLoadState('networkidle');
@@ -269,20 +271,20 @@ test.describe('Site chrome: skip link and language switcher', () => {
 
   test('zh pages link to the English twin from the header switcher', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
-    await page.goto('/zh/guide/getting-started');
+    await page.goto('/zh/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const banner = page.getByRole('banner');
-    await expect(banner.locator('a[href="/guide/getting-started"]')).toHaveCount(1);
+    await expect(banner.locator('a[href="/guide/getting-started/"]')).toHaveCount(1);
   });
 
   test('en pages link to the zh twin from the header switcher', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const banner = page.getByRole('banner');
-    await expect(banner.locator('a[href="/zh/guide/getting-started"]')).toHaveCount(1);
+    await expect(banner.locator('a[href="/zh/guide/getting-started/"]')).toHaveCount(1);
   });
 });
 
@@ -293,7 +295,7 @@ test.describe('Site chrome: header repository link', () => {
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const banner = page.getByRole('banner');
@@ -312,7 +314,7 @@ test.describe('Site chrome: header repository link', () => {
 
   test('zh pages localize the repository link label', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
-    await page.goto('/zh/guide/getting-started');
+    await page.goto('/zh/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const banner = page.getByRole('banner');
@@ -333,7 +335,7 @@ test.describe('Site chrome: header repository link', () => {
 test.describe('Site chrome: reading rail scrollspy', () => {
   test('marks Overview at rest and follows the scroll', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     // open-page-rail renders the same links twice (the desktop outline nav

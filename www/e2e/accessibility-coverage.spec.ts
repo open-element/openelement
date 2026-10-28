@@ -27,26 +27,26 @@ import { HOME_AXE_EXCLUSIONS } from './axe-home-exclusions.ts';
 /** One route per template plus the zh pages the resident gate never scanned. */
 const SWEPT_ROUTES = [
   '/',
-  '/docs',
-  '/guide/getting-started',
-  '/guide/core-concepts',
-  '/architecture',
-  '/architecture/comparison',
-  '/changelog',
-  '/roadmap',
-  '/errors',
+  '/docs/',
+  '/guide/getting-started/',
+  '/guide/core-concepts/',
+  '/architecture/',
+  '/architecture/comparison/',
+  '/changelog/',
+  '/roadmap/',
+  '/errors/',
   '/404',
-  '/blog/1-0-0-alpha-1-baseline',
-  '/zh',
-  '/zh/docs',
-  '/zh/changelog',
-  '/zh/roadmap',
-  '/zh/errors',
+  '/blog/1-0-0-alpha-1-baseline/',
+  '/zh/',
+  '/zh/docs/',
+  '/zh/changelog/',
+  '/zh/roadmap/',
+  '/zh/errors/',
   '/zh/404',
 ] as const;
 
 /** Both locale roots render the same scroll-animated home template. */
-export const HOME_ROUTES: ReadonlySet<string> = new Set(['/', '/zh']);
+export const HOME_ROUTES: ReadonlySet<string> = new Set(['/', '/zh/']);
 
 /**
  * zh pages must not announce untranslated English chrome. The sweep scans every
@@ -96,7 +96,7 @@ test.describe('Accessibility coverage sweep (axe)', () => {
 
   test('zh pages carry no untranslated aria-label', async ({ page }) => {
     const untranslated: string[] = [];
-    for (const route of SWEPT_ROUTES.filter((route) => route.startsWith('/zh'))) {
+    for (const route of SWEPT_ROUTES.filter((route) => route.startsWith('/zh/'))) {
       await page.goto(route);
       await page.waitForLoadState('networkidle');
       const labels: string[] = await page.evaluate(() =>
@@ -125,8 +125,8 @@ test.describe('Accessibility coverage sweep (axe)', () => {
     // (changelog register, package graph) must not leak the zh copy into the
     // English tree.
     for (const [route, forbidden] of [
-      ['/changelog', '发布登记表'],
-      ['/roadmap', '包依赖图'],
+      ['/changelog/', '发布登记表'],
+      ['/roadmap/', '包依赖图'],
     ] as const) {
       await page.goto(route);
       await page.waitForLoadState('networkidle');
