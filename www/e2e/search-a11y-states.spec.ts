@@ -109,8 +109,14 @@ test.describe('open-search dialog — a11y for every content state', () => {
   test('backdrop dismissal returns focus to the Search trigger', async ({ page }) => {
     const trigger = await openDialog(page);
     // The overlay covers the viewport; the panel is centered below 15vh, so a
-    // corner click lands on the backdrop, not the panel.
-    await page.mouse.click(8, 8);
+    // corner click lands on the backdrop, not the panel. Click the backdrop
+    // element itself (with an explicit visible wait) instead of raw viewport
+    // coordinates: the raw-coordinate form occasionally raced the overlay's
+    // state under the full 3-engine lane and left the dialog open (flake
+    // recorded on #1668). The assertions below are unchanged.
+    const backdrop = page.locator('open-search .overlay');
+    await expect(backdrop).toBeVisible();
+    await backdrop.click({ position: { x: 8, y: 8 } });
     await expect(page.getByRole('dialog', { name: 'Search' })).toBeHidden();
     await expect(trigger).toBeFocused();
   });
