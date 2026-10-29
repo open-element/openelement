@@ -217,12 +217,12 @@ test('#1386: the Vite plugin gates a build on the emitted module when asked', as
   const runTransform = (
     plugin: { transform?: unknown },
     onError: (error: unknown) => never,
-  ): string | null => {
+  ): { code: string } | null => {
     const transform = plugin.transform as unknown as (
       this: { error: (error: unknown) => never },
       code: string,
       id: string,
-    ) => string | null;
+    ) => { code: string } | null;
     return transform.call({ error: onError }, source, id);
   };
 
@@ -230,7 +230,10 @@ test('#1386: the Vite plugin gates a build on the emitted module when asked', as
   const plain = runTransform(compiledElementPlugin(), (error) => {
     throw error;
   });
-  expect(typeof plain === 'string', 'the default hook emits the compiled module').toBeTruthy();
+  expect(
+    typeof plain?.code === 'string',
+    'the default hook emits the compiled module',
+  ).toBeTruthy();
 
   // Opt-in build behaviour on a module that DOES type-check: the gate runs and
   // the emitted bytes are unchanged. (That the gate fires on a module which
@@ -246,5 +249,5 @@ test('#1386: the Vite plugin gates a build on the emitted module when asked', as
     },
   );
   expect(errors, 'a type-checking emitted module must not fail the gate').toEqual([]);
-  expect(gated, 'the check must not change emitted bytes').toEqual(plain);
+  expect(gated?.code, 'the check must not change emitted bytes').toEqual(plain?.code);
 });

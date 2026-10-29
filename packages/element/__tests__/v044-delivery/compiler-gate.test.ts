@@ -48,7 +48,7 @@ type TransformHook = (
   this: TransformContext,
   code: string,
   id: string,
-) => { code: string; map?: unknown } | string | null;
+) => { code: string; map?: unknown } | null;
 
 function transformOf(plugin: Plugin): TransformHook {
   expect(
@@ -100,8 +100,8 @@ describe('v0.44 compiler gate - real @element modules still compile or fail clos
       '}',
     ].join('\n');
     const result = compile.call(failingContext(), source, '/project/app/islands/gate-counter.tsx');
-    expect(typeof result === 'string', 'compiler hook must emit compiled code').toBeTruthy();
-    expect(result).toContain('__partProgram');
+    expect(typeof result?.code === 'string', 'compiler hook must emit compiled code').toBeTruthy();
+    expect(result!.code).toContain('__partProgram');
   });
 
   test('a real but invalid @element module fails closed with located diagnostics', () => {
