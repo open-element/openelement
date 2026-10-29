@@ -1877,3 +1877,14 @@ open-hero-polish{position:absolute;width:1px;height:1px;overflow:hidden;pointer-
     max-width: none;
   }
 }
+/* ── Long-form prose measure (T7) ─────────────────────────────────────────
+   The article column is 864px at 16px type (~108 characters per line); Vue
+   and React keep their reference prose around 700–760px (~86–90 characters).
+   Constrain the text blocks to a readable measure while code blocks, tables
+   and figures keep the full column width — they either scroll horizontally or
+   own their layout, and narrowing them would force more wrapping. Applies to
+   both long-form surfaces (guide/architecture articles and blog posts). */
+.article-content :is(p, ul, ol, blockquote, dl, h2, h3, h4, h5, h6),
+.blog-content :is(p, ul, ol, blockquote, dl, h2, h3, h4, h5, h6) {
+  max-width: 44rem;
+}
