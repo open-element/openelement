@@ -45,7 +45,7 @@ jobs:
 
       - name: Initialize CodeQL
         # v4.38.1
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/init@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d
         with:
           languages: ${{ matrix.language }}
           # TypeScript source analysis: no build step needed — the CodeQL
@@ -54,6 +54,6 @@ jobs:
 
       - name: Perform CodeQL Analysis
         # v4.38.1
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/analyze@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d
         with:
           category: '/language:${{matrix.language}}'
