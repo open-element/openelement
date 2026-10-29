@@ -1888,3 +1888,76 @@ open-hero-polish{position:absolute;width:1px;height:1px;overflow:hidden;pointer-
 .blog-content :is(p, ul, ol, blockquote, dl, h2, h3, h4, h5, h6) {
   max-width: 44rem;
 }
+
+/* ── Reference package cards (T5b) ────────────────────────────────────────
+   The registry rows used to be a 3-column grid (name+copy | subpath chips |
+   kind), so a long localized description made the left column tall while the
+   middle chips and the right badge stayed pinned to the first line: the row
+   read as three unrelated columns with a large empty gap. The card now aligns
+   name and kind on one header line, then lets chips and the description flow
+   full width beneath it. */
+.page-reference .pkg-card {
+  padding: 1.35rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.page-reference .pkg-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+}
+
+.page-reference .pkg-card-name {
+  margin: 0;
+  color: var(--color-primary);
+  font-family: var(--font-mono);
+  font-size: clamp(1.35rem, 2.1vw, 1.9rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.page-reference .pkg-card-import {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.page-reference .pkg-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.page-reference .pkg-chip {
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.375rem;
+  background: var(--color-muted);
+  color: var(--color-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.page-reference .pkg-card-copy {
+  margin: 0.85rem 0 0;
+  max-width: 52rem;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.page-reference .pkg-card-note {
+  display: block;
+  margin-top: 0.4rem;
+  max-width: 52rem;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}

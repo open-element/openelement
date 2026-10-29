@@ -656,60 +656,29 @@ export function ReferencePage(props: {
           <span slot='title'>{props.s2Title}</span>
           <span slot='copy'>{props.s2Copy}</span>
           <div class='border-t border-border'>
-            <div
-              class='hidden grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_auto] items-start gap-[clamp(1rem,4vw,3rem)] border-b border-border py-3 text-(length:--font-size-micro) font-bold tracking-[0.18em] text-muted-foreground uppercase min-[861px]:grid'
-              aria-hidden='true'
-            >
-              <span>{props.headPackage}</span>
-              <span>{props.headSubpaths}</span>
-              <span>{props.headKind}</span>
-            </div>
             {props.packages.map((pkg) => (
-              <div
-                class='group grid grid-cols-[minmax(0,1fr)] items-start gap-3 border-b border-border py-6 min-[861px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_auto] min-[861px]:gap-[clamp(1rem,4vw,3rem)]'
-                id={pkg.id}
-                data-kind={pkg.kind}
-                key={pkg.id}
-              >
-                <div class='min-w-0'>
-                  <span class='block [overflow-wrap:anywhere] text-primary text-[length:clamp(1.7rem,2.8vw,2.5rem)] font-extrabold leading-none tracking-[-0.03em] group-data-[kind=optional]:text-muted-foreground'>
-                    {pkg.name}
-                  </span>
-                  <span class='mt-2 block [overflow-wrap:anywhere] text-(length:--text-xs) text-muted-foreground'>
-                    {pkg.importPath}
-                  </span>
-                  <p class='mt-3 mb-0 text-(length:--text-sm) leading-normal text-muted-foreground'>
-                    {pkg.copy}
-                  </p>
-                  <span class='mt-2 block text-(length:--text-xs) leading-normal text-muted-foreground empty:hidden'>
-                    {pkg.note1}
-                  </span>
-                  <span class='mt-2 block text-(length:--text-xs) leading-normal text-muted-foreground empty:hidden'>
-                    {pkg.note2}
-                  </span>
-                  <span class='mt-2 block text-(length:--text-xs) leading-normal text-muted-foreground empty:hidden'>
-                    {pkg.note3}
-                  </span>
+              <article class='pkg-card group' id={pkg.id} data-kind={pkg.kind} key={pkg.id}>
+                <div class='pkg-card-head'>
+                  <div class='min-w-0'>
+                    <h3 class='pkg-card-name group-data-[kind=optional]:text-muted-foreground'>
+                      {pkg.name}
+                    </h3>
+                    <span class='pkg-card-import'>{pkg.importPath}</span>
+                  </div>
+                  <span class={pkg.kindClass}>{pkg.kindLabel}</span>
                 </div>
-                <div class='flex flex-wrap gap-2'>
-                  <span class='rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
-                    {pkg.export1}
-                  </span>
-                  <span class='rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
-                    {pkg.export2}
-                  </span>
-                  <span class='rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
-                    {pkg.export3}
-                  </span>
-                  <span class='rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
-                    {pkg.export4}
-                  </span>
-                  <span class='rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
-                    {pkg.export5}
-                  </span>
+                <div class='pkg-card-chips'>
+                  <span class='pkg-chip empty:hidden'>{pkg.export1}</span>
+                  <span class='pkg-chip empty:hidden'>{pkg.export2}</span>
+                  <span class='pkg-chip empty:hidden'>{pkg.export3}</span>
+                  <span class='pkg-chip empty:hidden'>{pkg.export4}</span>
+                  <span class='pkg-chip empty:hidden'>{pkg.export5}</span>
                 </div>
-                <span class={pkg.kindClass}>{pkg.kindLabel}</span>
-              </div>
+                <p class='pkg-card-copy'>{pkg.copy}</p>
+                <span class='pkg-card-note empty:hidden'>{pkg.note1}</span>
+                <span class='pkg-card-note empty:hidden'>{pkg.note2}</span>
+                <span class='pkg-card-note empty:hidden'>{pkg.note3}</span>
+              </article>
             ))}
             <footer class='pt-6 text-(length:--text-xs) leading-normal text-muted-foreground'>
               <p class='m-0'>{props.footnote}</p>
