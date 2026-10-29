@@ -92,6 +92,20 @@ function matrixInstances(): Array<{ browser: string }> {
 const launchExecutable = process.env.OE_BROWSER_LAUNCH_EXECUTABLE;
 
 export default defineConfig({
+  // Vite 8.1 (rolldown 1.1) stopped feeding the nearest tsconfig into its oxc
+  // transform; Vite 8.0 (rolldown 1.0) did. Without this, framework decorators
+  // and JSX are left untransformed in the test transform (the
+  // "SyntaxError: Invalid or unexpected token" that blocked the Vite 8.1.6
+  // upgrade). Declare the TS options the sources actually need — the same pair
+  // www/vite.config.ts sets for the real build — instead of relying on
+  // per-package tsconfig discovery, which 8.1 no longer performs.
+  oxc: {
+    jsx: {
+      runtime: 'automatic',
+      importSource: '@openelement/element',
+    },
+    decorator: { legacy: true },
+  },
   test: {
     globals: false,
     environment: 'node',
@@ -109,10 +123,8 @@ export default defineConfig({
     projects: [
       {
         // Decorator-syntax suites (compile-decorators, compiled-element-v1)
-        // lower through vite 8's oxc transform, which reads the nearest
-        // tsconfig — packages/element/tsconfig.json carries
-        // experimentalDecorators for exactly this surface (Deno parsed them
-        // natively pre-migration).
+        // and the JSX suites rely on the root `oxc` transform options above
+        // (Vite 8.1 no longer applies the nearest tsconfig automatically).
         // The #1386 emitted-module typecheck tests run a TypeScript program
         // per test; under the coverage lane's instrumentation that exceeds
         // vitest's 5s default, so the project carries the same per-test

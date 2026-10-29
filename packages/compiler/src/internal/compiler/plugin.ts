@@ -413,7 +413,18 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
             });
           }
         }
-        return compiled.code;
+        // Hand the transform's real map to the bundler as its `map` output
+        // instead of relying on the inline map comment. Vite 8.0's rolldown
+        // read that comment back; rolldown 1.1 (Vite 8.1) no longer does, so
+        // the authored source (e.g. the consumer's counter.tsx) disappeared
+        // from the emitted bundle's source map — caught by the packed Element
+        // consumer's "authored source map must survive" assertion. The map is
+        // already on CompileElementResult; this is the #1210 contract the
+        // strip helper was written for.
+        return {
+          code: stripInlineSourceMapComment(compiled.code),
+          map: compiled.map,
+        };
       } catch (error) {
         if (error instanceof CompiledElementError) {
           // #1413: hand the build the structured diagnostic record

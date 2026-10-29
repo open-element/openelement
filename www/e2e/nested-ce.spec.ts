@@ -38,12 +38,12 @@ test.describe('Nested Custom Elements', () => {
 
   test('page navigation works between guide pages', async ({ page }) => {
     // Navigate from home to a guide page
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     // The guide page should have loaded successfully
     const url = page.url();
-    expect(url).toContain('/guide/getting-started');
+    expect(url).toContain('/guide/getting-started/');
 
     // The page should have a title (DSD-rendered)
     const title = await page.title();

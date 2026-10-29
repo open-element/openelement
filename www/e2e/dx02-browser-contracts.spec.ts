@@ -245,6 +245,28 @@ test.describe('DX-02 390px: viewport behaviour', () => {
     await expect(headerDisclosure).toBeVisible();
     await expect(headerDisclosure.locator('summary')).toBeVisible();
   });
+
+  test('home inner surface does not clip the sources caption at 320px', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const metrics = await page.evaluate(() => {
+      const root = document.querySelector('.page-home');
+      return {
+        rootClientWidth: root?.clientWidth ?? -1,
+        rootScrollWidth: root?.scrollWidth ?? -1,
+        documentScrollWidth: document.documentElement.scrollWidth,
+      };
+    });
+    // No page-level scrollbar at the 320 floor.
+    expect(metrics.documentScrollWidth).toBe(320);
+    // The page root clips decorative overflow by design, but its own scroll box
+    // must stay flush: the sources caption used to poke 3px past it.
+    expect(metrics.rootScrollWidth, '.page-home scrollWidth vs clientWidth at 320px').toBe(
+      metrics.rootClientWidth,
+    );
+  });
 });
 
 test.describe('DX-02 keyboard: chrome path', () => {
@@ -335,7 +357,7 @@ test.describe('DX-02 keyboard at 390px: the documentation disclosure', () => {
     page,
   }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const capability = await walkTabPathForLinks(page);
@@ -348,7 +370,7 @@ test.describe('DX-02 keyboard at 390px: the documentation disclosure', () => {
       expect(capability.stops.some((stop) => stop.key === 'a')).toBe(false);
       return;
     }
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     const summary = await tabUntil(

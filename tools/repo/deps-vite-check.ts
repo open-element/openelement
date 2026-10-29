@@ -27,7 +27,7 @@ import process from 'node:process';
 
 /** The ONE vite version the router and every generated project resolve; main()
  * verifies the router manifest against it before checking the template. */
-export const VITE_DEV_PIN = '8.0.16';
+export const VITE_DEV_PIN = '8.1.6';
 export const VITE_PEER_RANGE = 'npm:vite@^8.0.0';
 
 const MANIFEST_GLOB_ROOTS = [

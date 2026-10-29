@@ -91,14 +91,23 @@ function contentSourceDrift(sitemapRoutes: Set<string>): string[] {
 }
 
 function expectedLocale(route: string): string {
-  return route === '/zh' || route.startsWith('/zh/') ? 'zh' : 'en';
+  return route === '/zh/' || route.startsWith('/zh/') ? 'zh' : 'en';
 }
 
 const routes = readSitemapRoutes();
 
+/**
+ * Route identity for source-drift comparisons: the sitemap now carries the
+ * outward canonical form (trailing slash, D-02), while content sources name
+ * identity routes. Compare identities, navigate with the canonical URLs.
+ */
+function routeIdentity(route: string): string {
+  return route === '/' ? '/' : route.replace(/\/+$/, '');
+}
+
 test.describe('Public IA route coverage', () => {
   test('sitemap covers every article source route in every locale', () => {
-    expect(contentSourceDrift(new Set(routes))).toEqual([]);
+    expect(contentSourceDrift(new Set(routes.map(routeIdentity)))).toEqual([]);
   });
 
   for (const route of routes) {

@@ -1,7 +1,7 @@
 # DX-02 — Browser automation for timing / morph / preserve / 390px / keyboard
 
 Candidate: `ef5da43e45d887b214841a99c26d3f8d2dac358b` (branch `alpha15`).
-Recorded 2026-10-19 from `/Users/zhengzhi/Documents/projects/openelement/openelement`.
+Recorded 2026-10-19 from the repository root.
 
 This document is the runbook for the DX-02 suite, and it is explicit about one
 boundary: **browser automation is not screen-reader testing.** Everything below

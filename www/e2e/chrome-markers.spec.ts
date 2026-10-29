@@ -26,9 +26,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const DESKTOP = { width: 1280, height: 900 };
-const RAIL_ROUTES = ['/guide/getting-started', '/zh/guide/getting-started'] as const;
+const RAIL_ROUTES = ['/guide/getting-started/', '/zh/guide/getting-started/'] as const;
 /** The banner brand link points at the locale root: `/` (en) or `/zh` (zh). */
-const BRAND_SELECTOR = 'header a[href="/"], header a[href="/zh"]';
+const BRAND_SELECTOR = 'header a[href="/"], header a[href="/zh/"]';
 
 /** The `::before` channel of one anchor. */
 interface AnchorMarker {

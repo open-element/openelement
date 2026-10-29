@@ -23,9 +23,9 @@ import type { PageHead, StructuredDataEntry } from '@openelement/router';
 import { getPostBySlug } from '#generated/blog-data';
 import { contentLocale } from './locale.ts';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../../site-config.ts';
-import { localizePath } from './link.ts';
+import { SITE_ORIGIN, siteHref } from './site-url.ts';
 
-export const SITE_ORIGIN = 'https://openelement.org';
+export { SITE_ORIGIN } from './site-url.ts';
 
 const BRAND = 'openElement';
 
@@ -56,7 +56,7 @@ export interface SiteHeadInput {
 export function siteHead(input: SiteHeadInput): PageHead {
   const locale = contentLocale(input.locale ?? 'en');
   const title = brandedTitle(input.title);
-  const canonical = `${SITE_ORIGIN}${localizePath(input.route, locale)}`;
+  const canonical = `${SITE_ORIGIN}${siteHref(input.route, locale)}`;
   const head: PageHead = {
     title,
     description: input.description,
@@ -133,11 +133,11 @@ export function siteHead(input: SiteHeadInput): PageHead {
     head.canonical = canonical;
     head.alternates = [
       ...SITE_LOCALES.map((candidate) => ({
-        href: `${SITE_ORIGIN}${localizePath(input.route, candidate)}`,
+        href: `${SITE_ORIGIN}${siteHref(input.route, candidate)}`,
         hreflang: candidate,
       })),
       {
-        href: `${SITE_ORIGIN}${localizePath(input.route, SITE_DEFAULT_LOCALE)}`,
+        href: `${SITE_ORIGIN}${siteHref(input.route, SITE_DEFAULT_LOCALE)}`,
         hreflang: 'x-default',
       },
     ];

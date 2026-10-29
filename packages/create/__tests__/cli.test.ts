@@ -152,7 +152,7 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
   // from it, so a floating or absent pin is a TS2591 the user meets first.
   expect(/^\d+\.\d+\.\d+$/.test(manifest.devDependencies['@types/node'])).toBeTruthy();
   expect(manifest.devDependencies['vite-plus']).toEqual(undefined);
-  expect(manifest.devDependencies['vite']).toEqual('8.0.16');
+  expect(manifest.devDependencies['vite']).toEqual('8.1.6');
   expect(Object.keys(manifest.scripts).sort()).toEqual([
     'build',
     'dev',

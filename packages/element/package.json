@@ -52,6 +52,6 @@
     "@preact/signals-core": "^1.12.1",
     "@types/node": "26.5.0",
     "lit": "3.3.3",
-    "vite": "8.0.16"
+    "vite": "8.1.6"
   }
 }

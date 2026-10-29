@@ -237,7 +237,7 @@ test('configuration keeps the middleware-use anchor target', async () => {
   expect(en).toEqual(expect.anything());
   expect(security).toEqual(expect.anything());
   expect(en.html).toContain('<h2>middleware.use</h2>');
-  expect(security.html).toContain('/guide/configuration#middleware-use');
+  expect(security.html).toContain('/guide/configuration/#middleware-use');
 });
 
 test('content collection loading succeeds for all collections', async () => {

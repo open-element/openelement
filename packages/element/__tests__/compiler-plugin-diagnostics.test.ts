@@ -67,7 +67,7 @@ test('compiler plugin diagnostics (#1413): the adapter passes {id, loc, frame}',
     this: { error(e: unknown): never },
     code: string,
     id: string,
-  ) => string | null;
+  ) => { code: string } | null;
 
   const { errors, context } = captureBuildError();
   let thrown = false;
@@ -111,7 +111,7 @@ test('compiler plugin diagnostics (#1413): a clean module still transforms', asy
     this: { error(e: unknown): never },
     code: string,
     id: string,
-  ) => string | null;
+  ) => { code: string } | null;
   const { errors, context } = captureBuildError();
   const clean = [
     "import { element, OpenElement, property } from '@openelement/element';",
@@ -123,5 +123,5 @@ test('compiler plugin diagnostics (#1413): a clean module still transforms', asy
   ].join('\n');
   const emitted = transform.call(context, clean, '/project/app/islands/diag-clean.tsx');
   expect(errors).toEqual([]);
-  expect(typeof emitted === 'string' && emitted.includes('__partProgram')).toBeTruthy();
+  expect(typeof emitted?.code === 'string' && emitted.code.includes('__partProgram')).toBeTruthy();
 });

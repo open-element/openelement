@@ -23,8 +23,8 @@
  * Pure functions only; IO lives in ../emit-site-sitemap.ts.
  */
 
-import { SITE_ORIGIN } from '../../app/site-ui/head.ts';
 import { normalizeLocalePath } from '../../app/site-ui/i18n.ts';
+import { normalizeSiteHref, siteHref, SITE_ORIGIN } from '../../app/site-ui/site-url.ts';
 import { escapeXml } from './xml-escape.ts';
 
 export interface SitemapUrlEntry {
@@ -147,8 +147,10 @@ export function renderSitemapXml(
   const hostname = (options.hostname ?? SITE_ORIGIN).replace(/\/$/, '');
   const locales = options.locales ?? [];
   const defaultLocale = options.defaultLocale ?? '';
+  // Routes arrive as site paths (localized or not); the outward URL form is
+  // the trailing-slash canonical form (owner decision D-02).
   const urls: SitemapUrlEntry[] = routes.map((path) => ({
-    loc: `${hostname}${path}`,
+    loc: `${hostname}${normalizeSiteHref(path)}`,
     lastmod: options.lastmod?.get(path),
     changefreq: 'weekly',
     priority: path === '/' ? 1.0 : 0.7,
@@ -159,15 +161,10 @@ export function renderSitemapXml(
       locales: [...locales],
       defaultLocale,
     });
-    const alternates = locales.map((locale) => {
-      const localized =
-        locale === defaultLocale
-          ? canonical
-          : canonical === '/'
-            ? `/${locale}`
-            : `/${locale}${canonical}`;
-      return { hreflang: locale, href: `${hostname}${localized}` };
-    });
+    const alternates = locales.map((locale) => ({
+      hreflang: locale,
+      href: `${hostname}${siteHref(canonical, locale)}`,
+    }));
     const xDefault = alternates.find((alternate) => alternate.hreflang === defaultLocale);
     if (xDefault) alternates.push({ hreflang: 'x-default', href: xDefault.href });
     return alternates;

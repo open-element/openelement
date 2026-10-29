@@ -10,7 +10,7 @@ import '../../islands/open-dragon-live-gaze.tsx';
 import '../../islands/open-hero-polish.tsx';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
-import { localizePath } from '#site-ui/link.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import { homeStrings } from '../../site-ui/chrome-strings.ts';
 import {
   diagramDsd,
@@ -72,7 +72,7 @@ const content = {
     sceneOutputLead: 'Static first.',
     sceneOutputAccent: 'Deployable anywhere.',
     startBuilding: 'Start building',
-    watchUnfold: 'Watch it unfold',
+    watchUnfold: 'Explore the architecture',
     getStarted: 'Get started',
     readGuide: 'Read the guide',
     begin: 'Begin.',
@@ -105,7 +105,7 @@ const content = {
     sceneOutputLead: '静态优先。',
     sceneOutputAccent: '随处可部署。',
     startBuilding: '开始构建',
-    watchUnfold: '看它展开',
+    watchUnfold: '探索架构',
     getStarted: '快速开始',
     readGuide: '阅读指南',
     begin: '开始。',
@@ -705,7 +705,7 @@ export function PageHome(props: {
       </section>
 
       <section class='border-t border-border px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(3rem,8vh,6rem)]'>
-        <header class='mb-6 flex items-end justify-between gap-8'>
+        <header class='mb-6 flex min-w-0 items-end justify-between gap-8'>
           <div>
             <p class='text-(length:--text-xs) font-extrabold tracking-[.24em] text-primary uppercase [&:lang(zh)]:normal-case [&:lang(zh)]:tracking-[.08em] [&:lang(zh)]:leading-[1.9]'>
               {props.facts}
@@ -714,7 +714,9 @@ export function PageHome(props: {
               {props.continueComposition}
             </h2>
           </div>
-          <p class='max-w-[30rem] leading-[1.5] text-muted-foreground'>{props.referenceCopy}</p>
+          <p class='min-w-0 max-w-[30rem] break-words leading-[1.5] text-muted-foreground [overflow-wrap:anywhere]'>
+            {props.referenceCopy}
+          </p>
         </header>
         <div class='links grid grid-cols-1 border border-border min-[521px]:grid-cols-2 min-[1201px]:grid-cols-4'>
           {props.references.map((reference) => (
@@ -771,7 +773,7 @@ export default definePage(PageHome, {
       // the reader's locale and the same tab.
       enginesHref: SPEC_EVIDENCE.engines,
       depsHref: SPEC_EVIDENCE.deps,
-      outputHref: localizePath(SPEC_EVIDENCE.dsd, resolved),
+      outputHref: siteHref(SPEC_EVIDENCE.dsd, resolved),
       // The hero's alpha-status note names the line from release truth; only
       // the prose half lives in the content map. The major.minor is derived
       // here (a function body) — the compiled route-module grammar keeps
@@ -795,15 +797,15 @@ export default definePage(PageHome, {
       // Two copies by construction — the translateX(-50%) keyframe's seam
       // math (see the `marquee` constant above).
       marqueeText: marquee + marquee,
-      startBuildingHref: localizePath('/guide/getting-started', resolved),
-      getStartedHref: localizePath('/guide/getting-started', resolved),
-      docsHref: localizePath('/docs', resolved),
+      startBuildingHref: siteHref('/guide/getting-started', resolved),
+      getStartedHref: siteHref('/guide/getting-started', resolved),
+      docsHref: siteHref('/docs', resolved),
       strategies: [...strategies[resolved]],
       outputs: [...outputs[resolved]],
       references: references[resolved].map(([index, title, href, copy]) => ({
         index,
         title,
-        href: localizePath(href, resolved),
+        href: siteHref(href, resolved),
         copy,
       })),
     };
