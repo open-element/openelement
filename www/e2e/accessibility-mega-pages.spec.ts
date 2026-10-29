@@ -26,7 +26,7 @@ import { expect, test } from '@playwright/test';
 import { observeWithTimeoutClassification } from './helpers.ts';
 
 /** The generated mega-pages, in both locales. */
-const MEGA_PAGES = ['/reference', '/zh/reference'] as const;
+const MEGA_PAGES = ['/reference/', '/zh/reference/'] as const;
 
 /** The resident gate's ceiling for the same page (accessibility-gate.spec.ts). */
 const MEGA_PAGE_TIMEOUT_MS = 420_000;

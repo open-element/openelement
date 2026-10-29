@@ -29,7 +29,7 @@
 import { expect, test } from '@playwright/test';
 import { MATRIX_HELPERS_SOURCE } from './wcag-contrast.ts';
 
-const PAGE = '/contributing';
+const PAGE = '/contributing/';
 
 /**
  * The contributing page's content renders inside the page component's own
@@ -313,7 +313,7 @@ test.describe('open-button disabled states', () => {
         const authored = find('open-button')[0]!;
         const host = authored.cloneNode(false) as Element;
         if (target === 'native') host.removeAttribute('href');
-        else host.setAttribute('href', '/roadmap');
+        else host.setAttribute('href', '/roadmap/');
         host.setAttribute('disabled', '');
         host.append(target === 'native' ? 'Disabled' : 'Disabled link');
         authored.after(host);

@@ -2,7 +2,7 @@ import type { PageHead } from '@openelement/router';
 import { prepareArticle } from './article-body.ts';
 import { siteHead } from './head.ts';
 import { contentLocale } from './locale.ts';
-import { localizePath } from './link.ts';
+import { siteHref } from './site-url.ts';
 import type { ReadingMetadata } from './page-contract.ts';
 import { getPage as getGuidePage, pages as guidePages } from '../data/_generated-guide-data.ts';
 import {
@@ -138,7 +138,7 @@ export function projectArticlePage(
   const navigationItem = (candidate: typeof previous) =>
     candidate
       ? {
-          href: localizePath(articleRoutePath(collection, candidate.slug), locale),
+          href: siteHref(articleRoutePath(collection, candidate.slug), locale),
           label: localizedTitle(candidate.slug),
         }
       : undefined;
@@ -154,7 +154,7 @@ export function projectArticlePage(
     notFoundMessage: '',
     metadata: {
       breadcrumb: shell.breadcrumb[locale],
-      breadcrumbHref: localizePath(shell.root, locale),
+      breadcrumbHref: siteHref(shell.root, locale),
       title: page.frontmatter.title,
       lede: page.frontmatter.lede ?? '',
       // The version mark is the source-line stamp (never the bare

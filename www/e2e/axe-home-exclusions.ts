@@ -27,7 +27,6 @@
  * and the mobile rail summary instead.
  */
 export const HOME_AXE_EXCLUSIONS: readonly string[] = [
-  '.scene-outlined',
   '.scene-copy',
   '.scene-art',
   '.scene > h2',

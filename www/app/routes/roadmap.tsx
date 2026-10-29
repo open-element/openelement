@@ -14,6 +14,7 @@ import {
   STABLE_LINE,
 } from '../data/version.ts';
 import { siteHead } from '#site-ui/head.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import type { SiteLocale } from '../../site-config.ts';
 
@@ -282,6 +283,9 @@ export function RoadmapPage(props: {
   metadata: { breadcrumb: string; title: string; lede: string };
   railItems: Array<{ id: string; href: string; label: string; depth: string }>;
   locale: string;
+  architectureHref: string;
+  changelogHref: string;
+  deploymentHref: string;
   releaseLineIndex: string;
   releaseLineTitle: string;
   releaseLineCopy: string;
@@ -559,9 +563,9 @@ export function RoadmapPage(props: {
           class='flex flex-wrap gap-3 w-[min(1180px,calc(100%_-_3rem))] mt-[clamp(4rem,10vh,8rem)] mx-auto mb-0 pb-[clamp(3rem,8vh,6rem)]'
           slot='footer'
         >
-          <open-button href='/architecture'>{props.architecture}</open-button>
-          <open-button href='/changelog'>{props.changelog}</open-button>
-          <open-button href='/guide/deployment'>{props.deployment}</open-button>
+          <open-button href={props.architectureHref}>{props.architecture}</open-button>
+          <open-button href={props.changelogHref}>{props.changelog}</open-button>
+          <open-button href={props.deploymentHref}>{props.deployment}</open-button>
         </nav>
       </open-reading-shell>
     </div>
@@ -686,6 +690,9 @@ export default definePage(RoadmapPage, {
       changelog: t.changelog,
       deployment: t.deployment,
       locale: resolved,
+      architectureHref: siteHref('/architecture', resolved),
+      changelogHref: siteHref('/changelog', resolved),
+      deploymentHref: siteHref('/guide/deployment', resolved),
     };
   },
 });

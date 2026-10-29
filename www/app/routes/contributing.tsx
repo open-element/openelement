@@ -11,7 +11,7 @@ import '#site-ui/open-artifact-panel.tsx';
 import '../islands/open-page-rail.tsx';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
-import { localizePath } from '#site-ui/link.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import { contributingSetupCodeHtml } from '../data/_generated-page-code.ts';
 
 export const meta = { section: '', label: 'Contributing', order: 30 };
@@ -511,8 +511,8 @@ export default definePage(PageContributing, {
       setupCodeHtml: trustedHtml(contributingSetupCodeHtml),
       discussionsHref: 'https://github.com/open-element/openelement/discussions',
       issuesHref: 'https://github.com/open-element/openelement/issues',
-      changelogHref: localizePath('/changelog', resolved),
-      roadmapHref: localizePath('/roadmap', resolved),
+      changelogHref: siteHref('/changelog', resolved),
+      roadmapHref: siteHref('/roadmap', resolved),
     };
   },
 });

@@ -96,11 +96,11 @@ test('mdxToCompiledPageSource output passes through the compiler unchanged in sh
     } as never,
     tsx,
     '/project/app/routes/title.mdx.tsx',
-  ) as string | null;
-  // The standalone compiledElementPlugin returns the compiled code string.
-  expect(typeof result === 'string').toBeTruthy();
-  expect(result).toContain('__partProgram');
-  expect(result).toContain('export default class TitlePage');
+  ) as { code: string } | null;
+  // The standalone compiledElementPlugin returns the compiled module ({code,map}).
+  expect(typeof result?.code === 'string').toBeTruthy();
+  expect(result!.code).toContain('__partProgram');
+  expect(result!.code).toContain('export default class TitlePage');
 });
 
 test('mdxPlugin: Phase 3-style SSR viteBuild (configFile:false, noExternal) compiles .mdx routes', async () => {

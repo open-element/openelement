@@ -1,6 +1,6 @@
 # DOC-01 — alpha15 site truth and guide-command corrections
 
-Lane E (docs-site), task-5. Repo: `/Users/zhengzhi/Documents/projects/openelement/openelement`, branch `alpha15`, HEAD `ef5da43` plus the batch worktree edits. No commit, push or deploy was performed (this session holds no Cloudflare credentials).
+Lane E (docs-site), task-5. Repo: `<repository root>`, branch `alpha15`, HEAD `ef5da43` plus the batch worktree edits. No commit, push or deploy was performed (this session holds no Cloudflare credentials).
 
 ## 1. How the site version is derived
 

@@ -9,15 +9,15 @@
 ## Start here
 
 - [Home](https://openelement.org/): the framework overview and the published version line.
-- [Getting started](https://openelement.org/guide/getting-started): install and scaffold a first project.
-- [Core concepts](https://openelement.org/guide/core-concepts): elements, blocks, islands, and the compiled-element model.
-- [Tutorial](https://openelement.org/guide/tutorial): a full walk through authoring, routing, and deployment.
+- [Getting started](https://openelement.org/guide/getting-started/): install and scaffold a first project.
+- [Core concepts](https://openelement.org/guide/core-concepts/): elements, blocks, islands, and the compiled-element model.
+- [Tutorial](https://openelement.org/guide/tutorial/): a full walk through authoring, routing, and deployment.
 
 ## Reference
 
-- [API reference](https://openelement.org/reference): the public exports, generated from the real package surface.
-- [Error codes](https://openelement.org/errors): every `OEC####` / `OE_*` diagnostic code with its message, generated from the code registries.
-- [Error handling](https://openelement.org/guide/error-handling): the machine-readable diagnostics envelope (`openelement.diagnostics/1`).
+- [API reference](https://openelement.org/reference/): the public exports, generated from the real package surface.
+- [Error codes](https://openelement.org/errors/): every `OEC####` / `OE_*` diagnostic code with its message, generated from the code registries.
+- [Error handling](https://openelement.org/guide/error-handling/): the machine-readable diagnostics envelope (`openelement.diagnostics/1`).
 
 ## For coding agents
 

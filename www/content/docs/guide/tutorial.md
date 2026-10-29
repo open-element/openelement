@@ -49,7 +49,7 @@ Docs: https://openelement.org
 `npm run dev` starts the Vite dev server and prints the URL to open:
 
 ```text
-  VITE v8.0.16  ready in 412 ms
+  VITE v8.1.6  ready in 412 ms
 
   ➜  Local:   http://localhost:5173/
 ```

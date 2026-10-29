@@ -28,16 +28,18 @@ test('open-layout navigation rejects executable and protocol-relative URLs', () 
 test('open-layout navigation localizes and switches canonical paths', () => {
   expect(localizeLayoutPath('/guide', 'zh', ['en', 'zh'], 'en')).toEqual('/zh/guide');
   expect(localizeLayoutPath('/guide', 'en', ['en', 'zh'], 'en')).toEqual('/guide');
-  expect(localeSwitchPath('/zh/guide', 'zh', ['en', 'zh'], 'en')).toEqual('/guide');
+  expect(localeSwitchPath('/zh/guide', 'zh', ['en', 'zh'], 'en')).toEqual('/guide/');
+  // The switcher's href is emitted in the outward canonical form (D-02).
+  expect(localeSwitchPath('/zh', 'zh', ['en', 'zh'], 'en')).toEqual('/');
   expect(localeSwitchLabel('en')).toEqual('中文');
 });
 
 test('localeSwitchPath degrades unresolved route params to the static ancestor', () => {
   // A pattern path must never put a literal ":slug" into the switcher href.
-  expect(localeSwitchPath('/blog/:slug', 'en', ['en', 'zh'], 'en')).toEqual('/zh/blog');
-  expect(localeSwitchPath('/zh/blog/:slug', 'zh', ['en', 'zh'], 'en')).toEqual('/blog');
+  expect(localeSwitchPath('/blog/:slug', 'en', ['en', 'zh'], 'en')).toEqual('/zh/blog/');
+  expect(localeSwitchPath('/zh/blog/:slug', 'zh', ['en', 'zh'], 'en')).toEqual('/blog/');
   // A leading param collapses to the locale home.
-  expect(localeSwitchPath('/:slug', 'en', ['en', 'zh'], 'en')).toEqual('/zh');
+  expect(localeSwitchPath('/:slug', 'en', ['en', 'zh'], 'en')).toEqual('/zh/');
   // The sr-only note completes the target-locale label in the READER's language
   // (the branches were swapped: a zh page carried an English sentence).
   expect(localeSwitchScopeNote('zh')).toContain('英文版本为全站原文');
@@ -107,7 +109,7 @@ test('buildSidebarRows flattens the filtered section tree into heading and link 
   expect(rows[2].label).toEqual('Getting Started');
   // The active page is marked exactly once, on the exact-match link.
   expect(rows.filter((row) => row.current === 'page').map((row) => row.href)).toEqual([
-    '/guide/api',
+    '/guide/api/',
   ]);
   // Heading rows carry no link affordance; link rows carry no heading.
   expect(rows[0].href).toEqual(false);
@@ -121,7 +123,7 @@ test('buildSidebarRows localizes link targets and matches the localized current 
   const links = rows.filter((row) => row.kind === 'link');
   expect(links.every((row) => row.href !== false && row.href.startsWith('/zh/'))).toBeTruthy();
   expect(rows.filter((row) => row.current === 'page').map((row) => row.href)).toEqual([
-    '/zh/guide/api',
+    '/zh/guide/api/',
   ]);
 });
 
@@ -172,7 +174,7 @@ test('decorateHeaderNav marks the current section and never external links', () 
   // bare hrefs, and current marking must still land for non-default locales.
   const zhNav = decorateHeaderNav(links, '/blog', 'zh', ['en', 'zh']);
   expect(zhNav.map((link) => link.current)).toEqual([false, 'page', false]);
-  expect(zhNav[0].href).toEqual('/zh/docs');
+  expect(zhNav[0].href).toEqual('/zh/docs/');
   expect(zhNav[2].href).toEqual('https://github.com/open-element/openelement');
   // A locale-prefixed request-time path normalizes to the same result.
   expect(
@@ -184,10 +186,10 @@ test('footerColumn restores the four-column link structure with localized target
   const product = footerColumn('en', ['en', 'zh'], 'product');
   expect(product.label).toEqual('Product');
   expect(product.links.map((link) => link.href)).toEqual([
-    '/guide/core-concepts',
-    '/architecture/design-system',
-    '/architecture',
-    '/architecture/dsd',
+    '/guide/core-concepts/',
+    '/architecture/design-system/',
+    '/architecture/',
+    '/architecture/dsd/',
   ]);
   const zhProduct = footerColumn('zh', ['en', 'zh'], 'product');
   expect(zhProduct.label).toEqual('产品');

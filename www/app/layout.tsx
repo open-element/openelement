@@ -41,6 +41,7 @@ import {
   type SidebarRow,
 } from './site-ui/open-layout-navigation.ts';
 import { searchChromeStrings } from './site-ui/chrome-strings.ts';
+import { normalizeSiteHref } from './site-ui/site-url.ts';
 import './islands/open-search.tsx';
 
 type CompiledComputed<T> = ReturnType<typeof computed<T>> & T;
@@ -60,6 +61,12 @@ export default class Layout extends OpenElement {
 
   @property({ reflect: true })
   homeHref = '/';
+
+  // The router hands the layout the localized home href ("/zh" on the zh
+  // tree); the outward canonical form is "/zh/" (owner decision D-02). A
+  // computed keeps the attribute slot grammar-legal (this.<property>).
+  @property({ reflect: false, attribute: false })
+  homeHrefCanonical = computed(() => normalizeSiteHref(this.homeHref));
 
   // Re-declares the optional base field (OpenElementConfiguration.locale) as a
   // compiled @property. The `override` modifier that tsc would demand here is
@@ -206,7 +213,7 @@ export default class Layout extends OpenElement {
           <div class='mx-auto flex min-h-(--nav-height) items-center gap-1 px-3 min-[481px]:gap-2 min-[481px]:px-4 min-[901px]:gap-3 min-[1121px]:gap-6 min-[1121px]:px-[clamp(1.25rem,3.5vw,2.25rem)]'>
             <a
               class='group inline-flex min-h-10 w-13 min-w-[52px] max-w-[52px] shrink-0 items-center gap-3 bg-transparent text-(length:--text-2xl) font-extrabold tracking-normal text-foreground no-underline whitespace-nowrap focus-visible:rounded-lg focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[3px]'
-              href={this.homeHref}
+              href={this.homeHrefCanonical}
               aria-label={this.siteName}
             >
               <span

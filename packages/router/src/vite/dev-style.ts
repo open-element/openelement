@@ -14,7 +14,7 @@
  *   one compiled fact. The peer's hooks are proxied rather than mounted,
  *   because `@tailwindcss/vite` is an optional peer resolved lazily and Vite 8
  *   flattens user plugins before the `config` hook runs (verified against
- *   vite 8.0.16).
+ *   vite 8.1.6).
  * - `generated` (UnoCSS): the engine compiles the document sheet from its own
  *   resolved configuration and candidates, and the dev server serves that text
  *   from a real `text/css` endpoint (`no-store`, versioned URL) which the head

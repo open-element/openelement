@@ -2,7 +2,7 @@ import { definePage } from '@openelement/router';
 import '@openelement/ui/open-button';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
-import { localizePath } from '#site-ui/link.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import type { SiteLocale } from '../../site-config.ts';
 import redirectTableJson from '../../tools/site-redirects.json' with { type: 'json' };
 
@@ -24,7 +24,7 @@ function redirectSuggestions(locale: SiteLocale, popularHrefs: Set<string>) {
     const hash = raw.indexOf('#');
     const toPath = hash < 0 ? raw : raw.slice(0, hash);
     const fragment = hash < 0 ? '' : raw.slice(hash);
-    const href = localizePath(toPath, locale) + fragment;
+    const href = siteHref(`${toPath}${fragment}`, locale);
     if (popularHrefs.has(href) || seen.has(href)) continue;
     seen.add(href);
     suggestions.push({ label: href, href });
@@ -192,7 +192,7 @@ export default definePage(Page404, {
     const text = content[resolved];
     const popular = text.popular.map(([label, href]) => ({
       label,
-      href: localizePath(href, resolved),
+      href: siteHref(href, resolved),
     }));
     return {
       serifLine: text.serifLine,
@@ -204,8 +204,8 @@ export default definePage(Page404, {
       popular,
       suggestionsLabel: text.suggestionsLabel,
       suggestions: redirectSuggestions(resolved, new Set(popular.map((link) => link.href))),
-      homeHref: localizePath('/', resolved),
-      docsHref: localizePath('/docs', resolved),
+      homeHref: siteHref('/', resolved),
+      docsHref: siteHref('/docs', resolved),
       marqueeText: marquee + marquee,
     };
   },

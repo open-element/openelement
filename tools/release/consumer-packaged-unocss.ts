@@ -983,7 +983,7 @@ async function main(): Promise<void> {
             // leg exists to test.
             unocss: '66.10.0',
             'open-props': '1.7.23',
-            vite: '8.0.16',
+            vite: '8.1.6',
             typescript: '6.0.3',
           },
           devDependencies: {

@@ -9,6 +9,7 @@
  */
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeSiteHref } from '../app/site-ui/site-url.ts';
 import { SITE_LOCALES } from '../site-config.ts';
 import { loadRedirectTable } from './lib/site-retired.ts';
 import { rename, writeFile } from 'node:fs/promises';
@@ -25,7 +26,9 @@ for (const mapping of mappings) {
     const prefix = locale === 'en' ? '' : `/${locale}`;
     const raw = perLocale[locale];
     const [toPath, fragment] = raw.split('#');
-    const target = `${prefix}${toPath}${fragment ? `#${fragment}` : ''}`;
+    // Redirect targets use the outward canonical form (D-02): a stale URL must
+    // not land on a second 308 hop.
+    const target = normalizeSiteHref(`${prefix}${toPath}${fragment ? `#${fragment}` : ''}`);
     lines.push(`${prefix}${mapping.from}  ${target}  ${mapping.status}`);
   }
 }

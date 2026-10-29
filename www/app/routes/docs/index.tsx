@@ -1,7 +1,7 @@
 import { definePage } from '@openelement/router';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
-import { localizePath } from '#site-ui/link.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import { packageCountModifier, sourceLineStamp } from '../../data/version.ts';
 import { quickstartCommandCountPhrase } from '../../data/quickstart.ts';
 
@@ -43,8 +43,10 @@ const content = {
       'Four scenarios, each tied to the repository file that implements it and the command that builds it. These are honest, local examples: the repository has no hosted demo app, so no card pretends to be one.',
     examplesNote:
       'Every card is reproducible from a fresh checkout at the source line shown above. The run steps are the fixture’s own package scripts, not invented commands; request-time scenarios need a Node server, the static scenario does not.',
+    examplesPrepare:
+      'Prepare once, from the repository root: clone https://github.com/open-element/openelement and install the workspace (pnpm install). Then run each card’s command from that same root — these are repository fixtures, not commands for an already-created app.',
     fieldSource: 'Source',
-    fieldRun: 'Run',
+    fieldRun: 'Run (repo root)',
     fieldDoc: 'Related doc',
     fieldLimits: 'Limits',
     examples: [
@@ -122,8 +124,10 @@ const content = {
       '四个场景，每张卡片都绑定实现它的仓库文件与构建它的命令。它们是诚实的本地示例：仓库没有托管演示站，因此没有卡片把自己伪装成在线 demo。',
     examplesNote:
       '每张卡片都可以从全新检出按上方所示源码线复现。运行步骤取自各 fixture 自己的 package script，不是编造的命令；请求时场景需要 Node 服务端，静态场景不需要。',
+    examplesPrepare:
+      '先在仓库根目录准备一次：克隆 https://github.com/open-element/openelement 并安装工作区（pnpm install）。之后在同一个根目录执行每张卡片的命令——这些是仓库 fixture，不是已创建应用里的命令。',
     fieldSource: '源码',
-    fieldRun: '运行',
+    fieldRun: '运行（仓库根目录）',
     fieldDoc: '相关文档',
     fieldLimits: '限制',
     examples: [
@@ -222,6 +226,7 @@ export function PageDocs(props: {
   examplesLabel: string;
   examplesLede: string;
   examplesNote: string;
+  examplesPrepare: string;
   fieldSource: string;
   fieldRun: string;
   fieldDoc: string;
@@ -323,6 +328,9 @@ export function PageDocs(props: {
         <p class='mt-3 mb-0 max-w-[46rem] font-mono text-(length:--text-sm) leading-[1.7] text-muted-foreground'>
           {props.examplesLede}
         </p>
+        <p class='mt-3 mb-0 max-w-[46rem] font-mono text-(length:--text-xs) leading-[1.6] text-muted-foreground'>
+          {props.examplesPrepare}
+        </p>
         <ol class='mt-[clamp(1.5rem,4vh,2.5rem)] grid list-none grid-cols-1 gap-4 p-0 min-[901px]:grid-cols-2'>
           {props.examples.map((example) => (
             <li
@@ -417,13 +425,13 @@ export default definePage(PageDocs, {
         index: String(position + 1).padStart(2, '0'),
         title,
         copy,
-        href: localizePath(href, resolved),
+        href: siteHref(href, resolved),
       })),
       // The Examples cards keep their repository links absolute (they leave the
       // site) and localize only the related in-site doc route.
       examples: examples.map((example) => ({
         ...example,
-        docHref: localizePath(example.docHref, resolved),
+        docHref: siteHref(example.docHref, resolved),
         // Each-item children in the compiled grammar must be {item.<field>}
         // (OEC9013), so the localized field labels ride on every card rather
         // than being read from props.* inside the mapped item.

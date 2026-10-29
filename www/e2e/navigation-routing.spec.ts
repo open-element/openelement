@@ -18,17 +18,17 @@ import { waitForLoadStateClassified } from './helpers.ts';
 test.describe('Direct URL Access', () => {
   const routes = [
     { path: '/', titleContains: 'openElement' },
-    { path: '/guide/getting-started', titleContains: 'openElement' },
-    { path: '/architecture', titleContains: 'openElement' },
-    { path: '/guide/islands-and-ssr', titleContains: 'openElement' },
-    { path: '/architecture/dsd', titleContains: 'openElement' },
-    { path: '/guide/routing-and-data', titleContains: 'openElement' },
-    { path: '/changelog', titleContains: 'openElement' },
-    { path: '/roadmap', titleContains: 'openElement' },
-    { path: '/docs', titleContains: 'openElement' },
-    { path: '/contributing', titleContains: 'openElement' },
-    { path: '/reference', titleContains: 'openElement' },
-    { path: '/blog', titleContains: 'openElement' },
+    { path: '/guide/getting-started/', titleContains: 'openElement' },
+    { path: '/architecture/', titleContains: 'openElement' },
+    { path: '/guide/islands-and-ssr/', titleContains: 'openElement' },
+    { path: '/architecture/dsd/', titleContains: 'openElement' },
+    { path: '/guide/routing-and-data/', titleContains: 'openElement' },
+    { path: '/changelog/', titleContains: 'openElement' },
+    { path: '/roadmap/', titleContains: 'openElement' },
+    { path: '/docs/', titleContains: 'openElement' },
+    { path: '/contributing/', titleContains: 'openElement' },
+    { path: '/reference/', titleContains: 'openElement' },
+    { path: '/blog/', titleContains: 'openElement' },
   ];
 
   for (const route of routes) {
@@ -44,7 +44,7 @@ test.describe('Direct URL Access', () => {
       // dodge it. Tracked as the local Firefox large-page trap (§1.4/R7) and
       // the Firefox flake class recorded as KR-18 in
       // the internal working ledger (not published).
-      if (route.path === '/reference') test.setTimeout(420_000);
+      if (route.path === '/reference/') test.setTimeout(420_000);
       const response = await page.goto(route.path);
       // A ceiling that expires here is an engine load timeout, not an
       // assertion failure: say so in the failure output (FR-05C).
@@ -118,11 +118,11 @@ test.describe('Link Navigation', () => {
   });
 
   test('navigating between guide pages preserves layout', async ({ page }) => {
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     // Navigate to another guide page
-    await page.goto('/guide/islands-and-ssr');
+    await page.goto('/guide/islands-and-ssr/');
     await page.waitForLoadState('networkidle');
 
     // The layout landmarks survive the navigation (nested mains: shell +
@@ -153,7 +153,7 @@ test.describe('404 Page', () => {
 
 test.describe('Blog Pages', () => {
   test('blog index page loads', async ({ page }) => {
-    await page.goto('/blog');
+    await page.goto('/blog/');
     await page.waitForLoadState('networkidle');
 
     const title = await page.title();
@@ -161,7 +161,7 @@ test.describe('Blog Pages', () => {
   });
 
   test('blog index has blog post links', async ({ page }) => {
-    await page.goto('/blog');
+    await page.goto('/blog/');
     await page.waitForLoadState('networkidle');
 
     // Blog index should have links to individual posts. The retired
@@ -180,7 +180,7 @@ test.describe('Blog Pages', () => {
   });
 
   test('individual blog post loads', async ({ page }) => {
-    await page.goto('/blog');
+    await page.goto('/blog/');
     await page.waitForLoadState('networkidle');
 
     // Follow the first post link the index actually renders — never assume a

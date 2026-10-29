@@ -81,7 +81,11 @@ function failingContext(): TransformContext & { messages: string[] } {
   };
 }
 
-type TransformHook = (this: TransformContext, code: string, id: string) => string | null;
+type TransformHook = (
+  this: TransformContext,
+  code: string,
+  id: string,
+) => { code: string; map?: Record<string, unknown> | null } | null;
 
 function transformOf(plugin: Plugin): TransformHook {
   expect(
@@ -89,12 +93,6 @@ function transformOf(plugin: Plugin): TransformHook {
     'plugin must expose a transform hook',
   ).toBeTruthy();
   return plugin.transform as unknown as TransformHook;
-}
-
-function decodeBase64(value: string): string {
-  const binary = atob(value);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
 }
 
 test('compiled-element v1 - harness sanity (fixtures load)', async () => {
@@ -119,10 +117,14 @@ describe('compiled-element v1 - fixture transforms through the Vite hook', () =>
   const id = '/project/app/islands/counter.tsx';
 
   // One shared emission across the steps (module describe scope): a single test
-  // produces it, later tests pin its properties in the same order.
+  // produces it, later tests pin its properties in the same order. Vite plugin
+  // transforms return `{ code, map }`; these suites read the code field.
   let emitted: string | null = null;
+  let emittedMap: Record<string, unknown> | null = null;
   test('transform returns generated code', () => {
-    emitted = transform.call(failingContext(), source, id);
+    const emission = transform.call(failingContext(), source, id);
+    emitted = emission?.code ?? null;
+    emittedMap = emission?.map ?? null;
     expect(typeof emitted === 'string').toBeTruthy();
     expect(emitted).toContain('__partProgram');
   });
@@ -225,14 +227,18 @@ describe('compiled-element v1 - fixture transforms through the Vite hook', () =>
 
   test('re-running the transform yields byte-identical output', () => {
     const again = transform.call(failingContext(), source, id);
-    expect(again).toEqual(emitted);
+    expect(again?.code).toEqual(emitted);
   });
 
-  test('inline source map carries x_openElement v1 program source records', () => {
-    const marker = '//# sourceMappingURL=data:application/json;base64,';
-    const line = emitted!.split('\n').find((candidate) => candidate.startsWith(marker));
-    expect(line, 'generated code must embed an inline base64 source map').toBeTruthy();
-    const map = JSON.parse(decodeBase64(line.slice(marker.length)));
+  test('the transform returns the source map as its map output', () => {
+    // #1210 contract: the hook returns the compiler's real Source Map object;
+    // the authored module must not also carry an inline map comment (that
+    // would be a second, conflicting map story for the bundler).
+    expect(emittedMap, 'the transform must return its source map').toBeTruthy();
+    expect(emitted!, 'generated code keeps no inline map comment').not.toContain(
+      'sourceMappingURL=data:application/json',
+    );
+    const map = emittedMap as Record<string, unknown>;
     expect(map.version).toEqual(3);
     expect(map.sources).toEqual([id]);
     // sourcesContent carries the original TSX source verbatim.
@@ -242,7 +248,9 @@ describe('compiled-element v1 - fixture transforms through the Vite hook', () =>
     const expected = JSON.parse(readFixtureSync('expected-program.json'));
     expect(map.x_openElement.version).toEqual(1);
     expect(map.x_openElement).toEqual(expected.sourceMap);
-    expect(map.x_openElement.records.length).toEqual(expected.sourceMap.records.length);
+    expect((map.x_openElement as { records: unknown[] }).records.length).toEqual(
+      expected.sourceMap.records.length,
+    );
   });
 
   test('measurement evidence is recorded', () => {
@@ -629,14 +637,14 @@ test('compiled-element alpha.1 - canonical program records and decorator lowerin
     '}',
   ].join('\n');
   const id = '/project/app/islands/alpha-one.tsx';
-  const emitted = transform.call(failingContext(), source, id);
+  const emitted = transform.call(failingContext(), source, id)?.code ?? null;
   expect(typeof emitted === 'string').toBeTruthy();
 
   const marker = 'const __partProgram = ';
-  const start = emitted.indexOf(marker);
+  const start = emitted!.indexOf(marker);
   expect(start >= 0, 'generated code must embed the Part Program literal').toBeTruthy();
-  const end = emitted.indexOf(';', start);
-  const program = JSON.parse(emitted.slice(start + marker.length, end));
+  const end = emitted!.indexOf(';', start);
+  const program = JSON.parse(emitted!.slice(start + marker.length, end));
 
   expect(program.version).toEqual(2);
   expect(program.root).toEqual({ id: 'root', kind: 'light', nodes: ['e0'] });

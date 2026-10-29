@@ -137,7 +137,7 @@ test.describe('Search', () => {
   });
 
   test('search trigger focuses input and accepts real keyboard typing', async ({ page }) => {
-    await page.goto('/guide/getting-started');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(() => customElements.get('open-search'));
 
@@ -312,7 +312,7 @@ test.describe('Search', () => {
   });
 
   test('zh locale renders localized search chrome', async ({ page }) => {
-    await page.goto('/zh/guide/getting-started');
+    await page.goto('/zh/guide/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForFunction(() => customElements.get('open-search'));
 
