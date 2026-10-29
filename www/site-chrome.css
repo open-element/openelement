@@ -1835,3 +1835,45 @@ open-hero-polish{position:absolute;width:1px;height:1px;overflow:hidden;pointer-
     padding: 0.7rem 0.8rem;
   }
 }
+/* ── Roadmap page: typographic rhythm (T6) ────────────────────────────────
+   The shared section frame gives every editorial page one header scale; the
+   roadmap reads as a dense release narrative, so its frames get a smaller
+   title scale, a narrower lede column and a tighter vertical rhythm. Scoped to
+   the page hook so guide/reference frames keep their own scale. */
+.page-roadmap open-section-frame > section {
+  margin-top: clamp(2.75rem, 6vh, 4.5rem);
+}
+
+.page-roadmap open-section-frame > section > header {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: clamp(1.25rem, 3vw, 3rem);
+  padding-bottom: 1.1rem;
+}
+
+.page-roadmap open-section-frame > section > header h2 {
+  font-size: clamp(1.55rem, 2.4vw, 2.25rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+}
+
+.page-roadmap open-section-frame > section > header > p {
+  align-self: end;
+  max-width: 42ch;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.page-roadmap open-section-frame > section > div {
+  padding-top: 1.4rem;
+}
+
+@media (max-width: 760px) {
+  .page-roadmap open-section-frame > section > header {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .page-roadmap open-section-frame > section > header > p {
+    max-width: none;
+  }
+}

@@ -377,11 +377,11 @@ export function RoadmapPage(props: {
                 {props.registryLabel} <code>{props.registryNote}</code>
               </p>
             </div>
-            <div class='grid grid-cols-[minmax(0,1fr)] gap-[clamp(2rem,6vw,5rem)] [align-items:start] min-[1121px]:grid-cols-[minmax(0,1fr)_minmax(280px,0.38fr)]'>
+            <div class='grid grid-cols-[minmax(0,1fr)] gap-[clamp(1.5rem,4vw,3rem)] items-start min-[1121px]:grid-cols-[minmax(0,1fr)_minmax(260px,0.34fr)]'>
               <div class='timeline relative grid' aria-label={props.timelineAria}>
                 {props.rows.map((phase) => (
                   <div
-                    class='group relative pt-5 pb-5 ps-6 min-[641px]:ps-8'
+                    class='group relative pt-4 pb-4 ps-6 min-[641px]:ps-8'
                     data-state={phase.state}
                     data-stamp={phase.stampKind}
                     key={phase.key}
@@ -391,17 +391,17 @@ export function RoadmapPage(props: {
                       aria-hidden='true'
                     ></span>
                     <div class='flex flex-wrap items-baseline gap-x-4 gap-y-3'>
-                      <span class='text-foreground text-[length:clamp(2rem,4.2vw,3.6rem)] font-[800] leading-none tracking-[-0.03em] group-data-[state=next]:text-primary group-data-[state=planned]:text-transparent group-data-[state=planned]:[-webkit-text-stroke:1.5px_color-mix(in_srgb,var(--color-ring)_55%,transparent)]'>
+                      <span class='text-foreground text-[length:clamp(1.5rem,2.4vw,2.35rem)] font-[800] leading-none tracking-[-0.02em] group-data-[state=next]:text-primary group-data-[state=planned]:text-transparent group-data-[state=planned]:[-webkit-text-stroke:1.5px_color-mix(in_srgb,var(--color-ring)_55%,transparent)]'>
                         {phase.version}
                       </span>
                       <span class='px-3 py-1 rounded-md text-(length:--text-xs) font-bold tracking-[0.08em] uppercase empty:hidden group-data-[stamp=current]:bg-primary group-data-[stamp=current]:text-primary-foreground group-data-[stamp=next]:border group-data-[stamp=next]:border-primary group-data-[stamp=next]:text-primary group-data-[stamp=baseline]:bg-primary group-data-[stamp=baseline]:text-primary-foreground'>
                         {phase.stampLabel}
                       </span>
-                      <span class='text-primary font-serif text-[length:clamp(1.25rem,1.9vw,1.7rem)] italic font-[400] group-data-[state=planned]:text-ring'>
+                      <span class='text-primary font-serif text-[length:clamp(1.05rem,1.35vw,1.3rem)] italic font-[400] group-data-[state=planned]:text-ring'>
                         {phase.theme}
                       </span>
                     </div>
-                    <p class='text-muted-foreground text-(length:--text-sm) leading-(--leading-normal) max-w-[560px] mt-3 mb-0'>
+                    <p class='text-muted-foreground text-(length:--text-sm) leading-(--leading-normal) max-w-[540px] mt-2 mb-0'>
                       {phase.copy}
                     </p>
                     <span class='text-muted-foreground text-(length:--text-xs) tracking-[0.1em] uppercase empty:hidden'>
@@ -427,7 +427,7 @@ export function RoadmapPage(props: {
             <span slot='index'>{props.boundaryIndex}</span>
             <span slot='title'>{props.boundaryTitle}</span>
             <span slot='copy'>{props.boundaryCopy}</span>
-            <div class='grid grid-cols-[minmax(0,1fr)] gap-5 min-[1121px]:grid-cols-[minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(0,0.72fr)]'>
+            <div class='grid grid-cols-[minmax(0,1fr)] gap-4 min-[1121px]:grid-cols-3'>
               <open-artifact-panel class='truth'>
                 <span slot='label'>{props.inProductLabel}</span>
                 <h2 class='mt-0 mb-4 text-foreground text-(length:--text-2xl) leading-[1.08] tracking-normal'>
@@ -481,7 +481,7 @@ export function RoadmapPage(props: {
             <span slot='title'>{props.matrixTitle}</span>
             <span slot='copy'>{props.matrixCopy}</span>
             <div class='grid border-t border-t-border'>
-              <div class='grid grid-cols-[minmax(0,1fr)] gap-2 py-5 border-b border-b-border min-[641px]:grid-cols-[minmax(132px,0.28fr)_minmax(0,1fr)] min-[641px]:gap-5 last:[border-bottom:0]'>
+              <div class='grid grid-cols-[minmax(0,1fr)] gap-2 py-4 border-b border-b-border min-[641px]:grid-cols-[minmax(148px,0.22fr)_minmax(0,1fr)] min-[641px]:gap-4 last:[border-bottom:0]'>
                 <span class='text-primary font-mono text-(length:--text-xs) font-extrabold tracking-normal uppercase'>
                   {props.shipLabel}
                 </span>
@@ -489,7 +489,7 @@ export function RoadmapPage(props: {
                   {props.shipCopy}
                 </span>
               </div>
-              <div class='grid grid-cols-[minmax(0,1fr)] gap-2 py-5 border-b border-b-border min-[641px]:grid-cols-[minmax(132px,0.28fr)_minmax(0,1fr)] min-[641px]:gap-5 last:[border-bottom:0]'>
+              <div class='grid grid-cols-[minmax(0,1fr)] gap-2 py-4 border-b border-b-border min-[641px]:grid-cols-[minmax(148px,0.22fr)_minmax(0,1fr)] min-[641px]:gap-4 last:[border-bottom:0]'>
                 <span class='text-primary font-mono text-(length:--text-xs) font-extrabold tracking-normal uppercase'>
                   {props.proveLabel}
                 </span>
@@ -497,7 +497,7 @@ export function RoadmapPage(props: {
                   {props.proveCopy}
                 </span>
               </div>
-              <div class='grid grid-cols-[minmax(0,1fr)] gap-2 py-5 border-b border-b-border min-[641px]:grid-cols-[minmax(132px,0.28fr)_minmax(0,1fr)] min-[641px]:gap-5 last:[border-bottom:0]'>
+              <div class='grid grid-cols-[minmax(0,1fr)] gap-2 py-4 border-b border-b-border min-[641px]:grid-cols-[minmax(148px,0.22fr)_minmax(0,1fr)] min-[641px]:gap-4 last:[border-bottom:0]'>
                 <span class='text-primary font-mono text-(length:--text-xs) font-extrabold tracking-normal uppercase'>
                   {props.freezeLabel}
                 </span>
@@ -514,7 +514,7 @@ export function RoadmapPage(props: {
             <span slot='index'>{props.visualIndex}</span>
             <span slot='title'>{props.visualTitle}</span>
             <span slot='copy'>{props.visualCopy}</span>
-            <div class='grid grid-cols-[minmax(0,1fr)] gap-5 min-[1121px]:grid-cols-[minmax(0,0.88fr)_minmax(0,1fr)]'>
+            <div class='grid grid-cols-[minmax(0,1fr)] gap-4 min-[1121px]:grid-cols-2 items-start'>
               <open-artifact-panel>
                 <span slot='label'>{props.packageMatrixLabel}</span>
                 <span slot='meta'>{props.productBoundaryMeta}</span>
@@ -560,7 +560,7 @@ export function RoadmapPage(props: {
         </section>
 
         <nav
-          class='flex flex-wrap gap-3 w-[min(1180px,calc(100%_-_3rem))] mt-[clamp(4rem,10vh,8rem)] mx-auto mb-0 pb-[clamp(3rem,8vh,6rem)]'
+          class='flex flex-wrap gap-3 w-[min(1180px,calc(100%_-_3rem))] mt-[clamp(2.5rem,6vh,4.5rem)] mx-auto mb-0 pb-[clamp(2.5rem,6vh,4rem)]'
           slot='footer'
         >
           <open-button href={props.architectureHref}>{props.architecture}</open-button>
