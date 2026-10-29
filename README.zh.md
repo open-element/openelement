@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.bestpractices.dev/projects/16052"><img src="https://www.bestpractices.dev/projects/16052/badge" alt="OpenSSF Best Practices: passing" /></a>
   <img src="https://img.shields.io/npm/v/%40openelement%2Frouter" alt="npm version" />
-  <img src="https://img.shields.io/npm/dm/%40openelement%2Felement" alt="npm monthly downloads" />
+  <img src="https://badgen.net/npm/dm/%40openelement%2Felement" alt="npm monthly downloads" />
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="license: MIT" />
   <img src="https://img.shields.io/badge/node-%3E%3D24.2-informational" alt="node: >=24.2" />
 </p>
