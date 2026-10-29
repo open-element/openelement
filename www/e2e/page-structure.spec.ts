@@ -202,6 +202,46 @@ test.describe('Unified page structure', () => {
     await expect(page.locator('[id^="api-"]').first()).toBeVisible();
   });
 
+  test('reference export inventory stays navigable: grouped panes and working deep links', async ({
+    page,
+  }) => {
+    await page.goto('/reference/');
+    const metrics = await page.evaluate(() => ({
+      docHeight: document.documentElement.scrollHeight,
+      groups: document.querySelectorAll('.ref-group').length,
+      rows: document.querySelectorAll('.ref-row').length,
+      anchors: document.querySelectorAll('[id^="api-"]').length,
+    }));
+    // The previous single-page export wall measured ~491k px. Grouped panes
+    // keep the generated inventory navigable; this guard stops a future change
+    // from silently re-flattening it.
+    expect(metrics.groups).toEqual(6);
+    expect(metrics.rows).toBeGreaterThan(1000);
+    // Rows keep their generated anchors; the extra one is the #api-reference
+    // section id.
+    expect(metrics.anchors).toEqual(metrics.rows + 1);
+    expect(metrics.docHeight).toBeLessThan(30000);
+
+    // A generated search anchor inside a scroll pane must still land: native
+    // fragment navigation scrolls the pane, so no client JavaScript is needed.
+    await page.goto('/reference/#api-element-root-Action');
+    const deepLink = await page.evaluate(() => {
+      const row = document.getElementById('api-element-root-Action');
+      const pane = row?.closest('.ref-group-scroll');
+      if (!row || !pane) return { found: false, paneScrollTop: 0, inView: false };
+      const rowBox = row.getBoundingClientRect();
+      const paneBox = pane.getBoundingClientRect();
+      return {
+        found: true,
+        paneScrollTop: pane.scrollTop,
+        inView: rowBox.top >= paneBox.top - 1 && rowBox.top <= paneBox.bottom,
+      };
+    });
+    expect(deepLink.found).toBeTruthy();
+    expect(deepLink.paneScrollTop).toBeGreaterThan(0);
+    expect(deepLink.inView).toBeTruthy();
+  });
+
   test('roadmap standards visual renders through the compiled light root', async ({ page }) => {
     await page.goto('/roadmap/');
     const visual = page.locator('open-standards-visual');

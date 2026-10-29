@@ -1,4 +1,5 @@
 /** WWW supported API reference page. */
+import { trustedHtml, type TrustedHtml } from '@openelement/element';
 import { definePage } from '@openelement/router';
 import { siteHead } from '#site-ui/head.ts';
 import { normalizeSiteHref } from '#site-ui/site-url.ts';
@@ -29,28 +30,6 @@ export interface ApiPackageItem {
   kind: string;
   kindClass: string;
   kindLabel: string;
-}
-
-/** One generated export entry; `anchor` is the generated searchRecord anchor. */
-export interface ApiReferenceItem {
-  key: string;
-  anchor: string;
-  name: string;
-  container: string;
-  kind: string;
-  stability: string;
-  summary: string;
-  /** Declared call shape rendered from the source declaration. */
-  signature: string;
-  /**
-   * The export's option-bag members as one display line (`name: type —
-   * description`, `; `-joined): a list Block item template admits
-   * `{item.<field>}` values and nested elements, not a nested Block, so the
-   * per-export table renders as text while the config section below renders as
-   * a real table (it is a top-level Block).
-   */
-  options: string;
-  source: string;
 }
 
 /** One row of the generated config-option table (an each Block item). */
@@ -269,19 +248,33 @@ const kindLabels = {
 } as const;
 
 /**
- * Flatten the generated per-export reference into one render list. Anchors
- * come from the generated module unchanged, so they match the generated
- * searchRecords (and the built-output fragment gate) by construction (#1307).
- * Signatures and option lists are rendered from the source declarations by the
- * generator (#1414) — the page never restates either.
+ * Render the generated export inventory as grouped, fixed-height scroll panes:
+ * one pane per package, every export row keeping its generated `id` anchor.
+ *
+ * Why HTML rather than a compiled list: the compiler grammar admits nested
+ * elements in a list item template but not a nested list Block, while the
+ * reference needs package groups around per-export rows. The export corpus is
+ * generated data rendered as trusted HTML at build time (the same innerHTML
+ * channel article bodies use), so the grouping is expressible without
+ * weakening the page grammar or adding client JavaScript.
+ *
+ * The panes keep the document short (~4-8k px instead of ~491k px) and every
+ * generated search anchor still resolves inside its pane; native fragment
+ * navigation scrolls the pane to the target.
  */
-function projectReferenceEntries(labels: {
-  requiredLabel: string;
-  optionalLabel: string;
-}): ApiReferenceItem[] {
-  // A list Block item template admits `{item.<field>}` values and nested
-  // elements, not a nested Block, so an export's options render as one line
-  // while the config section below renders as a real table (top-level Block).
+function renderReferenceGroupsHtml(
+  locale: Locale,
+  requiredLabel: string,
+  optionalLabel: string,
+): string {
+  const unit = locale === 'zh' ? '个导出' : 'exports';
+  const regionLabel = locale === 'zh' ? '导出列表' : 'export list';
+  const escapeHtml = (value: string): string =>
+    value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
   const optionLine = (
     options: readonly {
       name: string;
@@ -292,29 +285,52 @@ function projectReferenceEntries(labels: {
   ): string =>
     options
       .map((option) => {
-        const marker = option.required ? labels.requiredLabel : labels.optionalLabel;
+        const marker = option.required ? requiredLabel : optionalLabel;
         const description = option.description === '' ? '' : ` — ${option.description}`;
-        return `${option.name}${
-          option.required ? '' : '?'
-        }: ${option.type} (${marker})${description}`;
+        return `${option.name}${option.required ? '' : '?'}: ${option.type} (${marker})${description}`;
       })
       .join('; ');
-  return apiReference.packages.flatMap((pkg) =>
-    pkg.subpaths.flatMap((subpath) =>
-      subpath.exports.map((exported) => ({
-        key: exported.anchor,
-        anchor: exported.anchor,
-        name: exported.name,
-        container: `${pkg.name} · ${subpath.label}`,
-        kind: exported.kind,
-        stability: exported.stability,
-        summary: exported.summary,
-        signature: exported.signature,
-        options: optionLine(exported.options),
-        source: `${exported.source.path}:${exported.source.line}`,
-      })),
-    ),
-  );
+  const groups = apiReference.packages
+    .map((pkg) => {
+      const rows = pkg.subpaths
+        .flatMap((subpath) =>
+          subpath.exports.map((exported) => {
+            const options = optionLine(exported.options);
+            const tags = [exported.kind, exported.stability].filter(Boolean).join(' · ');
+            return (
+              `<div class="ref-row" id="${escapeHtml(exported.anchor)}" role="listitem">` +
+              `<div class="ref-row-head">` +
+              `<span class="ref-name">${escapeHtml(exported.name)}</span>` +
+              (tags === '' ? '' : `<span class="ref-tags">${escapeHtml(tags)}</span>`) +
+              `</div>` +
+              `<span class="ref-container">${escapeHtml(pkg.name)} · ${escapeHtml(subpath.label)}</span>` +
+              (exported.summary === ''
+                ? ''
+                : `<p class="ref-summary">${escapeHtml(exported.summary)}</p>`) +
+              `<pre class="ref-sig" tabindex="0"><code>${escapeHtml(exported.signature)}</code></pre>` +
+              (options === '' ? '' : `<p class="ref-options">${escapeHtml(options)}</p>`) +
+              `<span class="ref-source">${escapeHtml(exported.source.path)}:${exported.source.line}</span>` +
+              `</div>`
+            );
+          }),
+        )
+        .join('');
+      const count = pkg.subpaths.reduce((total, subpath) => total + subpath.exports.length, 0);
+      return (
+        `<section class="ref-group" aria-labelledby="ref-${pkg.id}-title">` +
+        `<div class="ref-group-head">` +
+        `<h3 class="ref-group-title" id="ref-${pkg.id}-title">${escapeHtml(pkg.name)}</h3>` +
+        `<span class="ref-group-count">${count} ${unit}</span>` +
+        `</div>` +
+        `<div class="ref-group-scroll" role="region" tabindex="0" ` +
+        `aria-label="${escapeHtml(pkg.name)} — ${regionLabel}">` +
+        `<div role="list" class="ref-list">${rows}</div>` +
+        `</div>` +
+        `</section>`
+      );
+    })
+    .join('');
+  return `<div class="ref-groups">${groups}</div>`;
 }
 
 interface GeneratedElementDetail {
@@ -569,18 +585,7 @@ export function ReferencePage(props: {
   headExport: string;
   headSummary: string;
   headSource: string;
-  referenceEntries: Array<{
-    key: string;
-    anchor: string;
-    name: string;
-    container: string;
-    kind: string;
-    stability: string;
-    summary: string;
-    signature: string;
-    options: string;
-    source: string;
-  }>;
+  exportsHtml: TrustedHtml;
   s5Index: string;
   s5Title: string;
   s5Copy: string;
@@ -721,14 +726,6 @@ export function ReferencePage(props: {
           <span slot='title'>{props.s3Title}</span>
           <span slot='copy'>{props.s3Copy}</span>
           <div class='border-t border-border' id='api-reference'>
-            <div
-              class='hidden grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_auto] items-start gap-[clamp(1rem,4vw,3rem)] border-b border-border py-3 text-(length:--font-size-micro) font-bold tracking-[0.18em] text-muted-foreground uppercase min-[1101px]:grid'
-              aria-hidden='true'
-            >
-              <span>{props.headExport}</span>
-              <span>{props.headSummary}</span>
-              <span>{props.headSource}</span>
-            </div>
             {/* The exports region is a list, and now says so: the rows were
                 plain divs, so a screen reader read one undifferentiated run of
                 text with no item count ("list, N items") and no way to step
@@ -739,43 +736,7 @@ export function ReferencePage(props: {
                 rejected: with the header row hidden below 1101px, a role=table
                 would promise column semantics the narrow layout does not
                 render. */}
-            <div role='list' aria-label={props.s3Title}>
-              {props.referenceEntries.map((entry) => (
-                <div
-                  class='grid grid-cols-[minmax(0,1fr)] items-start gap-2 border-b border-border py-4 min-[1101px]:grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)_minmax(0,1.2fr)] min-[1101px]:gap-[clamp(1rem,4vw,3rem)]'
-                  id={entry.anchor}
-                  role='listitem'
-                  key={entry.key}
-                >
-                  <div>
-                    <span class='inline text-primary font-mono text-(length:--text-base) font-bold wrap-anywhere'>
-                      {entry.name}
-                    </span>
-                    <span class='mt-1 block text-(length:--text-xs) text-muted-foreground wrap-anywhere'>
-                      {entry.container}
-                    </span>
-                    <span class='me-1 rounded-md bg-border px-2 py-1 text-(length:--text-xs) text-primary empty:hidden'>
-                      {entry.kind}
-                    </span>
-                    <span class='me-1 rounded-md bg-transparent px-2 py-1 text-(length:--text-xs) text-primary empty:hidden shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-ring)_55%,transparent)]'>
-                      {entry.stability}
-                    </span>
-                  </div>
-                  <div>
-                    <p class='m-0 text-(length:--text-sm) leading-normal text-muted-foreground wrap-anywhere'>
-                      {entry.summary}
-                    </p>
-                    <code class='mt-2 block font-mono text-(length:--text-xs) leading-snug text-primary wrap-anywhere'>
-                      {entry.signature}
-                    </code>
-                    <p class='mt-3 mb-0 wrap-anywhere'>{entry.options}</p>
-                  </div>
-                  <span class='font-mono text-(length:--text-xs) text-muted-foreground wrap-anywhere'>
-                    {entry.source}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <div class='ref-groups' innerHTML={props.exportsHtml} trustedHtml></div>
           </div>
         </open-section-frame>
         <open-section-frame>
@@ -971,10 +932,9 @@ export default definePage(ReferencePage, {
       headExport: t.headExport,
       headSummary: t.headSummary,
       headSource: t.headSource,
-      referenceEntries: projectReferenceEntries({
-        requiredLabel: t.requiredLabel,
-        optionalLabel: t.optionalLabel,
-      }),
+      exportsHtml: trustedHtml(
+        renderReferenceGroupsHtml(resolved, t.requiredLabel, t.optionalLabel),
+      ),
       s5Index: t.s5Index,
       s5Title: t.s5Title,
       s5Copy: t.s5Copy,

@@ -83,13 +83,13 @@ OpenElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权
 
 ### 产物体积
 
-以下数字于 2026-10-28 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。静态产物总量是 `www/dist` 下每个常规文件的字节总和（含隐藏的构建元数据）——下表命令可打印该值，并由 `check:doc-figures` 以 ±1% 门控；它刻意不采用 `du` 口径：`du` 随机器而变，而同一棵树的字节总和不随平台变化。该数字存在数字节的自指：打印它的这一页、以及由该页建出的搜索索引，本身都在被测量的树里，因此重新构建可能让总量移动个位数字节。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。alpha6 之后数字变动过五次：alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）；alpha8 的 B2 manifest 转换（pnpm workspaces，不再有 `deno.json` workspace 标记）重新切分了应用侧 island chunk；alpha8 的客户端构建现在会在 chunk 分组前把每个包 island 声明的身份解析到真实模块 id（#1471 fail-closed）；alpha9 的样式列车让站点落座 @theme 角色表并接入 Zag 驱动的 open-search 岛（#1502），带动了下方 island chunk 与路由载荷的增长，因此每个 island chunk 都以 `island-open-<tag>-<hash>.js` 命名，而共享的编译元素运行时单独成块、由 `client.js` 在每个 island 页面上即时加载；alpha10 列车把 island 组件样式做了压缩（#1543），让共享的编译元素运行时从寄居的 island chunk 挪进独立的 `element-runtime-<hash>.js` chunk（#1544），再把 island 样式表整体从 chunk 中抽出、成为按内容寻址的 `client/assets/*.css` 资源（#1553、ADR-0164）。alpha.11 的样式列车（#1558、ADR-0164）随后把包 island 与站点页面剩余的内联样式表迁到同一 `.css` import 形态。alpha15 候选构建在“表现从手写样式表迁到标记中的工具类”之后重切了 island chunk：先是 `@openelement/ui` 的六个组件（`island-open-button`、`island-open-code-block`），本轮则是站点自己的 island（`island-open-page-rail`、`island-open-dragon-live-gaze`）——类字符串比它们替换掉的类名更长，这与组件付出的是同一种代价。下方每一行都量自该构建。2026-10-28 的官网质量批次又完整重测了一遍：首页 hero 与证据链接、重构后的快速开始、文档中心新增的 Examples 区块，以及搜索对话框的无障碍修复，共同改变了路由载荷与静态产物总量。下方的路由载荷按路由 manifest chunk 集合的即时导入闭包测量，因此无论共享代码落在哪个 chunk 文件里，数字都保持诚实。
+以下数字于 2026-10-29 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。静态产物总量是 `www/dist` 下每个常规文件的字节总和（含隐藏的构建元数据）——下表命令可打印该值，并由 `check:doc-figures` 以 ±1% 门控；它刻意不采用 `du` 口径：`du` 随机器而变，而同一棵树的字节总和不随平台变化。该数字存在数字节的自指：打印它的这一页、以及由该页建出的搜索索引，本身都在被测量的树里，因此重新构建可能让总量移动个位数字节。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。alpha6 之后数字变动过五次：alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）；alpha8 的 B2 manifest 转换（pnpm workspaces，不再有 `deno.json` workspace 标记）重新切分了应用侧 island chunk；alpha8 的客户端构建现在会在 chunk 分组前把每个包 island 声明的身份解析到真实模块 id（#1471 fail-closed）；alpha9 的样式列车让站点落座 @theme 角色表并接入 Zag 驱动的 open-search 岛（#1502），带动了下方 island chunk 与路由载荷的增长，因此每个 island chunk 都以 `island-open-<tag>-<hash>.js` 命名，而共享的编译元素运行时单独成块、由 `client.js` 在每个 island 页面上即时加载；alpha10 列车把 island 组件样式做了压缩（#1543），让共享的编译元素运行时从寄居的 island chunk 挪进独立的 `element-runtime-<hash>.js` chunk（#1544），再把 island 样式表整体从 chunk 中抽出、成为按内容寻址的 `client/assets/*.css` 资源（#1553、ADR-0164）。alpha.11 的样式列车（#1558、ADR-0164）随后把包 island 与站点页面剩余的内联样式表迁到同一 `.css` import 形态。alpha15 候选构建在“表现从手写样式表迁到标记中的工具类”之后重切了 island chunk：先是 `@openelement/ui` 的六个组件（`island-open-button`、`island-open-code-block`），本轮则是站点自己的 island（`island-open-page-rail`、`island-open-dragon-live-gaze`）——类字符串比它们替换掉的类名更长，这与组件付出的是同一种代价。下方每一行都量自该构建。2026-10-28 的官网质量批次又完整重测了一遍：首页 hero 与证据链接、重构后的快速开始、文档中心新增的 Examples 区块，以及搜索对话框的无障碍修复，共同改变了路由载荷与静态产物总量。2026-10-29 的 reference 重排又把单页 49 万 px 的导出清单换成按包分组的固定高度面板，因此静态产物总量下降，而页面数、URL 数与 manifest 数保持不变。下方的路由载荷按路由 manifest chunk 集合的即时导入闭包测量，因此无论共享代码落在哪个 chunk 文件里，数字都保持诚实。
 
 | 指标                 | 数值                                             |
 | -------------------- | ------------------------------------------------ |
 | 预渲染文档           | 74 个 HTML 文件                                  |
 | `sitemap.xml` URL 数 | 72                                               |
-| 静态产物总量         | 13.1 MiB（13,773,549 B）                         |
+| 静态产物总量         | 11.5 MiB（12,083,906 B）                         |
 | island manifest      | 74 份——每页一份                                  |
 | 搜索索引             | 每个语言 36 页（en、zh），72 个 fragment，1.6 MiB |
 
@@ -97,7 +97,7 @@ OpenElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权
 pnpm run site:build                         # 先重新生成以下全部内容
 find www/dist -name '*.html' | wc -l        # 74
 grep -c '<loc>' www/dist/sitemap.xml        # 72
-find www/dist -type f -exec wc -c {} + | tail -1   # 合计 13,773,549 B（上表字节总和）
+find www/dist -type f -exec wc -c {} + | tail -1   # 合计 12,083,906 B（上表字节总和）
 ls www/dist/island-manifests | wc -l        # 74
 cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 36
 ```
