@@ -295,6 +295,7 @@ function renderReferenceGroupsHtml(
       const rows = pkg.subpaths
         .flatMap((subpath) =>
           subpath.exports.map((exported) => {
+            const summary: string = exported.summary;
             const options = optionLine(exported.options);
             const tags = [exported.kind, exported.stability].filter(Boolean).join(' · ');
             return (
@@ -304,9 +305,7 @@ function renderReferenceGroupsHtml(
               (tags === '' ? '' : `<span class="ref-tags">${escapeHtml(tags)}</span>`) +
               `</div>` +
               `<span class="ref-container">${escapeHtml(pkg.name)} · ${escapeHtml(subpath.label)}</span>` +
-              (exported.summary === ''
-                ? ''
-                : `<p class="ref-summary">${escapeHtml(exported.summary)}</p>`) +
+              (summary === '' ? '' : `<p class="ref-summary">${escapeHtml(summary)}</p>`) +
               `<pre class="ref-sig" tabindex="0"><code>${escapeHtml(exported.signature)}</code></pre>` +
               (options === '' ? '' : `<p class="ref-options">${escapeHtml(options)}</p>`) +
               `<span class="ref-source">${escapeHtml(exported.source.path)}:${exported.source.line}</span>` +

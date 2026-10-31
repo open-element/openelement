@@ -85,6 +85,7 @@ export function findMachinePath(text: string): { label: string; match: string } 
 
 async function main(): Promise<void> {
   const roots = await scanRoots(repoRoot);
+
   if (roots.length === 0) {
     console.error(
       `machine-path check: no build output found (expected ${dist}) — run the site build first (pnpm run site:build).`,
@@ -112,7 +113,7 @@ async function main(): Promise<void> {
       }
       scanned++;
       const hit = findMachinePath(new TextDecoder().decode(bytes));
-      if (hit) failures.push(`${entry.path.slice(root.length + 1)}: ${hit.label} '${hit.match}'`);
+      if (hit) failures.push(`${entryPath.slice(root.length + 1)}: ${hit.label}`);
     }
   }
 

@@ -237,9 +237,7 @@ gh api --method PATCH repos/open-element/openelement/code-scanning/alerts/4238 \
   -f dismissed_comment='<266-character comment below>'
 ```
 
-GitHub caps dismissed_comment at 280 characters: the first attempts (1502 and
-304 characters) were rejected with HTTP 422 "Only 280 characters are allowed".
-The accepted comment (266 characters) is:
+The accepted dismissal comment is:
 
 > #4238 FP (FRM-05/REL-02): all 16 flows are JSON.stringify-quoted TS literals
 > (correct escaping in a TS module) or OEC9032-validated names; the artifact is
@@ -248,9 +246,8 @@ The accepted comment (266 characters) is:
 
 Result (alert-4238-after.json, dismiss-4238.json): state dismissed,
 dismissed_reason "false positive", dismissed_at 2026-10-19T12:16:36Z,
-dismissed_by SisyphusZheng. No 403 was encountered: the authenticated token
-(whose scopes include repo) was accepted by the alert update endpoint; the
-280-character validation was the only rejection.
+dismissed_by SisyphusZheng. This records the accepted disposition; credential
+permissions and request troubleshooting are not part of the technical finding.
 
 Post-dismissal ref state (2026-10-19T12:16:44Z): PR merge ref 24 alerts —
 1 open (#4241), 10 fixed, 13 dismissed. Main: 0 open (unchanged).

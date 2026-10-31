@@ -156,3 +156,19 @@ test('pageSeo: locale detection follows the explicit default, not array order', 
   const zh = pageSeo('<title>x</title>', 'zh/guide/install/index.html', ['zh', 'en'], 'en');
   expect(zh.locale).toEqual('zh');
 });
+
+test('resolveBuiltPath: dotted locale slugs are real directories, not assumed assets', () => {
+  const files = new Set([
+    'blog/post.zh/index.html',
+    'zh/blog/post.zh/index.html',
+    'assets/app.js',
+    'legacy.html',
+  ]);
+  const exists = (file: string) => files.has(file);
+  expect(resolveBuiltPath('/blog/post.zh/', exists)).toBe('blog/post.zh/index.html');
+  expect(resolveBuiltPath('/zh/blog/post.zh/', exists)).toBe('zh/blog/post.zh/index.html');
+  expect(resolveBuiltPath('/assets/app.js', exists)).toBe('assets/app.js');
+  expect(resolveBuiltPath('/legacy', exists)).toBe('legacy.html');
+  expect(resolveBuiltPath('/blog/missing.zh/', exists)).toBeNull();
+  expect(resolveBuiltPath('/assets/missing.js', exists)).toBeNull();
+});

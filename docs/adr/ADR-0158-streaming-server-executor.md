@@ -1,6 +1,6 @@
 # ADR-0158: Optional streaming mode of the compiled server executor
 
-- Status: ACCEPTED (2026-09-25, owner ruling — approved for the alpha5 lane)
+- Status: ACCEPTED; AMENDED 2026-10-31 (2026-09-25, owner ruling — approved for the alpha5 lane)
 - Tracking: #1444, #1447, #1450, #1453
 - Preserves: ADR-0143, ADR-0148, ADR-0120, ADR-0129, ADR-0152, ADR-0153
 
@@ -184,3 +184,22 @@ does not block the framework candidate.
 - P6: one Part Program and its existing three executors stay canonical.
 - Prior art: streaming SSR can defer content, but this mode backfills
   compiler-owned Parts without server components or island-hydration coupling.
+
+## Amendment (2026-10-31): accepted next architecture, implementation pending
+
+The accepted next direction in [ADR-0174](./ADR-0174-generated-code-runtime-and-compatibility.md)
+separates generated browser execution from server IR. It does not expand this
+record's route/field admission or imply component defer is implemented. Existing
+ADR-0159 tuple/seed, inert transport, CSP, no-JS tail, commitment and navigation
+ownership remain binding; any changed encoding requires migration/rejection
+fixtures and material component-wire changes require a successor record.
+
+Component defer is separate Alpha18 work, with implementation NOT RUN. Before
+admission, define finite active, queued and cumulative tasks, buffered bytes,
+depth, deadlines and host capacity, with fail-closed overflow policy and bounded
+full-await/HTML fallback. Coordinate resources/CSS/scripts and single DOM writer
+with navigation morph; stale results cannot own the new page. Cancellation
+releases framework resources and isolates results, not forcibly terminates
+arbitrary user Promises. Measure real proxy/deployment first useful content,
+residence and peak memory; no default enablement without correctness and benefit
+proof. Preserve existing route/field streaming and non-stream/action behavior.

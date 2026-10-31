@@ -1,6 +1,6 @@
 # ADR-0148: Compiler semantic core and Vite integration boundary
 
-- Status: ACCEPTED
+- Status: ACCEPTED; AMENDED 2026-10-31
 - Amends: ADR-0143
 
 ## Decision
@@ -49,3 +49,13 @@ package (`packages/compiler`). The boundary itself is unchanged — compiler and
 Element runtime still meet only through the deterministic, serializable,
 versioned artifact, and generated graphs still contain no compiler
 implementation or Vite plugin.
+
+## Amendment (2026-10-31): accepted next architecture, implementation pending
+
+[ADR-0174](./ADR-0174-generated-code-runtime-and-compatibility.md) replaces the
+absolute single-serializable-artifact constraint for the accepted next backend
+with separate compile-time IR, generated-module ABI and HTML/data wire contracts.
+Keep the bundler-neutral semantic core, one-way integration boundary, forbidden
+imports, deterministic diagnostics/maps and public compiler addendum. Current
+Part Program implementation remains until qualified replacement; new backend
+implementation is NOT RUN and no ABI/wire format is frozen here.

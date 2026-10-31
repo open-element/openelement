@@ -55,8 +55,9 @@ Tally: 17 Met, 6 Partial, 0 Gap, 1 Not applicable (24 controls).
 2. Select assessment requirements whose `applicability` includes `maturity-1` and whose `state` is not `Retired`. Do not carry statuses forward across tags; re-check each evidence path.
 3. Re-run the Markdown lint check used by the repository:
 
+From the repository root:
+
 ```sh
-cd /Users/zhengzhi/Documents/projects/openelement/openelement
 ./node_modules/.bin/markdownlint-cli2 docs/security/osps-baseline-l1.md
 ```
 

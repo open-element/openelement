@@ -69,6 +69,27 @@ const entries: Record<SiteLocale, TimelineEntry[]> = {
       stamp: 'BASELINE',
     },
     {
+      version: 'v1.0.0-alpha.16',
+      theme: 'Compilation and safe delivery',
+      copy: 'The browser still executes Part Programs, so the backend must prepare for new composition. Generate direct DOM mount/claim/update/dispose, separate public and private output, extend existing server functions with async/full-await composition, and target zero JS only where there is no actual client need. Keep existing behavior and cleanup. Full function authoring belongs to Alpha17; new component defer to Alpha18. ADR-0174 formally accepts the generated-code/runtime direction and amends ADR-0148; implementation remains pending. ADR-0171 records the output-safety direction.',
+      state: 'planned',
+      status: 'Planning target; release depends on validation',
+    },
+    {
+      version: 'v1.0.0-alpha.17',
+      theme: 'Function components and composition',
+      copy: 'Use Signals and setup-once for stateful composition without an extra host: props, children, conditions, keyed lists, explicit CE exports and independent precompiled component packages. Validate one recommended entry, starters, docs and migration; general upgrade tooling and URL-prefix removal are separate work. OpenElement has no React Hooks and promises no Hooks/React compatibility; old classes remain compatible without an immediate rewrite. ADR-0173 formally accepts the composition direction and amends ADR-0143; implementation and consumer validation remain pending. The distribution contract is not frozen.',
+      state: 'planned',
+      status: 'Planning target; recommendation changes after author and consumer validation',
+    },
+    {
+      version: 'v1.0.0-alpha.18',
+      theme: 'Component-level streaming',
+      copy: 'Extend existing route/field channels to deferred component subtrees, coordinating CSS, scripts, failures, bounded resources, cancellation and navigation/HTML morph. Isolate stale responses and measure real deployment benefits, full-await and HTML fallback. No arbitrary nesting, forced termination of any user task, or universally script-free dynamic insertion is promised. Extend ADR-0158 resource/component contracts; material protocol changes get a successor record.',
+      state: 'planned',
+      status: 'Planning target; default enablement requires correctness and benefit evidence',
+    },
+    {
       version: 'v1.0 RC / Stable',
       theme: 'Separately admitted releases',
       copy: 'Freeze contracts and dependencies after Alpha evidence; require at least fourteen days of RC soak, install/upgrade/security qualification and human GO. Element and Router do not mandate a package count.',
@@ -83,6 +104,27 @@ const entries: Record<SiteLocale, TimelineEntry[]> = {
       copy: '从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程。Element 与 Router 是公共核心，Create 是正式入口，UI 为实验性能力。1.0 Alpha 是新基线，不提供从 0.x 的受支持迁移。',
       state: 'baseline',
       stamp: 'BASELINE',
+    },
+    {
+      version: 'v1.0.0-alpha.16',
+      theme: '编译与安全交付',
+      copy: '当前浏览器仍执行 Part Program，后端需为后续组合做准备。生成直接 DOM mount/claim/update/dispose，隔离公开与私有输出，扩展既有服务端函数的异步/full-await组合；无实际客户端需求的页面目标为零JS，保留既有行为与清理。完整函数作者API留在Alpha17，新组件defer留在Alpha18。ADR-0174已正式接受生成代码/运行时方向并修订ADR-0148，实现仍待完成；ADR-0171记录输出安全方向。',
+      state: 'planned',
+      status: '规划目标；发布取决于验证结果',
+    },
+    {
+      version: 'v1.0.0-alpha.17',
+      theme: '函数组件与组合',
+      copy: '基于Signals和setup-once，让有状态业务组合无需额外host：props、children、条件、keyed list、显式CE出口与独立预编译组件包。验证统一推荐入口、starter、文档与迁移；通用升级工具和URL去前缀独立推进。当前没有React Hooks，也不承诺Hooks/React兼容；旧class兼容，用户无需立即重写。ADR-0173已正式接受组件组合方向并修订ADR-0143，实现与独立消费者验证仍待完成；分发契约尚未冻结。',
+      state: 'planned',
+      status: '规划目标；作者与消费者验证通过后切换推荐路径',
+    },
+    {
+      version: 'v1.0.0-alpha.18',
+      theme: '组件级流式交付',
+      copy: '扩展既有route/field通道交付延迟组件子树，协调CSS、脚本、错误、有限资源、取消和导航/HTML morph。隔离过期响应，测量真实部署收益并验证完整等待与HTML fallback。不承诺任意嵌套、强制终止任意用户任务或所有动态回填完全无脚本。扩展ADR-0158资源与组件契约，协议实质变化另行记录。',
+      state: 'planned',
+      status: '规划目标；默认启用需要正确性与收益证据',
     },
     {
       version: 'v1.0 RC / Stable',
@@ -100,7 +142,7 @@ const content = {
     headDescription: `The openElement roadmap: the public Alpha admission (v1.0.0-alpha.1), the ${STABLE_LINE.series} stable maintenance line and the gated path to v1.0.`,
     pageTitle: 'Roadmap',
     heroLede:
-      'OpenElement roadmap labels describe the public product surface, tied to package truth, docs truth and CI evidence rather than a wish list.',
+      'Compose native Web UI with TSX, deliver HTML first, and run interaction when needed. Alpha16–18 plan compilation and safe delivery, function components, then component-level streaming.',
     railItems:
       '[{"id":"release-line","label":"Release line"},{"id":"product-boundary","label":"Product boundary"},{"id":"decision-matrix","label":"Decision matrix"},{"id":"system-visual","label":"System visual"}]',
     architecture: 'Architecture',
@@ -118,7 +160,7 @@ const content = {
     releaseLineIndex: '01 / release line',
     releaseLineTitle: 'From shipped evidence to v1.0 freeze.',
     releaseLineCopy:
-      'The line is deliberately narrow: only claims that can survive docs, package exports and build validation stay visible.',
+      'Alpha16–18 are planning targets, not released capabilities, with no fixed dates. Current source and publication status below remain derived from release records. RC and stable need independent real-use, install/upgrade and security admission even after these milestones.',
     timelineAria: 'Roadmap release line',
     stamps: {
       CURRENT: 'CURRENT',
@@ -127,7 +169,7 @@ const content = {
     } as Record<'CURRENT' | 'BASELINE' | 'NEXT', string>,
     designRuleTitle: 'Design rule',
     designRuleText:
-      'No new package is created by default. Auth, ORM and storage remain recipes — openElement owns the application contract, not service products.',
+      'Element, Router, standard HTTP, HTML-first delivery, on-demand interaction and native interoperability remain the foundation; layouts and existing Lit compatibility stay supported. OhMyLit is a separate effort; new Native capabilities do not automatically promise Lit parity. Auth, ORM and storage remain recipes, not service products.',
     boundaryIndex: '02 / product boundary',
     boundaryTitle: 'Scope is explicit.',
     boundaryCopy:
@@ -194,7 +236,7 @@ const content = {
     headDescription: `openElement 路线图：公开 Alpha 准入（v1.0.0-alpha.1）、${STABLE_LINE.series} 稳定维护线，以及通往 v1.0 的门禁路径。`,
     pageTitle: 'Roadmap',
     heroLede:
-      'OpenElement 的 roadmap 标签描述的是公开产品面，锚定包真相、文档真相与 CI 证据，而不是愿望清单。',
+      '用 TSX 组合原生 Web UI，先交付 HTML，再按需运行交互。Alpha16–18 依次规划编译与安全交付、函数组件、组件级流式交付。',
     railItems:
       '[{"id":"release-line","label":"发布线"},{"id":"product-boundary","label":"产品边界"},{"id":"decision-matrix","label":"决策矩阵"},{"id":"system-visual","label":"系统图示"}]',
     architecture: '架构',
@@ -205,7 +247,8 @@ const content = {
     registryLabel: '各包 npm latest：',
     releaseLineIndex: '01 / 发布线',
     releaseLineTitle: '从已交付证据，到 v1.0 冻结。',
-    releaseLineCopy: '这条线刻意收窄：只有经得起文档、包导出与构建验证检验的表述，才会留在这里。',
+    releaseLineCopy:
+      'Alpha16–18为规划目标，不是已发布能力，不设固定日期。当前源码与包发布状态继续由发布记录派生；完成这些版本后，RC与稳定版仍需真实使用、安装升级和安全等独立准入。',
     timelineAria: 'Roadmap 发布线',
     stamps: {
       CURRENT: '当前',
@@ -214,7 +257,7 @@ const content = {
     } as Record<'CURRENT' | 'BASELINE' | 'NEXT', string>,
     designRuleTitle: '设计规则',
     designRuleText:
-      '默认不新增包。Auth、ORM 与存储保持为配方——openElement 拥有的是应用契约，不是服务产品。',
+      'Element、Router、标准HTTP、HTML-first、按需交互和原生互操作保持为基础；layout与既有Lit兼容继续维护，独立OhMyLit另行规划，Native新增能力不自动承诺Lit对等。Auth、ORM与存储保持配方，不是服务产品。',
     boundaryIndex: '02 / 产品边界',
     boundaryTitle: '范围是明确的。',
     boundaryCopy: '当前能力、被排除的承诺与视觉契约，分开陈述。',

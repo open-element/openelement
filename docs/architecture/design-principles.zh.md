@@ -43,8 +43,9 @@ DOM、CSS `@scope`、Speculation Rules API、View Transitions 这些特性
 [HTML Design Principles §3.5 Do Not Reinvent the Wheel][html-dp]；
 [open-webcomponent 建议][open-wc]。
 
-本仓实践：路由准入从 WHATWG `URLPattern` 派生；运行期组件模型是
-custom elements + Declarative Shadow DOM + light root；样式边界是 CSS
+本仓实践：路由准入从 WHATWG `URLPattern` 派生；当前原生组件边界是
+custom elements + Declarative Shadow DOM + light root；ADR-0173接受内部有状态
+hostless组合与显式CE出口，不替代原生互操作；样式边界是 CSS
 `@scope`；预取是 Speculation Rules API；页面转场是 View Transitions；
 void 元素集合有唯一属主。自建正则路由、scoping 运行时、元数据提取器
 不进仓库。
@@ -55,17 +56,19 @@ void 元素集合有唯一属主。自建正则路由、scoping 运行时、元�
 ## P2 — 编译期支付，不在运行期支付
 
 复杂度花在构建期。交付物必须读起来像普通平台代码。给用户应用增加的
-运行期表面积，默认拒收。
+必要运行时必须最小、归属明确、经过测试，并与生成代码一起统计完整页面
+可达闭包（ADR-0174）；移动字节位置不算收益。
 
 引用：[W3C TAG Web Platform Design Principles][tag-dp]；
 [The Rule of Least Power][least-power]；
 [Svelte — Rethinking Reactivity][svelte]。
 
-本仓实践：编译器在构建期把受支持的 TSX 降为 Part Program
-（ADR-0143、ADR-0148）；不受支持的写法以诊断失败，绝不回退到运行期
-虚拟 DOM 路径；SSR 产物是声明式平台标记，而不是被 ship 的渲染函数的
-产物。构建期 IR 允许自造，因为运行期契约是浏览器自己的组件模型；IR
-绝不向运行期渗漏。
+本仓实践：当前后端仍消费Part Program。ADR-0174接受后继浏览器直接生成
+mount/claim/update/dispose，并区分编译期IR、生成模块ABI与HTML/数据wire；
+实现尚未完成，不代表旧执行器已退休。必要Signals、身份、事件、region与清理
+helper可以保留，但需唯一owner、行为证据和字节归因。无VDOM或runtime JSX
+fallback；不受支持的写法以源码定位诊断拒绝。服务器IR无需为了与客户端形式
+一致而重写。helper/ABI/wire的稳定格式须在消费者证据形成后冻结。
 
 判别问句：_这增加的是构建期表面积还是运行期表面积？运行期表面积需要
 ADR。_
@@ -105,7 +108,9 @@ HTTP 语义绝不静默降级。表单无 JavaScript 可用；GET 缓存语义�
 
 ## P5 — 为删除而设计
 
-每一层都必须可删。兼容只存在于部署边界，绝不渗入应用代码。每个 shim
+每一层都必须可删。兼容仅限部署边界，唯一例外是ADR-0173明确规定的旧class作者迁移临时适配：
+通过唯一适配点共享后端与Signals，不建立第二renderer；退休要求能力覆盖、真实
+迁移与发布资格，不设强制立即重写或固定删除版本。每个 shim
 落地时必须写明退役条件。
 
 引用：[The Extensible Web Manifesto][ewm]；
@@ -174,6 +179,14 @@ SHA-256 与候选 SHA 绑定。
 
 判别问句：_这条边界是否只有一个写者？它的消费方形态测试抓得住第二个
 吗？_
+
+## 方向接受不等于能力已交付
+
+[ADR-0173](../adr/ADR-0173-component-execution-and-composition.md)与
+[ADR-0174](../adr/ADR-0174-generated-code-runtime-and-compatibility.md)为后继架构
+修订P1/P2/P5。接受不是实现证据：新组件/codegen切片仍NOT RUN，名称/类型/ABI
+未冻结。P6/P8保持单一后端、Signals引擎与DOM owner，不授权平行兼容机制或
+手工维护的第二事实源。
 
 ## 平台追账评审
 

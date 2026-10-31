@@ -52,8 +52,9 @@ References: [The Extensible Web Manifesto][ewm];
 [open-webcomponent recommendations][open-wc].
 
 In this repository: routing admission derives from WHATWG `URLPattern`; the
-runtime component model is custom elements with Declarative Shadow DOM and
-light roots; style scoping is CSS `@scope`; prefetching is the Speculation
+current native component boundary is custom elements with Declarative Shadow DOM
+and light roots; ADR-0173 accepts stateful hostless internal composition with
+explicit CE exports, not replacement of native interoperability; style scoping is CSS `@scope`; prefetching is the Speculation
 Rules API; page transitions are View Transitions; the void-element set has one
 canonical owner. Self-built regex routers, scoping runtimes, and metadata
 extractors do not enter the tree.
@@ -64,18 +65,22 @@ yes, the framework writes nothing._
 ## P2 — Pay at compile time, not at runtime
 
 Complexity is spent at build time. What ships must read as ordinary platform
-code. Runtime surface added to user applications is presumed rejected.
+code. Necessary runtime must be minimal, owned, tested and measured with generated
+code in the full reachable page closure (ADR-0174); moving bytes is not a gain.
 
 References: [W3C TAG Web Platform Design Principles][tag-dp];
 [The Rule of Least Power][least-power];
 [Svelte — Rethinking Reactivity][svelte].
 
-In this repository: the compiler lowers supported TSX to a Part Program at
-build time (ADR-0143, ADR-0148); unsupported authoring fails with diagnostics
-and never falls back to a runtime virtual-DOM path; SSR output is declarative
-platform markup, not the product of a shipped render function. The build-time
-IR is allowed to be custom because the runtime contract is the browser's own
-component model; the IR must never leak into the runtime.
+In this repository: the current backend consumes Part Programs. ADR-0174 accepts
+next-generation direct browser mount/claim/update/dispose with separate
+compile-time IR, generated-module ABI and HTML/data wire. This is implementation
+pending, not a claim the old executor has retired. Necessary Signals, identity,
+events, region and cleanup helpers remain permitted, with one owner, behavior
+proof and byte attribution. No VDOM or runtime JSX fallback is introduced;
+unsupported authoring fails with source-located diagnostics. Server IR need not
+be rewritten merely to match the client. Stable helper/ABI/wire formats require
+consumer evidence before freeze.
 
 Litmus: _Does this add build-time surface or runtime surface? Runtime surface
 needs an ADR._
@@ -123,8 +128,12 @@ hold?_
 
 ## P5 — Designed for deletion
 
-Every layer must be deletable. Compatibility lives only at deployment
-boundaries and never leaks into application code. Every shim lands with a
+Every layer must be deletable. Compatibility is restricted to deployment
+boundaries, except for the specific temporary existing-class author migration
+allowance in ADR-0173. That exception uses one adapter sharing the backend and
+Signals, not a second
+renderer; retirement requires capability coverage, real migration and release
+qualification, without a fixed forced-rewrite version. Every shim lands with a
 written retirement condition.
 
 References: [The Extensible Web Manifesto][ewm];
@@ -205,6 +214,15 @@ temporary by intent, as in P6.
 
 Litmus: _Does this boundary have exactly one writer, and would its
 consumer-form test catch a second?_
+
+## Accepted direction versus shipped capability
+
+[ADR-0173](../adr/ADR-0173-component-execution-and-composition.md) and
+[ADR-0174](../adr/ADR-0174-generated-code-runtime-and-compatibility.md) amend
+P1/P2/P5 for the next architecture. Acceptance is not implementation evidence:
+new component/codegen slices remain NOT RUN, names/types/ABI unfrozen. P6/P8
+retain one backend, Signals engine and DOM owner; no parallel compatibility
+mechanism or hand-maintained second truth is authorized.
 
 ## Platform catch-up review
 
