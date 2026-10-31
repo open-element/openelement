@@ -2,7 +2,7 @@
 
 - 状态：**G1 已批准（2026-10-18）**。实现落在 `packages/router/src/vite/internal/ssg/island-scheduler.ts`。
 - 历史范围：alpha15 late-host 修复。本文保留当时设计与验证状态；未勾选清单不构成当前资格通过证明。
-- 设计基线：`f395b1e1fc06a727a3e27f26a5aad62ea2929ab8`；落地基线：`ed50abeaa`（含 t3-release 的 third-party harness 修复）。
+- 设计基线：`f395b1e1fc06a727a3e27f26a5aad62ea2929ab8`；落地基线：alpha15 late-host 修复批次（含 third-party harness 修复）。
 - 上游决策（G0，已批准）：**D2=A 泛用** / D3=B / D4=A / D5=A；HERO 不门控（本文不涉及）。
 - 本文的机制结论来自只读代码探查 + 既有单测实跑（见附录 A 证据索引）。
 
@@ -22,13 +22,13 @@ Owner 批准 4/4，均按本文 §11 的推荐取值；第 5 条（引擎口径�
 
 - `grep -i lit` 在新增生产代码中必须 **= 0**。
 - 新增 src 必须自带 **branch tests**（仓库 coverage 余量仅 +0.21pp）。
-- **KR-17 摘钩**必须贴三引擎结论摘要作为证据（只写「本地通过」不合格）。
-- 三引擎 e2e 是最重的一腿，执行前与 lead 协调机器资源（另有 lane 在跑 gate）。
-- **三引擎首跑若出现 firefox 红，不得用重试掩盖**（KR-18：owner 已定 `retries=0`，禁止恢复 retries/skip）：按台账格式记录现象 + 证据路径，标 `flaky`/`open`，如实上报，由 lead 决定是否允许记账后的 rerun。
+- **三引擎结论摘要**必须作为验收证据（只写「本地通过」不合格）。
+- 三引擎 e2e 是最重的一腿，执行前需确认机器与浏览器资源就绪。
+- **三引擎首跑若出现 firefox 红，不得用重试掩盖**（owner 已定 `retries=0`，禁止恢复 retries/skip）：记录现象 + 证据路径，标 `flaky`/`open`，如实上报；是否允许记账后的 rerun 须另行确认。
 
 ### 三引擎是门禁默认值（裁决 + 代价，已记）
 
-- **默认引擎集 = `chromium,firefox,webkit`**：`qualify.ts` 的 `CONTRACT_ENGINES` 即门禁默认。理由是 D5 的台账纪律 —— 若默认 chromium、由调用方设 env，则 KR-17 的退役证据依赖「调用方设对」，门禁本身不成立。
+- **默认引擎集 = `chromium,firefox,webkit`**：`qualify.ts` 的 `CONTRACT_ENGINES` 即门禁默认。理由是 D5 的记录纪律 —— 若默认 chromium、由调用方设 env，则三引擎全绿的证据依赖「调用方设对」，门禁本身不成立。
 - **`OPEN_ELEMENT_WC_ENGINES` 只是本地迭代的收窄手段**：用完必须复跑默认集；**不得**作为 CI / release 的常规配置。
 - **已接受的代价**：`@openelement/fixture-third-party-web-components#smoke` 的浏览器段约为原来的 **3 倍**，而该 target 挂在 `@openelement/tools-release#gate:packed` → `release:check`（以及 CI 的 `published-consumers` workflow）。**`release:check` 会因此变慢**，这是 owner 在 G1-5 明确知悉并接受的取舍（契约证据优先于门禁时长）。
 - 结构上只 build 一次（`prepareFixtureApp`），三引擎各开一个 session，所以 ×3 只落在浏览器段，不落在外层 `pnpm install` / router build / `stencil build` 上。
@@ -36,7 +36,7 @@ Owner 批准 4/4，均按本文 §11 的推荐取值；第 5 条（引擎口径�
 
 ## 实现偏离（已批准意图内）
 
-实现 `672847cb7` 时，**冻结既有 28 例零修改**这一硬约束（§4.5 I-4）逼出了三处对 §3.1 伪代码字面的收敛。三条都不改 B2 / F01 的语义，也都由既有钉法直接证明其必要性，经 lead 判定**在 G1 批准意图内**（不需重开决策门）。D-4 是 seam 登记后的记录订正，不涉及实现行为。四条在此集中登记，便于 owner 复审一处可见。
+实现 `672847cb7` 时，**冻结既有 28 例零修改**这一硬约束（§4.5 I-4）逼出了三处对 §3.1 伪代码字面的收敛。三条都不改 B2 / F01 的语义，也都由既有钉法直接证明其必要性，**在 G1 批准意图内**（不需重开决策门）。D-4 是 seam 登记后的记录订正，不涉及实现行为。四条在此集中登记，便于 owner 复审一处可见。
 
 | # | 偏离 | 为什么必须 | 既有钉法（证明其必要性） |
 | --- | --- | --- | --- |
@@ -102,7 +102,7 @@ fixture 形状（`tests/fixtures/third-party-web-components/`）：
 
 **另一个时序事实**：即使 `observeVisible()` 在该页被调用（例如页面有 enhance 表单），它也只会在 morph 之后跑一次；而此处 morph 发生在 t1 之前，`wc-client.ts` chunk 在 t2/t3 才落地 —— **仍然错过**。所以机制必须是「时间/活动驱动」，不能只是「morph 驱动」。
 
-**现状（已核实，t3-release handoff）**：前序 harness 陷阱（scaffold 未带 `--no-install` ⇒ `ERR_PNPM_NO_MATCHING_VERSION`）**已由 t3-release 修复并落地**（`6d52fa580`；`qualify.ts:583-589`）。修复后的 smoke 顺序是 `create --no-install` → `pnpm install --no-frozen-lockfile` → `pnpm run build`（**全绿**）→ 浏览器阶段**恰好在 `missing=wc-open-child` 失败，且 `browserErrors` 为空**。这正面确认了本节的根因判断：失败**不是** chunk/模块加载错误，而是**注册门控**本身。残余即 committed ledger 的 **KR-17**（the internal working ledger (not published)），其退休条件是「T8 的三引擎、多库用例全绿」——**该条件已并入 §10 验收清单**。
+**现状（已核实）**：前序 harness 陷阱（scaffold 未带 `--no-install` ⇒ `ERR_PNPM_NO_MATCHING_VERSION`）**已修复并落地**（`qualify.ts:583-589`）。修复后的 smoke 顺序是 `create --no-install` → `pnpm install --no-frozen-lockfile` → `pnpm run build`（**全绿**）→ 浏览器阶段**恰好在 `missing=wc-open-child` 失败，且 `browserErrors` 为空**。这正面确认了本节的根因判断：失败**不是** chunk/模块加载错误，而是**注册门控**本身。残余的验收条件是「三引擎、多库用例全绿」——**该条件已并入 §10 验收清单**。
 
 ### 1.3 为什么这是泛用互操作缺陷，不是 Lit 问题
 
@@ -148,7 +148,7 @@ fixture 形状（`tests/fixtures/third-party-web-components/`）：
 **时钟**：只用 `deps.win.setTimeout`（模块已用；不引入 rAF / `requestIdleCallback`：前者在隐藏标签页暂停，后者在高负载下可能错过窗口，且本机制的正确性不依赖帧对齐）。
 **不改** `load()`、不改 `observeVisible()` 的语义；探测只是**多调用几次 `observeVisible()`**。
 
-伪代码（实现 lane 可直接照抄结构）：
+伪代码（实现可直接照抄结构）：
 
 ```ts
 // ── 全部在 createIslandScheduler() 内部，模块保持 import-free ──────────
@@ -353,7 +353,7 @@ if (pendingTags().length > 0) {
 
 **拒绝理由（逐条）**：
 
-1. **违反 owner 约束 D2=A**：G0 已定「泛用」，且本 note 的验收清单要求新增生产代码中 `grep -i lit` == 0。这是 owner 的明确边界，不是本 lane 的偏好。
+1. **违反 owner 约束 D2=A**：G0 已定「泛用」，且本 note 的验收清单要求新增生产代码中 `grep -i lit` == 0。这是 owner 的明确边界，不是实现侧的偏好。
 2. **不解决问题**：缺陷维度是「host 出现时机」，不是「框架」。§9 A1–A4 会证明 FAST/Stencil/vanilla 同样复现。Lit 特化只修 1/4 个 fixture 用例，却要新增一套 API。
 3. **每库一个适配器 = N 个新 seam**：FAST（`FASTElement.$fastController`）、Stencil（compiler 输出无公开 update 钩子）、Shoelace/Material（无 host 内容创作 API）、Ionic（同上）。按 constitution P8 / ADR-0163，每个 seam 都要登记 + 消费者形态测试，成本远超收益。
 4. **对「非库来源」无效**：应用自己的 `setTimeout(() => appendChild(...))`、另一个 island 的渲染副作用、morph 之外的 DOM patch —— 都没有「库」可特化。
@@ -369,7 +369,7 @@ if (pendingTags().length > 0) {
 | **`customElements.whenDefined(tag)`** | 与问题无关：`tag` 的定义由我们控制，未知的是 **host** 是否存在。 |
 | **`DOMNodeInserted` / mutation events** | 已废弃；跨 shadow 行为不一致；同步派发，性能更差。 |
 | **永久轮询** | 无界 CPU；后台标签页节流下行为不可预测。 |
-| **只在 fixture 侧适配（审计 P1-1 option c：known-red / 改口径 / gate 摘钩）** | owner 已选 D2=A。且它是真缺口：任何第三方组件在自身 open shadow root 内创建 openElement child 的应用都坏，且对外文档已承诺支持（`using-third-party-web-components.md:116-117`）。**保留为「若 G1 否决 P-A」的降级项**，此时必须把该 known-red 写进 committed ledger 并在 gate 显式排除。 |
+| **只在 fixture 侧适配（审计 P1-1 option c：known-red / 改口径 / gate 摘钩）** | owner 已选 D2=A。且它是真缺口：任何第三方组件在自身 open shadow root 内创建 openElement child 的应用都坏，且对外文档已承诺支持（`using-third-party-web-components.md:116-117`）。**保留为「若 G1 否决 P-A」的降级项**，此时必须把该 known-red 登记为已知失败并在 gate 显式排除。 |
 | **让 island 作者声明「host 由外部创建」** | 需要新的构建期声明面 + 扫描/校验 + 文档；D2=A 明确要求泛用、不要按 host 来源声明；且 manifest 无法知道运行期 DOM 事实。 |
 | **把预算常量放进 `packages/protocol/src/policy.ts`** | `policy.ts` 自述的收录标准是「**more than one executor** checks the same number」（`policy.ts:5-12`）。本预算只有 scheduler 一个执行者；且新增 protocol 导出会触发 `interface:snapshot:write`（`IDLE_FALLBACK_TIMEOUT_MS` 在 snapshot 中出现 6 次）。**故常量内联在 scheduler 内**（与 I-6 一致）。 |
 
@@ -386,7 +386,7 @@ if (pendingTags().length > 0) {
 | F-5 | `setTimeout` 被节流/暂停（后台标签页） | 探测停滞 | 链式排程在尝试次数上限内自然终止，不泄漏 timer；页面可见后若仍有 host 事件（morph）仍可激活 | 否 |
 | F-6 | 应用**合法地**声明了本页不使用的 island | `detail.pending` 会列出它们 | 诊断事件是 **informational，不是 error**。文档必须写明：消费者不得仅凭该事件判定失败，需与 per-page island manifest 交叉核对 | 否 |
 | F-7 | 探测与 morph rescan 并发 | — | 两者调用同一幂等函数；`map[tag] === null` + `probeDone` 保证 exactly-once | 否 |
-| F-8 | 超大 composed tree + 大量 pending tag | 预算表 | 成本上界 O(V) × 18，分散在多个 macrotask；实现 lane 必须实测（§7.4） | 否 |
+| F-8 | 超大 composed tree + 大量 pending tag | 预算表 | 成本上界 O(V) × 18，分散在多个 macrotask；实现必须实测（§7.4） | 否 |
 
 **诊断信号契约（建议写进 docs）**：
 
@@ -414,7 +414,7 @@ detail：{ pending: string[], attempts: number, elapsedMs: number }
 - **关键对照**：**今天的 ready 扫描已经对每个 pending tag 各做一次同阶深遍历**（`loadAll` → `load` → `hasIslandHost`，每 tag 一次 `querySelectorAll('*')` 全树）。也就是说：
   - 一次探测的成本 ≤ 今天为**一个** tag 付出的 ready 扫描成本；
   - 探测把「pending 个 tag × 1 次」换成「1 次覆盖全部 pending tag」——**单次通过比现状更便宜**，只是重复 ≤6 次。
-- **量级参照（不作为承诺，仅作 scale）**：www `/reference` 页约 13,496 个元素（审计 §3）。18 次遍历的上界 ≈ 2.4×10⁵ 次元素访问，每次是「`querySelectorAll` 结果索引 + `.shadowRoot` 属性读」。实现 lane 必须实测（§7.4），不得以估算代替。
+- **量级参照（不作为承诺，仅作 scale）**：www `/reference` 页约 13,496 个元素（审计 §3）。18 次遍历的上界 ≈ 2.4×10⁵ 次元素访问，每次是「`querySelectorAll` 结果索引 + `.shadowRoot` 属性读」。实现必须实测（§7.4），不得以估算代替。
 - **内存**：1 个 timer id + 1 个 pending 字符串数组；disarm 后不保留任何引用、不注册全局监听、不持有 observer。
 
 ### 7.2 与现有 hydration 流程的关系
@@ -432,7 +432,7 @@ detail：{ pending: string[], attempts: number, elapsedMs: number }
 2. **门控复用**：唯一的下游是 `observeVisible()` → `loadAll()` → `load()` → `hasIslandHost()`。**false 就不 fetch，且 factory 留在 map**（`island-scheduler.ts:124`，B2 原始语义）。
 3. **负向测试**：§9 C4 用 playwright 请求监听断言「本页未使用的 island chunk 请求数 == 0」。该测试必须在探测启用前后都为 0，否则实现有误。
 
-### 7.4 实现 lane 必须实测并落盘（不得以估算代替）
+### 7.4 实现必须实测并落盘（不得以估算代替）
 
 1. **单次融合遍历 benchmark**：≥10,000 元素的合成树 + 1 个 pending tag + 无 host，chromium 中测量单次 `collectHosts` 的 p50/p95（目标 < 2 ms/次，18 次总计 < 10 ms）；报告数字与测量方法进 PR body。
 2. **探测期 CPU profile**：`/third-party-wc/` 页面加载的 3 s 窗口内，`Performance` 火焰图不得出现 > 5 ms 的单次长任务归因于探测。
@@ -472,7 +472,7 @@ function scheduleProbe(delayMs: number): void;
 function probe(now: number): void;
 ```
 
-**为什么这个形状适合 DOM-free 单测**：`collectHosts` 只依赖 `ParentNode` 契约（`querySelectorAll` + 元素的 `shadowRoot`），既有测试 double（`__tests__/island-scheduler.test.ts:18-38` 的 `FakeElement`）已经提供了这两者，只需把 `querySelectorAll` 的 selector 解析从「`'*'` 或单 tag」扩到「逗号列表」（**测试文件改动，implementation lane 负责**）。`probe` 的时间只来自 `deps.win`，不需要 `vi.useFakeTimers()`。
+**为什么这个形状适合 DOM-free 单测**：`collectHosts` 只依赖 `ParentNode` 契约（`querySelectorAll` + 元素的 `shadowRoot`），既有测试 double（`__tests__/island-scheduler.test.ts:18-38` 的 `FakeElement`）已经提供了这两者，只需把 `querySelectorAll` 的 selector 解析从「`'*'` 或单 tag」扩到「逗号列表」（**测试文件改动由实现侧负责**）。`probe` 的时间只来自 `deps.win`，不需要 `vi.useFakeTimers()`。
 
 ### 8.2 时钟注入（不新增 dep）
 
@@ -505,7 +505,7 @@ function makeTimers() {
 
 > **测试 double 影响**：既有 `makeWin()`（`island-scheduler.test.ts:52-65`）没有 `clearTimeout`。它**不会**被现有用例触达 —— 续期只在窗口耗尽后发生，而同步 `setTimeout` double 下探测链会一次性跑完并直接 `giveUp`，不会进入 `onIslandLoadActivity`。新增的续期用例（T-8）必须使用上面的 `makeTimers()`。
 
-**兼容性实测（本 lane 已跑）**：现有 `makeWin()` 的 `setTimeout` 是**同步执行**（`island-scheduler.test.ts:54`）。因此探测链在那些测试里会在构造期同步跑完。这**不会**破坏现有断言（已逐一推演：`x-load` 无 host 的用例 `pending` 为空不排程；`treeWithTags('x-load')` 的用例探测跑完也找不到 host，`loaded` 仍为 `['x-load']`，`readyEvents` 不变），但 implementation lane **必须实跑全量 28 个用例并以「零修改测试文件」为通过标准**；任何需要改既有断言的 delta 都按设计错误处理（I-4），不得改测试迁就实现。
+**兼容性实测（已实测）**：现有 `makeWin()` 的 `setTimeout` 是**同步执行**（`island-scheduler.test.ts:54`）。因此探测链在那些测试里会在构造期同步跑完。这**不会**破坏现有断言（已逐一推演：`x-load` 无 host 的用例 `pending` 为空不排程；`treeWithTags('x-load')` 的用例探测跑完也找不到 host，`loaded` 仍为 `['x-load']`，`readyEvents` 不变），但实现**必须实跑全量 28 个用例并以「零修改测试文件」为通过标准**；任何需要改既有断言的 delta 都按设计错误处理（I-4），不得改测试迁就实现。
 
 ### 8.3 DOM-free 单测矩阵（first-party，新增到 `packages/router/__tests__/island-scheduler.test.ts`）
 
@@ -536,15 +536,15 @@ function makeTimers() {
 - `tests/fixtures/router-request-time/e2e/live.spec.ts` —— 与既有 `#606 client:visible island inside page DSD loads on intersection`（`live.spec.ts:913`）并列，新增「late host in an open shadow root activates without a morph」。
 - fixture 需要一个新的 route：页面上有一个**第一方** vanilla 组件（`attachShadow({mode:'open'})`）在 `setTimeout`/升级后把自己的 shadow root 里塞入一个 island host。这是 DOM-free 单测之外的端到端形状验证，且**不依赖任何第三方库**（可稳定跑三引擎）。
 
-**并且 third-party WC smoke 自身必须三引擎**（这是 KR-17 的退休条件原文：「T8's three-engine, multi-library cases green」）：
+**并且 third-party WC smoke 自身必须三引擎**（这是本设计的验收条件：「三引擎、多库用例全绿」）：
 
 - 现状：`verifyBrowser(distDir)` 硬编码 `launchQualifyBrowser({ distDir })`（`qualify.ts:177`），而 `drive-chromium.ts:36` 的 `browserName` **默认 chromium** ⇒ 今天只跑 chromium。
 - 改法：`verifyBrowser` 增加 `browserName` 参数，`main()` 里**只 build 一次**（`prepareFixtureApp` 已 build），然后对 `['chromium','firefox','webkit']` 各开一个 session 跑同一套探针，把每引擎的结果并入 record/tierReport（并按引擎分别判定 pass/gap）。
 - **不要**让三引擎各自 scaffold+build 一次（会把 smoke 的墙钟时间乘 3；build 是这条路径上最贵的一段）。
-- 风险：KR-18 已记录 firefox fixture flake，且 owner 已定 `retries=0`、禁止用 retry 掩盖。三引擎会把 WC smoke 的 flake 面放大到 3 倍，且第三方库（Shoelace/Material/FAST/Ionic）在不同引擎上的 capability 探测本来就可能给出**合法的**不同结果。因此：
+- 风险：既有记录显示 firefox fixture 存在 flake，且 owner 已定 `retries=0`、禁止用 retry 掩盖。三引擎会把 WC smoke 的 flake 面放大到 3 倍，且第三方库（Shoelace/Material/FAST/Ionic）在不同引擎上的 capability 探测本来就可能给出**合法的**不同结果。因此：
   1. 每引擎的 capability 判定必须允许「该引擎上不适用」表达为 `null`（现有契约 `using-third-party-web-components.md:136-137` 已经这么规定），**不得**把引擎差异转成失败或把 `null` 转成 `true`；
   2. 只把「注册/升级/迟到 host 激活」这类**契约级**断言设为三引擎必须全绿，其余能力探针按引擎记录；
-  3. 不用固定 sleep，一律 `expect.poll` / `waitForFunction`（KR-18 的教训）。
+  3. 不用固定 sleep，一律 `expect.poll` / `waitForFunction`（既有 flake 记录的教训）。
 
 ---
 
@@ -583,7 +583,7 @@ function makeTimers() {
 
 现有 `qualify.ts` 的 `expectedTags`（`:256-269`）、`thirdPartyReady`（`:288-318`）、`summary`（`:329-376`）需要相应扩展；**不得削弱任何现有断言**（尤其 `litHostContainsOpenElement`，`:360-362`）。
 
-### 9.2 每个库需要新增的依赖与体积/网络影响
+### 9.2 每个库的依赖与历史包元数据
 
 | 包 | 版本 | 解包体积（`dist.unpackedSize`） | 现状 | 本计划新增 |
 |---|---|---|---|---|
@@ -592,7 +592,7 @@ function makeTimers() {
 | `@shoelace-style/shoelace` | 2.20.1 | 8,350,254 B | 已 pin | 0 |
 | `@material/web` | 2.4.1 | 4,047,089 B | 已 pin | 0 |
 | `@ionic/core` | 8.8.18 | 20,456,789 B（+ ionicons / tslib） | 已 pin | 0 |
-| `@stencil/core` | 4.43.5 | 23,067,665 B，**0 个 dependencies** | 作为 `@ionic/core` 的直接依赖**已被安装** | **0 额外字节** |
+| `@stencil/core` | 4.43.5 | 23,067,665 B，**0 个 dependencies** | 与 `@ionic/core` 的传递依赖同版本；是否复用同一安装实例取决于安装环境 | 0 个新增直接声明（不据此推断网络/磁盘为 0） |
 
 **结论**：
 - 新增直接依赖仅 `@stencil/core@4.43.5`，与 Ionic 的传递依赖版本一致；是否复用同一安装实例取决于包管理器与安装环境。
@@ -603,9 +603,9 @@ function makeTimers() {
 
 - fixture 每次运行生成隔离临时 app；峰值磁盘需求取决于依赖缓存、链接方式与构建产物，不以历史机器余量作为资格证据。
 - 既有清理契约：`qualify.ts:1040-1044` 在 `finally` 中 `rm(tmpRoot, { recursive: true })`，仅当 `OPEN_ELEMENT_KEEP_THIRD_PARTY_WC_SMOKE=1` 保留（`:881`）。历史诊断观察到失败后的残留目录；验收必须覆盖失败路径清理，CI 不得设置 `OPEN_ELEMENT_KEEP_*`。
-- ✅ **前序 harness 陷阱已由 t3-release 修复并落地**（`6d52fa580`）：`qualify.ts:583-589` 现在 `scaffoldApp({ ..., extraArgs: ['--no-install'] })`，`tests/fixtures/web-component-interop/qualify.ts` 同步改了同一行。**实现 lane 不得 revert 该改动**；本计划不再需要为此留依赖项。
+- ✅ **前序 harness 陷阱已修复并落地**：`qualify.ts:583-589` 现在 `scaffoldApp({ ..., extraArgs: ['--no-install'] })`，`tests/fixtures/web-component-interop/qualify.ts` 同步改了同一行。**实现不得 revert 该改动**；本计划不再需要为此留依赖项。
 
-### 9.4 harness 改动点（fixture 侧，implementation lane 负责）
+### 9.4 harness 改动点（fixture 侧，实现侧负责）
 
 1. `tests/fixtures/third-party-web-components/qualify.ts`
    - `THIRD_PARTY_IMPORTS` 增 `'@stencil/core': '4.43.5'`（显式直接依赖，锁到 Ionic 已带的版本）。
@@ -614,12 +614,12 @@ function makeTimers() {
    - `expectedTags`（`:256-269`）扩展；`thirdPartyReady`/`summary` 增加新探针；**新增 `open:island-host-timeout` 监听并把 `pending` 折进失败消息**（比今天的 `missing=` 更有诊断力）。
    - A3 需要在 `prepareFixtureApp`（`:578-602`）里加 `stencil build` 步骤，并在 app 里 `defineCustomElement()` 注册。
    - **三引擎**：`verifyBrowser(distDir)`（`:172-177`）改为接受 `browserName`，`main()` 里 build 一次后对 chromium/firefox/webkit 各开一个 session（§8.4）；结果按引擎并入 record 与 tierReport。
-   - **KR-17 退休**：全绿后更新／摘除 the internal working ledger (not published)（ledger 的 `Retirement condition` 就是本条；摘钩需给出三引擎证据）。
+   - **验收条件收口**：本条的三引擎、多库用例全绿后，本设计声明的互操作缺口即关闭；收口需给出三引擎证据。
 2. 体积/依赖声明：`docs/integrations/using-third-party-web-components.md` 的支持矩阵（`:129-134`）与「Library Evidence」段（`:108-127`）需要补 A/B 组条目；新增一条**明确的 late-host 支持声明**与 **closed shadow root 不支持声明**；三引擎结果需要一条说明（含 `null` 语义）。
 
 ---
 
-## 10. 验收清单（implementation lane 直接照做）
+## 10. 验收清单（实现直接照做）
 
 ### 10.1 生产代码
 
@@ -649,7 +649,7 @@ function makeTimers() {
 - [ ] **third-party WC smoke 三引擎**：`launchQualifyBrowser` 按 §8.4 接上 chromium + firefox + webkit，**build 一次、三个 session**；注册/升级/late-host 激活这类契约级断言三引擎全绿。
 - [ ] `browserVersion` 与每引擎 capability 结果都进 record/tierReport；引擎差异只能表达为 `null`/gap，**不得**转成 pass。
 - [ ] `vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-native-framework e2e` 与 `--filter @openelement/fixture-router-request-time e2e`。
-- [ ] 无 flake：不依赖固定 sleep 断言（用 `expect.poll` / `waitForFunction`）；owner 已定 `retries=0`，**禁止**用 retry 掩盖（KR-18）。
+- [ ] 无 flake：不依赖固定 sleep 断言（用 `expect.poll` / `waitForFunction`）；owner 已定 `retries=0`，**禁止**用 retry 掩盖。
 
 ### 10.4 fixture（§9）
 
@@ -657,9 +657,9 @@ function makeTimers() {
 - [ ] `pnpm --dir tests/fixtures/third-party-web-components run smoke` 在 `wc-open-child` 上**由红转绿**（当前失败信息是 `custom-element registration failed; missing=wc-open-child; browserErrors=`，三引擎都要绿）。
 - [ ] C4 负向用例（unused tag 0 fetch）为绿。
 - [ ] C2 closed root 记为 gap（`null`），**不得**转成 pass。
-- [ ] **KR-17 退休**：the internal working ledger (not published) 的 KR-17 条目 `Latest observation` 更新为「已修复」并摘钩（或按 ledger 惯例保留条目 + 标注 retired），证据 = 三引擎 smoke 全绿的日志。
-- [ ] 不 revert t3-release 已落地的 `--no-install`（`qualify.ts:583-589`）。
-- [ ] 新增直接依赖仅 `@stencil/core@4.43.5`，且确认它为 0 额外体积；在 PR body 记录该事实与验证方式（`@ionic/core@8.8.18` 的 dependencies 已含同版本）。
+- [ ] **验收条件收口**：三引擎 smoke 全绿的日志是唯一证据形态（按引擎摘要 + tierReport 产物路径），不写「本地通过」。
+- [ ] 不 revert 已落地的 `--no-install`（`qualify.ts:583-589`）。
+- [ ] 新增直接依赖仅 `@stencil/core@4.43.5`；不得以「传递依赖已存在」声称 0 额外体积，实际资源影响须在执行环境验证并在 PR body 记录验证方式（`@ionic/core@8.8.18` 的 dependencies 已含同版本）。
 
 ### 10.5 文档 / seam
 
@@ -667,7 +667,7 @@ function makeTimers() {
 - [ ] `www/content/docs/guide/islands-and-ssr.md`（+ `.zh.md`）：B2 段落补一句「可达性在有界 late 窗口内持续求值」；如触发 `doc-figures` >1% 增长则按 ritual 重基线。
 - [ ] 新增 `open:island-host-timeout` 事件记入公开事件面文档（与 `open:ready` / `open:action-failure` 并列）。
 - [x] 按 constitution P8 / ADR-0163 判定：该事件构成 client runtime → page 的公开诊断面，已登记 `docs/architecture/seams.md`（「Late-host activation give-up announcement」行，owner/consumer-form guard 齐备）；scheduler 仍是唯一 owner，未新增构建期产物或跨阶段交接。判定与替代方案见 ADR-0170。
-- [ ] 若 owner 要求把设计提交为文档：`docs/release/late-host-island-activation-design.md`（G1 批准后由本 lane 提交）。
+- [ ] 若 owner 要求把设计提交为文档：`docs/release/late-host-island-activation-design.md`（G1 批准后提交）。
 
 ### 10.6 门禁命令（提交前本地全绿）
 
@@ -683,7 +683,7 @@ vp run --no-cache --fail-if-no-match --filter @openelement/fixture-third-party-w
 ```
 
 无需运行：`interface:snapshot:write`（无导出变化）、`version-bump`（非发布 PR）。
-定稿前置：完整 `release:check` 需在**新 SHA** 上重跑（审计 §4.6；t3-release 只跑了 smoke 本身，未跑完整 `release:check`）。
+定稿前置：完整 `release:check` 需在**新 SHA** 上重跑（审计 §4.6；现有记录只覆盖 smoke 本身，未覆盖完整 `release:check`）。
 
 ### 10.7 禁止项
 
@@ -709,20 +709,20 @@ vp run --no-cache --fail-if-no-match --filter @openelement/fixture-third-party-w
    - 它解决了「不得静默丢 island」的诊断要求，但会在「应用声明了本页不使用的 island」这一**完全正常**的场景下也派发（每页 ≤1 次，无监听者成本 ≈0）。
    - 替代：不派发事件，只在测试/诊断模式下暴露状态（则生产环境仍无信号）；或派发但要求文档写明 informational 语义（建议后者）。
 3. **多库 fixture 是否包含 A3（真 Stencil 自撰 host）**
-   - 含：证明「非 Lit、非 FAST 的第三方编译器路径」，代价是 harness 增加一个 `stencil build` 步骤（+5–10 s）与 ~40 行 harness 代码，**磁盘/网络 +0**。
+   - 含：证明「非 Lit、非 FAST 的第三方编译器路径」，代价是 harness 增加一个 `stencil build` 步骤（+5–10 s）与 ~40 行 harness 代码；磁盘/网络影响取决于执行环境，不据此断言为 +0。
    - 不含：A 组只剩 Lit / FAST / native 三例（仍满足「3+」，但 Stencil 只以 light-DOM 形式（B3）出现），与 owner 原话「Shoelace / FAST / Stencil / Ionic / Lit 中选 3+，每库都要有 late host in open shadow root 用例」相比，Stencil 的 shadow 内部用例会缺席。
 4. **改动面是否收敛为「单文件生产改动」**
    - 建议：是（只改 `island-scheduler.ts`）。探测的下游完全复用 F01 的 `observeVisible()`，不碰 `entry-client-codegen.ts`、不碰 protocol、不碰构建期。
    - 备选：额外把 `onIslandLoaded` 在 `enhancedForms === false` 时也无条件生成（`entry-client-codegen.ts:675`），让「任何 island 加载」立即触发一次 rescan —— 能让首个 late host 更快被激活，但把改动面扩到第二个文件 + codegen 测试，且**不能替代定时探测**（§5.2）。建议不做。
-5. **（t3 handoff 新增，需 owner 知悉成本）三引擎 third-party WC smoke 的范围**
-   - KR-17 的退休条件已写死为「T8's three-engine, multi-library cases green」，因此 WC smoke 必须接上 chromium/firefox/webkit（§8.4）。这不是本 lane 可自行收窄的。
-   - 但需要 owner 知悉两点成本/风险：① 浏览器阶段变成 3 个 session（建议 build 一次、三 session，避免 3× 构建）；② KR-18 已记录 firefox fixture flake 且 owner 已定 `retries=0`、禁止 retry 掩盖，三引擎会放大暴露面。建议的收敛口径：**只有「注册 / 升级 / late-host 激活」这类契约级断言要求三引擎全绿**，其余能力探针按引擎记录、差异表达为 `null`（符合 `using-third-party-web-components.md:136-137` 既有契约）。
+5. **（需 owner 知悉成本）三引擎 third-party WC smoke 的范围**
+   - 本设计的验收条件已写死为「三引擎、多库用例全绿」，因此 WC smoke 必须接上 chromium/firefox/webkit（§8.4）。这不是实现侧可自行收窄的。
+   - 但需要 owner 知悉两点成本/风险：① 浏览器阶段变成 3 个 session（建议 build 一次、三 session，避免 3× 构建）；② 既有记录显示 firefox fixture 存在 flake，且 owner 已定 `retries=0`、禁止 retry 掩盖，三引擎会放大暴露面。建议的收敛口径：**只有「注册 / 升级 / late-host 激活」这类契约级断言要求三引擎全绿**，其余能力探针按引擎记录、差异表达为 `null`（符合 `using-third-party-web-components.md:136-137` 既有契约）。
 
 **G1 结论：1–4 按上述推荐批准；第 5 条（引擎口径）随后裁决为「接受推荐收敛口径」（见顶部「批准记录」）。**
 
 ---
 
-## 附录 A：证据索引（本 lane 实际读过的位置）
+## 附录 A：证据索引（本文实际核对过的位置）
 
 **核心实现**
 
@@ -763,9 +763,8 @@ vp run --no-cache --fail-if-no-match --filter @openelement/fixture-third-party-w
 
 **上游记录**
 
-- 历史外部审计复现：`missing=wc-open-child`（根因、可复现代码与失败时序见 §1；内部审查流水不作为公开读者的必要证据）。
-- the internal working ledger (not published) 的 **KR-17** 条目（committed；`Owner: alpha15 batch — T8 takes the fixture follow-up`；`Retirement condition: T8's three-engine, multi-library cases green`；`Latest observation: 2026-10-18, lane/t3-release @ f395b1e1f`——smoke 到达浏览器阶段且恰好 `missing=wc-open-child`、browser errors 为空）。同文件 KR-18（firefox fixture flake；`retries=0` 为已批准策略、禁止 retry 掩盖）直接约束 §8.4 的三引擎方案。
-- t3-release handoff（lane/t3-release，未 push）：`6d52fa580` fix(tests): keep the pre-publish registry install out of qualify scaffolds；`36c60cdd1` test(release): qualify the create initializer alias before and after publish；`ed50abeaa` docs(release): commit the known-reds ledger for release readers（三者均为 lane 历史提交，不是主分支祖先；主分支落地提交见 KR-17 条目）。历史报告另记录当时没有 gate 执行 `fixture-web-component-interop#qualify`；该观察为后续资格工作输入，不表示当前 gate 状态。
+- 历史外部审计在 `53fc1d4fb` 与已发布 alpha.14 上复现了 `missing=wc-open-child`（根因、可复现代码与失败时序见 §1）；该历史观察不是当前版本的失败判定。
+- 前序 harness 修复的结果以当前树为准：`qualify.ts:583-589` 的 `--no-install` 即该修复；未合并的交接提交不列为本公开文档的证据。历史报告另记录当时没有 gate 执行 `fixture-web-component-interop#qualify`；该观察为后续资格工作输入，不表示当前 gate 状态。
 - git：`c27f1ae6b`（F01）、`3c472f08f` / `82792403d`（toString 自包含不变量及其后的注释改写；F01 已把 `hasIslandHost` 提升回模块作用域，inline 路径退役 —— `tests/fixtures/router-request-time/app/routes/visible-probe.tsx:6` 明示改为 virtual module）。
 
 ## 附录 B：未决 / 残留风险
@@ -775,8 +774,8 @@ vp run --no-cache --fail-if-no-match --filter @openelement/fixture-third-party-w
 3. **P-B 升级触发条件**：若 §7.4 的实测显示单次遍历 > 2 ms 或总长任务 > 5 ms，需要重新找 owner 决策（不得自行改预算）。
 4. **A3 的 Stencil 构建步骤**会给 harness 增加构建时间与一处新的失败面（Stencil 配置/版本），需在 fixture 里 fail loud（stencil build 非零退出必须让 smoke 失败，不得静默降级）。
 5. **`ssr:false` island 的 host 也可能在 SSR 标记里**（只是组件未序列化）——文档描述 late host 时不要把它等价为「客户端加载」，需以「host 出现时机」表述。
-6. **三引擎 WC smoke 的 flake 面**：KR-18（firefox fixture flake，`retries=0` 政策）说明本仓库的三引擎 fixture 已在 flake 边缘。WC smoke 加密到三引擎后，任何新的跨引擎差异都会被 gate 观察到；收敛口径见 §11.5（只把契约级断言设成全绿），并把首次三引擎跑的结果如实记录（包括合法的引擎差异）。
-7. **KR-17 摘钩的证据形态**：ledger 摘钩需要「三引擎全绿的日志」作为证据；建议在 PR body 直接贴三段引擎的 smoke 结论摘要 + `OPEN_ELEMENT_TIER_REPORT` 产物路径（产物不入库），不要只写「本地通过」。
+6. **三引擎 WC smoke 的 flake 面**：既有 firefox fixture flake 记录（`retries=0` 政策）说明本仓库的三引擎 fixture 已在 flake 边缘。WC smoke 加密到三引擎后，任何新的跨引擎差异都会被 gate 观察到；收敛口径见 §11.5（只把契约级断言设成全绿），并把首次三引擎跑的结果如实记录（包括合法的引擎差异）。
+7. **验收证据形态**：验收收口需要「三引擎全绿的日志」作为证据；建议在 PR body 直接贴三段引擎的 smoke 结论摘要 + `OPEN_ELEMENT_TIER_REPORT` 产物路径（产物不入库），不要只写「本地通过」。
 
 ---
 

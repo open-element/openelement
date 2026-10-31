@@ -46,7 +46,7 @@ snapshot, and both sides were swept again from scratch.
    (raw, gzip and file counts for every group) — the harness itself is
    unchanged across editions.
 5. **The three-arm session added one harness mapping line and nothing else.**
-   `group-build.sh` gained an `a14` side case (`ROOT=/private/tmp/oe-ab-a14`);
+   `group-build.sh` gained an `a14` side case (`ROOT=<scratch>/oe-ab-a14`, where `<scratch>` is a local out-of-tree directory);
    the collector, the sweep driver, the timing wrapper and the clean-then-build
    recipes are untouched. The A14 arm is a detached worktree at the tag with an
    empty `git status --porcelain`; the final arm is the tree-hash-verified

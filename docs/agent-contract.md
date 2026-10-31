@@ -141,7 +141,7 @@ debugger — reconcile locally before pushing.
 <!-- derived:gates:start -->
 | Gate | Steps, in order (the first failure stops the gate) |
 | --- | --- |
-| `vp run check` | `fmt:check` → `lint` → `typecheck` → `@openelement/tools-repo#lint:markdown` |
+| `vp run check` | `fmt:check` → `lint` → `typecheck` → `@openelement/tools-repo#lint:markdown` → `@openelement/www#check:public-docs` |
 | `vp run gate:release` | `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` |
 | `vp run release:check` | `@openelement/tools-repo#generate:all` → `@openelement/tools-repo#release:registry-check` → `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` → `@openelement/tools-release#publish:npm:dry-run` |
 | `vp run saas:verify` | `@openelement/saas#check` → `@openelement/saas#test` |

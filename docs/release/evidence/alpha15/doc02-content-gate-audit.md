@@ -1,6 +1,6 @@
 # DOC-02 — audit of the existing content-example gate
 
-Lane E (docs-site), task-5. Scope: audit `www/tools/check-content-examples.ts` and its tests, close real coverage gaps **with tests** (no new gate), and make at most minimal robustness fixes. Measured on the batch worktree (branch `alpha15`, HEAD `ef5da43` plus lane edits), 2026-10-19. Raw logs under `/tmp/docs-site/`.
+Lane E (docs-site), task-5. Scope: audit `www/tools/check-content-examples.ts` and its tests, close real coverage gaps **with tests** (no new gate), and make at most minimal robustness fixes. Measured on the batch worktree (branch `alpha15`, HEAD `ef5da43` plus lane edits), 2026-10-19. Raw logs under `<scratch>/docs-site/`.
 
 ## 1. What the gate decides
 
@@ -69,13 +69,13 @@ So shell, JSON, text, HTML and CSS fences are never sent to the compiler or the 
 
 `FENCE_PATTERN` required a bare `\n` immediately after the language token, so ```` ```tsx ```` (trailing space) or a CRLF opener was not discovered by the type-check **or** the compile run. One character class (`[^\S\n]*`) now tolerates that spacing; `ANY_FENCE` already did.
 
-Behavior-neutral on today's corpus: `grep -rn "^```\(ts\|tsx\|js\|javascript\|typescript\)[ \t]\+$" www/content` returns no hits, and the full gate still passes (log: `/tmp/docs-site/gate-final.log`).
+Behavior-neutral on today's corpus: `grep -rn "^```\(ts\|tsx\|js\|javascript\|typescript\)[ \t]\+$" www/content` returns no hits, and the full gate still passes (log: `<scratch>/docs-site/gate-final.log`).
 
 ### 6.2 The documented-rejection exclusion was dead code in the real gate
 
 `checkContent()` readdir()s an absolute root, so `example.file` is absolute; `COMPILE_EXCLUDED_PAGES` is keyed repo-relative. `isCompileExcluded` did a plain map lookup, so it answered `false` for every walked page — the exemption only ever worked for the tests, which pass relative fixture names.
 
-Evidence with the pre-fix module copied from `HEAD` to `/tmp/docs-site/prefix/` (relative imports rewritten to absolute so it runs):
+Evidence with the pre-fix module copied from `HEAD` to `<scratch>/docs-site/prefix/` (relative imports rewritten to absolute so it runs):
 
 ```text
 HEAD (pre-fix) isCompileExcluded(absolute): false
@@ -83,7 +83,7 @@ HEAD (pre-fix) compileExample(absolute grammar page): 1 failure
 after the fix: isCompileExcluded(absolute): true; compileExample: []
 ```
 
-The bug was latent, not red: all 16 unique grammar-page fences in the current corpus compile green even when run (`/tmp/docs-site/probe-exclusion.ts`), so no gate run was failing. But the documented suppression path did not exist, and the first whole-unit rejected teaching form would have failed the gate with no way to use the allowlist. Fix: `isCompileExcluded` accepts the raw key or the path relative to the repo root.
+The bug was latent, not red: all 16 unique grammar-page fences in the current corpus compile green even when run (`<scratch>/docs-site/probe-exclusion.ts`), so no gate run was failing. But the documented suppression path did not exist, and the first whole-unit rejected teaching form would have failed the gate with no way to use the allowlist. Fix: `isCompileExcluded` accepts the raw key or the path relative to the repo root.
 
 ## 7. Gaps left open (documented, deliberately not fixed here)
 
@@ -135,4 +135,4 @@ pnpm --filter @openelement/www run check:routes-types                         # 
 pnpm --filter @openelement/www run check:install-command                      # passed (10 display files)
 ```
 
-Logs: `/tmp/docs-site/gate-baseline.log`, `gate-after.log`, `gate-final.log`, `doc-claims.log`, `routes-types.log`, `check-install-command.log`, `prefix-exclusion.txt`, `corpus-counts.txt`.
+Logs: `<scratch>/docs-site/gate-baseline.log`, `gate-after.log`, `gate-final.log`, `doc-claims.log`, `routes-types.log`, `check-install-command.log`, `prefix-exclusion.txt`, `corpus-counts.txt`.

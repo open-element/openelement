@@ -12,6 +12,10 @@ This directory is the **durable pointer** for the two release-evidence documents
 The measurement was taken on `d9eb755d3`; the delta to the submitted final SHA
 is documentation-only (see the A/B document's delta note).
 
+`<scratch>` in this directory's evidence documents stands for a local
+out-of-tree directory; the recorded session logs lived in one and are not
+committed.
+
 ## What is tracked here, and what is a release asset
 
 Tracked (small, reviewable):
@@ -58,20 +62,21 @@ Release exists (review FR-06/REL-03). Three handoff options were evaluated:
   replaces the publication asset.
 
 Fetch and verify (either command downloads identical bytes; the verifier fails
-closed on any digest, hash, assertion or documented-number mismatch):
+closed on any digest, hash, assertion or documented-number mismatch).
+`<scratch>` below is a local out-of-tree directory of your choice:
 
 ```sh
 # Anonymous fetch from the public fork (no repository access needed):
 gh release download evidence-ef5da43 -R SisyphusZheng/openelement \
-  -p alpha15-ab-jfb-evidence.tar.zst -D /tmp/rel03
+  -p alpha15-ab-jfb-evidence.tar.zst -D <scratch>/rel03
 # or, without gh:
-curl -fsSL -o /tmp/rel03/alpha15-ab-jfb-evidence.tar.zst \
+curl -fsSL -o <scratch>/rel03/alpha15-ab-jfb-evidence.tar.zst \
   https://github.com/SisyphusZheng/openelement/releases/download/evidence-ef5da43/alpha15-ab-jfb-evidence.tar.zst
 
 # Verify: pinned sha256 + byte size + 503 member hashes + 86/22 assertions
 # + the JFB numbers recomputed from the raw package against metrics.json and
 # the JFB document. Exit 1 on any failed check.
-node tools/release/verify-evidence-archive.ts --archive /tmp/rel03/alpha15-ab-jfb-evidence.tar.zst
+node tools/release/verify-evidence-archive.ts --archive <scratch>/rel03/alpha15-ab-jfb-evidence.tar.zst
 # or let the verifier fetch it (same checks, digest comes from this README):
 node tools/release/verify-evidence-archive.ts \
   --url https://github.com/SisyphusZheng/openelement/releases/download/evidence-ef5da43/alpha15-ab-jfb-evidence.tar.zst

@@ -114,7 +114,7 @@ are not skipped: CI's WebKit engine is the Linux build, where the Tab path
 reaches links, so the full ring/skip-link/disclosure assertions run there. The
 two 390px/timing rows run and assert on macOS WebKit normally.
 
-Logs from this lane (scratch, not committed): `/tmp/cli-tests/`. The commands
+Logs from this lane (scratch, not committed): `<scratch>/cli-tests/`. The commands
 above are the reproducible form; the accepted evidence is the CI run on the
 consolidated candidate.
 

@@ -37,7 +37,7 @@ claims that were previously conflated:
 output and nothing else, so it is the correct object to assert against until the
 Lead's consolidation build replaces it.
 
-Command and evidence (`/tmp/release-evidence/rel05/dist-inventory.txt`):
+Command and evidence (`<scratch>/release-evidence/rel05/dist-inventory.txt`):
 
 ```sh
 find www/dist -maxdepth 3 -name 'server' -print   # (no output)
@@ -50,7 +50,7 @@ No `server` directory exists at any depth under `www/dist`; there is no
 
 Single-file test (`pnpm exec vitest run --project www
 www/tools/site-package-sheet-admission.test.ts`, wall 1.74 s, log
-`/tmp/release-evidence/rel05/a6-single-file-on-existing-dist.log`):
+`<scratch>/release-evidence/rel05/a6-single-file-on-existing-dist.log`):
 
 ```text
  ✓ |www| www/tools/site-package-sheet-admission.test.ts (6 tests) 138ms
@@ -59,7 +59,7 @@ www/tools/site-package-sheet-admission.test.ts`, wall 1.74 s, log
 ```
 
 The test's own built-output assertion was replayed as a standalone probe
-(`/tmp/release-evidence/rel05/a6-built-output-probe.mjs`,
+(`<scratch>/release-evidence/rel05/a6-built-output-probe.mjs`,
 `a6-built-output-probe.json`) against the same tree. It reproduces the test's
 derivation exactly (marker → emitted sheet → referencing artifacts) and prints
 the per-sheet facts the assertion compresses:
@@ -117,7 +117,7 @@ and the removal branch is always taken.
 
 ### 3.1 Mechanism demonstration (scratch, no repository change)
 
-`/tmp/release-evidence/rel05/rm-swallow-demo.mjs` is the same four lines with a
+`<scratch>/release-evidence/rel05/rm-swallow-demo.mjs` is the same four lines with a
 read-only parent directory, so `rm` fails with `EACCES`:
 
 ```text
@@ -163,7 +163,7 @@ in the working tree (commit-less, branch `alpha15`, base `ef5da43`):
   `tests/fixtures/router-static-only/dist/server/entry.js` build ran to exit 0,
   logged `[build-ssg] Pure-static build: removed build-time SSR bundle
   (dist/server)`, and the directory is gone
-  (`/tmp/release-evidence/rel05/static-only-stale-build.log`).
+  (`<scratch>/release-evidence/rel05/static-only-stale-build.log`).
 
 The empty-directory rebuild of `www` itself still runs at Lead consolidation on
 the frozen tree (Lane E is editing `www/content/docs`, and `site:build` begins
@@ -288,10 +288,10 @@ admission contract is correct; only the removal's error handling was not.
 
 | path | content |
 | --- | --- |
-| `/tmp/release-evidence/rel05/dist-inventory.txt` | SHA/toolchain, `find` sweep, `www/dist` listing and file count |
-| `/tmp/release-evidence/rel05/a6-single-file-on-existing-dist.log` | the 6/6 vitest run (wall 1.74 s) |
-| `/tmp/release-evidence/rel05/a6-built-output-probe.json` | per-sheet emitted/referenced evidence |
-| `/tmp/release-evidence/rel05/rm-swallow-demo.mjs` | the four-line removal reproduction |
-| `/tmp/release-evidence/rel05/a6-built-output-probe.mjs` | probe source (replicates the test's derivation) |
-| `/tmp/release-evidence/rel05/static-only-stale-build.log` | real fixture build with a pre-injected stale `dist/server/entry.js`: exit 0, verified removal log, directory gone |
+| `<scratch>/release-evidence/rel05/dist-inventory.txt` | SHA/toolchain, `find` sweep, `www/dist` listing and file count |
+| `<scratch>/release-evidence/rel05/a6-single-file-on-existing-dist.log` | the 6/6 vitest run (wall 1.74 s) |
+| `<scratch>/release-evidence/rel05/a6-built-output-probe.json` | per-sheet emitted/referenced evidence |
+| `<scratch>/release-evidence/rel05/rm-swallow-demo.mjs` | the four-line removal reproduction |
+| `<scratch>/release-evidence/rel05/a6-built-output-probe.mjs` | probe source (replicates the test's derivation) |
+| `<scratch>/release-evidence/rel05/static-only-stale-build.log` | real fixture build with a pre-injected stale `dist/server/entry.js`: exit 0, verified removal log, directory gone |
 | `packages/router/__tests__/build-ssg-bundle-url.test.ts` | 7 tests (5 new) pinning the finalize contract; 1.07 s wall |
