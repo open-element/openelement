@@ -179,3 +179,48 @@ record's 10 ms target.
 - alpha.4 JFB data is historical advisory only and is not part of the
   comparison.
 - Timing in the A/B document is advisory-only and is not used for any claim.
+
+## Sanitised replacement package (2026-10-31)
+
+The original asset above is **historical and unchanged**: the PB-02 audit
+records machine-specific build paths in its unpacked content (7,221
+machine-path rows across 292 files; every row was classified during triage, and
+0 credential/customer-data candidates were found under the recorded scanner
+scope). Its bytes, digest and tags are not modified — only the sanitised
+replacement below is new.
+
+The replacement is published as an **evidence-only prerelease** (not a product
+release) on the release fork:
+<https://github.com/SisyphusZheng/openelement/releases/tag/evidence-sanitized-2026-10-31>
+
+- asset: `alpha15-ab-jfb-evidence.sanitized-2026-10-31.tar.zst`
+- **233,633 bytes**, sha256
+  `7e9a4f6d678ef8222d6d39612fb7fa2c2b604370eb153413a41312f47cc52a60`,
+  **525 members** (the original 524-member set plus `SANITIZATION.md`),
+  **504 hashed entries** (the original 503-path set plus `SANITIZATION.md`).
+- changes: machine-specific **path prefixes only** — home roots became
+  `<HOME>`, CI workspace roots `<CI_WORKSPACE>`, scratch/worktree checkout
+  roots `<CHECKOUT>`, temporary roots `<TMP>`, hosted toolchain cache roots
+  `<TOOLCACHE>`. Relative tails are preserved; no measurement value,
+  assertion, timing figure, failure log or conclusion was edited; per-file
+  line counts are identical to the source (990 lines rewritten across 286
+  files, 1,124 prefix occurrences). `SANITIZATION.md` inside the archive
+  records the rules, the replacement statistics and the residual boundaries.
+
+The replacement digest **does not replace or validate the original digest**.
+Cite each measurement with the digest that actually carries it. The verifier
+described above is anchored to the historical original's claims; for the
+replacement use the copyable commands from the release note:
+
+```sh
+shasum -a 256 alpha15-ab-jfb-evidence.sanitized-2026-10-31.tar.zst
+# expected 7e9a4f6d678ef8222d6d39612fb7fa2c2b604370eb153413a41312f47cc52a60
+tar -tf alpha15-ab-jfb-evidence.sanitized-2026-10-31.tar.zst | wc -l   # 525
+mkdir -p <scratch>/sanitized-check
+tar -xf alpha15-ab-jfb-evidence.sanitized-2026-10-31.tar.zst -C <scratch>/sanitized-check
+(cd <scratch>/sanitized-check && shasum -a 256 -c SHA256SUMS)                # 504 lines, all OK
+```
+
+Scope boundary: the PB-02 NOT SCANNED list applies — no full-history scan, no
+other releases/assets, no Actions artifacts, no nested archives, and no
+credential audit. Rule-based "no leaks found" is not proof of absence.
