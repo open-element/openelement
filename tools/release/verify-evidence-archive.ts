@@ -23,13 +23,21 @@
  * A missing archive or a failed fetch is an explicit failure with the fetch
  * path, never a silent pass. Nothing is written outside the scratch work
  * directory.
+ *
+ * The archive is untrusted input: the fetch is size-capped (the declared
+ * Content-Length *and* the streamed bytes), and every member is inspected
+ * through the tar listing before extraction. Absolute paths, `..` escapes,
+ * symlinks, hardlinks and device/fifo members are refused, and the member
+ * count, per-member size and expanded total are bounded (see
+ * `EVIDENCE_LIMITS`). Any of those is a failure with the offending member
+ * named — never a warning, never a partial pass.
  */
 
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 
 /** CPU/JS benchmarks in the archived aggregate.py contract. */
@@ -280,12 +288,12 @@ interface RunnerResult {
   stderr: string;
 }
 
-type Runner = (
+/** A command runner injected by tests; the default spawns a real process. */
+export type Runner = (
   cmd: string,
   args: string[],
   options?: { cwd?: string; env?: NodeJS.ProcessEnv },
 ) => Promise<RunnerResult>;
-
 const defaultRunner: Runner = async (cmd, args, options = {}) =>
   await new Promise((resolvePromise, reject) => {
     const child = spawn(cmd, args, { cwd: options.cwd, env: options.env ?? process.env });
@@ -307,6 +315,315 @@ async function sha256File(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
+// ── Untrusted archive admission ────────────────────────────────────────────
+//
+// The archive comes from a URL or a download directory, so it is untrusted
+// input. The pinned digest is checked first, but a verification path must not
+// turn "the bytes hash to the pinned digest" into "the bytes are safe to
+// unpack": the tracked README is also just a file, and an archive whose digest
+// is accepted from `--url` has no trusted anchor at all. Both the transfer and
+// the member list are therefore bounded independently of the digest check.
+
+/** Caps applied to the downloaded archive and to every archive member. */
+export interface EvidenceLimits {
+  /** Largest accepted download, declared or streamed. */
+  maxDownloadBytes: number;
+  /** Largest accepted member count. */
+  maxMembers: number;
+  /** Largest accepted single expanded member. */
+  maxMemberBytes: number;
+  /** Largest accepted expanded total across all members. */
+  maxExpandedBytes: number;
+}
+
+/**
+ * Defaults sized for the alpha15 package (223,543 bytes compressed, 1,048
+ * members, 5,071,290 expanded bytes) with two orders of magnitude of headroom,
+ * still small enough that a hostile member list cannot exhaust the machine.
+ */
+export const EVIDENCE_LIMITS: EvidenceLimits = {
+  maxDownloadBytes: 64 * 1024 * 1024,
+  maxMembers: 10_000,
+  maxMemberBytes: 64 * 1024 * 1024,
+  maxExpandedBytes: 256 * 1024 * 1024,
+};
+
+/** Download attempts for transport errors and 5xx (the old `curl --retry 2`). */
+const FETCH_ATTEMPTS = 3;
+
+/** Tar member kinds the listing parser can name; only file/directory pass. */
+export type ArchiveMemberKind =
+  | 'file'
+  | 'directory'
+  | 'symlink'
+  | 'hardlink'
+  | 'char-device'
+  | 'block-device'
+  | 'fifo'
+  | 'socket'
+  | 'unknown';
+
+/** One member as printed by `tar -tv` (regular listing rows only). */
+export interface ArchiveMember {
+  name: string;
+  kind: ArchiveMemberKind;
+  size: number;
+}
+
+const MEMBER_KINDS: Record<string, ArchiveMemberKind> = {
+  '-': 'file',
+  d: 'directory',
+  l: 'symlink',
+  h: 'hardlink',
+  c: 'char-device',
+  b: 'block-device',
+  p: 'fifo',
+  s: 'socket',
+};
+
+/**
+ * A `tar -tv` row. Handles both listing dialects the verifier can meet:
+ * GNU tar (`-rw-r--r-- owner/group 5 2026-10-19 16:47 name`) and bsdtar
+ * (`-rw-r--r-- 0 owner group 5 Oct 19 15:03 name`, with a year for old
+ * members). The name is whatever follows the date, so spaces inside a member
+ * name survive; the size column is the token immediately before the date.
+ * A device row prints its major/minor pair (`0,0`) where a file prints bytes;
+ * the pair is normalised to 0 (the member kind is refused before the size
+ * rules apply).
+ */
+const VERBOSE_MEMBER_ROW =
+  /^([-dlhcbps])(?:\S{9})\s+(?:\d+\s+)?.*?\s(\d+(?:,\s*\d+)?)\s+(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}|[A-Z][a-z]{2}\s+\d{1,2}\s+(?:\d{1,2}:\d{2}|\d{4}))\s(.+)$/;
+
+/**
+ * Parse a `tar -tv` listing into members. A row that does not match the known
+ * dialects is an explicit failure: silently skipping a row would let an
+ * unparsed member through to extraction.
+ */
+export function parseTarVerboseListing(listing: string): ArchiveMember[] {
+  const members: ArchiveMember[] = [];
+  for (const line of listing.split('\n')) {
+    if (line.trim().length === 0) continue;
+    const match = VERBOSE_MEMBER_ROW.exec(line);
+    if (!match) {
+      throw new Error(
+        `archive listing row is not a recognised tar -tv entry: ${JSON.stringify(line.slice(0, 200))}`,
+      );
+    }
+    const kind = MEMBER_KINDS[match[1]!];
+    const size = match[2]!.includes(',') ? 0 : Number(match[2]);
+    if (!kind || !Number.isSafeInteger(size) || size < 0) {
+      throw new Error(`archive listing row has an unusable type/size: ${JSON.stringify(line)}`);
+    }
+    // A symlink or hardlink row carries the target after " -> " / " link to ";
+    // the member name is the part before it (the type is refused anyway).
+    const rawName = match[3]!;
+    const name =
+      kind === 'symlink'
+        ? rawName.replace(/ -> .*$/, '')
+        : kind === 'hardlink'
+          ? rawName.replace(/ link to .*$/, '')
+          : rawName;
+    members.push({ name, kind, size });
+  }
+  return members;
+}
+
+/** Why a member name is unsafe to extract, or null when it is a plain path. */
+export function unsafeMemberName(name: string): string | null {
+  if (name.length === 0) return 'has an empty name';
+  if (name.includes('\0')) return 'contains a NUL byte';
+  if (name.startsWith('/')) return 'is an absolute path';
+  if (name.startsWith('\\')) return 'is an absolute path';
+  if (/^[A-Za-z]:[\\/]/.test(name)) return 'is an absolute Windows path';
+  if (name.split(/[\\/]/).includes('..')) return 'escapes the extraction root via ".."';
+  return null;
+}
+
+export interface ValidatedMembers {
+  members: ArchiveMember[];
+  expandedBytes: number;
+}
+
+/**
+ * Resolve a `SHA256SUMS` entry against the unpacked root. The manifest is
+ * archive content too: an entry that leaves the unpack root would make the
+ * verifier hash a file it never admitted, so the same name rules apply.
+ */
+export function manifestEntryPath(unpackRoot: string, entryPath: string): string {
+  const relative = entryPath.replace(/^\.\//, '');
+  const unsafe = unsafeMemberName(relative);
+  if (unsafe) {
+    throw new Error(`SHA256SUMS entry ${JSON.stringify(entryPath)} ${unsafe}`);
+  }
+  return join(unpackRoot, relative);
+}
+
+/**
+ * Refuse an archive member list that is unsafe to extract or too large.
+ * Throws with the offending member named — a verification run that cannot
+ * bound the unpack is a failure, not a skipped check.
+ */
+export function validateArchiveMembers(
+  members: readonly ArchiveMember[],
+  limits: EvidenceLimits = EVIDENCE_LIMITS,
+): ValidatedMembers {
+  if (members.length === 0) {
+    throw new Error('archive contains no members — nothing can be verified');
+  }
+  if (members.length > limits.maxMembers) {
+    throw new Error(
+      `archive has ${members.length} members; the accepted maximum is ${limits.maxMembers}`,
+    );
+  }
+  let expandedBytes = 0;
+  for (const member of members) {
+    const badName = unsafeMemberName(member.name);
+    if (badName) {
+      throw new Error(`archive member ${JSON.stringify(member.name)} ${badName}`);
+    }
+    if (member.kind !== 'file' && member.kind !== 'directory') {
+      throw new Error(
+        `archive member ${JSON.stringify(member.name)} is a ${member.kind}; only regular files and directories are accepted`,
+      );
+    }
+    if (member.size > limits.maxMemberBytes) {
+      throw new Error(
+        `archive member ${JSON.stringify(member.name)} expands to ${member.size} bytes; the accepted maximum is ${limits.maxMemberBytes}`,
+      );
+    }
+    expandedBytes += member.size;
+    if (expandedBytes > limits.maxExpandedBytes) {
+      throw new Error(
+        `archive expands to more than ${limits.maxExpandedBytes} bytes (member ${JSON.stringify(member.name)} crosses the limit)`,
+      );
+    }
+  }
+  return { members: [...members], expandedBytes };
+}
+
+/** List the archive's members via `tar -tv` (LC_ALL=C keeps the date format). */
+export async function readArchiveMembers(
+  archivePath: string,
+  run: Runner = defaultRunner,
+): Promise<ArchiveMember[]> {
+  const listing = await run('tar', ['-tvf', archivePath], {
+    env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
+  });
+  if (listing.code !== 0) {
+    throw new Error(`tar -tvf failed (${listing.code}): ${listing.stderr.trim()}`);
+  }
+  return parseTarVerboseListing(listing.stdout);
+}
+
+/**
+ * Validate a declared Content-Length before any byte is written. A missing
+ * header is allowed (the stream cap still applies); a malformed one is not.
+ */
+export function checkContentLength(header: string | null, maxBytes: number): number | null {
+  if (header === null || header.trim().length === 0) return null;
+  const value = header.trim();
+  if (!/^\d+$/.test(value)) {
+    throw new Error(`download refused: invalid Content-Length ${JSON.stringify(header)}`);
+  }
+  const declared = Number(value);
+  if (!Number.isSafeInteger(declared)) {
+    throw new Error(`download refused: unusable Content-Length ${JSON.stringify(header)}`);
+  }
+  if (declared > maxBytes) {
+    throw new Error(
+      `download refused: declared Content-Length ${declared} exceeds the ${maxBytes} byte limit`,
+    );
+  }
+  return declared;
+}
+
+/** The subset of `fetch` the verifier needs; injectable so tests stay offline. */
+export type FetchLike = (input: string) => Promise<Response>;
+
+/**
+ * Download `url` to `target` under a hard byte cap. The cap is enforced twice:
+ * against the declared Content-Length (fail before any byte is written) and
+ * against every streamed chunk (a chunked or lying response cannot exceed it).
+ * The partial file is removed on every failure path.
+ */
+export async function downloadArchive(
+  url: string,
+  target: string,
+  limits: EvidenceLimits = EVIDENCE_LIMITS,
+  fetchImpl: FetchLike = fetch,
+): Promise<{ bytes: number }> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`download refused: not a valid URL: ${url}`);
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`download refused: ${parsed.protocol} is not an http(s) URL (${url})`);
+  }
+  let response: Response | null = null;
+  let lastError = '';
+  // Same retry budget the previous curl invocation carried (`--retry 2`):
+  // transport errors and 5xx are retried, a <=4xx answer is final.
+  for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      const candidate = await fetchImpl(url);
+      if (candidate.status >= 500) {
+        lastError = `HTTP ${candidate.status}${candidate.statusText ? ` ${candidate.statusText}` : ''}`;
+        continue;
+      }
+      response = candidate;
+      break;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  if (!response) {
+    throw new Error(`fetch failed for ${url}: ${lastError || 'no response'}`);
+  }
+  if (!response.ok) {
+    throw new Error(
+      `fetch failed for ${url}: HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+    );
+  }
+  const declared = checkContentLength(
+    response.headers.get('content-length'),
+    limits.maxDownloadBytes,
+  );
+  if (!response.body) {
+    throw new Error(`fetch failed for ${url}: the response carries no body`);
+  }
+  await mkdir(dirname(target), { recursive: true });
+  const handle = await open(target, 'w');
+  let bytes = 0;
+  try {
+    for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+      const buffer = Buffer.from(chunk);
+      bytes += buffer.length;
+      if (bytes > limits.maxDownloadBytes) {
+        throw new Error(
+          `download refused: streamed bytes exceed the ${limits.maxDownloadBytes} byte limit`,
+        );
+      }
+      await handle.write(buffer);
+    }
+  } catch (error) {
+    await handle.close();
+    await rm(target, { force: true });
+    throw new Error(
+      `fetch failed for ${url}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  await handle.close();
+  if (declared !== null && bytes !== declared) {
+    await rm(target, { force: true });
+    throw new Error(
+      `fetch failed for ${url}: streamed ${bytes} bytes but Content-Length declared ${declared}`,
+    );
+  }
+  return { bytes };
+}
+
 export interface VerifyOptions {
   /** Local archive path; ignored when `url` is set. */
   archivePath: string | null;
@@ -321,6 +638,10 @@ export interface VerifyOptions {
   workDir: string | null;
   keepWorkDir: boolean;
   runner?: Runner;
+  /** Injectable fetch for the `url` path; defaults to the platform `fetch`. */
+  fetch?: FetchLike;
+  /** Override the admission caps (tests exercise them against small fixtures). */
+  limits?: Partial<EvidenceLimits>;
 }
 
 /** Run the full verification and return the machine-readable report. */
@@ -348,6 +669,7 @@ export async function verifyEvidenceArchive(options: VerifyOptions): Promise<Ver
 
   const workRoot = options.workDir ?? (await mkdtemp(join(tmpdir(), 'oe-evidence-verify-')));
   await mkdir(workRoot, { recursive: true });
+  const limits: EvidenceLimits = { ...EVIDENCE_LIMITS, ...options.limits };
   let archivePath = options.archivePath ? resolve(options.archivePath) : null;
   try {
     if (
@@ -365,15 +687,15 @@ export async function verifyEvidenceArchive(options: VerifyOptions): Promise<Ver
         );
       }
       const target = join(workRoot, basename(new URL(options.url).pathname) || 'evidence.tar.zst');
-      const fetch = await run('curl', ['-fsSL', '--retry', '2', '-o', target, options.url]);
-      if (fetch.code !== 0) {
-        throw new Error(
-          `fetch failed (${fetch.code}): ${fetch.stderr.trim() || fetch.stdout.trim()}`,
-        );
-      }
+      await downloadArchive(options.url, target, limits, options.fetch ?? fetch);
       archivePath = target;
     }
     const archiveBytes = (await stat(archivePath)).size;
+    if (archiveBytes > limits.maxDownloadBytes) {
+      throw new Error(
+        `archive is ${archiveBytes} bytes; the accepted maximum is ${limits.maxDownloadBytes}`,
+      );
+    }
     const digest = await sha256File(archivePath);
     const expected = options.expectedSha256 ?? claims.sha256;
     check(
@@ -387,13 +709,19 @@ export async function verifyEvidenceArchive(options: VerifyOptions): Promise<Ver
       `actual=${archiveBytes} readme=${claims.bytes ?? '(unpinned)'}`,
     );
 
-    const list = await run('tar', ['-tf', archivePath]);
-    const members = list.stdout.split('\n').filter((line) => line.trim().length > 0).length;
-    if (list.code !== 0) throw new Error(`tar -tf failed: ${list.stderr.trim()}`);
+    // Admission: inspect every member before any byte is unpacked. An unsafe
+    // or oversized member list aborts the run (no extraction, no verdict).
+    const members = await readArchiveMembers(archivePath, run);
+    const admitted = validateArchiveMembers(members, limits);
+    check(
+      'archive members are admitted before extraction',
+      admitted.members.length > 0,
+      `${admitted.members.length} member(s), ${admitted.expandedBytes} expanded bytes`,
+    );
     check(
       'archive member count matches the README',
-      claims.members === null || claims.members === members,
-      `actual=${members} readme=${claims.members ?? '(unpinned)'}`,
+      claims.members === null || claims.members === members.length,
+      `actual=${members.length} readme=${claims.members ?? '(unpinned)'}`,
     );
 
     const unpacked = join(workRoot, 'unpacked');
@@ -412,7 +740,7 @@ export async function verifyEvidenceArchive(options: VerifyOptions): Promise<Ver
     let hashed = 0;
     const badHashes: string[] = [];
     for (const entry of manifest) {
-      const filePath = join(unpacked, entry.path.replace(/^\.\//, ''));
+      const filePath = manifestEntryPath(unpacked, entry.path);
       const actual = await sha256File(filePath).catch(() => null);
       if (actual === null) {
         badHashes.push(`${entry.path}: missing`);
@@ -581,7 +909,7 @@ export async function verifyEvidenceArchive(options: VerifyOptions): Promise<Ver
       archive: archivePath,
       sha256: digest,
       bytes: archiveBytes,
-      members,
+      members: members.length,
       manifestEntries: manifest.length,
       checks,
       failures,
@@ -601,7 +929,14 @@ Verifies the alpha15 raw measurement package before approval: pinned sha256 and
 byte size, 503 member hashes, the 86/22 assertion reproducers, and the JFB
 numbers recomputed from the raw per-invocation JSON against both
 jfb/metrics.json and the JFB document. Exits 1 on any failed check, on a
-missing archive, or on a failed fetch — never a silent pass.`;
+missing archive, or on a failed fetch — never a silent pass.
+
+The archive is untrusted input: the transfer is capped (declared
+Content-Length and streamed bytes) and every member is admitted before
+extraction — absolute paths, ".." escapes, symlinks, hardlinks and device
+members are refused, as are member counts, per-member sizes and expanded
+totals above EVIDENCE_LIMITS. Any violation aborts the run with the offending
+member named (exit 2).`;
 
 interface CliOptions {
   archive: string | null;

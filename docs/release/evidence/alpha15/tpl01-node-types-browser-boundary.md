@@ -1,7 +1,7 @@
 # TPL-01 / TPL-02 — starter Node types, browser boundary, manager-matched handoff
 
 Lane D (templates-ci), task-4. Branch `alpha15`, base HEAD `ef5da43` plus this
-lane's edits, 2026-10-19. Scratch logs under `/tmp/templates-ci/`.
+lane's edits, 2026-10-19. Scratch logs under `<scratch>/templates-ci/`.
 
 ## TPL-01 — starter Node types + the browser entry's Node boundary
 
@@ -38,11 +38,11 @@ lane's edits, 2026-10-19. Scratch logs under `/tmp/templates-ci/`.
 
 | proof | command | result |
 | --- | --- | --- |
-| pre-fix timer fails the typecheck | packed-tarball scaffold with the pre-fix timer (bare `setInterval`, `number` field), `tsc --noEmit -p tsconfig.json` | exit 2, `app/islands/live-timer.tsx(40,5): error TS2322: Type 'Timeout' is not assignable to type 'number'.` (`/tmp/templates-ci/tpl01-timer-red.log`) |
-| fixed generated starter typechecks | packed create CLI → packed framework tarballs in the consumer tree, repo `tsc` on the GENERATED tsconfig | exit 0 (`/tmp/templates-ci/e2e-quality.log`, same tree as the TPL-03 chain) |
-| Vite fails open without the guard | plain Vite browser build of an island importing `node:fs` | exit 0; emitted chunk carries the inlined `__vite-browser-external` stub (`/tmp/templates-ci/vite-fail-open.log`) |
-| guard fails closed | router build of the same island fixture | exit 1, `[OE_CLIENT_BUILD_BROWSER_ENTRY_NODE_BUILTIN] ... imports the Node builtin "node:fs" (from .../app/islands/probe-counter.tsx)` (`/tmp/templates-ci/probe-after-guard.log`) |
-| loader page stays green | router build with a route `loader` importing `node:fs/promises` | exit 0, build complete, island chunk emitted (`/tmp/templates-ci/probe-after-guard.log`) |
+| pre-fix timer fails the typecheck | packed-tarball scaffold with the pre-fix timer (bare `setInterval`, `number` field), `tsc --noEmit -p tsconfig.json` | exit 2, `app/islands/live-timer.tsx(40,5): error TS2322: Type 'Timeout' is not assignable to type 'number'.` (`<scratch>/templates-ci/tpl01-timer-red.log`) |
+| fixed generated starter typechecks | packed create CLI → packed framework tarballs in the consumer tree, repo `tsc` on the GENERATED tsconfig | exit 0 (`<scratch>/templates-ci/e2e-quality.log`, same tree as the TPL-03 chain) |
+| Vite fails open without the guard | plain Vite browser build of an island importing `node:fs` | exit 0; emitted chunk carries the inlined `__vite-browser-external` stub (`<scratch>/templates-ci/vite-fail-open.log`) |
+| guard fails closed | router build of the same island fixture | exit 1, `[OE_CLIENT_BUILD_BROWSER_ENTRY_NODE_BUILTIN] ... imports the Node builtin "node:fs" (from .../app/islands/probe-counter.tsx)` (`<scratch>/templates-ci/probe-after-guard.log`) |
+| loader page stays green | router build with a route `loader` importing `node:fs/promises` | exit 0, build complete, island chunk emitted (`<scratch>/templates-ci/probe-after-guard.log`) |
 
 Tests: `packages/router/__tests__/browser-entry-boundary.test.ts` — 4 tests,
 green (unit: specifier matcher + plugin shape + coded error; real router-CLI

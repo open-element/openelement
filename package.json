@@ -7,7 +7,7 @@
     "node": ">=24.2"
   },
   "scripts": {
-    "check": "node tools/repo/gate.ts fmt:check lint typecheck @openelement/tools-repo#lint:markdown",
+    "check": "node tools/repo/gate.ts fmt:check lint typecheck @openelement/tools-repo#lint:markdown @openelement/www#check:public-docs",
     "check:dep-age": "node tools/repo/check-dependency-age.ts",
     "test": "pnpm run generate:all && vitest run --project element --project compiler --project router --project create --project ui --project saas --project www --project tools --project tests --project benchmarks",
     "test:e2e": "node tools/repo/gate.ts site:build @openelement/www#e2e:browsers @openelement/fixture-router-native-framework#e2e @openelement/fixture-router-lit-framework#e2e",

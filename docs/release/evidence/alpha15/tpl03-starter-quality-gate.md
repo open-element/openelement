@@ -1,7 +1,7 @@
 # TPL-03 — fresh-scaffold starter quality gate
 
 Lane D (templates-ci), task-4. Branch `alpha15`, base HEAD `ef5da43` plus this
-lane's edits, 2026-10-19. Scratch logs under `/tmp/templates-ci/`.
+lane's edits, 2026-10-19. Scratch logs under `<scratch>/templates-ci/`.
 
 TPL-03 asks for one thing: a CI gate that runs **create → typecheck → lint → test
 → build → smoke** on a freshly scaffolded starter, so a template regression is a
@@ -80,7 +80,7 @@ that made the root unpredictable.
   `setInterval`, which resolves to Node's overload once `@types/node` is in the
   program. The packed-tarball scaffold with that timer fails:
   `app/islands/live-timer.tsx(40,5): error TS2322: Type 'Timeout' is not
-  assignable to type 'number'.` (`/tmp/templates-ci/tpl01-timer-red.log`,
+  assignable to type 'number'.` (`<scratch>/templates-ci/tpl01-timer-red.log`,
   exit 2). The fix (window.setInterval + number) is what the gate's typecheck
   leg now proves green.
 - **Starter typecheck RED (missing types half, from the review).** The pre-fix
@@ -97,10 +97,10 @@ that made the root unpredictable.
   `import 'node:fs';` built green with only "Module node:fs has been
   externalized for browser compatibility": a plain Vite browser build of the
   same island exits 0 and emits its chunk with the `__vite-browser-external`
-  stub inlined (`/tmp/templates-ci/vite-fail-open.log`). After the TPL-01 guard
+  stub inlined (`<scratch>/templates-ci/vite-fail-open.log`). After the TPL-01 guard
   the same fixture exits 1 with
   `[OE_CLIENT_BUILD_BROWSER_ENTRY_NODE_BUILTIN]`, while the loader-page and
-  clean fixtures still exit 0 (`/tmp/templates-ci/probe-after-guard.log`).
+  clean fixtures still exit 0 (`<scratch>/templates-ci/probe-after-guard.log`).
 
 ## 4. Local evidence (real `pnpm`, no shim)
 
@@ -114,11 +114,11 @@ vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke qua
 | evidence | command | result |
 | --- | --- | --- |
 | the template's own lint script, user-like context | `cd <pointer root>/my-blog && pnpm run lint` (root read from the pointer file) | `Found 0 warnings and 0 errors. Finished … on 13 files with 96 rules`, exit 0 |
-| the exact CI invocation | `vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke quality` | every leg green incl. smoke on `/`, `/about`, `/api/ping`; final line "the fresh-scaffold lifecycle is green"; exit 0 (`/tmp/templates-ci/quality-final.log`) |
-| fail closed (lint leg, lint-only error) | seed `.oxlintrc.json` `{"rules":{"no-debugger":"error"}}` + `app/components/lint-seed.ts` with `debugger;`, then the same gate invocation | `pnpm run typecheck` exit 0 (the failure really is lint-only); `pnpm run lint` exit 1 ("Found 0 warnings and 1 error"); the gate exits 1 at the lint leg (`/tmp/templates-ci/quality-seeded.log`). Seeds removed, gate green again (exit 0) |
+| the exact CI invocation | `vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke quality` | every leg green incl. smoke on `/`, `/about`, `/api/ping`; final line "the fresh-scaffold lifecycle is green"; exit 0 (`<scratch>/templates-ci/quality-final.log`) |
+| fail closed (lint leg, lint-only error) | seed `.oxlintrc.json` `{"rules":{"no-debugger":"error"}}` + `app/components/lint-seed.ts` with `debugger;`, then the same gate invocation | `pnpm run typecheck` exit 0 (the failure really is lint-only); `pnpm run lint` exit 1 ("Found 0 warnings and 1 error"); the gate exits 1 at the lint leg (`<scratch>/templates-ci/quality-seeded.log`). Seeds removed, gate green again (exit 0) |
 | Playwright configs resolve the moved scaffold | `playwright test --config tests/e2e/starter-smoke/playwright.config.ts --list` (31 tests) and `…playwright.dev.config.ts --list` (4 tests) | exit 0 for both |
-| real browser smoke from the external scaffold | `playwright test --config tests/e2e/starter-smoke/playwright.config.ts --project=chromium` | 10 passed (9.1s) (`/tmp/templates-ci/pw-chromium.log`) |
-| pack/quality precondition | `pnpm --dir tests/e2e/starter-smoke run setup` | `starter-smoke ready at /var/folders/…/T/openelement-starter-smoke-<random>/my-blog`, exit 0; the pointer file records that root |
+| real browser smoke from the external scaffold | `playwright test --config tests/e2e/starter-smoke/playwright.config.ts --project=chromium` | 10 passed (9.1s) (`<scratch>/templates-ci/pw-chromium.log`) |
+| pack/quality precondition | `pnpm --dir tests/e2e/starter-smoke run setup` | `starter-smoke ready at <scratch>/openelement-starter-smoke-<random>/my-blog`, exit 0; the pointer file records that root |
 | workflow YAML | `python3 -c "import yaml; ..."` on `.github/workflows/autoflow-ci.yml` | parses; 10 job IDs unchanged; `pack` carries the new named step |
 | workflow linters | `actionlint` (exit 0); `zizmor --offline .github` 1.30.0 | no findings |
 
@@ -133,7 +133,7 @@ Targeted suites re-run on this tree: `vitest run --project create` (create
 suite incl. the packed-CLI test) and `vitest run --project router
 packages/router/__tests__/browser-entry-boundary.test.ts`; package typechecks
 for create/router/starter-smoke; `oxfmt --check`, `oxlint` and markdownlint on
-the touched files — all green (logs under `/tmp/templates-ci/`). The `pack`
+the touched files — all green (logs under `<scratch>/templates-ci/`). The `pack`
 job's timeout (40 min, measured) has headroom for the ~1 minute of lifecycle
 commands the step adds.
 
@@ -156,7 +156,7 @@ unchanged tree:
 ```text
 $ cd tests/e2e/starter-smoke/work/my-blog && oxlint
 No files found to lint. … Finished in 7ms on 0 files   → exit 1
-$ cp -R tests/e2e/starter-smoke/work/my-blog /tmp/lint-outside && cd /tmp/lint-outside && oxlint
+$ cp -R tests/e2e/starter-smoke/work/my-blog <scratch>/lint-outside && cd <scratch>/lint-outside && oxlint
 Found 0 warnings and 0 errors. … on 13 files           → exit 0
 ```
 
@@ -226,7 +226,7 @@ the analyzer reads as an insecure temporary file.
   paths.ts:109: const workDir = mkdtempSync(join(tmpdir(), SCRATCH_PREFIX));  # mkdtemp input
   ```
 
-**Re-verification after the fix (real `pnpm`, logs under `/tmp/templates-ci/`):**
+**Re-verification after the fix (real `pnpm`, logs under `<scratch>/templates-ci/`):**
 
 | check | command | result |
 | --- | --- | --- |

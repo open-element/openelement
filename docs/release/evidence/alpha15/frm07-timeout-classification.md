@@ -62,7 +62,7 @@ lit / firefox / PROBE-TIMEOUT:
 Timed out after 300000ms: …
 ```
 
-Reproducer (scratch, `/tmp/cli-tests/frm07c-classification-evidence.mts`), run on
+Reproducer (scratch, `<scratch>/cli-tests/frm07c-classification-evidence.mts`), run on
 this toolchain: it drives a real subprocess timeout through `runProcess()` and feeds
 the three shapes through the exported classifier. Output:
 
@@ -155,7 +155,7 @@ a flaky-accounting divergence — the precise classification error FR-05C calls 
   also evidence for the known Firefox large-page trap; the other 11 direct-URL
   routes pass in the same run.)
 - Classification reproducer: a throwaway spec
-  (`/tmp/cli-tests/timeout-classification.spec.ts` + local config) sets a 1500 ms
+  (`<scratch>/cli-tests/timeout-classification.spec.ts` + local config) sets a 1500 ms
   test ceiling, wraps a 10 s wait in `observeWithTimeoutClassification`, and its
   failure output is:
 

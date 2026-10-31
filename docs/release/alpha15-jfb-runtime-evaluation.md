@@ -27,7 +27,7 @@ each other.
 
 Both arms are the same JFB entry source; **only `package.json`'s dependency
 versions differ** (proved by `shasum` over every source file — see
-`/private/tmp/jfb-evidence/arm-source-shasum.txt`):
+`<scratch>/jfb-evidence/arm-source-shasum.txt`, with `<scratch>` a local out-of-tree directory):
 
 - `frameworks/keyed/openelement-alpha14/` — `@openelement/element` `1.0.0-alpha.14`
   from the registry.
