@@ -144,11 +144,9 @@ export function extractBuiltLinks(file: string, html: string): BuiltLink[] {
 export function resolveBuiltPath(path: string, exists: (file: string) => boolean): string | null {
   const clean = path.replace(/^\//, '').replace(/\/+$/, '');
   if (clean === '') return exists('index.html') ? 'index.html' : null;
-  // Static assets carry an extension; routes are clean URLs with index.html.
-  const lastSegment = clean.slice(clean.lastIndexOf('/') + 1);
-  if (/\.[a-z0-9]+$/i.test(lastSegment)) {
-    return exists(clean) ? clean : null;
-  }
+  // Resolve real files first, then real directory routes (slugs may contain dots).
+  // An extension-shaped suffix alone cannot distinguish a route from an asset.
+  if (exists(clean)) return clean;
   const asRoute = `${clean}/index.html`;
   if (exists(asRoute)) return asRoute;
   const asFile = `${clean}.html`;

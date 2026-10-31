@@ -1,6 +1,6 @@
 # DOC-01 — alpha15 site truth and guide-command corrections
 
-Lane E (docs-site), task-5. Repo: `<repository root>`, branch `alpha15`, HEAD `ef5da43` plus the batch worktree edits. No commit, push or deploy was performed (this session holds no Cloudflare credentials).
+Historical candidate observation (2026-10-19): branch `alpha15`, HEAD `ef5da43` plus the batch worktree edits. The results below describe that candidate, not the current deployed site. Publication and deployment were not verified by this record.
 
 ## 1. How the site version is derived
 
@@ -24,7 +24,7 @@ pnpm --filter @openelement/www run check:install-command
 # Install-command check passed (10 display files, 1 canonical string).
 ```
 
-`check:content-data` (generated projection drift) is **red at report time** because content documents changed across lanes after the last `generate:all`; the only file named is `www/app/data/_generated-guide-data.ts`. This lane cannot regenerate it (the batch rules reserve `generate:all` for consolidation), and other lanes are editing `www/content/docs/guide/{deployment,security}.md` concurrently, so a targeted regeneration now would snapshot half-written cross-lane content. The Lead runs `generate:all` at consolidation; re-run `check:content-data` after it.
+`check:content-data` (generated projection drift) was **red at the historical observation time**; the reported file was `www/app/data/_generated-guide-data.ts`, after content changed following generation. This record contains no subsequent consolidated generation/check result and does not assert that it passed.
 
 ## 3. Built-site facts (local `www/dist`, built 2026-10-19 17:45)
 
@@ -46,14 +46,14 @@ The home page prints the per-package registry table (six `v1.0.0-alpha.14` entri
 
 ## 4. Live deployment is stale — verified, not fixed here
 
-Fetched 2026-10-19 ~20:07 +08:00 (`curl -s https://openelement.org/ -o /tmp/docs-site/live-home.html`; `web_fetch` refuses the hostname because it resolves to a non-public address):
+Fetched 2026-10-19 ~20:07 +08:00 using HTTPS, with the response saved as `live-home.html` for the checks below:
 
 ```sh
-grep -o "v1.0.0-alpha.14 · six packages · one version" /tmp/docs-site/live-home.html | wc -l   # 1
-grep -c "1.0.0-alpha.15" /tmp/docs-site/live-home.html                                        # 0
+grep -o "v1.0.0-alpha.14 · six packages · one version" live-home.html | wc -l   # 1
+grep -c "1.0.0-alpha.15" live-home.html                                        # 0
 ```
 
-The live home page is the older single-line layout (`v1.0.0-alpha.14 · six packages · one version`); the current source renders the per-package registry table and the source-line stamp on guide pages. So the live site is an older deployment, exactly as the task book records. **Fixing the deployment is out of reach in this session** (no Cloudflare credentials, and the batch rules forbid a site build).
+The live home page is the older single-line layout (`v1.0.0-alpha.14 · six packages · one version`); the current source renders the per-package registry table and the source-line stamp on guide pages. The historical live response therefore showed an older deployment. No later deployment result is established by this record.
 
 ## 5. Deploy-trigger facts that are repo-verifiable, and what needs the post-merge push
 
@@ -93,8 +93,8 @@ Transcript strings in `tutorial.md` were matched against the tools that print th
 ### 6.3 The `pnpm check` suspect
 
 * `grep -rn "pnpm check" www/content/docs` → **0 hits**; the docs never spell the repo gate that way.
-* The repo script is `check` (`package.json`), and the repo's own docs use `pnpm run check`. Tested in a scratch project (`/tmp/docs-site/pmexp`): `pnpm check` (no `run`) **does execute** the `check` script under pnpm 12.3.4 (`exit=0`, `$ echo CHECK_RAN`), so the short spelling is not a broken command for this repository.
-* The real defect behind the suspect is the **scaffold** side, recorded as CL-23 in `.zcode/plans/alpha15-debt-ledger.md:113` ("new scaffold `pnpm check` → Missing script"). It is already reconciled in the tree: `packages/create/templates/package.json.tmpl` ships no `check` script, and `packages/create/README.md` documents exactly the scripts it ships. No public doc tells a scaffold user to run `check`, so no edit was needed.
+* The repo script is `check` (`package.json`), and the repo's own docs use `pnpm run check`. Tested in an isolated scratch project: `pnpm check` (no `run`) **does execute** the `check` script under pnpm 12.3.4 (`exit=0`, `$ echo CHECK_RAN`), so the short spelling is not a broken command for this repository.
+* The real defect behind the suspect is the **scaffold** side, historically recorded as CL-23 ("new scaffold `pnpm check` → Missing script"). It is already reconciled in the tree: `packages/create/templates/package.json.tmpl` ships no `check` script, and `packages/create/README.md` documents exactly the scripts it ships. No public doc tells a scaffold user to run `check`, so no edit was needed.
 
 ## 7. Changes made by this lane (DOC-01 scope)
 

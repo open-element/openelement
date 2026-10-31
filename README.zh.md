@@ -24,7 +24,7 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 以下均为可复现、可第三方核验的参考。
 
 - [Software Heritage](https://archive.softwareheritage.org/browse/origin/directory/?origin_url=https://github.com/open-element/openelement)
-- [js-framework-benchmark](https://krausest.github.io/js-framework-benchmark/) — 自 1.0.0-alpha.4 起可查询
+- [js-framework-benchmark](https://krausest.github.io/js-framework-benchmark/) — 外部基准结果（测量版本以具体条目为准）
 - [deps.dev 包视图](https://deps.dev/npm/%40openelement%2Frouter) 与 [npm](https://www.npmjs.com/package/@openelement/router) 上的 npm provenance 证明
 - Bundle 体积见 [Bundlephobia](https://bundlephobia.com/package/@openelement/element)
 

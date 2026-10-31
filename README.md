@@ -24,7 +24,7 @@ The source tree is `1.0.0-alpha.15`, a new public baseline for Element and Route
 These references are reproducible and verifiable by third parties.
 
 - [Software Heritage](https://archive.softwareheritage.org/browse/origin/directory/?origin_url=https://github.com/open-element/openelement)
-- [js-framework-benchmark](https://krausest.github.io/js-framework-benchmark/) — available from v1.0.0-alpha.4 onward
+- [js-framework-benchmark](https://krausest.github.io/js-framework-benchmark/) — external benchmark results (check the entry for its measured version)
 - [deps.dev package view](https://deps.dev/npm/%40openelement%2Frouter) and npm provenance attestations on [npm](https://www.npmjs.com/package/@openelement/router)
 - Bundle size via [Bundlephobia](https://bundlephobia.com/package/@openelement/element)
 

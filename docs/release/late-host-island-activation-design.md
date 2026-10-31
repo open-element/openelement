@@ -1,7 +1,7 @@
 # Late-host island activation — design and decision record
 
 - 状态：**G1 已批准（2026-10-18）**。实现落在 `packages/router/src/vite/internal/ssg/island-scheduler.ts`。
-- 任务：T8（alpha15 收尾批）· lane `lane/t8-design`。
+- 历史范围：alpha15 late-host 修复。本文保留当时设计与验证状态；未勾选清单不构成当前资格通过证明。
 - 设计基线：`f395b1e1fc06a727a3e27f26a5aad62ea2929ab8`；落地基线：`ed50abeaa`（含 t3-release 的 third-party harness 修复）。
 - 上游决策（G0，已批准）：**D2=A 泛用** / D3=B / D4=A / D5=A；HERO 不门控（本文不涉及）。
 - 本文的机制结论来自只读代码探查 + 既有单测实跑（见附录 A 证据索引）。
@@ -14,7 +14,7 @@ Owner 批准 4/4，均按本文 §11 的推荐取值；第 5 条（引擎口径�
 | --- | --- | --- |
 | 1 | 探测预算 | **6 次/窗口、3000 ms/窗口、3 窗口、绝对 9000 ms**（⇒ 绝对扫描次数上限 18） |
 | 2 | 新公开诊断事件 `open:island-host-timeout` | **接受**（informational，每页 ≤1 次，无监听者成本 ≈ 0） |
-| 3 | 多库 fixture 是否含 A3（真 Stencil 自撰 host） | **包含**（`@stencil/core@4.43.5`，磁盘/网络 +0） |
+| 3 | 多库 fixture 是否含 A3（真 Stencil 自撰 host） | **包含**（`@stencil/core@4.43.5`，与 Ionic 使用相同版本） |
 | 4 | 改动面 | **收敛为单文件** `island-scheduler.ts`；不碰 `entry-client-codegen.ts`、不碰 protocol、不碰构建期 |
 | 5 | 三引擎 third-party WC smoke 的收敛口径 | **接受推荐口径**：契约级断言（注册 / 升级 / late-host 激活 / exactly-once / unused tag 0 fetch）**三引擎全绿**；其余能力探针按引擎记录，差异表达为 `null`，不算失败。实现形态 = **build 一次、三个 session**，每引擎结果并入 record/tierReport |
 
@@ -98,7 +98,7 @@ fixture 形状（`tests/fixtures/third-party-web-components/`）：
 | **`onReady(observeVisible)`** | 仅当 `visibleTags.length > 0` 才注册；本页 `load` + `only` bucket 之外为空 | `island-scheduler.ts:340` |
 | **`onIslandLoaded` 后的 rescan** | `enhancedForms === false` 时该 dep 被生成为 **`null`** | `entry-client-codegen.ts:675` |
 
-**结论（比审计 P1 更精确）**：不是「rescan 漏了这次机会」，而是**这个页面形状上不存在任何 rescan 代码路径**。这与外部审计已核实的结论一致（`.zcode/plans/alpha15-external-audit-verification-2026-10-18.md:75`：`missing=wc-open-child` 在 `53fc1d4fb` + 已发布 alpha.14 上同样失败）。
+**结论**：不是「rescan 漏了这次机会」，而是**这个页面形状上不存在任何 rescan 代码路径**。历史复现也在 `53fc1d4fb` 与已发布 alpha.14 上观察到 `missing=wc-open-child`；该历史观察不是当前版本的失败判定。
 
 **另一个时序事实**：即使 `observeVisible()` 在该页被调用（例如页面有 enhance 表单），它也只会在 morph 之后跑一次；而此处 morph 发生在 t1 之前，`wc-client.ts` chunk 在 t2/t3 才落地 —— **仍然错过**。所以机制必须是「时间/活动驱动」，不能只是「morph 驱动」。
 
@@ -558,7 +558,7 @@ function makeTimers() {
 |---|---|---|---|---|
 | A1 | **Lit** | `wc-lit-host extends LitElement` → `render()` 返回 `<wc-open-child>` | `lit@3.3.3`（已 pin） | **已存在**，即当前 repro；保留为主用例 |
 | A2 | **FAST** | `wc-fast-host extends FASTElement`，`fastHtml` 模板返回 `<wc-open-fast>` | `@microsoft/fast-element@3.0.2`（已 pin） | 不同模板引擎/更新时机，证明非 Lit 专属 |
-| A3 | **Stencil** | `wc-stencil-host`，用 `@stencil/core` 编写 + `stencil build --config …`（`dist-custom-elements`），fixture app 用 `defineCustomElement()` 消费（与 `ion-button` 同路径） | `@stencil/core@4.43.5` | **关键：`@ionic/core@8.8.18` 的 `dependencies` 已含 `"@stencil/core": "4.43.5"`** ⇒ 该包**今天就已经被安装**（本地 pnpm store 已缓存 `@stencil/core@4.43.5`；残留 temp app 的 `.pnpm` 里也有它）。把它显式写进 `THIRD_PARTY_IMPORTS` 只为「上升为直接依赖 + 版本锁定」，**不新增下载/磁盘**。代价是 harness 多一个 `stencil build` 步骤（预计 +5–10 s） |
+| A3 | **Stencil** | `wc-stencil-host`，用 `@stencil/core` 编写 + `stencil build --config …`（`dist-custom-elements`），fixture app 用 `defineCustomElement()` 消费（与 `ion-button` 同路径） | `@stencil/core@4.43.5` | `@ionic/core@8.8.18` 的 `dependencies` 已含 `"@stencil/core": "4.43.5"`。显式写进 `THIRD_PARTY_IMPORTS` 用于直接依赖声明与版本锁定；下载与磁盘成本依赖安装环境，不保证为零。harness 增加 `stencil build` 步骤（历史估计 +5–10 s） |
 | A4 | **bare native** | `wc-native-host extends HTMLElement` + `attachShadow({mode:'open'})` + 后插 child | 无 | 语料已有同类（`wc-native-badge`）；零成本对照组 |
 
 **B 组 —「light-DOM 后插入到第三方 host」（每库一例，覆盖 §2.1 第二行）**
@@ -595,15 +595,14 @@ function makeTimers() {
 | `@stencil/core` | 4.43.5 | 23,067,665 B，**0 个 dependencies** | 作为 `@ionic/core` 的直接依赖**已被安装** | **0 额外字节** |
 
 **结论**：
-- **新增直接依赖仅 1 个（`@stencil/core`），而它今天已经因为 `@ionic/core` 被下载/安装**（同版本 4.43.5，pnpm 解析到同一实例；本地 store 已缓存）。⇒ **本地与 CI 的额外网络/磁盘均为 0**。
-- fixture 第三方直接依赖解包总量约 **36.3 MB**（lit meta 0.10 + fast 3.16 + shoelace 7.96 + material 3.86 + ionic 19.5 + stencil 22.0，其中 stencil 本就在册），本计划**不增加**这个总量。
-- A3 的隐含成本是 **构建时间**（`stencil build` +5–10 s）与 harness 复杂度，不是磁盘。**这是 §11 的一个 G1 取舍点。**
+- 新增直接依赖仅 `@stencil/core@4.43.5`，与 Ionic 的传递依赖版本一致；是否复用同一安装实例取决于包管理器与安装环境。
+- 上表保留历史包元数据，不将其求和或缓存复用推导为网络、磁盘或发布资格保证。
+- A3 还增加 `stencil build` 步骤（历史估计 +5–10 s）与 harness 复杂度；实际资源需求须在执行环境验证。
 
-### 9.3 磁盘预算（当前可用 ≈ 9.9 GB）
+### 9.3 临时目录与清理边界
 
-- `df` 实测：`/System/Volumes/Data` **9.9 GiB** 可用；pnpm store `~/Library/pnpm/store/v11` 已占 **9.2 GB**（共享、hardlink 复用）。
-- fixture 每次运行在系统 temp 下生成一个 app 目录，pnpm 从 store **hardlink** ⇒ 峰值新增磁盘 ≈ store 增量 + 构建产物。本计划 store 增量为 **0**。
-- 既有清理契约：`qualify.ts:1040-1044` 在 `finally` 中 `rm(tmpRoot, { recursive: true })`，仅当 `OPEN_ELEMENT_KEEP_THIRD_PARTY_WC_SMOKE=1` 保留（`:881`）。**遗留 temp 目录在诊断时确实存在**（本机发现 4 个上次运行残留的骨架目录）——建议在验收清单里加一条「harness 失败路径也必须清理；CI 不得设置 `OPEN_ELEMENT_KEEP_*`」。
+- fixture 每次运行生成隔离临时 app；峰值磁盘需求取决于依赖缓存、链接方式与构建产物，不以历史机器余量作为资格证据。
+- 既有清理契约：`qualify.ts:1040-1044` 在 `finally` 中 `rm(tmpRoot, { recursive: true })`，仅当 `OPEN_ELEMENT_KEEP_THIRD_PARTY_WC_SMOKE=1` 保留（`:881`）。历史诊断观察到失败后的残留目录；验收必须覆盖失败路径清理，CI 不得设置 `OPEN_ELEMENT_KEEP_*`。
 - ✅ **前序 harness 陷阱已由 t3-release 修复并落地**（`6d52fa580`）：`qualify.ts:583-589` 现在 `scaffoldApp({ ..., extraArgs: ['--no-install'] })`，`tests/fixtures/web-component-interop/qualify.ts` 同步改了同一行。**实现 lane 不得 revert 该改动**；本计划不再需要为此留依赖项。
 
 ### 9.4 harness 改动点（fixture 侧，implementation lane 负责）
@@ -760,15 +759,13 @@ vp run --no-cache --fail-if-no-match --filter @openelement/fixture-third-party-w
 - `npx vitest run packages/router/__tests__/island-scheduler.test.ts` → **28 passed / 225 ms**（harness 可用且 DOM-free）。
 - `npm view` 解包体积：shoelace 8,350,254 B；material 4,047,089 B；fast-element 3,309,788 B；ionic 20,456,789 B；lit 106,390 B；`@stencil/core@4.45.2` 22,183,565 B / 332 files；`@stencil/core@4.43.5` 23,067,665 B（0 deps）。
 - `npm view @ionic/core@8.8.18 dependencies` → `{ tslib, ionicons ^8.0.13, '@stencil/core': '4.43.5' }` ⇒ Stencil 编译器已随 Ionic 安装。
-- pnpm store `~/Library/pnpm/store/v11/index.db` 已缓存 `@shoelace-style/shoelace@2.20.1` / `@material/web@2.4.1` / `@microsoft/fast-element@3.0.2` / `@ionic/core@8.8.18` / `@stencil/core@4.43.5` 与 `4.45.2`。
-- `df -h` → `/System/Volumes/Data` 9.9 GiB 可用；store 9.2 GB。
 - `tools/lib/vp-pack.ts` 说明 router 发布 `src/**`（所以源码注释会进 tarball，`pack-surface:check` 会对 `tests/`、`packages/` 字面量 fail closed —— 见 `82792403d`；新增注释**不得**写仓库内路径）。
 
 **上游记录**
 
-- `.zcode/plans/alpha15-external-audit-verification-2026-10-18.md:15,75,88,104,128`（P1-1 与 `missing=wc-open-child` 的核实结论；owner 决策建议 a/b/c）。
+- 历史外部审计复现：`missing=wc-open-child`（根因、可复现代码与失败时序见 §1；内部审查流水不作为公开读者的必要证据）。
 - the internal working ledger (not published) 的 **KR-17** 条目（committed；`Owner: alpha15 batch — T8 takes the fixture follow-up`；`Retirement condition: T8's three-engine, multi-library cases green`；`Latest observation: 2026-10-18, lane/t3-release @ f395b1e1f`——smoke 到达浏览器阶段且恰好 `missing=wc-open-child`、browser errors 为空）。同文件 KR-18（firefox fixture flake；`retries=0` 为已批准策略、禁止 retry 掩盖）直接约束 §8.4 的三引擎方案。
-- t3-release handoff（lane/t3-release，未 push）：`6d52fa580` fix(tests): keep the pre-publish registry install out of qualify scaffolds；`36c60cdd1` test(release): qualify the create initializer alias before and after publish；`ed50abeaa` docs(release): commit the known-reds ledger for release readers（三者均为 lane 历史提交，不是主分支祖先；主分支落地提交见 KR-17 条目）。lane 报告：`.zcode/scratch/t3-release/REPORT.md`（§1 harness 修复 + 正/负向证明；handoff notes；「no gate currently runs `fixture-web-component-interop#qualify`」记为 alpha16 候选）。
+- t3-release handoff（lane/t3-release，未 push）：`6d52fa580` fix(tests): keep the pre-publish registry install out of qualify scaffolds；`36c60cdd1` test(release): qualify the create initializer alias before and after publish；`ed50abeaa` docs(release): commit the known-reds ledger for release readers（三者均为 lane 历史提交，不是主分支祖先；主分支落地提交见 KR-17 条目）。历史报告另记录当时没有 gate 执行 `fixture-web-component-interop#qualify`；该观察为后续资格工作输入，不表示当前 gate 状态。
 - git：`c27f1ae6b`（F01）、`3c472f08f` / `82792403d`（toString 自包含不变量及其后的注释改写；F01 已把 `hasIslandHost` 提升回模块作用域，inline 路径退役 —— `tests/fixtures/router-request-time/app/routes/visible-probe.tsx:6` 明示改为 virtual module）。
 
 ## 附录 B：未决 / 残留风险

@@ -1,6 +1,6 @@
 # ADR-0143: Compiled OpenElement model
 
-- Status: ACCEPTED (current `1.0.0-alpha.1` baseline)
+- Status: ACCEPTED; AMENDED 2026-10-31 (current `1.0.0-alpha.1` baseline)
 - Preserves: Custom Elements, DSD-first server output, progressive enhancement
 
 ## Decision
@@ -46,3 +46,15 @@ ships as the public `@openelement/compiler` package (`packages/compiler`).
 The decision itself is unchanged — the compiler is still mandatory tooling
 reached through the official Element/Vite path, and unsupported syntax still
 fails at build time with source-located diagnostics.
+
+## Amendment (2026-10-31): accepted next architecture, implementation pending
+
+The exclusive CE/class author model and shared executable Part Program are
+amended by [ADR-0173](./ADR-0173-component-execution-and-composition.md) and
+[ADR-0174](./ADR-0174-generated-code-runtime-and-compatibility.md). The accepted
+direction is stateful hostless function composition, explicit CE/native and
+island boundaries, and generated browser execution shared with compatible
+classes. Original requirements above remain historical/current implementation
+facts, not proof the new model has shipped. Implementation qualification is NOT
+RUN. Preserve HTML/DSD, claim fidelity, diagnostics, native interoperability and
+independent three-engine consumers. Names, types and ABI remain unfrozen.

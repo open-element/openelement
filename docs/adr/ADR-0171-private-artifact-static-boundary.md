@@ -1,6 +1,6 @@
 # ADR-0171: The private-artifact static boundary — `dist/server` is never a public static resource
 
-- Status: ACCEPTED (implemented:
+- Status: ACCEPTED; AMENDED 2026-10-31 (implemented:
   `packages/router/src/vite/internal/static-serve.ts` —
   `isPrivateArtifactRequest`, `tryStaticOutcome`, `dispatchRequest`)
 - Decided: 2026-10-19 (alpha15 S-01 hotfix lane; the external PR #1611 review's
@@ -213,3 +213,21 @@ this repository asks of a new surface (P5 deletability, P8 single writer):
   by the alpha15 verification).
 - **Docs** — deployment and security guides (EN + ZH) state the boundary and
   that `oe start`/`npm start` refuse the namespace.
+
+## Amendment (2026-10-31): accepted next architecture, implementation pending
+
+The next output-safety direction is structural separation of the browser public
+root from private server output, with a publish manifest defining the allowed
+public set. Each deployment exit must prove either runtime validation or
+packaging/upload filtering, including missing/stale manifest and traversal,
+decode, case and symlink behavior. This is accepted direction, implementation
+NOT RUN; directory names and manifest format are not frozen.
+
+Keep the implemented predicate and all evidence above until every replacement
+consumer is qualified. Hosts not using framework dispatch need their own
+publish-root/filter proof; a stronger build layout does not silently retire the
+existing deny boundary or authorize private reads. The independent Alpha17
+URL-prefix migration does not block Alpha16 structural safety. A publish
+allowlist is not HTML/serialization safety or application authorization.
+[ADR-0174](./ADR-0174-generated-code-runtime-and-compatibility.md) separates these
+proofs; rollback must preserve matched server/client artifacts.

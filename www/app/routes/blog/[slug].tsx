@@ -241,14 +241,17 @@ export default definePage(PageBlogPost, {
       })),
       navigation: {
         previous: previous
-          ? { href: `${blogHref}/${previous.slug}`, label: previous.frontmatter.title }
+          ? {
+              href: siteHref(`/blog/${previous.slug}`, resolved),
+              label: previous.frontmatter.title,
+            }
           : undefined,
         next: next
-          ? { href: `${blogHref}/${next.slug}`, label: next.frontmatter.title }
+          ? { href: siteHref(`/blog/${next.slug}`, resolved), label: next.frontmatter.title }
           : undefined,
       },
       articleHtml: trustedHtml(article.html),
-      nextDispatchHref: next ? `${blogHref}/${next.slug}` : blogHref,
+      nextDispatchHref: next ? siteHref(`/blog/${next.slug}`, resolved) : blogHref,
       nextDispatchText: next
         ? `${next.frontmatter.title} →`
         : resolved === 'en'
