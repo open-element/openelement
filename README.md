@@ -19,6 +19,14 @@ Element compiles JSX-authored Custom Elements into a Part Program used by server
 
 The source tree is `1.0.0-alpha.15`, a new public baseline for Element and Router. It is not a compatibility migration from historic 0.x snapshots. From this release the six packages (`protocol`, `element`, `compiler`, `router`, `create`, `ui`) publish as one line, and npm `latest` points at that line — `npm install @openelement/router` resolves to the current 1.0 prerelease. Since #1557 the Element monolith is three packages: `@openelement/protocol` (cross-system contracts, zero dependencies), `@openelement/element` (pure runtime), and `@openelement/compiler` (build-time TSX-to-Part-Program compiler + Vite plugin).
 
+The description above is the current alpha.15 implementation. The [accepted target](./docs/architecture/product-model.md)
+is HTML-first Full TSX with explicit Signals and an explicit CE boundary. On
+2026-11-03 the owner ended the independent OhMyLit initiative and initiated
+first-party Lit renderer retirement; alpha.15 support remains, and the release
+window is undecided. Third-party Lit WC client-only use remains, without automatic
+SSR or Lit DSD hydration guarantees. The [candidate author samples](./docs/architecture/tsx-author-candidate-contract.md)
+are unreleased and unverified, not the Quick Start API.
+
 ## Evidence & recognition
 
 These references are reproducible and verifiable by third parties.
@@ -31,8 +39,8 @@ These references are reproducible and verifiable by third parties.
 ## Quick Start
 
 Requires **Node.js 24.2+ (24.18.0 recommended)** and a package manager: npm,
-pnpm, yarn, or bun (the scaffolder installs with whichever one it finds on
-`PATH`, and the generated project is package-manager neutral). Create, run, and
+pnpm, yarn, or bun (the scaffolder prefers the invoking package manager, then
+probes `PATH` in pnpm/npm/yarn/bun order; the generated project is package-manager neutral). Create, run, and
 build — the generator installs the dependencies itself, so there is no separate
 install step:
 
@@ -74,7 +82,7 @@ export default definePage(HelloPage, {
 Re-run `npm run dev`, open the URL Vite prints plus `/hello`, and `npm run build` emits the static-first `dist/` output. Full walkthrough: <https://openelement.org/guide/getting-started>.
 
 **Build-time host:** Framework Mode development and builds run on Node.js
-24.2+ through pnpm scripts (ADR-0161, superseding the Deno-native decision in
+24.2+ through application package scripts (ADR-0161, superseding the Deno-native decision in
 ADR-0108): the `@openelement/router` tooling subpaths (`./vite`, `./cli/*`)
 are consumed through the starter's own dependency pins as plain Node
 programs. The request-time output uses standard ESM and Web
@@ -97,7 +105,8 @@ can load ESM. Element remains independently consumable in npm-only projects.
 - `packages/element` — the Element core product: the pure runtime; depends only on protocol plus
   `@preact/signals-core` at publish time.
 - `packages/compiler` — the Element compiler (#1557): the TSX-to-Part-Program semantic core and the
-  Vite plugin boundary; the only package carrying the TypeScript dependency.
+  Vite plugin boundary; TypeScript lives here within the Element three-package split,
+  while Router tooling also depends on TypeScript.
 - `packages/router` — the Router core product: Route Mode and Framework Mode plus the application
   lifecycle tooling (`@openelement/router/vite`, `/nitro-mount`, `/cli/*`).
 - `packages/create` — the supported creation entry for the two core products.

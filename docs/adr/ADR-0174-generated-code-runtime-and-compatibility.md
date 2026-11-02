@@ -1,6 +1,6 @@
 # ADR-0174: Generated code, shared runtime and compatibility
 
-- Status: ACCEPTED (2026-10-31, architectural direction; implementation pending)
+- Status: ACCEPTED / AMENDED (2026-11-03, slice prerequisites; implementation pending)
 - Amends: ADR-0143, ADR-0148 and principle P2
 - Related: ADR-0158, ADR-0159, ADR-0171, ADR-0173
 
@@ -89,6 +89,28 @@ typed seeds, ownership, cancellation and bounded recovery are not broadened by
 this backend change. Identity/marker/installer changes require migration and
 rejection fixtures. Component defer remains separate Alpha18 qualification;
 material wire changes require a successor decision before rollout.
+
+## Amendment (2026-11-03): prerequisites and slice order
+
+Use the [author candidate contract](../architecture/tsx-author-candidate-contract.md)
+before expanding codegen. A real leaf mount/update/dispose slice precedes related
+owner/region structures; then retain the stateful hostless list, the same list's
+SSR/claim/failure slice and the independent precompiled tarball consumer, in that
+order of prerequisites. Begin the consumer slice early once the list foundation
+exists, not after freezing ABI or completing all SSR work. Props replacement,
+ordinary-local snapshots, JSX insertion ownership and renderability must be
+explicit before their dependent extensions. Runtime guards for unknown values
+are legitimate safety checks, not a generic renderer fallback.
+
+G1 is running generated code; G2 is identity/owner evidence before related
+expansion; G3 is author and consumer evidence before public API/default Starter.
+These are the existing gates, not an extra generic approval process. Alpha16
+owns the foundation and qualified old-executor retirement, Alpha17 Full TSX
+productization, and Alpha18 bounded defer. If evidence fails, harden or narrow
+the dependent scope rather than claiming completion. First-party Lit retirement
+is the separate ADR-0152 product decision with its release window still OPEN;
+it is neither accomplished nor versioned by this backend milestone. Current
+Part execution, class APIs and alpha.15 Lit support are not removed here.
 
 ## Verification before expansion or freeze
 

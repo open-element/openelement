@@ -1,21 +1,16 @@
 /**
- * The compiler's parse seam — the ONE module that depends on the TypeScript
- * JavaScript parsing API (#1473, item 2 of the semantic-core split).
+ * TypeScript parsing policy helper for the strict compilation path (#1473).
  *
- * `ParserPort` is the explicit boundary every parse backend implements:
- * authored source in, TS AST plus syntax diagnostics out. The rest of the
- * semantic core consumes the resulting AST through read-only type predicates
- * and never constructs or transpiles a parse tree itself, so replacing the
- * backend is a change to this file's single implementation and nowhere else.
+ * `ParserPort` returns a TypeScript AST and TypeScript syntax diagnostics; it
+ * is not a backend-neutral AST boundary. Other paths, including module analysis
+ * and type-check hosts, also parse source. Tolerant discovery and strict
+ * compilation have different diagnostic responsibilities and need not share
+ * this helper's TSX/ES2022 policy.
  *
- * Retirement conditions (the alpha6 architecture-debt lane, issue #1473): this
- * TypeScript-backed implementation is scheduled to be replaced when either
- * trigger fires, whichever lands first —
- *   1. the TypeScript 6 line ends JavaScript-API maintenance ("JS-API EOL"),
- *      making tsgo's native API the supported parse entry, or
- *   2. oxc's standard-decorators support is declared stable.
- * At that point `typescriptParser` swaps for an oxc/tsgo-backed `ParserPort`
- * implementation; the compiler pipeline and its diagnostics contract stay.
+ * A future parser change requires auditing those consumers, AST assumptions,
+ * source locations and diagnostics. TypeScript API maintenance or another
+ * parser's decorator support may motivate evaluation, but do not establish a
+ * drop-in replacement or a one-file backend swap.
  */
 
 import ts from 'typescript';
