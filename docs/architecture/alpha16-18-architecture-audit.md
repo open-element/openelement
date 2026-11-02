@@ -155,3 +155,27 @@ The right next move is therefore not a compiler rewrite. It is one compiler
 grammar extension (value-position JSX + multi-root) plus one runtime primitive
 (mount recipe + insertion owner), proven on a stateful list across SSR, claim,
 update and dispose — in that order.
+
+## 8. Corroboration from the compiler-lane audit
+
+A separate read-only compiler audit independently reached the same conclusions
+and added three details worth recording. They are reported evidence, not first
+hand re-verified here:
+
+1. **There is exactly one real "generate a function body" channel today**: the
+   alpha15 server function component lane emits `__h/__t/__ssr` string
+   construction (`server-component.ts:442`, `server.ts:108-197`). It is not DOM
+   codegen, produces no Part Program, and registers no element. Any claim that
+   the repository "already generates browser code" is wrong.
+2. **Diagnostic codes are string literals at throw sites**; the reference
+   catalogue is produced by two generators and two gates, and the generator's
+   source scan does not cover `style-imports.ts` (OEC9029) or
+   `server-component.ts` (`generate-error-reference.ts:53-58`). Widening the
+   grammar multiplies codes, so the catalogue coverage gap becomes a real risk
+   for authors rather than a tidiness issue.
+3. **The parse seam is no longer described as backend-neutral** — the current
+   header says replacing the parser requires auditing every consumer, AST
+   assumption, source position and diagnostic (`parse-module.ts:1-13`). This
+   supports the audit's earlier point: the honest statement is
+   "TypeScript-bound with a single parse helper", not "swap the backend by
+   editing one file".
