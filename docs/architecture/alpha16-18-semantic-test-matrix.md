@@ -69,6 +69,39 @@ the slices that the release gates on (TSX-04, 06, 07, 09, 10, 14, 18, 23, 30).
 `n/a` reasons live in the contract's applicability matrix and must not be
 invented per row.
 
+## Acceptance coverage (taskbook §18)
+
+The 21 required acceptance areas map to matrix rows and milestones. A row with
+no backing matrix row is a defect in this document, not a gap in the product.
+
+| # | Acceptance area | Matrix rows | Milestone |
+| --- | --- | --- | --- |
+| 1 | Function Components | TSX-01, 02, 23 | M03 |
+| 2 | Nested hostless composition | TSX-01, 09, 10 | M03, M04 |
+| 3 | Fragments and multi-root | TSX-01 | M02 |
+| 4 | Empty output | TSX-01 | M02 |
+| 5 | Props and Children | TSX-03, 04, 10 | M04, M08 |
+| 6 | Reusable JSX values | TSX-09, 23, 25 | M04 |
+| 7 | Signals | TSX-02, 05 | M04 |
+| 8 | Fine-grained updates | TSX-02, 05, 28 | M05 |
+| 9 | Keyed identity | TSX-07, 08 | M08 |
+| 10 | Props replacement | TSX-04, 24 | M08 |
+| 11 | Event behaviour | TSX-12, 20 | M05 |
+| 12 | Cleanup and disposal | TSX-19, 26, 27 | M04 |
+| 13 | SSR | TSX-17, 18, 30 | M07 |
+| 14 | DSD | TSX-18, 30 | M07 |
+| 15 | Claim / hydration | TSX-18, 30 | M06 |
+| 16 | Security | cross-cutting negatives §4 (all rows) | M05 |
+| 17 | Class compatibility | class fixtures on the shared backend (not a TSX row) | M09 |
+| 18 | Router compatibility | Framework Mode regression (not a TSX row) | M11 |
+| 19 | Packed consumer compatibility | TSX-21 | M12 |
+| 20 | Browser and server qualification | cross-engine column plus server matrix | M13 |
+| 21 | No unintended dependency on the old generic executor | graph + reachability evidence | M10 |
+
+Two acceptance areas deliberately have no TSX row: class compatibility and
+Router compatibility are cross-cutting regressions, not author-language cases.
+They still need evidence, owned by M09 and M11.
+
 ## Evidence format
 
 Each recorded result needs, at minimum:

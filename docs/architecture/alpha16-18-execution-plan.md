@@ -99,6 +99,42 @@ freeze.
 G1/G2/G3 are the existing gates from ADR-0173/0174; this plan adds no approval
 layer.
 
+## 1A. Milestone map, dependencies and critical path
+
+Milestone ids are stable for referencing in issues and evidence records.
+
+| ID | Milestone | Depends on | Parallel with | Exit evidence |
+| --- | --- | --- | --- | --- |
+| M01 | Semantic IR / compiler boundary decision (compile-time vs wire vs metadata) | D-O2 decision | M05 | recorded split with consumer trace |
+| M02 | Full TSX admission (fragments, multi-root, value-position JSX, inline expressions) | M01 | M04 | admitted cases with diagnostics + negatives |
+| M03 | Function component frontend adapter | M02 | M05 | same diagnostics/spans as class path |
+| M04 | Runtime primitives: mount recipe, insertion owner, tracked props | M01 | M03 | G2 evidence on two insertions and keyed replacement |
+| M05 | Generated client codegen: mount/update/dispose | M03, M04 | M06 | G1: generated code actually runs in a browser |
+| M06 | Generated claim | M05 | M07 | claim fidelity matrix |
+| M07 | SSR integration for the generated backend | M05 | M06 | SSR→claim parity on the same slice |
+| M08 | Keyed identity + props replacement on the generated path | M04, M05 | M09 | DOM identity, focus, selection, handler-current-item |
+| M09 | Class compatibility adapter on the shared backend | M05 | M08 | class fixtures pass on the new backend |
+| M10 | Old executor migration / retirement evidence | M05–M09 | — | graph reachability + behaviour coverage (D-O1) |
+| M11 | Router integration for the generated path | M07, M10 | — | Framework Mode unchanged in contract |
+| M12 | Packed consumer qualification | M05 (early), M11 | — | tarball in a fresh app, no aliases |
+| M13 | Browser + server qualification | M05–M12 | — | three engines, exact SHA |
+
+**Critical path:** M01 → M02 → M04 → M05 → M06/M07 → M10 → M11 → M13.
+
+**Parallelisable without blocking:** M08 (keyed/props) after M04; M09 (class
+adapter) after M05; M12 starts as soon as any generated slice can be packed, and
+deliberately precedes ABI freeze; security/output separation work runs
+independently.
+
+**Rollback points:** after M04 (primitives can be abandoned with no public
+surface), after M06 (claim can be reverted while mount stays), after M09 (class
+adapter removal is additive), and before M13 (release boundary). Each rollback is
+a revert of one change set, never a partial in-place surgery.
+
+**Post-Alpha18:** Rust compiler PoC only after M01–M13 stabilise semantics, IR,
+ABI, codegen, source maps, diagnostics and benchmarks. It implements the same
+semantics; it does not rewrite the browser runtime.
+
 ## 2. Alpha17 — Full TSX productization
 
 Only what Alpha16 proved may be productized here.
@@ -151,18 +187,23 @@ Local sequence before any push: merge → generate → check → fix → then pu
 
 ## 5. Risk register
 
-| # | Risk | Trigger | Impact | Mitigation | Owner of the decision |
-| --- | --- | --- | --- | --- | --- |
-| R1 | JSX value model chosen wrong and re-worked after consumers exist | recipes shipped without the two-insertion and deferred-insertion tests | large rework, ABI churn | prove TSX-23/25/26 before any public type; keep the recipe opaque | architect |
-| R2 | Props replacement silently stale | keyed reuse implemented with captured values | wrong data saved, hardest class of bug | require the live-getter invariant and the handler-sees-new-item test | runtime |
-| R3 | Generated code larger than the program it replaces | codegen measured only after executor removal | budget regression, size-claim failure | measure full reachable closure per change; keep the old path until graph evidence exists | compiler |
-| R4 | Claim cannot reproduce repeated insertion order | markers assumed order-free | hydration mismatch or silent duplication | design the marker protocol in S3 before A17 freeze | runtime |
-| R5 | Two runtimes across a package boundary | precompiled library bundles its own copy | broken identity, double subscriptions | singleton check or explicit rejection; test from a tarball | distribution |
-| R6 | Safety regressions while grammar widens | new expression positions bypass sink screening | XSS / URL injection | one sink source of truth; positive and negative fixtures per new position | security |
-| R7 | Lit retirement confused with this programme | pressure to delete while native is unproven | lose a working renderer, break users | retirement is a separate gated change with its own announcement and window | product |
-| R8 | Public API frozen early to unblock a demo | naming pressure | permanent compatibility debt | G3 gate; names stay candidate until consumer evidence | product |
-| R9 | Evaluation-timing surprises (per-insertion props) | authors assume React snapshot semantics | confusing bugs, support load | document the counts (TSX-28) and test them; consider a dev-mode warning | architect |
-| R10 | Owner/region model outgrows `LifetimeScope` | cross-owner projection or portals demanded | redesign mid-flight | keep projection inside the defining subtree in Alpha16; portals are a later explicit decision | architect |
+| # | Risk | Probability | Impact | Detection | Mitigation | Blocking gate | Owner decision? |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| R1 | JSX value model chosen wrong and re-worked after consumers exist | Medium | High | two-insertion / deferred-insertion tests fail late | prove TSX-23/25/26 before any public type; keep the recipe opaque | G2 | No |
+| R2 | Props replacement silently stale | Medium | High | handler-sees-new-item test fails | enforce live-getter invariant; mirror `itemBox` | G2 | No |
+| R3 | Generated code larger than the program it replaces | Medium | Medium | full-closure byte measurement per change | keep old path until graph evidence; measure before removal | G1 | No |
+| R4 | Claim cannot reproduce repeated insertion order | Medium | High | S3 matrix | design marker protocol in M06 before ABI freeze | G2 | No |
+| R5 | Two runtimes across a package boundary | Low | High | packed consumer with two copies | singleton check or explicit rejection | G3 | No |
+| R6 | Safety regressions while grammar widens | Low | High | sink fixtures per new expression position | one sink source of truth; negatives per position | G1 | No |
+| R7 | Lit retirement contaminates Alpha16 | Medium | Medium | PR scope creep | separate track with its own gate | — | **Yes: D-O1/Lit** |
+| R8 | Public API frozen early to unblock a demo | Medium | High | names appear in docs/starters before G3 | G3 gate; names stay candidate | G3 | No |
+| R9 | Evaluation-timing surprise (per-insertion props) | High | Medium | author reports / TSX-28 counts | document counts; consider dev warning | G3 | No |
+| R10 | Owner/region model outgrows `LifetimeScope` | Low | High | cross-owner projection demand | keep projection inside defining subtree in Alpha16 | G2 | No |
+| R11 | Old-executor retirement gate infeasible in one release | High | High | M10 evidence missing at release time | split release or amend the gate explicitly (D-O1) | release | **Yes: D-O1** |
+| R12 | `__partProgram` split breaks Router detection | Medium | High | routing/SSG tests after split | migrate lexical consumers in the same change | G1 | **Yes: D-O2** |
+| R13 | Test migration lags implementation | Medium | Medium | matrix rows unbacked | migrate per slice, not at the end | G3 | No |
+| R14 | Documentation drift between canonical docs and ADRs | Medium | Medium | index and documentation checks; review | canonical doc + link map; amend ADRs, never rewrite | — | No |
+| R15 | Scope expansion (Rust, Flight, second renderer) | Medium | High | proposal review | non-goals list; constraint check (canonical §5) | — | **Yes if proposed** |
 
 ## 6. Stop conditions
 
