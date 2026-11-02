@@ -4,7 +4,8 @@ OpenElement has two public products: Element and Router. The remaining packages
 adapt, scaffold, build, and distribute those products.
 
 - [Design principles](./design-principles.md) ([中文](./design-principles.zh.md))
-- [Product model](./product-model.md)
+- [Product model and 2026-11-03 direction](./product-model.md)
+- [TSX author candidate contract](./tsx-author-candidate-contract.md) — 22 review cases; unreleased APIs, not implementation evidence
 - [Compiler and element runtime](./compiler-and-element-runtime.md)
 - [Rendering and hydration](./rendering-and-hydration.md)
 - [Router and server runtime](./router-and-server-runtime.md)

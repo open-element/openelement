@@ -8,9 +8,9 @@
  * reported its own way and a consumer had to know which log to read; the
  * envelope is the one consumption surface an agent (or a human) reads instead.
  *
- * Ownership follows the producers: the ENVELOPE is owned here (a types-only
- * contract, like the rest of this package); the CODES stay with their
- * producers (`@openelement/compiler`, `@openelement/element`, and the router
+ * Ownership follows the producers: the ENVELOPE is owned here (zero-dependency
+ * contracts plus small pure runtime parsing/validation utilities); the CODES
+ * stay with their producers (`@openelement/compiler`, `@openelement/element`, and the router
  * own their registries). Nothing here validates a code against any registry —
  * a producer this workspace has never heard of still round-trips, which is
  * the forward-compatibility clause #1612 pins.

@@ -19,6 +19,8 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 
 源码目前是 Element 与 Router 的全新公开基线 `1.0.0-alpha.15`。它不是从历史 0.x API 到 1.x 的兼容迁移。从这个版本起，六个包（`protocol`、`element`、`compiler`、`router`、`create`、`ui`）作为同一条版本线发布，npm `latest` 指向该线——`npm install @openelement/router` 解析到当前 1.0 预发布。自 #1557 起，Element 单体拆为三个包：`@openelement/protocol`（跨系统契约，零依赖）、`@openelement/element`（纯运行时）与 `@openelement/compiler`（构建期 TSX-to-Part-Program 编译器 + Vite 插件）。
 
+以上描述的是当前 alpha.15 实现。[已接受的目标](./docs/architecture/product-model.md)是 HTML-first Full TSX、显式 Signals 与显式 CE 边界。2026-11-03 所有者终止 OhMyLit 独立产品计划，并正式启动第一方 Lit renderer 退役；alpha.15 支持事实保留，具体版本窗口未定。第三方 Lit WC 的 client-only 使用继续保留，但不保证自动 SSR 或 Lit DSD hydration。[候选作者样例](./docs/architecture/tsx-author-candidate-contract.md)尚未发布或验证，不是下方快速开始的 API。
+
 ## 证据与收录
 
 以下均为可复现、可第三方核验的参考。
@@ -30,7 +32,7 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 
 ## 快速开始
 
-需要 **Node.js 24.2+（建议 24.18.0）** 与任一包管理器：npm、pnpm、yarn 或 bun（脚手架会用 PATH 上找到的那个安装依赖，生成的项目不绑定包管理器）。创建、运行、构建——依赖由生成器自己安装，没有单独的 install 步骤：
+需要 **Node.js 24.2+（建议 24.18.0）** 与任一包管理器：npm、pnpm、yarn 或 bun（脚手架优先使用调用它的包管理器，再按 pnpm/npm/yarn/bun 顺序探测 PATH；生成的项目不绑定包管理器）。创建、运行、构建——依赖由生成器自己安装，没有单独的 install 步骤：
 
 ```bash
 npm create @openelement my-app
@@ -67,9 +69,9 @@ export default definePage(HelloPage, {
 });
 ```
 
-重新跑 `pnpm dev`，打开 Vite 打印的 URL 并加上 `/hello`，`pnpm build` 会产出 static-first 的 `dist/`。完整教程：<https://openelement.org/zh/guide/getting-started>。
+重新跑 `npm run dev`，打开 Vite 打印的 URL 并加上 `/hello`，`npm run build` 会产出 static-first 的 `dist/`。完整教程：<https://openelement.org/zh/guide/getting-started>。
 
-**构建期宿主说明：** 文件路由的开发与构建运行在 Node.js 24.2+ 上，经 pnpm 脚本驱动（ADR-0161，取代 ADR-0108 的 Deno-native 决策）：`@openelement/router` 的工具子路径（`./vite`、`./cli/*`）作为普通 Node 程序经 starter 自己的依赖钉扎消费。请求期产物使用标准 ESM 与 Web `Request`/`Response`；部署支持以资格矩阵实际覆盖的运行时与 Nitro 目标为准，而非所有能加载 ESM 的运行时。Element 仍可在纯 npm 项目中独立消费。
+**构建期宿主说明：** 文件路由的开发与构建运行在 Node.js 24.2+ 上，经应用自身的 package scripts 驱动（ADR-0161，取代 ADR-0108 的 Deno-native 决策）：`@openelement/router` 的工具子路径（`./vite`、`./cli/*`）作为普通 Node 程序经 starter 自己的依赖钉扎消费。请求期产物使用标准 ESM 与 Web `Request`/`Response`；部署支持以资格矩阵实际覆盖的运行时与 Nitro 目标为准，而非所有能加载 ESM 的运行时。Element 仍可在纯 npm 项目中独立消费。
 
 ## 特性
 
@@ -83,7 +85,7 @@ export default definePage(HelloPage, {
 
 - `packages/element`：Element 核心产品（纯运行时）。
 - `packages/protocol`：跨系统契约包（#1557）：Part Program IR、错误方言、准入描述符；零依赖，仅装契约。
-- `packages/compiler`：Element 编译器（#1557）：TSX-to-Part-Program 语义核心与 Vite 插件边界；唯一携带 TypeScript 依赖的包。
+- `packages/compiler`：Element 编译器（#1557）：TSX-to-Part-Program 语义核心与 Vite 插件边界；在 Element 三包拆分内由它携带 TypeScript，Router tooling 也依赖 TypeScript。
 - `packages/router`：Router 核心产品：代码路由与文件路由实现。
   `packages/router` 的 `/vite`、`/cli/*` 与 `/nitro-mount` 子路径：Router 的应用生命周期与服务器输出。
 - `packages/create`：面向这两个核心产品的正式创建入口。

@@ -1,6 +1,6 @@
 # ADR-0173: Component execution and composition
 
-- Status: ACCEPTED (2026-10-31, architectural direction; implementation pending)
+- Status: ACCEPTED / AMENDED (2026-11-03, semantic prerequisites; implementation pending)
 - Amends: ADR-0143; principles P1 and P5
 - Related: ADR-0148, ADR-0157, ADR-0174
 
@@ -56,8 +56,10 @@ platform callbacks or transactional DOM rollback.
 ## Native interoperability and migration
 
 Explicit CE exports own native properties/events, slots, Shadow DOM, reflection,
-form association and cross-framework consumption. Existing Lit compatibility
-remains independently qualified; new Native features do not imply Lit parity.
+form association and cross-framework consumption. Alpha.15 Lit support remains
+current while first-party retirement proceeds under the 2026-11-03 ADR-0152
+amendment; future Native/Lit parity is not a commitment. Third-party Lit WC
+client-only interoperability does not imply automatic SSR or Lit DSD hydration.
 Server-only functions may be async, but closures, DOM nodes and complete Signals
 graphs do not become serialized state. This remains hydration, not resumability.
 
@@ -98,6 +100,29 @@ Do not delete private state, shift cleanup to authors or weaken required native
 capabilities to claim success. Freeze public APIs/default starters only after
 author and consumer evidence. Structural evidence may reopen the architecture;
 ordinary local failures do not automatically revoke it or invite endless retries.
+
+## Amendment (2026-11-03): author semantics before expansion
+
+The [22-case author candidate contract](../architecture/tsx-author-candidate-contract.md)
+is the prerequisite review surface, not a shipped API or executable fixture.
+Props, computed and Children spellings/types remain OPEN alongside ref/context,
+iterables and flush timing. Review ordinary-local snapshots versus tracked JSX
+reads explicitly; Full TSX syntax does not make every value renderable. Unknown
+children may fail at a source-located runtime guard; bare functions are not
+implicitly invoked. A keyed instance must receive replacement props without
+losing its private state or capturing a stale item in events.
+
+Retain this order: (1) a running generated leaf slice, then a stateful hostless
+list after identity/owner proof; (2) the same list through SSR/claim/update/dispose
+and failure recovery; (3) precompiled tarball consumption in a fresh application.
+Start the third slice as soon as the list foundation permits, before ABI freeze,
+so consumer evidence constrains the ABI; it need not wait for the entire SSR
+slice. Do not substitute three disconnected demonstrations. G1 proves actual
+generated execution, G2 gates related structure expansion, and G3 gates public
+API/default Starter. Independent safety fixes are not blocked by these gates.
+Alpha16 establishes this foundation, Alpha17 productizes Full TSX composition,
+and Alpha18 qualifies bounded defer only after the foundation is stable. None
+of these slices has been implemented or verified by this amendment.
 
 ## References
 

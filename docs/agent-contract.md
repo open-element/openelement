@@ -87,8 +87,8 @@ scripts stay the single source of truth, pnpm stays the package manager, and
 | `@openelement/www` | `www` |
 <!-- derived:workspaces:end -->
 
-`@openelement/protocol` declares no scripts by charter (a types-only
-contract with zero dependencies). The tools suites have no aggregate test
+`@openelement/protocol` declares no scripts by charter (zero-dependency
+contracts plus small runtime utilities, including diagnostics parsing). The tools suites have no aggregate test
 task by design: the repo vitest `tools` project (`vitest.config.ts`) owns
 `tools/repo`, `tools/lib` and `tools/release`, and CI runs it with
 `vitest run --project tools`.
@@ -108,13 +108,19 @@ task by design: the repo vitest `tools` project (`vitest.config.ts`) owns
 | Local full verification (check + test + gates) | `vp run verify` |
 | Build the docs site into `www/dist` | `vp run site:build` |
 | Site verification (links, tokens, content) | `vp run site:verify` |
-| Release precheck (read-only registry queries) | `vp run release:check` |
+| Full release precheck (local writes + network; not read-only) | `vp run release:check` |
 | Content dates (read-only validation) | `vp run --fail-if-no-match @openelement/www#check:content-dates` |
 | Interface snapshot (check / write) | `vp run --fail-if-no-match @openelement/tools-repo#interface:snapshot` / `vp run --fail-if-no-match @openelement/tools-repo#interface:snapshot:write` |
 | Doc figures (measured-output gate) | `vp run --fail-if-no-match @openelement/www#check:doc-figures` |
 | Version bump (one knob, twelve release-line points + four member stamps) | `pnpm --dir tools/repo run version-bump <version> [--write]` |
 | Workflow lint (after any `.github` touch) | `zizmor --offline .` |
 | This contract's own conformance check | `node tools/repo/check-agent-contract.ts` |
+
+`release:check` runs generation, registry queries, release/build and packed gates,
+then publish dry-run. It writes local artifacts and uses the network; do not run
+it during a read-only audit. Dry-run is not publication, and this command is not
+publication authorization. The derived gate table below records its actual steps;
+command conformance alone does not validate prose about side effects.
 
 ## Generated files — never hand-edit
 

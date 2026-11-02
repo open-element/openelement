@@ -1,6 +1,6 @@
 # ADR-0152: Element, Router, and the public 1.0 Alpha baseline
 
-- Status: ACCEPTED (reconciled for `1.0.0-alpha.1` on 2026-09-11)
+- Status: ACCEPTED / AMENDED (2026-11-03; Lit retirement decision, implementation pending)
 - Supersedes: former 0.44 release topology, five-package boundary, and in-repository UI/application
   qualification
 - Preserves: ADR-0148, exact-SHA release trust, protected promotion, fresh verification, and human
@@ -163,3 +163,39 @@ coloring is dropped — its color policy read `process.env`, which runtime code 
 The `virtual:open-hono-entry` module id and its `_virtual_open-hono-entry` asset prefix are
 retained as legacy names with no dependency semantics; renaming them would churn build
 artifacts for no observable change.
+
+## Superseding amendment (2026-11-03): one Native product direction
+
+The owner terminates the independent OhMyLit product initiative (research,
+development and brand launch) and formally starts retirement of the first-party
+Lit renderer. This supersedes the 2026-09-16 "Lit renderer mode is doctrine"
+amendment and the future Native/Lit parity obligation in Framework Mode and
+admission above. Element and Router remain the two core products. The target is
+HTML-first Full TSX with explicit Signals, hostless internal composition and an
+explicit native CE boundary; see the [product model](../architecture/product-model.md).
+
+This is a product-focus decision, not an adoption count or proof that Lit/DSD
+cannot work. External consumers are unknown, not known to be absent. Alpha.15
+still implements and supports the existing Lit mode; this amendment deletes no
+implementation, export, dependency or test, and supplies no new qualification.
+Existing Lit checks remain necessary until a separately qualified retirement
+candidate replaces that support contract.
+
+The last supported version, breaking prerelease, compatibility period and owner
+for security handling are **OPEN**. Do not silently assign retirement to alpha16,
+rewrite historical release evidence or promise indefinite security maintenance
+of an old branch. Users may pin an old version and assess its risks. Before a
+retirement release, publish migration notes covering configuration, `./lit`,
+`./lit-ssr`, server-runtime exports, hydration and first-screen/SEO effects.
+`renderer: 'lit'` must receive an explicit migration error, never silently select
+Native. Native rewrites and client-only migration are distinct choices.
+
+Preserve third-party Lit Web Components as client-only interoperability, including
+properties/events and platform boundaries. This gives no automatic SSR admission
+and no promise that OpenElement hydrates foreign Lit DSD. Migrate shared
+leaf-graph, forms/readiness, navigation and safety assertions before deleting
+renderer-exclusive fixtures. Complete exports/dependencies/generated surfaces,
+negative tests and full candidate qualification together before release. A rollback
+restores the whole compatible server/client/build set as a new candidate, not a
+single dependency or an overwritten published version. No removal or publication
+is authorized by this documentation-only stage.
