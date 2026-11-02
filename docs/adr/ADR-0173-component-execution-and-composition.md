@@ -101,6 +101,30 @@ capabilities to claim success. Freeze public APIs/default starters only after
 author and consumer evidence. Structural evidence may reopen the architecture;
 ordinary local failures do not automatically revoke it or invite endless retries.
 
+## Amendment (2026-11-03, owner review): reusable JSX values and repeatable children
+
+This amendment supersedes the single-insertion clause above ("The initial
+fragment contract is single insertion, not arbitrary cloning or transfer between
+roots") and the corresponding single-projection rule for children. The owner
+rejected both limits during author-contract review.
+
+A JSX expression in value position is a **reusable, lazy insertion
+description**, not a mounted region: each insertion creates an independent
+owner, instance, DOM region, private signals and cleanup. Children may be
+projected more than once, each projection being an independent owner and region.
+Lexical dependencies belong to the definition site; cleanup ownership belongs to
+the projection site. Projection outside the defining owner's subtree is rejected
+in Alpha16 rather than silently orphaned.
+
+This still excludes a public VNode ABI, runtime component resolution, generic
+browser interpretation, and cloning mounted DOM. The execution model, evaluation
+timing, rejected alternatives and failure modes are specified in
+[JSX values and repeatable children](../architecture/jsx-value-and-children-model.md);
+the author-visible cases are TSX-23 to TSX-30 in the
+[author contract](../architecture/tsx-author-candidate-contract.md). Nothing here
+is implemented: no recipe, insertion helper or tracked-props mechanism exists in
+the tree.
+
 ## Amendment (2026-11-03): author semantics before expansion
 
 The [22-case author candidate contract](../architecture/tsx-author-candidate-contract.md)

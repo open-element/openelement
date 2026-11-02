@@ -5,7 +5,11 @@ adapt, scaffold, build, and distribute those products.
 
 - [Design principles](./design-principles.md) ([中文](./design-principles.zh.md))
 - [Product model and 2026-11-03 direction](./product-model.md)
-- [TSX author candidate contract](./tsx-author-candidate-contract.md) — 22 review cases; unreleased APIs, not implementation evidence
+- [Alpha16–18 architecture audit](./alpha16-18-architecture-audit.md) — what alpha.15 actually implements, what is reusable, what must change
+- [TSX author candidate contract](./tsx-author-candidate-contract.md) — 30 review cases; approved TSX-03/04/05/09/10 semantics; unreleased APIs, not implementation evidence
+- [JSX values and repeatable children](./jsx-value-and-children-model.md) — mount recipes, evaluation timing, owner/region model, rejected alternatives
+- [Alpha16–18 execution plan](./alpha16-18-execution-plan.md) — slices, G1/G2/G3, work classes and risk register
+- [Alpha16–18 semantic test matrix](./alpha16-18-semantic-test-matrix.md) — per-case evidence ledger; all rows not run
 - [Compiler and element runtime](./compiler-and-element-runtime.md)
 - [Rendering and hydration](./rendering-and-hydration.md)
 - [Router and server runtime](./router-and-server-runtime.md)
