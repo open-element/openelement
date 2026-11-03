@@ -101,9 +101,33 @@ capabilities to claim success. Freeze public APIs/default starters only after
 author and consumer evidence. Structural evidence may reopen the architecture;
 ordinary local failures do not automatically revoke it or invite endless retries.
 
+## Amendment (2026-11-03, owner review): reusable JSX values and repeatable children
+
+This amendment supersedes the single-insertion clause above ("The initial
+fragment contract is single insertion, not arbitrary cloning or transfer between
+roots") and the corresponding single-projection rule for children. The owner
+rejected both limits during author-contract review.
+
+A JSX expression in value position is a **reusable, lazy insertion
+description**, not a mounted region: each insertion creates an independent
+owner, instance, DOM region, private signals and cleanup. Children may be
+projected more than once, each projection being an independent owner and region.
+Lexical dependencies belong to the definition site; cleanup ownership belongs to
+the projection site. Projection outside the defining owner's subtree is rejected
+in Alpha16 rather than silently orphaned.
+
+This still excludes a public VNode ABI, runtime component resolution, generic
+browser interpretation, and cloning mounted DOM. The execution model, evaluation
+timing, rejected alternatives and failure modes are specified in
+[JSX values and repeatable children](../architecture/jsx-value-and-children-model.md);
+the author-visible cases are TSX-23 to TSX-30 in the
+[author contract](../architecture/tsx-author-candidate-contract.md). Nothing here
+is implemented: no recipe, insertion helper or tracked-props mechanism exists in
+the tree.
+
 ## Amendment (2026-11-03): author semantics before expansion
 
-The [22-case author candidate contract](../architecture/tsx-author-candidate-contract.md)
+The [30-case author candidate contract](../architecture/tsx-author-candidate-contract.md)
 is the prerequisite review surface, not a shipped API or executable fixture.
 Props, computed and Children spellings/types remain OPEN alongside ref/context,
 iterables and flush timing. Review ordinary-local snapshots versus tracked JSX
@@ -131,3 +155,39 @@ of these slices has been implemented or verified by this amendment.
 - [Solid components](https://docs.solidjs.com/concepts/components/basics)
 - [Solid onMount](https://docs.solidjs.com/reference/lifecycle/on-mount)
 - [Solid onCleanup](https://docs.solidjs.com/reference/lifecycle/on-cleanup)
+
+## Amendment (2026-11-03, owner-approved): long-lived class adapter
+
+The owner approved retaining the Class/decorator API through a long-lived
+compatibility adapter (D-O3). Class and function authoring share one semantic
+model and one generated execution backend — ownership, identity, Signals, update
+and disposal — and the adapter is compatibility infrastructure, not a parallel
+execution architecture or a second renderer. No forced deprecation or deletion
+version is scheduled; a future retirement would be a separate product decision
+requiring real consumer evidence.
+
+The reusable-JSX-value and repeatable-Children amendment above remains
+authoritative: repeated consumption creates independent instances unless an
+explicit API says otherwise.
+
+## Superseding amendment (2026-11-03, fourth pass — APPROVED)
+
+Status: **APPROVED 2026-11-03.** This supersedes the "long-lived class adapter"
+amendment above; that amendment remains readable as history.
+
+The fourth-pass reassessment proposes retiring the public Class/Decorator
+authoring API instead of retaining a long-lived compatibility adapter: authors
+would use function components only, native Custom Elements would remain the
+public platform boundary, and the compiler would still emit a native element
+class internally where the platform requires one. No compatibility adapter would
+be built.
+
+Evidence behind the proposal: 219 in-tree files use `@element(`; the class-shaped
+compiler frontend is the only one that exists; external adoption is unknown
+(monthly downloads small but non-zero, no verified downstream consumer). Full
+analysis: [fourth-pass reassessment](../architecture/alpha16-18-fourth-pass-reassessment.md).
+
+The invariant that does not change: one semantic model, one generated execution
+backend, never two execution architectures. Native Custom Elements stay a
+first-class platform boundary; hostless function components are never forced to
+become elements.
