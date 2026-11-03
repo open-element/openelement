@@ -324,10 +324,20 @@ dispose old resources first.
 
 ### TSX-19 — error and cleanup containment
 
-A boundary captures descendant failures; setup failing midway releases what it
-acquired; one throwing cleanup does not suppress the rest; dispose is
-idempotent. Phases: SSR (server errors), Mount, Claim, Update, Dispose. OPEN:
-boundary reset policy.
+A boundary captures descendant failures; one throwing cleanup does not suppress
+the rest; dispose is idempotent. Setup failure must be exception-safe per the
+model note §4.1b: the child scope exists before the first node, every resource
+registers as acquired, and a failed setup disposes that scope in detach mode so
+no partial DOM region survives, every cleanup is attempted, and the original
+construction error is what surfaces.
+
+Required failure rows (each needs its own test, not one combined case): failure
+before the first node; after partial DOM; after signal subscriptions; after
+event listeners; during insertion into the parent; during nested component
+setup; and a cleanup that throws while others remain.
+
+Phases: SSR (server errors), Mount, Claim, Update, Dispose. OPEN: boundary reset
+policy.
 
 ### TSX-20 — explicit CE and third-party WC
 
@@ -345,6 +355,18 @@ CSS; a fresh application consumes it with no library TSX and no workspace alias;
 ABI mismatch, duplicate runtimes, missing types/CSS and server chunks in client
 graphs fail closed. Phases: all, in the consumer project. OPEN: metadata format
 and version ranges; this evidence starts before ABI freeze.
+
+Scope boundary (Alpha16 vs Alpha17), stated rather than implied:
+
+- **Alpha16 proves** that the generated artifact and the supported consumption
+  surface work from a fresh packed application — the stateful list is packaged
+  as one compiled artifact and consumed without aliases or library TSX.
+- **Alpha16 does not require** arbitrary cross-module function-component recipe
+  composition; that ABI is deferred to Alpha17.
+- **Alpha17 qualifies** cross-module component recipes and the frozen precompiled
+  ABI.
+- TSX-21 therefore does **not** prove cross-module recipe distribution in
+  Alpha16. A green TSX-21 row must say which of the two it exercised.
 
 ### TSX-22 — HMR and source locations
 
@@ -384,28 +406,42 @@ onConnect(() => { setTimeout(() => host.append(...insertInto(owner, late)), 10);
 ```
 
 Creating a recipe allocates no DOM and no instance; inserting later uses the
-current prop values; insertion into a disposed owner fails closed with a coded
-diagnostic. The insertion API shown is illustrative and unreleased. Phases:
-Mount, Update, Dispose (SSR `n/a`).
+current prop values; insertion into a disposed definition owner fails closed
+with a coded, source-located diagnostic. The insertion API shown is illustrative
+and unreleased, and the lineage check it depends on is OPEN (model note §4.1c).
+Phases: Mount, Update, Dispose (SSR `n/a`).
 
 ### TSX-26 — independent projection deletion and cross-owner rejection
 
 With two projections of the same children, removing one leaves the other's
-instance, signals and DOM live and does not dispose shared state. A projection
-into a different owner subtree fails closed. Phases: Mount, Update, Dispose.
+instance, signals and DOM live and does not dispose shared state. Removal of one
+projection uses **detach mode** on that projection's owner only; the sibling's
+DOM must survive. A projection into a different owner subtree fails closed with a
+coded diagnostic, which requires the lineage mechanism described in the model
+note §4.1c (OPEN). Phases: Mount, Update, Dispose.
 
 ### TSX-27 — parent owner disposal
 
 Disposing the parent disposes all descendant owners exactly once, including every
-projection and every list entry; a second dispose is a no-op; a throwing cleanup
-does not prevent the remaining ones. Phases: Mount, Claim, Dispose.
+projection and every list entry, and the mode cascades (children inherit
+detach or non-detach from the parent call, `lifetime-scope.ts:100`); a second
+dispose is a no-op; a throwing cleanup does not prevent the remaining ones.
+Distinguish the two modes explicitly: plain `dispose()` keeps owned DOM (the
+disconnect/suspend path), `dispose(true)` removes it. Phases: Mount, Claim,
+Dispose.
 
 ### TSX-28 — expression evaluation counts
 
-The documented count per phase: props expressions once per insertion; inline JSX
-expressions on each dependent update; event handlers at dispatch; setup
-expressions once. A test asserts the counts, because this is where authors will
-otherwise guess wrong. Phases: SSR, Mount, Claim, Update.
+The full observable contract is the model note §4.2a table (nine situations).
+In one line: a props expression does **not** run at recipe creation, runs when a
+child reads the getter, runs again on each dependent re-evaluation, and runs once
+during destructuring; inline JSX expressions run per dependent update; handlers
+run per dispatch; setup runs once.
+
+A test asserts the counts, because this is where authors will otherwise guess
+wrong, and claim must match mount except for SSR-only reads. OPEN: whether a
+getter is memoised per tick or evaluated per binding — decided by this case.
+Phases: SSR, Mount, Claim, Update.
 
 ### TSX-29 — dynamic component type
 
@@ -414,7 +450,9 @@ const C = cond ? A : B;
 return <C />;
 ```
 
-Status: **rejected for Alpha16.** Resolving a component from a runtime value
+Status: **rejected for Alpha16.** A future distinction may be drawn between a
+compile-time-known finite set of component branches and arbitrary runtime
+component resolution, but that is not a capability added here. Resolving a component from a runtime value
 requires runtime dispatch, which the model forbids. A later explicit `Dynamic`
 primitive would need its own identity and ownership rules. The rejection is a
 source-located diagnostic, not a crash. Phases: `n/a` (rejected at compile time).

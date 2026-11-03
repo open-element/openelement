@@ -127,19 +127,35 @@ function App(__owner) {
 }
 ```
 
-`insert` is the only new runtime primitive this model requires:
+An earlier draft claimed `insert` was the **only** new runtime primitive. That
+claim is withdrawn: it was made before the disposal and ownership questions below
+were worked through.
+
+What the model actually needs, and what already exists:
 
 ```js
+// Prototype form — ILLUSTRATIVE, and deliberately incomplete.
 function insert(owner, recipe, parent, before) {
-  const scope = owner.child();          // the projection-site owner
+  const scope = owner.child();          // projection-site owner (exists)
   const nodes = recipe(scope, parent, before);
   scope.addRangeCleanup(() => removeNodes(nodes));
   return nodes;
 }
 ```
 
-Both pieces already exist: `LifetimeScope.child()` and `addRangeCleanup`
-(`lifetime-scope.ts:28-30`, `:63-69`).
+| Requirement | Status | Evidence |
+| --- | --- | --- |
+| child owner | exists | `LifetimeScope.child()` (`lifetime-scope.ts:28-30`) |
+| deferred range removal | exists | `addRangeCleanup` (`lifetime-scope.ts:63-69`) |
+| removal actually triggered | **must be decided by the caller** | see §4.1a — a range cleanup only runs under `dispose(true)` |
+| definition-owner liveness check | **new internal check required** | `LifetimeScope` exposes `disposed`/`active` (`:32-38`) but no identity or provenance |
+| projection-owner ancestry check | **open** — needs an internal token or query | parent link is private (`#parent`, `:5`) |
+| exception-safe partial rollback | **new code required** in generated mount | §4.1b |
+
+So the honest statement is: **`insert` is a compiler-emitted call site, not a
+proven single primitive.** Whether it is one function, a small internal object, or
+generated inline code is OPEN and is decided by the test obligations in §9, not by
+this document.
 
 ### 4.1 Why this is not a VDOM
 
@@ -150,6 +166,103 @@ Both pieces already exist: `LifetimeScope.child()` and `addRangeCleanup`
 - The recipe has no inspectable shape, so no generic walker can traverse it.
   Any consumer must call it, which requires an owner — i.e. the semantics are
   enforced by the type of the primitive, not by convention.
+
+### 4.1a Disposal versus detachment (must not be conflated)
+
+`LifetimeScope.dispose(detachOwnedNodes = false)` is not a single operation. The
+real semantics, read from the implementation:
+
+| Call | What runs | What survives |
+| --- | --- | --- |
+| `dispose()` | abort signal, child scopes (same mode), registered `add()` cleanups LIFO | range cleanups **do not run**; owned DOM stays in place |
+| `dispose(true)` | everything above **plus** `addRangeCleanup` callbacks | owned DOM range is removed |
+
+Evidence: `lifetime-scope.ts:83-109` (the `if (detachOwnedNodes)` guard around
+range cleanups), and the two production call sites that use detach mode —
+`blocks.ts:312` (`block.branchScope.dispose(true)` when a when-branch is
+replaced) and `blocks.ts:516` (`entry.scope.dispose(true)` when a keyed entry is
+deleted). Ordinary disconnect uses plain `dispose()` precisely so DOM can be
+reclaimed on reconnect.
+
+Therefore every situation needs its own row, and the prototype `insert` above
+gets the last one **wrong** if copied literally:
+
+| Situation | Mode | Notes |
+| --- | --- | --- |
+| Component/resource disposal (owner leaves the tree) | `dispose(true)` from the removing parent | both subscriptions and DOM go |
+| DOM range detachment only | `dispose(true)` on the range owner | used by branch replacement / keyed deletion |
+| Parent owner disposal | `dispose(true)` cascades to children | children inherit the mode (`:100`) |
+| Keyed entry deletion | `dispose(true)` | existing precedent, `blocks.ts:516` |
+| Independent projection deletion | `dispose(true)` on that projection's owner only | the sibling projection must stay live |
+| CE disconnect / suspend | plain `dispose()` or suspension path | owned DOM is retained for reconnect/revive |
+| Failed setup rollback | `dispose(true)` on the partial scope | partial DOM must not survive (§4.1b) |
+
+**Do not change the default `dispose()` behaviour to make an example work.** The
+default is load-bearing for disconnect/reconnect and revive
+(`runtime/revive.ts`), and changing it is a separate decision with its own
+evidence.
+
+### 4.1b Exception-safe setup and insertion
+
+The prototype registers a range cleanup only *after* `recipe()` returns. If a
+generated mount throws, the partially built region has no registered removal.
+The contract must therefore be:
+
+1. **The child scope exists before the first node is created**, so every
+   subsequent resource registers on a scope that can be disposed.
+2. **Every acquired resource registers as it is acquired** — node ranges,
+   signal subscriptions, event listeners, nested owners — not in one batch at
+   the end.
+3. **On failure, the inserting code disposes that scope with detach mode**,
+   which removes any partial DOM range and releases subscriptions/listeners.
+4. **Nested component setup failures propagate** after the inner scope has
+   rolled back; the parent decides whether its own boundary recovers.
+5. **The original error is preserved.** Cleanup errors are attempted and
+   suppressed; the construction error is what surfaces (the same first-error
+   discipline as `LifetimeScope.dispose`, `:88-108`).
+6. **No orphan region and no double ownership**: a scope that failed setup is
+   never attached to a live parent as a functioning region.
+
+Failure matrix that the implementation must satisfy explicitly:
+
+| Failure point | Required behaviour |
+| --- | --- |
+| before the first node exists | nothing to remove; error surfaces |
+| after partial DOM creation | partial range removed by the rollback |
+| after signal subscriptions | subscriptions released; no writes to a dead region |
+| after event listeners | listeners removed |
+| during insertion into the parent | already-inserted nodes removed; parent unchanged |
+| during nested component setup | nested scope rolled back first |
+| inside one cleanup while others remain | remaining cleanups still attempted; first error surfaces |
+
+### 4.1c Owner lineage and cross-owner projection
+
+The approved contract says lexical dependencies belong to the definition site,
+ownership to the projection site, and projection must stay inside the defining
+owner's subtree in Alpha16. The prototype gives the runtime **no way to check
+that**, because `LifetimeScope` keeps its parent private (`#parent`,
+`lifetime-scope.ts:5`) and exposes only `disposed` / `active` (`:32-38`).
+
+Required checks, and what is missing today:
+
+| Check | Available today | Needs |
+| --- | --- | --- |
+| definition owner still alive | `owner.disposed` | nothing new |
+| projection owner still alive | `owner.disposed` | nothing new |
+| projection owner is a permitted descendant of the definition owner | **nothing** | an internal lineage token or an ancestry query |
+| delayed insertion after definition owner disposal | partial: disposal is observable, association is not | the same lineage mechanism |
+| two insertions produce two independent owners | achievable | nothing new |
+
+Design constraint for whatever mechanism is chosen: it must stay **internal**
+(no public owner API), must not turn `LifetimeScope` into a general graph
+service, and must cost nothing on the hot path when no projection crosses a
+boundary. Options to evaluate — an immutable lineage token carried by the
+recipe, a definition-owner stamp checked at insertion, or a compiler-emitted
+`assertSameTree` guard — are **OPEN** and decided by the TSX-26 test, not here.
+
+What must not happen: silently allowing a cross-subtree projection and then
+disposing it with the wrong owner, or leaking a "projection of a dead owner"
+into the DOM.
 
 ### 4.2 Evaluation timing
 
@@ -168,6 +281,42 @@ creation. Two insertions of one recipe may therefore receive different prop
 values if the captured state changed between them. This differs from React,
 where the element object snapshots props once. It is the price of independent
 instances and it must be tested, not discovered.
+
+### 4.2a Observable evaluation contract
+
+The timing table above is not precise enough to implement or test. The exact
+contract, with the open parts named:
+
+| # | Situation | What evaluates | Count |
+| --- | --- | --- | --- |
+| 1 | Recipe creation (`const c = <Counter step={next()} />`) | nothing authored runs; only a closure is allocated | `next()` **0 times** |
+| 2 | Initial insertion | props getters are created; a getter body runs when the child reads it | `next()` runs once per child read, inside whatever tracking context performs the read |
+| 3 | Tracked prop dependency update | the getter runs again for each dependent binding that re-evaluates | once per dependent evaluation |
+| 4 | Keyed prop replacement | the backing value is replaced; dependent bindings re-run | getter runs on re-evaluation, not on replacement itself |
+| 5 | Destructuring (`const { step } = props`) | getter runs once during setup | exactly once, snapshot |
+| 6 | Event dispatch | handler body runs; prop reads inside it run then | per dispatch |
+| 7 | SSR initialization | setup once, getters as read during serialization | per serialization read |
+| 8 | Client initialization | setup once | per client instance |
+| 9 | Claim | setup once; no duplicate subscriptions | setup 1, subscriptions 1 per logical subscription |
+
+The consequence authors will notice is row 2 + 3: `step={next()}` is **not**
+evaluated once when the JSX value is created. Two insertions can observe
+different values if captured state changed between them, and a side effect in a
+props expression runs per read rather than per element. That is a deliberate
+consequence of independent instances plus tracked getters, and it is tested by
+TSX-28 rather than left to documentation.
+
+**OPEN (decided by TSX-28):** whether a getter's value is memoised per update
+tick when read by several bindings, or evaluated once per binding. Both are
+compatible with the author-visible contract above; the choice is a cost and
+consistency decision. The test that settles it: count evaluations for a props
+expression read by three bindings across one update.
+
+Known sharp edge, to be documented rather than hidden: a non-idempotent props
+expression (`<X v={counter++} />`) becomes order- and count-dependent. Options
+are a dev-mode warning or a documented rule that side effects belong in
+handlers/effects. This is OPEN; it must not be silently allowed to differ
+between mount and claim.
 
 ### 4.3 Props are getters over the defining scope
 
@@ -360,6 +509,24 @@ OPEN, and must be resolved by evidence rather than by preference:
 8. HMR state preservation when a recipe's defining module is replaced.
 
 ## 9. Test obligations before this model may be called implemented
+
+Additional obligations introduced by §4.1a–§4.2a, beyond the ten listed further
+below:
+
+11. **Detach vs dispose**: ordinary `dispose()` leaves owned DOM in place;
+    `dispose(true)` removes it. A test asserts both, because the difference is
+    what makes reconnect work.
+12. **Setup failure rollback** for each row of the §4.1b matrix: assert no
+    surviving nodes, no surviving listeners, no surviving subscriptions, the
+    original error surfaced, and every cleanup attempted.
+13. **Owner lineage**: projection from a live descendant succeeds; projection
+    from a non-descendant fails closed; insertion after the definition owner is
+    disposed fails closed. Assert the failure is coded and source-located.
+14. **Evaluation counts** (TSX-28): number of times a props expression runs for
+    creation, insertion, update, keyed replacement, and claim.
+15. **Claim parity of counts**: the same expression runs the same number of
+    times under SSR→claim as under fresh mount (excluding SSR-only reads).
+
 
 Minimum, on the stateful list slice (Slice 2), each asserting instance counts
 and owner identity — not only rendered text:

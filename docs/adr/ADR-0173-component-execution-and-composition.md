@@ -127,7 +127,7 @@ the tree.
 
 ## Amendment (2026-11-03): author semantics before expansion
 
-The [22-case author candidate contract](../architecture/tsx-author-candidate-contract.md)
+The [30-case author candidate contract](../architecture/tsx-author-candidate-contract.md)
 is the prerequisite review surface, not a shipped API or executable fixture.
 Props, computed and Children spellings/types remain OPEN alongside ref/context,
 iterables and flush timing. Review ordinary-local snapshots versus tracked JSX
@@ -155,3 +155,17 @@ of these slices has been implemented or verified by this amendment.
 - [Solid components](https://docs.solidjs.com/concepts/components/basics)
 - [Solid onMount](https://docs.solidjs.com/reference/lifecycle/on-mount)
 - [Solid onCleanup](https://docs.solidjs.com/reference/lifecycle/on-cleanup)
+
+## Amendment (2026-11-03, owner-approved): long-lived class adapter
+
+The owner approved retaining the Class/decorator API through a long-lived
+compatibility adapter (D-O3). Class and function authoring share one semantic
+model and one generated execution backend — ownership, identity, Signals, update
+and disposal — and the adapter is compatibility infrastructure, not a parallel
+execution architecture or a second renderer. No forced deprecation or deletion
+version is scheduled; a future retirement would be a separate product decision
+requiring real consumer evidence.
+
+The reusable-JSX-value and repeatable-Children amendment above remains
+authoritative: repeated consumption creates independent instances unless an
+explicit API says otherwise.
