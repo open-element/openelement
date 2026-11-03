@@ -2,8 +2,10 @@
 
 Date: 2026-11-03 (fourth pass). Baseline: `4f1f2001b`; branch
 `docs/alpha16-18-contract-revision`; previous HEAD `cba667e0c`.
-Status: **PROPOSAL — NOT APPROVED.** Nothing here is an owner decision until the
-owner accepts it. No product source was changed.
+Status: **APPROVED 2026-11-03 as one architecture decision package (P-1…P-5).**
+Owner approval covers architecture direction and retirement policy only: it is
+**not** authorisation to delete source, freeze the new ABI, or publish. No product
+source was changed by this document.
 
 This pass re-opens D-O2 (Part Program v2) and D-O3 (Class API) because the owner
 challenged their premise: *why carry historical implementation constraints into
@@ -14,18 +16,19 @@ evidence-first; each recommendation states what would change if accepted.
 
 | Object | Previous decision | This pass | Confidence |
 | --- | --- | --- | --- |
-| Class/Decorator authoring API | KEEP, long-lived adapter (D-O3, approved 2026-11-03) | **PROPOSE RETIRE** the authoring API; keep native Custom Elements and any internal generated class | **High** — no external users by owner declaration; cost is in-repo migration only |
-| Part Program v2 as a **serialized browser execution protocol** | KEEP, transitional (D-O2) | **PROPOSE RETIRE** as browser protocol | High |
-| Part Program v2 as an **SSR/build data structure** | KEEP | **PROPOSE REPLACE** by backend-local structures that share the semantic model, not the schema | Medium |
-| `__partProgram` field | KEEP, transitional | **PROPOSE REMOVE** from the target generated-module contract; replace with a narrow ABI | High |
-| `validatePartProgram` / `PART_PROGRAM_VERSION` / `COMPILED_MODULE_ABI_VERSION` v2 | KEEP | **PROPOSE RETIRE** the first two; the new ABI gets its own version | High |
+| Class/Decorator authoring API | KEEP, long-lived adapter (D-O3, approved 2026-11-03) | **APPROVED: RETIRE** the authoring API; keep native Custom Elements and any internal generated class | **High** — no external users by owner declaration; cost is in-repo migration only |
+| Part Program v2 as a **serialized browser execution protocol** | KEEP, transitional (D-O2) | **APPROVED: RETIRE** as browser protocol | High |
+| Part Program v2 as an **SSR/build data structure** | KEEP | **APPROVED: REPLACE** by backend-local structures that share the semantic model, not the schema | Medium |
+| `__partProgram` field | KEEP, transitional | **APPROVED: REMOVE** from the target generated-module contract; replace with a narrow ABI | High |
+| `validatePartProgram` / `PART_PROGRAM_VERSION` / `COMPILED_MODULE_ABI_VERSION` v2 | KEEP | **APPROVED: RETIRE** the first two; the new ABI gets its own version | High |
 | `LifetimeScope` | KEEP | **KEEP**, but re-justified below (§6), not granted permanent status | High |
 | Signals | KEEP | **KEEP** | High |
 | Native Custom Elements | KEEP | **KEEP** (explicit platform boundary) | High |
 
-**None of these is approved.** The documents now carry them as proposals; the
-approved 2026-11-03 decisions remain recorded as history and are not silently
-rewritten.
+**All five are approved** (2026-11-03, one decision package). The earlier
+2026-11-03 D-O2/D-O3 records are superseded — not deleted — and remain readable as
+history. Approval is policy-level: deletions and the new ABI still require Alpha16b
+qualification and M01 design evidence.
 
 ## 2. Class API re-evaluation
 
@@ -33,7 +36,7 @@ rewritten.
 
 | Layer | What it is | Disposition |
 | --- | --- | --- |
-| **A. Public Class authoring API** (`@element`, `class X extends OpenElement`, decorators) | the authoring surface Alpha15 shipped | **PROPOSE RETIRE** |
+| **A. Public Class authoring API** (`@element`, `class X extends OpenElement`, decorators) | the authoring surface Alpha15 shipped | **APPROVED: RETIRE** |
 | **B. Internal generated class** | the compiler emits a class extending a generated base with `__partProgram` + handlers | **KEEP the concept**; keeps native lifecycle |
 | **C. Native platform integration** (`HTMLElement`, `customElements.define`, attributes/properties/events/shadow) | browser boundary | **KEEP, first-class** |
 
@@ -219,9 +222,9 @@ ABI is not the IR; the HTML/claim/stream wire is not the ABI.
 | Alpha17 | no longer carries a class-adapter obligation; carries the frozen ABI, public function API, migration notes |
 | Alpha18 | unchanged: bounded defer only |
 
-If the class-retirement proposal is **not** approved, M09 reverts to the adapter
-milestone and the execution plan's Alpha16b item "retire class frontend" is
-removed. Both variants are stated so the plan is not silently pre-decided.
+The class-retirement decision is approved, so M09 is the generated Native Custom
+Element boundary and Alpha16b retires the class frontend. The previous "revert to
+adapter" variant is recorded only as rejected history.
 
 ## 9. What the owner must approve
 
@@ -239,12 +242,11 @@ That combination should be made explicit if chosen.
 
 ## 10. Status of the documents
 
-Everything below is **proposal**, not frozen:
-this document, the target sections of `compiler-native-architecture.md`, the
-retirement roadmap matrix, the execution plan's M09/M10 wording, and the
-PROPOSED amendments added to ADR-0173/0174. The approved 2026-11-03 decisions
-(D-O1 split, D-O2 staging discipline, D-O3 adapter) remain recorded as approved
-history until the owner supersedes them.
+Everything below is now the approved direction: this document, the target
+sections of `compiler-native-architecture.md`, the retirement roadmap matrix, the
+execution plan's M09/M10 wording, and the superseding amendments in ADR-0173 and
+ADR-0174. D-O1 (16a/16b split) and the D-O2 staging discipline remain in force;
+D-O2's KEEP conclusion and the D-O3 adapter are superseded.
 
 **Architecture consistency, engineering feasibility, retirement feasibility and
 release readiness are four different questions.** This pass can claim only the

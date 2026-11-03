@@ -1,7 +1,7 @@
 # Alpha16–18 retirement roadmap
 
-Date: 2026-11-03. Baseline: `4f1f2001b`. Status: **PROPOSED / NOTHING IS
-AUTHORISED FOR DELETION BY THIS DOCUMENT**. Companion to
+Date: 2026-11-03. Baseline: `4f1f2001b`. Status: **APPROVED POLICY / NOTHING IS
+AUTHORISED FOR DELETION BY THIS DOCUMENT ALONE**. Companion to
 [the freeze audit](./alpha16-18-freeze-audit.md) and
 [the cleanup inventory](./alpha16-18-cleanup-inventory.md).
 
@@ -18,13 +18,13 @@ Rules that govern every row:
 
 | Object | Kind | Current consumers | Disposition | Replacement | Deletion precondition | Test / gate | Milestone |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `@element` decorator | public API | app authors, 219 in-tree files | **PROPOSE RETIRE** (fourth pass; owner approval required) | function components | owner approval + migration note + in-tree migration | class→function migration matrix | Alpha17 |
-| `OpenElement` base class | public API | authors, runtime | **PROPOSE RETIRE as author surface**; internal generated base may remain | emitted internal base | owner approval; platform need re-checked | registration/lifecycle tests | Alpha17 |
+| `@element` decorator | public API | app authors, 219 in-tree files | **RETIRE (approved 2026-11-03)** | function components | in-tree migration + release note; no external users (owner-declared) | class→function migration matrix | Alpha16b |
+| `OpenElement` base class | public API | authors, runtime | **RETIRE as author surface (approved)**; internal generated base may remain | emitted internal base | no author imports it; internal need re-checked | registration/lifecycle tests | Alpha16b |
 | `jsx-runtime.ts` / `jsx-dev-runtime.ts` | public types + guard | typecheck, fail-closed test | **KEEP** | — | guard must keep failing closed | JSX-outside-compiler test | permanent |
 | `LifetimeScope` | internal primitive | kernel, blocks, parts, hydrate | **KEEP** | — | — | TSX-27 | permanent |
 | Signals (`@preact/signals-core` + internal contract) | dependency | everything | **KEEP** | — | — | signal tests | permanent |
-| Part Program v2 + validator | protocol + public export | runtime, SSR, Router, build, tests | **PROPOSE RETIRE** as serialized browser protocol | compiler IR + narrow ABI | owner approval; per-consumer migration complete | consumer map + M10 | M01 / Alpha16b |
-| `__partProgram` emitted field | generated ABI | see consumer map | **PROPOSE REMOVE** from target contract | narrow generated ABI | owner approval; every consumer migrated | M01 + M10 | Alpha16b |
+| Part Program v2 + validator | protocol + public export | runtime, SSR, Router, build, tests | **RETIRE (approved)** as serialized browser protocol | compiler IR + narrow ABI | per-consumer migration complete; M10 evidence | consumer map + M10 | Alpha16b |
+| `__partProgram` emitted field | generated ABI | see consumer map | **REMOVE (approved)** from target contract | narrow generated ABI | every consumer migrated; ABI designed in M01 | M01 + M10 | Alpha16b |
 | `PART_PROGRAM_VERSION` | ABI stamp | generated modules, stream identity | **KEEP** | — | — | mismatch tests | — |
 | `COMPILED_MODULE_ABI_VERSION` v2 | ABI stamp | generated modules, facade | **KEEP, versioned separately from the future ABI** | new ABI gets its own number | no freeze before consumer evidence | abi mismatch tests | Alpha17 |
 | Generic browser executor: `fresh-dom.ts` walker | internal | kernel connect (fresh) | **RETIRE AFTER QUALIFICATION** | generated mount | M10 unreachability + full behaviour coverage | M10, M13 | Alpha16b |
@@ -102,7 +102,7 @@ rollback. Not merged into Alpha16.
 
 ## 3. What must never appear on this roadmap
 
-- Deleting the Class/decorator API **without owner approval** — it is the subject of a proposed retirement, not an assumption.
+- Deleting the Class/decorator API before Alpha16b qualifies its migration (the retirement itself is approved).
 - Deleting the Part Program, its validator or `__partProgram` (D-O2).
 - Deleting the JSX type entry or its fail-closed guard.
 - Deleting SSR/DSD, security sinks, Signals or `LifetimeScope` for size reasons.
@@ -127,8 +127,8 @@ the code looks.
 
 ## 5. Fourth-pass status
 
-The rows above marked **PROPOSE** are proposals from
-[the fourth-pass reassessment](./alpha16-18-fourth-pass-reassessment.md). They
-become actions only if the owner approves P-1…P-5. If P-1 is rejected, the class
-rows revert to the 2026-11-03 D-O3 adapter decision; if P-2/P-3 are rejected, the
-Part Program rows revert to the transitional KEEP with a staged split.
+P-1…P-5 are **approved (2026-11-03)** as one decision package
+([reassessment](./alpha16-18-fourth-pass-reassessment.md)). The rows above are
+therefore approved destinations, not live deletions: every one still requires its
+consumer trace, per-area M10 evidence (browser, server, build, ABI, public API) and
+Alpha16b qualification. Approval is policy; the roadmap is execution.

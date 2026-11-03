@@ -27,7 +27,7 @@ not a promise of automatic SSR or OpenElement-managed Lit DSD hydration. See the
 | --- | --- | --- |
 | Current fact | Alpha.15 Part Program, classes and Native/Lit modes remain | Existing release evidence; no new qualification claimed here |
 | Accepted target | Full TSX syntax input, explicit Signals, HTML-first output, native Request/Response |
-| Proposed (owner review) | Retire the serialized Part Program protocol and the Class authoring API; narrow generated ABI | Alpha16 semantic samples and connected codegen slices; Alpha17 author productization |
+| Approved (2026-11-03) | Retire the serialized Part Program protocol and the Class authoring API; narrow generated ABI (structure not frozen) | Alpha16 semantic samples and connected codegen slices; Alpha17 author productization |
 | Candidate | Tracked readonly props, computed derivation, Children and JSX values | [Author candidate contract](./tsx-author-candidate-contract.md); author review and consumer tests before freeze |
 | OPEN | Exact props/computed/Children APIs, ref/context, iterable admission, flush timing, ABI and Lit release window | Resolve with scoped tests and owner decisions before dependent rollout |
 | Non-goals | React Hooks/behavior compatibility, a second renderer or OhMyLit product, Rust/Flight migration, zero-runtime claims | Do not add these as delivery commitments |
@@ -56,12 +56,11 @@ Alpha17 owns Full TSX productization, public composition APIs, cross-module
 recipes, precompiled consumers and Starter/app migration. Alpha18 owns bounded
 component defer only on a stable foundation; arbitrary Promises and unbounded
 nesting are not admitted. The Class API was retained through a long-lived compatibility adapter on the
-shared backend (D-O3, approved 2026-11-03). The **fourth pass proposes retiring
-the authoring API** instead, keeping native Custom Elements and an internal
-generated class; see
-[the reassessment](./alpha16-18-fourth-pass-reassessment.md). This is a proposal
-pending owner approval, not a decision, and it never permits two execution
-architectures. These
+shared backend (D-O3, approved 2026-11-03). **The fourth pass, approved 2026-11-03, retires the authoring API** instead and
+builds no compatibility adapter; native Custom Elements and an internal generated
+class are kept; see
+[the reassessment](./alpha16-18-fourth-pass-reassessment.md). It never permits two
+execution architectures. These
 are gated milestones, not dates or assertions of implementation. Preserve G1 (real codegen
 slice), G2 (identity/owner before related expansion), G3 (author and independent
 consumer proof before public API/default Starter). Historical direction blogs

@@ -1,10 +1,12 @@
 # Compiler-native architecture (canonical)
 
-Date: 2026-11-03. Status: **ACCEPTED IN DIRECTION**, with one **PROPOSED**
-change under owner review: retiring the serialized Part Program protocol and the
-Class authoring API ([fourth-pass reassessment](./alpha16-18-fourth-pass-reassessment.md)).
-Everything marked PROPOSED is not a decision; everything marked CURRENT is what
-the tree does today. Baseline: `4f1f2001b24909086f7e7efe9e5016d48d615c91`.
+Date: 2026-11-03. Status: **ACCEPTED IN DIRECTION, INCLUDING THE FOURTH-PASS
+DECISION PACKAGE (P-1…P-5) APPROVED 2026-11-03**: the Class authoring API and the
+serialized Part Program protocol are retired as the target, `__partProgram` leaves
+the generated-module contract, and the old validator/version retire with the
+schema ([reassessment](./alpha16-18-fourth-pass-reassessment.md)). Approval is
+policy-level: nothing is deleted and no ABI is frozen by this document.
+Baseline: `4f1f2001b24909086f7e7efe9e5016d48d615c91`.
 
 This is the single canonical statement of the Alpha16–18 target architecture.
 Other documents link here instead of restating it:
@@ -99,8 +101,8 @@ They are different artefacts and are corrected here.
 | Layer | What it is | Where it lives today | Transitional? |
 | --- | --- | --- | --- |
 | **A. Compiler Semantic IR** | internal representation used for analysis, lowering, optimisation and code generation | implicit in `semantic-core` (no standalone IR type today) | No — it is the compiler's own contract |
-| **B. Part Program v2** | serializable structural artifact produced by the current compiler | `packages/protocol/src/part-program.ts` (schema + validator + version) | **PROPOSED: retire** as a browser protocol; the server may keep a private structure |
-| **C. `__partProgram`** | the **emitted static field** on a generated module that carries artifact B | produced by `emit-module.ts`; consumed by Element/SSR/Router | **PROPOSED: remove** from the target contract; replaced by a narrow ABI |
+| **B. Part Program v2** | serializable structural artifact produced by the current compiler | `packages/protocol/src/part-program.ts` (schema + validator + version) | **RETIRE (approved)** as a browser protocol; the server may keep a private structure |
+| **C. `__partProgram`** | the **emitted static field** on a generated module that carries artifact B | produced by `emit-module.ts`; consumed by Element/SSR/Router | **REMOVE (approved)** from the target contract; replaced by a narrow ABI |
 | **D. Generated module ABI** | contract between generated modules and runtime helpers/facades | `COMPILED_MODULE_ABI_VERSION`, statics shape | Not frozen; needs its own versioning |
 | **E. HTML / Claim / Stream wire** | serialized HTML, markers, permitted seed data, resources, build identity | SSR serializer, stream manifest, claim markers | Preserved; may evolve with migration |
 
@@ -112,10 +114,12 @@ Binding consequences:
 - **CURRENT FACT:** the Part Program, its validator and the emitted field are the
   shipping execution contract; nothing may be deleted before its consumers are
   migrated.
-- **PROPOSED TARGET (pending owner approval):** the serialized program is retired
-  as a browser protocol, `validatePartProgram`/`PART_PROGRAM_VERSION` retire with
-  the schema, and the module carries a narrow generated ABI instead. Until that
-  proposal is approved, the transitional rules below govern.
+- **APPROVED TARGET (2026-11-03):** the serialized program is retired as a
+  browser protocol, `validatePartProgram`/`PART_PROGRAM_VERSION` retire with the
+  schema, and the module carries a narrow generated ABI instead. The ABI's actual
+  structure is **not** frozen here: M01 designs it and packed-consumer evidence
+  constrains it. Until each consumer migrates, the transitional rules above
+  govern in practice.
 - Do not remove metadata merely because the browser stops interpreting
   structure: tag, version and properties are consumed by Router, SSR and stream
   identity checks.
@@ -240,17 +244,17 @@ conflated in planning or tests.
 **CURRENT FACT:** the only shipping authoring path is the decorated class
 (`@element`, `class X extends OpenElement`); 219 in-tree files use it.
 
-**PROPOSED (owner review, fourth pass):** retire the public Class/Decorator
+**APPROVED (2026-11-03, fourth pass):** retire the public Class/Decorator
 authoring API and do **not** build a compatibility adapter. Keep native Custom
 Elements as the public platform boundary, and keep an internal generated class
 where the platform requires an element. Authors would no longer extend
 `OpenElement`; whether that symbol remains author-facing is an implementation
 question.
 
-**APPROVED HISTORY (2026-11-03 D-O3):** the earlier decision was a long-lived
-adapter. It stands as recorded history until the owner supersedes it; it is
-reproduced in [the reassessment](./alpha16-18-fourth-pass-reassessment.md) §2
-with the cost evidence behind the change of direction.
+**SUPERSEDED HISTORY (2026-11-03 D-O3):** the earlier decision was a long-lived
+adapter. It is superseded by the approved fourth pass and retained as history; the
+cost evidence behind the change is in
+[the reassessment](./alpha16-18-fourth-pass-reassessment.md) §2.
 
 Whichever way this is decided, the constraint that does not move: **one semantic
 model and one generated backend**, never two execution architectures.

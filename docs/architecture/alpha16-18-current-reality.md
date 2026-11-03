@@ -23,7 +23,7 @@ Classification vocabulary: **IMPLEMENTED**, **PARTIALLY IMPLEMENTED**,
 | Server function components (string composition) | IMPLEMENTED (bounded) | `server-component.ts:1-33,442`; `element/src/server.ts:108-197` | async (explicitly rejected, `server-component.ts:174-175`), client instances |
 | Function component authoring for the browser | NOT IMPLEMENTED | same evidence; no runtime JSX value | — |
 | Generated client mount/claim/update/dispose | PLANNED | ADR-0174 records it as accepted direction, implementation NOT RUN (`ADR-0174:9-13`) | — |
-| Semantic IR distinct from wire format | PROPOSED | canonical architecture §4.1 | any separation exists today |
+| Semantic IR distinct from wire format | APPROVED TARGET (not implemented) | canonical architecture §4.1 | any separation exists today |
 
 ### Element runtime
 
@@ -112,7 +112,7 @@ are noted as such rather than "fixed".
    execution protocol (emitted as `__partProgram`, interpreted by the walkers).
 2. **Which portions remain compile-time only?**
    None are isolated today; the same JSON serves both. Separating them is a
-   PROPOSED migration (canonical §4.1).
+   approved migration (canonical §4.1), not implemented.
 3. **Which consumers need it for SSR?**
    `element/src/public-runtime.ts:725-790` (title/root kind/parts/metadata) and
    the server serializer entry (`compiled/server/index.ts:674-681`).
@@ -258,12 +258,13 @@ If Alpha16a succeeds and Alpha16b does not: the work stays internal; no Alpha16
 release is cut; the remaining migration is re-planned with the failing
 capability named. Shipping both paths as a release is not an option.
 
-### D-O2 — APPROVED (2026-11-03), staging kept, KEEP conclusion challenged
+### D-O2 — PARTIALLY SUPERSEDED (2026-11-03, fourth pass)
 
-The staging discipline (define layers first, migrate per consumer, no premature
-ABI freeze) remains approved. The fourth pass **proposes retiring the serialized
-protocol and `__partProgram`** rather than keeping them (P-2/P-3/P-4); those parts
-await owner approval.
+The staging discipline (define layers first, per-consumer migration, no premature
+ABI freeze) remains in force. Its KEEP conclusion is **superseded**: the serialized
+protocol, `__partProgram`, the old validator and the old version are approved for
+retirement. The new ABI is designed in M01 and constrained by packed-consumer
+evidence — it is not frozen here.
 
 Define the layer boundary first (semantic IR · Part Program v2 · emitted
 `__partProgram` · generated-module ABI · HTML/claim/stream wire · metadata), then
@@ -271,13 +272,11 @@ migrate consumers on evidence. Do not delete or rename `__partProgram`, do not
 freeze a new ABI, and keep server serialization, streaming, routing, CSS recovery
 and identity checks working until each consumer's own migration condition is met.
 
-### D-O3 — APPROVED (2026-11-03), challenged by the fourth pass
+### D-O3 — SUPERSEDED (2026-11-03, fourth pass)
 
-The approved decision was a long-lived Class API compatibility adapter. The
-fourth pass **proposes retiring the authoring API instead** (P-1, pending owner
-approval); see
-[the reassessment](./alpha16-18-fourth-pass-reassessment.md). The approved record
-stands until superseded.
+The 2026-11-03 D-O3 decision (long-lived Class API adapter) is **superseded** by
+the approved fourth-pass package: the Class/Decorator authoring API is retired and
+no compatibility adapter is built. The old record remains above as history.
 
 Class and function authoring share one semantic model and one generated backend
 (ownership, identity, signals, update, disposal). The adapter is compatibility

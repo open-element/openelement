@@ -170,10 +170,10 @@ The reusable-JSX-value and repeatable-Children amendment above remains
 authoritative: repeated consumption creates independent instances unless an
 explicit API says otherwise.
 
-## PROPOSED amendment (2026-11-03, fourth pass — NOT APPROVED)
+## Superseding amendment (2026-11-03, fourth pass — APPROVED)
 
-Status: **PROPOSED. Requires explicit owner approval. It does not amend this
-record until accepted.**
+Status: **APPROVED 2026-11-03.** This supersedes the "long-lived class adapter"
+amendment above; that amendment remains readable as history.
 
 The fourth-pass reassessment proposes retiring the public Class/Decorator
 authoring API instead of retaining a long-lived compatibility adapter: authors
@@ -187,6 +187,7 @@ compiler frontend is the only one that exists; external adoption is unknown
 (monthly downloads small but non-zero, no verified downstream consumer). Full
 analysis: [fourth-pass reassessment](../architecture/alpha16-18-fourth-pass-reassessment.md).
 
-The invariant that holds either way: one semantic model, one generated execution
-backend, never two execution architectures. If the proposal is rejected, the
-2026-11-03 D-O3 amendment above continues to govern.
+The invariant that does not change: one semantic model, one generated execution
+backend, never two execution architectures. Native Custom Elements stay a
+first-class platform boundary; hostless function components are never forced to
+become elements.

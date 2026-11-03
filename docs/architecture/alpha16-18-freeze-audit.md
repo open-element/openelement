@@ -208,24 +208,26 @@ evidence and proposes: **retire the Class/Decorator authoring API** (P-1) and
 `__partProgram` from the target module contract** (P-2/P-3), with the validator
 and version retired alongside (P-4) and no authoring compatibility adapter (P-5).
 
-State of those items: **PROPOSED, not approved.** The 2026-11-03 D-O2/D-O3 records
-stand as approved history until the owner supersedes them. See
+State of those items: **APPROVED 2026-11-03** as one decision package (P-1…P-5).
+The 2026-11-03 D-O2/D-O3 records are superseded and retained as history. Approval is
+policy-level: no source is deleted and no ABI is frozen. See
 [the reassessment](./alpha16-18-fourth-pass-reassessment.md).
 
 Consequences already applied to the documents (all reversible if the proposals
 are rejected):
 
 - canonical architecture marks the protocol and class API as CURRENT FACT +
-  PROPOSED retirement rather than permanent KEEP;
+  APPROVED retirement target rather than permanent KEEP;
 - the retirement roadmap moved the class API, `OpenElement` author surface,
-  Part Program v2 and the validator into PROPOSE RETIRE rows;
+  Part Program v2 and the validator into RETIRE rows;
 - the execution plan replaced M09 ("class adapter") with the generated Native
   Custom Element boundary, and states both variants;
-- ADR-0173 and ADR-0174 carry **PROPOSED** amendments that explicitly do not
-  amend the records until accepted;
+- ADR-0173 and ADR-0174 carry superseding amendments recording the retirement;
+  the earlier amendments remain readable as history;
 - M14 is normalized to Alpha16b everywhere.
 
-The freeze statement in §9 is therefore qualified: the architecture is
-*internally consistent* about the target, but the target itself has five open
-owner proposals. Freezing means "no remaining contradictions", not "the
-retirement direction is approved".
+The freeze statement in §9 is therefore now unqualified on direction: the target
+is approved and internally consistent. What remains open is **execution
+feasibility** (M01–M13), not architecture. Freezing means "no remaining
+contradictions and an approved direction" — it still does not mean the work is
+feasible or the release is ready.

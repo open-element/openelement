@@ -168,10 +168,11 @@ Class authoring is retained through a long-lived compatibility adapter on the
 shared backend (owner-approved D-O3); it is compatibility infrastructure, not a
 second execution architecture, and no retirement version is scheduled.
 
-## PROPOSED amendment (2026-11-03, fourth pass — NOT APPROVED)
+## Superseding amendment (2026-11-03, fourth pass — APPROVED)
 
-Status: **PROPOSED. Requires explicit owner approval. It does not amend this
-record until accepted.**
+Status: **APPROVED 2026-11-03.** This supersedes the "keep the Part Program as a
+transitional serialized artifact" reading of the D-O2 amendment above; the staging
+discipline and the release gate remain in force.
 
 The fourth-pass reassessment proposes that Part Program v2 ceases to be a
 serialized browser execution protocol: the compiler keeps a compiler-owned
@@ -183,8 +184,9 @@ entrypoints, build-time feature flags, ABI version and build identity) instead o
 with the schema; `COMPILED_MODULE_ABI_VERSION` would be superseded by the new ABI
 version.
 
-The 2026-11-03 D-O2 amendment above remains the governing decision until this
-proposal is accepted; its staging discipline (per-consumer migration, no
-premature ABI freeze) applies to the proposed direction as well.
+The staging discipline from the D-O2 amendment — per-consumer migration, no
+premature ABI freeze — continues to govern the approved direction. The new ABI's
+actual structure is deferred to M01 design plus real packed-consumer evidence; it
+must not become another large JSON descriptor.
 
 Full analysis: [fourth-pass reassessment](../architecture/alpha16-18-fourth-pass-reassessment.md).

@@ -1,7 +1,7 @@
 # Alpha16–18 execution plan
 
-Date: 2026-11-03 (second-round correction). Status: **PROPOSED**, owner decisions
-D-O1 approved; D-O2/D-O3 approved on 2026-11-03 and **re-opened as proposals by the fourth pass**. Baseline: `4f1f2001b24909086f7e7efe9e5016d48d615c91`.
+Date: 2026-11-03 (fourth pass). Status: **APPROVED DIRECTION**, owner decisions
+D-O1 approved; the fourth-pass package P-1…P-5 (class retirement, Part Program retirement, `__partProgram` removal, validator/version retirement, no adapter) **approved 2026-11-03**. Baseline: `4f1f2001b24909086f7e7efe9e5016d48d615c91`.
 
 This plan implements the direction in
 [ADR-0173](../adr/ADR-0173-component-execution-and-composition.md) and
@@ -45,8 +45,8 @@ ship two execution models.
 | M06 | Stateful hostless list on the generated path | I | M05 | identity, private draft, keyed reorder, conditions, multi/empty root |
 | M07 | Generated claim (leaf) | I | M05 | claim fidelity on the leaf slice |
 | M08 | Generated claim + SSR for the stateful list | I | M06, M07 | the same list across SSR → claim → update → dispose |
-| M09 | Generated Native Custom Element boundary (replaces the former "class adapter" milestone) — emitted element class, registration, property/attribute conversion, events, Shadow DOM/DSD interop, third-party WC compatibility | I | M05 | emitted element behaves from ordinary HTML and foreign frameworks; no author-facing class requirement |
-| M10 | Old-executor capability migration and reachability evidence | I→Q | M05–M09 | graph unreachability from every applicable production browser entry + behaviour coverage |
+| M09 | Generated Native Custom Element boundary — emitted element class, registration, property/attribute conversion, events, Shadow DOM/DSD interop, third-party WC compatibility. **Only explicit Native Export / Island Boundary sites generate a CE**; hostless function components are never forced into elements | I | M05 | emitted element behaves from ordinary HTML and foreign frameworks; no author-facing class requirement; hostless components stay hostless |
+| M10 | Legacy-consumer migration and retirement evidence, **per area**: browser runtime, server runtime, build/SSG, ABI/module contract, public API | I→Q | M05–M09 | five separate proofs — see §2a; generic-executor unreachability alone is not sufficient |
 | M10a | Early packed-consumer smoke | Q | M05 | generated artifact installs and runs from a fresh packed app, no aliases |
 | M11 | Router integration for the generated path | I | M08, M10 | Framework Mode contract unchanged |
 | M12 | Final packed-consumer qualification (same stateful list) | Q | M06, M08, M11 | tarball consumption of the full slice; scope per §5 |
@@ -55,6 +55,11 @@ ship two execution models.
 
 **Alpha16a exit = M01–M08 with G1 and G2 evidence recorded.** M09–M14 belong to
 Alpha16b. G3 is not claimed by Alpha16a.
+
+**M03 baseline.** The function-component frontend must match the Alpha15 class
+frontend on diagnostics, Source Map fidelity and security semantics; that parity is
+the regression baseline. The class frontend is no longer described as a long-lived
+parallel path — it retires in Alpha16b.
 
 **M10a is not an Alpha16a exit condition.** It is an early, non-gating smoke run
 that may happen as soon as a generated artifact can be packed. Alpha16a still
@@ -69,6 +74,8 @@ Required before release:
 1. every required browser execution capability migrated (M10);
 2. generated mount, update, claim and disposal complete (M05, M07, M08);
 3. generated Native Custom Element boundary complete (M09);
+3a. the Class authoring frontend and the serialized Part Program protocol retired
+    from production paths (approved fourth pass), with the ABI replaced per M01;
 4. Router integration (M11);
 5. independent packed-consumer qualification (M12);
 6. browser and server qualification (M13);
@@ -240,20 +247,34 @@ Stop and re-plan rather than push through when:
 
 A passing CI run is none of the above.
 
-## 12. Fourth-pass proposals (not yet decided)
+## 12. Approved fourth-pass package (P-1…P-5, 2026-11-03)
 
-The fourth pass proposes retiring the public Class authoring API and the
-serialized Part Program protocol
-([reassessment](./alpha16-18-fourth-pass-reassessment.md)). Consequences for this
-plan, **conditional on owner approval**:
+The owner approved, as one package: retire the Class/Decorator authoring API; retire
+Part Program v2 as a public shared serialized execution protocol; remove
+`__partProgram` from the target generated-module ABI; retire the old validator and
+version while keeping version compatibility checks; build no authoring
+compatibility adapter.
 
-- if P-1 (class authoring retirement) is approved, Alpha16b additionally retires
-  the class frontend and the plan carries **no** adapter obligation; if rejected,
-  M09 reverts to the adapter milestone;
-- if P-2/P-3 (protocol + `__partProgram` retirement) are approved, Alpha16b
-  additionally proves no production browser consumer reads the old schema and
-  `__partProgram` leaves the production module contract;
-- if either proposal is rejected, the corresponding work reverts to the
-  transitional KEEP recorded on 2026-11-03.
+Consequences for this plan:
 
-No milestone numbering changes; recomposition is by prose, not by renumbering.
+- Alpha16b retires the class frontend and the old protocol; Alpha17 carries **no**
+  adapter obligation and instead owns Full TSX productization, the frozen ABI and
+  Starter/docs migration.
+- The new ABI's **actual structure is not frozen here**. M01 designs it and packed
+  consumer evidence constrains it. It must not become another large JSON
+  descriptor, and it must not recreate a generic execution protocol.
+- Alpha15 class frontend remains the regression baseline for diagnostics, Source
+  Map and security parity (M03), not a maintained parallel authoring path.
+
+### 12a. M10 must produce five separate proofs
+
+| Area | Proof |
+| --- | --- |
+| Browser runtime | no production browser entry loads the generic executor or the old protocol |
+| Server runtime | SSR/streaming consumers read the new server structure, not the old schema |
+| Build/SSG | CSS recovery, blocks detection and route classification read metadata/ABI facts, not the schema or source-text markers |
+| ABI/module contract | generated modules carry the narrow ABI; no `__partProgram` in production output |
+| Public API | retired exports are gone or deprecated per the approved policy, with the migration note |
+
+Generic-executor unreachability is **one** of the five. It does not stand in for the
+other four.
