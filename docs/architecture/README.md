@@ -7,6 +7,8 @@ adapt, scaffold, build, and distribute those products.
 - [Product model and 2026-11-03 direction](./product-model.md)
 - [**Compiler IR and ABI boundary (M01)**](./compiler-ir-and-abi-boundary.md) — six-layer contract, IR, server/client backends, narrow ABI, build metadata, wire, five worked examples
 - [M02 Semantic IR feasibility report](./m02-semantic-ir-feasibility.md) — spike result: five examples expressible; OPEN items
+- [M03-A lexical scope resolution](./m03-scope-resolution.md) — **DESIGN**: BindingId model, scopes, read modes, resolver candidates
+- [M03-B expression identity](./m03-expression-identity.md) — **DESIGN**: expression registry vs slice/closure/AST candidates; lowering, captures, source maps
 - [M01 consumer migration matrix](./m01-consumer-migration-matrix.md) — 23 consumers with target layer, replacement, stage and retirement condition
 - [**Compiler-native architecture (canonical)**](./compiler-native-architecture.md) — P1–P5, responsibility split, Part Program's transitional role, canonical vocabulary
 - [Alpha16–18 current reality and contradictions](./alpha16-18-current-reality.md) — status matrix, contradiction matrix, boundary answers, asset preservation
