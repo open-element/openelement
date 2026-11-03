@@ -1,244 +1,261 @@
 # M03-B — Expression identity
 
-Date: 2026-11-03. Milestone: **Alpha16a M03-B (design only)**. Base:
-`017bd3e8775e8d74fc8778b6321bbbe5d74486c6` (M02 merged).
+Date: 2026-11-03. Milestone: **Alpha16a M03-D (design)**. Base:
+`017bd3e8775e8d74fc8778b6321bbbe5d74486c6` (M02 merged). Revised after owner
+review (see [the corrections register](./m03-review-corrections.md)).
 
-Status: **DESIGN PROPOSAL — NOT IMPLEMENTED.** No codegen, no runtime, no ABI, no
-public API. Claims are marked *read from source*, *measured*, or *hypothesis*.
+Status: **DESIGN PROPOSAL — NOT IMPLEMENTED.** No codegen, no runtime, no ABI.
 
 ## 1. The problem
 
-M02 stores an expression as a **source slice plus metadata**:
+M02 stores an expression as authored text plus metadata:
 
 ```ts
 // M02 semantic-ir/types.ts
 interface IrExpression {
   readonly kind: 'literal' | 'local' | 'computed' | 'tracked' | 'handler' | 'key';
-  readonly source: string;   // authored slice, e.g. "props.items.filter(i => i.active)"
+  readonly source: string;
   readonly span: IrSpan;
   readonly reads: readonly IrRead[];
 }
 ```
 
-That was deliberate: it proved the IR does not need an AST copy. But it leaves
-codegen with an impossible choice:
+Codegen cannot use that: re-parsing `source` is forbidden, emitting it verbatim
+leaks TypeScript-only syntax and JSX, and storing an AST is a second JavaScript
+AST. M03-B defines **what an expression is** such that a backend can generate code
+for it without parsing and without owning an AST.
 
-1. **Re-parse `source`** to emit JavaScript → violates "no reparse" and would
-   recreate a JavaScript parser inside the backend.
-2. **Embed `source` verbatim** → emits TypeScript-only syntax that will not run
-   (`as`, `!`, generics, `satisfies`, type arguments), and JSX inside expressions
-   would leak into output.
-3. **Store an AST** → a second JS AST, forbidden.
+## 2. Source-verified facts (installed `typescript@6.0.3`)
 
-So M03-B must answer: **what is an expression, such that a backend can generate
-code for it without parsing and without owning an AST?**
+| API | Declaration | What it gives us |
+| --- | --- | --- |
+| `ts.transform(source, transformers, options)` | `typescript.d.ts:11446` | apply a custom transformer to the **existing** AST |
+| `TransformationResult.dispose()` | `typescript.d.ts:8056` | release transformed nodes deterministically |
+| `ts.createPrinter(opts?)` | `typescript.d.ts:9513` | print a node/file to text (public API) |
+| `printer.printNode(hint, node, sourceFile)` | `typescript.d.ts:8117` | print a single expression |
+| `ts.setTextRange(node, original)` | `typescript.d.ts:9185` | give a synthesized node the original position range |
+| `ts.factory.*` | `typescript.d.ts:8895` | build replacement nodes |
+| `ts.transpileModule(text, opts)` | `typescript.d.ts:11408` | one-shot erasure + print, **parses text first** |
+| `ts.createProgram(...)` / `program.emit(...)` | `typescript.d.ts:9614,9629` | full-program emit with source maps |
 
-## 2. What the compiler already has (read from source)
+The compiler already depends on `typescript` and already uses `transpileModule`
+(`semantic-core/parse-module.ts:43`). Nothing here adds a dependency.
 
-| Fact | Evidence |
-| --- | --- |
-| The authored `ts.SourceFile` exists during compilation only | `semantic-core/parse-module.ts:35`; `compile.ts:114-186` |
-| Expressions currently carry authored text and reads | `semantic-ir/types.ts` `IrExpression`; `build.ts` `buildExpression` |
-| Reads are already resolved to binding kinds | `build.ts` `collectReads` (to be replaced by M03-A's resolver) |
-| The compiler already invokes TypeScript's printer/transform ecosystem | `typescript@6.0.3` is a direct dependency (`packages/compiler/package.json`), and `transpileModule` is already used for syntax diagnostics |
-| The IR is required to be plain data (no functions) | `validate.ts` `OEIR_DATA_FUNCTION` / `OEIR_DATA_INSTANCE` |
-| Type checking of emitted output is a separate boundary | `type-check.ts:143` |
+## 3. Correction A — the actual lowering route, compared
 
-The last two rows are the hard constraints: **no functions inside the IR**, and
-**no AST nodes retained**.
+### Route 1 — existing `SourceFile` + `Program.emit`
 
-## 3. Candidates
+Sequence: `createProgram({ rootNames, options, host })` → `program.emit(sourceFile,
+writeFile, undefined, false, { before: [openElementJsxTransform] })`.
 
-### B1 — Authored source slice (status quo)
+- Reuses the existing `SourceFile`? Yes — it is the program's source file.
+- Erasure: done by TypeScript's own emitter.
+- Source maps: `sourceMap: true` produces a map from generated JS to the authored
+  file, including positions from the custom transformer if it uses `setTextRange`.
+- Cost: a **program** (whole-module-graph resolution) per compilation. The
+  semantic core is deliberately host-independent and today runs on a single
+  source string; building a program would make the compiler own module
+  resolution.
 
-- Identity: the span.
-- Codegen: must parse, or must emit TS syntax that browsers cannot run.
-- Verdict: **fails** the no-reparse rule as soon as it reaches codegen.
+### Route 2 — `transpileModule` on authored text
 
-### B2 — Compiled closure created at compile time
+Sequence: `transpileModule(authoredSource, { jsx: …, compilerOptions })`.
 
-The compiler produces a real JavaScript function and stores it in the IR.
+- Reuses the existing `SourceFile`? **No** — it parses the text again.
+- Erasure: complete (TypeScript's own).
+- JSX: TypeScript lowers JSX to its own factory calls, not to OpenElement
+  recipes; our JSX lowering would have to run afterwards on the emitted JS.
+- Cost: one extra **full parse of the module**, and it cannot see our custom
+  recipes. Already used today only for syntax diagnostics.
 
-- Codegen: trivially references it.
-- Verdict: **fails** the IR data-only invariant (`OEIR_DATA_FUNCTION`), and makes
-  the IR non-inspectable and non-reproducible across processes. It also makes the
-  server backend execute a client-shaped artefact, which is exactly the shared
-  executable model the architecture forbids.
+### Route 3 — direct transform + public printer (recommended)
 
-### B3 — Generated reference table (ExprId → generated slot)
+Sequence:
 
-The compiler assigns each expression an id and records the slot it will occupy in
-the generated module; codegen emits a reference.
-
-- Strength: no reparse, no AST, deterministic.
-- Weakness alone: it says *where* the code goes, not *what* the code is. It needs
-  a content model — which is B5.
-
-### B4 — Sidecar AST reference (ExprId → `ts.Node`)
-
-Keep the authored nodes alive and print on demand.
-
-- Strength: zero text duplication; printer handles TS→JS.
-- Weaknesses: the node is only valid while the `SourceFile` lives (memory grows
-  with the module graph), it couples the IR to a TypeScript program identity, and
-  printer output is a TypeScript-version behaviour. It also invites "the backend
-  asks the compiler AST a question at codegen time", which is the coupling M03 is
-  trying to remove.
-- Verdict: acceptable only as an **implementation detail inside one compile**, not
-  as the persisted identity.
-
-### B5 — Compiler-owned Expression Registry (recommended)
-
-One registry record per expression, created at compile time, holding **everything
-a backend needs and nothing it must interpret**:
-
-```ts
-interface ExpressionRecord {
-  readonly id: ExprId;              // stable within the module build
-  readonly origin: IrSpan;          // authored span (for diagnostics/source maps)
-  readonly kind: IrExpressionKind;  // snapshot | computed | tracked | handler | key | literal
-  /** Lowered JavaScript text. No TS-only syntax, no JSX. */
-  readonly js: string;
-  /** Bindings the text reads, resolved by M03-A. */
-  readonly captures: readonly BindingRef[];
-  /** Where the lowered text came from, for source maps. */
-  readonly mapSegments: readonly MapSegment[];
-}
+```text
+1. ts.transform(sourceFile, [openElementExpressionTransform], options)
+2. walk the transformed tree; for each expression:
+     a. apply a small erasure visitor (as / satisfies / non-null / type args /
+        type assertions / return-type annotations inside arrow bodies)
+     b. replace embedded JSX with a recipe reference call
+     c. ts.setTextRange(newNode, original) on every synthesized node
+3. ts.createPrinter().printNode(ts.EmitHint.Expression, node, sourceFile)
+4. record segments while printing (see §5)
+5. transformationResult.dispose()
 ```
 
-Key property: `js` is produced **once, at compile time**, by TypeScript's own
-transform/printer (the dependency the compiler already has), not by a parser the
-project writes. That is not a second JavaScript AST: it is the same TypeScript
-AST, transformed and printed, then dropped.
+- Reuses the existing `SourceFile`? **Yes** — the same AST that was parsed once.
+- Erasure: performed by **our visitor** over a narrow syntax set, not by a
+  parser. This is the one place where the design takes on work TypeScript would
+  otherwise do, and it is why §7 defines a differential oracle.
+- JSX: our own lowering, applied on the same tree, so recipe identity and spans
+  survive.
+- Source maps: our own segment recording (§5), reusing
+  `semantic-core/source-map.ts` (`SourceMapSegmentBuilder`).
+- Cost: one transform pass + one print per expression; no reparse.
+- Risk: the erasure visitor must be complete for admitted syntax, verified by
+  the oracle.
 
-After the record is built, the `ts.SourceFile` is released. No `ts.Node` survives
-into the IR or into codegen.
+| Criterion | Route 1 program.emit | Route 2 transpileModule | **Route 3 transform+print** |
+| --- | --- | --- | --- |
+| Reparse of authored source | no | **yes** | **no** |
+| Reuses the existing `SourceFile` | yes | no | **yes** |
+| Erasure by TypeScript itself | yes | yes | **no — our visitor** |
+| Custom JSX lowering fits | yes (before-transform) | poorly (after emit) | **yes (same tree)** |
+| Requires a `ts.Program` | **yes** | no | **no** |
+| Host independence preserved | no | yes | **yes** |
+| Source maps | from TS emit | from TS emit (map of synthetic text) | **our segments** |
+| Cost per module | high | one extra parse | **transform + print** |
 
-## 4. Comparison
+**Recommendation: Route 3**, with Route 2 retained as a **differential oracle** in
+tests (compile the same expression through both and compare evaluated behaviour),
+and Route 1 documented as the fallback if the erasure visitor proves
+underspecified. Choosing Route 3 is what keeps the compiler host-independent; the
+oracle is what keeps it honest.
 
-| Criterion | B1 slice | B2 closure | B3 ref table | B4 sidecar AST | **B5 registry** |
-| --- | --- | --- | --- | --- | --- |
-| Codegen can avoid parsing | no | yes | yes | yes | **yes** |
-| No second JS AST | yes | yes | yes | borderline | **yes** |
-| IR stays plain data | yes | **no** | yes | no | **yes** |
-| Exact authored span preserved | yes | weak | weak | yes | **yes** (`origin` + segments) |
-| TS-only syntax erased | no | yes | no | yes | **yes** |
-| JSX inside expressions handled | no | yes | no | yes | **yes** (lowered before printing) |
-| Server/client consume independently | yes (but useless) | no (shared artefact) | yes | no | **yes** (each backend reads the record) |
-| Memory during build | O(1) | O(1) | O(1) | O(nodes), must stay alive | **O(expressions)** |
-| Deterministic across builds | yes | no | yes | printer-version bound | **yes, version-bound and recorded** |
-| Incremental friendly | yes | no | yes | no | **yes, per module** |
+**Why not Route 1 despite better source maps:** a mandatory program contradicts
+the "no mandatory full TypeScript Program" constraint the owner set for M03, and
+it would move module resolution into the semantic core.
 
-## 5. Recommended model
+## 4. Correction C — ExpressionRegistry is separate from the IR
 
-**B5 registry as the identity, B3 reference as the consumption mechanism.**
-
-- Identity: `ExprId = <moduleId>#<scopePath>:<ordinal>` — stable under edits that
-  do not change scope structure (same reasoning as M03-A's `BindingId`).
-- Content: lowered JS text + capture list + origin span + map segments.
-- Consumption: each backend emits *its own* code that uses the record. The client
-  backend wraps it in a tracked closure; the server backend wraps it in a render
-  call. **They share the record, not an executable artifact.**
-- The IR keeps `js` and `captures`; it never keeps a function or a node.
-
-This satisfies both architecture rules at once:
-
-1. *Shared semantic meaning, independent execution* — one record, two consumers.
-2. *No generic interpreter* — the record is a string plus names; nothing walks it.
-
-## 6. The lowering step (the risky part)
-
-The registry's `js` field requires a compile-time lowering pass:
-
-| Input | Output | How |
+| Layer | Holds | Lifetime |
 | --- | --- | --- |
-| `props.items.filter(i => i.active)` | same text | no TS-only syntax, printed as-is |
-| `value as number` | `value` | TS transform erases the assertion |
-| `value!` | `value` | non-null assertion erased |
-| `fn<string>(x)` | `fn(x)` | type arguments erased |
-| `satisfies T` | erased | TS transform |
-| `<Row item={x} />` inside an expression | a recipe/insertion call | **the compiler's own JSX lowering**, not the printer |
-| `props.children` | a projection call | same |
+| **Semantic IR** | `ExprId` references, binding references, tracking semantics (`mode`, dependencies), recipe relationships, authored spans | the component graph |
+| **Expression Registry** (sidecar) | `ExprId` → lowered JS text, lexical captures, source-map segments, lowering provenance (TypeScript version, transformer version) | one compilation; released after codegen |
 
-Rules:
+Separation rule: the IR says *which* expression and *how it is tracked*; the
+registry says *what code* it becomes. Neither is serialized; neither is public.
 
-1. The transformation is done with TypeScript's transform API on the authored
-   AST, then printed once. The project does not write a JavaScript printer.
-2. JSX inside expressions is lowered **before** printing, so no JSX reaches the
-   registry.
-3. The printer output must be deterministic for the pinned TypeScript version
-   (`6.0.3`); the record stores the version it was produced with, so a version
-   bump is a visible invalidation rather than a silent drift.
-4. Anything that cannot be lowered deterministically (e.g. an expression whose
-   evaluation order depends on TypeScript-only semantics) fails closed with a
-   coded diagnostic instead of being guessed.
+A sidecar keyed by `ExprId` is chosen over embedding the record in the IR node so
+that a component graph can be inspected without dragging lowered code along, and
+so the registry can be dropped as soon as codegen is done.
 
-**Hypothesis to verify in the M03 implementation:** TypeScript's printer produces
-stable, minimal output for the expression forms the TSX contract admits. If it
-does not (e.g. it preserves unnecessary parentheses or rewrites arrow forms), the
-fallback is a narrowly scoped re-print of already-transformed nodes — still not a
-hand-written parser, but it must be measured before being relied on.
+## 5. Correction B — source maps
 
-## 7. Source maps
+Three coordinate spaces exist and must not be confused:
 
-`mapSegments` records, for each lowered chunk, the authored span it came from.
-Codegen places `js` into generated output at a known offset and rebases the
-segments. This keeps the Alpha15 guarantee that a runtime error maps to authored
-TSX, without codegen knowing anything about the expression's internal structure.
+```text
+authored TSX  ──(transform)──►  lowered JS  ──(codegen placement)──►  generated module
+   span                            offsets                                line/col
+```
 
-The registry must be the **only** place where "authored text" and "generated
-text" are related; if codegen also guesses offsets, the map drifts.
+- While printing, the compiler walks the transformed tree node by node and
+  records `(generatedOffset, authoredSpan)` pairs. This is a **segmented
+  print**, not a call into printer internals: `printNode` is public, and offsets
+  are accumulated by the caller.
+- The registry stores `mapSegments` in the same convention the existing
+  `SourceMapSegmentBuilder` consumes (`EmissionSegment`: 1-based generated line,
+  0-based generated column, 1-based source line, 0-based source column).
+- Codegen rebases those segments by the offset at which it placed the lowered
+  text, then hands the accumulated segments to the existing builder. There is one
+  source (the authored module), so the source index stays 0, as today.
+- **Alpha15 parity check:** the existing Part Program path emits Source Map v3
+  through the same builder; M03-I must prove that a generated module built by the
+  new route maps an error inside an expression back to the authored line/column
+  with the same fidelity the current path achieves.
 
-## 8. AST lifetime, memory and incrementality
+Nested JSX inside an expression complicates provenance: the JSX node is replaced
+by a recipe reference, so its own interior spans belong to the **recipe**, not to
+the expression's lowered text. The replacement node therefore carries the original
+JSX span via `setTextRange`, and the segments point at the JSX's start; the
+recipe keeps its own full span (M02 already records it).
 
-| Concern | Design |
+## 6. Correction E — nested JSX and evaluation order
+
+| Aspect | Decision |
 | --- | --- |
-| AST lifetime | `ts.SourceFile` lives for one module compile; registry holds no nodes |
-| Memory | O(expressions) records per module, released with the module result |
-| Incremental | registry rebuilt per module; `ExprId` stable under body-only edits |
-| Cross-module | expressions never cross modules; a component reference crosses by *name*, resolved by M03-A |
-| Determinism | records are pure functions of `(source, typeScriptVersion, hostFacts)` |
+| JSX inside an expression (e.g. `cond ? <A/> : <B/>`) | replaced by a **recipe reference**, never inlined construction |
+| Recipe identity | the recipe created during the same walk (M02 `IrRecipe.id`); the expression holds a reference, not a copy |
+| Evaluation order | JSX lowering must not reorder evaluation: the replacement call is evaluated exactly where the JSX node was |
+| Owner assignment | happens at the **insertion site**, not inside the expression; the expression only produces a recipe value |
+| Generated substitution | codegen emits the recipe reference expression it was given; it never sees JSX |
+| Source mapping | the replacement node keeps the JSX's original range (`setTextRange`) |
+
+Context-sensitive expressions fail closed:
+
+| Construct | Behaviour |
+| --- | --- |
+| `this` | diagnostic `OEIR_UNSUPPORTED_THIS` (function components have no `this`; class authoring retires) |
+| `arguments` | diagnostic `OEIR_UNSUPPORTED_ARGUMENTS` |
+| `super` | diagnostic `OEIR_UNSUPPORTED_SUPER` |
+| `new.target` | diagnostic `OEIR_UNSUPPORTED_NEW_TARGET` |
+| `await` inside an expression | only inside an async server component (M14); otherwise diagnostic `OEIR_AWAIT_OUTSIDE_ASYNC` |
+| `yield` / generators | diagnostic `OEIR_UNSUPPORTED_GENERATOR` |
+| `eval` / `with` | diagnostic `OEIR_DYNAMIC_SCOPE` |
+
+## 7. Correction D — identity stability, stated correctly
+
+- `ExprId` is **unique within one compilation**. That is the only guarantee the
+  compiler needs: the registry and the IR are consumed in the same build.
+- `ExprId` is **not** claimed to be stable across builds. Inserting an expression
+  earlier in a component shifts ordinals; the first draft implied otherwise and
+  that claim is withdrawn.
+- Cross-build stability (for caching, incremental rebuilds, or persistent
+  analysis) is **not required** unless a concrete consumer demonstrates the need.
+  If such a consumer appears, the fix is content-addressed identity, which is a
+  later decision with its own evidence.
+- The registry is per compilation and per module; nothing persists.
+
+## 8. Lowering rules (the contract the implementation must satisfy)
+
+1. The expression is transformed on the **existing** AST; no text reparse.
+2. TypeScript-only syntax is erased by the erasure visitor: `as`, `satisfies`,
+   non-null `!`, type assertions, type arguments on calls/new, and annotations
+   inside nested arrow/function bodies.
+3. Embedded JSX is lowered to recipe references before printing.
+4. Every synthesized node carries its original range (`setTextRange`), so the
+   segmented print can produce accurate segments.
+5. Printing uses the public `createPrinter().printNode(..., EmitHint.Expression)`.
+6. The transformed tree is disposed after the record is built; no `ts.Node` is
+   retained.
+7. Anything the erasure visitor cannot lower deterministically fails closed with a
+   coded diagnostic — never a best-effort emission.
 
 ## 9. Risks
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Printer output drifts across TS versions | generated diffs and source maps churn | pin version, record it in the artifact, treat bump as a migration |
-| Lowering silently changes evaluation order | wrong semantics in generated code | transform only erasure/JSX; never reorder; conformance tests compare evaluated results for the admitted corpus |
-| Capture list incomplete | generated closure references an undeclared name | capture list comes from M03-A's resolver, not from text scanning; a missing capture is a failing test |
-| Two backends diverge in how they wrap the record | semantic drift | both wrap mechanically (one closure, one render call); behaviour tests assert identical evaluation |
-| Registry becomes a de-facto wire format | the IR gets shipped | hard rule: registry is compiler-private; nothing serializes it to the browser |
-| JSX-in-expression lowering couples expression identity to recipes | ordering/identity bugs | lower to a recipe **reference** (id), not to inline construction; recipes already carry their own ids (M02) |
+| Erasure visitor incomplete for admitted syntax | invalid JS emitted | differential oracle vs `transpileModule` on the corpus (evaluate both, compare behaviour and syntax validity) |
+| Printer output churn across TypeScript versions | generated diffs churn | record `typescriptVersion` in the registry; treat a bump as a visible invalidation and re-run the oracle |
+| Capture list incomplete | generated closure references an unknown name | captures come from M03-A's resolver, not text scanning; a missing capture fails resolution |
+| Segmented print drifts from printed text | wrong source maps | segments are recorded from the same walk that produces the text, never recomputed |
+| Registry grows into a wire format | IR shipped to browser | hard rule: registry is compiler-private, per compilation |
+| Nested JSX ordering bug | wrong evaluation order | replacement is a 1:1 node substitution at the same position; tests assert order |
 
-## 10. Acceptance matrix (for the M03 implementation)
+## 10. Acceptance matrix (M03-I)
 
 | Case | Expected |
 | --- | --- |
-| `value as number` in a JSX slot | registry `js` is `value`; no `as` in output |
-| `value!` and `fn<string>(x)` | erasures applied |
+| `value as number` | lowered text is `value`; valid JS |
+| `value!` / `fn<string>(x)` / `x satisfies T` | erasures applied |
+| nested arrow with annotations | erasures applied inside the body |
 | `props.items.filter(i => i.active)` | text preserved; captures = `props` |
-| `<Row item={x} />` in an expression slot | lowered to a recipe reference; no JSX in `js` |
-| two expressions in one component | two distinct `ExprId`s; no id reuse |
-| same text twice at different sites | two records (site identity, not text identity) |
-| codegen | assert it performs **zero** parsing: it only concatenates `js` and rebases segments |
-| source map | a JS error thrown inside the expression maps to the authored span |
-| memory | after compile, no `ts.Node` is reachable from the IR (assert by walk) |
-| determinism | compiling twice yields byte-identical `js` |
+| `<Row item={x}/>` inside a ternary | recipe reference; no JSX in text; evaluation order preserved |
+| two expressions, same text | two `ExprId`s, two records (site identity) |
+| codegen | performs **zero** parsing; only concatenation + segment rebasing |
+| source map | an exception inside the expression maps to the authored span |
+| AST release | after compile, no `ts.Node` reachable from IR or registry |
+| determinism | two compilations produce byte-identical lowered text |
+| differential oracle | every admitted expression form evaluates identically through Route 3 and Route 2 |
+| unsupported context (`this`, `arguments`, …) | coded diagnostic, no emission |
 
-## 11. Impact on M04 / M05
+## 11. Milestone alignment
 
-- **M04** needs capture lists to build recipe closures and owner boundaries; the
-  registry supplies them per expression.
-- **M05** is the first real consumer: emit `() => <js>` closures with names bound
-  from `captures`. If this design holds, M05 never parses — that is the concrete
-  test of the whole M03 thesis.
-- **M06+** (claim) are unaffected: the claim path consumes HTML/markers, not
-  expressions.
+| Milestone | Scope |
+| --- | --- |
+| **M03-D** | this design (scope model + expression identity + contracts) |
+| **M03-I** | frontend implementation: resolver, registry, erasure visitor, differential oracle; still no codegen |
+| **M04** | runtime primitives, recipes, ownership |
+| **M05** | first generated execution |
 
-## 12. Explicitly not decided here
+Approving the documentation does not complete M03; M03 completes when M03-I's
+matrix is green.
 
-- The exact `ExprId` string format (only its stability properties are defined).
-- Whether records are interned across modules (no evidence of need yet).
-- Whether the lowering uses transform-then-print or transpile-with-wrapper; both
-  are acceptable if deterministic and measured.
-- Anything about ABI serialization: the registry is compiler-private.
+## 12. Impact on M04 / M05
+
+- M04 consumes capture lists and recipe references; both are defined here.
+- M05 is the first real consumer: it emits `() => <lowered>` with captures bound
+  by name and segments rebased. If M05 needs to parse anything, this design
+  failed.
+- M06+ (claim) is unaffected: claim consumes HTML/markers, not expressions.

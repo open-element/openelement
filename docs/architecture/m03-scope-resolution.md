@@ -1,264 +1,283 @@
 # M03-A — Lexical scope resolution
 
-Date: 2026-11-03. Milestone: **Alpha16a M03-A (design only)**. Base:
-`017bd3e8775e8d74fc8778b6321bbbe5d74486c6` (M02 merged).
+Date: 2026-11-03. Milestone: **Alpha16a M03-D (design)**. Base:
+`017bd3e8775e8d74fc8778b6321bbbe5d74486c6` (M02 merged). Revised after owner
+review (see [the corrections register](./m03-review-corrections.md)).
 
 Status: **DESIGN PROPOSAL — NOT IMPLEMENTED.** No codegen, no runtime, no public
-API, no ABI. Every claim below is marked as *measured*, *read from source*, or
-*hypothesis* (unverified).
+API, no ABI. Claims are marked *source-verified* (read from the repository or the
+installed TypeScript declarations), *measured*, or *hypothesis*.
 
 ## 1. Why this exists
 
-M02's spike resolves bindings with a **flat name table**:
+M02's spike resolves bindings with a flat name table
+(`packages/compiler/src/internal/compiler/semantic-ir/build.ts`):
 
 ```ts
-// packages/compiler/src/internal/compiler/semantic-ir/build.ts (M02)
 interface Scope { readonly bindings: Map<string, IrBindingKind>; }
 ```
 
-That is enough to prove the IR shape, and it is wrong for a real compiler:
+It proves the IR shape and is wrong for a real compiler: shadowing overwrites
+instead of nesting, destructuring declares nothing, closures capture whatever the
+table holds at walk time, imports are not modelled, and a read cannot say *which*
+declaration it refers to — the one fact M05 codegen needs.
 
-- a shadowed `value` overwrites the outer binding instead of nesting;
-- destructuring (`const { name } = props`) declares no binding at all;
-- closures capture whatever the table holds at walk time;
-- imports and aliases are not modelled;
-- the table cannot say *which* declaration a read refers to, which is exactly
-  what M05 codegen needs to emit the right identifier.
-
-Scope resolution is the first thing M03 must decide, because **every later
-artefact keys off binding identity**: the IR's reads, expression captures, and
-codegen's variable naming.
-
-## 2. What the repository does today (read from source)
+## 2. What the repository does today (source-verified)
 
 | Fact | Evidence |
 | --- | --- |
-| The compiler parses with `ts.createSourceFile` and separately runs `ts.transpileModule` for syntax diagnostics | `semantic-core/parse-module.ts:35,43` |
-| No semantic type checker is used in the compile path: `ts.createProgram` appears only in the emitted-module verification boundary | `semantic-core/type-check.ts:143`; no `getTypeChecker` anywhere in `packages/compiler/src` |
-| Intrinsic bindings are resolved by **import provenance** (module specifier + imported name + alias), not by type | `semantic-core/module-analysis.ts:74-158` (`createModuleIntrinsicBindings`, `isCompileTimeOnlyIntrinsic`) |
-| The semantic core is forbidden ambient state and file-system access; hosts hand it sources | ADR-0148; `server-component.ts` `resolveModule` callback |
-| The existing class grammar never needed scope: it only admits `this.<field>` and one-action handlers | `lower-program.ts` sink rules |
+| Parses with `ts.createSourceFile`, and separately runs `ts.transpileModule` for syntax diagnostics | `semantic-core/parse-module.ts:35,43` |
+| No semantic checker in the compile path: `ts.createProgram` appears only in the emitted-module verification boundary, and there is no `getTypeChecker` in `packages/compiler/src` | `semantic-core/type-check.ts:143` |
+| Intrinsic bindings resolve by **import provenance** (specifier + imported name + alias) | `semantic-core/module-analysis.ts:74-158` |
+| The semantic core may not touch ambient state or the filesystem; hosts hand it sources | ADR-0148; `server-component.ts` `resolveModule` |
+| The class grammar never needed scope (only `this.<field>` sinks) | `lower-program.ts` sink rules |
 
-Consequence: today the compiler is **syntax-only**. Any design that requires a
-`ts.Program` for correctness must justify the cost and must not break the
-"no ambient state" boundary.
+The compiler is syntax-only today. Any design needing a `ts.Program` for
+correctness must justify the cost and preserve host independence.
 
-## 3. Requirements
+## 3. Binding identity, split from classification (correction A)
 
-1. **Stable binding identity** — a read resolves to a declaration, not a name.
-2. **Shadowing** — nearest enclosing declaration wins; nested scopes nest.
-3. **Destructuring** — object/array patterns, renaming, defaults, rest.
-4. **Nested closures** — captures resolve to ancestor declarations.
-5. **Function parameters** — including defaults that reference earlier params.
-6. **Component props** — the props parameter is an implicit, typed scope.
-7. **Imports and aliases** — `import { a as b }`, default, namespace, type-only.
-8. **Read modes** — direct read, captured read, handler read, JSX inline read.
-9. **Reactivity classification** — which reads are reactive and *when* they are
-   read (that timing is the semantics, not the name).
-10. **Host independence** — resolution must not read the filesystem; cross-module
-    binding facts arrive through the host's resolver.
-
-## 4. Candidate architectures
-
-### A1 — TypeScript checker over a full `ts.Program`
-
-Use `ts.createProgram`, then `checker.getSymbolAtLocation` / `getTypeAtLocation`.
-
-- Fidelity: highest (real symbol table, real types, cross-module).
-- Cost: building a program pulls the whole module graph; the compile path is
-  currently one file in, one string out. `type-check.ts` already shows the shape:
-  a custom `CompilerHost`, virtual files, `noEmit`, and a caller-supplied
-  resolution map.
-- Risk: the semantic core would need a program per build; incremental memory and
-  determinism become the host's problem; and the IR must never store a
-  `ts.Symbol` (it is mutable, tied to a program instance, and not serializable).
-
-### A2 — Self-built syntax-only scope resolver
-
-Walk the `ts.SourceFile` the compiler already has, maintain a scope stack, build
-declarations from syntax, resolve reads lexically.
-
-- Fidelity: sufficient for TSX component code (no type-directed resolution).
-- Cost: one extra AST walk; no program, no global state.
-- Limits: cannot answer "is this import a signal?" when the import comes from a
-  package the host did not resolve; cannot resolve `enum`/namespace merging; no
-  type information for diagnostic quality.
-
-### A3 — Hybrid: syntax resolver first, checker only for ambiguity
-
-A2 does the work; the host may additionally supply a **binding classifier** (a
-map from import specifier → binding kind, already how intrinsics are resolved),
-and A1 is used *only* when a rule needs type information and the host opted in.
-
-- Fidelity: A2 for everything local; classifier for imports; checker optional.
-- Cost: A2 cost always, A1 cost only on opt-in.
-- Risk: two paths that can disagree → mitigated by making the checker strictly
-  advisory and never authoritative over the IR.
-
-### A4 — Language service / LSP (`ts.createLanguageService`)
-
-Rejected: incremental state, latency, and a persistent process model are far
-outside a per-module pure function. It solves editor problems, not compile-time
-binding identity.
-
-### Comparison
-
-| Criterion | A1 full program | A2 syntax resolver | A3 hybrid (recommended) | A4 language service |
-| --- | --- | --- | --- | --- |
-| Correct for local scope semantics | yes | yes | yes | yes |
-| Cross-module binding kind | yes | only via host classifier | via host classifier | yes |
-| Host-independent purity | needs a program host | yes | yes | no |
-| Cost per module | whole-graph | one walk | one walk + optional | tainted by daemon |
-| Deterministic output | host-dependent | yes | yes | no |
-| Incremental friendly | heavy | trivial (per module) | trivial + classifier cache | n/a |
-| Fits the current compile entry (string in, string out) | poor | yes | yes | no |
-| Risk of IR depending on TS internals | high | low | low (advisory only) | high |
-
-**Recommendation: A3.** The resolver is syntax-based and pure; the host supplies
-binding classifiers for imports; a checker may be consulted for advisory
-diagnostics but its symbols never enter the IR.
-
-## 5. Binding identity model (the core artefact)
+The first draft put `kind` inside `BindingId`. That is wrong: classification is
+**mutable** (a host may learn later that an import is a signal) while identity is
+not. Five separate things:
 
 ```ts
-type BindingKind = 'local' | 'signal' | 'computed' | 'prop' | 'import' | 'component' | 'unknown';
+/** Stable within one compilation. Not serialized. */
+interface ScopeId {
+  readonly moduleId: string;
+  /** Scope-chain path: "0.2.1" = module → component → block 1. */
+  readonly path: string;
+}
 
 interface BindingId {
-  /** Module the declaration lives in (host-supplied id, not a path). */
-  readonly module: string;
-  /** Deterministic position of the declaration within the module's scope tree. */
-  readonly path: string;      // e.g. "0.2.1" — scope index chain
+  readonly scope: ScopeId;
   readonly name: string;
-  readonly kind: BindingKind;
+  /** Ordinal among declarations of this name in the scope (declaration merging). */
+  readonly declarationOrder: number;
+}
+
+/** Syntactic form of the declaration. Immutable once built. */
+type DeclarationKind =
+  | 'var' | 'let' | 'const' | 'function' | 'class' | 'class-name'
+  | 'param' | 'import' | 'catch';
+
+/** Classification. Mutable; may be filled or refined by the host. */
+type ValueKind = 'signal' | 'computed' | 'prop' | 'plain' | 'unknown';
+
+/** Where the binding came from. */
+type BindingOrigin =
+  | { readonly form: 'local' }
+  | { readonly form: 'prop-param' }
+  | { readonly form: 'import'; readonly specifier: string; readonly importedName: string | null }
+  | { readonly form: 'builtin'; readonly name: string };
+
+interface ResolvedBinding {
+  readonly id: BindingId;
+  readonly declaration: DeclarationKind;
+  readonly value: ValueKind;
+  readonly origin: BindingOrigin;
+  /** Authored declaration site, for diagnostics. */
+  readonly declarationSpan: IrSpan;
+  /** Classification provenance: syntax-derived or host-supplied. */
+  readonly classifiedBy: 'syntax' | 'host-classifier' | 'unresolved';
 }
 ```
 
-Why a path and not a byte offset: an offset changes on every edit above it, which
-would invalidate cached expression captures and make incremental builds thrash.
-A scope-chain path is stable under edits *inside* a scope body and changes only
-when the scope structure changes — which is exactly when re-resolution is
-required anyway.
+Rules:
 
-Why not a `ts.Symbol`: it is bound to a program instance, mutable, and not
-serializable; storing one would silently couple the IR to a specific program.
+- `BindingId` never contains `ValueKind`; reclassifying a binding must not change
+  its identity (otherwise every cache and every emitted variable name churns).
+- No serialized `BindingId` format is frozen. The IR stores resolved bindings
+  inline; nothing is written to disk or to the browser.
+- Scope paths are internal numbering; they are not a public contract either.
 
-**Hypothesis to verify in M03 implementation:** scope-chain paths remain stable
-enough for incremental compiles in practice; if they do not, switch to a content
-hash of `(name, kind, declaration shape)` with the path retained for diagnostics.
+### Declaration merging and redeclaration
 
-## 6. Scope model
+| Situation | Resolution |
+| --- | --- |
+| `var x` twice in one function scope | one binding, `declarationOrder` 0; second declaration is the same identity |
+| `function f` twice (overloads) | one binding; signatures merge, implementations must be one |
+| `var` + `function` same name in one scope | one binding (both are function-scoped) |
+| `let`/`const` shadowing an outer name | new binding in the inner scope; outer untouched |
+| duplicate `let`/`const` in the same scope | **diagnostic** `OEIR_DUPLICATE_DECLARATION` |
+| `import x` + local `const x` in module scope | **diagnostic** `OEIR_IMPORT_CONFLICT` |
+| parameter + `var` of the same name in the body | one binding (function-scoped var merges into the parameter scope) |
+| class name inside its own body | `class-name` binding visible only inside the class scope |
+| namespace / enum merging | **unsupported**, fail closed |
 
-| Scope | Declares | Notes |
+## 4. Lexical scope semantics (correction B)
+
+Every construct below must either be implemented exactly or fail closed with a
+coded diagnostic — silent divergence is the failure mode this section prevents.
+
+| Construct | Required behaviour | If unsupported |
 | --- | --- | --- |
-| module | imports, top-level `const`/`function`/`class` | imports carry a host-provided classifier |
-| component function params | props parameter | props is `prop` kind; a destructured props param declares each property as `prop` |
-| function body | `const`/`let`/`var`/`function`/`class` | block scoping for `let`/`const` |
-| block (if/for/while/try/catch) | block-scoped declarations | `catch` introduces its own binding |
-| arrow / nested function | params + body | captures resolve outward |
-| JSX callback (`.map(item => …)`) | the mapper parameter | a per-entry value, never reactive by itself |
+| `var` | hoisted to the nearest function/module scope; visible before the declaration; no TDZ | — |
+| `let` / `const` | block-scoped; TDZ from block entry to declaration | — |
+| `catch (e)` | its own scope containing `e` | — |
+| `for (let i …)` | fresh lexical environment per iteration; closures capture the per-iteration binding | — |
+| `for (const x of …)` / `for…in` | same per-iteration rule | — |
+| `switch` | one block scope shared by all cases | — |
+| `class` | class name binding inside the class body; members do not leak | — |
+| named function expression `(function f(){…})` | `f` bound inside the function's own scope only | — |
+| parameters | initializers evaluate left-to-right; a default may reference **earlier** parameters, not body declarations | — |
+| `this` | only meaningful inside a class member (class authoring is retiring) or a captured outer `this`; in a function component there is no `this` | **diagnostic** `OEIR_UNSUPPORTED_THIS` |
+| `arguments` | not part of the component model | **diagnostic** `OEIR_UNSUPPORTED_ARGUMENTS` |
+| `super` | no class inheritance in function components | **diagnostic** `OEIR_UNSUPPORTED_SUPER` |
+| `new.target` | not part of the model | **diagnostic** `OEIR_UNSUPPORTED_NEW_TARGET` |
+| `eval` / `with` | forbidden (dynamic scope defeats static resolution) | **diagnostic** `OEIR_DYNAMIC_SCOPE` |
+| labels / `with`-like constructs | unsupported | fail closed |
 
-Resolution rule: walk scopes inward-out; first declaration of the name wins.
-A read that resolves to no declaration is `unknown` and produces a diagnostic
-(`OEIR_UNRESOLVED_BINDING`) rather than silently becoming a local.
+Resolution rule: walk scopes inward-out, nearest declaration wins; a read that
+resolves to nothing is `OEIR_UNRESOLVED_BINDING` with its span — never silently
+treated as a local.
 
 ### Destructuring
 
-`const { a, b: renamed, c = 1, ...rest } = props` declares `a`, `renamed`,
-`c`, `rest`. Object patterns **read the source expression once** at declaration
-time; the declared names are ordinary locals (snapshots), not props. This is the
-same rule TSX-03 already states for `const { value } = props`.
+`const { a, b: renamed, c = 1, ...rest } = props` declares `a`, `renamed`, `c`,
+`rest`; each is an ordinary local (snapshot), consistent with TSX-03. Array
+patterns and nested patterns follow the same rule. A destructured **props
+parameter** (`function C({ a, b })`) declares `a`/`b` with `origin: prop-param`,
+and reading them in a tracked position keeps prop semantics.
 
-Array patterns behave the same: `const [first, second] = items`.
+## 5. Captures, reads, dependencies and evaluation mode are four axes (correction C)
 
-### Closures
+The first draft conflated "captured" with "reactive dependency". They are
+independent:
 
-A nested function captures ancestor bindings. Capture is a property of the read,
-not of the declaration: the same `BindingId` can be read directly in one place
-and captured in another. Codegen needs the capture list, so the IR records for
-each expression **which bindings it reads** (already true in M02) and M03 must
-also record **whether the read crosses a function boundary** (new).
-
-### Props and imports
-
-- Props: the props parameter is a `prop` binding; property reads on it
-  (`props.value`) are prop reads. Destructuring it at the top is a snapshot.
-- Imports: kind comes from the host classifier (module specifier + imported name,
-  alias-resolved) — the same proven mechanism used for intrinsics today
-  (`module-analysis.ts:74-158`). An import with no classifier is `unknown` and
-  reading it in a tracked position is an error, not a guess.
-
-## 7. Read modes and reactivity classification
-
-| Read site | Mode | Reactive? |
+| Axis | Question | Recorded as |
 | --- | --- | --- |
-| setup statement (`const x = s.value`) | direct | no — snapshot at setup |
-| JSX dynamic text / attribute | inline | yes if it reads `signal`, `computed` or `prop` |
-| nested function body | captured | depends on the same rule; the read happens when called |
-| event handler | handler | **not tracked** (dispatch-time read), never counted as a dependency |
-| list mapper body | per-entry | the mapper parameter is a local; reads of outer signals stay reactive |
-| `computed(() => …)` body | derivation | yes — the body's reads are dependencies |
+| **Identifier read** | which bindings does this expression read? | `reads: BindingId[]` |
+| **Lexical capture** | does the read cross a function boundary (closure)? | `captures: BindingId[]` (subset of reads) |
+| **Reactive dependency** | should this read subscribe at runtime? | `dependencies: BindingId[]` (subset of reads) |
+| **Evaluation mode** | when does the expression run? | `mode: 'setup' \| 'inline' \| 'handler' \| 'derived' \| 'per-entry' \| 'key'` |
 
-The classification is a function of `(read site kind, resolved binding kind)`, not
-of the name. That is the property M02's flat table could not provide.
+A handler may **capture** a signal without **subscribing** to it. A tracked JSX
+expression typically does both. A setup read does neither.
+
+Worked examples:
+
+| Expression | Mode | Reads | Captures | Dependencies |
+| --- | --- | --- | --- | --- |
+| `const x = s.value` (statement) | setup | `s` | — | — (snapshot) |
+| `{s.value}` (JSX child) | inline | `s` | — | `s` |
+| `computed(() => s.value * 2)` | derived | `s` | `s` (inside the arrow) | `s` |
+| `onClick={() => { s.value++ }}` | handler | `s` | `s` | — (no subscription) |
+| `items.map(item => <Row item={item} />)` | per-entry | `items`, `item` | `item` (arrow param), `items` read outside | `items` if it is a tracked read |
+| `key={item.id}` | key | `item` | — | — |
+
+Rule: dependency selection depends on mode **and** value kind; capture selection
+depends only on where the read occurs relative to the nearest function boundary.
+
+## 6. Import classification contract (correction D)
+
+The intrinsic resolver is an **import-provenance mechanism for one package's
+compile-time intrinsics**; it is not a general binding classifier. The general
+contract is host-supplied:
+
+```ts
+interface ImportClassifier {
+  /**
+   * Called once per imported binding, after alias resolution.
+   * Returning `undefined` means "not classified" — the binding becomes `unknown`
+   * and only fails closed if it is read in a position that requires a kind.
+   */
+  classify(moduleSpecifier: string, importedName: string | null): ValueKind | undefined;
+}
+```
+
+Rules:
+
+| Case | Behaviour |
+| --- | --- |
+| `import { signal } from 'x'` | alias resolved, then classified by `('x','signal')` |
+| `import { signal as s }` | local name `s`, classification for `('x','signal')` |
+| `import * as ns` | namespace binding; `ns.x` reads are `unknown` unless the host classifies member access |
+| `import def from 'x'` | `importedName: null` (default import) |
+| `import type { T }` / `type` specifiers | binding exists but is not a runtime value; reading it in a value position is a diagnostic |
+| local declaration shadowing an import | the local wins inside its scope; the import stays untouched in module scope |
+| re-export (`export { a } from`) | not a binding in this module; consumers classify through their own specifier |
+| unresolved external import | `unknown` + `classifiedBy: 'unresolved'`; fails closed only where a kind is required |
+
+No full `ts.Program` is required for this: the classifier is a lookup the host
+provides, exactly like today's intrinsic model. A checker may be consulted for
+advisory diagnostics; its symbols never enter the IR.
+
+## 7. Candidate architectures
+
+| Criterion | A1 checker over full program | A2 syntax resolver | A3 hybrid (recommended) | A4 language service |
+| --- | --- | --- | --- | --- |
+| Local scope correctness | yes | yes | yes | yes |
+| Cross-module binding kind | yes | via host classifier | via host classifier | yes |
+| Host-independent purity | needs a program host | yes | yes | no |
+| Cost per module | whole graph | one walk | one walk + optional advisory | daemon |
+| Deterministic | host-dependent | yes | yes | no |
+| Fits "string in, string out" | poor | yes | yes | no |
+| IR couples to TS symbols | yes | no | no | yes |
+
+**Recommendation: A3.** Syntax resolver authoritative; host classifier for imports;
+checker advisory only.
 
 ## 8. Cost and compatibility
 
-**Measured / read from source:**
-
-- today's parse path parses **twice**: `createSourceFile` for the AST and
-  `transpileModule` for syntax diagnostics (`parse-module.ts:35,43`);
-- `ts.createProgram` exists only in `type-check.ts`, behind an explicit
-  "verification boundary" and a caller-supplied host.
-
-**Hypothesis (needs measurement in M03):**
-
-- one extra AST walk costs a small fraction of parse time;
-- avoiding the second `transpileModule` pass (using `parseDiagnostics` off the
-  `SourceFile`) would repay the resolver's cost — worth measuring, but it is a
-  behaviour change and therefore out of scope for M03 design approval.
-
-**Compatibility:** the resolver is a pure function of `(sourceFile, hostFacts)`.
-It does not need the filesystem, does not need a program, and can run inside the
-existing `buildSemanticIr` call. Nothing in Alpha15 changes.
+- *Source-verified:* today's parse path parses twice (`createSourceFile` +
+  `transpileModule`, `parse-module.ts:35,43`).
+- *Source-verified:* a program is created only in `type-check.ts` behind an
+  explicit verification boundary.
+- *Hypothesis (to measure in M03-I):* one extra AST walk is a small fraction of
+  parse time; removing the duplicate `transpileModule` pass could repay it, but
+  that is a behaviour change and not part of this design.
 
 ## 9. Risks
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Scope-path instability under edits | incremental rebuild invalidation | measure; fall back to declaration-shape hash |
-| Import classifier gaps | `unknown` bindings in tracked positions | fail closed with a coded diagnostic; host can extend the classifier |
-| Resolver and TS disagree on edge semantics (e.g. `var` hoisting) | wrong binding identity | mirror TS rules explicitly; conformance tests against `ts` for cases in the corpus |
-| Checker used as authority by accident | IR coupled to a program | hard rule: checker output is advisory only, never written into the IR |
-| Two code paths (syntax vs checker) disagree | silent inconsistency | the IR has exactly one source of truth; checker only adds diagnostics |
+| Scope-path instability under edits | cache invalidation | acceptable: identity only needs to be stable **within one compilation** (see M03-B correction D); cross-build stability is not required |
+| Host classifier gaps | `unknown` bindings | fail closed only where a kind is required |
+| Resolver/TS divergence on edge semantics | wrong binding | mirror TS rules explicitly; differential tests against `ts` for the corpus |
+| Checker used as authority | IR couples to a program | hard rule: advisory only |
+| Declaration merging missed | two identities for one binding | the merge table in §3 is the contract |
 
-## 10. Acceptance matrix (for the M03 implementation, not this document)
+## 10. Acceptance matrix (for M03-I)
 
 | Case | Expected |
 | --- | --- |
-| shadowed local in nested block | read resolves to the inner declaration |
-| destructured props (rename/default/rest) | each name is a distinct binding; snapshots |
-| array destructuring | each element binding distinct |
-| closure capturing an outer signal | read is captured; capture list on the expression |
-| nested closures two levels deep | resolves to the outermost declaration |
-| param default referencing an earlier param | resolves to the earlier binding |
-| import alias (`a as b`) | `b` resolves to the import binding, classifier kind kept |
-| namespace import member read | member read is `unknown` unless classified |
-| JSX `.map(item => …)` parameter | per-entry local binding, not reactive |
-| handler reading a signal | handler read; not a dependency |
-| unresolved identifier in tracked position | `OEIR_UNRESOLVED_BINDING` diagnostic with span |
-| class component (Alpha15 path) | untouched — resolver not on that path |
+| shadowed local | resolves to the inner binding |
+| `var` hoisting | read before declaration resolves to the same binding |
+| `let` TDZ | read before declaration is a diagnostic, not a silent `undefined` |
+| destructured props (rename/default/rest) | distinct bindings, prop-param origin |
+| array destructuring | distinct bindings |
+| `for (let i…)` closure | captures the per-iteration binding |
+| catch parameter | own scope |
+| switch block | one shared scope |
+| named function expression | self-name bound inside only |
+| parameter default referencing an earlier parameter | resolves to that parameter |
+| import alias | local name bound, classifier keyed by original name |
+| namespace member | `unknown` unless classified |
+| type-only import read as value | diagnostic |
+| duplicate `let` | diagnostic |
+| import + local conflict | diagnostic |
+| `this` / `arguments` / `super` / `new.target` / `eval` | coded fail-closed diagnostics |
+| handler capturing a signal | capture yes, dependency no |
+| computed body | capture and dependency both |
+| unresolved identifier in a tracked slot | `OEIR_UNRESOLVED_BINDING` with span |
 
-## 11. Impact on M04 / M05
+## 11. Milestone alignment (correction 4)
 
-- **M04** (ownership/recipes) needs capture lists to know what a recipe closes
-  over; the resolver supplies them.
-- **M05** (codegen) needs concrete identifiers; `BindingId` is what the emitter
-  maps to generated variable names. If `BindingId` is unstable, every emitted
-  name churns and diffs become unreadable.
-- Neither milestone may depend on a `ts.Symbol`.
+| Milestone | Scope |
+| --- | --- |
+| **M03-D** | this document set: design only (scope model, expression identity, contracts) |
+| **M03-I** | frontend implementation: resolver + registry + differential tests against TypeScript; no codegen |
+| **M04** | runtime primitives and ownership (recipes, lineage, disposal) |
+| **M05** | first generated execution (mount/update/dispose) |
 
-## 12. Explicitly not decided here
+Documentation approval does **not** complete M03. M03 completes when M03-I's
+acceptance matrix is green.
 
-- Whether the second parse pass is removed (behaviour change, separate decision).
-- Whether a checker is ever enabled by default.
-- Incremental compilation strategy (M03 only defines stability requirements).
+## 12. Impact on M04 / M05
+
+- M04 needs captures and owner boundaries; the resolver supplies captures,
+  recipes supply owners.
+- M05 needs concrete identifiers; `BindingId` is what the emitter maps to
+  generated variable names.
+- Neither may depend on `ts.Symbol`.
