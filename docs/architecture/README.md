@@ -5,6 +5,8 @@ adapt, scaffold, build, and distribute those products.
 
 - [Design principles](./design-principles.md) ([中文](./design-principles.zh.md))
 - [Product model and 2026-11-03 direction](./product-model.md)
+- [**Compiler IR and ABI boundary (M01)**](./compiler-ir-and-abi-boundary.md) — six-layer contract, IR, server/client backends, narrow ABI, build metadata, wire, five worked examples
+- [M01 consumer migration matrix](./m01-consumer-migration-matrix.md) — 23 consumers with target layer, replacement, stage and retirement condition
 - [**Compiler-native architecture (canonical)**](./compiler-native-architecture.md) — P1–P5, responsibility split, Part Program's transitional role, canonical vocabulary
 - [Alpha16–18 current reality and contradictions](./alpha16-18-current-reality.md) — status matrix, contradiction matrix, boundary answers, asset preservation
 - [Alpha16–18 cleanup and migration inventory](./alpha16-18-cleanup-inventory.md) — KEEP/REFACTOR/REPLACE/RETIRE rows with consumers and exit criteria

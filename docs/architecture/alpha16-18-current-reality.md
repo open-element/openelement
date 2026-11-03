@@ -127,8 +127,9 @@ are noted as such rather than "fixed".
    (registration), and the stream manifest's tag/version checks.
 6. **Can class and function components share one generated backend?**
    Yes in principle: both lower to the same semantic model and would emit the
-   same generated shape; class keeps a frontend adapter. Not proven — no
-   function backend exists.
+   same generated shape; the class frontend is a migration input that retires in
+   Alpha16b, not a parallel adapter design. Not proven — no function backend
+   exists.
 7. **What must the minimal runtime contain?**
    Signals, `LifetimeScope`, narrow effects for dynamic dependencies, DOM/range
    helpers, event installation, security sinks, and platform interop. Each needs
@@ -195,7 +196,7 @@ separated production consumers from tests and docs. Production consumers:
 | SSG source records | `protocol/src/ssg.ts:10,24-25` | type-only projection of `sourceMap.records` | build/server | keep (metadata) | staged | type import |
 | Rendered-component type | `element/src/public-runtime.ts` compiled-constructor types | program shape for serializer entry | server | keep | staged | type |
 | Protocol schema | `protocol/src/part-program.ts` | schema, validator, versions | shared | keep transitional | staged | `PART_PROGRAM_VERSION`, `COMPILED_MODULE_ABI_VERSION` |
-| Public protocol export | `protocol/src/index.ts:13`, `protocol/package.json:29` | public subpath | distribution | keep until deprecation decision | — | export map |
+| Public protocol export | `protocol/src/index.ts:13`, `protocol/package.json:29` | public subpath | distribution | retires with the protocol (approved P-2/P-4); new ABI subpath in Alpha17 | 16b | export map + release note |
 
 Test/fixture consumers (not production, listed separately): generated fixtures
 under `packages/element/__wtr__/generated/*`, element/router suites asserting
@@ -244,7 +245,7 @@ These are **APPROVED**. Do not re-ask.
   applicable G1/G2 evidence. No public version, tag, publication, Starter
   promise or release claim follows from it.
 - **Alpha16b** is the formal Alpha16 release qualification: all required browser
-  capabilities migrated, generated mount/update/claim/disposal, class adapter on
+  capabilities migrated, generated mount/update/claim/disposal, class frontend retirement on
   the shared backend, Router integration, packed-consumer and browser/server
   qualification, and graph evidence that the old generic browser executor is
   unreachable from every applicable production browser entry graph.
@@ -278,11 +279,11 @@ The 2026-11-03 D-O3 decision (long-lived Class API adapter) is **superseded** by
 the approved fourth-pass package: the Class/Decorator authoring API is retired and
 no compatibility adapter is built. The old record remains above as history.
 
-Class and function authoring share one semantic model and one generated backend
-(ownership, identity, signals, update, disposal). The adapter is compatibility
-infrastructure, not a parallel execution architecture. No forced deprecation or
-deletion version is scheduled; a future retirement would be a separate product
-decision with real consumer evidence.
+*(Historical text of the superseded record, retained verbatim above.)* Class and
+function authoring were to share one semantic model and one generated backend,
+with the adapter treated as compatibility infrastructure. That decision no longer
+governs: the fourth-pass package **retires the Class authoring API and builds no
+adapter**, and `OpenElement` is no longer an author-facing base class.
 
 ## F. Remaining OPEN engineering details
 

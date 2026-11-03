@@ -39,7 +39,7 @@ ship two execution models.
 | --- | --- | --- | --- | --- |
 | M01 | Semantic IR / layer boundary decision (IR · Part Program · emitted field · module ABI · wire) | A | — | recorded layer map consistent with the canonical doc |
 | M02 | Alpha16 TSX foundation grammar admission (fragments, multi-root, value-position JSX, inline tracked expressions) | I | M01 | admitted cases with source-located diagnostics and negatives in the same change |
-| M03 | Function component frontend adapter | I | M02 | same diagnostics/spans/security as the class lane |
+| M03 | Function component frontend (the only long-term frontend; class frontend retires in 16b) | I | M02 | diagnostics / Source Map / security parity with the Alpha15 **baseline** |
 | M04 | Runtime ownership + recipe primitives (insertion owner, tracked props, lineage check) | P→I | M01 | G2 on two insertions, keyed replacement, disposal modes |
 | M05 | Generated leaf mount / update / dispose | I | M03, M04 | G1: generated code actually executes in a browser |
 | M06 | Stateful hostless list on the generated path | I | M05 | identity, private draft, keyed reorder, conditions, multi/empty root |
@@ -65,6 +65,23 @@ parallel path — it retires in Alpha16b.
 that may happen as soon as a generated artifact can be packed. Alpha16a still
 completes on M01–M08 alone; do not lower it to "whatever M10a proved".
 
+## 1a. M02 acceptance — Semantic IR feasibility
+
+Owner-set scope (2026-11-03): M02 proves the IR can **express** the five approved
+worked examples. It does not implement SSR or claim.
+
+| # | Criterion |
+| --- | --- |
+| 1 | All five examples have explicit semantic test cases. |
+| 2 | The first four (static hostless, signals-driven, keyed list, reusable JSX value) are covered by IR unit tests. |
+| 3 | The fifth (SSR → DSD → Claim) is verified only as **IR expressiveness of the same stateful list**; end-to-end SSR/claim belongs to M06–M08, and the claim marker protocol stays OPEN in M02. |
+| 4 | Every newly admitted syntax ships positive **and** negative tests. |
+| 5 | Source span, diagnostics, identity and ownership information are asserted, not assumed. |
+| 6 | No VNode, no generic interpreter, no second JavaScript AST. |
+
+A pass at M02 is design-feasibility evidence. It is **not** G1, not G2, and not an
+Alpha16a exit.
+
 ## 2. Alpha16b — retirement and Alpha16 release qualification
 
 Alpha16b is the only route to a formal Alpha16 release.
@@ -80,16 +97,23 @@ Required before release:
 5. independent packed-consumer qualification (M12);
 6. browser and server qualification (M13);
 7. **graph evidence that the old generic browser executor is unreachable from
-   every applicable production browser entry graph** (M10);
+   every applicable production browser entry graph** (M10, proof 1 of 5);
 8. behavioural coverage for every migrated capability.
 
-**The ADR-0174 hard gate is unchanged.** If the old generic browser executor is
-still reachable in a production browser entry graph, Alpha16 does **not**
-qualify. Shipping both execution paths as a release is not an option.
+**Two different obligations, often confused.** The ADR-0174 hard gate and the
+approved retirement policy are not the same requirement, and neither substitutes
+for the other:
 
-The gate concerns the old generic **browser execution path**. It does not require
-deleting the Part Program artifact, its validator, the emitted field, tag/version
-metadata, the server serializer, or streaming program data.
+| Obligation | Scope | Failure consequence |
+| --- | --- | --- |
+| **ADR-0174 release gate** | the old generic **browser executor** must be unreachable from every applicable production browser entry graph | Alpha16 does not qualify for release |
+| **Approved retirement policy (P-2/P-3/P-4)** | Part Program v2 as a shared serialized browser protocol, `validatePartProgram`, `PART_PROGRAM_VERSION` and `__partProgram` are retired **from the target production contract**; the narrow ABI replaces them | the retirement is incomplete; the ABI work is unfinished |
+| **Five M10 proofs** | browser runtime · server runtime · build/SSG · ABI/module contract · public API | any missing proof means M10 is not met |
+
+What retirement **does not** mean: deleting the server's private rendering
+structure, the SSR serializer, streaming data, DSD, claim markers, security sinks
+or any server-side semantic capability. The server keeps its own structure; it
+simply is not the old shared protocol and is not shipped to the browser.
 
 **If Alpha16a succeeds and Alpha16b does not:** the work stays internal; no
 Alpha16 release is cut; the failing capability is named and re-planned. Do not
@@ -109,7 +133,7 @@ M01 → M02 → M03 ─┐
 - **Spine:** M01 → M02 → M04 → M05 → M06 → M08 → M11 → M12/M13.
 - M03 is on the spine in practice: M05 cannot be produced without the function
   adapter, so it is not parallel with M05.
-- **Genuinely parallel:** M07 (leaf claim) and M09 (class adapter) both need only
+- **Genuinely parallel:** M07 (leaf claim) and M09 (generated Native CE boundary) both need only
   M05; M10a starts the moment a generated artifact can be packed; security and
   output-separation work is independent of all of the above.
 - **M10 cannot start before M05–M09** — reachability evidence for a replacement
@@ -165,7 +189,9 @@ Only what Alpha16 proved may be productized here.
   consumer evidence).
 - Precompiled component distribution: server/client entries, declarations,
   relocatable CSS, runtime-uniqueness checks, one supported consumption mode.
-- Starter, docs, examples, and class-author migration through the adapter.
+- Starter, docs and examples migration. **No class compatibility adapter** is
+  built (approved P-5); class-authored examples are rewritten as function
+  components, and the retired API is documented in the migration note.
 
 Not allowed: a second rendering backend; an ABI frozen without a consumer; package
 distribution proven only inside the monorepo.
@@ -240,8 +266,8 @@ Stop and re-plan rather than push through when:
 - **Alpha16b release requires the old generic browser executor to be unreachable
   from every applicable production browser entry graph.** A release that keeps
   both production execution paths does not qualify.
-- The Class API remains supported through the adapter; the adapter is not a
-  second backend.
+- The Class API is **retired** (approved P-1/P-5); no compatibility adapter is
+  built and no second authoring path exists.
 - Public API remains candidate until G3 evidence exists.
 - The Lit boundary is unchanged unless its own separate track gate is met.
 
