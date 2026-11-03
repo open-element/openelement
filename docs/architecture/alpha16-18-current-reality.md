@@ -58,13 +58,26 @@ Classification vocabulary: **IMPLEMENTED**, **PARTIALLY IMPLEMENTED**,
 | Framework Mode, loaders/actions/forms, SSR/SSG | IMPLEMENTED | `packages/router/src/vite/internal/...`; fixtures |
 | Native renderer integration | IMPLEMENTED | renderer selection + `renderer-runtime.ts:167-175` |
 | Lit renderer | IMPLEMENTED (retiring, separate track) | `router/src/lit.ts:63-83`, `router/package.json:35-56` |
-| Compiled-class detection for routing | IMPLEMENTED, and lexical | `router/src/authoring.ts:432-442` (presence of `__partProgram`) |
-| Blocks detection by source text | IMPLEMENTED, and lexical | `ssg/island-blocks-scan.ts:105-117` (`source.includes('__partProgram')`) |
-| Stream build-identity check | IMPLEMENTED | `server-runtime/stream-runtime.ts:516-525` (tag + version) |
+| Compiled-class detection for routing | IMPLEMENTED | `router/src/authoring.ts:441-445` — a **runtime property-presence** check (`component.__partProgram !== undefined`) plus a prototype-descriptor arm; not a source scan |
+| Blocks detection by source text | IMPLEMENTED, and lexical | `ssg/island-blocks-scan.ts:117-120` — `source.includes('__partProgram')` plus a `"blocks": [{` shape test on the emitted JSON |
+| CSS-edge recovery from emitted artifacts | IMPLEMENTED, and lexical | `compiler/src/internal/compiler/compiled-artifact-style-requests.ts:42,122,143,196` — marker prefilter, then parses the emitted module to recover `__partProgram`, style requests and scope facts |
+| Stream route validation | IMPLEMENTED | `server-runtime/route-dispatch.ts:47-83` reads `default.__partProgram` for `tag`/`version` against the stream manifest |
+| Stream identity check | IMPLEMENTED | `server-runtime/stream-runtime.ts:516-525` (tag + version) |
+| Generated module shape typing | IMPLEMENTED | `server-runtime/types.ts:46` (`__partProgram?: { version; tag }`) |
+| Compiled page tag resolution | IMPLEMENTED | `server-runtime/renderer-runtime.ts:167-175` |
 
-The two "lexical" rows are the strongest argument against removing
-`__partProgram` casually: two consumers match it as a *string in source*, not
-through a type or symbol.
+Correction to an earlier draft of this document: it claimed **two Router
+consumers scan `__partProgram` as a source string**. That was wrong. There are
+exactly **two lexical/source-text consumers in the whole tree**, and only one of
+them is in Router:
+
+| Lexical consumer | Location | Why it scans text |
+| --- | --- | --- |
+| SSG blocks detection | `router/src/vite/internal/ssg/island-blocks-scan.ts:117-120` | packed installs ship already-compiled modules whose blocks cannot be re-derived from authoring grammar |
+| Compiler CSS/style-edge recovery | `compiler/src/internal/compiler/compiled-artifact-style-requests.ts:42,122-143` | re-derives style requests from an emitted module before the runtime reads it |
+
+Both are consequently **release blockers for any change to the emitted field
+shape**, and both must migrate in the same change as the ABI that replaces it.
 
 ### Delivery
 
@@ -88,7 +101,7 @@ are noted as such rather than "fixed".
 | C-05 | Architecture docs (`compiler-and-element-runtime.md`) | "one mandatory compiler … lowers supported TSX into a Part Program" | Target adds generated code alongside the program | `compiler-and-element-runtime.md:1-6` | Scope: current description stays true until codegen lands; add a target pointer rather than rewriting |
 | C-06 | jsx-runtime header | "Compiled output never calls these factories" | Will remain true for the target too, but the header implies JSX values cannot exist | `jsx-runtime.ts:1-17` | Not a conflict; the model note explains the new value representation is separate from these factories |
 | C-07 | Alpha16-18 blog (www) | Presents `component(...)` as planned API | No implementation; candidates may change | `www/content/blog/2026-10-31-alpha16-18-a-clearer-direction.zh.md:33-47` | Already disclaimed in the article; no change needed |
-| C-08 | Taskbook gate G1 | Alpha16 release requires graph evidence that the old executor is unreachable | No mechanism in place to produce that evidence, and old path is the only path today | ADR-0174:57-59 | **Owner decision required** (see §D-O1); do not weaken silently |
+| C-08 | ADR-0174 release gate vs plan A16-5 | Plan allowed shipping both execution paths when the old executor could not be retired | Direct conflict with the ADR-0174 requirement that the old generic executor be unreachable before Alpha16 release | ADR-0174:57-59; plan §A16-5 and §7 | **Resolved** by the owner-approved Alpha16a/Alpha16b split (D-O1): gate kept intact for Alpha16b; 16a is internal only. See ADR-0174 amendment 2026-11-03 |
 | C-09 | Architecture docs | Lit is one of two first-class renderer modes | Retirement initiated | ADR-0152:107-115 + 2026-11-03 amendment | Already superseded by amendment; window OPEN |
 | C-10 | `product-model.md` | "two public core products" | Target keeps two products; nothing conflicts | — | No conflict (recorded to prevent re-litigating) |
 
@@ -150,6 +163,44 @@ are noted as such rather than "fixed".
     security owner, migration docs, export/dependency removal, Native parity,
     rollback. They do not gate Alpha16.
 
+## C-bis. `__partProgram` production consumer map
+
+Repository-wide search (`__partProgram`, `PartProgramV2`, `PartProgram`,
+`PART_PROGRAM_VERSION`, `COMPILED_MODULE_ABI_VERSION`, `normalizePartProgram`,
+`createFreshDom`, `hydrateExistingDom`, `addRangeCleanup`, `dispose(true)`)
+separated production consumers from tests and docs. Production consumers:
+
+| Consumer | Actual file / function | Current role | Layer | Target role | Migration stage | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| Element facade | `open-element-implementation.ts:72-79,327-361` | fails closed when the compiled program is missing; drives connect | browser runtime | keep (metadata + program until generated mount lands) | 16a | `failMissingProgram`, `kernel.connect()` |
+| Compiled statics contract | `internal/compiled/facade-host.ts:6,28` | declares/consumes `__partProgram`, `__compiledProperties`, handler table | browser runtime | keep statics; shrink program use | 16b | type `__partProgram?: PartProgram` |
+| Program normalization | `internal/compiled/runtime-program.ts` | validates + normalizes the program once per connect | browser runtime | shrink to metadata once the walker retires | 16b | module header |
+| Public runtime / SSR | `public-runtime.ts:222,378,419,520-540,725-790` | tag, `metadata.properties`, registration, stream shell digest, HTML serialization | server + browser | SSR keeps program-derived structure | staged | `renderToStringAtDepth`, `createStreamShellExecutor` |
+| Server entry | `element/src/server.ts` | compiled property metadata + root kind | server | keep | — | server rendering path |
+| Server serializer module | `internal/compiled/server/index.ts:674-681` | serialization entry | server | keep | — | entry |
+| Router page classification | `router/src/authoring.ts:441-445` | **runtime property presence** + prototype arm | build/browser | migrate to explicit metadata flag | 16b | function body |
+| Router page tag | `server-runtime/renderer-runtime.ts:167-175` | resolves compiled page tag | server | keep tag metadata | 16b | comment + access |
+| Router stream validation | `server-runtime/route-dispatch.ts:47-83` | tag/version vs stream manifest | server | keep; ABI-aware | 16b | `readPartProgram` |
+| Router stream identity | `server-runtime/stream-runtime.ts:516-525` | tag + version mismatch rejection | server | keep | 16b | guard |
+| Router types | `server-runtime/types.ts:46` | generated module shape | build | keep; extend for ABI | 16b | interface field |
+| SSG blocks detection | `ssg/island-blocks-scan.ts:117-120` | **lexical** scan + blocks shape | build | replace with emitted metadata flag | 16b | `compiledArtifactMightUseBlocks` |
+| Compiler CSS recovery | `compiler/.../compiled-artifact-style-requests.ts:42,122-196` | **lexical** prefilter, then parse emitted module for style/scope facts | build | replace with emitted ABI metadata | 16b | `COMPILED_ARTIFACT_MARKER`, `PART_PROGRAM_BINDING` |
+| Protocol schema | `protocol/src/part-program.ts` | schema, validator, versions | shared | keep transitional | staged | `PART_PROGRAM_VERSION`, `COMPILED_MODULE_ABI_VERSION` |
+| Public protocol export | `protocol/src/index.ts:13`, `protocol/package.json:29` | public subpath | distribution | keep until deprecation decision | — | export map |
+
+Test/fixture consumers (not production, listed separately): generated fixtures
+under `packages/element/__wtr__/generated/*`, element/router suites asserting
+program shape, packed-consumer harnesses, and `tests/fixtures/**`.
+
+What this map establishes:
+
+- Browser-executor retirement is **not** Part Program deletion: server
+  serialization, streaming, tag/version metadata and build-time CSS recovery all
+  keep reading program data after the walker retires.
+- Exactly **two** consumers read the emitted field as text, and they are in two
+  different packages.
+- `authoring.ts` is a runtime property check and must not be described as lexical.
+
 ## D. Alpha15 asset preservation audit
 
 | Asset | Class | Why | Evidence |
@@ -164,7 +215,7 @@ are noted as such rather than "fixed".
 | SSR serializer + DSD | Preserve | HTML-first promise | `public-runtime.ts:725-790` |
 | Security sink screening | Preserve | single source of truth for URLs/attrs | `protocol/src/forbidden-sinks.ts` |
 | Diagnostics + source maps | Preserve and extend | every new grammar needs codes and locations | `compiler-diagnostics.ts`, `source-map.ts` |
-| Part Program + validator | Preserve as transitional; split roles | four roles, two lexical consumers | §C1, §C4 |
+| Part Program + validator | Preserve as transitional; separate the five layers | emitted artifact shared by runtime, SSR, Router and build consumers (§C-bis) | §C-bis |
 | Class/decorator authoring | Refactor to compatibility adapter | one backend rule (P5) | ADR-0173 amendment |
 | Router Framework Mode | Preserve | application layer is not rewritten | `packages/router/src/vite/...` |
 | Lit renderer | Retire after separate qualification | owner decision, window OPEN | ADR-0152 amendment |
@@ -172,21 +223,62 @@ are noted as such rather than "fixed".
 | Packed consumers + release gates | Preserve | evidence discipline | `tools/release/` |
 | Behavioral tests | Preserve and migrate | regression base for every slice | element/router suites |
 
-## E. Open owner decisions
+## E. Owner decisions (approved 2026-11-03)
 
-**D-O1 — Alpha16 gate feasibility.** ADR-0174 requires graph evidence that the
-old executor is unreachable before Alpha16 release. Producing that evidence in
-one release requires the generated backend to cover everything the walker does
-(including claim, blocks, styles, streaming). Options: (a) keep the gate and
-accept that Alpha16 slips; (b) amend the gate to "old executor unreachable for
-the new model's path, remaining consumers listed with owners" — weaker, must be
-explicit; (c) split Alpha16 into 16a (new model alongside) and 16b (retirement).
-Recommendation: (c), because it preserves the gate's intent without pretending
-coverage exists.
+These are **APPROVED**. Do not re-ask.
 
-**D-O2 — metadata/execution split timing.** Splitting `__partProgram` into
-execution data and metadata touches Router's lexical detection. Decide whether
-the split happens in Alpha16 or after the generated backend is proven.
+### D-O1 — APPROVED: Alpha16a / Alpha16b split (Option C)
 
-**D-O3 — class API direction.** Keep as a long-lived adapter or schedule a
-deprecation? P5 forbids a parallel renderer but not a long-lived adapter.
+- **Alpha16a** is an internal compiler-native foundation milestone: new
+  execution model, new generated path introduced, existing generic executor
+  retained for un-migrated capabilities, leaf and stateful foundations proven,
+  applicable G1/G2 evidence. No public version, tag, publication, Starter
+  promise or release claim follows from it.
+- **Alpha16b** is the formal Alpha16 release qualification: all required browser
+  capabilities migrated, generated mount/update/claim/disposal, class adapter on
+  the shared backend, Router integration, packed-consumer and browser/server
+  qualification, and graph evidence that the old generic browser executor is
+  unreachable from every applicable production browser entry graph.
+- **The ADR-0174 hard gate remains intact.** A formal Alpha16 release with the
+  old generic browser executor still reachable does not qualify. Alpha16a does
+  not amend or bypass it.
+- The gate targets the old generic **browser execution path**, not deletion of
+  every Part Program artifact or every server-side consumer.
+
+If Alpha16a succeeds and Alpha16b does not: the work stays internal; no Alpha16
+release is cut; the remaining migration is re-planned with the failing
+capability named. Shipping both paths as a release is not an option.
+
+### D-O2 — APPROVED: staged Part Program / metadata / execution migration
+
+Define the layer boundary first (semantic IR · Part Program v2 · emitted
+`__partProgram` · generated-module ABI · HTML/claim/stream wire · metadata), then
+migrate consumers on evidence. Do not delete or rename `__partProgram`, do not
+freeze a new ABI, and keep server serialization, streaming, routing, CSS recovery
+and identity checks working until each consumer's own migration condition is met.
+
+### D-O3 — APPROVED: long-lived Class API compatibility adapter
+
+Class and function authoring share one semantic model and one generated backend
+(ownership, identity, signals, update, disposal). The adapter is compatibility
+infrastructure, not a parallel execution architecture. No forced deprecation or
+deletion version is scheduled; a future retirement would be a separate product
+decision with real consumer evidence.
+
+## F. Remaining OPEN engineering details
+
+Not owner decisions — implementation details that need evidence, each with the
+test that will settle it:
+
+| # | OPEN item | Decided by |
+| --- | --- | --- |
+| O-1 | Props tracking granularity (instance version vs per-property) | cost measurement on the stateful list + TSX-28 evaluation counts |
+| O-2 | Exact evaluation-count contract for inline expressions with multiple reads | TSX-28 |
+| O-3 | Claim marker protocol for ordered repeated insertion | TSX-30 across SSR→claim |
+| O-4 | Whether an ownership token/ancestry query is needed for projection validation | TSX-26 cross-owner rejection |
+| O-5 | Intrinsic-subtree template cloning as an optimisation | byte measurement, not design preference |
+| O-6 | Cross-module recipe distribution (deferred to Alpha17) | TSX-21 packed-consumer matrix |
+| O-7 | Context representation and reactivity | TSX-13 |
+| O-8 | `onConnect` / `onDispose` final names and signatures | Alpha17 G3 author evidence |
+| O-9 | HMR state preservation | TSX-22 |
+| O-10 | Iterable admission beyond arrays | TSX-16 |

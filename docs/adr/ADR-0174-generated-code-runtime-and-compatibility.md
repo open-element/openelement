@@ -128,3 +128,42 @@ consumers and Chromium/Firefox/WebKit. Record full JS/CSS closure measurements,
 including helper and duplicated generated code costs. Failed evidence blocks
 its dependent expansion, not unrelated work. Do not weaken state, cleanup or
 native guarantees to make a test green.
+
+## Amendment (2026-11-03, owner-approved): Alpha16a / Alpha16b split
+
+The owner approved splitting Alpha16 into two milestones. This amendment records
+the split without amending the retirement gate itself.
+
+**Alpha16a — internal compiler-native foundation.** Build the new execution
+model, introduce the generated path, keep the existing generic executor for
+capabilities not yet migrated, prove the leaf and stateful foundations, and
+complete the applicable identity/ownership evidence. Alpha16a creates no public
+version, tag, publication, Starter promise or release claim, and it is not a
+licence to ship two execution models.
+
+**Alpha16b — Alpha16 release qualification.** Complete migration of required
+browser execution capabilities, generated mount/update/claim/disposal, the class
+adapter on the shared backend, Router integration, packed-consumer and
+browser/server qualification, and produce graph evidence that the old generic
+browser executor is unreachable from every applicable production browser entry
+graph.
+
+**The hard gate above is unchanged.** A formal Alpha16 release with the old
+generic browser executor still reachable does not qualify. Alpha16a's existence
+neither amends nor bypasses that requirement.
+
+Scope clarification: the gate concerns the old generic **browser execution
+path**. It does not require deleting the Part Program artifact, its validator,
+its metadata, or the server-side serialization and streaming consumers that read
+program data. `__partProgram` is a compiler **output** carrying the serializable
+artifact; it is not the compiler's internal semantic IR, and it must not be
+renamed or removed by this roadmap.
+
+Consumer migration is staged (owner-approved D-O2): the layer boundary between
+compiler semantic IR, Part Program v2, the emitted `__partProgram` field, the
+generated-module ABI and the HTML/claim/stream wire is defined first, and each
+consumer migrates on evidence. No new ABI is frozen by this record.
+
+Class authoring is retained through a long-lived compatibility adapter on the
+shared backend (owner-approved D-O3); it is compatibility infrastructure, not a
+second execution architecture, and no retirement version is scheduled.

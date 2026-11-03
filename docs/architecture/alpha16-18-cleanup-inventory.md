@@ -17,7 +17,7 @@ listed as "not fully traced" is INVESTIGATE, not deletable.
 | `semantic-core/analyze-module.ts` | class/module shape analysis | compile lane only | add a function-component frontend adapter beside it | REFACTOR | Full TSX admission | function adapter shares diagnostics and source spans |
 | `semantic-core/lower-program.ts` (1689 lines) | restricted JSX → program tree | compile lane | admit fragments/multi-root/value-position JSX; keep one walk | REFACTOR | per-case contract; S1 slice | new admissions land with diagnostics + negatives in the same change |
 | `semantic-core/emit-program.ts` | assemble + validate program | compile lane | keep validation; add metadata split | REFACTOR | D-O2 | metadata/execution split decided |
-| `semantic-core/emit-module.ts` | emit module with `__partProgram` JSON | generated consumers, Router lexical scans | add generated client/server code paths; keep JSON until proven | REFACTOR | codegen ABI | generated output measured, not assumed smaller |
+| `semantic-core/emit-module.ts` | emit module with `__partProgram` JSON | generated modules, Element runtime, SSR, Router build/runtime consumers | add generated client/server code paths; keep JSON until proven | REFACTOR | codegen ABI | generated output measured, not assumed smaller |
 | `semantic-core/server-component.ts` | server function components → string calls | client build + SSG build | extend (locals, async policy, composition) | REFACTOR | server semantics decision | async rule decided and documented |
 | `compiler-diagnostics.ts` + OEC codes | source-located diagnostics | every compile consumer | add codes for new admissions | KEEP | none | catalogue generator covers new codes (currently misses two sources) |
 | `source-map.ts` | Source Map v3 | compiler, dev tooling | extend to generated code | KEEP | none | generated code maps to authored TSX |
@@ -45,14 +45,28 @@ listed as "not fully traced" is INVESTIGATE, not deletable.
 | --- | --- | --- | --- | --- | --- | --- |
 | `protocol/part-program.ts` types + `validatePartProgram` | structural contract + validator | compiler, element, router, tooling | keep as transitional structural contract; split roles | REFACTOR | consumer trace (done at boundary level) | metadata vs execution separated |
 | `PART_PROGRAM_VERSION` / `COMPILED_MODULE_ABI_VERSION` | format + ABI stamps | generated modules, stream identity | version generated-module ABI separately | REFACTOR | ABI design | mismatch rejected early with actionable diagnostics |
-| `__partProgram` static | four roles (structure, execution, SSR, metadata) | element facade, serializer, router detection (lexical), stream identity | metadata remains; execution part shrinks | **INVESTIGATE → REFACTOR** | D-O2; Router lexical scans | every consumer migrated or explicitly retained |
+| `__partProgram` static (emitted field carrying Part Program v2) | browser execution route + SSR input + Router/stream identity + CSS recovery | see the consumer map in [current reality](./alpha16-18-current-reality.md#c-bis-__partprogram-production-consumer-map) | metadata/identity remains; browser-execution use retires with the generic executor | **REFACTOR (staged)** | D-O2 approved; two lexical consumers must migrate with any field-shape change | every production consumer migrated to metadata/ABI or explicitly retained, with its exit condition met |
 | `protocol/src/index.ts` public export of the program module | public surface | external consumers unknown | keep until deprecation decided | KEEP | consumer analysis | no removal without a decision |
 
-`__partProgram` is the highest-risk row in this inventory: two consumers match it
-as a **source string** (`router/src/authoring.ts:442` uses property presence;
-`ssg/island-blocks-scan.ts:117` uses `source.includes('__partProgram')`), so
-changing the emitted shape breaks routing silently unless both are migrated in
-the same change.
+`__partProgram` is the highest-risk row in this inventory. It is a compiler
+**output** (not the compiler's internal semantic IR), and it is consumed by four
+different kinds of consumer at once:
+
+- browser execution (generic walkers, normalization, facade),
+- server serialization and streaming,
+- Router/stream identity and page classification,
+- build-time CSS recovery and SSG blocks detection.
+
+Exactly two consumers read the emitted field as **text**, and they live in
+different packages: `router/src/vite/internal/ssg/island-blocks-scan.ts:117-120`
+and `compiler/src/internal/compiler/compiled-artifact-style-requests.ts:42,122`.
+Everything else accesses the property at runtime. An earlier draft of this
+inventory described the Router check in `authoring.ts:441-445` as lexical; it is
+a **runtime property-presence check** and has been corrected.
+
+Consequence: retiring the old generic browser executor does **not** delete the
+Part Program, its validator, the emitted field, the tag/version metadata, the
+server serializer or the streaming program data.
 
 ## Router / full stack
 

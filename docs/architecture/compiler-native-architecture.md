@@ -87,28 +87,38 @@ separate product decision with its own evidence.
 
 ## 4. Canonical boundaries
 
-### 4.1 Part Program is transitional, in four distinguishable roles
+### 4.1 Five separate layers (do not conflate them)
 
-Today's `__partProgram` is not one thing. Its roles must be separated before
-anything is removed:
+An earlier revision of this document said "`__partProgram` has four roles" and
+described the Part Program as the compiler's structural representation. That
+conflated a **compiler output** with the **compiler's internal representation**.
+They are different artefacts and are corrected here.
 
-1. **compile-time structural representation** — analysis/lowering input;
-2. **browser execution protocol** — the thing P2 retires;
-3. **SSR/serialization input** — the server serializer reads root kind, parts and
-   metadata to emit HTML (evidence: `packages/element/src/public-runtime.ts:725-790`);
-4. **metadata and identity** — tag, version, properties, routing detection
-   (evidence: `packages/element/src/public-runtime.ts:222,378,419`,
-   `packages/router/src/authoring.ts:442`,
-   `packages/router/src/vite/internal/server-runtime/stream-runtime.ts:523-525`).
+| Layer | What it is | Where it lives today | Transitional? |
+| --- | --- | --- | --- |
+| **A. Compiler Semantic IR** | internal representation used for analysis, lowering, optimisation and code generation | implicit in `semantic-core` (no standalone IR type today) | No — it is the compiler's own contract |
+| **B. Part Program v2** | serializable structural artifact produced by the current compiler | `packages/protocol/src/part-program.ts` (schema + validator + version) | Yes — transitional during migration |
+| **C. `__partProgram`** | the **emitted static field** on a generated module that carries artifact B | produced by `emit-module.ts`; consumed by Element/SSR/Router | Yes — until consumers migrate |
+| **D. Generated module ABI** | contract between generated modules and runtime helpers/facades | `COMPILED_MODULE_ABI_VERSION`, statics shape | Not frozen; needs its own versioning |
+| **E. HTML / Claim / Stream wire** | serialized HTML, markers, permitted seed data, resources, build identity | SSR serializer, stream manifest, claim markers | Preserved; may evolve with migration |
 
-Consequences that are binding:
+Binding consequences:
 
-- Do not delete the Part Program, its validator, or `__partProgram`.
-- Do not remove metadata merely because the browser stops interpreting structure.
-- Do not break Router or SSR consumers.
-- A compile-time IR may survive the retirement of the browser protocol.
-- Any change is a migration with per-consumer tracing, not a global deletion
-  (see [the cleanup inventory](./alpha16-18-cleanup-inventory.md)).
+- The new compiler must not be architecturally constrained by artifact B. Its
+  internal IR is not automatically a public protocol, and a compile-time IR may
+  survive after the browser stops interpreting structure.
+- Do not delete the Part Program, its validator, or the `__partProgram` field.
+  Do not rename it as part of this roadmap.
+- Do not remove metadata merely because the browser stops interpreting
+  structure: tag, version and properties are consumed by Router, SSR and stream
+  identity checks.
+- Do not remove server serialization or stream data because browser codegen
+  replaces the generic walker. **`program.parts[index]` use in server streaming is
+  not the old browser interpreter.**
+- Any change is a staged migration with per-consumer tracing and exit
+  conditions, not a global deletion. The consumer map is maintained in
+  [the current-reality audit](./alpha16-18-current-reality.md) and
+  [the cleanup inventory](./alpha16-18-cleanup-inventory.md).
 
 ### 4.2 One generated backend
 
@@ -117,6 +127,27 @@ semantics, signals, the generated execution shape, SSR serialization path, and
 the ABI. They may differ in their **frontend adapter** (decorated class vs
 function) and in authoring-visible sugar. Two execution backends are out of
 scope permanently.
+
+### 4.2a Alpha16a / Alpha16b release split (owner-approved D-O1)
+
+**Alpha16a — internal foundation.** Build the compiler-native execution model,
+introduce the new generated path, keep the existing generic executor for
+capabilities not yet migrated, prove the leaf and stateful foundations, complete
+the applicable G1/G2 evidence. Alpha16a is **internal engineering progress**: no
+public version, tag, publication, or default-Starter promise follows from it,
+and it is not permission to ship two execution models.
+
+**Alpha16b — Alpha16 release qualification.** Complete migration of all required
+browser execution capabilities, generated mount/update/claim/disposal, the class
+adapter on the shared backend, Router integration, packed-consumer qualification
+and browser/server qualification; prove the old generic browser executor is
+unreachable from every applicable production browser entry graph; complete
+behavioural coverage for migrated capabilities.
+
+**The ADR-0174 hard gate remains intact.** If the old generic browser executor
+remains reachable, Alpha16 does not qualify for formal release. The gate concerns
+the old generic **browser execution path** — not the deletion of every Part
+Program artifact or every server-side consumer.
 
 ### 4.3 Function components and hostless composition
 
@@ -169,11 +200,18 @@ text/attribute correctness, DSD, user-edited form state, DOM preservation,
 mismatch diagnostics, cleanup and bounded recovery. Replacing the client
 executor does not automatically solve SSR or claim.
 
-### 4.7 Class compatibility
+### 4.7 Class compatibility (owner-approved D-O3)
 
-Existing class/decorator authoring keeps working through the shared backend and
-a compatibility adapter. It is not a permanent parallel renderer. Eventual
-retirement of the class API is a separate product decision.
+The Class API is retained through a **long-lived compatibility adapter**:
+
+- existing class/decorator authors stay supported through the adapter;
+- class and function components share one semantic model and one generated
+  execution backend, including ownership, identity, signals, update and
+  disposal;
+- the adapter is compatibility infrastructure, **not** a parallel execution
+  architecture and not a second renderer;
+- no forced class-API deprecation or deletion version is scheduled. Any future
+  retirement is a separate product decision requiring real consumer evidence.
 
 ### 4.8 Lit retirement is a separate track
 
