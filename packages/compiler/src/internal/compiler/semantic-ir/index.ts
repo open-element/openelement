@@ -15,6 +15,7 @@ export type {
   IrComponentRef,
   IrCondition,
   IrDiagnostic,
+  IrDiagnosticOrigin,
   IrDynamicAttribute,
   IrDynamicText,
   IrElement,

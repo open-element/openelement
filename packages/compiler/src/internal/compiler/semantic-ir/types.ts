@@ -20,9 +20,13 @@
 /** A half-open source range in the authored file. */
 export interface IrSpan {
   readonly file: string;
-  /** Byte offset of the first character. */
+  /**
+   * UTF-16 code-unit offset of the first character (the TypeScript position
+   * unit). Not a byte offset: converting to bytes requires re-encoding, and any
+   * Source Map work must keep this unit.
+   */
   readonly start: number;
-  /** Byte offset one past the last character. */
+  /** UTF-16 code-unit offset one past the last character. */
   readonly end: number;
   /** 1-based line of `start`. */
   readonly line: number;
@@ -169,6 +173,10 @@ export interface IrCondition {
 export interface IrList {
   readonly kind: 'list';
   readonly id: string;
+  /** Region owner for the list itself. */
+  readonly ownerId: string;
+  /** Each entry owns its own subtree; the IR states that as a fact, not a hope. */
+  readonly itemOwner: 'per-entry';
   readonly items: IrExpression;
   /** `null` means the list is positional (unkeyed) and says so explicitly. */
   readonly key: IrExpression | null;
@@ -236,12 +244,24 @@ export interface IrComponent {
   readonly span: IrSpan;
 }
 
+/**
+ * Where a diagnostic can be located.
+ *
+ * - `source`    — points at an authored expression or node; a reader can jump there.
+ * - `ir-object` — points at an IR object whose span is the best available anchor.
+ * - `module`    — no single authored site exists (missing component, syntax
+ *                 failure, IR-wide invariant); the span is the module fallback
+ *                 and must not be presented as a source location.
+ */
+export type IrDiagnosticOrigin = 'source' | 'ir-object' | 'module';
+
 /** A diagnostic produced while building or validating the IR. */
 export interface IrDiagnostic {
   readonly severity: 'error' | 'warning';
   readonly code: string;
   readonly message: string;
   readonly span: IrSpan;
+  readonly origin: IrDiagnosticOrigin;
 }
 
 /** The result of one build: the component plus any diagnostics. */

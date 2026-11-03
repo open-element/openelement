@@ -3,8 +3,9 @@
 Date: 2026-11-03. Milestone: **Alpha16a M02 (initial slice)**. Base:
 `554a54a338e58b63b38887f2e5e7e6145e1c5626`.
 
-Status: **spike implemented and green; design questions listed as OPEN.** No
-codegen, no interpreter, no ABI, no SSR/claim change.
+Status: **spike implemented, then corrected in M02.1 (owner review); design
+questions listed as OPEN.** No codegen, no interpreter, no ABI, no SSR/claim
+change.
 
 ## 1. What this slice proves — and what it does not
 
@@ -154,7 +155,23 @@ from quietly appearing inside the compiler.
 with its own tests; element and router suites pass unchanged. Nothing in this
 slice can break Alpha15 because nothing in Alpha15 imports it.
 
-## 11. Verdict
+## 11. M02.1 corrections (owner review)
+
+| # | Defect found in review | Correction |
+| --- | --- | --- |
+| 1 | Ex3/Ex5 did not cover *one* stateful list: the list owned the draft and the row was tested separately | Ex3 and Ex5 are now **one shared fixture**: `List` maps `props.items` to `<Row key={item.id} item={item} />`, and `Row` owns its private `draft`. Both modules are asserted together, including identity-in-key + reference and per-entry ownership. |
+| 2 | `list.items` forced to `kind:'local'` | The data source keeps its semantics: `props.items` is now `tracked` with a prop read; a plain local stays a snapshot. |
+| 3 | Validator checked only root-level spans | Every span-bearing object is checked: attributes, dynamic-attribute expressions, component-ref props, list items/key, condition test, recipe target and its props, resource expressions. |
+| 4 | Several diagnostics were not source-located | `IrDiagnostic` now carries `origin: 'source' \| 'ir-object' \| 'module'`. Authored-grammar findings point at source; IR-object findings at the IR object; module-level findings (syntax, missing component) say so instead of pretending to be a source location. |
+| 5 | `value={1}` was marked tracked and then rejected | Tracking is derived from the expression kind, not from "not local": literals and plain locals are untracked. Added positive tests for literal, local and prop attributes. |
+| 6 | Ownership checks were per-recipe | Owners must be unique, resolvable and acyclic; every insertion/projection owner must exist; **no two insertion sites may share an owner globally**; lists declare per-entry ownership and their region owner. |
+| 7 | Pack failed: publish-scoped source module unreachable | The spike is excluded from the published surface. Note: this repository's packer derives include/exclude from `package.json.files` (`!` prefix), **not** from `publish.exclude`, so the exclusion is `"!src/internal/compiler/semantic-ir"`. The Alpha15 publish graph is otherwise untouched. |
+
+P2 items also closed: an ordinary-local snapshot test, worked examples for
+`condition` and `children-projection`, and the span documentation now says
+**UTF-16 code units** (TypeScript positions), not bytes.
+
+## 12. Verdict
 
 The IR is **feasible as a shape** and the five examples are expressible. The next
 risk is not "can we describe a component" but "can we resolve expressions

@@ -23,6 +23,7 @@ import type {
   IrComponentRef,
   IrCondition,
   IrDiagnostic,
+  IrDiagnosticOrigin,
   IrDynamicAttribute,
   IrDynamicText,
   IrElement,
@@ -74,12 +75,19 @@ function fallbackSpan(file: string): IrSpan {
   return { file, start: 0, end: 0, line: 1, column: 1 };
 }
 
-function error(state: BuildState, code: string, message: string, node: ts.Node): void {
+function error(
+  state: BuildState,
+  code: string,
+  message: string,
+  node: ts.Node,
+  origin: IrDiagnosticOrigin = 'source',
+): void {
   state.diagnostics.push({
     severity: 'error',
     code,
     message,
     span: spanOf(state.sourceFile, state.file, node),
+    origin,
   });
 }
 
@@ -89,6 +97,7 @@ function warning(state: BuildState, code: string, message: string, node: ts.Node
     code,
     message,
     span: spanOf(state.sourceFile, state.file, node),
+    origin: 'source',
   });
 }
 
@@ -227,20 +236,20 @@ function buildAttributes(state: BuildState, node: ts.JsxAttributes): IrAttribute
     }
     const expressionNode = initializer.expression;
     const channel = attributeChannel(name);
+    const expressionKind: IrExpressionKind =
+      channel === 'event'
+        ? 'handler'
+        : channel === 'key'
+          ? 'key'
+          : classifyDynamic(state, expressionNode);
     attributes.push({
       kind: 'dynamic-attribute',
       name,
       channel,
-      expression: buildExpression(
-        state,
-        expressionNode,
-        channel === 'event'
-          ? 'handler'
-          : channel === 'key'
-            ? 'key'
-            : classifyDynamic(state, expressionNode),
-      ),
-      tracked: channel === 'event' ? false : classifyDynamic(state, expressionNode) !== 'local',
+      expression: buildExpression(state, expressionNode, expressionKind),
+      // Only a genuinely tracked read is tracked: a literal or a plain local is
+      // not, which is what keeps `value={1}` legal and unclaimed.
+      tracked: expressionKind === 'tracked',
       span: spanOf(state.sourceFile, state.file, property),
     });
   }
@@ -416,7 +425,7 @@ function buildChild(state: BuildState, child: ts.Node, path: string): IrNode | n
     kind: 'dynamic-text',
     id: path,
     expression: buildExpression(state, expression, kind),
-    tracked: kind !== 'local' && kind !== 'literal',
+    tracked: kind === 'tracked',
     span: spanOf(state.sourceFile, state.file, expression),
   };
   return dynamic;
@@ -510,10 +519,16 @@ function tryBuildList(state: BuildState, node: ts.Node, path: string): IrList | 
     );
   }
 
+  const regionOwner = nextOwner(state, `${state.componentId}#owner1`, 'list-item');
   return {
     kind: 'list',
     id: path,
-    items: buildExpression(state, itemsNode, 'local'),
+    ownerId: regionOwner.id,
+    itemOwner: 'per-entry',
+    // The data source keeps its own evaluation semantics: a reactive read stays
+    // reactive, an ordinary local stays a snapshot. Forcing this to `local`
+    // misrepresented `props.items`.
+    items: buildExpression(state, itemsNode, classifyDynamic(state, itemsNode)),
     key: keyAttribute?.expression ?? null,
     template,
     span: spanOf(state.sourceFile, state.file, node),
@@ -568,6 +583,7 @@ export function buildSemanticIr(source: string, file: string): IrBuildResult {
         code: 'OEIR_SYNTAX',
         message: ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '),
         span: fallbackSpan(file),
+        origin: 'module',
       })),
     };
   }
@@ -595,6 +611,7 @@ export function buildSemanticIr(source: string, file: string): IrBuildResult {
       code: 'OEIR_COMPONENT_MISSING',
       message: 'no function component found (expected a function declaration or arrow binding)',
       span: fallbackSpan(file),
+      origin: 'module',
     });
     return { component: null, diagnostics };
   }
@@ -668,6 +685,7 @@ export function buildSemanticIr(source: string, file: string): IrBuildResult {
       code: 'OEIR_EMPTY_OUTPUT',
       message: 'the component produces no output (empty root)',
       span: fallbackSpan(file),
+      origin: 'module',
     });
   }
 

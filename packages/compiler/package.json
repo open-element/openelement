@@ -1,7 +1,7 @@
 {
   "name": "@openelement/compiler",
   "version": "1.0.0-alpha.15",
-  "description": "Build-time compiler for OpenElement — transforms TSX with @element decorators into Part Program modules. The three-package split's only TypeScript-dependent package.",
+  "description": "Build-time compiler for OpenElement \u2014 transforms TSX with @element decorators into Part Program modules. The three-package split's only TypeScript-dependent package.",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -11,7 +11,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "publish": {
-    "include": ["src/**", "README.md", "LICENSE"],
+    "include": [
+      "src/**",
+      "README.md",
+      "LICENSE"
+    ],
     "access": "public"
   },
   "dependencies": {
@@ -31,5 +35,10 @@
     ".": "./src/compiler.ts",
     "./vite": "./src/vite.ts"
   },
-  "files": ["src", "README.md", "LICENSE"]
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "!src/internal/compiler/semantic-ir"
+  ]
 }
