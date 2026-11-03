@@ -12,19 +12,19 @@ Rules that govern every row:
 3. Public API removal needs an owner decision; internal removal needs graph
    evidence plus behaviour coverage.
 4. Lit retirement follows ADR-0152 and is never mixed into Alpha16.
-5. Class API removal is **not** on this roadmap (D-O3: long-lived adapter).
+5. Class API removal requires **owner approval** (fourth-pass proposal P-1); the 2026-11-03 D-O3 adapter decision governs until superseded.
 
 ## 1. Disposition matrix
 
 | Object | Kind | Current consumers | Disposition | Replacement | Deletion precondition | Test / gate | Milestone |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `@element` decorator | public API | app authors, fixtures | **KEEP** (D-O3) | — | never in this roadmap | class fixtures | permanent |
-| `OpenElement` base class | public API | authors, runtime | **KEEP** | — | — | class fixtures | permanent |
+| `@element` decorator | public API | app authors, 219 in-tree files | **PROPOSE RETIRE** (fourth pass; owner approval required) | function components | owner approval + migration note + in-tree migration | class→function migration matrix | Alpha17 |
+| `OpenElement` base class | public API | authors, runtime | **PROPOSE RETIRE as author surface**; internal generated base may remain | emitted internal base | owner approval; platform need re-checked | registration/lifecycle tests | Alpha17 |
 | `jsx-runtime.ts` / `jsx-dev-runtime.ts` | public types + guard | typecheck, fail-closed test | **KEEP** | — | guard must keep failing closed | JSX-outside-compiler test | permanent |
 | `LifetimeScope` | internal primitive | kernel, blocks, parts, hydrate | **KEEP** | — | — | TSX-27 | permanent |
 | Signals (`@preact/signals-core` + internal contract) | dependency | everything | **KEEP** | — | — | signal tests | permanent |
-| Part Program v2 + validator | protocol + public export | runtime, SSR, Router, build, tests | **KEEP** (transitional) | eventual metadata/execution split | staged per D-O2; per-consumer migration | consumer map | M01 |
-| `__partProgram` emitted field | generated ABI | see consumer map | **KEEP / REFACTOR** | split into metadata + execution | every consumer migrated or retained | M01 + M10 | M01 |
+| Part Program v2 + validator | protocol + public export | runtime, SSR, Router, build, tests | **PROPOSE RETIRE** as serialized browser protocol | compiler IR + narrow ABI | owner approval; per-consumer migration complete | consumer map + M10 | M01 / Alpha16b |
+| `__partProgram` emitted field | generated ABI | see consumer map | **PROPOSE REMOVE** from target contract | narrow generated ABI | owner approval; every consumer migrated | M01 + M10 | Alpha16b |
 | `PART_PROGRAM_VERSION` | ABI stamp | generated modules, stream identity | **KEEP** | — | — | mismatch tests | — |
 | `COMPILED_MODULE_ABI_VERSION` v2 | ABI stamp | generated modules, facade | **KEEP, versioned separately from the future ABI** | new ABI gets its own number | no freeze before consumer evidence | abi mismatch tests | Alpha17 |
 | Generic browser executor: `fresh-dom.ts` walker | internal | kernel connect (fresh) | **RETIRE AFTER QUALIFICATION** | generated mount | M10 unreachability + full behaviour coverage | M10, M13 | Alpha16b |
@@ -38,7 +38,7 @@ Rules that govern every row:
 | `authoring.ts` compiled-class detection | internal | routing | **REFACTOR** to metadata flag | emitted metadata | migration with M01 | router tests | Alpha16b |
 | `island-blocks-scan.ts` lexical scan | internal | SSG blocks detection | **REPLACE** with emitted flag | metadata | must migrate with any field-shape change | SSG tests | Alpha16b |
 | `compiled-artifact-style-requests.ts` lexical scan | internal | CSS edge recovery | **REPLACE** with emitted ABI metadata | metadata | same change as the field shape | CSS recovery tests | Alpha16b |
-| `server-component.ts` (string composition) | internal | client + SSG builds | **REFACTOR** (extend: locals, async per M14) | — | — | M14 | Alpha16 |
+| `server-component.ts` (string composition) | internal | client + SSG builds | **REFACTOR** (extend: locals; async per M14) | — | — | M14 | Alpha16b |
 | SSR serializer + DSD path | internal | server rendering | **KEEP** | — | — | SSR matrix | permanent |
 | Security sinks (`forbidden-sinks.ts`) | internal | compiler, server, runtime | **KEEP** | — | — | sink fixtures | permanent |
 | `renderer-adapter.ts` native branch | internal | Framework Mode | **KEEP** | — | — | router tests | permanent |
@@ -70,7 +70,8 @@ Exit: M01–M08 evidence recorded. **Retirement: none.** M10a may run opportunis
 
 ### Phase 2 — Alpha16b
 
-- migrate every required browser capability (M09–M14);
+- migrate every required browser capability (M09–M13);
+- **M14 full-await async server components** (Alpha16b; never Alpha16a, never Alpha18 bounded defer);
 - produce M10 reachability evidence for **each** production browser entry
   (Element default, `client-only`, `no-blocks`, `base`, Router-generated client
   entry);
@@ -101,7 +102,7 @@ rollback. Not merged into Alpha16.
 
 ## 3. What must never appear on this roadmap
 
-- Deleting the Class/decorator API (D-O3).
+- Deleting the Class/decorator API **without owner approval** — it is the subject of a proposed retirement, not an assumption.
 - Deleting the Part Program, its validator or `__partProgram` (D-O2).
 - Deleting the JSX type entry or its fail-closed guard.
 - Deleting SSR/DSD, security sinks, Signals or `LifetimeScope` for size reasons.
@@ -123,3 +124,11 @@ Every action in Phase 2 or later must attach:
 
 An action missing any of these stays open, regardless of how obviously obsolete
 the code looks.
+
+## 5. Fourth-pass status
+
+The rows above marked **PROPOSE** are proposals from
+[the fourth-pass reassessment](./alpha16-18-fourth-pass-reassessment.md). They
+become actions only if the owner approves P-1…P-5. If P-1 is rejected, the class
+rows revert to the 2026-11-03 D-O3 adapter decision; if P-2/P-3 are rejected, the
+Part Program rows revert to the transitional KEEP with a staged split.

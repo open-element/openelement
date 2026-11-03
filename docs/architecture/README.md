@@ -10,6 +10,7 @@ adapt, scaffold, build, and distribute those products.
 - [Alpha16–18 cleanup and migration inventory](./alpha16-18-cleanup-inventory.md) — KEEP/REFACTOR/REPLACE/RETIRE rows with consumers and exit criteria
 - [Alpha16–18 freeze audit](./alpha16-18-freeze-audit.md) — contradiction register (FR-01…FR-12), source coverage ledger, chain map, freeze statement
 - [Alpha16–18 retirement roadmap](./alpha16-18-retirement-roadmap.md) — disposition matrix and phased deletion gates
+- [Alpha16–18 fourth-pass reassessment](./alpha16-18-fourth-pass-reassessment.md) — **PROPOSED** retirement of the Class authoring API and the serialized Part Program protocol; owner approval required
 - [Alpha16–18 architecture audit](./alpha16-18-architecture-audit.md) — what alpha.15 actually implements, what is reusable, what must change
 - [TSX author candidate contract](./tsx-author-candidate-contract.md) — 30 review cases; approved TSX-03/04/05/09/10 semantics; unreleased APIs, not implementation evidence
 - [JSX values and repeatable children](./jsx-value-and-children-model.md) — mount recipes, evaluation timing, owner/region model, rejected alternatives

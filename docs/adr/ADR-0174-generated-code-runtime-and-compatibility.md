@@ -167,3 +167,24 @@ consumer migrates on evidence. No new ABI is frozen by this record.
 Class authoring is retained through a long-lived compatibility adapter on the
 shared backend (owner-approved D-O3); it is compatibility infrastructure, not a
 second execution architecture, and no retirement version is scheduled.
+
+## PROPOSED amendment (2026-11-03, fourth pass — NOT APPROVED)
+
+Status: **PROPOSED. Requires explicit owner approval. It does not amend this
+record until accepted.**
+
+The fourth-pass reassessment proposes that Part Program v2 ceases to be a
+serialized browser execution protocol: the compiler keeps a compiler-owned
+Semantic IR, server and client backends render from it independently, and the
+generated module carries a **narrow ABI** (identity/registration, property and
+attribute metadata, style/scope metadata, generated client and server
+entrypoints, build-time feature flags, ABI version and build identity) instead of
+`__partProgram`. `validatePartProgram` and `PART_PROGRAM_VERSION` would retire
+with the schema; `COMPILED_MODULE_ABI_VERSION` would be superseded by the new ABI
+version.
+
+The 2026-11-03 D-O2 amendment above remains the governing decision until this
+proposal is accepted; its staging discipline (per-consumer migration, no
+premature ABI freeze) applies to the proposed direction as well.
+
+Full analysis: [fourth-pass reassessment](../architecture/alpha16-18-fourth-pass-reassessment.md).

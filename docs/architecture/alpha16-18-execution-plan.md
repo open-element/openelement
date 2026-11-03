@@ -1,7 +1,7 @@
 # Alpha16–18 execution plan
 
 Date: 2026-11-03 (second-round correction). Status: **PROPOSED**, owner decisions
-D-O1/D-O2/D-O3 approved. Baseline: `4f1f2001b24909086f7e7efe9e5016d48d615c91`.
+D-O1 approved; D-O2/D-O3 approved on 2026-11-03 and **re-opened as proposals by the fourth pass**. Baseline: `4f1f2001b24909086f7e7efe9e5016d48d615c91`.
 
 This plan implements the direction in
 [ADR-0173](../adr/ADR-0173-component-execution-and-composition.md) and
@@ -45,13 +45,13 @@ ship two execution models.
 | M06 | Stateful hostless list on the generated path | I | M05 | identity, private draft, keyed reorder, conditions, multi/empty root |
 | M07 | Generated claim (leaf) | I | M05 | claim fidelity on the leaf slice |
 | M08 | Generated claim + SSR for the stateful list | I | M06, M07 | the same list across SSR → claim → update → dispose |
-| M09 | Class compatibility adapter on the shared backend | I | M05 | class fixtures pass on the generated backend; no second backend |
+| M09 | Generated Native Custom Element boundary (replaces the former "class adapter" milestone) — emitted element class, registration, property/attribute conversion, events, Shadow DOM/DSD interop, third-party WC compatibility | I | M05 | emitted element behaves from ordinary HTML and foreign frameworks; no author-facing class requirement |
 | M10 | Old-executor capability migration and reachability evidence | I→Q | M05–M09 | graph unreachability from every applicable production browser entry + behaviour coverage |
 | M10a | Early packed-consumer smoke | Q | M05 | generated artifact installs and runs from a fresh packed app, no aliases |
 | M11 | Router integration for the generated path | I | M08, M10 | Framework Mode contract unchanged |
 | M12 | Final packed-consumer qualification (same stateful list) | Q | M06, M08, M11 | tarball consumption of the full slice; scope per §5 |
 | M13 | Browser + server qualification, exact SHA | Q | M09–M12, M14 | three engines, release train |
-| M14 | Async server components, full-await (OEC9032 lifted with defined semantics) | I | M02 | awaited output, server-only graph guard intact |
+| M14 | Async server components, full-await (OEC9032 lifted with defined semantics) — **Alpha16b** | I | M02 | awaited output, server-only graph guard intact |
 
 **Alpha16a exit = M01–M08 with G1 and G2 evidence recorded.** M09–M14 belong to
 Alpha16b. G3 is not claimed by Alpha16a.
@@ -68,7 +68,7 @@ Required before release:
 
 1. every required browser execution capability migrated (M10);
 2. generated mount, update, claim and disposal complete (M05, M07, M08);
-3. class compatibility on the shared backend (M09);
+3. generated Native Custom Element boundary complete (M09);
 4. Router integration (M11);
 5. independent packed-consumer qualification (M12);
 6. browser and server qualification (M13);
@@ -118,7 +118,7 @@ Rollback boundaries:
 | --- | --- | --- |
 | after M04 | recipe/insertion primitives (no public surface yet) | nothing about class or Lit support |
 | after M07 | claim implementation only; mount stays | not a Part Program decision |
-| after M09 | **the new adapter implementation**, not the Class API | reverting adapter code must never imply retiring the Class API |
+| after M09 | the generated CE boundary implementation | reverting it must not change the authoring-model decision (class retirement is a separate owner decision) |
 | after M11 | Router integration of the generated path | Framework Mode contract unchanged |
 | before M13 | release boundary | no version, tag or publication |
 
@@ -239,3 +239,21 @@ Stop and re-plan rather than push through when:
 - The Lit boundary is unchanged unless its own separate track gate is met.
 
 A passing CI run is none of the above.
+
+## 12. Fourth-pass proposals (not yet decided)
+
+The fourth pass proposes retiring the public Class authoring API and the
+serialized Part Program protocol
+([reassessment](./alpha16-18-fourth-pass-reassessment.md)). Consequences for this
+plan, **conditional on owner approval**:
+
+- if P-1 (class authoring retirement) is approved, Alpha16b additionally retires
+  the class frontend and the plan carries **no** adapter obligation; if rejected,
+  M09 reverts to the adapter milestone;
+- if P-2/P-3 (protocol + `__partProgram` retirement) are approved, Alpha16b
+  additionally proves no production browser consumer reads the old schema and
+  `__partProgram` leaves the production module contract;
+- if either proposal is rejected, the corresponding work reverts to the
+  transitional KEEP recorded on 2026-11-03.
+
+No milestone numbering changes; recomposition is by prose, not by renumbering.

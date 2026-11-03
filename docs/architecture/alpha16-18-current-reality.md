@@ -157,8 +157,11 @@ are noted as such rather than "fixed".
     and only with measurement.
 13. **What does the approved Alpha16 gate require about the old executor?**
     ADR-0174 requires graph evidence that it is unreachable before Alpha16
-    release, plus coverage and qualification (`ADR-0174:57-59`). Whether that
-    remains feasible in one release is an **open owner decision** (D-O1).
+    release, plus coverage and qualification (`ADR-0174:57-59`). The gate is
+    **decided, not open**: the owner approved the Alpha16a/Alpha16b split on
+    2026-11-03 (D-O1). Alpha16a is internal with no release; **Alpha16b is the
+    only release route** and must satisfy the gate. If the evidence cannot be
+    produced, no Alpha16 release is cut.
 14. **Which Lit retirement requirements are independent?**
     All of them: last supported version, breaking release, compatibility window,
     security owner, migration docs, export/dependency removal, Native parity,
@@ -255,7 +258,12 @@ If Alpha16a succeeds and Alpha16b does not: the work stays internal; no Alpha16
 release is cut; the remaining migration is re-planned with the failing
 capability named. Shipping both paths as a release is not an option.
 
-### D-O2 — APPROVED: staged Part Program / metadata / execution migration
+### D-O2 — APPROVED (2026-11-03), staging kept, KEEP conclusion challenged
+
+The staging discipline (define layers first, migrate per consumer, no premature
+ABI freeze) remains approved. The fourth pass **proposes retiring the serialized
+protocol and `__partProgram`** rather than keeping them (P-2/P-3/P-4); those parts
+await owner approval.
 
 Define the layer boundary first (semantic IR · Part Program v2 · emitted
 `__partProgram` · generated-module ABI · HTML/claim/stream wire · metadata), then
@@ -263,7 +271,13 @@ migrate consumers on evidence. Do not delete or rename `__partProgram`, do not
 freeze a new ABI, and keep server serialization, streaming, routing, CSS recovery
 and identity checks working until each consumer's own migration condition is met.
 
-### D-O3 — APPROVED: long-lived Class API compatibility adapter
+### D-O3 — APPROVED (2026-11-03), challenged by the fourth pass
+
+The approved decision was a long-lived Class API compatibility adapter. The
+fourth pass **proposes retiring the authoring API instead** (P-1, pending owner
+approval); see
+[the reassessment](./alpha16-18-fourth-pass-reassessment.md). The approved record
+stands until superseded.
 
 Class and function authoring share one semantic model and one generated backend
 (ownership, identity, signals, update, disposal). The adapter is compatibility

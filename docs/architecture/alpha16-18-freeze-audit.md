@@ -18,7 +18,7 @@ verified versus assumed.
 | Does a hidden second execution model exist today? | **No.** There is one authoring path (class/decorator) and one browser execution model (generic Part Program walk). The server function-component lane is string composition, not a second client model. |
 | Are there untracked legacy-execution consumers? | **No untracked production consumer was found.** The consumer map (§4) covers direct, indirect, type-only, build-time and lexical consumers. Tests/fixtures are listed separately. |
 | Can the old generic browser executor be removed in Alpha16b? | **Conditionally yes.** It requires M10 reachability evidence across every production browser entry, plus behaviour coverage. If that evidence cannot be produced, Alpha16 does not release (gate intact). |
-| Which legacy APIs must be kept? | Class/decorator API (D-O3), Part Program + validator + emitted field (D-O2), JSX type entry + fail-closed guard, Signals, `LifetimeScope`, SSR/DSD serializer, security sinks, Router Framework Mode, native CE boundary, third-party WC interop. |
+| Which legacy APIs must be kept? | **Unconditionally:** JSX type entry + fail-closed guard, Signals, `LifetimeScope`, SSR/DSD serializer, security sinks, Router Framework Mode, native CE boundary, third-party WC interop. **Under fourth-pass proposal (not decided):** Class authoring API, Part Program v2, validator, `__partProgram`. See §10. |
 | Which historical implementations should eventually be deleted? | The generic browser walkers and their dispatch surfaces, runtime-only normalization, and superseded executor installation seams — each only after M10 evidence. See [the retirement roadmap](./alpha16-18-retirement-roadmap.md). |
 | What is only history and should leave the current path? | `@lit-labs/ssr` shim + `./lit`/`./lit-ssr` surfaces (ADR-0152 track), and superseded ADR wording already superseded by dated amendments. |
 | May Alpha16a start? | **Yes, once this PR is merged.** The blocking corrections are documentation-level and are closed here; implementation gates (G1/G2) remain to be earned. |
@@ -152,7 +152,7 @@ FR-12 is a citation rule.
 | M10a non-gating early smoke | corrected this round | yes |
 | M10 on the Alpha16b critical spine | M10 depends on M05–M09 | yes |
 | M03 position | function adapter is a practical prerequisite of M05 | yes (corrected earlier) |
-| M14 async server | parallelisable, non-gating for 16a | yes |
+| M14 async server | **Alpha16b**; never Alpha16a, never Alpha18 bounded defer; parallelisable | yes |
 | Gate wording | old generic **browser** executor unreachable, not all Part Program | yes; ADR-0174 amendment says the same |
 | G3 | public API freeze only after consumer evidence | yes |
 
@@ -199,3 +199,33 @@ Only engineering questions that still need evidence (none are owner decisions):
   but does not gate it.
 - **Alpha16b remains the only release route**, with the ADR-0174 gate intact.
 - Nothing in this document is implementation evidence.
+
+## 10. Fourth-pass addendum (2026-11-03)
+
+The owner challenged D-O2 and D-O3. A dedicated reassessment now records the
+evidence and proposes: **retire the Class/Decorator authoring API** (P-1) and
+**retire Part Program v2 as a serialized browser protocol, removing
+`__partProgram` from the target module contract** (P-2/P-3), with the validator
+and version retired alongside (P-4) and no authoring compatibility adapter (P-5).
+
+State of those items: **PROPOSED, not approved.** The 2026-11-03 D-O2/D-O3 records
+stand as approved history until the owner supersedes them. See
+[the reassessment](./alpha16-18-fourth-pass-reassessment.md).
+
+Consequences already applied to the documents (all reversible if the proposals
+are rejected):
+
+- canonical architecture marks the protocol and class API as CURRENT FACT +
+  PROPOSED retirement rather than permanent KEEP;
+- the retirement roadmap moved the class API, `OpenElement` author surface,
+  Part Program v2 and the validator into PROPOSE RETIRE rows;
+- the execution plan replaced M09 ("class adapter") with the generated Native
+  Custom Element boundary, and states both variants;
+- ADR-0173 and ADR-0174 carry **PROPOSED** amendments that explicitly do not
+  amend the records until accepted;
+- M14 is normalized to Alpha16b everywhere.
+
+The freeze statement in §9 is therefore qualified: the architecture is
+*internally consistent* about the target, but the target itself has five open
+owner proposals. Freezing means "no remaining contradictions", not "the
+retirement direction is approved".
