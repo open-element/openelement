@@ -50,10 +50,15 @@ ship two execution models.
 | M10a | Early packed-consumer smoke | Q | M05 | generated artifact installs and runs from a fresh packed app, no aliases |
 | M11 | Router integration for the generated path | I | M08, M10 | Framework Mode contract unchanged |
 | M12 | Final packed-consumer qualification (same stateful list) | Q | M06, M08, M11 | tarball consumption of the full slice; scope per §5 |
-| M13 | Browser + server qualification, exact SHA | Q | M09–M12 | three engines, release train |
+| M13 | Browser + server qualification, exact SHA | Q | M09–M12, M14 | three engines, release train |
+| M14 | Async server components, full-await (OEC9032 lifted with defined semantics) | I | M02 | awaited output, server-only graph guard intact |
 
-**Alpha16a exit = M01–M08 with G1 and G2 evidence recorded.** M09–M13 belong to
+**Alpha16a exit = M01–M08 with G1 and G2 evidence recorded.** M09–M14 belong to
 Alpha16b. G3 is not claimed by Alpha16a.
+
+**M10a is not an Alpha16a exit condition.** It is an early, non-gating smoke run
+that may happen as soon as a generated artifact can be packed. Alpha16a still
+completes on M01–M08 alone; do not lower it to "whatever M10a proved".
 
 ## 2. Alpha16b — retirement and Alpha16 release qualification
 
@@ -103,7 +108,9 @@ M01 → M02 → M03 ─┐
 - **M10 cannot start before M05–M09** — reachability evidence for a replacement
   requires the replacement to exist.
 - M12 (final packed qualification) follows M11; it is not the same work as M10a
-  (early smoke).
+  (early, non-gating smoke).
+- M14 (async server components) is parallelisable with M05–M11; it does not
+  gate Alpha16a.
 
 Rollback boundaries:
 

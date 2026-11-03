@@ -50,7 +50,7 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 5 | `ShimStyleSheet`（SSR 侧 CSSStyleSheet） | `packages/element/src/internal/core/style-sheet.ts` | 保留为平台边缘 |
 | 6 | SSR 全局垫片（CSSStyleSheet banner + customElements stub） | `packages/router/src/vite/internal/ssg/ssr-polyfills.ts` | 保留为平台边缘 |
 | 7 | 浏览器怪癖台账（#579/#604/#610） | `packages/router/src/vite/internal/ssg/morph-webkit-fix.ts`、`packages/router/src/vite/internal/ssg/form-enhance.ts` | 保留为平台边缘（各条目自带删除条件） |
-| 8 | `@lit-labs/ssr` 全局 DOM shim | `packages/router/src/lit-ssr.ts` 等 | 保留为平台边缘（上游 + 教义） |
+| 8 | `@lit-labs/ssr` 全局 DOM shim | `packages/router/src/lit-ssr.ts` 等 | 随第一方 Lit renderer 一并退役（ADR-0152 独立轨道；当前仍保留并受测，窗口 OPEN） |
 | 9 | Nitro mount 适配 | `packages/router/src/nitro-mount.ts` | 保留为平台边缘（P5 明示的部署边界） |
 | 10 | node:http `serveFetch` 适配 | `packages/router/src/internal/node-http.ts` | 保留为平台边缘 |
 | 11 | Workers `nodeCompat`（unenv） | `apps/saas/nitro.config.ts`、fixture 同形 | 保留为平台边缘 |
@@ -59,7 +59,7 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 14 | signal 引擎 Preact 适配 | `packages/element/src/internal/signal/` | 保留为平台边缘 |
 | 15 | `@openelement/url-pattern-list` 维护 fork | `packages/router/src/internal/router/route-table.ts` | 保留为平台边缘（附评估结论） |
 | 16 | CEM 兼容分类（第三方 WC 准入） | `packages/router/src/vite/internal/ssg/cem-compat.ts` | 保留为平台边缘（产品互操作面） |
-| 17 | 渲染器适配缝（native / lit） | `packages/router/src/vite/internal/ssg/renderer-adapter.ts` | 保留为平台边缘（教义，非债） |
+| 17 | 渲染器适配缝（native / lit） | `packages/router/src/vite/internal/ssg/renderer-adapter.ts` | native 分支为长期方向；lit 分支随 ADR-0152 独立轨道退役。原「Lit 为教义」的表述已被 2026-11-03 修正案取代 |
 | 18 | legacy 虚拟入口 id（`virtual:open-hono-entry`，ADR-0152） | `packages/router/src/vite/plugin-virtual-modules.ts` | 条件到即删（随下一次产物命名不兼容变更一起改名） |
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法

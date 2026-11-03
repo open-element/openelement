@@ -62,5 +62,5 @@ there (`git show 3b5c7a9a^:docs/audit/2026-07-27-application-loop-framework-rese
 - [ADR-0170-late-host-island-activation.md](./ADR-0170-late-host-island-activation.md)
 - [ADR-0171-private-artifact-static-boundary.md](./ADR-0171-private-artifact-static-boundary.md) — AMENDED: accepted next architecture; implementation pending (2026-10-31)
 - [ADR-0172-document-lang-resolution.md](./ADR-0172-document-lang-resolution.md)
-- [ADR-0173-component-execution-and-composition.md](./ADR-0173-component-execution-and-composition.md) — AMENDED: author semantics and slice prerequisites; implementation pending (2026-11-03)
-- [ADR-0174-generated-code-runtime-and-compatibility.md](./ADR-0174-generated-code-runtime-and-compatibility.md) — AMENDED: semantic prerequisites and connected slice order; implementation pending (2026-11-03)
+- [ADR-0173-component-execution-and-composition.md](./ADR-0173-component-execution-and-composition.md) — AMENDED: author semantics, slice prerequisites, reusable JSX values and long-lived class adapter; implementation pending (2026-11-03)
+- [ADR-0174-generated-code-runtime-and-compatibility.md](./ADR-0174-generated-code-runtime-and-compatibility.md) — AMENDED: semantic prerequisites, slice order and Alpha16a/16b split with the release gate intact; implementation pending (2026-11-03)
