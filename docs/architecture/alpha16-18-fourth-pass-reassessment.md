@@ -14,7 +14,7 @@ evidence-first; each recommendation states what would change if accepted.
 
 | Object | Previous decision | This pass | Confidence |
 | --- | --- | --- | --- |
-| Class/Decorator authoring API | KEEP, long-lived adapter (D-O3, approved 2026-11-03) | **PROPOSE RETIRE** the authoring API; keep native Custom Elements and any internal generated class | Medium — cost is large and measurable; benefit is architectural |
+| Class/Decorator authoring API | KEEP, long-lived adapter (D-O3, approved 2026-11-03) | **PROPOSE RETIRE** the authoring API; keep native Custom Elements and any internal generated class | **High** — no external users by owner declaration; cost is in-repo migration only |
 | Part Program v2 as a **serialized browser execution protocol** | KEEP, transitional (D-O2) | **PROPOSE RETIRE** as browser protocol | High |
 | Part Program v2 as an **SSR/build data structure** | KEEP | **PROPOSE REPLACE** by backend-local structures that share the semantic model, not the schema | Medium |
 | `__partProgram` field | KEEP, transitional | **PROPOSE REMOVE** from the target generated-module contract; replace with a narrow ABI | High |
@@ -50,12 +50,18 @@ from ordinary HTML.
 | Public subpaths carrying class authoring | `@openelement/element` root, `./authoring`, `./base`, `./client-only`, `./no-blocks` | public surface is not one symbol |
 | Compiler frontend | `analyze-module.ts` (`analyzeCompiledModule`) + `lower-program.ts` | class-shaped pipeline is the only frontend today |
 | Runtime coupling | `open-element-implementation.ts` fails closed without `__partProgram` | class and protocol are currently entangled |
-| External downloads (last month) | `@openelement/element` **1,551**; `@openelement/router` **1,436**; last week element **51** | small but non-zero; **cannot** establish "no external users" |
+| External downloads (last month) | `@openelement/element` **1,551**; `@openelement/router` **1,436**; last week element **51** | **owner-attested:** these are CI and the owner's own pulls, not external users |
 
-External adoption **cannot be proven either way** from available evidence:
-download counts include CI/mirrors, and no verified downstream project was found.
-The repo's own 1.0 Alpha baseline explicitly does not promise 0.x migration,
-which weakens the compatibility argument but does not eliminate it.
+**Owner declaration (2026-11-03): there are no external users.** All npm
+downloads are CI or the owner's own pulls, and the repository's two stars are the
+owner's own clicks. This is owner testimony, not telemetry — but for a product
+decision about *this project's* users, the owner is the authority. It supersedes
+the earlier "unknown, not proven absent" reading of the download numbers.
+
+Consequence: the compatibility cost of retiring class authoring is **in-repo
+migration only** (219 files), not breaking an external author base. The 1.0 Alpha
+baseline already promises no 0.x migration, so no published compatibility
+obligation is broken either.
 
 ### 2.3 Cost of each option
 
@@ -63,7 +69,7 @@ which weakens the compatibility argument but does not eliminate it.
 | --- | --- | --- | --- |
 | **KEEP + adapter** (previous) | adapter + dual authoring surface + permanent test matrix | none | one backend, but a second *frontend* and permanent `__partProgram` dependency |
 | **DEPRECATE** | adapter + deprecation machinery + two supported paths for years | low near-term | postpones the decision, keeps both costs |
-| **RETIRE** | migrate 219 in-tree files + rewrite compiler frontend as function-first + rewrite generated module + Starter/docs | breaking for any external class author; needs a migration note and a major-version statement | one authoring model, one frontend, no legacy frontend to keep honest |
+| **RETIRE** | migrate 219 in-tree files + rewrite compiler frontend as function-first + rewrite generated module + Starter/docs | **no external class authors (owner-declared)**; in-repo migration + release note only | one authoring model, one frontend, no legacy frontend to keep honest |
 
 ### 2.4 Recommendation
 
@@ -80,9 +86,11 @@ which weakens the compatibility argument but does not eliminate it.
    internal base the generated code emits, with no author-facing export), not a
    naming decision.
 
-The honest downside: 219 in-tree call sites migrate, and any external class
-author breaks. That is a real cost and it is why this needs the owner's explicit
-approval rather than being inferred from "the architecture is cleaner".
+The honest downside: 219 in-tree call sites migrate. The owner has declared that
+no external class authors exist, so the external breakage cost is **zero by owner
+testimony** rather than merely unknown. That removes the main counter-argument to
+retirement; the remaining cost is the in-repo migration itself, which is why this
+still needs explicit approval rather than being inferred from architecture taste.
 
 ## 3. Part Program v2 re-evaluation
 
@@ -192,9 +200,11 @@ ABI is not the IR; the HTML/claim/stream wire is not the ABI.
   projects and forks, not dependents.
 - The repository's own position is a fresh 1.0 Alpha baseline without 0.x
   compatibility obligations.
-- **Conclusion: external impact is unknown, not proven absent.** A retirement
-  must therefore ship a migration note and a breaking-release statement, and
-  must not claim "no users".
+- **Conclusion (owner-attested): no external users.** Retirement therefore
+  carries no external migration burden; what remains is in-repo migration,
+  documentation, and a release note stating the breaking change. The
+  "no users" claim is the owner's declaration and is recorded as such, not as an
+  independently measured fact.
 
 ## 8. Updated milestones
 

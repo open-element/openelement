@@ -175,7 +175,10 @@ HTML-first Full TSX with explicit Signals, hostless internal composition and an
 explicit native CE boundary; see the [product model](../architecture/product-model.md).
 
 This is a product-focus decision, not an adoption count or proof that Lit/DSD
-cannot work. External consumers are unknown, not known to be absent. Alpha.15
+cannot work. External consumers were recorded as unknown when this amendment was
+written; on 2026-11-03 the owner declared that no external users exist (downloads
+are CI and the owner's own pulls). The statement above is retained as the record
+of what was known at the time. Alpha.15
 still implements and supports the existing Lit mode; this amendment deletes no
 implementation, export, dependency or test, and supplies no new qualification.
 Existing Lit checks remain necessary until a separately qualified retirement
