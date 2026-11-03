@@ -45,12 +45,18 @@ three-engine qualification, input fidelity and size budgets remain required.
 | CE properties/events/slots/forms | Foreign CE identity does not establish SSR capability |
 | SSR followed by client claim | Hydration, not serialized closures or resumability |
 
-Alpha16 owns semantics and the generated mount/claim/update/dispose foundation,
-old-capability migration, server async and output isolation. Alpha17 owns Full TSX
-productization, public composition APIs, precompiled consumers and Starter/app
-migration. Alpha18 owns bounded component defer only on a stable foundation;
-arbitrary Promises and unbounded nesting are not admitted. These are gated
-milestones, not dates or assertions of implementation. Preserve G1 (real codegen
+Alpha16 is split (owner decision D-O1). **Alpha16a** is an internal
+compiler-native foundation: semantics, generation, leaf and stateful proofs, with
+no public version, tag, publication or release claim. **Alpha16b** is the formal
+Alpha16 release qualification, and it requires the old generic browser executor
+to be unreachable from production browser entry graphs; the ADR-0174 gate is
+unchanged, and shipping both execution paths as a release does not qualify.
+Alpha17 owns Full TSX productization, public composition APIs, cross-module
+recipes, precompiled consumers and Starter/app migration. Alpha18 owns bounded
+component defer only on a stable foundation; arbitrary Promises and unbounded
+nesting are not admitted. The Class API is retained through a long-lived
+compatibility adapter on the shared backend (D-O3), not a second renderer. These
+are gated milestones, not dates or assertions of implementation. Preserve G1 (real codegen
 slice), G2 (identity/owner before related expansion), G3 (author and independent
 consumer proof before public API/default Starter). Historical direction blogs
 remain records of their date; this document and the amended ADRs state the current

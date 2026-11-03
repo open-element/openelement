@@ -77,24 +77,24 @@ no backing matrix row is a defect in this document, not a gap in the product.
 | # | Acceptance area | Matrix rows | Milestone |
 | --- | --- | --- | --- |
 | 1 | Function Components | TSX-01, 02, 23 | M03 |
-| 2 | Nested hostless composition | TSX-01, 09, 10 | M03, M04 |
+| 2 | Nested hostless composition | TSX-01, 09, 10 | M04, M06 |
 | 3 | Fragments and multi-root | TSX-01 | M02 |
 | 4 | Empty output | TSX-01 | M02 |
-| 5 | Props and Children | TSX-03, 04, 10 | M04, M08 |
+| 5 | Props and Children | TSX-03, 04, 10 | M04, M06 |
 | 6 | Reusable JSX values | TSX-09, 23, 25 | M04 |
 | 7 | Signals | TSX-02, 05 | M04 |
 | 8 | Fine-grained updates | TSX-02, 05, 28 | M05 |
-| 9 | Keyed identity | TSX-07, 08 | M08 |
-| 10 | Props replacement | TSX-04, 24 | M08 |
+| 9 | Keyed identity | TSX-07, 08 | M06 |
+| 10 | Props replacement | TSX-04, 24 | M06 |
 | 11 | Event behaviour | TSX-12, 20 | M05 |
 | 12 | Cleanup and disposal | TSX-19, 26, 27 | M04 |
-| 13 | SSR | TSX-17, 18, 30 | M07 |
-| 14 | DSD | TSX-18, 30 | M07 |
-| 15 | Claim / hydration | TSX-18, 30 | M06 |
-| 16 | Security | cross-cutting negatives §4 (all rows) | M05 |
+| 13 | SSR | TSX-17, 18, 30 | M08 |
+| 14 | DSD | TSX-18, 30 | M08 |
+| 15 | Claim / hydration | TSX-18, 30 | M07, M08 |
+| 16 | Security | cross-cutting negatives §4 (all rows) | M05, M13 |
 | 17 | Class compatibility | class fixtures on the shared backend (not a TSX row) | M09 |
 | 18 | Router compatibility | Framework Mode regression (not a TSX row) | M11 |
-| 19 | Packed consumer compatibility | TSX-21 | M12 |
+| 19 | Packed consumer compatibility | TSX-21 | M10a (smoke), M12 (final) |
 | 20 | Browser and server qualification | cross-engine column plus server matrix | M13 |
 | 21 | No unintended dependency on the old generic executor | graph + reachability evidence | M10 |
 
@@ -131,3 +131,8 @@ is not evidence for this one.
 9. Byte attribution for generated code plus helpers, measured on the full
    reachable closure.
 10. Packed-consumer install with no workspace alias and no library TSX.
+
+Alpha16a claims only M01-M08 evidence. Rows depending on M09-M13 (class
+compatibility, Router integration, packed qualification, full browser/server
+qualification, executor unreachability) belong to Alpha16b and must not be
+reported as Alpha16a results.

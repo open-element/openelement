@@ -527,7 +527,6 @@ below:
 15. **Claim parity of counts**: the same expression runs the same number of
     times under SSR→claim as under fresh mount (excluding SSR-only reads).
 
-
 Minimum, on the stateful list slice (Slice 2), each asserting instance counts
 and owner identity — not only rendered text:
 
