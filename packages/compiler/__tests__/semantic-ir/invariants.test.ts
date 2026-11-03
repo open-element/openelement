@@ -314,3 +314,75 @@ describe('IR invariants reject malformed IR', () => {
     );
   });
 });
+
+describe('M02.2 — dynamic slots are collected from every surface', () => {
+  const trackedWithoutSource =
+    (): import('../../src/internal/compiler/semantic-ir/index.ts').IrDynamicAttribute => ({
+      kind: 'dynamic-attribute',
+      name: 'value',
+      channel: 'property',
+      expression: { kind: 'local', source: 'x', span: span(0, 1), reads: [] },
+      tracked: true,
+      span: span(0, 2),
+    });
+
+  test('a component-ref prop claiming tracking is checked', () => {
+    const child: IrNode = {
+      kind: 'component-ref',
+      id: 'c1',
+      name: 'Child',
+      props: [trackedWithoutSource()],
+      span: span(0, 3),
+    };
+    const diagnostics = validateSemanticIr(componentWith({ roots: [child] }), { sourceLength: 20 });
+    expect(codesOf(diagnostics)).toContain('OEIR_TRACKED_WITHOUT_SOURCE');
+  });
+
+  test('a recipe target prop claiming tracking is checked', () => {
+    const component = componentWith({
+      recipes: [
+        {
+          kind: 'recipe',
+          id: 'r1',
+          target: {
+            kind: 'component-ref',
+            id: 'x',
+            name: 'Child',
+            props: [trackedWithoutSource()],
+            span: span(0, 3),
+          },
+          span: span(0, 3),
+        },
+      ],
+      roots: [
+        { kind: 'insertion-site', id: 's1', recipeId: 'r1', ownerId: 'owner0', span: span(0, 1) },
+      ],
+    });
+    const diagnostics = validateSemanticIr(component, { sourceLength: 20 });
+    expect(codesOf(diagnostics)).toContain('OEIR_TRACKED_WITHOUT_SOURCE');
+  });
+
+  test('two lists sharing one region owner are rejected', () => {
+    const makeList = (id: string): IrNode => ({
+      kind: 'list',
+      id,
+      ownerId: 'shared-list-owner',
+      itemOwner: 'per-entry',
+      items: { kind: 'local', source: 'x', span: span(0, 1), reads: [] },
+      key: null,
+      template: [{ kind: 'text', id: `${id}-t`, value: 'a', span: span(0, 1) }],
+      span: span(0, 5),
+    });
+    const diagnostics = validateSemanticIr(
+      componentWith({
+        owners: [
+          { id: 'owner0', parent: null, reason: 'component' },
+          { id: 'shared-list-owner', parent: 'owner0', reason: 'list-item' },
+        ],
+        roots: [makeList('l1'), makeList('l2')],
+      }),
+      { sourceLength: 20 },
+    );
+    expect(codesOf(diagnostics)).toContain('OEIR_LIST_SHARED_OWNER');
+  });
+});

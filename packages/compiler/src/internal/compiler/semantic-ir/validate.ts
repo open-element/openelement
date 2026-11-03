@@ -64,9 +64,33 @@ interface DynamicSlot {
   readonly trackingExpected: boolean;
 }
 
-function dynamicSlots(nodes: readonly IrNode[]): DynamicSlot[] {
+/** Collect dynamic slots from one attribute list (element attributes / component props). */
+function slotsFromAttributes(
+  attributes: readonly import('./types.ts').IrAttribute[],
+  out: DynamicSlot[],
+): void {
+  for (const attribute of attributes) {
+    if (attribute.kind !== 'dynamic-attribute') continue;
+    const updateDriven =
+      attribute.channel !== 'event' && attribute.channel !== 'key' && attribute.channel !== 'ref';
+    out.push({
+      expression: attribute.expression,
+      tracked: attribute.tracked,
+      span: attribute.span,
+      trackingExpected: updateDriven,
+    });
+  }
+}
+
+/**
+ * Every dynamic slot in the component: dynamic text, element attributes,
+ * component-ref props **and** recipe target attributes/props. A slot that is
+ * not collected here is a slot whose tracking claim is never checked, so this
+ * function is the single definition of "dynamic slot".
+ */
+function dynamicSlots(component: IrComponent): DynamicSlot[] {
   const slots: DynamicSlot[] = [];
-  for (const node of walkNodes(nodes)) {
+  for (const node of walkNodes(component.roots)) {
     if (node.kind === 'dynamic-text') {
       slots.push({
         expression: node.expression,
@@ -76,18 +100,19 @@ function dynamicSlots(nodes: readonly IrNode[]): DynamicSlot[] {
       });
       continue;
     }
-    if (node.kind !== 'element') continue;
-    for (const attribute of node.attributes) {
-      if (attribute.kind !== 'dynamic-attribute') continue;
-      const updateDriven =
-        attribute.channel !== 'event' && attribute.channel !== 'key' && attribute.channel !== 'ref';
-      slots.push({
-        expression: attribute.expression,
-        tracked: attribute.tracked,
-        span: attribute.span,
-        trackingExpected: updateDriven,
-      });
+    if (node.kind === 'element') {
+      slotsFromAttributes(node.attributes, slots);
+      continue;
     }
+    if (node.kind === 'component-ref') {
+      slotsFromAttributes(node.props, slots);
+    }
+  }
+  for (const recipe of component.recipes) {
+    slotsFromAttributes(
+      recipe.target.kind === 'component-ref' ? recipe.target.props : recipe.target.attributes,
+      slots,
+    );
   }
   return slots;
 }
@@ -194,8 +219,8 @@ function checkAllSpans(
 }
 
 /** A dynamic slot that claims tracking must actually read a reactive source. */
-function checkTrackingClaims(nodes: readonly IrNode[], diagnostics: IrDiagnostic[]): void {
-  for (const slot of dynamicSlots(nodes)) {
+function checkTrackingClaims(component: IrComponent, diagnostics: IrDiagnostic[]): void {
+  for (const slot of dynamicSlots(component)) {
     const reactive = slot.expression.reads.some(
       (read) => read.binding === 'signal' || read.binding === 'computed' || read.binding === 'prop',
     );
@@ -291,6 +316,19 @@ function checkInsertionOwners(component: IrComponent, diagnostics: IrDiagnostic[
             node.span,
           ),
         );
+      }
+      // A list's region owner is that list's own: two lists must not share one.
+      const previousList = ownerUse.get(node.ownerId);
+      if (previousList !== undefined) {
+        diagnostics.push(
+          irDiagnostic(
+            'OEIR_LIST_SHARED_OWNER',
+            `owner '${node.ownerId}' is already used by '${previousList}'`,
+            node.span,
+          ),
+        );
+      } else {
+        ownerUse.set(node.ownerId, node.id);
       }
       continue;
     }
@@ -442,7 +480,7 @@ export function validateSemanticIr(
   const diagnostics: IrDiagnostic[] = [];
   checkAllSpans(component, context, diagnostics);
   checkUniqueIds(component.roots, diagnostics);
-  checkTrackingClaims(component.roots, diagnostics);
+  checkTrackingClaims(component, diagnostics);
   checkOwnerTree(component.owners, diagnostics);
   checkInsertionOwners(component, diagnostics);
   checkLists(component.roots, diagnostics);

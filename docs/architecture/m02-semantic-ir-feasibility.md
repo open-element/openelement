@@ -171,6 +171,17 @@ P2 items also closed: an ordinary-local snapshot test, worked examples for
 `condition` and `children-projection`, and the span documentation now says
 **UTF-16 code units** (TypeScript positions), not bytes.
 
+### M02.2 — final validator completeness (owner review)
+
+| # | Gap | Correction |
+| --- | --- | --- |
+| 1 | `dynamicSlots()` only collected element attributes, so **component-ref props** and **recipe target attributes/props** never had their tracking claim checked | `dynamicSlots(component)` is now the single definition of "dynamic slot": dynamic text, element attributes, component-ref props, and recipe target attributes/props |
+| 2 | A list's region owner was checked for existence but not added to the global owner-use set, so two lists could share one owner | List owners now participate in global uniqueness; a shared list owner is `OEIR_LIST_SHARED_OWNER` |
+
+Both are covered by a positive case (reactive component prop is tracked, literal
+prop is not) and negatives (tracked claim on a component-ref prop, on a recipe
+target prop, and two lists sharing a region owner).
+
 ## 12. Verdict
 
 The IR is **feasible as a shape** and the five examples are expressible. The next

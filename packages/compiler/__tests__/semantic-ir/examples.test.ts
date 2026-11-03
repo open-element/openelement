@@ -369,3 +369,28 @@ describe('M02.1 — admitted syntax that needs a worked example', () => {
     visit(component.roots);
   });
 });
+
+describe('M02.2 — component-ref props carry tracking', () => {
+  test('a reactive component prop is tracked, a literal one is not', () => {
+    const source = `function Panel(props) {
+  return <div><Child value={props.value} fixed={1} /></div>;
+}
+`;
+    const { component, codes } = build(source);
+    expect(errorsOnly(codes)).toEqual([]);
+    const div = firstElement(component.roots);
+    const child = div.children.find((node) => node.kind === 'component-ref');
+    expect(child).toBeDefined();
+    if (child === undefined || child.kind !== 'component-ref')
+      throw new Error('expected component-ref');
+    const props = child.props.filter(
+      (prop): prop is IrDynamicAttribute => prop.kind === 'dynamic-attribute',
+    );
+    const value = props.find((prop) => prop.name === 'value');
+    const fixed = props.find((prop) => prop.name === 'fixed');
+    expect(value!.tracked).toBe(true);
+    expect(value!.expression.kind).toBe('tracked');
+    expect(fixed!.tracked).toBe(false);
+    expect(fixed!.expression.kind).toBe('literal');
+  });
+});
