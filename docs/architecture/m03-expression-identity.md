@@ -180,6 +180,7 @@ const result =
 
 | # | Check |
 | --- | --- |
+| 0 | the prototype must cover, beyond the expression above: **comments**, **operator precedence**, **parentheses**, **nested conditional expressions**, and **template strings** — a mechanism that only survives one shape does not serve the admitted grammar |
 | 1 | both branches of the conditional map back to their authored ranges |
 | 2 | the nested arrow function body maps correctly |
 | 3 | the JSX replacement (recipe reference) maps to the JSX start, not to emitted glue |

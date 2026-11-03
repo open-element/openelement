@@ -67,6 +67,10 @@ type ValueKind = 'signal' | 'computed' | 'prop' | 'plain' | 'unknown';
 /** Where the binding came from. */
 type BindingOrigin =
   | { readonly form: 'local' }
+  /**
+   * ONLY the component's original props parameter. A variable obtained by
+   * destructuring props is 'local' (a snapshot) and must not reuse this form.
+   */
   | { readonly form: 'prop-param' }
   | { readonly form: 'import'; readonly specifier: string; readonly importedName: string | null }
   | { readonly form: 'builtin'; readonly name: string };
@@ -116,7 +120,11 @@ Rules:
 | duplicate `let`/`const` in the same scope | **diagnostic** `OEIR_DUPLICATE_DECLARATION` |
 | `import x` + local `const x` in module scope | **diagnostic** `OEIR_IMPORT_CONFLICT` |
 | parameter + `var` of the same name in the body | one binding (function-scoped var merges into the parameter scope) |
-| class name inside its own body | `class-name` binding visible only inside the class scope |
+| class **declaration** | two bindings: an outer `class` binding in the enclosing scope, plus an inner `class-name` binding visible only inside the class body — so `static create() { return new Counter(); }` resolves to the inner one, and `new Counter()` outside resolves to the outer one |
+| named **class expression** `const Factory = class Internal {}` | `Internal` is a `class-name` binding visible **only** inside the class body; `Factory` is an ordinary `const` |
+| anonymous class expression `const F = class {}` | only the outer `const` binding |
+| class field initializers / static blocks | may reference the inner `class-name` binding; not the outer one if not yet initialized |
+| `extends` clause | evaluated in the **enclosing** scope (the inner name is not in scope for the heritage expression) |
 | namespace / enum merging | **unsupported**, fail closed |
 
 ## 4. Lexical scope semantics (correction B)
@@ -127,8 +135,9 @@ coded diagnostic — silent divergence is the failure mode this section prevents
 | Construct | Required behaviour | If unsupported |
 | --- | --- | --- |
 | `var` | hoisted to the nearest function/module scope; visible before the declaration; no TDZ | — |
-| `let` / `const` | block-scoped; TDZ from block entry to declaration | — |
+| `let` / `const` | block-scoped; TDZ from block entry to declaration | see §4.1 — TDZ is a **runtime** state, not a source-order rule |
 | `catch (e)` | its own scope containing `e` | — |
+| block function declaration (`if (b) { function f(){} }`) | **strict/module semantics: block-scoped**; it does not leak into the enclosing scope. Annex B script hoisting is **not** adopted | — |
 | `for (let i …)` | fresh lexical environment per iteration; closures capture the per-iteration binding | — |
 | `for (const x of …)` / `for…in` | same per-iteration rule | — |
 | `switch` | one block scope shared by all cases | — |
@@ -145,6 +154,29 @@ coded diagnostic — silent divergence is the failure mode this section prevents
 Resolution rule: walk scopes inward-out, nearest declaration wins; a read that
 resolves to nothing is `OEIR_UNRESOLVED_BINDING` with its span — never silently
 treated as a local.
+
+### 4.1 TDZ is a runtime state, not a source-order rule
+
+A resolver must bind names lexically. It must **not** conclude "TDZ error" from the
+fact that a read appears textually before the declaration:
+
+```js
+const read = () => value;   // closure created while `value` is still in TDZ
+let value = 42;             // initialized later
+read();                     // legal: the read happens after initialization
+```
+
+| Situation | Correct behaviour |
+| --- | --- |
+| direct read before initialization, in the same execution pass | keep TDZ behaviour; a static diagnostic is allowed only when the compiler can prove the read executes before initialization |
+| closure created before initialization, invoked after | **legal**; resolves to the same `BindingId`; no diagnostic |
+| closure invoked before initialization | legal to compile; the TDZ error is a **runtime** error, not a compile-time one |
+| execution order not statically determinable | **no static TDZ diagnostic**; never guess from source position |
+
+So the acceptance criterion is not "read before declaration is an error" but
+"bindings resolve lexically, and a TDZ diagnostic is emitted only where the
+compiler can prove the ordering". This matters because the batch-created closure
+pattern above is ordinary JavaScript and must not be rejected.
 
 ### Destructuring (owner decision: JavaScript semantics, option A)
 
@@ -179,6 +211,10 @@ Consequences that follow, and are intentional:
 
 Array patterns and nested patterns follow the same rule: destructuring produces
 snapshots, at any depth.
+
+`BindingOrigin: 'prop-param'` therefore applies **only** to the original props
+object parameter. Every name produced by destructuring it is `form: 'local'`, and
+a destructured name can never inherit the props object's reactive dependency.
 
 ## 5. Captures, reads, dependencies and evaluation mode are four axes (correction C)
 
@@ -267,6 +303,38 @@ Rules:
 | re-export (`export { a } from`) | not a binding in this module; consumers classify through their own specifier |
 | unresolved external import | `unknown` + `classifiedBy: 'unresolved'`; fails closed only where a kind is required |
 
+### 6.1 How classifier results flow into the resolver
+
+The three questions are chained, in this order; nothing is inferred from a name:
+
+```ts
+import * as Runtime from 'runtime';
+const count = Runtime.signal(0);
+```
+
+| Step | Question | Answer source |
+| --- | --- | --- |
+| 1 | what is `Runtime`? | `classifySymbol('runtime', null)` → `namespace` |
+| 2 | what is `Runtime.signal`? | `classifyMember('runtime', 'signal')` → `factory` |
+| 3 | what does calling it produce? | `classifyCall('runtime', 'signal')` → `{ call: 'signal' }` |
+| 4 | what is `count`? | the **call result** fixes `count.valueKind = 'signal'` |
+
+For a direct import the same chain starts at `classifySymbol`:
+
+| Step | Question | Answer source |
+| --- | --- | --- |
+| 1 | what is the imported `signal`? | `classifySymbol('x', 'signal')` → `factory` |
+| 2 | what does calling it produce? | `classifyCall('x', 'signal')` → `{ call: 'signal' }` |
+| 3 | what is `const count = signal(0)`? | `count.valueKind = 'signal'` |
+
+Failure behaviour:
+
+- if `classifyMember` is not implemented by the host, `Runtime.signal` is
+  `unknown`; the call result is `unknown`; `count.valueKind` is `unknown`;
+- `unknown` is only fatal where a kind is **required** (a tracked slot), and there
+  the diagnostic says which specifier/member was unclassified;
+- the resolver never guesses a factory from the name `signal` itself.
+
 No full `ts.Program` is required for this: the classifier is a lookup the host
 provides, exactly like today's intrinsic model. A checker may be consulted for
 advisory diagnostics; its symbols never enter the IR.
@@ -312,7 +380,13 @@ checker advisory only.
 | --- | --- |
 | shadowed local | resolves to the inner binding |
 | `var` hoisting | read before declaration resolves to the same binding |
-| `let` TDZ | read before declaration is a diagnostic, not a silent `undefined` |
+| `let` TDZ, direct read before initialization | keep runtime TDZ; static diagnostic only when the compiler can prove the ordering |
+| closure created before initialization, invoked after | resolves to the same binding; **no diagnostic** |
+| closure invoked before initialization | compiles; TDZ error is runtime, not compile-time |
+| block function declaration | block-scoped; no Annex B leakage |
+| class declaration | outer binding + inner `class-name` binding, both resolve |
+| named class expression | inner name visible only inside the body |
+| destructured props parameter | `local` origin, snapshot, not tracked |
 | destructured props (rename/default/rest) | distinct bindings, **snapshot** semantics; not tracked in JSX |
 | destructured props parameter `function C({a})` | `a` is a snapshot; `{a}` is not tracked; `{props.a}` is |
 | a factory import used as a value (`signal`) | `SymbolRole: 'factory'`, not `ValueKind: 'signal'` |

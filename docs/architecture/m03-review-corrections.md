@@ -24,6 +24,12 @@ after owner review of PR #1706. Documentation only; no implementation.
 | M03R-14 | P2 | Differential oracle compared Route 2 and Route 3 on all expressions, though they lower JSX differently; and "codegen performs zero parsing" was listed as M03-I acceptance | Oracle scope split: erasure-only expressions compared; plain JS by result; JSX/recipes, source maps and context-sensitive syntax verified independently. `codegen zero parsing` moved to **M05** acceptance | M03-B §10 |
 | M03R-15 | P2 | `ResolvedBinding.declaration` could not represent merged declarations | Replaced with `declarations: DeclarationRecord[]`; added `let`+`var`, `function`+`const`/`let`, `class`+`var` conflicts as `OEIR_DECLARATION_CONFLICT` | M03-A §3 |
 | M03R-16 | P2 | Host classifier returned one `ValueKind`, conflating a factory symbol with the value it produces | Split into `classifySymbol` (SymbolRole), `classifyValue` (ValueKind), `classifyCall` (factory result) and optional `classifyMember`; namespace members and re-export classification specified | M03-A §6 |
+| M03R-17 | P1 | TDZ was described as a source-order rule ("read before declaration is a diagnostic") | TDZ is a runtime state: lexical binding always resolves; a static diagnostic only where the compiler can **prove** the read executes before initialization; closures created before and invoked after are legal | M03-A §4.1, §10 |
+| M03R-18 | P2 | Block function declarations were unspecified | Strict/module semantics: block-scoped, no Annex B leakage; unsupported forms fail closed | M03-A §4 |
+| M03R-19 | P2 | Class declarations modelled only the inner `class-name` binding | Three cases specified: class **declaration** (outer + inner), named class expression (inner only), anonymous class expression; heritage evaluated in the enclosing scope | M03-A §4 |
+| M03R-20 | P2 | `prop-param` origin could be reused by destructured names | Origin documented as **only** the original props object parameter; destructured names are `local` and never inherit the props dependency | M03-A §3, §4 |
+| M03R-21 | P2 | Classifier outputs had no defined route into the resolver | Explicit chain: `classifySymbol` → `classifyCall` → call-result `ValueKind` for `count`; `classifyMember` → member role for `Runtime.signal`; `unknown` fails closed only where a kind is required, naming the specifier/member | M03-A §6.1 |
+| M03R-22 | P2 | M1 source-map prototype covered one expression shape | Prototype must also cover comments, operator precedence, parentheses, nested conditional expressions and template strings | M03-B §5 |
 
 ## Deliberately still OPEN
 
@@ -36,6 +42,8 @@ after owner review of PR #1706. Documentation only; no implementation.
 | OPEN-5 | Claim marker protocol | M06–M08 | explicitly out of M03 scope |
 | OPEN-6 | Which source-map mechanism is used (segmented printer / TypeScript emit / position-recording wrapper) | M03-I | the §5 six-check experiment decides it; no route is claimed until then |
 | OPEN-7 | Whether the author contract needs an explicit note that destructured props are snapshots | author-contract owner (docs) | the contract already states it (TSX-03); M03-A now agrees, a cross-reference may still help authors |
+| OPEN-8 | Whether M1's segmented printer can cover the expanded prototype set (comments, precedence, parens, nested conditionals, templates) | M03-I-0 | the prototype decides it; failure routes to M2, then M3 with cross-version evidence |
+| OPEN-9 | Whether namespace-factory call classification is supported in M03-I or deferred | M03-I | the chain is specified (M03-A §6.1); if the host does not implement `classifyMember`, the binding stays `unknown` and fails closed only where a kind is required |
 
 ## What this register does not claim
 
