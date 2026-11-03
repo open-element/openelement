@@ -383,9 +383,15 @@ See [m01-consumer-migration-matrix.md](./m01-consumer-migration-matrix.md) — 2
 consumers, each with file, symbol, access type, target layer, replacement, stage,
 test and retirement condition.
 
-Summary: 6 runtime property consumers, 3 SSR, 2 stream, 4 Router, 2 lexical, 4
-type-only, 2 protocol/public-export, plus fixtures/harness. Every one has a named
-target layer; none is "delete later without a trace".
+The matrix is the single source of these counts; this document does not keep a
+second tally. What it establishes structurally:
+
+- every production consumer has a named target layer;
+- exactly **two** consumers read the emitted module as source text, in two
+  different packages;
+- every proposed ABI field lists a named consumer (the matrix is the authority);
+- fixtures, harnesses and release tooling are classified as supporting evidence,
+  not as protocol consumers.
 
 ## 13. Infrastructure reuse
 
@@ -437,7 +443,9 @@ execution and identity slices in M05–M06, and Alpha16a exits at M08.
 3. Ownership lineage mechanism for cross-owner projection rejection.
 4. Key encoding in the wire for keyed claim alignment.
 5. Where style/scope facts live: ABI or build metadata.
-6. Whether the server keeps its own IR serialization or renders directly.
+6. Whether the server backend generates render functions directly or emits a
+   separate **server-private render plan** — that plan must not be a serialized
+   copy of the Semantic IR (§5.1), and it carries its own lifecycle and version.
 7. Evaluation-count contract for lazy props getters (TSX-28).
 8. Exact boundary between generated update code and retained helpers.
 

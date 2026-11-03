@@ -12,7 +12,7 @@ Rules that govern every row:
 3. Public API removal needs an owner decision; internal removal needs graph
    evidence plus behaviour coverage.
 4. Lit retirement follows ADR-0152 and is never mixed into Alpha16.
-5. Class API removal requires **owner approval** (fourth-pass proposal P-1); the 2026-11-03 D-O3 adapter decision governs until superseded.
+5. The Class authoring API retirement is **approved** (P-1/P-5, 2026-11-03); the earlier D-O3 adapter decision is superseded. No adapter is built and no second authoring path exists.
 
 ## 1. Disposition matrix
 
@@ -85,7 +85,7 @@ release — the work stays internal.
 
 - Full TSX productization, cross-module recipes, frozen generated ABI, public API
   completion, Starter/docs/examples migration;
-- class authoring continues through the adapter.
+- class-authored examples and docs migrate to function components; **no adapter exists**.
 
 Exit: G3 consumer evidence; API freeze decisions.
 
@@ -102,8 +102,10 @@ rollback. Not merged into Alpha16.
 
 ## 3. What must never appear on this roadmap
 
+Each row below is a prohibition on **unqualified** action, not on the approved retirement itself.
+
 - Deleting the Class/decorator API before Alpha16b qualifies its migration (the retirement itself is approved).
-- Deleting the Part Program, its validator or `__partProgram` (D-O2).
+- **Premature** deletion of the Part Program, its validator or `__partProgram` before their consumers are migrated and Alpha16b qualifies. Their retirement is approved policy, not an open question; what this roadmap forbids is deleting them without the evidence.
 - Deleting the JSX type entry or its fail-closed guard.
 - Deleting SSR/DSD, security sinks, Signals or `LifetimeScope` for size reasons.
 - Removing a public subpath without a deprecation decision.

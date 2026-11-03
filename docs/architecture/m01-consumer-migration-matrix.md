@@ -46,11 +46,13 @@ The table is an **audit ledger**, not a list of 23 direct Part Program consumers
 It contains three kinds of entry, and reading them as one class is what produces
 false "23 consumers to migrate" statements:
 
-| Kind | Rows | Meaning |
-| --- | --- | --- |
-| **Direct protocol consumers** | C01–C13, C19, C20 (16 rows) | read the emitted program, the schema, the validator or the public export |
-| **Type-only consumers** | C11, C14, C15, C17, C18 (5 rows, overlapping C11 with the above) | depend on the *types*; they follow the ABI rather than migrate independently |
-| **Supporting evidence** | **C16, C21, C22, C23** (4 rows) | do **not** consume the protocol; they constrain how retirement may be done |
+| Kind | Rows | Count | Meaning |
+| --- | --- | --- | --- |
+| **Direct protocol/schema/export audit rows** | C01–C13, C19, C20 | **15** | read the emitted program, the schema, the validator or the public export |
+| **Type-only rows** | C14, C15, C17, C18 (+ C11, already counted above) | **5** (1 overlaps the previous row) | depend on the *types*; they follow the ABI rather than migrate independently |
+| **Supporting evidence** | C16, C21, C22, C23 | **4** | do **not** consume the protocol; they constrain how retirement may be done |
+
+Arithmetic that must hold: 15 + 4 + (type-only rows not already counted: C14, C15, C17, C18 = 4) = **23**. The single type-only row that overlaps the direct group is **C11**, which appears in both lists by design.
 
 Two rows were previously misclassified and are corrected:
 
@@ -76,9 +78,9 @@ consumer. The counts below count *rows per theme*, so they sum past 23 by design
 | Tests / fixtures / harness | C21, C22 | supporting evidence |
 | Release infrastructure | C23 | supporting evidence |
 
-Counts that are safe to quote: **2 lexical consumers**, **16 files that read the
-protocol/schema/export**, **5 supporting-evidence rows**, **0 unmapped production
-consumers**.
+Counts that are safe to quote: **2 lexical consumers**, **15 direct protocol/schema/export
+audit rows**, **5 type-only rows (1 overlapping)**, **4 supporting-evidence rows**,
+**23 ledger rows**, **0 unmapped production consumers**.
 
 ## Blocking pairs
 

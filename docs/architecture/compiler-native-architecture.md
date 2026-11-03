@@ -141,13 +141,22 @@ Binding consequences:
   [the current-reality audit](./alpha16-18-current-reality.md) and
   [the cleanup inventory](./alpha16-18-cleanup-inventory.md).
 
-### 4.2 One generated backend
+### 4.2 One client execution backend, independent server rendering backend
 
-Class and function components share: the semantic model, identity and ownership
-semantics, signals, the generated execution shape, SSR serialization path, and
-the ABI. There is exactly one authoring frontend going forward (functions); the
-class frontend is a migration-path input that retires in Alpha16b, not a parallel
-adapter design. Two execution backends are out of scope permanently.
+There is exactly **one client execution backend** for the component model: one
+semantic model, one ownership/identity model, one signals engine, one generated
+execution shape, one ABI.
+
+There is exactly **one independent server rendering backend**, producing HTML/DSD
+from the same semantic model. It is not a variant of the client backend and does
+not share an execution protocol with it.
+
+- **Two client execution backends are prohibited.** A second renderer, or a
+  legacy client path kept alive for compatibility, is out of scope permanently.
+- **The independent server rendering backend remains valid and necessary.** Its
+  existence is not a violation of P5.
+- There is one authoring frontend going forward (functions); the class frontend
+  is a migration input that retires in Alpha16b, not a parallel adapter design.
 
 ### 4.2a Alpha16a / Alpha16b release split (owner-approved D-O1)
 
@@ -249,7 +258,7 @@ Bounded defer, cancellation and streamed regions are **Alpha18**, not this.
 Ordinary `await` and deferred regions are different capabilities and must not be
 conflated in planning or tests.
 
-### 4.7 Class authoring — current fact and proposal
+### 4.7 Class authoring — current fact and approved retirement
 
 **CURRENT FACT:** the only shipping authoring path is the decorated class
 (`@element`, `class X extends OpenElement`); 219 in-tree files use it.
@@ -257,9 +266,10 @@ conflated in planning or tests.
 **APPROVED (2026-11-03, fourth pass):** retire the public Class/Decorator
 authoring API and do **not** build a compatibility adapter. Keep native Custom
 Elements as the public platform boundary, and keep an internal generated class
-where the platform requires an element. Authors would no longer extend
-`OpenElement`; whether that symbol remains author-facing is an implementation
-question.
+where the platform requires an element. Authors no longer extend
+`OpenElement`; whether a **non-authoring** export of that symbol is still needed (internal
+use, tooling, or nothing at all) is an implementation question — it is no longer
+an author-facing API either way.
 
 **SUPERSEDED HISTORY (2026-11-03 D-O3):** the earlier decision was a long-lived
 adapter. It is superseded by the approved fourth pass and retained as history; the

@@ -65,6 +65,23 @@ parallel path — it retires in Alpha16b.
 that may happen as soon as a generated artifact can be packed. Alpha16a still
 completes on M01–M08 alone; do not lower it to "whatever M10a proved".
 
+## 1a. M02 acceptance — Semantic IR feasibility
+
+Owner-set scope (2026-11-03): M02 proves the IR can **express** the five approved
+worked examples. It does not implement SSR or claim.
+
+| # | Criterion |
+| --- | --- |
+| 1 | All five examples have explicit semantic test cases. |
+| 2 | The first four (static hostless, signals-driven, keyed list, reusable JSX value) are covered by IR unit tests. |
+| 3 | The fifth (SSR → DSD → Claim) is verified only as **IR expressiveness of the same stateful list**; end-to-end SSR/claim belongs to M06–M08, and the claim marker protocol stays OPEN in M02. |
+| 4 | Every newly admitted syntax ships positive **and** negative tests. |
+| 5 | Source span, diagnostics, identity and ownership information are asserted, not assumed. |
+| 6 | No VNode, no generic interpreter, no second JavaScript AST. |
+
+A pass at M02 is design-feasibility evidence. It is **not** G1, not G2, and not an
+Alpha16a exit.
+
 ## 2. Alpha16b — retirement and Alpha16 release qualification
 
 Alpha16b is the only route to a formal Alpha16 release.
