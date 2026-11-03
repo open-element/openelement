@@ -39,7 +39,7 @@ ship two execution models.
 | --- | --- | --- | --- | --- |
 | M01 | Semantic IR / layer boundary decision (IR · Part Program · emitted field · module ABI · wire) | A | — | recorded layer map consistent with the canonical doc |
 | M02 | Alpha16 TSX foundation grammar admission (fragments, multi-root, value-position JSX, inline tracked expressions) | I | M01 | admitted cases with source-located diagnostics and negatives in the same change |
-| M03 | Function component frontend adapter | I | M02 | same diagnostics/spans/security as the class lane |
+| M03 | Function component frontend (the only long-term frontend; class frontend retires in 16b) | I | M02 | diagnostics / Source Map / security parity with the Alpha15 **baseline** |
 | M04 | Runtime ownership + recipe primitives (insertion owner, tracked props, lineage check) | P→I | M01 | G2 on two insertions, keyed replacement, disposal modes |
 | M05 | Generated leaf mount / update / dispose | I | M03, M04 | G1: generated code actually executes in a browser |
 | M06 | Stateful hostless list on the generated path | I | M05 | identity, private draft, keyed reorder, conditions, multi/empty root |
@@ -109,7 +109,7 @@ M01 → M02 → M03 ─┐
 - **Spine:** M01 → M02 → M04 → M05 → M06 → M08 → M11 → M12/M13.
 - M03 is on the spine in practice: M05 cannot be produced without the function
   adapter, so it is not parallel with M05.
-- **Genuinely parallel:** M07 (leaf claim) and M09 (class adapter) both need only
+- **Genuinely parallel:** M07 (leaf claim) and M09 (generated Native CE boundary) both need only
   M05; M10a starts the moment a generated artifact can be packed; security and
   output-separation work is independent of all of the above.
 - **M10 cannot start before M05–M09** — reachability evidence for a replacement

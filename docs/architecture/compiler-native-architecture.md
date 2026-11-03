@@ -72,8 +72,9 @@ condition.
 
 ### P5 — One generated backend
 
-Class authoring and function authoring may have different frontend adapters, but
-they converge on **one** generated execution backend. A permanent
+Function authoring is the **only** long-term frontend; the class frontend retires
+in Alpha16b (approved P-1). Both never-the-less converge on **one** generated
+execution backend. A permanent
 `class → old Part runtime` plus `function → new runtime` split would be two
 frameworks and is prohibited. Retiring the class authoring API later is a
 separate product decision with its own evidence.
@@ -135,9 +136,9 @@ Binding consequences:
 
 Class and function components share: the semantic model, identity and ownership
 semantics, signals, the generated execution shape, SSR serialization path, and
-the ABI. They may differ in their **frontend adapter** (decorated class vs
-function) and in authoring-visible sugar. Two execution backends are out of
-scope permanently.
+the ABI. There is exactly one authoring frontend going forward (functions); the
+class frontend is a migration-path input that retires in Alpha16b, not a parallel
+adapter design. Two execution backends are out of scope permanently.
 
 ### 4.2a Alpha16a / Alpha16b release split (owner-approved D-O1)
 

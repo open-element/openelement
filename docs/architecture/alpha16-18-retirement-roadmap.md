@@ -25,7 +25,7 @@ Rules that govern every row:
 | Signals (`@preact/signals-core` + internal contract) | dependency | everything | **KEEP** | — | — | signal tests | permanent |
 | Part Program v2 + validator | protocol + public export | runtime, SSR, Router, build, tests | **RETIRE (approved)** as serialized browser protocol | compiler IR + narrow ABI | per-consumer migration complete; M10 evidence | consumer map + M10 | Alpha16b |
 | `__partProgram` emitted field | generated ABI | see consumer map | **REMOVE (approved)** from target contract | narrow generated ABI | every consumer migrated; ABI designed in M01 | M01 + M10 | Alpha16b |
-| `PART_PROGRAM_VERSION` | ABI stamp | generated modules, stream identity | **KEEP** | — | — | mismatch tests | — |
+| `PART_PROGRAM_VERSION` | ABI stamp | generated modules, stream identity | **RETIRE (approved P-4)** | new ABI version constant | schema retirement + new ABI version exists | mismatch tests | Alpha16b |
 | `COMPILED_MODULE_ABI_VERSION` v2 | ABI stamp | generated modules, facade | **KEEP, versioned separately from the future ABI** | new ABI gets its own number | no freeze before consumer evidence | abi mismatch tests | Alpha17 |
 | Generic browser executor: `fresh-dom.ts` walker | internal | kernel connect (fresh) | **RETIRE AFTER QUALIFICATION** | generated mount | M10 unreachability + full behaviour coverage | M10, M13 | Alpha16b |
 | Part dispatch helpers in `parts.ts` | internal | fresh-dom, hydrate | **REFACTOR** — split generated operations from retained helpers | generated code + small helpers | per-helper retirement condition | per-part regression | Alpha16b |

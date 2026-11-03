@@ -714,3 +714,24 @@ spelling the legacy artifact path names.
 Consumer form: `packages/element/__tests__/compiled-server/memory-sheet-policy.test.ts`
 (the inline text with no `<link>`, the URL-carrying boundary sheet that is linked
 and never inlined, and the unreadable sheet's report).
+
+## Amendment (2026-11-03): the CSS-parser claim is stale
+
+The 2026-10 text above says this toolchain "ships no CSS parser the router may
+resolve (postcss, lightningcss and css-tree are all unresolvable from
+`@openelement/router`)". That is no longer true and is corrected here without
+rewriting the historical paragraph:
+
+- `@openelement/router` declares `postcss` and `postcss-value-parser` as
+  direct dependencies (`packages/router/package.json`).
+- `packages/router/src/vite/internal/light-css-scope.ts:69` imports `postcss`.
+- `packages/router/src/vite/internal/providers/unocss.ts:80` resolves
+  `postcss-value-parser`.
+
+What remains accurate: the scoping transform is still a hand-written string/
+comment/escape-aware scan, not an AST pass, and `light-css-scope.ts` remains the
+single seam to swap if an AST pass is adopted. The retirement condition is
+unchanged; only its stated premise was wrong.
+
+Lesson for M01: a "we cannot resolve X" claim must be re-verified against the
+manifest before it is used to justify a hand-written implementation.
