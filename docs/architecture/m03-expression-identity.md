@@ -131,7 +131,7 @@ A sidecar keyed by `ExprId` is chosen over embedding the record in the IR node s
 that a component graph can be inspected without dragging lowered code along, and
 so the registry can be dropped as soon as codegen is done.
 
-## 5. Correction B — source maps
+## 5. Correction B — source maps (mechanism UNVERIFIED, experiment required)
 
 Three coordinate spaces exist and must not be confused:
 
@@ -140,26 +140,56 @@ authored TSX  ──(transform)──►  lowered JS  ──(codegen placement)�
    span                            offsets                                line/col
 ```
 
-- While printing, the compiler walks the transformed tree node by node and
-  records `(generatedOffset, authoredSpan)` pairs. This is a **segmented
-  print**, not a call into printer internals: `printNode` is public, and offsets
-  are accumulated by the caller.
-- The registry stores `mapSegments` in the same convention the existing
-  `SourceMapSegmentBuilder` consumes (`EmissionSegment`: 1-based generated line,
-  0-based generated column, 1-based source line, 0-based source column).
-- Codegen rebases those segments by the offset at which it placed the lowered
-  text, then hands the accumulated segments to the existing builder. There is one
-  source (the authored module), so the source index stays 0, as today.
-- **Alpha15 parity check:** the existing Part Program path emits Source Map v3
-  through the same builder; M03-I must prove that a generated module built by the
-  new route maps an error inside an expression back to the authored line/column
-  with the same fidelity the current path achieves.
+**What is settled:**
 
-Nested JSX inside an expression complicates provenance: the JSX node is replaced
-by a recipe reference, so its own interior spans belong to the **recipe**, not to
-the expression's lowered text. The replacement node therefore carries the original
-JSX span via `setTextRange`, and the segments point at the JSX's start; the
-recipe keeps its own full span (M02 already records it).
+- Segments must be expressed in the existing `SourceMapSegmentBuilder` convention
+  (`EmissionSegment`: 1-based generated line, 0-based generated column, 1-based
+  source line, 0-based source column), because that is what the Alpha15 path
+  already produces and what codegen already composes.
+- Codegen rebases segment offsets by the placement offset; segments are never
+  recomputed downstream.
+- Nested JSX: the replacement node keeps the original JSX range
+  (`setTextRange`), so its provenance points at the JSX, not at the recipe's
+  interior. M02 already records the recipe's own span.
+
+**What is NOT settled, and must not be presented as designed:**
+
+`printer.printNode(hint, node, sourceFile)` returns a **string**. It does not hand
+back per-child output offsets. `setTextRange` preserves *authored* positions; it
+produces no generated offsets. So the sentence "walk the tree and record
+(generatedOffset, authoredSpan)" describes an intention, not a mechanism. How the
+generated offset of each nested sub-expression is obtained is **open**.
+
+Candidate mechanisms, all requiring prototype evidence in M03-I:
+
+| Mechanism | How offsets arise | Cost / risk |
+| --- | --- | --- |
+| **M1 — segmented printer** | print each sub-node separately and concatenate, accumulating offsets as you go; syntax glue (operators, parens, commas) is emitted by the caller | deterministic and public-API only; the caller becomes responsible for correct glue, which is where bugs hide |
+| **M2 — TypeScript emit source maps** | let `program.emit` (or a transform-then-emit route) produce the map from the same `SourceFile` | accurate and battle-tested; requires a program, which is the constraint Route 3 exists to avoid |
+| **M3 — position-recording printer wrapper** | wrap/replace printer handlers (`PrintHandlers`) to observe each node's emitted range | relies on printer handler behaviour that TypeScript documents thinly; acceptable only if M1 fails and the wrapper is proven stable across the pinned version |
+
+**Required experiment before M03-I implementation claims anything.** Compile this
+exact expression through the chosen mechanism and verify six things:
+
+```tsx
+const result =
+  props.enabled
+    ? props.items.map(item => <Row value={item.value} />)
+    : <Fallback />;
+```
+
+| # | Check |
+| --- | --- |
+| 1 | both branches of the conditional map back to their authored ranges |
+| 2 | the nested arrow function body maps correctly |
+| 3 | the JSX replacement (recipe reference) maps to the JSX start, not to emitted glue |
+| 4 | operators and parentheses do not shift or swallow neighbouring segments |
+| 5 | an error thrown at each of several positions inside the lowered text maps to the right authored line/column |
+| 6 | after codegen rebasing, the final generated module's map still points at the authored TSX |
+
+If M1 cannot produce reliable segments, the design must switch to M2 (accept a
+program for emit) or justify M3 with evidence. **Route 3 is still preferred, but
+its source-map half is a hypothesis, not a result.**
 
 ## 6. Correction E — nested JSX and evaluation order
 
@@ -216,29 +246,48 @@ Context-sensitive expressions fail closed:
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Erasure visitor incomplete for admitted syntax | invalid JS emitted | differential oracle vs `transpileModule` on the corpus (evaluate both, compare behaviour and syntax validity) |
+| Erasure visitor incomplete for admitted syntax | invalid JS emitted | differential oracle vs `transpileModule` **on erasure-only expressions**; JSX and source maps verified independently (§10) |
 | Printer output churn across TypeScript versions | generated diffs churn | record `typescriptVersion` in the registry; treat a bump as a visible invalidation and re-run the oracle |
 | Capture list incomplete | generated closure references an unknown name | captures come from M03-A's resolver, not text scanning; a missing capture fails resolution |
 | Segmented print drifts from printed text | wrong source maps | segments are recorded from the same walk that produces the text, never recomputed |
 | Registry grows into a wire format | IR shipped to browser | hard rule: registry is compiler-private, per compilation |
 | Nested JSX ordering bug | wrong evaluation order | replacement is a 1:1 node substitution at the same position; tests assert order |
 
-## 10. Acceptance matrix (M03-I)
+## 10. Acceptance matrix
+
+### M03-I (frontend, no codegen)
 
 | Case | Expected |
 | --- | --- |
-| `value as number` | lowered text is `value`; valid JS |
+| `value as number` | lowered text is `value`; output parses as valid JavaScript |
 | `value!` / `fn<string>(x)` / `x satisfies T` | erasures applied |
 | nested arrow with annotations | erasures applied inside the body |
 | `props.items.filter(i => i.active)` | text preserved; captures = `props` |
-| `<Row item={x}/>` inside a ternary | recipe reference; no JSX in text; evaluation order preserved |
 | two expressions, same text | two `ExprId`s, two records (site identity) |
-| codegen | performs **zero** parsing; only concatenation + segment rebasing |
-| source map | an exception inside the expression maps to the authored span |
-| AST release | after compile, no `ts.Node` reachable from IR or registry |
+| registry output | parses as JavaScript (syntax check), no `ts.Node` retained, no JSX in text |
 | determinism | two compilations produce byte-identical lowered text |
-| differential oracle | every admitted expression form evaluates identically through Route 3 and Route 2 |
+| source map (mechanism experiment, §5) | the six checks above pass |
 | unsupported context (`this`, `arguments`, …) | coded diagnostic, no emission |
+
+**Moved out of M03-I:** "codegen performs zero parsing" is an **M05** acceptance
+criterion. M03-I can only prove the registry contains valid JS and no AST; the
+codegen that consumes it does not exist yet.
+
+### Differential oracle scope (Route 2 is not the semantic reference)
+
+Route 2 and Route 3 do not process JSX the same way, so comparing their final
+output would be meaningless. The oracle is split:
+
+| Aspect | How it is verified |
+| --- | --- |
+| TypeScript syntax erasure | Route 2 vs Route 3 on **erasure-only** expressions (no JSX, no recipes) — text or evaluation parity |
+| ordinary JavaScript expressions | evaluate both routes and compare results |
+| nested JSX / recipes | **independent** verification of recipe substitution and evaluation order (no Route 2 comparison) |
+| source maps | independent verification of authored-position mapping |
+| context-sensitive syntax | independent verification of the diagnostic code and fail-closed behaviour |
+
+Route 2 is an oracle for **TypeScript's erasure**, not for OpenElement's
+semantics.
 
 ## 11. Milestone alignment
 

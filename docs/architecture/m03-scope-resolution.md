@@ -71,12 +71,21 @@ type BindingOrigin =
   | { readonly form: 'import'; readonly specifier: string; readonly importedName: string | null }
   | { readonly form: 'builtin'; readonly name: string };
 
+/** One syntactic declaration contributing to a binding. */
+interface DeclarationRecord {
+  readonly kind: DeclarationKind;
+  readonly span: IrSpan;
+  /** True when this record is the one that carries the initializer/value. */
+  readonly initializing: boolean;
+}
+
 interface ResolvedBinding {
   readonly id: BindingId;
-  readonly declaration: DeclarationKind;
+  /** Every declaration that merged into this binding — never a single kind. */
+  readonly declarations: readonly DeclarationRecord[];
   readonly value: ValueKind;
   readonly origin: BindingOrigin;
-  /** Authored declaration site, for diagnostics. */
+  /** Authored declaration sites, for diagnostics (first is the canonical one). */
   readonly declarationSpan: IrSpan;
   /** Classification provenance: syntax-derived or host-supplied. */
   readonly classifiedBy: 'syntax' | 'host-classifier' | 'unresolved';
@@ -97,7 +106,12 @@ Rules:
 | --- | --- |
 | `var x` twice in one function scope | one binding, `declarationOrder` 0; second declaration is the same identity |
 | `function f` twice (overloads) | one binding; signatures merge, implementations must be one |
-| `var` + `function` same name in one scope | one binding (both are function-scoped) |
+| `var` + `function` same name in one scope | one binding; two `DeclarationRecord`s |
+| `parameter` + `var` same name | one binding; parameter and var records both retained |
+| `let`/`const` + `var` same name in one scope | **diagnostic** `OEIR_DECLARATION_CONFLICT` |
+| `function` + `const`/`let` same name | **diagnostic** `OEIR_DECLARATION_CONFLICT` |
+| `class` + `var` same name | **diagnostic** `OEIR_DECLARATION_CONFLICT` |
+| two `function` declarations (overloads) | one binding, multiple `DeclarationRecord`s |
 | `let`/`const` shadowing an outer name | new binding in the inner scope; outer untouched |
 | duplicate `let`/`const` in the same scope | **diagnostic** `OEIR_DUPLICATE_DECLARATION` |
 | `import x` + local `const x` in module scope | **diagnostic** `OEIR_IMPORT_CONFLICT` |
@@ -132,13 +146,39 @@ Resolution rule: walk scopes inward-out, nearest declaration wins; a read that
 resolves to nothing is `OEIR_UNRESOLVED_BINDING` with its span — never silently
 treated as a local.
 
-### Destructuring
+### Destructuring (owner decision: JavaScript semantics, option A)
 
 `const { a, b: renamed, c = 1, ...rest } = props` declares `a`, `renamed`, `c`,
-`rest`; each is an ordinary local (snapshot), consistent with TSX-03. Array
-patterns and nested patterns follow the same rule. A destructured **props
-parameter** (`function C({ a, b })`) declares `a`/`b` with `origin: prop-param`,
-and reading them in a tracked position keeps prop semantics.
+`rest`; **each is an ordinary local snapshot**, consistent with TSX-03.
+
+A destructured **props parameter** is the same operation, so it has the same
+semantics:
+
+```tsx
+function C({ a, b }) { return <p>{a}/{b}</p>; }
+```
+
+`a` and `b` are **snapshots taken once during setup**. Reading them in a JSX slot
+is *not* a tracked prop read, and a parent update does not change them. Only a
+direct property read on the props object (`props.a`) is a tracked prop read.
+
+This is deliberately less convenient than a reactive props proxy, and it is
+required: the approved author contract promises ordinary JavaScript semantics for
+destructuring. A resolver must not quietly upgrade a snapshot to a subscription in
+order to make its own bookkeeping easier.
+
+Consequences that follow, and are intentional:
+
+- `function C({ a })` components do not re-render on prop change; the author must
+  read `props.a` (or take the value via a signal) to get tracking.
+- Diagnostics do not "helpfully" treat a destructured prop as reactive. If an
+  author destructures and then expects updates, the failure is visible, not
+  silently patched.
+- If the project later wants reactive destructuring, that is a new **author-facing
+  semantic** requiring an approved contract change, not a resolver detail.
+
+Array patterns and nested patterns follow the same rule: destructuring produces
+snapshots, at any depth.
 
 ## 5. Captures, reads, dependencies and evaluation mode are four axes (correction C)
 
@@ -175,16 +215,44 @@ The intrinsic resolver is an **import-provenance mechanism for one package's
 compile-time intrinsics**; it is not a general binding classifier. The general
 contract is host-supplied:
 
+The classifier must not answer one question, because there are three different
+ones. A factory (`signal`) and the value it produces (`count`) must not share a
+kind:
+
 ```ts
+/** What the imported symbol *is* — a role, not a value category. */
+type SymbolRole = 'factory' | 'value' | 'type' | 'namespace' | 'unknown';
+
+/** What a binding's value *is*, once it exists. */
+type ValueKind = 'signal' | 'computed' | 'prop' | 'plain' | 'unknown';
+
+/** What calling a factory produces, when the host knows it. */
+interface FactoryResult {
+  readonly call: 'signal' | 'computed' | 'unknown';
+}
+
 interface ImportClassifier {
-  /**
-   * Called once per imported binding, after alias resolution.
-   * Returning `undefined` means "not classified" — the binding becomes `unknown`
-   * and only fails closed if it is read in a position that requires a kind.
-   */
-  classify(moduleSpecifier: string, importedName: string | null): ValueKind | undefined;
+  /** Role of the imported symbol (alias already resolved). */
+  classifySymbol(moduleSpecifier: string, importedName: string | null): SymbolRole | undefined;
+  /** Value kind of the binding, when the host knows it directly. */
+  classifyValue(moduleSpecifier: string, importedName: string | null): ValueKind | undefined;
+  /** Result kind of a factory call, when the host knows it. */
+  classifyCall(moduleSpecifier: string, importedName: string | null): FactoryResult | undefined;
+  /** Optional: classify a namespace member (`ns.x`). */
+  classifyMember?(moduleSpecifier: string, memberName: string): SymbolRole | undefined;
 }
 ```
+
+Rules that follow:
+
+| Situation | Resolution |
+| --- | --- |
+| `import { signal } from 'x'` → `signal` | `SymbolRole: 'factory'`; **not** `ValueKind: 'signal'` |
+| `const count = signal(0)` | binding `count` gets `ValueKind: 'signal'` **from the call result**, not from the import |
+| `import { count } from 'x'` where `x` exports an instance | `SymbolRole: 'value'` + `classifyValue` may say `'signal'` |
+| `import * as ns` then `ns.x` | `classifyMember` may classify the member; otherwise `unknown` |
+| re-export in an intermediate module | the classifier is asked about the **final specifier the author wrote**; re-export chains are the host's business, not the resolver's |
+| nothing classified | `unknown` + `classifiedBy: 'unresolved'`, fails closed only where a kind is required |
 
 Rules:
 
@@ -245,7 +313,14 @@ checker advisory only.
 | shadowed local | resolves to the inner binding |
 | `var` hoisting | read before declaration resolves to the same binding |
 | `let` TDZ | read before declaration is a diagnostic, not a silent `undefined` |
-| destructured props (rename/default/rest) | distinct bindings, prop-param origin |
+| destructured props (rename/default/rest) | distinct bindings, **snapshot** semantics; not tracked in JSX |
+| destructured props parameter `function C({a})` | `a` is a snapshot; `{a}` is not tracked; `{props.a}` is |
+| a factory import used as a value (`signal`) | `SymbolRole: 'factory'`, not `ValueKind: 'signal'` |
+| a call whose result is a signal (`const c = signal(0)`) | binding `c` is `ValueKind: 'signal'` |
+| `let x` + `var x` same scope | `OEIR_DECLARATION_CONFLICT` |
+| `function f` + `const f` | `OEIR_DECLARATION_CONFLICT` |
+| `class C` + `var C` | `OEIR_DECLARATION_CONFLICT` |
+| `var`/`function` merge | one binding, two declaration records retained |
 | array destructuring | distinct bindings |
 | `for (let i…)` closure | captures the per-iteration binding |
 | catch parameter | own scope |
