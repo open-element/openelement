@@ -164,7 +164,8 @@ model and one generated execution backend — ownership, identity, Signals, upda
 and disposal — and the adapter is compatibility infrastructure, not a parallel
 execution architecture or a second renderer. No forced deprecation or deletion
 version is scheduled; a future retirement would be a separate product decision
-requiring real consumer evidence.
+requiring real consumer evidence. *(Superseded 2026-11-03 by the fourth-pass
+amendment below: the authoring API is retired and no adapter is built.)*
 
 The reusable-JSX-value and repeatable-Children amendment above remains
 authoritative: repeated consumption creates independent instances unless an

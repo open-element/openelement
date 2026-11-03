@@ -55,12 +55,13 @@ unchanged, and shipping both execution paths as a release does not qualify.
 Alpha17 owns Full TSX productization, public composition APIs, cross-module
 recipes, precompiled consumers and Starter/app migration. Alpha18 owns bounded
 component defer only on a stable foundation; arbitrary Promises and unbounded
-nesting are not admitted. The Class API was retained through a long-lived compatibility adapter on the
-shared backend (D-O3, approved 2026-11-03). **The fourth pass, approved 2026-11-03, retires the authoring API** instead and
-builds no compatibility adapter; native Custom Elements and an internal generated
-class are kept; see
-[the reassessment](./alpha16-18-fourth-pass-reassessment.md). It never permits two
-execution architectures. These
+nesting are not admitted. The Class API was to be retained through a long-lived compatibility adapter (D-O3,
+2026-11-03) — **superseded**: the fourth-pass package (approved 2026-11-03)
+**retires the authoring API and builds no compatibility adapter**, and
+`OpenElement` is no longer an author-facing base class. Native Custom Elements and
+an internal generated class are kept; see
+[the reassessment](./alpha16-18-fourth-pass-reassessment.md). Two execution
+architectures are never permitted. These
 are gated milestones, not dates or assertions of implementation. Preserve G1 (real codegen
 slice), G2 (identity/owner before related expansion), G3 (author and independent
 consumer proof before public API/default Starter). Historical direction blogs

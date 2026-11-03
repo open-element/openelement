@@ -70,14 +70,23 @@ range helpers, scheduling, and platform interop. Every retained runtime
 responsibility needs an owner, a scope, a behaviour test and a retirement
 condition.
 
-### P5 — One generated backend
+### P5 — One client execution backend, one independent server rendering backend
 
 Function authoring is the **only** long-term frontend; the class frontend retires
-in Alpha16b (approved P-1). Both never-the-less converge on **one** generated
-execution backend. A permanent
-`class → old Part runtime` plus `function → new runtime` split would be two
-frameworks and is prohibited. Retiring the class authoring API later is a
-separate product decision with its own evidence.
+in Alpha16b (approved P-1) and **no compatibility adapter is built** (approved
+P-5).
+
+There is **one client execution backend** for the component model: one semantic
+model, one ownership/identity model, one signals engine, one generated execution
+shape, one ABI. There is **one independent server rendering backend** producing
+HTML/DSD from the same semantic model.
+
+The two backends share **semantic ownership, not a common execution protocol**:
+no shared serialized program, no shared interpreter, and no requirement that the
+server executes client-generated code (or the reverse).
+
+A second client execution backend — a second renderer, or a legacy path kept
+alive for compatibility — is prohibited permanently.
 
 ## 3. Responsibility split
 
@@ -150,9 +159,9 @@ public version, tag, publication, or default-Starter promise follows from it,
 and it is not permission to ship two execution models.
 
 **Alpha16b — Alpha16 release qualification.** Complete migration of all required
-browser execution capabilities, generated mount/update/claim/disposal, the class
-adapter on the shared backend, Router integration, packed-consumer qualification
-and browser/server qualification; prove the old generic browser executor is
+browser execution capabilities, generated mount/update/claim/disposal, retirement
+of the class frontend (no adapter is built), Router integration, packed-consumer
+qualification and browser/server qualification; prove the old generic browser executor is
 unreachable from every applicable production browser entry graph; complete
 behavioural coverage for migrated capabilities.
 
@@ -257,8 +266,19 @@ adapter. It is superseded by the approved fourth pass and retained as history; t
 cost evidence behind the change is in
 [the reassessment](./alpha16-18-fourth-pass-reassessment.md) §2.
 
-Whichever way this is decided, the constraint that does not move: **one semantic
-model and one generated backend**, never two execution architectures.
+The approved decision is made, so the statement is unconditional:
+
+- `OpenElement` is **no longer an author-facing class base**. Authors do not
+  extend it and do not write `render()`.
+- The compiler may still emit an internal class extending a framework-internal
+  base where the platform requires an element (island root, registration, native
+  interop). That internal base is not a public authoring API.
+- No compatibility adapter exists, so there is no class authoring path to keep
+  honest and no second frontend to test.
+
+The constraint that does not move: **one semantic model and one generated client
+execution backend**, plus one independent server rendering backend, never two
+execution architectures.
 
 ### 4.8 Lit retirement is a separate track
 

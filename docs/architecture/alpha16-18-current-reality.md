@@ -279,11 +279,11 @@ The 2026-11-03 D-O3 decision (long-lived Class API adapter) is **superseded** by
 the approved fourth-pass package: the Class/Decorator authoring API is retired and
 no compatibility adapter is built. The old record remains above as history.
 
-Class and function authoring share one semantic model and one generated backend
-(ownership, identity, signals, update, disposal). The adapter is compatibility
-infrastructure, not a parallel execution architecture. No forced deprecation or
-deletion version is scheduled; a future retirement would be a separate product
-decision with real consumer evidence.
+*(Historical text of the superseded record, retained verbatim above.)* Class and
+function authoring were to share one semantic model and one generated backend,
+with the adapter treated as compatibility infrastructure. That decision no longer
+governs: the fourth-pass package **retires the Class authoring API and builds no
+adapter**, and `OpenElement` is no longer an author-facing base class.
 
 ## F. Remaining OPEN engineering details
 

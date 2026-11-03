@@ -80,16 +80,23 @@ Required before release:
 5. independent packed-consumer qualification (M12);
 6. browser and server qualification (M13);
 7. **graph evidence that the old generic browser executor is unreachable from
-   every applicable production browser entry graph** (M10);
+   every applicable production browser entry graph** (M10, proof 1 of 5);
 8. behavioural coverage for every migrated capability.
 
-**The ADR-0174 hard gate is unchanged.** If the old generic browser executor is
-still reachable in a production browser entry graph, Alpha16 does **not**
-qualify. Shipping both execution paths as a release is not an option.
+**Two different obligations, often confused.** The ADR-0174 hard gate and the
+approved retirement policy are not the same requirement, and neither substitutes
+for the other:
 
-The gate concerns the old generic **browser execution path**. It does not require
-deleting the Part Program artifact, its validator, the emitted field, tag/version
-metadata, the server serializer, or streaming program data.
+| Obligation | Scope | Failure consequence |
+| --- | --- | --- |
+| **ADR-0174 release gate** | the old generic **browser executor** must be unreachable from every applicable production browser entry graph | Alpha16 does not qualify for release |
+| **Approved retirement policy (P-2/P-3/P-4)** | Part Program v2 as a shared serialized browser protocol, `validatePartProgram`, `PART_PROGRAM_VERSION` and `__partProgram` are retired **from the target production contract**; the narrow ABI replaces them | the retirement is incomplete; the ABI work is unfinished |
+| **Five M10 proofs** | browser runtime · server runtime · build/SSG · ABI/module contract · public API | any missing proof means M10 is not met |
+
+What retirement **does not** mean: deleting the server's private rendering
+structure, the SSR serializer, streaming data, DSD, claim markers, security sinks
+or any server-side semantic capability. The server keeps its own structure; it
+simply is not the old shared protocol and is not shipped to the browser.
 
 **If Alpha16a succeeds and Alpha16b does not:** the work stays internal; no
 Alpha16 release is cut; the failing capability is named and re-planned. Do not
@@ -165,7 +172,9 @@ Only what Alpha16 proved may be productized here.
   consumer evidence).
 - Precompiled component distribution: server/client entries, declarations,
   relocatable CSS, runtime-uniqueness checks, one supported consumption mode.
-- Starter, docs, examples, and class-author migration through the adapter.
+- Starter, docs and examples migration. **No class compatibility adapter** is
+  built (approved P-5); class-authored examples are rewritten as function
+  components, and the retired API is documented in the migration note.
 
 Not allowed: a second rendering backend; an ABI frozen without a consumer; package
 distribution proven only inside the monorepo.
@@ -240,8 +249,8 @@ Stop and re-plan rather than push through when:
 - **Alpha16b release requires the old generic browser executor to be unreachable
   from every applicable production browser entry graph.** A release that keeps
   both production execution paths does not qualify.
-- The Class API remains supported through the adapter; the adapter is not a
-  second backend.
+- The Class API is **retired** (approved P-1/P-5); no compatibility adapter is
+  built and no second authoring path exists.
 - Public API remains candidate until G3 evidence exists.
 - The Lit boundary is unchanged unless its own separate track gate is met.
 

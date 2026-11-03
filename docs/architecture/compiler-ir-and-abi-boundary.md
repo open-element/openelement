@@ -123,25 +123,55 @@ Open: whether the IR is a plain object graph, a typed node union, or lowered
 directly to backend-specific trees. This is an implementation choice for M02,
 not a contract.
 
-## 5. Server backend
+## 5. Server backend (two distinct things, not one)
 
-Consumes the IR and produces:
+A previous draft used "server backend" for both of the following. They are
+different and must not be conflated:
 
-- HTML with DSD where the root mode requires it;
-- permitted seed data (serializable only);
-- stream metadata and build identity.
+### 5.1 Compiler-time server backend
 
-Rules:
+A **code generator**. It runs inside the compiler (build time), consumes the
+Semantic IR, and emits the server rendering code for a component. It is the
+server-side counterpart of the client codegen, not a runtime.
 
-1. The server may keep its own intermediate structure. It does **not** have to
-   reuse the client's generated code, and it does not have to emit a
-   browser-consumable program.
-2. Request-scoped state must be isolated; no module-level mutable state in the
-   render path.
-3. Await is full-await in Alpha16 (M14): data is awaited before output; no
-   out-of-order fragment streaming. Bounded defer is Alpha18.
-4. Server-only modules stay out of client graphs (existing guard, #1618).
-5. Streaming keeps admission, backpressure, cancellation and identity checks.
+It may emit a **server-private generated structure** — closures, template
+strings, a render plan — as long as that structure is:
+
+- produced by the compiler, not by serializing the IR;
+- consumed only by the server runtime;
+- never shipped to the browser;
+- never interpreted by a generic engine.
+
+**A server-private structure is not "the IR serialized for the server."** The IR
+does not cross a process boundary in any form. If the server needs a persisted
+intermediate, it is a separate server-owned artifact with its own version, not
+the compiler's IR.
+
+### 5.2 Request-time generated server execution
+
+The emitted server entrypoint runs per request:
+
+1. the router resolves the route and loads the module;
+2. the generated server entrypoint is called with request-scoped inputs
+   (resolved data, params, request-scoped context);
+3. it renders HTML — and DSD where the component's root mode requires it — by
+   invoking the generated render functions;
+4. it emits permitted seed data (serializable only) and stream metadata/build
+   identity when the route streams.
+
+Request scope rules:
+
+- no module-level mutable state on the render path; per-request objects only;
+- full-await in Alpha16 (M14): data is awaited before output; no out-of-order
+  fragment streaming (bounded defer is Alpha18);
+- server-only modules never enter client graphs (existing guard, #1618);
+- streaming keeps admission, backpressure, cancellation and identity checks.
+
+### 5.3 Shared rules for both
+
+The server never executes client-generated code, and the client never executes
+server-generated code. Sharing is at the semantic level (one IR, one meaning),
+not at the artifact level.
 
 ## 6. Client backend
 
@@ -178,7 +208,7 @@ Recommended field candidates, each justified by a consumer in
 
 | Field | Producer | Consumer | Purpose | Layer | Stage |
 | --- | --- | --- | --- | --- | --- |
-| tag | compiler | registration, Router classification | element identity | ABI | Alpha16b |
+| tag | compiler | registration (`customElements.define`) | **component identity metadata** | ABI | Alpha16b |
 | properties/attributes metadata | compiler | facade, SSR seeding, forms | prop ↔ attribute conversion | ABI | Alpha16b |
 | root mode | compiler | SSR/DSD, claim | light vs shadow-open/closed | ABI | Alpha16b |
 | style/scope facts | compiler | CSS delivery, SSG CSS recovery | style assets | ABI (or build metadata) | Alpha16b |
@@ -191,6 +221,32 @@ Recommended field candidates, each justified by a consumer in
 Rules: no field without a named consumer; no structural program; no runtime
 dispatch table; metadata and entrypoints may be separate exports. The exact set is
 **not frozen** here.
+
+**Component identity metadata vs build-time route classification.** These are
+different facts with different consumers and must not share one field:
+
+| Fact | Consumer | Channel |
+| --- | --- | --- |
+| Component tag / identity | runtime registration, SSR seed, claim identity | **ABI** (runtime) |
+| "This module is a page element class, not a function page" | Router route scanning at build time | **build-time classification**, derived by the plugin |
+| "This package component needs blocks/browser code" | SSG/SSG-package admission at build time | **build metadata** (emitted flag or graph fact) |
+
+The earlier C07 row (Router reading `__partProgram` presence) is a *runtime
+property check used as a build-time discriminator*. In the target it becomes a
+build-time classification fact, not an ABI field.
+
+### 7.1 Versioning: three separate checks
+
+| Check | Owner | When | Meaning |
+| --- | --- | --- | --- |
+| `PART_PROGRAM_VERSION` | current schema | today | retires with the schema (approved P-4) |
+| `COMPILED_MODULE_ABI_VERSION` (v2) | current generated-module ABI | today | **retires**; superseded by the new ABI's own version (approved P-3/P-4) |
+| **New ABI version** | new generated-module contract | from Alpha16b | Alpha16b performs **compatibility checking only**: generated module ↔ runtime helpers ↔ server/client build identity |
+| **Cross-module ABI freeze** | Alpha17 | Alpha17 | the stable published contract between a precompiled library and a consumer |
+
+Alpha16b checking ABI compatibility is **not** an ABI freeze. The freeze — the
+guarantee that a library compiled against ABI N works in a consumer on ABI N — is
+an Alpha17 deliverable constrained by packed-consumer evidence.
 
 ## 8. Build metadata
 
@@ -357,17 +413,22 @@ is in-repo even though a source-map *consumer* library is vendored.
 
 ## 14. M01 acceptance criteria
 
-| Gate | Criterion | Status |
-| --- | --- | --- |
-| G1 layer separation | six layers defined; no universal descriptor | met by this document |
-| G2 consumer completeness | every production consumer mapped; every proposed ABI field has a consumer | met by the matrix |
-| G3 compiler feasibility | IR expresses the five examples; not TS AST; not a re-implemented JS AST | met by design; to be proven in M02 |
-| G4 runtime feasibility | no generic interpreter target; JSX values do not become VNode | met by design |
-| G5 compatibility/safety | SSR/DSD/claim fidelity, security, isolation, cancellation accounted | specified; to be proven in M06–M08 |
-| G6 scope control | docs only; no source/export/dependency/version change | met |
+M01's own gates are named **M01-A1…M01-A6** to avoid colliding with the Alpha16
+qualification gates **G1** (real generated execution) and **G2** (identity /
+ownership), which keep their approved names and are earned in M05–M06.
 
-`M01 完成 ≠ G1/G2 完成 ≠ Alpha16a 完成.` This document establishes the contract;
-the evidence still has to be earned in M02–M08.
+| M01 gate | Criterion | Status |
+| --- | --- | --- |
+| **M01-A1** layer separation | six layers defined; no universal descriptor | met by this document |
+| **M01-A2** consumer completeness | every production consumer mapped; every proposed ABI field has a consumer | met by the matrix |
+| **M01-A3** compiler feasibility | IR expresses the five examples; not TS AST; not a re-implemented JS AST | met by design; to be proven in M02 |
+| **M01-A4** runtime feasibility | no generic interpreter target; JSX values do not become VNode | met by design |
+| **M01-A5** compatibility/safety | SSR/DSD/claim fidelity, security, isolation, cancellation accounted | specified; to be proven in M06–M08 |
+| **M01-A6** scope control | docs only; no source/export/dependency/version change | met |
+
+**Completion statement.** M01 is complete when A1–A6 hold for this contract. That
+is **not** G1 or G2, and **not** Alpha16a: G1/G2 are earned by the generated
+execution and identity slices in M05–M06, and Alpha16a exits at M08.
 
 ## 15. Open engineering questions
 

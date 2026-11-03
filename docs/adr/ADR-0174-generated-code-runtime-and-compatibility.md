@@ -159,6 +159,16 @@ program data. `__partProgram` is a compiler **output** carrying the serializable
 artifact; it is not the compiler's internal semantic IR, and it must not be
 renamed or removed by this roadmap.
 
+> **Correction (2026-11-03, fourth pass — approved):** the sentence above that
+> "the gate … does not require deleting the Part Program artifact, its validator,
+> its metadata" describes *the gate only*. The separately approved retirement
+> policy (P-2/P-3/P-4) does require Part Program v2, `validatePartProgram`,
+> `PART_PROGRAM_VERSION` and `__partProgram` to leave the **target production
+> contract**, replaced by a narrow ABI. The gate and the retirement policy are two
+> obligations; satisfying one does not satisfy the other. Server-private
+> structures, SSR/streaming data, DSD, claim markers and security sinks are
+> preserved.
+
 Consumer migration is staged (owner-approved D-O2): the layer boundary between
 compiler semantic IR, Part Program v2, the emitted `__partProgram` field, the
 generated-module ABI and the HTML/claim/stream wire is defined first, and each
