@@ -142,7 +142,8 @@ are noted as such rather than "fixed".
    and attributes, input/focus/selection, DSD, cleanup ownership, and bounded
    recovery on mismatch (`runtime/hydrate.ts:76-93,226-248`).
 10. **What is the ownership contract?**
-    Parent/child `LifetimeScope`, LIFO cleanup, per-scope error isolation,
+    Parent/child `LifetimeScope`, owner cleanups LIFO (children visited in
+    insertion order), per-scope error isolation,
     idempotent dispose, range cleanups, disposal ≠ DOM detachment
     (`lifetime-scope.ts:83-109`).
 11. **Which EachBlock / Item Box concepts can be reused?**
@@ -185,6 +186,11 @@ separated production consumers from tests and docs. Production consumers:
 | Router types | `server-runtime/types.ts:46` | generated module shape | build | keep; extend for ABI | 16b | interface field |
 | SSG blocks detection | `ssg/island-blocks-scan.ts:117-120` | **lexical** scan + blocks shape | build | replace with emitted metadata flag | 16b | `compiledArtifactMightUseBlocks` |
 | Compiler CSS recovery | `compiler/.../compiled-artifact-style-requests.ts:42,122-196` | **lexical** prefilter, then parse emitted module for style/scope facts | build | replace with emitted ABI metadata | 16b | `COMPILED_ARTIFACT_MARKER`, `PART_PROGRAM_BINDING` |
+| Program kernel types | `internal/compiled/runtime/program-kernel.ts:13,38,44` | type-level slices of `PartProgramV2` for parts/branches | browser runtime | type-only; follows the ABI | 16b | type imports |
+| Hydration seam types | `runtime/hydrate-seam.ts:22,35` | type signature of the installed claim executor | browser runtime | keep until claim is generated | 16b | type import |
+| Revive | `runtime/revive.ts:254,284` | range cleanups for revived blocks (reconnect path) | browser runtime | keep; depends on non-detach semantics | 16b | `addRangeCleanup` |
+| SSG source records | `protocol/src/ssg.ts:10,24-25` | type-only projection of `sourceMap.records` | build/server | keep (metadata) | staged | type import |
+| Rendered-component type | `element/src/public-runtime.ts` compiled-constructor types | program shape for serializer entry | server | keep | staged | type |
 | Protocol schema | `protocol/src/part-program.ts` | schema, validator, versions | shared | keep transitional | staged | `PART_PROGRAM_VERSION`, `COMPILED_MODULE_ABI_VERSION` |
 | Public protocol export | `protocol/src/index.ts:13`, `protocol/package.json:29` | public subpath | distribution | keep until deprecation decision | — | export map |
 

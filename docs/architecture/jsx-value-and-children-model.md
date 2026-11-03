@@ -174,8 +174,8 @@ real semantics, read from the implementation:
 
 | Call | What runs | What survives |
 | --- | --- | --- |
-| `dispose()` | abort signal, child scopes (same mode), registered `add()` cleanups LIFO | range cleanups **do not run**; owned DOM stays in place |
-| `dispose(true)` | everything above **plus** `addRangeCleanup` callbacks | owned DOM range is removed |
+| `dispose()` | abort signal, child scopes **in insertion order**, then registered `add()` cleanups **LIFO** | range cleanups **do not run**; owned DOM stays in place |
+| `dispose(true)` | everything above **plus** `addRangeCleanup` callbacks (also LIFO) | owned DOM range is removed |
 
 Evidence: `lifetime-scope.ts:83-109` (the `if (detachOwnedNodes)` guard around
 range cleanups), and the two production call sites that use detach mode —
@@ -187,14 +187,19 @@ reclaimed on reconnect.
 Therefore every situation needs its own row, and the prototype `insert` above
 gets the last one **wrong** if copied literally:
 
-| Situation | Mode | Notes |
+`dispose(true)` is **not** a DOM-only detach: it performs the complete scope
+disposal (abort signal, children in the same mode, `add()` cleanups LIFO) and
+*additionally* runs the `addRangeCleanup` callbacks. The earlier draft called it
+"DOM range detachment only"; that naming was wrong and is corrected here.
+
+| Situation | Call | What it does |
 | --- | --- | --- |
-| Component/resource disposal (owner leaves the tree) | `dispose(true)` from the removing parent | both subscriptions and DOM go |
-| DOM range detachment only | `dispose(true)` on the range owner | used by branch replacement / keyed deletion |
-| Parent owner disposal | `dispose(true)` cascades to children | children inherit the mode (`:100`) |
-| Keyed entry deletion | `dispose(true)` | existing precedent, `blocks.ts:516` |
-| Independent projection deletion | `dispose(true)` on that projection's owner only | the sibling projection must stay live |
-| CE disconnect / suspend | plain `dispose()` or suspension path | owned DOM is retained for reconnect/revive |
+| Component/resource disposal (owner leaves the tree) | `dispose(true)` on the owner | full disposal **plus** removal of the owned DOM range |
+| Branch replacement / keyed deletion (region removal) | `dispose(true)` on the branch/entry owner | full disposal plus range removal; existing precedent `blocks.ts:312,516` |
+| Parent owner disposal | `dispose(true)` cascades to children | children inherit the mode (`lifetime-scope.ts:100`) |
+| Independent projection deletion | `dispose(true)` on that projection's owner only | sibling projection must stay live |
+| CE disconnect / suspend (DOM retained for reconnect) | plain `dispose()` | full disposal **except** range cleanups; owned DOM stays in place for revive |
+| "Detach DOM without disposing resources" | **does not exist** in this API | treat as unsupported; do not emulate it by calling `dispose(true)` early |
 | Failed setup rollback | `dispose(true)` on the partial scope | partial DOM must not survive (§4.1b) |
 
 **Do not change the default `dispose()` behaviour to make an example work.** The
@@ -273,7 +278,7 @@ This is the semantic decision authors will notice, so it must be explicit:
 | Recipe creation (the JSX expression evaluated as a value) | closure allocated; lexical bindings captured; **no** DOM, **no** instance, **no** signal read, **no** user expression executed |
 | Insertion | child owner created; optional key thunk read; component setup runs **once** for this instance; props getters close over the defining scope |
 | Update | effects whose tracked reads changed re-run; setup does not re-run; instance identity preserved |
-| Disposal | the projection-site owner disposes: children, then own cleanups LIFO; one throwing cleanup does not stop the rest |
+| Disposal | the projection-site owner disposes: child scopes in insertion order, then own cleanups LIFO; one throwing cleanup does not stop the rest |
 
 Consequence to accept explicitly: a props expression such as
 `<Counter step={next()}/>` is evaluated **per insertion**, not once at
@@ -291,7 +296,7 @@ contract, with the open parts named:
 | --- | --- | --- | --- |
 | 1 | Recipe creation (`const c = <Counter step={next()} />`) | nothing authored runs; only a closure is allocated | `next()` **0 times** |
 | 2 | Initial insertion | props getters are created; a getter body runs when the child reads it | `next()` runs once per child read, inside whatever tracking context performs the read |
-| 3 | Tracked prop dependency update | the getter runs again for each dependent binding that re-evaluates | once per dependent evaluation |
+| 3 | Tracked prop dependency update | the getter runs again for each dependent binding that re-evaluates | once per dependent evaluation; a single update may therefore run it several times |
 | 4 | Keyed prop replacement | the backing value is replaced; dependent bindings re-run | getter runs on re-evaluation, not on replacement itself |
 | 5 | Destructuring (`const { step } = props`) | getter runs once during setup | exactly once, snapshot |
 | 6 | Event dispatch | handler body runs; prop reads inside it run then | per dispatch |
@@ -411,14 +416,31 @@ rules remain as specified in the contract (TSX-07/TSX-08).
 
 ### 4.7 SSR, mount, claim
 
-The same generated code must serve all three, so the recipe targets a host
-interface rather than `document` directly:
+**Shared semantic model, not necessarily shared executable code.** Server and
+client may use different codegen backends; what must match is *meaning*:
+instance identity, insertion order, props values, ownership and cleanup — not a
+single byte-identical module. An earlier draft said "the same generated code must
+serve all three", which is stronger than the architecture requires and would
+force a runtime host abstraction that the target explicitly avoids.
+
+Two acceptable implementations:
+
+1. **Two backends (preferred target):** server codegen emits HTML/DSD; client
+   codegen emits mount/update/claim/dispose. No shared executable artifact.
+2. **One recipe compiled per target:** the same authored recipe lowers
+   separately for each host, with a compile-time-selected emission.
+
+What is **not** acceptable: shipping a generic interpreter plus a host vtable so
+that one program runs everywhere. If a host interface is used at all, it is an
+internal detail of one backend and must not become a runtime dispatch surface.
+
+The concrete illustration below is therefore one possible shape, not a mandate:
 
 | Mode | Host |
 | --- | --- |
-| SSR | string/serializer host (the server lane already emits direct string composition, `server-component.ts:1-33`) |
-| Fresh mount | DOM host |
-| Claim | DOM host in claim mode, walking existing markers instead of creating |
+| SSR | string/serializer backend (the server lane already emits direct string composition, `server-component.ts:1-33`) |
+| Fresh mount | DOM backend |
+| Claim | DOM backend in claim mode, walking existing markers instead of creating |
 
 This is a **target, not an achievement**: claim-mode recipe insertion needs a
 marker protocol that does not exist yet, and the string host must prove it can

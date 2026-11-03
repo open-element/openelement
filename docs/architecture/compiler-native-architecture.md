@@ -175,17 +175,27 @@ projection, failure behaviour and disposal are specified in
 [the JSX model](./jsx-value-and-children-model.md); unresolved items there are
 marked OPEN, not silently settled.
 
+**JSX runtime entry is not the recipe mechanism.** `jsx-runtime.ts` /
+`jsx-dev-runtime.ts` keep only two jobs: they make TSX typecheck, and they fail
+closed when JSX reaches runtime without compilation
+(`packages/element/src/jsx-runtime.ts:20-53`). Alpha16's JSX recipes are a **new
+compiler output semantics**, not a revival of those factories: a recipe is
+emitted by the compiler and carries no runtime tag/type dispatch. The guard stays,
+and it must keep failing closed after recipes exist.
+
 ### 4.5 Ownership and lifetime
 
-Reuse `LifetimeScope`. It already provides parent/child scopes, LIFO cleanup,
+Reuse `LifetimeScope`. It already provides parent/child scopes, LIFO cleanup of
+`add()` callbacks (child scopes are visited in **insertion order**, not LIFO),
 per-scope error isolation, idempotent disposal, an abort signal and range
 cleanups (`packages/element/src/internal/compiled/lifetime-scope.ts:4-109`).
 
 Binding rules:
 
 - every component instance and every insertion projection has exactly one owner;
-- disposal order is children-then-own, LIFO, with one failing cleanup not
-  cancelling the rest;
+- disposal order is children first (insertion order), then the owner's own
+  cleanups LIFO, with one failing cleanup not cancelling the rest;
+- `dispose(true)` is full disposal **plus** range cleanup, not a DOM-only detach;
 - **disposal and DOM detachment are different operations** and must not be
   conflated;
 - no second owner system and no generic Region interpreter; "region" stays a
@@ -199,6 +209,24 @@ mount/claim. Claim is qualified separately for node and component identity,
 text/attribute correctness, DSD, user-edited form state, DOM preservation,
 mismatch diagnostics, cleanup and bounded recovery. Replacing the client
 executor does not automatically solve SSR or claim.
+
+### 4.6a Async server components (Alpha16 scope)
+
+The current compiler **rejects** `async` server function components with
+`OEC9032` and requires a single synchronous JSX return
+(`semantic-core/server-component.ts:135,173-175`). The target must be defined
+explicitly rather than assumed:
+
+| Question | Alpha16 position |
+| --- | --- |
+| Are ordinary async server components supported? | **Yes, as a defined milestone (M14), not as current behaviour.** |
+| How is output produced? | **Full-await:** the component awaits its data, then returns its JSX; HTML is emitted after all awaits complete. No out-of-order or per-fragment streaming in Alpha16. |
+| Does server-only code reach the client graph? | No — the existing server-only import guard (#1618) remains the enforcement point; unmigrated async work must not add a second path. |
+| Which milestone owns it? | M14, parallelisable, required for Alpha16b qualification. Not part of the Alpha16a gate. |
+
+Bounded defer, cancellation and streamed regions are **Alpha18**, not this.
+Ordinary `await` and deferred regions are different capabilities and must not be
+conflated in planning or tests.
 
 ### 4.7 Class compatibility (owner-approved D-O3)
 
