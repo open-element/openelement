@@ -49,6 +49,22 @@ nearest preceding anchor.
 | M1 definition in M03-B was stale | M03-B now records the old "print sub-nodes and concatenate" M1 as **SUPERSEDED** and defines the marker-based M1, linking here. |
 | "Segments proven" overstated | the record distinguishes **node anchors proven** from **full production Source Map v3 proven end-to-end**. |
 
+## 5a. Revision note (2026-11-03, second qualification round)
+
+The first revision of this record described the six checks slightly more strongly
+than the tests proved. This revision states what each check actually asserts:
+
+| Change | Why |
+| --- | --- |
+| marker **index** built in one pass over the printed text (O(L)); offsets resolved by prefix sums + binary search (O(log n)) | the earlier code rescanned `markedText` per marker |
+| missing / duplicate / unknown / unpaired markers **fail closed** and return the text untouched | a marker the prototype does not understand must never be silently deleted |
+| anchors **merged** by generated line/column (deepest wins) before `SourceMapSegmentBuilder` | two segments at one generated position is ambiguous to consumers |
+| Source Map v3 decoded with **all five VLQ fields** (generated column, source index/line/column, name) and compared per segment | the earlier check compared only generated line and source line |
+| Check 2 selects the arrow by its **full authored span** and compares with an independently located generated position | the narrowest-at-start rule could pick an identifier instead |
+| Check 3 covers **both** `<Row />` and `<Fallback />` (recipe ids `r0`/`r1`) | previously only the alternate branch |
+| Check 5 asserts the **deepest-wins** rule with the candidate set and the resolved span | the earlier assertion contained identical operands and proved nothing |
+| unary / ASI corpus (`a + +b`, `a - -b`, `a++`, `++b`, `a + ++b`, `??`, newline before `+`) | marker insertion must not change parsing or meaning |
+
 ## 5. Coverage and the six checks
 
 Corpus: original nested-JSX expression · source comments · operator precedence ·
@@ -63,7 +79,9 @@ parentheses · nested conditionals · template strings.
 | 5. multiple positions | **pass** | every identifier anchor matches its independently printed name; several positions in a nested conditional/template expression |
 | 6. codegen rebasing | **pass** | multi-line prefix shifts generated line/column; authored position unchanged |
 | extra: differing-length replacement | **pass** | every offset inside the recipe call resolves to the JSX start (no drift) |
-| extra: Source Map v3 | **pass at anchor level** | anchors feed `SourceMapSegmentBuilder`; the produced `mappings` string is decoded and cross-checked against anchor positions |
+| extra: Source Map v3 | **pass, full coordinates** | merged points feed `SourceMapSegmentBuilder`; the `mappings` string is decoded with all five VLQ fields and compared coordinate by coordinate, including name index |
+| extra: marker pairing | **pass** | missing / duplicate / unknown / unpaired markers are unit-tested to fail closed |
+| extra: unary / ASI | **pass** | seven adjacency/newline forms parse and evaluate identically after stripping |
 | extra: determinism | **pass** | two runs produce identical text, namespace and anchors |
 
 ## 6. Discovered properties (these become M03-I-2 rules)

@@ -131,7 +131,7 @@ A sidecar keyed by `ExprId` is chosen over embedding the record in the IR node s
 that a component graph can be inspected without dragging lowered code along, and
 so the registry can be dropped as soon as codegen is done.
 
-## 5. Correction B — source maps (mechanism UNVERIFIED, experiment required)
+## 5. Correction B — source maps (M1 ADOPTED; end-to-end map still OPEN)
 
 Three coordinate spaces exist and must not be confused:
 
@@ -143,7 +143,8 @@ authored TSX  ──(transform)──►  lowered JS  ──(codegen placement)�
 **What is settled (updated after M03-I-0):**
 
 - Positions are **anchors** (discrete node starts), not interpolated ranges. The
-  prototype proved anchors are obtainable for every printed node with public APIs.
+  prototype proved anchors are obtainable for every printed **expression / JSX**
+  node with public APIs (not for every TypeScript node).
 - Anchors must be expressed in the existing `SourceMapSegmentBuilder` convention
   (`EmissionSegment`: 1-based generated line, 0-based generated column, 1-based
   source line, 0-based source column), because that is what the Alpha15 path
@@ -166,8 +167,10 @@ Candidate mechanisms, all requiring prototype evidence in M03-I:
 
 | Mechanism | How offsets arise | Cost / risk |
 | --- | --- | --- |
-| ~~M1 — segmented printer (SUPERSEDED)~~ | *print each sub-node separately and concatenate, accumulating offsets as you go* | **superseded in M03-I-0**: the caller would own syntax glue, which is exactly where a hand-written printer drifts. Kept as history. |
-| **M1 — marker-based anchor printing (ADOPTED)** | print the **whole expression once**; attach a namespaced synthetic comment before/after each node; strip markers with a linear offset index; record one **anchor** per node start | public APIs only, one print, no glue; verified in [M03-I-0](./m03-i0-sourcemap-prototype.md) |
+| ~~M1 — segmented printer (SUPERSEDED)~~ | *print each sub-node separately and concatenate* | **SUPERSEDED by M03-I-0**: the caller would own syntax glue, which is where a hand-written printer drifts. History only. |
+| **M1 — marker-based anchor printing (ADOPTED)** | print the **whole expression once**; attach a namespaced synthetic comment before/after each expression/JSX node; build a marker index in one pass; strip through **prefix sums + binary search**; record one **anchor** per node start | public APIs only, one print, no glue; verified in [M03-I-0](./m03-i0-sourcemap-prototype.md) |
+| M2 — TypeScript emit source maps (FALLBACK) | let `program.emit` produce the map | accurate, but needs `ts.createProgram`; fallback only |
+| M3 — printer-handler offsets (CLOSED) | wrap `PrintHandlers.onEmitNode` | **impossible with public APIs**: `Printer` exposes no writer, so offsets are unobservable `typescript.d.ts:8104-8124` |
 | **M2 — TypeScript emit source maps** | let `program.emit` (or a transform-then-emit route) produce the map from the same `SourceFile` | accurate and battle-tested; requires a program, which is the constraint Route 3 exists to avoid |
 | **M3 — position-recording printer wrapper** | wrap/replace printer handlers (`PrintHandlers`) to observe each node's emitted range | relies on printer handler behaviour that TypeScript documents thinly; acceptable only if M1 fails and the wrapper is proven stable across the pinned version |
 
@@ -191,13 +194,21 @@ const result =
 | 5 | an error thrown at each of several positions inside the lowered text maps to the right authored line/column |
 | 6 | after codegen rebasing, the final generated module's map still points at the authored TSX |
 
-**M03-I-0 result (2026-11-03):** M1 was implemented and verified. Positions are
-**anchors** (discrete node starts) — not ranges with linear interpolation, because a
-replaced JSX node is longer than its authored text. M3 is closed: the public
-`Printer` interface exposes no writer, so `onEmitNode` cannot observe offsets.
-M2 remains a fallback only. Settlement: **node positions are proven; a complete
-production Source Map v3 through `SourceMapSegmentBuilder` is proven at the anchor
-level, not yet end-to-end.** See
+**M03-I-0 result (2026-11-03).** M1 was implemented and verified:
+
+- positions are **anchors** (discrete node starts), not ranges with linear
+  interpolation — a JSX node replaced by `__oe_recipe_ref(...)` is longer than its
+  authored text, so arithmetic on authored offsets is invalid;
+- anchors are merged deterministically (deepest wins) before they reach
+  `SourceMapSegmentBuilder`, because a consumer must not receive two segments at
+  one generated position;
+- the produced `mappings` string decodes with all five VLQ fields and matches the
+  anchors coordinate by coordinate;
+- coverage is **expressions and JSX nodes**, not “all TypeScript nodes”.
+
+Settlement: **node anchors are proven, and a Source Map v3 built from them decodes
+correctly**. What remains OPEN is the **end-to-end production map through codegen**
+(M05), plus the erasure visitor and large-expression behaviour. See
 [the prototype decision](./m03-i0-sourcemap-prototype.md).
 
 ## 6. Correction E — nested JSX and evaluation order
