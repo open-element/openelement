@@ -35,6 +35,10 @@ Alpha16a is an **internal engineering milestone**. It creates no public version,
 tag, publication, Starter default or release claim, and it is not a licence to
 ship two execution models.
 
+The table follows the dependency spine, not the phase boundary: **only M01–M08
+form the Alpha16a exit set**. M09–M14 are Alpha16b work; M10a is a non-gating
+early smoke that may run during 16a but is not an exit condition.
+
 | ID | Work | Class | Depends on | Exit evidence |
 | --- | --- | --- | --- | --- |
 | M01 | Semantic IR / layer boundary decision (IR · Part Program · emitted field · module ABI · wire) | A | — | recorded layer map consistent with the canonical doc |
@@ -45,8 +49,8 @@ ship two execution models.
 | M06 | Stateful hostless list on the generated path | I | M05 | identity, private draft, keyed reorder, conditions, multi/empty root |
 | M07 | Generated claim (leaf) | I | M05 | claim fidelity on the leaf slice |
 | M08 | Generated claim + SSR for the stateful list | I | M06, M07 | the same list across SSR → claim → update → dispose |
-| M09 | Generated Native Custom Element boundary — emitted element class, registration, property/attribute conversion, events, Shadow DOM/DSD interop, third-party WC compatibility. **Only explicit Native Export / Island Boundary sites generate a CE**; hostless function components are never forced into elements | I | M05 | emitted element behaves from ordinary HTML and foreign frameworks; no author-facing class requirement; hostless components stay hostless |
-| M10 | Legacy-consumer migration and retirement evidence, **per area**: browser runtime, server runtime, build/SSG, ABI/module contract, public API | I→Q | M05–M09 | five separate proofs — see §2a; generic-executor unreachability alone is not sufficient |
+| M09 | Generated Native Custom Element boundary — emitted element class, registration, property/attribute conversion, events, Shadow DOM/DSD interop, third-party WC compatibility. **Only explicit Native Export / Island Boundary sites generate a CE**; hostless function components are never forced into elements. This is **not** a class adapter: class-authoring migration is M10 partition evidence | I | M05 | emitted element behaves from ordinary HTML and foreign frameworks; no author-facing class requirement; hostless components stay hostless |
+| M10 | Legacy-consumer migration and retirement evidence, **per area**: browser runtime, server runtime, build/SSG, ABI/module contract, public API | I→Q | M05–M09 | five separate proofs — see §12a; generic-executor unreachability alone is not sufficient |
 | M10a | Early packed-consumer smoke | Q | M05 | generated artifact installs and runs from a fresh packed app, no aliases |
 | M11 | Router integration for the generated path | I | M08, M10 | Framework Mode contract unchanged |
 | M12 | Final packed-consumer qualification (same stateful list) | Q | M06, M08, M11 | tarball consumption of the full slice; scope per §5 |
@@ -64,6 +68,13 @@ parallel path — it retires in Alpha16b.
 **M10a is not an Alpha16a exit condition.** It is an early, non-gating smoke run
 that may happen as soon as a generated artifact can be packed. Alpha16a still
 completes on M01–M08 alone; do not lower it to "whatever M10a proved".
+
+**Claim acceptance chain (M07–M08).** M07 proves the leaf claim: marker/order
+encoding, key alignment, permitted seed state, bounded mismatch recovery and
+duplicate-subscription accounting. M08 proves the same chain on the stateful list
+through SSR → claim → update → dispose. Marker, key, seed and recovery are one
+acceptance chain; none of them may be deferred to Alpha17 with the callback or
+API name. TSX-18 and TSX-30 are the ledger rows.
 
 ## 1a. M02 acceptance — Semantic IR feasibility
 
@@ -93,6 +104,10 @@ Required before release:
 3. generated Native Custom Element boundary complete (M09);
 3a. the Class authoring frontend and the serialized Part Program protocol retired
     from production paths (approved fourth pass), with the ABI replaced per M01;
+    class retirement requires a per-file class→function migration matrix **and**
+    the capability inventory in
+    [the retirement roadmap](./alpha16-18-retirement-roadmap.md#class-retirement-capability-gate-alpha16b)
+    to show an approved replacement for every current class capability;
 4. Router integration (M11);
 5. independent packed-consumer qualification (M12);
 6. browser and server qualification (M13);
@@ -131,8 +146,8 @@ M01 → M02 → M03 ─┐
 ```
 
 - **Spine:** M01 → M02 → M04 → M05 → M06 → M08 → M11 → M12/M13.
-- M03 is on the spine in practice: M05 cannot be produced without the function
-  adapter, so it is not parallel with M05.
+- M03 is on the spine in practice: M05 cannot be produced without the
+  function-component frontend, so it is not parallel with M05.
 - **Genuinely parallel:** M07 (leaf claim) and M09 (generated Native CE boundary) both need only
   M05; M10a starts the moment a generated artifact can be packed; security and
   output-separation work is independent of all of the above.
@@ -185,8 +200,9 @@ Only what Alpha16 proved may be productized here.
   ref, lifecycle, error boundary.
 - Full TSX productization: cross-module recipes, remaining admission, author
   experience.
-- Generated-module ABI versioned and rejected early on mismatch (freeze only with
-  consumer evidence).
+- Generated-module ABI versioned and rejected early on mismatch in Alpha16b
+  (compatibility check only); the cross-module ABI freeze is Alpha17 and only
+  with packed-consumer evidence (M01 boundary §7.1).
 - Precompiled component distribution: server/client entries, declarations,
   relocatable CSS, runtime-uniqueness checks, one supported consumption mode.
 - Starter, docs and examples migration. **No class compatibility adapter** is
@@ -213,16 +229,33 @@ resource and cancellation bounds; a Flight/RSC rewrite.
 
 ## 8. Finite-readiness of the design
 
-These questions must be answered before Alpha16a claims success:
+Readiness is judged **per phase, not once**. The question list is kept whole, but a
+question gates only the phase whose exit set contains it (§1: Alpha16a exit =
+M01–M08 + G1/G2). A question in §8b is a **tracked risk** during Alpha16a; it is
+not an Alpha16a success condition, and no 16a claim rests on it.
 
-| # | Question | Answered by |
-| --- | --- | --- |
-| 1 | Can the compiler emit mount/update/dispose that runs? | M05 / G1 |
-| 2 | Are identity, owner, region, signals and cleanup coherent? | M04, M06 / G2 |
-| 3 | Do authors accept the semantics? | M02, contract review |
-| 4 | Do packed consumers work without aliases? | M10a |
-| 5 | Does claim preserve DOM, input and focus? | M07, M08 |
-| 6 | Is the old executor's reachability measurable? | M10 |
+### 8a. Alpha16a must answer these (gate 16a)
+
+| # | Question | Answered by | Gates 16a |
+| --- | --- | --- | --- |
+| 1 | Can the compiler emit mount/update/dispose that runs? | M05 / G1 | **yes** |
+| 2 | Are identity, owner, region, signals and cleanup coherent? | M04, M06 / G2 | **yes** |
+| 3 | Do authors accept the semantics? | M02 admission, contract review | **yes** — both land inside 16a |
+| 5 | Does claim preserve DOM, input and focus? | M07, M08 | **yes** — M07/M08 are inside the 16a exit set |
+
+### 8b. Alpha16b must answer these (tracked during 16a, never gate 16a)
+
+| # | Question | Answered by | Why it cannot gate 16a |
+| --- | --- | --- | --- |
+| 4 | Do packed consumers work without aliases? | M12; M10a is an early non-gating smoke | M12 needs M11, and M09 is 16b; a green M10a proves a smaller artifact, not S3 |
+| 6 | Is the old executor's reachability measurable? | M10's five proofs (§12a) | M10 cannot start before M05–M09, and M09 is 16b |
+
+**SUPERSEDED HISTORY:** the earlier §8 list presented all six questions as
+"must be answered before Alpha16a claims success", which contradicted §1 and is
+replaced by §8a/§8b above. Questions 4 and 6 remain required work; they are
+answered at 16b, and their absence at 16a is expected, not a failure. During 16a
+they are tracked as risk R11 (16b unreachability) and the packed-consumer rows;
+M10a may run opportunistically without becoming the answer to question 4.
 
 ## 9. Risk register
 
@@ -231,12 +264,12 @@ These questions must be answered before Alpha16a claims success:
 | R1 | JSX value model re-worked after consumers exist | Medium | High | TSX-23/25/26 fail late | prove before any public type; keep the recipe opaque | G2 | No |
 | R2 | Props replacement silently stale | Medium | High | handler-sees-new-item fails | live-getter invariant; mirror `itemBox` | G2 | No |
 | R3 | Generated code larger than the program it replaces | Medium | Medium | full-closure byte measurement per change | keep the old path until graph evidence | G1 | No |
-| R4 | Claim cannot reproduce repeated insertion order | Medium | High | S3 matrix | design marker protocol in M07/M08 before ABI freeze | G2 | No |
+| R4 | Claim cannot reproduce repeated insertion order | Medium | High | S3 matrix | design the marker protocol in M07/M08 and carry it into the Alpha16b ABI compatibility check (freeze is Alpha17) | G2 | No |
 | R5 | Two runtimes across a package boundary | Low | High | packed consumer with two copies | singleton check or explicit rejection | G3 | No |
 | R6 | Safety regression while grammar widens | Low | High | sink fixtures per new expression position | one sink source of truth; negatives per position | G1 | No |
 | R7 | Lit retirement contaminates Alpha16 | Medium | Medium | scope creep in PRs | separate ADR-0152 track; not on this spine | — | No (already decided) |
 | R8 | Public API frozen early to unblock a demo | Medium | High | names in docs/starters before G3 | G3 gate; names stay candidate | G3 | No |
-| R9 | Evaluation-timing surprise (per-insertion props) | High | Medium | author reports; TSX-28 counts | document §4.2a counts; consider dev warning | G3 | No |
+| R9 | Evaluation-timing surprise (props getters evaluate **per read**, not per insertion or per update tick) | High | Medium | author reports; TSX-28 counts | document the §4.2a counts; per-read is approved semantics, not a cost toggle; consider dev warning | G3 | No — owner ruling: per-read (2026-11) |
 | R10 | Owner/region model outgrows `LifetimeScope` | Low | High | cross-owner projection demand | keep projection inside the subtree; lineage check | G2 | No |
 | R11 | Alpha16b does not reach executor-unreachable state | Medium | High | M10 evidence missing at release | work stays internal; no release; re-plan with the named capability | release | No (D-O1 settled the shape) |
 | R12 | Layer split breaks a `__partProgram` consumer | Medium | High | Router/SSG/CSS tests after any field-shape change | migrate the two lexical consumers in the same change; staged per D-O2 | G1 | No (D-O2 settled) |
@@ -244,11 +277,20 @@ These questions must be answered before Alpha16a claims success:
 | R14 | Documentation drift between canonical docs and ADRs | Medium | Medium | index/doc checks; review | canonical doc + link map; amend ADRs, never rewrite | — | No |
 | R15 | Scope expansion (Rust, Flight, second renderer) | Medium | High | proposal review | non-goals list; nine-question constraint check | — | Yes if proposed |
 
+**APPROVED TARGET (owner ruling; semantics, not implementation): props getters evaluate per read.** A getter body
+runs each time it is read, inside whatever tracking context performs the read. A
+per-update-tick memoisation is **not** an equivalent variant of this contract: it
+changes observable evaluation counts, returned values and side-effect order, so it
+cannot be adopted as a pure cost optimisation. TSX-28's job is to verify the counts
+and record the cost, not to choose between the two. The count table is
+[the model note §4.2a](./jsx-value-and-children-model.md).
+
 ## 10. Stop conditions
 
 Stop and re-plan rather than push through when:
 
-1. props semantics are unresolved and a slice needs them;
+1. a slice needs props evaluation semantics that differ from the approved per-read
+   contract, or the observed counts cannot be made to match it;
 2. children are owned by more than one live owner in any test;
 3. SSR/claim identity of the same list diverges;
 4. a packed consumer needs source or aliases;
@@ -298,9 +340,11 @@ Consequences for this plan:
 | --- | --- |
 | Browser runtime | no production browser entry loads the generic executor or the old protocol |
 | Server runtime | SSR/streaming consumers read the new server structure, not the old schema |
-| Build/SSG | CSS recovery, blocks detection and route classification read metadata/ABI facts, not the schema or source-text markers |
+| Build/SSG | CSS recovery, blocks detection and route classification read build-time facts; CSS/blocks use emitted metadata/ABI facts, while route classification is a Router-plugin build-time fact — none re-parses the old schema or source-text markers |
 | ABI/module contract | generated modules carry the narrow ABI; no `__partProgram` in production output |
-| Public API | retired exports are gone or deprecated per the approved policy, with the migration note |
+| Public API | retired exports are gone or deprecated per the approved policy, with the migration note **and the class capability/replacement inventory complete** (see the roadmap) |
 
 Generic-executor unreachability is **one** of the five. It does not stand in for the
-other four.
+other four. Class-authoring migration is M10 partition evidence — public API **and**
+browser runtime — not M09 evidence: M09 owns the generated Native Custom Element
+boundary only.
