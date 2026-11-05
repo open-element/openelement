@@ -54,7 +54,7 @@ on:
   workflow_dispatch:
     inputs:
       full_qualification:
-        description: 'Run full qualification (nine job IDs / thirteen instances); requires expected_sha. false = four base jobs only'
+        description: 'Run full qualification (ten logical jobs / thirteen instances: sha-guard + nine qualification IDs / twelve instances); requires expected_sha. false = four base jobs only'
         required: false
         type: boolean
         default: false
@@ -147,6 +147,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          # Gitleaks must scan the real history, not the default one-commit
+          # shallow clone. fetch-depth: 0 fetches every branch and tag so
+          # `--log-opts=--all` below has a complete log; scanning a shallow
+          # clone would silently prove only that HEAD is clean.
+          fetch-depth: 0
       - name: Workflow lint (actionlint)
         run: |
           curl -sSfL -o /tmp/actionlint.tar.gz \
@@ -160,13 +165,16 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           # Exit 11 = informational findings (safe fixes only); fail only on medium+
           zizmor --offline .github || [ $? -eq 11 ]
-      - name: Secret scan (gitleaks)
+      - name: Secret scan (gitleaks, full history)
         run: |
           curl -sSfL -o /tmp/gitleaks.tar.gz \
             https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
           echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-          /tmp/gitleaks git --redact --verbose .
+          # Explicit log scope: --all walks every fetched ref (the checkout
+          # above uses fetch-depth: 0). Do not drop this flag or the checkout
+          # depth — both are required for a full-history scan.
+          /tmp/gitleaks git --redact --verbose --log-opts="--all" .
       - uses: ./.github/actions/setup-node-workspace
       - name: Fast checks (fmt, lint, typecheck, markdown)
         run: vp run check
@@ -271,9 +279,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: '24'
       - name: Install all browser engines
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Element tests
@@ -363,9 +368,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: '24'
       - name: Install browsers for packed consumers
         # --with-deps: WebKit needs host libraries (libgtk-4, gstreamer, …)
         # the plain browser download does not bring — the packed starter smoke
@@ -428,10 +430,12 @@ jobs:
     permissions:
       contents: read
     # Two legs, one job ID. The ID must stay `e2e-full` because the release
-    # workflow's ci-evidence requires the nine qualification job IDs verbatim;
-    # a matrix leg is still a separate job instance, and ci-evidence requires
-    # every instance of a required job (`e2e-full (...)`) to conclude success,
-    # so splitting here strengthens the contract instead of loosening it.
+    # workflow's ci-evidence requires the nine qualification job IDs verbatim
+    # (plus sha-guard) from the shared ci-qualification.ts contract; a matrix
+    # leg is still a separate job instance, and ci-evidence requires every
+    # exact instance of a required job (`e2e-full (...)`) to appear once and
+    # conclude success, so splitting here strengthens the contract instead of
+    # loosening it.
     # `site-e2e` is an irreducible full-suite proof (site-e2e-run.ts rejects
     # `--project`/`--grep` filters and audits one complete 3-engine report), so
     # the parallel leg takes everything that is not that proof.
@@ -566,9 +570,6 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: '24'
       - name: Install browsers
         run: ./node_modules/.bin/playwright install chromium firefox webkit
       - name: Install system deps (Linux)
@@ -619,7 +620,11 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '24'
+          # Same single source of truth as the workspace setup action. The
+          # cold-install proof skips that composite (its node_modules cache
+          # would defeat the proof), not the toolchain pin: a floating major
+          # would re-introduce the drift this file just removed.
+          node-version-file: .node-version
       # The cold-install proof deliberately skips the workspace setup action
       # (whose node_modules cache would defeat it), so pnpm is installed here
       # the same way: exact pin over https against registry.npmjs.org.

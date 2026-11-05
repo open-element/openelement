@@ -14,14 +14,17 @@ name: Release
 #             verifies, in order: the dispatch is main's exact SHA
 #             (ci-evidence), the official AutoFlow CI run for that same SHA
 #             concluded success with every required job-instance conclusion
-#             success — nine job IDs, twelve instances, because e2e-full,
-#             node-serve-smoke and packed-consumer-matrix each expand to two
-#             (ci-evidence, discovered over the API — never supplied), the
-#             same-SHA release train gate:release (release-gate), and then
-#             re-verifies operation/SHA/version/package set immediately
-#             before the irreversible npm publish (release). The option must
-#             be selected explicitly; an empty or unknown value fails closed
-#             in the dispatch-guard job and never falls through to publish.
+#             success — ten logical jobs / thirteen instances: the sha-guard
+#             plus nine qualification job IDs / twelve instances, because
+#             e2e-full, node-serve-smoke and packed-consumer-matrix each
+#             expand to two (ci-evidence, discovered over the API — never
+#             supplied; the exact instance identity comes from the shared
+#             tools/repo/ci-qualification.ts definition), the same-SHA release
+#             train gate:release (release-gate), and then re-verifies
+#             operation/SHA/version/package set immediately before the
+#             irreversible npm publish (release). The option must be selected
+#             explicitly; an empty or unknown value fails closed in the
+#             dispatch-guard job and never falls through to publish.
 #   repoint — channel dist-tag repair only, strictly separated from
 #             new-version publishing (the T7 owner backstop). Explicitly
 #             selected, requires tag + version + packages inputs, verifies
@@ -34,8 +37,9 @@ name: Release
 #   DEVELOPMENT           ordinary commits; nothing in this file runs.
 #   CI_VERIFIED           the AutoFlow CI push run on main concluded success
 #                         with every required job-instance conclusion success
-#                         (nine job IDs / twelve instances; enforced in
-#                         autoflow-ci.yml, re-discovered and re-checked for
+#                         (ten logical jobs / thirteen instances: sha-guard +
+#                         nine qualification IDs / twelve instances; enforced
+#                         in autoflow-ci.yml, re-discovered and re-checked for
 #                         the dispatched SHA in `ci-evidence`).
 #   RELEASE_CANDIDATE     the CI-verified main commit carrying the version
 #                         bump; candidate = main's HEAD at dispatch time.
@@ -137,13 +141,16 @@ jobs:
   # ── Job 1: Same-SHA CI evidence (publish only) ─────────────────────────
   # The official AutoFlow CI run for exactly the dispatched SHA is discovered
   # here over the API — the dispatcher never supplies a run id as proof — and
-  # its nine required job IDs (twelve instances: e2e-full, node-serve-smoke
-  # and packed-consumer-matrix each expand to two) are checked one by one.
-  # The run-level conclusion alone is not evidence: a run can be green with
-  # the heavy jobs skipped on a non-qualifying lane, and skipped, cancelled,
-  # failure, a missing job ID or any non-success instance is a refusal (the
-  # qualification contract of autoflow-ci.yml, read from the API instead of
-  # trusted from a report).
+  # its EXACT qualification identity is checked instance by instance. The
+  # definition is not hand-maintained here: tools/repo/ci-qualification.ts is
+  # the one shared contract (sha-guard plus nine qualification job IDs /
+  # twelve matrix instances = thirteen instances), re-derived from
+  # autoflow-ci.yml by the tools tests. Every expected instance must appear
+  # exactly once with conclusion success; a missing or duplicated matrix leg,
+  # an unexpected instance, a partial listing, or any non-success (skip,
+  # cancel, failure, timeout) is a refusal. The run-level conclusion alone is
+  # not evidence: a run can be green with the heavy jobs skipped on a
+  # non-qualifying lane.
   ci-evidence:
     needs: [dispatch-guard]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'publish'
@@ -157,6 +164,13 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      # The contract CLI is plain Node with no dependencies, but the runner's
+      # default Node may not strip TypeScript. Read the repository pin from
+      # .node-version instead of a floating major: 24.0/24.1 predate
+      # import.meta.main, and a floating major could resolve to them.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version-file: .node-version
 
       - name: Verify the dispatched candidate is main's exact SHA
         env:
@@ -200,28 +214,56 @@ jobs:
             echo "::error::CI run ${RUN_ID} for ${CANDIDATE_SHA} concluded '${RUN_CONCLUSION}'; publish refused"
             exit 1
           fi
-          gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" > /tmp/ci-jobs.json
+          # `filter=latest` is explicit, not inherited from the API default: a
+          # re-run (the whole run, or GitHub's "re-run failed jobs" subset)
+          # creates additional job attempts, and only each instance's latest
+          # attempt is evidence. With `latest`, a partial re-run still lists
+          # the same thirteen instances; including superseded attempts would
+          # make the exact-identity check below refuse a justified re-run.
+          gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100&filter=latest" > /tmp/ci-jobs.json
+          # One shared qualification definition (tools/repo/ci-qualification.ts):
+          # thirteen required instances = sha-guard + nine qualification job IDs
+          # / twelve matrix instances. The tools tests re-derive this identity
+          # from autoflow-ci.yml, so the release path, the harness and the
+          # workflow cannot drift into hand-maintained duplicate lists.
+          node "${GITHUB_WORKSPACE}/tools/repo/ci-qualification.ts" --json > /tmp/ci-qualification.json
+          EXPECTED_TOTAL=$(jq -r '.totalInstances' /tmp/ci-qualification.json)
           TOTAL=$(jq -r '.total_count' /tmp/ci-jobs.json)
           LISTED=$(jq -r '.jobs | length' /tmp/ci-jobs.json)
           if [ "${TOTAL}" != "${LISTED}" ]; then
             echo "::error::the CI jobs listing for run ${RUN_ID} is incomplete (${LISTED}/${TOTAL}); publish refused"
             exit 1
           fi
-          # One line per refusal: a missing required job, or any entry of a
-          # required (matrix) job whose conclusion is not success.
-          FAILURES=$(jq -r --arg run "${RUN_ID}" --arg required "lint test e2e pack e2e-full bfcache node-serve-smoke packed-consumer-matrix fresh-install" '
-            ($required | split(" ")) as $jobs |
-            [ $jobs[] as $job |
-                ([ .jobs[] | select(.name == $job or (.name | startswith($job + " ("))) ]) as $entries |
-                if ($entries | length) == 0 then "required CI job \($job) is missing from run \($run)"
-                else ($entries[] | select(.conclusion != "success") | "required CI job \($job) concluded \(.conclusion)")
-                end ] | .[]' /tmp/ci-jobs.json)
-          if [ -n "${FAILURES}" ]; then
-            while IFS= read -r failure; do echo "::error::${failure}"; done <<< "${FAILURES}"
-            echo "::error::CI evidence for ${CANDIDATE_SHA} is not a passing full qualification (nine job IDs / twelve instances); publish refused"
+          if [ "${LISTED}" != "${EXPECTED_TOTAL}" ]; then
+            echo "::error::the CI run lists ${LISTED} job instance(s); the qualification contract requires ${EXPECTED_TOTAL} (ten logical jobs / thirteen instances: sha-guard plus nine qualification job IDs / twelve instances); publish refused"
             exit 1
           fi
-          echo "CI evidence verified: run ${RUN_ID} (push, ${CANDIDATE_SHA}) success; all twelve required job-instance conclusions (nine job IDs) success."
+          # Exact identity, not a prefix match: every expected instance must
+          # appear exactly once, no unexpected instance may appear, and every
+          # conclusion must be success. A missing or duplicated matrix leg, an
+          # unexpected job, or any non-success (skipped/cancelled/failure) is
+          # a refusal — "roughly the right shape" is never evidence.
+          FAILURES=$(jq -r --arg run "${RUN_ID}" --slurpfile contract /tmp/ci-qualification.json '
+            ($contract[0].instances) as $expected |
+            ([.jobs[].name]) as $actual |
+            [
+              ( $expected[] as $name |
+                ([ $actual[] | select(. == $name) ] | length) as $count |
+                if $count == 0 then "required CI job instance \($name) is missing from run \($run)"
+                elif $count > 1 then "required CI job instance \($name) appears \($count) times in run \($run)"
+                else empty end ),
+              ( $actual[] as $name |
+                select(([ $expected[] | select(. == $name) ] | length) == 0) |
+                "unexpected CI job instance \($name) in run \($run)" ),
+              ( .jobs[] | select(.conclusion != "success") |
+                "required CI job instance \(.name) concluded \(.conclusion // .status)" )
+            ] | .[]' /tmp/ci-jobs.json)
+          if [ -n "${FAILURES}" ]; then
+            while IFS= read -r failure; do echo "::error::${failure}"; done <<< "${FAILURES}"
+            echo "::error::CI evidence for ${CANDIDATE_SHA} is not the complete qualification contract (ten logical jobs / thirteen instances: sha-guard plus nine job IDs / twelve instances); publish refused"
+            exit 1
+          fi
+          echo "CI evidence verified: run ${RUN_ID} (push, ${CANDIDATE_SHA}) success; all thirteen required job instances (sha-guard plus nine qualification job IDs / twelve instances) concluded success."
           {
             echo "run_id=${RUN_ID}"
             echo "sha=${CANDIDATE_SHA}"
@@ -252,14 +294,14 @@ jobs:
       - uses: ./.github/actions/setup-node-workspace
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '24'
+          node-version-file: .node-version
       - name: Install all browser engines
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       # -w pins the workspace ROOT's gate:release: the bare task name would
       # also match @openelement/tools-repo#gate:release and run the train
-      # twice.
+      # twice. --no-cache: the train must execute, never replay a task cache.
       - name: Run the release train gate
-        run: vp run --fail-if-no-match -w gate:release
+        run: vp run --no-cache --fail-if-no-match -w gate:release
 
   release:
     needs: [dispatch-guard, release-gate]
@@ -296,7 +338,7 @@ jobs:
       - uses: ./.github/actions/setup-node-workspace
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '24'
+          node-version-file: .node-version
           registry-url: 'https://registry.npmjs.org'
 
       # The candidate-evidence reverify, in machine form: the checkout must be
@@ -645,7 +687,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '24'
+          node-version-file: .node-version
           registry-url: 'https://registry.npmjs.org'
       - name: Install pinned npm (dist-tag OIDC floor)
         run: npm install -g npm@12.2.0 # zizmor: ignore[adhoc-packages] — pinned exact version; npm dist-tag over trusted publishing requires npm >= 12.2.0 (npm docs), and the runner's bundled npm is older

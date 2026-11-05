@@ -1,10 +1,14 @@
+import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 import {
   checkToolchainPins,
   extractToolchainPins,
   satisfiesEngineFloor,
+  verifyRepositoryPins,
   type ToolchainPinSources,
 } from './check-toolchain-pins.ts';
+
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 function sources(overrides: Partial<ToolchainPinSources> = {}): ToolchainPinSources {
   return {
@@ -42,6 +46,20 @@ function failures(overrides: Partial<ToolchainPinSources> = {}): string[] {
 
 test('toolchain pins: a coherent repository has no drift', () => {
   expect(failures()).toEqual([]);
+});
+
+test('toolchain pins: the checked-out repository itself carries no drift', async () => {
+  // Live half of REL-04: the fixtures above prove the audit's rules, but only
+  // this reads .node-version, the real package.json/pnpm-lock.yaml, the
+  // Dockerfile, the workflows/action and the README together. It rides the
+  // existing tools vitest project (the same automatic path as every other
+  // tools test), so a drift in the repository fails the normal test gate
+  // without adding a CI job or changing the qualification gate counts.
+  const { pins, failures: drift } = await verifyRepositoryPins(repoRoot);
+  expect(drift, drift.join('\n')).toEqual([]);
+  expect(pins.nodeVersion).toMatch(/^\d+\.\d+\.\d+$/u);
+  expect(pins.workflows.length).toBeGreaterThan(0);
+  expect(pins.workflows.some((workflow) => workflow.usesNodeVersionFile)).toEqual(true);
 });
 
 test('toolchain pins: the Dockerfile must carry the repository pins', () => {

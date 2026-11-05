@@ -19,12 +19,22 @@
  *     check honest on its own, so a green drift run cannot be produced by a
  *     display that happens to match while the record does not.
  *
- * Offline behaviour is explicit and loud, never a silent pass: when every
- * query fails for a network reason (ENOTFOUND / EAI_AGAIN / ETIMEDOUT /
- * ECONNREFUSED / ENETUNREACH / ECONNRESET / getaddrinfo), the CLI prints a
- * `SKIP` line naming the reason and exits 0. A query failure that is not a
- * network failure (auth, malformed answer) is a red — an unverifiable display
- * must not pass.
+ * Failure semantics (release evidence, not a best-effort local check):
+ *   - any proven display/tracked drift is a red, non-zero exit;
+ *   - any registry query failure is a red, non-zero exit. A package that
+ *     cannot be queried is unverified, and an unverified display must never
+ *     pass a gate. This includes network failures (ENOTFOUND / EAI_AGAIN /
+ *     ETIMEDOUT / ECONNREFUSED / ENETUNREACH / ECONNRESET / getaddrinfo),
+ *     auth/HTTP failures (E403 etc.) and malformed answers;
+ *   - the only way to turn an unreachable registry into exit 0 is the explicit
+ *     `--allow-offline` flag. It is a NON-QUALIFYING local run: the output says
+ *     so, and the release workflow/gate never passes it. Without the flag the
+ *     same offline answer is a loud FAIL naming the reason and the counts of
+ *     verified / unverified distinct packages.
+ *
+ * Findings always win over a skip: a confirmed drift proved by the packages
+ * that DID answer is a red even when another package is unreachable, so a
+ * later network blip can never erase a proven divergence.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -80,7 +90,9 @@ export interface DisplayProjection {
  * diverged and something was unreachable.
  */
 export interface DriftTolerance {
-  onOffline: (message: string) => void;
+  onOffline: (message: string, packageName: string) => void;
+  /** Record that a package's query answered (counted by distinct name). */
+  onVerified?: (packageName: string) => void;
 }
 
 async function queryOrSkip(
@@ -89,11 +101,13 @@ async function queryOrSkip(
   tolerance?: DriftTolerance,
 ): Promise<RegistryEvidence | undefined> {
   try {
-    return await query(name);
+    const evidence = await query(name);
+    tolerance?.onVerified?.(name);
+    return evidence;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (tolerance && isOfflineFailure(message)) {
-      tolerance.onOffline(message);
+      tolerance.onOffline(message, name);
       return undefined;
     }
     throw error;
@@ -153,15 +167,21 @@ export async function displayDriftFailures(
   for (const name of display.unreleased) {
     try {
       const { distTags } = await query(name);
+      tolerance?.onVerified?.(name);
       failures.push(
         `display drift: ${name} is named as never-published but the registry serves ` +
           `${Object.values(distTags).join(', ') || '<no tags>'}`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (isMissingPackageFailure(message)) continue; // expected
+      if (isMissingPackageFailure(message)) {
+        // The registry confirming the name is absent is the expected answer,
+        // i.e. this package was verified clean.
+        tolerance?.onVerified?.(name);
+        continue;
+      }
       if (tolerance && isOfflineFailure(message)) {
-        tolerance.onOffline(message);
+        tolerance.onOffline(message, name);
         continue;
       }
       throw error;
@@ -216,9 +236,15 @@ export interface DriftCheckResult {
   skipped: boolean;
   /** The offline reason, when skipped. */
   reason?: string;
-  /** How many packages were reachable and verified. */
+  /**
+   * How many DISTINCT packages had at least one probe answered. A package can
+   * be probed by both layers (the display projection and the tracked registry
+   * block), so this is a package count, never a query/answer count. It is not
+   * disjoint from {@link unverifiedPackages}: one layer may answer while the
+   * other is offline.
+   */
   verifiedPackages: number;
-  /** How many packages a network failure left unverified. */
+  /** How many distinct packages a network failure left with an unverified probe. */
   unverifiedPackages: number;
 }
 
@@ -238,27 +264,96 @@ export async function runRegistryDriftCheck(options: {
   query: DriftQuery;
 }): Promise<DriftCheckResult> {
   const offlineReasons: string[] = [];
-  let unverified = 0;
+  const verifiedNames = new Set<string>();
+  const unverifiedNames = new Set<string>();
   const tolerance: DriftTolerance = {
-    onOffline: (message) => {
-      unverified += 1;
+    onOffline: (message, packageName) => {
+      unverifiedNames.add(packageName);
       offlineReasons.push(message);
+    },
+    onVerified: (packageName) => {
+      verifiedNames.add(packageName);
     },
   };
   const failures = [
     ...(await displayDriftFailures(options.display, options.query, tolerance)),
     ...(await registryDriftFailures(options.document, options.query, tolerance)),
   ];
-  const expectedQueries =
-    Object.keys(options.display.publishedLatest).length +
-    options.display.unreleased.length +
-    options.document.packages.filter((entry) => entry.status !== 'unpublished').length;
+  // `verifiedPackages` is a DISTINCT package count (the same name can be
+  // probed by both layers). A name may appear in both sets when one layer
+  // answered and the other was offline; the two counters answer different
+  // questions and are deliberately not a partition.
   return {
     failures,
-    skipped: unverified > 0,
+    skipped: unverifiedNames.size > 0,
     ...(offlineReasons.length > 0 ? { reason: offlineReasons[0]! } : {}),
-    verifiedPackages: expectedQueries - unverified,
-    unverifiedPackages: unverified,
+    verifiedPackages: verifiedNames.size,
+    unverifiedPackages: unverifiedNames.size,
+  };
+}
+
+/** How a completed drift check maps to a CLI result. */
+export type DriftStatus = 'pass' | 'fail' | 'skip';
+
+export interface DriftVerdict {
+  status: DriftStatus;
+  exitCode: 0 | 1;
+  lines: string[];
+}
+
+/**
+ * Resolve a completed check into the CLI verdict. A proven drift is always a
+ * failure. An unreachable registry is a failure too (a gate must not pass an
+ * unverified display) unless the caller explicitly asked for a non-qualifying
+ * local run with `--allow-offline`; only then is it the loud SKIP.
+ */
+export function driftVerdict(
+  result: DriftCheckResult,
+  options: { allowOffline: boolean },
+): DriftVerdict {
+  if (result.failures.length > 0) {
+    return {
+      status: 'fail',
+      exitCode: 1,
+      lines: [
+        'registry-drift: FAIL — the site displays version values the registry does not serve:',
+        ...result.failures.map((failure) => `- ${failure}`),
+        "Land the publish train's registry-sync output (docs/release/release-state.json + " +
+          'www/app/data/version.ts + the regenerated release-line module) or fix the copy.',
+      ],
+    };
+  }
+  if (result.skipped) {
+    const detail =
+      `the npm registry could not be reached: ${result.reason ?? 'unknown'}. ` +
+      `${result.verifiedPackages} distinct package(s) had at least one answered probe, ` +
+      `${result.unverifiedPackages} distinct package(s) had an unverified probe.`;
+    if (options.allowOffline) {
+      return {
+        status: 'skip',
+        exitCode: 0,
+        lines: [
+          `registry-drift: SKIP (explicit non-qualifying local run — --allow-offline) — ${detail} ` +
+            'This result is not release evidence.',
+        ],
+      };
+    }
+    return {
+      status: 'fail',
+      exitCode: 1,
+      lines: [
+        `registry-drift: FAIL — ${detail} A gate/release run must not pass an unverified ` +
+          'display. For an explicit non-qualifying local run, pass --allow-offline.',
+      ],
+    };
+  }
+  return {
+    status: 'pass',
+    exitCode: 0,
+    lines: [
+      `registry-drift: PASS — all ${result.verifiedPackages} distinct required packages match ` +
+        'the live registry.',
+    ],
   };
 }
 
@@ -274,7 +369,28 @@ export async function readTrackedTruth(root: string): Promise<{
   return { document, display };
 }
 
+export const USAGE = `usage: node tools/release/registry-drift-check.ts [--allow-offline]
+
+Compares the site's displayed version values and the tracked registry block with
+the live npm registry. Any proven drift exits 1; any query failure exits 1 too,
+unless --allow-offline is passed. That flag is an explicit NON-QUALIFYING local
+mode for an unreachable registry; it never turns a proven drift green and is
+never used by gate:release.`;
+
 async function main(): Promise<void> {
+  let allowOffline = false;
+  for (const arg of process.argv.slice(2)) {
+    if (arg === '--allow-offline') {
+      allowOffline = true;
+    } else if (arg === '--help') {
+      process.stdout.write(`${USAGE}\n`);
+      return;
+    } else {
+      console.error(`registry-drift: unknown argument '${arg}'`);
+      console.error(USAGE);
+      process.exit(2);
+    }
+  }
   const root = process.cwd();
   const { document, display } = await readTrackedTruth(root);
   const result = await runRegistryDriftCheck({
@@ -282,28 +398,19 @@ async function main(): Promise<void> {
     display,
     query: npmRegistryEvidence,
   });
-  // Findings first: a network failure elsewhere never erases a proven drift.
-  if (result.failures.length > 0) {
-    console.error('registry-drift: the site displays version values the registry does not serve:');
-    for (const failure of result.failures) console.error(`- ${failure}`);
+  const verdict = driftVerdict(result, { allowOffline });
+  const write = verdict.exitCode === 0 ? console.log : console.error;
+  for (const line of verdict.lines) write(line);
+  process.exit(verdict.exitCode);
+}
+
+if (import.meta.main) {
+  try {
+    await main();
+  } catch (error) {
     console.error(
-      "Land the publish train's registry-sync output (docs/release/release-state.json + " +
-        'www/app/data/version.ts + the regenerated release-line module) or fix the copy.',
+      `registry-drift: FAIL — ${error instanceof Error ? error.message : String(error)}`,
     );
     process.exit(1);
   }
-  if (result.skipped) {
-    console.log(
-      `registry-drift: SKIP (no network — the npm registry could not be reached: ` +
-        `${result.reason ?? 'unknown'}). ${result.verifiedPackages} package(s) were ` +
-        `verified clean, ${result.unverifiedPackages} could not be verified.`,
-    );
-    process.exit(0);
-  }
-  console.log(
-    `registry-drift: ${Object.keys(display.publishedLatest).length} displayed package version(s) ` +
-      `match the live registry; ${display.unreleased.length} never-published name(s) absent.`,
-  );
 }
-
-if (import.meta.main) await main();
