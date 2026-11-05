@@ -6,6 +6,16 @@ tags: ['roadmap', 'architecture', 'alpha']
 excerpt: 'Function JSX and Signals, stateful composition without extra hosts, and explicit native boundaries: the planned sequence for compilation, component authoring, and deferred delivery.'
 ---
 
+> **Status note (2026-11-06)**: this article is a 2026-10-31 direction record,
+> not the current stage definition or a claim of shipped capability. The
+> current stages live in `alpha16-18-execution-plan.md`: 16a internal, 16b
+> release, 17 productization, 18 bounded defer, driven by the G1/G2/G3
+> evidence gates with no delivery dates. The Class/Decorator authoring API is
+> approved for retirement with no compatibility layer (ADR-0173, P-1/P-5).
+> The three-release table, "Alpha16 cross-module composition" and the
+> `/client/` URL migration below were contemporary proposals, since superseded.
+> The shipped version line remains `1.0.0-alpha.15`.
+
 OpenElement's next component model will use function JSX and Signals so that
 components can encapsulate their own state and subscriptions without adding a
 DOM host for every piece of business UI. Custom Elements remain a first-class
@@ -62,10 +72,12 @@ const Counter = component(() => {
 ```
 
 Authors will be able to keep drafts, expanded state and subscriptions inside a
-component while the framework manages cleanup. Existing class users will not
-need to rewrite immediately. OpenElement does not currently support React
-Hooks; the new model keeps Signals and does not introduce a Hooks or React
-ecosystem compatibility layer. Specific names and types still need validation.
+component while the framework manages cleanup. The Class/Decorator authoring
+API is approved for retirement (P-1/P-5) and removed in a single deletion
+commit; no compatibility layer or migration window is offered. OpenElement
+does not currently support React Hooks; the new model keeps Signals and does
+not introduce a Hooks or React ecosystem compatibility layer. Specific names
+and types still need validation.
 
 ## What the current architecture provides
 
@@ -112,9 +124,10 @@ children rather than managing these ownership details themselves.
 
 [ADR-0173: Component execution and composition](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0173-component-execution-and-composition.md)
 formally accepts the direction and amends the exclusive CE/class constraint in ADR-0143 while retaining claim fidelity,
-native interoperability and independent-consumer requirements. New functions
-and compatible old classes will share a backend and Signals; reflection,
-forms, Context and connection behavior still need individual adaptation tests.
+native interoperability and independent-consumer requirements. The
+Class/Decorator authoring API is approved for retirement with no compatibility
+adapter; reflection, forms, Context and connection behavior still need
+individual adaptation tests.
 
 ## Shared semantics do not require one executable program
 
@@ -206,8 +219,9 @@ Claim must avoid accidental repeat client setup or duplicate active
 subscriptions; bounded recovery must clean up before rebuilding.
 
 The recommended path still needs real author examples, type checks, source
-locations, mixed old/new use and full-page comparison. Existing class users
-will not have to rewrite immediately.
+locations and full-page comparison. The old authoring model is removed in one
+cutover after the new frontend passes the G1 evidence gate; no dual authoring
+lane is offered.
 
 ## Component packages must leave the monorepo
 
@@ -271,12 +285,12 @@ as output safety continues without waiting for every slice.
 | Release | Main work | User impact |
 | --- | --- | --- |
 | Alpha16 | Direct DOM codegen, public/private output, server-function extensions, page client-needs analysis | Existing components migrate to the new backend; zero JS is the goal for pages with no actual client need |
-| Alpha17 | Reactive function components, composition, explicit CE, independent packages and migration | One recommended path for new projects; compatible old classes; general upgrade tooling and URL migration proceed independently |
+| Alpha17 | Reactive function components, composition, explicit CE, independent packages and migration | One recommended path for new projects; the old class authoring API is retired with no compatibility layer; general upgrade tooling and URL migration proceed independently |
 | Alpha18 | Component defer, resource readiness, bounded resources and navigation integration | Useful content can arrive first, with explicit handling and fallback for late results and failures |
 
-Element and Router remain independently usable core products. Existing Lit
-compatibility stays maintained; OhMyLit is a separate product effort, not a
-condition for the main release. A new Native capability is not automatically
+Element and Router remain independently usable core products. The Lit renderer
+is handled by the independent ADR-0152 retirement track; the separate OhMyLit
+product effort has been discontinued. A new Native capability is not automatically
 a promise of equivalent Lit support. The layout convention remains.
 
 These are planning targets. ADR-0173 and ADR-0174 formally accept the architecture direction;

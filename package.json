@@ -13,7 +13,7 @@
     "test:e2e": "node tools/repo/gate.ts site:build @openelement/www#e2e:browsers @openelement/fixture-router-native-framework#e2e @openelement/fixture-router-lit-framework#e2e",
     "build": "pnpm -r --filter @openelement/protocol --filter @openelement/element --filter @openelement/compiler --filter @openelement/router --filter @openelement/create --filter @openelement/ui run build",
     "verify": "node tools/repo/gate.ts check test @openelement/tools-repo#gate:source saas:verify saas:workers @openelement/tools-release#gate:packed",
-    "release:check": "node tools/repo/gate.ts @openelement/tools-repo#generate:all @openelement/tools-repo#release:registry-check @openelement/tools-repo#gate:release @openelement/tools-release#gate:packed @openelement/tools-release#publish:npm:dry-run",
+    "release:check": "node tools/repo/gate.ts @openelement/ui#ui-manifest:check @openelement/ui#ui-cem:check @openelement/tools-repo#generate:all @openelement/tools-repo#release:registry-check @openelement/tools-repo#gate:release @openelement/tools-release#gate:packed @openelement/tools-release#publish:npm:dry-run",
     "site:build": "node tools/repo/gate.ts @openelement/tools-repo#generate:all @openelement/www#build @openelement/www#pagefind @openelement/www#emit:redirects @openelement/www#emit:sitemap @openelement/www#emit:rss",
     "pages:build": "vp run site:build",
     "site:verify": "node tools/repo/gate.ts site:build @openelement/www#check:links @openelement/www#check:theme-tokens @openelement/www#check:content @openelement/tools-repo#retired-api:check",

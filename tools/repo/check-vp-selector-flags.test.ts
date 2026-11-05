@@ -79,6 +79,32 @@ test('vp selector flags: a filter selection without the flag is a violation', ()
   expect(kinds(scan('vp run --filter=@openelement/tools-repo build'))).toEqual(['no-flag']);
 });
 
+test('vp selector flags: a filter selection without a task is a violation', () => {
+  // The filter matches packages, not tasks. Without a task token the command
+  // can match a package and still run nothing, even with the flag present.
+  for (const text of [
+    'vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo',
+    'vp run --no-cache --fail-if-no-match --filter=@openelement/tools-repo',
+    'vp run --no-cache --fail-if-no-match -F @openelement/tools-repo',
+  ]) {
+    expect(kinds(scan(text)), text).toEqual(['no-task']);
+  }
+});
+
+test('vp selector flags: the internal gate step form is not a vp invocation', () => {
+  // `node tools/repo/gate.ts … @pkg#task …` is gate.ts's internal step
+  // notation; gate.ts rewrites it to the fail-closed filter argv. It is legal
+  // there and must not be reported as a direct `vp run` selector.
+  for (const text of [
+    'node tools/repo/gate.ts @openelement/tools-repo#typecheck',
+    'node ../../tools/repo/gate.ts @openelement/www#build',
+  ]) {
+    const out = scan(text);
+    expect(kinds(out), text).toEqual([]);
+    expect(out.qualifiedCount, text).toEqual(0);
+  }
+});
+
 test('vp selector flags: the specifier defect is reported for every resolution outcome', () => {
   const resolving = scan('vp run --fail-if-no-match @openelement/www#build');
   expect(kinds(resolving)).toEqual(['specifier-form']);

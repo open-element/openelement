@@ -5,34 +5,44 @@
  * docs/agent-contract.md states what a coding agent may rely on:
  * the canonical task entry, the generated-file map, the gate semantics, the
  * machine-readable diagnostics consumption (#1612), and the ritual commands.
- * Every claim in it is checked here against the same facts the runtime uses —
- * the contract is derived, never hand-copied (P6):
+ * The mechanically checkable facts in it are checked here against the same
+ * facts the runtime uses — the derived blocks are never hand-copied (P6):
  *
  *   - The workspace/package inventory and the gate compositions are GENERATED
  *     blocks (markers below), rendered from the canonical discovery
  *     (tools/repo/workspace-tasks.ts) and the root package.json gate scripts.
  *     `--write` regenerates them in place; a hand edit fails the byte compare.
- *   - Every command the contract names must resolve: `vp run <pkg>#<task>`
- *     against the workspace's real package name + script graph, bare `vp run`
- *     against the root scripts, `pnpm --dir <ws> run <task>` against the
- *     named workspace, `node <path>` against the file system, and the
- *     `openelement build` diagnostics flags against the CLI source that
- *     implements them. A renamed or deleted task therefore turns the contract
- *     red — the drift guard the issue pins. A package-qualified `vp run` must
- *     also carry `--fail-if-no-match`, because the contract is the form agents
- *     copy: a missing flag here propagates the silently-unmatched selector
- *     into every new call site (the repo-wide tripwire for call sites that are
- *     not documentation is tools/repo/check-vp-selector-flags.ts).
+ *   - Every command the contract names must resolve. The executable
+ *     package-qualified form is `vp run --no-cache --fail-if-no-match --filter
+ *     <pkg> <task>`: it is checked against the workspace's real package name
+ *     and script graph, and the shared parser (tools/repo/vp-run-form.ts)
+ *     keeps this check and tools/repo/check-vp-selector-flags.ts on the same
+ *     definition. The `pkg#task` specifier form is rejected here for the same
+ *     reason the scan rejects it: vp resolves that form's package by exact
+ *     NAME and exits 0 without running anything when it matches nothing, and
+ *     `--fail-if-no-match` is inert on it (measured against vp 1.0.0). Bare
+ *     `vp run` commands resolve against the root scripts; `pnpm --dir <ws> run
+ *     <task>`, `node <path>`, and the `openelement build` diagnostics flags are
+ *     checked against their owning files. A renamed or deleted task therefore
+ *     turns the contract red — the drift guard the issue pins.
+ *   - The internal gate form (`@pkg#task` inside a `node tools/repo/gate.ts`
+ *     step list) is legal and is validated as such: gate.ts parses each step
+ *     and dispatches it through the fail-closed filter argv, so a gate step is
+ *     not a `vp run` call. Every root and workspace gate composition's steps
+ *     must name an existing root script or an existing package + task, which
+ *     also rejects the path-shaped `dir#task` selector at parse time.
  *   - The diagnostics-consumption section is anchored both ways: the doc must
  *     carry the envelope facts (format tag, CLI flags, parse entry points)
  *     and the owning sources must still declare them.
  *   - www/public/llms.txt is the published surface: it must exist and every
  *     repository path it links must exist.
  *
- * Scope note: this is static conformance — the check proves every command
- * EXISTS and is wired exactly as documented. It does not execute the gates
- * (the gates' own runs are their conformance); executing every documented
- * command here would re-run the release train inside a unit check.
+ * Scope note: this is static conformance, not execution. It proves every
+ * named command RESOLVES and every internal gate step names a real package +
+ * task; it does not execute the gates, prove their side effects, or prove that
+ * a generated output is Git-tracked. Those are review facts, and the contract
+ * says so rather than implying this check proves them. Executing every
+ * documented command here would re-run the release train inside a unit check.
  *
  * External binaries named by the contract (zizmor) are recognized but not
  * resolved: they are not workspace facts. Everything else must resolve.
@@ -41,6 +51,16 @@ import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { parseGateStep, type GateStep } from './gate.ts';
+import {
+  CANONICAL_PACKAGE_COMMAND,
+  isAnglePlaceholder,
+  parseVpRunForm,
+  unknownVpRunFlags,
+  vpRunSpecifier,
+  VP_FAIL_IF_NO_MATCH,
+  VP_NO_CACHE,
+} from './vp-run-form.ts';
 import { readWorkspaces, type WorkspaceTasks } from './workspace-tasks.ts';
 
 export const CONTRACT_PATH = 'docs/agent-contract.md';
@@ -126,9 +146,6 @@ export function extractCommands(markdown: string): string[] {
 
 // ─── Command resolution ─────────────────────────────────────────────
 
-/** The vp flags the contract documents. An undocumented flag is a typo the check must name. */
-const VP_FLAGS = new Set(['--fail-if-no-match', '--no-cache']);
-
 /**
  * Resolve one command against the workspace facts. Returns null when the
  * command exists exactly as documented, else the failure reason.
@@ -152,40 +169,54 @@ function resolveVpRun(text: string, facts: ContractFacts): string | null {
     .slice('vp run '.length)
     .split(/\s+/)
     .filter((token) => token.length > 0);
-  const positional: string[] = [];
-  let hasNoMatchFlag = false;
-  for (const token of argv) {
-    if (token.startsWith('--')) {
-      if (!VP_FLAGS.has(token)) return `vp run: undocumented flag '${token}'`;
-      if (token === '--fail-if-no-match') hasNoMatchFlag = true;
-      continue;
+  // The executable-form grammar is shared with tools/repo/check-vp-selector-flags.ts:
+  // both must treat the `pkg#task` specifier as a defect and the filter +
+  // flag + task shape as the only external package selection.
+  const form = parseVpRunForm(argv);
+  const unknown = unknownVpRunFlags(form);
+  if (unknown.length > 0) {
+    return `vp run: undocumented flag '${unknown[0]}'`;
+  }
+  const specifier = vpRunSpecifier(form);
+  if (specifier !== undefined) {
+    return (
+      `vp run: '${specifier}' is the internal pkg#task specifier form; ` +
+      `${VP_FAIL_IF_NO_MATCH} is inert on it and vp exits 0 when nothing matches — ` +
+      `use '${CANONICAL_PACKAGE_COMMAND}'`
+    );
+  }
+  if (!form.filterRequested) {
+    if (form.positionals.length !== 1) {
+      return `vp run: expected exactly one root task, got ${form.positionals.length}`;
     }
-    positional.push(token);
-  }
-  if (positional.length !== 1) {
-    return `vp run: expected exactly one task specifier, got ${positional.length}`;
-  }
-  const specifier = positional[0];
-  const hash = specifier.indexOf('#');
-  if (hash === -1) {
+    const task = form.positionals[0]!;
     // A placeholder form (`vp run <task>`) states the SHAPE, not a runnable
-    // claim: the flag check above is its contract.
-    if (/^<[^>]+>$/.test(specifier)) return null;
-    if (!(specifier in facts.rootScripts)) {
-      return `vp run: no root script named '${specifier}'`;
+    // claim: the flag checks above are its contract.
+    if (isAnglePlaceholder(task)) return null;
+    if (!(task in facts.rootScripts)) {
+      return `vp run: no root script named '${task}'`;
     }
     return null;
   }
-  // A package-qualified command the contract documents must carry the flag:
-  // the contract is the form agents copy, so a missing flag there propagates
-  // the silent-no-op selector into every new call site.
-  if (!hasNoMatchFlag) {
-    return `vp run: '${specifier}' is package-qualified and must document --fail-if-no-match`;
+
+  // Package-qualified: the contract is the form agents copy, so it must show
+  // the complete fail-closed argv, not just a flag that happens to be present.
+  if (!form.failIfNoMatch) {
+    return `vp run: a --filter selection must carry ${VP_FAIL_IF_NO_MATCH} (got '${text}')`;
   }
-  const pkg = specifier.slice(0, hash);
-  const task = specifier.slice(hash + 1);
-  // The placeholder form (`vp run <pkg>#<task>`) is shape-only, same rule.
-  if (/^<[^>]+>$/.test(pkg) && /^<[^>]+>$/.test(task)) return null;
+  if (!form.noCache) {
+    return `vp run: a package-qualified command must carry ${VP_NO_CACHE} (a gate step is proof, not a build accelerator)`;
+  }
+  if (form.filter === undefined) {
+    return 'vp run: a --filter selection must name a package';
+  }
+  if (form.positionals.length !== 1) {
+    return `vp run: expected exactly one task after --filter, got ${form.positionals.length}`;
+  }
+  const pkg = form.filter;
+  const task = form.positionals[0]!;
+  // The placeholder form (`vp run --filter <pkg> <task>`) is shape-only.
+  if (isAnglePlaceholder(pkg) || isAnglePlaceholder(task)) return null;
   const workspace = facts.workspaces.find((candidate) => candidate.name === pkg);
   if (!workspace) return `vp run: no workspace package named '${pkg}'`;
   if (!(task in workspace.tasks)) {
@@ -255,6 +286,78 @@ export function gateCompositions(rootScripts: Record<string, string>): GateCompo
     }
   }
   return out.sort((a, b) => a.script.localeCompare(b.script));
+}
+
+/** A gate composition plus the manifest that declares it (root or workspace). */
+export interface NamedGateComposition extends GateComposition {
+  owner: string;
+}
+
+/**
+ * Every gate composition in the task graph, not only the root aggregate
+ * scripts: workspace gates (`tools/repo#gate:source`, fixture gates, ...) run
+ * through the same coordinator and use the same internal `pkg#task` step
+ * notation. A step with no `#` is a ROOT script because gate.ts always
+ * dispatches bare steps against the root package, even from a workspace task.
+ */
+export function allGateCompositions(facts: ContractFacts): NamedGateComposition[] {
+  const out: NamedGateComposition[] = [];
+  for (const { script, steps } of gateCompositions(facts.rootScripts)) {
+    out.push({ owner: '.', script, steps });
+  }
+  for (const workspace of facts.workspaces) {
+    for (const [script, command] of Object.entries(workspace.tasks)) {
+      const tokens = command.split(/\s+/);
+      if (tokens[0] !== 'node' || !tokens[1]?.endsWith('gate.ts')) continue;
+      const steps = tokens.slice(2).filter((token) => token.length > 0);
+      if (steps.length > 0) out.push({ owner: workspace.workspace, script, steps });
+    }
+  }
+  return out.sort((a, b) => a.owner.localeCompare(b.owner) || a.script.localeCompare(b.script));
+}
+
+/**
+ * Validate the INTERNAL gate form. `@pkg#task` is legal only as a gate.ts
+ * step, where gate.ts parses it and rewrites it to the fail-closed
+ * `vp run --no-cache --fail-if-no-match --filter pkg task` argv. This check
+ * keeps that notation honest: the package must be an exact workspace name and
+ * the task must exist, so a stale step fails the contract instead of relying
+ * on the gate's runtime dispatch to discover it.
+ */
+export function validateGateSteps(facts: ContractFacts): string[] {
+  const failures: string[] = [];
+  for (const { owner, script, steps } of allGateCompositions(facts)) {
+    for (const step of steps) {
+      let parsed: GateStep;
+      try {
+        parsed = parseGateStep(step);
+      } catch (error) {
+        failures.push(
+          `agent-contract: gate '${script}' (${owner}) has an invalid step '${step}': ${(error as Error).message}`,
+        );
+        continue;
+      }
+      if (parsed.pkg === null) {
+        if (!(parsed.task in facts.rootScripts)) {
+          failures.push(
+            `agent-contract: gate '${script}' (${owner}) step '${step}' names no root script`,
+          );
+        }
+        continue;
+      }
+      const workspace = facts.workspaces.find((candidate) => candidate.name === parsed.pkg);
+      if (!workspace) {
+        failures.push(
+          `agent-contract: gate '${script}' (${owner}) step '${step}' names no workspace package '${parsed.pkg}'`,
+        );
+      } else if (!(parsed.task in workspace.tasks)) {
+        failures.push(
+          `agent-contract: gate '${script}' (${owner}) step '${step}' names no task '${parsed.task}' in ${parsed.pkg}`,
+        );
+      }
+    }
+  }
+  return failures;
 }
 
 export function renderWorkspacesBlock(facts: ContractFacts): string {
@@ -393,7 +496,11 @@ export async function validateMarkdown(
     }
   }
 
-  // 2. Every command must resolve.
+  // 2. Every gate step must resolve in its legal INTERNAL form. A gate step is
+  //    not a vp invocation; gate.ts owns the rewrite to the fail-closed argv.
+  failures.push(...validateGateSteps(facts));
+
+  // 3. Every command must resolve.
   const commands = extractCommands(markdown);
   for (const command of commands) {
     const failure = await resolveCommand(command, facts, repoRootDir);
@@ -405,7 +512,7 @@ export async function validateMarkdown(
     );
   }
 
-  // 3. The diagnostics claims must be anchored in code, and the doc must
+  // 4. The diagnostics claims must be anchored in code, and the doc must
   //    still carry them.
   const protocolSource = await readIfExists(join(repoRootDir, DIAGNOSTICS_PROTOCOL_SOURCE));
   const cliSource = await readIfExists(join(repoRootDir, DIAGNOSTICS_CLI_SOURCE));
@@ -452,7 +559,7 @@ export async function validateMarkdown(
     }
   }
 
-  // 4. The published llms.txt. (AGENTS.md is intentionally NOT checked: it
+  // 5. The published llms.txt. (AGENTS.md is intentionally NOT checked: it
   //    is an owner-local, git-excluded file — `.git/info/exclude` — not a
   //    repository fact; a fresh checkout has none.)
   failures.push(...(await validateLlmsTxt(repoRootDir, markdown)));

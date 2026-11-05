@@ -6,6 +6,8 @@ tags: ['roadmap', 'architecture', 'alpha']
 excerpt: '函数式 JSX 与 Signals、无需额外 host 的有状态组合、显式原生边界：编译与安全交付、组件创作和异步内容交付的规划顺序。'
 ---
 
+> **本文状态（2026-11-06 补记）**：本文是 2026-10-31 的方向记录，不代表当前阶段定义或已实现能力。当前阶段划分以 `alpha16-18-execution-plan.md` 为准：16a 内部、16b 发布、17 产品化、18 有界 defer，由 G1/G2/G3 证据门驱动，无交付日期。Class/Decorator 作者 API 已批准退役且不提供兼容层（ADR-0173、P-1/P-5）。文中「三个版本交付顺序」「Alpha16 支持跨模块组合」「`/client/` URL 迁移」等表述均为当时的设想，已被后续修订取代。当前版本线仍为 `1.0.0-alpha.15`。
+
 接下来的 OpenElement 将提供函数式 JSX 与 Signals，让组件封装自己的状态和订阅，拆分业务 UI 时无需逐个增加 DOM host。需要原生属性、事件、slots、Shadow DOM、表单关联或跨框架消费时，Custom Elements 继续提供正式出口。Alpha16–18 依次改进编译与安全交付、组件创作和异步内容交付。
 
 ## 写法会怎样变化
@@ -44,7 +46,7 @@ const Counter = component(() => {
 });
 ```
 
-作者可以把草稿、展开状态和订阅放进组件，资源清理由框架负责。旧 class 用户无需立即重写。当前 OE 没有 React Hooks；新模型沿用 Signals，不引入 Hooks/React 生态兼容层。具体名称和类型仍需验证。
+作者可以把草稿、展开状态和订阅放进组件，资源清理由框架负责。Class/Decorator 作者 API 已批准退役（P-1/P-5），切换为单次删除提交，不提供兼容层或迁移期。当前 OE 没有 React Hooks；新模型沿用 Signals，不引入 Hooks/React 生态兼容层。具体名称和类型仍需验证。
 
 ## 当前架构解决了什么
 
@@ -64,7 +66,7 @@ OpenElement 已经有一套编译型组件基础。TSX 在构建期转换成版�
 
 这要求框架建立逻辑实例与 DOM region 的关系：分支删除要释放整个子树，keyed 移动要保留身份和状态，Children 插入必须有唯一清理责任。用户仍通过 props 和 children 组合组件，这些所有权细节由编译器与运行时承担。
 
-[ADR-0173：组件执行与组合模型](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0173-component-execution-and-composition.md) 已正式接受架构方向并修订 ADR-0143 中唯一 CE/class 模型的约束，保留 claim fidelity、原生互操作及独立消费者验证要求。旧 class 继续兼容，新增函数模型共用后端与 Signals；反射、表单、Context 和连接行为的适配仍需要逐项验证。
+[ADR-0173：组件执行与组合模型](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0173-component-execution-and-composition.md) 已正式接受架构方向并修订 ADR-0143 中唯一 CE/class 模型的约束，保留 claim fidelity、原生互操作及独立消费者验证要求。Class/Decorator 作者 API 已批准退役，不建兼容适配器；反射、表单、Context 和连接行为的适配仍需要逐项验证。
 
 ## 困境二：共享 program 的便利限制了执行后端
 
@@ -110,7 +112,7 @@ OpenElement 当前没有 React Hooks。函数组件也不引入 Hooks 兼容承�
 
 CSS 隐藏且仍挂载会保留实例和订阅。条件分支未激活时不创建实例，退出时销毁，重新进入建立新实例；首版没有隐含 keep-alive。SSR 和客户端分别初始化，接管需避免客户端意外重复 setup 和重复活动订阅；局部恢复重建时先正确清理。
 
-推荐路径需要在真实作者样例、类型检查、源码定位、旧/新混用和完整页面对照中得到验证。已有 class 用户无需立即重写项目。
+推荐路径需要在真实作者样例、类型检查、源码定位和完整页面对照中得到验证。旧作者模型在新前端通过 G1 证据门后一次性移除，不设双轨共存。
 
 ## 组件包必须跨出 monorepo
 
@@ -143,9 +145,9 @@ OpenElement 已有 route/field streaming。[ADR-0158](https://github.com/open-el
 | 版本 | 主要工作 | 用户影响 |
 | --- | --- | --- |
 | Alpha16 | 直接 DOM codegen、公开/私有输出隔离、服务端函数扩展、页级客户端需求判定 | 现有组件迁移到新后端；无实际客户端需求的页面目标为零 JS |
-| Alpha17 | 响应式函数组件、组合、显式 CE、独立组件包及迁移 | 新项目获得统一推荐路径；旧 class 保留兼容；通用 upgrade 和 URL 迁移独立推进 |
+| Alpha17 | 响应式函数组件、组合、显式 CE、独立组件包及迁移 | 新项目获得统一推荐路径；旧 class 作者 API 退役、无兼容层；通用 upgrade 和 URL 迁移独立推进 |
 | Alpha18 | 组件级 defer、资源准备、有限资源及导航整合 | 快内容可以先显示，迟到结果和失败有明确处理与fallback |
 
-Element 与 Router 继续承担核心产品职责。Lit 现有兼容继续维护，独立 OhMyLit 产品另行规划；Native 的新增能力不自动构成 Lit 对等支持承诺。
+Element 与 Router 继续承担核心产品职责。Lit 渲染器按 ADR-0152 独立退役轨道处理，OhMyLit 独立产品计划已终止；Native 的新增能力不自动构成 Lit 对等支持承诺。
 
 以上是规划目标。ADR-0173/0174 已正式接受架构方向，已登记的 amendment 保留历史与变更关系；实现仍待完成，预编译组件包分发契约尚未冻结。具体 API、发布状态和性能收益以实现与验证结果为准，当前没有固定发布日期或新的收益数字。
