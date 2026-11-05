@@ -5,7 +5,7 @@
  * out of the runtime-face packages — protocol/element/compiler/router/ui bar
  * Node APIs AND the retired host's API surface, the node-hosted create CLI
  * bars the retired host's API surface only, and every packed module is
- * checked for CJS syntax, undeclared imports, and the JSR bridge.
+ * checked for CJS syntax, undeclared imports, and non-npm registry inputs.
  */
 
 import { dirname, join, resolve } from 'node:path';
@@ -17,6 +17,7 @@ import { runCommand } from '../lib/process.ts';
 import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
+import { findNonNpmRegistryInput, findNonNpmRegistrySpecifier } from './npm-manifest.ts';
 
 const PUBLINT_VERSION = '0.3.21';
 const ATTW_VERSION = '0.18.4';
@@ -92,17 +93,15 @@ const HOST_TOOLING_PATH_ALLOWLIST: Record<string, RegExp> = {
   '@openelement/router': /^src\/(?:vite\/|cli\/|nitro-mount\.|internal\/node-http\.)/,
 };
 
-/**
- * The JSR npm-compat bridge is deleted: packed first-party modules carry no
- * bare `@std/*` specifiers, so no `@jsr/*` dependency may appear in any
- * packed manifest and no `@std/`/`jsr:`/`@jsr/` specifier may appear in any
- * packed module. npm is the only public registry.
+/*
+ * npm is the only public registry (ADR-0161). This scan shares the policy with
+ * the pack-time manifest projection (tools/release/npm-manifest.ts,
+ * findNonNpmRegistrySpecifier / findNonNpmRegistryInput): packed first-party
+ * modules carry no bare `@std/*` specifier, and no packed manifest may declare
+ * a non-npm NAME or VALUE in any dependency section. The shared predicate is
+ * the single definition, so a spelling accepted at pack time cannot fail here
+ * for a different reason (or the reverse).
  */
-function isForbiddenBridgeSpecifier(specifier: string): boolean {
-  return (
-    specifier.startsWith('@std/') || specifier.startsWith('@jsr/') || specifier.startsWith('jsr:')
-  );
-}
 
 const RUNTIME_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 const CJS_PATTERNS: Array<[RegExp, string]> = [
@@ -400,11 +399,14 @@ function manifestImportViolations(
     if (!isModuleScanPath(relative)) continue;
     const source = readFileSync(entryPath, 'utf8');
     for (const { value, line } of extractStaticModuleSpecifiers(source, relative)) {
-      if (isForbiddenBridgeSpecifier(value)) {
+      const specifierForm = findNonNpmRegistrySpecifier(value);
+      if (specifierForm !== null) {
         violations.push({
           path: `${packageName}/${relative}`,
           line,
-          message: `JSR bridge specifier '${value}' is forbidden; npm is the only public registry`,
+          message:
+            `non-npm registry specifier '${value}' (form '${specifierForm}') is forbidden; ` +
+            'npm is the only public registry',
         });
         continue;
       }
@@ -447,13 +449,19 @@ function pushPackageJsonViolations(
     });
   }
   for (const section of ['dependencies', 'peerDependencies', 'optionalDependencies'] as const) {
-    for (const key of Object.keys((packageJson[section] as Record<string, string>) ?? {})) {
-      if (key.startsWith('@jsr/')) {
-        violations.push({
-          path: `${packageName}/package.json`,
-          message: `bridge dependency '${key}' is forbidden; npm is the only public registry`,
-        });
-      }
+    for (const [key, value] of Object.entries(
+      (packageJson[section] as Record<string, string>) ?? {},
+    )) {
+      const input = findNonNpmRegistryInput(key, value);
+      if (input === null) continue;
+      const detail =
+        input.field === 'name'
+          ? `name '${key}' has the non-npm registry name form '${input.form}'`
+          : `'${key}' declares '${String(value)}' with the non-npm registry value form '${input.form}'`;
+      violations.push({
+        path: `${packageName}/package.json`,
+        message: `non-npm registry dependency in ${section}: ${detail}; npm is the only public registry`,
+      });
     }
   }
   return packageJson;

@@ -11,10 +11,12 @@
  * smuggle a day-one version past the window). Registry and network
  * failures fail closed — an unverifiable package is a red, never a silent
  * pass. Successful lookups are cached in `.artifacts/` (publish times are
- * immutable) so repeat runs avoid re-querying; the on-disk format is
- * versioned and any earlier-shape cache is discarded wholesale, so entries
- * written before the exact-version rule can never survive as a second
- * authority.
+ * immutable) so repeat runs avoid re-querying. The on-disk format is
+ * versioned and records the registry each publish time came from: the cache
+ * key is the package key alone, so without the source a mirror-era answer
+ * would be indistinguishable from an npm answer after the policy changed.
+ * Any earlier-shape cache is discarded wholesale (v2 and older recorded no
+ * source), so an old npm.jsr.io entry can never be replayed as npm evidence.
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
@@ -22,20 +24,26 @@ import process from 'node:process';
 const MIN_AGE_DAYS = 3;
 const DAY_MS = 86_400_000;
 const CACHE_PATH = '.artifacts/dep-age-cache.json';
-/** Cache format version; bumped whenever the writer's semantics change. */
-const CACHE_VERSION = 2;
+/**
+ * Cache format version; bumped whenever the writer's semantics change.
+ * v3: each entry records its registry origin. v2 entries were a bare
+ * `key → publish` map with no source, so they are discarded on read rather
+ * than trusted as npm results (a local run could otherwise inherit a
+ * pre-npm-only cache). This is a one-way migration: v2 is re-fetched.
+ */
+const CACHE_VERSION = 3;
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
 const FETCH_TIMEOUT_MS = 60_000;
 const FETCH_ATTEMPTS = 2;
 const CONCURRENCY = 12;
 
 /**
- * The only registry hosts this gate may query. The lockfile's per-package
+ * The only registry host this gate may query. The lockfile's per-package
  * `tarball:` lines are repository-controlled but still file data; the fetch
- * below therefore fails closed on any host outside this set. A new registry
- * (a new jsr-style mirror) is a deliberate, reviewed extension of this set.
+ * below therefore fails closed on any host outside this set. npm is the only
+ * public registry (ADR-0161); no mirror is an accepted source.
  */
-const REGISTRY_HOSTS = new Set(['registry.npmjs.org', 'npm.jsr.io']);
+const REGISTRY_HOSTS = new Set(['registry.npmjs.org']);
 
 /**
  * npm's package-name grammar (validate-npm-package-name): lowercase, scoped
@@ -122,16 +130,27 @@ export function ageFailure(publishIso: string, now: Date, key: string): string |
   return undefined;
 }
 
+/** One cached publish time together with the registry that supplied it. */
+export interface CacheEntry {
+  /** Registry origin the publish time was read from. */
+  registry: string;
+  /** The exact locked version's publish time (ISO 8601). */
+  publish: string;
+}
+
 /**
  * Read a cache document, or reject anything that is not the current
- * version. The pre-versioning cache was a flat `key → time` map written
- * while `time.created` fallbacks were still accepted, so its entries are
- * indistinguishable from exact-version times — every non-v2 shape
- * (including that flat map) and unparsable text is discarded wholesale and
+ * version. The pre-versioning cache was a flat `key → time` map (whose
+ * entries could be `time.created` fallbacks), and v2 was a `key → publish`
+ * map with exact-version times but still no registry source. Neither can
+ * prove which registry answered, so a local cache could have come from the
+ * retired npm.jsr.io mirror and is indistinguishable from an npm answer.
+ * Every non-v3 shape (including those maps), an entry without a string
+ * registry and publish time, and unparsable text are discarded wholesale and
  * the affected packages are re-fetched from the registry, the only
  * authority.
  */
-export function parseCache(text: string): Record<string, string> {
+export function parseCache(text: string): Record<string, CacheEntry> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -142,32 +161,80 @@ export function parseCache(text: string): Record<string, string> {
   if ((parsed as { version?: unknown }).version !== CACHE_VERSION) return {};
   const publish = (parsed as { publish?: unknown }).publish;
   if (typeof publish !== 'object' || publish === null) return {};
-  const entries: Record<string, string> = {};
+  const entries: Record<string, CacheEntry> = {};
   for (const [key, value] of Object.entries(publish)) {
-    if (typeof value === 'string') entries[key] = value;
+    if (typeof value !== 'object' || value === null) continue;
+    const { registry, publish: time } = value as {
+      registry?: unknown;
+      publish?: unknown;
+    };
+    if (typeof registry === 'string' && registry !== '' && typeof time === 'string') {
+      entries[key] = { registry, publish: time };
+    }
   }
   return entries;
 }
 
+function registryOrigin(registry: string): string | undefined {
+  try {
+    return new URL(registry).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The cached publish time for a package, or undefined when there is none or
+ * the entry was written for another registry origin. Matching the recorded
+ * source is the cache-level half of the npm-only policy: even a cache that
+ * somehow survived the version bump cannot answer for a package resolved
+ * from a different registry.
+ */
+export function cachedPublishTime(
+  cache: Readonly<Record<string, CacheEntry>>,
+  pkg: LockPackage,
+): string | undefined {
+  const entry = cache[pkg.key];
+  if (entry === undefined) return undefined;
+  const cached = registryOrigin(entry.registry);
+  const wanted = registryOrigin(pkg.registry);
+  return cached !== undefined && cached === wanted ? entry.publish : undefined;
+}
+
+/**
+ * Preflight every lockfile package before its cache entry is trusted. The
+ * cache is keyed by package key, not by registry, so an entry written while a
+ * mirror was still allowlisted could otherwise outlive the policy change.
+ * A registry host, URL, or package name outside the npm contract is a red
+ * before any cache read or network touch.
+ */
+export function registryFailure(pkg: LockPackage): string | undefined {
+  let registry: URL;
+  try {
+    registry = new URL(pkg.registry);
+  } catch {
+    return `${pkg.key}: registry ${JSON.stringify(pkg.registry)} is not a parsable URL — failing closed`;
+  }
+  if (!REGISTRY_HOSTS.has(registry.host)) {
+    return (
+      `${pkg.key}: registry host ${JSON.stringify(registry.host)} is not allowlisted ` +
+      `(expected ${[...REGISTRY_HOSTS].sort().join(', ')}) — failing closed; ` +
+      'npm is the only public registry'
+    );
+  }
+  if (!NPM_NAME_RE.test(pkg.name)) {
+    return `${pkg.key}: package name ${JSON.stringify(pkg.name)} is not a legal npm name — failing closed`;
+  }
+  return undefined;
+}
+
 /** Resolve the publish time, or a `${pkg.key}: …` failure message (fail-closed). */
 export async function fetchPublishTime(pkg: LockPackage): Promise<string> {
+  const preflight = registryFailure(pkg);
+  if (preflight !== undefined) return preflight;
   let reason = 'no attempt';
   for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
     try {
-      // Fail closed before any network touch: the registry origin is lockfile
-      // data, so both its parsability and its host are re-validated here
-      // rather than trusted from the parser.
-      const registry = new URL(pkg.registry);
-      if (!REGISTRY_HOSTS.has(registry.host)) {
-        return (
-          `${pkg.key}: registry host ${JSON.stringify(registry.host)} is not allowlisted ` +
-          `(expected one of ${[...REGISTRY_HOSTS].sort().join(', ')}) — failing closed; ` +
-          'extend REGISTRY_HOSTS deliberately if this registry is intended'
-        );
-      }
-      if (!NPM_NAME_RE.test(pkg.name)) {
-        return `${pkg.key}: package name ${JSON.stringify(pkg.name)} is not a legal npm name — failing closed`;
-      }
       // Full (non-abbreviated) packuments: only they carry the `time` map,
       // and for meta-packages like playwright they reach ~20MB.
       const response = await fetch(packumentUrl(pkg.registry, pkg.name), {
@@ -200,8 +267,16 @@ if (import.meta.main) {
   const now = new Date();
   const packages = parseLockPackages(await readFile('pnpm-lock.yaml', 'utf8'));
   const cache = parseCache(await readFile(CACHE_PATH, 'utf8').catch(() => ''));
-  const pending = packages.filter((pkg) => cache[pkg.key] === undefined);
-  const failures: string[] = [];
+  // Host/name preflight runs for every package, cached or not: a warm cache
+  // must never launder a registry the allowlist no longer accepts.
+  const rejected = new Map<string, string>();
+  const pending: LockPackage[] = [];
+  for (const pkg of packages) {
+    const failure = registryFailure(pkg);
+    if (failure !== undefined) rejected.set(pkg.key, failure);
+    else if (cachedPublishTime(cache, pkg) === undefined) pending.push(pkg);
+  }
+  const failures: string[] = [...rejected.values()];
   const queue = [...pending];
   let fetched = 0;
   await Promise.all(
@@ -210,14 +285,15 @@ if (import.meta.main) {
         const result = await fetchPublishTime(pkg);
         if (result.startsWith(`${pkg.key}:`)) failures.push(result);
         else {
-          cache[pkg.key] = result;
+          cache[pkg.key] = { registry: pkg.registry, publish: result };
           fetched++;
         }
       }
     }),
   );
   for (const pkg of packages) {
-    const publish = cache[pkg.key];
+    if (rejected.has(pkg.key)) continue;
+    const publish = cachedPublishTime(cache, pkg);
     if (publish !== undefined) {
       const failure = ageFailure(publish, now, pkg.key);
       if (failure !== undefined) failures.push(failure);
@@ -235,6 +311,6 @@ if (import.meta.main) {
     process.exit(1);
   }
   console.log(
-    `Dependency age check passed: ${packages.length} resolved packages, ${fetched} fetched, ${packages.length - fetched} cached, min age ${MIN_AGE_DAYS}d.`,
+    `Dependency age check passed: ${packages.length} resolved packages, ${fetched} fetched, ${packages.length - fetched - rejected.size} cached, min age ${MIN_AGE_DAYS}d.`,
   );
 }
