@@ -5,7 +5,8 @@ import {
   type StreamShellManifest,
   renderToString,
 } from '../../src/public-runtime.ts';
-import { OpenElementError } from '@openelement/protocol/errors';
+import { computed } from '../../src/internal/signal/framework.ts';
+import { FacadeErrorCode, OpenElementError } from '@openelement/protocol/errors';
 import type { PartProgramV2 } from '@openelement/protocol/part-program';
 import { CompiledProgramValidationError } from '../../src/internal/compiled/server/shared.ts';
 import { type TestNodeSpec, testProgram } from '../compiled-runtime/test-program.ts';
@@ -547,4 +548,153 @@ test('deferred bridge enforces the build-aligned field/owner budget on hand-writ
     instanceId: 'pair-budget-32',
   });
   expect(Object.keys(boundary.seed).length).toEqual(32);
+});
+
+test('a pending property read through a computed Part keeps the stream pending code', async () => {
+  const computedProgram = testProgram({
+    tag: 'oe-deferred-computed',
+    rootMode: 'light',
+    template: [
+      {
+        k: 'el',
+        tag: 'p',
+        attrs: [],
+        children: [
+          { k: 'part', index: 0 },
+          { k: 'part', index: 1 },
+        ],
+      },
+    ],
+    parts: [
+      { k: 'text', index: 0, signal: 'title' },
+      { k: 'text', index: 1, signal: 'derived' },
+    ],
+    properties: [
+      {
+        name: 'title',
+        attribute: null,
+        type: 'string',
+        converter: 'string',
+        reflect: false,
+        default: 'default',
+      },
+      {
+        name: 'derived',
+        attribute: null,
+        type: 'string',
+        converter: 'string',
+        reflect: false,
+        default: '',
+      },
+    ],
+  }) as PartProgramV2;
+  // The compiler marks a `= computed(() => ...)` field after the plain
+  // property records; mirror that emitted shape (computed is never seeded).
+  const derivedRecord = computedProgram.metadata.properties.find(
+    (record) => record.name === 'derived',
+  )!;
+  derivedRecord.computed = true;
+  derivedRecord.deps = ['title'];
+
+  class ComputedPage {}
+  Object.assign(ComputedPage, {
+    __partProgram: computedProgram,
+    __compiledProperties: computedProgram.metadata.properties,
+    __computedFields: {
+      derived: (signals: Record<string, { value: unknown }>) =>
+        computed(() => String(signals.title.value)),
+    },
+  });
+  const deferredManifest = await manifestFor(computedProgram, [
+    { field: 'title', signal: 'title', owners: [{ kind: 'part', index: 0 }] },
+  ]);
+  const error = await assertRejectsIncludes(
+    () =>
+      createStreamShellExecutor({
+        componentClass: ComputedPage as unknown as CustomElementConstructor,
+        manifest: deferredManifest,
+        instanceId: 'computed-instance',
+      }),
+    OpenElementError,
+    'pending property "title" was read while creating a stream shell',
+  );
+  expect(error.code).toEqual(FacadeErrorCode.STREAM_PENDING_READ);
+  expect(error.phase).toEqual('ssr');
+});
+
+test('a pending property refuses subscription and write with the same pending code', async () => {
+  const pendingOpsProgram = testProgram({
+    tag: 'oe-deferred-pending-ops',
+    rootMode: 'light',
+    template: [{ k: 'el', tag: 'p', attrs: [], children: [{ k: 'part', index: 0 }] }],
+    parts: [{ k: 'text', index: 0, signal: 'title' }],
+    properties: [
+      {
+        name: 'title',
+        attribute: null,
+        type: 'string',
+        converter: 'string',
+        reflect: false,
+        default: 'default',
+      },
+      {
+        name: 'observation',
+        attribute: null,
+        type: 'string',
+        converter: 'string',
+        reflect: false,
+        default: '',
+      },
+    ],
+  }) as PartProgramV2;
+  // The compiler marks a `= computed(() => ...)` field after the plain records;
+  // mirror that shape so the factory runs against the seeded pending signal.
+  const observationRecord = pendingOpsProgram.metadata.properties.find(
+    (record) => record.name === 'observation',
+  )!;
+  observationRecord.computed = true;
+  observationRecord.deps = ['title'];
+
+  const run = async (operation: 'subscribe' | 'write') => {
+    class PendingOperationPage {}
+    Object.assign(PendingOperationPage, {
+      __partProgram: pendingOpsProgram,
+      __compiledProperties: pendingOpsProgram.metadata.properties,
+      __computedFields: {
+        observation: (
+          signals: Record<
+            string,
+            { value: unknown; subscribe?: (fn: (value: unknown) => void) => () => void }
+          >,
+        ) => {
+          if (operation === 'subscribe') signals.title.subscribe!(() => {});
+          else signals.title.value = 'written';
+          return computed(() => 'unobserved');
+        },
+      },
+    });
+    const deferredManifest = await manifestFor(pendingOpsProgram, [
+      { field: 'title', signal: 'title', owners: [{ kind: 'part', index: 0 }] },
+    ]);
+    return createStreamShellExecutor({
+      componentClass: PendingOperationPage as unknown as CustomElementConstructor,
+      manifest: deferredManifest,
+      instanceId: 'pending-operation-instance',
+    });
+  };
+
+  for (const [operation, pastTense] of [
+    ['subscribe', 'subscribed'],
+    ['write', 'written'],
+  ] as const) {
+    const error = await assertRejectsIncludes(
+      () => run(operation),
+      OpenElementError,
+      `pending property "title" was ${pastTense} while creating a stream shell`,
+    );
+    expect(error.code, `${operation} uses the pending-read code`).toEqual(
+      FacadeErrorCode.STREAM_PENDING_READ,
+    );
+    expect(error.phase).toEqual('ssr');
+  }
 });
