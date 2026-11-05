@@ -735,3 +735,16 @@ unchanged; only its stated premise was wrong.
 
 Lesson for M01: a "we cannot resolve X" claim must be re-verified against the
 manifest before it is used to justify a hand-written implementation.
+
+## Amendment (2026-11-06): one adapter form, no dual-adapter retirement
+
+The inert `nativeSheetAdapterModule` generator, the
+`NATIVE_CSS_MODULE_SCRIPTS` verdict and `SheetAdapterForm` were removed from
+`packages/router/src/vite/internal/style-assets.ts`; the fetch adapter is now
+the only emitted form. There is no second adapter path left to keep alive or
+retire. The "fetch adapter form is deleted" retirement condition and the
+"dual-adapter ruling" above are retained as historical evidence of why the
+native form was never enabled, not as live policy. Appendices A/B/C remain the
+support-matrix record (rolldown MISSING_EXPORT, Safari gap, webpack silent
+inlining). Shim inventory entry #3 (CSS dual adapter) was retired in the same
+change; `shims:check` now reports 17 registered shims / 3 retired.

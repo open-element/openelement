@@ -32,9 +32,7 @@ import {
   clientStyleAssetPlugin,
   devStyleAssetPlugin,
   fetchSheetAdapterModule,
-  nativeSheetAdapterModule,
   serverStyleAssetPlugin,
-  sheetAdapterForm,
   styleAssetFileName,
   styleAssetGraphId,
   styleAssetHash,
@@ -301,14 +299,8 @@ test('the fetch adapter exports the sheet synchronously and records readiness', 
   expect(adapter).toContain('throw new Error');
 });
 
-test('the native adapter form is the import-attribute shape and stays behind the verdict', () => {
-  expect(nativeSheetAdapterModule('import.meta.ROLLUP_FILE_URL_ref-1')).toContain(
-    "import sheet from import.meta.ROLLUP_FILE_URL_ref-1 with { type: 'css' };",
-  );
-  expect(nativeSheetAdapterModule('x')).not.toContain('document.head');
-  // The recorded verdict: the fetch adapter ships on this toolchain (module
-  // doc carries the evidence and the retirement condition).
-  expect(sheetAdapterForm()).toEqual('fetch');
+test('the only emitted adapter never carries a native CSS module script import', () => {
+  expect(fetchSheetAdapterModule('ref-1')).not.toContain("with { type: 'css' }");
 });
 
 test("the SSR half declares the client build's emitted asset, never its text", async () => {
