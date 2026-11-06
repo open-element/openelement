@@ -67,8 +67,23 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - name: Install Chromium for browser-backed consumer smoke
-        run: ./node_modules/.bin/playwright install --with-deps chromium
+      # Same cache key shape as the autoflow browser jobs: playwright is a
+      # pinned devDependency, so pnpm-lock.yaml identifies the browser
+      # revisions this cache can serve.
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+      - name: Install browsers for browser-backed consumer smoke
+        # Installs the same three engines the other browser jobs use. The
+        # 2026-10-19 run 39305622653 failed here with only chromium installed:
+        # the fixture-third-party-web-components smoke raised
+        # `browserType.launch: Executable doesn't exist ... firefox-1511`, and
+        # its contract engines are chromium+firefox+webkit.
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Verify Node ESM public runtime consumers
         env:
           OPEN_ELEMENT_PUBLISHED_VERSION: ${{ inputs.version }}

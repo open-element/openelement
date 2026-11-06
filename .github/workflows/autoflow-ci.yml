@@ -270,7 +270,15 @@ jobs:
     # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
     needs: [sha-guard]
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # 40, not 25 (2026-11-06 incident): `playwright install --with-deps`
+    # stalled on apt/network three times that day, and PR #1709 run
+    # 42207927084 was cancelled at the 25-minute job timeout inside the
+    # install step (42173988539 and 42184716741 attempt 1 have the same
+    # shape) — the required check never reached the tests. The cap now
+    # budgets up to three 10-minute install attempts (the retry loop below)
+    # on top of the test steps, and the browser cache keeps the normal path
+    # short.
+    timeout-minutes: 40
     permissions:
       contents: read
     steps:
@@ -279,8 +287,35 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
+      - name: Cache Playwright browsers
+        # v4.3.0 — same pinned action as .github/actions/setup-node-workspace.
+        # A cache step cannot live in that composite (it restores the pnpm
+        # store), and the browser cache is per-job browser install state. The
+        # key hashes pnpm-lock.yaml because playwright is a pinned
+        # devDependency: a playwright bump changes the lockfile and therefore
+        # the key, so stale browser revisions are never restored.
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
       - name: Install all browser engines
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+        # 2026-11-06 failure shape: one `playwright install --with-deps` call
+        # stalled in apt/network for the whole job timeout. `timeout 600`
+        # bounds a single attempt, and three attempts absorb a transient apt
+        # mirror/download failure instead of failing the required check; a
+        # cache hit skips the browser download portion.
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 600 ./node_modules/.bin/playwright install --with-deps chromium firefox webkit; then
+              exit 0
+            fi
+            echo "::warning::playwright install attempt ${attempt}/3 failed; retrying"
+            sleep 10
+          done
+          echo "::error::playwright install failed after 3 attempts"
+          exit 1
       - name: Element tests
         run: vp run --no-cache --fail-if-no-match --filter @openelement/element test
       - name: Router tests (includes 3-engine browser tests)
@@ -549,14 +584,15 @@ jobs:
     needs: [sha-guard]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
     runs-on: ${{ matrix.os }}
-    # 60, not 30: the Full path now runs the whole packed proof set here, not
-    # just the starter + ui-app pair. The release train's gate:packed exercises
-    # the same consumers: its `release:check` completed in 2074 s while also
-    # carrying the ~1400 s 3-engine Site E2E (run 37570682317, "Qualify
-    # candidate" step), so the packed consumer set itself is well under
-    # ~11 min on Linux; macOS is the slower half of this matrix, so the old
-    # 30-minute cap no longer matched the work.
-    timeout-minutes: 60
+    # 75, not 60 (2026-11-06 audit): the last full qualification run
+    # 42190806989 spent 59m34s in this job on the ubuntu-24.04 leg against the
+    # 60-minute cap — a 26-second margin, so the next variance cancelled the
+    # main qualification. The cap is a runner-variance guard, not the fix:
+    # the Playwright browser cache below removes the install cost, and the
+    # extra 15 minutes keeps a slow-but-healthy leg from being cancelled.
+    # macOS is the slower half of this matrix. (60 replaced 30 when the Full
+    # path took on the whole packed proof set.)
+    timeout-minutes: 75
     permissions:
       contents: read
     strategy:
@@ -570,6 +606,26 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
+      # Playwright's browser cache lives at a different path per OS, so each
+      # matrix leg gets a literal path instead of an expression. Key shape and
+      # restore-keys match the test job, so the Linux legs share browser cache
+      # entries with each other and with `test`.
+      - name: Cache Playwright browsers (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+      - name: Cache Playwright browsers (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
       - name: Install browsers
         run: ./node_modules/.bin/playwright install chromium firefox webkit
       - name: Install system deps (Linux)
