@@ -16,6 +16,7 @@ import {
   unwrapExpression,
   validateComputedExpressionBody,
 } from './analyze-module.ts';
+import { classifyIntrinsicAttribute } from './attribute-classification.ts';
 import {
   conditionLiteralAllowed,
   type ConditionOperator,
@@ -110,44 +111,6 @@ type ProgramPartInput =
       off: ProgramTreeNode[];
     }
   | { k: 'each'; signal: string; key: string; field?: string; item: ProgramTreeNode[] };
-
-const BOOLEAN_ATTRIBUTES = new Set([
-  'allowfullscreen',
-  'async',
-  'autofocus',
-  'autoplay',
-  'checked',
-  'controls',
-  'default',
-  'defer',
-  'disabled',
-  'formnovalidate',
-  'hidden',
-  'inert',
-  'ismap',
-  'itemscope',
-  'loop',
-  'multiple',
-  'muted',
-  'nomodule',
-  'open',
-  'playsinline',
-  'readonly',
-  'required',
-  'reversed',
-  'selected',
-]);
-
-const DOM_PROPERTY_NAMES = new Set([
-  'checked',
-  'files',
-  'indeterminate',
-  'readOnly',
-  'scrollLeft',
-  'scrollTop',
-  'selected',
-  'value',
-]);
 
 /**
  * The one boundary sentence every when-branch rejection names (alpha15):
@@ -1130,76 +1093,82 @@ export class Lowering {
     elementId: string,
     trustedHtmlCapability: boolean,
   ): void {
-    const lowerName = name.toLowerCase();
-    if (name === 'class') {
-      this.addPart({ k: 'class', signal, path }, path, sourceNode, elementId);
-      return;
+    // The one shared classification (`attribute-classification.ts`): production
+    // lowering and the Semantic IR builder must answer "what does this attribute
+    // mean?" identically. Event/key/ref names are dispatched before attribute
+    // lowering runs; if one ever reached this path it lands on the generic
+    // attribute branch, exactly what the pre-extraction fallthrough did.
+    switch (classifyIntrinsicAttribute(name, tag)) {
+      case 'class':
+        this.addPart({ k: 'class', signal, path }, path, sourceNode, elementId);
+        return;
+      case 'style':
+        this.addPart({ k: 'style', signal, path }, path, sourceNode, elementId);
+        return;
+      case 'html':
+        // Trusted-HTML sink: the marker admits the sink at compile time and the
+        // Object-typed signal must carry the runtime TrustedHtml capability.
+        if (this.fieldTypes.get(signal) !== 'object') {
+          this.fail(
+            sourceNode,
+            'OEC9026',
+            'innerHTML sinks require an Object-typed TrustedHtml property',
+          );
+        }
+        if (!trustedHtmlCapability) {
+          this.fail(
+            sourceNode,
+            'OEC9026',
+            'innerHTML sinks require the explicit trustedHtml capability marker',
+          );
+        }
+        if (VOID_TAGS.has(tag)) {
+          this.fail(
+            sourceNode,
+            'OEC9026',
+            `void element <${tag}> cannot carry an innerHTML sink — move the sink to a ` +
+              'container element (e.g. <div>)',
+          );
+        }
+        this.addPart({ k: 'html', signal, path }, path, sourceNode, elementId);
+        return;
+      case 'boolean':
+        if (forbiddenSinkReason('bool', name) !== null) {
+          this.fail(
+            sourceNode,
+            'OEC9011',
+            `attribute name "${name}" is unsafe — names must be valid HTML attribute names, not ` +
+              'event handlers (on*) or forbidden sinks; use an admitted attribute name',
+          );
+        }
+        this.addPart({ k: 'bool', signal, name, path }, path, sourceNode, elementId);
+        return;
+      case 'property':
+        if (forbiddenSinkReason('prop', name) !== null) {
+          this.fail(
+            sourceNode,
+            'OEC9011',
+            `property sink name "${name}" is unsafe — prototype-pollution primitives are on the ` +
+              'shared deny list on every boundary; rename the sink',
+          );
+        }
+        this.addPart({ k: 'prop', signal, name, path }, path, sourceNode, elementId);
+        return;
+      case 'event':
+      case 'key':
+      case 'ref':
+      case 'attribute':
+        if (forbiddenSinkReason('attr', name) !== null) {
+          this.fail(
+            sourceNode,
+            'OEC9011',
+            `attribute name "${name}" is unsafe — names must be valid HTML attribute names, not ` +
+              'event handlers (on*) or forbidden sinks; use an admitted attribute name',
+          );
+        }
+        this.addPart({ k: 'attr', signal, name, path }, path, sourceNode, elementId);
+        return;
     }
-    if (name === 'style') {
-      this.addPart({ k: 'style', signal, path }, path, sourceNode, elementId);
-      return;
-    }
-    if (name === 'innerHTML') {
-      // Trusted-HTML sink: the marker admits the sink at compile time and the
-      // Object-typed signal must carry the runtime TrustedHtml capability.
-      if (this.fieldTypes.get(signal) !== 'object') {
-        this.fail(
-          sourceNode,
-          'OEC9026',
-          'innerHTML sinks require an Object-typed TrustedHtml property',
-        );
-      }
-      if (!trustedHtmlCapability) {
-        this.fail(
-          sourceNode,
-          'OEC9026',
-          'innerHTML sinks require the explicit trustedHtml capability marker',
-        );
-      }
-      if (VOID_TAGS.has(tag)) {
-        this.fail(
-          sourceNode,
-          'OEC9026',
-          `void element <${tag}> cannot carry an innerHTML sink — move the sink to a ` +
-            'container element (e.g. <div>)',
-        );
-      }
-      this.addPart({ k: 'html', signal, path }, path, sourceNode, elementId);
-      return;
-    }
-    if (BOOLEAN_ATTRIBUTES.has(lowerName)) {
-      if (forbiddenSinkReason('bool', name) !== null) {
-        this.fail(
-          sourceNode,
-          'OEC9011',
-          `attribute name "${name}" is unsafe — names must be valid HTML attribute names, not ` +
-            'event handlers (on*) or forbidden sinks; use an admitted attribute name',
-        );
-      }
-      this.addPart({ k: 'bool', signal, name, path }, path, sourceNode, elementId);
-      return;
-    }
-    if (name === 'value' || DOM_PROPERTY_NAMES.has(name) || (tag === 'input' && name === 'value')) {
-      if (forbiddenSinkReason('prop', name) !== null) {
-        this.fail(
-          sourceNode,
-          'OEC9011',
-          `property sink name "${name}" is unsafe — prototype-pollution primitives are on the ` +
-            'shared deny list on every boundary; rename the sink',
-        );
-      }
-      this.addPart({ k: 'prop', signal, name, path }, path, sourceNode, elementId);
-      return;
-    }
-    if (forbiddenSinkReason('attr', name) !== null) {
-      this.fail(
-        sourceNode,
-        'OEC9011',
-        `attribute name "${name}" is unsafe — names must be valid HTML attribute names, not ` +
-          'event handlers (on*) or forbidden sinks; use an admitted attribute name',
-      );
-    }
-    this.addPart({ k: 'attr', signal, name, path }, path, sourceNode, elementId);
   }
 
   private lowerExpressionChild(

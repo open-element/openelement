@@ -70,6 +70,12 @@ const observe = (host) => ({
 });
 
 const host = new FakeNode(null);
+let missingError = "";
+try {
+  mount(host, {});
+} catch (error) {
+  missingError = error.message;
+}
 const instance = mount(host, { props: { ok: true, n: 1 } });
 const first = observe(host);
 instance.update({ props: { ok: true, n: 2 } });
@@ -77,7 +83,7 @@ const refreshed = observe(host);
 instance.update({ props: { ok: false, n: 2 } });
 const swapped = observe(host);
 instance.dispose();
-console.log("__OE_M10A__" + JSON.stringify({ first, refreshed, swapped, hostChildren: host.children.length }));
+console.log("__OE_M10A__" + JSON.stringify({ first, refreshed, swapped, hostChildren: host.children.length, missingError }));
 `;
 
 interface SmokeResult {
@@ -85,6 +91,8 @@ interface SmokeResult {
   refreshed: { tag: string; text: string | null };
   swapped: { tag: string; text: string | null };
   hostChildren: number;
+  /** Runtime coded error for a missing host value (LeafRecipe.requiredValues). */
+  missingError: string;
 }
 
 let workRoot: string | null = null;
@@ -226,5 +234,8 @@ describe('M10a — generated artifact from a fresh packed consumer', () => {
     expect(result.refreshed).toEqual({ tag: 'span', text: '2' });
     expect(result.swapped).toEqual({ tag: 'em', text: 'off' });
     expect(result.hostChildren).toBe(0);
+    // The host-values contract travels with the packed artifact: `requiredValues`
+    // is enforced at runtime with a coded error, not a silent `"undefined"`.
+    expect(result.missingError).toContain('OEIR_LEAF_MISSING_VALUE: props');
   });
 });
