@@ -138,11 +138,32 @@ export interface IrStaticAttribute {
   readonly span: IrSpan;
 }
 
-/** A dynamic attribute / property / event / key binding. */
+/** A dynamic attribute / property / event / key / ref binding. */
 export interface IrDynamicAttribute {
   readonly kind: 'dynamic-attribute';
   readonly name: string;
-  readonly channel: 'property' | 'attribute' | 'event' | 'key' | 'ref';
+  /**
+   * How the binding reaches the host, from the shared intrinsic-attribute
+   * classification (`semantic-core/attribute-classification.ts`): a plain
+   * `attribute` goes through `setAttribute`, a `boolean` uses presence
+   * semantics, a `property` is a DOM IDL property assignment, and
+   * `class` / `style` / `html` name the authored value shapes.
+   *
+   * The M05 leaf codegen slice does not support `class` / `style` / `html` and
+   * rejects them with a coded diagnostic (fail closed, never an undefined
+   * coercion). `event` / `key` / `ref` are binding channels, not DOM
+   * attributes.
+   */
+  readonly channel:
+    | 'property'
+    | 'attribute'
+    | 'boolean'
+    | 'class'
+    | 'style'
+    | 'html'
+    | 'event'
+    | 'key'
+    | 'ref';
   readonly expression: IrExpression;
   readonly tracked: boolean;
   readonly span: IrSpan;

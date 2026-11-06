@@ -13,6 +13,7 @@
  */
 
 import ts from 'typescript';
+import { classifyIntrinsicAttribute } from '../semantic-core/attribute-classification.ts';
 import { typescriptParser } from '../semantic-core/parse-module.ts';
 import type {
   IrAttribute,
@@ -191,15 +192,20 @@ function classifyDynamic(state: BuildState, node: ts.Node): IrExpressionKind {
   return 'local';
 }
 
-/** Attribute channel for an intrinsic element. */
-function attributeChannel(name: string): IrDynamicAttribute['channel'] {
-  if (name === 'key') return 'key';
-  if (name === 'ref') return 'ref';
-  if (/^on[A-Z]/.test(name)) return 'event';
-  return 'property';
+/**
+ * Attribute channel for a dynamic JSX attribute.
+ *
+ * The classification is the production compiler's, from the one shared
+ * `semantic-core/attribute-classification.ts`: the IR must not decide that a
+ * `data-*` / `aria-*` / `for` / `tabindex` name is a JS property expando when
+ * the production path treats it as an HTML attribute. `tag` feeds the same
+ * classifier production sees (it participates in the `<input value>` rule).
+ */
+function attributeChannel(name: string, tag: string): IrDynamicAttribute['channel'] {
+  return classifyIntrinsicAttribute(name, tag);
 }
 
-function buildAttributes(state: BuildState, node: ts.JsxAttributes): IrAttribute[] {
+function buildAttributes(state: BuildState, node: ts.JsxAttributes, tag: string): IrAttribute[] {
   const attributes: IrAttribute[] = [];
   for (const property of node.properties) {
     if (ts.isJsxSpreadAttribute(property)) {
@@ -235,7 +241,7 @@ function buildAttributes(state: BuildState, node: ts.JsxAttributes): IrAttribute
       continue;
     }
     const expressionNode = initializer.expression;
-    const channel = attributeChannel(name);
+    const channel = attributeChannel(name, tag);
     const expressionKind: IrExpressionKind =
       channel === 'event'
         ? 'handler'
@@ -287,7 +293,7 @@ function buildComponentRef(
     kind: 'component-ref',
     id: path,
     name,
-    props: buildAttributes(state, opening.attributes),
+    props: buildAttributes(state, opening.attributes, tag),
     span: spanOf(state.sourceFile, state.file, node),
   };
 }
@@ -335,7 +341,7 @@ function buildChild(state: BuildState, child: ts.Node, path: string): IrNode | n
       kind: 'element',
       id: path,
       tag,
-      attributes: buildAttributes(state, opening.attributes),
+      attributes: buildAttributes(state, opening.attributes, tag),
       children,
       span: spanOf(state.sourceFile, state.file, child),
     };
