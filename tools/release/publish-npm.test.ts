@@ -119,19 +119,79 @@ test('deriveDependencies skips declared-but-unused externals', () => {
   expect(deps).toEqual({ '@openelement/router': '1.2.3' });
 });
 
-test('importsShapeFromPackageJson filters jsr: and workspace: entries', () => {
-  // jsr: values never ship (packed modules carry no JSR bridge — enforced by
-  // check-package-artifacts) and workspace: values resolve internally; the
-  // package.json projection filters both before the derivation sees them.
+/** The message a throwing call produces; the test asserts on its precise form. */
+function thrownMessage(fn: () => unknown): string {
+  try {
+    fn();
+  } catch (error) {
+    return (error as Error).message;
+  }
+  throw new Error('expected the call to throw');
+}
+
+test('importsShapeFromPackageJson filters workspace/catalog and rejects non-npm inputs', () => {
+  // Ordinary npm dependencies are unaffected, and workspace:/catalog: values
+  // stay filtered exactly as before: the former resolves internally, the
+  // latter is a workspace-private pnpm reference, not a published npm range.
+  // Peer and optional sections are projected nowhere, but they are still
+  // publication inputs and are validated.
   expect(
     importsShapeFromPackageJson({
       dependencies: {
-        '@std/path': 'jsr:^1.0.0',
         '@openelement/element': 'workspace:*',
+        '@hono/vite-dev-server': '^0.25.3',
         react: '^18.2.0',
+        vite: 'catalog:',
       },
+      peerDependencies: { lit: '^3.3.3' },
+      optionalDependencies: { fsevents: '^2.3.3' },
     }),
-  ).toEqual({ react: 'npm:react@^18.2.0' });
+  ).toEqual({
+    '@hono/vite-dev-server': 'npm:@hono/vite-dev-server@^0.25.3',
+    react: 'npm:react@^18.2.0',
+  });
+
+  // The NAME half and the VALUE half are both rejected, in every dependency
+  // section, including the npm-alias value form (`npm:@std/...`).
+  const rejected: Array<[string, Record<string, string>]> = [
+    ['dependencies', { '@std/fs': '1.0.0' }],
+    ['dependencies', { '@jsr/std__path': '1.0.0' }],
+    ['dependencies', { 'std-value': '@std/path@1.0.0' }],
+    ['dependencies', { 'jsr-alias': 'jsr:@std/assert@^1.0.0' }],
+    ['dependencies', { 'legacy-jsr-alias': 'npm:@jsr/std__path@1.0.0' }],
+    ['dependencies', { 'legacy-std-alias': 'npm:@std/path@1.0.0' }],
+    ['peerDependencies', { '@std/fs': '1.0.0' }],
+    ['peerDependencies', { 'jsr-peer': 'jsr:^1.0.0' }],
+    ['peerDependencies', { 'std-peer': 'npm:@std/path@1.0.0' }],
+    ['optionalDependencies', { '@jsr/std__path': '1.0.0' }],
+    ['optionalDependencies', { 'jsr-optional': 'npm:@jsr/std__path@1.0.0' }],
+    ['devDependencies', { '@std/fs': '1.0.0' }],
+  ];
+  for (const [section, record] of rejected) {
+    assertThrowsIncludes(
+      () => importsShapeFromPackageJson({ [section]: record }),
+      Error,
+      'npm is the only public registry',
+    );
+  }
+
+  // The message names the half that is actually illegal and the exact form:
+  // a JSR-scoped NAME must not be reported as if its ordinary version range
+  // were the problem.
+  const nameMessage = thrownMessage(() =>
+    importsShapeFromPackageJson({ dependencies: { '@std/fs': '1.0.0' } }),
+  );
+  expect(nameMessage).toContain("name form '@std/'");
+  expect(nameMessage).toContain("'@std/fs'");
+  expect(nameMessage).not.toContain('value form');
+  expect(nameMessage).not.toContain('1.0.0');
+
+  const valueMessage = thrownMessage(() =>
+    importsShapeFromPackageJson({ peerDependencies: { lit: 'npm:@std/path@1.0.0' } }),
+  );
+  expect(valueMessage).toContain("value form 'npm:@std/'");
+  expect(valueMessage).toContain('peerDependencies');
+  expect(valueMessage).not.toContain('name form');
 });
 
 test('deriveDependencies resolves an internal workspace dependency from source', () => {
@@ -175,6 +235,29 @@ test('deriveDependencies throws when a root-mapped npm dependency has no version
     Error,
     'no version',
   );
+});
+
+test('deriveDependencies rejects a non-npm root mapping instead of silently skipping it', () => {
+  // The root resolution map is another input path for the same policy: a
+  // non-npm alias must fail loudly here even if a caller bypasses the
+  // package.json projection. `npm:@std/...` is checked alongside the
+  // `jsr:`/`npm:@jsr/` spellings.
+  for (const mapping of [
+    'npm:@jsr/std__path@^1.0.0',
+    'npm:@std/path@^1.0.0',
+    'jsr:@std/path@^1.0.0',
+  ]) {
+    const localIo: DeriveDepsIo = {
+      ...io,
+      readRootJson: () => ({ imports: { '@std/path': mapping } }),
+      readSrcFiles: () => [`import { join } from '@std/path';`],
+    };
+    assertThrowsIncludes(
+      () => deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo),
+      Error,
+      'npm is the only public registry',
+    );
+  }
 });
 
 test('deriveAllDependencies reads root imports once for the full package graph', () => {

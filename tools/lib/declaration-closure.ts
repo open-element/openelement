@@ -11,9 +11,11 @@
  *   - `import ... from`, `export ... from`, `import("...")`, and
  *     `export * from` (TypeScript AST via typescript-ast)
  *   - `/// <reference path="..." />` triple-slash references
- * Bare, npm:, jsr:, node:, and URL specifiers are external and produce no
- * edge. Relative edges must stay inside the package root and resolve to an
- * existing declaration; cycles terminate through the visited set.
+ * Non-relative specifiers (bare package names, `npm:`, `node:`, and URL
+ * forms) are external and produce no edge: this check owns relative
+ * declaration integrity only and applies no registry policy. Relative edges
+ * must stay inside the package root and resolve to an existing declaration;
+ * cycles terminate through the visited set.
  *
  * The graph is deliberately conservative: a missing declaration on a
  * reachable edge fails the release.

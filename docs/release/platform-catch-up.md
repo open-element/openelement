@@ -188,6 +188,22 @@ line rides one Node/pnpm/Vite/TypeScript set from the alpha.8 host port onward.
   `./no-regions` subpath (ADR-0166 amendment).
 - **Status: recorded — this ledger entry is the alpha.15 review.**
 
+## Post-ledger correction (2026-11-05): JSR residue retired
+
+The alpha.8 entry above records the contemporaneous deletion of the JSR
+publish config and is left as written. Two residue classes survived that
+entry's wording and are closed now:
+
+- **The `npm.jsr.io` mirror is not an allowed registry host.** The
+  dependency-age gate queries `registry.npmjs.org` only; a lockfile tarball
+  naming the JSR mirror fails closed before any cache lookup or request
+  (`tools/repo/check-dependency-age.ts`).
+- **JSR dependency inputs are rejected, not filtered.** Release tooling
+  accepts no `jsr:`, `@jsr/`, `@std/`, or `npm:@jsr/` dependency value in a
+  packed manifest, and no such specifier in a packed module. The JSR input
+  path is retired; npm is the only public registry
+  ([ADR-0161](../adr/ADR-0161-node-pnpm-consumer-surface.md)).
+
 ## What this ledger does not claim
 
 - No release below alpha.15 had a contemporaneous platform catch-up record; the

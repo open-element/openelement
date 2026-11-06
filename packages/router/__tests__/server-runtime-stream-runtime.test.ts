@@ -35,6 +35,8 @@ import {
 } from '../src/vite/internal/server-runtime/stream-runtime.ts';
 import type { StreamExecutorView } from '../src/vite/internal/server-runtime/stream-runtime.ts';
 import type { StreamRouteManifest } from '@openelement/protocol/ssg';
+import { ErrorCode } from '@openelement/protocol/errors';
+import { StreamErrorCode, UNPRINTABLE_ERROR } from '../src/internal/error-codes.ts';
 
 function manifest(fieldCount: number): StreamRouteManifest {
   return {
@@ -293,7 +295,13 @@ test('stream body answers a rejected field with a terminal value-less error fram
   deferred.reject(new Error('late failure'));
   const originalError = console.error;
   const messages: string[] = [];
-  console.error = (...args: unknown[]) => messages.push(String(args[0]));
+  const diagnostics: Record<string, unknown>[] = [];
+  console.error = (...args: unknown[]) => {
+    messages.push(String(args[0]));
+    if (args[1] !== null && typeof args[1] === 'object') {
+      diagnostics.push(args[1] as Record<string, unknown>);
+    }
+  };
   let frame: string;
   try {
     frame = decoder.decode((await reader.read()).value);
@@ -306,7 +314,137 @@ test('stream body answers a rejected field with a terminal value-less error fram
     messages.some((message) => message === '[openElement] deferred Part failed'),
     'the failure is diagnosed',
   ).toBeTruthy();
+  expect(diagnostics[0], 'server diagnostics are structured and locatable').toMatchObject({
+    code: ErrorCode.UNKNOWN,
+    phase: 'ssr',
+    message: 'late failure',
+    route: '/',
+    field: 'f0',
+  });
+  expect(diagnostics[0]?.cause, 'the original cause is kept server-side').toBeInstanceOf(Error);
   expect(!frame.includes('late failure'), 'the error frame carries no internals').toBeTruthy();
+  await reader.cancel();
+});
+
+test('stream body diagnoses an unprintable rejection without breaking the stream', async () => {
+  const scope = createStreamRequestScope(new Request('https://example.test/'));
+  const deferred = Promise.withResolvers<string>();
+  const records = streamFields({ f0: deferred.promise }, manifest(1));
+  const body = createStreamBody({ escapeAttr })({
+    scope,
+    route: '/',
+    manifest: manifest(1),
+    executor: executor(),
+    records,
+    document: { prefix: '<html>', suffix: '</html>' },
+    token: 'token-1',
+  });
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  await reader.read();
+  // A null-prototype rejection has no toString; a diagnostic that calls
+  // String(error) would throw a SECOND error from inside the catch and reject
+  // the pull, truncating the body mid-stream.
+  deferred.reject(Object.create(null));
+  const originalError = console.error;
+  const diagnostics: Record<string, unknown>[] = [];
+  console.error = (...args: unknown[]) => {
+    if (args[1] !== null && typeof args[1] === 'object') {
+      diagnostics.push(args[1] as Record<string, unknown>);
+    }
+  };
+  let frame: string;
+  try {
+    frame = decoder.decode((await reader.read()).value);
+  } finally {
+    console.error = originalError;
+  }
+  expect(frame).toContain('&quot;outcome&quot;:&quot;error&quot;');
+  expect(diagnostics[0]).toMatchObject({
+    code: ErrorCode.UNKNOWN,
+    phase: 'ssr',
+    message: UNPRINTABLE_ERROR,
+    route: '/',
+    field: 'f0',
+  });
+  expect(frame.includes(UNPRINTABLE_ERROR), 'the wire carries no diagnostic text').toEqual(false);
+  // The stream still terminates normally: the failure never escaped the catch.
+  expect(decoder.decode((await reader.read()).value)).toEqual('</html>');
+  expect((await reader.read()).done).toEqual(true);
+  await reader.cancel();
+});
+
+test('stream body diagnoses a throwing toString without breaking the stream', async () => {
+  const scope = createStreamRequestScope(new Request('https://example.test/'));
+  const deferred = Promise.withResolvers<string>();
+  const records = streamFields({ f0: deferred.promise }, manifest(1));
+  const body = createStreamBody({ escapeAttr })({
+    scope,
+    route: '/',
+    manifest: manifest(1),
+    executor: executor(),
+    records,
+    document: { prefix: '<html>', suffix: '</html>' },
+    token: 'token-1',
+  });
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  await reader.read();
+  deferred.reject({
+    toString: () => {
+      throw new Error('hostile toString');
+    },
+  });
+  const originalError = console.error;
+  const diagnostics: Record<string, unknown>[] = [];
+  console.error = (...args: unknown[]) => {
+    if (args[1] !== null && typeof args[1] === 'object') {
+      diagnostics.push(args[1] as Record<string, unknown>);
+    }
+  };
+  let frame: string;
+  try {
+    frame = decoder.decode((await reader.read()).value);
+  } finally {
+    console.error = originalError;
+  }
+  expect(frame).toContain('&quot;outcome&quot;:&quot;error&quot;');
+  expect(diagnostics[0]?.message).toEqual(UNPRINTABLE_ERROR);
+  expect(decoder.decode((await reader.read()).value)).toEqual('</html>');
+  expect((await reader.read()).done).toEqual(true);
+  await reader.cancel();
+});
+
+test('a throwing diagnostic sink cannot abort the streamed response', async () => {
+  const scope = createStreamRequestScope(new Request('https://example.test/'));
+  const deferred = Promise.withResolvers<string>();
+  const records = streamFields({ f0: deferred.promise }, manifest(1));
+  const body = createStreamBody({ escapeAttr })({
+    scope,
+    route: '/',
+    manifest: manifest(1),
+    executor: executor(),
+    records,
+    document: { prefix: '<html>', suffix: '</html>' },
+    token: 'token-1',
+  });
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  await reader.read();
+  deferred.reject(new Error('late failure'));
+  const originalError = console.error;
+  console.error = () => {
+    throw new Error('logger down');
+  };
+  let frame: string;
+  try {
+    frame = decoder.decode((await reader.read()).value);
+  } finally {
+    console.error = originalError;
+  }
+  expect(frame).toContain('&quot;outcome&quot;:&quot;error&quot;');
+  expect(decoder.decode((await reader.read()).value)).toEqual('</html>');
+  expect((await reader.read()).done).toEqual(true);
   await reader.cancel();
 });
 
@@ -331,7 +469,13 @@ test('stream body turns an over-policy range into error frames, never oversized 
   await reader.read();
   const originalError = console.error;
   const messages: string[] = [];
-  console.error = (...args: unknown[]) => messages.push(String(args[0]));
+  const diagnostics: Record<string, unknown>[] = [];
+  console.error = (...args: unknown[]) => {
+    messages.push(String(args[0]));
+    if (args[1] !== null && typeof args[1] === 'object') {
+      diagnostics.push(args[1] as Record<string, unknown>);
+    }
+  };
   let frame: string;
   try {
     frame = decoder.decode((await reader.read()).value);
@@ -342,6 +486,20 @@ test('stream body turns an over-policy range into error frames, never oversized 
   expect(
     messages.some((message) => message === '[openElement] deferred Part failed'),
     'the oversized range is diagnosed',
+  ).toBeTruthy();
+  expect(
+    diagnostics[0],
+    'the bounded-range code survives into the structured record',
+  ).toMatchObject({
+    code: StreamErrorCode.RANGE_BOUND,
+    phase: 'ssr',
+    route: '/',
+    field: 'f0',
+  });
+  expect((diagnostics[0]?.cause as Error).message).toContain('deferred range exceeds the bound');
+  expect(
+    !frame.includes('x'.repeat(32)),
+    'the error frame carries no oversized markup',
   ).toBeTruthy();
   await reader.cancel();
 });

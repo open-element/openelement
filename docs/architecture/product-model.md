@@ -27,7 +27,7 @@ not a promise of automatic SSR or OpenElement-managed Lit DSD hydration. See the
 | --- | --- | --- |
 | Current fact | Alpha.15 Part Program, classes and Native/Lit modes remain | Existing release evidence; no new qualification claimed here |
 | Accepted target | Full TSX syntax input, explicit Signals, HTML-first output, native Request/Response |
-| Approved (2026-11-03) | Retire the serialized Part Program protocol and the Class authoring API; narrow generated ABI (structure not frozen) | Alpha16 semantic samples and connected codegen slices; Alpha17 author productization |
+| APPROVED TARGET (2026-11-03) | Retire the serialized Part Program protocol and the Class authoring API, with no compatibility adapter; narrow generated ABI (structure not frozen) | Alpha16 semantic samples and connected codegen slices; Alpha16b class migration/retirement and ABI compatibility checks; Alpha17 author productization and ABI freeze |
 | Candidate | Tracked readonly props, computed derivation, Children and JSX values | [Author candidate contract](./tsx-author-candidate-contract.md); author review and consumer tests before freeze |
 | OPEN | Exact props/computed/Children APIs, ref/context, iterable admission, flush timing, ABI and Lit release window | Resolve with scoped tests and owner decisions before dependent rollout |
 | Non-goals | React Hooks/behavior compatibility, a second renderer or OhMyLit product, Rust/Flight migration, zero-runtime claims | Do not add these as delivery commitments |
@@ -55,17 +55,24 @@ unchanged, and shipping both execution paths as a release does not qualify.
 Alpha17 owns Full TSX productization, public composition APIs, cross-module
 recipes, precompiled consumers and Starter/app migration. Alpha18 owns bounded
 component defer only on a stable foundation; arbitrary Promises and unbounded
-nesting are not admitted. The Class API was to be retained through a long-lived compatibility adapter (D-O3,
-2026-11-03) — **superseded**: the fourth-pass package (approved 2026-11-03)
-**retires the authoring API and builds no compatibility adapter**, and
-`OpenElement` is no longer an author-facing base class. Native Custom Elements and
-an internal generated class are kept; see
-[the reassessment](./alpha16-18-fourth-pass-reassessment.md). Two execution
-architectures are never permitted. These
-are gated milestones, not dates or assertions of implementation. Preserve G1 (real codegen
-slice), G2 (identity/owner before related expansion), G3 (author and independent
-consumer proof before public API/default Starter). Historical direction blogs
-remain records of their date; this document and the amended ADRs state the current
-direction without rewriting those records.
+nesting are not admitted. Class-authoring migration and API retirement belong to
+Alpha16b, not Alpha17; Alpha17 may productize the already-proven function
+semantics and migrate examples/docs, but it may not be the first home of a
+necessary 16b capability. These are gated milestones, not dates or assertions of
+implementation.
+
+**SUPERSEDED HISTORY (D-O3, 2026-11-03):** the Class API was to be retained
+through a long-lived compatibility adapter. The approved fourth pass supersedes
+that record: **APPROVED TARGET (2026-11-03)** — the authoring API is retired and
+**no compatibility adapter is built**, and `OpenElement` is no longer an
+author-facing base class. Native Custom Elements and an internal generated class
+are kept; see the [ADR-0173 fourth-pass amendment](../adr/ADR-0173-component-execution-and-composition.md#superseding-amendment-2026-11-03-fourth-pass--approved)
+and [the reassessment](./alpha16-18-fourth-pass-reassessment.md). Two execution
+architectures are never permitted.
+
+Preserve G1 (real codegen slice), G2 (identity/owner before related expansion),
+G3 (author and independent consumer proof before public API/default Starter).
+Historical direction blogs remain records of their date; this document and the
+amended ADRs state the current direction without rewriting those records.
 
 `1.0.0-alpha.1` establishes a new public baseline. Historic pre-1.0 APIs do not create compatibility obligations unless a durable external data, protocol, security, or explicitly promised contract requires one.

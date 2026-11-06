@@ -595,7 +595,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "5c91e33844834d05308bcfa78db3000694b577a6787f98a4423402baf6b8a254",
+          "publicShapeSha256": "7831c17029529db5b2508760a5ce905a232bba124090c0c1c7a70f148bdb7867",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -683,6 +683,7 @@
             "isValidTagName=value:{call:(tagName:string)=>union(false|true)}",
             "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
+            "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
             "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
             "reportError=value:{call:(error:OpenElementError)=>void}",
             "setErrorTelemetryHook=value:{call:(hook:ErrorTelemetryHook)=>void}",
@@ -720,7 +721,7 @@
           ]
         },
         "./base": {
-          "publicShapeSha256": "5c91e33844834d05308bcfa78db3000694b577a6787f98a4423402baf6b8a254",
+          "publicShapeSha256": "7831c17029529db5b2508760a5ce905a232bba124090c0c1c7a70f148bdb7867",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -808,6 +809,7 @@
             "isValidTagName=value:{call:(tagName:string)=>union(false|true)}",
             "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
+            "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
             "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
             "reportError=value:{call:(error:OpenElementError)=>void}",
             "setErrorTelemetryHook=value:{call:(hook:ErrorTelemetryHook)=>void}",
@@ -833,7 +835,7 @@
           ]
         },
         "./client-only": {
-          "publicShapeSha256": "5c91e33844834d05308bcfa78db3000694b577a6787f98a4423402baf6b8a254",
+          "publicShapeSha256": "7831c17029529db5b2508760a5ce905a232bba124090c0c1c7a70f148bdb7867",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -921,6 +923,7 @@
             "isValidTagName=value:{call:(tagName:string)=>union(false|true)}",
             "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
+            "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
             "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
             "reportError=value:{call:(error:OpenElementError)=>void}",
             "setErrorTelemetryHook=value:{call:(hook:ErrorTelemetryHook)=>void}",
@@ -974,7 +977,7 @@
           ]
         },
         "./no-blocks": {
-          "publicShapeSha256": "5c91e33844834d05308bcfa78db3000694b577a6787f98a4423402baf6b8a254",
+          "publicShapeSha256": "7831c17029529db5b2508760a5ce905a232bba124090c0c1c7a70f148bdb7867",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -1062,6 +1065,7 @@
             "isValidTagName=value:{call:(tagName:string)=>union(false|true)}",
             "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
+            "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
             "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
             "reportError=value:{call:(error:OpenElementError)=>void}",
             "setErrorTelemetryHook=value:{call:(hook:ErrorTelemetryHook)=>void}",

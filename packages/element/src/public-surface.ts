@@ -61,7 +61,12 @@ export { assertValidTagName } from './public-runtime.ts';
 
 // ─── Context (re-export from core) ───────────────────────
 
-export { consumeContext, createContext, provideContext } from './public-runtime.ts';
+export {
+  consumeContext,
+  createContext,
+  provideContext,
+  releaseConsumedContext,
+} from './public-runtime.ts';
 export type { Context } from './public-runtime.ts';
 
 // ─── Error types (re-export from core) ───────────────────

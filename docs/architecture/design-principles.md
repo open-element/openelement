@@ -129,12 +129,26 @@ hold?_
 ## P5 — Designed for deletion
 
 Every layer must be deletable. Compatibility is restricted to deployment
-boundaries, except for the specific temporary existing-class author migration
-allowance in ADR-0173. That exception uses one adapter sharing the backend and
-Signals, not a second
-renderer; retirement requires capability coverage, real migration and release
-qualification, without a fixed forced-rewrite version. Every shim lands with a
-written retirement condition.
+boundaries. Every shim lands with a written retirement condition.
+
+**APPROVED TARGET (2026-11-03):** the public Class/Decorator authoring API is
+retired, and **no compatibility adapter is built** for it (ADR-0173 fourth-pass
+amendment). Native Custom Elements remain the public platform boundary; the
+compiler may still emit an internal generated class where the platform requires
+an element. **CURRENT FACT:** the class authoring path still ships; approval is
+not implementation evidence.
+
+Retirement is evidence-gated: a replacement must cover the retiring capability
+inventory — semantics, not just the API name — and a necessary capability is not
+deferred to a later productization milestone.
+
+**SUPERSEDED HISTORY (2026-11-03, D-O3):** an earlier revision of this section
+carried a temporary author-migration exception — existing classes kept through
+one adapter sharing the backend and Signals, not a second renderer, retired only
+after capability coverage, real migration and release qualification, with no
+fixed forced-rewrite version. The approved fourth pass supersedes that
+exception; no adapter exists or is planned. See the
+[fourth-pass amendment in ADR-0173](../adr/ADR-0173-component-execution-and-composition.md#superseding-amendment-2026-11-03-fourth-pass--approved).
 
 References: [The Extensible Web Manifesto][ewm];
 [Write code that is easy to delete, not easy to extend][tef].
@@ -142,7 +156,8 @@ References: [The Extensible Web Manifesto][ewm];
 In this repository: the Nitro mount is contained at the `dist/server` exit and
 invisible to application code; string-splicing script injectors and
 `Function.toString()` config serialization were deleted outright, not wrapped
-in compatibility layers (Alpha permits breaking cleanup); retired ADRs are
+in compatibility layers (Alpha permits breaking cleanup); the Class authoring
+API retires without a compatibility adapter (ADR-0173); retired ADRs are
 preserved in Git history rather than kept as parallel documentation.
 
 Litmus: _If the platform shipped this tomorrow, what exactly do we delete, and

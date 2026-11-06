@@ -369,8 +369,9 @@ async function validatePackageConfigs(packages: PackageInfo[], failures: string[
   );
 
   for (const pkg of packages) {
-    // The publish surface is the package.json `files` allowlist (npm) —
-    // JSR is not a release channel (ADR-0108).
+    // The publish surface is the package.json `files` allowlist (npm); JSR is
+    // not a release channel or a supported dependency input (ADR-0161,
+    // superseding ADR-0108).
     const configPath = join(pkg.dir, 'package.json');
     const config = (await readJson(configPath)) as {
       name?: unknown;

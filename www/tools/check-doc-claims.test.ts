@@ -6,6 +6,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   ALLOWLIST,
+  checkCompatPromises,
   checkDocClaims,
   checkMeasuredCoverage,
   checkParity,
@@ -28,10 +29,12 @@ function authorities(overrides: Partial<Authorities> = {}): Authorities {
     scriptsByPackage: new Map([
       ['root', new Set(['check', 'verify', 'gate:release'])],
       ['@openelement/tools-repo', new Set(['typecheck', 'seams:check'])],
+      ['@openelement/www', new Set(['build', 'check:doc-claims'])],
     ]),
     scriptsByDirectory: new Map([
       ['.', new Set(['check', 'verify'])],
       ['tools/repo', new Set(['typecheck', 'seams:check'])],
+      ['www', new Set(['build', 'check:doc-claims'])],
     ]),
     templateScripts: new Set(['dev', 'build', 'start', 'test', 'fmt', 'lint', 'typecheck']),
     cliSubcommands: new Set(['dev', 'build', 'start', 'version']),
@@ -176,7 +179,7 @@ describe('commands', () => {
       pick(
         run({
           'CONTRIBUTING.md':
-            'Run `vp run check`, `vp run --fail-if-no-match @openelement/tools-repo#typecheck`.',
+            'Run `vp run check`, `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo typecheck`.',
         }),
         'task-command',
       ),
@@ -187,6 +190,46 @@ describe('commands', () => {
         'task-command',
       ),
     ).toEqual([]);
+  });
+
+  test('the canonical filter form resolves the task in the selected package', () => {
+    const canonical = 'vp run --no-cache --fail-if-no-match --filter';
+    expect(
+      pick(
+        run({
+          'CONTRIBUTING.md': `Run \`${canonical} @openelement/www check:doc-claims\`.`,
+        }),
+        'task-command',
+      ),
+    ).toEqual([]);
+    // The task exists elsewhere, but not in the filtered package: the old
+    // whole-workspace lookup waved it through, the filter form must not.
+    const wrongPackage = pick(
+      run({ 'CONTRIBUTING.md': `Run \`${canonical} @openelement/www typecheck\`.` }),
+      'task-command',
+    );
+    expect(wrongPackage).toHaveLength(1);
+    expect(wrongPackage[0]!.message).toContain('declares no such script');
+    const unknownPackage = pick(
+      run({ 'CONTRIBUTING.md': `Run \`${canonical} @openelement/ghost typecheck\`.` }),
+      'task-command',
+    );
+    expect(unknownPackage).toHaveLength(1);
+    expect(unknownPackage[0]!.message).toContain('not a workspace package');
+  });
+
+  test('the pkg#task specifier is a form defect, never a task lookup', () => {
+    // Measured on vp 1.0.0: the specifier exits 0 without running anything
+    // when the package does not resolve, and --fail-if-no-match is inert.
+    for (const command of [
+      'vp run --no-cache --fail-if-no-match @openelement/tools-repo#typecheck',
+      'vp run @openelement/tools-repo#typecheck',
+    ]) {
+      const findings = pick(run({ 'CONTRIBUTING.md': `Run \`${command}\`.` }), 'task-command');
+      expect(findings, command).toHaveLength(1);
+      expect(findings[0]!.message).toContain('internal gate-step specifier');
+      expect(findings[0]!.message).toContain('--filter');
+    }
   });
 
   test('a router bin subcommand that does not exist is a finding', () => {
@@ -312,5 +355,37 @@ describe('extraction primitives', () => {
     expect(countValue('sixteen')).toBe(16);
     expect(countValue('16')).toBe(16);
     expect(countValue('nonsense')).toBeNull();
+  });
+});
+
+describe('compat-promise policy ban', () => {
+  test('fires when a public page promises class compatibility', () => {
+    const findings = checkCompatPromises(
+      new Map([
+        ['www/content/blog/example.md', '旧 class 用户无需立即重写项目。'],
+        [
+          'www/content/blog/example-en.md',
+          'Existing class users will not need to rewrite immediately. Compatible old classes share a backend.',
+        ],
+      ]),
+    );
+    expect(findings.length).toBeGreaterThanOrEqual(2);
+    expect(findings.every((finding) => finding.rule === 'compat-promise')).toBe(true);
+  });
+
+  test('stays quiet on the approved no-adapter wording', () => {
+    const findings = checkCompatPromises(
+      new Map([
+        [
+          'www/content/blog/example.md',
+          'Class/Decorator 作者 API 已批准退役（P-1/P-5），不提供兼容层或迁移期。旧 class 作者 API 退役、无兼容层。',
+        ],
+        [
+          'www/content/blog/example-en.md',
+          'The Class/Decorator authoring API is approved for retirement with no compatibility adapter; the old class authoring API is retired with no compatibility layer.',
+        ],
+      ]),
+    );
+    expect(findings).toEqual([]);
   });
 });

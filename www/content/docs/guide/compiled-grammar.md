@@ -165,17 +165,65 @@ static override styles: StyleSheetLike[] = [`:host { display: block; }`];
 A compiled module is data plus a class. Signals, contexts and shared constants live in plain `.ts` modules — the `app/islands/lab-context.ts` module below is the pattern — and the compiled module imports them. The one admitted statement is the island delivery policy.
 
 ```ts
-// app/islands/lab-context.ts — a plain module owns module-level state
-import { createContext, signal } from '@openelement/element';
+// app/islands/lab-context.ts — a plain module owns module-level state and the
+// binding tables a compiled class cannot carry itself (compiled fields are
+// restricted to initialized @property declarations)
+import {
+  consumeContext,
+  createContext,
+  provideContext,
+  releaseConsumedContext,
+  signal,
+  type Signal,
+} from '@openelement/element';
 
 export const labA = signal(0);
 export const LabCtx = createContext<string>(Symbol('lab-ctx'), 'lab-default');
+
+type LabRelease = ReturnType<typeof provideContext>;
+const labReleases = new WeakMap<HTMLElement, LabRelease>();
+
+/** Provide one value and keep only the newest provider-side release handle. */
+export function provideLab(host: HTMLElement, value: string): void {
+  labReleases.set(host, provideContext(host, LabCtx, value));
+}
+
+/** Release the provider record once; a replaced handle is already a no-op. */
+export function releaseLab(host: HTMLElement): void {
+  const release = labReleases.get(host);
+  if (!release) return;
+  labReleases.delete(host);
+  release();
+}
+
+interface LabBinding {
+  readonly signal: Signal<string>;
+  readonly unsubscribe: () => void;
+}
+
+const labBindings = new WeakMap<HTMLElement, LabBinding>();
+
+/** Consume the nearest provider for one host and save the bridge cleanup. */
+export function bindLab(host: HTMLElement, apply: (value: string) => void): void {
+  unbindLab(host);
+  const lab = consumeContext<string>(LabCtx, host);
+  const unsubscribe = lab.subscribe(apply);
+  labBindings.set(host, { signal: lab, unsubscribe });
+}
+
+/** Release the local subscription and the provider bridge exactly once. */
+export function unbindLab(host: HTMLElement): void {
+  const binding = labBindings.get(host);
+  if (!binding) return;
+  labBindings.delete(host);
+  binding.unsubscribe();
+  releaseConsumedContext(binding.signal);
+}
 ```
 
 ```tsx
 import { defineIslandConfig } from '@openelement/router';
-import { consumeContext, element, OpenElement, property } from '@openelement/element';
-import { LabCtx, labA } from './lab-context.ts';
+import { element, OpenElement, property } from '@openelement/element';
 
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
 
@@ -190,12 +238,12 @@ export default class ElementLab extends OpenElement {
 }
 ```
 
-Context rides the same seam end to end. The plain module owns the token; a provider element supplies the value from `connectedCallback`; a consumer reads the nearest provider with `consumeContext` and copies the value into a `@property`. Both elements below are islands, each carrying the same `defineIslandConfig` declaration as `element-lab` above — page-scope components never run lifecycle code in the browser ([Islands and SSR](/guide/islands-and-ssr)).
+Context rides the same seam end to end. The plain module owns the token; a provider element supplies the value from `connectedCallback` and saves the release handle returned by `provideContext`; a consumer reads the nearest provider with `consumeContext` and copies the value into a `@property`. Each provide replaces the host's record for that key, so `provideLab` keeps only the newest handle (a replaced handle is a no-op) and `releaseLab` releases the current record on `disconnectedCallback` — the provider's request listener is detached, so a reconnect adds no listener. On the consumer side the bridge is owned by the consumer: save it, and release it on `disconnectedCallback` with `unbindLab` — `releaseConsumedContext` detaches the provider side, so a disconnected consumer receives no further updates and a repeated connect adds no second bridge. Both elements below are islands, each carrying the same `defineIslandConfig` declaration as `element-lab` above — page-scope components never run lifecycle code in the browser ([Islands and SSR](/guide/islands-and-ssr)).
 
 ```tsx
-// app/islands/lab-provider.tsx — the provider owns the value
-import { element, OpenElement, property, provideContext } from '@openelement/element';
-import { LabCtx } from './lab-context.ts';
+// app/islands/lab-provider.tsx — the provider owns the value AND its release
+import { element, OpenElement, property } from '@openelement/element';
+import { provideLab, releaseLab } from './lab-context.ts';
 
 @element('lab-provider', { root: 'shadow-open' })
 export default class LabProvider extends OpenElement {
@@ -204,12 +252,18 @@ export default class LabProvider extends OpenElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    provideContext(this, LabCtx, this.lab);
+    provideLab(this, this.lab);
+  }
+
+  override disconnectedCallback(): void {
+    releaseLab(this);
+    super.disconnectedCallback();
   }
 
   pick(): void {
     this.lab = 'lab-a';
-    provideContext(this, LabCtx, this.lab);
+    // Replaces the saved handle; the provider listener stays single.
+    provideLab(this, this.lab);
   }
 
   render() {
@@ -219,9 +273,9 @@ export default class LabProvider extends OpenElement {
 ```
 
 ```tsx
-// the consumer copies the nearest provider's value into a @property
-import { consumeContext, element, OpenElement, property } from '@openelement/element';
-import { LabCtx } from './lab-context.ts';
+// the consumer binds once per connection and releases the bridge on disconnect
+import { element, OpenElement, property } from '@openelement/element';
+import { bindLab, unbindLab } from './lab-context.ts';
 
 @element('lab-readout', { root: 'shadow-open' })
 export default class LabReadout extends OpenElement {
@@ -230,9 +284,12 @@ export default class LabReadout extends OpenElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    const lab = consumeContext<string>(LabCtx, this);
-    this.lab = lab.value;
-    lab.subscribe((next) => { this.lab = next; });
+    bindLab(this, (value) => { this.lab = value; });
+  }
+
+  override disconnectedCallback(): void {
+    unbindLab(this);
+    super.disconnectedCallback();
   }
 
   render() {
@@ -241,7 +298,7 @@ export default class LabReadout extends OpenElement {
 }
 ```
 
-The subscribe-and-copy shape is forced by the grammar itself: a `computed(...)` field may only read `this.<declared property>`, and the consumed signal is not a property — so the consumer copies provider updates into one, and the compiled Parts read that property.
+The subscribe-and-copy shape is forced by the grammar itself: a `computed(...)` field may only read `this.<declared property>`, and the consumed signal is not a property — so the consumer copies provider updates into one, and the compiled Parts read that property. The bridge and provider-handle tables live in the plain module because a compiled class may not carry private state fields; `unbindLab` releases the local subscription AND the consumer bridge, while `provideLab`/`releaseLab` keep the provider at exactly one request listener across repeated provides and reconnects.
 
 ```text
 // rejected: signal()/createContext() at module top level — OEC9008

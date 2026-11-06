@@ -97,3 +97,11 @@ The canonical bootstrap spelling evolves from `npm exec
 names the scope and never repeats the `/create` suffix. Package, tag, and the
 verified alternates (`npx` short form, explicit-bin `pnpm dlx`) are unchanged;
 the single source remains `packages/create/src/install-command.ts`.
+
+## Amendment (2026-11-05, registry-input enforcement)
+
+The npm-only decision above also governs release-tool inputs: packed manifests
+and modules reject the legacy `jsr:`, `@jsr/`, `@std/`, and `npm:@jsr/`
+spellings instead of filtering them, and the dependency-age gate does not query
+`npm.jsr.io`. This restates the decision's existing scope; it is not a new
+policy.

@@ -1,6 +1,6 @@
 # ADR-0174: Generated code, shared runtime and compatibility
 
-- Status: ACCEPTED / AMENDED (2026-11-03, slice prerequisites; implementation pending)
+- Status: ACCEPTED / AMENDED (2026-11-03, slice prerequisites; fourth-pass Part Program and class-authoring retirement approved; implementation pending)
 - Amends: ADR-0143, ADR-0148 and principle P2
 - Related: ADR-0158, ADR-0159, ADR-0171, ADR-0173
 
@@ -142,11 +142,11 @@ version, tag, publication, Starter promise or release claim, and it is not a
 licence to ship two execution models.
 
 **Alpha16b — Alpha16 release qualification.** Complete migration of required
-browser execution capabilities, generated mount/update/claim/disposal, the class
-adapter on the shared backend, Router integration, packed-consumer and
-browser/server qualification, and produce graph evidence that the old generic
-browser executor is unreachable from every applicable production browser entry
-graph.
+browser execution capabilities, generated mount/update/claim/disposal, the
+class-authoring migration and retirement (no adapter — see the fourth-pass
+amendment below), Router integration, packed-consumer and browser/server
+qualification, and produce graph evidence that the old generic browser executor is
+unreachable from every applicable production browser entry graph.
 
 **The hard gate above is unchanged.** A formal Alpha16 release with the old
 generic browser executor still reachable does not qualify. Alpha16a's existence
@@ -174,9 +174,16 @@ compiler semantic IR, Part Program v2, the emitted `__partProgram` field, the
 generated-module ABI and the HTML/claim/stream wire is defined first, and each
 consumer migrates on evidence. No new ABI is frozen by this record.
 
-Class authoring is retained through a long-lived compatibility adapter on the
-shared backend (owner-approved D-O3); it is compatibility infrastructure, not a
-second execution architecture, and no retirement version is scheduled.
+**SUPERSEDED HISTORY (2026-11-03, D-O3).** Class authoring was to be retained
+through a long-lived compatibility adapter on the shared backend; it was
+compatibility infrastructure, not a second execution architecture, and no
+retirement version was scheduled. The fourth-pass amendment below supersedes this:
+the Class/Decorator authoring API retires in Alpha16b with **no adapter**, and the
+2026-11-03 baseline of 219 in-tree files recorded as matching `@element(` is the
+migration surface (a historical size metric, not a current count; its scan
+predicate was not recorded, so it is not reproducible here, and it was not
+re-verified by this revision; re-inventory at execution) with a per-file matrix
+and capability/replacement inventory. See [ADR-0173](./ADR-0173-component-execution-and-composition.md).
 
 ## Superseding amendment (2026-11-03, fourth pass — APPROVED)
 
@@ -184,19 +191,21 @@ Status: **APPROVED 2026-11-03.** This supersedes the "keep the Part Program as a
 transitional serialized artifact" reading of the D-O2 amendment above; the staging
 discipline and the release gate remain in force.
 
-The fourth-pass reassessment proposes that Part Program v2 ceases to be a
-serialized browser execution protocol: the compiler keeps a compiler-owned
-Semantic IR, server and client backends render from it independently, and the
-generated module carries a **narrow ABI** (identity/registration, property and
-attribute metadata, style/scope metadata, generated client and server
-entrypoints, build-time feature flags, ABI version and build identity) instead of
-`__partProgram`. `validatePartProgram` and `PART_PROGRAM_VERSION` would retire
-with the schema; `COMPILED_MODULE_ABI_VERSION` would be superseded by the new ABI
-version.
+The approved decision (2026-11-03) is that Part Program v2 ceases to be a
+serialized browser execution protocol in the target contract: the compiler keeps a
+compiler-owned Semantic IR, server and client backends render from it
+independently, and the generated module carries a **narrow ABI**
+(identity/registration, property and attribute metadata, style/scope metadata,
+generated client and server entrypoints, build-time feature flags, ABI version and
+build identity) instead of `__partProgram`. Under the same decision,
+`validatePartProgram` and `PART_PROGRAM_VERSION` retire with the schema, and
+`COMPILED_MODULE_ABI_VERSION` is superseded by the new ABI version.
 
-The staging discipline from the D-O2 amendment — per-consumer migration, no
-premature ABI freeze — continues to govern the approved direction. The new ABI's
-actual structure is deferred to M01 design plus real packed-consumer evidence; it
-must not become another large JSON descriptor.
+This is an approved target, not implementation evidence: no source is deleted,
+the current Part Program path still ships, and the new ABI is not frozen. The
+staging discipline from the D-O2 amendment — per-consumer migration, no premature
+ABI freeze — continues to govern the target. The new ABI's actual structure
+remains deferred to M01 design plus real packed-consumer evidence; it must not
+become another large JSON descriptor.
 
 Full analysis: [fourth-pass reassessment](../architecture/alpha16-18-fourth-pass-reassessment.md).

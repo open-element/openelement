@@ -44,8 +44,10 @@ import {
   STREAM_MAX_SEED_PROPERTIES,
   STREAM_TIMEOUT_MS,
 } from '@openelement/element/authoring';
+import { ErrorCode, OpenElementError } from '@openelement/protocol/errors';
+import { errorToEnvelope } from '@openelement/protocol/diagnostics';
 import { isOpenElementNotFound, isOpenElementRedirect } from '../../../authoring.ts';
-import { serveError, StreamErrorCode } from '../../../internal/error-codes.ts';
+import { describeError, serveError, StreamErrorCode } from '../../../internal/error-codes.ts';
 import type { DocumentStyleSink } from './renderer-runtime.ts';
 import type { StreamRouteManifest } from '@openelement/protocol/ssg';
 
@@ -267,6 +269,57 @@ export function streamFields(data: unknown, manifest: StreamRouteManifest): Stre
 }
 
 /**
+ * One server-side diagnostic for a deferred Part that cannot become a
+ * content frame. The structured record reuses the framework error dialect
+ * (code/phase when the failure is an `OpenElementError`, `UNKNOWN`/`ssr`
+ * otherwise) and carries the route/field location plus the original cause.
+ * It is logged, never serialized: the client wire receives only the bounded,
+ * value-less `error` outcome built below.
+ */
+function reportStreamFailure(headline: string, route: string, field: string, error: unknown): void {
+  // A diagnostic runs INSIDE the catch that is salvaging a failed Part. It must
+  // never throw a second time: a null-prototype rejection, a hostile
+  // `toString`, a broken `message` accessor, or a throwing console sink would
+  // otherwise reject the pull and abort the response body mid-stream. The
+  // fallback record is built from the same safe description, so the failure is
+  // still classified and locatable.
+  try {
+    // Reuse the one diagnostic envelope shape: a coded framework failure keeps
+    // its own code/phase/severity/message; any other throw is classified as the
+    // unknown/ssr terminal, never laundered into a producer code.
+    const envelope =
+      error instanceof OpenElementError
+        ? errorToEnvelope(error)
+        : {
+            code: ErrorCode.UNKNOWN,
+            severity: 'error' as const,
+            phase: 'ssr' as const,
+            message: describeError(error),
+          };
+    console.error(`[openElement] ${headline}`, {
+      ...envelope,
+      route,
+      field,
+      cause: error,
+    });
+  } catch {
+    try {
+      console.error(`[openElement] ${headline}`, {
+        code: ErrorCode.UNKNOWN,
+        severity: 'error',
+        phase: 'ssr',
+        message: describeError(error),
+        route,
+        field,
+      });
+    } catch {
+      // Diagnostics must never break the stream; a console that throws is
+      // already the last reporting channel available.
+    }
+  }
+}
+
+/**
  * Binds the streaming body builder to the entry's injected Element function
  * (and the policy timeout default): the returned builder is the
  * `__streamBody` call site the generated handler invokes once per streamed
@@ -408,16 +461,9 @@ export function createStreamBody(config: StreamBodyConfig): StreamBodyFn {
               });
             } catch (error) {
               if (isOpenElementRedirect(error) || isOpenElementNotFound(error)) {
-                console.error('[openElement] late stream protocol decision', {
-                  route,
-                  field: entry.field,
-                });
+                reportStreamFailure('late stream protocol decision', route, entry.field, error);
               } else {
-                console.error('[openElement] deferred Part failed', {
-                  route,
-                  field: entry.field,
-                  error,
-                });
+                reportStreamFailure('deferred Part failed', route, entry.field, error);
               }
               current = entry.owners.map(
                 (owner) =>
@@ -580,6 +626,12 @@ export const STREAM_BROWSER_BOOTSTRAP: string = `(function () {
   var frameUrlAttributes = new Set(${JSON.stringify(STREAM_FRAME_URL_ATTRIBUTES)});
   var frameUrlControlMax = ${STREAM_FRAME_URL_CONTROL_MAX};
   var unsafeFrameUrl = ${STREAM_FRAME_UNSAFE_URL};
+  function describeFailure(value) {
+    try {
+      if (value instanceof Error && typeof value.message === 'string') return value.message;
+    } catch (_) {}
+    try { return String(value); } catch (_) { return '<unprintable error>'; }
+  }
   function report(reason, frame) {
     console.warn('[openElement] rejected streamed Part frame', {
       reason: reason,
@@ -848,7 +900,7 @@ export const STREAM_BROWSER_BOOTSTRAP: string = `(function () {
       try {
         callback(frame.part, frame.field, frame.outcome);
       } catch (error) {
-        report('stream claim listener failed: ' + String(error), frame);
+        report('stream claim listener failed: ' + describeFailure(error), frame);
       }
     }
   }

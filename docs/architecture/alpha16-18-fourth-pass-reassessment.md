@@ -49,11 +49,18 @@ from ordinary HTML.
 
 | Evidence | Value | What it proves |
 | --- | --- | --- |
-| Files using `@element(` in-tree | **219** (`apps` 14, `packages` 75, `tests` 81, `www` 49) | migration cost is large **inside the repo** |
+| Files using `@element(` in-tree (2026-11-03 baseline scan) | **219** (`apps` 14, `packages` 75, `tests` 81, `www` 49) | migration cost is large **inside the repo**; historical size metric only, not a current count; scan predicate not recorded and not re-verified (see note below) |
 | Public subpaths carrying class authoring | `@openelement/element` root, `./authoring`, `./base`, `./client-only`, `./no-blocks` | public surface is not one symbol |
 | Compiler frontend | `analyze-module.ts` (`analyzeCompiledModule`) + `lower-program.ts` | class-shaped pipeline is the only frontend today |
 | Runtime coupling | `open-element-implementation.ts` fails closed without `__partProgram` | class and protocol are currently entangled |
 | External downloads (last month) | `@openelement/element` **1,551**; `@openelement/router` **1,436**; last week element **51** | **owner-attested:** these are CI and the owner's own pulls, not external users |
+
+**Historical metric limitation (2026-11-05).** The 219-file total and its
+`apps`/`packages`/`tests`/`www` buckets are retained only as the original
+2026-11-03 report's record. The exact scan predicate and command were not recorded, so the scan cannot be
+reproduced in this workspace; this revision has **not** re-run, re-verified or
+re-counted them. The number is not a current inventory and must not be cited as
+one. No scan or implementation test is added by this note.
 
 **Owner declaration (2026-11-03): there are no external users.** All npm
 downloads are CI or the owner's own pulls, and the repository's two stars are the
@@ -62,9 +69,9 @@ decision about *this project's* users, the owner is the authority. It supersedes
 the earlier "unknown, not proven absent" reading of the download numbers.
 
 Consequence: the compatibility cost of retiring class authoring is **in-repo
-migration only** (219 files), not breaking an external author base. The 1.0 Alpha
-baseline already promises no 0.x migration, so no published compatibility
-obligation is broken either.
+migration only** (the 2026-11-03 baseline recorded 219 files; historical metric),
+not breaking an external author base. The 1.0 Alpha baseline already promises no
+0.x migration, so no published compatibility obligation is broken either.
 
 ### 2.3 Cost of each option
 
@@ -72,7 +79,7 @@ obligation is broken either.
 | --- | --- | --- | --- |
 | **KEEP + adapter** (previous) | adapter + dual authoring surface + permanent test matrix | none | one backend, but a second *frontend* and permanent `__partProgram` dependency |
 | **DEPRECATE** | adapter + deprecation machinery + two supported paths for years | low near-term | postpones the decision, keeps both costs |
-| **RETIRE** | migrate 219 in-tree files + rewrite compiler frontend as function-first + rewrite generated module + Starter/docs | **no external class authors (owner-declared)**; in-repo migration + release note only | one authoring model, one frontend, no legacy frontend to keep honest |
+| **RETIRE** | migrate the 2026-11-03 baseline set (219 files, historical metric) + rewrite compiler frontend as function-first + rewrite generated module + Starter/docs | **no external class authors (owner-declared)**; in-repo migration + release note only | one authoring model, one frontend, no legacy frontend to keep honest |
 
 ### 2.4 Recommendation
 
@@ -89,11 +96,13 @@ obligation is broken either.
    internal base the generated code emits, with no author-facing export), not a
    naming decision.
 
-The honest downside: 219 in-tree call sites migrate. The owner has declared that
-no external class authors exist, so the external breakage cost is **zero by owner
-testimony** rather than merely unknown. That removes the main counter-argument to
-retirement; the remaining cost is the in-repo migration itself, which is why this
-still needs explicit approval rather than being inferred from architecture taste.
+The honest downside: the 2026-11-03 baseline scan recorded 219 in-tree files
+matching `@element(` (a historical size metric, not a current count, and not
+re-verified by this revision). The owner has declared that no external class
+authors exist, so the external breakage cost is **zero by owner testimony** rather
+than merely unknown. That removes the main counter-argument to retirement; the
+remaining cost is the in-repo migration itself, which is why this still needs
+explicit approval rather than being inferred from architecture taste.
 
 ## 3. Part Program v2 re-evaluation
 
@@ -116,9 +125,9 @@ the artifact today:
 | Consumer class | Count | Can it survive without `__partProgram`? |
 | --- | --- | --- |
 | Browser production runtime | 6 direct sites | **No** — this is the thing being replaced |
-| SSR serializer | 3 | **Yes**, with backend-local structure (the server may keep its own IR) |
+| SSR serializer | 3 | **Yes**, with backend-local structure (the server may keep its own private rendering structure, not the Semantic IR) |
 | Streaming identity | 2 | **Yes**, with explicit build-identity metadata in the new ABI |
-| Router page classification | 2 | **Yes**, with a metadata flag instead of field presence |
+| Router page classification | 2 | **Yes**, with a Router-plugin build-time classification fact, not an ABI/metadata field |
 | Build-time lexical | 2 | **Yes**, migrated in the same change as the field shape |
 | Type-only | 4 | Follow the ABI |
 | Protocol/validator/public export | 3 | Retired or retained by product decision |
@@ -153,7 +162,7 @@ Nothing here is frozen. Responsibilities are justified by the traced consumers:
 
 | Responsibility | Needed by | Justification |
 | --- | --- | --- |
-| Component identity + tag | registration, Router page classification | replaces `__partProgram.tag` presence checks |
+| Component identity + tag | registration, SSR seed, claim | replaces `__partProgram.tag` reads. Router page classification is a separate **build-time** fact derived by the plugin, not this ABI field |
 | Property/attribute metadata | facade, SSR seeding, form interop | replaces `metadata.properties` reads |
 | Style/scope metadata | CSS recovery, style delivery | replaces build-time CSS recovery scanning |
 | Generated client entrypoints | mount/update/claim/dispose | replaces the walker's entry |
@@ -213,13 +222,13 @@ ABI is not the IR; the HTML/claim/stream wire is not the ABI.
 
 | Milestone | Change |
 | --- | --- |
-| M01 | unchanged: IR / module ABI / metadata / wire boundary — now with the **proposed** retirement as the target, not "keep and split" |
+| M01 | unchanged: IR / module ABI / metadata / wire boundary — now with the **approved** retirement as the target, not "keep and split" |
 | M02–M08 | unchanged |
 | **M09** | **replaced.** Was "Class Compatibility Adapter". New M09: **Generated Native Custom Element boundary** — emitted element class, registration, property/attribute conversion, events, Shadow DOM/DSD interop, third-party WC compatibility |
 | M10 | unchanged in purpose; now also covers removing `__partProgram` from production module contracts and proving the old protocol has no production browser consumer |
 | M11–M13 | unchanged |
 | **M14** | **normalised to Alpha16b.** Full-await async server components; not Alpha16a, not Alpha18 bounded defer |
-| Alpha17 | no longer carries a class-adapter obligation; carries the frozen ABI, public function API, migration notes |
+| Alpha17 | no longer carries a class-adapter obligation; carries the frozen ABI, public function API, and migration-note publication (capability migration remains Alpha16b) |
 | Alpha18 | unchanged: bounded defer only |
 
 The class-retirement decision is approved, so M09 is the generated Native Custom
@@ -228,9 +237,13 @@ adapter" variant is recorded only as rejected history.
 
 ## 9. What the owner must approve
 
+The "If rejected" column is counterfactual history, not a menu of fallbacks:
+P-1…P-5 were approved on 2026-11-03, so M09 is not an adapter and no rejected
+variant is a current path.
+
 | # | Proposal | If rejected |
 | --- | --- | --- |
-| P-1 | Retire the public Class/Decorator authoring API; keep CE + internal generated class; migrate in-tree call sites | M09 remains the adapter; `__partProgram` retains a class-facing consumer |
+| P-1 | Retire the public Class/Decorator authoring API; keep CE + internal generated class; migrate in-tree call sites | M09 would remain the adapter; `__partProgram` would retain a class-facing consumer |
 | P-2 | Retire Part Program v2 as a serialized browser protocol | the protocol stays transitional and the walker survives longer |
 | P-3 | Remove `__partProgram` from the target module contract; introduce the narrow ABI | the ABI work shrinks to splitting the existing field |
 | P-4 | Retire `validatePartProgram` / `PART_PROGRAM_VERSION` with the schema | they survive as orphaned infrastructure |

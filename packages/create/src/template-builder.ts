@@ -171,8 +171,8 @@ export const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['public/openelement-mark.svg', 'public/openelement-mark.svg'],
   // B5 (ADR-0161): the starter is a plain Node project. Framework
   // consumption resolves through package.json dependencies (npm is the only
-  // public registry; packed first-party modules carry no bare @std/*
-  // specifiers, so no @jsr registry bridge is generated), the lifecycle is
+  // public registry; the packed first-party modules and this scaffold carry
+  // no `jsr:` / `@std/*` spelling), the lifecycle is
   // package.json scripts, and tsconfig.json owns the `check` type-check
   // surface. Manager-neutral since alpha.15: the scripts are plain commands
   // (`oe dev` / `oe build` / `oe start` / `oxfmt` / `oxlint` / `tsc` /

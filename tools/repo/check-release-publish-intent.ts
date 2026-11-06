@@ -16,22 +16,29 @@
  *     an explicit operation=publish, repoint only under operation=repoint);
  *   - the extracted shell steps, executed under a fake `gh`/`npm` on PATH:
  *     main+SHA candidate binding, same-SHA CI evidence discovery (run
- *     discovered over the API, never supplied; a missing, failed, cancelled
- *     or skipped required CI job ⇒ refusal), the release-gate requirement,
- *     the pre-publish re-verification, publish-vs-repoint separation, and
- *     registry truthfulness (E404 = confirmed absent = the only publish
- *     candidate; any other query error is a refusal — never read as
- *     "not yet published").
+ *     discovered over the API, never supplied; the exact thirteen job
+ *     instances of the shared qualification definition — sha-guard plus the
+ *     nine qualification IDs / twelve instances — must each appear once and
+ *     conclude success; a missing or duplicated instance, an unexpected
+ *     instance, a partial listing, or a failed/cancelled/skipped required
+ *     instance ⇒ refusal), the release-gate requirement, the pre-publish
+ *     re-verification, publish-vs-repoint separation, and registry
+ *     truthfulness (E404 = confirmed absent = the only publish candidate; any
+ *     other query error — E403 included — is a refusal, never read as "not
+ *     yet published").
  *
  * The negative matrix this harness evaluates:
  *   push to main → CI runs, no publish; merge/version-bump commit → no
  *   publish; CI success → no publish; CI failure → no publish;
  *   full-qualification dispatch → no publish; manual publish with wrong SHA →
  *   DENY; manual publish with missing CI evidence → DENY; manual publish with
- *   a skipped required job → DENY; manual publish with a failed release gate
- *   → DENY; manual publish with all gates satisfied → ELIGIBLE (evaluated,
- *   never executed); manual repoint to an existing version → REPOINT ONLY;
- *   manual repoint to a nonexistent version → DENY.
+ *   a skipped required job → DENY; manual publish with a missing matrix leg,
+ *   a duplicated instance, an unexpected instance or a non-success sha-guard
+ *   → DENY; manual publish with a failed release gate → DENY; manual publish
+ *   with all gates satisfied → ELIGIBLE (evaluated, never executed); manual
+ *   repoint to an existing version → REPOINT ONLY; manual repoint to a
+ *   nonexistent version → DENY. The post-publish read-back must keep
+ *   `always()` so a failed publish still records registry-state forensics.
  *
  * The embedded condition evaluator deliberately supports only the operators
  * this workflow's guards use (&&, ||, ==, !=, !, parentheses, string
@@ -60,24 +67,18 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { spawnCommandSync } from './node-command.ts';
+import {
+  CI_GUARD_JOB,
+  CI_QUALIFICATION_JOBS,
+  CI_RUN_INSTANCES,
+  CI_TOTAL_RUN_INSTANCES,
+  deriveRunInstanceNames,
+} from './ci-qualification.ts';
 
 export const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 export const DEFAULT_RELEASE_WORKFLOW = join(repoRoot, '.github/workflows/autoflow-release.yml');
 export const DEFAULT_CI_WORKFLOW = join(repoRoot, '.github/workflows/autoflow-ci.yml');
 const WORKFLOWS_DIR = join(repoRoot, '.github/workflows');
-
-/** The nine qualification jobs of autoflow-ci.yml, minus the sha-guard. */
-export const REQUIRED_CI_JOBS = [
-  'lint',
-  'test',
-  'e2e',
-  'pack',
-  'e2e-full',
-  'bfcache',
-  'node-serve-smoke',
-  'packed-consumer-matrix',
-  'fresh-install',
-] as const;
 
 export type Expectation = 'DENY' | 'ELIGIBLE' | 'REPOINT_ONLY' | 'NONE';
 
@@ -95,15 +96,19 @@ interface StepDoc {
   run?: string;
   env?: Record<string, string>;
   uses?: string;
+  with?: Record<string, unknown>;
+  'continue-on-error'?: boolean;
 }
 
 interface JobDoc {
+  name?: unknown;
   needs?: string | string[];
   if?: string;
   steps?: StepDoc[];
   uses?: string;
   environment?: string;
   permissions?: Record<string, string>;
+  strategy?: { matrix?: unknown };
 }
 
 interface WorkflowDoc {
@@ -301,6 +306,10 @@ function runShellScript(
     ...options.env,
     GITHUB_OUTPUT: outputPath,
     GITHUB_REPOSITORY: 'openelement/openelement',
+    // The extracted steps may resolve checked-in tools through the workspace
+    // (the qualification-contract CLI). GitHub provides this variable; the
+    // harness points it at the real checkout while cwd stays the scratch repo.
+    GITHUB_WORKSPACE: repoRoot,
     PATH: `${options.pathPrefix ? `${options.pathPrefix}:` : ''}${process.env.PATH ?? ''}`,
   };
   // GitHub's default Linux shell is `bash -e {0}` — reproduce it exactly.
@@ -374,6 +383,11 @@ if [ "$1" = "view" ]; then
   if in_list "$pkg" "\${FAKE_NPM_PRESENT:-}"; then
     printf '%s\\n' "$ver"; exit 0
   fi
+  if in_list "$pkg" "\${FAKE_NPM_FORBIDDEN:-}"; then
+    echo "npm error code E403" >&2
+    echo "npm error 403 Forbidden - GET https://registry.npmjs.org/@openelement%2f$pkg" >&2
+    exit 1
+  fi
   if in_list "$pkg" "\${FAKE_NPM_ERROR:-}"; then
     echo "npm error code ENOTFOUND" >&2
     echo "npm error network request to https://registry.npmjs.org/@openelement/$pkg failed" >&2
@@ -405,12 +419,14 @@ interface FakeBin {
   npmPresent: string[];
   npmAbsent: string[];
   npmError: string[];
+  npmForbidden: string[];
   npmMismatch: string[];
   logPath: string;
   setNpm(options: {
     present?: readonly string[];
     absent?: readonly string[];
     error?: readonly string[];
+    forbidden?: readonly string[];
     mismatch?: readonly string[];
   }): void;
 }
@@ -428,12 +444,14 @@ function makeFakeBin(root: string): FakeBin {
     npmPresent: [],
     npmAbsent: [],
     npmError: [],
+    npmForbidden: [],
     npmMismatch: [],
     logPath: npmLog,
     setNpm(options) {
       this.npmPresent = [...(options.present ?? [])];
       this.npmAbsent = [...(options.absent ?? [])];
       this.npmError = [...(options.error ?? [])];
+      this.npmForbidden = [...(options.forbidden ?? [])];
       this.npmMismatch = [...(options.mismatch ?? [])];
     },
   };
@@ -446,6 +464,7 @@ function fakeEnv(bin: FakeBin, ghDir: string): Record<string, string> {
     FAKE_NPM_PRESENT: bin.npmPresent.join(' '),
     FAKE_NPM_ABSENT: bin.npmAbsent.join(' '),
     FAKE_NPM_ERROR: bin.npmError.join(' '),
+    FAKE_NPM_FORBIDDEN: bin.npmForbidden.join(' '),
     FAKE_NPM_MISMATCH: bin.npmMismatch.join(' '),
   };
 }
@@ -462,23 +481,46 @@ function readNpmLog(bin: FakeBin): string {
 // Scenario fixtures
 // ---------------------------------------------------------------------------
 
-function ciJobsJson(overrides: Record<string, string> = {}, drop: readonly string[] = []): string {
-  const jobs: Array<{ name: string; conclusion: string }> = [];
-  for (const base of REQUIRED_CI_JOBS) {
-    if (drop.includes(base)) continue;
-    const conclusion = overrides[base] ?? 'success';
-    if (base === 'node-serve-smoke') {
-      jobs.push({ name: `${base} (24)`, conclusion }, { name: `${base} (26)`, conclusion });
-    } else if (base === 'packed-consumer-matrix') {
-      jobs.push(
-        { name: `${base} (ubuntu-latest)`, conclusion },
-        { name: `${base} (macos-latest)`, conclusion },
-      );
-    } else {
-      jobs.push({ name: base, conclusion });
-    }
+interface JobsFixture {
+  /** Conclusion override keyed by the exact GitHub job-instance name. */
+  overrides?: Readonly<Record<string, string>>;
+  /** Exact instance names to omit. */
+  drop?: readonly string[];
+  /** Exact instance names to list a second time. */
+  duplicate?: readonly string[];
+  /** Extra instances not in the contract. */
+  extra?: readonly { name: string; conclusion?: string }[];
+  /** Override the API's total_count (for partial-listing fixtures). */
+  totalCount?: number;
+  /**
+   * Instances from a partial "re-run failed jobs" action. Their latest
+   * attempt is `run_attempt: 2`; with the workflow's explicit
+   * `filter=latest`, the jobs listing still carries exactly one entry per
+   * instance (thirteen), so the contract check accepts it. Without the
+   * filter, superseded attempts would inflate the listing and the same run
+   * would be refused.
+   */
+  rerun?: readonly string[];
+}
+
+function ciJobsJson(fixture: JobsFixture = {}): string {
+  const jobs: Array<{ name: string; conclusion: string; run_attempt?: number }> = [];
+  for (const name of CI_RUN_INSTANCES) {
+    if (fixture.drop?.includes(name)) continue;
+    jobs.push({
+      name,
+      conclusion: fixture.overrides?.[name] ?? 'success',
+      ...(fixture.rerun?.includes(name) ? { run_attempt: 2 } : {}),
+    });
   }
-  return JSON.stringify({ total_count: jobs.length, jobs });
+  for (const name of fixture.duplicate ?? []) {
+    const source = jobs.find((job) => job.name === name);
+    if (source) jobs.push({ ...source });
+  }
+  for (const entry of fixture.extra ?? []) {
+    jobs.push({ name: entry.name, conclusion: entry.conclusion ?? 'success' });
+  }
+  return JSON.stringify({ total_count: fixture.totalCount ?? jobs.length, jobs });
 }
 
 function runsJson(runs: ReadonlyArray<Record<string, string | number>>): string {
@@ -753,7 +795,11 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
     };
   });
 
-  // ── 7. Failed/skipped/cancelled/missing CI jobs are refused ─────────────
+  // ── 7. Every deviation from the exact qualification contract is refused ─
+  // The contract is identity, not shape: each of the thirteen expected
+  // instances must appear exactly once and conclude success. A missing matrix
+  // leg, a duplicated leg, an unexpected job, a partial listing and a
+  // non-success sha-guard are all separate negative rows.
   scenario('manual-publish-with-non-success-ci-job-is-refused', 'DENY', () => {
     const problems: string[] = [];
     const green = evidenceRun(
@@ -764,42 +810,101 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
     if (green.status !== 0) problems.push(`a fully green run was refused: ${green.stderr.trim()}`);
     if (!green.output.includes('run_id=111'))
       problems.push('the discovered run id was not recorded');
-    const cases: Array<[string, string | null, string | null, string]> = [
-      [
-        'run conclusion failure',
-        JSON.stringify({ head_sha: headSha, conclusion: 'failure' }),
-        ciJobsJson(),
-        'failure',
-      ],
-      [
-        'skipped required job',
-        JSON.stringify({ head_sha: headSha, conclusion: 'success' }),
-        ciJobsJson({ lint: 'skipped' }),
-        'skipped',
-      ],
-      [
-        'cancelled required job',
-        JSON.stringify({ head_sha: headSha, conclusion: 'success' }),
-        ciJobsJson({ 'packed-consumer-matrix': 'cancelled' }),
-        'cancelled',
-      ],
-      [
-        'missing required job',
-        JSON.stringify({ head_sha: headSha, conclusion: 'success' }),
-        ciJobsJson({}, ['fresh-install']),
-        'missing',
-      ],
+    const successRun = JSON.stringify({ head_sha: headSha, conclusion: 'success' });
+    // A partial re-run is still a complete qualification: the jobs listing
+    // carries one latest attempt per instance (thirteen total), some at
+    // run_attempt 2. The identity check must accept that just as it accepts a
+    // first-attempt run; `filter=latest` in the workflow is what keeps the
+    // superseded attempts out of this listing.
+    const partialRerun = evidenceRun(
+      pushRun,
+      successRun,
+      ciJobsJson({ rerun: ['lint', 'e2e-full (fixture-gates)'] }),
+    );
+    if (partialRerun.status !== 0) {
+      problems.push(
+        `a partial re-run's thirteen latest instances were refused: ${partialRerun.stderr.trim()}`,
+      );
+    }
+    if (!partialRerun.output.includes('run_id=111')) {
+      problems.push('the partial re-run did not record the discovered run id');
+    }
+    const cases: Array<{ label: string; run: string; jobs: string; marker: string }> = [
+      {
+        label: 'run conclusion failure',
+        run: JSON.stringify({ head_sha: headSha, conclusion: 'failure' }),
+        jobs: ciJobsJson(),
+        marker: 'failure',
+      },
+      {
+        label: 'skipped required job',
+        run: successRun,
+        jobs: ciJobsJson({ overrides: { lint: 'skipped' } }),
+        marker: 'skipped',
+      },
+      {
+        label: 'cancelled matrix leg',
+        run: successRun,
+        jobs: ciJobsJson({
+          overrides: { 'packed-consumer-matrix (macos-latest)': 'cancelled' },
+        }),
+        marker: 'cancelled',
+      },
+      {
+        label: 'missing required job (all instances)',
+        run: successRun,
+        jobs: ciJobsJson({ drop: ['fresh-install'] }),
+        marker: 'qualification contract requires',
+      },
+      {
+        label: 'missing matrix leg',
+        run: successRun,
+        jobs: ciJobsJson({
+          drop: ['e2e-full (fixture-gates)'],
+          extra: [{ name: 'rogue' }],
+        }),
+        marker: 'is missing',
+      },
+      {
+        label: 'duplicate matrix instance',
+        run: successRun,
+        jobs: ciJobsJson({
+          drop: ['node-serve-smoke (26)'],
+          duplicate: ['node-serve-smoke (24)'],
+        }),
+        marker: 'appears 2 times',
+      },
+      {
+        label: 'unexpected job instance',
+        run: successRun,
+        jobs: ciJobsJson({ drop: ['bfcache'], extra: [{ name: 'rogue' }] }),
+        marker: 'unexpected CI job instance',
+      },
+      {
+        label: 'non-success sha-guard',
+        run: successRun,
+        jobs: ciJobsJson({ overrides: { 'sha-guard': 'skipped' } }),
+        marker: 'sha-guard',
+      },
+      {
+        label: 'partial jobs listing',
+        run: successRun,
+        jobs: ciJobsJson({ totalCount: CI_TOTAL_RUN_INSTANCES + 1 }),
+        marker: 'incomplete',
+      },
     ];
-    for (const [label, run, jobs, marker] of cases) {
-      const result = evidenceRun(pushRun, run, jobs);
-      if (result.status === 0) problems.push(`${label} was accepted`);
-      else if (!`${result.stdout}${result.stderr}`.includes(marker)) {
-        problems.push(`${label} refusal does not mention '${marker}'`);
+    for (const testCase of cases) {
+      const result = evidenceRun(pushRun, testCase.run, testCase.jobs);
+      if (result.status === 0) problems.push(`${testCase.label} was accepted`);
+      else if (!`${result.stdout}${result.stderr}`.includes(testCase.marker)) {
+        problems.push(`${testCase.label} refusal does not mention '${testCase.marker}'`);
       }
     }
     return {
       observed:
-        problems.length === 0 ? 'DENY (skipped ≠ success, missing = refusal)' : 'NOT DENIED',
+        problems.length === 0
+          ? 'DENY (exact identity: missing/duplicate/unexpected/non-success)'
+          : 'NOT DENIED',
       ok: problems.length === 0,
       detail: problems.join('; '),
     };
@@ -955,6 +1060,7 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
     present?: readonly string[];
     absent?: readonly string[];
     error?: readonly string[];
+    forbidden?: readonly string[];
     mismatch?: readonly string[];
   }): ShellRun => {
     bin.setNpm(options);
@@ -978,20 +1084,41 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
     if (errorRun.output.includes('already_published=false')) {
       problems.push('a publish set was emitted despite the query error');
     }
-    bin.setNpm({ present: ['router'], error: ['ui'] });
-    writeFileSync(bin.logPath, '');
-    const repointRun = runExtractedStep(
-      release.doc,
-      'repoint',
-      'Re-point the channel tag',
-      { OPERATION: 'repoint', TAG: 'alpha', INPUT_VERSION: VERSION, INPUT_PACKAGES: 'router,ui' },
-      { cwd: scratch, pathPrefix: bin.dir, extraEnv: fakeEnv(bin, ghDir) },
-    );
-    if (repointRun.status === 0) problems.push('repoint accepted an unverifiable registry answer');
-    if (readNpmLog(bin).trim() !== '')
-      problems.push('repoint wrote a dist-tag after a query error');
+    // E403 is not E404: auth/token-scope refusals and rate limits must never be
+    // read as a confirmed absence (nor as an existing version on the repoint
+    // side). The publish path's own post-E403 registry re-check lives in
+    // publish:npm; this row pins the workflow's classification of the same
+    // answer.
+    const forbiddenRun = detectRun({
+      present: ['protocol', 'element', 'compiler', 'router', 'ui'],
+      forbidden: ['create'],
+    });
+    if (forbiddenRun.status === 0) problems.push('an E403 was treated as a publish candidate');
+    if (forbiddenRun.output.includes('already_published=false')) {
+      problems.push('a publish set was emitted despite the E403');
+    }
+    for (const failure of ['error', 'forbidden'] as const) {
+      bin.setNpm({ present: ['router'], [failure]: ['ui'] });
+      writeFileSync(bin.logPath, '');
+      const repointRun = runExtractedStep(
+        release.doc,
+        'repoint',
+        'Re-point the channel tag',
+        {
+          OPERATION: 'repoint',
+          TAG: 'alpha',
+          INPUT_VERSION: VERSION,
+          INPUT_PACKAGES: 'router,ui',
+        },
+        { cwd: scratch, pathPrefix: bin.dir, extraEnv: fakeEnv(bin, ghDir) },
+      );
+      if (repointRun.status === 0)
+        problems.push(`repoint accepted an unverifiable registry answer (${failure})`);
+      if (readNpmLog(bin).trim() !== '')
+        problems.push(`repoint wrote a dist-tag after a query ${failure}`);
+    }
     return {
-      observed: problems.length === 0 ? 'DENY (error ≠ absent)' : 'NOT DENIED',
+      observed: problems.length === 0 ? 'DENY (error/E403 ≠ absent)' : 'NOT DENIED',
       ok: problems.length === 0,
       detail: problems.join('; '),
     };
@@ -1035,28 +1162,132 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
     };
   });
 
-  // ── 14. The required CI job list matches the CI workflow ────────────────
-  scenario('required-ci-job-list-matches-the-ci-workflow', 'NONE', () => {
+  // ── 14. One qualification definition, checked against the CI workflow ───
+  // The release path consumes tools/repo/ci-qualification.ts; this scenario
+  // re-derives the exact GitHub instance names from autoflow-ci.yml and fails
+  // when the shared definition (or the workflow's consumption of it) drifts.
+  scenario('qualification-contract-single-definition-matches-ci', 'NONE', () => {
     const problems: string[] = [];
-    const ciJobs = Object.keys(ci.doc.jobs ?? {})
-      .filter((name) => name !== 'sha-guard')
-      .sort();
-    const match = /--arg required "([^"]+)"/u.exec(release.text);
-    if (!match) problems.push('the release workflow declares no required CI job list');
-    else {
-      const declared = match[1]!.split(' ').filter(Boolean).sort();
-      if (JSON.stringify(declared) !== JSON.stringify(ciJobs)) {
-        problems.push(`declared ${JSON.stringify(declared)} != CI jobs ${JSON.stringify(ciJobs)}`);
+    const derived = deriveRunInstanceNames(ci.doc.jobs ?? {});
+    problems.push(...derived.problems);
+    const expected = [...CI_RUN_INSTANCES].sort();
+    const observed = [...derived.instances].sort();
+    if (JSON.stringify(observed) !== JSON.stringify(expected)) {
+      problems.push(
+        `shared contract ${JSON.stringify(expected)} != CI workflow ${JSON.stringify(observed)}`,
+      );
+    }
+    if (CI_TOTAL_RUN_INSTANCES !== 13) {
+      problems.push(`the contract must require thirteen instances, got ${CI_TOTAL_RUN_INSTANCES}`);
+    }
+    const qualification = CI_QUALIFICATION_JOBS.flatMap((job) => job.instances);
+    if (qualification.length !== 12) {
+      problems.push(
+        `the nine qualification IDs must expand to twelve instances, got ${qualification.length}`,
+      );
+    }
+    if (CI_RUN_INSTANCES[0] !== CI_GUARD_JOB) {
+      problems.push('the sha-guard instance must lead the required instance list');
+    }
+    if (new Set(CI_RUN_INSTANCES).size !== CI_RUN_INSTANCES.length) {
+      problems.push('the shared contract carries duplicate instance names');
+    }
+    if (!CI_RUN_INSTANCES.includes(CI_GUARD_JOB)) {
+      problems.push('the sha-guard instance is not required by the contract');
+    }
+
+    const evidenceStep = stepOf(
+      jobOf(release.doc, 'ci-evidence'),
+      'Discover the AutoFlow CI evidence',
+    );
+    const body = evidenceStep.run ?? '';
+    if (!body.includes('ci-qualification.ts')) {
+      problems.push('ci-evidence does not read the shared qualification definition');
+    }
+    if (!body.includes('/jobs?per_page=100&filter=latest')) {
+      problems.push(
+        'ci-evidence does not pin filter=latest on the jobs query; a partial re-run would ' +
+          'list superseded attempts and the exact-identity check would refuse it',
+      );
+    }
+    if (!body.includes('--slurpfile contract')) {
+      problems.push('ci-evidence does not load the contract as a single jq definition');
+    }
+    if (/--arg required "/u.test(release.text)) {
+      problems.push('the release workflow still carries a hand-maintained required job list');
+    }
+    for (const marker of [
+      'is missing from run',
+      ' times in run',
+      'unexpected CI job instance',
+      'qualification contract requires',
+    ]) {
+      if (!body.includes(marker)) {
+        problems.push(`ci-evidence lacks the exact-identity marker '${marker}'`);
       }
     }
     return {
-      observed: problems.length === 0 ? 'NINE JOBS MATCH' : 'DRIFT',
+      observed:
+        problems.length === 0
+          ? 'ONE CONTRACT (13 instances derived from autoflow-ci.yml)'
+          : 'CONTRACT DRIFT',
       ok: problems.length === 0,
       detail: problems.join('; '),
     };
   });
 
-  // ── 15. The kept release tooling surfaces are reused, not rebuilt ───────
+  // ── 15. Post-publish read-back keeps always() failure forensics ──────────
+  // The registry read-back is evidence about what npm actually serves. It must
+  // still run when the publish/alias steps failed (always()), so a partial or
+  // failed publish leaves a tracked/readable registry record, and the artifact
+  // upload must carry that record (never a silent "no files" pass). A red
+  // read-back stays red: the step may not be continue-on-error.
+  scenario('post-publish-readback-keeps-always-forensics', 'NONE', () => {
+    const problems: string[] = [];
+    const releaseJob = jobOf(release.doc, 'release');
+    const readback = stepOf(releaseJob, 'Re-read the registry after the alias re-point');
+    const readbackIf = readback.if ?? '';
+    if (!/always\s*\(/u.test(readbackIf)) {
+      problems.push('the registry read-back lost its always() guard');
+    }
+    if (!/steps\.check\.outputs\.already_published\s*!=\s*'true'/u.test(readbackIf)) {
+      problems.push('the registry read-back lost its already-published guard');
+    }
+    if (readback['continue-on-error'] === true) {
+      problems.push('the registry read-back is continue-on-error (a failed read would be green)');
+    }
+    if (!(readback.run ?? '').includes('sync:registry')) {
+      problems.push('the read-back no longer runs sync:registry');
+    }
+    const upload = (releaseJob.steps ?? []).find((step) =>
+      (step.name ?? '').includes('Upload the registry-synced release state'),
+    );
+    if (!upload) problems.push('the registry-state artifact upload is missing');
+    else {
+      if (!/always\s*\(/u.test(upload.if ?? '')) {
+        problems.push('the registry-state artifact upload lost its always() guard');
+      }
+      if (upload.with?.['if-no-files-found'] !== 'error') {
+        problems.push('the registry-state artifact upload no longer fails on missing files');
+      }
+      const paths = String(upload.with?.path ?? '');
+      for (const path of [
+        'docs/release/release-state.json',
+        'www/app/data/version.ts',
+        'www/app/data/_generated-release-line.ts',
+      ]) {
+        if (!paths.includes(path)) problems.push(`the artifact upload omits ${path}`);
+      }
+    }
+    return {
+      observed:
+        problems.length === 0 ? 'READ-BACK ALWAYS RUNS, ARTIFACT FAILS CLOSED' : 'FORENSICS LOST',
+      ok: problems.length === 0,
+      detail: problems.join('; '),
+    };
+  });
+
+  // ── 16. The kept release tooling surfaces are reused, not rebuilt ───────
   scenario('release-surfaces-reused', 'NONE', () => {
     const problems: string[] = [];
     // Literal markers, matched with includes(): the check asks "is this kept

@@ -261,7 +261,9 @@ conflated in planning or tests.
 ### 4.7 Class authoring — current fact and approved retirement
 
 **CURRENT FACT:** the only shipping authoring path is the decorated class
-(`@element`, `class X extends OpenElement`); 219 in-tree files use it.
+(`@element`, `class X extends OpenElement`); the 2026-11-03 baseline recorded 219
+in-tree files matching `@element(`. That figure is a historical size metric, not
+a current precise count; the migration inventory is re-taken at execution.
 
 **APPROVED (2026-11-03, fourth pass):** retire the public Class/Decorator
 authoring API and do **not** build a compatibility adapter. Keep native Custom
@@ -283,8 +285,10 @@ The approved decision is made, so the statement is unconditional:
 - The compiler may still emit an internal class extending a framework-internal
   base where the platform requires an element (island root, registration, native
   interop). That internal base is not a public authoring API.
-- No compatibility adapter exists, so there is no class authoring path to keep
-  honest and no second frontend to test.
+- No compatibility adapter is built, so there is no adapter path to keep honest
+  and no second frontend to test. The class authoring path remains the migration
+  input until Alpha16b retires it; its per-file/capability evidence is M10
+  partition evidence, not the M09 CE boundary.
 
 The constraint that does not move: **one semantic model and one generated client
 execution backend**, plus one independent server rendering backend, never two

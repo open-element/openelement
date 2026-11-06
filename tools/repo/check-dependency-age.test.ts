@@ -1,10 +1,12 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import {
   ageFailure,
+  cachedPublishTime,
   fetchPublishTime,
   packumentUrl,
   parseCache,
   parseLockPackages,
+  registryFailure,
   type LockPackage,
 } from './check-dependency-age.ts';
 
@@ -135,7 +137,7 @@ test('fetchPublishTime fails closed on wrong-type publish-time metadata', async 
   }
 });
 
-test('parseCache discards caches that predate the versioned format', () => {
+test('parseCache discards every cache shape that lacks a registry source', () => {
   // The flat shape is the pre-versioning cache, whose values may be
   // `time.created` fallback dates: none of its entries may survive as a
   // second authority — every unrecognized shape re-fetches from the
@@ -145,14 +147,69 @@ test('parseCache discards caches that predate the versioned format', () => {
   expect(
     parseCache(JSON.stringify({ version: 1, publish: { 'foo@1.0.0': fallbackDate } })),
   ).toEqual({});
-  expect(parseCache(JSON.stringify({ version: 2 }))).toEqual({});
-  expect(parseCache(JSON.stringify({ version: 2, publish: 'not-a-map' }))).toEqual({});
-  expect(parseCache('not json at all')).toEqual({});
-  // The current format round-trips, dropping non-string entries.
+  // v2 is the first versioned shape, but its bare `key → publish` entries did
+  // not record a registry. A local cache written while npm.jsr.io was still
+  // allowlisted is indistinguishable from npm truth in that shape, so it is
+  // discarded wholesale rather than read as npm evidence.
   expect(
     parseCache(JSON.stringify({ version: 2, publish: { 'foo@1.0.0': fallbackDate } })),
-  ).toEqual({ 'foo@1.0.0': fallbackDate });
-  expect(parseCache(JSON.stringify({ version: 2, publish: { 'foo@1.0.0': 12345 } }))).toEqual({});
+  ).toEqual({});
+  expect(parseCache(JSON.stringify({ version: 3 }))).toEqual({});
+  expect(parseCache(JSON.stringify({ version: 3, publish: 'not-a-map' }))).toEqual({});
+  expect(parseCache('not json at all')).toEqual({});
+  // The current format round-trips, dropping entries without a source or a
+  // string publish time.
+  expect(
+    parseCache(
+      JSON.stringify({
+        version: 3,
+        publish: { 'foo@1.0.0': { registry: REGISTRY, publish: fallbackDate } },
+      }),
+    ),
+  ).toEqual({ 'foo@1.0.0': { registry: REGISTRY, publish: fallbackDate } });
+  for (const bad of [
+    { 'foo@1.0.0': fallbackDate },
+    { 'foo@1.0.0': { registry: REGISTRY } },
+    { 'foo@1.0.0': { registry: '', publish: fallbackDate } },
+    { 'foo@1.0.0': { registry: REGISTRY, publish: 12345 } },
+  ]) {
+    expect(parseCache(JSON.stringify({ version: 3, publish: bad }))).toEqual({});
+  }
+});
+
+test('a cache entry recorded for another registry is not an npm result', () => {
+  // The cache is keyed by package key alone. A v3 entry can still name a
+  // different registry origin — the retired JSR mirror, or a hand-edited
+  // cache — and must not answer for a package the lockfile resolves from npm.
+  const jsr = parseCache(
+    JSON.stringify({
+      version: 3,
+      publish: {
+        'foo@1.0.0': { registry: 'https://npm.jsr.io', publish: '2020-01-01T00:00:00.000Z' },
+      },
+    }),
+  );
+  expect(jsr['foo@1.0.0']?.registry).toEqual('https://npm.jsr.io');
+  expect(cachedPublishTime(jsr, lockPackage())).toBeUndefined();
+
+  const npm = parseCache(
+    JSON.stringify({
+      version: 3,
+      publish: {
+        'foo@1.0.0': { registry: `${REGISTRY}/`, publish: '2020-01-01T00:00:00.000Z' },
+      },
+    }),
+  );
+  // The comparison is by origin, so a trailing slash is the same source.
+  expect(cachedPublishTime(npm, lockPackage())).toEqual('2020-01-01T00:00:00.000Z');
+  // No entry at all, and an unparsable recorded source, are both a miss.
+  expect(cachedPublishTime({}, lockPackage())).toBeUndefined();
+  expect(
+    cachedPublishTime(
+      { 'foo@1.0.0': { registry: 'not a url', publish: '2020-01-01T00:00:00.000Z' } },
+      lockPackage(),
+    ),
+  ).toBeUndefined();
 });
 
 test('parseLockPackages resolves quoted, bare and peer-suffixed keys with their registry', () => {
@@ -167,9 +224,9 @@ test('parseLockPackages resolves quoted, bare and peer-suffixed keys with their 
     '  foo@1.2.3(bar@2.0.0):',
     '    resolution: {integrity: sha512-bbb}',
     '',
-    '  jsr-pkg@0.1.0:',
+    '  mirror-pkg@0.1.0:',
     '    resolution: {integrity: sha512-ccc}',
-    '    tarball: https://npm.jsr.io/%40jsr/pkg/0.1.0',
+    '    tarball: https://mirror.example.test/mirror-pkg/0.1.0',
     '',
     'snapshots:',
     '',
@@ -179,8 +236,48 @@ test('parseLockPackages resolves quoted, bare and peer-suffixed keys with their 
   expect(parseLockPackages(lock)).toEqual([
     { key: '@scope/name@1.0.0', name: '@scope/name', version: '1.0.0', registry: REGISTRY },
     { key: 'foo@1.2.3(bar@2.0.0)', name: 'foo', version: '1.2.3', registry: REGISTRY },
-    { key: 'jsr-pkg@0.1.0', name: 'jsr-pkg', version: '0.1.0', registry: 'https://npm.jsr.io' },
+    {
+      key: 'mirror-pkg@0.1.0',
+      name: 'mirror-pkg',
+      version: '0.1.0',
+      registry: 'https://mirror.example.test',
+    },
   ]);
+});
+
+test('registryFailure rejects the retired npm.jsr.io mirror before cache or network', () => {
+  // The preflight runs for every locked package, cached or not: a warm cache
+  // entry cannot outlive the allowlist change and launder a mirror source.
+  expect(registryFailure(lockPackage())).toBeUndefined();
+  const jsr = registryFailure(lockPackage({ registry: 'https://npm.jsr.io' }));
+  expect(jsr).toContain('foo@1.0.0:');
+  expect(jsr).toContain('not allowlisted');
+  expect(jsr).toContain('failing closed');
+  expect(jsr).toContain('registry.npmjs.org');
+  expect(registryFailure(lockPackage({ registry: 'not a url' }))).toContain(
+    'is not a parsable URL',
+  );
+});
+
+test('fetchPublishTime rejects the retired npm.jsr.io mirror', async () => {
+  // The JSR mirror was removed from the allowlist with the npm-only policy
+  // (ADR-0161): a lockfile tarball naming it is old input and must fail
+  // closed before any network request.
+  const requested: string[] = [];
+  vi.stubGlobal('fetch', (url: string | URL) => {
+    requested.push(String(url));
+    return Promise.resolve(new Response('{}'));
+  });
+  try {
+    const reason = await fetchPublishTime(lockPackage({ registry: 'https://npm.jsr.io' }));
+    expect(reason).toContain('foo@1.0.0:');
+    expect(reason).toContain('not allowlisted');
+    expect(reason).toContain('failing closed');
+    expect(reason).toContain('registry.npmjs.org');
+    expect(requested).toEqual([]);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
 
 afterEach(() => {

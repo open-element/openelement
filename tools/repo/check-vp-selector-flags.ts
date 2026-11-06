@@ -38,6 +38,14 @@
  *                    is silent too. Bare root tasks (`vp run fmt`) are not
  *                    package-qualified: they dispatch against the root
  *                    workspace package, always match, and are exempt.
+ *   3. no-task       a `--filter` selection must also name a task. A filter
+ *                    matches packages, not tasks, so a command with no task
+ *                    token can still green without running the intended step.
+ *
+ * The canonical proof form also carries `--no-cache`. That is a gate/evidence
+ * property, not part of fail-closed selection: this scan enforces filter +
+ * flag (+ task), while the contract drift guard requires the full documented
+ * argv (tools/repo/vp-run-form.ts is the shared parser for both).
  *
  * The executable is recognised by basename, so a path-prefixed invocation
  * (`node_modules/.bin/vp run …` in a git hook, which inherits no
@@ -67,6 +75,13 @@
  * are complementary: one owner for the argv, one check for the hand-written
  * surface.
  *
+ * The `pkg#task` short form is not scanned as an invocation when it appears in
+ * a gate.ts step list (`node tools/repo/gate.ts @openelement/www#build`): that
+ * notation is internal gate wiring, and gate.ts translates each step into the
+ * fail-closed `--filter` argv. It is legal there and only there. This scanner
+ * looks for `vp run`, so a gate step list is not mistaken for one, and the
+ * contract's derived gate table documents the distinction.
+ *
  * CLI:
  *   node tools/repo/check-vp-selector-flags.ts [--root=<dir>]
  * Exit 0 = every scanned invocation is fail-closed; 1 = at least one
@@ -77,17 +92,21 @@ import { join, relative, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { isMap, isScalar, isSeq, LineCounter, parseDocument, type Document } from 'yaml';
+import {
+  CANONICAL_PACKAGE_COMMAND,
+  parseVpRunForm,
+  VP_FAIL_IF_NO_MATCH,
+  vpRunSpecifier,
+} from './vp-run-form.ts';
 import { readWorkspaces } from './workspace-tasks.ts';
 
 export const ALLOW_MARKER = 'vp-selector-flags-allow:';
-const FAIL_FLAG = '--fail-if-no-match';
-/** Filter selection flags: the value is the following token. */
-const FILTER_FLAGS = new Set(['--filter', '-F']);
+const FAIL_FLAG = VP_FAIL_IF_NO_MATCH;
 const FLAG_EXEMPT_WHERE = 'a --filter selection must carry --fail-if-no-match';
 /** The canonical, fail-closed shape the advice and the tooling both emit. */
-const EFFECTIVE_FORM = `vp run --no-cache ${FAIL_FLAG} --filter <pkg> <task>`;
+const EFFECTIVE_FORM = CANONICAL_PACKAGE_COMMAND;
 
-export type ViolationKind = 'specifier-form' | 'no-flag';
+export type ViolationKind = 'specifier-form' | 'no-flag' | 'no-task';
 
 export interface Violation {
   kind: ViolationKind;
@@ -251,45 +270,25 @@ function specifierDetail(selector: string, facts: SelectorFacts): string {
 
 /** Analyze one `vp run …` argv against the workspace facts. */
 export function analyzeVpRun(argv: readonly string[], facts: SelectorFacts): RunVerdict {
-  const specifiers: string[] = [];
-  let filterSelected = false;
-  let hasFlag = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index]!;
-    if (token === FAIL_FLAG) {
-      hasFlag = true;
-      continue;
-    }
-    if (token.startsWith('--filter=')) {
-      filterSelected = true;
-      continue;
-    }
-    if (FILTER_FLAGS.has(token)) {
-      // The bare form takes the next token as the pattern; a missing value is
-      // already a filter selection (vp rejects the invocation either way).
-      filterSelected = true;
-      const value = argv[index + 1];
-      if (value !== undefined && !value.startsWith('-')) index += 1;
-      continue;
-    }
-    if (token.startsWith('-')) continue;
-    specifiers.push(token);
-  }
-  const selector = specifiers[0];
-  const qualified = filterSelected || (selector !== undefined && selector.includes('#'));
+  // The parser is shared with the contract drift guard: both must agree that
+  // only `--filter` + `--fail-if-no-match` is a package-qualified selection the
+  // CLI can be handed directly.
+  const form = parseVpRunForm(argv);
+  const specifier = vpRunSpecifier(form);
+  const qualified = form.filterRequested || specifier !== undefined;
   if (!qualified) return { qualified: false, violations: [] };
 
   const blank = { file: '', line: 0, invocation: '' };
   // The effective-form rule comes first and stands alone: on a `pkg#task`
   // specifier the missing-flag advice would be wrong (the flag does nothing
   // there), so a specifier reports the form defect and nothing else.
-  if (selector !== undefined && selector.includes('#')) {
+  if (specifier !== undefined) {
     return {
       qualified,
-      violations: [{ ...blank, kind: 'specifier-form', detail: specifierDetail(selector, facts) }],
+      violations: [{ ...blank, kind: 'specifier-form', detail: specifierDetail(specifier, facts) }],
     };
   }
-  if (!hasFlag) {
+  if (!form.failIfNoMatch) {
     return {
       qualified,
       violations: [
@@ -297,6 +296,21 @@ export function analyzeVpRun(argv: readonly string[], facts: SelectorFacts): Run
           ...blank,
           kind: 'no-flag',
           detail: `${FLAG_EXEMPT_WHERE} (got ${[...argv].join(' ')})`,
+        },
+      ],
+    };
+  }
+  if (form.positionals.length === 0) {
+    // A filter selects a package; it does not select a task. Without a task
+    // token the invocation can match the package and still run nothing, which
+    // is the silent-green shape this scan exists to stop.
+    return {
+      qualified,
+      violations: [
+        {
+          ...blank,
+          kind: 'no-task',
+          detail: `a --filter selection must name a task (${EFFECTIVE_FORM})`,
         },
       ],
     };

@@ -5,10 +5,11 @@
  *   - which workspaces exist: derived from the root `pnpm-workspace.yaml`
  *     `packages` globs (the real workspace config), never a hand-maintained
  *     array;
- *   - which scripts are committed generators vs build-artifact emitters:
- *     derived from each workspace's package.json scripts (a script referenced
- *     by a `generate:*` script is a generator; a script named `emit-*.ts`
- *     referenced by any script is an emitter).
+ *   - which scripts are generators vs build-artifact emitters: derived from
+ *     each workspace's package.json scripts (a script referenced by a
+ *     `generate:*` script is a generator — its output may be tracked or
+ *     Git-ignored; a script named `emit-*.ts` referenced by any script is an
+ *     emitter).
  *
  * Consumers: generate-all.ts (runs every generator script) and
  * check-generator-gates.ts (enforces the per-class wiring rules). This
@@ -240,7 +241,7 @@ export function scriptInCommand(command: string): string | undefined {
   return matches.at(-1)?.[1];
 }
 
-/** Committed generators: scripts referenced by a `generate:*` script. */
+/** Generator scripts: those referenced by a `generate:*` script (the output may be tracked or Git-ignored). */
 export function generatorEntries(workspaces: readonly WorkspaceTasks[]): ScriptEntry[] {
   const entries: ScriptEntry[] = [];
   for (const ws of workspaces) {

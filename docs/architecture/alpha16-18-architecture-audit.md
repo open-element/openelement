@@ -18,7 +18,7 @@ an exhaustive line-by-line review: the coverage boundary is §6.
 | Semantic analysis | `analyzeCompiledModule` (module/class shape), intrinsic binding model | High | Extend to function components and JSX values; class-only assumptions must be isolated | `compile.ts:19-33,134-139` |
 | Lowering | `Lowering` walks admitted JSX into Part Program nodes | High | Add lowering for value-position JSX, inline tracked expressions, repeatable children | `lower-program.ts:450-534,818-820` |
 | Authoring grammar | Single `return` of one JSX expression; single intrinsic root; no fragments at root; no spread attributes | **Medium** | This is the wall the owner rejects: fragments, multi-root, local statements and arbitrary expressions must be admitted incrementally | `compile.ts:141-152`, `lower-program.ts:450-465,529-536` |
-| Program IR | Part Program v2: roots, elements, text, Parts, when/each Blocks, locations, source map | High | Keep as one compiler contract; generated codegen is a second output behind the same semantics | `protocol/part-program.ts:22-47,90-101` |
+| Program IR | Part Program v2: roots, elements, text, Parts, when/each Blocks, locations, source map | Medium (migration input) | Split into a compiler-private Semantic IR for generation; Part Program v2 is the current/transitional input and retires from the target in Alpha16b | `protocol/part-program.ts:22-47,90-101` |
 | Module emission | Generated module carries `__partProgram` JSON + metadata + handler forwarding | High as a bridge, **low as the target** | The target replaces a generic browser program walk with generated mount/claim/update/dispose; the emitted-module shape changes | `emit-module.ts:295,354-356,528` |
 | Browser execution | Fixed executors replay the typed program; `fresh-dom.ts` mounts, `hydrate.ts` claims | High (behaviour), Medium (structure) | Direct codegen replaces the generic walk; claim fidelity, pre-upgrade replay, bounded recovery must be preserved | `runtime/fresh-dom.ts:40-70`, `runtime/hydrate.ts:867`, `kernel.ts:1-27` |
 | Ownership | `LifetimeScope` tree: parent/child, own cleanups LIFO, children visited in insertion order, per-scope error isolation, idempotent dispose, range cleanups under `dispose(true)` | **Directly reusable** | This is already the Owner primitive the hostless model needs | `compiled/lifetime-scope.ts:4-26,28-30,55-69,83-109` |
@@ -56,16 +56,19 @@ candidate worth prototyping.
 
 Nothing here authorises deletion. This table records, for each historical
 capability, whether the target model keeps it, migrates it, or eventually
-retires it — and what evidence would be required.
+retires it — and what evidence would be required. **Revision 2026-11-05:** the
+2026-11-03 fourth pass approved retirement of Part Program v2 and the Class
+authoring API; the earlier KEEP/Migrate readings for those two rows are
+SUPERSEDED HISTORY and are corrected below.
 
 | Asset | Disposition | Condition |
 | --- | --- | --- |
-| Part Program v2 IR and validators | **Keep** | Still the compiler's structural contract; generated codegen consumes the same facts |
+| Part Program v2 IR and validators | **Retire in Alpha16b (approved)** | Replaced by the compiler-private Semantic IR plus the narrow generated-module ABI; the server may keep a private structure, not the old schema |
 | Fixed Part executors (text/attr/prop/event/ref/class/style) | **Keep during migration, retire later** | Retire only with graph evidence that the old path is unreachable and behavioural coverage is complete. Alpha16 release requires that evidence; a missing slice delays the release, it does not lower the bar |
 | Block builders (`when`, `each`) and `byKey` | **Keep, generalise** | The recipe model reuses the entry lifecycle rather than duplicating it |
 | `LifetimeScope` | **Keep** | Becomes the owner primitive for hostless instances |
 | `itemBox` live-value pattern | **Keep, promote** | Becomes props replacement for components |
-| Class authoring API (`@element`, `OpenElement`) | **Migrate, not delete** | Existing authors keep working through the shared backend; retirement is a separate decision with consumer evidence and no fixed version |
+| Class authoring API (`@element`, `OpenElement`) | **Retire in Alpha16b (approved); no adapter** | The 2026-11-03 baseline recorded 219 in-tree files matching `@element(` (historical size metric, not a current count); migrate with a per-file matrix and capability/replacement inventory, re-inventoried at execution; native CE remains the public platform boundary |
 | Server function components (eager string composition) | **Keep, extend** | Alpha16 extends locals/async/composition; it does not replace them with client instances |
 | SSR serializer and DSD output | **Keep** | The string host for recipes; no full server rewrite required |
 | Claim/hydrate machinery (markers, pre-upgrade replay, bounded recovery, source maps) | **Keep** | The generated path must preserve all of it; claim fidelity is a gate, not a nice-to-have |

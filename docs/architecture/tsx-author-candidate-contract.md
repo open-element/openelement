@@ -3,6 +3,11 @@
 Date: 2026-11-03. Status: **CANDIDATE / NOT IMPLEMENTED OR VERIFIED**.
 Baseline: `4f1f2001b24909086f7e7efe9e5016d48d615c91`.
 
+Revised 2026-11-05: props getters are **decided per-read** (TSX-28), which is
+also a correction to TSX-03 and TSX-09; reconnect resource persistence (TSX-14)
+and dual-backend parity (TSX-18) are recorded as OPEN obligations with named
+milestones.
+
 This contract is the author-facing half of
 [ADR-0173](../adr/ADR-0173-component-execution-and-composition.md) and
 [ADR-0174](../adr/ADR-0174-generated-code-runtime-and-compatibility.md). Its
@@ -32,8 +37,9 @@ Rules that hold for every case below:
    creates its own owner, instance and DOM region.
 4. Cleanup belongs to the projection site; lexical dependencies belong to the
    definition site.
-5. `props` is a read-only record whose property reads are tracked; `children` is
-   a recipe, not a DOM fragment.
+5. `props` is a read-only record whose property reads are tracked and evaluated
+   on **every read** (no per-tick cache); `children` is a recipe, not a DOM
+   fragment.
 6. A value not statically known is checked by a runtime guard carrying a source
    location. The guard is not a renderer fallback.
 
@@ -67,8 +73,11 @@ never silently converted into signals; the author never wires a subscription by
 hand.
 
 OPEN: whether the props record is one versioned source or per-property signals
-(model note §4.3). Both satisfy the author-visible contract; the choice is a
-cost decision, not a semantic one.
+(model note §4.3). Both satisfy the author-visible contract **only while every
+read re-evaluates the getter** — evaluation is per-read (model note §4.2a,
+APPROVED). The choice is an invalidation-channel and cost decision; a variant
+that returns a cached value per version changes observable counts and is not an
+equivalent option.
 
 ### TSX-04 — keyed identity with props replacement
 
@@ -141,7 +150,8 @@ type table that resolves a component from a value.
 The execution model, generated-code shape, evaluation timing and failure modes
 are in [the model note](./jsx-value-and-children-model.md). The author-visible
 consequence that must be tested rather than discovered: props expressions are
-evaluated **per insertion**, not once when the value is created.
+evaluated **per read**, not once when the value is created — so an insertion
+sees current values, and two insertions can observe different ones.
 
 ### TSX-10 — repeatable children projection
 
@@ -288,6 +298,26 @@ CSS-hidden instances stay subscribed; disconnect releases connection resources.
 Phases: Mount, Claim, Update, Dispose (SSR `n/a`). Negatives: a platform move may
 still fire platform callbacks; no zero-callback promise.
 
+Reconnect does not re-run setup. CURRENT FACT: the suspend path disposes the
+resource owner (plain `dispose()`) while retaining the DOM, and revive constructs
+a **fresh** root `LifetimeScope` and re-arms the retained bindings
+(`runtime/revive.ts:326`). The target therefore has to preserve the **logical**
+instance, its setup count and its private state; a surviving physical scope
+object does not follow, and is not an acceptance criterion. That resource-level
+contract is **OPEN**, owned by **M05–M09** and specified in
+[model note §4.1d](./jsx-value-and-children-model.md): M07–M08 exercise the
+retained-DOM/disposed-owner difference, and M09 is the generated Native CE
+boundary where platform reconnect occurs.
+
+Acceptance evidence is setup count 1, the fixture's expected logical
+subscription graph reproduced with no duplicate and no loss (a dynamic branch
+may hold zero or several; no universal count of 1), private state preserved, and
+no additional destruction of preservable DOM/input. Focus after a platform
+detach/reinsert is recorded as a platform difference, not promised; no focus
+restoration API is added. Claim fidelity is TSX-18's separate in-place contract.
+The callback names may be settled later (Alpha17, §5); the persistence semantics
+may not wait with the names.
+
 ### TSX-15 — runtime renderability
 
 ```tsx
@@ -312,7 +342,9 @@ Update. Negative: unbounded consumption is prohibited on server and client.
 A server component may await data before producing output; the emitted HTML and
 any interactive descendants are tested separately; server-only code reaching the
 client graph is a coded build failure. Phases: SSR only (no browser instance).
-Negatives: a Promise is not a normal child; defer is Alpha18.
+Negatives: a Promise is not a normal child; bounded defer is Alpha18. Ordinary
+async server components, including full-await output, are **M14 / Alpha16b**;
+they are not an Alpha18 defer feature and the two must not be conflated.
 
 ### TSX-18 — SSR seed and Claim fidelity
 
@@ -321,6 +353,17 @@ Claim preserves DOM, pre-activation user input, focus and selection; mismatch
 recovers within bounds with source locations. Phases: SSR, Claim, Update,
 Dispose. Negatives: a failed claim must not double-subscribe; a rebuild must
 dispose old resources first.
+
+Same IR is not automatic parity: server and client may be generated from one
+semantic IR, but equivalence is asserted behaviourally **per phase** for the same
+authored input — evaluation counts against the §4.2a row for that phase
+(SSR-only reads may legitimately differ and are recorded, not forced equal), DOM
+and attributes, SSR seed state versus post-claim state, claim marker/key/order,
+bounded recovery, and error propagation (diagnostic identity and authored
+location). M06 (fresh mount) and M08 (SSR→claim) produce the compared results; M07
+is the leaf-claim prerequisite; M13 qualifies browser and server. That is the
+acceptance chain in [the execution plan](./alpha16-18-execution-plan.md); see
+model note §4.7. It is not a proven consequence of sharing the IR.
 
 ### TSX-19 — error and cleanup containment
 
@@ -432,15 +475,28 @@ Dispose.
 
 ### TSX-28 — expression evaluation counts
 
-The full observable contract is the model note §4.2a table (nine situations).
-In one line: a props expression does **not** run at recipe creation, runs when a
-child reads the getter, runs again on each dependent re-evaluation, and runs once
-during destructuring; inline JSX expressions run per dependent update; handlers
-run per dispatch; setup runs once.
+The full observable contract is the model note §4.2a table (nine situations);
+row 3 there is counted **per read**, not per binding or per update.
+
+**APPROVED (owner ruling; semantics, not implementation or measurement): props getters evaluate per read.** In one line: a
+props expression does **not** run at recipe creation; it runs on **every getter
+read**, so a dependent re-evaluation performs one evaluation per read it
+performs; destructuring reads once during setup; inline JSX expressions run per
+dependent update; handlers run per dispatch; setup runs once.
 
 A test asserts the counts, because this is where authors will otherwise guess
-wrong, and claim must match mount except for SSR-only reads. OPEN: whether a
-getter is memoised per tick or evaluated per binding — decided by this case.
+wrong. The equality obligation is **fresh mount vs claim for the same client
+phase**; SSR reads are recorded separately and are not required to equal client
+counts. The locked case is three bindings reading one getter in one update: three
+evaluations, never one cached value. TSX-28 verifies and records cost; it does
+not choose the semantics. Any memoisation that changes evaluation count, return
+value or side-effect order is a semantic change and needs a new owner ruling.
+
+**SUPERSEDED HISTORY:** an earlier revision of this case recorded "getter is
+memoised per tick or evaluated per binding — decided by this case". That framing
+is withdrawn; the per-read decision and its observable consequences are recorded
+in model note §4.2a.
+
 Phases: SSR, Mount, Claim, Update.
 
 ### TSX-29 — dynamic component type
@@ -520,14 +576,19 @@ These must fail closed with a source location in every phase where they apply:
 
 Each needs a measurement or an evidenced decision, not more prose:
 
-1. Props tracking granularity (version signal vs per-property).
-2. Exact evaluation-count contract for inline expressions with multiple reads.
+1. Props tracking granularity (version signal vs per-property) — the
+   invalidation channel only; getter evaluation is per-read (TSX-28), so no
+   variant may cache values.
+2. Recorded count for an inline expression that reads one getter several times
+   in a single evaluation — per-read semantics is decided; only the recording
+   form is open.
 3. Claim marker protocol for ordered repeated insertion.
 4. Cross-module recipe distribution (Alpha17) and whether a recipe may cross a
    package boundary before the ABI exists.
 5. Intrinsic-subtree template cloning as an optimization.
 6. Context default representation and reactivity.
-7. `onConnect` / `onDispose` final names and signatures.
+7. `onConnect` / `onDispose` final names and signatures — names only; reconnect
+   resource persistence is not deferred with them (model note §4.1d).
 8. HMR state preservation.
 9. Iterable admission beyond arrays.
 10. Whether an explicit insertion escape hatch is public at all.

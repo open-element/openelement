@@ -148,12 +148,14 @@ test('declaration closure: path escapes fail closed', () => {
   expect(graph.missing).toEqual([]);
 });
 
-test('declaration closure: bare npm jsr and node specifiers are external', () => {
+test('declaration closure: non-relative specifiers are external', () => {
+  // This check follows relative declaration edges only; a bare package name,
+  // an npm: alias, a node: builtin and a URL are all outside its remit.
   const graph = graphOf(
     {
       'src/index.d.ts':
         "import type { T } from 'npm:typescript@6';\n" +
-        "export type { A } from 'jsr:@std/assert';\n" +
+        "export type { A } from '@scope/pkg';\n" +
         "export type { B } from 'preact';\n" +
         "import type { C } from 'node:buffer';\n" +
         "import type { D } from 'https://esm.sh/thing';\n" +

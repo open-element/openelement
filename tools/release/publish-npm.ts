@@ -44,6 +44,7 @@ import { npmView, verifyNpmRelease } from './npm-release-verifier.ts';
 import { type RegistrySyncResult, syncRegistryState } from './registry-sync.ts';
 import {
   applyPackageJsonOverrides,
+  assertNpmOnly,
   assertOnlyApprovedManifestChanges,
   deriveAllDependencies,
   hashFileTree,
@@ -353,6 +354,11 @@ export async function packPackage(
       }
       applyPackageJsonOverrides(pkg, pkgJson);
       for (const [name, value] of Object.entries(sourceManifest.peerDependencies ?? {})) {
+        // The shared npm-only policy validates the peer PAIR (name and range)
+        // before the parser sees the synthesized specifier, so a peer whose
+        // name or range carries a non-npm spelling reports that half instead
+        // of a generic parse failure.
+        assertNpmOnly(name, value, `${pkg.name} peerDependencies`);
         // Plain package.json ranges; validated and normalized through the
         // same parser the published derivation uses.
         const parsed = parseNpmSpec(`npm:${name}@${value}`, `${pkg.name} peer dependency`);

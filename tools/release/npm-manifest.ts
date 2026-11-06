@@ -330,27 +330,104 @@ export interface DeriveDepsIo {
 }
 
 /**
+ * npm is the only public registry (ADR-0161), and this module owns the ONE
+ * policy that says so. The pack-time manifest projection here and the packed-
+ * artifact scan in check-package-artifacts.ts both route through these
+ * predicates, so the two cannot drift into different notions of "non-npm input".
+ *
+ * The two halves of a dependency pair are checked independently because either
+ * can carry the spelling: the NAME (`@std/*`, `@jsr/*`, or a `jsr:`-prefixed
+ * key) and the VALUE (a `jsr:` range, or an `npm:@std/` / `npm:@jsr/` / bare
+ * `@std/` / `@jsr/` alias). A normal npm name with a normal range matches
+ * neither, so a plain dependency is never rejected.
+ */
+const NON_NPM_NAME_FORMS = ['jsr:', '@jsr/', '@std/'] as const;
+const NON_NPM_VALUE_FORMS = ['jsr:', 'npm:@jsr/', 'npm:@std/', '@jsr/', '@std/'] as const;
+
+export interface NonNpmRegistryInput {
+  /** Which half of the dependency pair carries the non-npm spelling. */
+  field: 'name' | 'value';
+  /** The exact spelling found, e.g. `@std/`, `jsr:`, or `npm:@jsr/`. */
+  form: string;
+}
+
+/** The non-npm spelling a module specifier or dependency value starts with. */
+export function findNonNpmRegistrySpecifier(specifier: string): string | null {
+  return NON_NPM_VALUE_FORMS.find((form) => specifier.startsWith(form)) ?? null;
+}
+
+/**
+ * The policy core: which half of a `name`/`value` pair carries a non-npm
+ * spelling, and which spelling it is. Returns null for an ordinary npm pair.
+ */
+export function findNonNpmRegistryInput(name: string, value: unknown): NonNpmRegistryInput | null {
+  const nameForm = NON_NPM_NAME_FORMS.find((form) => name.startsWith(form));
+  if (nameForm !== undefined) return { field: 'name', form: nameForm };
+  if (typeof value !== 'string') return null;
+  const valueForm = findNonNpmRegistrySpecifier(value);
+  return valueForm === null ? null : { field: 'value', form: valueForm };
+}
+
+/**
+ * The single throwing entry for dependency inputs (`where` names the surface:
+ * a manifest path and section, a resolution label, a peer-dependency slot).
+ * The message names the half that is actually illegal and the exact spelling
+ * found — a dependency whose NAME is the problem never blames its version.
+ */
+export function assertNpmOnly(name: string, value: unknown, where: string): void {
+  const input = findNonNpmRegistryInput(name, value);
+  if (input === null) return;
+  const message =
+    input.field === 'name'
+      ? `dependency '${name}' uses the non-npm registry name form '${input.form}'; ` +
+        'npm is the only public registry — use an npm package name or remove it.'
+      : `dependency '${name}' declares '${String(value)}' with the non-npm registry value form '${input.form}'; ` +
+        'npm is the only public registry — replace it with an npm version range or remove it.';
+  throw new Error(`[npm] ${where}: ${message}`);
+}
+
+/** Dependency-shaped sections a manifest can declare registry inputs in. */
+const DEPENDENCY_SECTIONS = [
+  'dependencies',
+  'devDependencies',
+  'peerDependencies',
+  'optionalDependencies',
+] as const;
+
+/**
+ * Validate every dependency section of one manifest through the shared entry.
+ * Peer and optional inputs never reach the `imports` projection, but they are
+ * publication inputs all the same, so they are checked here rather than
+ * surfacing later as a packed artifact violation.
+ */
+function assertNpmOnlyDependencySections(manifest: Record<string, unknown>, where: string): void {
+  for (const section of DEPENDENCY_SECTIONS) {
+    const record = manifest[section];
+    if (!record || typeof record !== 'object') continue;
+    for (const [name, value] of Object.entries(record as Record<string, unknown>)) {
+      assertNpmOnly(name, value, `${where} ${section}`);
+    }
+  }
+}
+
+/**
  * Project a package.json dependency record into the `imports`-shaped
  * `npm:<name>@<version>` form the derivation consumes (dependency truth
  * lives in package.json `dependencies`).
- * `workspace:` values are internal (the source-import loop resolves them);
- * `jsr:` values are skipped — packed modules must carry no JSR bridge
- * (check-package-artifacts).
+ * `workspace:` values are internal (the source-import loop resolves them),
+ * and `catalog:` values are workspace-private pnpm references, not published
+ * npm ranges; both stay out of the projection. Non-npm inputs are rejected,
+ * not filtered (assertNpmOnlyDependencySections).
  */
 export function importsShapeFromPackageJson(
   manifest: Record<string, unknown>,
 ): Record<string, string> {
+  assertNpmOnlyDependencySections(manifest, 'package.json');
   const out: Record<string, string> = {};
   const record = manifest.dependencies as Record<string, string> | undefined;
   for (const [name, value] of Object.entries(record ?? {})) {
     if (typeof value !== 'string') continue;
-    if (
-      value.startsWith('workspace:') ||
-      value.startsWith('jsr:') ||
-      value.startsWith('catalog:')
-    ) {
-      continue;
-    }
+    if (value.startsWith('workspace:') || value.startsWith('catalog:')) continue;
     out[name] = `npm:${name}@${value}`;
   }
   return out;
@@ -371,29 +448,29 @@ function workspaceResolutionImports(): Record<string, string> {
       return {};
     }
   };
-  const merge = (manifest: Record<string, unknown>, into: Record<string, string>): void => {
+  const merge = (
+    label: string,
+    manifest: Record<string, unknown>,
+    into: Record<string, string>,
+  ): void => {
+    assertNpmOnlyDependencySections(manifest, label);
     for (const source of ['dependencies', 'devDependencies'] as const) {
       for (const [name, value] of Object.entries(
         (manifest[source] as Record<string, string> | undefined) ?? {},
       )) {
         if (typeof value !== 'string') continue;
-        if (
-          value.startsWith('workspace:') ||
-          value.startsWith('jsr:') ||
-          value.startsWith('catalog:')
-        ) {
-          continue;
-        }
+        if (value.startsWith('workspace:') || value.startsWith('catalog:')) continue;
         into[name] = `npm:${name}@${value}`;
       }
     }
   };
   const out: Record<string, string> = {};
-  merge(read('package.json'), out);
+  merge('package.json', read('package.json'), out);
   try {
     for (const entry of readdirSync('packages', { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-      merge(read(`packages/${entry.name}/package.json`), out);
+      const path = `packages/${entry.name}/package.json`;
+      merge(path, read(path), out);
     }
   } catch {
     // no packages dir (non-workspace invocation)
@@ -432,6 +509,13 @@ export function parseNpmSpec(
   value: string,
   label: string,
 ): { name: string; version: string } | null {
+  const specifierForm = findNonNpmRegistrySpecifier(value);
+  if (specifierForm !== null) {
+    throw new Error(
+      `[npm] ${label} specifier '${value}' uses the non-npm registry form '${specifierForm}'; ` +
+        'npm is the only public registry — replace it with an npm specifier or remove it.',
+    );
+  }
   const match = value.match(/^npm:(@[^/]+\/[^@/]+|[^@/]+)(?:@(\^?[\d.]+(?:-[\w.]+)?))?/);
   if (!match) return null;
   const name = match[1];
@@ -439,6 +523,10 @@ export function parseNpmSpec(
   if (!version) {
     throw new Error(`npm dependency '${name}' (${label}) has no version; add an explicit version.`);
   }
+  // A specifier can smuggle the spelling through its parsed halves
+  // (`npm:jsr:foo@1.0.0`); the pair check is the same one the manifest
+  // projection uses, so the message names the offending half.
+  assertNpmOnly(name, version, label);
   return { name, version };
 }
 

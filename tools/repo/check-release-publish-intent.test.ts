@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import {
+  DEFAULT_CI_WORKFLOW,
   DEFAULT_RELEASE_WORKFLOW,
   runMatrix,
   type ScenarioOutcome,
@@ -43,11 +44,23 @@ function withMutatedWorkflow(mutate: (text: string) => string): { dir: string; p
   return { dir, path };
 }
 
+function withMutatedCiWorkflow(mutate: (text: string) => string): { dir: string; path: string } {
+  const dir = mkdtempSync(join(tmpdir(), 'oe-intent-ci-mutation-'));
+  const path = join(dir, 'autoflow-ci.yml');
+  const original = readFileSync(DEFAULT_CI_WORKFLOW, 'utf8');
+  const mutated = mutate(original);
+  expect(mutated, 'the mutation must actually change the workflow text').not.toEqual(original);
+  writeFileSync(path, mutated);
+  return { dir, path };
+}
+
 test('release publish intent: the full negative matrix behaves as required', () => {
   const outcomes = runMatrix();
-  // The matrix covers the twelve owner-policy rows plus three structural
-  // checks (CI job-list agreement, kept tooling surfaces, trigger drift).
-  expect(outcomes.length).toBeGreaterThanOrEqual(15);
+  // The matrix covers the owner-policy rows, the exact qualification-identity
+  // negative rows (missing/duplicated/unexpected instance, partial listing,
+  // non-success sha-guard), the always() read-back forensics and the shared
+  // contract/CI-workflow agreement.
+  expect(outcomes.length).toBeGreaterThanOrEqual(16);
   expect(failures(outcomes)).toEqual([]);
 });
 
@@ -94,6 +107,52 @@ test('harness goes red when a skipped-gate bypass is re-introduced', () => {
     const failed = failures(runMatrix({ releasePath: path }));
     expect(failed.length, failed.join('\n')).toBeGreaterThan(0);
     expect(failed.join('\n')).toContain('manual-publish-with-failed-release-gate-is-refused');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('harness goes red when ci-evidence stops pinning filter=latest', () => {
+  const { dir, path } = withMutatedWorkflow((text) =>
+    text.replace('jobs?per_page=100&filter=latest', 'jobs?per_page=100'),
+  );
+  try {
+    const failed = failures(runMatrix({ releasePath: path }));
+    expect(failed.length, failed.join('\n')).toBeGreaterThan(0);
+    expect(failed.join('\n')).toContain('qualification-contract-single-definition-matches-ci');
+    // The failure names the re-run defect, not just a generic contract drift.
+    expect(failed.join('\n')).toContain('filter=latest');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('harness goes red when the CI workflow grows a matrix leg', () => {
+  const { dir, path } = withMutatedCiWorkflow((text) =>
+    text.replace('leg: [site-e2e, fixture-gates]', 'leg: [site-e2e, fixture-gates, extra-leg]'),
+  );
+  try {
+    const failed = failures(runMatrix({ ciPath: path }));
+    expect(failed.length, failed.join('\n')).toBeGreaterThan(0);
+    expect(failed.join('\n')).toContain('qualification-contract-single-definition-matches-ci');
+    expect(failed.join('\n')).toContain('extra-leg');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('harness goes red when the CI workflow gains a job the contract does not own', () => {
+  const { dir, path } = withMutatedCiWorkflow((text) =>
+    text.replace(
+      /^jobs:\n/mu,
+      'jobs:\n  rogue:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n',
+    ),
+  );
+  try {
+    const failed = failures(runMatrix({ ciPath: path }));
+    expect(failed.length, failed.join('\n')).toBeGreaterThan(0);
+    expect(failed.join('\n')).toContain('qualification-contract-single-definition-matches-ci');
+    expect(failed.join('\n')).toContain('rogue');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
