@@ -38,6 +38,19 @@ test('git hooks contract: pre-push dispatches the pack-surface gate through the 
   ).toBeTruthy();
 });
 
+test('git hooks contract: tarballs are rebuilt before the facade check reads them', () => {
+  // A stale tarball makes pack-surface:check green on inputs that were never
+  // scanned. The rebuild must be a real vp invocation, not just a comment, and
+  // it must precede the check (#1708 CI run 42087248453).
+  const rebuild = hook.search(/^node_modules\/\.bin\/vp run .* pack:dry-run$/m);
+  const check = hook.search(/^node_modules\/\.bin\/vp run .* pack-surface:check$/m);
+  expect(rebuild, 'pre-push must dispatch pack:dry-run').toBeGreaterThanOrEqual(0);
+  expect(check, 'pre-push must dispatch pack-surface:check').toBeGreaterThanOrEqual(0);
+  expect(check, 'the facade check must read tarballs rebuilt by this hook').toBeGreaterThan(
+    rebuild,
+  );
+});
+
 test('git hooks contract: the dispatched task exists in the release package', async () => {
   const release = JSON.parse(
     await readFile(join(repoRoot, 'tools/release/package.json'), 'utf8'),

@@ -1,13 +1,20 @@
 # Agent Development Contract
 
-What a coding agent may rely on when working in this repository. Every claim
-here is checked mechanically by `node tools/repo/check-agent-contract.ts`
-(the conformance test rides the vitest `tools` project, so PR CI fails on
-drift): the command tables are derived from `package.json` facts, never
-hand-copied, and a renamed or deleted command turns the contract red. Change
-the contract in the same commit that changes the behavior it describes, then
-regenerate the derived blocks (`node tools/repo/check-agent-contract.ts
---write`) and run the conformance check.
+What a coding agent may rely on when working in this repository. The
+mechanically checkable facts here are checked by
+`node tools/repo/check-agent-contract.ts` (the conformance test rides the
+vitest `tools` project, so PR CI fails on drift): the workspace and gate tables
+are rendered from `package.json` facts (never hand-copied), every command named
+anywhere in the document must resolve against the real workspace/script graph,
+and every internal gate step must name an existing package + task. A renamed or
+deleted command turns the contract red.
+
+The check is static conformance, not execution: it does not run the gates, and
+it does not prove prose about side effects, trackedness, or CI wiring. Those
+remain review facts. Change the contract in the same commit that changes the
+behavior it describes, then regenerate the derived blocks
+(`node tools/repo/check-agent-contract.ts --write`) and run the conformance
+check.
 
 Verified against the alpha.15 release tree (#1613); the tree's release stamp
 is `1.0.0-alpha.15` (all six package manifests, `CREATE_VERSION`,
@@ -42,11 +49,19 @@ All tasks enter through the vp CLI (owner ruling, 2026-10-03): package.json
 scripts stay the single source of truth, pnpm stays the package manager, and
 `vp run` is the one dispatch surface (`tools/repo/vp-dispatch.ts`).
 
-- `vp run --fail-if-no-match <pkg>#<task>` resolves by the package's exact NAME — the `name`
-  field in the package's `package.json`, never its directory path. The
-  path-shaped form (`dir#task`) silently no-ops under vp 1.0.0 (exit 0, no
-  output), so package-qualified calls carry `--fail-if-no-match`, which
-  turns a selector that matched nothing into a non-zero exit.
+- The executable package-qualified form is
+  `vp run --no-cache --fail-if-no-match --filter <pkg> <task>`. `--filter`
+  selects by the package's exact NAME — the `name` field in the package's
+  `package.json`, never its directory path — and `--fail-if-no-match` turns a
+  selector that matched nothing into a non-zero exit. `--no-cache` is part of
+  the documented proof form: a gate or evidence command must run, not replay a
+  cached accelerator entry.
+- The `pkg#task` specifier form is not an executable selector. Under vp 1.0.0
+  it exits 0 with no output when the package does not resolve, and
+  `--fail-if-no-match` is inert on it because the flag belongs to `--filter`.
+  `gate.ts` uses `pkg#task` as its INTERNAL step notation and rewrites each
+  step to the fail-closed form above; that notation is legal only inside a
+  `node tools/repo/gate.ts` step list, never in a `vp run` call.
 - A bare `vp run <task>` dispatches against the root workspace package
   (`fmt`, `check`, `test`, `site:build`, ...).
 - Gate steps dispatch with `--no-cache` — a gate step is proof, not a build
@@ -101,17 +116,17 @@ task by design: the repo vitest `tools` project (`vitest.config.ts`) owns
 | The pre-push check: fmt + lint + typecheck + markdown | `vp run check` |
 | Regenerate every derived artifact | `vp run generate:all` |
 | The full workspace test suite | `vp run test` |
-| One package's tests (canonical form) | `vp run --fail-if-no-match @openelement/element#test` |
-| Router tests | `vp run --fail-if-no-match @openelement/router#test` |
-| Compiler tests | `vp run --fail-if-no-match @openelement/compiler#test` |
-| UI / create / site tests | `vp run --fail-if-no-match @openelement/ui#test` / `vp run --fail-if-no-match @openelement/create#test` / `vp run --fail-if-no-match @openelement/www#test` |
+| One package's tests (canonical form) | `vp run --no-cache --fail-if-no-match --filter @openelement/element test` |
+| Router tests | `vp run --no-cache --fail-if-no-match --filter @openelement/router test` |
+| Compiler tests | `vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` |
+| UI / create / site tests | `vp run --no-cache --fail-if-no-match --filter @openelement/ui test` / `vp run --no-cache --fail-if-no-match --filter @openelement/create test` / `vp run --no-cache --fail-if-no-match --filter @openelement/www test` |
 | Local full verification (check + test + gates) | `vp run verify` |
 | Build the docs site into `www/dist` | `vp run site:build` |
 | Site verification (links, tokens, content) | `vp run site:verify` |
 | Full release precheck (local writes + network; not read-only) | `vp run release:check` |
-| Content dates (read-only validation) | `vp run --fail-if-no-match @openelement/www#check:content-dates` |
-| Interface snapshot (check / write) | `vp run --fail-if-no-match @openelement/tools-repo#interface:snapshot` / `vp run --fail-if-no-match @openelement/tools-repo#interface:snapshot:write` |
-| Doc figures (measured-output gate) | `vp run --fail-if-no-match @openelement/www#check:doc-figures` |
+| Content dates (read-only validation) | `vp run --no-cache --fail-if-no-match --filter @openelement/www check:content-dates` |
+| Interface snapshot (check / write) | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` / `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot:write` |
+| Doc figures (measured-output gate) | `vp run --no-cache --fail-if-no-match --filter @openelement/www check:doc-figures` |
 | Version bump (one knob, twelve release-line points + four member stamps) | `pnpm --dir tools/repo run version-bump <version> [--write]` |
 | Workflow lint (after any `.github` touch) | `zizmor --offline .` |
 | This contract's own conformance check | `node tools/repo/check-agent-contract.ts` |
@@ -124,18 +139,34 @@ command conformance alone does not validate prose about side effects.
 
 ## Generated files — never hand-edit
 
-| Generated surface | Written only by | Checked by |
-| --- | --- | --- |
-| `www/app/data/_generated-*.ts` (blog data, nav, article routes, API reference, error reference, error codes, install command) | the `www` `generate:*` tasks, auto-enrolled in `vp run generate:all` | the paired `--check` tasks (byte-identical compare), wired into `gate:release` |
-| `www/app/data/_generated-release-line.ts` | the release train's registry read-back (internal release procedure, not published) | `@openelement/tools-release#registry-drift:check` (in `gate:release`) |
-| `docs/release/public-interface-snapshot.json` | `vp run --fail-if-no-match @openelement/tools-repo#interface:snapshot:write` | `vp run --fail-if-no-match @openelement/tools-repo#interface:snapshot` (in `gate:source` and CI) |
-| `packages/ui/src/generated-manifest.json` | `vp run --fail-if-no-match @openelement/ui#generate:ui-manifest` | `@openelement/ui#ui-manifest:check` (in `gate:release`) |
-| `www/dist/**` | `vp run site:build` (redirects/sitemap/RSS emitters write into it) | the site build and consumer gates that read `dist` |
+| Generated surface | Repository state | Written only by | Checked by |
+| --- | --- | --- | --- |
+| `www/app/data/_generated-*.ts` (guide/architecture/blog data, nav, article routes, changelog archive, content meta, page code, quickstart, API reference, error reference, error codes, install command) | **Git-ignored** (`.gitignore`: `www/app/data/_generated-*.ts`); a local build input, never committed | the `www` `generate:*` tasks, auto-enrolled in `vp run generate:all` | the paired `--check` tasks (byte-identical compare), wired into `gate:release` |
+| `www/app/data/_generated-release-line.ts` | **Git-ignored** (same pattern) | the release train's registry read-back (internal release procedure, not published) | `@openelement/tools-release#registry-drift:check` (in `gate:release`) |
+| `docs/release/public-interface-snapshot.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot:write` | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` (in `gate:source` and CI) |
+| `packages/ui/src/generated-manifest.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/ui generate:ui-manifest` | `@openelement/ui#ui-manifest:check` (in `gate:release`) |
+| `packages/ui/custom-elements.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/ui generate:ui-cem` | `@openelement/ui#ui-cem:check` (in `gate:release`) |
+| `www/dist/**` | **Git-ignored** (build output; `.gitignore`: `dist/`) | `vp run site:build` (redirects/sitemap/RSS emitters write into it) | the site build and consumer gates that read `dist` |
 
-Hand-editing a generated file is wasted work — the next generator run
-overwrites it and the paired `--check` task goes red. Adding a
-`generate:*` script enrolls it in `generate:all` automatically; the
+Trackedness changes what a bad edit looks like, not whether the file is
+generated. Editing a **tracked** surface either makes a paired `--check` fail
+with a byte diff (when that check runs before any regeneration) or, if no such
+check runs, leaves a reviewable repository diff. Editing a **Git-ignored**
+surface is overwritten by the next generator run and leaves no repository diff
+at all. Never hand-edit either class.
+
+Adding a `generate:*` script enrolls it in `generate:all` automatically; the
 generator/emitter wiring rules live in `tools/repo/check-generator-gates.ts`.
+That check verifies the wiring — a task that reruns the same script with
+`--check` — and does **not** assert trackedness: a green `--check` is the
+reproducibility evidence for the inputs, not proof that a tracked output was
+committed. It also reports gate order rather than hiding it: `gate:release`
+runs the two tracked outputs' checks — `@openelement/ui#ui-manifest:check` and
+`@openelement/ui#ui-cem:check` — before `generate:all`, so their byte compare
+sees the committed bytes; the Git-ignored `www` checks follow `generate:all`,
+where regeneration is the only valid content. A paired check that follows
+`generate:all` gets a note, so the remaining ordering limit is visible. Gate
+ordering is owned by the release lane, not by this contract's check.
 
 ## Gate semantics
 
@@ -144,12 +175,20 @@ A gate is a fail-closed sequence: steps run serially through
 and a fully green run prints the step count. CI is the verdict, not the
 debugger — reconcile locally before pushing.
 
+The step column in the table below uses `gate.ts`'s internal `pkg#task`
+notation. That notation is legal only inside a gate step list: `gate.ts`
+validates each step (exact package NAME, no path selector) and dispatches it as
+`vp run --no-cache --fail-if-no-match --filter <pkg> <task>`. It is not a
+`vp run` invocation and must not be copied into one. This contract's check
+validates every root and workspace gate step against the real package/task
+graph; it does not execute the gate.
+
 <!-- derived:gates:start -->
 | Gate | Steps, in order (the first failure stops the gate) |
 | --- | --- |
 | `vp run check` | `fmt:check` → `lint` → `typecheck` → `@openelement/tools-repo#lint:markdown` → `@openelement/www#check:public-docs` |
 | `vp run gate:release` | `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` |
-| `vp run release:check` | `@openelement/tools-repo#generate:all` → `@openelement/tools-repo#release:registry-check` → `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` → `@openelement/tools-release#publish:npm:dry-run` |
+| `vp run release:check` | `@openelement/ui#ui-manifest:check` → `@openelement/ui#ui-cem:check` → `@openelement/tools-repo#generate:all` → `@openelement/tools-repo#release:registry-check` → `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` → `@openelement/tools-release#publish:npm:dry-run` |
 | `vp run saas:verify` | `@openelement/saas#check` → `@openelement/saas#test` |
 | `vp run saas:workers` | `@openelement/saas#build` → `@openelement/saas#nitro:build-workers` → `@openelement/tools-repo#workers:boundary-check` |
 | `vp run site:build` | `@openelement/tools-repo#generate:all` → `@openelement/www#build` → `@openelement/www#pagefind` → `@openelement/www#emit:redirects` → `@openelement/www#emit:sitemap` → `@openelement/www#emit:rss` |
@@ -219,23 +258,25 @@ coded failure surface.
 - CodeQL findings need their thread resolved before merge.
 - The tracked agent-facing entry is [CONTRIBUTING.md](../CONTRIBUTING.md)
   (the vp task doctrine and the gate architecture); this contract is its
-  detailed, mechanically checked form. `AGENTS.md`, where a checkout carries
-  one, is an owner-local overlay, not a repository fact.
+  detailed, mechanically checked form. CONTRIBUTING.md is prose and is not
+  machine-checked, so where the two differ on the executable vp form, this
+  contract and its checkers are authoritative. `AGENTS.md`, where a checkout
+  carries one, is an owner-local overlay, not a repository fact.
 
 ## Ritual checklist (learned the hard way)
 
 | Ritual | Command | Rule |
 | --- | --- | --- |
-| Interface snapshot | `vp run --fail-if-no-match @openelement/tools-repo#interface:snapshot:write` | Run whenever public exports change; the check rides every PR. |
-| Content dates | `vp run --fail-if-no-match @openelement/www#check:content-dates` | The manifest `www/lib/content-dates.json` is hand-edited inside the content commit itself; the check is read-only validation. |
-| Doc figures | `vp run --fail-if-no-match @openelement/www#check:doc-figures` | The measured-output numbers in the comparison docs must match a fresh `www/dist` measurement; re-baseline on >1% growth. |
+| Interface snapshot | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot:write` | Run whenever public exports change; the check rides every PR. |
+| Content dates | `vp run --no-cache --fail-if-no-match --filter @openelement/www check:content-dates` | The manifest `www/lib/content-dates.json` is hand-edited inside the content commit itself; the check is read-only validation. |
+| Doc figures | `vp run --no-cache --fail-if-no-match --filter @openelement/www check:doc-figures` | The measured-output numbers in the comparison docs must match a fresh `www/dist` measurement; re-baseline on >1% growth. |
 | e2e outline pins | (www e2e specs) | Adding H2 sections to outline-pinned docs requires updating the pins; prefer not adding H2 sections. |
 | Version bump | `pnpm --dir tools/repo run version-bump <version> [--write]` | One knob: twelve release-line points plus the four release-line-shaped workspace-member stamps — 16 files today (the dry run's `points:` line is authoritative); see the internal release procedure (not published). |
 | Workflow lint | `zizmor --offline .` | Required after touching anything under `.github` — workflows AND composite actions. |
 | Cross-system seams | (register + test) | A seam change registers in `docs/architecture/seams.md` AND ships a consumer-form test (constitution P8, ADR-0163); a seam missing either does not pass the gate. |
-| Shim inventory | `vp run --fail-if-no-match @openelement/tools-repo#shims:check` | `docs/architecture/shim-inventory.md` is a hand-maintained registry with a mechanical reader: every row carries an existing tracked path, an owner, a status, and a non-empty retirement condition. The reader rides `gate:source`. |
-| Doc claims | `vp run --fail-if-no-match @openelement/www#check:doc-claims` | Every machine-checkable factual claim in the covered docs (versions, commands, subpaths, gate and CI counts, ADR and path references, locale parity, the meta-description budget) must agree with the file that owns the fact. Narrative prose is explicitly out of scope; exemptions live in the checker's allowlist and each needs a reason. |
-| ADR index | `vp run --fail-if-no-match @openelement/tools-repo#adr-index:check` | A record must be listed, its links resolvable, and a non-active record annotated `SUPERSEDED` / `RETIRED` / `EXECUTED`; the reader rides `gate:source`. |
+| Shim inventory | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo shims:check` | `docs/architecture/shim-inventory.md` is a hand-maintained registry with a mechanical reader: every row carries an existing tracked path, an owner, a status, and a non-empty retirement condition. The reader rides `gate:source`. |
+| Doc claims | `vp run --no-cache --fail-if-no-match --filter @openelement/www check:doc-claims` | Every machine-checkable factual claim in the covered docs (versions, commands, subpaths, gate and CI counts, ADR and path references, locale parity, the meta-description budget) must agree with the file that owns the fact. Narrative prose is explicitly out of scope; exemptions live in the checker's allowlist and each needs a reason. |
+| ADR index | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo adr-index:check` | A record must be listed, its links resolvable, and a non-active record annotated `SUPERSEDED` / `RETIRED` / `EXECUTED`; the reader rides `gate:source`. |
 | Publish dispatch | (GitHub Actions) | Requires main push CI green FIRST — the exact-SHA contract. |
 
 ## Maintaining this contract

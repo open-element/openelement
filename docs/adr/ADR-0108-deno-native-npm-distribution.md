@@ -31,3 +31,13 @@ The repository keeps Deno-native configuration and tests, while disposable
 consumer projects install the produced tarballs with npm and exercise the
 actual published shape. Publication remains an explicit maintainer action after
 the exact candidate SHA passes the release qualification workflow.
+
+## Amendment (2026-11-05, npm-only registry closure)
+
+The `jsr:@std/*` dependency-source half of the decision above was retired after
+this ADR was superseded: the alpha.8 Deno-free baseline removed every `@std/*`
+import, and release tooling now rejects `jsr:`, `@jsr/`, `@std/`, and
+`npm:@jsr/` dependency inputs instead of filtering them. `npm.jsr.io` is not an
+allowed registry host. The contemporaneous decision text above is left
+unchanged; npm is the only public registry
+([ADR-0161](./ADR-0161-node-pnpm-consumer-surface.md)).

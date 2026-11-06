@@ -12,7 +12,16 @@
  *      (`packages/`, `tools/`, `www/`, `apps/`, `tests/`, `benchmarks/`,
  *      `docs/`) or a decision-record citation. The tarball is the only
  *      documentation a consumer can read; a path they cannot open is noise,
- *      and an ADR id is maintainer vocabulary;
+ *      and an ADR id is maintainer vocabulary. These are ADVISORY: they are
+ *      reported on every run but do not block a PR push. Only the consumer
+ *      contracts below (metadata, export subpaths, bin targets, side-effect
+ *      truthfulness) are BLOCKING. A prose wording in a JSDoc comment is not
+ *      the same class of defect as a package a consumer cannot install; the
+ *      #1708 CI run is the evidence — two ADR tokens in a correct comment
+ *      stopped the entire pack job, while the local gate scanned a stale
+ *      tarball and stayed green. Severity lives on the violation, not on a
+ *      per-invocation flag, so the same rule cannot be green in one job and
+ *      red in another;
  *   3. a packed export subpath that the shipped README never names;
  *   4. a module-scope write to a well-known global in a package declared
  *      `sideEffects: false`, which would make the tree-shaking claim false;
@@ -97,11 +106,34 @@ const SEAM_INSTALL_PATTERN = /^install[A-Z][A-Za-z0-9_$]*\s*\(/;
 /** Text members worth scanning: shipped code, declarations, docs, styles. */
 const SCAN_EXTENSIONS = ['.js', '.mjs', '.cjs', '.d.ts', '.json', '.md', '.css', '.tmpl', '.txt'];
 
+/** Documentation-hygiene findings are advisory; consumer contracts block. */
+export type PackSurfaceSeverity = 'blocking' | 'advisory';
+
 export interface PackSurfaceViolation {
   packageName: string;
   path: string;
   line?: number;
   message: string;
+  /** Absent means `blocking` — a new violation is fail-closed by default. */
+  severity?: PackSurfaceSeverity;
+}
+
+/**
+ * Split findings by severity. Only `advisory` findings are non-blocking, and
+ * only when a rule explicitly opts in; every other rule stays fail-closed.
+ * Exported so the severity contract is machine-verified rather than promised
+ * in a comment.
+ */
+export function partitionViolations(violations: readonly PackSurfaceViolation[]): {
+  blocking: PackSurfaceViolation[];
+  advisory: PackSurfaceViolation[];
+} {
+  const blocking: PackSurfaceViolation[] = [];
+  const advisory: PackSurfaceViolation[] = [];
+  for (const violation of violations) {
+    (violation.severity === 'advisory' ? advisory : blocking).push(violation);
+  }
+  return { blocking, advisory };
 }
 
 function isScannable(path: string): boolean {
@@ -134,6 +166,7 @@ export function findInternalReferences(
         path,
         line: index + 1,
         message: `repository-internal path '${repoPath[1]}/' must not ship in an npm artifact`,
+        severity: 'advisory',
       });
     }
     if (ADR_PATTERN.test(line)) {
@@ -142,6 +175,7 @@ export function findInternalReferences(
         path,
         line: index + 1,
         message: 'decision-record citation (ADR) must not ship in an npm artifact',
+        severity: 'advisory',
       });
     }
   }
@@ -540,23 +574,33 @@ async function scanTarball(pkg: PackageInfo): Promise<PackSurfaceViolation[]> {
   return scanPackedPackage(pkg.name, files);
 }
 
+function formatViolation(violation: PackSurfaceViolation): string {
+  const line = violation.line ? `:${violation.line}` : '';
+  return `  ${violation.packageName}/${violation.path}${line}: ${violation.message}`;
+}
+
 async function main(): Promise<void> {
   const packages = releasePublishOrder(await readPackages());
   const violations: PackSurfaceViolation[] = [];
   for (const pkg of packages) {
     violations.push(...(await scanTarball(pkg)));
   }
+  const { blocking, advisory } = partitionViolations(violations);
 
-  if (violations.length > 0) {
+  // Advisory findings stay visible on every run (a stale repo path or an ADR
+  // id is still worth fixing) but must not stop a PR. Only a consumer-facing
+  // contract violation exits non-zero.
+  if (advisory.length > 0) {
+    console.warn(`\nPacked facade advisories (#1412, non-blocking, ${advisory.length}):`);
+    for (const violation of advisory) console.warn(formatViolation(violation));
+  }
+  if (blocking.length > 0) {
     console.error('\nPacked facade violations detected (#1412):');
-    for (const violation of violations) {
-      const line = violation.line ? `:${violation.line}` : '';
-      console.error(`  ${violation.packageName}/${violation.path}${line}: ${violation.message}`);
-    }
+    for (const violation of blocking) console.error(formatViolation(violation));
     process.exit(1);
   }
   console.log(
-    `Packed facade check passed (${packages.length} packages: metadata, no internal references, subpaths documented).`,
+    `Packed facade check passed (${packages.length} packages: metadata, exports, bin and side-effects verified; ${advisory.length} advisory finding(s)).`,
   );
 }
 

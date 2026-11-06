@@ -36,12 +36,17 @@ import {
 } from '@openelement/protocol/policy';
 import { signal } from './internal/signal/index.ts';
 import { serializeStyleLinks } from './internal/compiled/server/index.ts';
-import type { CompiledProgramHost } from './internal/compiled/server/index.ts';
+import type { CompiledProgramHost, CompiledSignalLike } from './internal/compiled/server/index.ts';
 import { type TrustedHtml, trustedHtmlValue } from './internal/core/security.ts';
 
 export { collectPublicProps } from './internal/core/props-utils.ts';
 export type { SsrAdmissionDecision } from '@openelement/protocol/render';
-export { consumeContext, createContext, provideContext } from './internal/core/index.ts';
+export {
+  consumeContext,
+  createContext,
+  provideContext,
+  releaseConsumedContext,
+} from './internal/core/index.ts';
 export type { Context, RenderError } from './internal/core/index.ts';
 export { assertValidTagName, isValidTagName } from './internal/core/tag-utils.ts';
 export { ERROR_PREFIX } from '@openelement/protocol/errors';
@@ -103,15 +108,18 @@ export { ensurePreHydrationClickCapture } from './internal/compiled/runtime/pre-
 
 // ─── Server-render entry (compiled serializer) ─────────────────────
 
+/**
+ * The signal capability the compiled server host and its computed factories
+ * actually consume: a readable protocol signal, never a writable promise.
+ */
+type CompiledSignalRecord = Record<string, CompiledSignalLike<unknown>>;
+
 /** Compiled class statics consumed by the server-render entry. */
 interface CompiledComponentConstructor extends CustomElementConstructor {
   __partProgram?: PartProgram;
   __compiledProperties?: CompiledPropertyMetadata[];
   __elementMetadata?: CompiledElementMetadata;
-  __computedFields?: Record<
-    string,
-    (signals: Record<string, ReturnType<typeof signal>>) => ReturnType<typeof signal>
-  >;
+  __computedFields?: Record<string, (signals: CompiledSignalRecord) => CompiledSignalLike<unknown>>;
   /**
    * The emitted property table (`static props`), whose `default` holds the
    * authored initializer verbatim — the only carrier of a non-serializable
@@ -364,13 +372,41 @@ function compiledDefaultOf(
   return runtimeDefault === undefined ? record.default : runtimeDefault;
 }
 
+/**
+ * A deferred property's read-only placeholder: no value exists while the
+ * stream shell is built, so EVERY capability fails closed with the established
+ * pending-read code — a read, an accidental write, and a subscription. A
+ * silent no-op `subscribe` would let a computed factory (or an adapter) wait
+ * for a value that can never arrive; refusing it keeps the observer path as
+ * loud as the read path. The object advertises exactly the capability the
+ * compiled server host consumes — a readable signal — rather than
+ * impersonating a writable one.
+ */
+function pendingPropertySignal(name: string): CompiledSignalLike<unknown> {
+  const refuse = (operation: 'read' | 'written' | 'subscribed'): never => {
+    throw new OpenElementError(
+      `[openElement] pending property "${name}" was ${operation} while creating a stream shell.`,
+      { code: FacadeErrorCode.STREAM_PENDING_READ, phase: 'ssr' },
+    );
+  };
+  return {
+    get value(): unknown {
+      return refuse('read');
+    },
+    set value(_next: unknown) {
+      refuse('written');
+    },
+    subscribe: () => refuse('subscribed'),
+  };
+}
+
 function seedCompiledProperties(
   ctor: CompiledComponentConstructor,
   props: Record<string, unknown>,
   pendingProperties: ReadonlySet<string> = new Set(),
   preserveNull = false,
 ): {
-  signals: Record<string, ReturnType<typeof signal>>;
+  signals: CompiledSignalRecord;
   hostAttrs: Array<readonly [string, unknown]>;
 } {
   const properties = Array.isArray(ctor.__compiledProperties)
@@ -380,20 +416,12 @@ function seedCompiledProperties(
   // a compiled property named `__proto__` is a host signal entry, never the
   // record's prototype, so the server seed and the client claim read the same
   // signal for that name.
-  const signals: Record<string, ReturnType<typeof signal>> = Object.create(null);
+  const signals: CompiledSignalRecord = Object.create(null);
   const hostAttrs: Array<readonly [string, unknown]> = [];
   for (const record of properties) {
     if (record.computed) continue;
     if (pendingProperties.has(record.name)) {
-      signals[record.name] = {
-        get value(): never {
-          throw new OpenElementError(
-            `[openElement] pending property "${record.name}" was read while creating a stream shell.`,
-            { code: FacadeErrorCode.STREAM_PENDING_READ, phase: 'ssr' },
-          );
-        },
-        subscribe: () => () => {},
-      } as unknown as ReturnType<typeof signal>;
+      signals[record.name] = pendingPropertySignal(record.name);
       continue;
     }
     const present = preserveNull

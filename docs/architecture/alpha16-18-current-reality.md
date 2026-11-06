@@ -180,10 +180,10 @@ separated production consumers from tests and docs. Production consumers:
 | Element facade | `open-element-implementation.ts:72-79,327-361` | fails closed when the compiled program is missing; drives connect | browser runtime | keep (metadata + program until generated mount lands) | 16a | `failMissingProgram`, `kernel.connect()` |
 | Compiled statics contract | `internal/compiled/facade-host.ts:6,28` | declares/consumes `__partProgram`, `__compiledProperties`, handler table | browser runtime | keep statics; shrink program use | 16b | type `__partProgram?: PartProgram` |
 | Program normalization | `internal/compiled/runtime-program.ts` | validates + normalizes the program once per connect | browser runtime | shrink to metadata once the walker retires | 16b | module header |
-| Public runtime / SSR | `public-runtime.ts:222,378,419,520-540,725-790` | tag, `metadata.properties`, registration, stream shell digest, HTML serialization | server + browser | SSR keeps program-derived structure | staged | `renderToStringAtDepth`, `createStreamShellExecutor` |
+| Public runtime / SSR | `public-runtime.ts:222,378,419,520-540,725-790` | tag, `metadata.properties`, registration, stream shell digest, HTML serialization | server + browser | request-time path runs the generated server entrypoint over a server-private structure; it reads no Semantic IR | staged | `renderToStringAtDepth`, `createStreamShellExecutor` |
 | Server entry | `element/src/server.ts` | compiled property metadata + root kind | server | keep | — | server rendering path |
 | Server serializer module | `internal/compiled/server/index.ts:674-681` | serialization entry | server | keep | — | entry |
-| Router page classification | `router/src/authoring.ts:441-445` | **runtime property presence** + prototype arm | build/browser | migrate to explicit metadata flag | 16b | function body |
+| Router page classification | `router/src/authoring.ts:441-445` | **runtime property presence** + prototype arm | build/browser | Router-plugin build-time classification fact, **not an ABI field** | 16b | function body |
 | Router page tag | `server-runtime/renderer-runtime.ts:167-175` | resolves compiled page tag | server | keep tag metadata | 16b | comment + access |
 | Router stream validation | `server-runtime/route-dispatch.ts:47-83` | tag/version vs stream manifest | server | keep; ABI-aware | 16b | `readPartProgram` |
 | Router stream identity | `server-runtime/stream-runtime.ts:516-525` | tag + version mismatch rejection | server | keep | 16b | guard |
@@ -204,12 +204,17 @@ program shape, packed-consumer harnesses, and `tests/fixtures/**`.
 
 What this map establishes:
 
-- Browser-executor retirement is **not** Part Program deletion: server
-  serialization, streaming, tag/version metadata and build-time CSS recovery all
-  keep reading program data after the walker retires.
 - Exactly **two** consumers read the emitted field as text, and they are in two
   different packages.
-- `authoring.ts` is a runtime property check and must not be described as lexical.
+- `authoring.ts` is a runtime property check and must not be described as lexical;
+  its target channel is build-time page classification, not an ABI field.
+- **SUPERSEDED HISTORY (D-O2):** the earlier reading said browser-executor
+  retirement is **not** Part Program deletion and that server serialization,
+  streaming and build-time consumers keep reading program data after the walker
+  retires. The approved fourth pass retires Part Program v2, the validator,
+  `PART_PROGRAM_VERSION` and `__partProgram` from the target production contract in
+  Alpha16b; the server keeps a **server-private structure**, which is not the old
+  program data. The release gate and the retirement policy remain two obligations.
 
 ## D. Alpha15 asset preservation audit
 
@@ -225,8 +230,8 @@ What this map establishes:
 | SSR serializer + DSD | Preserve | HTML-first promise | `public-runtime.ts:725-790` |
 | Security sink screening | Preserve | single source of truth for URLs/attrs | `protocol/src/forbidden-sinks.ts` |
 | Diagnostics + source maps | Preserve and extend | every new grammar needs codes and locations | `compiler-diagnostics.ts`, `source-map.ts` |
-| Part Program + validator | Preserve as transitional; separate the five layers | emitted artifact shared by runtime, SSR, Router and build consumers (§C-bis) | §C-bis |
-| Class/decorator authoring | Refactor to compatibility adapter | one backend rule (P5) | ADR-0173 amendment |
+| Part Program + validator | CURRENT FACT: transitional; APPROVED TARGET: retire in Alpha16b | emitted artifact shared by runtime, SSR, Router and build consumers today; the server-private replacement is not the old schema | §C-bis; roadmap |
+| Class/decorator authoring | CURRENT FACT: shipping; APPROVED TARGET: retire in Alpha16b after class→function migration, with no adapter | one authoring model; generated CE boundary for native exports | ADR-0173 fourth-pass amendment; roadmap |
 | Router Framework Mode | Preserve | application layer is not rewritten | `packages/router/src/vite/...` |
 | Lit renderer | Retire after separate qualification | owner decision, window OPEN | ADR-0152 amendment |
 | Third-party WC interop | Preserve | native boundary | `entry-descriptor.ts` admission paths |
@@ -245,10 +250,11 @@ These are **APPROVED**. Do not re-ask.
   applicable G1/G2 evidence. No public version, tag, publication, Starter
   promise or release claim follows from it.
 - **Alpha16b** is the formal Alpha16 release qualification: all required browser
-  capabilities migrated, generated mount/update/claim/disposal, class frontend retirement on
-  the shared backend, Router integration, packed-consumer and browser/server
-  qualification, and graph evidence that the old generic browser executor is
-  unreachable from every applicable production browser entry graph.
+  capabilities migrated, generated mount/update/claim/disposal, class-authoring
+  migration and API retirement (no adapter), Router integration, packed-consumer
+  and browser/server qualification, and graph evidence that the old generic
+  browser executor is unreachable from every applicable production browser entry
+  graph.
 - **The ADR-0174 hard gate remains intact.** A formal Alpha16 release with the
   old generic browser executor still reachable does not qualify. Alpha16a does
   not amend or bypass it.

@@ -45,8 +45,7 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | --- | --- | --- | --- |
 | 1 | 岛 CSS 压缩变换（#1543） | ~~`packages/router/src/vite/internal/island-css.ts`~~ | **已删（#1558）** |
 | 2 | `styleAssetProtocol` 激活开关（#1553） | ~~element 编译器选项~~ | **已删（#1558）** |
-| 3 | CSS 双适配器：fetch 回退形态（#1553） | `packages/router/src/vite/internal/style-assets.ts` | 条件到即删（Safari + 工具链）；单一化子裁决待 owner |
-| 4 | dev/SSR 内联 sheet 适配器（#1553） | `packages/router/src/vite/internal/style-assets.ts` | 条件到即删（同 #3 的判定翻转或 dev 走 HTTP） |
+| 4 | dev/SSR 内联 sheet 适配器（#1553） | `packages/router/src/vite/internal/style-assets.ts` | 保留为平台边缘（dev 半边已移除；SSR 文本待 server-only CSS 资产发现） |
 | 5 | `ShimStyleSheet`（SSR 侧 CSSStyleSheet） | `packages/element/src/internal/core/style-sheet.ts` | 保留为平台边缘 |
 | 6 | SSR 全局垫片（CSSStyleSheet banner + customElements stub） | `packages/router/src/vite/internal/ssg/ssr-polyfills.ts` | 保留为平台边缘 |
 | 7 | 浏览器怪癖台账（#579/#604/#610） | `packages/router/src/vite/internal/ssg/morph-webkit-fix.ts`、`packages/router/src/vite/internal/ssg/form-enhance.ts` | 保留为平台边缘（各条目自带删除条件） |
@@ -66,6 +65,11 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 散文）已在 alpha8/alpha10 清理；其余命中要么已含书面退役条件，要么是
 平台缺口本身。（2026-10-13 追加：第 12 项的退役条件随后到期并由 N-1 重塑
 执行——形状仿真已删，模块改为一等 spawn 助手，见条目详情；其余结论不变。）
+（2026-11-06 追加：第 3 项「CSS 双适配器」已注销——惰性的
+`nativeSheetAdapterModule` 生成器与 `NATIVE_CSS_MODULE_SCRIPTS` 判定常量一并
+删除，`style-assets.ts` 只发 fetch 一种形态；双适配器不复存在，因此不再是
+待退役垫片，整行与详情小节一并移除。ADR-0164 附录 B/C 保留为支持矩阵的
+历史证据。编号 3 留空不复用，避免历史引用错位。）
 
 ## 条目详情
 
@@ -87,28 +91,6 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
   字符串准入机器（`style-admission.ts` + OEC9028）时一并退役了该选项，
   样式请求通道改为对编译模块的已授权 `.css` import 边的无条件登记
   （`style-requests.ts` 边注册表，P8 单写者不变）。
-
-### 3. CSS 双适配器之 fetch 回退形态——条件到即删；单一化子裁决待 owner
-
-- 所有者：router client build（`style-assets.ts`，接缝
-  "CSS import compatibility (#1553)" 行）。
-- 方向：拦截 `.oe-style.css` 请求 → 交还模块图的 sheet adapter 模块。
-- 存在原因：原生 CSS Module Script（`import … with { type: 'css' }`）
-  双重不可用——rolldown 1.0.3 对原生形态 MISSING_EXPORT 硬失败，
-  Safari 截至 27 未实现（[ADR-0164](../adr/ADR-0164-island-style-asset-protocol.md)
-  附录 C）。能力判定是构建期事实：`NATIVE_CSS_MODULE_SCRIPTS = false`
-  （`style-assets.ts:113`），现实构建全部产出 fetch 形态（TLA 守卫，
-  fail-closed）。
-- 退役条件（已写在 `style-assets.ts:52-53`）：当某个工具链既能打包原生
-  形态、又能覆盖交付舰队（即 Safari 落地 CSS Module Script）时，翻转
-  判定，删除 fetch 生成器 `fetchSheetAdapterModule`。
-- 开放子裁决（issue #1559 记录，owner 默认倾向"机制更少"）：(a) 维持
-  双形态 + 上述条件（代码现状）；(b) 单一适配器策略——始终 URL +
-  fetch + replace，立即删除惰性的 `nativeSheetAdapterModule` 生成器与
-  判定常量（约两行状态的删除，原生形态今天本就零次产出）。任一裁决都
-  收敛到单一机制；本登记簿按代码现状记录 (a) 的条件，(b) 一经批准即
-  变成"现在删"。
-- 处置：条件到即删（(a)）；(b) 批准则立即删原生形态一侧。
 
 ### 4. dev/SSR 内联 sheet 适配器——dev 半边已删除（S-C1.3），SSR 文本形态保留为边界
 

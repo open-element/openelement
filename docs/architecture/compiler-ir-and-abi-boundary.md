@@ -2,6 +2,9 @@
 
 Date: 2026-11-03. Milestone: **Alpha16a M01**. Status: **DESIGN — not implemented.**
 Base: `11b58f13e73bc7ae539e5de554646b0fc1e4a0a4`.
+Revision 2026-11-05: §15 item 7 now records the owner's per-read props decision;
+TSX-28 verifies and records the counts/cost. This is a documentation sync, not
+implementation evidence.
 
 Approved direction this document must serve (2026-11-03, P-1…P-5): function-first
 Full TSX; compiler-owned semantic model; independent server/client backends; no
@@ -162,7 +165,7 @@ The emitted server entrypoint runs per request:
 Request scope rules:
 
 - no module-level mutable state on the render path; per-request objects only;
-- full-await in Alpha16 (M14): data is awaited before output; no out-of-order
+- full-await in **Alpha16b (M14)**: data is awaited before output; no out-of-order
   fragment streaming (bounded defer is Alpha18);
 - server-only modules never enter client graphs (existing guard, #1618);
 - streaming keeps admission, backpressure, cancellation and identity checks.
@@ -434,9 +437,10 @@ ownership), which keep their approved names and are earned in M05–M06.
 
 **Completion statement.** M01 is complete when A1–A6 hold for this contract. That
 is **not** G1 or G2, and **not** Alpha16a: G1/G2 are earned by the generated
-execution and identity slices in M05–M06, and Alpha16a exits at M08.
+execution and identity slices in M05–M06, and **Alpha16a exits at M08 with G1/G2
+recorded**.
 
-## 15. Open engineering questions
+## 15. Open engineering questions and settled semantics
 
 1. IR representation form (object graph vs typed union vs direct lowering).
 2. Claim marker protocol for ordered repeated insertion.
@@ -446,8 +450,16 @@ execution and identity slices in M05–M06, and Alpha16a exits at M08.
 6. Whether the server backend generates render functions directly or emits a
    separate **server-private render plan** — that plan must not be a serialized
    copy of the Semantic IR (§5.1), and it carries its own lifecycle and version.
-7. Evaluation-count contract for lazy props getters (TSX-28).
+7. Props getter evaluation is **DECIDED (owner ruling): every read evaluates**.
+   What remains OPEN is the measured count/cost evidence (TSX-28), not the
+   semantics. A per-update-tick cache that changes evaluation count, returned
+   value or side-effect order is a different contract, not an optimization.
 8. Exact boundary between generated update code and retained helpers.
+
+Claim marker/order, key alignment, permitted seed state and bounded recovery are
+acceptance obligations of **M07** (leaf claim) and **M08** (stateful SSR→claim);
+they are not M01 design deliverables. The marker protocol may be designed in M07,
+but it may not be deferred to Alpha17 with a callback or API name.
 
 ## 16. Deferred decisions
 

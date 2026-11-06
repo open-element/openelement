@@ -186,8 +186,11 @@ claiming one module fail the chunk grouping the same way. A declared
 `modulePath` is not assumed globally unique (two packages can ship the same
 relative name; import-map targets resolve outside the specifier string):
 `buildClient` resolves each package specifier through the same resolution the
-build uses and joins on the real module path when one exists; npm/jsr
-specifiers keep the declared specifier as identity under the same exact rule.
+build uses and joins on the real module path when one exists; npm specifiers
+keep the declared specifier as identity under the same exact rule. (The `jsr`
+half named in the original revision retired with the npm-only surface —
+[ADR-0161](./ADR-0161-node-pnpm-consumer-surface.md); no JSR specifier is a
+supported input.)
 Both directions of the rule are tested in the shared module's suite — no test
 helper reimplements the matching.
 

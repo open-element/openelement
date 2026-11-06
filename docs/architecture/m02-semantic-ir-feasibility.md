@@ -7,6 +7,13 @@ Status: **spike implemented, then corrected in M02.1 (owner review); design
 questions listed as OPEN.** No codegen, no interpreter, no ABI, no SSR/claim
 change.
 
+Revision 2026-11-05: the condition/children coverage record is corrected. The
+M02.1/M02.2 corrections added worked examples and positive assertions for both
+nodes; `children-projection` also has a missing-owner negative case. `condition`
+has **no** negative case, so only its expressiveness is evidenced. The earlier
+"not exercised by a worked example" wording in §3, §8 and §9 was stale and is
+marked SUPERSEDED HISTORY there.
+
 ## 1. What this slice proves — and what it does not
 
 It proves that a **small IR can express the semantics** of the five approved
@@ -42,10 +49,10 @@ subpath: the IR is not public API, not a wire format, not a codegen input.
 | `dynamic-text` | ex. 2, 3, 5 |
 | `static-attribute` / `dynamic-attribute` | ex. 2 (event), 3 (key, draft), 5 (value, handler) |
 | `component-ref` | ex. 1 (Header/Footer), ex. 4 (recipe target) |
-| `condition` | supported by the grammar and validator; not exercised by a worked example (see OPEN-3) |
+| `condition` | supported by the grammar and validator; exercised by the M02.1 worked example (positive only; no negative case — see §11) |
 | `list` | ex. 3, 5 |
 | `recipe` + `insertion-site` | ex. 4 |
-| `children-projection` | supported by the grammar; not exercised by a worked example (see OPEN-3) |
+| `children-projection` | supported by the grammar; exercised by the M02.1 worked example and the missing-owner negative case (see §11) |
 | `expression` / `read` | every dynamic slot |
 | `owner` / `resource` | every example |
 
@@ -121,9 +128,12 @@ from quietly appearing inside the compiler.
 ## 8. Feasibility findings
 
 1. **The five examples fit in a small node set.** No example required a new node
-   type, and no node is present "for the future" except `condition` and
-   `children-projection`, which the grammar supports and the validator checks but
-   no worked example exercises yet.
+   type, and no node is present "for the future": `condition` and
+   `children-projection` also have M02.1 worked examples, and
+   `children-projection` has a missing-owner negative case. `condition` has no
+   negative case, so its expressiveness is shown but its failure mode is not.
+   (SUPERSEDED HISTORY: an earlier revision said both were unexercised; §11
+   records the correction.)
 2. **The three evaluation tiers are representable without a JavaScript AST.**
    Expressions stay authored source slices plus resolved reads; nothing re-parses
    them, so the IR does not become a second parser.
@@ -143,10 +153,16 @@ from quietly appearing inside the compiler.
 | --- | --- | --- |
 | OPEN-1 | Scope resolution must become real (shadowing, destructuring, closures, cross-module imports). The spike uses a flat name table. | Otherwise "tracked" claims are guesses |
 | OPEN-2 | Expression `source` slices are fine for a spike; a real backend needs either a re-derivable expression id or a compiled closure. Choosing wrong makes codegen re-parse source. | Determines the IR→client codegen seam |
-| OPEN-3 | `condition` and `children-projection` are implemented but not covered by a worked example. | They need semantic tests before M03 admits them |
-| OPEN-4 | Claim marker protocol for ordered repeated insertion remains OPEN (as agreed). | Blocks example 5 end-to-end (M06–M08) |
+| OPEN-4 | Claim marker protocol for ordered repeated insertion remains OPEN (as agreed). | Blocks example 5 end-to-end; the marker/key/seed/recovery chain is owned by M07 (leaf) and M08 (stateful SSR→claim) |
 | OPEN-5 | Ownership lineage (which owner may project into which) has no mechanism yet; the IR only records owner ids. | Needed for TSX-26 |
 | OPEN-6 | The builder is a prototype frontend, not the production one; the class-shaped frontend is untouched and still the Alpha15 path. | M03 must decide how the function frontend replaces, not wraps, the class path |
+
+**OPEN-3 is CLOSED for its worked-example gap** by the M02.1/M02.2 corrections
+(§11): `condition` and `children-projection` have worked examples and positive
+assertions, and `children-projection` has a missing-owner negative case. This
+does **not** claim a negative case for `condition` — none exists, and that
+remains unverified. The earlier "implemented but not covered" record is
+SUPERSEDED HISTORY.
 
 ## 10. Relationship to the Alpha15 chain
 
@@ -168,8 +184,9 @@ slice can break Alpha15 because nothing in Alpha15 imports it.
 | 7 | Pack failed: publish-scoped source module unreachable | The spike is excluded from the published surface. Note: this repository's packer derives include/exclude from `package.json.files` (`!` prefix), **not** from `publish.exclude`, so the exclusion is `"!src/internal/compiler/semantic-ir"`. The Alpha15 publish graph is otherwise untouched. |
 
 P2 items also closed: an ordinary-local snapshot test, worked examples for
-`condition` and `children-projection`, and the span documentation now says
-**UTF-16 code units** (TypeScript positions), not bytes.
+`condition` and `children-projection` (positive only for `condition`;
+`children-projection` also has the missing-owner negative), and the span
+documentation now says **UTF-16 code units** (TypeScript positions), not bytes.
 
 ### M02.2 — final validator completeness (owner review)
 

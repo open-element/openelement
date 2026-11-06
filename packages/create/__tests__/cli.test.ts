@@ -958,20 +958,25 @@ test('async template build returns deterministic path order', async () => {
   expect(Object.values(templates).some((content) => content.includes('${v.'))).toBeFalsy();
 });
 
-test('generated starter carries no JSR bridge', async () => {
+test('generated starter carries no non-npm registry reference', async () => {
   const templates = await buildTemplates(resolveVersions(), 'sample-app');
   const pkg = JSON.parse(templates['package.json']);
   expect(pkg.name).toEqual('sample-app');
   expect(pkg.private).toEqual(true);
-  // Packed first-party modules carry no bare @std/* specifiers, so the
-  // starter needs no @std npm aliases and no @jsr registry mapping: npm is
-  // the only public registry.
+  // Packed first-party modules carry no non-npm registry specifiers, so the
+  // starter needs no JSR aliases and no registry mapping: npm is the only
+  // public registry.
   expect('.npmrc' in templates).toBeFalsy();
   for (const value of Object.values(pkg.dependencies as Record<string, string>)) {
     expect(value.includes('@jsr/'), `dependency must not reference @jsr: ${value}`).toBeFalsy();
     expect(value.startsWith('jsr:'), `dependency must not use jsr: ${value}`).toBeFalsy();
+    expect(
+      value.startsWith('npm:@jsr/'),
+      `dependency must not use the retired JSR alias: ${value}`,
+    ).toBeFalsy();
   }
-  // Parse, don't substring: a bridge might hide behind a proxy subdomain.
+  // Parse, don't substring: a non-npm registry might hide behind a proxy
+  // subdomain.
   const serialized = JSON.stringify(templates);
   const templateUrls = serialized.match(/https?:\/\/[^"'\\\s]+/g) ?? [];
   for (const url of templateUrls) {
@@ -1991,7 +1996,8 @@ test.skipIf(!pnpmAvailable)(
       // install-time pnpm bookkeeping file cannot mask a template regression.)
       expect(existsSync(join(tmpRoot, 'sample-app', 'app', 'layout.tsx'))).toBeTruthy();
       expect(existsSync(join(tmpRoot, 'sample-app', 'pnpm-workspace.yaml'))).toBeFalsy();
-      // No JSR bridge may ship in packed scaffolds, not just workspace runs.
+      // No non-npm registry reference may ship in packed scaffolds, not just
+      // workspace runs.
       // B5 (ADR-0161): the packed scaffold is a Node project — the
       // manifest and tsconfig ship, no Deno config does.
       expect(existsSync(join(tmpRoot, 'sample-app', 'package.json'))).toBeTruthy();

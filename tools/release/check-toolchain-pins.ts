@@ -18,9 +18,11 @@
  *   - the toolchain README must name the same three versions (documentation is
  *     part of the contract here; a stale README is how the drift starts).
  *
- * Exit code 1 on any failure. No Docker required. Composed into the release
- * preflight (tools/release/release-preflight.ts); deliberately not added to a
- * CI workflow (that would change the pinned qualification gate counts).
+ * Exit code 1 on any failure. No Docker required. The same audit runs against
+ * the checked-out repository from check-toolchain-pins.test.ts, which rides the
+ * existing tools vitest project — deliberately not a new CI workflow job, so
+ * the pinned qualification gate counts stay untouched while a real toolchain
+ * drift still fails the normal test gate.
  */
 
 import { readFile } from 'node:fs/promises';

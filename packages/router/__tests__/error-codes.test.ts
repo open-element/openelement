@@ -24,8 +24,12 @@ import {
 } from '../src/vite/internal/element-runtime-chunk.ts';
 import { requireViteHelperChunk } from '../src/vite/internal/vite-helper-chunk.ts';
 import {
+  AdapterErrorCode,
   authoringError,
   buildError,
+  describeError,
+  errorCause,
+  isMissingPeerError,
   ClientAssetErrorCode,
   ClientBuildErrorCode,
   DeliveryErrorCode,
@@ -44,6 +48,7 @@ import {
   SsgDynamicErrorCode,
   SsgRenderErrorCode,
   StreamErrorCode,
+  UNPRINTABLE_ERROR,
 } from '../src/internal/error-codes.ts';
 import { validateIslandMediaQuery } from '../src/vite/internal/ssg/delivery.ts';
 import { validateIslandModuleSpecifier } from '../src/vite/internal/ssg/entry-generators.ts';
@@ -69,6 +74,7 @@ import type { ClientIslandDeliveryEntry } from '../src/vite/internal/ssg/deliver
 import type { SsgRenderOptions, SsrBundle, StreamRouteManifest } from '@openelement/protocol/ssg';
 
 const TABLES = {
+  AdapterErrorCode,
   PageErrorCode,
   IslandErrorCode,
   ServeErrorCode,
@@ -124,6 +130,64 @@ test('error codes: the factories carry the phase their surface implies', () => {
   expect(buildError(DeliveryErrorCode.TAGS, 'boom', { cause }).cause).toEqual(cause);
   const serve = serveError(StreamErrorCode.DEFERRED_TIMEOUT, 'boom');
   expect([serve.phase, serve.severity, serve.recoverable]).toEqual(['ssr', 'error', false]);
+  // serveError and the optional-peer adapters preserve the wrapped cause too.
+  const serveCause = new Error('serve inner');
+  expect(serveError(AdapterErrorCode.HONO_MISSING, 'boom', { cause: serveCause }).cause).toBe(
+    serveCause,
+  );
+});
+
+test('error codes: peer classification and diagnostics degrade without throwing', () => {
+  const missingPeer = Object.assign(
+    new Error("Cannot find package '@hono/vite-dev-server' imported from /app/vite.config.ts"),
+    { code: 'ERR_MODULE_NOT_FOUND' },
+  );
+  expect(isMissingPeerError(missingPeer, '@hono/vite-dev-server')).toEqual(true);
+  expect(
+    isMissingPeerError(
+      new Error('wrapped by a loader', { cause: missingPeer }),
+      '@hono/vite-dev-server',
+    ),
+  ).toEqual(true);
+  // A different missing specifier is not this peer's MISSING condition.
+  expect(isMissingPeerError(missingPeer, 'hono')).toEqual(false);
+  // An installed peer whose transitive import is absent is ALSO
+  // ERR_MODULE_NOT_FOUND, but the quoted specifier is not the peer itself.
+  const transitive = Object.assign(
+    new Error(
+      "Cannot find package 'minimatch' imported from /node_modules/@hono/vite-dev-server/dist/index.mjs",
+    ),
+    { code: 'ERR_MODULE_NOT_FOUND' },
+  );
+  expect(isMissingPeerError(transitive, '@hono/vite-dev-server')).toEqual(false);
+  expect(
+    isMissingPeerError(new Error('module evaluation failed'), '@hono/vite-dev-server'),
+  ).toEqual(false);
+
+  expect(describeError(new Error('readable failure'))).toEqual('readable failure');
+  // A null-prototype throwable has no primitive conversion at all.
+  expect(describeError(Object.create(null))).toEqual(UNPRINTABLE_ERROR);
+  expect(
+    describeError({
+      toString: () => {
+        throw new Error('hostile toString');
+      },
+    }),
+  ).toEqual(UNPRINTABLE_ERROR);
+  const hostileMessage = Object.create(Error.prototype) as Error;
+  Object.defineProperty(hostileMessage, 'message', {
+    get() {
+      throw new Error('hostile message getter');
+    },
+  });
+  expect(describeError(hostileMessage)).toEqual(UNPRINTABLE_ERROR);
+
+  // A hostile non-Error cause is preserved verbatim with a safe message.
+  const hostile = Object.create(null);
+  const cause = errorCause(hostile);
+  expect(cause).toBeInstanceOf(Error);
+  expect(cause.message).toEqual(UNPRINTABLE_ERROR);
+  expect(cause.cause).toBe(hostile);
 });
 
 function ctx(): PagePropsContext {

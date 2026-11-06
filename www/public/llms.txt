@@ -21,7 +21,7 @@
 
 ## For coding agents
 
-- [Agent development contract](https://github.com/open-element/openelement/blob/main/docs/agent-contract.md): the standard contract — canonical commands (derived from package.json), the generated-file map (never hand-edit), gate semantics, diagnostics consumption, and the ritual checklist. Mechanically enforced by a conformance test.
+- [Agent development contract](https://github.com/open-element/openelement/blob/main/docs/agent-contract.md): the standard contract — canonical commands (derived from package.json), the generated-file map (never hand-edit), gate semantics, diagnostics consumption, and the ritual checklist. Its mechanically checkable facts (commands, gate steps, workspace inventory) are enforced by a static conformance check; prose about side effects and file trackedness is not.
 - [Contributing](https://github.com/open-element/openelement/blob/main/CONTRIBUTING.md): the repository's contribution doctrine — the vp task entry, the gate architecture, and the release path.
 - [Build diagnostics](https://github.com/open-element/openelement/blob/main/packages/protocol/src/diagnostics.ts): the envelope types — parse build failures with `parseDiagnosticReport` from `@openelement/protocol/diagnostics`, never by grepping logs.
 - [Architecture](https://github.com/open-element/openelement/blob/main/docs/architecture/): design principles, package boundaries, and the seam registry.

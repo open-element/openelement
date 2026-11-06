@@ -591,54 +591,97 @@ test('package artifacts: @openelement/ui must not ship retired upstream token re
   );
 });
 
-test('package artifacts: rejects the JSR bridge in every packed module', async () => {
+test('package artifacts: rejects non-npm registry inputs in modules and manifests', async () => {
+  // One negative proof for both input surfaces: a packaged module may not
+  // import a non-npm spelling, and a packed manifest may not declare one in
+  // any dependency section. The policy is shared with the pack-time manifest
+  // projection (npm-manifest.ts), so the npm-alias and value forms are caught
+  // here with the same notion of "non-npm input".
   await withPackage(
     '@openelement/router',
     {
       'src/vite/plugin.js': `import { join } from '@std/path';\nexport const p = join;\n`,
-      'src/cli/start.js': `import { existsSync } from '@std/fs';\nexport const e = existsSync;\n`,
-      'src/index.js': `import { map } from 'jsr:@std/collections@^1.0.0';\nexport const q = map;\n`,
+      'src/cli/start.js': `import { existsSync } from 'jsr:@std/fs';\nexport const e = existsSync;\n`,
+      'src/index.js': `import { map } from 'npm:@jsr/std__collections@^1.0.0';\nexport const q = map;\n`,
+      'src/http.js': `import { join } from 'npm:@std/path@^1.0.0';\nexport const p = join;\n`,
     },
-    (root) => {
-      const violations = scanExtractedPackage('@openelement/router', root).violations;
-      const paths = violations.map((v) => v.path);
-      expect(
-        paths.includes('@openelement/router/src/vite/plugin.js'),
-        'tooling @std must fail',
-      ).toBeTruthy();
-      expect(
-        paths.includes('@openelement/router/src/cli/start.js'),
-        'cli @std must fail',
-      ).toBeTruthy();
-      expect(
-        paths.includes('@openelement/router/src/index.js'),
-        'runtime jsr: must fail',
-      ).toBeTruthy();
-      const bridge = violations.filter((v) => v.path.endsWith('.js'));
-      expect(
-        bridge.length === 3 &&
-          bridge.every((v) => v.message.includes('npm is the only public registry')),
-        `bridge violations must name npm as the only registry: ${JSON.stringify(violations)}`,
-      ).toBeTruthy();
-    },
-  );
-});
-
-test('package artifacts: rejects @jsr dependencies in packed manifests', async () => {
-  await withPackage(
-    '@openelement/router',
-    { 'src/index.js': `export const version = 1;\n` },
     (root) => {
       const pkg = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'));
-      pkg.dependencies = { '@jsr/std__path': '1.0.0' };
+      pkg.dependencies = {
+        // Legal npm dependencies stay green: ordinary names and ranges are
+        // not mistaken for the non-npm spellings below.
+        '@hono/vite-dev-server': '^0.25.3',
+        '@jsr/std__path': '1.0.0',
+        '@std/fs': '1.0.0',
+        'jsr-alias': 'jsr:@std/assert@^1.0.0',
+        'legacy-jsr-alias': 'npm:@jsr/std__path@1.0.0',
+        'legacy-std-alias': 'npm:@std/path@1.0.0',
+        'std-value': '@std/path@1.0.0',
+      };
+      // Peer and optional sections are publication inputs too (the pack-time
+      // projection validates them through the same entry).
+      pkg.peerDependencies = {
+        lit: '^3.3.3',
+        '@std/http': '1.0.0',
+        'jsr-peer': 'jsr:^1.0.0',
+      };
+      pkg.optionalDependencies = {
+        fsevents: '^2.3.3',
+        'jsr-optional': 'npm:@jsr/std__path@1.0.0',
+      };
       writeFileSync(`${root}/package.json`, JSON.stringify(pkg));
-      const messages = scanExtractedPackage('@openelement/router', root).violations.map(
-        (v) => v.message,
-      );
+
+      const violations = scanExtractedPackage('@openelement/router', root).violations;
+      const moduleViolations = violations.filter((violation) => violation.path.endsWith('.js'));
+      expect(moduleViolations.map((violation) => violation.path).toSorted()).toEqual([
+        '@openelement/router/src/cli/start.js',
+        '@openelement/router/src/http.js',
+        '@openelement/router/src/index.js',
+        '@openelement/router/src/vite/plugin.js',
+      ]);
       expect(
-        messages.some((m) => m.includes("bridge dependency '@jsr/std__path' is forbidden")),
-        `expected a bridge-dependency violation, got: ${JSON.stringify(messages)}`,
+        moduleViolations.every((violation) =>
+          violation.message.includes('npm is the only public registry'),
+        ),
+        `non-npm module violations must name npm as the only registry: ${JSON.stringify(violations)}`,
       ).toBeTruthy();
+
+      const manifestViolations = violations.filter(
+        (violation) =>
+          violation.path === '@openelement/router/package.json' &&
+          violation.message.includes('non-npm registry dependency'),
+      );
+      // Six dependencies, two peer declarations, one optional declaration.
+      expect(manifestViolations.length, JSON.stringify(manifestViolations)).toEqual(9);
+
+      // Legal npm entries in every section are not flagged.
+      for (const legal of ['@hono/vite-dev-server', 'lit', 'fsevents']) {
+        expect(
+          manifestViolations.some((violation) => violation.message.includes(`'${legal}'`)),
+          `legal npm dependency '${legal}' must not be flagged: ${JSON.stringify(manifestViolations)}`,
+        ).toEqual(false);
+      }
+
+      // The message names the actual illegal half and form: a JSR-scoped NAME
+      // never gets blamed on its ordinary version range.
+      const nameViolation = manifestViolations.find((violation) =>
+        violation.message.includes("name '@std/fs'"),
+      );
+      expect(nameViolation?.message).toContain("name form '@std/'");
+      expect(nameViolation?.message).not.toContain('value form');
+      expect(nameViolation?.message).not.toContain('1.0.0');
+
+      const aliasViolation = manifestViolations.find((violation) =>
+        violation.message.includes("'legacy-std-alias'"),
+      );
+      expect(aliasViolation?.message).toContain("value form 'npm:@std/'");
+      expect(aliasViolation?.message).not.toContain('name form');
+
+      const peerViolation = manifestViolations.find((violation) =>
+        violation.message.includes("'jsr-peer'"),
+      );
+      expect(peerViolation?.message).toContain('peerDependencies');
+      expect(peerViolation?.message).toContain("value form 'jsr:'");
     },
   );
 });

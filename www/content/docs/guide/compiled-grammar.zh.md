@@ -164,17 +164,64 @@ static override styles: StyleSheetLike[] = [`:host { display: block; }`];
 编译模块是数据加一个类。信号、context 与共享常量住在普通 `.ts` 模块里——下方的 `app/islands/lab-context.ts` 模块就是范式——编译模块再导入它们。唯一被承认的语句是岛交付策略。
 
 ```ts
-// app/islands/lab-context.ts —— 普通模块承载模块级状态
-import { createContext, signal } from '@openelement/element';
+// app/islands/lab-context.ts —— 普通模块承载模块级状态，以及编译类自己无法
+// 承载的绑定表（编译字段只允许带初始值的 @property 声明）
+import {
+  consumeContext,
+  createContext,
+  provideContext,
+  releaseConsumedContext,
+  signal,
+  type Signal,
+} from '@openelement/element';
 
 export const labA = signal(0);
 export const LabCtx = createContext<string>(Symbol('lab-ctx'), 'lab-default');
+
+type LabRelease = ReturnType<typeof provideContext>;
+const labReleases = new WeakMap<HTMLElement, LabRelease>();
+
+/** 供给一个值，并且只保留最新的提供者侧释放句柄。 */
+export function provideLab(host: HTMLElement, value: string): void {
+  labReleases.set(host, provideContext(host, LabCtx, value));
+}
+
+/** 恰好一次释放提供者记录；被替换的句柄本身已是 no-op。 */
+export function releaseLab(host: HTMLElement): void {
+  const release = labReleases.get(host);
+  if (!release) return;
+  labReleases.delete(host);
+  release();
+}
+
+interface LabBinding {
+  readonly signal: Signal<string>;
+  readonly unsubscribe: () => void;
+}
+
+const labBindings = new WeakMap<HTMLElement, LabBinding>();
+
+/** 为单个宿主消费最近的提供者，并保存桥接清理。 */
+export function bindLab(host: HTMLElement, apply: (value: string) => void): void {
+  unbindLab(host);
+  const lab = consumeContext<string>(LabCtx, host);
+  const unsubscribe = lab.subscribe(apply);
+  labBindings.set(host, { signal: lab, unsubscribe });
+}
+
+/** 恰好一次释放本地订阅与提供者桥接。 */
+export function unbindLab(host: HTMLElement): void {
+  const binding = labBindings.get(host);
+  if (!binding) return;
+  labBindings.delete(host);
+  binding.unsubscribe();
+  releaseConsumedContext(binding.signal);
+}
 ```
 
 ```tsx
 import { defineIslandConfig } from '@openelement/router';
-import { consumeContext, element, OpenElement, property } from '@openelement/element';
-import { LabCtx, labA } from './lab-context.ts';
+import { element, OpenElement, property } from '@openelement/element';
 
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
 
@@ -189,12 +236,12 @@ export default class ElementLab extends OpenElement {
 }
 ```
 
-context 沿着同一条接缝端到端工作。普通模块持有令牌；提供者元素在 `connectedCallback` 里供给值；消费者用 `consumeContext` 读取最近的提供者，并把值复制进一个 `@property`。下面两个元素都是 island，各自携带与上方 `element-lab` 相同的 `defineIslandConfig` 声明——页作用域组件永远不会在浏览器里运行生命周期代码（见 [Islands 与 SSR](/zh/guide/islands-and-ssr)）。
+context 沿着同一条接缝端到端工作。普通模块持有令牌；提供者元素在 `connectedCallback` 里供给值，并保存 `provideContext` 返回的释放句柄；消费者用 `consumeContext` 读取最近的提供者，并把值复制进一个 `@property`。每次 provide 都会替换该宿主在该 key 上的记录，因此 `provideLab` 只保留最新句柄（被替换的句柄已是 no-op），`releaseLab` 在 `disconnectedCallback` 里释放当前记录——提供者的请求监听器被摘掉，重新连接也不会新增监听器。在消费者一侧，桥接归消费者所有：保存它，并在 `disconnectedCallback` 里用 `unbindLab` 释放——`releaseConsumedContext` 会断开提供者一侧，因此断开连接的消费者不会再收到更新，重复连接也不会新增第二条桥接。下面两个元素都是 island，各自携带与上方 `element-lab` 相同的 `defineIslandConfig` 声明——页作用域组件永远不会在浏览器里运行生命周期代码（见 [Islands 与 SSR](/zh/guide/islands-and-ssr)）。
 
 ```tsx
-// app/islands/lab-provider.tsx —— 提供者持有值
-import { element, OpenElement, property, provideContext } from '@openelement/element';
-import { LabCtx } from './lab-context.ts';
+// app/islands/lab-provider.tsx —— 提供者持有值及其释放句柄
+import { element, OpenElement, property } from '@openelement/element';
+import { provideLab, releaseLab } from './lab-context.ts';
 
 @element('lab-provider', { root: 'shadow-open' })
 export default class LabProvider extends OpenElement {
@@ -203,12 +250,18 @@ export default class LabProvider extends OpenElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    provideContext(this, LabCtx, this.lab);
+    provideLab(this, this.lab);
+  }
+
+  override disconnectedCallback(): void {
+    releaseLab(this);
+    super.disconnectedCallback();
   }
 
   pick(): void {
     this.lab = 'lab-a';
-    provideContext(this, LabCtx, this.lab);
+    // 替换已保存的句柄；提供者监听器始终只有一个。
+    provideLab(this, this.lab);
   }
 
   render() {
@@ -218,9 +271,9 @@ export default class LabProvider extends OpenElement {
 ```
 
 ```tsx
-// 消费者把最近提供者的值复制进一个 @property
-import { consumeContext, element, OpenElement, property } from '@openelement/element';
-import { LabCtx } from './lab-context.ts';
+// 消费者每次连接只绑定一次，并在断开时释放桥接
+import { element, OpenElement, property } from '@openelement/element';
+import { bindLab, unbindLab } from './lab-context.ts';
 
 @element('lab-readout', { root: 'shadow-open' })
 export default class LabReadout extends OpenElement {
@@ -229,9 +282,12 @@ export default class LabReadout extends OpenElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    const lab = consumeContext<string>(LabCtx, this);
-    this.lab = lab.value;
-    lab.subscribe((next) => { this.lab = next; });
+    bindLab(this, (value) => { this.lab = value; });
+  }
+
+  override disconnectedCallback(): void {
+    unbindLab(this);
+    super.disconnectedCallback();
   }
 
   render() {
@@ -240,7 +296,7 @@ export default class LabReadout extends OpenElement {
 }
 ```
 
-订阅再复制的形态是文法本身决定的：`computed(...)` 字段只能读取 `this.<已声明的属性>`，而消费到的信号不是属性——因此消费者把提供者的更新复制进属性，编译 Part 读取的是那个属性。
+订阅再复制的形态是文法本身决定的：`computed(...)` 字段只能读取 `this.<已声明的属性>`，而消费到的信号不是属性——因此消费者把提供者的更新复制进属性，编译 Part 读取的是那个属性。桥接表与提供者句柄表都住在普通模块里，因为编译类不能携带私有状态字段；`unbindLab` 同时释放本地订阅与消费者桥接，而 `provideLab`/`releaseLab` 让提供者在重复 provide 与重连之间始终只有一个请求监听器。
 
 ```text
 // 拒绝：模块顶层的 signal()/createContext() —— OEC9008

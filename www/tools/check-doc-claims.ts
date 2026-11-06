@@ -24,6 +24,9 @@
  *  10. description budget    -> POLICY (a declared bound, not a fact): the
  *      frontmatter `lede` is the meta description, and search snippets are
  *      budgeted at 160 characters.
+ *  11. policy ban phrases    -> POLICY: literal wording a retired decision
+ *      forbids (P-1/P-5 promise no class API compatibility). These are exact
+ *      tokens, not narrative judgements; ADR history is outside the corpus.
  *
  * Everything else is narrative — comparisons, design rationale, cost stories,
  * benchmark prose, "why" sentences. Narrative is NOT checked here and the
@@ -39,6 +42,14 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
+import { CI_QUALIFICATION_JOBS } from '../../tools/repo/ci-qualification.ts';
+import {
+  parseVpRunForm,
+  VP_FAIL_IF_NO_MATCH,
+  VP_FILTER,
+  VP_NO_CACHE,
+  vpRunSpecifier,
+} from '../../tools/repo/vp-run-form.ts';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -64,7 +75,7 @@ export const NARRATIVE_CLASSES: ReadonlyArray<{ name: string; why: string }> = [
   },
   {
     name: 'roadmap and maturity statements',
-    why: 'future intent is a plan, not a fact; the roadmap page derives its version rows from release-state',
+    why: 'future intent is a plan, not a fact; the roadmap page derives its version rows from release-state — except literal banned policy phrases, which rule `compat-promise` decides as tokens',
   },
   {
     name: 'API semantics and examples',
@@ -103,7 +114,8 @@ export type ClaimRule =
   | 'path'
   | 'parity'
   | 'lede'
-  | 'measured';
+  | 'measured'
+  | 'compat-promise';
 
 export const ALLOWLIST: readonly AllowEntry[] = [
   {
@@ -439,11 +451,14 @@ export function allWorkflowJobs(root: string): Set<string> {
   return jobs;
 }
 
-/** The release train's required qualification job ids, read from its own check. */
-export function requiredCiJobs(root: string): string[] {
-  const text = readFileSync(join(root, '.github/workflows/autoflow-release.yml'), 'utf8');
-  const match = /--arg required "([^"]+)"/.exec(text);
-  return match ? match[1]!.split(/\s+/).filter(Boolean) : [];
+/**
+ * The release train's required qualification job ids. They come from the one
+ * shared contract (tools/repo/ci-qualification.ts), which the release workflow
+ * consumes and the tools tests re-derive from autoflow-ci.yml; the docs and the
+ * publish path therefore cannot be checking different lists.
+ */
+export function requiredCiJobs(_root: string): string[] {
+  return CI_QUALIFICATION_JOBS.map((job) => job.id);
 }
 
 export function readAuthorities(root: string = repoRoot): Authorities {
@@ -799,7 +814,14 @@ const TASK_TOKEN = /^[A-Za-z@][\w@./:-]*$/;
  * template's scripts: a doc may legitimately describe a generated project's
  * `dev`/`build` (its scripts are manager-neutral) or a workspace task, and the
  * rule's job is to catch the task that no longer exists anywhere — a renamed or
- * retired command. It deliberately does not police WHICH package a page meant.
+ * retired command.
+ *
+ * The `vp run` form is read by the same parser the contract checks use
+ * (`tools/repo/vp-run-form.ts`), because the package-qualified executable form
+ * is `--filter`-based: `vp run --no-cache --fail-if-no-match --filter <pkg>
+ * <task>`. A filter selection must resolve its task in THAT package, and the
+ * internal `pkg#task` specifier is a form defect (vp exits 0 without running it
+ * when the package does not resolve) rather than a task name to look up.
  */
 export function checkCommands(files: Map<string, string>, corpus: Corpus): Finding[] {
   const findings: Finding[] = [];
@@ -829,13 +851,71 @@ export function checkCommands(files: Map<string, string>, corpus: Corpus): Findi
       const head = words[0];
 
       if (head === 'vp' && words[1] === 'run') {
-        const rest = words.slice(2).filter((word) => !word.startsWith('-'));
-        const task = rest.find((word) => TASK_TOKEN.test(word));
+        const form = parseVpRunForm(words.slice(2));
+        const specifier = vpRunSpecifier(form);
+        if (specifier !== undefined) {
+          push(
+            file,
+            text,
+            index,
+            'task-command',
+            value,
+            `uses the internal gate-step specifier "${specifier}": vp exits 0 without running it ` +
+              `when the package does not resolve and ${VP_FAIL_IF_NO_MATCH} is inert on it — ` +
+              `write the executable form "vp run ${VP_NO_CACHE} ${VP_FAIL_IF_NO_MATCH} ${VP_FILTER} <pkg> <task>"`,
+          );
+          continue;
+        }
+        if (form.filterRequested) {
+          if (form.filter === undefined) {
+            push(
+              file,
+              text,
+              index,
+              'task-command',
+              value,
+              `selects with ${VP_FILTER} but names no package`,
+            );
+            continue;
+          }
+          const packageName = form.filter;
+          const task = form.positionals[0];
+          if (task === undefined) {
+            push(
+              file,
+              text,
+              index,
+              'task-command',
+              value,
+              `selects "${packageName}" with ${VP_FILTER} but names no task`,
+            );
+            continue;
+          }
+          const scripts = a.scriptsByPackage.get(packageName);
+          if (scripts === undefined) {
+            push(
+              file,
+              text,
+              index,
+              'task-command',
+              value,
+              `${VP_FILTER} selects "${packageName}", which is not a workspace package name`,
+            );
+          } else if (!scripts.has(task)) {
+            push(
+              file,
+              text,
+              index,
+              'task-command',
+              value,
+              `runs "${task}" in ${packageName}, which declares no such script. Known: ${[...scripts].sort().join(', ')}`,
+            );
+          }
+          continue;
+        }
+        const task = form.positionals.find((word) => TASK_TOKEN.test(word));
         if (task === undefined) continue;
-        const known = task.includes('#')
-          ? packageHasTask(task.split('#')[0]!, task.split('#')[1]!)
-          : hasTask(task);
-        if (!known) {
+        if (!hasTask(task)) {
           push(
             file,
             text,
@@ -1290,6 +1370,60 @@ export interface CheckInput {
   measuredPages?: string[];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Policy bans — literal wording a retired decision forbids.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * P-1/P-5 (ADR-0173) retire the Class/Decorator authoring API with NO
+ * compatibility adapter. A public page promising continued compatibility or
+ * "no rewrite needed" contradicts approved policy; the wording is a literal
+ * token, not a narrative judgement. ADRs are outside the covered corpus, so
+ * their historical text stays untouched.
+ */
+export const BANNED_COMPAT_PHRASES: ReadonlyArray<{ pattern: RegExp; why: string }> = [
+  {
+    pattern: /(?:旧|已有|现有)\s*class[^\n。；]{0,40}(?:继续兼容|保留兼容|无需(?:立即)?重写)/g,
+    why: 'P-1/P-5 retire the class API; no compatibility period is offered',
+  },
+  {
+    pattern: /class\s*(?:作者\s*)?API[^\n。；]{0,16}(?:继续兼容|保留兼容|提供兼容层|保留兼容期)/g,
+    why: 'no compatibility adapter is built for the retired class API',
+  },
+  {
+    pattern:
+      /class\s+(?:authoring\s+)?API[^\n.]{0,48}(?:remains compatible|compatibility adapter|no rewrite needed)/gi,
+    why: 'English pages must not promise class API compatibility either',
+  },
+  {
+    pattern: /(?:existing|old|legacy)\s+class\s+users?[^\n.]{0,64}rewrite/gi,
+    why: 'P-1/P-5 offer no migration window; "no rewrite needed" promises one',
+  },
+  {
+    pattern:
+      /compatible\s+(?:old|legacy)\s+classes|Lit\s+compatibility\s+(?:stays|remains|is)\s+maintained/gi,
+    why: 'no old-class or Lit compatibility lane survives the approved retirements',
+  },
+];
+
+export function checkCompatPromises(files: Map<string, string>): Finding[] {
+  const findings: Finding[] = [];
+  for (const [file, text] of files) {
+    for (const { pattern, why } of BANNED_COMPAT_PHRASES) {
+      for (const match of text.matchAll(pattern)) {
+        findings.push({
+          rule: 'compat-promise',
+          file,
+          line: lineOf(text, match.index ?? 0),
+          value: match[0],
+          message: `banned compatibility promise "${match[0]}" — ${why}`,
+        });
+      }
+    }
+  }
+  return findings;
+}
+
 export function checkDocClaims(input: CheckInput): Finding[] {
   const corpus: Corpus = {
     authorities: {
@@ -1319,6 +1453,7 @@ export function checkDocClaims(input: CheckInput): Finding[] {
     ...checkLedeBudget(files, corpus),
     ...checkPackageCounts(files, corpus),
     ...checkMeasuredCoverage(files, corpus, input.measuredPages ?? []),
+    ...checkCompatPromises(files),
   ].sort((left, right) =>
     left.file === right.file ? left.line - right.line : left.file.localeCompare(right.file),
   );

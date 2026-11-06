@@ -3,13 +3,13 @@
  * serve-runtime error codes.
  *
  * Every failure raised by the authoring surface (`definePage`,
- * `defineIslandConfig`), the serve CLI, the island-delivery build pipeline,
- * the Document seam, the `.mdx` pipeline, the route/island scanners, the
- * dynamic prerender, and the generated entry's server runtime carries a
- * stable code, a phase and a severity, exactly like the element package's
- * `OpenElementError` contract (decision 0053): a host classifies any failure
- * by its code and the CLI decides what to show without pattern-matching
- * message text.
+ * `defineIslandConfig`), the serve CLI, the optional-peer server adapters,
+ * the island-delivery build pipeline, the Document seam, the `.mdx` pipeline,
+ * the route/island scanners, the dynamic prerender, and the generated entry's
+ * server runtime carries a stable code, a phase and a severity, exactly like
+ * the element package's `OpenElementError` contract (decision 0053): a host
+ * classifies any failure by its code and the CLI decides what to show without
+ * pattern-matching message text.
  *
  * Phase follows the surface that raises the code: `validation` for the
  * authoring descriptors and the Document head contract (each one rejects an
@@ -69,6 +69,28 @@ export const IslandErrorCode = {
 export const ServeErrorCode = {
   /** `--mode` is missing a value or names an unknown mode. */
   MODE: 'OE_SERVE_MODE',
+} as const;
+
+/**
+ * Stable codes for the optional-peer server adapters (`vite/dev-server.ts`
+ * and `hono-adapter.ts`). Phase `ssr`: the adapter cannot mount or serve until
+ * the peer is installed, and the caller classifies the missing peer by code
+ * while the original resolution failure stays on `cause`.
+ */
+export const AdapterErrorCode = {
+  /** Dev mode was requested without `@hono/vite-dev-server` installed. */
+  HONO_DEV_SERVER_MISSING: 'OE_ADAPTER_HONO_DEV_SERVER_MISSING',
+  /**
+   * `@hono/vite-dev-server` resolved but its module threw while loading
+   * (a broken install, a failing transitive import, or module evaluation
+   * throwing). Distinct from MISSING so a host does not tell the user to
+   * install a package that is already present.
+   */
+  HONO_DEV_SERVER_LOAD_FAILED: 'OE_ADAPTER_HONO_DEV_SERVER_LOAD_FAILED',
+  /** The Hono adapter was imported without the optional `hono` peer installed. */
+  HONO_MISSING: 'OE_ADAPTER_HONO_MISSING',
+  /** `hono` resolved but its module threw while loading. */
+  HONO_LOAD_FAILED: 'OE_ADAPTER_HONO_LOAD_FAILED',
 } as const;
 
 /**
@@ -515,11 +537,95 @@ export function buildError(
  * surfaces. The message text is carried verbatim from the raising site —
  * the wire frames and the CLI keep matching on it.
  */
-export function serveError(code: string, message: string): OpenElementError {
+export function serveError(
+  code: string,
+  message: string,
+  options: { cause?: Error } = {},
+): OpenElementError {
   return new OpenElementError(message, {
     code,
     phase: 'ssr',
     severity: 'error',
     recoverable: false,
+    ...(options.cause ? { cause: options.cause } : {}),
   });
+}
+
+/** The one marker a diagnostic emits when a thrown value has no safe text form. */
+export const UNPRINTABLE_ERROR = '<unprintable error>';
+
+/**
+ * Describe an arbitrary thrown value for a diagnostic without ever throwing.
+ *
+ * An `Error` message is preferred (it is the producer's own text); a
+ * null-prototype throwable or an object whose `toString` throws would make a
+ * bare `String(value)` throw a SECOND time from inside the catch that is
+ * reporting the first failure, so both the message read and the fallback
+ * coercion are guarded. The last resort is {@linkcode UNPRINTABLE_ERROR} —
+ * diagnostics must degrade, never break the stream or the CLI exit path.
+ */
+export function describeError(value: unknown): string {
+  try {
+    if (value instanceof Error) {
+      const message: unknown = value.message;
+      if (typeof message === 'string' && message !== '') return message;
+    }
+  } catch {
+    // A hostile `message` getter (or a throwing Symbol.hasInstance) falls
+    // through to the safe coercion below.
+  }
+  try {
+    return String(value);
+  } catch {
+    return UNPRINTABLE_ERROR;
+  }
+}
+
+/**
+ * Coerce an arbitrary catch value to the `Error` a `cause` field accepts,
+ * preserving the original value on `cause` and never invoking a hostile
+ * `toString` without a guard.
+ */
+export function errorCause(value: unknown): Error {
+  if (value instanceof Error) return value;
+  return new Error(describeError(value), { cause: value });
+}
+
+/**
+ * Whether a failed dynamic import means the OPTIONAL PEER ITSELF is not
+ * installed.
+ *
+ * Node reports `ERR_MODULE_NOT_FOUND` for any unresolved specifier, including
+ * a transitive dependency missing from an installed peer. Only a cause that
+ * names the peer's own specifier in quotes is the "install this package"
+ * condition; everything else is an installed-but-broken peer
+ * ({@linkcode AdapterErrorCode.HONO_LOAD_FAILED} and friends). The cause chain
+ * is walked because ESM loaders and test runners may wrap the resolution
+ * failure; a hostile `code`/`message`/`cause` accessor simply classifies as
+ * not-missing.
+ */
+export function isMissingPeerError(cause: unknown, specifier: string): boolean {
+  let current: unknown = cause;
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (current === null || current === undefined) return false;
+    let code: unknown;
+    let message: unknown;
+    try {
+      const record = current as { code?: unknown; message?: unknown; cause?: unknown };
+      code = record.code;
+      message = record.message;
+    } catch {
+      return false;
+    }
+    if (code === 'ERR_MODULE_NOT_FOUND') {
+      if (typeof message !== 'string') return true;
+      return message.includes(`'${specifier}'`) || message.includes(`"${specifier}"`);
+    }
+    try {
+      current = (current as { cause?: unknown }).cause;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }

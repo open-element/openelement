@@ -1,6 +1,6 @@
 # ADR-0173: Component execution and composition
 
-- Status: ACCEPTED / AMENDED (2026-11-03, semantic prerequisites; implementation pending)
+- Status: ACCEPTED / AMENDED (2026-11-03, semantic prerequisites and fourth-pass class-authoring retirement approved; implementation pending)
 - Amends: ADR-0143; principles P1 and P5
 - Related: ADR-0148, ADR-0157, ADR-0174
 
@@ -71,6 +71,11 @@ renderer. Retire it only after required capability coverage, real consumer
 migration and release qualification; no fixed deletion version or forced
 immediate rewrite is set. Client executor retirement and author-class retirement
 are separate decisions.
+
+*(SUPERSEDED HISTORY, 2026-11-03: the fourth-pass amendment below retires the
+Class authoring API and builds no adaptation boundary. The paragraph above is
+retained as the record of the earlier D-O3 decision; the two retirement tracks
+remain separate decisions.)*
 
 ## Alternatives, costs and qualification
 
@@ -156,7 +161,10 @@ of these slices has been implemented or verified by this amendment.
 - [Solid onMount](https://docs.solidjs.com/reference/lifecycle/on-mount)
 - [Solid onCleanup](https://docs.solidjs.com/reference/lifecycle/on-cleanup)
 
-## Amendment (2026-11-03, owner-approved): long-lived class adapter
+## Amendment (2026-11-03, owner-approved): long-lived class adapter — **SUPERSEDED HISTORY**
+
+Status: **SUPERSEDED 2026-11-03** by the fourth-pass amendment below. Retained as
+the record of D-O3; it is not current guidance.
 
 The owner approved retaining the Class/decorator API through a long-lived
 compatibility adapter (D-O3). Class and function authoring share one semantic
@@ -176,17 +184,25 @@ explicit API says otherwise.
 Status: **APPROVED 2026-11-03.** This supersedes the "long-lived class adapter"
 amendment above; that amendment remains readable as history.
 
-The fourth-pass reassessment proposes retiring the public Class/Decorator
-authoring API instead of retaining a long-lived compatibility adapter: authors
-would use function components only, native Custom Elements would remain the
-public platform boundary, and the compiler would still emit a native element
-class internally where the platform requires one. No compatibility adapter would
-be built.
+**Decision.** The public Class/Decorator authoring API is retired rather than
+retained behind a long-lived compatibility adapter; the owner approved this on
+2026-11-03. Authors use function components only, native Custom Elements remain
+the public platform boundary, and the compiler still emits an internal element
+class where the platform requires one. No compatibility adapter is built. This
+is policy, not implementation evidence: the class path still ships and no slice
+is verified by this record.
 
-Evidence behind the proposal: 219 in-tree files use `@element(`; the class-shaped
-compiler frontend is the only one that exists; external adoption is unknown
-(monthly downloads small but non-zero, no verified downstream consumer). Full
-analysis: [fourth-pass reassessment](../architecture/alpha16-18-fourth-pass-reassessment.md).
+Evidence recorded when the decision was taken: at the 2026-11-03 baseline, 219
+in-tree files were recorded as matching `@element(` — a historical size metric,
+not a current precise count — and the class-shaped compiler frontend is the only
+one that exists. The 2026-11-03 download measurement found monthly downloads
+small but non-zero and no verified downstream consumer; that is a **measurement
+result**, recorded as external adoption **unknown**, not proven absent. It is a
+different fact from the owner declaration of 2026-11-03 that **no external users
+exist** — all npm downloads are CI and the owner's own pulls. The declaration is
+owner testimony, not telemetry, and it supersedes the "unknown" reading for this
+decision. Full analysis:
+[fourth-pass reassessment](../architecture/alpha16-18-fourth-pass-reassessment.md).
 
 The invariant that does not change: one semantic model, one generated execution
 backend, never two execution architectures. Native Custom Elements stay a

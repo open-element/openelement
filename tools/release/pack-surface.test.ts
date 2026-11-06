@@ -14,6 +14,7 @@ import {
   findModuleScopeSeamInstalls,
   findUndocumentedSubpaths,
   type PackSurfaceViolation,
+  partitionViolations,
   scanPackedPackage,
 } from './pack-surface.ts';
 import { packedMetadata } from './npm-manifest.ts';
@@ -136,7 +137,7 @@ test('pack surface: ui declares the packaged Custom Elements Manifest', () => {
   expect(packedMetadata('@openelement/element').customElements).toBeUndefined();
 });
 
-test('pack surface: repository-internal paths and ADR citations fail', () => {
+test('pack surface: repository-internal paths and ADR citations are reported as advisories', () => {
   const cases: Array<[string, string]> = [
     ['comment', '// see packages/router/src/authoring.ts for the contract'],
     ['task', 'Regenerate with: deno task --cwd packages/ui generate:ui-manifest'],
@@ -161,9 +162,38 @@ test('pack surface: repository-internal paths and ADR citations fail', () => {
   ];
   for (const [label, line] of cases) {
     const violations = findInternalReferences('@openelement/element', 'src/index.js', line);
-    expect(violations.length, `${label} must fail: ${line}`).toEqual(1);
+    expect(violations.length, `${label} must be reported: ${line}`).toEqual(1);
     expect(violations[0].line).toEqual(1);
+    expect(violations[0].severity).toEqual('advisory');
+    expect(partitionViolations(violations)).toEqual({ blocking: [], advisory: violations });
   }
+});
+
+test('pack surface: only consumer contracts block; text hygiene stays advisory', () => {
+  // The #1708 failure class: a correct JSDoc comment mentioning a decision
+  // record must be visible, but must not stop a PR push.
+  const adr = findInternalReferences(
+    '@openelement/element',
+    'src/index.js',
+    'compiled authoring (ADR-0143)',
+  );
+  expect(adr).toHaveLength(1);
+  expect(partitionViolations(adr)).toEqual({ blocking: [], advisory: adr });
+
+  // A consumer-facing contract has no severity override: it stays blocking.
+  const contract = findMetadataViolations(
+    '@openelement/element',
+    manifest('@openelement/element', { homepage: 'https://wrong.example' }),
+    ELEMENT_METADATA,
+  );
+  expect(contract.length).toBeGreaterThan(0);
+  expect(contract[0].severity).toBeUndefined();
+  expect(partitionViolations(contract).blocking).toEqual(contract);
+
+  // Mixed input: only the contract stops the run.
+  const mixed = partitionViolations([...adr, ...contract]);
+  expect(mixed.blocking).toEqual(contract);
+  expect(mixed.advisory).toEqual(adr);
 });
 
 test('pack surface: ordinary prose and package-relative paths pass', () => {

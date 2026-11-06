@@ -108,18 +108,30 @@ HTTP 语义绝不静默降级。表单无 JavaScript 可用；GET 缓存语义�
 
 ## P5 — 为删除而设计
 
-每一层都必须可删。兼容仅限部署边界，唯一例外是ADR-0173明确规定的旧class作者迁移临时适配：
-通过唯一适配点共享后端与Signals，不建立第二renderer；退休要求能力覆盖、真实
-迁移与发布资格，不设强制立即重写或固定删除版本。每个 shim
-落地时必须写明退役条件。
+每一层都必须可删。兼容仅限部署边界。每个 shim 落地时必须写明退役条件。
+
+**APPROVED TARGET（2026-11-03）：** 公共 Class/Decorator 作者 API 退役，且
+**不为其构建兼容适配器**（ADR-0173 第四次修订）。原生 Custom Elements 仍是
+公共平台边界；平台要求元素时，编译器仍可在内部生成 class。**CURRENT FACT：**
+class 作者路径目前仍在交付；批准不等于实现证据。
+
+退役受证据约束：替代必须覆盖被退役能力清单——是语义，而不只是 API
+名称——必要能力不得推迟到后续产品化里程碑。
+
+**SUPERSEDED HISTORY（2026-11-03，D-O3）：** 本条早期版本带有一个旧 class
+作者迁移临时例外——通过唯一适配点保留既有 class 作者，共享后端与 Signals，
+不建立第二 renderer；只在能力覆盖、真实迁移与发布资格满足后退役，不设强制
+立即重写或固定删除版本。该例外已被批准的第四次修订取代；适配器不存在，
+也不在计划内。见
+[ADR-0173 第四次修订](../adr/ADR-0173-component-execution-and-composition.md#superseding-amendment-2026-11-03-fourth-pass--approved)。
 
 引用：[The Extensible Web Manifesto][ewm]；
 [Write code that is easy to delete, not easy to extend][tef]。
 
 本仓实践：Nitro mount 被关在 `dist/server` 出口，对应用代码不可见；
 字符串拼接的 script 注入器与 `Function.toString()` 配置序列化被直接
-删除而非包上兼容层（Alpha 允许破坏性清理）；退役的 ADR 留在 Git
-历史中，而不是另建平行文档。
+删除而非包上兼容层（Alpha 允许破坏性清理）；Class 作者 API 退役且不建
+兼容适配器（ADR-0173）；退役的 ADR 留在 Git 历史中，而不是另建平行文档。
 
 判别问句：_平台明天原生支持了这个，我们具体删什么、应用代码动几行？
 答不出 → 这个抽象不该存在。_

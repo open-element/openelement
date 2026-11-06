@@ -3,6 +3,11 @@
 Date: 2026-11-03. Status: **APPROVED POLICY / NOTHING MAY BE DELETED FROM THIS LIST
 ALONE**. Baseline: `4f1f2001b24909086f7e7efe9e5016d48d615c91`.
 
+Revision 2026-11-05: the ABI-stamp row and the `__partProgram` consequence text
+are corrected to the approved fourth-pass target (old v2 retires in Alpha16b, the
+new ABI is compatibility-checked in Alpha16b, freeze is Alpha17). The D-O2 KEEP
+reading is retained only as SUPERSEDED HISTORY.
+
 Actions: **KEEP**, **REFACTOR**, **REPLACE**, **RETIRE AFTER QUALIFICATION**,
 **OUT OF SCOPE**, **NEEDS FURTHER INVESTIGATION**.
 
@@ -14,10 +19,10 @@ listed as "not fully traced" is INVESTIGATE, not deletable.
 | Item / path | Current responsibility | Actual consumers | Target responsibility | Action | Blockers / dependencies | Exit criteria |
 | --- | --- | --- | --- | --- | --- | --- |
 | `semantic-core/parse-module.ts` + `typescriptParser` | one TS parse helper | compile lane, server-component lane, CSS/class scans | keep as the parse helper; stop calling it backend-neutral | KEEP | none | wording corrected (done); no behavioural change |
-| `semantic-core/analyze-module.ts` | class/module shape analysis | compile lane only | function-first frontend; class frontend retires | REFACTOR (class frontend RETIRE, approved) | Full TSX admission; M03 parity on diagnostics/spans | function adapter matches the Alpha15 diagnostic/Source Map/security baseline |
+| `semantic-core/analyze-module.ts` | class/module shape analysis | compile lane only | function-first frontend; class frontend retires | REFACTOR (class frontend RETIRE, approved) | Full TSX admission; M03 parity on diagnostics/spans | function frontend matches the Alpha15 diagnostic/Source Map/security baseline |
 | `semantic-core/lower-program.ts` (1689 lines) | restricted JSX → program tree | compile lane | admit fragments/multi-root/value-position JSX; keep one walk | REFACTOR | per-case contract; S1 slice | new admissions land with diagnostics + negatives in the same change |
 | `semantic-core/emit-program.ts` | assemble + validate program | compile lane | keep validation; add metadata split | REFACTOR | D-O2 | metadata/execution split decided |
-| `semantic-core/emit-module.ts` | emit module with `__partProgram` JSON | generated modules, Element runtime, SSR, Router build/runtime consumers | add generated client/server code paths; keep JSON until proven | REFACTOR | codegen ABI | generated output measured, not assumed smaller |
+| `semantic-core/emit-module.ts` | emit module with `__partProgram` JSON | generated modules, Element runtime, SSR, Router build/runtime consumers | add generated client/server code paths; keep JSON only until the replacement evidence, then retire it in Alpha16b | REFACTOR | codegen ABI; M10 | generated output measured; old JSON removed with M10 |
 | `semantic-core/server-component.ts` | server function components → string calls | client build + SSG build | extend (locals, async policy, composition) | REFACTOR | server semantics decision | async rule decided and documented |
 | `compiler-diagnostics.ts` + OEC codes | source-located diagnostics | every compile consumer | add codes for new admissions | KEEP | none | catalogue generator covers new codes (currently misses two sources) |
 | `source-map.ts` | Source Map v3 | compiler, dev tooling | extend to generated code | KEEP | none | generated code maps to authored TSX |
@@ -44,8 +49,8 @@ listed as "not fully traced" is INVESTIGATE, not deletable.
 | Item / path | Current responsibility | Actual consumers | Target responsibility | Action | Blockers | Exit criteria |
 | --- | --- | --- | --- | --- | --- | --- |
 | `protocol/part-program.ts` types + `validatePartProgram` | structural contract + validator | compiler, element, router, tooling | **RETIRE (approved)** with the browser protocol; server keeps a private structure | RETIRE (approved) | all consumers migrated; M01 ABI design | no production consumer reads the schema |
-| `PART_PROGRAM_VERSION` / `COMPILED_MODULE_ABI_VERSION` | format + ABI stamps | generated modules, stream identity | version generated-module ABI separately | REFACTOR | ABI design | mismatch rejected early with actionable diagnostics |
-| `__partProgram` static (emitted field carrying Part Program v2) | browser execution route + SSR input + Router/stream identity + CSS recovery | see the consumer map in [current reality](./alpha16-18-current-reality.md#c-bis-__partprogram-production-consumer-map) | metadata/identity remains; browser-execution use retires with the generic executor | **REFACTOR (staged)** | D-O2 approved; two lexical consumers must migrate with any field-shape change | every production consumer migrated to metadata/ABI or explicitly retained, with its exit condition met |
+| `PART_PROGRAM_VERSION` / `COMPILED_MODULE_ABI_VERSION` | format + ABI stamps | generated modules, stream identity | old v2 stamps retire with the schema; the new ABI's own version is compatibility-checked in Alpha16b and frozen only in Alpha17 | RETIRE (approved P-3/P-4) | ABI design; packed-consumer evidence for the freeze | mismatch rejected early; old v2 consumers migrated |
+| `__partProgram` static (emitted field carrying Part Program v2) | browser execution route + SSR input + Router/stream identity + CSS recovery | see the consumer map in [current reality](./alpha16-18-current-reality.md#c-bis-__partprogram-production-consumer-map) | **removed from the target production contract**; replaced by the narrow ABI, with tag/property metadata as separate facts | **RETIRE (approved, staged)** | P-3; every consumer migrates with M10 evidence; two lexical consumers must migrate with any field-shape change | every production consumer migrated to the narrow ABI or explicitly retained server-private structure, with its exit condition met |
 | `protocol/src/index.ts` public export of the program module | public surface | no external users (owner-declared) | retires with the protocol; a new ABI subpath arrives in Alpha17 | RETIRE (approved P-2/P-4) | release note + migration statement | retired export documented in the breaking release |
 
 `__partProgram` is the highest-risk row in this inventory. It is a compiler
@@ -64,9 +69,15 @@ Everything else accesses the property at runtime. An earlier draft of this
 inventory described the Router check in `authoring.ts:441-445` as lexical; it is
 a **runtime property-presence check** and has been corrected.
 
-Consequence: retiring the old generic browser executor does **not** delete the
-Part Program, its validator, the emitted field, the tag/version metadata, the
-server serializer or the streaming program data.
+**SUPERSEDED HISTORY (D-O2):** an earlier revision said retiring the old generic
+browser executor does **not** delete the Part Program, its validator, the emitted
+field, the tag/version metadata, the server serializer or the streaming program
+data. That described the ADR-0174 release gate only. The approved fourth-pass
+policy (P-2/P-3/P-4) separately requires Part Program v2, `validatePartProgram`,
+`PART_PROGRAM_VERSION` and `__partProgram` to leave the **target production
+contract** in Alpha16b, replaced by the narrow ABI. The server keeps a
+server-private structure, not the old shared schema. The gate and the retirement
+policy remain two obligations.
 
 ## Router / full stack
 
@@ -76,7 +87,7 @@ server serializer or the streaming program data.
 | Native renderer integration | selects and renders compiled components | Framework Mode | keep; extend to generated backend | KEEP | codegen | renderer integration unchanged in contract |
 | Lit renderer (`src/lit.ts`, `lit-ssr.ts`, subpaths, fixture) | first-party Lit pages | Lit users (unknown count) | retire on a separate track | RETIRE AFTER QUALIFICATION (separate) | last-supported version, breaking release, window, security owner, Native parity | ADR-0152 amendment conditions met |
 | Third-party Lit/WC interop | client-only foreign components | users | keep | KEEP | none | no SSR promise made |
-| `authoring.ts` compiled-class detection | routing discriminator | route scanning | migrate to metadata, not presence of execution data | REFACTOR | D-O2 | detection survives the split |
+| `authoring.ts` compiled-class detection | routing discriminator | route scanning | migrate to a Router **build-time page-classification fact**, not an ABI field | REFACTOR | M01 boundary §7 | detection survives the field removal |
 | `island-blocks-scan.ts` source-text detection | builds detection | SSG | migrate to emitted metadata flag | REFACTOR | D-O2 | string scan replaced with a fact |
 | `stream-runtime.ts` identity checks | build skew rejection | streaming | keep | KEEP | ABI change | mismatch diagnostics preserved |
 
@@ -96,8 +107,8 @@ server serializer or the streaming program data.
 This inventory does **not** authorise, in this task or in Alpha16 without its own
 qualification:
 
-1. deleting the Part Program, its validator, or `__partProgram`;
-2. deleting the class/decorator authoring API;
+1. deleting the Part Program, its validator, or `__partProgram` before the §4 evidence (the retirement itself is approved);
+2. deleting the class/decorator authoring API before the roadmap capability gate;
 3. deleting the Lit renderer or its subpaths;
 4. removing installation seams because they "look obsolete";
 5. changing package exports, dependencies, versions or release artifacts;

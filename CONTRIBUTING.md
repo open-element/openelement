@@ -62,8 +62,8 @@ Use public package boundaries rather than private workspace imports. Prefer Web 
 ## Task map
 
 The root `package.json` scripts are the task surface (`pnpm run <task>`); workspace tasks dispatch
-package-qualified through the vp CLI (`vp run <@scope/pkg>#<task>`), which resolves by exact
-package name:
+package-qualified through the vp CLI (`vp run --no-cache --fail-if-no-match --filter <@scope/pkg> <task>`),
+which selects by exact package name:
 
 | Task                                          | Purpose                                                                                                   |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -71,12 +71,12 @@ package name:
 | `test`                                        | Full vitest suite across every workspace project (see the Architecture review permission note)            |
 | `test:e2e`                                    | Site build plus browser end-to-end suites (www, router fixtures)                                          |
 | `build`                                       | Build the six public packages (protocol, element, compiler, router, create, ui)                           |
-| `vp run @openelement/tools-release#pack`      | Pack release tarballs through `tools/release`                                                             |
+| `vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack` | Pack release tarballs through `tools/release`                                                            |
 | `verify`                                      | Full repository verification, including SaaS                                                              |
 | `verify:core`                                 | Element/Router Alpha candidate verification (no SaaS steps)                                               |
 | `release:check`                               | Registry check plus the release train (`gate:release`) plus packed qualification plus npm publish dry-run |
 | `site:build` / `site:verify`                  | Build / fully verify the documentation site                                                               |
-| `saas:verify` / `saas:workers`                | The independently governed SaaS application (`vp run @openelement/saas#build` builds it)                  |
+| `saas:verify` / `saas:workers`                | The independently governed SaaS application (`vp run --no-cache --fail-if-no-match --filter @openelement/saas build` builds it) |
 | `clean` / `clean:deep`                        | Remove generated artifacts                                                                                |
 | `bench`                                       | Benchmark self-checks under `benchmarks/` (deterministic assertions, no browsers)                         |
 | `fmt` / `fmt:check` / `lint` / `typecheck`    | Format, lint, and type-check the workspace                                                                |
@@ -122,7 +122,7 @@ Subtask areas: `tools/repo` (gates, release-state checks, coverage, hooks), `too
 node tools/repo/gate.ts <step...>
 ```
 
-A step is a root task name (`check`) or a package-qualified task (`@openelement/tools-repo#release:registry-check`); each step dispatches through `vp run --filter <package> <task>` with `--fail-if-no-match` and caching disabled, so a selector that names no package fails the gate instead of silently skipping. `parseGateStep` (`tools/repo/gate.ts`) rejects the path-shaped `dir#task` selector form (it cannot be dispatched), `..` segments and absolute paths, so steps can never escape the repository.
+A step is a root task name (`check`) or a package-qualified task (`@openelement/tools-repo#release:registry-check`); each step dispatches through `vp run --no-cache --fail-if-no-match --filter <package> <task>`, so a selector that names no package fails the gate instead of silently skipping. `parseGateStep` (`tools/repo/gate.ts`) rejects the path-shaped `dir#task` selector form (it cannot be dispatched), `..` segments and absolute paths, so steps can never escape the repository.
 
 ## Hooks
 
