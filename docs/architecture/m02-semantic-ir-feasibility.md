@@ -14,6 +14,17 @@ has **no** negative case, so only its expressiveness is evidenced. The earlier
 "not exercised by a worked example" wording in §3, §8 and §9 was stale and is
 marked SUPERSEDED HISTORY there.
 
+Revision 2026-11-06: the M02 IR is now consumed by the compiler-private
+leaf-codegen prototype (PR #1709, M05 direction). That prototype is a Class P
+spike: it is **not** a codegen contract and it does not record M05/G1 evidence —
+see [m05-g1-leaf-prototype](./m05-g1-leaf-prototype.md). Two corrections follow
+from that consumption: (1) the IR's attribute channel is a **simplified
+classification**, not a contract (the spike defaulted dynamic attributes to a DOM
+property); the production classification now lives in
+`packages/compiler/src/internal/compiler/semantic-core/attribute-classification.ts`
+and is shared by both consumers; (2) the IR is still not public API and not a wire
+format, but the "not a codegen input" sentence in §2 is amended accordingly.
+
 ## 1. What this slice proves — and what it does not
 
 It proves that a **small IR can express the semantics** of the five approved
@@ -36,7 +47,10 @@ Those are M05–M08.
 | `packages/compiler/__tests__/semantic-ir/invariants.test.ts` | unsupported grammar + malformed IR (negative) |
 
 Nothing is exported from `packages/compiler/src/compiler.ts` or any package
-subpath: the IR is not public API, not a wire format, not a codegen input.
+subpath: the IR is not public API and not a wire format. Since 2026-11-06 it is
+consumed by the compiler-private leaf-codegen prototype (see the revision note
+above and [m05-g1-leaf-prototype](./m05-g1-leaf-prototype.md)); that consumption
+is a Class P spike, so the IR still has no codegen contract.
 
 ## 3. The IR node set (and which nodes the examples actually exercise)
 
