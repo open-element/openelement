@@ -5,10 +5,10 @@
  * emitted text against a minimal DOM. They prove the artifact is concrete DOM
  * instructions rather than a serialized program for a generic interpreter.
  *
- * Out of scope here, asserted as explicit negatives: component refs,
- * conditions, lists, event/ref/key attributes, ownership, claim, SSR and
- * source maps. Property/attribute dynamic values are covered. No production
- * build path consumes this generator yet.
+ * Conditions are covered with static branches (anchor + rebuild on test
+ * change); dynamic nodes inside a branch are an explicit negative. Still out
+ * of scope: component refs, lists, event/ref/key attributes, ownership, claim,
+ * SSR and source maps. No production build path consumes this generator yet.
  */
 
 import { describe, expect, test } from 'vitest';
@@ -76,6 +76,12 @@ class FakeNode {
     const index = this.children.indexOf(child);
     if (index < 0) throw new Error('removeChild: node is not a child');
     this.children.splice(index, 1);
+  }
+
+  insertBefore(node: FakeNode, reference: FakeNode): void {
+    const index = this.children.indexOf(reference);
+    if (index < 0) throw new Error('insertBefore: reference is not a child');
+    this.children.splice(index, 0, node);
   }
 }
 
@@ -223,6 +229,43 @@ describe('G1 slice — dynamic property/attribute values', () => {
   });
 });
 
+describe('G1 slice — conditional branches', () => {
+  const MAYBE =
+    'function Maybe(props) { return <div>{props.ok ? <span>on</span> : <em>off</em>}</div>; }';
+
+  test('emits an anchor, a branch builder and a selector as concrete DOM code', () => {
+    const generated = recipe(MAYBE);
+    expect(generated.module).toContain('document.createTextNode("")');
+    expect(generated.module).toContain('.insertBefore(');
+    expect(generated.module).toContain('document.createElement("span")');
+    expect(generated.module).toContain('document.createElement("em")');
+    expect(generated.module).not.toContain('__partProgram');
+  });
+
+  test('switching the test swaps only the branch DOM, never rebuilding the host', () => {
+    const mount = evaluate(recipe(MAYBE));
+    const host = new FakeNode(null);
+    const instance = mount(host, { props: { ok: true } });
+    const div = host.children[0]!;
+    const tags = () =>
+      div.children.filter((child) => child.tagName !== null).map((child) => child.tagName);
+
+    expect(tags()).toEqual(['span']);
+    expect(div.children.find((c) => c.tagName === 'span')!.children[0]!.nodeValue).toBe('on');
+
+    instance.update({ props: { ok: false } });
+    expect(tags()).toEqual(['em']);
+    expect(div.children.find((c) => c.tagName === 'em')!.children[0]!.nodeValue).toBe('off');
+    expect(host.children[0]).toBe(div);
+
+    instance.update({ props: { ok: true } });
+    expect(tags()).toEqual(['span']);
+
+    instance.dispose();
+    expect(host.children).toHaveLength(0);
+  });
+});
+
 describe('G1 slice — unsupported shapes fail closed', () => {
   function codes(source: string): string[] {
     return generateLeafRecipe(component(source)).diagnostics.map((diagnostic) => diagnostic.code);
@@ -234,14 +277,14 @@ describe('G1 slice — unsupported shapes fail closed', () => {
     expect(result.diagnostics.map((d) => d.code)).toContain('OEIR_LEAF_UNSUPPORTED_NODE');
   });
 
-  test('a condition is refused', () => {
+  test('a dynamic node inside a condition branch is refused', () => {
     const result = generateLeafRecipe(
       component(
-        'function Maybe(props) { return <div>{props.ok ? <span>on</span> : <em>off</em>}</div>; }',
+        'function Maybe(props) { return <div>{props.ok ? <span>{props.n}</span> : <em>off</em>}</div>; }',
       ),
     );
     expect(result.recipe).toBeNull();
-    expect(result.diagnostics.map((d) => d.code)).toContain('OEIR_LEAF_UNSUPPORTED_NODE');
+    expect(result.diagnostics.map((d) => d.code)).toContain('OEIR_LEAF_BRANCH_DYNAMIC');
   });
 
   test('an event attribute is refused', () => {
