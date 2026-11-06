@@ -6,8 +6,9 @@
  * instructions rather than a serialized program for a generic interpreter.
  *
  * Out of scope here, asserted as explicit negatives: component refs,
- * conditions, lists, dynamic attributes, ownership, claim, SSR and source maps.
- * No production build path consumes this generator yet.
+ * conditions, lists, event/ref/key attributes, ownership, claim, SSR and
+ * source maps. Property/attribute dynamic values are covered. No production
+ * build path consumes this generator yet.
  */
 
 import { describe, expect, test } from 'vitest';
@@ -196,6 +197,32 @@ describe('G1 slice — the generated code executes', () => {
   });
 });
 
+describe('G1 slice — dynamic property/attribute values', () => {
+  const FIELDS = 'function Fields(props) { return <input value={props.name} data-x={10} />; }';
+
+  test('tracked properties go into update, snapshots stay at mount', () => {
+    const generated = recipe(FIELDS);
+    expect(generated.module).toContain('e0["value"] = props.name;');
+    expect(generated.module).toContain('e0["data-x"] = 10;');
+    const afterMount = generated.module.slice(generated.module.indexOf('function renderDynamic'));
+    expect(afterMount).toContain('e0["value"] = props.name;');
+    expect(afterMount).not.toContain('e0["data-x"] = 10;');
+  });
+
+  test('update refreshes the tracked property without touching the snapshot', () => {
+    const mount = evaluate(recipe(FIELDS));
+    const host = new FakeNode(null);
+    const instance = mount(host, { props: { name: 'Ada' } });
+    const input = host.children[0] as unknown as Record<string, unknown>;
+
+    expect(input['value']).toBe('Ada');
+    expect(input['data-x']).toBe(10);
+    instance.update({ props: { name: 'Grace' } });
+    expect(input['value']).toBe('Grace');
+    expect(input['data-x']).toBe(10);
+  });
+});
+
 describe('G1 slice — unsupported shapes fail closed', () => {
   function codes(source: string): string[] {
     return generateLeafRecipe(component(source)).diagnostics.map((diagnostic) => diagnostic.code);
@@ -217,10 +244,10 @@ describe('G1 slice — unsupported shapes fail closed', () => {
     expect(result.diagnostics.map((d) => d.code)).toContain('OEIR_LEAF_UNSUPPORTED_NODE');
   });
 
-  test('a dynamic attribute is refused', () => {
-    expect(codes('function Fields(props) { return <input value={props.name} />; }')).toContain(
-      'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
-    );
+  test('an event attribute is refused', () => {
+    expect(
+      codes('function Btn(props) { return <button onClick={props.onClick}>x</button>; }'),
+    ).toContain('OEIR_LEAF_UNSUPPORTED_ATTRIBUTE');
   });
 
   test('a component with no roots is refused', () => {
