@@ -241,7 +241,10 @@ test('the live shim inventory is clean (this is the drift guard, not a smoke tes
     report.violations,
     report.violations.map((violation) => `${violation.line}: ${violation.detail}`).join('\n'),
   ).toEqual([]);
-  expect(report.rowCount).toBeGreaterThanOrEqual(18);
+  // Row 3 was retired on 2026-11-06 when the single-fetch adapter landed; the
+  // live floor is 17. Keep this a drift guard: retiring another row without a
+  // recorded decision must still turn it red.
+  expect(report.rowCount).toBeGreaterThanOrEqual(17);
   expect(report.sectionCount).toBeGreaterThanOrEqual(report.rowCount);
   expect(report.citationCount).toBeGreaterThan(0);
 });

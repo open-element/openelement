@@ -45,10 +45,11 @@
  * deliberately NOT emitted: rolldown 1.0.3 hard-fails it at MISSING_EXPORT,
  * Safari has no CSS module scripts through Safari 27 (#1553 App. C), and
  * webpack silently inlines the CSS back into the JS chunk, breaking the
- * zero-inline guarantee (ADR-0164 App. B/C). The adapter is bundled, so a
- * runtime probe cannot choose between two build-time module shapes; keeping a
- * second generator inert was dead code, not a capability option. See ADR-0164
- * for the recorded support matrix.
+ * zero-inline guarantee. The adapter is bundled, so a runtime probe cannot
+ * choose between two build-time module shapes; keeping a second generator
+ * inert was dead code, not a capability option. The full platform support
+ * matrix is recorded in the island style asset protocol decision record,
+ * which is repository documentation and is not shipped in this package.
  *
  * Neither adapter ever touches `document.head`: the sheet travels to its
  * consumer as a stylesheet object (a shadow root adopts it, a light root
