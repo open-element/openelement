@@ -5,10 +5,11 @@
  * emitted text against a minimal DOM. They prove the artifact is concrete DOM
  * instructions rather than a serialized program for a generic interpreter.
  *
- * Conditions are covered with static branches (anchor + rebuild on test
- * change); dynamic nodes inside a branch are an explicit negative. Still out
- * of scope: component refs, lists, event/ref/key attributes, ownership, claim,
- * SSR and source maps. No production build path consumes this generator yet.
+ * Conditions carry a branch-local refresh closure, so tracked text and
+ * dynamic attributes inside the active branch are refreshed by update; nested
+ * conditions are an explicit negative. Still out of scope: component refs,
+ * lists, event/ref/key attributes, ownership, claim, SSR and source maps. No
+ * production build path consumes this generator yet.
  */
 
 import { describe, expect, test } from 'vitest';
@@ -266,6 +267,97 @@ describe('G1 slice — conditional branches', () => {
   });
 });
 
+describe('G1 slice — dynamic nodes inside a condition branch', () => {
+  const MIXED =
+    'function Maybe(props) { const label = props.label; return <div>{props.ok ? <span>{label} / {props.n}</span> : <em>{props.other}</em>}</div>; }';
+
+  function branchElement(host: FakeNode): FakeNode {
+    const div = host.children[0]!;
+    return div.children.find((child) => child.tagName !== null)!;
+  }
+
+  test('the artifact emits a per-branch refresh closure and calls it after select', () => {
+    const generated = recipe(MIXED);
+    expect(generated.module).toContain('refresh = function () {');
+    expect(generated.module).toContain('= built.refresh;');
+    expect(generated.module).toContain('_refresh();');
+    // Branch text ids are reported as part of the same recipe.
+    expect(generated.trackedTextIds).toHaveLength(2);
+    expect(generated.snapshotTextIds).toHaveLength(1);
+  });
+
+  test('tracked text in the active branch refreshes, snapshots stay at build time', () => {
+    const mount = evaluate(recipe(MIXED));
+    const host = new FakeNode(null);
+    const instance = mount(host, {
+      label: 'L',
+      props: { ok: true, n: 1, other: 'x' },
+    });
+    const span = branchElement(host);
+
+    expect(span.tagName).toBe('span');
+    expect(span.children[0]!.nodeValue).toBe('L');
+    expect(span.children[2]!.nodeValue).toBe('1');
+
+    const snapshotNode = span.children[0]!;
+    const trackedNode = span.children[2]!;
+    instance.update({ label: 'L2', props: { ok: true, n: 2, other: 'y' } });
+    expect(trackedNode.nodeValue).toBe('2');
+    expect(snapshotNode.nodeValue).toBe('L');
+    expect(branchElement(host)).toBe(span);
+  });
+
+  test('switching branches refreshes the newly active branch from current values', () => {
+    const mount = evaluate(recipe(MIXED));
+    const host = new FakeNode(null);
+    const instance = mount(host, {
+      label: 'L',
+      props: { ok: true, n: 1, other: 'x' },
+    });
+    const div = host.children[0]!;
+
+    instance.update({ label: 'L', props: { ok: false, n: 1, other: 'y' } });
+    const em = branchElement(host);
+    expect(em.tagName).toBe('em');
+    expect(em.children[0]!.nodeValue).toBe('y');
+
+    // Rebuilding the consequent evaluates its snapshot again, against the
+    // current values, and refresh sees the newest tracked value.
+    instance.update({ label: 'L2', props: { ok: true, n: 3, other: 'z' } });
+    const span = branchElement(host);
+    expect(span.tagName).toBe('span');
+    expect(span.children[0]!.nodeValue).toBe('L2');
+    expect(span.children[2]!.nodeValue).toBe('3');
+    expect(host.children[0]).toBe(div);
+
+    instance.dispose();
+    expect(host.children).toHaveLength(0);
+  });
+
+  test('a dynamic property inside a branch refreshes and disappears on swap', () => {
+    const mount = evaluate(
+      recipe(
+        'function Maybe(props) { return <div>{props.ok ? <input value={props.name} /> : <em>off</em>}</div>; }',
+      ),
+    );
+    const host = new FakeNode(null);
+    const instance = mount(host, { props: { ok: true, name: 'Ada' } });
+    const input = branchElement(host) as unknown as Record<string, unknown>;
+
+    expect(branchElement(host).tagName).toBe('input');
+    expect(input['value']).toBe('Ada');
+    instance.update({ props: { ok: true, name: 'Grace' } });
+    expect(input['value']).toBe('Grace');
+
+    instance.update({ props: { ok: false, name: 'Grace' } });
+    expect(branchElement(host).tagName).toBe('em');
+    expect(branchElement(host).children[0]!.nodeValue).toBe('off');
+
+    instance.dispose();
+    expect(host.children).toHaveLength(0);
+  });
+});
+
 describe('G1 slice — unsupported shapes fail closed', () => {
   function codes(source: string): string[] {
     return generateLeafRecipe(component(source)).diagnostics.map((diagnostic) => diagnostic.code);
@@ -277,14 +369,14 @@ describe('G1 slice — unsupported shapes fail closed', () => {
     expect(result.diagnostics.map((d) => d.code)).toContain('OEIR_LEAF_UNSUPPORTED_NODE');
   });
 
-  test('a dynamic node inside a condition branch is refused', () => {
+  test('a nested condition inside a condition branch is refused', () => {
     const result = generateLeafRecipe(
       component(
-        'function Maybe(props) { return <div>{props.ok ? <span>{props.n}</span> : <em>off</em>}</div>; }',
+        'function Maybe(props) { return <div>{props.ok ? <span>{props.ok ? <b>x</b> : <i>y</i>}</span> : <em>off</em>}</div>; }',
       ),
     );
     expect(result.recipe).toBeNull();
-    expect(result.diagnostics.map((d) => d.code)).toContain('OEIR_LEAF_BRANCH_DYNAMIC');
+    expect(result.diagnostics.map((d) => d.code)).toContain('OEIR_LEAF_NESTED_CONDITION');
   });
 
   test('an event attribute is refused', () => {
