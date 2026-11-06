@@ -26,8 +26,12 @@ node_modules/.bin/vp run --no-cache --fail-if-no-match --filter openelement type
 echo "=== pre-push gates for '$BRANCH' ==="
 
 node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-release graph:check
-# pack-surface:check reads the packed tarballs (pack:dry-run writes them); with
-# none present it fails closed and names that task itself (#1541).
+# pack-surface:check reads the REAL tarball bytes. Rebuild them first, exactly
+# as the CI pack job does: a tarball left over from an earlier build is stale
+# input, so a newly shipped text violation would pass locally and fail only on
+# the remote (#1708 CI run 42087248453). With none present the check still
+# fails closed and names the task itself (#1541).
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack:dry-run
 node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack-surface:check
 node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo export-files:check
 
