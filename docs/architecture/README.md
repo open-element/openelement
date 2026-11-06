@@ -9,6 +9,7 @@ adapt, scaffold, build, and distribute those products.
 - [M02 Semantic IR feasibility report](./m02-semantic-ir-feasibility.md) — spike result: five examples expressible; OPEN items
 - [M03-A lexical scope resolution](./m03-scope-resolution.md) — **DESIGN**: BindingId vs classification, full scope semantics, captures/dependencies, host classifier contract
 - [M03-B expression identity](./m03-expression-identity.md) — **DESIGN**: lowering route with source-verified TypeScript APIs, registry/IR separation, source maps, identity limits
+- [M03-I-0 source-map prototype decision](./m03-i0-sourcemap-prototype.md) — M1 marker-based **anchors** adopted; M3 closed on API grounds; end-to-end map still OPEN (M05)
 - [M03 review corrections register](./m03-review-corrections.md) — which review findings were resolved, and which questions stay OPEN
 - [M01 consumer migration matrix](./m01-consumer-migration-matrix.md) — 23 consumers with target layer, replacement, stage and retirement condition
 - [**Compiler-native architecture (canonical)**](./compiler-native-architecture.md) — P1–P5, responsibility split, Part Program's transitional role, canonical vocabulary
