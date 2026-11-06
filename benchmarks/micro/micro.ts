@@ -7,10 +7,16 @@
  * contributes no layout/paint cost, so these numbers isolate kernel/block
  * algorithmic behavior — the upstream js-framework-benchmark lane (on the
  * fork) owns layout-inclusive numbers. SSR serialization uses the CANONICAL
- * server serializer (serializeCompiledProgram); the test-only serializeToHtml
- * in runtime.ts
- * diverges for multi-field each Blocks (serializes ival slots as
- * "[object Object]") and is deliberately not used — see the packet report.
+ * server serializer (serializeCompiledProgram), not the test-only
+ * serializeToHtml in runtime.ts. Since #1469 both delegate the walk to the
+ * same shared kernel (serializer/serialize-program.ts), and the runtime seed
+ * seam now resolves each item slot's own field (itemTextValue →
+ * itemValue(part, item, node.field)), so multi-field each Blocks no longer
+ * serialize as "[object Object]". The seed path is still not the server path —
+ * it merges attribute sinks into one attribute per name, quotes boolean
+ * presence, and skips the server's item record/key admission — and these
+ * numbers must measure the serializer the product ships, so the benchmark
+ * enters through the canonical server entry point.
  *
  * Diagnostics targeted (per the packet): Signal -> single Part latency,
  * attribute/property Part writes, keyed Block behavior at 1k-row scale, SSR
