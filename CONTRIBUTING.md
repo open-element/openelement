@@ -11,6 +11,35 @@ Read [SECURITY.md](./SECURITY.md) and [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
 
 Do not commit agent prompts, dispatch transcripts, copied CI logs, temporary evidence, or per-attempt journals.
 
+## Completion, CI and evidence policy
+
+A change is complete when the required checks of the `main` ruleset — `lint`,
+`test`, `e2e`, `pack` and `CodeQL` — are green on the exact pull-request head
+that merges. A local pass, a cancelled or skipped job, and a prototype are not
+completion evidence.
+
+- **Local evidence must be reproducible.** Record the SHA the evidence was
+  produced at, the exact commands, the result (exit code or summary), and the
+  toolchain the run used (the pinned Node and pnpm; the browser revision when
+  browser evidence is claimed). Evidence produced at a different commit is not
+  evidence for the head under review.
+- **CI green is the verdict.** Reconcile locally — merge, generate, check,
+  focused tests, full diff review — before pushing; CI is not the debugger. A
+  red required check blocks merge, and a pending or partially-run pipeline must
+  not be described as passing.
+- **CI flakes are recorded, not silently rerun.** When a rerun is needed, the
+  pull-request thread (or a tracked note linked from it) records the original
+  failing job/step and its error, why the failure is environmental rather than a
+  product regression, the rerun's attempt, and the result. A rerun changes the
+  evidence; it does not erase the failure from the record.
+- **Gate claims cite the execution-plan unit.** The pull request names the
+  milestone or gate it claims (an M row, G1/G2, a slice) and the commands behind
+  each claim. A prototype or spike is labelled "NOT G1" / "not a gate record";
+  a prototype or a local run must never be written up as a gate, qualification
+  or release evidence — see
+  [docs/architecture/alpha16-18-progress.md](./docs/architecture/alpha16-18-progress.md)
+  for the tracked statuses.
+
 ## Architecture review
 
 Review every change against [docs/architecture/design-principles.md](./docs/architecture/design-principles.md): the four-question gate (P7) applies to ordinary pull requests — the fields are in the pull request template — and deviations follow the comply-or-explain rule. Current architecture belongs in `docs/architecture`; retired decisions are retained in `docs/adr` and annotated there.

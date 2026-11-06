@@ -40,8 +40,10 @@ Owner ruling 2026-10-20: the working copy's root file is environment-local
 (session execution policy, excluded via the clone's `.git/info/exclude`) and
 must not ship as product guidance; the #1613 scope's "AGENTS.md entry pointer"
 is satisfied by the generated-project template above plus this contract and
-`llms.txt`. Restoring a root pointer requires the owner to move that policy out
-of the working copy first.
+`llms.txt`. The session execution policy that file carries is stated in tracked
+form in [Session execution model](#session-execution-model-owner-ruling-2026-09-21);
+restoring a root pointer would still be an owner decision and must not make the
+local file a repository fact.
 
 ## The canonical task entry
 
@@ -262,6 +264,36 @@ coded failure surface.
   machine-checked, so where the two differ on the executable vp form, this
   contract and its checkers are authoritative. `AGENTS.md`, where a checkout
   carries one, is an owner-local overlay, not a repository fact.
+
+## Session execution model (owner ruling 2026-09-21)
+
+The permanent division of labour for agent sessions in this repository: the
+session model does planning, review and merge strategy only; implementation runs
+on a cheap implementation model (deepseek-v4.1-flash or its successor) dispatched
+as workflow subagents. This section is the tracked statement; a checkout's root
+`AGENTS.md` is the owner-local overlay described in
+[Repository entry points](#repository-entry-points), not a repository fact.
+
+The planning side carries the obligations that make that split work:
+
+- **Cross-lane conflict map first.** Before a multi-lane plan starts, map the
+  shared files, generated-artifact dependencies and global invariants — the full
+  reconciliation surface. A plan that cannot predict its merge conflicts is a
+  planning failure, not a CI problem.
+- **Consolidation PRs are the default merge strategy.** Every merge to the
+  default branch stales the other PRs (the up-to-date rotation door); plan the
+  consolidation instead of fighting it in CI.
+- **Local reconciliation before CI.** Merge, generate, check, run the focused
+  tests and review the full diff locally; CI is the verdict, not the debugger.
+- **CI is the merge gate, not a substitute for review.** Required checks must be
+  green on the exact head (see [CONTRIBUTING.md](../CONTRIBUTING.md)), and merge
+  authorization stays a human owner decision.
+
+Exceptions — a session implementing directly, or a different implementation
+model — are an owner decision and are recorded in the pull request that relies on
+them. `Signed-off-by` certifies DCO provenance, not which model implemented the
+change; where the division of labour matters to the record, the pull request
+description states it.
 
 ## Ritual checklist (learned the hard way)
 

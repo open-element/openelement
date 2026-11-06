@@ -21,6 +21,19 @@ package topology, architecture, security/trust or compatibility decision also
 lands an ADR — see [CONTRIBUTING.md](../CONTRIBUTING.md) § When an ADR is
 required, and list it above under "Active ADRs changed".
 
+## Security sink and evidence gate (C7)
+
+Answer both, outside the four-question gate above; "not applicable" is an
+answer, an empty field is not.
+
+5. **Security sinks (R6)** — does this change add or widen an expression,
+   attribute/property, URL-carrying or raw-HTML sink? Name the canonical
+   predicate that screens it and the negative fixture that proves the denial:
+6. **Evidence provenance** — record the SHA the evidence was produced at, the
+   exact commands, the toolchain (Node/pnpm, browser revision where browser
+   evidence is claimed), and what was NOT verified; say explicitly whether each
+   claim is a local run or a green CI run:
+
 ## What changed
 
 -
