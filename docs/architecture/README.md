@@ -23,6 +23,7 @@ adapt, scaffold, build, and distribute those products.
 - [TSX author candidate contract](./tsx-author-candidate-contract.md) — 30 review cases; approved TSX-03/04/05/09/10 semantics; unreleased APIs, not implementation evidence
 - [JSX values and repeatable children](./jsx-value-and-children-model.md) — mount recipes, evaluation timing, owner/region model, rejected alternatives
 - [Alpha16–18 execution plan](./alpha16-18-execution-plan.md) — M01–M14, 16a/16b/17/18 stage split, G1/G2/G3, work classes, §8a/§8b and the risk register; the dependency spine (no dates) is the authoritative stage definition
+- [Alpha16–18 progress ledger and audit closure register](./alpha16-18-progress.md) — tracked M01–M14 status with evidence PR/SHA, gate records and the Alpha16a exit gap list, plus the 2026-11-03 audit closure register; a merged slice updates its row in the same PR
 - [Alpha16–18 semantic test matrix](./alpha16-18-semantic-test-matrix.md) — per-case evidence ledger; all rows not run
 - [Compiler and element runtime](./compiler-and-element-runtime.md)
 - [Rendering and hydration](./rendering-and-hydration.md)
