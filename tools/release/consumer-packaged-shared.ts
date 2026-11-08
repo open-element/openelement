@@ -1,13 +1,12 @@
 /**
  * Shared harness for packed-artifact consumer qualification of Framework Mode
  * applications (Beta.2.2, #1339 §11): prove that the pack:dry-run tarballs —
- * not the workspace source — support the complete notes-app flow on one
- * renderer. The two renderer harnesses (tools/release/consumer-packaged-native.ts
- * and tools/release/consumer-packaged-lit.ts) each supply a PackedAppLegSpec (app sources,
- * probes, dev-feedback edits); this module owns everything both worlds share:
- * process/server/temp-project lifecycle, the cell framework, the HTTP and
- * form probes, the dev-feedback session, the Playwright continuation probes,
- * and the boundary walks.
+ * not the workspace source — support the complete notes-app flow on the
+ * compiled native renderer. The harness (tools/release/consumer-packaged-native.ts)
+ * supplies a PackedAppLegSpec (app sources, probes, dev-feedback edits); this
+ * module owns the shared process/server/temp-project lifecycle, the cell
+ * framework, the HTTP and form probes, the dev-feedback session, the
+ * Playwright continuation probes, and the boundary walks.
  *
  * The observational rule for packaging defects: qualify the PACKED artifact,
  * never the workspace source. The harness stages a scratch consumer OUTSIDE
@@ -16,7 +15,7 @@
  * explicit package.json (file: deps + pinned externals) plus a
  * pnpm-workspace.yaml overriding every packed @openelement/* spec back to its
  * own file: tarball (consumerPnpmOverridesYaml), materializes a
- * minimal notes app modeled on tests/fixtures/router-{native,lit}-framework/ using
+ * minimal notes app modeled on tests/fixtures/router-native-framework/ using
  * only published specifiers, and then runs the verification cells:
  *
  *   install                hermetic npm install of the tarballs + the pnpm
@@ -39,11 +38,10 @@
  *   form-422               POST /notes/new missing title -> 422
  *   form-303               POST /notes/new valid -> 303 + Location
  *   browser-continuation   chromium+firefox+webkit: island activates
- *                          without a full reload (native: kernel claims the
- *                          DSD; lit: hydrate-support lifts defer-hydration
- *                          adopting the DSD). Each renderer x browser pair is
- *                          an individually reported PASS/FAIL unit; any single
- *                          browser failure fails the cell.
+ *                          without a full reload (the compiled kernel claims
+ *                          the DSD). Each browser is an individually reported
+ *                          PASS/FAIL unit; any single browser failure fails
+ *                          the cell.
  *   boundary               dist/client asset scan + @openelement/router .d.ts
  *                          declaration-graph walk (no compiler/router-vite/
  *                          node:/workspace: edges, every edge resolves)
@@ -95,9 +93,8 @@ const repoRoot = resolve(import.meta.dirname!, '../..');
 // document state) and one ordering contract. Splitting them into
 // install/server/browser/boundary modules would thread that session through
 // single-caller abstractions and duplicate the timeout/probe orchestration —
-// less traceable, not more testable. Each renderer leg keeps its own spec
-// (consumer-packaged-native.ts / consumer-packaged-lit.ts); shared lifecycle
-// stays here.
+// less traceable, not more testable. The leg keeps its own spec
+// (consumer-packaged-native.ts); shared lifecycle stays here.
 
 const BUILD_TIMEOUT_MS = 10 * 60_000;
 const TYPES_TIMEOUT_MS = 5 * 60_000;
@@ -121,8 +118,7 @@ export const DECLARATION_LEAK_PATTERN =
  * and `export ... from` edges. Side-effect-only imports (no import clause)
  * are excluded — they carry no consumer type surface. The vp generator emits
  * them faithfully into `.d.ts` for module-order fidelity, so a packed
- * declaration graph may reference an optional peer (e.g.
- * `@lit-labs/ssr/lib/install-global-dom-shim.js`); leak scans must still see
+ * declaration graph may reference an optional peer; leak scans must still see
  * every specifier, and only the resolution walk uses this edge set.
  */
 export function declarationTypeEdges(text: string): string[] {
@@ -514,16 +510,6 @@ function assertIncludes(haystack: string, needle: string, label: string): void {
   }
 }
 
-/**
- * lit-ssr keeps <!--lit-part--> / <!--lit-node N--> marker comments inside
- * rendered text, so joined strings like 'note-count=2' are interrupted on the
- * wire. Strip the markers before asserting rendered lit text at the HTTP
- * layer (same helper as app-flow-lit/e2e/lit-flow.spec.ts).
- */
-function stripLitMarkers(html: string): string {
-  return html.replace(/<!--\/?lit-(part|node)[^>]*-->/g, '');
-}
-
 function delay(ms: number): Promise<void> {
   return new Promise((resolveWait) => setTimeout(resolveWait, ms));
 }
@@ -535,7 +521,6 @@ function delay(ms: number): Promise<void> {
  * keeps answering 200 with stale content is a FAIL for the same reason.
  */
 async function pollDevPage(
-  spec: PackedAppLegSpec,
   baseUrl: string,
   path: string,
   expect: { status?: number; present?: string[]; absent?: string[] },
@@ -547,8 +532,7 @@ async function pollDevPage(
   while (Date.now() < deadline) {
     try {
       const response = await fetch(`${baseUrl}${path}`);
-      const raw = await response.text();
-      const body = spec.stripMarkers ? stripLitMarkers(raw) : raw;
+      const body = await response.text();
       const statusOk = response.status === (expect.status ?? 200);
       const missing = (expect.present ?? []).filter((marker) => !body.includes(marker));
       const leaked = (expect.absent ?? []).filter((marker) => body.includes(marker));
@@ -614,7 +598,7 @@ export const PACKED_APP_CELL_NAMES = [
   'boundary',
 ] as const;
 export type PackedAppCellName = (typeof PACKED_APP_CELL_NAMES)[number];
-export type PackedAppRenderer = 'native' | 'lit';
+export type PackedAppRenderer = 'native';
 
 export interface PackedAppOutcome {
   ok: boolean;
@@ -670,17 +654,17 @@ async function attempt(fn: () => Promise<string | undefined>): Promise<PackedApp
 // consumer's own devDependency (node_modules resolution walks up from the
 // probe file inside the temp consumer — the same contract the packed-starter
 // browser matrix documents). The script is generated into the temp consumer
-// and removed with it. Args: <baseUrl> <native|lit> <chromium|firefox|webkit>.
-// One browser per invocation so every renderer x browser pair is an
-// individually identifiable PASS/FAIL unit in the gate output.
+// and removed with it. Args: <baseUrl> <native> <chromium|firefox|webkit>.
+// One browser per invocation so every browser is an individually identifiable
+// PASS/FAIL unit in the gate output.
 
 const PACKED_BROWSERS = ['chromium', 'firefox', 'webkit'] as const;
 
 const PW_PROBE_SCRIPT = `import { chromium, firefox, webkit } from '@playwright/test';
 
 const [baseUrl, renderer, browserName] = process.argv.slice(2);
-if (!baseUrl || (renderer !== 'native' && renderer !== 'lit')) {
-  throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native|lit> <browser>');
+if (!baseUrl || renderer !== 'native') {
+  throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native> <browser>');
 }
 const browserType = browserName === 'chromium'
   ? chromium
@@ -690,7 +674,7 @@ const browserType = browserName === 'chromium'
   ? webkit
   : null;
 if (!browserType) {
-  throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native|lit> <browser>');
+  throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native> <browser>');
 }
 
 const browser = await browserType.launch({ headless: true });
@@ -708,60 +692,26 @@ try {
     if (marker !== 'alive') throw new Error('a full document reload dropped the continuation marker');
   };
 
-  if (renderer === 'native') {
-    // The compiled kernel CLAIMS the island DSD: the SSR node identity must
-    // survive activation and interaction (no re-render, no reload).
-    const islandCountText = (expected: string): string =>
-      '(function(){var p=document.querySelector("notes-index");' +
-      'var i=p&&p.shadowRoot&&p.shadowRoot.querySelector("note-counter");' +
-      'var c=i&&i.shadowRoot&&i.shadowRoot.querySelector("#count");' +
-      'return !!(c&&c.textContent==="' + expected + '");})()';
-    await page.waitForFunction(islandCountText('0'), undefined, { timeout: 60000 });
-    const count = page.locator('note-counter #count');
-    const ssrCount = await count.elementHandle();
-    const button = page.locator('note-counter #increment');
-    await button.click();
-    await page.waitForFunction(islandCountText('1'), undefined, { timeout: 60000 });
-    await button.click();
-    await page.waitForFunction(islandCountText('2'), undefined, { timeout: 60000 });
-    const activeCount = await count.elementHandle();
-    if (!await ssrCount!.evaluate((node, candidate) => node === candidate, activeCount)) {
-      throw new Error('native kernel re-rendered instead of claiming the SSR node');
-    }
-    await assertNoReload();
-  } else {
-    // hydrate-support ADOPTS the island DSD: the defer-hydration marker is
-    // lifted on the hydration root, node identity survives, clicks patch the
-    // adopted nodes in place.
-    const counterText = (expected: string): string =>
-      '(function(){var h=document.querySelector("notes-list-page");' +
-      'var i=h&&h.shadowRoot&&h.shadowRoot.querySelector("note-counter");' +
-      'var b=i&&i.shadowRoot&&i.shadowRoot.querySelector("#counter");' +
-      'return !!(b&&b.textContent==="' + expected + '");})()';
-    await page.waitForFunction(counterText('count: 0'), undefined, { timeout: 60000 });
-    const counter = page.locator('note-counter #counter');
-    const ssrButton = await counter.elementHandle();
-    await page.waitForFunction(
-      '(function(){var h=document.querySelector("notes-list-page");' +
-        'var i=h&&h.shadowRoot&&h.shadowRoot.querySelector("note-counter");' +
-        'return !!(i&&!i.hasAttribute("defer-hydration"));})()',
-      undefined,
-      { timeout: 60000 },
-    );
-    const hydratedButton = await counter.elementHandle();
-    if (!await ssrButton!.evaluate((node, candidate) => node === candidate, hydratedButton)) {
-      throw new Error('lit hydrate-support re-rendered instead of adopting the SSR node');
-    }
-    await counter.click();
-    await page.waitForFunction(counterText('count: 1'), undefined, { timeout: 60000 });
-    await counter.click();
-    await page.waitForFunction(counterText('count: 2'), undefined, { timeout: 60000 });
-    const activeButton = await counter.elementHandle();
-    if (!await ssrButton!.evaluate((node, candidate) => node === candidate, activeButton)) {
-      throw new Error('lit hydration re-rendered the SSR button instead of patching in place');
-    }
-    await assertNoReload();
+  // The compiled kernel CLAIMS the island DSD: the SSR node identity must
+  // survive activation and interaction (no re-render, no reload).
+  const islandCountText = (expected: string): string =>
+    '(function(){var p=document.querySelector("notes-index");' +
+    'var i=p&&p.shadowRoot&&p.shadowRoot.querySelector("note-counter");' +
+    'var c=i&&i.shadowRoot&&i.shadowRoot.querySelector("#count");' +
+    'return !!(c&&c.textContent==="' + expected + '");})()';
+  await page.waitForFunction(islandCountText('0'), undefined, { timeout: 60000 });
+  const count = page.locator('note-counter #count');
+  const ssrCount = await count.elementHandle();
+  const button = page.locator('note-counter #increment');
+  await button.click();
+  await page.waitForFunction(islandCountText('1'), undefined, { timeout: 60000 });
+  await button.click();
+  await page.waitForFunction(islandCountText('2'), undefined, { timeout: 60000 });
+  const activeCount = await count.elementHandle();
+  if (!await ssrCount!.evaluate((node, candidate) => node === candidate, activeCount)) {
+    throw new Error('native kernel re-rendered instead of claiming the SSR node');
   }
+  await assertNoReload();
   console.log('BROWSER-CONTINUATION-OK ' + renderer + ' ' + browserName + ' ' + browser.version());
 } finally {
   await browser.close();
@@ -778,22 +728,17 @@ const PW_DEV_WARMUP_SCRIPT = `import { chromium } from '@playwright/test';
 // vite cold-start reload to the island lifecycle. This script waits until the
 // island is active AND no reload has occurred for a stability window; the
 // subsequent probe then runs against steady-state dev serving.
-// Args: <baseUrl> <native|lit>.
+// Args: <baseUrl> <native>.
 
 const [baseUrl, renderer] = process.argv.slice(2);
-if (!baseUrl || (renderer !== 'native' && renderer !== 'lit')) {
-  throw new Error('usage: pw-dev-warmup-probe.ts <baseUrl> <native|lit>');
+if (!baseUrl || renderer !== 'native') {
+  throw new Error('usage: pw-dev-warmup-probe.ts <baseUrl> <native>');
 }
 
-const islandActive = renderer === 'native'
-  ? '(function(){var p=document.querySelector("notes-index");' +
-    'var i=p&&p.shadowRoot&&p.shadowRoot.querySelector("note-counter");' +
-    'var c=i&&i.shadowRoot&&i.shadowRoot.querySelector("#count");' +
-    'return !!(c&&c.textContent==="0");})()'
-  : '(function(){var h=document.querySelector("notes-list-page");' +
-    'var i=h&&h.shadowRoot&&h.shadowRoot.querySelector("note-counter");' +
-    'var b=i&&i.shadowRoot&&i.shadowRoot.querySelector("#counter");' +
-    'return !!(b&&b.textContent==="count: 0");})()';
+const islandActive = '(function(){var p=document.querySelector("notes-index");' +
+  'var i=p&&p.shadowRoot&&p.shadowRoot.querySelector("note-counter");' +
+  'var c=i&&i.shadowRoot&&i.shadowRoot.querySelector("#count");' +
+  'return !!(c&&c.textContent==="0");})()';
 
 const STABILITY_MS = 3000;
 const deadline = Date.now() + 120000;
@@ -867,7 +812,7 @@ export interface PackedAppLegSpec {
   externals: Record<string, string>;
   /**
    * Consumer tsconfig.json compilerOptions merged over the node-face base
-   * (the jsx settings on the native leg only).
+   * (the jsx settings the packed app source needs).
    */
   compilerOptions: Record<string, unknown>;
   files: Record<string, string>;
@@ -889,8 +834,6 @@ export interface PackedAppLegSpec {
   };
   /** Extra prerendered artifacts asserted in the build cell. */
   prerenderedExtras: string[];
-  /** Strip lit-ssr marker comments before matching probe markers. */
-  stripMarkers: boolean;
   locationPattern: RegExp;
 }
 
@@ -899,8 +842,7 @@ export interface PackedAppLegSpec {
 async function runGetProbes(spec: PackedAppLegSpec, baseUrl: string): Promise<string> {
   for (const probe of spec.probes) {
     const response = await fetch(`${baseUrl}${probe.path}`);
-    const raw = await response.text();
-    const body = spec.stripMarkers ? stripLitMarkers(raw) : raw;
+    const body = await response.text();
     if (response.status !== probe.status) {
       throw new Error(`probe ${probe.path}: status=${response.status}, expected ${probe.status}`);
     }
@@ -926,15 +868,14 @@ async function actionCount(baseUrl: string): Promise<number> {
 }
 
 /** POST /notes/new with a missing title: the action must answer 422. */
-async function postInvalid(spec: PackedAppLegSpec, baseUrl: string): Promise<string> {
+async function postInvalid(baseUrl: string): Promise<string> {
   const before = await actionCount(baseUrl);
   const response = await fetch(`${baseUrl}/notes/new`, {
     method: 'POST',
     body: new URLSearchParams({ body: 'missing the title entirely', intent: 'create' }),
     redirect: 'manual',
   });
-  const raw = await response.text();
-  const body = spec.stripMarkers ? stripLitMarkers(raw) : raw;
+  const body = await response.text();
   if (response.status !== 422) {
     throw new Error(`POST /notes/new (missing title): status=${response.status}, expected 422`);
   }
@@ -976,8 +917,7 @@ async function postValid(spec: PackedAppLegSpec, baseUrl: string): Promise<strin
   }
   // Follow the PRG target: the detail page must render the created note.
   const followed = await fetch(`${baseUrl}${location}`);
-  const raw = await followed.text();
-  const body = spec.stripMarkers ? stripLitMarkers(raw) : raw;
+  const body = await followed.text();
   if (followed.status !== 200) {
     throw new Error(`PRG target ${location}: status=${followed.status}, expected 200`);
   }
@@ -1002,7 +942,7 @@ export interface BrowserProbeContext {
 
 /**
  * Classify a failed browser-probe subprocess BY KIND before printing its
- * output. Run 39216159302 reported the Lit/Firefox continuation probe as a
+ * output. Run 39216159302 reported a Firefox continuation probe as a
  * generic cell failure, but the 300000ms line was the harness abort and the
  * child's last output was Playwright's teardown error ("Target page, context
  * or browser has been closed") — the kill, not the cause. The kind decides
@@ -1062,7 +1002,7 @@ export function classifyBrowserProbeFailure(
   };
 }
 
-/** The one failure line per renderer x browser probe: kind, then output tail. */
+/** The one failure line per browser probe: kind, then output tail. */
 function describeBrowserProbeFailure(
   probe: ProcessRunResult,
   context: BrowserProbeContext,
@@ -1084,10 +1024,9 @@ function describeBrowserProbeFailure(
 
 /**
  * Run the generated Playwright continuation probe against one already-serving
- * base URL (cli/start or the dev server). The probe itself asserts
- * renderer-specific continuation: the native kernel claims the island DSD and
- * lit hydrate-support adopts it, node identity survives interaction, and no
- * full reload happens.
+ * base URL (cli/start or the dev server). The probe itself asserts native
+ * continuation: the compiled kernel claims the island DSD, node identity
+ * survives interaction, and no full reload happens.
  */
 async function runBrowserContinuationProbe(
   tmp: string,
@@ -1095,8 +1034,8 @@ async function runBrowserContinuationProbe(
   leg: PackedAppRenderer,
   phase = 'browser-continuation',
 ): Promise<string> {
-  // Packed three-browser matrix: every renderer x browser pair runs as its
-  // own probe invocation with its own OK marker; any single browser failure
+  // Packed three-browser matrix: every browser runs as its own probe
+  // invocation with its own OK marker; any single browser failure
   // fails the cell (no workspace-fixture inference, no shared-browser pass).
   const passed: string[] = [];
   const failures: string[] = [];
@@ -1199,10 +1138,10 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
   const firstPort = await withServer(label, 'dev', devArgs, tmp, async (baseUrl) => {
     // 1. Live SSR over the wire: same probe set the production modes answer.
     await runGetProbes(spec, baseUrl);
-    await postInvalid(spec, baseUrl);
+    await postInvalid(baseUrl);
     await postValid(spec, baseUrl);
 
-    // 2. Browser continuation in dev (native claim / lit adoption). Warm up
+    // 2. Browser continuation in dev (compiled kernel claim). Warm up
     //    first: vite's cold-cache dep optimization forces one full reload,
     //    which must not be attributed to the island lifecycle.
     await runDevWarmupProbe(tmp, baseUrl, leg);
@@ -1218,7 +1157,6 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
     try {
       editConsumerSource(tmp, edits.componentFile, edits.componentFrom, edits.componentTo);
       await pollDevPage(
-        spec,
         baseUrl,
         edits.probePath,
         { present: [edits.componentTo], absent: [edits.componentFrom] },
@@ -1226,7 +1164,6 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
       );
       editConsumerSource(tmp, edits.routeFile, edits.routeFrom, edits.routeTo);
       await pollDevPage(
-        spec,
         baseUrl,
         edits.probePath,
         { present: [edits.routeTo], absent: [edits.routeFrom] },
@@ -1240,7 +1177,6 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
         `${componentOriginal}\nexport const __devBroken = ;\n`,
       );
       await pollDevPage(
-        spec,
         baseUrl,
         edits.probePath,
         { status: 500, absent: [edits.componentTo] },
@@ -1248,7 +1184,6 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
       );
       writeFileSync(join(tmp, edits.componentFile), componentOriginal);
       await pollDevPage(
-        spec,
         baseUrl,
         edits.probePath,
         { present: [edits.componentFrom] },
@@ -1268,13 +1203,7 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
     devArgs,
     tmp,
     async (baseUrl) => {
-      await pollDevPage(
-        spec,
-        baseUrl,
-        '/',
-        { present: [spec.probes[0].markers[0]] },
-        'dev restart',
-      );
+      await pollDevPage(baseUrl, '/', { present: [spec.probes[0].markers[0]] }, 'dev restart');
     },
   );
   await assertPortClosed(secondPort, `${label} (restart)`);
@@ -1310,7 +1239,7 @@ async function serveSession(spec: PackedAppLegSpec, tmp: string): Promise<Sessio
   try {
     await withServer(label, 'start', argsFor, tmp, async (baseUrl) => {
       result.gets = await attempt(() => runGetProbes(spec, baseUrl));
-      result.form422 = await attempt(() => postInvalid(spec, baseUrl));
+      result.form422 = await attempt(() => postInvalid(baseUrl));
       result.form303 = await attempt(() => postValid(spec, baseUrl));
     });
   } catch (error) {
@@ -1420,14 +1349,15 @@ export function walkPackedDeclarations(options: {
 
 /**
  * Router-leg boundary cell: follow .d.ts import edges from the published
- * @openelement/router entries (index/lit/lit-ssr/document) through the
- * shared walker. Every edge must resolve to a declaration file, and no edge
- * may name the compiler, router-internal tooling, vite, a host builtin or a
- * workspace specifier.
+ * @openelement/router entries (index/document) through the shared walker.
+ * Every edge must resolve to a declaration file, and no edge may name the
+ * compiler, router-internal tooling, vite, a host builtin or a workspace
+ * specifier. The retired ./lit and ./lit-ssr declaration entries are no longer
+ * part of the packed surface.
  */
 function walkRouterDeclarations(tmp: string): string {
   const routerSrc = join(tmp, 'node_modules', '@openelement', 'router', 'src');
-  const entries = ['index.d.ts', 'lit.d.ts', 'lit-ssr.d.ts', 'document.d.ts'];
+  const entries = ['index.d.ts', 'document.d.ts'];
   const missingEntries = entries.filter((entry) => !existsSync(join(routerSrc, entry)));
   if (missingEntries.length > 0) {
     throw new Error(
@@ -1443,14 +1373,14 @@ function walkRouterDeclarations(tmp: string): string {
       `Packed @openelement/router declaration graph violations:\n${problems.join('\n')}`,
     );
   }
-  return `${modules} declaration modules resolved clean from index/lit/lit-ssr/document`;
+  return `${modules} declaration modules resolved clean from index/document`;
 }
 
 // ─── Packed element-leaf module graph (boundary cell) ───────────────────────
 //
 // #1339 review: the kernel-free claim for the element leaves must hold on the
 // PACKED artifact, not only the workspace source graph (which
-// packages/router/__tests__/lit-graph-boundary.test.ts proves). Walk the
+// packages/router/__tests__/entry-graph-boundary.test.ts proves). Walk the
 // installed @openelement/element/src/{html,logger,authoring}.js graphs inside
 // the consumer's node_modules and require the Native runtime kernel (the root
 // barrel, the compiled-runtime facade, the compiled serializer, the signal
@@ -1628,8 +1558,8 @@ async function resolvePackedAppTarballs(): Promise<PackedAppTarball[]> {
  * vite over the packed router plugin, `build`/`start` call the packed router
  * CLIs through node, `check` is tsc — with the packed tarballs as file:
  * dependencies and the pinned externals beside them. Subpath imports
- * (jsx-runtime, /vite, /lit, /lit-ssr) resolve through the packages' own
- * exports maps — never separate pins (same contract the packed-starter
+ * (jsx-runtime, /vite) resolve through the packages' own exports maps —
+ * never separate pins (same contract the packed-starter
  * consumer asserts on the generated starter manifest).
  */
 function consumerScripts(): Record<string, string> {
@@ -1691,7 +1621,7 @@ export function consumerPnpmOverridesYaml(tarballs: readonly PackedAppTarball[])
 }
 
 /**
- * Run the complete packed-consumer qualification for one renderer leg:
+ * Run the complete packed-consumer qualification for the packed app leg:
  * resolve the tarballs, stage the scratch consumer outside the repository,
  * execute every verification cell, print the per-cell support matrix, and
  * throw when any cell failed. The temp consumer is always removed.
@@ -1827,8 +1757,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       if (!existsSync(indexHtmlPath)) {
         throw new Error(`Build emitted no prerendered page: ${indexHtmlPath}`);
       }
-      const raw = readFileSync(indexHtmlPath, 'utf8');
-      const html = spec.stripMarkers ? stripLitMarkers(raw) : raw;
+      const html = readFileSync(indexHtmlPath, 'utf8');
       for (const marker of spec.probes[0].markers) {
         assertIncludes(html, marker, 'prerendered dist/index.html');
       }

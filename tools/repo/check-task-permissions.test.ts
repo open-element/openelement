@@ -52,7 +52,6 @@ const TASK_FILES: TaskFile[] = [
   },
   { path: 'apps/saas/package.json', ffiAllowed: {} },
   { path: 'tests/e2e/starter-smoke/package.json', ffiAllowed: {} },
-  { path: 'tests/fixtures/router-lit-framework/package.json', ffiAllowed: {} },
   { path: 'tests/fixtures/router-native-framework/package.json', ffiAllowed: {} },
   { path: 'tests/fixtures/router-nitro/package.json', ffiAllowed: {} },
   { path: 'tests/fixtures/router-request-time/package.json', ffiAllowed: {} },

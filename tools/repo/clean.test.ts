@@ -100,8 +100,6 @@ test('default clean removes generated output and preserves user content', async 
     'dist-test-ssg-render/index.html',
     'tests/fixtures/router-nitro/.nitro/cache.json',
     'tests/fixtures/router-nitro/.output-node/server.js',
-    'tests/fixtures/router-lit-framework/dist/index.html',
-    'tests/fixtures/router-lit-framework/test-results/report.json',
     'tests/e2e/starter-smoke/work/package.json',
     'playwright-report/index.html',
     'test-results/report.json',
