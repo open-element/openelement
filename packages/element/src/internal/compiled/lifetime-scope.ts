@@ -1,5 +1,21 @@
 import { frameworkError, KernelErrorCode } from '@openelement/protocol/errors';
 
+/**
+ * The parent link the constructor already keeps, exposed as one module-internal
+ * query for the M04 projection-lineage check (`runtime/lineage.ts`).
+ *
+ * The scope deliberately stays a scope: the class gains no ancestry method, no
+ * graph walk and no public surface. The lineage check is the only reader, it
+ * walks at most one insertion's owner depth, and no scope-creating path pays
+ * for the feature beyond this one WeakMap entry.
+ */
+const scopeParents = new WeakMap<LifetimeScope, LifetimeScope>();
+
+/** The parent scope of `scope`, or `undefined` for a root scope. Internal. */
+export function parentScopeOf(scope: LifetimeScope): LifetimeScope | undefined {
+  return scopeParents.get(scope);
+}
+
 /** One tree-shaped browser lifetime owner for components, Parts and Blocks. */
 export class LifetimeScope {
   #parent?: LifetimeScope;
@@ -22,6 +38,7 @@ export class LifetimeScope {
         );
       }
       parent.#children.add(this);
+      scopeParents.set(this, parent);
     }
   }
 

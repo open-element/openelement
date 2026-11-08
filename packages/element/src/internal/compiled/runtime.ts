@@ -22,15 +22,16 @@ import { trustedHtmlValue } from '../core/security.ts';
 // Canonical when-Block condition evaluation (#1372) — single source shared
 // with the server serializer; do not reintroduce a private comparison.
 import { conditionHolds } from './condition-holds.ts';
-// Canonical attr/class/style value coercions — single source of truth,
-// shared with the server serializer (server/shared.ts) so all three
-// execution modes stay byte-identical; do not reintroduce private copies.
+// Canonical attr/class/style value coercions and the shared compiled-program
+// validation failure — the browser-safe shared source in runtime/values.ts,
+// shared with the server serializer so all three execution modes stay
+// byte-identical; do not reintroduce private copies.
 import {
   attributeValueOf,
   classValueOf,
   CompiledProgramValidationError,
   styleValueOf,
-} from './server/shared.ts';
+} from './runtime/values.ts';
 import { formatError } from '../core/errors.ts';
 // The ONE tree-walking serializer (issue #1469): both the
 // seed and the server serializer delegate their walk to this kernel.
@@ -101,6 +102,29 @@ export {
   releasePreUpgradeEvents,
   replayPreUpgradeEvents,
 };
+
+// ─── Generated-code runtime primitives (M04) ──────────────────────
+
+/**
+ * The compiler-neutral ownership/recipe primitives the generated-code path
+ * consumes from M05 on: a mount recipe, its per-projection owner/region
+ * insertion, replaceable tracked props and the internal evidence probe.
+ *
+ * Re-exported here — an internal module, never a package export — so the
+ * package entry graph typechecks them and the generated runtime has one import
+ * surface. No Part Program path uses them: this slice ships primitives and
+ * their G2 evidence only (Alpha16a M04), and M05 emits the call sites.
+ */
+export {
+  createRecipe,
+  insertRecipe,
+  type MountFunction,
+  type Projection,
+  type Recipe,
+  type RecipeOptions,
+} from './runtime/recipe.ts';
+export { createTrackedProps, type TrackedProps } from './runtime/props.ts';
+export { runtimeProbe, type RuntimeProbeCounts } from './runtime/observability.ts';
 
 // ─── Seed serialization ────────────────────────────────────────────
 
