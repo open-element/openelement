@@ -3,8 +3,9 @@
 Date: 2026-11-03. Milestone: **Alpha16a M02 (initial slice)**. Base:
 `554a54a338e58b63b38887f2e5e7e6145e1c5626`.
 
-Status: **spike implemented, then corrected in M02.1 (owner review); design
-questions listed as OPEN.** No codegen, no interpreter, no ABI, no SSR/claim
+Status: **spike implemented, then corrected in M02.1 (owner review); M02 exit
+evidence completed 2026-11-08 (PR-1); design questions listed as OPEN under
+their owning milestones.** No codegen, no interpreter, no ABI, no SSR/claim
 change.
 
 Revision 2026-11-05: the condition/children coverage record is corrected. The
@@ -24,6 +25,17 @@ property); the production classification now lives in
 `packages/compiler/src/internal/compiler/semantic-core/attribute-classification.ts`
 and is shared by both consumers; (2) the IR is still not public API and not a wire
 format, but the "not a codegen input" sentence in §2 is amended accordingly.
+
+Revision 2026-11-08 (M02 exit closeout, PR #1729): the execution-plan §1a
+criterion-4 gap is closed. The admitted `condition` node now has its negative
+case in `packages/compiler/__tests__/semantic-ir/invariants.test.ts` — "a
+conditional branch that is neither JSX nor null" — asserting
+`OEIR_CONDITION_BRANCH_UNSUPPORTED` with `origin: 'source'` and a span that
+slices exactly the authored branch expression. Evidence was produced at head
+`3103952a7` with `npx vitest run --project compiler` (LOCAL run; counts in the
+[progress ledger](./alpha16-18-progress.md) §3/§4). This is a test/doc slice: it
+changes no production code, runtime, ABI or browser behaviour, and claims no
+M03+ work and no G1/G2 record.
 
 ## 1. What this slice proves — and what it does not
 
@@ -63,7 +75,7 @@ is a Class P spike, so the IR still has no codegen contract.
 | `dynamic-text` | ex. 2, 3, 5 |
 | `static-attribute` / `dynamic-attribute` | ex. 2 (event), 3 (key, draft), 5 (value, handler) |
 | `component-ref` | ex. 1 (Header/Footer), ex. 4 (recipe target) |
-| `condition` | supported by the grammar and validator; exercised by the M02.1 worked example (positive only; no negative case — see §11) |
+| `condition` | supported by the grammar and validator; exercised by the M02.1 worked example and by the branch-shape negative case added at the 2026-11-08 exit closeout (see §6) |
 | `list` | ex. 3, 5 |
 | `recipe` + `insertion-site` | ex. 4 |
 | `children-projection` | supported by the grammar; exercised by the M02.1 worked example and the missing-owner negative case (see §11) |
@@ -114,6 +126,7 @@ not update-driven slots.
 | unsupported statement (`if`, …) | `OEIR_STATEMENT_UNSUPPORTED` |
 | no component in module | `OEIR_COMPONENT_MISSING` |
 | syntax error | `OEIR_SYNTAX` |
+| a conditional branch that is neither JSX nor null | `OEIR_CONDITION_BRANCH_UNSUPPORTED` |
 | children on a component reference | `OEIR_COMPONENT_CHILDREN_UNSUPPORTED` |
 | multiple returns | `OEIR_MULTIPLE_RETURNS` |
 | tracking claim without a reactive read | `OEIR_TRACKED_WITHOUT_SOURCE` |
@@ -143,11 +156,11 @@ from quietly appearing inside the compiler.
 
 1. **The five examples fit in a small node set.** No example required a new node
    type, and no node is present "for the future": `condition` and
-   `children-projection` also have M02.1 worked examples, and
-   `children-projection` has a missing-owner negative case. `condition` has no
-   negative case, so its expressiveness is shown but its failure mode is not.
-   (SUPERSEDED HISTORY: an earlier revision said both were unexercised; §11
-   records the correction.)
+   `children-projection` also have M02.1 worked examples, and both now have
+   negative cases — `children-projection` a missing-owner case, `condition` the
+   branch-shape case added at the 2026-11-08 exit closeout (§6). (SUPERSEDED
+   HISTORY: an earlier revision said both were unexercised, and a later one said
+   `condition` had no negative case; §11 records the corrections.)
 2. **The three evaluation tiers are representable without a JavaScript AST.**
    Expressions stay authored source slices plus resolved reads; nothing re-parses
    them, so the IR does not become a second parser.
@@ -171,12 +184,15 @@ from quietly appearing inside the compiler.
 | OPEN-5 | Ownership lineage (which owner may project into which) has no mechanism yet; the IR only records owner ids. | Needed for TSX-26 |
 | OPEN-6 | The builder is a prototype frontend, not the production one; the class-shaped frontend is untouched and still the Alpha15 path. | M03 must decide how the function frontend replaces, not wraps, the class path |
 
-**OPEN-3 is CLOSED for its worked-example gap** by the M02.1/M02.2 corrections
-(§11): `condition` and `children-projection` have worked examples and positive
-assertions, and `children-projection` has a missing-owner negative case. This
-does **not** claim a negative case for `condition` — none exists, and that
-remains unverified. The earlier "implemented but not covered" record is
-SUPERSEDED HISTORY.
+**OPEN-3 is CLOSED.** The M02.1/M02.2 corrections added worked examples and
+positive assertions for `condition` and `children-projection`, plus the
+`children-projection` missing-owner negative case; the 2026-11-08 exit closeout
+adds the `condition` branch-shape negative case (§6). The earlier "implemented
+but not covered" record and the later "no negative case for `condition`" note are
+SUPERSEDED HISTORY. The OPEN items above remain OPEN under their owning
+milestones: OPEN-1/2/6 are M03 work, OPEN-5 is M04 work, and OPEN-4 (claim
+marker) is M07/M08 work and is explicitly allowed to stay OPEN in M02 by
+execution-plan §1a criterion 3.
 
 ## 10. Relationship to the Alpha15 chain
 
@@ -198,9 +214,11 @@ slice can break Alpha15 because nothing in Alpha15 imports it.
 | 7 | Pack failed: publish-scoped source module unreachable | The spike is excluded from the published surface. Note: this repository's packer derives include/exclude from `package.json.files` (`!` prefix), **not** from `publish.exclude`, so the exclusion is `"!src/internal/compiler/semantic-ir"`. The Alpha15 publish graph is otherwise untouched. |
 
 P2 items also closed: an ordinary-local snapshot test, worked examples for
-`condition` and `children-projection` (positive only for `condition`;
-`children-projection` also has the missing-owner negative), and the span
+`condition` and `children-projection` (positive only for `condition` at this
+point; `children-projection` also had the missing-owner negative), and the span
 documentation now says **UTF-16 code units** (TypeScript positions), not bytes.
+The `condition` negative case was added later, at the 2026-11-08 exit closeout
+(§6/§8.1); this paragraph is kept as history and does not claim it.
 
 ### M02.2 — final validator completeness (owner review)
 
@@ -219,3 +237,8 @@ The IR is **feasible as a shape** and the five examples are expressible. The nex
 risk is not "can we describe a component" but "can we resolve expressions
 correctly and then generate code from this description" — OPEN-1 and OPEN-2.
 Those are M03's job.
+
+**Exit status (2026-11-08):** with the `condition` negative case in place, all
+six execution-plan §1a criteria are met, so the M02 exit is recorded as met for
+the feasibility scope only (see the [progress ledger](./alpha16-18-progress.md)
+§3/§4). This record does not claim M03+, G1/G2 or any runtime/browser evidence.

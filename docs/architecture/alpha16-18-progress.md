@@ -1,7 +1,7 @@
 # Alpha16–18 progress ledger and audit closure register
 
 Date: 2026-11-08. Baseline: `origin/main` =
-`ec09d444e65c4773c0b6d5ac097bce54b0497d0f` (PR #1719, merged 2026-11-08); the
+`5649d9770c94e67d67c6d7401e0897dfe0c6e990` (PR #1720, merged 2026-11-08); the
 2026-11-03 audit closure register in §5 is re-verified against the same tree.
 
 This is the tracked status record for the Alpha16–18 milestones and for the
@@ -99,7 +99,7 @@ record and the owner signs it off before the §4 row flips (owner decision D2,
 | Milestone | Class | Status | Evidence PR / SHA | Notes |
 | --- | --- | --- | --- | --- |
 | M01 | A | Complete (decision record) | #1704 `554a54a33` (2026-11-03) | The layer map, IR and ABI boundary are recorded in [the M01 boundary doc](./compiler-ir-and-abi-boundary.md). Its "DESIGN — not implemented" line is the Class A contract: the M01 deliverable is the recorded decision, not code. |
-| M02 | I | In progress — spike merged, exit not met | #1705 `017bd3e87` (2026-11-03) | The [M02 report](./m02-semantic-ir-feasibility.md) proves the IR can express the five worked examples. Measured against execution-plan §1a: criteria 1/2/3/5/6 are met, and the only remaining exit gap is §1a criterion 4 — the admitted `condition` node has no negative case (`OEIR_CONDITION_BRANCH_UNSUPPORTED` exists at `packages/compiler/src/internal/compiler/semantic-ir/build.ts:456-468` but has no test). The §9 OPEN list does not block the exit: OPEN-1/2/6 are M03 work, OPEN-5 is M04 work and OPEN-4 (claim marker) is explicitly allowed to stay OPEN in M02 by §1a criterion 3. The next slice adds the negative case and flips this row to complete. |
+| M02 | I | Complete (feasibility exit evidence recorded) | #1729 `3103952a7` (2026-11-08) | The [M02 report](./m02-semantic-ir-feasibility.md) proves the IR can express the five worked examples; the 2026-11-08 exit closeout adds the last §1a criterion-4 piece — the admitted `condition` node's branch-shape negative case in `packages/compiler/__tests__/semantic-ir/invariants.test.ts` ("a conditional branch that is neither JSX nor null") asserts `OEIR_CONDITION_BRANCH_UNSUPPORTED` with `origin: 'source'` and an in-source span. Evidence at `3103952a7`: `npx vitest run --project compiler` → 22 files / 332 tests passed, a LOCAL run; `pnpm check` and the doc gates are green at the PR head (commands and counts in the PR body). §1a criteria 1/2/3/5/6 were already met; §9 OPEN-1/2/6 stay M03 work, OPEN-5 stays M04 work, and OPEN-4 (claim marker) stays OPEN in M02 by §1a criterion 3. NOT verified: no M03+, codegen, runtime, browser, ABI or G1/G2 evidence — this is the feasibility exit record only. |
 | M03 | I | In progress — design and I-0 prototype merged, implementation not started | #1706 `463e6cb07` (design), #1707 `e23420d3a` (M03-I-0) | [M03-A](./m03-scope-resolution.md) and [M03-B](./m03-expression-identity.md) are DESIGN PROPOSAL — NOT IMPLEMENTED; [M03-I-0](./m03-i0-sourcemap-prototype.md) is a PROTOTYPE + DECISION. No resolver, erasure, identity or end-to-end source-map implementation exists, so Alpha15 diagnostics/Source-Map/security parity is not met. |
 | M04 | P→I | Not started | — | No ownership or recipe primitives. G2 is not recorded. |
 | M05 | I | In progress — Class P prototype merged; **NOT G1**; M05 not complete | #1709 `4f9821527` (2026-11-06) | The compiler-private leaf-codegen prototype is real-DOM mechanism evidence only. M03 and M04 are absent, so the M05 exit (G1) cannot be recorded. PR #1709's merged body records the head's local evidence: compiler project 331 tests, semantic-ir 130 tests, chromium 7/7 and firefox 7/7 real-DOM cases, consumer smoke 1/1; WebKit was left to CI and is not claimed. See [the prototype record](./m05-g1-leaf-prototype.md) for supported/refused shapes and the not-claimed list. |
@@ -123,7 +123,7 @@ record and the owner signs it off before the §4 row flips (owner decision D2,
 | Exit requirement | Status | Gap |
 | --- | --- | --- |
 | M01 | Met | Decision record merged (#1704). No implementation is owed by M01. |
-| M02 | Not met | Feasibility spike only; §1a criteria 1/2/3/5/6 are met and the only remaining gap is criterion 4 — the admitted `condition` node has no negative case. The §9 OPEN list does not block the exit: OPEN-1/2/6 are M03 work, OPEN-5 is M04 work and OPEN-4 is allowed OPEN in M02 by §1a criterion 3. |
+| M02 | Met | Feasibility exit evidence recorded at #1729 `3103952a7`: execution-plan §1a criteria 1–6 are met, including the admitted `condition` node's branch-shape negative case (see §3). No M03+, codegen, runtime/browser evidence or G1/G2 record is claimed. |
 | M03 | Not met | Design + source-map prototype only; no function-component frontend, erasure, identity or source maps. |
 | M04 | Not met | Not started; no ownership/recipe primitives. |
 | M05 | Not met | Class P prototype only; M03/M04 prerequisites absent. |
@@ -133,8 +133,9 @@ record and the owner signs it off before the §4 row flips (owner decision D2,
 | G1 (M05 exit: generated code executes in a browser at a recorded SHA) | **Not recorded** | The only browser evidence is the prototype; it is not a G1 record (see [prototype record §7](./m05-g1-leaf-prototype.md#7-not-claimed)). |
 | G2 (ownership/recipe evidence: two insertions, keyed replacement, disposal modes) | **Not recorded** | M04 is not started, so there is no implementation to record against. |
 
-**Conclusion: Alpha16a exit is not achieved.** No row in this ledger may be read
-as Alpha16a completion, a version, a tag, a publication or a release claim.
+**Conclusion: M02 is met; the Alpha16a exit is still not achieved.** M03–M08
+and the G1/G2 records remain pending. No row in this ledger may be read as
+Alpha16a completion, a version, a tag, a publication or a release claim.
 Alpha16b (M09–M14) has not started; the next planned work is the M03 → M04 →
 M05 v2 spine.
 
