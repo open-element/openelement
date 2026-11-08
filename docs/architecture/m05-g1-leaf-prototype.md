@@ -6,7 +6,7 @@ prototype**. Baseline: `origin/main@460b1ec96`. Branch:
 commits land **above** that SHA, so the final evidence SHA is the PR head — see
 [Evidence](#6-evidence).
 
-Status: **PROTOTYPE — NOT G1.** Per
+Status: **PROTOTYPE — NOT G1 — SUPERSEDED HISTORY.** Per
 [the execution plan](./alpha16-18-execution-plan.md) §0, a prototype never counts
 as feature completion; M05 is Class I and depends on M03 (function-component
 frontend) and M04 (runtime ownership), neither of which is implemented. This
@@ -17,6 +17,26 @@ Plan authority: scope follows the repository
 pass), which is the authoritative stage definition. It does **not** advance the
 Alpha16 v7.1 gates G1a/G1b: C-0 (compile-semantics ADR, #1652, v7.1 G1a) and C-3
 (base codegen, #1655) remain OPEN. No taskbook gate is claimed or closed here.
+
+## 0. Supersession (2026-11-09)
+
+**SUPERSEDED by M05 v2 at `0ffc89263` (PR #1736, M05a).** The production
+direction is now `packages/compiler/src/internal/compiler/semantic-ir/generated-leaf/generate.ts`:
+it consumes the merged M03 `FunctionModelModule` + `ExpressionRegistry` (no
+host-value stub, no reparse), emits concrete mount/update/dispose code against
+the merged M04 runtime primitives (`createRecipe`/`insertRecipe`,
+`bindSignalWrites`, canonical values helpers), and is exercised in a real
+engine by `packages/compiler/__tests__/semantic-ir/generated-leaf.browser.test.ts`
+(S1 slice; G1 **draft** evidence only, pending Lead compilation and owner
+sign-off). This prototype record is kept as **history and mechanism evidence**:
+it is not G1 evidence, not an M05 completion record, and no longer the
+contract for generated code. The old prototype files/tests remain in the tree
+until a later slice removes them with this supersession on record.
+
+Why this slice supersedes it: the prototype stood in host-supplied `values` for
+the missing expression frontend, had no ownership/projection model, no source
+maps and only a DOM-stub consumer contract; M03 and M04 now provide the real
+frontend and insertion surface, so the generated artifact uses them directly.
 
 ## 1. What this is — and what it is not
 
