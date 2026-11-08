@@ -84,6 +84,19 @@ describe('unsupported authored grammar fails with a coded diagnostic', () => {
     );
   });
 
+  test('a conditional branch that is neither JSX nor null', () => {
+    const source = 'function C(props) {\n  return <div>{props.ok ? render() : <em />}</div>;\n}\n';
+    const { diagnostics } = buildCodes(source);
+    const branch = diagnostics.find(
+      (diagnostic) => diagnostic.code === 'OEIR_CONDITION_BRANCH_UNSUPPORTED',
+    );
+    expect(branch).toBeDefined();
+    expect(branch!.origin).toBe('source');
+    expect(branch!.span.file).toBe(FILE);
+    // The span points at the offending branch expression in the authored source.
+    expect(source.slice(branch!.span.start, branch!.span.end)).toBe('render()');
+  });
+
   test('two returns', () => {
     expect(
       buildCodes('function A() {\n  return <div />;\n  return <span />;\n}\n').codes,
