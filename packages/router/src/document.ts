@@ -1,12 +1,12 @@
 /**
  * @openelement/router/document - resolved Document seam (#1326).
  *
- * Page meaning is resolved exactly once per render, before either serializer
+ * Page meaning is resolved exactly once per render, before the serializer
  * runs: the page descriptor's head — a static object or a resolver function —
  * plus the request-scoped context become a ResolvedDocument: title,
  * description, meta, canonical, alternates/hreflang, locale, the normalized
- * link collection, and the structured-data (JSON-LD) documents the Native and
- * Lit serializers emit into <head>.
+ * link collection, and the structured-data (JSON-LD) documents the native
+ * serializer emits into <head>.
  *
  * Boundaries of this seam:
  * - Pure resolution only. It never fetches, caches, reads a global request,
@@ -19,8 +19,7 @@
  *   predicates, and the neutral client-script loading descriptors
  *   (loading/module/nonce.ts), and those use @openelement/element's
  *   trusted-HTML contract (escape/attribute rules) rather than a second copy
- *   of it. The resolved Document is the shared contract between the two
- *   serializers.
+ *   of it. The resolved Document is the contract the serializer consumes.
  */
 
 import type {
@@ -44,7 +43,7 @@ export interface PageHeadAlternate {
   hreflang?: string;
 }
 
-/** A normalized <link> the serializers emit into <head>. */
+/** A normalized <link> the serializer emits into <head>. */
 export interface ResolvedDocumentLink {
   rel: 'canonical' | 'alternate';
   href: string;
@@ -54,7 +53,7 @@ export interface ResolvedDocumentLink {
 /**
  * A page's resolved document meaning: every <head> field after the head
  * resolver (when the descriptor declares one) has run, plus the normalized
- * `links` projection the serializers consume. Call-site precedence is
+ * `links` projection the serializer consumes. Call-site precedence is
  * resolved-document value first, route/build docConfig fallback second.
  */
 export interface ResolvedDocument {
@@ -79,7 +78,7 @@ export interface ResolvedDocument {
    * Document language: the resolved application locale for this render, and
    * ONLY that. It stays undefined on a single-locale site — the seam never
    * defaults it to `'en'` — so the configured document `head.lang` remains
-   * the fallback the serializers apply. A project that declared i18n always
+   * the fallback the serializer applies. A project that declared i18n always
    * resolves a locale, and that locale overrides the configured value
    * (the document-language decision record).
    */

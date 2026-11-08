@@ -493,7 +493,13 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
   // Only defined keys are returned: the caller applies this on top of its own
   // resolved options (directory defaults are owned by the caller).
   const options: FrameworkOptions = {};
-  if (overrides.renderer !== undefined) options.renderer = overrides.renderer;
+  if (overrides.renderer !== undefined) {
+    // The loader rejects a retired 'lit' value with an explicit migration
+    // error (config.ts); re-assert here so a caller that bypasses the loader
+    // cannot silently fall through to the native renderer.
+    assertValidUserConfig({ renderer: overrides.renderer });
+    options.renderer = 'native';
+  }
   // The roots are emitted only when `dirs` was configured: without it the
   // caller's own defaults already are these values, and restating them here
   // would make `resolveAppConfig` look like it owns the directory defaults.

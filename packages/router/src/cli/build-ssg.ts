@@ -163,8 +163,8 @@ interface BuildSSGOptions {
   layout?: FrameworkOptions['layout'];
   layouts?: FrameworkOptions['layouts'];
   upgradeStrategy?: HydrationStrategy;
-  /** Page renderer (#1339). Defaults to ctx.options.renderer. */
-  renderer?: 'native' | 'lit';
+  /** Page renderer; only native exists. Defaults to ctx.options.renderer. */
+  renderer?: 'native';
   resolveAlias?: Record<string, string> | import('vite').Alias[];
   base?: string;
   /**
@@ -209,8 +209,8 @@ interface SsgEntryDescriptorInputs {
   upgradeStrategy: HydrationStrategy;
   layout?: FrameworkOptions['layout'];
   layouts?: FrameworkOptions['layouts'];
-  /** Page renderer (#1339) — threaded from FrameworkOptions. */
-  renderer?: 'native' | 'lit';
+  /** Page renderer — threaded from FrameworkOptions. */
+  renderer?: 'native';
   /** Declared project locales — threaded from the build context. */
   i18n?: { locales: string[]; defaultLocale: string };
 }

@@ -63,14 +63,6 @@ export interface BuildContextView {
   };
   /** The Phase 2 client build's asset manifest (null when no client bundle shipped). */
   clientAssetManifest?: ClientAssetManifest | null;
-  /**
-   * Resolved framework options. Only the renderer is read here: whether an
-   * emitted graph must carry the shared element-runtime chunk is a
-   * renderer-level fact (native requires it, lit's entry is element-free,
-   * #1339), and the runtime-preload projection fails closed for a native
-   * island-bearing build whose chunk it cannot name.
-   */
-  options?: { renderer?: 'native' | 'lit' };
 }
 
 type DeliveryIslandMeta = Partial<IslandDecl> &
@@ -204,19 +196,14 @@ export async function postProcessClientIslandBuild(
   if (bearingPages.length > 0) {
     const runtimeUrl = findElementRuntimeChunkFile(ctx.clientAssetManifest?.shared ?? []);
     if (runtimeUrl === undefined) {
-      // Lit's entry is element-free (#1339) and legally has no runtime chunk.
-      if (ctx.options?.renderer !== 'lit') {
-        throw buildError(
-          ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
-          `Island-bearing pages (${bearingPages
-            .map((manifest) => manifest.route)
-            .join(
-              ', ',
-            )}) need the shared element-runtime chunk preloaded, but the emitted client ` +
-            `assets carry no element-runtime-<hash>.js chunk to name — the native client build ` +
-            `must ship the #1544 chunk before the per-page projection can point a modulepreload at it`,
-        );
-      }
+      throw buildError(
+        ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
+        `Island-bearing pages (${bearingPages
+          .map((manifest) => manifest.route)
+          .join(', ')}) need the shared element-runtime chunk preloaded, but the emitted client ` +
+          `assets carry no element-runtime-<hash>.js chunk to name — the client build ` +
+          `must ship the #1544 chunk before the per-page projection can point a modulepreload at it`,
+      );
     } else {
       injectElementRuntimePreload(outputDir, pageManifests, runtimeUrl);
     }

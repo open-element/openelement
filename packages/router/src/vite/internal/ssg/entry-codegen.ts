@@ -65,8 +65,6 @@ interface RenderRouteHandlerOptions {
   renderers: RendererDecl[];
   docConfig: RouteHandlerDocConfig;
   isSSG: boolean;
-  /** Page renderer fork (#1339); absent/'native' keeps compiled renderToString emission. */
-  renderer?: 'native' | 'lit';
 }
 
 /** Shared codegen state threaded through the route-handler emit helpers (#847). */
@@ -81,7 +79,6 @@ export interface RouteHandlerEmitContext {
   routeMeta: string;
   routeContext: string;
   headExtrasExpr: string;
-  renderer: 'native' | 'lit';
 }
 
 /**
@@ -197,9 +194,6 @@ function renderRouteContentLines(
   // The page renders as its own compiled host element via __ssr; the page
   // descriptor's props projector maps request-scoped data onto the compiled
   // properties. Renderer modules (_renderer.ts) wrap the rendered HTML string.
-  // (the lit page-data side channel — embedded JSON no
-  // client consumed — was removed; page-state restoration needs a real
-  // consumer contract first.)
   lines.push(routeRenderStatement(ctx, propsExpr, indent));
   if (matchingRenderers.length > 0) {
     lines.push(`${indent}// Renderer tree wrapping (outer -> inner)`);
@@ -411,7 +405,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
 /** Generate a WinterCG route handler for a page route (GET) or its action (POST). */
 export function renderRouteHandler(
   lines: string[],
-  { method, route, renderers, docConfig, isSSG, renderer }: RenderRouteHandlerOptions,
+  { method, route, renderers, docConfig, isSSG }: RenderRouteHandlerOptions,
 ): void {
   const ctx: RouteHandlerEmitContext = {
     isAction: method === 'post',
@@ -426,7 +420,6 @@ export function renderRouteHandler(
       route.filePath,
     )} }`,
     headExtrasExpr: isSSG ? '__headExtras' : quoteGeneratedJavaScriptValue(docConfig.headExtras),
-    renderer: renderer ?? 'native',
   };
 
   renderRouteHandlerPreamble(lines, ctx);
@@ -436,16 +429,15 @@ export function renderRouteHandler(
   renderRouteResponseAndCatch(lines, ctx);
 }
 
-/** Compatibility-facing focused entry points used by the entry orchestrator. */
+/** Focused entry points used by the entry orchestrator. */
 export function renderPageRoute(
   lines: string[],
   route: PageRouteDecl,
   renderers: RendererDecl[],
   docConfig: RouteHandlerDocConfig,
   isSSG: boolean,
-  renderer?: 'native' | 'lit',
 ): void {
-  renderRouteHandler(lines, { method: 'get', route, renderers, docConfig, isSSG, renderer });
+  renderRouteHandler(lines, { method: 'get', route, renderers, docConfig, isSSG });
 }
 
 export function renderActionRoute(
@@ -454,7 +446,6 @@ export function renderActionRoute(
   renderers: RendererDecl[],
   docConfig: RouteHandlerDocConfig,
   isSSG: boolean,
-  renderer?: 'native' | 'lit',
 ): void {
-  renderRouteHandler(lines, { method: 'post', route, renderers, docConfig, isSSG, renderer });
+  renderRouteHandler(lines, { method: 'post', route, renderers, docConfig, isSSG });
 }

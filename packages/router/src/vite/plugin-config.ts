@@ -424,7 +424,7 @@ export function createConfigHooks(
         ...(noExternal === undefined ? {} : { ssr: { noExternal } }),
         // Chokidar's fs.watch backend drops consecutive change events within
         // 50ms. A quick fix after a syntax error can otherwise leave Vite's
-        // SSR error cached forever (the packed Lit consumer on Linux).
+        // SSR error cached forever (the packed consumer on Linux).
         // Use its native write-stability queue, which delivers the final
         // write instead of throttling it away. Explicit watcher settings win.
         ...(userConfig.server?.watch === null ||

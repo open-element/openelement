@@ -1,13 +1,13 @@
 /**
  * @openelement/element/html — pure HTML document utilities (Beta.2.2, #1339).
  *
- * Single implementation source for HTML escaping and the document wrapper,
- * shared by the Native and Lit generated server entries. This leaf exists so
- * a renderer that is NOT the Native compiled runtime (e.g. the Lit SSR path)
- * never has to import the package root barrel — which carries the compiled
- * runtime kernel — just to escape HTML or wrap a document. The module graph
- * reachable from here contains no compiler, no Part Program kernel, and no
- * renderer runtime.
+ * Single implementation source for HTML escaping and the document wrapper:
+ * used by the generated native server entry through the package root barrel,
+ * and imported directly by kernel-free build/config consumers. The leaf
+ * exists so a consumer that is not the compiled runtime never has to import
+ * the package root barrel — which carries the compiled runtime kernel — just
+ * to escape HTML or wrap a document. The module graph reachable from here
+ * contains no compiler, no Part Program kernel, and no renderer runtime.
  */
 export {
   createDocumentStyleResources,

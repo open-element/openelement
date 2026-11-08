@@ -2,11 +2,11 @@
  * @openelement/router/document — resolved Document seam tests (Beta.2.2, #1326).
  *
  * The seam is the single place page meaning (title/description/meta/
- * canonical/alternates/locale) is resolved before either serializer runs.
+ * canonical/alternates/locale) is resolved before the serializer runs.
  * These tests pin the resolution policy: static and resolver heads, field
  * validation, normalized link ordering, locale propagation, and purity.
- * End-to-end proof that both serializers emit the resolved document lives in
- * the app-flow-native / app-flow-lit fixture matrices.
+ * End-to-end proof that the resolved document reaches the emitted HTML lives
+ * in the app-flow-native fixture matrix.
  */
 
 import { expect, test } from 'vitest';

@@ -53,9 +53,8 @@
  */
 
 // `@openelement/element/authoring` is the kernel-free leaf: importing the
-// package root barrel here would pull the Native runtime kernel into the
-// config surface and break the Lit server entry's kernel-free boundary
-// (lit-graph-boundary.test.ts).
+// package root barrel here would pull the compiled runtime kernel into the
+// config surface (entry-graph-boundary.test.ts).
 import { OpenElementError } from '@openelement/element/authoring';
 
 /** Canonical config-file name, resolved in the project root. */

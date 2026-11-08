@@ -19,7 +19,7 @@
  * every generated entry (dev, SSG prerender, Nitro production). The modules
  * never import the Element runtime barrel: the entry injects its Element
  * functions and its serialized build data (admitted tag list, layout plan) at
- * binding time, keeping the LIT entry's graph kernel-free (#1339). The only
+ * binding time, keeping the runtime graph kernel-free. The only
  * Element edges are the kernel-free `/authoring` leaf's protocol/policy
  * constants (the action fetch header, the problem+json media type, the
  * dangerous-key deny list, the body-limit budget, and the stream policy
@@ -83,14 +83,8 @@ export type {
   ProjectedProps,
   RouteModule,
 } from './page-render.ts';
-export {
-  createLitPageRenderer,
-  createNativePageRenderer,
-  resolveCompiledPageTag,
-  resolveLitPageTag,
-} from './renderer-runtime.ts';
+export { createNativePageRenderer, resolveCompiledPageTag } from './renderer-runtime.ts';
 export type {
-  LitPageRendererDeps,
   NativePageRendererDeps,
   PageSsrRenderer,
   PageSsrSourceInfo,
@@ -122,7 +116,6 @@ export { createGeneratedApp } from './app.ts';
 export type { GeneratedApp, GeneratedAppConfig, GeneratedPageRuntime } from './app.ts';
 export {
   assertCompiledStreamRoute,
-  assertLitStreamRoute,
   createMethodNotAllowedResponder,
   createPageHandlerTable,
 } from './route-dispatch.ts';

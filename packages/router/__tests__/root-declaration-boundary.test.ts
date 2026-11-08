@@ -6,7 +6,7 @@
  * entries, and a `skipLibCheck: false` consumer cannot typecheck the root
  * without Vite installed.
  *
- * The runtime module-graph walk (lit-graph-boundary.test.ts) deliberately
+ * The runtime module-graph walk (entry-graph-boundary.test.ts) deliberately
  * drops type-only edges: an `import type`, or an inline `import('./…')` in a
  * type position, is erased at runtime but survives into the emitted `.d.ts`,
  * so a source module that only TYPES against the Vite build layer still leaks

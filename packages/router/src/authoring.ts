@@ -255,7 +255,7 @@ export type StructuredDataEntry = { readonly [key: string]: JsonValue };
  * canonical/alternates in #1326; structured data via the typed JSON-LD
  * channel). Either a static object or — via PageHeadResolver — resolved per
  * render from the request-scoped context by resolvePageDocument
- * (@openelement/router/document) before either serializer runs.
+ * (@openelement/router/document) before the serializer runs.
  */
 export interface PageHead {
   title?: string;
@@ -434,9 +434,8 @@ const PAGE_DESCRIPTOR_FIELDS = new Set(['route', 'head', 'renderIntent', 'props'
  * an ES class (class syntax defines `prototype` as a NON-writable own
  * property; a plain function's `prototype` is writable and an arrow function
  * has none). The second arm preserves the class path for classes that
- * legitimately carry no compiled program — the LitElement page classes
- * defineLitPage() funnels through this same definePage(). Everything else
- * function-shaped is a server function page.
+ * legitimately carry no compiled program. Everything else function-shaped is
+ * a server function page.
  */
 function isElementPageClass(component: (...args: never[]) => unknown): boolean {
   if ((component as { __partProgram?: unknown }).__partProgram !== undefined) return true;

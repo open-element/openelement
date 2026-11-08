@@ -139,9 +139,9 @@ export interface ModuleSemanticsOptions {
 /**
  * The core's own vocabulary: empty. The element package exposes no
  * defineElement() factory — compiled registration is the @element decorator
- * on an OpenElement subclass, which the scan recognizes directly. Every live
- * registration factory — Router's page definition, the lit page factory —
- * rides host-injected descriptors, and the retired factory names fail closed
+ * on an OpenElement subclass, which the scan recognizes directly. Router's
+ * page-definition and registration vocabulary rides host-injected
+ * descriptors, and any retired or unrecognized factory name fails closed
  * like any other unrecognized import.
  */
 const CORE_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [];
@@ -628,8 +628,8 @@ export function analyzeModuleSemantics(
     ) {
       // A default-exported page-definition factory call marks the module as a
       // page — but only for a binding the host's injected vocabulary admits.
-      // (The lit renderer's factory lives on a subpath; the router injects
-      // both specifiers, the core stays package-blind, #1339.)
+      // The core stays package-blind: the host injects the vocabulary, so no
+      // package specifier is hard-coded here.
       const pageFactory = statement.expression.expression.text;
       const matchedPageBinding = pageDefinitionBindings.find((descriptor) =>
         imports.isRuntimeNamedImport(
@@ -640,13 +640,13 @@ export function analyzeModuleSemantics(
       );
       if (matchedPageBinding) {
         definePage = true;
-        // The server function page (alpha15): only the native definePage
-        // binding (not the lit factory whose first argument is a tag string)
-        // can admit a component function. The first argument must be a plain
-        // identifier that resolves to a server function component THIS module
-        // declares — an inline arrow or an unexported local would ship runtime
-        // JSX, and the server lane has no interpreter (the R1 admission rule
-        // mirrored).
+        // The server function page (alpha15): only the `definePage`
+        // page-definition binding admits a component function — the first
+        // argument's meaning is binding-specific, and only definePage's is a
+        // component reference. The first argument must be a plain identifier
+        // that resolves to a server function component THIS module declares —
+        // an inline arrow or an unexported local would ship runtime JSX, and
+        // the server lane has no interpreter (the R1 admission rule mirrored).
         if (
           matchedPageBinding.kind === 'page-definition' &&
           matchedPageBinding.exportName === 'definePage'
@@ -781,10 +781,11 @@ export function analyzeModuleSemantics(
         if (/^on[A-Z]/.test(name)) interactionEvents.add(name.slice(2).toLowerCase());
       }
     }
-    // Lit templates carry the same attribute inside html`` template literals
-    // instead of JSX (#1339: the enhancement layer is renderer-shared, so the
-    // detection must be too). The attribute-shape lookahead ([\s=>/]) keeps
-    // prose mentions from pulling the layer in, matching the JSX rule.
+    // Template-literal markup (e.g. a third-party lit html`` template) carries
+    // the same attribute inside template literals instead of JSX; the scan is
+    // syntax-based, so the detection covers both forms. The attribute-shape
+    // lookahead ([\s=>/]) keeps prose mentions from pulling the layer in,
+    // matching the JSX rule.
     if (ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) {
       const parts = ts.isNoSubstitutionTemplateLiteral(node)
         ? [node.text]

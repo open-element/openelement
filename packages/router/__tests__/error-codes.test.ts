@@ -58,7 +58,6 @@ import { buildPackageIslandDecls } from '../src/vite/internal/ssg/island-scanner
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 import { resolveDynamicRoutePath } from '../src/vite/internal/ssg/ssg-helpers.ts';
 import { mdxToCompiledPageSource } from '../src/vite/plugin-mdx-lower.ts';
-import { assertLitStreamRoute } from '../src/vite/internal/server-runtime/route-dispatch.ts';
 import {
   createStreamPageShell,
   streamFields,
@@ -426,19 +425,6 @@ test('error codes: the streaming pump reports ssr-phase codes', async () => {
 });
 
 test('error codes: the dispatch guards and the renderer seam report ssr-phase codes', () => {
-  const litStream = assertThrowsIncludes(
-    () =>
-      assertLitStreamRoute(
-        { default: { openElementPage: { renderIntent: { stream: {} } } } },
-        '/',
-        '/app/routes/streamed.tsx',
-      ),
-    OpenElementError,
-    'Lit renderer does not support stream route',
-  );
-  expect(litStream.code).toEqual(DispatchErrorCode.LIT_STREAM_UNSUPPORTED);
-  expect(litStream.phase).toEqual('ssr');
-
   const renderer = createNativePageRenderer({
     renderToString: () => ({ html: '' }),
     customElements: { get: () => undefined },

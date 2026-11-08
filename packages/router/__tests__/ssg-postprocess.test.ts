@@ -456,22 +456,6 @@ test('#1544/B2: an island-bearing native build whose runtime chunk cannot be nam
   }
 });
 
-test('#1544/B2: a lit island-bearing build is skipped — its entry is element-free (#1339)', async () => {
-  const tmp = makeTempDir();
-  try {
-    const dist = join(tmp, 'dist');
-    writeProjectionPages(dist);
-    // Lit carries no runtime chunk legally: no throw, and no link either.
-    await postProcessClientIslandBuild({
-      ...ctxView({ ...PROJECTION_MANIFEST, shared: [] }, tmp),
-      options: { renderer: 'lit' },
-    });
-    expect(readFileSync(join(dist, 'index.html'), 'utf8').includes('modulepreload')).toEqual(false);
-  } finally {
-    cleanup(tmp);
-  }
-});
-
 // ─── injectCspMeta ──────────────────────────────────────────
 test('injectCspMeta adds CSP meta tag to HTML files', () => {
   const tmp = makeTempDir();

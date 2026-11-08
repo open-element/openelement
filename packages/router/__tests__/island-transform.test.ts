@@ -151,19 +151,6 @@ describe('island-transform - layout-convention admission (router-convention <-> 
 });
 
 describe('entry-generators - generateClientEntry (v0.5.0 CE upgrade)', () => {
-  test('no legacy SSR client imports - CE-native upgrade', () => {
-    const islands = [
-      {
-        tagName: 'my-counter',
-        modulePath: '/app/islands/my-counter.ts',
-        strategy: 'idle' as const,
-      },
-    ];
-    const code = generateClientEntry(islands);
-    // v0.5.0: browser CE spec upgrades elements automatically
-    expect(code.includes('lit-element-hydrate-support')).toEqual(false);
-  });
-
   test('registers custom elements via dynamic import', () => {
     const islands = [
       {
@@ -212,7 +199,6 @@ describe('entry-generators - generateClientEntry (v0.5.0 CE upgrade)', () => {
     const code = generateClientEntry(islands);
     // v0.5.0: no old marker, CE-native upgrade
     expect(code.includes('defer-hydration')).toEqual(false);
-    expect(code.includes('LitElement')).toEqual(false);
   });
 
   test('returns no-client-JS comment for empty islands', () => {

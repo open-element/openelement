@@ -5,8 +5,8 @@
  * (ADR-0160 rule d): chunk hashes change, chunk file names change (Rolldown
  * default and manualChunks naming), manualChunks off, shared chunks appear,
  * an island without its own chunk rides the client entry, several islands
- * share one chunk, native and lit both render the tag at document time, and
- * an enhanced-forms-only project with zero islands still gets the entry.
+ * share one chunk, the entry's script tag renders at document time, and an
+ * enhanced-forms-only project with zero islands still gets the entry.
  *
  * The load-bearing scenario is the FILE NAME one: island identity (the
  * delivery tag) must never drift when an output chunk is renamed or
@@ -361,7 +361,7 @@ test('matrix 6 — islands sharing one chunk keep distinct identities', () => {
   expect(result.shared).toEqual([]);
 });
 
-// ─── 7/8. native / lit ────────────────────────────────────────────────
+// ─── 7/8. native document-time injection ──────────────────────────────
 
 const pageRoute: RouteEntry[] = [
   { path: '/', filePath: 'index.ts', type: 'page', varName: 'pageIndex' },
@@ -381,12 +381,12 @@ test('matrix 7 — native: every document channel renders the script tag at docu
   assertScriptAtBodyEnd(renderDocument(doc), '/client/islands/client.js');
 });
 
-test('matrix 8 — lit: same document-time injection over the lit adapter and package islands', () => {
-  const litEntry = renderEntry(buildEntryDescriptor(pageRoute, { ssg: true, renderer: 'lit' }));
-  assertDocumentTimeInjection(litEntry);
+test('matrix 8 — native: package islands join on the declared module-path fragment', () => {
+  const nativeEntry = renderEntry(buildEntryDescriptor(pageRoute, { ssg: true }));
+  assertDocumentTimeInjection(nativeEntry);
 
-  // A lit project's island is typically a package module: identity joins on
-  // the declared module-path fragment, never the chunk name.
+  // A package island has no source file: identity joins on the declared
+  // module-path fragment, never the chunk name.
   const result = manifest(
     [
       {

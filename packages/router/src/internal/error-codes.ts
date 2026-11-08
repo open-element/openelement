@@ -149,8 +149,6 @@ export const DescriptorErrorCode = {
   STREAM_RENDERER: 'OE_DESCRIPTOR_STREAM_RENDERER',
   /** Streaming conflicts with the compiled layout wrapper. */
   STREAM_LAYOUT: 'OE_DESCRIPTOR_STREAM_LAYOUT',
-  /** The lit renderer does not support a compiled layout/layouts. */
-  LIT_LAYOUT: 'OE_DESCRIPTOR_LIT_LAYOUT',
 } as const;
 
 /**
@@ -319,8 +317,6 @@ export const StreamErrorCode = {
  * manifest while the generated entry wires its dispatch table.
  */
 export const DispatchErrorCode = {
-  /** A stream route is registered under the lit renderer, which cannot stream. */
-  LIT_STREAM_UNSUPPORTED: 'OE_DISPATCH_LIT_STREAM',
   /** A stream route's literal declaration has no matching build manifest/program. */
   STREAM_DECLARATION_MISMATCH: 'OE_DISPATCH_STREAM_DECLARATION',
 } as const;

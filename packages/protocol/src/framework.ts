@@ -170,9 +170,8 @@ export type Middleware = (request: Request, next: () => Promise<Response>) => Pr
 
 /**
  * The adapter-facing framework options: where routes and islands
- * live, which renderer serializes pages, the default layout and named-layout
- * declarations, the document `<html>`/head injection channels, and the
- * request-time middleware switches.
+ * live, the default layout and named-layout declarations, the document
+ * `<html>`/head injection channels, and the request-time middleware switches.
  *
  * Every field is optional; the adapter applies its documented default. This is
  * the type an application config file's default export is checked against, so
@@ -180,15 +179,11 @@ export type Middleware = (request: Request, next: () => Promise<Response>) => Pr
  */
 export interface FrameworkOptions {
   /**
-   * Page renderer selection (Beta.2.2, #1339). EXPLICIT, never inferred:
-   * 'native' (default) renders pages through the compiled Part Program
-   * serializer (renderToString); 'lit' renders LitElement pages through
-   * @lit-labs/ssr and hydrates them with @lit-labs/ssr-client. Routing,
-   * loaders, actions, form enhancement and morphing are shared; only page
-   * rendering and the client claim layer fork. 'lit' currently requires
-   * `layout: false` (no compiled layout); the build fails closed otherwise.
+   * Page renderer selection. The compiled native renderer is the only one
+   * supported; omit this key. A retired `'lit'` value is rejected with an
+   * explicit migration error at the config boundary (ADR-0152, 2026-11-08).
    */
-  renderer?: 'native' | 'lit';
+  renderer?: 'native';
   /** Directory the route scanner walks, relative to the Vite root. Defaults to `app/routes`. */
   routesDir?: string;
   /** Directory island modules are discovered in. Defaults to `app/islands`. */

@@ -14,20 +14,6 @@ import { DispatchErrorCode, serveError } from '../../../internal/error-codes.ts'
 import type { PageRouteModule, StreamRouteManifestLike } from './types.ts';
 
 /**
- * Startup guard for a page route under a renderer without compiled-stream
- * support (the lit fork): a route declaring `renderIntent.stream` fails the
- * build loudly instead of silently rendering static.
- */
-export function assertLitStreamRoute(module: unknown, route: string, file: string): void {
-  const stream = readStreamIntent(module);
-  if (stream === undefined) return;
-  throw serveError(
-    DispatchErrorCode.LIT_STREAM_UNSUPPORTED,
-    '[openElement] Lit renderer does not support stream route ' + route + ' at ' + file + '.',
-  );
-}
-
-/**
  * Startup guard for a page route under the compiled stream runtime: the
  * route's literal stream declaration must match the build-time manifest
  * (field list, program tag, program version) and the module must carry the

@@ -34,11 +34,11 @@
  * This is the same rule #1544 already applies to the element runtime — shared
  * infrastructure that many chunks need must not be homed inside one
  * lazily-loaded island chunk — applied to the same class of module. It is a
- * bundler contract, not a coincidence: `manualChunks` (native) and
- * `codeSplitting.groups` (lit) are the documented per-module to per-chunk
- * assignment surfaces, and the match key is Vite's own declared id. Nothing
- * here depends on a group name colliding with an entry chunk's name, which is
- * the variant this module deliberately does NOT use.
+ * bundler contract, not a coincidence: `codeSplitting.groups` is the
+ * documented per-module to per-chunk assignment surface, and the match key is
+ * Vite's own declared id. Nothing here depends on a group name colliding with
+ * an entry chunk's name, which is the variant this module deliberately does
+ * NOT use.
  *
  * WHY IT FAILS CLOSED. The grouping above is only as durable as Vite's id. If
  * a future Vite renames it, the group stops matching and the pre-B2 graph

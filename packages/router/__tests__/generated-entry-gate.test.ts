@@ -90,16 +90,6 @@ function generatedEntries(): Array<{ label: string; code: string }> {
       ),
     },
     {
-      label: 'lit SSG',
-      code: renderEntry(
-        buildEntryDescriptor(fullRoutes, {
-          renderer: 'lit',
-          ssg: true,
-          layout: false,
-        }),
-      ),
-    },
-    {
       label: 'native SSG with middleware.use',
       code: renderEntry(
         buildEntryDescriptor(basicRoutes, {
@@ -210,7 +200,6 @@ test('gate: retired helper emissions never reappear in generated entries', () =>
     // entry assembly (block e)
     'function __registerSsrComponent(',
     'function __assertStreamRoute(',
-    'function __assertLitStreamRoute(',
     'function __clientScriptDescriptors(',
     'function __getDefaultLocale(',
     'function __openElementBaseHandler(',
@@ -246,7 +235,7 @@ test('gate: generated entries carry neither the dangerous-key copy nor its liter
 
 // ── Gate d: server-only code never enters the client graph ──────────────────
 
-/** Static import/export specifiers of one module (same pattern as lit-graph-boundary). */
+/** Static import/export specifiers of one module (same pattern as the graph-boundary gate). */
 function extractSpecifiers(source: string): string[] {
   const specs = new Set<string>();
   for (const match of source.matchAll(
@@ -257,7 +246,7 @@ function extractSpecifiers(source: string): string[] {
   return [...specs];
 }
 
-/** Resolve a specifier to a repo file, or null when it leaves the walk (mirrors lit-graph-boundary). */
+/** Resolve a specifier to a repo file, or null when it leaves the walk. */
 function resolveSpecifier(spec: string, fromFile: string): string | null {
   if (spec.startsWith('.')) {
     const target = resolve(dirname(fromFile), spec);
@@ -302,8 +291,7 @@ function assertServerRuntimeFree(graph: Set<string>, label: string): void {
 }
 
 test('gate: the client entry and browser runtime graphs never import the server runtime', () => {
-  // The generated client entry (native full shape and lit shape) must not
-  // carry a server-runtime specifier...
+  // The generated client entry must not carry a server-runtime specifier...
   const islands = [
     {
       tagName: 'x-probe',
@@ -313,42 +301,31 @@ test('gate: the client entry and browser runtime graphs never import the server 
       dsd: true,
     },
   ] as const;
-  for (const renderer of ['native', 'lit'] as const) {
-    const client = generateClientEntry([...islands], {
-      renderer,
-      enhancedForms: true,
-    });
-    expect(client).toContain('virtual:open-client-runtime/scheduler');
-    expect(
-      client.includes('server-runtime'),
-      `${renderer} client entry imports server code`,
-    ).toBeFalsy();
-    // ...and the real modules behind the virtual client runtime specifiers
-    // (island-scheduler.ts / enhance-client.ts) stay server-free too: the
-    // walk follows their actual import graph.
-    const browserRuntime = walkModuleGraph([
-      resolve(REPO_ROOT, 'packages/router/src/vite/internal/ssg/island-scheduler.ts'),
-      resolve(REPO_ROOT, 'packages/router/src/vite/internal/ssg/enhance-client.ts'),
-    ]);
-    expect(browserRuntime.size > 0).toBeTruthy();
-    assertServerRuntimeFree(browserRuntime, `${renderer} client runtime graph`);
-  }
+  const client = generateClientEntry([...islands], { enhancedForms: true });
+  expect(client).toContain('virtual:open-client-runtime/scheduler');
+  expect(client.includes('server-runtime'), 'client entry imports server code').toBeFalsy();
+  // ...and the real modules behind the virtual client runtime specifiers
+  // (island-scheduler.ts / enhance-client.ts) stay server-free too: the
+  // walk follows their actual import graph.
+  const browserRuntime = walkModuleGraph([
+    resolve(REPO_ROOT, 'packages/router/src/vite/internal/ssg/island-scheduler.ts'),
+    resolve(REPO_ROOT, 'packages/router/src/vite/internal/ssg/enhance-client.ts'),
+  ]);
+  expect(browserRuntime.size > 0).toBeTruthy();
+  assertServerRuntimeFree(browserRuntime, 'client runtime graph');
 });
 
 test('gate: the generated client entry never CALLS a __ binding it does not define', () => {
   // 88bda88bf regression class (not a symbol pin): the B2 zero-island change
-  // added `__loadElementRuntime();` to a block shared by both renderers while
-  // the definition (`var __loadElementRuntime = ...`) stayed in the native
-  // branch only. The lit entry then threw
-  // `ReferenceError: __loadElementRuntime is not defined` at module
-  // evaluation — island scheduling and the enhance layer never ran, and
-  // fixture-router-lit-framework#e2e:browsers burned the 45-minute job cap
-  // with 27 failed on 3 engines.
+  // added `__loadElementRuntime();` to a block shared by the two then-existing
+  // renderer shapes while its definition stayed in the native branch only, so
+  // one shape threw `ReferenceError` at module evaluation. The retired Lit
+  // renderer is gone, but the failure class is not: a shared block can still
+  // call a binding that only one emission shape defines.
   //
   // The check is shape-based on purpose: it fails for ANY `__`-prefixed call
   // without a matching definition (var/function declaration or `as __x`
-  // import alias), so the next shared-block edit that reaches into a
-  // renderer-only helper is caught by the same gate.
+  // import alias), over every enhancedForms shape the native entry emits.
   const islands = [
     {
       tagName: 'x-probe',
@@ -358,12 +335,7 @@ test('gate: the generated client entry never CALLS a __ binding it does not defi
       dsd: true,
     },
   ] as const;
-  const shapes: { renderer: 'native' | 'lit'; enhancedForms: boolean }[] = [
-    { renderer: 'native', enhancedForms: true },
-    { renderer: 'native', enhancedForms: false },
-    { renderer: 'lit', enhancedForms: true },
-    { renderer: 'lit', enhancedForms: false },
-  ];
+  const shapes: { enhancedForms: boolean }[] = [{ enhancedForms: true }, { enhancedForms: false }];
   const report: string[] = [];
   for (const shape of shapes) {
     const client = generateClientEntry([...islands], shape);
@@ -374,7 +346,7 @@ test('gate: the generated client entry never CALLS a __ binding it does not defi
     const called = new Set<string>();
     for (const match of client.matchAll(/\b(__\w+)\s*\(/g)) called.add(match[1]);
     for (const name of [...called].filter((candidate) => !defined.has(candidate)).sort()) {
-      report.push(`${shape.renderer}/enhancedForms=${shape.enhancedForms}: ${name}`);
+      report.push(`enhancedForms=${shape.enhancedForms}: ${name}`);
     }
   }
   expect(report, 'generated client entry calls an undefined binding').toEqual([]);

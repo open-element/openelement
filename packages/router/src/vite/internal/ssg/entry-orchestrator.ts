@@ -30,7 +30,7 @@
  *   for side-effect custom element registration.
  * - HTML document wrapping delegates to wrapInDocument from html-escape.ts
  *   (imported at runtime - single source of truth, no duplicate HTML logic)
- * - DSD output must remain plain HTML, without Lit SSR marker comments.
+ * - DSD output must remain plain HTML, with no renderer-specific marker comments.
  *
  * Thin orchestrator: delegates code generation to focused sub-modules:
  *   - entry-codegen.ts         — entry code string generation (#901)
@@ -479,12 +479,12 @@ export function renderEntry(desc: EntryDescriptor): string {
     allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
   };
   for (const route of desc.pageRoutes) {
-    renderPageRoute(lines, route, desc.renderers, docConfig, desc.isSSG, desc.renderer);
+    renderPageRoute(lines, route, desc.renderers, docConfig, desc.isSSG);
   }
 
   // --- Action POST handlers ---
   for (const route of desc.pageRoutes) {
-    renderActionRoute(lines, route, desc.renderers, docConfig, desc.isSSG, desc.renderer);
+    renderActionRoute(lines, route, desc.renderers, docConfig, desc.isSSG);
   }
 
   // --- Shared dispatch: the WinterCG route middleware over the populated

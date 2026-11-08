@@ -15,7 +15,7 @@ Framework Mode authoring — the package root (`definePage`,
 `defineIslandConfig`, the action protocol) and the Element route-data types it
 re-exports — is built on compiled element classes and therefore
 requires `@openelement/element` to be installed. The `./document`
-subpath (the resolved-page seam used by the Native and Lit serializers) is
+subpath (the resolved-page seam used by the native serializer) is
 Framework Mode surface too: it depends on Element's trusted-HTML contract
 through the shared head-safety predicates, so it is not part of the
 Element-free Route Mode closure. Element is declared as an
