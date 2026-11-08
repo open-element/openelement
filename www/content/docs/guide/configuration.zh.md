@@ -68,7 +68,7 @@ export default defineConfig({
 
 可接受的键——其余任何键都会以这份列表报错并让构建失败：
 
-- `renderer`——`'native'`（默认，编译后的 Part Program 序列化器）或 `'lit'`。
+- `renderer`——只接受 `'native'`（默认：编译后的 Part Program 序列化器）。渲染器选择保持显式、绝不推断。已退役的 `'lit'` 值仍被识别，因此会以显式迁移错误失败（`CONFIG_INVALID`；ADR-0152 2026-11-08 以零兼容窗口、无适配器地执行该退役）；其余任何值都是类型错误。
 - `dirs`——`{ routes, islands, components }`。
 - `layout`——`false` 表示退出约定，或 `{ import, props }`。标签名由 import 的文件名推导，因此不可配置。
 - `packageIslands`——组件包如何被接纳。省略或 `'auto'`（默认）：构建在 scan 期推导被接纳的集合——应用的路由、页面、布局、岛与组件真正导入的每一个包属主元素模块（经打包器解析）都按其属主包归因，拥有有效 OpenElement manifest 的包无需任何配置即被接纳。数组在推导之外追加显式条目（如 `['@openelement/ui']`）；两个包声明同名标签时，显式条目优先于推导条目。`'manual'` 关闭推导：只接纳列出的包，导入未列出组件包的行为会以显式声明的修法被报告。应用导入了某包的元素模块、而该包没有有效 manifest 时，它永远不会被接纳（无可接纳之物）并被报告——这是 auto 下保留的唯一真实失误类报告。推导还会把每个被接纳的包并入 SSR 外部化列表（被接纳的包被打包而非运行时导入），因此没有 `ssr.noExternal` 键。

@@ -18,11 +18,11 @@ The repository publishes six public packages for two core products:
   `dependencies` are `@openelement/protocol`, `@openelement/compiler`,
   `@openelement/url-pattern-list`, `mime`, `pathe`, `postcss`, `postcss-value-parser` and
   the pinned `typescript`; the host tooling — `vite`, `@openelement/element`, `hono`,
-  `@hono/vite-dev-server`, `marked`, `@tailwindcss/vite`, `unocss` and the Lit SSR
-  packages — is declared as **optional peers**, which npm never auto-installs, so a Route
-  Mode install pulls no Vite, Element, or Nitro host tooling. The pack step is what
-  performs that split: it moves `@openelement/element` out of `dependencies` into the
-  optional-peer set and strips every optional peer from `dependencies`
+  `@hono/vite-dev-server`, `marked`, `@tailwindcss/vite` and `unocss` — is declared as
+  **optional peers**, which npm never auto-installs, so a Route Mode install pulls no
+  Vite, Element, or Nitro host tooling. The pack step is what performs that split: it
+  moves `@openelement/element` out of `dependencies` into the optional-peer set and strips
+  every optional peer from `dependencies`
   (`tools/release/publish-npm.ts`), which is why the workspace manifest still lists
   Element and Vite as dependencies while the published artifact does not.
   `nitro` is deliberately not declared even as an optional peer: applications that deploy

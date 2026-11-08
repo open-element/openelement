@@ -17,7 +17,7 @@ Custom Elements Manifest 条目本身都不构成证据。最终结果是服务�
 | ---------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | **T0 · Custom Element leaf** | 宿主元素、属性以及创作时写下的 slot-first light-DOM 子节点。不承诺第三方 shadow root。 | 组件自行注册并升级；CSS `:not(:defined)` 与 `:defined` 可以对升级过渡进行样式控制。 | 任何无需经过 SSR 验证即可使用的 WC；不需要适配器。                     |
 | **T1 · Structure snapshot**  | 构建期对稳定结构的无头 DSD 快照，**不含请求数据**。                                    | 升级既有宿主元素，不丢弃该结构。                                                    | 固定版本通过了快照与升级检查的组件。                                   |
-| **T2 · Runtime adapter**     | 适配器运行时经过资格验证的 SSR 输出；第一方 Lit 模式已有直达路径。                     | 通过组件运行时完成 hydration/升级，不替换服务端产生的状态。                         | 仅在第三方 Lit 通过准入之后；失败则回退到 **T0**，而不是假定存在快照。 |
+| **T2 · Runtime adapter**     | 适配器运行时经过资格验证的 SSR 输出。第一方 Lit 文件路由已退役（[ADR-0152](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0152-product-router-and-alpha-convergence.md)）。                     | 通过组件运行时完成 hydration/升级，不替换服务端产生的状态。                         | 仅在第三方 Lit 通过准入之后；失败则回退到 **T0**，而不是假定存在快照。 |
 | **T3 · Native compiled**     | 第一方编译后的 Part Program 序列化 HTML/DSD。                                          | 同一个程序负责创建或认领 DOM 并绑定行为。                                           | openElement 组件。                                                     |
 
 即使没有 JavaScript，只要创作时的子节点承载了关键内容，T0 依然有用。请优先
@@ -40,16 +40,20 @@ Part；快照绝不捕获请求数据。快照缓存以解析后的版本与构�
 T2 不会因为一个 tag 继承了 LitElement 就自动成立。第三方包必须经受住适配器
 SSR、（使用时的）流式路由以及延迟 hydration/升级检查。如果做不到，服务端会
 在**流式开始之前**输出 T0 宿主与 light 子节点并给出降级诊断。字节发出之后的
-错误无法把响应变回 T0；它遵循流式错误契约。第一方
-`renderer: 'lit'` 的资格验证并不为所有第三方 Lit 包背书。
+错误无法把响应变回 T0；它遵循流式错误契约。第三方 Lit 仍需各自通过准入：
+已退役的第一方 Lit 文件路由
+（[ADR-0152](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0152-product-router-and-alpha-convergence.md)）
+从不为第三方包背书，且退役不提供兼容窗口。
 
 ## 当前可用能力
 
 当前的第三方 tag 语料对 native、Lit、FAST 与 Stencil 探针检查的是 T0 形态的
 输出：宿主与创作的 light 子节点存在，第三方 DSD 缺席，并在 Chromium、
-Firefox 与 WebKit 中实际执行浏览器升级。Lit 文件路由单独对显式注册的
-Lit 页面/island 做服务端渲染；native openElement 组件走编译后的程序。构建期
-无头快照与第三方 Lit T2 自动准入仍是**提案**，不是当前的普遍保证。
+Firefox 与 WebKit 中实际执行浏览器升级。第一方 Lit 文件路由已退役
+（[ADR-0152](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0152-product-router-and-alpha-convergence.md)）；
+第三方 Lit WC 仍是 client-only 互操作面，仍需通过准入；native openElement
+组件走编译后的程序。构建期无头快照与第三方 Lit T2 自动准入仍是**提案**，
+不是当前的普遍保证。
 
 在流式路由上，已验证的第三方放置方式是流式壳内的服务端出生：资格探针钉住
 单个实例完成升级、保留其服务端出生的 slot 子节点，并在回填之后保持可交互。

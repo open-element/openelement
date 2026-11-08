@@ -18,7 +18,7 @@ server and browser checks.
 | ---------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | **T0 · Custom Element leaf** | The host, attributes, and authored slot-first light-DOM children. No third-party shadow root is promised. | The component registers and upgrades itself; CSS `:not(:defined)` and `:defined` can style the transition. | Any usable WC without proven SSR; no adapter required.                                           |
 | **T1 · Structure snapshot**  | A build-time headless DSD snapshot of stable structure, **not request data**.                             | Upgrades the existing host without discarding that structure.                                              | Components whose pinned version passes snapshot and upgrade checks.                              |
-| **T2 · Runtime adapter**     | Qualified SSR output for the adapter's runtime; first-party Lit mode already has a direct path.           | Hydrates/upgrades through the component runtime without replacing server-born state.                       | Third-party Lit only after admission passes; failure returns to **T0**, not an assumed snapshot. |
+| **T2 · Runtime adapter**     | Qualified SSR output for the adapter's runtime. The first-party Lit Framework Mode is retired ([ADR-0152](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0152-product-router-and-alpha-convergence.md)).           | Hydrates/upgrades through the component runtime without replacing server-born state.                       | Third-party Lit only after admission passes; failure returns to **T0**, not an assumed snapshot. |
 | **T3 · Native compiled**     | The first-party compiled Part Program serializes HTML/DSD.                                                | The same program creates or claims DOM and binds behavior.                                                 | OpenElement components.                                                                          |
 
 T0 is useful even without JavaScript when the authored children contain the
@@ -45,16 +45,21 @@ third-party package must survive adapter SSR, the streamed route when used,
 and deferred hydration/upgrade checks. If it does not, the server emits the
 T0 host and light children with a downgrade diagnostic **before streaming
 begins**. An error after bytes are sent cannot turn that response into T0;
-it follows the stream error contract. First-party
-`renderer: 'lit'` qualification does not certify all third-party Lit packages.
+it follows the stream error contract. Third-party Lit still requires its own
+admission pass: the retired first-party Lit Framework Mode
+([ADR-0152](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0152-product-router-and-alpha-convergence.md))
+never certified third-party packages, and its retirement provides no
+compatibility window.
 
 ## What is available now
 
 The current foreign-tag corpus checks T0-shaped output for native, Lit, FAST,
 and Stencil probes: hosts and authored light children are present, foreign
 DSD is absent, and browser upgrade is exercised in Chromium, Firefox, and
-WebKit. The Lit Framework Mode separately server-renders explicitly
-registered Lit pages/islands; native OpenElement components use their compiled
+WebKit. The first-party Lit Framework Mode is retired
+([ADR-0152](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0152-product-router-and-alpha-convergence.md));
+third-party Lit WCs remain client-only interoperability and still require
+admission, while native OpenElement components use their compiled
 program. Build-time headless snapshots and automatic third-party Lit T2
 admission are **proposed**, not current blanket guarantees.
 

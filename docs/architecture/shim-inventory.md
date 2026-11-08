@@ -58,7 +58,7 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 14 | signal 引擎 Preact 适配 | `packages/element/src/internal/signal/` | 保留为平台边缘 |
 | 15 | `@openelement/url-pattern-list` 维护 fork | `packages/router/src/internal/router/route-table.ts` | 保留为平台边缘（附评估结论） |
 | 16 | CEM 兼容分类（第三方 WC 准入） | `packages/router/src/vite/internal/ssg/cem-compat.ts` | 保留为平台边缘（产品互操作面） |
-| 17 | 渲染器适配缝（native / lit） | `packages/router/src/vite/internal/ssg/renderer-adapter.ts` | 条件到即删（lit 分支随 ADR-0152 退役；native 分支为长期方向） |
+| 17 | 渲染器适配缝（native / lit；lit 分支已删） | ~~`packages/router/src/lit.ts`~~、~~`packages/router/src/lit-ssr.ts`~~（native 选择缝保留于 `packages/router/src/vite/internal/ssg/renderer-adapter.ts`） | **已删（ADR-0152 2026-11-08 零兼容退役；native 为唯一渲染器）** |
 | 18 | legacy 虚拟入口 id（`virtual:open-hono-entry`，ADR-0152） | `packages/router/src/vite/plugin-virtual-modules.ts` | 条件到即删（随下一次产物命名不兼容变更一起改名） |
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法
@@ -74,6 +74,12 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 ADR-0152 当日 owner ruling 判定第一方 Lit renderer 零兼容退役，两个公共
 入口与可选 peer 依赖一并删除；该 shim 随入口消失，不再是待退役垫片。
 编号 8 保留在表中并标记「已删」，不复用。）
+（2026-11-08 追加：第 17 项「渲染器适配缝（native / lit）」的退役条件同日
+到期并执行——lit 侧入口 `lit.ts` / `lit-ssr.ts` 随第一方 Lit renderer 零兼容
+退役删除，生成入口、服务端运行时与客户端构建只保留 native 分叉；
+`renderer-adapter.ts` 收敛为 native 单模式，并对已退役的 `'lit'` 值显式抛出
+迁移错误（迁移信号，不是兼容窗口）。该行标记「已删」，编号 17 保留不复用；
+native 选择缝是主产物，不再作为垫片登记。）
 
 ## 条目详情
 
@@ -303,16 +309,23 @@ ADR-0152 当日 owner ruling 判定第一方 Lit renderer 零兼容退役，两�
   仅当 CEM 规范形状变更时随之改写。
 - 处置：保留为平台边缘。
 
-### 17. 渲染器适配缝（native / lit）——条件到即删
+### 17. 渲染器适配缝（native / lit）——已删（ADR-0152，2026-11-08）
 
-- 所有者：router SSG（`renderer-adapter.ts`——生成入口对页面渲染运行时
-  的唯一分叉点；`lit.ts` / `lit-ssr.ts` 为 lit 侧入口）。
-- 方向：entry codegen → 渲染器运行时绑定（两模式共享应用语义，分叉
-  仅在此缝）。
-- 退役条件：lit 分支随 ADR-0152 独立轨道退役（同 #8）；native 侧没有
-  可退的垫片——它是主产物。原文「教义，非债」的定性已被 2026-11-03
+- 所有者（历史）：router SSG（`packages/router/src/vite/internal/ssg/renderer-adapter.ts`
+  ——生成入口对页面渲染运行时的唯一分叉点；lit 侧入口 `lit.ts` / `lit-ssr.ts`
+  已随本项删除）。收敛后的单模式选择仍在该文件：`RendererMode = 'native'`，
+  `selectRendererAdapter` 只接受缺省或 `'native'`，对已退役的 `'lit'` 值抛出
+  显式迁移错误（ADR-0152 当日 owner ruling），其余值 fail closed。
+- 方向（历史）：entry codegen → 渲染器运行时绑定；两模式共享应用语义，
+  分叉曾仅在此缝。
+- 退役条件：**已执行**——lit 分支随 ADR-0152 独立轨道退役（同 #8）于
+  2026-11-08 删除：两个 lit 公共入口与可选 peer 依赖移除，生成入口、服务端
+  运行时与客户端构建不再有 lit 分叉；`renderer-adapter.ts` 收敛为 native
+  单模式并保留对 `'lit'` 的显式退役拒绝作为迁移信号。native 侧没有可退的
+  垫片——它是主产物，不是兼容层；原文「教义，非债」的定性已被 2026-11-03
   取代性修正案推翻，不再有效。
-- 处置：native 分支长期保留；lit 分支随 Lit 轨道退役，窗口 OPEN。
+- 处置：**已删**（lit 分叉）；native 选择缝为长期主产物，不再是登记簿意义上
+  的垫片。
 
 ### 18. legacy 虚拟入口 id（`virtual:open-hono-entry`，ADR-0152）——条件到即删
 

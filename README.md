@@ -15,16 +15,21 @@
 English | [简体中文](./README.zh.md)
 
 OpenElement is a Web Platform-first core for two products: **Element** and **Router**.
-Element compiles JSX-authored Custom Elements into a Part Program used by server serialization, fresh DOM, and existing-DOM hydration. Router owns route selection, HTTP semantics, navigation, loaders, actions, and the shared Native/Lit Framework Mode application contract.
+Element compiles JSX-authored Custom Elements into a Part Program used by server serialization, fresh DOM, and existing-DOM hydration. Router owns route selection, HTTP semantics, navigation, loaders, actions, and the shared Framework Mode application contract (one compiled-native renderer, selected explicitly).
 
 The source tree is `1.0.0-alpha.15`, a new public baseline for Element and Router. It is not a compatibility migration from historic 0.x snapshots. From this release the six packages (`protocol`, `element`, `compiler`, `router`, `create`, `ui`) publish as one line, and npm `latest` points at that line — `npm install @openelement/router` resolves to the current 1.0 prerelease. Since #1557 the Element monolith is three packages: `@openelement/protocol` (cross-system contracts, zero dependencies), `@openelement/element` (pure runtime), and `@openelement/compiler` (build-time TSX-to-Part-Program compiler + Vite plugin).
 
 The description above is the current alpha.15 implementation. The [accepted target](./docs/architecture/product-model.md)
 is HTML-first Full TSX with explicit Signals and an explicit CE boundary. On
 2026-11-03 the owner ended the independent OhMyLit initiative and initiated
-first-party Lit renderer retirement; alpha.15 support remains, and the release
-window is undecided. Third-party Lit WC client-only use remains, without automatic
-SSR or Lit DSD hydration guarantees. The [candidate author samples](./docs/architecture/tsx-author-candidate-contract.md)
+first-party Lit renderer retirement; the 2026-11-08 owner ruling
+([ADR-0152](./docs/adr/ADR-0152-product-router-and-alpha-convergence.md)) executes
+that retirement with no compatibility window. The current source line no longer
+ships the first-party Lit renderer — its public entry points, runtime branch,
+tests and fixtures are removed, and `renderer: 'lit'` fails with an explicit
+migration error — while the published alpha.15 artifact still contains it.
+Third-party Lit WC client-only use remains, without automatic SSR or Lit DSD
+hydration guarantees. The [candidate author samples](./docs/architecture/tsx-author-candidate-contract.md)
 are unreleased and unverified, not the Quick Start API.
 
 ## Evidence & recognition
@@ -95,7 +100,7 @@ can load ESM. Element remains independently consumable in npm-only projects.
 - Declarative Shadow DOM plus SSR, existing-DOM hydration, and islands that hydrate only where needed.
 - Authoring JSX is compiled to a Part Program at build time; there is no runtime virtual-DOM contract.
 - Route Mode for explicit route records and Framework Mode for file routes, loaders, actions, and forms.
-- Native and Lit renderers behind one application contract; renderer integrations stay explicit.
+- One compiled-native renderer behind the application contract; renderer selection stays explicit, and the retired Lit renderer is rejected with a migration error.
 - Compiled output tree-shakes so server-only modules never leak into the client bundle.
 
 ## Repository shape

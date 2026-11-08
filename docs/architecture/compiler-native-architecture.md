@@ -296,11 +296,12 @@ execution architectures.
 
 ### 4.8 Lit retirement is a separate track
 
-Recorded in ADR-0152's 2026-11-03 amendment: OhMyLit is terminated, first-party
-Lit renderer retirement is initiated, alpha.15 support remains, and the
-last-supported version, breaking release, compatibility window and security
-owner are **OPEN**. Third-party Lit Web Components stay available client-side.
-Lit retirement does not gate Alpha16 and must not be smuggled into it.
+Recorded in ADR-0152's 2026-11-03 amendment and executed by the 2026-11-08 owner
+ruling: OhMyLit is terminated and the first-party Lit renderer is retired
+zero-compat — no compatibility adapter, dual renderer lane or migration interval
+exists, and the current source line no longer ships it. Third-party Lit Web
+Components stay available client-side, without automatic SSR or Lit DSD hydration
+guarantees. Lit retirement did not gate Alpha16 and must not be smuggled into it.
 
 ### 4.9 Rust is a post-Alpha18 track
 
@@ -344,6 +345,6 @@ An addition that cannot answer all nine is not ready.
 
 - It does not claim any item above is implemented.
 - It does not freeze names, types or the ABI.
-- It does not authorise deleting the Part Program, the old executor, the class
-  API or the Lit renderer.
+- It does not authorise deleting the Part Program, the old executor or the class
+  API; the Lit renderer retirement is a separate ADR-0152 track.
 - It does not promise dates or performance outcomes.
