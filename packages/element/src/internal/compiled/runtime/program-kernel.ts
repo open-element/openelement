@@ -5,6 +5,14 @@
  * seed serialization — rides on. This module imports no sibling: parts,
  * fresh-dom, blocks, claim, and pre-upgrade-events all draw their shared
  * machinery from here.
+ *
+ * The compiler-neutral halves of that machinery live in their own browser-safe
+ * modules and are delegated to from here so a future generated-code runtime can
+ * consume them without the Part Program context: `bindings.ts` owns the write
+ * subscription and update-error mechanism, `values.ts` owns the canonical sink
+ * coercions, the URL guard, range removal and the shared validation failure
+ * (the definitions that used to live in this module are re-exported below for
+ * the existing consumers).
  */
 
 import type { SignalLike, Unsubscribe } from '@openelement/protocol/signal';
@@ -18,21 +26,20 @@ import {
 // is an OpenElementError carrying a code from the catalogue, so a consumer
 // classifies a compiled-runtime failure by code instead of by message prefix.
 import {
-  AuthoringErrorCode,
   raiseFrameworkError,
   RUNTIME_MESSAGES_ENABLED,
   RuntimeErrorCode,
 } from '@openelement/protocol/errors';
-// The ONE protocol URL policy (the `__h` server constructor's boundary): every
-// class-lane DOM attribute write judges URL-carrying values through it rather
-// than growing a second scheme list.
-import { unsafeStreamFrameAttribute } from '@openelement/protocol/stream-frame-policy';
 import type { RuntimeProgramIR } from '../runtime-program.ts';
 // Type-only (erased): the binding shapes this context records, owned by the
 // Part and Block modules that create them.
 import type { TextPartSlot } from './parts.ts';
 import type { EachBlock, WhenBlock } from './blocks.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
+// The one neutral write-subscription/update-guard mechanism this kernel's
+// context-shaped wrappers delegate to (bindings.ts), and the one canonical
+// value semantics every execution mode reads (values.ts).
+import { bindSignalWrites, guardUpdate, lookupSignal } from './bindings.ts';
 
 type ProgramFixedPart = Extract<
   PartProgramV2['parts'][number],
@@ -244,7 +251,7 @@ export function fail(code: string, message: string): never {
 }
 
 export function signalOf(ctx: MountContext, name: string): SignalLike<unknown> {
-  const signal = ctx.host.signals[name];
+  const signal = lookupSignal(ctx.host.signals, name);
   if (!signal) {
     fail(
       RuntimeErrorCode.HOST_SIGNAL_MISSING,
@@ -260,10 +267,9 @@ export function signalOf(ctx: MountContext, name: string): SignalLike<unknown> {
 }
 
 /**
- * Subscribe to future writes only. Preact's adapter delivers a synchronous
- * initial effect; a conforming lazy engine may not. Only that exact
- * subscription-time echo is ignored, so a lazy engine's first real write is
- * never lost.
+ * Subscribe to future writes only, on a scope's lifetime. The neutral
+ * mechanism lives in `bindings.ts`; this context-shaped wrapper only resolves
+ * the host signal (and names the program origin when it is missing).
  */
 export function subscribeWrites(
   ctx: MountContext,
@@ -271,21 +277,7 @@ export function subscribeWrites(
   name: string,
   fn: (value: unknown) => void,
 ): void {
-  const signal = signalOf(ctx, name);
-  const snapshot = signal.value;
-  let subscribeReturned = false;
-  const unsub = signal.subscribe((value) => {
-    if (!subscribeReturned && Object.is(value, snapshot)) return;
-    if (!scope.disposed) fn(value);
-  });
-  subscribeReturned = true;
-  if (typeof unsub !== 'function') {
-    fail(
-      RuntimeErrorCode.SUBSCRIPTION_INVALID,
-      `[compiled-runtime] signal "${name}" returned an invalid unsubscribe`,
-    );
-  }
-  scope.add(unsub);
+  bindSignalWrites(scope, signalOf(ctx, name), name, fn);
 }
 
 /**
@@ -293,20 +285,14 @@ export function subscribeWrites(
  * (#1375): a throw is reported to the host's update-error sink (the kernel's
  * CompiledErrorBoundary) and not rethrown, so the failing write never escapes
  * into the signal writer's stack and the subscription stays live for the
- * next write. A host without a sink keeps the propagating behavior.
+ * next write. A host without a sink keeps the propagating behavior. The
+ * mechanism lives in `bindings.ts`.
  */
 export function guardedUpdate(
   ctx: MountContext,
   fn: (value: unknown) => void,
 ): (value: unknown) => void {
-  return (value) => {
-    try {
-      fn(value);
-    } catch (error) {
-      if (!ctx.host.onUpdateError) throw error;
-      ctx.host.onUpdateError(error);
-    }
-  };
+  return guardUpdate(fn, ctx.host.onUpdateError);
 }
 
 export function isFixedPart(part: PartProgramV2['parts'][number]): part is ProgramFixedPart {
@@ -398,29 +384,11 @@ export function isStaticStyleFallbackNode(node: Node | undefined): boolean {
   );
 }
 
-export function displayValue(value: unknown): string {
-  return value === null || value === undefined ? '' : String(value);
-}
-
-/**
- * The class lane's one URL-write guard: a URL-carrying attribute name whose
- * value carries a script-bearing scheme is refused BEFORE the DOM write, with
- * the same `OE_UNSAFE_URL_SINK` code the server constructor (`__h`) raises for
- * its markup sinks. The predicate is the ONE shared protocol policy; do not
- * reintroduce a scheme list here.
- */
-export function assertSafeUrlAttribute(name: string, value: string): void {
-  if (!unsafeStreamFrameAttribute(name, value)) return;
-  fail(
-    AuthoringErrorCode.UNSAFE_URL_SINK,
-    `[compiled-runtime] URL attribute ${JSON.stringify(name)} received a script-bearing ` +
-      `scheme (${JSON.stringify(value.slice(0, 32))}); the value is refused.`,
-  );
-}
-
-export function removeNodes(nodes: readonly Node[]): void {
-  for (const node of nodes) node.parentNode?.removeChild(node);
-}
+// The canonical value semantics moved to the browser-safe shared module
+// (`values.ts`) so the generated-code runtime and both serializers read one
+// source; re-exported here because the Part Program executors import them from
+// this kernel. No definition of these lives in this module any more.
+export { assertSafeUrlAttribute, displayValue, removeNodes } from './values.ts';
 
 export function insertNodesBefore(parent: Node, nodes: readonly Node[], reference: Node): void {
   for (const node of nodes) parent.insertBefore(node, reference);

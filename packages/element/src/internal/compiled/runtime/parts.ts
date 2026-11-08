@@ -19,10 +19,10 @@ import {
   type ProgramStylePart,
   type ProgramTextPart,
 } from '@openelement/protocol/part-program';
-// Canonical attr/class/style value coercions — single source of truth,
-// shared with the server serializer (server/shared.ts) so all three
+// Canonical attr/class/style value coercions — the one browser-safe source in
+// values.ts, shared with the server serializer and the seed path so all three
 // execution modes stay byte-identical; do not reintroduce private copies.
-import { attributeValueOf, classValueOf, styleValueOf } from '../server/shared.ts';
+import { attributeValueOf, classValueOf, styleValueOf } from './values.ts';
 import { RuntimeErrorCode } from '@openelement/protocol/errors';
 import type { LifetimeScope } from '../lifetime-scope.ts';
 import {

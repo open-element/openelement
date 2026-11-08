@@ -22,15 +22,16 @@ import { trustedHtmlValue } from '../core/security.ts';
 // Canonical when-Block condition evaluation (#1372) — single source shared
 // with the server serializer; do not reintroduce a private comparison.
 import { conditionHolds } from './condition-holds.ts';
-// Canonical attr/class/style value coercions — single source of truth,
-// shared with the server serializer (server/shared.ts) so all three
-// execution modes stay byte-identical; do not reintroduce private copies.
+// Canonical attr/class/style value coercions and the shared compiled-program
+// validation failure — the browser-safe shared source in runtime/values.ts,
+// shared with the server serializer so all three execution modes stay
+// byte-identical; do not reintroduce private copies.
 import {
   attributeValueOf,
   classValueOf,
   CompiledProgramValidationError,
   styleValueOf,
-} from './server/shared.ts';
+} from './runtime/values.ts';
 import { formatError } from '../core/errors.ts';
 // The ONE tree-walking serializer (issue #1469): both the
 // seed and the server serializer delegate their walk to this kernel.

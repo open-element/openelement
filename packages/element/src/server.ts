@@ -32,7 +32,11 @@
 
 import { escapeText } from './internal/compiled/escape-text.ts';
 import { displayValue } from './internal/compiled/runtime/program-kernel.ts';
-import { attributeValueOf, classValueOf, styleValueOf } from './internal/compiled/server/shared.ts';
+import {
+  attributeValueOf,
+  classValueOf,
+  styleValueOf,
+} from './internal/compiled/runtime/values.ts';
 import { escapeAttr } from './internal/core/html-escape.ts';
 import {
   isSafeAttributeName,

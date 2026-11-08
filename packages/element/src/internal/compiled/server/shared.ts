@@ -8,6 +8,13 @@
  * the compiler-emitted vocabulary — fixed `prop`/`attr`/`bool`/`class`/`style`/
  * `html` sinks, `event` sinks, `text` Parts, and `when`/`each` Blocks with
  * static branches; other unified-schema kinds fail closed here.
+ *
+ * The two browser-neutral pieces below are re-exported from the shared
+ * generated-runtime value module (`../runtime/values.ts`), not defined here:
+ * the canonical sink coercions and the compiled-program validation failure.
+ * The DOM executor, the seed serializer and this server grammar validator all
+ * read the same definitions, and the browser graph no longer imports a server
+ * module just to coerce a class/style value.
  */
 
 import {
@@ -22,10 +29,10 @@ import {
   isSafeAttributeName as canonicalAttributeNameIsSafe,
   RAW_TEXT_TAGS,
 } from '@openelement/protocol/forbidden-sinks';
-import { OpenElementError, ServerErrorCode } from '@openelement/protocol/errors';
 import { normalizePartProgram, type RuntimeProgramIR } from '../runtime-program.ts';
 // Canonical void-element set (issue #1220, M4) — single source of truth.
 import { VOID_TAGS } from '../../core/html-escape.ts';
+import { CompiledProgramValidationError } from '../runtime/values.ts';
 
 export interface CompiledSignalLike<T = unknown> {
   readonly value: T;
@@ -38,27 +45,12 @@ export interface CompiledProgramHost {
   handlers?: Record<string, (event: unknown) => void>;
 }
 
-/**
- * One compiled server/hydration validation failure (#1386 item 3): an
- * `OpenElementError` carrying the caller's code, so the whole server/hydration
- * grammar boundary is catchable as one type. `path` names the program record
- * that failed; it stays a field rather than moving into the code, because the
- * path is per-site data and the code is the contract.
- */
-export class CompiledProgramValidationError extends OpenElementError {
-  readonly path: string;
-
-  constructor(path: string, message: string, code: string = ServerErrorCode.PROGRAM_INVALID) {
-    super(`[compiled-program] ${path}: ${message}`, {
-      code,
-      severity: 'error',
-      phase: 'validation',
-      recoverable: false,
-    });
-    this.name = 'CompiledProgramValidationError';
-    this.path = path;
-  }
-}
+export {
+  attributeValueOf,
+  classValueOf,
+  CompiledProgramValidationError,
+  styleValueOf,
+} from '../runtime/values.ts';
 
 const HTML_TAG_RE = /^[a-z][a-z0-9._:-]*$/;
 const ATTRIBUTE_NAME_RE = /^[A-Za-z_:][A-Za-z0-9_.:-]*$/;
@@ -390,60 +382,12 @@ export function isRecordValue(value: unknown): value is Record<string, unknown> 
 }
 
 /**
- * Shared sink coercions consumed identically by the server serializer, fresh
- * DOM creation, and the hydration recovery builder. Keeping them here (not in a
- * mode-local module) is what makes the three modes byte-identical for the
- * same program + signal state.
+ * The canonical sink coercions are defined once in the browser-safe shared
+ * value module and re-exported here (see the module header): the server
+ * serializer, fresh DOM creation and hydration recovery consume the same
+ * functions, which is what makes the three modes byte-identical for the same
+ * program + signal state.
  */
-export function attributeValueOf(value: unknown): string | null {
-  return value === null || value === undefined ? null : String(value);
-}
-
-export function classValueOf(value: unknown): string {
-  if (value === null || value === undefined || value === false) return '';
-  if (typeof value === 'string' || typeof value === 'number') return String(value);
-  if (Array.isArray(value)) return value.map(classValueOf).filter(Boolean).join(' ');
-  if (typeof value === 'object') {
-    return Object.keys(value as Record<string, unknown>)
-      .sort()
-      .filter((key) => Boolean((value as Record<string, unknown>)[key]))
-      .join(' ');
-  }
-  throw new CompiledProgramValidationError(
-    'host.signals',
-    'class Part expects a string, array, or record',
-  );
-}
-
-function cssName(name: string): string {
-  if (name.startsWith('--')) return name;
-  const vendor = /^(Webkit|Moz|ms|O)([A-Z].*)$/.exec(name);
-  const kebab = (value: string): string =>
-    value[0].toLowerCase() +
-    value.slice(1).replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-  if (vendor) return `-${vendor[1].toLowerCase()}-${kebab(vendor[2])}`;
-  return kebab(name);
-}
-
-export function styleValueOf(value: unknown): string {
-  if (value === null || value === undefined || value === false) return '';
-  if (typeof value === 'string' || typeof value === 'number') return String(value);
-  if (Array.isArray(value)) return value.map(styleValueOf).filter(Boolean).join(';');
-  if (typeof value === 'object') {
-    return Object.keys(value as Record<string, unknown>)
-      .sort()
-      .filter((key) => {
-        const item = (value as Record<string, unknown>)[key];
-        return item !== null && item !== undefined && item !== false;
-      })
-      .map((key) => `${cssName(key)}:${String((value as Record<string, unknown>)[key])}`)
-      .join(';');
-  }
-  throw new CompiledProgramValidationError(
-    'host.signals',
-    'style Part expects CSS text or a declaration record',
-  );
-}
 
 export function voidElement(tag: string): boolean {
   return VOID_TAGS.has(tag);
