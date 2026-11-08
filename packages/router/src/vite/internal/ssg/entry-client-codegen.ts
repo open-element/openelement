@@ -5,7 +5,6 @@ import { stableModuleId } from '@openelement/compiler';
 import { runtimeModulePath } from '../runtime-module-path.ts';
 import { findBuildWorkspaceRoot } from '../../workspace-alias.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
-import { selectRendererAdapter } from './renderer-adapter.ts';
 import {
   type AdmittedClientIslandEntry,
   type AdmittedIslandModuleSpecifier,
@@ -429,7 +428,9 @@ export function generateClientEntry(
     return '// openElement Client Entry - No islands detected, zero client JS needed\n';
   }
 
-  const lit = selectRendererAdapter(options.renderer).hydration === 'lit-adoption';
+  // Retired Lit fork: kept as a constant for one commit so the remaining lit
+  // branches can be removed as a reviewable group in the next change.
+  const lit = false;
   // The component stylesheet's registration rides the native entry only: the
   // lit entry is element-free by design (#1339), and its DSD-delivered link
   // still styles server-rendered lit shadow trees.

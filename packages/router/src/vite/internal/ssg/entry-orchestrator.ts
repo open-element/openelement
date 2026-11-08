@@ -96,13 +96,6 @@ export function renderEntry(desc: EntryDescriptor): string {
   const adapter = selectRendererAdapter(desc.renderer);
   for (const island of desc.islands) validateIslandModuleSpecifier(island.modulePath);
 
-  if (adapter.firstServerImport) {
-    // #1339: the lit SSR DOM shim must be the FIRST import of the entry so it
-    // evaluates before @openelement/element, lit, and every route/island
-    // module (route module imports are emitted below). Covers the dev entry,
-    // the SSG bundle and the request-time server entry uniformly.
-    lines.push(adapter.firstServerImport);
-  }
   lines.push(
     "import { createRouteMiddleware as __createRouteMiddleware } from '@openelement/router/http';",
   );

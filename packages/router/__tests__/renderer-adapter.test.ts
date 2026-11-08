@@ -142,61 +142,51 @@ const expected = {
     server: [16913, '9d12d9ca03948eb33a2a65403ab60c50029a26cf8c5cc50aa7ffa9ffb05a17cc'],
     client: [2862, 'e9629cded31adcb2237afa612acd50c1bd9cd8a17dbd889ab1ae46066616e5ed'],
   },
-  lit: {
-    server: [17016, '3d9e9a2059ec7e05c52b0f5279a9225a196643597dc176cd69095f1fead49ae5'],
-    client: [3167, '7dcb18fd659ffe53b039adfc5139a2496e1b4c02b5d4322ed6c216606511f418'],
-  },
 } as const;
 
-test('internal Native/Lit selection preserves the generated server/client bytes', async () => {
-  for (const mode of ['native', 'lit'] as const) {
-    const adapter = selectRendererAdapter(mode);
-    expect(adapter.mode).toEqual(mode);
-    expect(adapter.supportsCompiledStream).toEqual(mode === 'native');
-    expect(adapter.hydration).toEqual(mode === 'native' ? 'compiled-hydration' : 'lit-adoption');
-    const descriptor = buildEntryDescriptor(routes, { renderer: mode });
-    const server = renderEntry(descriptor);
-    const client = generateClientEntry(
-      [
-        {
-          tagName: 'x-probe',
-          modulePath: '/app/islands/x.ts',
-          strategy: 'load',
-          ssr: true,
-          dsd: true,
-        },
-      ],
-      { renderer: mode },
-    );
-    for (const [kind, text] of [
-      ['server', server],
-      ['client', client],
-    ] as const) {
-      const bytes = new TextEncoder().encode(text);
-      const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-        .join('');
-      expect(bytes.length).toEqual(expected[mode][kind][0]);
-      expect(hash).toEqual(expected[mode][kind][1]);
-    }
-    if (mode === 'native') {
-      // Red A witness: the lazy surface specifier is the stable virtual id and
-      // no checkout root can appear in the entry text, which is what makes the
-      // native client pin machine-independent (see the re-baseline note above).
-      expect(client).toContain(`import('${ELEMENT_SERVICES_RUNTIME_SPECIFIERS.full}')`);
-      expect(client).not.toContain(process.cwd());
-    }
-    expect(descriptor.imports.some((entry) => entry.from === '@openelement/element')).toEqual(
-      mode === 'native',
-    );
-    expect(
-      descriptor.imports.some((entry) => entry.from === '@openelement/router/lit-ssr'),
-    ).toEqual(mode === 'lit');
-  }
-  expect(selectRendererAdapter(undefined).mode).toEqual('native');
-  assertThrowsIncludes(
-    () => selectRendererAdapter('future'),
-    Error,
-    "renderer must be 'native' or 'lit'",
+test('internal native selection preserves the generated server/client bytes', async () => {
+  const adapter = selectRendererAdapter('native');
+  expect(adapter.mode).toEqual('native');
+  expect(adapter.supportsCompiledStream).toEqual(true);
+  expect(adapter.hydration).toEqual('compiled-hydration');
+  const descriptor = buildEntryDescriptor(routes, { renderer: 'native' });
+  const server = renderEntry(descriptor);
+  const client = generateClientEntry(
+    [
+      {
+        tagName: 'x-probe',
+        modulePath: '/app/islands/x.ts',
+        strategy: 'load',
+        ssr: true,
+        dsd: true,
+      },
+    ],
+    { renderer: 'native' },
   );
+  for (const [kind, text] of [
+    ['server', server],
+    ['client', client],
+  ] as const) {
+    const bytes = new TextEncoder().encode(text);
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+    expect(bytes.length).toEqual(expected.native[kind][0]);
+    expect(hash).toEqual(expected.native[kind][1]);
+  }
+  // Red A witness: the lazy surface specifier is the stable virtual id and
+  // no checkout root can appear in the entry text, which is what makes the
+  // native client pin machine-independent (see the re-baseline note above).
+  expect(client).toContain(`import('${ELEMENT_SERVICES_RUNTIME_SPECIFIERS.full}')`);
+  expect(client).not.toContain(process.cwd());
+  expect(descriptor.imports.some((entry) => entry.from === '@openelement/element')).toEqual(true);
+  expect(descriptor.imports.some((entry) => entry.from === '@openelement/router/lit-ssr')).toEqual(
+    false,
+  );
+  expect(selectRendererAdapter(undefined).mode).toEqual('native');
+  assertThrowsIncludes(() => selectRendererAdapter('future'), Error, "renderer must be 'native'");
+});
+
+test('the retired lit renderer fails with an explicit migration error', () => {
+  assertThrowsIncludes(() => selectRendererAdapter('lit'), Error, 'retired');
 });

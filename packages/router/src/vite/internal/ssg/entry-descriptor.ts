@@ -594,20 +594,6 @@ export function buildEntryDescriptor(
         `a stream route's own layout. Streaming routes: ${streamRoutes}.`,
     );
   }
-  if (
-    renderer === 'lit' &&
-    (layout.default !== false || Object.values(layout.layouts).some((shell) => shell !== false))
-  ) {
-    // #1339 boundary: the lit renderer supports layout: false only — the
-    // layout composition renders through the compiled serializer, which the
-    // lit path deliberately never imports. Fail the build loudly instead of
-    // silently emitting a shell-less page.
-    throw buildError(
-      DescriptorErrorCode.LIT_LAYOUT,
-      `[openElement] renderer: 'lit' does not support a compiled layout/layouts yet. ` +
-        `Set openElement({ renderer: 'lit', layout: false }) and drop the layouts config.`,
-    );
-  }
   const reservedTags = new Set([
     ...pageRoutes.map((route) => route.tagName),
     ...islands.map((island) => island.tagName),
