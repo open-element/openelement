@@ -1,6 +1,6 @@
 # ADR-0152: Element, Router, and the public 1.0 Alpha baseline
 
-- Status: ACCEPTED / AMENDED (2026-11-03; Lit retirement decision, implementation pending)
+- Status: ACCEPTED / AMENDED (2026-11-03; Lit retirement decision. 2026-11-08 owner ruling: zero-compatibility retirement, implementation authorized)
 - Supersedes: former 0.44 release topology, five-package boundary, and in-repository UI/application
   qualification
 - Preserves: ADR-0148, exact-SHA release trust, protected promotion, fresh verification, and human
@@ -202,3 +202,38 @@ negative tests and full candidate qualification together before release. A rollb
 restores the whole compatible server/client/build set as a new candidate, not a
 single dependency or an overwritten published version. No removal or publication
 is authorized by this documentation-only stage.
+
+## Owner ruling (2026-11-08) — zero-compatibility Lit retirement
+
+The earlier Lit retirement decision assumed a Web Component host could serve as
+the base of the whole rendering stack. That premise is wrong. A Custom Element
+cannot carry the scope a full-stack plus front-render model needs. The execution
+plan's M09 row and ADR-0173 already record the corrected boundary: only explicit
+Native Export / Island Boundary sites generate a CE, and hostless function
+components are never forced into elements. First-party Lit renderer support is
+therefore an architecture dead end, not a version to be migrated away from
+gradually.
+
+Decision:
+
+- **Close the four OPEN items above.** There is no last supported version, no
+  breaking prerelease, no compatibility period and no security-owner window. No
+  compatibility adapter, no dual renderer lane and no migration interval are
+  provided; the cutover is a single deletion commit.
+- **This is the deprecation decision** required before removing the public
+  `./lit` and `./lit-ssr` subpaths (retirement roadmap §3). It authorizes that
+  removal and supersedes the closing sentence of the 2026-11-03 amendment,
+  which withheld authorization for a documentation-only stage.
+- **Standalone and immediate.** Retirement stays one change set outside the
+  Alpha16/16b M-row spine and its G1/G2/M10 gates: the Lit path has no dependency
+  on the generated path, so no gate is awaited. It is not merged into an M row.
+- **Kept:** third-party Lit Web Components as client-only interoperability
+  (retirement roadmap: KEEP / permanent); the explicit `renderer: 'lit'`
+  migration error rather than silently selecting Native; and the requirement to
+  move shared leaf-graph, forms/readiness, navigation and safety assertions to
+  native or neutral fixtures before deleting renderer-exclusive fixtures.
+- **Kept:** exports, dependencies, generated surfaces, negative tests and full
+  candidate qualification must be completed together in the same change set.
+  A rollback restores the whole retired set, never a single dependency.
+- This ruling authorizes removal only; it is not a release action and changes no
+  version line.

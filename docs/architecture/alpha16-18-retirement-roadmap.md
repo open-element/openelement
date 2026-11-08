@@ -11,7 +11,9 @@ Rules that govern every row:
 2. Every deletion names its consumers and its replacement evidence first.
 3. Public API removal needs an owner decision; internal removal needs graph
    evidence plus behaviour coverage.
-4. Lit retirement follows ADR-0152 and is never mixed into Alpha16.
+4. Lit retirement follows ADR-0152 (2026-11-08 owner ruling): a standalone
+   zero-compatibility change set, never merged into the Alpha16 M-row spine.
+   No compatibility window, adapter or dual renderer lane is provided.
 5. The Class authoring API retirement is **approved** (P-1/P-5, 2026-11-03); the earlier D-O3 adapter decision is superseded. No adapter is built and no second authoring path exists.
 
 ## 1. Disposition matrix
@@ -44,10 +46,10 @@ Rules that govern every row:
 | SSR serializer + DSD path | internal | server rendering | **KEEP** | — | — | SSR matrix | permanent |
 | Security sinks (`forbidden-sinks.ts`) | internal | compiler, server, runtime | **KEEP** | — | — | sink fixtures | permanent |
 | `renderer-adapter.ts` native branch | internal | Framework Mode | **KEEP** | — | — | router tests | permanent |
-| `renderer-adapter.ts` lit branch | internal | Lit users | **RETIRE (ADR-0152 track)** | Native | last-supported version, window, security owner, parity | Lit track gate | independent |
-| `router/src/lit.ts`, `lit-ssr.ts`, `./lit`, `./lit-ssr` | public API | Lit users (count unknown) | **RETIRE (ADR-0152 track)** | Native | ADR-0152 conditions | Lit track gate | independent |
-| `@lit-labs/ssr` shim (shim #8) | shim | `lit-ssr.ts` | **RETIRE with the Lit track** | — | Lit track | Lit track gate | independent |
-| Lit-only fixtures/tests | tests | Lit renderer | **RETIRE with the Lit track** after shared assertions migrate | native/neutral fixture | shared assertions migrated first | — | independent |
+| `renderer-adapter.ts` lit branch | internal | Lit renderer | **RETIRE — zero compatibility** | none; M09 / ADR-0173 boundary replaces the premise | ADR-0152 2026-11-08 amendment | negative tests + router suite | independent |
+| `router/src/lit.ts`, `lit-ssr.ts`, `./lit`, `./lit-ssr` | public API | Lit users (count unknown) | **RETIRE — zero compatibility** | none; same | ADR-0152 2026-11-08 amendment is the deprecation decision | pack-surface / export-files / interface snapshot | independent |
+| `@lit-labs/ssr` shim (shim #8) | shim | `lit-ssr.ts` | **RETIRE with the same deletion commit** | — | shim row retired | shims:check | independent |
+| Lit-only fixtures/tests | tests | Lit renderer | **RETIRE after shared assertions migrate** | native/neutral fixture | shared assertions migrated first | neutral fixture suite | independent |
 | Third-party WC interop | product capability | users | **KEEP** | — | — | interop fixtures | permanent |
 
 **Three ABI actions, deliberately kept apart** (the earlier single "KEEP …
@@ -153,11 +155,18 @@ Exit: G3 consumer evidence; API freeze decisions.
 - bounded defer, streaming, cancellation, request-scoped ownership;
 - no unbounded Promise, no second execution model.
 
-### Independent track — Lit retirement
+### Standalone track — zero-compatibility Lit retirement
 
-Follow ADR-0152: last supported version, breaking release, compatibility window,
-security owner, migration docs, export/dependency removal, Native parity,
-rollback. Not merged into Alpha16.
+Per the ADR-0152 2026-11-08 owner ruling: a Web Component host cannot carry the
+scope a full-stack plus front-render model needs (M09, ADR-0173). There is no
+last supported version, breaking release, compatibility window, security owner,
+migration period, adapter or dual renderer lane. That amendment records the
+deprecation decision; the cutover is one deletion commit covering exports,
+dependencies, generated surfaces, the renderer branch, Lit-only fixtures and
+shim #8, with negative tests and full candidate qualification in the same change
+set. Shared assertions move to neutral fixtures first. Not merged into the
+Alpha16 M-row spine; no G1/G2/M10 gate is awaited. Third-party WC interop stays
+KEEP / permanent.
 
 ## 3. What must never appear on this roadmap
 
