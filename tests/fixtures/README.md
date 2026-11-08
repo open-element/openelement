@@ -17,7 +17,6 @@ and request-time pins the `@zag-js/*`/`valibot`/`zod` request-time stack.
 | ------------------------- | ------------------------------------------------------------------ |
 | `router-native-framework` | app-flow source fixture: SSR, dynamic routes, islands              |
 | `router-request-time`     | request-time rendering source fixture (native app-flow twin)       |
-| `router-lit-framework`    | Lit SSR integration (adds `lit`/`@lit-labs`)                       |
 | `router-ui-dogfood`       | UI dogfood (adds `@openelement/ui` subpaths)                       |
 | `router-nitro`            | real Nitro node-server + cloudflare_module proof                   |
 | `router-static-only`      | static routes only (no dynamic renderIntent, no request-time entry) |

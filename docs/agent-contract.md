@@ -85,7 +85,6 @@ scripts stay the single source of truth, pnpm stays the package manager, and
 | `@openelement/e2e-starter-smoke` | `tests/e2e/starter-smoke` |
 | `@openelement/element` | `packages/element` |
 | `@openelement/fixture-router-base-path` | `tests/fixtures/router-base-path` |
-| `@openelement/fixture-router-lit-framework` | `tests/fixtures/router-lit-framework` |
 | `@openelement/fixture-router-native-framework` | `tests/fixtures/router-native-framework` |
 | `@openelement/fixture-router-nitro` | `tests/fixtures/router-nitro` |
 | `@openelement/fixture-router-request-time` | `tests/fixtures/router-request-time` |
@@ -195,7 +194,7 @@ graph; it does not execute the gate.
 | `vp run saas:workers` | `@openelement/saas#build` → `@openelement/saas#nitro:build-workers` → `@openelement/tools-repo#workers:boundary-check` |
 | `vp run site:build` | `@openelement/tools-repo#generate:all` → `@openelement/www#build` → `@openelement/www#pagefind` → `@openelement/www#emit:redirects` → `@openelement/www#emit:sitemap` → `@openelement/www#emit:rss` |
 | `vp run site:verify` | `site:build` → `@openelement/www#check:links` → `@openelement/www#check:theme-tokens` → `@openelement/www#check:content` → `@openelement/tools-repo#retired-api:check` |
-| `vp run test:e2e` | `site:build` → `@openelement/www#e2e:browsers` → `@openelement/fixture-router-native-framework#e2e` → `@openelement/fixture-router-lit-framework#e2e` |
+| `vp run test:e2e` | `site:build` → `@openelement/www#e2e:browsers` → `@openelement/fixture-router-native-framework#e2e` |
 | `vp run verify` | `check` → `test` → `@openelement/tools-repo#gate:source` → `saas:verify` → `saas:workers` → `@openelement/tools-release#gate:packed` |
 | `vp run verify:core` | `@openelement/tools-repo#gate:source` → `@openelement/tools-release#gate:packed` |
 <!-- derived:gates:end -->

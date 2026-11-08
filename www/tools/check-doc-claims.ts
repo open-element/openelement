@@ -167,6 +167,18 @@ export const ALLOWLIST: readonly AllowEntry[] = [
   },
   {
     rule: 'path',
+    value: 'packages/router/src/lit-ssr.ts',
+    reason:
+      'a historical path in the shim inventory: the first-party Lit renderer retirement (ADR-0152, 2026-11-08) deleted the module; the rows record the retired shim',
+  },
+  {
+    rule: 'path',
+    value: 'packages/router/src/lit.ts',
+    reason:
+      'a historical path in the shim inventory: the first-party Lit renderer retirement (ADR-0152, 2026-11-08) deleted the lit renderer entry; the row records the retired renderer-adapter seam',
+  },
+  {
+    rule: 'path',
     value: 'www/app/data/_generated-release-line.ts',
     reason:
       'a generated (gitignored) module: it exists after generate:all, never in a fresh checkout; check:content-data owns its content',

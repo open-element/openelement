@@ -75,7 +75,7 @@ export default class ArticlePage extends OpenElement {
 - `defer` 必须是非空、无重复的字面量安全属性名列表——不接受变量、展开或计算键。
 - 每个字段必须是已声明的编译属性，可写、非 computed、`attribute: false`、`reflect: false`，且不得与路由参数或 `locale` 冲突。
 - 路由描述符不得携带自定义 `props` 投影器或依赖请求的 head；`renderIntent` 只能包含字面量的 `mode` 与 `stream` 赋值。
-- 只接受原生编译页面：`defineLitPage` 会被拒绝，服务端函数页也会被拒绝——`stream` 是编译 Part Program 的通道（ADR-0169），因此需要流式渲染的页面要使用编译的 `definePage` 类路由（[路由与数据](/zh/guide/routing-and-data) 陈述的是同一条边界）。
+- 只接受原生编译页面：服务端函数页会被拒绝，需要流式渲染的页面要使用编译的 `definePage` 类路由——`stream` 是编译 Part Program 的通道（ADR-0169），第一方 Lit 页面面已随 ADR-0152 退役、不再存在。
 
 有两个项目级约束容易漏掉。流式渲染要求应用壳在**整个项目范围内关闭**（`openElement({ layout: false })`，且不得有 `layouts`）：流式文档是分片冲刷的，无法被壳包裹，因此单个路由写 `route: { layout: false }` 并不能满足这道门禁。并且 loader 仍然只返回**一个对象**——没有第二个 loader，也没有新的数据形状。
 

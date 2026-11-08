@@ -210,18 +210,6 @@ test('pageComponentName is spread-conditional: absent for class pages and plain 
   );
 });
 
-test('pageComponentName never records a defineLitPage first argument', () => {
-  // The lit factory's first argument is a tag string, not a component.
-  const lit = [
-    "import { defineLitPage } from '@openelement/router/lit';",
-    'export default defineLitPage(pageTag, NotesPage, {});',
-  ].join('\n');
-  expect(
-    analyzeModuleSemantics(lit, FACTS_FILE, { vocabulary: ROUTER_MODULE_VOCABULARY })
-      .pageComponentName,
-  ).toEqual(undefined);
-});
-
 // ─── 3. route-scanner: the functionPage admission ───────────────────────────
 
 const FUNCTION_ROUTE_SOURCE = [

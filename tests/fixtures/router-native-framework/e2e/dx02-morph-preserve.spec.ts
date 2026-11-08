@@ -7,8 +7,8 @@
  *   - `enhance-guards.spec.ts` pins the interception guards (no-JS, target,
  *     cross-origin, GET, anchors) and, since FRM-07A, the `open:enhance-ready`
  *     readiness barrier before a click can observe an enhanced state;
- *   - `router-lit-framework/e2e/continuation-regression.spec.ts` pins the morph
- *     failure paths on the Lit renderer.
+ *   - `continuation-regression.spec.ts` pins the base-target fallback and the
+ *     disposed-form late-response contracts on this native fixture.
  *
  * Gaps this file adds (alpha15 DX-02, review "automation ≠ screen-reader"
  * scope item):

@@ -81,11 +81,10 @@ export function buildEntryDescriptor(
     /** Relative file paths for local islands (preserves subdirectory structure) */
     islandFiles?: string[];
     /**
-     * Page renderer (#1339). 'native' (default) renders pages via
-     * renderToString; 'lit' renders LitElement pages via @openelement/router/lit-ssr.
-     * Explicit config only — never inferred from route sources.
+     * Page renderer. Only 'native' (the default, compiled renderToString) is
+     * supported; a retired 'lit' value fails closed in selectRendererAdapter.
      */
-    renderer?: 'native' | 'lit';
+    renderer?: 'native';
     /** Local island metadata indexed by tag name. */
     islandMeta?: Record<string, Partial<IslandDecl>>;
     /** Compiled non-island components reachable from local page imports. */
@@ -121,7 +120,6 @@ export function buildEntryDescriptor(
   const islandsDir = options.islandsDir || DEFAULT_ISLANDS_DIR;
   const isSSG = options.ssg === true;
   const adapter = selectRendererAdapter(options.renderer);
-  const renderer = adapter.mode;
 
   // --- Imports ---
   const imports: ImportDecl[] = [];
@@ -133,8 +131,8 @@ export function buildEntryDescriptor(
   // entry-emitted `new Hono()` and the bridge import.
   imports.push({ from: '@openelement/router/server-runtime', names: ['createGeneratedApp'] });
   imports.push(...adapter.serverImports(routes.some((route) => route.streamManifest)));
-  // #1326: both renderers resolve page meaning through the one Document seam
-  // before wrapInDocument serializes it.
+  // #1326: page meaning is resolved through the one Document seam before
+  // wrapInDocument serializes it.
   imports.push({
     from: '@openelement/router/document',
     names: ['resolvePageDocument'],
@@ -163,10 +161,10 @@ export function buildEntryDescriptor(
     // The server function page render seam (alpha15 server lane): the
     // compiled constructor function is called through the typed runtime
     // module, which owns the two boundary checks (render is a function;
-    // props never carry the compiler-owned `children` channel). Renderer-
-    // neutral: a function page produces HTML directly, so the native and lit
-    // adapters emit the same call site. Emitted only when a function-page
-    // route exists, so a class-page-only entry stays byte-identical.
+    // props never carry the compiler-owned `children` channel). A function
+    // page produces HTML directly, so the site carries no renderer-specific
+    // branch. Emitted only when a function-page route exists, so a
+    // class-page-only entry stays byte-identical.
     if (routes.some((route) => route.functionPage !== undefined)) {
       imports.push({
         from: '@openelement/router/server-runtime',
@@ -238,9 +236,8 @@ export function buildEntryDescriptor(
     // emitted call sites reference; the runtime binding itself (renderer,
     // props projection, status pages, layout) happens inside the
     // generated-app factory per the renderer adapter (#1470 block e). The
-    // adapter's startup stream guard is imported under the same
-    // `__assertStreamRoute` binding for both renderers. Same page-handler
-    // gate as the channel.
+    // adapter's startup stream guard is imported under the `__assertStreamRoute`
+    // binding. Same page-handler gate as the channel.
     imports.push(...adapter.runtimeSeam().imports);
     imports.push(adapter.runtimeSeam().streamGuard);
   }
@@ -465,13 +462,12 @@ export function buildEntryDescriptor(
   for (const route of pageRoutes) {
     if (
       route.streamManifest &&
-      (renderer !== 'native' ||
-        renderers.some(
-          (entry) =>
-            entry.scope === '/' ||
-            route.path === entry.scope ||
-            route.path.startsWith(entry.scope + '/'),
-        ))
+      renderers.some(
+        (entry) =>
+          entry.scope === '/' ||
+          route.path === entry.scope ||
+          route.path.startsWith(entry.scope + '/'),
+      )
     ) {
       throw buildError(
         DescriptorErrorCode.STREAM_RENDERER,
@@ -594,20 +590,6 @@ export function buildEntryDescriptor(
         `a stream route's own layout. Streaming routes: ${streamRoutes}.`,
     );
   }
-  if (
-    renderer === 'lit' &&
-    (layout.default !== false || Object.values(layout.layouts).some((shell) => shell !== false))
-  ) {
-    // #1339 boundary: the lit renderer supports layout: false only — the
-    // layout composition renders through the compiled serializer, which the
-    // lit path deliberately never imports. Fail the build loudly instead of
-    // silently emitting a shell-less page.
-    throw buildError(
-      DescriptorErrorCode.LIT_LAYOUT,
-      `[openElement] renderer: 'lit' does not support a compiled layout/layouts yet. ` +
-        `Set openElement({ renderer: 'lit', layout: false }) and drop the layouts config.`,
-    );
-  }
   const reservedTags = new Set([
     ...pageRoutes.map((route) => route.tagName),
     ...islands.map((island) => island.tagName),
@@ -620,9 +602,6 @@ export function buildEntryDescriptor(
 
   return {
     isSSG,
-    // #1339: only non-default renderers land on the descriptor, keeping the
-    // native descriptor shape byte-identical for existing consumers/tests.
-    ...(renderer === 'native' ? {} : { renderer }),
     imports,
     middleware,
     ...(fetchMiddleware.length > 0 ? { fetchMiddleware } : {}),

@@ -75,7 +75,7 @@ The declaration is deliberately literal. The build rejects anything it cannot re
 - `defer` must be a nonempty, duplicate-free list of literal, safe property names — no variables, spreads, or computed keys.
 - Each named field must be a declared compiled property that is writable, non-computed, `attribute: false` and `reflect: false`, and must not collide with a route param or `locale`.
 - The route descriptor may not carry a custom `props` projector or a request-dependent head, and `renderIntent` must contain only the literal `mode` and `stream` assignments.
-- Only native compiled pages are admitted: `defineLitPage` is rejected, and so is a server function page — `stream` is a compiled Part-Program channel (ADR-0169), so a page that must stream uses a compiled `definePage` class route (the boundary [Routing and Data](/guide/routing-and-data) states).
+- Only native compiled pages are admitted: a server function page is rejected, and a page that must stream uses a compiled `definePage` class route — `stream` is a compiled Part-Program channel (ADR-0169), and the retired first-party Lit page surface no longer exists (ADR-0152).
 
 Two project-level constraints are easy to miss. Streaming requires the layout to be **off for the whole project** (`openElement({ layout: false })`, no `layouts`): a streamed document is flushed in parts and cannot be wrapped by a layout, so a per-route `route: { layout: false }` does not satisfy the gate. And the loader still returns **one object** — no second loader, no new data shape.
 

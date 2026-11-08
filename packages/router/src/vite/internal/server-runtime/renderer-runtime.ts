@@ -1,19 +1,17 @@
 /**
  * @openelement/router/server-runtime — the page SSR renderer seam.
  *
- * `__ssr` renders one registered page/island host to HTML. The native fork
- * routes through Element's compiled serializer (`renderToString`, which fails
- * closed for unregistered or uncompiled classes); the lit fork (#1339)
- * routes through @lit-labs/ssr (`renderLitPageToHtml`). The fork point is the
- * renderer adapter (renderer-adapter.ts): each adapter picks which factory
- * and which page-tag resolver the entry imports and binds to `__ssr` /
- * `__resolvePageTag` — the call sites never fork.
+ * `__ssr` renders one registered page/island host to HTML through Element's
+ * compiled serializer (`renderToString`, which fails closed for unregistered
+ * or uncompiled classes). The renderer adapter (renderer-adapter.ts) binds
+ * the factory and the page-tag resolver to `__ssr` / `__resolvePageTag` — the
+ * call sites never fork.
  *
  * Element functions are injected, never imported: the typed module carries no
- * @openelement/element edge, so the LIT entry's import graph stays free of
- * the Native runtime kernel (#1339 boundary) and the
- * bundler inlines the module into every generated entry. The admitted tag
- * list is generated data (serialized into the entry) for the same reason.
+ * @openelement/element edge, so the runtime's import graph stays free of the
+ * compiled kernel and the bundler inlines the module into every generated
+ * entry. The admitted tag list is generated data (serialized into the entry)
+ * for the same reason.
  *
  * Bodies are migrated verbatim from the generated-entry helpers
  * (entry-render-runtime.ts).
@@ -135,33 +133,8 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
   };
 }
 
-/** The subset of @openelement/router/lit-ssr the lit renderer needs. */
-export interface LitPageRendererDeps {
-  /** `renderLitPageToHtml` — the registered LitElement page host renders to DSD HTML. */
-  renderLitPageToHtml: (input: { tag: string; props?: Record<string, unknown> }) => {
-    html: string;
-  };
-}
-
 /**
- * The lit renderer (#1339): render a registered LitElement page host to DSD
- * HTML through @lit-labs/ssr. Fails closed for invalid tags and unregistered
- * hosts (inside renderLitPageToHtml); nested admitted islands compose through
- * the same SSR registry — lit-ssr's job, no adapter code.
- */
-export function createLitPageRenderer(deps: LitPageRendererDeps): PageSsrRenderer {
-  const { renderLitPageToHtml } = deps;
-  // depth/projectedChildren/sourceInfo are accepted for call-site compatibility
-  // and deliberately ignored: nested composition is lit-ssr's job (no adapter
-  // code), there is no layout slot claim on this path (nothing to project),
-  // and lit-ssr carries no route/source diagnostics channel — so sourceInfo
-  // would have nowhere to go. If lit-ssr ever gains one, thread it here; until
-  // then the drop is explicit, not an oversight (H2余).
-  return (tag, props = {}) => renderLitPageToHtml({ tag, props }).html;
-}
-
-/**
- * Native page-tag resolution (#1276, B1.3-F1): the compiled Part Program is
+ * Compiled page-tag resolution (#1276, B1.3-F1): the compiled Part Program is
  * the one canonical source for the route→program tag binding. A definePage
  * route module default-exports the compiled page class, whose
  * `__partProgram.tag` carries the @element(...) decorator tag; the route FILE
@@ -177,17 +150,5 @@ export function resolveCompiledPageTag(routeModule: unknown, fallbackTag: string
     | null;
   const program = module?.default?.__partProgram;
   if (program && typeof program.tag === 'string' && program.tag.includes('-')) return program.tag;
-  return fallbackTag;
-}
-
-/**
- * Lit page-tag resolution (#1339 lit fork): a defineLitPage route records its
- * host tag on the class's `openElementPageTag` static (there is no compiled
- * Part Program in the lit path); the path-derived tag stays the fallback.
- */
-export function resolveLitPageTag(routeModule: unknown, fallbackTag: string): string {
-  const module = routeModule as { default?: { openElementPageTag?: unknown } } | undefined | null;
-  const tag = module?.default?.openElementPageTag;
-  if (typeof tag === 'string' && tag.includes('-')) return tag;
   return fallbackTag;
 }

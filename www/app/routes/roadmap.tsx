@@ -169,7 +169,7 @@ const content = {
     } as Record<'CURRENT' | 'BASELINE' | 'NEXT', string>,
     designRuleTitle: 'Design rule',
     designRuleText:
-      'Element, Router, standard HTTP, HTML-first delivery, on-demand interaction and native interoperability remain the foundation; layouts and existing Lit compatibility stay supported. OhMyLit is a separate effort; new Native capabilities do not automatically promise Lit parity. Auth, ORM and storage remain recipes, not service products.',
+      'Element, Router, standard HTTP, HTML-first delivery, on-demand interaction and native interoperability remain the foundation; layouts stay supported, third-party Lit Web Components remain client-only interoperability, and the first-party Lit renderer is retired (ADR-0152). OhMyLit is a separate effort; new Native capabilities do not automatically promise Lit parity. Auth, ORM and storage remain recipes, not service products.',
     boundaryIndex: '02 / product boundary',
     boundaryTitle: 'Scope is explicit.',
     boundaryCopy:
@@ -257,7 +257,7 @@ const content = {
     } as Record<'CURRENT' | 'BASELINE' | 'NEXT', string>,
     designRuleTitle: '设计规则',
     designRuleText:
-      'Element、Router、标准HTTP、HTML-first、按需交互和原生互操作保持为基础；layout与既有Lit兼容继续维护，独立OhMyLit另行规划，Native新增能力不自动承诺Lit对等。Auth、ORM与存储保持配方，不是服务产品。',
+      'Element、Router、标准HTTP、HTML-first、按需交互和原生互操作保持为基础；layout继续受支持，第三方Lit Web Components保持client-only互操作，第一方Lit renderer已退役（ADR-0152）。独立OhMyLit另行规划，Native新增能力不自动承诺Lit对等。Auth、ORM与存储保持配方，不是服务产品。',
     boundaryIndex: '02 / 产品边界',
     boundaryTitle: '范围是明确的。',
     boundaryCopy: '当前能力、被排除的承诺与视觉契约，分开陈述。',

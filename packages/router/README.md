@@ -15,7 +15,7 @@ Framework Mode authoring — the package root (`definePage`,
 `defineIslandConfig`, the action protocol) and the Element route-data types it
 re-exports — is built on compiled element classes and therefore
 requires `@openelement/element` to be installed. The `./document`
-subpath (the resolved-page seam used by the Native and Lit serializers) is
+subpath (the resolved-page seam used by the native serializer) is
 Framework Mode surface too: it depends on Element's trusted-HTML contract
 through the shared head-safety predicates, so it is not part of the
 Element-free Route Mode closure. Element is declared as an
@@ -178,27 +178,6 @@ modules instead of codegen template strings, so it is directly unit-testable.
 Applications never import this subpath directly — the entries the Vite
 pipeline generates do. It is exported for type-aware tooling and for hosts
 that assemble the same server seams by hand.
-
-## Lit renderer subpaths
-
-Framework Mode ships two renderer integrations; the default is the compiled
-Native renderer on the package root. Lit is the second qualified renderer,
-available through two subpaths:
-
-```ts
-// Lit page authoring: defineLitPage(tag, PageClass, descriptor), the Lit
-// counterpart to definePage(). No lit value import — safe in any graph.
-import { defineLitPage } from '@openelement/router/lit';
-
-// Server-only Lit page rendering to DSD HTML through @lit-labs/ssr.
-import { renderLitPageToHtml } from '@openelement/router/lit-ssr';
-```
-
-`@openelement/router/lit-ssr` installs the `@lit-labs/ssr` global DOM shim as
-an import side effect and must never reach a client bundle (it is deliberately
-absent from the package root barrel). Both subpaths are optional: they depend
-on `lit` / `@lit-labs/ssr` / `@lit-labs/ssr-client`, declared as optional
-peers, so a Native-only install never pulls them in.
 
 ## Route Mode subpaths
 

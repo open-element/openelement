@@ -21,7 +21,7 @@
 
 import { PageErrorCode, serveError } from '../../../internal/error-codes.ts';
 
-/** The page descriptor a definePage/defineLitPage route module carries on its default export. */
+/** The page descriptor a definePage route module carries on its default export. */
 export type PageDefinition = Record<string, unknown>;
 
 /** A route module namespace as the generated entry imports it (`import * as $route`). */

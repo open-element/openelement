@@ -506,7 +506,6 @@ jobs:
         if: matrix.leg == 'fixture-gates'
         run: |
           vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-native-framework gate
-          vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-lit-framework gate
           vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-ui-dogfood gate
           vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-static-only gate
           # The second style engine (alpha15 stage 2B): the probe reads its own
@@ -656,9 +655,9 @@ jobs:
         # The second style engine's packed artifact proof (dev + build +
         # per-engine probes).
         run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release consumer:packaged-unocss
-      - name: Packed app consumer proof (native + lit)
+      - name: Packed app consumer proof (native)
         # qualifyPackedAppLeg runs walkRouterDeclarations and
-        # assertPackedElementLeavesKernelFree for each renderer leg.
+        # assertPackedElementLeavesKernelFree for the packed app consumer.
         run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release consumer:packaged-app
 
   fresh-install:

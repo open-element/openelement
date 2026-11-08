@@ -107,21 +107,6 @@ describe('build - generateClientEntry', () => {
     expect(code).toContain('openElement Client Entry');
   });
 
-  test('no legacy SSR client imports (v0.5.0 CE-native upgrade)', () => {
-    const islands = [
-      {
-        tagName: 'my-counter',
-        modulePath: '/app/islands/my-counter.ts',
-        strategy: 'idle' as const,
-      },
-    ];
-    const code = generateClientEntry(islands);
-    // v0.5.0: browser CE spec handles upgrade
-    expect(code.includes('lit-element-hydrate-support')).toEqual(false);
-    expect(code.includes('litElementHydrateSupport')).toEqual(false);
-    expect(code.includes('LitElement')).toEqual(false);
-  });
-
   test('uses idle-time idle loading', () => {
     const islands = [
       {

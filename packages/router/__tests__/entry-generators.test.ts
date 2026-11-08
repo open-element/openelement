@@ -123,14 +123,6 @@ test('mixed load+idle', () => {
   assertEntrySyntax(code);
 });
 
-test('no legacy SSR client runtime', () => {
-  const code = generateClientEntry([
-    { tagName: 'my-counter', modulePath: './counter.ts', strategy: 'idle' },
-  ]);
-  expect(code.includes('LitElement')).toEqual(false);
-  expect(code.includes('lit-element-hydrate-support')).toEqual(false);
-});
-
 test('open:ready event', () => {
   const code = generateClientEntry([
     { tagName: 'my-island', modulePath: './island.ts', strategy: 'idle' },
@@ -285,14 +277,6 @@ test('#1416: both ssr and dsd false is client-only even off the "only" strategy'
   expect(elementServicesImport(onlyWithoutFlags)).toContain('element-services-client-only');
 });
 
-test('#1416: the lit renderer entry imports no element entry at all', () => {
-  const code = generateClientEntry(
-    [{ tagName: 'x-lit', modulePath: './lit.ts', strategy: 'idle' }],
-    { renderer: 'lit' },
-  );
-  expect(importLines(code).some((line) => line.includes('@openelement/element'))).toEqual(false);
-});
-
 // #1548: the blocks axis. The entry carries the when/each Block builders
 // unless the island blocks scan proved no island module lowers one — the
 // codegen only translates that proof into the subpath choice.
@@ -352,14 +336,6 @@ test('#1548: includeBlocksRuntime:true is explicit and equivalent to the default
     { includeBlocksRuntime: true },
   );
   expect(elementServicesImport(code).endsWith('element-services-full.ts')).toBe(true);
-});
-
-test('#1548: the lit renderer ignores the blocks axis (no element entry either way)', () => {
-  const code = generateClientEntry(
-    [{ tagName: 'x-lit', modulePath: './lit.ts', strategy: 'idle' }],
-    { renderer: 'lit', includeBlocksRuntime: false },
-  );
-  expect(importLines(code).some((line) => line.includes('@openelement/element'))).toEqual(false);
 });
 
 test('legacy eager/lazy strategies are not emitted by v0.21 runtime', () => {

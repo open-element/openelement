@@ -33,9 +33,8 @@ import { createLayoutRuntime, createStatusHtml } from './document-runtime.ts';
 import type { LayoutRuntime, StatusHtmlRenderer } from './document-runtime.ts';
 import { createPagePropsRuntime } from './page-render.ts';
 import type { PagePropsRuntime } from './page-render.ts';
-import { createLitPageRenderer, createNativePageRenderer } from './renderer-runtime.ts';
+import { createNativePageRenderer } from './renderer-runtime.ts';
 import type {
-  LitPageRendererDeps,
   NativePageRendererDeps,
   PageSsrRenderer,
   TrustedHtmlValue,
@@ -54,16 +53,14 @@ type FetchMiddleware = (request: Request, next: () => Promise<Response>) => Prom
  * imports no Element renderer and binds none of it.
  */
 export interface GeneratedPageRuntime {
-  mode: 'native' | 'lit';
+  mode: 'native';
   /** Build-admitted SSR-renderable tags (serialized generated data). */
   ssrRenderableTags: readonly string[];
   trustedHtml: (html: string) => TrustedHtmlValue;
   escapeHtml: (value: string) => string;
-  /** native only: the compiled serializer and the SSR registry. */
+  /** The compiled serializer and the SSR registry. */
   renderToString?: NativePageRendererDeps['renderToString'];
   customElements?: { get(tag: string): unknown };
-  /** lit only: the lit-ssr page renderer. */
-  renderLitPageToHtml?: LitPageRendererDeps['renderLitPageToHtml'];
 }
 
 /** The route-descriptor data the generated entry hands the factory. */
@@ -213,14 +210,11 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
   // #1470 block e).
   const page = config.pageRuntime;
   if (page) {
-    const ssr =
-      page.mode === 'native'
-        ? createNativePageRenderer({
-            renderToString: page.renderToString!,
-            customElements: page.customElements!,
-            ssrRenderableTags: page.ssrRenderableTags,
-          })
-        : createLitPageRenderer({ renderLitPageToHtml: page.renderLitPageToHtml! });
+    const ssr = createNativePageRenderer({
+      renderToString: page.renderToString!,
+      customElements: page.customElements!,
+      ssrRenderableTags: page.ssrRenderableTags,
+    });
     const layout = createLayoutRuntime({
       ssr,
       trustedHtml: page.trustedHtml,

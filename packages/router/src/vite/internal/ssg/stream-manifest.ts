@@ -351,29 +351,25 @@ export async function scanStreamManifest(
   if (!exported || !ts.isCallExpression(exported.expression)) return undefined;
   const call = exported.expression;
   if (!ts.isIdentifier(call.expression)) return undefined;
-  const binding = sf.statements.filter(ts.isImportDeclaration).flatMap((statement) => {
-    if (!ts.isStringLiteral(statement.moduleSpecifier)) return [];
-    const specifier = statement.moduleSpecifier.text;
+  const isDefinePage = sf.statements.some((statement) => {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      return false;
+    }
+    if (statement.moduleSpecifier.text !== '@openelement/router') return false;
     const named = statement.importClause?.namedBindings;
-    if (!named || !ts.isNamedImports(named)) return [];
-    return named.elements
-      .filter(
-        (entry) =>
-          entry.name.text === call.expression.getText(sf) &&
-          (((entry.propertyName?.text ?? entry.name.text) === 'definePage' &&
-            specifier === '@openelement/router') ||
-            ((entry.propertyName?.text ?? entry.name.text) === 'defineLitPage' &&
-              specifier === '@openelement/router/lit')),
-      )
-      .map((entry) => entry.propertyName?.text ?? entry.name.text);
-  })[0];
-  if (!binding) return undefined;
-  const descriptor = objectValue(call.arguments[binding === 'defineLitPage' ? 2 : 1]);
+    if (!named || !ts.isNamedImports(named)) return false;
+    return named.elements.some(
+      (entry) =>
+        entry.name.text === call.expression.getText(sf) &&
+        (entry.propertyName?.text ?? entry.name.text) === 'definePage',
+    );
+  });
+  if (!isDefinePage) return undefined;
+  const descriptor = objectValue(call.arguments[1]);
   const intent = descriptor && objectValue(property(descriptor, 'renderIntent')?.initializer);
   if (!intent || !property(intent, 'stream')) return undefined;
   const at = position(sf, property(intent, 'stream')!);
   const fail: (reason: string) => never = (reason) => diagnostic(route, 'defer', at, reason);
-  if (binding !== 'definePage') fail('only native compiled pages support stream.defer');
   if (
     !descriptor ||
     descriptor.properties.some(

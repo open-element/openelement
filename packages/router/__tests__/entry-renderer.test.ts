@@ -354,8 +354,8 @@ test('renderEntry: imports DSD renderer; Hono assembly is the factory (#1470 blo
   expect(code.includes("from 'hono'")).toBeFalsy();
   expect(code).toContain('const __app = createGeneratedApp({');
   expect(code).toContain('export default app');
-  // v0.5.0: DSD renderer replaces @lit-labs/ssr; v0.44: the compiled sync
-  // renderToString is the only serializer — no runtime JSX or tree renderer.
+  // v0.44: the compiled sync renderToString is the only serializer — no
+  // runtime JSX or tree renderer.
   expect(code).toContain(
     "import { createDocumentStyleResources, createStreamShellExecutor, renderToString, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
   );

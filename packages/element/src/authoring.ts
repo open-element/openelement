@@ -2,11 +2,11 @@
  * @openelement/element/authoring — runtime guards shared by authoring layers
  * (Beta.2.2, #1339/#1326).
  *
- * definePage()/defineLitPage() and their sibling authoring entries validate
- * descriptors with exactly these guards. They live on a dedicated leaf
- * subpath so an authoring layer that ships in a browser graph (e.g. a Lit
- * route module) never has to import the package root barrel — which carries
- * the compiled Native runtime — just to validate a descriptor. Pure
+ * definePage() and its sibling authoring entries validate descriptors with
+ * exactly these guards. They live on a dedicated leaf subpath so an authoring
+ * layer that ships in a browser graph (e.g. a third-party Web Component host)
+ * never has to import the package root barrel — which carries the compiled
+ * native runtime — just to validate a descriptor. Pure
  * re-exports of leaf modules; no runtime kernel is reachable from here.
  */
 export { assertValidTagName, isValidTagName } from './internal/core/tag-utils.ts';

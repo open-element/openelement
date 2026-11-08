@@ -24,8 +24,9 @@ contract expresses the fail-closed invariants the interop corpus requires.
 ## Precedents and deliberate differences
 
 The nearest mature precedent for the Part Program is lit-html's `Template`/`Part`
-model — a name neighbor that lives in this tree: the Lit framework mode depends on
-`lit@3.3.3`. The differences are deliberate. The Part Program is a compile-time
+model — a name neighbor this repository carried until the first-party Lit renderer
+retirement (`lit@3.3.3`, ADR-0152, 2026-11-08). The differences are deliberate. The
+Part Program is a compile-time
 artifact, not a runtime API: every dynamic location receives a compiler-owned
 identity at build time, so nothing discovers bindings at runtime the way lit-html's
 `TemplateInstance` resolves its Parts. The artifact is a serializable, versioned

@@ -117,9 +117,8 @@ export function installSsrRegistryGuard(): SsrRegistryGuard {
       // the stale class is still registered. When the entry re-registers its
       // OWN tag, the new class must win — through the TRUE original define
       // (the wrapper early-returns on existing registrations for non-stub
-      // registries); the lit shim overwrites on duplicate define in
-      // development mode (its console.warn is the upstream-designed
-      // live-reload notice).
+      // registries); the Map-backed dev SSR stub registry overwrites on
+      // duplicate define (#952) instead of rejecting the re-registration.
       if (entryDefined.get(tag) === current) {
         (
           (registry as unknown as Record<string, unknown>)[

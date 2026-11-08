@@ -1,15 +1,15 @@
 import type { ImportDecl } from '@openelement/protocol/ssg';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
-type RendererMode = 'native' | 'lit';
+type RendererMode = 'native';
 
 /**
  * The typed page-render runtime seam: which
  * @openelement/router/server-runtime functions the generated entry imports
  * and how its `createGeneratedApp` config binds the page-render runtime to
  * the entry's own Element imports. The emitted call sites (`__ssr`,
- * `__pageProps`, `__renderLayout`, …) are identical for both renderers —
- * only this seam forks. The runtime binding itself moved into the factory
+ * `__pageProps`, `__renderLayout`, …) are generated for the compiled native
+ * renderer only. The runtime binding itself moved into the factory
  * (server-runtime/app.ts, #1470 block e); the entry keeps only the
  * adapter-selected imports and the `pageRuntime` config lines.
  */
@@ -28,9 +28,8 @@ interface RuntimeSeam {
 
 interface RendererAdapter {
   readonly mode: RendererMode;
-  readonly hydration: 'compiled-hydration' | 'lit-adoption';
+  readonly hydration: 'compiled-hydration';
   readonly supportsCompiledStream: boolean;
-  readonly firstServerImport?: string;
   serverImports(hasStreamRoute: boolean): ImportDecl[];
   runtimeSeam(): RuntimeSeam;
 }
@@ -81,53 +80,19 @@ const native: RendererAdapter = {
   },
 };
 
-const lit: RendererAdapter = {
-  mode: 'lit',
-  hydration: 'lit-adoption',
-  supportsCompiledStream: false,
-  firstServerImport: "import '@lit-labs/ssr/lib/install-global-dom-shim.js';",
-  serverImports() {
-    return [
-      {
-        from: '@openelement/element/html',
-        names: ['createDocumentStyleResources', 'trustedHtml', 'escapeHtml', 'wrapInDocument'],
-      },
-      {
-        from: '@openelement/router/lit-ssr',
-        names: ['renderLitPageToHtml'],
-        alias: '__renderLitPageToHtml',
-      },
-    ];
-  },
-  runtimeSeam() {
-    return {
-      imports: [
-        { from: RUNTIME_MODULE, names: ['resolveLitPageTag'], alias: '__resolvePageTag' },
-        { from: RUNTIME_MODULE, names: ['pageDefinition'], alias: '__pageDefinition' },
-        { from: RUNTIME_MODULE, names: ['routeMeta'], alias: '__routeMeta' },
-        { from: RUNTIME_MODULE, names: ['localeFromPath'], alias: '__localeFromPath' },
-      ],
-      streamGuard: {
-        from: RUNTIME_MODULE,
-        names: ['assertLitStreamRoute'],
-        alias: '__assertStreamRoute',
-      },
-      pageRuntimeLines: [
-        `mode: 'lit',`,
-        `renderLitPageToHtml: __renderLitPageToHtml,`,
-        `trustedHtml,`,
-        `escapeHtml,`,
-      ],
-    };
-  },
-};
-
 /** Internal mode selection only; SSR and browser executors stay independent. */
 export function selectRendererAdapter(value: unknown): RendererAdapter {
   if (value === undefined || value === 'native') return native;
-  if (value === 'lit') return lit;
+  if (value === 'lit') {
+    throw new Error(
+      "[openElement] renderer 'lit' is retired (ADR-0152, 2026-11-08 owner ruling): " +
+        'the first-party Lit renderer was removed because a Web Component host ' +
+        'cannot carry the full-stack rendering scope. Use the compiled native ' +
+        'renderer; no compatibility adapter is provided.',
+    );
+  }
   throw new Error(
-    `[openElement] renderer must be 'native' or 'lit' (got ${quoteGeneratedJavaScriptValue(
+    `[openElement] renderer must be 'native' (got ${quoteGeneratedJavaScriptValue(
       String(value),
     )}). ` +
       'Renderer selection is explicit openElement({ renderer }) config and is never inferred.',

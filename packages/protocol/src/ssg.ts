@@ -282,12 +282,11 @@ export interface LayoutPlan {
 export interface EntryDescriptor {
   isSSG: boolean;
   /**
-   * Page renderer selection (#1339). Absent/'native' keeps the
-   * compiled renderToString page path byte-identical; 'lit' forks page tag
-   * resolution, page SSR and the client entry onto @lit-labs/ssr.
-   * Loader/action/protocol codegen never forks.
+   * Page renderer selection. Only the compiled native renderer exists; absent
+   * or 'native' keeps the renderToString page path byte-identical. Loader,
+   * action and protocol codegen never fork on a renderer.
    */
-  renderer?: 'native' | 'lit';
+  renderer?: 'native';
   imports: ImportDecl[];
   middleware: MiddlewareDecl[];
   /**

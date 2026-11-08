@@ -104,7 +104,6 @@ describe('live-tree drift guard', () => {
   /** Every application-shaped surface that must keep its standing task. */
   const EXPECTED_COVERED = [
     'router-base-path',
-    'router-lit-framework',
     'router-native-framework',
     'router-nitro',
     'router-request-time',

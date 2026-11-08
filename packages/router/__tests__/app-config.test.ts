@@ -160,7 +160,7 @@ test('app config: non-empty file + inline options is a hard conflict', async () 
       resolveAppConfig({
         root: app.root,
         configFile,
-        importedConfig: defineConfig({ renderer: 'lit' }),
+        importedConfig: defineConfig({ renderer: 'native' }),
         inlineOptions: { head: { title: 'inline' } },
       }),
     );
@@ -170,7 +170,7 @@ test('app config: non-empty file + inline options is a hard conflict', async () 
       resolveAppConfig({
         root: app.root,
         configFile,
-        importedConfig: defineConfig({ renderer: 'lit' }),
+        importedConfig: defineConfig({ renderer: 'native' }),
         inlineOptions: { head: { title: 'inline' } },
       });
     } catch (error) {
@@ -253,6 +253,19 @@ test('app config: a renamed inline key fails closed and names its replacement', 
   // The current spellings (and an absent inline object) pass untouched.
   assertNoRenamedInlineKeys({ head: { title: 'x' }, layout: false });
   assertNoRenamedInlineKeys(undefined);
+});
+
+test('app config: the retired lit renderer fails with an explicit migration error', () => {
+  assertThrowsIncludes(
+    () =>
+      resolveAppConfig({
+        root: process.cwd(),
+        configFile: '/tmp/openelement.config.ts',
+        importedConfig: defineConfig({ renderer: 'lit' }),
+      }),
+    OpenElementError,
+    'retired',
+  );
 });
 
 test('app config: type violations fail closed with the offending key named', () => {

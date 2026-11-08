@@ -40,10 +40,10 @@ export function localizeLayoutHref(href: string, locale: string, defaultLocale: 
 export type StatusHtmlRenderer = (title: unknown, message: unknown) => string;
 
 /**
- * Binds the status-page renderer to the entry's `escapeHtml` import. Both the
- * native and the lit entry import the same canonical escaper
- * (@openelement/element[/html]), so the one implementation serves every
- * status channel (404 fallbacks, render failures, SSG redirect pages).
+ * Binds the status-page renderer to the entry's `escapeHtml` import. The
+ * generated entry imports the canonical escaper (@openelement/element[/html]),
+ * so the one implementation serves every status channel (404 fallbacks,
+ * render failures, SSG redirect pages).
  */
 export function createStatusHtml(escapeHtml: (value: string) => string): StatusHtmlRenderer {
   return (title, message) =>

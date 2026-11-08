@@ -11,17 +11,12 @@
  * exactly the module ids under that root — segment-boundary containment,
  * never a substring hit.
  *
- * Fail-closed (#1471 semantics): every native island chunk statically imports
- * the runtime, and the native generated entry imports it too (lazily, since
- * B2 — a dynamic `import()` edge, never a static one, so a page whose island
- * manifest is empty never requests it). A native build whose emitted graph
- * groups zero runtime modules is therefore a structural failure — it would
- * silently ship per-island runtime copies — and fails with a coded error.
- * The lit entry is element-free by design
- * (#1339), so lit skips that guard — but the group is not lit-inert: the
- * runtime specifier resolves under lit too, and element modules reach a lit
- * graph transitively (router client runtime), so the shared chunk is really
- * produced there; an empty group under lit is merely legal, not expected.
+ * Fail-closed (#1471 semantics): every island chunk statically imports the
+ * runtime, and the generated entry imports it too (lazily, since B2 — a
+ * dynamic `import()` edge, never a static one, so a page whose island
+ * manifest is empty never requests it). A build whose emitted graph groups
+ * zero runtime modules is therefore a structural failure — it would silently
+ * ship per-island runtime copies — and fails with a coded error.
  *
  * {@linkcode findElementRuntimeChunkFile} is the same identity used by the
  * head projection that modulepreloads the chunk on island-bearing pages.
@@ -114,8 +109,8 @@ export function elementRuntimeChunkName(
  *
  * Exactly one file may carry the identity — a second one is the split layout
  * {@linkcode requireElementRuntimeChunk} rejects, never a first-hit. Zero
- * matches returns undefined: callers that require the chunk fail closed
- * themselves (a lit graph legally carries none).
+ * matches returns undefined: a zero-island build legally emits no runtime
+ * chunk, and callers that require the chunk fail closed themselves.
  */
 export function findElementRuntimeChunkFile(files: readonly string[]): string | undefined {
   const matches = files.filter((file) => {

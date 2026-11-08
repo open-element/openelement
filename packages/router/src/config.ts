@@ -53,9 +53,8 @@
  */
 
 // `@openelement/element/authoring` is the kernel-free leaf: importing the
-// package root barrel here would pull the Native runtime kernel into the
-// config surface and break the Lit server entry's kernel-free boundary
-// (lit-graph-boundary.test.ts).
+// package root barrel here would pull the compiled runtime kernel into the
+// config surface (entry-graph-boundary.test.ts).
 import { OpenElementError } from '@openelement/element/authoring';
 
 /** Canonical config-file name, resolved in the project root. */
@@ -460,8 +459,20 @@ export function assertValidUserConfig(value: unknown): asserts value is OpenElem
     build,
     middleware,
   } = value;
-  if (renderer !== undefined && renderer !== 'native' && renderer !== 'lit') {
-    throw typeError('renderer', `'native' or 'lit'`, renderer);
+  // 'lit' stays a recognized value so a retired config gets an explicit
+  // migration error instead of silently selecting the native renderer
+  // (ADR-0152, 2026-11-08 owner ruling). No adapter or migration period exists.
+  if (renderer === 'lit') {
+    throw configError(
+      `${OPEN_ELEMENT_CONFIG_FILE} key "renderer" value 'lit' is retired: the ` +
+        'first-party Lit renderer was removed because a Web Component host cannot ' +
+        'carry the full-stack rendering scope. Use the compiled native renderer ' +
+        "(omit 'renderer'). No compatibility adapter is provided.",
+      'CONFIG_INVALID',
+    );
+  }
+  if (renderer !== undefined && renderer !== 'native') {
+    throw typeError('renderer', `'native'`, renderer);
   }
 
   if (dirs !== undefined) {

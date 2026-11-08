@@ -467,7 +467,6 @@ but it may not be deferred to Alpha17 with a callback or API name.
 - Cross-module recipe distribution — Alpha17.
 - Bounded defer wire changes — Alpha18.
 - Rust/Oxc compiler frontend — post-Alpha18 evaluation.
-- Lit renderer retirement — separate ADR-0152 track.
 
 ## 17. Risks
 

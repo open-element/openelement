@@ -250,7 +250,7 @@ test('requireElementRuntimeChunk fails closed on a missing identity (ordering bu
 // pages reads the chunk's ADDRESS from the build's own output. These are the
 // guard forms of that read: the identity is the grouping name plus the hash
 // `chunkFileNames` appends, exactly one file may carry it, and an output with
-// none is left to the caller (a lit graph legally has none).
+// none returns undefined, leaving the fail-closed requirement to the caller.
 
 test('findElementRuntimeChunkFile reads the emitted chunk file and its base-prefixed asset URL', () => {
   const files = [
@@ -265,9 +265,9 @@ test('findElementRuntimeChunkFile reads the emitted chunk file and its base-pref
   expect(findElementRuntimeChunkFile(files.map((file) => `/client/${file}`))).toEqual(
     `/client/islands/${ELEMENT_RUNTIME_CHUNK_NAME}-Bh4sh.js`,
   );
-  // Zero matches is NOT an error here: lit's entry is element-free (#1339),
-  // so a lit graph legally carries no runtime chunk. Callers that require the
-  // chunk fail closed themselves (requireElementRuntimeChunk above).
+  // Zero matches is NOT an error here: a zero-island native build legally
+  // carries no runtime chunk. Callers that require the chunk fail closed
+  // themselves (requireElementRuntimeChunk above).
   expect(findElementRuntimeChunkFile(['islands/client.js'])).toEqual(undefined);
   // Near-misses never count: the hash suffix is required, and a chunk that
   // merely CONTAINS the name is a different chunk.

@@ -56,8 +56,6 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     document: 'src/document.ts',
     hono: 'src/hono-adapter.ts',
     http: 'src/http.ts',
-    lit: 'src/lit.ts',
-    'lit-ssr': 'src/lit-ssr.ts',
     'nitro-mount': 'src/nitro-mount.ts',
     router: 'src/router.ts',
     'router/client': 'src/router-client.ts',

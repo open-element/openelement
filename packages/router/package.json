@@ -8,8 +8,6 @@
     "./router": "./src/router.ts",
     "./router/client": "./src/router-client.ts",
     "./document": "./src/document.ts",
-    "./lit": "./src/lit.ts",
-    "./lit-ssr": "./src/lit-ssr.ts",
     "./server-runtime": "./src/vite/internal/server-runtime/mod.ts",
     "./hono": "./src/hono-adapter.ts",
     "./vite": "./src/vite/index.ts",
@@ -47,9 +45,6 @@
     "vite": "8.1.6"
   },
   "peerDependencies": {
-    "lit": "^3.3.3",
-    "@lit-labs/ssr": "^4.1.0",
-    "@lit-labs/ssr-client": "^1.1.8",
     "vite": "^8.0.0",
     "hono": "^4.12",
     "@hono/vite-dev-server": "^0.25.3",
@@ -58,16 +53,7 @@
     "unocss": "^66.10.0"
   },
   "peerDependenciesMeta": {
-    "lit": {
-      "optional": true
-    },
     "hono": {
-      "optional": true
-    },
-    "@lit-labs/ssr": {
-      "optional": true
-    },
-    "@lit-labs/ssr-client": {
       "optional": true
     },
     "vite": {
@@ -89,11 +75,8 @@
   "devDependencies": {
     "@jridgewell/trace-mapping": "0.3.31",
     "hono": "4.13.11",
-    "@lit-labs/ssr": "4.1.0",
-    "@lit-labs/ssr-client": "1.1.8",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.5.0",
-    "lit": "3.3.3",
     "tailwindcss": "4.3.3"
   }
 }

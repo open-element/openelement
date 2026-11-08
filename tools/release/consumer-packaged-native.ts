@@ -13,7 +13,7 @@
  * DSD, node identity survives interaction, no full reload) is asserted by the
  * generated Playwright probe that module runs with `native`.
  *
- * Run via the root `consumer:packaged-app` task (chained with the lit leg).
+ * Run via the root `consumer:packaged-app` task.
  */
 
 import { type PackedAppLegSpec, qualifyPackedAppLeg } from './consumer-packaged-shared.ts';
@@ -499,7 +499,6 @@ const NATIVE_LEG: PackedAppLegSpec = {
     },
   ],
   prerenderedExtras: [],
-  stripMarkers: false,
   locationPattern: /^\/notes\/note-\d+\?created=1$/,
   devEdits: {
     componentFile: 'app/components/page-notes-index.tsx',

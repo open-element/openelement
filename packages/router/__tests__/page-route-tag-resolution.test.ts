@@ -19,10 +19,7 @@
  */
 import { expect, test } from 'vitest';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
-import {
-  resolveCompiledPageTag,
-  resolveLitPageTag,
-} from '../src/vite/internal/server-runtime/renderer-runtime.ts';
+import { resolveCompiledPageTag } from '../src/vite/internal/server-runtime/renderer-runtime.ts';
 import type { RouteEntry } from '@openelement/protocol/framework';
 
 const definePageRoutes: RouteEntry[] = [
@@ -75,8 +72,8 @@ test('renderEntry: styled 404 route renders through the compiled-program tag res
   expect(code).toContain('let __tag = __resolvePageTag($pageNotFound, "el-404");');
 });
 
-// The generated entry imports the resolvers from
-// @openelement/router/server-runtime and binds them per the renderer adapter
+// The generated entry imports the resolver from
+// @openelement/router/server-runtime and binds it through the renderer adapter
 // (ADR-0160 rule a); the assertions below execute the shipped module directly.
 test('resolveCompiledPageTag: compiled program tag wins over the path-derived fallback (#1276)', () => {
   // The definePage route module default-exports the compiled page class
@@ -114,30 +111,15 @@ test('resolveCompiledPageTag: malformed program tags keep the path-derived fallb
   );
 });
 
-test('resolveLitPageTag: the openElementPageTag static wins over the fallback (#1339)', () => {
-  const routeModule = { default: { openElementPageTag: 'lit-notes-page' } };
-  expect(resolveLitPageTag(routeModule, 'notes')).toEqual('lit-notes-page');
-  expect(resolveLitPageTag({ default: { openElementPageTag: 'notes' } }, 'notes')).toEqual('notes');
-  expect(resolveLitPageTag({ default: { openElementPageTag: 7 } }, 'notes')).toEqual('notes');
-  expect(resolveLitPageTag({ default: class {} }, 'notes')).toEqual('notes');
-  expect(resolveLitPageTag(undefined, 'notes')).toEqual('notes');
-});
-
-test('the generated entry imports the tag resolvers per renderer and never forks the call sites', () => {
-  const nativeEntry = renderEntry(buildEntryDescriptor(definePageRoutes));
-  expect(nativeEntry).toContain(
+test('the generated entry imports the one compiled tag resolver and never forks its call sites', () => {
+  const entry = renderEntry(buildEntryDescriptor(definePageRoutes));
+  expect(entry).toContain(
     "import { resolveCompiledPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
   );
-  expect(nativeEntry.includes('resolveLitPageTag')).toEqual(false);
-
-  const litEntry = renderEntry(
-    buildEntryDescriptor(definePageRoutes, { renderer: 'lit', layout: false }),
+  // Registration, handler and routeInfo all use one canonical
+  // `__resolvePageTag(module, fallback)` expression.
+  expect(entry).toContain(`let __tag = ${RESOLUTION_EXPR}`);
+  expect(entry).toContain(
+    `__registerSsrComponent(${RESOLUTION_EXPR}, $pageWorkspaceRecords.default)`,
   );
-  expect(litEntry).toContain(
-    "import { resolveLitPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
-  );
-  expect(litEntry.includes('resolveCompiledPageTag')).toEqual(false);
-  // The binding call sites (registration, handler, routeInfo) stay renderer-
-  // neutral: one canonical `__resolvePageTag(module, fallback)` expression.
-  expect(litEntry).toContain(`let __tag = ${RESOLUTION_EXPR}`);
 });

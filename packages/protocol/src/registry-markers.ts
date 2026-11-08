@@ -35,6 +35,6 @@ export const ENTRY_REGISTRATION_OWNERS = '__openEntryDefined';
  * registry outlives vite dev SSR module re-evaluations, so without this the
  * second evaluation would capture the already-wrapped `define` as its
  * "original" and every forced re-registration would silently early-return
- * through the previous wrapper (#1339 lit dev feedback).
+ * through the previous wrapper (#952 dev re-evaluation).
  */
 export const SSR_REGISTRY_ORIGINAL_DEFINE = '__openElementOrigDefine';

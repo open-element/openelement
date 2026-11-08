@@ -5,31 +5,35 @@ OpenElement has exactly two public core products: **Element** and **Router**.
 | Product | Responsibility                                                                                                                 | Independent boundary                                                   |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
 | Element | Compiled Custom Elements, reactivity, lifecycle, server serialization, fresh DOM, and existing-DOM hydration/update                | Installs, builds, and runs without Router                              |
-| Router  | Route selection, HTTP semantics, navigation, loaders/actions, Document resolution, and Native/Lit Framework Mode orchestration | Route Mode runs without Element; renderer integrations remain explicit |
+| Router  | Route selection, HTTP semantics, navigation, loaders/actions, Document resolution, and Framework Mode orchestration with one compiled-native renderer | Route Mode runs without Element; renderer selection remains explicit |
 
 The table above describes the current alpha.15 implementation and support, not the completed next architecture. The accepted target is an **HTML-first full-stack framework with Full TSX authoring, explicit Signals and an explicit CE boundary**. Internal function components compose without mandatory hosts; standard Custom Elements remain the native export, independent-control and island activation boundary, including DSD where qualified. JSX is compiled input, not a public runtime virtual-DOM contract. Explicit and file-generated routes share one route authority; URLPattern owns pattern syntax while Router owns ordered winner selection, method dispatch, cancellation, and application outcomes.
 
 The `create` package is the supported creation entry for the two core products. The canonical target architecture — principles P1–P5, the Part Program's transitional role and the responsibility split — lives in
 [the compiler-native architecture](./compiler-native-architecture.md); this document states product scope, not that architecture. `packages/ui` is an experimental product maintained in this repository outside the 1.0 stable promise. `www` is the official product surface. `apps/saas` is an independent first-party application in this repository, governed separately from the Alpha repository candidate; it is not a core product, not a public package, and not part of the Alpha repository GO criteria. Neither Site nor SaaS extends the Element/Router stable API promise, but both are owned and maintained by this repository.
 
-## Accepted direction and evidence (2026-11-03)
+## Accepted direction and evidence (2026-11-03; retirement executed 2026-11-08)
 
-The owner ended OhMyLit as an independent product initiative and formally started
+The owner ended OhMyLit as an independent product initiative and initiated
 first-party Lit renderer retirement. This focuses investment on one Native path;
-it is not a finding that Lit or DSD is unusable. Alpha.15's implementation and
-support remain facts: nothing is removed by this decision. The last supported
-version, breaking prerelease and compatibility/security window remain **OPEN**.
-Third-party Lit Web Components remain a client-only interoperability use case,
-not a promise of automatic SSR or OpenElement-managed Lit DSD hydration. See the
+it is not a finding that Lit or DSD is unusable. The 2026-11-08 owner ruling
+executes that retirement with no compatibility window: the current source line no
+longer ships the first-party Lit renderer — its public entry points, runtime
+branch and fixtures are removed, and `renderer: 'lit'` fails with an explicit
+migration error — while the published alpha.15 artifact still contains it. There
+is no last supported version, breaking prerelease or compatibility/security
+window. Third-party Lit Web Components remain a client-only interoperability use
+case, not a promise of automatic SSR or OpenElement-managed Lit DSD hydration.
+See the
 [superseding ADR-0152 amendment](../adr/ADR-0152-product-router-and-alpha-convergence.md).
 
 | Status | Contract | Evidence required / responsible milestone |
 | --- | --- | --- |
-| Current fact | Alpha.15 Part Program, classes and Native/Lit modes remain | Existing release evidence; no new qualification claimed here |
+| Current fact | Alpha.15 Part Program and classes remain; the first-party Lit renderer is retired in the current source line (no compatibility window; ADR-0152 2026-11-08) | Existing release evidence; no new qualification claimed here |
 | Accepted target | Full TSX syntax input, explicit Signals, HTML-first output, native Request/Response |
 | APPROVED TARGET (2026-11-03) | Retire the serialized Part Program protocol and the Class authoring API, with no compatibility adapter; narrow generated ABI (structure not frozen) | Alpha16 semantic samples and connected codegen slices; Alpha16b class migration/retirement and ABI compatibility checks; Alpha17 author productization and ABI freeze |
 | Candidate | Tracked readonly props, computed derivation, Children and JSX values | [Author candidate contract](./tsx-author-candidate-contract.md); author review and consumer tests before freeze |
-| OPEN | Exact props/computed/Children APIs, ref/context, iterable admission, flush timing, ABI and Lit release window | Resolve with scoped tests and owner decisions before dependent rollout |
+| OPEN | Exact props/computed/Children APIs, ref/context, iterable admission, flush timing, and ABI | Resolve with scoped tests and owner decisions before dependent rollout |
 | Non-goals | React Hooks/behavior compatibility, a second renderer or OhMyLit product, Rust/Flight migration, zero-runtime claims | Do not add these as delivery commitments |
 
 Full TSX syntax is not permission to render every JavaScript value. Ordinary

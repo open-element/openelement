@@ -236,7 +236,7 @@ test('renderEntry: SSG mode excludes DOM shim (DSD renderer has no shim dependen
   const desc = buildEntryDescriptor(sampleRoutes, { ssg: true });
   const code = renderEntry(desc);
 
-  // v0.5.0: DSD renderer doesn't need DOM shim - no @lit-labs/ssr dependency
+  // v0.5.0: the compiled DSD renderer doesn't need the DOM shim
   expect(code.includes('install-global-dom-shim')).toEqual(false);
 });
 
@@ -293,8 +293,6 @@ test('renderEntry: page routes use SSR helper and wrapInDocument', () => {
   expect(code).toContain('wrapInDocument(');
   // v0.5.0: No legacy SSR client artifacts
   expect(code.includes('generateHydrationScript')).toEqual(false);
-  expect(code.includes('stripLitComments')).toEqual(false);
-  expect(code.includes('lit-part')).toEqual(false);
 });
 
 test('renderEntry: no process.env call in output', () => {

@@ -1,15 +1,13 @@
 /**
- * Lit/Native module-graph boundary (Beta.2.2, #1339 review item): prove with
- * a REAL static import-graph walk — not bundle string greps — that
+ * Entry module-graph boundary: prove with a REAL static import-graph walk —
+ * not bundle string greps — that
  *
- *   1. the generated LIT server entry's module graph never reaches the Native
- *      runtime kernel (the package root barrel, the compiled-runtime facade,
- *      the compiled serializer or the signal engine), covering the source,
- *      dev-server (un-treeshaken, alias-resolved to source) and packed-artifact
- *      paths alike, since all three resolve the same subpath graph;
- *   2. the @openelement/element/html and /authoring leaves stay kernel-free;
- *   3. (negative control) the NATIVE entry's graph DOES reach the kernel — the
- *      walk can find it when it is actually present.
+ *   1. the @openelement/element/html and /authoring leaves stay free of the
+ *      compiled runtime kernel (the package root barrel, the compiled-runtime
+ *      facade, the compiled serializer or the signal engine); these are the
+ *      leaves third-party Web Component hosts consume;
+ *   2. (negative control) the generated native server entry's graph DOES reach
+ *      the kernel — the walk can find it when it is actually present.
  *
  * Resolution mirrors what consumers get: package subpaths resolve through the
  * generated export map (generated-export-files.ts — the same map the adapter
@@ -41,8 +39,8 @@ function extractSpecifiers(source: string): string[] {
 
 /**
  * Resolve a specifier to a repo file, or null when it is external to the
- * boundary claim (npm:/node:/hono/lit/@lit-labs runtime deps, and the
- * @openelement/generated/* build-time aliases produced by the adapter itself).
+ * boundary claim (npm:/node: runtime deps, and the @openelement/generated/*
+ * build-time aliases produced by the adapter itself).
  */
 function resolveSpecifier(spec: string, fromFile: string): string | null {
   if (spec.startsWith('.')) {
@@ -87,7 +85,7 @@ function walkModuleGraph(roots: string[]): { seen: Set<string>; parents: Map<str
   return { seen, parents };
 }
 
-/** The Native runtime kernel must never appear in a Lit graph. */
+/** The compiled runtime kernel that the kernel-free leaves must never reach. */
 const KERNEL = [
   /packages\/element\/src\/index\.ts$/, // the runtime barrel
   /packages\/element\/src\/public-runtime\.ts$/, // the compiled-runtime facade
@@ -111,14 +109,14 @@ function assertKernelFree(
         }
         expect(
           false,
-          `${label} reached the Native runtime kernel: ${file}\nvia:\n  ${chain.join('\n  ')}`,
+          `${label} reached the compiled runtime kernel: ${file}\nvia:\n  ${chain.join('\n  ')}`,
         ).toBeTruthy();
       }
     }
   }
 }
 
-const litRoutes: RouteEntry[] = [
+const pageRoutes: RouteEntry[] = [
   { path: '/notes', filePath: 'notes.ts', type: 'page', varName: 'pageNotes', definePage: true },
 ];
 
@@ -131,27 +129,6 @@ function graphRootsFromGenerated(source: string): string[] {
   }
   return roots;
 }
-
-test('lit server entry: module graph never reaches the Native runtime kernel', () => {
-  const litEntry = renderEntry(
-    buildEntryDescriptor(litRoutes, { renderer: 'lit', layout: false, ssg: true }),
-  );
-  const graph = walkModuleGraph(graphRootsFromGenerated(litEntry));
-  assertKernelFree(graph, 'lit server entry graph');
-  // Sanity presence: the graph really contains the lit seam and the leaves.
-  expect(
-    graph.seen.has(resolve(REPO_ROOT, 'packages/router/src/lit-ssr.ts')),
-    'lit-ssr missing',
-  ).toBeTruthy();
-  expect(
-    graph.seen.has(resolve(REPO_ROOT, 'packages/router/src/document.ts')),
-    'document seam missing',
-  ).toBeTruthy();
-  expect(
-    graph.seen.has(resolve(REPO_ROOT, 'packages/element/src/html.ts')),
-    'html leaf missing',
-  ).toBeTruthy();
-});
 
 test('element/html and element/authoring leaves are kernel-free', () => {
   for (const leaf of ['html.ts', 'authoring.ts']) {
@@ -168,10 +145,10 @@ test('element/html and element/authoring leaves are kernel-free', () => {
 });
 
 test('negative control: the native server entry graph DOES reach the kernel', () => {
-  const nativeEntry = renderEntry(buildEntryDescriptor(litRoutes, { ssg: true }));
+  const nativeEntry = renderEntry(buildEntryDescriptor(pageRoutes, { ssg: true }));
   const graph = walkModuleGraph(graphRootsFromGenerated(nativeEntry));
   const reachesKernel = [...graph.seen].some((file) =>
     KERNEL.some((pattern) => pattern.test(file)),
   );
-  expect(reachesKernel, 'the walk must find the Native kernel when it is present').toEqual(true);
+  expect(reachesKernel, 'the walk must find the compiled kernel when it is present').toEqual(true);
 });
