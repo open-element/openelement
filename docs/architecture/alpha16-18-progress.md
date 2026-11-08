@@ -1,7 +1,7 @@
 # Alpha16–18 progress ledger and audit closure register
 
-Date: 2026-11-06. Baseline: `origin/main` =
-`4f9821527e2893dc232635b65e57be75649efc37` (PR #1709, merged 2026-11-06); the
+Date: 2026-11-08. Baseline: `origin/main` =
+`ec09d444e65c4773c0b6d5ac097bce54b0497d0f` (PR #1719, merged 2026-11-08); the
 2026-11-03 audit closure register in §5 is re-verified against the same tree.
 
 This is the tracked status record for the Alpha16–18 milestones and for the
@@ -35,10 +35,12 @@ What is not the stage authority:
 - **The v7.1 gate names G1a/G1b** — not repository M-gate units. The work they
   track stays open: C-0 #1652 (compile-semantics ADR) and C-3 #1655 (base
   codegen) are OPEN.
-- **The issue tracker** — milestone `1.0.0-alpha.16` (#37) still carries 43
-  OPEN issues under the pre-fourth-pass numbering. Remapping them to M01–M14
-  is a C1 follow-up; until it lands, the tracker is not evidence for a status
-  in this ledger.
+- **The issue tracker** — milestone `1.0.0-alpha.16` (#37) carries **40 open
+  issues, 0 closed and 0 open pull requests**, measured 2026-11-08 through the
+  GitHub search API; the milestone counter shows 43 and is stale (last updated
+  2026-10-31). The issues still use the pre-fourth-pass numbering: remapping
+  them to M01–M14 is a C1 follow-up; until it lands, the tracker is not evidence
+  for a status in this ledger.
 
 ## 2. Status vocabulary and evidence rules
 
@@ -72,12 +74,32 @@ Evidence rules, applied to every row:
    "PROTOTYPE", its scope and its not-claimed list; a gate record may cite it
    only as mechanism evidence, never as the gate result.
 
+### 2.1 G1/G2 evidence record template
+
+A G1 or G2 gate record is opened only when the execution-plan exit evidence
+exists at a recorded SHA (execution plan §1, §8a). The five evidence rules of §2
+(1–5) apply to every field and are not restated here. The Lead compiles the
+record and the owner signs it off before the §4 row flips (owner decision D2,
+2026-11-08).
+
+| Field | What the record carries |
+| --- | --- |
+| Gate | G1 (generated code executes) or G2 (ownership/recipe evidence) |
+| Evidence PR + squash SHA | the merged PR number and the squash SHA the evidence was produced at (per-head rule 4) |
+| Exact commands | the commands that produced the evidence, verbatim |
+| Result summary | pass/fail counts per command and the matrix cells the result fills |
+| Engine + revision | every browser engine and its revision when browser evidence is claimed, each claim labelled LOCAL or CI (rule 3) |
+| What was NOT verified | the boundaries of the claim, in the [M05 prototype record §7](./m05-g1-leaf-prototype.md#7-not-claimed) style |
+| Classification | prototype or production (Class P vs Class I, execution plan §0); a prototype is cited as mechanism evidence, never as the gate result (rule 2) |
+| Recorder / sign-off | Lead compiles and records, owner signs off (D2) |
+| Where recorded | the PR body plus the matching row in §4 of this ledger, carrying the same SHA |
+
 ## 3. Milestone ledger (M01–M14)
 
 | Milestone | Class | Status | Evidence PR / SHA | Notes |
 | --- | --- | --- | --- | --- |
 | M01 | A | Complete (decision record) | #1704 `554a54a33` (2026-11-03) | The layer map, IR and ABI boundary are recorded in [the M01 boundary doc](./compiler-ir-and-abi-boundary.md). Its "DESIGN — not implemented" line is the Class A contract: the M01 deliverable is the recorded decision, not code. |
-| M02 | I | In progress — spike merged, exit not met | #1705 `017bd3e87` (2026-11-03) | The [M02 report](./m02-semantic-ir-feasibility.md) proves the IR can express the five worked examples. Its §9 lists OPEN-1/OPEN-2/OPEN-4/OPEN-5/OPEN-6, the condition node has no negative case, and the claim marker protocol stays OPEN — the M02 exit evidence is incomplete. |
+| M02 | I | In progress — spike merged, exit not met | #1705 `017bd3e87` (2026-11-03) | The [M02 report](./m02-semantic-ir-feasibility.md) proves the IR can express the five worked examples. Measured against execution-plan §1a: criteria 1/2/3/5/6 are met, and the only remaining exit gap is §1a criterion 4 — the admitted `condition` node has no negative case (`OEIR_CONDITION_BRANCH_UNSUPPORTED` exists at `packages/compiler/src/internal/compiler/semantic-ir/build.ts:456-468` but has no test). The §9 OPEN list does not block the exit: OPEN-1/2/6 are M03 work, OPEN-5 is M04 work and OPEN-4 (claim marker) is explicitly allowed to stay OPEN in M02 by §1a criterion 3. The next slice adds the negative case and flips this row to complete. |
 | M03 | I | In progress — design and I-0 prototype merged, implementation not started | #1706 `463e6cb07` (design), #1707 `e23420d3a` (M03-I-0) | [M03-A](./m03-scope-resolution.md) and [M03-B](./m03-expression-identity.md) are DESIGN PROPOSAL — NOT IMPLEMENTED; [M03-I-0](./m03-i0-sourcemap-prototype.md) is a PROTOTYPE + DECISION. No resolver, erasure, identity or end-to-end source-map implementation exists, so Alpha15 diagnostics/Source-Map/security parity is not met. |
 | M04 | P→I | Not started | — | No ownership or recipe primitives. G2 is not recorded. |
 | M05 | I | In progress — Class P prototype merged; **NOT G1**; M05 not complete | #1709 `4f9821527` (2026-11-06) | The compiler-private leaf-codegen prototype is real-DOM mechanism evidence only. M03 and M04 are absent, so the M05 exit (G1) cannot be recorded. PR #1709's merged body records the head's local evidence: compiler project 331 tests, semantic-ir 130 tests, chromium 7/7 and firefox 7/7 real-DOM cases, consumer smoke 1/1; WebKit was left to CI and is not claimed. See [the prototype record](./m05-g1-leaf-prototype.md) for supported/refused shapes and the not-claimed list. |
@@ -101,7 +123,7 @@ Evidence rules, applied to every row:
 | Exit requirement | Status | Gap |
 | --- | --- | --- |
 | M01 | Met | Decision record merged (#1704). No implementation is owed by M01. |
-| M02 | Not met | Feasibility spike only; design questions OPEN; one admitted node lacks a negative case. |
+| M02 | Not met | Feasibility spike only; §1a criteria 1/2/3/5/6 are met and the only remaining gap is criterion 4 — the admitted `condition` node has no negative case. The §9 OPEN list does not block the exit: OPEN-1/2/6 are M03 work, OPEN-5 is M04 work and OPEN-4 is allowed OPEN in M02 by §1a criterion 3. |
 | M03 | Not met | Design + source-map prototype only; no function-component frontend, erasure, identity or source maps. |
 | M04 | Not met | Not started; no ownership/recipe primitives. |
 | M05 | Not met | Class P prototype only; M03/M04 prerequisites absent. |
@@ -119,7 +141,7 @@ M05 v2 spine.
 ## 5. 2026-11-03 audit closure register
 
 Source ledger: the 2026-11-03 audit ledger at baseline `ace820a74` (#1699),
-re-verified 2026-11-06 against `4f9821527`. The verdicts below are static-file
+re-verified 2026-11-08 against `ec09d444e`. The verdicts below are static-file
 verdicts from that re-check; the re-check ran no suite and no benchmark. Rows
 marked "this change set" are fixed by the Track C change set that carries this
 ledger and close when that change set merges; their evidence is the diff in
