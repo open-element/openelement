@@ -219,3 +219,27 @@ where it does not.
 `K`, `D`, `F`, `B`, `P`) — those belong to M05+ and are not implied by these
 results. M03 rows above are frontend parity evidence only; no G1/G2 record and
 no Alpha16a exit claim is made here.
+
+## M06 S2 recorded results — stateful hostless list
+
+Evidence head: `74f7badc0` (LOCAL; PR #1738). Scope: the M06a admitted generator
+shapes (conditions, lists incl. keyed reorder/insert/delete/unkeyed/multi/empty
+root). **C+** = the production function frontend and the M05/M06 generator admit
+the fixture; **C−** = a source-located diagnostic; **T+**/**T−** = the fixture
+type-checks / is a type error (TypeScript is the authority). Real-browser
+evidence is the recorded LOCAL chromium S2 run, not a release qualification.
+
+| Case | T+ | T− | C+ | C− | Evidence artifact |
+| --- | --- | --- | --- | --- | --- |
+| TSX-06 conditions/zero | pass | pass | pass | pass | `generated-leaf.browser.test.ts` S2 condition toggle (branches replaced, no leak), `generated-leaf.test.ts` condition contract, matrix row in `m03-frontend-matrix.test.ts` |
+| TSX-07 keyed movement | pass | pass | pass | pass | `generated-leaf.browser.test.ts` S2 keyed reorder (same `li` nodes, focus + selection preserved), `generated-leaf.sourcemap.test.ts` list placements |
+| TSX-08 unkeyed positions | pass | pass | pass | pass | generator unit contract (index keys share the reconcile path); browser evidence is keyed only in M06a — unkeyed browser scenario is not claimed |
+| TSX-09 reusable JSX values | pass | pass | n/a | n/a | **not run** — recipes/insertion sites are M06b (generator still fails closed) |
+| TSX-10 repeatable children | pass | pass | n/a | n/a | **not run** — children projection is M06b (generator still fails closed) |
+| TSX-23 one recipe inserted twice | pass | pass | n/a | n/a | **not run** — M06b (owner-isolation evidence) |
+| TSX-26 projection deletion/cross-owner | pass | pass | n/a | n/a | **not run** — M06b/M07 lineage evidence |
+
+**Not run in this section:** every browser/claim/codegen cell (`M`, `U`, `S`,
+`K`, `D`, `F`, `B`, `P`) — those remain M05+/M13 and are not implied by the LOCAL
+chromium S2 evidence. M06 is **not** claimed complete by these rows; M06b and
+M07/M08 are pending.

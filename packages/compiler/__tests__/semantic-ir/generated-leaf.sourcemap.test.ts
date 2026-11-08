@@ -316,6 +316,53 @@ describe('M05b — end-to-end generated-module source map', () => {
     );
   });
 
+  test('M06 condition shapes are covered: placements decode and the map is deterministic', () => {
+    const source =
+      'function C(props) { return <section>{props.ok ? <p>on</p> : <em>off</em>}</section>; }\n';
+    const compiled = compile(source);
+    expect(compiled.placements.length).toBeGreaterThanOrEqual(1);
+    const map = consumer(compiled.map);
+    for (const placement of compiled.placements) {
+      const decoded = originalPositionFor(map, {
+        line: placement.generatedLine,
+        column: placement.generatedColumn,
+      });
+      expect(decoded.line).toBe(placement.authoredLine);
+      expect(decoded.column).toBe(placement.authoredColumn);
+    }
+    expect(compiled.module).toContain('document.createComment("oe:when")');
+    // Structural anchors exist for the emitted branch builders.
+    let mappedLines = 0;
+    eachMapping(map, (mapping) => {
+      if (mapping.originalLine !== null) mappedLines += 1;
+    });
+    expect(mappedLines).toBeGreaterThan(compiled.placements.length);
+    expect(JSON.stringify(compile(source).map)).toBe(JSON.stringify(compiled.map));
+  });
+
+  test('M06 list shapes are covered: items/key/template placements decode to authored spans', () => {
+    const source = `import { signal } from '@openelement/element';
+function L(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li key={item.id}>{item.label}</li>)}</ul>;
+}
+`;
+    const compiled = compile(source);
+    expect(compiled.module).toContain('document.createComment("oe:each")');
+    expect(compiled.placements.length).toBeGreaterThanOrEqual(3);
+    const map = consumer(compiled.map);
+    for (const placement of compiled.placements) {
+      const record = compiled.records.get(placement.exprId);
+      if (record === undefined) continue;
+      for (const segment of record.segments) {
+        const decoded = originalPositionFor(map, composedPosition(placement, segment));
+        expect(decoded.line).toBe(segment.sourceLine);
+        expect(decoded.column).toBe(segment.sourceColumn);
+      }
+    }
+    expect(JSON.stringify(compile(source).map)).toBe(JSON.stringify(compiled.map));
+  });
+
   test('the consumer package is the pinned repository version', () => {
     const require = createRequire(import.meta.url);
     const manifest = JSON.parse(

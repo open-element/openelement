@@ -124,6 +124,43 @@ describe('M05 leaf v2 — emitted module contract', () => {
     expect(nested.module).toContain('appendChild');
   });
 
+  test('M06 conditions emit an anchor + branch builders with disposal mapping', () => {
+    const result = generate(
+      'function C(props) { return <section>{props.ok ? <p>on</p> : <em>off</em>}</section>; }\n',
+    );
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    expect(module).toContain('document.createComment("oe:when")');
+    expect(module).toContain('function __oe_whenThen');
+    expect(module).toContain('function __oe_whenElse');
+    expect(module).toContain('dispose(true)');
+    expect(module).toContain('removeNodes(');
+    expect(module).toContain('insertBefore');
+    // Props reads refresh through the host propsChanged channel.
+    expect(result.requiresPropsChanged).toBe(true);
+  });
+
+  test('M06 lists emit per-entry owners, a key thunk, reuse and in-place update', () => {
+    const result = generate(`import { signal } from '@openelement/element';
+function C(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li key={item.id}>{item.label}</li>)}</ul>;
+}
+`);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    expect(module).toContain('document.createComment("oe:each")');
+    expect(module).toContain('function __oe_eachEntry');
+    expect(module).toContain('function __oe_eachKey');
+    expect(module).toContain('update(next)');
+    expect(module).toContain('.child()');
+    expect(module).toContain('dispose(true)');
+    expect(module).toContain('insertBefore');
+    // The mapper parameter is entry-local, never a host binding.
+    expect(result.requiredBindings).toEqual(['items']);
+    expect(module).not.toContain('requireBinding("item")');
+  });
+
   test('generated code is valid JavaScript (parse check)', () => {
     const module = generate(COUNTER).module!;
     const source = ts.createSourceFile(
@@ -141,17 +178,6 @@ describe('M05 leaf v2 — emitted module contract', () => {
 
 describe('M05 leaf v2 — fail-closed boundary (M05b/M06 shapes refused)', () => {
   const REFUSED: ReadonlyArray<{ label: string; source: string; code: string }> = [
-    {
-      label: 'condition',
-      source: 'function C(props) { return <div>{props.ok ? <span>a</span> : null}</div>; }\n',
-      code: 'OEIR_LEAF_UNSUPPORTED_NODE',
-    },
-    {
-      label: 'list',
-      source:
-        'function C(props) { return <ul>{props.items.map((item) => <li>{item}</li>)}</ul>; }\n',
-      code: 'OEIR_LEAF_UNSUPPORTED_NODE',
-    },
     {
       label: 'component reference',
       source:

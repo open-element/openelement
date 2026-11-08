@@ -34,6 +34,8 @@ import type {
   FunctionExpressionRef,
   FunctionModelAttribute,
   FunctionModelComponent,
+  FunctionModelCondition,
+  FunctionModelList,
   FunctionModelModule,
   FunctionModelNode,
 } from '../../semantic-core/function-frontend.ts';
@@ -55,6 +57,7 @@ const RUNTIME_IMPORTS = [
   'bindSignalWrites',
   'createRecipe',
   'displayValue',
+  'removeNodes',
 ] as const;
 
 const INTERNAL_PREFIX = '__oe_';
@@ -66,6 +69,8 @@ const ADMITTED_ATTRIBUTE_CHANNELS: ReadonlySet<string> = new Set([
   'boolean',
   'property',
 ]);
+/** Attributes the compiler consumes as identity (never a DOM write). */
+const CONSUMED_ATTRIBUTE_CHANNELS: ReadonlySet<string> = new Set(['key']);
 
 /** One lowered-expression placement in the emitted module (compiler-private). */
 export interface ExpressionPlacement {
@@ -116,6 +121,12 @@ interface EmitState {
   readonly placements: ExpressionPlacement[];
   /** Dedupe generated positions (a consumer must not see ambiguous duplicates). */
   readonly segmentKeys: Set<string>;
+  /** The scope variable in the current generated closure (`__oe_scope` by default). */
+  scopeVar: string;
+  /** Entry-mapper names bound in the current generated builder (not host bindings). */
+  readonly entryNames: Set<string>;
+  /** Refresh-function collectors for the enclosing list-entry builder (if any). */
+  readonly refreshStack: string[][];
 }
 
 function diag(state: EmitState, code: string, message: string, span: IrSpan): void {
@@ -221,6 +232,429 @@ function pushParts(state: EmitState, parts: readonly LinePart[], anchor?: SpanLi
   state.lines.push(text);
 }
 
+type SinkEntry =
+  | { readonly kind: 'node'; readonly name: string }
+  | { readonly kind: 'spread'; readonly name: string };
+
+/** Register one generated refresh function with the enclosing entry builder. */
+function registerRefresh(state: EmitState, name: string): void {
+  const collector = state.refreshStack[state.refreshStack.length - 1];
+  if (collector !== undefined) collector.push(name);
+}
+
+/** Append the sink entries to an element variable (authored child order). */
+function appendSinkToElement(
+  state: EmitState,
+  sink: readonly SinkEntry[],
+  targetVar: string,
+): void {
+  for (const entry of sink) {
+    if (entry.kind === 'node') push(state, `${targetVar}.appendChild(${entry.name});`);
+    else
+      push(
+        state,
+        `for (const ${INTERNAL_PREFIX}child of ${entry.name}) ${targetVar}.appendChild(${INTERNAL_PREFIX}child);`,
+      );
+  }
+}
+
+/** Append the sink entries to a generated node-array variable. */
+function appendSinkToArray(state: EmitState, sink: readonly SinkEntry[], targetVar: string): void {
+  for (const entry of sink) {
+    if (entry.kind === 'node') push(state, `${targetVar}.push(${entry.name});`);
+    else
+      push(
+        state,
+        `for (const ${INTERNAL_PREFIX}child of ${entry.name}) ${targetVar}.push(${INTERNAL_PREFIX}child);`,
+      );
+  }
+}
+
+/**
+ * Emit one nested generated builder function that returns a node array. The
+ * builder gets its own scope variable so its resources register on the branch /
+ * entry owner, and lowered expressions inside keep the M03 placement ledger.
+ */
+function emitNodesBuilder(
+  state: EmitState,
+  functionName: string,
+  scopeParam: string,
+  nodes: readonly FunctionModelNode[],
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+  anchor: SpanLike,
+): void {
+  push(state, `function ${functionName}(${scopeParam}) {`, anchor);
+  state.indent += 1;
+  const outerScope = state.scopeVar;
+  state.scopeVar = scopeParam;
+  push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
+  for (const node of nodes) {
+    const sink: SinkEntry[] = [];
+    emitNode(state, node, sink, records);
+    appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
+  }
+  push(state, `return ${INTERNAL_PREFIX}nodes;`);
+  state.scopeVar = outerScope;
+  state.indent -= 1;
+  push(state, '}');
+}
+
+/**
+ * Emit the per-entry list builder: binds the authored mapper parameter, builds
+ * the entry's detached nodes on the entry owner scope and returns an `update`
+ * hook so a keyed reuse re-evaluates the entry's refresh closures in place
+ * (DOM identity is preserved; per-read props replacement stays M06b/M07).
+ */
+function emitEntryBuilder(
+  state: EmitState,
+  functionName: string,
+  scopeParam: string,
+  itemParam: string,
+  itemName: string,
+  nodes: readonly FunctionModelNode[],
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+  anchor: SpanLike,
+): void {
+  push(state, `function ${functionName}(${scopeParam}, ${itemParam}) {`, anchor);
+  state.indent += 1;
+  const outerScope = state.scopeVar;
+  state.scopeVar = scopeParam;
+  state.entryNames.add(itemName);
+  push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
+  push(state, `let ${itemName} = ${itemParam};`);
+  const collector: string[] = [];
+  state.refreshStack.push(collector);
+  for (const node of nodes) {
+    const sink: SinkEntry[] = [];
+    emitNode(state, node, sink, records);
+    appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
+  }
+  state.refreshStack.pop();
+  state.entryNames.delete(itemName);
+  const updateBody = [`${itemName} = next;`, ...collector.map((name) => `${name}(true);`)].join(
+    ' ',
+  );
+  push(state, `return { nodes: ${INTERNAL_PREFIX}nodes, update(next) { ${updateBody} } };`);
+  state.scopeVar = outerScope;
+  state.indent -= 1;
+  push(state, '}');
+}
+
+/** Emit `when`/branch replacement through the M04 disposal mapping. */
+function emitCondition(
+  state: EmitState,
+  node: FunctionModelCondition,
+  sink: SinkEntry[],
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): void {
+  const record = recordFor(state, node.test, records);
+  if (record === null || !declareReads(state, record)) return;
+  const dependencies = dependencyNames(state, record);
+  if (dependencies === null) return;
+  const id = state.counter.value++;
+  const anchorVar = `${INTERNAL_PREFIX}whenAnchor${id}`;
+  const activeVar = `${INTERNAL_PREFIX}whenActive${id}`;
+  const ownerVar = `${INTERNAL_PREFIX}whenOwner${id}`;
+  const refreshVar = `${INTERNAL_PREFIX}whenRefresh${id}`;
+  const consequentFn = node.consequent.length > 0 ? `${INTERNAL_PREFIX}whenThen${id}` : null;
+  const alternateFn =
+    node.alternate !== null && node.alternate.length > 0 ? `${INTERNAL_PREFIX}whenElse${id}` : null;
+
+  push(state, `const ${anchorVar} = document.createComment("oe:when");`, node.span);
+  sink.push({ kind: 'node', name: anchorVar });
+  if (consequentFn !== null) {
+    emitNodesBuilder(
+      state,
+      consequentFn,
+      `${INTERNAL_PREFIX}whenThenScope${id}`,
+      node.consequent,
+      records,
+      node.span,
+    );
+  }
+  if (alternateFn !== null) {
+    emitNodesBuilder(
+      state,
+      alternateFn,
+      `${INTERNAL_PREFIX}whenElseScope${id}`,
+      node.alternate!,
+      records,
+      node.span,
+    );
+  }
+
+  push(state, `let ${activeVar} = -1;`);
+  push(state, `let ${ownerVar} = null;`);
+  push(state, `function ${refreshVar}(force) {`, node.span);
+  state.indent += 1;
+  const select = alternateFn === null ? `? 1 : 0` : `? 1 : 2`;
+  pushParts(state, [`const ${INTERNAL_PREFIX}next = (`, { record }, `) ${select};`]);
+  push(state, `if (!force && ${INTERNAL_PREFIX}next === ${activeVar}) return;`);
+  push(state, `if (${ownerVar} !== null) ${ownerVar}.dispose(true);`);
+  push(state, `${ownerVar} = null;`);
+  push(state, `const ${INTERNAL_PREFIX}branchOwner = ${state.scopeVar}.child();`);
+  push(state, `let ${INTERNAL_PREFIX}branchNodes;`);
+  push(state, `try {`);
+  state.indent += 1;
+  const thenCall = consequentFn === null ? '[]' : `${consequentFn}(${INTERNAL_PREFIX}branchOwner)`;
+  const elseCall = alternateFn === null ? '[]' : `${alternateFn}(${INTERNAL_PREFIX}branchOwner)`;
+  push(
+    state,
+    `${INTERNAL_PREFIX}branchNodes = ${INTERNAL_PREFIX}next === 1 ? ${thenCall} : ${elseCall};`,
+  );
+  state.indent -= 1;
+  push(state, `} catch (error) { ${INTERNAL_PREFIX}branchOwner.dispose(true); throw error; }`);
+  push(
+    state,
+    `${INTERNAL_PREFIX}branchOwner.addRangeCleanup(() => removeNodes(${INTERNAL_PREFIX}branchNodes));`,
+  );
+  push(state, `const ${INTERNAL_PREFIX}parent = ${anchorVar}.parentNode;`);
+  push(
+    state,
+    `if (${INTERNAL_PREFIX}parent !== null) { let ${INTERNAL_PREFIX}reference = ${anchorVar}.nextSibling; for (const ${INTERNAL_PREFIX}child of ${INTERNAL_PREFIX}branchNodes) ${INTERNAL_PREFIX}parent.insertBefore(${INTERNAL_PREFIX}child, ${INTERNAL_PREFIX}reference); }`,
+  );
+  push(
+    state,
+    `${activeVar} = ${INTERNAL_PREFIX}next; ${ownerVar} = ${INTERNAL_PREFIX}branchOwner;`,
+  );
+  state.indent -= 1;
+  push(state, '}');
+
+  // Initial branch: build detached, then hand the nodes to the enclosing sink so
+  // they land at the anchor position when the mount's node list is inserted.
+  const initialOwnerVar = `${INTERNAL_PREFIX}initialOwner${id}`;
+  const initialTestVar = `${INTERNAL_PREFIX}initialTest${id}`;
+  const initialNodesVar = `${INTERNAL_PREFIX}initialNodes${id}`;
+  push(state, `const ${initialOwnerVar} = ${state.scopeVar}.child();`);
+  pushParts(state, [`const ${initialTestVar} = (`, { record }, ');']);
+  push(state, `let ${initialNodesVar};`);
+  push(state, `try {`);
+  state.indent += 1;
+  const initialThen = consequentFn === null ? '[]' : `${consequentFn}(${initialOwnerVar})`;
+  const initialElse = alternateFn === null ? '[]' : `${alternateFn}(${initialOwnerVar})`;
+  push(state, `${initialNodesVar} = ${initialTestVar} ? ${initialThen} : ${initialElse};`);
+  state.indent -= 1;
+  push(state, `} catch (error) { ${initialOwnerVar}.dispose(true); throw error; }`);
+  push(state, `${initialOwnerVar}.addRangeCleanup(() => removeNodes(${initialNodesVar}));`);
+  push(
+    state,
+    `${activeVar} = ${initialTestVar} ? 1 : ${alternateFn === null ? 0 : 2}; ${ownerVar} = ${initialOwnerVar};`,
+  );
+  sink.push({ kind: 'spread', name: initialNodesVar });
+  for (const dependency of dependencies) {
+    const signal = dependency.fromProps ? `${INTERNAL_PREFIX}propsChanged` : dependency.name;
+    push(
+      state,
+      `bindSignalWrites(${state.scopeVar}, ${signal}, ${JSON.stringify(dependency.name)}, ${refreshVar});`,
+      node.span,
+    );
+  }
+  registerRefresh(state, refreshVar);
+}
+
+/** Emit `each`/map reconciliation with per-entry owners, keys and in-place updates. */
+function emitList(
+  state: EmitState,
+  node: FunctionModelList,
+  sink: SinkEntry[],
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): void {
+  const itemsRecord = recordFor(state, node.items, records);
+  if (itemsRecord === null || !declareReads(state, itemsRecord)) return;
+  const dependencies = dependencyNames(state, itemsRecord);
+  if (dependencies === null) return;
+  if (!IDENTIFIER_PATTERN.test(node.parameter) || node.parameter.startsWith(INTERNAL_PREFIX)) {
+    diag(
+      state,
+      'OEIR_LEAF_INVALID_BINDING',
+      `list mapper parameter '${node.parameter}' is not usable`,
+      node.span,
+    );
+    return;
+  }
+  const id = state.counter.value++;
+  const anchorVar = `${INTERNAL_PREFIX}eachAnchor${id}`;
+  const entriesVar = `${INTERNAL_PREFIX}eachEntries${id}`;
+  const entryFn = `${INTERNAL_PREFIX}eachEntry${id}`;
+  const keyFn = `${INTERNAL_PREFIX}eachKey${id}`;
+  const refreshVar = `${INTERNAL_PREFIX}eachRefresh${id}`;
+
+  push(state, `const ${anchorVar} = document.createComment("oe:each");`, node.span);
+  sink.push({ kind: 'node', name: anchorVar });
+  push(state, `let ${entriesVar} = [];`);
+  emitEntryBuilder(
+    state,
+    entryFn,
+    `${INTERNAL_PREFIX}eachScope${id}`,
+    `${INTERNAL_PREFIX}eachItem${id}`,
+    node.parameter,
+    node.template,
+    records,
+    node.span,
+  );
+
+  let keyDependencies: readonly Dependency[] = [];
+  if (node.key !== null) {
+    const keyRecord = recordFor(state, node.key, records);
+    if (keyRecord === null) return;
+    // The mapper parameter is entry-local (not a host binding); outer reads in a
+    // key thunk are validated as usual and refresh the list when written.
+    state.entryNames.add(node.parameter);
+    const declared = declareReads(state, keyRecord);
+    state.entryNames.delete(node.parameter);
+    if (!declared) return;
+    const keyDeps = dependencyNames(state, keyRecord);
+    if (keyDeps === null) return;
+    keyDependencies = keyDeps;
+    pushParts(
+      state,
+      [
+        `function ${keyFn}(${INTERNAL_PREFIX}eachItem, ${INTERNAL_PREFIX}eachIndex) { const ${node.parameter} = ${INTERNAL_PREFIX}eachItem; return (`,
+        { record: keyRecord },
+        '); }',
+      ],
+      node.key.span,
+    );
+  } else {
+    push(
+      state,
+      `function ${keyFn}(${INTERNAL_PREFIX}eachItem, ${INTERNAL_PREFIX}eachIndex) { return ${INTERNAL_PREFIX}eachIndex; }`,
+      node.span,
+    );
+  }
+
+  push(state, `function ${refreshVar}() {`, node.span);
+  state.indent += 1;
+  pushParts(state, [`const ${INTERNAL_PREFIX}items = (`, { record: itemsRecord }, ');']);
+  push(state, `const ${INTERNAL_PREFIX}previous = ${entriesVar};`);
+  push(state, `const ${INTERNAL_PREFIX}next = [];`);
+  push(state, `const ${INTERNAL_PREFIX}used = new Set();`);
+  push(
+    state,
+    `for (let ${INTERNAL_PREFIX}index = 0; ${INTERNAL_PREFIX}index < ${INTERNAL_PREFIX}items.length; ${INTERNAL_PREFIX}index++) {`,
+  );
+  state.indent += 1;
+  push(state, `const ${INTERNAL_PREFIX}item = ${INTERNAL_PREFIX}items[${INTERNAL_PREFIX}index];`);
+  push(
+    state,
+    `const ${INTERNAL_PREFIX}key = ${keyFn}(${INTERNAL_PREFIX}item, ${INTERNAL_PREFIX}index);`,
+  );
+  push(state, `let ${INTERNAL_PREFIX}found = null;`);
+  push(
+    state,
+    `for (const ${INTERNAL_PREFIX}entry of ${INTERNAL_PREFIX}previous) { if (${INTERNAL_PREFIX}entry.key === ${INTERNAL_PREFIX}key && !${INTERNAL_PREFIX}used.has(${INTERNAL_PREFIX}entry)) { ${INTERNAL_PREFIX}found = ${INTERNAL_PREFIX}entry; break; } }`,
+  );
+  push(state, `if (${INTERNAL_PREFIX}found !== null) {`);
+  state.indent += 1;
+  push(
+    state,
+    `${INTERNAL_PREFIX}used.add(${INTERNAL_PREFIX}found); ${INTERNAL_PREFIX}found.item = ${INTERNAL_PREFIX}item; ${INTERNAL_PREFIX}found.update(${INTERNAL_PREFIX}item); ${INTERNAL_PREFIX}next.push(${INTERNAL_PREFIX}found);`,
+  );
+  state.indent -= 1;
+  push(state, `} else {`);
+  state.indent += 1;
+  push(state, `const ${INTERNAL_PREFIX}owner = ${state.scopeVar}.child();`);
+  push(state, `let ${INTERNAL_PREFIX}built;`);
+  push(state, `try {`);
+  state.indent += 1;
+  push(
+    state,
+    `${INTERNAL_PREFIX}built = ${entryFn}(${INTERNAL_PREFIX}owner, ${INTERNAL_PREFIX}item);`,
+  );
+  state.indent -= 1;
+  push(state, `} catch (error) { ${INTERNAL_PREFIX}owner.dispose(true); throw error; }`);
+  push(
+    state,
+    `${INTERNAL_PREFIX}owner.addRangeCleanup(() => removeNodes(${INTERNAL_PREFIX}built.nodes));`,
+  );
+  push(
+    state,
+    `const ${INTERNAL_PREFIX}entry = { key: ${INTERNAL_PREFIX}key, item: ${INTERNAL_PREFIX}item, owner: ${INTERNAL_PREFIX}owner, nodes: ${INTERNAL_PREFIX}built.nodes, update: ${INTERNAL_PREFIX}built.update };`,
+  );
+  push(
+    state,
+    `${INTERNAL_PREFIX}used.add(${INTERNAL_PREFIX}entry); ${INTERNAL_PREFIX}next.push(${INTERNAL_PREFIX}entry);`,
+  );
+  state.indent -= 1;
+  push(state, `}`);
+  state.indent -= 1;
+  push(state, `}`);
+  push(
+    state,
+    `for (const ${INTERNAL_PREFIX}entry of ${INTERNAL_PREFIX}previous) if (!${INTERNAL_PREFIX}used.has(${INTERNAL_PREFIX}entry)) ${INTERNAL_PREFIX}entry.owner.dispose(true);`,
+  );
+  push(state, `const ${INTERNAL_PREFIX}parent = ${anchorVar}.parentNode;`);
+  push(state, `if (${INTERNAL_PREFIX}parent !== null) {`);
+  state.indent += 1;
+  // Keyed placement: the list owns the siblings AFTER the anchor. Find the tail
+  // reference (first following sibling that is not a current entry node), then
+  // place the next entries in reverse and move only nodes not already in place.
+  // Unchanged nodes (and a focused element in them) are never re-inserted.
+  push(state, `const ${INTERNAL_PREFIX}previousNodes = new Set();`);
+  push(
+    state,
+    `for (const ${INTERNAL_PREFIX}entry of ${INTERNAL_PREFIX}previous) for (const ${INTERNAL_PREFIX}node of ${INTERNAL_PREFIX}entry.nodes) ${INTERNAL_PREFIX}previousNodes.add(${INTERNAL_PREFIX}node);`,
+  );
+  push(state, `let ${INTERNAL_PREFIX}reference = ${anchorVar}.nextSibling;`);
+  push(
+    state,
+    `while (${INTERNAL_PREFIX}reference !== null && ${INTERNAL_PREFIX}previousNodes.has(${INTERNAL_PREFIX}reference)) ${INTERNAL_PREFIX}reference = ${INTERNAL_PREFIX}reference.nextSibling;`,
+  );
+  push(
+    state,
+    `for (let ${INTERNAL_PREFIX}entryIndex = ${INTERNAL_PREFIX}next.length - 1; ${INTERNAL_PREFIX}entryIndex >= 0; ${INTERNAL_PREFIX}entryIndex--) {`,
+  );
+  state.indent += 1;
+  push(
+    state,
+    `const ${INTERNAL_PREFIX}entryNodes = ${INTERNAL_PREFIX}next[${INTERNAL_PREFIX}entryIndex].nodes;`,
+  );
+  push(
+    state,
+    `for (let ${INTERNAL_PREFIX}nodeIndex = ${INTERNAL_PREFIX}entryNodes.length - 1; ${INTERNAL_PREFIX}nodeIndex >= 0; ${INTERNAL_PREFIX}nodeIndex--) {`,
+  );
+  state.indent += 1;
+  push(
+    state,
+    `const ${INTERNAL_PREFIX}node = ${INTERNAL_PREFIX}entryNodes[${INTERNAL_PREFIX}nodeIndex];`,
+  );
+  push(
+    state,
+    `if (${INTERNAL_PREFIX}node.parentNode !== ${INTERNAL_PREFIX}parent || ${INTERNAL_PREFIX}node.nextSibling !== ${INTERNAL_PREFIX}reference) ${INTERNAL_PREFIX}parent.insertBefore(${INTERNAL_PREFIX}node, ${INTERNAL_PREFIX}reference);`,
+  );
+  push(state, `${INTERNAL_PREFIX}reference = ${INTERNAL_PREFIX}node;`);
+  state.indent -= 1;
+  push(state, `}`);
+  state.indent -= 1;
+  push(state, `}`);
+  state.indent -= 1;
+  push(state, `}`);
+  push(state, `${entriesVar} = ${INTERNAL_PREFIX}next;`);
+  state.indent -= 1;
+  push(state, '}');
+
+  push(state, `${refreshVar}();`);
+  const initialNodesVar = `${INTERNAL_PREFIX}eachInitialNodes${id}`;
+  push(state, `const ${initialNodesVar} = [];`);
+  push(
+    state,
+    `for (const ${INTERNAL_PREFIX}entry of ${entriesVar}) for (const ${INTERNAL_PREFIX}node of ${INTERNAL_PREFIX}entry.nodes) ${initialNodesVar}.push(${INTERNAL_PREFIX}node);`,
+  );
+  sink.push({ kind: 'spread', name: initialNodesVar });
+  const subscribed = new Set<string>();
+  for (const dependency of [...dependencies, ...keyDependencies]) {
+    const signal = dependency.fromProps ? `${INTERNAL_PREFIX}propsChanged` : dependency.name;
+    if (subscribed.has(dependency.name)) continue;
+    subscribed.add(dependency.name);
+    push(
+      state,
+      `bindSignalWrites(${state.scopeVar}, ${signal}, ${JSON.stringify(dependency.name)}, ${refreshVar});`,
+      node.span,
+    );
+  }
+  registerRefresh(state, refreshVar);
+}
+
 function nextName(state: EmitState, prefix: string): string {
   return `${INTERNAL_PREFIX}${prefix}${state.counter.value++}`;
 }
@@ -271,7 +705,13 @@ function declareReads(state: EmitState, record: LoweredExpressionRecord): boolea
       state.requiredProps.add(state.propsName);
       continue;
     }
-    if (state.localResources.has(read.name) || state.hostBindings.has(read.name)) continue;
+    if (
+      state.localResources.has(read.name) ||
+      state.hostBindings.has(read.name) ||
+      state.entryNames.has(read.name)
+    ) {
+      continue;
+    }
     if (!IDENTIFIER_PATTERN.test(read.name) || read.name.startsWith(INTERNAL_PREFIX)) {
       diag(
         state,
@@ -425,7 +865,7 @@ function attributeAdmitted(
 function emitNode(
   state: EmitState,
   node: FunctionModelNode,
-  sink: string[],
+  sink: SinkEntry[],
   records: ReadonlyMap<string, LoweredExpressionRecord>,
 ): void {
   const span: IrSpan = node.span;
@@ -436,11 +876,19 @@ function emitNode(
       `const ${varName} = document.createTextNode(${JSON.stringify(node.value)});`,
       node.span,
     );
-    sink.push(varName);
+    sink.push({ kind: 'node', name: varName });
     return;
   }
   if (node.kind === 'fragment') {
     for (const child of node.children) emitNode(state, child, sink, records);
+    return;
+  }
+  if (node.kind === 'condition') {
+    emitCondition(state, node, sink, records);
+    return;
+  }
+  if (node.kind === 'list') {
+    emitList(state, node, sink, records);
     return;
   }
   if (node.kind === 'element') {
@@ -460,6 +908,11 @@ function emitNode(
       node.span,
     );
     for (const attribute of node.attributes) {
+      if (attribute.kind === 'dynamic' && CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
+        // `key` is list identity, consumed by the enclosing list emitter; it is
+        // never written to the DOM as an attribute.
+        continue;
+      }
       if (!attributeAdmitted(state, attribute, span)) continue;
       if (attribute.kind === 'static') {
         if (unsafeStreamFrameAttribute(attribute.name, attribute.value)) {
@@ -504,17 +957,18 @@ function emitNode(
         const signal = dependency.fromProps ? `${INTERNAL_PREFIX}propsChanged` : dependency.name;
         push(
           state,
-          `bindSignalWrites(${INTERNAL_PREFIX}scope, ${signal}, ${JSON.stringify(dependency.name)}, ${refresh});`,
+          `bindSignalWrites(${state.scopeVar}, ${signal}, ${JSON.stringify(dependency.name)}, ${refresh});`,
           attribute.span,
         );
       }
+      registerRefresh(state, refresh);
     }
     for (const child of node.children) {
-      const childSink: string[] = [];
+      const childSink: SinkEntry[] = [];
       emitNode(state, child, childSink, records);
-      for (const childVar of childSink) push(state, `${varName}.appendChild(${childVar});`);
+      appendSinkToElement(state, childSink, varName);
     }
-    sink.push(varName);
+    sink.push({ kind: 'node', name: varName });
     return;
   }
   if (node.kind === 'dynamic-text') {
@@ -524,7 +978,7 @@ function emitNode(
     if (dependencies === null) return;
     const textVar = nextName(state, 'text');
     push(state, `const ${textVar} = document.createTextNode("");`, node.span);
-    sink.push(textVar);
+    sink.push({ kind: 'node', name: textVar });
     if (dependencies.length === 0) {
       emitTextWrite(state, textVar, record);
       return;
@@ -540,10 +994,11 @@ function emitNode(
       const signal = dependency.fromProps ? `${INTERNAL_PREFIX}propsChanged` : dependency.name;
       push(
         state,
-        `bindSignalWrites(${INTERNAL_PREFIX}scope, ${signal}, ${JSON.stringify(dependency.name)}, ${refresh});`,
+        `bindSignalWrites(${state.scopeVar}, ${signal}, ${JSON.stringify(dependency.name)}, ${refresh});`,
         node.span,
       );
     }
+    registerRefresh(state, refresh);
     return;
   }
   diag(
@@ -585,6 +1040,9 @@ function emitComponent(
     segments: [],
     placements: [],
     segmentKeys: new Set(),
+    scopeVar: `${INTERNAL_PREFIX}scope`,
+    entryNames: new Set(),
+    refreshStack: [],
   };
   if (
     propsName !== null &&
@@ -680,9 +1138,9 @@ function emitComponent(
     pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
   }
   for (const root of component.roots) {
-    const sink: string[] = [];
+    const sink: SinkEntry[] = [];
     emitNode(state, root, sink, records);
-    for (const nodeVar of sink) push(state, `${INTERNAL_PREFIX}nodes.push(${nodeVar});`);
+    appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
   }
   push(state, `return ${INTERNAL_PREFIX}nodes;`);
   state.indent -= 1;
