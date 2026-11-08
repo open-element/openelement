@@ -180,3 +180,42 @@ Alpha16a claims only M01-M08 evidence with G1/G2 recorded. Rows depending on
 M09-M13 (generated CE boundary, class authoring migration under M10, Router
 integration, packed qualification, full browser/server qualification, executor
 unreachability) belong to Alpha16b and must not be reported as Alpha16a results.
+
+## M03-scope recorded results — frontend parity evidence
+
+Evidence head: `5cfd2fc80` (LOCAL run; PR #1734, squash SHA pinned by the next
+slice). Scope: the admitted function-component grammar only. **T+** = the
+fixture type-checks (TypeScript is the authority — the frontend is not a
+checker), **T−** = a type error is reported for the stated misuse, **C+** = the
+production function frontend compiles it cleanly, **C−** = a source-located OEC
+diagnostic is produced. Artifacts:
+`packages/compiler/__tests__/semantic-ir/m03-frontend-matrix.test.ts`
+(T/C rows), `m03-sourcemap-parity.test.ts` (expression-level Source Map parity
+for TSX-22), `m03-security-parity.test.ts` (per-position security negatives),
+and the A4a `function-frontend.test.ts` Alpha15 diagnostics-parity harness.
+
+| Case | T+ | T− | C+ | C− | Evidence artifact |
+| --- | --- | --- | --- | --- | --- |
+| TSX-01 roots/fragments/empty | pass | pass | pass | pass | `m03-frontend-matrix.test.ts` — TSX-01 row (fragment multi-root; non-JSX return `OEC9040`) |
+| TSX-02 signal/computed | pass | pass | pass | pass | TSX-02 row (`signal`/`computed` A1-classified resources; unresolved computed body `OEC9043`) |
+| TSX-03 props/destructuring | pass | pass | pass | pass | TSX-03 row (destructured props snapshot; array-pattern props parameter `OEC9040`) |
+| TSX-05 local vs computed vs inline | pass | pass | pass | pass | TSX-05 row (local snapshot vs JSX slot; declaration without initializer `OEC9042`) |
+| TSX-06 conditions/zero | pass | pass | pass | pass | TSX-06 row (ternary/`&&`/null; non-JSX branch `OEC9042`) |
+| TSX-08 unkeyed positions | pass | pass | pass | pass | TSX-08 row (unkeyed list admitted; non-inline mapper `OEC9042`) |
+| TSX-09 reusable JSX values | pass | pass | pass | pass | TSX-09 row (JSX in expression → recipe references; unsupported recipe target `OEC9042`) |
+| TSX-10 repeatable children | pass | pass | pass | pass | TSX-10 row (`props.children` projection; children on a component reference `OEC9042`) |
+| TSX-12 events/callbacks | pass | pass | pass | pass | TSX-12 row (arbitrary handler closures admitted; `this` in handler `OEC9043`) |
+| TSX-16 iterables | pass | pass | pass | pass | TSX-16 row (`.map` per-entry template; non-JSX mapper body `OEC9042`) |
+| TSX-22 HMR/source locations | pass | pass | pass | pass | TSX-22 row plus `m03-sourcemap-parity.test.ts` (expression-level segments decode to authored positions through `@jridgewell/trace-mapping@0.3.31`) |
+
+Security parity is recorded separately by `m03-security-parity.test.ts` for every
+newly admitted expression position (direct element attribute, condition branch,
+list template, JSX-in-expression recipe target), with class-vs-function findings
+compared on OEC code + offending authored token where the class baseline has an
+equivalent construct and an explicit `n/a (no equivalent construct)` record
+where it does not.
+
+**Not run in this section:** every browser/claim/codegen cell (`M`, `U`, `S`,
+`K`, `D`, `F`, `B`, `P`) — those belong to M05+ and are not implied by these
+results. M03 rows above are frontend parity evidence only; no G1/G2 record and
+no Alpha16a exit claim is made here.
