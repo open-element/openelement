@@ -5,6 +5,15 @@ Status: **READ-ONLY AUDIT**. Evidence is cited by path and line. Deeper
 narrative is in [the architecture audit](./alpha16-18-architecture-audit.md);
 the target is [the canonical architecture](./compiler-native-architecture.md).
 
+**2026-11-08 addendum.** The first-party Lit renderer retirement that this
+2026-11-03 audit records as initiated with its window still OPEN — the Router
+matrix's "Lit renderer" row, contradiction row C-09, boundary question 14 and
+the retirement-order table's Lit row — was executed zero-compat by the ADR-0152
+2026-11-08 owner ruling, merged as PR #1719 `ec09d444e`. The `./lit` and
+`./lit-ssr` subpaths, their entry modules and the renderer branch are removed,
+and `renderer: 'lit'` fails with an explicit migration error. The audit body
+stays as the 2026-11-03 snapshot.
+
 Classification vocabulary: **IMPLEMENTED**, **PARTIALLY IMPLEMENTED**,
 **PLANNED**, **PROPOSED**, **DEPRECATED**, **RETIRED**,
 **NEEDS INVESTIGATION**.

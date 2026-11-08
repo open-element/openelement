@@ -209,3 +209,18 @@ remains deferred to M01 design plus real packed-consumer evidence; it must not
 become another large JSON descriptor.
 
 Full analysis: [fourth-pass reassessment](../architecture/alpha16-18-fourth-pass-reassessment.md).
+
+## Amendment (2026-11-08, owner ruling): Lit retirement executed
+
+The 2026-11-03 prerequisites amendment above records first-party Lit retirement
+as "the separate ADR-0152 product decision with its release window still OPEN"
+and states that alpha.15 Lit support "is not removed here". That window fact is
+superseded: the ADR-0152 2026-11-08 owner ruling executed the retirement
+zero-compat — no last supported version, no compatibility period, no adapter and
+no dual-renderer lane — merged as PR #1719 `ec09d444e`. The `./lit` and
+`./lit-ssr` subpaths, their entry modules and the renderer branch are removed,
+and `renderer: 'lit'` fails with an explicit migration error. Third-party Lit
+Web Components remain a client-only interoperability use case, with no automatic
+SSR and no openElement-managed Lit DSD hydration. The rest of this ADR — the
+generated-code runtime direction, the release gate and the Alpha16a/Alpha16b
+split — is unchanged.
