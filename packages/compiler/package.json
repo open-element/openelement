@@ -42,6 +42,7 @@
     "!src/internal/compiler/semantic-ir",
     "!src/internal/compiler/semantic-core/scope-resolution.ts",
     "!src/internal/compiler/semantic-core/expression-lowering.ts",
-    "!src/internal/compiler/semantic-core/expression-registry.ts"
+    "!src/internal/compiler/semantic-core/expression-registry.ts",
+    "!src/internal/compiler/semantic-core/type-erasure.ts"
   ]
 }

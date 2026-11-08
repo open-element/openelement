@@ -17,12 +17,13 @@
  *      `TransformationResult` in a `finally` — no transformed tree survives the
  *      call.
  *
- * Deliberate boundaries (review these, A3 owns the missing half):
+ * Deliberate boundaries:
  *
- * - **No erasure visitor.** M03-B Route 3 step 2a (erase `as`/`satisfies`/
- *   non-null/type arguments/annotations) is M03-I-3 (A3). This module therefore
- *   **fails closed** (`OEIR_ERASURE_DEFERRED`) when the expression needs
- *   erasure; it never prints TypeScript-only syntax into "JavaScript" text.
+ * - **Erasure is integrated (M03-I-3, A3).** `type-erasure.ts` strips the
+ *   admitted TypeScript-only syntax inside the same transform (before/with JSX
+ *   replacement); anything outside that set still fails closed
+ *   (`OEIR_ERASURE_UNSUPPORTED` for class authoring, plus the context matrix).
+ *   The differential `ts.transpileModule` erasure oracle lives in tests only.
  * - **No production compile-path wiring.** A4 owns the component frontend; the
  *   registry is a sidecar M05 consumes, not a stage in the current pipeline.
  * - **No runtime recipe naming.** The recipe-reference call shape is supplied by
@@ -38,9 +39,10 @@
 import ts from 'typescript';
 import type { ScopeDiagnostic, SourceSpan } from './scope-resolution.ts';
 import type { EmissionSegment } from './source-map.ts';
+import { collectErasureBoundaryRefusals, eraseTypeScriptSyntax } from './type-erasure.ts';
 
-/** Bump when the marker/print pipeline changes; recorded in the registry. */
-export const EXPRESSION_LOWERING_TRANSFORM_VERSION = 'alpha16a-m03-i2.1';
+/** Bump when the marker/print/erasure pipeline changes; recorded in the registry. */
+export const EXPRESSION_LOWERING_TRANSFORM_VERSION = 'alpha16a-m03-i3.1';
 
 /** Prefix of the synthetic marker namespace (derived from the source hash). */
 const MARKER_PREFIX = '__oe_lm_';
@@ -148,76 +150,7 @@ function refusal(
   return { severity: 'error', code, message, span: sourceSpan(sourceFile, node), origin: 'source' };
 }
 
-// ─── Fail-closed refusal facts (A3 owns the erasure half) ───────────────────
-
-const ERASURE_REQUIRED =
-  'TypeScript-only syntax in an expression requires the A3 erasure visitor (M03-I-3); ' +
-  'this slice fails closed instead of printing non-JavaScript text';
-
-/** Collect every construct that needs M03-I-3's erasure visitor to become JS. */
-function collectErasureRefusals(
-  sourceFile: ts.SourceFile,
-  root: ts.Node,
-  diagnostics: ScopeDiagnostic[],
-): void {
-  const visit = (node: ts.Node): void => {
-    if (isJsxNode(node)) return;
-    if (
-      ts.isAsExpression(node) ||
-      ts.isSatisfiesExpression(node) ||
-      ts.isNonNullExpression(node) ||
-      ts.isTypeAssertionExpression(node)
-    ) {
-      diagnostics.push(refusal(sourceFile, node, 'OEIR_ERASURE_DEFERRED', ERASURE_REQUIRED));
-      return;
-    }
-    if (
-      (ts.isCallExpression(node) || ts.isNewExpression(node)) &&
-      node.typeArguments !== undefined &&
-      node.typeArguments.length > 0
-    ) {
-      diagnostics.push(
-        refusal(sourceFile, node.typeArguments[0]!, 'OEIR_ERASURE_DEFERRED', ERASURE_REQUIRED),
-      );
-    }
-    if (isFunctionLikeExpressionNode(node)) {
-      if (node.typeParameters !== undefined && node.typeParameters.length > 0) {
-        diagnostics.push(
-          refusal(sourceFile, node.typeParameters[0]!, 'OEIR_ERASURE_DEFERRED', ERASURE_REQUIRED),
-        );
-      }
-      if (node.type !== undefined) {
-        diagnostics.push(refusal(sourceFile, node.type, 'OEIR_ERASURE_DEFERRED', ERASURE_REQUIRED));
-      }
-      for (const parameter of node.parameters) {
-        if (parameter.type !== undefined) {
-          diagnostics.push(
-            refusal(sourceFile, parameter.type, 'OEIR_ERASURE_DEFERRED', ERASURE_REQUIRED),
-          );
-        }
-      }
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(root);
-}
-
-type FunctionLikeExpressionNode =
-  | ts.ArrowFunction
-  | ts.FunctionExpression
-  | ts.MethodDeclaration
-  | ts.GetAccessorDeclaration
-  | ts.SetAccessorDeclaration;
-
-function isFunctionLikeExpressionNode(node: ts.Node): node is FunctionLikeExpressionNode {
-  return (
-    ts.isArrowFunction(node) ||
-    ts.isFunctionExpression(node) ||
-    ts.isMethodDeclaration(node) ||
-    ts.isGetAccessorDeclaration(node) ||
-    ts.isSetAccessorDeclaration(node)
-  );
-}
+// ─── Fail-closed refusal facts (context matrix + erasure boundary) ──────────
 
 /** Whether `node` is an identifier occurrence evaluated as a value. */
 function isValueIdentifier(node: ts.Identifier): boolean {
@@ -408,6 +341,10 @@ function replaceJsxReferences(
         replaced.add(positioned);
         return positioned;
       }
+      // Erasure runs in the same traversal/print as the JSX substitution, so
+      // one transform + one printer pass covers both (M03-B Route 3).
+      const erased = eraseTypeScriptSyntax(node, visit);
+      if (erased !== undefined) return erased;
       return ts.visitEachChild(node, visit, context);
     };
     return (node) => ts.visitNode(node, visit) as ts.Node;
@@ -812,7 +749,7 @@ export function lowerExpressionText(
   const diagnostics: ScopeDiagnostic[] = [];
   const expressionSpan = sourceSpan(sourceFile, expression);
   collectContextRefusals(sourceFile, expression, diagnostics);
-  collectErasureRefusals(sourceFile, expression, diagnostics);
+  collectErasureBoundaryRefusals(sourceFile, expression, diagnostics);
   if (diagnostics.length > 0) {
     return { text: '', anchors: [], replacedJsxSpans: [], diagnostics };
   }
