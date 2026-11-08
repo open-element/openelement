@@ -141,6 +141,20 @@ function Host(props) {
     expect(titleRecord!.lowered).toContain('__oe_recipe_ref("#recipe0")');
   });
 
+  test('nested intrinsic JSX children are model nodes, not dropped (M05 follow-up)', () => {
+    const result = compile(
+      'function C(props) { return <section><p><b>bold</b></p><i>it</i></section>; }\n',
+    );
+    expect(result.diagnostics).toEqual([]);
+    const root = result.module!.components[0]!.roots[0]!;
+    expect(root.kind).toBe('element');
+    if (root.kind !== 'element') return;
+    expect(root.children.map((child) => child.kind)).toEqual(['element', 'element']);
+    const first = root.children[0]!;
+    expect(first.kind === 'element' && first.tag).toBe('p');
+    expect(first.kind === 'element' && first.children[0]?.kind).toBe('element');
+  });
+
   test('compilation is deterministic', () => {
     const first = compile(ADMITTED);
     const second = compile(ADMITTED);

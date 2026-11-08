@@ -570,6 +570,13 @@ class FunctionFrontendBuilder {
         nodes.push({ kind: 'text', value: text, span: spanOf(this.sourceFile, child) });
         continue;
       }
+      if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child) || ts.isJsxFragment(child)) {
+        // Direct nested JSX children are model nodes (not expressions): build
+        // them through the same node path so they are never silently dropped.
+        const nested = this.buildNode(child);
+        if (nested !== null) nodes.push(nested);
+        continue;
+      }
       if (!ts.isJsxExpression(child) || child.expression === undefined) continue;
       const built = this.buildSlot(child.expression);
       if (built !== null) nodes.push(built);
