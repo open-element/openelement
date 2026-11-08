@@ -40,6 +40,11 @@ import type {
 import type { LoweredExpressionRecord } from '../../semantic-core/expression-registry.ts';
 import type { BindingId } from '../../semantic-core/scope-resolution.ts';
 import type { IrDiagnostic, IrSpan } from '../types.ts';
+import {
+  SourceMapSegmentBuilder,
+  type CompiledElementSourceMap,
+  type EmissionSegment,
+} from '../../semantic-core/source-map.ts';
 
 /** Compiler-private runtime entry the emitted module imports from. */
 export const GENERATED_LEAF_RUNTIME_SPECIFIER = '@openelement/element/internal/compiled/runtime';
@@ -62,9 +67,29 @@ const ADMITTED_ATTRIBUTE_CHANNELS: ReadonlySet<string> = new Set([
   'property',
 ]);
 
+/** One lowered-expression placement in the emitted module (compiler-private). */
+export interface ExpressionPlacement {
+  readonly exprId: string;
+  /** 1-based generated line where the lowered text starts. */
+  readonly generatedLine: number;
+  /** 0-based generated column where the lowered text starts. */
+  readonly generatedColumn: number;
+  /** 1-based authored line of the expression. */
+  readonly authoredLine: number;
+  /** 0-based authored column of the expression start. */
+  readonly authoredColumn: number;
+}
+
 export interface GeneratedLeafModule {
   /** Emitted ESM module; `null` when any diagnostic was emitted (fail closed). */
   readonly module: string | null;
+  /**
+   * End-to-end Source Map v3 for the emitted module (M05b). `null` unless the
+   * caller supplies the authored source text (required for `sourcesContent`).
+   */
+  readonly sourceMap: CompiledElementSourceMap | null;
+  /** Placement ledger for every lowered expression in the emitted module. */
+  readonly placements: readonly ExpressionPlacement[];
   /** Host `bindings` names the module reads (signals/computeds/functions). */
   readonly requiredBindings: readonly string[];
   /** Host `props` names the module reads. */
@@ -86,14 +111,114 @@ interface EmitState {
   counter: { value: number };
   readonly propsName: string | null;
   requiresPropsChanged: boolean;
+  /** Source Map v3 segments for this component, in module-local line numbers. */
+  readonly segments: EmissionSegment[];
+  readonly placements: ExpressionPlacement[];
+  /** Dedupe generated positions (a consumer must not see ambiguous duplicates). */
+  readonly segmentKeys: Set<string>;
 }
 
 function diag(state: EmitState, code: string, message: string, span: IrSpan): void {
   state.diagnostics.push({ severity: 'error', code, message, span, origin: 'ir-object' });
 }
 
-function push(state: EmitState, text: string): void {
+interface SpanLike {
+  readonly file: string;
+  /** 1-based authored line. */
+  readonly line: number;
+  /** 1-based authored column. */
+  readonly column: number;
+}
+
+type LinePart = string | { readonly record: LoweredExpressionRecord };
+
+function currentColumn(state: EmitState): number {
+  return state.indent * 2;
+}
+
+function addSegment(
+  state: EmitState,
+  generatedLine: number,
+  generatedColumn: number,
+  sourceLine: number,
+  sourceColumn: number,
+  name?: string,
+): void {
+  const key = `${generatedLine}:${generatedColumn}`;
+  if (state.segmentKeys.has(key)) return;
+  state.segmentKeys.add(key);
+  state.segments.push({
+    generatedLine,
+    generatedColumn,
+    sourceLine,
+    sourceColumn,
+    ...(name === undefined ? {} : { name }),
+  });
+}
+
+/** Append one generated line; an authored anchor maps its start position. */
+function push(state: EmitState, text: string, anchor?: SpanLike): void {
+  const lineNumber = state.lines.length + 1;
+  if (anchor !== undefined) {
+    // Structural anchors map from the generated line start (statement position).
+    addSegment(state, lineNumber, 0, anchor.line, anchor.column - 1);
+  }
   state.lines.push(`${'  '.repeat(state.indent)}${text}`);
+}
+
+/**
+ * Append one generated line containing lowered expression text: the placement
+ * is recorded and the A2 expression segments are rebased into module
+ * coordinates (multi-line lowering keeps later lines at their own columns).
+ */
+function pushParts(state: EmitState, parts: readonly LinePart[], anchor?: SpanLike): void {
+  const lineNumber = state.lines.length + 1;
+  let column = currentColumn(state);
+  let text = '  '.repeat(state.indent);
+  if (anchor !== undefined) addSegment(state, lineNumber, column, anchor.line, anchor.column - 1);
+  for (const part of parts) {
+    if (typeof part === 'string') {
+      text += part;
+      column += part.length;
+      continue;
+    }
+    const record = part.record;
+    const lowered = record.lowered.trim();
+    const startLine = lineNumber;
+    const startColumn = column;
+    // The placement start maps to the authored expression start; the A2
+    // segments (which may start after trimmed markers) provide finer anchors.
+    addSegment(
+      state,
+      startLine,
+      startColumn,
+      record.authoredSpan.line,
+      record.authoredSpan.column - 1,
+    );
+    state.placements.push({
+      exprId: record.id,
+      generatedLine: startLine,
+      generatedColumn: startColumn,
+      authoredLine: record.authoredSpan.line,
+      authoredColumn: record.authoredSpan.column - 1,
+    });
+    for (const segment of record.segments) {
+      addSegment(
+        state,
+        startLine + segment.generatedLine - 1,
+        segment.generatedLine === 1
+          ? startColumn + segment.generatedColumn
+          : segment.generatedColumn,
+        segment.sourceLine,
+        segment.sourceColumn,
+        segment.name,
+      );
+    }
+    text += lowered;
+    const lines = lowered.split('\n');
+    column = lines.length === 1 ? startColumn + lowered.length : lines[lines.length - 1]!.length;
+  }
+  state.lines.push(text);
 }
 
 function nextName(state: EmitState, prefix: string): string {
@@ -225,8 +350,8 @@ function dependencyNames(
   return names;
 }
 
-function emitTextWrite(state: EmitState, targetVar: string, expression: string): void {
-  push(state, `${targetVar}.nodeValue = displayValue((${expression}));`);
+function emitTextWrite(state: EmitState, targetVar: string, record: LoweredExpressionRecord): void {
+  pushParts(state, [`${targetVar}.nodeValue = displayValue((`, { record }, '));']);
 }
 
 function emitAttributeWrite(
@@ -234,11 +359,16 @@ function emitAttributeWrite(
   elementVar: string,
   name: string,
   channel: string,
-  expression: string,
+  record: LoweredExpressionRecord,
+  anchor: SpanLike,
 ): void {
   const literal = JSON.stringify(name);
   if (channel === 'boolean') {
-    push(state, `${elementVar}.toggleAttribute(${literal}, Boolean((${expression})));`);
+    pushParts(
+      state,
+      [`${elementVar}.toggleAttribute(${literal}, Boolean((`, { record }, ')));'],
+      anchor,
+    );
     return;
   }
   if (channel === 'property') {
@@ -251,16 +381,16 @@ function emitAttributeWrite(
       );
       return;
     }
-    push(state, `${elementVar}[${literal}] = (${expression});`);
+    pushParts(state, [`${elementVar}[${literal}] = (`, { record }, ');'], anchor);
     return;
   }
   const valueVar = nextName(state, 'value');
-  push(state, `const ${valueVar} = attributeValueOf((${expression}));`);
-  push(state, `if (${valueVar} === null) ${elementVar}.removeAttribute(${literal});`);
-  push(state, `else {`);
-  push(state, `  assertSafeUrlAttribute(${literal}, ${valueVar});`);
-  push(state, `  ${elementVar}.setAttribute(${literal}, ${valueVar});`);
-  push(state, `}`);
+  pushParts(state, [`const ${valueVar} = attributeValueOf((`, { record }, '));'], anchor);
+  push(state, `if (${valueVar} === null) ${elementVar}.removeAttribute(${literal});`, anchor);
+  push(state, `else {`, anchor);
+  push(state, `  assertSafeUrlAttribute(${literal}, ${valueVar});`, anchor);
+  push(state, `  ${elementVar}.setAttribute(${literal}, ${valueVar});`, anchor);
+  push(state, `}`, anchor);
 }
 
 function attributeAdmitted(
@@ -301,7 +431,11 @@ function emitNode(
   const span: IrSpan = node.span;
   if (node.kind === 'text') {
     const varName = nextName(state, 'text');
-    push(state, `const ${varName} = document.createTextNode(${JSON.stringify(node.value)});`);
+    push(
+      state,
+      `const ${varName} = document.createTextNode(${JSON.stringify(node.value)});`,
+      node.span,
+    );
     sink.push(varName);
     return;
   }
@@ -320,7 +454,11 @@ function emitNode(
       return;
     }
     const varName = nextName(state, 'el');
-    push(state, `const ${varName} = document.createElement(${JSON.stringify(node.tag)});`);
+    push(
+      state,
+      `const ${varName} = document.createElement(${JSON.stringify(node.tag)});`,
+      node.span,
+    );
     for (const attribute of node.attributes) {
       if (!attributeAdmitted(state, attribute, span)) continue;
       if (attribute.kind === 'static') {
@@ -336,22 +474,29 @@ function emitNode(
         push(
           state,
           `${varName}.setAttribute(${JSON.stringify(attribute.name)}, ${JSON.stringify(attribute.value)});`,
+          attribute.span,
         );
         continue;
       }
       const record = recordFor(state, attribute.expression, records);
       if (record === null || !declareReads(state, record)) continue;
-      const expression = record.lowered.trim();
       const dependencies = dependencyNames(state, record);
       if (dependencies === null) continue;
       if (dependencies.length === 0) {
-        emitAttributeWrite(state, varName, attribute.name, attribute.channel, expression);
+        emitAttributeWrite(
+          state,
+          varName,
+          attribute.name,
+          attribute.channel,
+          record,
+          attribute.span,
+        );
         continue;
       }
       const refresh = nextName(state, 'refresh');
-      push(state, `function ${refresh}() {`);
+      push(state, `function ${refresh}() {`, attribute.span);
       state.indent += 1;
-      emitAttributeWrite(state, varName, attribute.name, attribute.channel, expression);
+      emitAttributeWrite(state, varName, attribute.name, attribute.channel, record, attribute.span);
       state.indent -= 1;
       push(state, `}`);
       push(state, `${refresh}();`);
@@ -360,6 +505,7 @@ function emitNode(
         push(
           state,
           `bindSignalWrites(${INTERNAL_PREFIX}scope, ${signal}, ${JSON.stringify(dependency.name)}, ${refresh});`,
+          attribute.span,
         );
       }
     }
@@ -374,20 +520,19 @@ function emitNode(
   if (node.kind === 'dynamic-text') {
     const record = recordFor(state, node.expression, records);
     if (record === null || !declareReads(state, record)) return;
-    const expression = record.lowered.trim();
     const dependencies = dependencyNames(state, record);
     if (dependencies === null) return;
     const textVar = nextName(state, 'text');
-    push(state, `const ${textVar} = document.createTextNode("");`);
+    push(state, `const ${textVar} = document.createTextNode("");`, node.span);
     sink.push(textVar);
     if (dependencies.length === 0) {
-      emitTextWrite(state, textVar, expression);
+      emitTextWrite(state, textVar, record);
       return;
     }
     const refresh = nextName(state, 'refresh');
-    push(state, `function ${refresh}() {`);
+    push(state, `function ${refresh}() {`, node.span);
     state.indent += 1;
-    emitTextWrite(state, textVar, expression);
+    emitTextWrite(state, textVar, record);
     state.indent -= 1;
     push(state, `}`);
     push(state, `${refresh}();`);
@@ -396,6 +541,7 @@ function emitNode(
       push(
         state,
         `bindSignalWrites(${INTERNAL_PREFIX}scope, ${signal}, ${JSON.stringify(dependency.name)}, ${refresh});`,
+        node.span,
       );
     }
     return;
@@ -414,6 +560,8 @@ interface EmittedComponent {
   readonly requiredBindings: readonly string[];
   readonly requiredProps: readonly string[];
   readonly requiresPropsChanged: boolean;
+  readonly segments: readonly EmissionSegment[];
+  readonly placements: readonly ExpressionPlacement[];
 }
 
 function emitComponent(
@@ -434,6 +582,9 @@ function emitComponent(
     counter: { value: 0 },
     propsName,
     requiresPropsChanged: false,
+    segments: [],
+    placements: [],
+    segmentKeys: new Set(),
   };
   if (
     propsName !== null &&
@@ -449,7 +600,7 @@ function emitComponent(
   }
   // Resources: signal/computed names are host bindings; local snapshots are
   // evaluated inside the mount (setup mode), preserving M03 semantics.
-  const localLines: string[] = [];
+  const localLines: Array<{ name: string; record: LoweredExpressionRecord; span: SpanLike }> = [];
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
       diag(
@@ -466,7 +617,7 @@ function emitComponent(
       if (record === null) continue;
       if (!declareReads(state, record)) continue;
       state.localResources.add(resource.name);
-      localLines.push(`const ${resource.name} = (${record.lowered.trim()});`);
+      localLines.push({ name: resource.name, record, span: resource.span });
       continue;
     }
     state.hostBindings.add(resource.name);
@@ -479,6 +630,8 @@ function emitComponent(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      segments: [],
+      placements: [],
     };
   }
   if (component.recipes.length > 0) {
@@ -494,6 +647,8 @@ function emitComponent(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      segments: [],
+      placements: [],
     };
   }
   if (!IDENTIFIER_PATTERN.test(component.name) || component.name.startsWith(INTERNAL_PREFIX)) {
@@ -509,6 +664,8 @@ function emitComponent(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      segments: [],
+      placements: [],
     };
   }
 
@@ -519,7 +676,9 @@ function emitComponent(
   push(state, `mount(${INTERNAL_PREFIX}scope) {`);
   state.indent += 1;
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
-  for (const line of localLines) push(state, line);
+  for (const line of localLines) {
+    pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+  }
   for (const root of component.roots) {
     const sink: string[] = [];
     emitNode(state, root, sink, records);
@@ -554,12 +713,21 @@ function emitComponent(
       );
     }
   }
+  const shift = prologue.length;
   return {
     lines: [...prologue, ...state.lines, '}', ''],
     diagnostics: state.diagnostics,
     requiredBindings: [...state.requiredBindings].sort(),
     requiredProps: [...state.requiredProps].sort(),
     requiresPropsChanged: state.requiresPropsChanged,
+    segments: state.segments.map((segment) => ({
+      ...segment,
+      generatedLine: segment.generatedLine + shift,
+    })),
+    placements: state.placements.map((placement) => ({
+      ...placement,
+      generatedLine: placement.generatedLine + shift,
+    })),
   };
 }
 
@@ -581,11 +749,16 @@ function parsesAsModule(text: string): boolean {
  * Emit the generated leaf module for one M03 `FunctionModelModule`.
  * Deterministic for the same model/registry; unsupported shapes fail closed.
  */
-export function generateLeafModule(module: FunctionModelModule): GeneratedLeafModule {
+export function generateLeafModule(
+  module: FunctionModelModule,
+  options: { readonly authoredSource?: string } = {},
+): GeneratedLeafModule {
   const records = new Map(module.expressions.expressions.map((record) => [record.id, record]));
   if (module.components.length === 0) {
     return {
       module: null,
+      sourceMap: null,
+      placements: [],
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
@@ -604,6 +777,8 @@ export function generateLeafModule(module: FunctionModelModule): GeneratedLeafMo
   const diagnostics: IrDiagnostic[] = [];
   const requiredBindings = new Set<string>();
   const requiredProps = new Set<string>();
+  const segments: EmissionSegment[] = [];
+  const placements: ExpressionPlacement[] = [];
   let requiresPropsChanged = false;
   for (const component of module.components) {
     const emitted = emitComponent(module.file, component, records);
@@ -612,26 +787,32 @@ export function generateLeafModule(module: FunctionModelModule): GeneratedLeafMo
     for (const name of emitted.requiredBindings) requiredBindings.add(name);
     for (const name of emitted.requiredProps) requiredProps.add(name);
     requiresPropsChanged ||= emitted.requiresPropsChanged;
+    segments.push(...emitted.segments);
+    placements.push(...emitted.placements);
     chunks.push(...emitted.lines);
   }
   if (diagnostics.length > 0) {
     return {
       module: null,
+      sourceMap: null,
+      placements: [...placements],
       requiredBindings: [...requiredBindings].sort(),
       requiredProps: [...requiredProps].sort(),
       requiresPropsChanged,
       diagnostics,
     };
   }
-  const text = [
+  const headerLines = [
     '// <generated by openelement M05 leaf-codegen v2; do not edit>',
     `import { ${RUNTIME_IMPORTS.join(', ')} } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
     '',
-    ...chunks,
-  ].join('\n');
+  ];
+  const text = [...headerLines, ...chunks].join('\n');
   if (!parsesAsModule(text)) {
     return {
       module: null,
+      sourceMap: null,
+      placements: [...placements],
       requiredBindings: [...requiredBindings].sort(),
       requiredProps: [...requiredProps].sort(),
       requiresPropsChanged,
@@ -646,8 +827,25 @@ export function generateLeafModule(module: FunctionModelModule): GeneratedLeafMo
       ],
     };
   }
+  const headerShift = headerLines.length;
+  const moduleSegments = segments.map((segment) => ({
+    ...segment,
+    generatedLine: segment.generatedLine + headerShift,
+  }));
+  const modulePlacements = placements.map((placement) => ({
+    ...placement,
+    generatedLine: placement.generatedLine + headerShift,
+  }));
+  let sourceMap: CompiledElementSourceMap | null = null;
+  if (options.authoredSource !== undefined) {
+    const builder = new SourceMapSegmentBuilder();
+    for (const segment of moduleSegments) builder.add(segment);
+    sourceMap = builder.build(module.file, options.authoredSource);
+  }
   return {
     module: text,
+    sourceMap,
+    placements: modulePlacements,
     requiredBindings: [...requiredBindings].sort(),
     requiredProps: [...requiredProps].sort(),
     requiresPropsChanged,
