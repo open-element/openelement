@@ -149,6 +149,8 @@ export interface FunctionModelCondition {
 
 export interface FunctionModelList {
   readonly kind: 'list';
+  /** Authored mapper parameter name (`items.map((item) => …)`). */
+  readonly parameter: string;
   readonly items: FunctionExpressionRef;
   readonly key: FunctionExpressionRef | null;
   readonly template: readonly FunctionModelNode[];
@@ -669,6 +671,7 @@ class FunctionFrontendBuilder {
     }
     return {
       kind: 'list',
+      parameter: parameter.name.text,
       items,
       key,
       template,

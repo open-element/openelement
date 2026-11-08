@@ -116,6 +116,7 @@ async function buildRuntimeBundle(): Promise<string> {
       [
         `export { createRecipe, insertRecipe } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/recipe.ts`)};`,
         `export { bindSignalWrites } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/bindings.ts`)};`,
+        `export { runtimeProbe } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/observability.ts`)};`,
         `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/values.ts`)};`,
         `export { LifetimeScope } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/lifetime-scope.ts`)};`,
         `export { signal, computed } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/signal/framework.ts`)};`,
@@ -414,6 +415,316 @@ for (const engine of engines()) {
       expect(result.throwingCleanup?.message).toContain('OEIR_TEST_THROWING_CLEANUP');
       expect(result.throwingCleanup?.normalUnsubscribed).toBe(true);
       expect(result.afterDetachDispose?.childCount).toBe(0);
+    });
+  });
+}
+
+// ─── M06 S2: stateful hostless list evidence ────────────────────────────────
+// The same real-M04 runtime bundle is used (no stubs). These scenarios cover
+// the S2 evidence: keyed reorder DOM identity, focus/selection preservation,
+// insert/delete cleanup accounting, condition branch replacement, private
+// draft isolation, and throwing-branch containment.
+
+const BOARD_SOURCE = `import { signal } from '@openelement/element';
+function Board(props) {
+  const items = signal([]);
+  const open = signal(true);
+  const count = signal(0);
+  return <section>
+    {open.value ? <p class="on">open</p> : <em class="off">closed</em>}
+    <ul>{items.value.map((item) => <li key={item.id}>{item.label}: {count.value}</li>)}</ul>
+  </section>;
+}
+`;
+
+const FOCUS_SOURCE = `import { signal } from '@openelement/element';
+function Form(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li key={item.id}><input value={item.label} /></li>)}</ul>;
+}
+`;
+
+const THROWING_BRANCH_SOURCE = `function Guard(props) {
+  return <section>{props.explode ? <p title={props.boom}>x</p> : <em>safe</em>}</section>;
+}
+`;
+
+interface S2Result {
+  readonly steps: readonly Snapshot[];
+  readonly identityPreserved: readonly boolean[];
+  readonly focusPreserved: boolean | null;
+  readonly selectionPreserved: boolean | null;
+  readonly focusNodeIdentity: boolean | null;
+  readonly subscriptionsBefore: number;
+  readonly subscriptionsAfter: number;
+  readonly unsubscribedBefore: number;
+  readonly unsubscribedAfter: number;
+  readonly thrown: string | null;
+  readonly recovered: Snapshot | null;
+}
+
+async function runS2Scenario(page: Page, moduleCode: string, scenario: string): Promise<S2Result> {
+  await page.addScriptTag({ content: harnessModule(moduleCode) });
+  return page.evaluate(
+    ({ scenario }) => {
+      interface SignalLike<T> {
+        readonly value: T;
+        subscribe(fn: (value: T) => void): () => void;
+      }
+      interface Runtime {
+        insertRecipe: (
+          owner: unknown,
+          recipe: unknown,
+          parent: Node,
+          before?: Node | null,
+        ) => { dispose(detach?: boolean): void; nodes: readonly Node[] };
+        LifetimeScope: new () => unknown;
+        signal: <T>(value: T) => SignalLike<T> & { value: T };
+        runtimeProbe: { snapshot(): { subscriptions: number; unsubscribed: number } };
+      }
+      interface Counting<T> extends SignalLike<T> {
+        value: T;
+      }
+      const runtime = (window as unknown as { __oeRuntime: Runtime }).__oeRuntime;
+      const factories = (
+        window as unknown as {
+          __oeModule: Record<string, (owner: unknown, host: unknown) => unknown>;
+        }
+      ).__oeModule;
+      const host = document.getElementById('host') as HTMLElement;
+      host.replaceChildren();
+      const scope = new runtime.LifetimeScope();
+      const snapshot = (): Snapshot => ({
+        html: host.innerHTML,
+        text: host.textContent ?? '',
+        tags: [...host.querySelectorAll('*')].map((element) => element.tagName.toLowerCase()),
+        attributes: Object.fromEntries(
+          [...(host.querySelectorAll('[data-count]') ?? [])].map((element) => [
+            element.tagName.toLowerCase(),
+            element.getAttribute('data-count'),
+          ]),
+        ),
+        childCount: host.childNodes.length,
+      });
+      const counting = <T>(initial: T): Counting<T> => {
+        const inner = runtime.signal(initial);
+        // Keep the real signal surface (read/write/subscribe) so the generated
+        // `bindSignalWrites` reads and the scenario writes both work.
+        return {
+          get value(): T {
+            return inner.value;
+          },
+          set value(next: T) {
+            (inner as { value: T }).value = next;
+          },
+          subscribe(fn: (value: T) => void) {
+            return inner.subscribe(fn);
+          },
+        } as Counting<T>;
+      };
+      const result: S2Result = {
+        steps: [],
+        identityPreserved: [],
+        focusPreserved: null,
+        selectionPreserved: null,
+        focusNodeIdentity: null,
+        subscriptionsBefore: 0,
+        subscriptionsAfter: 0,
+        unsubscribedBefore: 0,
+        unsubscribedAfter: 0,
+        thrown: null,
+        recovered: null,
+      };
+
+      if (scenario === 'board') {
+        const open = counting(true);
+        const items = counting([] as Array<{ id: string; label: string }>);
+        const count = counting(0);
+        const recipe = factories.createBoardRecipe!(scope, {
+          props: {},
+          bindings: { open, items, count },
+          propsChanged: runtime.signal(0),
+        });
+        runtime.insertRecipe(scope, recipe, host);
+        result.steps.push(snapshot());
+
+        items.value = [
+          { id: 'a', label: 'A' },
+          { id: 'b', label: 'B' },
+          { id: 'c', label: 'C' },
+        ];
+        count.value = 7;
+        result.steps.push(snapshot());
+        const before = [...host.querySelectorAll('li')];
+
+        // Keyed reorder: b, a, c — the DOM nodes must move, not re-create.
+        items.value = [
+          { id: 'b', label: 'B' },
+          { id: 'a', label: 'A' },
+          { id: 'c', label: 'C' },
+        ];
+        result.steps.push(snapshot());
+        const after = [...host.querySelectorAll('li')];
+        result.identityPreserved.push(
+          before[0] === after[1],
+          before[1] === after[0],
+          before[2] === after[2],
+        );
+
+        // Private draft: an unrelated signal write only refreshes its own slot.
+        const identityBefore = [...host.querySelectorAll('li')];
+        count.value = 9;
+        const identityAfter = [...host.querySelectorAll('li')];
+        result.identityPreserved.push(
+          identityBefore.every((node, index) => node === identityAfter[index]),
+        );
+        result.steps.push(snapshot());
+
+        // Delete one entry: its owner/region and subscriptions are disposed.
+        const probe = runtime.runtimeProbe;
+        result.subscriptionsBefore = probe.snapshot().subscriptions;
+        result.unsubscribedBefore = probe.snapshot().unsubscribed;
+        items.value = [
+          { id: 'a', label: 'A' },
+          { id: 'c', label: 'C' },
+        ];
+        result.steps.push(snapshot());
+        result.subscriptionsAfter = probe.snapshot().subscriptions;
+        result.unsubscribedAfter = probe.snapshot().unsubscribed;
+        open.value = false;
+        result.steps.push(snapshot());
+        open.value = true;
+        result.steps.push(snapshot());
+        return result;
+      }
+
+      if (scenario === 'focus') {
+        const items = counting([
+          { id: 'a', label: 'A' },
+          { id: 'b', label: 'B' },
+        ]);
+        const recipe = factories.createFormRecipe!(scope, {
+          props: {},
+          bindings: { items },
+          propsChanged: runtime.signal(0),
+        });
+        runtime.insertRecipe(scope, recipe, host);
+        result.steps.push(snapshot());
+        const inputs = [...host.querySelectorAll('input')];
+        const focused = inputs[1]!;
+        focused.focus();
+        focused.setSelectionRange(1, 1);
+        items.value = [
+          { id: 'b', label: 'B' },
+          { id: 'a', label: 'A' },
+        ];
+        result.steps.push(snapshot());
+        const afterInputs = [...host.querySelectorAll('input')];
+        result.focusNodeIdentity = document.activeElement === focused;
+        result.focusPreserved = document.activeElement === afterInputs[0];
+        result.selectionPreserved = focused.selectionStart === 1 && focused.selectionEnd === 1;
+        return result;
+      }
+
+      if (scenario === 'throwing-branch') {
+        const props: Record<string, unknown> = { explode: false, label: 'x', boom: 'ok' };
+        const propsChanged = runtime.signal(0);
+        const recipe = factories.createGuardRecipe!(scope, {
+          props,
+          bindings: {},
+          propsChanged,
+        });
+        const projection = runtime.insertRecipe(scope, recipe, host);
+        result.steps.push(snapshot());
+        Object.defineProperty(props, 'boom', {
+          configurable: true,
+          get() {
+            throw new Error('OEIR_TEST_BRANCH_THROW');
+          },
+        });
+        props.explode = true;
+        try {
+          propsChanged.value += 1;
+        } catch (error) {
+          result.thrown = String((error as Error).message);
+        }
+        result.steps.push(snapshot());
+        props.explode = false;
+        delete (props as { boom?: unknown }).boom;
+        propsChanged.value += 1;
+        result.recovered = snapshot();
+        projection.dispose(true);
+        return result;
+      }
+
+      return result;
+    },
+    { scenario },
+  );
+}
+
+for (const engine of engines()) {
+  describe(`M06 S2 — stateful hostless list in ${engine.name} (LOCAL evidence)`, () => {
+    let browser: Browser;
+    let page: Page;
+
+    beforeAll(async () => {
+      const runtimeCode = await buildRuntimeBundle();
+      browser = await engine.launch();
+      page = await browser.newPage();
+      await page.setContent('<!doctype html><html><body><div id="host"></div></body></html>');
+      await page.addScriptTag({ content: runtimeCode });
+    }, 180_000);
+
+    afterAll(async () => {
+      await browser?.close();
+    });
+
+    test('keyed reorder preserves DOM identity; private draft and delete keep cleanup accounting', async () => {
+      const board = generatedModule(BOARD_SOURCE);
+      const result = await runS2Scenario(page, board, 'board');
+      expect(result.steps[0]?.tags).toEqual(['section', 'p', 'ul']);
+      expect(result.steps[1]?.tags).toEqual(['section', 'p', 'ul', 'li', 'li', 'li']);
+      expect(result.steps[1]?.text).toBe('openA: 7B: 7C: 7');
+      expect(result.steps[2]?.text).toBe('openB: 7A: 7C: 7');
+      expect(result.identityPreserved.slice(0, 3)).toEqual([true, true, true]);
+      expect(result.identityPreserved[3]).toBe(true);
+      expect(result.steps[3]?.text).toBe('openB: 9A: 9C: 9');
+      expect(result.steps[4]?.tags).toEqual(['section', 'p', 'ul', 'li', 'li']);
+      expect(result.steps[4]?.text).toBe('openA: 9C: 9');
+      // The deleted entry's subscription is closed on disposal.
+      expect(result.unsubscribedAfter).toBeGreaterThan(result.unsubscribedBefore);
+    });
+
+    test('condition branch replacement swaps nodes without leaking the old branch', async () => {
+      const result = await runS2Scenario(page, generatedModule(BOARD_SOURCE), 'board');
+      const toggledOff = result.steps[5]!;
+      const toggledOn = result.steps[6]!;
+      expect(result.steps[0]?.tags).toContain('p');
+      expect(toggledOff.tags).toEqual(['section', 'em', 'ul', 'li', 'li']);
+      expect(toggledOff.text).toContain('closed');
+      expect(toggledOff.tags).not.toContain('p');
+      expect(toggledOn.tags).toEqual(['section', 'p', 'ul', 'li', 'li']);
+      expect(toggledOn.text).toContain('open');
+      expect(toggledOn.tags).not.toContain('em');
+    });
+
+    test('focus and selection survive a keyed reorder (nodes move, not re-created)', async () => {
+      const result = await runS2Scenario(page, generatedModule(FOCUS_SOURCE), 'focus');
+      expect(result.focusNodeIdentity).toBe(true);
+      expect(result.focusPreserved).toBe(true);
+      expect(result.selectionPreserved).toBe(true);
+    });
+
+    test('a throwing branch surfaces the error, removes no neighbour DOM and recovers', async () => {
+      const result = await runS2Scenario(
+        page,
+        generatedModule(THROWING_BRANCH_SOURCE),
+        'throwing-branch',
+      );
+      expect(result.thrown).toContain('OEIR_TEST_BRANCH_THROW');
+      expect(result.steps[1]?.tags).toEqual(['section']);
+      expect(result.recovered?.text).toBe('safe');
     });
   });
 }
