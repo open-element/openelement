@@ -45,5 +45,8 @@
     "!src/internal/compiler/semantic-core/expression-registry.ts",
     "!src/internal/compiler/semantic-core/type-erasure.ts",
     "!src/internal/compiler/semantic-core/function-frontend.ts"
-  ]
+  ],
+  "devDependencies": {
+    "@jridgewell/trace-mapping": "0.3.31"
+  }
 }

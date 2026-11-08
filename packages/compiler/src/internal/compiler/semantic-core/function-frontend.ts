@@ -533,7 +533,13 @@ class FunctionFrontendBuilder {
       return [];
     }
     const built = this.buildNode(value);
-    return built === null ? [] : [built];
+    if (built === null) {
+      // Fail closed: a branch value that is neither JSX nor nullish must not be
+      // silently dropped (the class frontend's OEC9012 branch boundary analogue).
+      this.fail(value, CODES.form, 'a conditional branch must be JSX or null');
+      return [];
+    }
+    return [built];
   }
 
   private buildNode(node: ts.Node): FunctionModelNode | null {
