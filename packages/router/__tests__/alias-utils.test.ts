@@ -90,7 +90,7 @@ test('normalizeViteAliases expands Router subpaths from the generated export map
       '/repo',
     ) ?? [];
 
-  for (const subpath of ['http', 'document', 'lit', 'lit-ssr']) {
+  for (const subpath of ['http', 'document']) {
     expect(
       aliases.find((alias) => alias.find === `@openelement/router/${subpath}`)?.replacement,
     ).toEqual(`/repo/packages/router/src/${subpath}.ts`);

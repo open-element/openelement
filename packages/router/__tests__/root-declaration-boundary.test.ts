@@ -24,7 +24,7 @@ const REPO_ROOT = new URL('../../../', import.meta.url).pathname;
 const ROUTER_SRC = resolve(REPO_ROOT, 'packages/router/src');
 
 /** The packed walker's entry set: the Framework Mode surface consumers get. */
-const ENTRY_FILES = ['index.ts', 'lit.ts', 'lit-ssr.ts', 'document.ts'];
+const ENTRY_FILES = ['index.ts', 'document.ts'];
 
 /**
  * Resolve one relative source specifier to an on-disk module. Sources spell

@@ -179,27 +179,6 @@ Applications never import this subpath directly — the entries the Vite
 pipeline generates do. It is exported for type-aware tooling and for hosts
 that assemble the same server seams by hand.
 
-## Lit renderer subpaths
-
-Framework Mode ships two renderer integrations; the default is the compiled
-Native renderer on the package root. Lit is the second qualified renderer,
-available through two subpaths:
-
-```ts
-// Lit page authoring: defineLitPage(tag, PageClass, descriptor), the Lit
-// counterpart to definePage(). No lit value import — safe in any graph.
-import { defineLitPage } from '@openelement/router/lit';
-
-// Server-only Lit page rendering to DSD HTML through @lit-labs/ssr.
-import { renderLitPageToHtml } from '@openelement/router/lit-ssr';
-```
-
-`@openelement/router/lit-ssr` installs the `@lit-labs/ssr` global DOM shim as
-an import side effect and must never reach a client bundle (it is deliberately
-absent from the package root barrel). Both subpaths are optional: they depend
-on `lit` / `@lit-labs/ssr` / `@lit-labs/ssr-client`, declared as optional
-peers, so a Native-only install never pulls them in.
-
 ## Route Mode subpaths
 
 Route Mode is consumable without Element or a renderer, through three

@@ -49,7 +49,7 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 5 | `ShimStyleSheet`（SSR 侧 CSSStyleSheet） | `packages/element/src/internal/core/style-sheet.ts` | 保留为平台边缘 |
 | 6 | SSR 全局垫片（CSSStyleSheet banner + customElements stub） | `packages/router/src/vite/internal/ssg/ssr-polyfills.ts` | 保留为平台边缘 |
 | 7 | 浏览器怪癖台账（#579/#604/#610） | `packages/router/src/vite/internal/ssg/morph-webkit-fix.ts`、`packages/router/src/vite/internal/ssg/form-enhance.ts` | 保留为平台边缘（各条目自带删除条件） |
-| 8 | `@lit-labs/ssr` 全局 DOM shim | `packages/router/src/lit-ssr.ts` 等 | 条件到即删（ADR-0152 第一方 Lit renderer 退役窗口；当前仍保留并受测，窗口 OPEN） |
+| 8 | `@lit-labs/ssr` 全局 DOM shim | ~~`packages/router/src/lit-ssr.ts`~~ | **已删（ADR-0152 2026-11-08 零兼容退役）** |
 | 9 | Nitro mount 适配 | `packages/router/src/nitro-mount.ts` | 保留为平台边缘（P5 明示的部署边界） |
 | 10 | node:http `serveFetch` 适配 | `packages/router/src/internal/node-http.ts` | 保留为平台边缘 |
 | 11 | Workers `nodeCompat`（unenv） | `apps/saas/nitro.config.ts`、fixture 同形 | 保留为平台边缘 |
@@ -70,6 +70,10 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 删除，`style-assets.ts` 只发 fetch 一种形态；双适配器不复存在，因此不再是
 待退役垫片，整行与详情小节一并移除。ADR-0164 附录 B/C 保留为支持矩阵的
 历史证据。编号 3 留空不复用，避免历史引用错位。）
+（2026-11-08 追加：第 8 项「`@lit-labs/ssr` 全局 DOM shim」已注销——
+ADR-0152 当日 owner ruling 判定第一方 Lit renderer 零兼容退役，两个公共
+入口与可选 peer 依赖一并删除；该 shim 随入口消失，不再是待退役垫片。
+编号 8 保留在表中并标记「已删」，不复用。）
 
 ## 条目详情
 
@@ -162,22 +166,20 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 - 处置：保留为平台边缘。台账纪律已内建：条件到即删对应条目及其
   workaround，无需另行评审。
 
-### 8. `@lit-labs/ssr` 全局 DOM shim——条件到即删
+### 8. `@lit-labs/ssr` 全局 DOM shim——已删
 
-- 所有者：router lit 渲染器（`packages/router/src/lit-ssr.ts:26` 副作用首导入，
-  `packages/router/src/lit-ssr.ts:9-11` Server-only 契约；
-  `packages/router/src/vite/internal/ssg/renderer-adapter.ts:87`、
-  `packages/router/src/vite/plugin-virtual-modules.ts:40-44`、
-  `packages/router/src/cli/build-ssg.ts:68` 装配同一事实）。
+- 所有者：router 第一方 Lit 渲染器（服务端入口曾以副作用首导入装配
+  `installWindowOnGlobal`；渲染器适配、虚拟模块与 SSG 构建 CLI 曾装配
+  同一事实）。
 - 方向：服务端全局 DOM shim → Lit SSR 渲染通道。
-- 存在原因：`@lit-labs/ssr` 需要 DOM 全局（`installWindowOnGlobal` 只补
-  缺失项）；这是上游依赖的形状，不是我们自建的层。
-- 退役条件：随 ADR-0152 的第一方 Lit renderer 退役轨道一并移除。原文引用的
-  2026-09-16 修正案「Lit renderer mode is doctrine, not debt」已被
-  **2026-11-03 取代性修正案**推翻（终止 OhMyLit、启动第一方 Lit renderer
-  退役）；"教义、非债"的表述不再有效，仅在 Git 历史与 ADR 正文中保留为
-  历史记录。
-- 处置：**随 Lit 轨道退役**；当前仍保留并受测，退役窗口 OPEN。
+- 存在原因：上游 `@lit-labs/ssr` 需要 DOM 全局；这是上游依赖的形状，不是
+  我们自建的层。
+- 退役条件：**已执行**。ADR-0152 2026-11-08 owner ruling 判定 WC 作为通用
+  host base 不成立，第一方 Lit renderer 零兼容退役；两个公共入口、可选
+  peer 依赖与对应测试已删除，编号 8 保留不复用。2026-09-16 修正案
+  「Lit renderer mode is doctrine, not debt」及 2026-11-03 取代性修正案
+  均只在 Git 历史与 ADR 正文中保留为历史记录。
+- 处置：**已删**。
 
 ### 9. Nitro mount 适配——保留为平台边缘
 

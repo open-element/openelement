@@ -49,15 +49,13 @@ const NODE_FREE_PACKAGES = new Set(['@openelement/create']);
  * below, so a broad tooling-tree entry can never re-open them to host APIs.
  *
  * The judgment, read off packages/router/package.json `exports` and
- * src/vite/internal/server-runtime/mod.ts. Of the twelve public subpaths,
- * eight are the runtime face (request-time, host-API-free):
+ * src/vite/internal/server-runtime/mod.ts. The runtime face
+ * (request-time, host-API-free) is:
  *   `.`                 -> src/index.ts
  *   `./http`            -> src/http.ts
  *   `./router`          -> src/router.ts
  *   `./router/client`   -> src/router-client.ts
  *   `./document`        -> src/document.ts
- *   `./lit`             -> src/lit.ts
- *   `./lit-ssr`         -> src/lit-ssr.ts
  *   `./server-runtime`  -> src/vite/internal/server-runtime/mod.ts
  * The remaining four are build host tooling (host/dev processes):
  *   `./vite` -> src/vite/index.ts, `./nitro-mount` -> src/nitro-mount.ts,

@@ -342,12 +342,6 @@ importers:
       '@jridgewell/trace-mapping':
         specifier: 0.3.31
         version: 0.3.31
-      '@lit-labs/ssr':
-        specifier: 4.1.0
-        version: 4.1.0(@types/node@26.5.0)
-      '@lit-labs/ssr-client':
-        specifier: 1.1.8
-        version: 1.1.8
       '@tailwindcss/vite':
         specifier: 4.3.3
         version: 4.3.3(vite@8.1.6(@types/node@26.5.0)(jiti@2.7.0)(yaml@2.9.1))
@@ -357,9 +351,6 @@ importers:
       hono:
         specifier: 4.13.11
         version: 4.13.11
-      lit:
-        specifier: 3.3.3
-        version: 3.3.3
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
@@ -1199,19 +1190,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@oxlint-tsgolint/darwin-arm64@7.0.2003':
-    resolution: {integrity: sha512-TgV33rXr6ueXBwvc+0nssUkTBSXHJxv77I8p4RCjDjCnvexHtmoPiudVRDfj3S3puMDdeQdHW6jdUgUPy3nr/w==}
-    cpu: [arm64]
-    os: [darwin]
-
   '@oxlint-tsgolint/darwin-arm64@7.0.2004':
     resolution: {integrity: sha512-uJk3ttju7Lz+Nv8WG4CsLyewoL1qf/Ny8S8OksJ7Bm/F14Tc9gMfW6arM1PCc57IzH/X/I79YsCWTgxX1FKibQ==}
     cpu: [arm64]
-    os: [darwin]
-
-  '@oxlint-tsgolint/darwin-x64@7.0.2003':
-    resolution: {integrity: sha512-hY3FMAjIaPDdK3FNxyRXRfHPOFeoBn6dmnLyKZgQ2IbTTD1adXhl6PfCIqHhCPvurigv7nf7mYuWZZ19MmJzmg==}
-    cpu: [x64]
     os: [darwin]
 
   '@oxlint-tsgolint/darwin-x64@7.0.2004':
@@ -1219,19 +1200,9 @@ packages:
     cpu: [x64]
     os: [darwin]
 
-  '@oxlint-tsgolint/linux-arm64@7.0.2003':
-    resolution: {integrity: sha512-eAET4JpyfBbg8SO0K74o4R55tEjVC292pIyxGOw2XGf8x/HrPNyxwQ478jMYOM54FIVOHc8sJ6VRHxluy6lucw==}
-    cpu: [arm64]
-    os: [linux]
-
   '@oxlint-tsgolint/linux-arm64@7.0.2004':
     resolution: {integrity: sha512-TAehQc+qdRXyDN3nl/r/3/oPrBVrbtrDeGMkFyG6mf+XphpoJ2lAMVFLclyvrVZCw02RbKROjyw8h72XwQQHcw==}
     cpu: [arm64]
-    os: [linux]
-
-  '@oxlint-tsgolint/linux-x64@7.0.2003':
-    resolution: {integrity: sha512-GXdyO/XyqDJ3s/llR/oOktLsYNjZtWSQBy0JMc+/0gsNPvTcseKPhn9c6KcFyWmnr6H4vljYALbujonqSzzEGw==}
-    cpu: [x64]
     os: [linux]
 
   '@oxlint-tsgolint/linux-x64@7.0.2004':
@@ -1239,19 +1210,9 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  '@oxlint-tsgolint/win32-arm64@7.0.2003':
-    resolution: {integrity: sha512-TWauXnPfet0VgpmrstoAK58eJ4gbuwPUuUTQmYQAzE/RG1CpnxXtrKUJULf6lyerPE4KN3gM+DflIA1hOH+38Q==}
-    cpu: [arm64]
-    os: [win32]
-
   '@oxlint-tsgolint/win32-arm64@7.0.2004':
     resolution: {integrity: sha512-FVWplzDImWhiuawnIZVETaQecv4GWom6Jv4Fx2xj7hhXXDZ5okEgiw1gTCImHTIQsi2ycC5oSxVwrn69bMh7iw==}
     cpu: [arm64]
-    os: [win32]
-
-  '@oxlint-tsgolint/win32-x64@7.0.2003':
-    resolution: {integrity: sha512-DoRmfe7j8VqNlukp8liRVW45GQDhzRccNenjD/pdzelgtffW47pCMd1xbJLkPaPbKnTwID3onn3VZlL7JbebEA==}
-    cpu: [x64]
     os: [win32]
 
   '@oxlint-tsgolint/win32-x64@7.0.2004':
@@ -3015,10 +2976,6 @@ packages:
       vite-plus:
         optional: true
 
-  oxlint-tsgolint@7.0.2003:
-    resolution: {integrity: sha512-VnK4zlqgmgq/7ZcjzCk/WpN8kKFsYGcB85Io9qT3wL4K8Un3RKmJkp793crNETieMusPMKOA4a+Mw2wbteI6TQ==}
-    hasBin: true
-
   oxlint-tsgolint@7.0.2004:
     resolution: {integrity: sha512-vQ9WDF3fiZJvRdSDosNOflerOCOpwol6vWzVDxW76RcU19cjTh7engvkHLvmv+tzedR8fAiJUVUGr6IVZdkzXQ==}
     hasBin: true
@@ -3859,37 +3816,19 @@ snapshots:
   '@oxfmt/binding-win32-x64-msvc@0.74.0':
     optional: true
 
-  '@oxlint-tsgolint/darwin-arm64@7.0.2003':
-    optional: true
-
   '@oxlint-tsgolint/darwin-arm64@7.0.2004':
-    optional: true
-
-  '@oxlint-tsgolint/darwin-x64@7.0.2003':
     optional: true
 
   '@oxlint-tsgolint/darwin-x64@7.0.2004':
     optional: true
 
-  '@oxlint-tsgolint/linux-arm64@7.0.2003':
-    optional: true
-
   '@oxlint-tsgolint/linux-arm64@7.0.2004':
-    optional: true
-
-  '@oxlint-tsgolint/linux-x64@7.0.2003':
     optional: true
 
   '@oxlint-tsgolint/linux-x64@7.0.2004':
     optional: true
 
-  '@oxlint-tsgolint/win32-arm64@7.0.2003':
-    optional: true
-
   '@oxlint-tsgolint/win32-arm64@7.0.2004':
-    optional: true
-
-  '@oxlint-tsgolint/win32-x64@7.0.2003':
     optional: true
 
   '@oxlint-tsgolint/win32-x64@7.0.2004':
@@ -5603,15 +5542,6 @@ snapshots:
       '@oxfmt/binding-win32-ia32-msvc': 0.74.0
       '@oxfmt/binding-win32-x64-msvc': 0.74.0
       vite-plus: 1.4.0(@types/node@26.5.0)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jiti@2.7.0)(playwright@1.59.1)(typescript@6.0.3)(yaml@2.9.1)
-
-  oxlint-tsgolint@7.0.2003:
-    optionalDependencies:
-      '@oxlint-tsgolint/darwin-arm64': 7.0.2003
-      '@oxlint-tsgolint/darwin-x64': 7.0.2003
-      '@oxlint-tsgolint/linux-arm64': 7.0.2003
-      '@oxlint-tsgolint/linux-x64': 7.0.2003
-      '@oxlint-tsgolint/win32-arm64': 7.0.2003
-      '@oxlint-tsgolint/win32-x64': 7.0.2003
 
   oxlint-tsgolint@7.0.2004:
     optionalDependencies:

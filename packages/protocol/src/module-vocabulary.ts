@@ -21,11 +21,6 @@ export const ROUTER_MODULE_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [
     kind: 'page-definition',
   },
   {
-    moduleSpecifier: '@openelement/router/lit',
-    exportName: 'defineLitPage',
-    kind: 'page-definition',
-  },
-  {
     moduleSpecifier: '@openelement/router',
     exportName: 'defineElement',
     kind: 'element-registration',
