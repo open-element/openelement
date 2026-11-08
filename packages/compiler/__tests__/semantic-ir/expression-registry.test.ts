@@ -12,8 +12,12 @@
  * resolver→registry integration (captures/dependencies are A1's answer, never
  * re-derived here).
  *
- * Erasure (`as`/`satisfies`/non-null/type arguments/annotations) is M03-I-3
- * (A3): A2 fails closed on it, and the refusal tests pin that boundary.
+ * Superseded boundary: A2 originally failed closed on TypeScript-only syntax
+ * (`OEIR_ERASURE_DEFERRED`) and pinned that boundary here. M03-I-3 (A3) lifted
+ * it — `type-erasure.ts` now strips the admitted erasure set, so this file's
+ * erasure block is rewritten to assert successful lowering instead of refusal
+ * (see the "supersedes the A2 erasure boundary" describe below). The context
+ * matrix and all other A2 refusals are unchanged.
  */
 
 import { describe, expect, test } from 'vitest';
@@ -702,17 +706,17 @@ describe('M03-B §8 rule 6 — TransformationResult dispose and no retained AST'
     expect(events).toEqual(['created', 'disposed']);
 
     // A refusal before the transform never creates one.
-    const erasureSourceFile = parse(`function Fixture(value) { return value as number; }`);
-    const asExpression = findNode(erasureSourceFile, ts.isAsExpression);
+    const contextSourceFile = parse(`function Fixture() { return this.props; }`);
+    const contextExpression = findNode(contextSourceFile, ts.isPropertyAccessExpression);
     events.length = 0;
-    const refused = lowerExpressionText(erasureSourceFile, asExpression, {
+    const refused = lowerExpressionText(contextSourceFile, contextExpression, {
       recipeReference: () => ({ callee: RECIPE_CALLEE, id: 'r0' }),
       lifecycle: {
         created: () => events.push('created'),
         disposed: () => events.push('disposed'),
       },
     });
-    expect(codesOf(refused.diagnostics)).toContain('OEIR_ERASURE_DEFERRED');
+    expect(codesOf(refused.diagnostics)).toContain('OEIR_UNSUPPORTED_THIS');
     expect(events).toEqual([]);
   });
 
@@ -786,27 +790,37 @@ describe('M03-B §8 rule 6 — TransformationResult dispose and no retained AST'
 
 // ─── Fail-closed refusals (source-located) ────────────────────────────────
 
-describe('A2 fails closed where A3 (erasure) or the model has no lowering', () => {
+describe('M03-I-3 (A3) supersedes the A2 erasure boundary', () => {
   const wrap = (expression: string): string =>
     `function Fixture(value, fn, items) { return ${expression}; }`;
 
-  const ERASURE_CASES: ReadonlyArray<{ expression: string; slice: string }> = [
-    { expression: 'value as number', slice: 'value as number' },
-    { expression: 'value!', slice: 'value!' },
-    { expression: 'fn<string>(value)', slice: 'string' },
-    { expression: 'value satisfies T', slice: 'value satisfies T' },
-    { expression: 'items.map((item: Item) => item)', slice: 'Item' },
+  // A2 pinned these as `OEIR_ERASURE_DEFERRED` refusals; A3 lifts the boundary:
+  // they must lower now, with the TypeScript-only syntax stripped.
+  const ERASURE_CASES: ReadonlyArray<{ expression: string; squeezed: string }> = [
+    { expression: 'value as number', squeezed: 'value' },
+    { expression: 'value!', squeezed: 'value' },
+    { expression: 'fn<string>(value)', squeezed: 'fn(value)' },
+    { expression: 'value satisfies T', squeezed: 'value' },
+    { expression: 'items.map((item: Item) => item)', squeezed: 'items.map((item)=>item)' },
   ];
   for (const entry of ERASURE_CASES) {
-    test(`erasure-required expression is refused: ${entry.expression}`, () => {
+    test(`erasure-required expression now lowers instead of failing closed: ${entry.expression}`, () => {
       const harnessValue = harness(wrap(entry.expression));
       const expression = findNode(harnessValue.sourceFile, ts.isReturnStatement).expression!;
       const { record, diagnostics } = harnessValue.registry.lower(expression, 'setup');
-      expect(record).toBeNull();
-      expectDiagnostic(diagnostics, 'OEIR_ERASURE_DEFERRED', harnessValue.source, entry.slice);
-      expect(harnessValue.registry.size).toBe(0);
+      expect(diagnostics).toEqual([]);
+      expect(record).not.toBeNull();
+      expect(squeeze(record!.lowered)).toBe(entry.squeezed);
+      expect(codesOf(diagnostics)).not.toContain('OEIR_ERASURE_DEFERRED');
+      expect(parsesAsJs(record!.lowered)).toBe(true);
+      expect(harnessValue.registry.size).toBe(1);
     });
   }
+});
+
+describe('fail-closed refusals outside the erasure set (context matrix + recipe/lowering facts)', () => {
+  const wrap = (expression: string): string =>
+    `function Fixture(value, fn, items) { return ${expression}; }`;
 
   const CONTEXT_CASES: ReadonlyArray<{ expression: string; code: string; slice: string }> = [
     { expression: 'this.props', code: 'OEIR_UNSUPPORTED_THIS', slice: 'this' },

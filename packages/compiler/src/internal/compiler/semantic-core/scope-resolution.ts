@@ -1513,6 +1513,9 @@ class ScopeResolver {
     if (ts.isPropertyAssignment(parent)) return parent.name !== identifier;
     if (ts.isShorthandPropertyAssignment(parent)) return parent.name === identifier;
     if (ts.isBindingElement(parent)) return false;
+    // A type-parameter declaration name is not a value position (A3 follow-up:
+    // generic arrows are admitted by the erasure set).
+    if (ts.isTypeParameterDeclaration(parent)) return false;
     if (ts.isVariableDeclaration(parent)) return parent.name !== identifier;
     if (ts.isParameter(parent)) return parent.name !== identifier;
     if (
