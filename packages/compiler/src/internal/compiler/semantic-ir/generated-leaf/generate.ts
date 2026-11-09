@@ -99,9 +99,21 @@
  * before it subscribes, so a throw after that write is not a DOM byte
  * rollback; `claimRecipe` then `dispose(false)`s the child owner. Conditions, lists,
  * component references, reusable JSX insertion, children projection and
- * `property` channels omit `claim` and keep mount-only output. The claim does
- * not encode repeated-insertion markers, keys, SSR seed bytes, or bounded
- * rebuild recovery (those stay inside M07/M08).
+ * `property` channels omit `claim` and keep mount-only output.
+ *
+ * M07b generator extension (bounded static directory): when an element's
+ * children, or a fragment's children, flatten to two or more fully static
+ * elements, mount emits private `oe:r:<ordinal>` / `oe:/r:<ordinal>` pairs in
+ * author order and `claim` calls `openStaticSiblingDirectory` /
+ * `claimStaticSiblingRange`. The expected ordinals are the generator's
+ * literals. Mixed text, insertion sites, and table/select/template/svg/math
+ * parents or ranges stay on the existing path and do not wrap the parent. A
+ * one-child static parent stays on the M07a path. Range interiors are not
+ * themselves directories. The generated `activate` is `() => {}` because this
+ * directory has no binding to run. A directory that admits a dynamic slot must
+ * wire `activate`; the empty function must not stay in place and stand in for
+ * that claim. Keys, dynamic seed, SSR, and bounded recovery stay outside this
+ * slice.
  *
  * NOT claimed here: production wiring, a public ABI, SSR (M08), TSX-18/TSX-30
  * as filled matrix rows, focus/input preservation, and packed-consumer
@@ -188,6 +200,29 @@ const ADMITTED_ATTRIBUTE_CHANNELS: ReadonlySet<string> = new Set([
 ]);
 /** Attributes the compiler consumes as identity (never a DOM write). */
 const CONSUMED_ATTRIBUTE_CHANNELS: ReadonlySet<string> = new Set(['key']);
+/**
+ * Table, select, template, svg, and math parsing contexts. A directory is not
+ * emitted under or around these tags. ASCII lowercase, matching intrinsic tags
+ * the generator already admits. This is not a new content model.
+ */
+const DIRECTORY_EXCLUDED_TAGS: ReadonlySet<string> = new Set([
+  'table',
+  'caption',
+  'colgroup',
+  'col',
+  'thead',
+  'tbody',
+  'tfoot',
+  'tr',
+  'td',
+  'th',
+  'select',
+  'optgroup',
+  'option',
+  'template',
+  'svg',
+  'math',
+]);
 
 /** One lowered-expression placement in the emitted module (compiler-private). */
 export interface ExpressionPlacement {
@@ -282,6 +317,14 @@ interface EmitState {
    * projection site inserts through this same recipe.
    */
   childrenRecipeVar: string | null;
+  /** `file#Component` label passed to a static sibling directory. */
+  directorySource: string;
+  /**
+   * True once this emitted chunk calls `openStaticSiblingDirectory` (the
+   * generated claim). The module header imports the directory consumer only
+   * when at least one component chunk needs it; mount emission alone does not.
+   */
+  usesStaticSiblingDirectoryConsumer: boolean;
 }
 
 function diag(state: EmitState, code: string, message: string, span: IrSpan): void {
@@ -1681,11 +1724,146 @@ function emitChildrenProjection(
   sink.push({ kind: 'projection', name: projectionVar });
 }
 
+function flattenFragments(nodes: readonly FunctionModelNode[]): FunctionModelNode[] {
+  const flat: FunctionModelNode[] = [];
+  for (const node of nodes) {
+    if (node.kind === 'fragment') flat.push(...flattenFragments(node.children));
+    else flat.push(node);
+  }
+  return flat;
+}
+
+function directoryParentAllowed(tag: string): boolean {
+  return TAG_PATTERN.test(tag) && !DIRECTORY_EXCLUDED_TAGS.has(tag);
+}
+
+/** A fully static element tree: no dynamic slots, sites, or excluded tags. */
+function isStaticDirectoryElement(node: FunctionModelNode): boolean {
+  if (node.kind !== 'element') return false;
+  if (!directoryParentAllowed(node.tag)) return false;
+  for (const attribute of node.attributes) {
+    if (attribute.kind !== 'static' || !ATTRIBUTE_PATTERN.test(attribute.name)) return false;
+  }
+  for (const child of flattenFragments(node.children)) {
+    if (child.kind === 'text') continue;
+    if (!isStaticDirectoryElement(child)) return false;
+  }
+  return true;
+}
+
+/**
+ * Two or more static element siblings, fragments flattened. One child stays on
+ * the M07a path. Text, dynamic slots, and insertion sites make this `null`,
+ * so the parent is not wrapped and text is left where it is.
+ */
+function staticElementDirectory(nodes: readonly FunctionModelNode[]): FunctionModelNode[] | null {
+  const flat = flattenFragments(nodes);
+  if (flat.length < 2) return null;
+  if (!flat.every((node) => isStaticDirectoryElement(node))) return null;
+  return flat;
+}
+
+function declaredStaticLiteral(node: FunctionModelNode): string {
+  if (node.kind === 'text') return `{ kind: "text", nodeValue: ${JSON.stringify(node.value)} }`;
+  if (node.kind !== 'element') return '{ kind: "text", nodeValue: "" }';
+  const attributes = node.attributes
+    .filter((attribute) => attribute.kind === 'static')
+    .map(
+      (attribute) =>
+        `{ name: ${JSON.stringify(attribute.name)}, value: ${JSON.stringify(attribute.value)} }`,
+    )
+    .join(', ');
+  const children = flattenFragments(node.children)
+    .map((child) => declaredStaticLiteral(child))
+    .join(', ');
+  return `{ kind: "element", localName: ${JSON.stringify(node.tag)}, attributes: [${attributes}], children: [${children}] }`;
+}
+
+function appendGeneratedNode(
+  state: EmitState,
+  target: { readonly kind: 'element' | 'array'; readonly name: string },
+  nodeName: string,
+): void {
+  if (target.kind === 'element') push(state, `${target.name}.appendChild(${nodeName});`);
+  else push(state, `${target.name}.push(${nodeName});`);
+}
+
+/**
+ * Mount one pure static directory. Interiors are emitted with directories
+ * suppressed, so a range does not contain another range.
+ */
+function emitMountedDirectory(
+  state: EmitState,
+  ranges: readonly FunctionModelNode[],
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+  target: { readonly kind: 'element' | 'array'; readonly name: string },
+): void {
+  ranges.forEach((range, ordinal) => {
+    const span = range.span;
+    const start = nextName(state, 'mark');
+    push(
+      state,
+      `const ${start} = document.createComment(${JSON.stringify(`oe:r:${ordinal}`)});`,
+      span,
+    );
+    appendGeneratedNode(state, target, start);
+    const sink: SinkEntry[] = [];
+    emitNode(state, range, sink, records, false);
+    for (const entry of sink) {
+      if (entry.kind === 'node') appendGeneratedNode(state, target, entry.name);
+    }
+    const end = nextName(state, 'mark');
+    push(
+      state,
+      `const ${end} = document.createComment(${JSON.stringify(`oe:/r:${ordinal}`)});`,
+      span,
+    );
+    appendGeneratedNode(state, target, end);
+  });
+}
+
+/**
+ * Claim one pure static directory through the M07b consumer. Ordinals are the
+ * generator's own literals, not a scan of the live child list.
+ *
+ * `activate` is `() => {}` on purpose: this path has no dynamic binding. A
+ * directory that admits a dynamic slot must pass a real `activate`. Keeping
+ * the empty function there would present an incomplete claim as complete.
+ */
+function emitClaimedDirectory(
+  state: EmitState,
+  parentVar: string,
+  ranges: readonly FunctionModelNode[],
+): string[] {
+  // Recorded from the emitted call site, not inferred from the text later.
+  state.usesStaticSiblingDirectoryConsumer = true;
+  const directory = nextName(state, 'directory');
+  const declaration = ranges.map((range) => `[${declaredStaticLiteral(range)}]`).join(', ');
+  push(
+    state,
+    `const ${directory} = openStaticSiblingDirectory(${parentVar}, [${declaration}], ${JSON.stringify(state.directorySource)});`,
+  );
+  const adopted: string[] = [];
+  ranges.forEach((range, ordinal) => {
+    const claim = nextName(state, 'range');
+    push(
+      state,
+      `const ${claim} = claimStaticSiblingRange(${directory}, ${ordinal}, ${state.scopeVar}, () => {});`,
+      range.span,
+    );
+    const interior = nextName(state, 'el');
+    push(state, `const ${interior} = ${claim}.interior[0];`);
+    adopted.push(interior);
+  });
+  return adopted;
+}
+
 function emitNode(
   state: EmitState,
   node: FunctionModelNode,
   sink: SinkEntry[],
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  allowDirectory = true,
 ): void {
   const span: IrSpan = node.span;
   if (node.kind === 'text') {
@@ -1794,10 +1972,18 @@ function emitNode(
       emitDependencySubscriptions(state, dependencies, refresh, attribute.span);
       registerRefresh(state, refresh);
     }
-    for (const child of node.children) {
-      const childSink: SinkEntry[] = [];
-      emitNode(state, child, childSink, records);
-      appendSinkToElement(state, childSink, varName);
+    const ranges =
+      allowDirectory && directoryParentAllowed(node.tag)
+        ? staticElementDirectory(node.children)
+        : null;
+    if (ranges !== null)
+      emitMountedDirectory(state, ranges, records, { kind: 'element', name: varName });
+    else {
+      for (const child of node.children) {
+        const childSink: SinkEntry[] = [];
+        emitNode(state, child, childSink, records, allowDirectory);
+        appendSinkToElement(state, childSink, varName);
+      }
     }
     sink.push({ kind: 'node', name: varName });
     return;
@@ -1865,6 +2051,8 @@ interface EmittedComponent {
   readonly requiresPropsChanged: boolean;
   readonly segments: readonly EmissionSegment[];
   readonly placements: readonly ExpressionPlacement[];
+  /** True when this component's generated claim calls the directory consumer. */
+  readonly usesStaticSiblingDirectoryConsumer?: boolean;
 }
 
 interface ClaimEmission {
@@ -1872,6 +2060,8 @@ interface ClaimEmission {
   readonly diagnostics: readonly IrDiagnostic[];
   readonly segments: readonly EmissionSegment[];
   readonly placements: readonly ExpressionPlacement[];
+  /** True when the emitted claim calls the directory consumer. */
+  readonly usesStaticSiblingDirectoryConsumer?: boolean;
 }
 
 /** M07a admits a fixed leaf. Anything with a runtime structure is mount-only. */
@@ -2036,10 +2226,16 @@ function emitClaimInto(
           ),
         );
       }
-      const childCursor = nextName(state, 'cursor');
-      push(state, `const ${childCursor} = { list: ${name}.childNodes, i: 0 };`);
-      emitClaimInto(state, node.children, childCursor, here, records, phase2, () => {});
-      emitClaimCursorEnd(state, childCursor, here);
+      const ranges = directoryParentAllowed(node.tag)
+        ? staticElementDirectory(node.children)
+        : null;
+      if (ranges !== null) emitClaimedDirectory(state, name, ranges);
+      else {
+        const childCursor = nextName(state, 'cursor');
+        push(state, `const ${childCursor} = { list: ${name}.childNodes, i: 0 };`);
+        emitClaimInto(state, node.children, childCursor, here, records, phase2, () => {});
+        emitClaimCursorEnd(state, childCursor, here);
+      }
       adopt(name);
     }
   });
@@ -2082,6 +2278,8 @@ function emitClaimFunction(
     listDepth: 0,
     recipeDepth: 0,
     childrenRecipeVar: null,
+    directorySource: `${file}#${component.name}`,
+    usesStaticSiblingDirectoryConsumer: false,
   };
   const localLines: Array<{
     name: string;
@@ -2105,12 +2303,17 @@ function emitClaimFunction(
   }
   const phase2: Array<() => void> = [];
   const adopted: string[] = [];
-  const rootCursor = nextName(state, 'cursor');
-  push(state, `const ${rootCursor} = { list: ${CLAIM_PARENT}.childNodes, i: 0 };`);
-  emitClaimInto(state, component.roots, rootCursor, '', records, phase2, (name) => {
-    adopted.push(name);
-  });
-  emitClaimCursorEnd(state, rootCursor, '/');
+  const rootDirectory = staticElementDirectory(component.roots);
+  if (rootDirectory !== null) {
+    adopted.push(...emitClaimedDirectory(state, CLAIM_PARENT, rootDirectory));
+  } else {
+    const rootCursor = nextName(state, 'cursor');
+    push(state, `const ${rootCursor} = { list: ${CLAIM_PARENT}.childNodes, i: 0 };`);
+    emitClaimInto(state, component.roots, rootCursor, '', records, phase2, (name) => {
+      adopted.push(name);
+    });
+    emitClaimCursorEnd(state, rootCursor, '/');
+  }
   if (state.diagnostics.length > 0) {
     return {
       lines: [],
@@ -2149,6 +2352,7 @@ function emitClaimFunction(
   return {
     lines: [...prologue, ...state.lines, '}', ''],
     diagnostics: [],
+    usesStaticSiblingDirectoryConsumer: state.usesStaticSiblingDirectoryConsumer,
     segments: state.segments.map((segment) => ({
       ...segment,
       generatedLine: segment.generatedLine + shift,
@@ -2201,6 +2405,8 @@ function emitComponent(
     listDepth: 0,
     recipeDepth: 0,
     childrenRecipeVar: projectsChildren ? `${INTERNAL_PREFIX}childrenRecipe` : null,
+    directorySource: `${file}#${component.name}`,
+    usesStaticSiblingDirectoryConsumer: false,
   };
   if (
     propsName !== null &&
@@ -2295,10 +2501,18 @@ function emitComponent(
   // every insertion site — including one inside another recipe body — can
   // reference them.
   emitRecipes(state, file, records);
-  for (const root of component.roots) {
-    const sink: SinkEntry[] = [];
-    emitNode(state, root, sink, records);
-    appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
+  const rootDirectory = staticElementDirectory(component.roots);
+  if (rootDirectory !== null) {
+    emitMountedDirectory(state, rootDirectory, records, {
+      kind: 'array',
+      name: `${INTERNAL_PREFIX}nodes`,
+    });
+  } else {
+    for (const root of component.roots) {
+      const sink: SinkEntry[] = [];
+      emitNode(state, root, sink, records);
+      appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
+    }
   }
   push(state, `return ${INTERNAL_PREFIX}nodes;`);
 
@@ -2378,6 +2592,7 @@ function emitComponent(
     requiredBindings: [...state.requiredBindings].sort(),
     requiredProps: [...state.requiredProps].sort(),
     requiresPropsChanged: state.requiresPropsChanged,
+    usesStaticSiblingDirectoryConsumer: claim?.usesStaticSiblingDirectoryConsumer === true,
     segments: [
       ...state.segments.map((segment) => ({
         ...segment,
@@ -2613,6 +2828,7 @@ export function generateLeafModule(
   const segments: EmissionSegment[] = [];
   const placements: ExpressionPlacement[] = [];
   let requiresPropsChanged = false;
+  let usesStaticSiblingDirectoryConsumer = false;
   for (const component of module.components) {
     const emitted = emitComponent(module.file, component, records, componentByName);
     diagnostics.push(...emitted.diagnostics);
@@ -2620,6 +2836,7 @@ export function generateLeafModule(
     for (const name of emitted.requiredBindings) requiredBindings.add(name);
     for (const name of emitted.requiredProps) requiredProps.add(name);
     requiresPropsChanged ||= emitted.requiresPropsChanged;
+    usesStaticSiblingDirectoryConsumer ||= emitted.usesStaticSiblingDirectoryConsumer === true;
     // Component chunks are concatenated in module order: rebase this component's
     // segment/placement lines onto the lines already emitted before it.
     const lineOffset = chunks.length;
@@ -2648,9 +2865,14 @@ export function generateLeafModule(
       diagnostics,
     };
   }
+  const runtimeImports: string[] = [...RUNTIME_IMPORTS];
+  if (usesStaticSiblingDirectoryConsumer) {
+    runtimeImports.push('claimStaticSiblingRange', 'openStaticSiblingDirectory');
+    runtimeImports.sort();
+  }
   const headerLines = [
     '// <generated by openelement M07a leaf-claim (mount M06b2a); do not edit>',
-    `import { ${RUNTIME_IMPORTS.join(', ')} } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
+    `import { ${runtimeImports.join(', ')} } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
     '',
   ];
   const text = [...headerLines, ...chunks].join('\n');

@@ -93,8 +93,9 @@ member because `RuntimeErrorCode` is exported.
 ## Still outside M07b
 
 Key alignment, dynamic seed, subscription multisets, property channels,
-input, focus, selection, bounded recovery, an SSR producer, mount emission of
-these markers, production wiring, and a public ABI freeze remain M07/M08 work.
+input, focus, selection, bounded recovery, an SSR producer, production
+wiring, and a public ABI freeze remain M07/M08 work. Mount emission for a
+pure static directory is the bounded generator section below.
 A global marker lock is not part of this slice. A committed node moved to a
 different parent is outside the supported domain. Different parents stay
 different identities.
@@ -117,7 +118,66 @@ them:
   incompatible mismatch surfaces.
 - **Namespace checks**: this slice requires the HTML namespace on the parent,
   its ancestors and in-range elements; the M07a claim walk is namespace-agnostic.
-- **Mount/claim node-set asymmetry**: once the generator emits the markers
-  (the bounded generator extension), mount projection nodes include the marker
-  comments while claim nodes are the interiors. The contract must state that
-  difference explicitly.
+- **Mount/claim node-set asymmetry**: the bounded generator extension emits the
+  markers, so the asymmetry is now an explicit internal contract in that
+  section (mount projection nodes include the marker comments; claim projection
+  nodes are the range interiors only). The M07 protocol record (M07-5) still
+  owns the general contract for a directory that admits a dynamic slot.
+
+## M07b generator extension
+
+This is a bounded generator extension inside M07b, not a new slice or
+milestone. The head branch ref `cursor/m07c-generator-mount-claim-21d0` is a
+slice name only; M07c and M07d remain unapproved labels (workboard §3, §13.5,
+§14.2).
+
+PR #1749 carries two commits — the generator change with its tests, and this
+document. They were authored on the accepted M07b head
+`197f243260447c48728785110f53e82260fbc4a9` and are rebased onto current `main`
+after #1747's squash merge. For a parent whose flattened children are two or
+more fully static elements, mount emits the paired markers and the generated
+claim calls `openStaticSiblingDirectory` and `claimStaticSiblingRange`.
+Expected ordinals are generator literals. The fixed-head QA record on this head
+is the implementation acceptance evidence for the extension.
+
+**D5 is closed by this extension.** §13.2 recorded "Mount markers | Left open
+as D5". Mount now emits the paired `oe:r:` markers for a parent whose flattened
+children are two or more fully static elements, claim consumes them through the
+§13 directory consumer, and the Owner accepted the bounded extension on
+2026-11-09 (workboard §14.2). This is not the M07c design (key, dynamic
+structure, duplicate subscription, cleanup).
+
+**Internal contract: mount/claim node-set asymmetry.** For a directory, mount
+projection nodes include the `oe:r:` / `oe:/r:` marker comments; claim
+projection nodes are the range interiors only. Mount returns the nodes it
+created, so the markers are part of that projection. Claim adopts existing
+nodes and returns the interiors the generated code references; the directory
+consumer owns the markers. The tests assert both node sets explicitly and must
+keep doing so.
+
+The generated `activate` is the empty function `() => {}` on purpose. This
+slice has no dynamic binding to run after the reservation. That empty function
+is not a complete claim. A later path that admits a dynamic slot into a
+directory must pass an `activate` that performs those bindings. Keeping
+`() => {}` on that path would present an incomplete claim as complete.
+
+`claimRecipe` records one owner and one region before it calls the generated
+claim, then `dispose(false)`s that owner when the claim throws. `runtimeProbe`
+owners and regions only increment. The +1 after a failed generated claim is an
+observation of that allocation. It is not a live owner and it is not a live
+region. On a first-range validation failure the consumer creates no range owner
+and registers no cleanup; on a mid-directory partial commit an earlier range
+keeps its owner and cleanup (see the known limitation below). A direct
+`claimStaticSiblingRange` validation failure still creates no owner for that
+failed range. Static zero subscriptions remain not a dynamic subscription
+account.
+
+### Known limitation: no recovery after a mid-directory partial commit
+
+Bounded recovery is M07-4 work, outside this slice. This slice claims ranges in
+order and does not batch-reserve. If range 0 commits and range 1 fails
+validation, the claim throws, the range-0 success tombstone remains, and a
+retry fails with `consumed:`. That directory is permanently unclaimable until
+the parent is replaced. A retry is not possible after a mid-directory partial
+commit. Only a first-range validation failure leaves the directory retryable
+after cleanup.
