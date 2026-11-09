@@ -136,6 +136,14 @@ export interface FunctionModelComponentRef {
   readonly kind: 'component-ref';
   readonly name: string;
   readonly props: readonly FunctionModelAttribute[];
+  /**
+   * The children recipe this reference passes as `props.children` (M06b2a,
+   * JSX value model §4.4): non-null only for `<Frame>…</Frame>`, where the
+   * children node list is the fragment recipe with this id. A recipe id, never
+   * a data prop: `props.children` is a recipe channel the child projects, not a
+   * value the authored expression may read.
+   */
+  readonly childrenRecipeId: string | null;
   readonly span: SourceSpan;
 }
 
@@ -182,7 +190,13 @@ export type FunctionModelNode =
 /** A value-position JSX node lowered to a reusable recipe (M02 §recipe). */
 export interface FunctionModelRecipe {
   readonly id: string;
-  readonly target: FunctionModelElement | FunctionModelComponentRef;
+  /**
+   * What one insertion mounts: a JSX value (element or component reference) or,
+   * for a children recipe (M06b2a), the fragment wrapping a component
+   * reference's JSX children (`<Frame>…</Frame>` passes this as
+   * `props.children`).
+   */
+  readonly target: FunctionModelElement | FunctionModelComponentRef | FunctionModelFragment;
   readonly span: SourceSpan;
 }
 
@@ -354,6 +368,7 @@ class FunctionFrontendBuilder {
   /** List-mapper parameters enclosing the slot being built (shadowing guard). */
   private readonly entryParameters: string[] = [];
   private recipeCounter = 0;
+  private childrenRecipeCounter = 0;
 
   constructor(sourceFile: ts.SourceFile, resolved: ResolvedModule) {
     this.sourceFile = sourceFile;
@@ -401,12 +416,37 @@ class FunctionFrontendBuilder {
   }
 
   /** Recipes created while lowering expressions; drained by the component walk. */
-  readonly pendingRecipes: Array<{ id: string; jsx: ts.JsxElement | ts.JsxSelfClosingElement }> =
-    [];
+  readonly pendingRecipes: Array<
+    | { readonly id: string; readonly jsx: ts.JsxElement | ts.JsxSelfClosingElement }
+    | { readonly id: string; readonly fragment: FunctionModelFragment }
+  > = [];
+
+  /** Register one component-reference children fragment as a recipe (M06b2a). */
+  private registerChildrenRecipe(fragment: FunctionModelFragment): string {
+    const id = `#children${this.childrenRecipeCounter}`;
+    this.childrenRecipeCounter += 1;
+    this.pendingRecipes.push({ id, fragment });
+    return id;
+  }
 
   // ── expressions ────────────────────────────────────────────────────────
 
   private expression(node: ts.Node, mode: EvaluationMode): FunctionExpressionRef | null {
+    // `props.children` is a recipe projection channel (JSX value model §4.4), not
+    // a readable value: only the direct child slot `{props.children}` is
+    // admitted (buildSlot -> children-projection). Any expression that reads it
+    // stays refused — `String(props.children)`, `title={props.children}` and a
+    // `props.children && …` test would otherwise pass the opaque recipe object
+    // to a value consumer. JSX subtrees are skipped: they are replaced by recipe
+    // references, and their own child slots are built by the node walk.
+    if (this.containsPropsChildrenRead(node)) {
+      this.fail(
+        node,
+        CODES.form,
+        'props.children is a recipe projection channel: it may only appear as a direct JSX child slot `{props.children}`, never inside an expression value',
+      );
+      return null;
+    }
     const { record, diagnostics } = this.registry.lower(node, mode);
     if (record === null) {
       for (const diagnostic of diagnostics) {
@@ -415,6 +455,39 @@ class FunctionFrontendBuilder {
       return null;
     }
     return { id: record.id, mode, span: record.authoredSpan };
+  }
+
+  /**
+   * Does this expression read `props.children` outside any replaced JSX subtree?
+   * JSX nodes are skipped because the expression lowering replaces them with a
+   * recipe reference; their child slots belong to the later node walk.
+   */
+  private containsPropsChildrenRead(node: ts.Node): boolean {
+    const propsParam = this.currentPropsParam;
+    if (propsParam === null) return false;
+    let found = false;
+    const visit = (current: ts.Node): void => {
+      if (found) return;
+      if (
+        ts.isJsxElement(current) ||
+        ts.isJsxSelfClosingElement(current) ||
+        ts.isJsxFragment(current)
+      ) {
+        return;
+      }
+      if (
+        ts.isPropertyAccessExpression(current) &&
+        ts.isIdentifier(current.expression) &&
+        current.expression.text === propsParam &&
+        current.name.text === 'children'
+      ) {
+        found = true;
+        return;
+      }
+      ts.forEachChild(current, visit);
+    };
+    visit(node);
+    return found;
   }
 
   // ── component / body ───────────────────────────────────────────────────
@@ -488,6 +561,10 @@ class FunctionFrontendBuilder {
     const recipes: FunctionModelRecipe[] = [];
     while (this.pendingRecipes.length > 0) {
       const entry = this.pendingRecipes.shift()!;
+      if ('fragment' in entry) {
+        recipes.push({ id: entry.id, target: entry.fragment, span: entry.fragment.span });
+        continue;
+      }
       const target = this.buildNode(entry.jsx) as
         | FunctionModelElement
         | FunctionModelComponentRef
@@ -745,18 +822,28 @@ class FunctionFrontendBuilder {
     tag: string,
   ): FunctionModelComponentRef | null {
     const name = tag.split('.')[0] ?? tag;
+    const props = this.buildAttributes(opening.attributes, tag, false);
+    // JSX children on a component reference are the children recipe passed as
+    // `props.children` (JSX value model §4.4): one fragment recipe per ref site,
+    // owned by the component that authors the ref. A whitespace-only child list
+    // builds no node and therefore passes no recipe (same as no children).
+    let childrenRecipeId: string | null = null;
     if (ts.isJsxElement(node) && node.children.length > 0) {
-      this.fail(
-        node,
-        CODES.form,
-        'children on a component reference are outside the admitted grammar',
-      );
-      return null;
+      const children = this.buildChildren(node.children);
+      if (children.length > 0) {
+        const fragment: FunctionModelFragment = {
+          kind: 'fragment',
+          children,
+          span: spanOf(this.sourceFile, node),
+        };
+        childrenRecipeId = this.registerChildrenRecipe(fragment);
+      }
     }
     return {
       kind: 'component-ref',
       name,
-      props: this.buildAttributes(opening.attributes, tag, false),
+      props,
+      childrenRecipeId,
       span: spanOf(this.sourceFile, node),
     };
   }

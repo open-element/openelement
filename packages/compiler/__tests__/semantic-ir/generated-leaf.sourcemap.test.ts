@@ -463,6 +463,56 @@ function C(props) { return <ul><Row text={props.label} /></ul>; }
     expect(JSON.stringify(compile(source).map)).toBe(JSON.stringify(compiled.map));
   });
 
+  test('M06b2a children: recipe-body placements decode and the projection anchors at the slot', () => {
+    const source = `import { signal } from '@openelement/element';
+function Frame(props) { return <div>{props.children}</div>; }
+function C(props) {
+  const n = signal(1);
+  return <Frame label={props.title}><b>{n.value}</b></Frame>;
+}
+`;
+    const compiled = compile(source);
+    // The projection goes through the M06b1a-2 insertion mechanism, against the
+    // mount-level children recipe read.
+    expect(compiled.module).toContain('insertRecipe(__oe_scope, __oe_childrenRecipe, ');
+    const map = consumer(compiled.map);
+    // Children-recipe-body placements stay inside C's component chunk: the
+    // existing per-chunk rebase is the only shift, so every placement decodes.
+    for (const placement of compiled.placements) {
+      const decoded = originalPositionFor(map, {
+        line: placement.generatedLine,
+        column: placement.generatedColumn,
+      });
+      expect(decoded.line, placement.exprId).toBe(placement.authoredLine);
+      expect(decoded.column, placement.exprId).toBe(placement.authoredColumn);
+    }
+    // The defining-scope read inside the children fragment has a placement at
+    // its authored span (nothing is re-lowered or relocated).
+    const valuePosition = positionAt(source, source.indexOf('n.value'));
+    expect(
+      compiled.placements.some(
+        (placement) =>
+          placement.authoredLine === valuePosition.line &&
+          placement.authoredColumn === valuePosition.column,
+      ),
+    ).toBe(true);
+    // The `{props.children}` projection site carries a structural anchor at the
+    // authored slot: the generated insertRecipe line decodes to `props.children`,
+    // not to the enclosing component or the Frame return.
+    const projectionLine = compiled.module
+      .split('\n')
+      .findIndex((line) => line.includes('insertRecipe(__oe_scope, __oe_childrenRecipe, '));
+    expect(projectionLine).toBeGreaterThanOrEqual(0);
+    const projectionPosition = positionAt(source, source.indexOf('props.children'));
+    const decodedProjection = originalPositionFor(map, {
+      line: projectionLine + 1,
+      column: 0,
+    });
+    expect(decodedProjection.line).toBe(projectionPosition.line);
+    expect(decodedProjection.column).toBe(projectionPosition.column);
+    expect(JSON.stringify(compile(source).map)).toBe(JSON.stringify(compiled.map));
+  });
+
   test('the consumer package is the pinned repository version', () => {
     const require = createRequire(import.meta.url);
     const manifest = JSON.parse(

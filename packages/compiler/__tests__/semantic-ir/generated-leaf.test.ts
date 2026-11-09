@@ -574,6 +574,239 @@ function C(props) {
   });
 });
 
+describe('M06b2a — component children projection: one children recipe per ref site', () => {
+  const FRAME = `function Frame(props) { return <div>{props.children}</div>; }
+function C(props) { return <Frame><b>x</b></Frame>; }
+`;
+  const CHILDREN_TREE = `import { signal } from '@openelement/element';
+function Frame(props) { return <section>{props.children}</section>; }
+function C(props) {
+  const n = signal(1);
+  return <Frame><b>{props.label}</b>{n.value}</Frame>;
+}
+`;
+
+  test('the model links `<Frame>…</Frame>` to one children fragment recipe', () => {
+    const front = compileFunctionModule(FRAME, FILE, { importClassifier: CLASSIFIER });
+    expect(front.diagnostics).toEqual([]);
+    const [frame, c] = front.module!.components;
+    // The child component has no reusable JSX values of its own.
+    expect(frame!.recipes).toEqual([]);
+    expect(c!.recipes.map((recipe) => [recipe.id, recipe.target.kind])).toEqual([
+      ['#children0', 'fragment'],
+    ]);
+    const ref = c!.roots[0]!;
+    expect(ref.kind).toBe('component-ref');
+    if (ref.kind !== 'component-ref') throw new Error('unreachable');
+    expect(ref.name).toBe('Frame');
+    // A recipe id, never a data prop: the children channel is the recipe link.
+    expect(ref.childrenRecipeId).toBe('#children0');
+    expect(ref.props).toEqual([]);
+    const frameRoot = frame!.roots[0]!;
+    expect(frameRoot.kind).toBe('element');
+    if (frameRoot.kind !== 'element') throw new Error('unreachable');
+    // The child's `{props.children}` slot is a projection node, not an expression.
+    expect(frameRoot.children.map((node) => node.kind)).toEqual(['children-projection']);
+  });
+
+  test('emits the children recipe once per ref site and passes it as props.children', () => {
+    const result = generate(FRAME);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // Two root factories + the one children recipe.
+    expect(module.match(/createRecipe\(/g)?.length).toBe(3);
+    // Definition site = the mount scope the ref is emitted in, one per ref site.
+    expect(module).toContain(`source: ${JSON.stringify(`${FILE}#C:children0`)},`);
+    expect(module.match(/const __oe_recipe0 = createRecipe\(\{/g)?.length).toBe(1);
+    expect(
+      module.match(/definitionOwner: __oe_scope,\n {4}source: ".*#C:children0",/g)?.length,
+    ).toBe(1);
+    // The props record carries the recipe as a plain property (a recipe channel,
+    // never a per-read getter and never a data attribute).
+    expect(module).toMatch(/const __oe_childProps\d+ = \{\n {4}children: __oe_recipe0,/);
+    expect(module).not.toMatch(/get children\(\)/);
+    // The children recipe body builds the authored fragment nodes.
+    expect(module).toMatch(
+      /mount\(__oe_recipeScope\d+\) \{\n {6}const __oe_recipeNodes\d+ = \[\];/,
+    );
+    expect(module).toContain('document.createElement("b")');
+    // The child mount receives the record.
+    expect(module).toMatch(
+      /Frame__mount\(__oe_childScope\d+, __oe_childProps\d+, __oe_childHost\d+\)/,
+    );
+  });
+
+  test('one mount-level props.children read, projected once per site', () => {
+    const result = generate(`function Frame(props) {
+  return <><section>{props.children}</section><aside>{props.children}</aside></>;
+}
+function C(props) { return <Frame><i>a</i><b>b</b></Frame>; }
+`);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // One read + one coded host/root check per mount, however many sites.
+    expect(module.match(/const __oe_childrenRecipe = __oe_props\.children;/g)?.length).toBe(1);
+    expect(module.match(/OEIR_LEAF_MISSING_CHILDREN/g)?.length).toBe(1);
+    // Two sites: two projections of the SAME recipe variable ...
+    expect(module.match(/insertRecipe\(__oe_scope, __oe_childrenRecipe, /g)?.length).toBe(2);
+    const projections = [
+      ...module.matchAll(/const (__oe_childrenProjection\d+) = insertRecipe\(/g),
+    ].map((match) => match[1]);
+    expect(projections).toHaveLength(2);
+    expect(new Set(projections).size).toBe(2);
+    // ... spread into two distinct element sinks (independent regions/owners).
+    expect(
+      module.match(
+        /for \(const __oe_child of __oe_childrenProjection\d+\.nodes\)\n?\s*__oe_el\d+\.appendChild/g,
+      )?.length,
+    ).toBe(2);
+  });
+
+  test('dynamic children content refreshes on the recipe scope, not the child mount scope', () => {
+    const result = generate(CHILDREN_TREE);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // A defining-scope signal read inside the children fragment.
+    expect(module).toMatch(/bindSignalWrites\(__oe_recipeScope\d+, n, "n"/);
+    // A defining-component props read inside the children fragment refreshes
+    // through the parent host's propDeps, still bound on the recipe instance.
+    expect(module).toMatch(
+      /for \(const __oe_propDep of __oe_host\.propDeps\) bindSignalWrites\(__oe_recipeScope\d+, __oe_propDep, "props"/,
+    );
+    // The recipe scope is the one handed to the recipe mount, never the child
+    // component's own mount scope.
+    const recipeScope = module.match(/mount\((__oe_recipeScope\d+)\)/)?.[1];
+    expect(recipeScope).toBeDefined();
+    expect(module).not.toMatch(new RegExp(`bindSignalWrites\\(__oe_childScope\\d+, n, "n"`));
+    expect(result.requiresPropsChanged).toBe(true);
+    expect(result.requiredProps).toEqual(['props']);
+    expect(result.requiredBindings).toEqual(['n']);
+  });
+
+  test('the recipe body mounts a component reference on a child of the recipe scope', () => {
+    const result = generate(`function Row(props) { return <li>{props.text}</li>; }
+function Frame(props) { return <ul>{props.children}</ul>; }
+function C(props) { return <Frame><Row text={props.label} /></Frame>; }
+`);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // The Row instance is owned by the children recipe instance: its scope is a
+    // child of the recipe scope (a live descendant of C's mount scope).
+    expect(module).toMatch(/const __oe_childScope\d+ = __oe_recipeScope\d+\.child\(\);/);
+    expect(module).toMatch(
+      /Row__mount\(__oe_childScope\d+, __oe_childProps\d+, __oe_childHost\d+\)/,
+    );
+    // The passed prop getter reads the DEFINING (C) scope.
+    expect(module).toContain('get text() { return (props . label); },');
+  });
+
+  test('multiple children in one fragment keep authored order', () => {
+    const result = generate(
+      'function Frame(props) { return <div>{props.children}</div>; }\nfunction C(props) { return <Frame><i>a</i><b>b</b></Frame>; }\n',
+    );
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    const italic = module.indexOf('document.createElement("i")');
+    const bold = module.indexOf('document.createElement("b")');
+    expect(italic).toBeGreaterThanOrEqual(0);
+    expect(bold).toBeGreaterThan(italic);
+    // The recipe returns the fragment nodes in authored order.
+    expect(module).toMatch(
+      /__oe_recipeNodes\d+\.push\(__oe_el\d+\);\n {6}__oe_recipeNodes\d+\.push\(__oe_el\d+\);/,
+    );
+  });
+
+  test('children passed to a component that does not project them are admitted (unused channel)', () => {
+    const result = generate(`function Plain(props) { return <div>plain</div>; }
+function C(props) { return <Plain><b>x</b></Plain>; }
+`);
+    expect(result.module).not.toBeNull();
+    // The recipe is still emitted and passed; only projection needs a site.
+    expect(result.module).toContain(`source: ${JSON.stringify(`${FILE}#C:children0`)},`);
+    expect(result.module).toMatch(/const __oe_childProps\d+ = \{\n {4}children: __oe_recipe\d+,/);
+    expect(result.module).not.toMatch(/insertRecipe\(/);
+  });
+
+  test('a host-supplied root instance must pass a real children recipe (coded runtime check)', () => {
+    const result = generate('function Frame(props) { return <div>{props.children}</div>; }\n');
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // The root factory mounts with host.props; a plain value must fail coded
+    // instead of rendering nothing: the check pins the recipe shape.
+    expect(module).toContain('const __oe_childrenRecipe = __oe_props.children;');
+    expect(module).toContain(
+      'if (__oe_childrenRecipe == null || typeof __oe_childrenRecipe !== "object" || typeof __oe_childrenRecipe.mount !== "function" || __oe_childrenRecipe.definitionOwner == null) throw new Error("OEIR_LEAF_MISSING_CHILDREN: component \'<Frame>\' projects props.children but the mounted instance was given no children recipe");',
+    );
+  });
+
+  test('a reference to a children-projecting component without JSX children fails closed', () => {
+    const result = generate(
+      'function Frame(props) { return <div>{props.children}</div>; }\nfunction C(props) { return <Frame />; }\n',
+    );
+    expect(result.module).toBeNull();
+    expect(codes(result)).toEqual(['OEIR_LEAF_MISSING_CHILDREN']);
+    expect(result.diagnostics[0]!.message).toContain('passes no JSX children');
+  });
+
+  test('nested children (a children-projecting ref inside a children recipe body) fail closed', () => {
+    const result = generate(`function Frame(props) { return <div>{props.children}</div>; }
+function Parent(props) { return <section>{props.children}</section>; }
+function C(props) { return <Frame><Parent><b>x</b></Parent></Frame>; }
+`);
+    expect(result.module).toBeNull();
+    expect(codes(result)).toEqual(['OEIR_LEAF_UNSUPPORTED_CHILDREN']);
+    expect(result.diagnostics[0]!.message).toContain('inside a reusable JSX value body');
+  });
+
+  test('a cycle through a children recipe is refused with its path and a coded diagnostic', () => {
+    const result = generate(`function A(props) { return <div>{props.children}</div>; }
+function B(props) { return <span><A><B /></A></span>; }
+`);
+    expect(result.module).toBeNull();
+    expect(codes(result)).toEqual(['OEIR_LEAF_RECIPE_CYCLE']);
+    expect(result.diagnostics[0]!.message).toContain(
+      'recipe insertion cycle: A -> B#children0 -> B -> A',
+    );
+  });
+
+  test('`props.children` in an expression value stays refused by the frontend', () => {
+    for (const source of [
+      'function C(props) { return <div title={String(props.children)}></div>; }\n',
+      'function C(props) { return <div title={props.children}></div>; }\n',
+      'function C(props) { return <div>{props.children && <b>x</b>}</div>; }\n',
+    ]) {
+      const front = compileFunctionModule(source, FILE, { importClassifier: CLASSIFIER });
+      expect(front.module).toBeNull();
+      expect(front.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(['OEC9042']);
+      expect(front.diagnostics[0]!.message).toContain('recipe projection channel');
+    }
+  });
+
+  test('an explicit `children` prop stays refused (the channel is JSX children only)', () => {
+    const result = generate(
+      'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row children="x" />; }\n',
+    );
+    expect(result.module).toBeNull();
+    expect(codes(result)).toEqual(['OEIR_LEAF_UNSUPPORTED_COMPONENT']);
+    expect(result.diagnostics[0]!.message).toContain('authored as JSX children');
+  });
+
+  test('children projection output is deterministic and parses as JavaScript', () => {
+    const first = generate(CHILDREN_TREE).module!;
+    expect(generate(CHILDREN_TREE).module).toBe(first);
+    const source = ts.createSourceFile(
+      'leaf.js',
+      first,
+      ts.ScriptTarget.ES2022,
+      true,
+      ts.ScriptKind.JS,
+    );
+    const parseDiagnostics =
+      (source as unknown as { parseDiagnostics?: readonly unknown[] }).parseDiagnostics ?? [];
+    expect(parseDiagnostics).toHaveLength(0);
+  });
+});
+
 describe('M05 leaf v2 — fail-closed boundary (M05b/M06 shapes refused)', () => {
   const REFUSED: ReadonlyArray<{
     label: string;
@@ -622,8 +855,13 @@ describe('M05 leaf v2 — fail-closed boundary (M05b/M06 shapes refused)', () =>
       code: 'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
     },
     {
-      label: 'children projection',
-      source: 'function C(props) { return <section>{props.children}</section>; }\n',
+      // M06b2a supersedes the whole-node `children projection` refusal: a
+      // `{props.children}` site in a component mount is now an admitted
+      // projection (see the M06b2a suite above; the host/root boundary is the
+      // coded `OEIR_LEAF_MISSING_CHILDREN` read). This row pins the remaining
+      // boundary: a projection inside a reusable JSX value body is refused.
+      label: 'children projection inside a reusable JSX value body',
+      source: 'function C(props) { const x = <div>{props.children}</div>; return <p>{x}</p>; }\n',
       code: 'OEIR_LEAF_UNSUPPORTED_NODE',
     },
     {
