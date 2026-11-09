@@ -1031,6 +1031,16 @@ function emitComponentRef(
   > = [];
   for (const attribute of node.props) {
     if (attribute.name === 'key') continue;
+    if (attribute.name === 'children') {
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+        `children on component '<${node.name}>' are outside the M06b1 slice (M06b1a-3 owns children projection)`,
+        span,
+      );
+      refused = true;
+      continue;
+    }
     if (!componentPropAdmitted(state, attribute, node.name, span)) {
       refused = true;
       continue;

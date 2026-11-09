@@ -337,6 +337,12 @@ describe('M05 leaf v2 — fail-closed boundary (M05b/M06 shapes refused)', () =>
       code: 'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
     },
     {
+      label: 'children prop on a component reference',
+      source:
+        'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row children="x" />; }\n',
+      code: 'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+    },
+    {
       label: 'style channel as a component prop',
       source:
         'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row style={props.text} />; }\n',
