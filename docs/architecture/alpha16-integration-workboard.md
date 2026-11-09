@@ -154,11 +154,12 @@ The withdrawn conditional M07b allowance (implement from "existing"
 marker/order plus static seed, with failure having no side effects) does not
 take effect. M07b is not an approved implementation slice.
 
-What is in progress is a **joint M07/M08 private-contract candidate**.
-Development is drafting it. QA has already given development the
-counterexamples. Status of that candidate: **pending review**. It is not
-approved and not implemented. This docs PR does not write the candidate and
-does not choose encodings, field names, or diagnostic codes.
+What was in progress when this section was written is a **joint M07/M08
+private-contract candidate**. Development was drafting it. QA had already given
+development the counterexamples. Status of that candidate at this section:
+**pending review**. It is not approved and not implemented. This docs PR does
+not write the candidate and does not choose encodings, field names, or
+diagnostic codes. §13 is a later decision. It does not edit these sentences.
 
 The candidate is the place where the team recommends the ordinary internal
 format and where technical lead and QA review that recommendation. The items
@@ -319,3 +320,118 @@ version, tag, or publication exists before M13.
 - Ancestry of `241c1eef7` inside `c70dc8d0` was not established locally.
 - The §3 candidate had not arrived, so it was not reviewed.
 - No source, test, ledger, matrix, or CI file was edited.
+
+## 13. Decided M07b plan
+
+Read for this section: 2026-11-09 18:05:26 +0800 (2026-11-09T10:05:26Z).
+`origin/main` was still
+[`c70dc8d0a3d620fbfcb7d10485f6de0a6900cd91`](https://github.com/open-element/openelement/commit/c70dc8d0a3d620fbfcb7d10485f6de0a6900cd91).
+
+The technical lead finished the full-text review together with QA and accepted
+the technical plan in this section. **That acceptance is not implementation
+acceptance, not an M07 exit, and not a TSX-18 or TSX-30 sign-off.** The
+candidate document itself stays **unapproved**. Its open D-items, unused key
+slot, "failure atomicity" wording, and `OEIR_LEAF_CLAIM_UNAVAILABLE` name are
+not the plan. This section supersedes the scheduling in §3 and §10 that waited
+on an unreviewed candidate. It does not rewrite §1 or §2.
+
+### 13.1 Dependency head
+
+PR #1745's head at this read is
+[`146d838573d130e07bbe9b4eebe86efacb43fe9d`](https://github.com/open-element/openelement/commit/146d838573d130e07bbe9b4eebe86efacb43fe9d),
+subject `fix(protocol): record the missing-claim code in the interface snapshot`,
+`updatedAt` `2026-11-09T10:03:22Z`, state OPEN. It is later than `96f53ad`.
+M07b depends on this head, not on `96f53ad`.
+
+Checks observed at the same instant, without downloading a job log: sha-guard,
+both Analyze jobs, lint, Cloudflare Pages, and CodeQL SUCCESS; `test`, `e2e`,
+and `pack` IN_PROGRESS; the release-only jobs SKIPPED. Lint SUCCESS is not a
+reading of the interface-snapshot assertion. `RuntimeErrorCode` is a public
+export, so a snapshot drift is not waived by calling the change internal.
+
+QA report, not re-read here, and only about `96f53ad`: the bare `Error` on that
+head was fixed; Node 24.22.1 reported element 763, focused 25, and compiler 93;
+CI lint on that head was still blocked by the interface snapshot. Those numbers
+and that failure are not results for `146d838`. The `94a87a36` dialect failure
+in §2.1 stays the result for that older head only.
+
+`96f53ad` remains the historical head where the catalog code and the rollback
+comments were read. It is not the current dependency, and its local counts are
+not reused against `146d838`.
+
+### 13.2 What the plan decides
+
+| Topic | Unapproved candidate | Decided plan |
+| --- | --- | --- |
+| Status | Draft awaiting D-item confirmation before any encoding | Technical plan accepted. No implementation branch is opened here |
+| Markers | Paired private comments, plus an unused key slot | Paired private comments for sibling ranges. No key, build, or version slot |
+| Which range a call adopts | Walk order, ordinals checked as they appear | The call carries an expected ordinal, or a handle fixed before the call. In-order consumption. Any other ordinal is rejected |
+| Oracle | Node identity unchanged | Before the call, the test holds the start, end, and interior node refs. It does not scan and invent the expected range. Identical content is not a self-proof |
+| Occupancy | Not specified | The rules in §13.3. `LifetimeScope` is not changed |
+| Failure | "Not partially left" beside byte rollback | Validate: zero DOM-operation log, zero net new resources, nodes kept. Activate: resource cleanup may leave an earlier dynamic write. Not a full transaction |
+| Diagnostics | `OEIR_LEAF_CLAIM_UNAVAILABLE` plus one mismatch string | The new catalog code for unavailable. Marker mismatch is a different diagnostic. One public code is not added per detail |
+| Seed equality | "Verbatim", with whitespace left to the user | Parsed DOM values, not HTML source bytes |
+| Mount markers | Left open as D5 | Mount is not required to emit markers |
+
+If a later catalog must mix non-range siblings under the same parent, the
+minimum boundary definition is reported before encoding. The consumer does not
+guess and swallow those siblings.
+
+### 13.3 Reservation
+
+Reservation is exclusive before user code, a getter, a hook, a resource, or
+re-entry. Immediate reservation after validate is allowed only when that
+validate is plainly pure, native, static, and synchronous, with no callback.
+Only the token holder releases it. A failure that has not committed releases
+the token after cleanup finishes, and the same range may be retried. That retry
+is release evidence, not recovery evidence. Success records a tombstone apart
+from the active scope. Dispose does not erase the tombstone. A later claim of
+that same range, including a claim after dispose, is rejected. A rejected
+repeat claim does not clear another live range.
+
+Failure does not advance the success cursor. Success advances it. Dispose does
+not move it backward.
+
+### 13.4 Acceptance sub-table
+
+Label: `m07b-static-sibling-ranges`. Parent is one HTML `Element`. The catalog
+is a complete declaration of sibling ranges `0..N-1`. Nested ranges, `table`,
+`select`, `template`, SVG, and MathML are outside the slice. Author node
+identity is unchanged. Marker comments are inside the owned range.
+
+| Case | Pass condition |
+| --- | --- |
+| Two ranges, same static content | Independent expected ordinals adopt the pre-stored refs. Two owners. Zero subscriptions |
+| Missing end, crossed pairs, mismatched pair, nested marker, out of parent, static mismatch in a later range | Real traversal. Zero attribute, text, insert, and remove operations. Nodes remain |
+| Ordinal negative, non-decimal, leading zero, duplicate, gap, or above the safe integer | Rejected. No `parseInt` collision adopts another range |
+| Validate failure, then the fixture repairs the DOM and retries | The retry can succeed, which shows the token was released. The row is not recovery |
+| Second claim of a range already successfully claimed, including after dispose | Rejected. A sibling live range is not cleared. A third claim is still rejected |
+| Re-entry | Either a real re-entry race is rejected, or the no-callback constraint is the accurate precondition and is what the test locks |
+| Dispose | First `dispose(false)` then `dispose(true)` does not remove. That is the existing contract, not a new gate |
+
+### 13.5 Non-goals, with the later obligations kept
+
+Not in this slice: key alignment, dynamic seed, `property`, focus, selection,
+bounded recovery, a real SSR producer, subscription-multiset accounting, and
+any TSX-18 or TSX-30 sign-off. A static claim with zero subscriptions does not
+fill the duplicate-subscription row.
+
+The full M07 leaf chain and the M08 list chain stay obligations. This slice
+does not move them onto M08 alone. M08 is still where the same stateful list
+crosses SSR → claim → update → dispose. M07c remains an unapproved label.
+
+Encoding, when development opens it, is a new branch that names
+`146d838573d130e07bbe9b4eebe86efacb43fe9d` as its base, or a later #1745 head
+reported by full SHA. It does not move the QA head underneath an older commit.
+This docs change does not open that branch. CI on `146d838` was unfinished at
+the read above, so this plan does not call #1745 accepted.
+
+### 13.6 Not verified by the 18:05 read
+
+- No suite was run. QA's 763 / 25 / 93 figures were not reproduced.
+- No job log for `146d838` was downloaded. In-progress checks are not results.
+- The interface-snapshot failure QA reported is not restated as the result of
+  the newer head, and the newer lint SUCCESS is not restated as a snapshot
+  review.
+- The candidate file was not edited. No source, test, or other document was
+  edited.
