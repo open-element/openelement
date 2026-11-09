@@ -487,3 +487,19 @@ but it may not be deferred to Alpha17 with a callback or API name.
 - [Consumer migration matrix](./m01-consumer-migration-matrix.md)
 - [Execution plan](./alpha16-18-execution-plan.md)
 - ADR-0173, ADR-0174
+
+## Amendment (2026-11-09): Alpha16a additive candidate codes and the M14 seam
+
+Owner decision 2026-11-09 (compatibility note only; no ABI freeze, no release
+claim):
+
+- `RuntimeErrorCode.LEAF_CLAIM_UNAVAILABLE` (PR #1745, squash `0a97602c4`) and
+  `RuntimeErrorCode.STATIC_RANGE_MISMATCH` (PR #1747, squash `0df1621a5`) are
+  additive members of the existing exported const. Both are recorded in
+  `docs/release/public-interface-snapshot.json` per ADR-0137.
+- Published `renderFunctionPageAwaited` (PR #1748) is recorded by the ADR-0169
+  amendment (2026-11-09); `renderFunctionPage` keeps its synchronous string
+  contract.
+- These are candidate API for the internal Alpha16a chain. The cross-module ABI
+  freeze stays Alpha17 and still requires packed-consumer evidence; no version,
+  tag or publication is implied.

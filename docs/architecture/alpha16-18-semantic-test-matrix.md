@@ -1,7 +1,10 @@
 # Alpha16–18 semantic test matrix
 
-Date: 2026-11-03. Status: **PROPOSED / ALL ROWS NOT RUN**. Baseline:
-`4f1f2001b24909086f7e7efe9e5016d48d615c91`.
+Date: 2026-11-03. Status: **PROPOSED — results are recorded in the per-milestone
+annexes below; the grid cells are not filled**. Baseline:
+`4f1f2001b24909086f7e7efe9e5016d48d615c91`. Latest recorded annex: the M07
+static-claim slices (2026-11-09; Node DOM shim evidence for the M07b generator
+extension, no browser claim).
 
 Revision 2026-11-05: acceptance area 17 is redefined as **Class authoring
 migration coverage** — M10 partition evidence for the public API and browser
@@ -89,6 +92,18 @@ rollback, and it does not change the successful-claim input/focus obligation.
 M07b static sibling ranges are DOM contract fixtures for one private directory.
 They are not SSR success evidence and do not fill TSX-18 or TSX-30 either.
 Zero subscriptions on a static range are not a dynamic-subscription account.
+
+The M07b generator extension (PR #1749) adds no TSX-18/TSX-30 cell: its
+mount/claim directory DOM shape is proved against a Node DOM shim, not a
+browser, and a mount-only pure-static directory also emits marker comments that
+no claim consumes (recorded as a known consequence in the M07b note and as a
+follow-up obligation).
+
+**TSX-04 row status (recorded 2026-11-09).** M06b2b's same-key keyed content
+replacement is TSX-04-adjacent supporting evidence only; the TSX-04 `M`/`U`/`D`
+cells stay open, and the row is not counted toward the already-recorded M06 exit
+(M06's exit rests on its own rows and the S2 evidence). Filling the row and
+assigning its per-phase cells is M08-era evidence work.
 
 ## Acceptance coverage (taskbook §18)
 
