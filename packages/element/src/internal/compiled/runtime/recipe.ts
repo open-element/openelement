@@ -80,12 +80,31 @@ import { removeNodes } from './values.ts';
 /** One generated mount: build this instance's detached DOM, owned by `scope`. */
 export type MountFunction<P = unknown> = (scope: LifetimeScope, props: Readonly<P>) => Node[];
 
+/**
+ * One generated claim: adopt the existing children of `parent` in place.
+ *
+ * The function returns the adopted top-level nodes. It must not create
+ * replacement nodes for a matching structure, and a structural mismatch must
+ * throw before any subscription is registered. Absent on recipes whose shape
+ * is outside the M07a leaf slice; mount stays available either way.
+ */
+export type ClaimFunction<P = unknown> = (
+  scope: LifetimeScope,
+  props: Readonly<P>,
+  parent: Node,
+) => Node[];
+
 /** The options one generated recipe call site provides. */
 export interface RecipeOptions<P = unknown> {
   /** The owner the JSX value was created in (definition-site lineage anchor). */
   definitionOwner: LifetimeScope;
   /** The generated mount for one instance of the recipe. */
   mount: MountFunction<P>;
+  /**
+   * Optional generated claim for this recipe (M07a). Omitted recipes cannot
+   * be claimed; `claimRecipe` fails closed before allocating an owner.
+   */
+  claim?: ClaimFunction<P>;
   /**
    * Creates this insertion's props record; called exactly once per insertion,
    * at insertion time (never at recipe creation). Defaults to an empty record.
@@ -102,6 +121,8 @@ export interface RecipeOptions<P = unknown> {
 export interface Recipe<P = unknown> {
   readonly definitionOwner: LifetimeScope;
   readonly mount: MountFunction<P>;
+  /** Present only when this recipe was created with a generated claim. */
+  readonly claim?: ClaimFunction<P>;
   readonly createProps: () => P;
   readonly source: string;
 }
@@ -118,6 +139,7 @@ export function createRecipe<P = unknown>(options: RecipeOptions<P>): Recipe<P> 
     mount: options.mount,
     createProps: options.createProps ?? (() => ({}) as P),
     source: options.source ?? 'generated mount',
+    ...(options.claim === undefined ? {} : { claim: options.claim }),
   };
   return Object.freeze(recipe);
 }
@@ -208,6 +230,73 @@ export function insertRecipe<P>(
     throw error;
   }
 
+  recordProjection(nodes.length);
+  let disposed = false;
+  const projection: Projection<P> = {
+    region,
+    owner,
+    nodes,
+    props,
+    dispose(detachOwnedNodes = false): void {
+      if (disposed) return;
+      disposed = true;
+      recordProjectionDisposed();
+      owner.dispose(detachOwnedNodes);
+    },
+  };
+  return Object.freeze(projection);
+}
+
+/**
+ * Release subscriptions from a failed claim without removing the existing DOM.
+ * Range cleanups are not run: the adopted nodes were already in `parent`.
+ */
+function rollbackClaim(owner: LifetimeScope): void {
+  try {
+    owner.dispose(false);
+  } catch {
+    // The claim error is what surfaces; every non-range cleanup was still attempted.
+  }
+}
+
+/**
+ * Claim one recipe onto an existing parent: lineage check, one child owner,
+ * one props record, and the nodes the generated claim adopts in place.
+ *
+ * Unlike {@link insertRecipe}, this does not create or move DOM. A recipe
+ * without a claim function fails before any owner exists. A claim that throws
+ * disposes the child owner without detach, so a mismatch cannot leave a
+ * subscription behind and cannot delete the pre-existing nodes.
+ */
+export function claimRecipe<P>(
+  insertingOwner: LifetimeScope,
+  recipe: Recipe<P>,
+  parent: Node,
+): Projection<P> {
+  assertProjectionAllowed(recipe.definitionOwner, insertingOwner, recipe.source);
+  if (recipe.claim === undefined) {
+    throw new Error(`OEIR_LEAF_CLAIM_UNAVAILABLE: ${recipe.source} has no generated claim`);
+  }
+
+  const owner = insertingOwner.child();
+  recordOwnerCreated();
+  const region = nextRegionId++;
+  recordRegionAllocated();
+
+  let props!: P;
+  let nodes: Node[];
+  try {
+    props = recipe.createProps();
+    nodes = recipe.claim(owner, props, parent);
+  } catch (error) {
+    rollbackClaim(owner);
+    throw error;
+  }
+
+  // The nodes are already in `parent`. Register removal only after claim
+  // succeeds, so a throwing claim cannot delete them.
+  owner.addRangeCleanup(() => removeNodes(nodes));
+  recordRangeCleanup();
   recordProjection(nodes.length);
   let disposed = false;
   const projection: Projection<P> = {

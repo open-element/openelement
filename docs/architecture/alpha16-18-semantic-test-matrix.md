@@ -80,7 +80,9 @@ invented per row.
 **Claim acceptance chain.** Rows TSX-18 and TSX-30 are one chain, not separate
 checkboxes: marker/order encoding, key alignment, permitted seed state, bounded
 mismatch recovery and duplicate-subscription accounting. M07 owns the leaf proof;
-M08 owns the stateful SSR→claim proof.
+M08 owns the stateful SSR→claim proof. The M07a slice (authored-order structural
+adoption of a static leaf, mismatch before subscribe, one subscription set per
+successful claim) does not fill TSX-18 or TSX-30.
 
 ## Acceptance coverage (taskbook §18)
 
