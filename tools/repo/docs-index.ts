@@ -29,9 +29,34 @@
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { dirname, join, normalize, relative, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+
+/**
+ * Read a file, or `undefined` when it is missing or unreadable.
+ *
+ * Deliberately not `existsSync()` followed by a read: that check-then-use shape
+ * is a filesystem race (CodeQL js/file-system-race); the read itself is the
+ * authoritative existence test.
+ */
+function readTextIfExists(absolute: string): string | undefined {
+  try {
+    return readFileSync(absolute, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+/** List a directory, or `undefined` when it is missing or unreadable. */
+function listDirIfExists(absolute: string): string[] | undefined {
+  try {
+    return readdirSync(absolute);
+  } catch {
+    return undefined;
+  }
+}
 
 export const ARCH_DIR = 'docs/architecture';
 export const ARCH_INDEX_PATH = 'docs/architecture/README.md';
@@ -186,11 +211,11 @@ function loadDoc(
   violations: DocsIndexViolation[],
 ): DocMeta | undefined {
   const absolute = join(root, path);
-  if (!existsSync(absolute)) {
+  const text = readTextIfExists(absolute);
+  if (text === undefined) {
     report(violations, 'missing-document', path, 'document does not exist in the tree');
     return undefined;
   }
-  const text = readFileSync(absolute, 'utf8');
   const frontMatter = parseFrontMatter(text);
   if (frontMatter === undefined) {
     report(
@@ -266,11 +291,12 @@ function loadDoc(
 
 function loadDocs(root: string, violations: DocsIndexViolation[]): DocMeta[] {
   const dir = join(root, ARCH_DIR);
-  if (!existsSync(dir)) {
+  const listing = listDirIfExists(dir);
+  if (listing === undefined) {
     report(violations, 'missing-directory', ARCH_DIR, 'the architecture directory does not exist');
     return [];
   }
-  const files = readdirSync(dir)
+  const files = listing
     .filter((name) => name.endsWith('.md') && name !== 'README.md')
     .sort()
     .map((name) => `${ARCH_DIR}/${name}`);
@@ -345,7 +371,8 @@ function loadHistory(
   deps: DocsIndexDeps,
 ): HistoryFile | undefined {
   const absolute = join(root, HISTORY_PATH);
-  if (!existsSync(absolute)) {
+  const historyText = readTextIfExists(absolute);
+  if (historyText === undefined) {
     report(
       violations,
       'missing-history',
@@ -356,7 +383,7 @@ function loadHistory(
   }
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(absolute, 'utf8'));
+    raw = JSON.parse(historyText);
   } catch (error) {
     report(violations, 'invalid-history-json', HISTORY_PATH, `cannot parse JSON: ${String(error)}`);
     return undefined;
@@ -523,7 +550,7 @@ function loadHistory(
       );
     }
     seenPaths.add(path);
-    if (recoveryPath !== undefined) seenPaths.addRecovery(recoveryPath);
+    seenPaths.addRecovery(recoveryPath);
     entries.push({
       kind,
       path,
@@ -538,8 +565,9 @@ function loadHistory(
   }
 
   // Every file in the archive must be registered (tree -> register direction).
-  if (existsSync(join(root, LEGACY_ADR_DIR))) {
-    for (const name of readdirSync(join(root, LEGACY_ADR_DIR)).sort()) {
+  const archiveNames = listDirIfExists(join(root, LEGACY_ADR_DIR));
+  if (archiveNames !== undefined) {
+    for (const name of archiveNames.sort()) {
       if (!name.endsWith('.md')) continue;
       const path = `${LEGACY_ADR_DIR}/${name}`;
       if (!seenPaths.has(path)) {
@@ -724,9 +752,8 @@ export function renderLegacyRegister(history: HistoryFile, root = '.'): string {
 
 /** Human label for a successor path: its topic, else its H1, else the path. */
 function historySuccessorLabel(root: string, path: string): string {
-  const absolute = join(root, path);
-  if (!existsSync(absolute)) return path;
-  const text = readFileSync(absolute, 'utf8');
+  const text = readTextIfExists(join(root, path));
+  if (text === undefined) return path;
   const frontMatter = parseFrontMatter(text);
   if (frontMatter !== undefined) {
     const topic = frontMatter.data['topic'];
@@ -798,8 +825,13 @@ function existedAtBaseline(
 export function checkDocsLinks(root: string): DocsIndexViolation[] {
   const violations: DocsIndexViolation[] = [];
   const walk = (dir: string): void => {
-    if (!existsSync(dir)) return;
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
       const absolute = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (absolute.endsWith(LEGACY_DIR) || absolute.endsWith('node_modules')) continue;
@@ -808,7 +840,8 @@ export function checkDocsLinks(root: string): DocsIndexViolation[] {
       }
       if (!entry.name.endsWith('.md')) continue;
       const path = relative(root, absolute).split('\\').join('/');
-      const text = readFileSync(absolute, 'utf8');
+      const text = readTextIfExists(absolute);
+      if (text === undefined) continue;
       for (const match of text.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
         const target = match[1]!;
         if (
@@ -847,11 +880,11 @@ export function checkDocsIndex(root = '.', deps: DocsIndexDeps = {}): DocsIndexR
 
   const checkBlock = (path: string, name: string, body: string): void => {
     const absolute = join(root, path);
-    if (!existsSync(absolute)) {
+    const text = readTextIfExists(absolute);
+    if (text === undefined) {
       report(violations, 'missing-index-file', path, 'generated index file does not exist');
       return;
     }
-    const text = readFileSync(absolute, 'utf8');
     const updated = upsertBlock(text, name, body);
     if (updated === undefined) {
       report(
@@ -889,11 +922,11 @@ export function writeDocsIndex(root = '.', deps: DocsIndexDeps = {}): DocsIndexR
   ];
   for (const [path] of blocks) {
     const absolute = join(root, path);
-    if (!existsSync(absolute)) continue;
     const name = path === ARCH_INDEX_PATH ? ARCH_INDEX_BLOCK : LEGACY_BLOCK;
     const body =
       path === ARCH_INDEX_PATH ? reportResult.architectureIndex : reportResult.legacyRegister;
-    const text = readFileSync(absolute, 'utf8');
+    const text = readTextIfExists(absolute);
+    if (text === undefined) continue;
     const updated = upsertBlock(text, name, body);
     if (updated !== undefined && updated.changed) writeFileSync(absolute, updated.text);
   }
