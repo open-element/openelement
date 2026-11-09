@@ -814,6 +814,24 @@ const MISSING_CHILDREN_SOURCE = `function Frame(props) {
 function App(props) { return <Frame><b>x</b></Frame>; }
 `;
 
+// M06a unkeyed list (browser evidence deferred from M06a; the M06b2c generator
+// fix made entry-local item snapshots refresh on positional reuse).
+const UNKEYED_SOURCE = `import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li>{item}</li>)}</ul>;
+}
+`;
+
+// Same-key keyed replacement (TSX-04-adjacent): stable `key={item.id}` while the
+// rendered label changes — identity must survive and the text must re-render.
+const KEYED_SOURCE = `import { signal } from '@openelement/element';
+function Keyed(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li key={item.id}>{item.label}</li>)}</ul>;
+}
+`;
+
 interface S2bSnapshot {
   readonly html: string;
   readonly text: string;
@@ -1209,6 +1227,62 @@ async function runS2bScenario(
         return result;
       }
 
+      // 9. TSX-08: unkeyed list (positional identity only — no node-identity
+      // claim). Authored order on mount; insert/delete writes land in position
+      // order with re-rendered content (the M06b2c entry-local refresh fix), and
+      // the list disposes cleanly.
+      if (scenario === 'unkeyed-list') {
+        const items = runtime.signal([] as string[]);
+        const recipe = factories.createListRecipe!(scope, {
+          props: {},
+          bindings: { items },
+          propsChanged: runtime.signal(0),
+        });
+        const projection = runtime.insertRecipe(scope, recipe, host);
+        record();
+        items.value = ['a', 'b', 'c'];
+        record();
+        items.value = ['a', 'b', 'c', 'd'];
+        record();
+        items.value = ['b', 'd'];
+        record();
+        items.value = [];
+        record();
+        projection.dispose(true);
+        record();
+        return result;
+      }
+
+      // 10. TSX-04-adjacent: same-key keyed replacement. Stable `key={item.id}`
+      // while the label changes keeps the entry's DOM node identity and
+      // re-renders the item-local text (the same M06b2c refresh path).
+      if (scenario === 'keyed-replacement') {
+        const items = runtime.signal([] as Array<{ id: string; label: string }>);
+        const recipe = factories.createKeyedRecipe!(scope, {
+          props: {},
+          bindings: { items },
+          propsChanged: runtime.signal(0),
+        });
+        const projection = runtime.insertRecipe(scope, recipe, host);
+        record();
+        items.value = [
+          { id: 'a', label: 'A' },
+          { id: 'b', label: 'B' },
+        ];
+        record();
+        const before = [...host.querySelectorAll('li')];
+        items.value = [
+          { id: 'a', label: 'A2' },
+          { id: 'b', label: 'B' },
+        ];
+        record();
+        const after = [...host.querySelectorAll('li')];
+        result.identities.push(before[0] === after[0], before[1] === after[1]);
+        projection.dispose(true);
+        record();
+        return result;
+      }
+
       return result;
     },
     { scenario },
@@ -1512,6 +1586,75 @@ for (const engine of engines()) {
         lineageRejected: 0,
         disposed: 0,
       });
+    });
+
+    test('unkeyed list: positional identity, authored order, insert/delete content, clean disposal', async () => {
+      const result = await runS2bScenario(page, generatedModule(UNKEYED_SOURCE), 'unkeyed-list');
+      const liTexts = (index: number): string[] =>
+        result.steps[index]!.elements.filter((element) => element.tag === 'li').map(
+          (element) => element.text,
+        );
+      // Empty mount: one list root, one projection.
+      expect(result.steps[1]?.tags).toEqual(['ul']);
+      expect(result.steps[1]?.text).toBe('');
+      expect(result.probes[1]).toMatchObject({
+        projections: 1,
+        regions: 1,
+        owners: 1,
+        nodes: 1,
+        rangeCleanups: 1,
+        subscriptions: 1,
+        lineageAccepted: 1,
+        lineageRejected: 0,
+      });
+      // Authored order on mount.
+      expect(result.steps[2]?.tags).toEqual(['ul', 'li', 'li', 'li']);
+      expect(result.steps[2]?.text).toBe('abc');
+      expect(liTexts(2)).toEqual(['a', 'b', 'c']);
+      // Append one entry: positions 0-2 keep their content, 'd' lands last.
+      expect(result.steps[3]?.tags).toEqual(['ul', 'li', 'li', 'li', 'li']);
+      expect(liTexts(3)).toEqual(['a', 'b', 'c', 'd']);
+      // Delete + positional reindex: the surviving positions render the NEW
+      // items (M06b2c entry-local refresh). Unkeyed means positional identity,
+      // so DOM node identity is NOT claimed across this write.
+      expect(result.steps[4]?.tags).toEqual(['ul', 'li', 'li']);
+      expect(liTexts(4)).toEqual(['b', 'd']);
+      expect(result.probes[4]?.projections).toBe(1);
+      // Emptying the list keeps the anchor comment inside <ul>; detach dispose
+      // removes the whole region and closes the list subscription.
+      expect(result.steps[5]?.tags).toEqual(['ul']);
+      expect(result.steps[5]?.text).toBe('');
+      expect(result.steps[6]?.childCount).toBe(0);
+      expect(result.probes[6]).toMatchObject({ disposed: 1, unsubscribed: 1 });
+    });
+
+    test('keyed same-key replacement: node identity preserved, item content updated', async () => {
+      const result = await runS2bScenario(page, generatedModule(KEYED_SOURCE), 'keyed-replacement');
+      const liTexts = (index: number): string[] =>
+        result.steps[index]!.elements.filter((element) => element.tag === 'li').map(
+          (element) => element.text,
+        );
+      expect(result.steps[1]?.tags).toEqual(['ul']);
+      expect(result.probes[1]).toMatchObject({
+        projections: 1,
+        regions: 1,
+        owners: 1,
+        nodes: 1,
+        rangeCleanups: 1,
+        subscriptions: 1,
+        lineageAccepted: 1,
+      });
+      // Initial keyed entries: one entry per key, authored order.
+      expect(liTexts(2)).toEqual(['A', 'B']);
+      // Same keys, first label changed: the keyed reuse keeps both <li> nodes
+      // and the entry local text refresh re-renders 'B' -> 'A2'.
+      expect(result.identities).toEqual([true, true]);
+      expect(liTexts(3)).toEqual(['A2', 'B']);
+      // No entry was recreated: still exactly the root projection.
+      expect(result.probes[3]?.projections).toBe(1);
+      // Clean detach disposal of the list region.
+      expect(result.steps[4]?.childCount).toBe(0);
+      expect(result.probes[4]).toMatchObject({ disposed: 1, unsubscribed: 1 });
     });
   });
 }
