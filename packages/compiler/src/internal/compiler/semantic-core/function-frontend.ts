@@ -192,6 +192,13 @@ export interface FunctionModelResource {
   readonly kind: 'signal' | 'computed' | 'local';
   /** Lowered initializer/derivation; absent when the declared form has none. */
   readonly expression: FunctionExpressionRef | null;
+  /**
+   * The reusable JSX value this declaration created (M06b1a-2): non-null only
+   * for an identifier bound to a direct JSX initializer, where `expression` is
+   * null. The generator emits one recipe per declaration and every `{name}`
+   * slot refers to it by this id; it never re-derives the link from spans.
+   */
+  readonly recipeId: string | null;
   readonly span: SourceSpan;
 }
 
@@ -337,6 +344,15 @@ class FunctionFrontendBuilder {
   private readonly registry: ExpressionRegistry;
   private readonly diagnostics: CompilerDiagnostic[] = [];
   private readonly recipeIds = new Map<ts.Node, string>();
+  /**
+   * Component-scope identifier → recipe id for a direct JSX initializer
+   * (M06b1a-2): the one place a `{name}` slot is known to be an insertion site
+   * rather than a dynamic text read. Reset per component so a name can never
+   * leak a recipe across components.
+   */
+  private localRecipeNames = new Map<string, string>();
+  /** List-mapper parameters enclosing the slot being built (shadowing guard). */
+  private readonly entryParameters: string[] = [];
   private recipeCounter = 0;
 
   constructor(sourceFile: ts.SourceFile, resolved: ResolvedModule) {
@@ -404,6 +420,7 @@ class FunctionFrontendBuilder {
   // ── component / body ───────────────────────────────────────────────────
 
   buildComponent(candidate: ComponentCandidate): FunctionModelComponent | null {
+    this.localRecipeNames = new Map();
     const node = candidate.node;
     const parameters = node.parameters;
     if (parameters.length > 1) {
@@ -509,18 +526,35 @@ class FunctionFrontendBuilder {
     }
     const value = unwrap(initializer);
     if (ts.isJsxElement(value) || ts.isJsxSelfClosingElement(value)) {
-      this.ensureRecipeId(value);
-      return { name, kind: 'local', expression: null, span: spanOf(this.sourceFile, declaration) };
+      // A direct JSX initializer is a reusable JSX value (M06b1a-2): one recipe
+      // is created here and every `{name}` slot becomes its insertion site. The
+      // recipe id is model metadata; the generator never re-derives the link.
+      const recipeId = this.ensureRecipeId(value);
+      if (recipeId === undefined) return null;
+      this.localRecipeNames.set(name, recipeId);
+      return {
+        name,
+        kind: 'local',
+        expression: null,
+        recipeId,
+        span: spanOf(this.sourceFile, declaration),
+      };
     }
     const binding = this.resolved.resolveIdentifier(declaration.name);
     const kind = binding?.value;
     if (ts.isCallExpression(value) && (kind === 'signal' || kind === 'computed')) {
       const argument = value.arguments[0] ?? value;
       const expression = this.expression(argument, kind === 'computed' ? 'derived' : 'setup');
-      return { name, kind, expression, span: spanOf(this.sourceFile, declaration) };
+      return { name, kind, expression, recipeId: null, span: spanOf(this.sourceFile, declaration) };
     }
     const expression = this.expression(value, 'setup');
-    return { name, kind: 'local', expression, span: spanOf(this.sourceFile, declaration) };
+    return {
+      name,
+      kind: 'local',
+      expression,
+      recipeId: null,
+      span: spanOf(this.sourceFile, declaration),
+    };
   }
 
   // ── JSX / node tree ────────────────────────────────────────────────────
@@ -600,7 +634,13 @@ class FunctionFrontendBuilder {
       return { kind: 'children-projection', span: spanOf(this.sourceFile, value) };
     }
     if (ts.isIdentifier(value)) {
-      const recipeId = this.recipeIds.get(value);
+      // A component-scope local bound to a direct JSX initializer is a reusable
+      // JSX value: every `{name}` slot is an insertion site for its recipe
+      // (M06b1a-2). An enclosing list-mapper parameter with the same name
+      // shadows the component local inside its template.
+      const recipeId = this.entryParameters.includes(value.text)
+        ? undefined
+        : this.localRecipeNames.get(value.text);
       if (recipeId !== undefined) {
         return { kind: 'insertion-site', recipeId, span: spanOf(this.sourceFile, value) };
       }
@@ -652,7 +692,12 @@ class FunctionFrontendBuilder {
     if (items === null) return null;
     const previousMode = this.entryMode;
     this.entryMode = 'per-entry';
+    // The mapper parameter shadows any component-scope recipe name while its
+    // template is built (M06b1a-2): `items.map((x) => <p>{x}</p>)` reads the
+    // entry, never the reusable JSX value `x` from the component scope.
+    this.entryParameters.push(parameter.name.text);
     const template = this.buildBranch(callback.body);
+    this.entryParameters.pop();
     this.entryMode = previousMode;
     const first = template[0];
     let key: FunctionExpressionRef | null = null;

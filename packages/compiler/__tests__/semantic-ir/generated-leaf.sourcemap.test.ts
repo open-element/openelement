@@ -311,11 +311,15 @@ describe('M05b — end-to-end generated-module source map', () => {
   });
 
   test('recipe-ref replacement positions are not emitted by the leaf generator (named boundary)', () => {
-    // Nested recipes/insertion sites remain a fail-closed M05a shape (M06/M07
-    // own them), so the module map cannot contain their positions yet. The
-    // anchors-not-ranges property for replacement is asserted at expression
-    // level by m03-sourcemap-parity.test.ts (A4b). No silent drop: the
-    // generator refuses and produces no map.
+    // M06b1a-2 supersession: the M05b "nested recipe" named boundary is
+    // superseded for DIRECT component-local JSX initializers — a `const x =
+    // <div/>` is now a reusable recipe and every `{x}` slot is an admitted
+    // insertion site whose positions ARE in the module map (see the M06b1a-2
+    // test below). This named boundary now covers only a JSX value lowered
+    // inside an ARBITRARY expression: it keeps the M02 `__oe_recipe_ref`
+    // placeholder, has no generated recipe definition and still fails closed
+    // with no map. The anchors-not-ranges property for replacement remains
+    // asserted at expression level by m03-sourcemap-parity.test.ts (A4b).
     const front = compileFunctionModule(
       'function C(props) { return <main title={props.ok ? <b>a</b> : <i>b</i>}></main>; }\n',
       FILE,
@@ -328,6 +332,60 @@ describe('M05b — end-to-end generated-module source map', () => {
     expect(generated.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
       'OEIR_LEAF_UNSUPPORTED_RECIPE',
     );
+  });
+
+  test('M06b1a-2 insertion-site anchors and recipe-body expressions decode in the module map', () => {
+    const source = `import { signal } from '@openelement/element';
+function Chip(props) {
+  const tone = signal('blue');
+  const chip = <i title={tone.value}>{tone.value}</i>;
+  return <div>{chip}<span>{chip}</span></div>;
+}
+`;
+    const compiled = compile(source);
+    expect(compiled.module).toContain('createRecipe({');
+    expect(compiled.module).toContain('insertRecipe(');
+    const lines = compiled.module.split('\n');
+    // The recipe body is emitted inline in the component chunk (the per-chunk
+    // line rebase is unchanged), so its expressions keep A2 segments.
+    const recipeBodyLine = lines.findIndex((line) => line.includes('mount(__oe_recipeScope'));
+    expect(recipeBodyLine).toBeGreaterThanOrEqual(0);
+    const map = consumer(compiled.map);
+    // Every insertion site carries a placement anchor at the authored `{chip}`
+    // identifier: decode each generated line start to its authored slot.
+    const authoredSlots = [...source.matchAll(/\{chip\}/g)].map((match) =>
+      positionAt(source, (match.index ?? 0) + 1),
+    );
+    expect(authoredSlots).toHaveLength(2);
+    const insertionLines = lines
+      .map((line, index) => ({ line, index }))
+      .filter((entry) => entry.line.includes('insertRecipe('));
+    expect(insertionLines).toHaveLength(2);
+    insertionLines.forEach((entry, site) => {
+      const decoded = originalPositionFor(map, { line: entry.index + 1, column: 0 });
+      expect(decoded.source).toBe(FILE);
+      expect(decoded.line).toBe(authoredSlots[site]!.line);
+      expect(decoded.column).toBe(authoredSlots[site]!.column);
+    });
+    // Both `tone.value` reads live inside the reusable value: every placement
+    // is below the recipe mount header and decodes to its authored start.
+    expect(compiled.placements.length).toBeGreaterThanOrEqual(2);
+    for (const placement of compiled.placements) {
+      expect(placement.generatedLine, placement.exprId).toBeGreaterThan(recipeBodyLine + 1);
+      const record = compiled.records.get(placement.exprId)!;
+      const decoded = originalPositionFor(map, {
+        line: placement.generatedLine,
+        column: placement.generatedColumn,
+      });
+      expect(decoded.line, placement.exprId).toBe(placement.authoredLine);
+      expect(decoded.column, placement.exprId).toBe(placement.authoredColumn);
+      for (const segment of record.segments) {
+        const segDecoded = originalPositionFor(map, composedPosition(placement, segment));
+        expect(segDecoded.line).toBe(segment.sourceLine);
+        expect(segDecoded.column).toBe(segment.sourceColumn);
+      }
+    }
+    expect(JSON.stringify(compile(source).map)).toBe(JSON.stringify(compiled.map));
   });
 
   test('M06 condition shapes are covered: placements decode and the map is deterministic', () => {

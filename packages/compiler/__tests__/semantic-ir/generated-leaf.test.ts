@@ -342,6 +342,238 @@ function List(props) {
   });
 });
 
+describe('M06b1a-2 — reusable JSX values: one recipe per value, one projection per site', () => {
+  const RECIPE_TREE = `import { signal } from '@openelement/element';
+function Chip(props) {
+  const tone = signal('blue');
+  const chip = <i class="chip" title={tone.value}>{tone.value}</i>;
+  return <div><b>a</b>{chip}<span>{chip}</span></div>;
+}
+`;
+
+  test('the model links a direct JSX initializer to its recipe and `{name}` slots to sites', () => {
+    const front = compileFunctionModule(RECIPE_TREE, FILE, {
+      importClassifier: CLASSIFIER,
+    });
+    expect(front.diagnostics).toEqual([]);
+    const component = front.module!.components[0]!;
+    const chip = component.resources.find((resource) => resource.name === 'chip')!;
+    expect(chip.kind).toBe('local');
+    expect(chip.expression).toBeNull();
+    expect(chip.recipeId).toBe('#recipe0');
+    // A non-JSX declaration carries no recipe link.
+    expect(component.resources.find((resource) => resource.name === 'tone')!.recipeId).toBeNull();
+    expect(component.recipes.map((recipe) => recipe.id)).toEqual(['#recipe0']);
+    const sites: string[] = [];
+    const walk = (nodes: readonly ReturnType<typeof component.roots>[number][]): void => {
+      for (const node of nodes) {
+        if (node.kind === 'insertion-site') sites.push(node.recipeId);
+        else if (node.kind === 'element' || node.kind === 'fragment') walk(node.children);
+      }
+    };
+    walk(component.roots);
+    expect(sites).toEqual(['#recipe0', '#recipe0']);
+  });
+
+  test('one createRecipe per referenced value and one insertRecipe per insertion site', () => {
+    const result = generate(RECIPE_TREE);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // One recipe + the pinned root factory both call createRecipe.
+    expect(module.match(/createRecipe\(/g)?.length).toBe(2);
+    expect(module).toContain('definitionOwner: __oe_scope,');
+    expect(module).toContain(`source: ${JSON.stringify(`${FILE}#Chip:recipe0`)},`);
+    // Two `{chip}` slots: two projections of the SAME recipe variable.
+    expect(module.match(/insertRecipe\(/g)?.length).toBe(2);
+    expect(module.match(/insertRecipe\(__oe_scope, __oe_recipe0, /g)?.length).toBe(2);
+    expect(module.match(/document\.createDocumentFragment\(\)/g)?.length).toBe(2);
+    // Each projection's nodes are spread into the enclosing element (two
+    // distinct projection handles, never a shared/moved region).
+    const projections = [...module.matchAll(/const (__oe_projection\d+) = insertRecipe\(/g)].map(
+      (match) => match[1],
+    );
+    expect(projections).toHaveLength(2);
+    expect(new Set(projections).size).toBe(2);
+    expect(
+      module.match(/for \(const __oe_child of __oe_projection\d+\.nodes\) __oe_el\d+\.appendChild/g)
+        ?.length,
+    ).toBe(2);
+  });
+
+  test('recipe bodies stay inline in the component chunk and bind refresh on the recipe scope', () => {
+    const module = generate(RECIPE_TREE).module!;
+    expect(module.match(/mount\(__oe_recipeScope\d+\) \{/g)?.length).toBe(1);
+    expect(module).toContain('const __oe_recipeNodes');
+    expect(module).toContain('return __oe_recipeNodes');
+    // The dynamic text inside the recipe target subscribes on the recipe
+    // instance scope, not on the component mount scope.
+    // Both the recipe attribute and its text child read `tone`, each with its
+    // own refresh closure bound on the recipe instance scope.
+    expect(module.match(/bindSignalWrites\(__oe_recipeScope\d+, tone, "tone"/g)?.length).toBe(2);
+  });
+
+  test('mixed intrinsic/insertion siblings keep authored order in the sink', () => {
+    const module = generate(`import { signal } from '@openelement/element';
+function C(props) {
+  const chip = <i>c</i>;
+  return <div><b>b</b>{chip}<u>u</u></div>;
+}
+`).module!;
+    const before = module.indexOf('document.createElement("b")');
+    const insertion = module.indexOf('insertRecipe(');
+    const after = module.indexOf('document.createElement("u")');
+    expect(before).toBeGreaterThanOrEqual(0);
+    expect(insertion).toBeGreaterThan(before);
+    expect(after).toBeGreaterThan(insertion);
+  });
+
+  test('a recipe target may be a component reference (M06b1a-1 prop rules apply)', () => {
+    const result = generate(`function Row(props) { return <li>{props.text}</li>; }
+function C(props) { const row = <Row text={props.label} />; return <ul>{row}{row}</ul>; }
+`);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // The recipe body calls the child mount on a fresh child scope of the
+    // recipe scope (the recipe instance owns the child instance).
+    expect(module.match(/mount\(__oe_recipeScope\d+\) \{/g)?.length).toBe(1);
+    expect(
+      module.match(/const __oe_childScope\d+ = __oe_recipeScope\d+\.child\(\);/g)?.length,
+    ).toBe(1);
+    expect(
+      module.match(
+        /__oe_childNodes\d+ = Row__mount\(__oe_childScope\d+, __oe_childProps\d+, __oe_childHost\d+\)/g,
+      )?.length,
+    ).toBe(1);
+    // Props stay per-read getters over the DEFINING mount scope, never cached.
+    expect(module).toContain('get text() { return (props . label); },');
+    // The child refresh channel is the defining-scope dependency set supplied by
+    // the defining component's mount host.
+    expect(module).toContain('propDeps: [...__oe_host.propDeps]');
+    expect(result.requiredProps).toEqual(['props']);
+    expect(result.requiresPropsChanged).toBe(true);
+    expect(module.match(/insertRecipe\(__oe_scope, __oe_recipe0, /g)?.length).toBe(2);
+  });
+
+  test('insertion sites in condition branches and list entries use their live descendant scope', () => {
+    const result = generate(`import { signal } from '@openelement/element';
+function C(props) {
+  const chip = <b>a</b>;
+  const items = signal([1]);
+  return <div>{props.ok ? <p>{chip}</p> : <i>{chip}</i>}<ul>{items.value.map((it) => <li>{chip}</li>)}</ul></div>;
+}
+`);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // One recipe, three projections, each on the owner of its generated builder
+    // (a live descendant of the definition owner, so M04 lineage admits it).
+    expect(module.match(/createRecipe\(/g)?.length).toBe(2);
+    expect(module.match(/insertRecipe\(/g)?.length).toBe(3);
+    expect(module).toMatch(/insertRecipe\(__oe_whenThenScope\d+, __oe_recipe0, /);
+    expect(module).toMatch(/insertRecipe\(__oe_whenElseScope\d+, __oe_recipe0, /);
+    expect(module).toMatch(/insertRecipe\(__oe_eachScope\d+, __oe_recipe0, /);
+  });
+
+  test('a declaration no insertion site reaches emits no recipe', () => {
+    const result = generate(
+      'function C(props) { const unused = <i>u</i>; return <p>plain</p>; }\n',
+    );
+    expect(result.module).not.toBeNull();
+    // Only the root factory's createRecipe: the reusable value is never inserted.
+    expect(result.module!.match(/createRecipe\(/g)?.length).toBe(1);
+    // `insertRecipe` is imported unconditionally; no site may CALL it.
+    expect(result.module).not.toMatch(/insertRecipe\(/);
+  });
+
+  test('a list mapper parameter shadows a same-named component recipe', () => {
+    const result = generate(`import { signal } from '@openelement/element';
+function C(props) {
+  const x = <b>recipe</b>;
+  const items = signal([]);
+  return <div><ul>{items.value.map((x) => <li>{x}</li>)}</ul></div>;
+}
+`);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // The `{x}` slot reads the ENTRY, never the component-scope reusable value.
+    expect(module).toContain('displayValue((x))');
+    expect(module).not.toMatch(/insertRecipe\(/);
+    expect(module.match(/createRecipe\(/g)?.length).toBe(1);
+  });
+
+  test('generated recipe modules are deterministic and parse as JavaScript', () => {
+    const first = generate(RECIPE_TREE).module!;
+    expect(generate(RECIPE_TREE).module).toBe(first);
+    const source = ts.createSourceFile(
+      'leaf.js',
+      first,
+      ts.ScriptTarget.ES2022,
+      true,
+      ts.ScriptKind.JS,
+    );
+    const parseDiagnostics =
+      (source as unknown as { parseDiagnostics?: readonly unknown[] }).parseDiagnostics ?? [];
+    expect(parseDiagnostics).toHaveLength(0);
+  });
+
+  test('JSX inside a non-initializer expression still fails closed (superseded whole-component refusal)', () => {
+    // The M06b1a-1 whole-component `OEIR_LEAF_UNSUPPORTED_RECIPE` refusal is
+    // superseded by the admitted path above; the code now pins only the
+    // non-direct-initializer boundary: the lowered text still carries the M02
+    // `__oe_recipe_ref` placeholder and no recipe is defined for it.
+    const result = generate(
+      'function C(props) { return <main title={props.ok ? <b>a</b> : <i>b</i>}></main>; }\n',
+    );
+    expect(result.module).toBeNull();
+    expect(codes(result)).toEqual(['OEIR_LEAF_UNSUPPORTED_RECIPE']);
+    expect(result.diagnostics[0]!.message).toContain('recipe reference');
+  });
+
+  test('a reusable JSX value read as an expression value fails closed', () => {
+    const result = generate(
+      'function C(props) { const x = <b>a</b>; return <p>{x && <i>y</i>}</p>; }\n',
+    );
+    expect(result.module).toBeNull();
+    expect(codes(result)).toEqual(['OEIR_LEAF_UNSUPPORTED_RECIPE']);
+    expect(result.diagnostics[0]!.message).toContain('projected with {x}');
+  });
+
+  test('children projection inside a recipe target fails closed', () => {
+    const result = generate(
+      'function C(props) { const x = <div>{props.children}</div>; return <p>{x}</p>; }\n',
+    );
+    expect(result.module).toBeNull();
+    expect(codes(result)).toEqual(['OEIR_LEAF_UNSUPPORTED_NODE']);
+    expect(result.diagnostics[0]!.message).toContain('children projection');
+  });
+
+  test('a recipe cycle is refused with its path and a coded diagnostic', () => {
+    const self = generate('function C(props) { const x = <div>{x}</div>; return <p>{x}</p>; }\n');
+    expect(self.module).toBeNull();
+    expect(codes(self)).toEqual(['OEIR_LEAF_RECIPE_CYCLE']);
+    expect(self.diagnostics[0]!.message).toContain(
+      'recipe insertion cycle: C#recipe0 -> C#recipe0',
+    );
+    // A component reached through a recipe target closes the same cycle.
+    const throughComponent = generate(
+      'function A(props) { const x = <A />; return <div>{x}</div>; }\n',
+    );
+    expect(throughComponent.module).toBeNull();
+    expect(codes(throughComponent)).toEqual(['OEIR_LEAF_RECIPE_CYCLE']);
+    expect(throughComponent.diagnostics[0]!.message).toContain(
+      'recipe insertion cycle: A -> A#recipe0 -> A',
+    );
+    // Mutually inserted recipes are still one cycle path.
+    const mutual = generate(
+      'function C(props) { const a = <div>{b}</div>; const b = <span>{a}</span>; return <p>{a}</p>; }\n',
+    );
+    expect(mutual.module).toBeNull();
+    expect(codes(mutual)).toEqual(['OEIR_LEAF_RECIPE_CYCLE']);
+    expect(mutual.diagnostics[0]!.message).toContain(
+      'recipe insertion cycle: C#recipe0 -> C#recipe1 -> C#recipe0',
+    );
+  });
+});
+
 describe('M05 leaf v2 — fail-closed boundary (M05b/M06 shapes refused)', () => {
   const REFUSED: ReadonlyArray<{
     label: string;
@@ -410,6 +642,12 @@ describe('M05 leaf v2 — fail-closed boundary (M05b/M06 shapes refused)', () =>
       code: 'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
     },
     {
+      // M06b1a-2 supersedes the whole-component `OEIR_LEAF_UNSUPPORTED_RECIPE`
+      // refusal: a DIRECT component-local `const x = <div/>` is now a reusable
+      // recipe and every `{x}` slot an insertion site (see the M06b1a-2 suite
+      // below). The code is retained for a JSX value lowered inside an
+      // arbitrary expression, which keeps the M02 `__oe_recipe_ref` placeholder
+      // and has no generated recipe definition.
       label: 'nested recipe (JSX in expression)',
       source:
         'function C(props) { return <main title={props.ok ? <b>a</b> : <i>b</i>}></main>; }\n',
