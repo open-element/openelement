@@ -260,9 +260,9 @@ interface EmitState {
   recipeDepth: number;
   /**
    * The component mount's one `__oe_props.children` read (M06b2a), or `null` when
-   * the component projects no children. Declared before the reusable recipes so
-   * a projection inside a recipe body could close over it; every projection site
-   * inserts through this one recipe value.
+   * the component projects no children. Emitted before the roots so the nested
+   * branch/entry builders emitted inside the mount close over one value; every
+   * projection site inserts through this same recipe.
    */
   childrenRecipeVar: string | null;
 }
@@ -2031,7 +2031,10 @@ function collectMountEdges(
         collectMountEdges(component, node.template, edges);
         break;
       default:
-        // text / dynamic-text / children-projection carry no mount edges.
+        // text / dynamic-text carry no mount edges. A children projection is
+        // also not an edge here: the child mount does not know statically which
+        // reference site supplied its recipe, so `findMountCycle` adds that
+        // (conservative) projection edge separately (M06b2a).
         break;
     }
   }
