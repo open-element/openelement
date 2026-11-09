@@ -1318,7 +1318,7 @@
           ]
         },
         "./server-runtime": {
-          "publicShapeSha256": "ec87a3675405402869ad8677f1cdc745f168df645a91f800a54919c2af310083",
+          "publicShapeSha256": "2865556d57605c62d2598aaa871fbf75c6de1224ba3f671ce1b4765ad2c81979",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "ActionExecution=type:{actionResult?:union(undefined|{data:unknown;kind:\"failure\";status:number}|{data:unknown;kind:\"success\"});response?:union(Response|undefined)}",
@@ -1395,6 +1395,7 @@
             "mergeChannelHeaders=value:{call:(response:Response,channel:Headers)=>Response}",
             "pageDefinition=value:{call:(routeModule:unknown)=>{index:string=>unknown}}",
             "renderFunctionPage=value:{call:(page:unknown,props:{index:string=>unknown})=>string}",
+            "renderFunctionPageAwaited=value:{call:(page:unknown,props:{index:string=>unknown})=>Promise<string>}",
             "resolveCompiledPageTag=value:{call:(routeModule:unknown,fallbackTag:string)=>string}",
             "routeMeta=value:{call:(routeModule:unknown)=>Record<string, unknown>}",
             "runActionProtocol=value:{call:(context:{body:{call:(data:union(ArrayBuffer|ArrayBufferView<ArrayBuffer>|Blob|FormData|ReadableStream<any>|URLSearchParams|null|string),status:union(number|undefined),headers:union(Record<string, string>|undefined))=>Response};executionCtx:unknown;get:{call:(key:string)=>unknown};header:{call:(name:string,value:string,options:union(undefined|{append?:union(false|true|undefined)}))=>void};html:{call:(html:string,status:union(number|undefined),headers:union(Record<string, string>|undefined))=>Response};json:{call:(object:unknown,status:union(number|undefined),headers:union(Record<string, string>|undefined))=>Response};readonly env:Record<string, unknown>;readonly headers:Headers;readonly req:{header:{call:(name:string)=>union(string|undefined)};param:{call:()=>Record<string, string>};raw:Request;readonly path:string;readonly url:string};redirect:{call:(location:string,status:union(number|undefined))=>Response};set:{call:(key:string,value:unknown)=>void};text:{call:(text:string,status:union(number|undefined),headers:union(Record<string, string>|undefined))=>Response}},routeModule:unknown,loadContext:intersection(Record<string, unknown>&{env?:unknown}),renderStatusPage:{call:(title:string,message:string,status:number)=>Response},state:{isFetch:union(false|true)})=>Promise<ActionExecution>}",

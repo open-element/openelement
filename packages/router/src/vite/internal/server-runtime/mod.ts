@@ -73,6 +73,7 @@ export {
   localeFromPath,
   pageDefinition,
   renderFunctionPage,
+  renderFunctionPageAwaited,
   routeMeta,
 } from './page-render.ts';
 export type {

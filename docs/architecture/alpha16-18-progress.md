@@ -112,7 +112,7 @@ record and the owner signs it off before the §4 row flips (owner decision D2,
 | M11 | I | Not started | — | Alpha16b: Router integration for the generated path. |
 | M12 | Q | Not started | — | Alpha16b: final packed-consumer qualification of the stateful list. |
 | M13 | Q | Not started | — | Alpha16b: three-engine browser + server qualification at an exact SHA. The three engines belong here, not to G1. |
-| M14 | I | Not started | — | Alpha16b: async server components, full-await. |
+| M14 | I | In progress (bounded server-function full-await slice on the Alpha15 lane; M14 exit not met) | PR #1748 (squash SHA pinned by the next housekeeping commit) | Alpha16b: async server components, full-await. **Bounded slice**: async server function components are admitted only as a single JSX return with `await` in text children and in nested server-component props; generated normal/error/404/SSG entries await the new published `renderFunctionPageAwaited` seam; the synchronous `renderFunctionPage` string contract is unchanged; attribute/condition/list-item/arbitrary-expression await and a sync parent of an async child stay refused with `OEC9032`; the production admission bridge refuses the near-miss shapes (statements before the return, block-bodied arrow). LOCAL evidence: compiler focused 203 tests, router 121 tests, element focused 64 (Node v24.18.0); PR-head CI green. NOT claimed: full M14, M13 three-engine qualification, the M08 generated-leaf SSR producer, streaming/defer (Alpha18), any release claim. |
 
 ## 4. Gate records (G1/G2) and the Alpha16a exit check
 
@@ -137,10 +137,10 @@ record and the owner signs it off before the §4 row flips (owner decision D2,
 exit is still not achieved.** M07a (static-leaf structural claim) and M07b
 (private static sibling-range directory) are in progress and do not complete
 M07. M08 (the same stateful list across SSR → claim → update → dispose) has not
-started. No row in this ledger may be read as
-Alpha16a completion, a version, a tag, a publication or a release claim.
-Alpha16b (M09–M14) has not started; the remaining M07 claim chain, then M08,
-is still the planned spine.
+started. No row in this ledger may be read as Alpha16a completion, a version, a
+tag, a publication or a release claim. Alpha16b (M09–M14) has not started except
+the bounded M14 slice in progress (PR #1748, not the M14 exit); the remaining
+M07 claim chain, then M08, is still the planned spine.
 
 ### 4.1 Gate records (G1/G2) — signed off by the owner 2026-11-09
 

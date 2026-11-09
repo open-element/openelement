@@ -1,6 +1,6 @@
 # ADR-0169: The request-time rendering surface — server function pages and the `./server` constructor helpers
 
-- Status: ACCEPTED (implemented: `packages/compiler/src/internal/compiler/semantic-core/server-component.ts`,
+- Status: ACCEPTED; AMENDED 2026-11-09 (bounded full-await server-function seam; see the amendment at the end) (implemented: `packages/compiler/src/internal/compiler/semantic-core/server-component.ts`,
   `packages/element/src/server.ts` (`@openelement/element/server`),
   `packages/router/src/authoring.ts` (`kind: 'function-page'`))
 - Decided: 2026-10-18 (alpha15 server lane; record written in the alpha15
@@ -242,3 +242,74 @@ this repository asks of a new surface (P5 deletability, P8 single writer):
 - `tests/fixtures/router-request-time` — the request-time fixture's own gate
   (typecheck + build + three-engine e2e), run by `@openelement/fixture-router-request-time#gate`
   in `gate:source` and in the `e2e-full` CI layer.
+
+## Amendment (2026-11-09): full-await server function pages (bounded)
+
+Status: ACCEPTED, bounded implementation in `packages/router` + the compiler
+server-component lane. This amendment does not change the Alpha15 synchronous
+contract and does not complete M14.
+
+### Context
+
+ADR-0169 decided the synchronous server function page: the module's exported
+function component renders to a string and `renderFunctionPage(page, props)`
+returns that string. The compiler rejects `async` components with `OEC9032`.
+
+Alpha16b's M14 requires async server components with **full-await** semantics:
+the component awaits its data, then returns its JSX; HTML is produced only
+after every await settles. The execution plan (§3) makes M14 parallelisable
+with M05–M11 and explicitly non-gating for Alpha16a.
+
+The first bounded slice (`#1748`) implements the seam on the **Alpha15 server
+lane**, not on the M08 generated-leaf chain.
+
+### Decision
+
+1. **A new published seam is added**: `renderFunctionPageAwaited(page, props):
+   Promise<string>` on `@openelement/router/server-runtime`. Generated normal,
+   error, 404 and SSG function-page entries await it. The sync
+   `renderFunctionPage` keeps its existing `(page, props) => string` contract,
+   including `String(thenable)` with no observation, so existing callers do not
+   change.
+2. **Bounded grammar.** An async server function component is admitted only
+   when it is a single JSX return, with `await` permitted in text children and
+   in nested server-component props. Attribute await, condition await,
+   list-item await, arbitrary-expression await, and a synchronous parent of an
+   async child stay refused with `OEC9032`. Statements before the return and
+   block-bodied arrows are admitted as near-misses and refused at the
+   production admission bridge with the same code (they must not fall through
+   as runtime JSX).
+3. **No new sink.** Awaited text goes through the existing escaped `__t`
+   channel; attributes/URL/raw-HTML admission is unchanged.
+4. **The server-only graph guard is unchanged**: server-only imports still do
+   not reach a client graph, and unmigrated async work must not add a second
+   path.
+5. **Bounded, not M14 exit.** This amendment records a bounded slice. M14's
+   exit ("awaited output, server-only graph guard intact" for the full M14
+   surface) stays open; the M07/M08 claim chain is not replaced by this seam.
+   Bounded defer, streaming, cancellation and request-scoped ownership remain
+   Alpha18 (ADR-0158/ADR-0174 boundary).
+
+### Consequences
+
+- The published surface grows by one additive function; the interface snapshot
+  records it (ADR-0137). No version bump, tag, publication or ABI freeze is
+  implied.
+- The synchronous seam's rejection of unbounded async shapes is a compile-time
+  diagnostic, not a runtime fallback; a user cannot get silent sync rendering
+  of an async component.
+- The Alpha15 lane and the future M08 generated-leaf server backend stay
+  separate until M08 decides the shared SSR producer; this slice does not
+  pre-empt that decision.
+
+### Evidence
+
+- `packages/router/__tests__/function-page.test.ts` — the awaited seam, the
+  preserved sync contract, and the generated-entry wiring.
+- `packages/compiler/__tests__/server-component-full-await.test.ts` — bounded
+  grammar admission, sync-parent refusal, await-position refusals, and the two
+  production admission near-misses.
+- `packages/compiler/src/internal/compiler/semantic-core/{server-component,
+  lower-program}.ts` — admission and lowering.
+- `packages/router/src/vite/internal/server-runtime/page-render.ts` — the shared
+  render-function / reserved-`children` checks behind both seams.
