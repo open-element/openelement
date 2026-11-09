@@ -113,7 +113,8 @@ export {
  * Re-exported here — an internal module, never a package export — so the
  * package entry graph typechecks them and the generated runtime has one import
  * surface. No Part Program path calls them. M05 emits the mount call sites.
- * `claimRecipe` is the M07a adoption entry; production entries do not call it.
+ * `claimRecipe` is the M07a adoption entry. `openStaticSiblingDirectory`
+ * is the M07b static-range directory. Production entries do not call either.
  */
 export {
   claimRecipe,
@@ -127,6 +128,14 @@ export {
 } from './runtime/recipe.ts';
 export { createTrackedProps, type TrackedProps } from './runtime/props.ts';
 export { runtimeProbe, type RuntimeProbeCounts } from './runtime/observability.ts';
+export {
+  claimStaticSiblingRange,
+  openStaticSiblingDirectory,
+  type DeclaredStaticNode,
+  type StaticRangeHandle,
+  type StaticSiblingClaim,
+  type StaticSiblingDirectory,
+} from './runtime/static-sibling-ranges.ts';
 
 // ─── Seed serialization ────────────────────────────────────────────
 
