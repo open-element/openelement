@@ -134,9 +134,10 @@ record and the owner signs it off before the §4 row flips (owner decision D2,
 | G2 (ownership/recipe evidence: two insertions, keyed replacement, disposal modes) | **Recorded (signed off 2026-11-09)** | Record in §4.1: PR #1735 `a82ef5957`, probes (a)–(e) in the `compiled-runtime` suites (LOCAL). |
 
 **Conclusion: M01–M06 are met, including the G1/G2 gate records, and the Alpha16a
-exit is still not achieved.** M07a (static-leaf structural claim) is in progress
-and does not complete M07. M08 (the same stateful list across SSR → claim →
-update → dispose) has not started. No row in this ledger may be read as
+exit is still not achieved.** M07a (static-leaf structural claim) and M07b
+(private static sibling-range directory) are in progress and do not complete
+M07. M08 (the same stateful list across SSR → claim → update → dispose) has not
+started. No row in this ledger may be read as
 Alpha16a completion, a version, a tag, a publication or a release claim.
 Alpha16b (M09–M14) has not started; the remaining M07 claim chain, then M08,
 is still the planned spine.

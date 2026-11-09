@@ -1,8 +1,9 @@
 # M07b static sibling ranges
 
-Status: private reviewed scope for this branch. Not a public ABI, not an SSR
-producer, and not the M07 exit. PR #1745 stays at its own head; this document
-does not move that branch.
+Status: scope accepted in workboard §13 (technical plan only); implementation
+not independently reviewed at this head. Not a public ABI, not an SSR producer,
+and not the M07 exit. The directory consumer is the bounded M07b slice; the
+fixed-head QA record is its acceptance evidence.
 
 The base is `146d838573d130e07bbe9b4eebe86efacb43fe9d`. M07a behavior stays:
 a missing generated claim is `OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE`; validation
@@ -99,3 +100,24 @@ different parent is outside the supported domain. Different parents stay
 different identities.
 The same-list path SSR → claim → update → dispose is still required. These
 fixtures do not fill TSX-18 or TSX-30.
+
+## Open items for the M07 private contract
+
+Recorded here, not decided by this slice; the M07 protocol record (M07-5) owns
+them:
+
+- **Attribute-seed strictness**: this slice compares parsed attributes as an
+  ordered, exact set (`sameAttributes`), which is stricter than "parsed DOM
+  values" and differs from the M07a leaf claim's lenient declared-attribute
+  compare. The contract must choose exact-set (order-insensitive) or state the
+  order requirement explicitly.
+- **Mismatch diagnostic identity**: this slice throws the catalogued
+  `OE_RUNTIME_STATIC_RANGE_MISMATCH`; the generated leaf claim throws a bare
+  `Error` carrying `OEIR_LEAF_CLAIM_MISMATCH`. One M07 chain must not ship two
+  incompatible mismatch surfaces.
+- **Namespace checks**: this slice requires the HTML namespace on the parent,
+  its ancestors and in-range elements; the M07a claim walk is namespace-agnostic.
+- **Mount/claim node-set asymmetry**: once the generator emits the markers
+  (the bounded generator extension), mount projection nodes include the marker
+  comments while claim nodes are the interiors. The contract must state that
+  difference explicitly.
