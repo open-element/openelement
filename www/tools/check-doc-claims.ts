@@ -379,6 +379,10 @@ export const CI_STEP_EVIDENCE: ReadonlyMap<string, CiStepEvidence> = new Map([
     { layer: 'base', where: 'lint job, "Seams registry (P8 reader)"' },
   ],
   [
+    '@openelement/tools-repo#docs-index:check',
+    { layer: 'base', where: 'lint job, "Governance checks" step' },
+  ],
+  [
     '@openelement/www#check:content-dates',
     { layer: 'base', where: 'lint job, "Content-date manifest check (gate:source)"' },
   ],

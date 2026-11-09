@@ -58,7 +58,8 @@ the record, the view is generated:
   view) plus the ADR registry and the archive register; the repository has no
   `docs/TRUTH.md`.
 - D-1 and D-2 are approved targets: their implementation and fixed-SHA evidence
-  land in M07-3/M07-4, not in the change that recorded this ADR.
+  land with the M07 bounded-recovery slice (M07-4) and the M07 protocol record
+  (M07-5), not in the change that recorded this ADR.
 - A document deletion or archive move that is not registered in
   `docs/history.json` fails a gate; a hand edit of a generated index fails a
   gate; a governing document without front matter fails a gate.
