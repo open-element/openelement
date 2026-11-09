@@ -1,3 +1,9 @@
+---
+status: active
+topic: Security and release engineering
+summary: Delegated generic checks, the OpenElement-specific test layers and the release evidence rules.
+---
+
 # Security and release engineering
 
 Generic checks are delegated directly to mature tools: gitleaks, CodeQL, dependency review, actionlint, zizmor, oxfmt formatting, oxlint linting, `tsc` typechecking, and Markdown lint. OpenElement-specific tests remain only for Element/Router semantics, package artifacts, browser/server graphs, and release state.

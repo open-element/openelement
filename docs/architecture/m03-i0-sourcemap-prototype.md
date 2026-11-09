@@ -1,3 +1,9 @@
+---
+status: historical
+topic: M03-I-0 source-map prototype
+summary: Prototype and decision record; marker-based anchors adopted, the end-to-end map stayed open for M05.
+---
+
 # M03-I-0 — source-map prototype: decision record
 
 Date: 2026-11-03. Milestone: **Alpha16a M03-I-0** (prototype only). Base:

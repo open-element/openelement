@@ -1,3 +1,9 @@
+---
+status: active
+topic: Packages and distribution
+summary: The six public packages for two core products, their boundaries and the distribution contract.
+---
+
 # Packages and distribution
 
 The repository publishes six public packages for two core products:

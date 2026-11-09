@@ -1,3 +1,9 @@
+---
+status: active
+topic: Consumer migration matrix
+summary: 23 consumers with target layer, replacement, stage and retirement condition; the active consumer map for M01-A2 and M10.
+---
+
 # M01 consumer migration matrix
 
 Date: 2026-11-03. Companion to

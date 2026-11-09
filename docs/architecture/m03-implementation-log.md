@@ -1,3 +1,9 @@
+---
+status: historical
+topic: M03 implementation log
+summary: Slice-by-slice M03 implementation and exit evidence, with the explicit not-claimed list.
+---
+
 # M03 implementation log
 
 Date: 2026-11-09. Milestone: **Alpha16a M03-I (function-component frontend)**.

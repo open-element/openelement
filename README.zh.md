@@ -110,8 +110,9 @@ pnpm run build
 
 ## 文档
 
-- [当前架构](./docs/architecture/README.md)
+- [当前架构（生效文档）](./docs/architecture/README.md)
 - [活跃决策](./docs/adr/README.md)
+- [归档与删除登记簿](./docs/legacy/README.md)
 - [安全策略](./SECURITY.md)
 - [贡献指南](./CONTRIBUTING.md)
 

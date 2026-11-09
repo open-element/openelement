@@ -208,7 +208,7 @@ ABI freeze — continues to govern the target. The new ABI's actual structure
 remains deferred to M01 design plus real packed-consumer evidence; it must not
 become another large JSON descriptor.
 
-Full analysis: [fourth-pass reassessment](../architecture/alpha16-18-fourth-pass-reassessment.md).
+Full analysis: fourth-pass reassessment (retired into Git history on 2026-11-10).
 
 ## Amendment (2026-11-08, owner ruling): Lit retirement executed
 

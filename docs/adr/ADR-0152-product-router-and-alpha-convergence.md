@@ -221,14 +221,14 @@ Decision:
   compatibility adapter, no dual renderer lane and no migration interval are
   provided; the cutover is a single deletion commit.
 - **This is the deprecation decision** required before removing the public
-  `./lit` and `./lit-ssr` subpaths (retirement roadmap §3). It authorizes that
+  `./lit` and `./lit-ssr` subpaths (the retirement roadmap, retired into Git history on 2026-11-10, §3). It authorizes that
   removal and supersedes the closing sentence of the 2026-11-03 amendment,
   which withheld authorization for a documentation-only stage.
 - **Standalone and immediate.** Retirement stays one change set outside the
   Alpha16/16b M-row spine and its G1/G2/M10 gates: the Lit path has no dependency
   on the generated path, so no gate is awaited. It is not merged into an M row.
 - **Kept:** third-party Lit Web Components as client-only interoperability
-  (retirement roadmap: KEEP / permanent); the explicit `renderer: 'lit'`
+  (the retirement roadmap, retired into Git history on 2026-11-10: KEEP / permanent); the explicit `renderer: 'lit'`
   migration error rather than silently selecting Native; and the requirement to
   move shared leaf-graph, forms/readiness, navigation and safety assertions to
   native or neutral fixtures before deleting renderer-exclusive fixtures.

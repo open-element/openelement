@@ -1,3 +1,9 @@
+---
+status: active
+topic: Author contract
+summary: 30 review cases with the approved TSX semantics; candidate APIs are unreleased and are not implementation evidence.
+---
+
 # TSX author candidate contract
 
 Date: 2026-11-03. Status: **CANDIDATE / NOT IMPLEMENTED OR VERIFIED**.
@@ -616,4 +622,4 @@ Each needs a measurement or an evidenced decision, not more prose:
 
 See also: [the execution plan](./alpha16-18-execution-plan.md),
 [the semantic test matrix](./alpha16-18-semantic-test-matrix.md),
-[the audit](./alpha16-18-architecture-audit.md).
+the audit (retired into Git history on 2026-11-10).

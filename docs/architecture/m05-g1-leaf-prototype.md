@@ -1,3 +1,9 @@
+---
+status: historical
+topic: M05 leaf-codegen prototype
+summary: Prototype record, NOT G1; superseded by the M05a slice that landed generated leaf mount/update/dispose.
+---
+
 # M05 leaf-codegen prototype — status: PROTOTYPE, NOT G1
 
 Date: 2026-11-06. Milestone: **Alpha16a M05 direction (leaf-codegen spike), Class P

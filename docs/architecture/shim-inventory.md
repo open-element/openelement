@@ -1,3 +1,9 @@
+---
+status: active
+topic: Shim inventory
+summary: Every compatibility layer with owner, direction, reason, retirement condition and disposition; machine-read by shims:check.
+---
+
 # Shim 盘点（P5 登记簿）
 
 设计宪法 P5 要求：每个 shim 落地时写明退役条件；"平台追账评审"每个

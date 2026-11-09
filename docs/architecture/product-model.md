@@ -1,3 +1,9 @@
+---
+status: active
+topic: Product scope and accepted direction
+summary: The two public products (Element and Router) and the accepted 2026-11-03 direction.
+---
+
 # Product model
 
 OpenElement has exactly two public core products: **Element** and **Router**.
@@ -71,7 +77,7 @@ that record: **APPROVED TARGET (2026-11-03)** — the authoring API is retired a
 **no compatibility adapter is built**, and `OpenElement` is no longer an
 author-facing base class. Native Custom Elements and an internal generated class
 are kept; see the [ADR-0173 fourth-pass amendment](../adr/ADR-0173-component-execution-and-composition.md#superseding-amendment-2026-11-03-fourth-pass--approved)
-and [the reassessment](./alpha16-18-fourth-pass-reassessment.md). Two execution
+and the reassessment (retired into Git history on 2026-11-10). Two execution
 architectures are never permitted.
 
 Preserve G1 (real codegen slice), G2 (identity/owner before related expansion),

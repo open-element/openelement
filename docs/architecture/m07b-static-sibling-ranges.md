@@ -1,6 +1,13 @@
+---
+status: active
+topic: M07b static sibling ranges
+summary: The paired-marker static sibling-range directory and the bounded M07b generator extension; not a public ABI and not the M07 exit.
+---
+
 # M07b static sibling ranges
 
-Status: scope accepted in workboard §13 (technical plan only); fixed-head QA
+Status: scope accepted in the retired M07 workboard §13 (Git history, 2026-11-10;
+technical plan only); fixed-head QA
 passed at `4feffef00` (#1747) and at `d7a4db434` (bounded generator extension,
 #1749). Not a public ABI, not an SSR producer, and not the M07 exit.
 
@@ -129,8 +136,8 @@ them:
 
 This is a bounded generator extension inside M07b, not a new slice or
 milestone. The head branch ref `cursor/m07c-generator-mount-claim-21d0` is a
-slice name only; M07c and M07d remain unapproved labels (workboard §3, §13.5,
-§14.2).
+slice name only; M07c and M07d remain unapproved labels (retired workboard
+§3, §13.5, §14.2; Git history, 2026-11-10).
 
 PR #1749 carries two commits — the generator change with its tests, and this
 document. They were authored on the M07b head
@@ -142,11 +149,13 @@ claim calls `openStaticSiblingDirectory` and `claimStaticSiblingRange`.
 Expected ordinals are generator literals. The fixed-head QA record on this head
 is the implementation acceptance evidence for the extension.
 
-**D5 is closed by this extension.** §13.2 recorded "Mount markers | Left open
+**D5 is closed by this extension.** The retired workboard's §13.2 (Git history,
+2026-11-10) recorded "Mount markers | Left open
 as D5". Mount now emits the paired `oe:r:` markers for a parent whose flattened
 children are two or more fully static elements, claim consumes them through the
-§13 directory consumer, and the Owner accepted the bounded extension on
-2026-11-09 (workboard §14.2). This is not the M07c design (key, dynamic
+§13 directory consumer of the retired workboard (Git history, 2026-11-10), and
+the Owner accepted the bounded extension on 2026-11-09 (retired workboard
+§14.2). This is not the M07c design (key, dynamic
 structure, duplicate subscription, cleanup).
 
 **Internal contract: mount/claim node-set asymmetry.** For a directory, mount

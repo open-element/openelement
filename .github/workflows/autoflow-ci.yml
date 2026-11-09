@@ -233,6 +233,7 @@ jobs:
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo assets:check-provenance
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo release:state-machine:check
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo workspace:links:check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo docs-index:check
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo deps:vite-check
       - name: vp selector flags (fail-closed task dispatch)
         # `vp run <pkg>#<task>` resolves the package part by exact package NAME

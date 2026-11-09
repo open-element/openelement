@@ -1,3 +1,9 @@
+---
+status: active
+topic: Router and server runtime
+summary: The application layer, the Vite adapter, the Nitro output path and the server contract boundary.
+---
+
 # Router and server runtime
 
 The application layer (`@openelement/router`) owns pages, routes, loaders, actions,

@@ -1,3 +1,9 @@
+---
+status: active
+topic: JSX values and repeatable children
+summary: Mount recipes, evaluation timing, the owner/region model and the disposal contract.
+---
+
 # JSX values and repeatable children: execution model
 
 Date: 2026-11-03. Status: **CANDIDATE DESIGN / NOT IMPLEMENTED**. Baseline:
