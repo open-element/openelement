@@ -35,7 +35,9 @@ const CLASSIFIER = {
 };
 
 function generate(source: string): GeneratedLeafModule {
-  const front = compileFunctionModule(source, FILE, { importClassifier: CLASSIFIER });
+  const front = compileFunctionModule(source, FILE, {
+    importClassifier: CLASSIFIER,
+  });
   expect(front.diagnostics, 'frontend admission').toEqual([]);
   return generateLeafModule(front.module!);
 }
@@ -57,14 +59,19 @@ function Counter(props) {
 `;
 
 describe('M05 leaf v2 — emitted module contract', () => {
-  test('emits one createRecipe factory per component using the M04 call surface', () => {
+  test('emits one module-level mount + delegating createRecipe factory per component', () => {
     const result = generate(COUNTER);
     expect(result.module).not.toBeNull();
     const module = result.module!;
     expect(module).toContain(`from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)}`);
+    // The body lives in the module-level mount (M06b1a-1) ...
+    expect(module).toContain('function Counter__mount(__oe_scope, __oe_props, __oe_host) {');
+    expect(module).toContain('const props = __oe_props;');
+    // ... and the pinned factory keeps its name/signature and delegates.
     expect(module).toContain('export function createCounterRecipe(');
     expect(module).toContain('createRecipe({');
     expect(module).toContain('mount(__oe_scope) {');
+    expect(module).toContain('return Counter__mount(__oe_scope, __oe_host.props, __oe_mountHost);');
     expect(module).toContain('bindSignalWrites(__oe_scope, count, "count"');
     expect(module).toContain('bindSignalWrites(__oe_scope, doubled, "doubled"');
     expect(module).toContain('displayValue(');
@@ -74,7 +81,17 @@ describe('M05 leaf v2 — emitted module contract', () => {
     expect(result.requiredProps).toEqual(['props']);
     expect(result.requiredBindings).toEqual(['count', 'doubled']);
     expect(result.requiresPropsChanged).toBe(true);
-    expect(module).toContain('bindSignalWrites(__oe_scope, __oe_propsChanged, "props"');
+    // Root props refresh: propDeps = [host.propsChanged]; the missing-host throw
+    // stays at factory creation (OEIR_LEAF_MISSING_VALUE contract preserved).
+    expect(module).toContain(
+      'const __oe_propsChanged = __oe_host.propsChanged; if (__oe_propsChanged === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: propsChanged");',
+    );
+    expect(module).toContain(
+      'const __oe_mountHost = { bindings: __oe_host.bindings, propDeps: [__oe_propsChanged] };',
+    );
+    expect(module).toContain(
+      'for (const __oe_propDep of __oe_host.propDeps) bindSignalWrites(__oe_scope, __oe_propDep, "props"',
+    );
   });
 
   test('emits detached nodes only: the mount never appends to a host element', () => {
@@ -176,13 +193,201 @@ function C(props) {
   });
 });
 
+describe('M06b1a-1 — module-level mounts and module-local component references', () => {
+  const NESTED = `function Row(props) { return <li>{props.text}</li>; }
+function C(props) { return <ul><Row text="x" /><Row text={props.label} /></ul>; }
+`;
+
+  test('one body per component: <Child>__mount defined once, called from the parent', () => {
+    const result = generate(NESTED);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // One module-level mount per component, however often it is referenced.
+    expect(module.match(/^function Row__mount\(/gm)?.length).toBe(1);
+    expect(module.match(/^function C__mount\(/gm)?.length).toBe(1);
+    // One exported root factory per component; the pinned `create<Name>Recipe`
+    // name pattern is exactly what the browser harness extracts.
+    expect(module.match(/^export function create\w+Recipe\(/gm)?.length).toBe(2);
+    expect(module).toContain('export function createRowRecipe(__oe_owner, __oe_host) {');
+    expect(module).toContain('export function createCRecipe(__oe_owner, __oe_host) {');
+    // The parent calls the child mount directly ...
+    expect(module.match(/Row__mount\(__oe_childScope/g)?.length).toBe(2);
+    // ... on a fresh child scope of the defining (parent) mount scope.
+    expect(module).toContain('const __oe_childScope1 = __oe_scope.child();');
+    expect(module).toContain('const __oe_childScope2 = __oe_scope.child();');
+  });
+
+  test('child props are a per-read getter record over the parent scope', () => {
+    const module = generate(NESTED).module!;
+    expect(module).toContain('const __oe_childProps1 = {');
+    // Static prop: literal data property (no scope read, no dependency).
+    expect(module).toContain('text: "x",');
+    // Dynamic prop: a getter over the DEFINING scope, never a cached value.
+    expect(module).toContain('get text() { return (props . label); },');
+    expect(module).not.toMatch(/const\s+text\s*=/);
+    // A passed parent prop resolves to the parent's own props channel.
+    expect(module).toContain(
+      'const __oe_childHost2 = { bindings: __oe_host.bindings, propDeps: [...__oe_host.propDeps] };',
+    );
+  });
+
+  test('the child refresh channel is the defining-scope read of each passed prop', () => {
+    const module = generate(`import { signal } from '@openelement/element';
+function Row(props) { return <li>{props.text}</li>; }
+function C(props) { const label = signal('a'); return <Row text={label.value} />; }
+`).module!;
+    // The passed prop reads the parent signal: the child subscribes to it.
+    expect(module).toContain(
+      'const __oe_childHost0 = { bindings: __oe_host.bindings, propDeps: [label] };',
+    );
+    // Parent prologue declares the binding exactly like any other read.
+    expect(module).toContain('const __oe_requireBinding = (name) =>');
+    expect(module).toContain('const label = __oe_requireBinding("label");');
+  });
+
+  test('mixed intrinsic/component siblings keep authored order', () => {
+    const module = generate(
+      'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <section><h1>a</h1><Row text="x" /><p>b</p></section>; }\n',
+    ).module!;
+    const heading = module.indexOf('document.createElement("h1")');
+    const child = module.indexOf('Row__mount(__oe_childScope');
+    const paragraph = module.indexOf('document.createElement("p")');
+    expect(heading).toBeGreaterThanOrEqual(0);
+    expect(child).toBeGreaterThan(heading);
+    expect(paragraph).toBeGreaterThan(child);
+    // The parent appends the child's returned nodes to the enclosing element.
+    expect(module).toContain(
+      'for (const __oe_child of __oe_childNodes3) __oe_el0.appendChild(__oe_child);',
+    );
+  });
+
+  test('a component-reference instance owns a child scope and cleans up its range', () => {
+    const module = generate(
+      'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row text="x" />; }\n',
+    ).module!;
+    expect(module).toContain('const __oe_childScope0 = __oe_scope.child();');
+    expect(module).toContain('try {');
+    expect(module).toContain('} catch (error) { __oe_childScope0.dispose(true); throw error; }');
+    expect(module).toContain(
+      '__oe_childScope0.addRangeCleanup(() => removeNodes(__oe_childNodes0));',
+    );
+  });
+
+  test('key on a component reference is identity only, never a DOM write or a child prop', () => {
+    const module = generate(
+      'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row key="row-1" text="x" />; }\n',
+    ).module!;
+    // `key` is consumed as identity: no prop getter/data property, no DOM write.
+    expect(module).not.toContain('get key()');
+    expect(module).not.toContain('"row-1"');
+    expect(module).not.toMatch(/setAttribute\("key"/);
+    expect(module).toContain('text: "x",');
+    expect(module).toContain('Row__mount(__oe_childScope');
+  });
+
+  test('a component-reference cycle is refused with its cycle path (OEIR_LEAF_COMPONENT_CYCLE)', () => {
+    const mutual = generate(
+      'function A(props) { return <B />; }\nfunction B(props) { return <A />; }\nfunction Root(props) { return <A />; }\n',
+    );
+    expect(mutual.module).toBeNull();
+    expect(codes(mutual)).toEqual(['OEIR_LEAF_COMPONENT_CYCLE']);
+    expect(mutual.diagnostics[0]!.message).toContain('component reference cycle: A -> B -> A');
+    const self = generate('function S(props) { return <S />; }\n');
+    expect(self.module).toBeNull();
+    expect(codes(self)).toEqual(['OEIR_LEAF_COMPONENT_CYCLE']);
+    expect(self.diagnostics[0]!.message).toContain('component reference cycle: S -> S');
+  });
+
+  test('a component reference inside a list entry template is refused (needs the M06b1b child update hook)', () => {
+    const result = generate(`import { signal } from '@openelement/element';
+function Item(props) { return <li>{props.text}</li>; }
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li><Item text={item.text} /></li>)}</ul>;
+}
+`);
+    expect(result.module).toBeNull();
+    expect(codes(result)).toEqual(['OEIR_LEAF_UNSUPPORTED_COMPONENT']);
+    expect(result.diagnostics[0]!.message).toContain('needs the child update hook (M06b1b)');
+    // A condition nested under the list template is still inside it.
+    const nested = generate(`import { signal } from '@openelement/element';
+function Item(props) { return <li>{props.text}</li>; }
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li>{props.ok ? <Item text="a" /> : null}</li>)}</ul>;
+}
+`);
+    expect(nested.module).toBeNull();
+    expect(codes(nested)).toEqual(['OEIR_LEAF_UNSUPPORTED_COMPONENT']);
+  });
+
+  test('component references in condition branches stay admitted', () => {
+    const result = generate(
+      'function Item(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <ul>{props.ok ? <Item text="a" /> : <Item text="b" />}</ul>; }\n',
+    );
+    expect(result.module).not.toBeNull();
+    expect(result.module!.match(/Item__mount\(__oe_childScope/g)?.length).toBe(2);
+  });
+
+  test('module host contract unions the child props channel', () => {
+    const result = generate(NESTED);
+    // Row's props reads are the module's props channel; the parent passes them.
+    expect(result.requiredProps).toEqual(['props']);
+    expect(result.requiredBindings).toEqual([]);
+    expect(result.requiresPropsChanged).toBe(true);
+  });
+
+  test('nested-component output is deterministic', () => {
+    expect(generate(NESTED).module).toBe(generate(NESTED).module);
+  });
+});
+
 describe('M05 leaf v2 — fail-closed boundary (M05b/M06 shapes refused)', () => {
-  const REFUSED: ReadonlyArray<{ label: string; source: string; code: string }> = [
+  const REFUSED: ReadonlyArray<{
+    label: string;
+    source: string;
+    code: string;
+  }> = [
     {
-      label: 'component reference',
+      label: 'component reference to a name outside the module',
+      source: 'function C(props) { return <External text="x" />; }\n',
+      code: 'OEIR_LEAF_UNKNOWN_COMPONENT',
+    },
+    {
+      label: 'component reference to a destructured-props child',
       source:
-        'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row text="x" />; }\n',
-      code: 'OEIR_LEAF_UNSUPPORTED_NODE',
+        'function Row({ text }) { return <li>{text}</li>; }\nfunction C(props) { return <Row text="x" />; }\n',
+      code: 'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+    },
+    {
+      label: 'component reference to a child that owns signal/computed resources',
+      source:
+        'import { signal } from "@openelement/element";\nfunction Row(props) { const n = signal(0); return <li>{n.value}</li>; }\nfunction C(props) { return <Row />; }\n',
+      code: 'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+    },
+    {
+      label: 'event channel as a component prop',
+      source:
+        'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row onHit={() => props.text} />; }\n',
+      code: 'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
+    },
+    {
+      label: 'class channel as a component prop',
+      source:
+        'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row class={props.text} />; }\n',
+      code: 'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
+    },
+    {
+      label: 'children prop on a component reference',
+      source:
+        'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row children="x" />; }\n',
+      code: 'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+    },
+    {
+      label: 'style channel as a component prop',
+      source:
+        'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row style={props.text} />; }\n',
+      code: 'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
     },
     {
       label: 'children projection',

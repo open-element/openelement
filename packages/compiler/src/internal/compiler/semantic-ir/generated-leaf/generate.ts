@@ -9,13 +9,37 @@
  * `assertSafeUrlAttribute` value semantics. The harness inserts generated
  * recipes through `insertRecipe` — the one insertion surface.
  *
- * S1 leaf scope: intrinsic elements, fragments, multi-root, empty output,
- * static text/attributes, dynamic text and `attribute`/`boolean`/`property`
- * channel attributes with signal/computed driven refresh, default + detach
- * disposal and throwing cleanups. Everything else fails closed with a coded
- * diagnostic: conditions, lists, component references, recipes/insertion
- * sites, children projection, and `class`/`style`/`innerHTML`/`event`/`ref`/
- * `key` attributes are M05b/M06 work.
+ * S1/M06a leaf + S2 scope: intrinsic elements, fragments, multi-root, empty
+ * output, static text/attributes, dynamic text and `attribute`/`boolean`/
+ * `property` channel attributes with signal/computed driven refresh,
+ * conditions, lists, default + detach disposal, throwing cleanups, and (M06b1a-1)
+ * module-level component mounts plus module-local component references
+ * (`<Child prop={expr}/>`). One component body is emitted exactly once per
+ * module: `function <Name>__mount(scope, props, host)` builds a detached
+ * instance and returns its nodes; the exported `create<Name>Recipe(owner, host)`
+ * factory keeps its name/signature and delegates its recipe mount to it, and a
+ * component reference calls the child mount directly with a fresh child scope.
+ *
+ * Props passed to a child are a per-read getter record over the DEFINING
+ * (parent) scope (`{ get text() { return <parent read>; } }`, never cached).
+ * The child refreshes a prop-dependent slot through `host.propDeps`: the root
+ * factory supplies `[host.propsChanged]` (preserving the
+ * `OEIR_LEAF_MISSING_VALUE: propsChanged` contract), a component-reference call
+ * site supplies the parent bindings its prop expressions depend on. The child
+ * instance owns a fresh child scope of the parent; the parent appends the
+ * returned nodes in authored order.
+ *
+ * Still fails closed with a coded diagnostic (M06b1a-2/M06b1a-3, M06b2, M07/M08
+ * boundary): recipes/insertion sites, children projection, component references
+ * to unknown/external components, component-reference cycles
+ * (`OEIR_LEAF_COMPONENT_CYCLE`; a cycle would emit self-recursive mounts),
+ * component references inside list entry templates (a keyed reuse would keep
+ * the first mount's props without the child update hook — M06b1b),
+ * child components with no named props parameter (destructured or absent) or
+ * with signal/computed resources, `class`/`style`/`innerHTML`/`event`/`ref`
+ * channels (on elements and on component props), and `key` as a DOM write.
+ * `key` on a component reference is consumed as list identity only and is never
+ * a DOM write or a child prop.
  *
  * The emitted module imports from the compiler-private runtime entry
  * `@openelement/element/internal/compiled/runtime`. That entry is not a
@@ -34,6 +58,7 @@ import type {
   FunctionExpressionRef,
   FunctionModelAttribute,
   FunctionModelComponent,
+  FunctionModelComponentRef,
   FunctionModelCondition,
   FunctionModelList,
   FunctionModelModule,
@@ -61,6 +86,24 @@ const RUNTIME_IMPORTS = [
 ] as const;
 
 const INTERNAL_PREFIX = '__oe_';
+/**
+ * Module-level component mount (M06b1a-1): `<Name>__mount(scope, props, host)`.
+ * The mount builds one detached instance and returns its top-level nodes; both
+ * the exported root factory and every component-reference call site delegate to
+ * it, so one component body is emitted exactly once per module.
+ */
+const MOUNT_SUFFIX = '__mount';
+/** Fixed module-level mount parameters; they define the emitted host record shape. */
+const MOUNT_SCOPE = `${INTERNAL_PREFIX}scope`;
+const MOUNT_PROPS = `${INTERNAL_PREFIX}props`;
+const MOUNT_HOST = `${INTERNAL_PREFIX}host`;
+/**
+ * The module-level mount's host record: the parent-provided host bindings plus
+ * the defining-scope signals a child instance refreshes props reads through.
+ * The root factory supplies `[host.propsChanged]`; a component-reference call
+ * site supplies the parent bindings its prop expressions depend on.
+ */
+const MOUNT_DEP_LOOP = `${INTERNAL_PREFIX}propDep`;
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const TAG_PATTERN = /^[a-z][a-z0-9-]*$/;
 const ATTRIBUTE_PATTERN = /^[A-Za-z_:][A-Za-z0-9_:.-]*$/;
@@ -123,14 +166,30 @@ interface EmitState {
   readonly segmentKeys: Set<string>;
   /** The scope variable in the current generated closure (`__oe_scope` by default). */
   scopeVar: string;
+  /** The host-record parameter of the module-level mount (`__oe_host`). */
+  readonly hostVar: string;
+  /** Module component table: component references resolve against it. */
+  readonly componentByName: ReadonlyMap<string, FunctionModelComponent>;
   /** Entry-mapper names bound in the current generated builder (not host bindings). */
   readonly entryNames: Set<string>;
   /** Refresh-function collectors for the enclosing list-entry builder (if any). */
   readonly refreshStack: string[][];
+  /**
+   * Number of enclosing list-entry templates. A component reference inside one
+   * is refused: a keyed reuse re-assigns the mapper parameter but the child
+   * instance has no update hook to re-read its props (M06b1b).
+   */
+  listDepth: number;
 }
 
 function diag(state: EmitState, code: string, message: string, span: IrSpan): void {
-  state.diagnostics.push({ severity: 'error', code, message, span, origin: 'ir-object' });
+  state.diagnostics.push({
+    severity: 'error',
+    code,
+    message,
+    span,
+    origin: 'ir-object',
+  });
 }
 
 interface SpanLike {
@@ -441,14 +500,7 @@ function emitCondition(
     `${activeVar} = ${initialTestVar} ? 1 : ${alternateFn === null ? 0 : 2}; ${ownerVar} = ${initialOwnerVar};`,
   );
   sink.push({ kind: 'spread', name: initialNodesVar });
-  for (const dependency of dependencies) {
-    const signal = dependency.fromProps ? `${INTERNAL_PREFIX}propsChanged` : dependency.name;
-    push(
-      state,
-      `bindSignalWrites(${state.scopeVar}, ${signal}, ${JSON.stringify(dependency.name)}, ${refreshVar});`,
-      node.span,
-    );
-  }
+  emitDependencySubscriptions(state, dependencies, refreshVar, node.span);
   registerRefresh(state, refreshVar);
 }
 
@@ -482,16 +534,21 @@ function emitList(
   push(state, `const ${anchorVar} = document.createComment("oe:each");`, node.span);
   sink.push({ kind: 'node', name: anchorVar });
   push(state, `let ${entriesVar} = [];`);
-  emitEntryBuilder(
-    state,
-    entryFn,
-    `${INTERNAL_PREFIX}eachScope${id}`,
-    `${INTERNAL_PREFIX}eachItem${id}`,
-    node.parameter,
-    node.template,
-    records,
-    node.span,
-  );
+  state.listDepth += 1;
+  try {
+    emitEntryBuilder(
+      state,
+      entryFn,
+      `${INTERNAL_PREFIX}eachScope${id}`,
+      `${INTERNAL_PREFIX}eachItem${id}`,
+      node.parameter,
+      node.template,
+      records,
+      node.span,
+    );
+  } finally {
+    state.listDepth -= 1;
+  }
 
   let keyDependencies: readonly Dependency[] = [];
   if (node.key !== null) {
@@ -642,16 +699,13 @@ function emitList(
   );
   sink.push({ kind: 'spread', name: initialNodesVar });
   const subscribed = new Set<string>();
+  const uniqueDependencies: Dependency[] = [];
   for (const dependency of [...dependencies, ...keyDependencies]) {
-    const signal = dependency.fromProps ? `${INTERNAL_PREFIX}propsChanged` : dependency.name;
     if (subscribed.has(dependency.name)) continue;
     subscribed.add(dependency.name);
-    push(
-      state,
-      `bindSignalWrites(${state.scopeVar}, ${signal}, ${JSON.stringify(dependency.name)}, ${refreshVar});`,
-      node.span,
-    );
+    uniqueDependencies.push(dependency);
   }
+  emitDependencySubscriptions(state, uniqueDependencies, refreshVar, node.span);
   registerRefresh(state, refreshVar);
 }
 
@@ -769,7 +823,11 @@ function dependencyNames(
         state,
         'OEIR_LEAF_UNSUPPORTED_BINDING',
         `tracked expression ${record.id} has a dependency outside its reads`,
-        toIrSpan({ id: record.id, mode: record.mode, span: record.authoredSpan }),
+        toIrSpan({
+          id: record.id,
+          mode: record.mode,
+          span: record.authoredSpan,
+        }),
       );
       return null;
     }
@@ -788,6 +846,36 @@ function dependencyNames(
       names.push({ name: read.name, fromProps });
   }
   return names;
+}
+
+/**
+ * Subscribe one generated refresh closure to the signals a slot's expression
+ * reads. Props reads refresh through the mount host's `propDeps` (the defining
+ * scope's signals: `host.propsChanged` for a root instance, the parent bindings
+ * behind the passed prop expressions for a component-reference instance); every
+ * other read binds its named host binding directly.
+ */
+function emitDependencySubscriptions(
+  state: EmitState,
+  dependencies: readonly Dependency[],
+  refreshVar: string,
+  anchor: SpanLike,
+): void {
+  for (const dependency of dependencies) {
+    if (dependency.fromProps) {
+      push(
+        state,
+        `for (const ${MOUNT_DEP_LOOP} of ${state.hostVar}.propDeps) bindSignalWrites(${state.scopeVar}, ${MOUNT_DEP_LOOP}, ${JSON.stringify(dependency.name)}, ${refreshVar});`,
+        anchor,
+      );
+      continue;
+    }
+    push(
+      state,
+      `bindSignalWrites(${state.scopeVar}, ${dependency.name}, ${JSON.stringify(dependency.name)}, ${refreshVar});`,
+      anchor,
+    );
+  }
 }
 
 function emitTextWrite(state: EmitState, targetVar: string, record: LoweredExpressionRecord): void {
@@ -860,6 +948,221 @@ function attributeAdmitted(
     return false;
   }
   return true;
+}
+
+/** Validate one prop of a component reference; `key` is consumed before this. */
+function componentPropAdmitted(
+  state: EmitState,
+  attribute: FunctionModelAttribute,
+  componentName: string,
+  span: IrSpan,
+): boolean {
+  if (attribute.kind === 'static') {
+    if (!ATTRIBUTE_PATTERN.test(attribute.name)) {
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
+        `prop name '${attribute.name}' on component '<${componentName}>' is invalid`,
+        span,
+      );
+      return false;
+    }
+    return true;
+  }
+  if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
+      `prop channel '${attribute.channel}' on component '<${componentName}>' is outside the M06b1 slice (class/style/innerHTML/event/ref stay refused)`,
+      span,
+    );
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Emit one module-local component-reference instance (M06b1a-1).
+ *
+ * The child body is the module-level `<Child>__mount`, so one component body is
+ * emitted once per module however often it is referenced. Each reference owns a
+ * fresh child scope (M04 ownership: disposal, rollback and range cleanup are the
+ * parent's), the parent appends the returned nodes to the enclosing sink in
+ * authored order, and props are a per-read getter record over the DEFINING
+ * (parent) scope — `{ get text() { return <parent read>; } }` — never cached.
+ * The child refreshes a prop-dependent slot through the defining-scope signals
+ * in `host.propDeps`: the parent bindings the passed prop expressions depend on,
+ * plus the parent's own props channel when a getter passes a parent prop.
+ */
+function emitComponentRef(
+  state: EmitState,
+  node: FunctionModelComponentRef,
+  sink: SinkEntry[],
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): void {
+  const span: IrSpan = node.span;
+  if (state.listDepth > 0) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+      `component '<${node.name}>' inside a list entry template needs the child update hook (M06b1b); a keyed reuse would keep the first mount's props`,
+      span,
+    );
+    return;
+  }
+  const target = state.componentByName.get(node.name);
+  if (target === undefined) {
+    diag(
+      state,
+      'OEIR_LEAF_UNKNOWN_COMPONENT',
+      `component '<${node.name}>' is not declared in this module (external components are M06b2)`,
+      span,
+    );
+    return;
+  }
+  if (target.propsParam === null) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+      `component '<${node.name}>' has no named props parameter (destructured or absent); component references need a named props parameter (M06b2 owns destructuring)`,
+      span,
+    );
+    return;
+  }
+  const ownedBindings = target.resources.filter(
+    (resource) => resource.kind === 'signal' || resource.kind === 'computed',
+  );
+  if (ownedBindings.length > 0) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+      `component '<${node.name}>' owns signal/computed resources; a child instance cannot resolve host bindings without sharing the parent instance (M06b2/M07 own it)`,
+      span,
+    );
+    return;
+  }
+  // Pass 1: admit the prop DOM channels. `key` is list identity, consumed by the
+  // enclosing list emitter and never a DOM write or a child prop.
+  let refused = false;
+  const admitted: Array<
+    | { readonly kind: 'static'; readonly name: string; readonly value: string }
+    | {
+        readonly kind: 'dynamic';
+        readonly name: string;
+        readonly expression: FunctionExpressionRef;
+        readonly span: SpanLike;
+      }
+  > = [];
+  for (const attribute of node.props) {
+    if (attribute.name === 'key') continue;
+    if (attribute.name === 'children') {
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+        `children on component '<${node.name}>' are outside the M06b1 slice (M06b1a-3 owns children projection)`,
+        span,
+      );
+      refused = true;
+      continue;
+    }
+    if (!componentPropAdmitted(state, attribute, node.name, span)) {
+      refused = true;
+      continue;
+    }
+    admitted.push(attribute);
+  }
+  if (refused) return;
+
+  const id = state.counter.value++;
+  const propsVar = `${INTERNAL_PREFIX}childProps${id}`;
+  const hostVar = `${INTERNAL_PREFIX}childHost${id}`;
+  const scopeVar = `${INTERNAL_PREFIX}childScope${id}`;
+  const nodesVar = `${INTERNAL_PREFIX}childNodes${id}`;
+
+  // Pass 2: resolve the dynamic prop expressions (prologue reads + the defining
+  // scope dependencies the child refreshes through) before emitting the record,
+  // so the block below is one authored-order sequence.
+  const propDeps = new Set<string>();
+  let needsParentProps = false;
+  type ResolvedProp =
+    | { readonly kind: 'static'; readonly name: string; readonly value: string }
+    | {
+        readonly kind: 'dynamic';
+        readonly name: string;
+        readonly record: LoweredExpressionRecord;
+        readonly span: SpanLike;
+      };
+  const resolved: ResolvedProp[] = [];
+  let failed = false;
+  for (const prop of admitted) {
+    if (prop.kind === 'static') {
+      resolved.push(prop);
+      continue;
+    }
+    const record = recordFor(state, prop.expression, records);
+    if (record === null || !declareReads(state, record)) {
+      failed = true;
+      continue;
+    }
+    const dependencies = dependencyNames(state, record);
+    if (dependencies === null) {
+      failed = true;
+      continue;
+    }
+    for (const dependency of dependencies) {
+      if (dependency.fromProps) needsParentProps = true;
+      else propDeps.add(dependency.name);
+    }
+    resolved.push({
+      kind: 'dynamic',
+      name: prop.name,
+      record,
+      span: prop.span,
+    });
+  }
+  if (failed) return;
+  if (resolved.length > 0) {
+    push(state, `const ${propsVar} = {`, span);
+    state.indent += 1;
+    for (const prop of resolved) {
+      if (prop.kind === 'static') {
+        const key = IDENTIFIER_PATTERN.test(prop.name) ? prop.name : JSON.stringify(prop.name);
+        push(state, `${key}: ${JSON.stringify(prop.value)},`);
+        continue;
+      }
+      const key = IDENTIFIER_PATTERN.test(prop.name) ? prop.name : JSON.stringify(prop.name);
+      pushParts(state, [`get ${key}() { return (`, { record: prop.record }, '); },'], prop.span);
+    }
+    state.indent -= 1;
+    push(state, '};');
+  }
+
+  // The child instance's host record: the parent host bindings (so the child
+  // resolves its own host reads from the same module-level record) plus the
+  // defining-scope signals behind the passed prop expressions.
+  const depParts = [...propDeps];
+  if (needsParentProps) depParts.push(`...${state.hostVar}.propDeps`);
+  push(
+    state,
+    `const ${hostVar} = { bindings: ${state.hostVar}.bindings, propDeps: [${depParts.join(', ')}] };`,
+    span,
+  );
+
+  // Fresh child scope, exception-safe mount, range cleanup before the parent can
+  // append: the same ownership mapping the M04 mount contract uses.
+  push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
+  push(state, `let ${nodesVar};`);
+  push(state, `try {`);
+  state.indent += 1;
+  push(
+    state,
+    `${nodesVar} = ${node.name}${MOUNT_SUFFIX}(${scopeVar}, ${resolved.length > 0 ? propsVar : '{}'}, ${hostVar});`,
+    span,
+  );
+  state.indent -= 1;
+  push(state, `} catch (error) { ${scopeVar}.dispose(true); throw error; }`);
+  push(state, `${scopeVar}.addRangeCleanup(() => removeNodes(${nodesVar}));`);
+  sink.push({ kind: 'spread', name: nodesVar });
 }
 
 function emitNode(
@@ -953,14 +1256,7 @@ function emitNode(
       state.indent -= 1;
       push(state, `}`);
       push(state, `${refresh}();`);
-      for (const dependency of dependencies) {
-        const signal = dependency.fromProps ? `${INTERNAL_PREFIX}propsChanged` : dependency.name;
-        push(
-          state,
-          `bindSignalWrites(${state.scopeVar}, ${signal}, ${JSON.stringify(dependency.name)}, ${refresh});`,
-          attribute.span,
-        );
-      }
+      emitDependencySubscriptions(state, dependencies, refresh, attribute.span);
       registerRefresh(state, refresh);
     }
     for (const child of node.children) {
@@ -990,21 +1286,18 @@ function emitNode(
     state.indent -= 1;
     push(state, `}`);
     push(state, `${refresh}();`);
-    for (const dependency of dependencies) {
-      const signal = dependency.fromProps ? `${INTERNAL_PREFIX}propsChanged` : dependency.name;
-      push(
-        state,
-        `bindSignalWrites(${state.scopeVar}, ${signal}, ${JSON.stringify(dependency.name)}, ${refresh});`,
-        node.span,
-      );
-    }
+    emitDependencySubscriptions(state, dependencies, refresh, node.span);
     registerRefresh(state, refresh);
+    return;
+  }
+  if (node.kind === 'component-ref') {
+    emitComponentRef(state, node, sink, records);
     return;
   }
   diag(
     state,
     'OEIR_LEAF_UNSUPPORTED_NODE',
-    `node '${node.kind}' is outside the leaf slice (M05b/M06 owns it)`,
+    `node '${node.kind}' is outside the M06b1 slice (recipes/insertion sites and children projection are M06b1a-2/M06b1a-3)`,
     span,
   );
 }
@@ -1023,12 +1316,13 @@ function emitComponent(
   file: string,
   component: FunctionModelComponent,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  componentByName: ReadonlyMap<string, FunctionModelComponent>,
 ): EmittedComponent {
   const propsName = component.propsParam;
   const state: EmitState = {
     component,
     lines: [],
-    indent: 2,
+    indent: 1,
     diagnostics: [],
     requiredBindings: new Set(),
     requiredProps: new Set(),
@@ -1040,9 +1334,12 @@ function emitComponent(
     segments: [],
     placements: [],
     segmentKeys: new Set(),
-    scopeVar: `${INTERNAL_PREFIX}scope`,
+    scopeVar: MOUNT_SCOPE,
+    hostVar: MOUNT_HOST,
+    componentByName,
     entryNames: new Set(),
     refreshStack: [],
+    listDepth: 0,
   };
   if (
     propsName !== null &&
@@ -1058,7 +1355,11 @@ function emitComponent(
   }
   // Resources: signal/computed names are host bindings; local snapshots are
   // evaluated inside the mount (setup mode), preserving M03 semantics.
-  const localLines: Array<{ name: string; record: LoweredExpressionRecord; span: SpanLike }> = [];
+  const localLines: Array<{
+    name: string;
+    record: LoweredExpressionRecord;
+    span: SpanLike;
+  }> = [];
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
       diag(
@@ -1096,7 +1397,7 @@ function emitComponent(
     diag(
       state,
       'OEIR_LEAF_UNSUPPORTED_RECIPE',
-      'nested recipes/insertion sites are outside the leaf slice (M05b)',
+      'nested recipes/insertion sites are outside the M06b1a-1 slice (M06b1a-2 owns them)',
       { file, start: 0, end: 0, line: 1, column: 1 },
     );
     return {
@@ -1127,12 +1428,6 @@ function emitComponent(
     };
   }
 
-  push(state, 'return createRecipe({');
-  state.indent += 1;
-  push(state, `definitionOwner: ${INTERNAL_PREFIX}owner,`);
-  push(state, `source: ${JSON.stringify(`${file}#${component.name}`)},`);
-  push(state, `mount(${INTERNAL_PREFIX}scope) {`);
-  state.indent += 1;
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
   for (const line of localLines) {
     pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
@@ -1143,37 +1438,59 @@ function emitComponent(
     appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
   }
   push(state, `return ${INTERNAL_PREFIX}nodes;`);
-  state.indent -= 1;
-  push(state, '},');
-  state.indent -= 1;
-  push(state, '});');
 
-  const prologue: string[] = [];
-  prologue.push(
-    `export function create${component.name}Recipe(${INTERNAL_PREFIX}owner, ${INTERNAL_PREFIX}host) {`,
-  );
+  // The component body lives in one module-level mount so a component reference
+  // and the exported root factory share exactly one emitted body per module.
+  const mountPrologue: string[] = [
+    `function ${component.name}${MOUNT_SUFFIX}(${MOUNT_SCOPE}, ${MOUNT_PROPS}, ${MOUNT_HOST}) {`,
+  ];
   if (propsName !== null) {
-    prologue.push(`  const ${propsName} = ${INTERNAL_PREFIX}host.props;`);
+    mountPrologue.push(`  const ${propsName} = ${MOUNT_PROPS};`);
     state.requiredProps.add(propsName);
   }
-  if (state.requiredBindings.size > 0 || state.requiresPropsChanged) {
-    prologue.push(
-      `  const ${INTERNAL_PREFIX}requireBinding = (name) => { const value = ${INTERNAL_PREFIX}host.bindings[name]; if (value === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: " + name); return value; };`,
+  if (state.requiredBindings.size > 0) {
+    mountPrologue.push(
+      `  const ${INTERNAL_PREFIX}requireBinding = (name) => { const value = ${MOUNT_HOST}.bindings[name]; if (value === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: " + name); return value; };`,
     );
     for (const binding of [...state.requiredBindings].sort()) {
-      prologue.push(
+      mountPrologue.push(
         `  const ${binding} = ${INTERNAL_PREFIX}requireBinding(${JSON.stringify(binding)});`,
       );
     }
-    if (state.requiresPropsChanged) {
-      prologue.push(
-        `  const ${INTERNAL_PREFIX}propsChanged = ${INTERNAL_PREFIX}host.propsChanged; if (${INTERNAL_PREFIX}propsChanged === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: propsChanged");`,
-      );
-    }
   }
-  const shift = prologue.length;
+  const mountHostVar = `${INTERNAL_PREFIX}mountHost`;
+  const factoryLines: string[] = [
+    `export function create${component.name}Recipe(${INTERNAL_PREFIX}owner, ${INTERNAL_PREFIX}host) {`,
+  ];
+  if (state.requiresPropsChanged) {
+    // The root instance's defining scope is the host props channel: the
+    // original OEIR_LEAF_MISSING_VALUE contract stays at factory creation.
+    factoryLines.push(
+      `  const ${INTERNAL_PREFIX}propsChanged = ${INTERNAL_PREFIX}host.propsChanged; if (${INTERNAL_PREFIX}propsChanged === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: propsChanged");`,
+    );
+    factoryLines.push(
+      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [${INTERNAL_PREFIX}propsChanged] };`,
+    );
+  } else {
+    factoryLines.push(
+      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [] };`,
+    );
+  }
+  factoryLines.push(
+    '  return createRecipe({',
+    `    definitionOwner: ${INTERNAL_PREFIX}owner,`,
+    `    source: ${JSON.stringify(`${file}#${component.name}`)},`,
+    '    mount(__oe_scope) {',
+    `      return ${component.name}${MOUNT_SUFFIX}(${MOUNT_SCOPE}, ${INTERNAL_PREFIX}host.props, ${mountHostVar});`,
+    '    },',
+    '  });',
+    '}',
+    '',
+  );
+  const mountLines = [...mountPrologue, ...state.lines, '}', ''];
+  const shift = mountPrologue.length;
   return {
-    lines: [...prologue, ...state.lines, '}', ''],
+    lines: [...mountLines, ...factoryLines],
     diagnostics: state.diagnostics,
     requiredBindings: [...state.requiredBindings].sort(),
     requiredProps: [...state.requiredProps].sort(),
@@ -1187,6 +1504,95 @@ function emitComponent(
       generatedLine: placement.generatedLine + shift,
     })),
   };
+}
+
+/** One component-reference edge in the module's component graph. */
+interface ComponentRefEdge {
+  readonly from: string;
+  readonly to: string;
+  readonly span: IrSpan;
+}
+
+/** Collect every component reference under one component's node tree. */
+function collectComponentRefs(
+  from: string,
+  nodes: readonly FunctionModelNode[],
+  edges: ComponentRefEdge[],
+): void {
+  for (const node of nodes) {
+    switch (node.kind) {
+      case 'component-ref':
+        edges.push({ from, to: node.name, span: node.span });
+        break;
+      case 'element':
+      case 'fragment':
+        collectComponentRefs(from, node.children, edges);
+        break;
+      case 'condition':
+        collectComponentRefs(from, node.consequent, edges);
+        if (node.alternate !== null) collectComponentRefs(from, node.alternate, edges);
+        break;
+      case 'list':
+        collectComponentRefs(from, node.template, edges);
+        break;
+      default:
+        // text / dynamic-text / insertion-site / children-projection carry no
+        // component references (recipes are refused before generation).
+        break;
+    }
+  }
+}
+
+/**
+ * Fail closed on component-reference cycles: the emitted mounts would call
+ * themselves at mount time (unbounded recursion). The authored node trees —
+ * roots, condition branches, list templates — are walked in authored order and
+ * the first cycle is reported with its path and the closing reference's span.
+ */
+function findComponentCycle(module: FunctionModelModule): IrDiagnostic | null {
+  const edges = new Map<string, ComponentRefEdge[]>();
+  for (const component of module.components) {
+    const collected: ComponentRefEdge[] = [];
+    collectComponentRefs(component.name, component.roots, collected);
+    edges.set(component.name, collected);
+  }
+  const WHITE = 0;
+  const GRAY = 1;
+  const BLACK = 2;
+  const color = new Map<string, number>();
+  const path: string[] = [];
+  const visit = (name: string): IrDiagnostic | null => {
+    color.set(name, GRAY);
+    path.push(name);
+    for (const edge of edges.get(name) ?? []) {
+      // Unknown/external targets fail closed on their own during emission.
+      if (!edges.has(edge.to)) continue;
+      const targetColor = color.get(edge.to) ?? WHITE;
+      if (targetColor === GRAY) {
+        const cycle = [...path.slice(path.indexOf(edge.to)), edge.to].join(' -> ');
+        return {
+          severity: 'error',
+          code: 'OEIR_LEAF_COMPONENT_CYCLE',
+          message: `component reference cycle: ${cycle}`,
+          span: edge.span,
+          origin: 'ir-object',
+        };
+      }
+      if (targetColor === WHITE) {
+        const found = visit(edge.to);
+        if (found !== null) return found;
+      }
+    }
+    path.pop();
+    color.set(name, BLACK);
+    return null;
+  };
+  for (const component of module.components) {
+    if ((color.get(component.name) ?? WHITE) !== WHITE) continue;
+    const found = visit(component.name);
+    if (found !== null) return found;
+  }
+  return null;
 }
 
 /** Fail-closed parse check of the emitted module text (no execution). */
@@ -1231,6 +1637,21 @@ export function generateLeafModule(
       ],
     };
   }
+  const componentByName = new Map(
+    module.components.map((component) => [component.name, component] as const),
+  );
+  const cycle = findComponentCycle(module);
+  if (cycle !== null) {
+    return {
+      module: null,
+      sourceMap: null,
+      placements: [],
+      requiredBindings: [],
+      requiredProps: [],
+      requiresPropsChanged: false,
+      diagnostics: [cycle],
+    };
+  }
   const chunks: string[] = [];
   const diagnostics: IrDiagnostic[] = [];
   const requiredBindings = new Set<string>();
@@ -1239,14 +1660,27 @@ export function generateLeafModule(
   const placements: ExpressionPlacement[] = [];
   let requiresPropsChanged = false;
   for (const component of module.components) {
-    const emitted = emitComponent(module.file, component, records);
+    const emitted = emitComponent(module.file, component, records, componentByName);
     diagnostics.push(...emitted.diagnostics);
     if (emitted.diagnostics.length > 0) continue;
     for (const name of emitted.requiredBindings) requiredBindings.add(name);
     for (const name of emitted.requiredProps) requiredProps.add(name);
     requiresPropsChanged ||= emitted.requiresPropsChanged;
-    segments.push(...emitted.segments);
-    placements.push(...emitted.placements);
+    // Component chunks are concatenated in module order: rebase this component's
+    // segment/placement lines onto the lines already emitted before it.
+    const lineOffset = chunks.length;
+    segments.push(
+      ...emitted.segments.map((segment) => ({
+        ...segment,
+        generatedLine: segment.generatedLine + lineOffset,
+      })),
+    );
+    placements.push(
+      ...emitted.placements.map((placement) => ({
+        ...placement,
+        generatedLine: placement.generatedLine + lineOffset,
+      })),
+    );
     chunks.push(...emitted.lines);
   }
   if (diagnostics.length > 0) {
@@ -1261,7 +1695,7 @@ export function generateLeafModule(
     };
   }
   const headerLines = [
-    '// <generated by openelement M05 leaf-codegen v2; do not edit>',
+    '// <generated by openelement M06b1 leaf-codegen v2; do not edit>',
     `import { ${RUNTIME_IMPORTS.join(', ')} } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
     '',
   ];
