@@ -58,7 +58,7 @@ there (`git show 3b5c7a9a^:docs/audit/2026-07-27-application-loop-framework-rese
 - [ADR-0166-regions-axis-entry-subpaths.md](./ADR-0166-regions-axis-entry-subpaths.md) — AMENDED: `./no-regions` retired in alpha15 (blocks axis: `./no-blocks` / `./base`)
 - [ADR-0167-declared-tailwind-compilation.md](./ADR-0167-declared-tailwind-compilation.md)
 - [ADR-0168-style-provider-port.md](./ADR-0168-style-provider-port.md)
-- [ADR-0169-request-time-rendering-surface.md](./ADR-0169-request-time-rendering-surface.md)
+- [ADR-0169-request-time-rendering-surface.md](./ADR-0169-request-time-rendering-surface.md) — AMENDED: bounded full-await server-function seam (2026-11-09; M14 bounded slice, not M14 exit)
 - [ADR-0170-late-host-island-activation.md](./ADR-0170-late-host-island-activation.md)
 - [ADR-0171-private-artifact-static-boundary.md](./ADR-0171-private-artifact-static-boundary.md) — AMENDED: accepted next architecture; implementation pending (2026-10-31)
 - [ADR-0172-document-lang-resolution.md](./ADR-0172-document-lang-resolution.md)

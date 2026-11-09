@@ -242,14 +242,22 @@ executor does not automatically solve SSR or claim.
 
 ### 4.6a Async server components (Alpha16 scope)
 
-The current compiler **rejects** `async` server function components with
-`OEC9032` and requires a single synchronous JSX return
-(`semantic-core/server-component.ts:135,173-175`). The target must be defined
+The Alpha15 request-time lane now implements **bounded full-await** for server
+function components (`#1748`, 2026-11-09; ADR-0169 amendment): an async component
+is admitted only as a single JSX return with `await` in text children and in
+nested server-component props. Attribute/condition/list-item/arbitrary-expression
+await and a synchronous parent of an async child stay refused with `OEC9032`;
+the production admission bridge refuses the near-miss shapes (statements before
+the return, block-bodied arrow) instead of leaving them as runtime JSX. The
+generated normal/error/404/SSG function-page entries await the published
+`renderFunctionPageAwaited`; the synchronous `renderFunctionPage` string
+contract is unchanged. This is a bounded M14 slice, not M14 exit, and it does
+not replace the M08 generated-leaf SSR producer. The target is stated
 explicitly rather than assumed:
 
 | Question | Alpha16 position |
 | --- | --- |
-| Are ordinary async server components supported? | **Yes, as a defined milestone (M14), not as current behaviour.** |
+| Are ordinary async server components supported? | **Yes for the bounded full-await grammar (`#1748`); the full M14 surface remains open.** |
 | How is output produced? | **Full-await:** the component awaits its data, then returns its JSX; HTML is emitted after all awaits complete. No out-of-order or per-fragment streaming in Alpha16. |
 | Does server-only code reach the client graph? | No — the existing server-only import guard (#1618) remains the enforcement point; unmigrated async work must not add a second path. |
 | Which milestone owns it? | M14, parallelisable, required for Alpha16b qualification. Not part of the Alpha16a gate. |
