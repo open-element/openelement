@@ -700,6 +700,22 @@ function C(props) { return <Frame><Row text={props.label} /></Frame>; }
     expect(module).toContain('get text() { return (props . label); },');
   });
 
+  test('projections in condition/list builders use their live descendant scopes', () => {
+    const result = generate(`function Frame(props) {
+  return <div>{props.ok ? <p>{props.children}</p> : null}<ul>{props.items.map((it) => <li>{props.children}</li>)}</ul></div>;
+}
+function C(props) { return <Frame ok={props.ok} items={props.items}><b>x</b></Frame>; }
+`);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    // A branch builder's scope and a list-entry owner are fresh descendants of
+    // the child instance scope handed to their builder, so M04 lineage admits
+    // the projection; each site still inserts the SAME mount-level recipe.
+    expect(module).toMatch(/insertRecipe\(__oe_whenThenScope\d+, __oe_childrenRecipe, /);
+    expect(module).toMatch(/insertRecipe\(__oe_eachScope\d+, __oe_childrenRecipe, /);
+    expect(module).not.toMatch(/insertRecipe\(__oe_scope, __oe_childrenRecipe, /);
+  });
+
   test('multiple children in one fragment keep authored order', () => {
     const result = generate(
       'function Frame(props) { return <div>{props.children}</div>; }\nfunction C(props) { return <Frame><i>a</i><b>b</b></Frame>; }\n',
