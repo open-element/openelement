@@ -1,11 +1,12 @@
 # M07b static sibling ranges
 
-Status: scope accepted in workboard §13 (technical plan only); implementation
-not independently reviewed at this head. Not a public ABI, not an SSR producer,
-and not the M07 exit. The directory consumer is the bounded M07b slice; the
-fixed-head QA record is its acceptance evidence.
+Status: scope accepted in workboard §13 (technical plan only); fixed-head QA
+passed at `4feffef00` (#1747) and at `d7a4db434` (bounded generator extension,
+#1749). Not a public ABI, not an SSR producer, and not the M07 exit.
 
-The base is `146d838573d130e07bbe9b4eebe86efacb43fe9d`. M07a behavior stays:
+The slice was authored on the M07a acceptance head `146d8385` (squash
+`0a97602c4`) and retargeted onto `main` after #1747's squash (`0df1621a5`); the
+QA-accepted #1747 head was `4feffef00`. M07a behavior stays:
 a missing generated claim is `OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE`; validation
 writes nothing; activation may keep an earlier dynamic write;
 `dispose(false)` does not upgrade to `dispose(true)`.
@@ -132,9 +133,10 @@ slice name only; M07c and M07d remain unapproved labels (workboard §3, §13.5,
 §14.2).
 
 PR #1749 carries two commits — the generator change with its tests, and this
-document. They were authored on the accepted M07b head
-`197f243260447c48728785110f53e82260fbc4a9` and are rebased onto current `main`
-after #1747's squash merge. For a parent whose flattened children are two or
+document. They were authored on the M07b head
+`197f243260447c48728785110f53e82260fbc4a9`, rebased to `4feffef00` for the
+fixed-head QA, and rebased onto `main` after #1747's squash merge
+(`0df1621a5`). For a parent whose flattened children are two or
 more fully static elements, mount emits the paired markers and the generated
 claim calls `openStaticSiblingDirectory` and `claimStaticSiblingRange`.
 Expected ordinals are generator literals. The fixed-head QA record on this head
@@ -160,6 +162,17 @@ slice has no dynamic binding to run after the reservation. That empty function
 is not a complete claim. A later path that admits a dynamic slot into a
 directory must pass an `activate` that performs those bindings. Keeping
 `() => {}` on that path would present an incomplete claim as complete.
+
+**Known consequence: mount-only trees also emit the markers.** The mount-side
+predicate is not gated on whether a claim is emitted, so a pure-static directory
+inside a reusable-JSX recipe body, a `props.children` recipe body, a
+condition/list template, or a component whose claim is omitted also gets the
+marker comments. No generated claim consumes them in those trees; they are
+inert comments, but they change `childNodes` and `innerHTML` (not `children` or
+`textContent`) of the affected subtrees. No product entry wires claim, so the
+consequence is bounded; a later slice must either suppress mount emission when
+no claim is emitted or assert and document it explicitly. The current tests do
+not cover this case (fixed-head QA gap, 2026-11-09).
 
 `claimRecipe` records one owner and one region before it calls the generated
 claim, then `dispose(false)`s that owner when the claim throws. `runtimeProbe`
