@@ -388,6 +388,37 @@ function registerRefresh(state: EmitState, name: string): void {
   if (collector !== undefined) collector.push(name);
 }
 
+/**
+ * True when the record reads a name bound by an enclosing list-entry builder
+ * (the mapper parameter). Such a read has no reactive dependency: a keyed reuse
+ * or an unkeyed positional reuse re-binds the parameter through
+ * `update(next)`. A zero-dependency slot that reads an entry-local name must
+ * therefore still register a refresh closure, otherwise it keeps the first
+ * snapshot (the M06b2c defect).
+ */
+function readsEntryLocal(state: EmitState, record: LoweredExpressionRecord): boolean {
+  // Outside an entry builder there is nothing to re-run against (a component
+  // mount has no `update` hook); keep today's static write byte-identical.
+  if (state.refreshStack.length === 0) return false;
+  return record.reads.some((read) => state.entryNames.has(read.name));
+}
+
+/**
+ * Emit `function <refresh>() { <write> } <refresh>();` and return the refresh
+ * name. The caller decides whether it registers with the enclosing entry builder
+ * and whether dependency subscriptions are added (zero-dependency vs tracked).
+ */
+function emitLocalRefresh(state: EmitState, anchor: SpanLike, write: () => void): string {
+  const refresh = nextName(state, 'refresh');
+  push(state, `function ${refresh}() {`, anchor);
+  state.indent += 1;
+  write();
+  state.indent -= 1;
+  push(state, `}`);
+  push(state, `${refresh}();`);
+  return refresh;
+}
+
 /** Append the sink entries to an element variable (authored child order). */
 function appendSinkToElement(
   state: EmitState,
@@ -475,6 +506,10 @@ function emitEntryBuilder(
   state.indent += 1;
   const outerScope = state.scopeVar;
   state.scopeVar = scopeParam;
+  // Save/restore rather than add/delete: a nested list entry may shadow the same
+  // mapper name, and deleting it on the way out would hide the outer entry-local
+  // reads (refresh registration and `declareReads` both consult this set).
+  const outerEntryNames = state.entryNames.has(itemName);
   state.entryNames.add(itemName);
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
   push(state, `let ${itemName} = ${itemParam};`);
@@ -486,7 +521,7 @@ function emitEntryBuilder(
     appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
   }
   state.refreshStack.pop();
-  state.entryNames.delete(itemName);
+  if (!outerEntryNames) state.entryNames.delete(itemName);
   const updateBody = [`${itemName} = next;`, ...collector.map((name) => `${name}(true);`)].join(
     ' ',
   );
@@ -653,9 +688,10 @@ function emitList(
     if (keyRecord === null) return;
     // The mapper parameter is entry-local (not a host binding); outer reads in a
     // key thunk are validated as usual and refresh the list when written.
+    const outerKeyEntryName = state.entryNames.has(node.parameter);
     state.entryNames.add(node.parameter);
     const declared = declareReads(state, keyRecord);
-    state.entryNames.delete(node.parameter);
+    if (!outerKeyEntryName) state.entryNames.delete(node.parameter);
     if (!declared) return;
     const keyDeps = dependencyNames(state, keyRecord);
     if (keyDeps === null) return;
@@ -1702,13 +1738,32 @@ function emitNode(
       const dependencies = dependencyNames(state, record);
       if (dependencies === null) continue;
       if (dependencies.length === 0) {
-        emitAttributeWrite(
+        if (!readsEntryLocal(state, record)) {
+          emitAttributeWrite(
+            state,
+            varName,
+            attribute.name,
+            attribute.channel,
+            record,
+            attribute.span,
+          );
+          continue;
+        }
+        // Entry-local read without a reactive dependency: the enclosing entry
+        // builder's `update(next)` re-binds the mapper parameter, so the write
+        // must re-run from a registered refresh closure (M06b2c).
+        registerRefresh(
           state,
-          varName,
-          attribute.name,
-          attribute.channel,
-          record,
-          attribute.span,
+          emitLocalRefresh(state, attribute.span, () =>
+            emitAttributeWrite(
+              state,
+              varName,
+              attribute.name,
+              attribute.channel,
+              record,
+              attribute.span,
+            ),
+          ),
         );
         continue;
       }
@@ -1739,7 +1794,17 @@ function emitNode(
     push(state, `const ${textVar} = document.createTextNode("");`, node.span);
     sink.push({ kind: 'node', name: textVar });
     if (dependencies.length === 0) {
-      emitTextWrite(state, textVar, record);
+      if (!readsEntryLocal(state, record)) {
+        emitTextWrite(state, textVar, record);
+        return;
+      }
+      // Entry-local read without a reactive dependency: the entry update hook
+      // re-binds the mapper parameter, so the text write must re-run from a
+      // registered refresh closure (M06b2c — unkeyed/same-key reuse).
+      registerRefresh(
+        state,
+        emitLocalRefresh(state, node.span, () => emitTextWrite(state, textVar, record)),
+      );
       return;
     }
     const refresh = nextName(state, 'refresh');

@@ -823,6 +823,214 @@ function B(props) { return <span><A><B /></A></span>; }
   });
 });
 
+describe('M06b2c — list-entry item refresh (unkeyed / same-key reuse)', () => {
+  /**
+   * The mapper parameter is re-bound by `update(next)`; a slot that reads it has
+   * ZERO reactive dependencies, so its write used to be emitted statically and
+   * never re-ran (first-snapshot staleness). These tests pin the registered
+   * refresh closure on the entry collector. A component reference inside an
+   * entry stays refused (see the M06b1a-1 suite); insertion sites inside an
+   * entry are projections whose recipes refresh through their own instances.
+   */
+
+  /** The bodies of the generated entry `update(next) { ... }` hooks, in order. */
+  function updateBodies(module: string): string[] {
+    return [...module.matchAll(/update\(next\) \{ ([^}]*) \}/g)].map((match) => match[1]!);
+  }
+
+  /** The plain refresh functions called by one entry update body. */
+  function refreshCalls(body: string): string[] {
+    return [...body.matchAll(/(__oe_refresh\d+)\(true\)/g)].map((match) => match[1]!);
+  }
+
+  const UNKEYED = `import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li>{item}</li>)}</ul>;
+}
+`;
+
+  test('an unkeyed entry re-runs its `{item}` write from a registered refresh', () => {
+    const result = generate(UNKEYED);
+    expect(result.module).not.toBeNull();
+    const module = result.module!;
+    const updates = updateBodies(module);
+    expect(updates).toHaveLength(1);
+    // The defect was exactly `update(next) { item = next; }`: the parameter was
+    // re-bound but no slot write re-ran, keeping the first render's snapshot.
+    expect(updates[0]).toMatch(/^item = next; __oe_refresh\d+\(true\);$/);
+    const refresh = refreshCalls(updates[0]!)[0]!;
+    expect(refresh).toBeDefined();
+    // The refresh re-reads the re-bound parameter (not a captured value) ...
+    expect(module).toMatch(
+      new RegExp(
+        `function ${refresh}\\(\\) \\{\\n\\s+__oe_text\\d+\\.nodeValue = displayValue\\(\\(item\\)\\);\\n\\s+\\}`,
+      ),
+    );
+    // ... and the initial build calls it immediately (one write, unchanged).
+    expect(module).toContain(`${refresh}();`);
+    // No reactive dependency exists on the slot, so only the list subscription
+    // is emitted — no bogus signal binding for the entry-local name.
+    expect(module.match(/bindSignalWrites\(/g)).toHaveLength(1);
+    expect(result.requiredBindings).toEqual(['items']);
+    expect(module).not.toContain('requireBinding("item")');
+  });
+
+  test('a keyed same-key replacement uses the same update path', () => {
+    const module = generate(`import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li key={item.id}>{item.label}</li>)}</ul>;
+}
+`).module!;
+    // Keyed reuse: same key, changed label — the entry hook must refresh in place.
+    expect(module).toMatch(/function __oe_eachKey\d+\(/);
+    const updates = updateBodies(module);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatch(/^item = next; __oe_refresh\d+\(true\);$/);
+    const refresh = refreshCalls(updates[0]!)[0]!;
+    expect(module).toMatch(
+      new RegExp(
+        `function ${refresh}\\(\\) \\{\\n\\s+__oe_text\\d+\\.nodeValue = displayValue\\(\\(item \\. label\\)\\);`,
+      ),
+    );
+  });
+
+  test('an entry-local dynamic attribute refreshes on update', () => {
+    const module = generate(`import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li data-id={item.id}>{item}</li>)}</ul>;
+}
+`).module!;
+    const updates = updateBodies(module);
+    expect(updates).toHaveLength(1);
+    const calls = refreshCalls(updates[0]!);
+    expect(calls).toHaveLength(2);
+    const attributeRefresh = calls.find((name) =>
+      new RegExp(
+        `function ${name}\\(\\) \\{\\n\\s+const __oe_value\\d+ = attributeValueOf\\(\\(item \\. id\\)\\);`,
+      ).test(module),
+    );
+    expect(attributeRefresh).toBeDefined();
+    expect(module).toContain(`${attributeRefresh}();`);
+    const textRefresh = calls.find((name) => name !== attributeRefresh)!;
+    expect(module).toMatch(
+      new RegExp(
+        `function ${textRefresh}\\(\\) \\{\\n\\s+__oe_text\\d+\\.nodeValue = displayValue\\(\\(item\\)\\);`,
+      ),
+    );
+  });
+
+  test('a condition inside an entry whose test reads the item refreshes (covered)', () => {
+    const module = generate(`import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li>{item.on ? <b>{item.label}</b> : <em>off</em>}</li>)}</ul>;
+}
+`).module!;
+    // emitCondition already registered with the enclosing entry collector; the
+    // forced refresh rebuilds the branch from the re-bound parameter, and the
+    // branch slot reading `item.label` is registered by the M06b2c fix.
+    const updates = updateBodies(module);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatch(
+      /^item = next; __oe_refresh\d+\(true\); __oe_whenRefresh\d+\(true\);$/,
+    );
+    expect(module).toMatch(/const __oe_next = \(item \. on\) \? 1 : 2;/);
+    const branchRefresh = refreshCalls(updates[0]!)[0]!;
+    expect(module).toMatch(
+      new RegExp(
+        `function ${branchRefresh}\\(\\) \\{\\n\\s+__oe_text\\d+\\.nodeValue = displayValue\\(\\(item \\. label\\)\\);`,
+      ),
+    );
+  });
+
+  test('a nested list builder inside an entry re-reads the entry-local name', () => {
+    const module = generate(`import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li>{item.children.map((child) => <b>{child}</b>)}</li>)}</ul>;
+}
+`).module!;
+    const updates = updateBodies(module);
+    // Inner entry (child slot) and outer entry (nested list) both refresh.
+    expect(updates).toHaveLength(2);
+    expect(updates.some((body) => /^child = next; __oe_refresh\d+\(true\);$/.test(body))).toBe(
+      true,
+    );
+    // The nested list's own refresh is registered on the SHARED entry collector.
+    expect(updates.some((body) => /^item = next; __oe_eachRefresh\d+\(true\);$/.test(body))).toBe(
+      true,
+    );
+    expect(module).toMatch(/const __oe_items = \(item \. children\);/);
+  });
+
+  test('a reusable-JSX insertion site inside an entry refreshes via its recipe instance', () => {
+    const module = generate(`import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  const suffix = signal('!');
+  const row = <b>{suffix.value}</b>;
+  return <ul>{items.value.map((item) => <li>{row}{item}</li>)}</ul>;
+}
+`).module!;
+    // The projection is inserted on the entry owner scope (a live descendant of
+    // the recipe's definition owner) ...
+    expect(module).toMatch(/insertRecipe\(__oe_eachScope\d+, __oe_recipe\d+,/);
+    // ... and its body subscribes on the RECIPE instance scope, so recipe
+    // content never depends on the entry `update` hook.
+    expect(module).toMatch(/bindSignalWrites\(__oe_recipeScope\d+, suffix, "suffix"/);
+    // The entry-local `{item}` text slot (the M06b2c defect) still refreshes.
+    const updates = updateBodies(module);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatch(/^item = next; __oe_refresh\d+\(true\);$/);
+  });
+
+  test('static slots outside a list entry keep the inline write (no refresh churn)', () => {
+    const text = generate('function C(props) { return <p>{"plain"}</p>; }\n').module!;
+    expect(text).not.toMatch(/function __oe_refresh\d+\(/);
+    expect(text).toContain('.nodeValue = displayValue(("plain"));');
+    const attribute = generate('function C(props) { return <p data-n={1}>x</p>; }\n').module!;
+    expect(attribute).not.toMatch(/function __oe_refresh\d+\(/);
+    expect(attribute).toContain('attributeValueOf((1))');
+    // No `update` hook exists outside an entry builder, so nothing can go stale.
+    expect(text).not.toContain('update(next)');
+    expect(attribute).not.toContain('update(next)');
+  });
+
+  test('the fixed list output is deterministic and parses as JavaScript', () => {
+    for (const source of [
+      UNKEYED,
+      `import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li key={item.id}>{item.label}</li>)}</ul>;
+}
+`,
+      `import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li data-id={item.id}>{item}</li>)}</ul>;
+}
+`,
+    ]) {
+      const first = generate(source).module!;
+      expect(generate(source).module).toBe(first);
+      const parsed = ts.createSourceFile(
+        'leaf.js',
+        first,
+        ts.ScriptTarget.ES2022,
+        true,
+        ts.ScriptKind.JS,
+      );
+      const parseDiagnostics =
+        (parsed as unknown as { parseDiagnostics?: readonly unknown[] }).parseDiagnostics ?? [];
+      expect(parseDiagnostics).toHaveLength(0);
+    }
+  });
+});
+
 describe('M05 leaf v2 — fail-closed boundary (M05b/M06 shapes refused)', () => {
   const REFUSED: ReadonlyArray<{
     label: string;
