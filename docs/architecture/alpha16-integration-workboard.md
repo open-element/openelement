@@ -435,3 +435,55 @@ the read above, so this plan does not call #1745 accepted.
   review.
 - The candidate file was not edited. No source, test, or other document was
   edited.
+
+## 14. 2026-11-09 21:45 — post-review amendments (Lead record)
+
+This section is a dated amendment. It does not rewrite §1–§13; where it
+conflicts, this section is the later read.
+
+### 14.1 §5 is superseded for the M07a branch
+
+`cursor/m07a-leaf-claim-21d0` no longer holds `94a87a36`. The branch moved to
+the §2.1 repair and then to the interface-snapshot commit: head `146d8385` at
+this read. AutoFlow + CodeQL are green at that head (14 check-runs: 9 success,
+5 release-only skipped; the exact-head runs are recorded in the PR #1745 body
+and the ledger). The §5 row "Stays for QA. Do not move this head" described the
+17:52 read and is not a current branch rule. QA keeps a fixed-head record for
+every head it reviews; the current QA target is `146d8385`.
+
+### 14.2 #1749 is an M07b generator extension, not the unapproved M07c
+
+§3 and §13.5 keep "M07c" as an unapproved developer label; they do not describe
+#1749's generator mount/claim work. #1749 is therefore named **"M07b generator
+extension"** in its commits and documents; the branch ref
+`cursor/m07c-generator-mount-claim-21d0` is a slice name only. The slice closes
+§13.2's D5 ("Mount markers | Left open as D5") as a bounded addition accepted
+by the Owner on 2026-11-09: the generator emits the paired markers for a parent
+whose flattened children are two or more fully static elements, and the
+generated claim consumes them through the §13 directory consumer. It is not the
+M07c design (key, dynamic structure, duplicate subscription, cleanup).
+
+### 14.3 Lead/QA acceptance recorded here
+
+- §2.1 (bare `Error` must-fix) — repaired at `146d8385`; the error-dialect test
+  is unchanged and the repair is green in CI at that head.
+- §2.2 (claim failure: validate writes nothing; activation rollback releases
+  resources and keeps borrowed nodes; no byte restoration) — accepted as the
+  reading of the existing contract; #1745 writes it into the model and TSX
+  notes.
+- §2.3 (dispose first-call-wins; a completed `dispose(false)` is not upgraded)
+  — accepted; TSX-27 and G2 behaviour are unchanged.
+- §13 decided M07b technical plan — accepted as **technical plan only**.
+  Implementation acceptance remains with the fixed-head QA review of each
+  slice; §13.5's non-goals stay non-goals.
+
+Merge order approved by the Lead for the 2026-11-09 queue: #1746 (this record)
+→ #1745 → #1747 (after retarget to `main` and full matrix CI) → #1749 (after
+retarget and full matrix CI); #1748 is an independent Alpha16b slice and lands
+after the M07 stack.
+
+### 14.4 Not changed by this amendment
+
+The marker/seed/diagnostic private-contract candidate stays unapproved (R4
+"Owner decision?" remains `No`). §9's unnamed items stay unnamed. This section
+adds no gate, no matrix cell and no milestone evidence.
