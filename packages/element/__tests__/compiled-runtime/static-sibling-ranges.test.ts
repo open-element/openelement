@@ -127,13 +127,13 @@ class LogAttributes {
 }
 
 class LogElement extends LogNode {
-  readonly namespaceURI: string | null = null;
   readonly attributes: LogAttributes;
   #nodeValue: string | null = null;
 
   constructor(
     log: OperationLog,
     readonly localName: string,
+    readonly namespaceURI: string | null = null,
   ) {
     super(log, 1);
     this.attributes = new LogAttributes(log);
@@ -157,8 +157,8 @@ class LogElement extends LogNode {
 class LogDocument {
   readonly log = new OperationLog();
 
-  element(localName: string): LogElement {
-    return new LogElement(this.log, localName);
+  element(localName: string, namespaceURI: string | null = null): LogElement {
+    return new LogElement(this.log, localName, namespaceURI);
   }
 
   text(value: string): LogText {
@@ -661,4 +661,347 @@ test('F: dispose modes stay first-wins, and an activation write is not rolled ba
     () => undefined,
   );
   expect(afterFailure.start).toBe(activation.ranges[0].start);
+});
+
+test('repeated opens share one pair identity across reentry, dispose, and retry', () => {
+  const doc = new LogDocument();
+  const parent = doc.element('div');
+  const range0 = buildRange(doc, parent, 0, 'same');
+  const range1 = buildRange(doc, parent, 1, 'same');
+  const declaration = [paragraph('same'), paragraph('same')];
+  const first = openStaticSiblingDirectory(asParent(parent), declaration, 'fixtures/Pair.tsx');
+  const second = openStaticSiblingDirectory(asParent(parent), declaration, 'fixtures/Pair.tsx');
+  expect(first).not.toBe(second);
+
+  const contenderHost = new LifetimeScope();
+  let contender: OpenElementError | undefined;
+  const claimed = claimStaticSiblingRange(first, 0, new LifetimeScope(), () => {
+    const owners = runtimeProbe.snapshot().owners;
+    try {
+      claimStaticSiblingRange(
+        second,
+        { start: asNode(range0.start) },
+        contenderHost,
+        () => undefined,
+      );
+    } catch (error) {
+      if (error instanceof OpenElementError) contender = error;
+      else throw error;
+    }
+    expect(runtimeProbe.snapshot().owners).toBe(owners);
+    expect(contenderHost.disposed).toBe(false);
+  });
+  expect(contender?.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+  expect(contender?.message).toContain('busy:');
+  expect(claimed.start).toBe(range0.start);
+  expect(claimed.end).toBe(range0.end);
+  expect(claimed.owner.disposed).toBe(false);
+  expect(runtimeProbe.snapshot().owners).toBe(1);
+  expect(range0.element.parentNode).toBe(parent);
+
+  const overlap = runtimeProbe.snapshot();
+  const mark = doc.log.events.length;
+  const duplicate = capture(() =>
+    claimStaticSiblingRange(second, 0, new LifetimeScope(), () => undefined),
+  );
+  expect(duplicate.message).toContain('consumed:');
+  expect(doc.log.writesSince(mark)).toEqual([]);
+  expect(runtimeProbe.snapshot().owners).toBe(overlap.owners);
+  expect(runtimeProbe.snapshot().regions).toBe(overlap.regions);
+  expect(claimed.owner.disposed).toBe(false);
+  expect(range0.element.parentNode).toBe(parent);
+
+  claimed.dispose(true);
+  expect(range0.start.parentNode).toBeNull();
+  expect(range0.element.parentNode).toBeNull();
+  expect(range0.end.parentNode).toBeNull();
+  expect(range1.element.parentNode).toBe(parent);
+  expect(claimed.owner.disposed).toBe(true);
+
+  const reopened = openStaticSiblingDirectory(asParent(parent), declaration, 'fixtures/Pair.tsx');
+  expect(
+    capture(() => claimStaticSiblingRange(reopened, 0, new LifetimeScope(), () => undefined))
+      .message,
+  ).toContain('consumed:');
+  expect(
+    capture(() =>
+      claimStaticSiblingRange(
+        reopened,
+        { start: asNode(range0.start) },
+        new LifetimeScope(),
+        () => undefined,
+      ),
+    ).message,
+  ).toContain('consumed:');
+  expect(
+    capture(() =>
+      claimStaticSiblingRange(
+        second,
+        { start: asNode(range0.end) },
+        new LifetimeScope(),
+        () => undefined,
+      ),
+    ).message,
+  ).toContain('consumed:');
+  expect(range1.element.parentNode).toBe(parent);
+  const rest = claimStaticSiblingRange(second, 1, new LifetimeScope(), () => undefined);
+  expect(rest.start).toBe(range1.start);
+  expect(rest.owner.disposed).toBe(false);
+  expect(rest.owner).not.toBe(claimed.owner);
+
+  const retryDoc = new LogDocument();
+  const retryParent = retryDoc.element('div');
+  const retryRange = buildRange(retryDoc, retryParent, 0, 'same');
+  const retryDeclaration = [paragraph('same')];
+  const retryFirst = openStaticSiblingDirectory(asParent(retryParent), retryDeclaration);
+  const retrySecond = openStaticSiblingDirectory(asParent(retryParent), retryDeclaration);
+  expect(() =>
+    claimStaticSiblingRange(retryFirst, 0, new LifetimeScope(), () => {
+      claimStaticSiblingRange(retrySecond, 0, new LifetimeScope(), () => undefined);
+    }),
+  ).toThrow(/busy:/);
+  expect(retryRange.element.parentNode).toBe(retryParent);
+  expect(retryRange.start.parentNode).toBe(retryParent);
+  const retried = claimStaticSiblingRange(retrySecond, 0, new LifetimeScope(), () => undefined);
+  expect(retried.start).toBe(retryRange.start);
+  expect(retried.owner.disposed).toBe(false);
+
+  const duringDoc = new LogDocument();
+  const duringParent = duringDoc.element('div');
+  const duringRange = buildRange(duringDoc, duringParent, 0, 'same');
+  const duringDeclaration = [paragraph('same')];
+  const duringDirectory = openStaticSiblingDirectory(asParent(duringParent), duringDeclaration);
+  let reopenedDuringClaim: OpenElementError | undefined;
+  const held = claimStaticSiblingRange(duringDirectory, 0, new LifetimeScope(), () => {
+    try {
+      openStaticSiblingDirectory(asParent(duringParent), duringDeclaration);
+    } catch (error) {
+      if (error instanceof OpenElementError) reopenedDuringClaim = error;
+      else throw error;
+    }
+  });
+  expect(reopenedDuringClaim?.message).toContain('busy:');
+  expect(held.owner.disposed).toBe(false);
+  expect(held.start).toBe(duringRange.start);
+
+  const left = openPair();
+  const right = openPair();
+  const leftClaim = claimStaticSiblingRange(
+    left.directory,
+    0,
+    new LifetimeScope(),
+    () => undefined,
+  );
+  const rightClaim = claimStaticSiblingRange(
+    right.directory,
+    0,
+    new LifetimeScope(),
+    () => undefined,
+  );
+  expect(leftClaim.start).not.toBe(rightClaim.start);
+  leftClaim.dispose(true);
+  expect(left.ranges[0].element.parentNode).toBeNull();
+  expect(rightClaim.owner.disposed).toBe(false);
+  expect(right.ranges[0].element.parentNode).toBe(right.parent);
+  expect(
+    capture(() => claimStaticSiblingRange(left.directory, 0, new LifetimeScope(), () => undefined))
+      .message,
+  ).toContain('consumed:');
+  const rightNext = claimStaticSiblingRange(
+    openStaticSiblingDirectory(asParent(right.parent), [paragraph('same'), paragraph('same')]),
+    1,
+    new LifetimeScope(),
+    () => undefined,
+  );
+  expect(rightNext.start).toBe(right.ranges[1].start);
+  expect(rightClaim.owner.disposed).toBe(false);
+});
+
+test('restricted table, select, template, and non-HTML contexts write nothing', () => {
+  const htmlNamespace = 'http://www.w3.org/1999/xhtml';
+  const svgNamespace = 'http://www.w3.org/2000/svg';
+  const mathNamespace = 'http://www.w3.org/1998/Math/MathML';
+  const restrictedParents = [
+    'table',
+    'TABLE',
+    'caption',
+    'colgroup',
+    'col',
+    'thead',
+    'tbody',
+    'tfoot',
+    'tr',
+    'td',
+    'th',
+    'TD',
+    'select',
+    'optgroup',
+    'option',
+    'OPTION',
+    'template',
+    'Template',
+    'svg',
+    'math',
+    'Math',
+  ];
+
+  function expectQuiet(
+    doc: LogDocument,
+    parent: LogElement,
+    mark: number,
+    held: readonly LogNode[],
+  ): void {
+    expect(doc.log.writesSince(mark)).toEqual([]);
+    const probe = runtimeProbe.snapshot();
+    expect(probe.owners).toBe(0);
+    expect(probe.regions).toBe(0);
+    expect(probe.rangeCleanups).toBe(0);
+    expect(probe.subscriptions).toBe(0);
+    expect(probe.projections).toBe(0);
+    expect(parent.childNodes).toHaveLength(held.length);
+    for (let index = 0; index < held.length; index += 1) {
+      expect(parent.childNodes[index]).toBe(held[index]);
+    }
+  }
+
+  for (const localName of restrictedParents) {
+    runtimeProbe.reset();
+    const doc = new LogDocument();
+    const parent = doc.element(localName);
+    buildRange(doc, parent, 0, 'same');
+    const held = [...parent.childNodes];
+    const mark = doc.log.events.length;
+    const error = capture(() =>
+      openStaticSiblingDirectory(asParent(parent), [paragraph('same')], `fixtures/${localName}`),
+    );
+    expect(error.code, localName).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(error.message, localName).toContain('parent:');
+    expect(error.message, localName).toContain(localName);
+    expect(error.code, localName).not.toBe(RuntimeErrorCode.LEAF_CLAIM_UNAVAILABLE);
+    expectQuiet(doc, parent, mark, held);
+  }
+
+  for (const localName of [
+    'tbody',
+    'tr',
+    'td',
+    'TD',
+    'option',
+    'TABLE',
+    'template',
+    'svg',
+    'math',
+  ]) {
+    runtimeProbe.reset();
+    const doc = new LogDocument();
+    const parent = doc.element('div');
+    const start = doc.comment('oe:r:0');
+    const bad = doc.element(localName);
+    const end = doc.comment('oe:/r:0');
+    parent.appendChild(start);
+    parent.appendChild(bad);
+    parent.appendChild(end);
+    const held = [...parent.childNodes];
+    const mark = doc.log.events.length;
+    const error = capture(() =>
+      openStaticSiblingDirectory(asParent(parent), [paragraph('same')], `fixtures/in-${localName}`),
+    );
+    expect(error.message, localName).toContain('unsupported element');
+    expect(error.message, localName).toContain(localName);
+    expectQuiet(doc, parent, mark, held);
+  }
+
+  runtimeProbe.reset();
+  const nested = new LogDocument();
+  const nestedParent = nested.element('div');
+  const nestedStart = nested.comment('oe:r:0');
+  const paragraphHost = nested.element('p');
+  paragraphHost.appendChild(nested.element('td'));
+  paragraphHost.appendChild(nested.element('option'));
+  const nestedEnd = nested.comment('oe:/r:0');
+  nestedParent.appendChild(nestedStart);
+  nestedParent.appendChild(paragraphHost);
+  nestedParent.appendChild(nestedEnd);
+  const nestedHeld = [...nestedParent.childNodes];
+  const nestedMark = nested.log.events.length;
+  const nestedError = capture(() =>
+    openStaticSiblingDirectory(asParent(nestedParent), [paragraph('same')]),
+  );
+  expect(nestedError.message).toContain('unsupported element');
+  expect(nestedError.message).toContain('td');
+  expectQuiet(nested, nestedParent, nestedMark, nestedHeld);
+
+  for (const ancestorName of ['TABLE', 'select', 'template']) {
+    runtimeProbe.reset();
+    const doc = new LogDocument();
+    const ancestor = doc.element(ancestorName);
+    const parent = doc.element('div');
+    ancestor.appendChild(parent);
+    buildRange(doc, parent, 0, 'same');
+    const held = [...parent.childNodes];
+    const mark = doc.log.events.length;
+    const error = capture(() => openStaticSiblingDirectory(asParent(parent), [paragraph('same')]));
+    expect(error.message, ancestorName).toContain('directory is inside');
+    expect(error.message, ancestorName).toContain(ancestorName);
+    expectQuiet(doc, parent, mark, held);
+  }
+
+  for (const namespace of [svgNamespace, mathNamespace]) {
+    runtimeProbe.reset();
+    const doc = new LogDocument();
+    const parent = doc.element('div', namespace);
+    buildRange(doc, parent, 0, 'same');
+    const held = [...parent.childNodes];
+    const mark = doc.log.events.length;
+    const error = capture(() => openStaticSiblingDirectory(asParent(parent), [paragraph('same')]));
+    expect(error.message, namespace).toContain('non-HTML namespace');
+    expect(error.message, namespace).toContain(namespace);
+    expectQuiet(doc, parent, mark, held);
+
+    runtimeProbe.reset();
+    const inner = new LogDocument();
+    const host = inner.element('div');
+    const foreign = inner.element('div', namespace);
+    host.appendChild(inner.comment('oe:r:0'));
+    host.appendChild(foreign);
+    host.appendChild(inner.comment('oe:/r:0'));
+    const innerHeld = [...host.childNodes];
+    const innerMark = inner.log.events.length;
+    const innerError = capture(() =>
+      openStaticSiblingDirectory(asParent(host), [paragraph('same')]),
+    );
+    expect(innerError.message, namespace).toContain('non-HTML namespace');
+    expectQuiet(inner, host, innerMark, innerHeld);
+  }
+
+  runtimeProbe.reset();
+  const foreignAncestor = new LogDocument();
+  const svgHost = foreignAncestor.element('g', svgNamespace);
+  const htmlChild = foreignAncestor.element('div', htmlNamespace);
+  svgHost.appendChild(htmlChild);
+  buildRange(foreignAncestor, htmlChild, 0, 'same');
+  const ancestorMark = foreignAncestor.log.events.length;
+  const ancestorHeld = [...htmlChild.childNodes];
+  const ancestorError = capture(() =>
+    openStaticSiblingDirectory(asParent(htmlChild), [paragraph('same')]),
+  );
+  expect(ancestorError.message).toContain('directory is inside');
+  expect(ancestorError.message).toContain(svgNamespace);
+  expectQuiet(foreignAncestor, htmlChild, ancestorMark, ancestorHeld);
+
+  runtimeProbe.reset();
+  const admitted = new LogDocument();
+  const admittedParent = admitted.element('div', htmlNamespace);
+  buildRange(admitted, admittedParent, 0, 'same');
+  const admittedDirectory = openStaticSiblingDirectory(asParent(admittedParent), [
+    paragraph('same'),
+  ]);
+  const admittedClaim = claimStaticSiblingRange(
+    admittedDirectory,
+    0,
+    new LifetimeScope(),
+    () => undefined,
+  );
+  expect(admittedClaim.interior[0]).toBe(admittedParent.childNodes[1]);
+  expect(runtimeProbe.snapshot().owners).toBe(1);
 });

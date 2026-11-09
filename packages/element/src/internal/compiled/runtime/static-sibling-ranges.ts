@@ -14,14 +14,16 @@
  *
  * Validation reads `nodeType`, `nodeValue`, `localName`, `namespaceURI`, and
  * attributes only. An exclusive reservation is taken before those reads and
- * before `activate`, so a getter or the activation callback cannot claim the
- * same directory. Only the holder releases an uncommitted reservation.
- * Commitment is a tombstone on the directory, not on the `LifetimeScope`:
- * `dispose` does not make the ordinal claimable again. This is not a
- * byte-level rollback. A validation failure writes nothing and creates no
- * owner. An activation failure disposes the uncommitted scope with
- * `dispose(false)`, which releases resources, leaves borrowed nodes in place,
- * and may leave a dynamic write that already happened.
+ * before `activate`. The reservation, the cursor, and the committed markers
+ * belong to the parent element, so a second `openStaticSiblingDirectory` on
+ * that parent is another view of the same pair identity, not a second owner.
+ * Only the holder releases an uncommitted reservation. Commitment remembers
+ * the ordinal and the start and end comments. `dispose` does not make that
+ * pair claimable again. This is not a byte-level rollback. A validation
+ * failure writes nothing and creates no owner. An activation failure disposes
+ * the uncommitted scope with `dispose(false)`, which releases resources,
+ * leaves borrowed nodes in place, and may leave a dynamic write that already
+ * happened.
  *
  * @module ./static-sibling-ranges.ts
  */
@@ -42,7 +44,31 @@ import {
 import { removeNodes } from './values.ts';
 
 const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
-const REFUSED_LOCAL_NAMES = new Set(['table', 'select', 'template', 'svg', 'math']);
+/**
+ * HTML parsing contexts this static subset does not own. The names are the
+ * table, select, and template families plus `svg` and `math`. ASCII case is
+ * folded because a shim can keep the source spelling; a canonical HTML
+ * `localName` is already lowercase. This set is not the stream-frame deny
+ * list and it is not an HTML parser.
+ */
+const RESTRICTED_HTML_LOCAL_NAMES = new Set([
+  'table',
+  'caption',
+  'colgroup',
+  'col',
+  'thead',
+  'tbody',
+  'tfoot',
+  'tr',
+  'td',
+  'th',
+  'select',
+  'optgroup',
+  'option',
+  'template',
+  'svg',
+  'math',
+]);
 const MAX_ORDINAL_DIGITS = 16;
 
 /** One node the caller declares. Compared against the parsed DOM, not HTML source. */
@@ -85,8 +111,8 @@ interface Reservation {
 }
 
 /**
- * The directory session. Consumption lives here, not in the DOM, so removing
- * a range with `dispose(true)` does not make its ordinal available again.
+ * One open of a parent. The consumption and reservation live on the pair
+ * identity below, not on this object: two opens of one parent share them.
  */
 export interface StaticSiblingDirectory {
   readonly parent: Element;
@@ -94,11 +120,39 @@ export interface StaticSiblingDirectory {
   readonly source: string;
 }
 
-interface DirectoryState extends StaticSiblingDirectory {
+/**
+ * Ownership of one parent. Keyed by the element, so it survives a second open
+ * and a `dispose` that removes the markers. The marker set keeps the committed
+ * start and end nodes reachable for the parent's lifetime; it is not a global
+ * registry.
+ */
+interface PairIdentity {
   next: number;
-  readonly consumed: Set<number>;
+  readonly consumedOrdinals: Set<number>;
+  readonly consumedMarkers: Set<Node>;
   reservation: Reservation | null;
   serial: number;
+}
+
+const pairIdentities = new WeakMap<Element, PairIdentity>();
+
+interface DirectoryState extends StaticSiblingDirectory {
+  readonly identity: PairIdentity;
+}
+
+function pairIdentity(parent: Element): PairIdentity {
+  let identity = pairIdentities.get(parent);
+  if (!identity) {
+    identity = {
+      next: 0,
+      consumedOrdinals: new Set(),
+      consumedMarkers: new Set(),
+      reservation: null,
+      serial: 0,
+    };
+    pairIdentities.set(parent, identity);
+  }
+  return identity;
 }
 
 function fail(source: string, detail: string): never {
@@ -152,12 +206,26 @@ function markerOrdinal(nodeValue: string | null, end: boolean): number | null {
   return canonicalOrdinal(nodeValue.slice(prefix.length));
 }
 
-function isSupportedDirectoryElement(node: Node): boolean {
-  if (node.nodeType !== 1) return false;
-  const element = node as Element;
+function asciiLower(value: string): string {
+  let folded = '';
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    folded += code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : value[index];
+  }
+  return folded;
+}
+
+/** `null` means the element is in the static HTML subset. */
+function elementRejection(element: Element): string | null {
   const namespace = element.namespaceURI;
-  if (namespace !== null && namespace !== HTML_NAMESPACE) return false;
-  return !REFUSED_LOCAL_NAMES.has(element.localName);
+  if (namespace !== null && namespace !== HTML_NAMESPACE) {
+    return `non-HTML namespace ${JSON.stringify(namespace)} on ${JSON.stringify(element.localName)}`;
+  }
+  const localName = typeof element.localName === 'string' ? element.localName : '';
+  if (RESTRICTED_HTML_LOCAL_NAMES.has(asciiLower(localName))) {
+    return `restricted element ${JSON.stringify(localName)}`;
+  }
+  return null;
 }
 
 function readAttributes(element: Element): { name: string; value: string }[] {
@@ -181,11 +249,9 @@ function rejectNestedMarker(node: Node, source: string): void {
   }
   if (node.nodeType !== 1) return;
   const element = node as Element;
-  if (!isSupportedDirectoryElement(element)) {
-    fail(
-      source,
-      `parent: unsupported element ${JSON.stringify(element.localName)} inside a static range`,
-    );
+  const rejection = elementRejection(element);
+  if (rejection) {
+    fail(source, `parent: unsupported element inside a static range (${rejection})`);
   }
   for (const child of childrenOf(element)) rejectNestedMarker(child, source);
 }
@@ -282,8 +348,11 @@ function matches(node: Node, declared: DeclaredStaticNode, source: string): bool
   }
   if (node.nodeType !== 1) return false;
   const element = node as Element;
-  if (!isSupportedDirectoryElement(element) || element.localName !== declared.localName)
-    return false;
+  const rejection = elementRejection(element);
+  if (rejection) {
+    fail(source, `parent: unsupported element inside a static range (${rejection})`);
+  }
+  if (element.localName !== declared.localName) return false;
   if (!sameAttributes(element, declared.attributes ?? [])) return false;
   const children = childrenOf(element);
   const declaredChildren = declared.children ?? [];
@@ -322,20 +391,28 @@ export function openStaticSiblingDirectory(
   declaration: readonly (readonly DeclaredStaticNode[])[],
   source = 'static sibling range',
 ): StaticSiblingDirectory {
-  if (parent.nodeType !== 1 || !isSupportedDirectoryElement(parent)) {
-    const name = parent.nodeType === 1 ? (parent as Element).localName : String(parent.nodeType);
-    fail(source, `parent: unsupported directory parent ${JSON.stringify(name)}`);
+  if (parent.nodeType !== 1) {
+    fail(source, `parent: unsupported directory parent ${JSON.stringify(String(parent.nodeType))}`);
   }
   const element = parent as Element;
-  parseDirectory(element, declaration.length, source, 0);
+  const rejection = elementRejection(element);
+  if (rejection) fail(source, `parent: unsupported directory parent (${rejection})`);
+  let ancestor: Node | null = element.parentNode;
+  while (ancestor) {
+    if (ancestor.nodeType === 1) {
+      const ancestorRejection = elementRejection(ancestor as Element);
+      if (ancestorRejection) fail(source, `parent: directory is inside ${ancestorRejection}`);
+    }
+    ancestor = ancestor.parentNode;
+  }
+  const identity = pairIdentity(element);
+  if (identity.reservation) fail(source, 'busy: directory reservation is held');
+  parseDirectory(element, declaration.length, source, identity.next);
   const state: DirectoryState = {
     parent: element,
     declaration,
     source,
-    next: 0,
-    consumed: new Set(),
-    reservation: null,
-    serial: 0,
+    identity,
   };
   return state;
 }
@@ -346,9 +423,10 @@ function asState(directory: StaticSiblingDirectory): DirectoryState {
 
 /**
  * Claim the next range. `expected` is the caller's ordinal, or the start
- * comment the caller held before this call. The reservation is taken before
- * any DOM read and before `activate`. A failure does not advance the cursor.
- * Success advances it permanently, including after `dispose`.
+ * comment the caller held before this call. The reservation is taken on the
+ * parent's pair identity before any DOM read and before `activate`. A failure
+ * does not advance the cursor. Success advances it permanently, including
+ * after `dispose` and including a later open of the same parent.
  */
 export function claimStaticSiblingRange(
   directory: StaticSiblingDirectory,
@@ -357,6 +435,7 @@ export function claimStaticSiblingRange(
   activate: (scope: LifetimeScope, interior: readonly Node[]) => void,
 ): StaticSiblingClaim {
   const state = asState(directory);
+  const identity = state.identity;
   if (typeof expected === 'number') {
     if (!Number.isSafeInteger(expected) || expected < 0) {
       fail(
@@ -364,23 +443,30 @@ export function claimStaticSiblingRange(
         `ordinal: caller ordinal is not a canonical safe integer (${String(expected)})`,
       );
     }
-    if (state.consumed.has(expected) || expected < state.next) {
+    if (identity.consumedOrdinals.has(expected) || expected < identity.next) {
       fail(state.source, `consumed: ordinal ${expected} is already committed`);
     }
-    if (expected !== state.next) {
+    if (expected !== identity.next) {
       fail(
         state.source,
-        `order: ordinal ${expected} is not the next unconsumed ordinal ${state.next}`,
+        `order: ordinal ${expected} is not the next unconsumed ordinal ${identity.next}`,
       );
     }
+  } else if (identity.consumedMarkers.has(expected.start)) {
+    fail(state.source, 'consumed: marker is already committed');
   }
-  if (state.reservation) {
+  if (identity.reservation) {
     fail(state.source, 'busy: directory reservation is held');
   }
-  const token = ++state.serial;
-  state.reservation = { token, ordinal: state.next };
+  const token = ++identity.serial;
+  identity.reservation = { token, ordinal: identity.next };
   try {
-    const parsed = parseDirectory(state.parent, state.declaration.length, state.source, state.next);
+    const parsed = parseDirectory(
+      state.parent,
+      state.declaration.length,
+      state.source,
+      identity.next,
+    );
     const range =
       typeof expected === 'number'
         ? parsed.find((item) => item.ordinal === expected)
@@ -394,13 +480,17 @@ export function claimStaticSiblingRange(
           : 'order: handle is not the start comment of a declared range',
       );
     }
-    if (state.consumed.has(ordinal) || ordinal < state.next) {
+    if (
+      identity.consumedOrdinals.has(ordinal) ||
+      ordinal < identity.next ||
+      identity.consumedMarkers.has(range.start)
+    ) {
       fail(state.source, `consumed: ordinal ${ordinal} is already committed`);
     }
-    if (ordinal !== state.next) {
+    if (ordinal !== identity.next) {
       fail(
         state.source,
-        `order: ordinal ${ordinal} is not the next unconsumed ordinal ${state.next}`,
+        `order: ordinal ${ordinal} is not the next unconsumed ordinal ${identity.next}`,
       );
     }
     const declared = state.declaration[ordinal];
@@ -423,12 +513,14 @@ export function claimStaticSiblingRange(
     recordRangeCleanup();
     recordRegionAllocated();
     recordProjection(owned.length);
-    if (state.reservation?.token !== token) {
+    if (identity.reservation?.token !== token) {
       fail(state.source, 'busy: reservation changed during activation');
     }
-    state.consumed.add(ordinal);
-    state.next = ordinal + 1;
-    state.reservation = null;
+    identity.consumedOrdinals.add(ordinal);
+    identity.consumedMarkers.add(range.start);
+    identity.consumedMarkers.add(range.end);
+    identity.next = ordinal + 1;
+    identity.reservation = null;
     let disposed = false;
     const claim: StaticSiblingClaim = {
       ordinal,
@@ -445,7 +537,7 @@ export function claimStaticSiblingRange(
     };
     return Object.freeze(claim);
   } catch (error) {
-    if (state.reservation?.token === token) state.reservation = null;
+    if (identity.reservation?.token === token) identity.reservation = null;
     throw error;
   }
 }

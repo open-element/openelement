@@ -43,18 +43,32 @@ its cleanup; the caller calls the same API again. That is not bounded recovery.
 ## Reservation
 
 `claimStaticSiblingRange` takes an exclusive reservation before it reads the
-DOM and before it calls `activate`. Only that holder releases an uncommitted
-reservation. A reentered claim fails `busy` and does not clear the holder's
-reservation. `openStaticSiblingDirectory` has no caller callback. The
-activation callback and a DOM getter are the reentry cases the fixture covers.
-There is no further dynamic-host reentry suite.
+DOM and before it calls `activate`. The reservation, the next ordinal, and
+the committed start and end comments belong to the parent element. A second
+`openStaticSiblingDirectory` on that parent is another view of the same pair
+identity. Only the holder releases an uncommitted reservation. A reentered
+claim, including one made through the other view or by a previously held
+marker, fails `busy` and does not clear the holder's reservation. Opening
+again while the reservation is held also fails `busy`. After `dispose`, a
+later open of the same parent still rejects that ordinal and those marker
+nodes. A different parent element is a different identity.
+`openStaticSiblingDirectory` has no caller callback. The activation callback
+and a DOM getter are the reentry cases the fixture covers. There is no
+further dynamic-host reentry suite.
 
 A validation mismatch creates no owner and writes nothing. An activation
 failure disposes the uncommitted scope with `dispose(false)`: resources are
 released, borrowed nodes stay, and a dynamic write that already happened may
-stay. Commitment is a tombstone on the directory object. `dispose` does not
-erase it. `LifetimeScope` first-dispose semantics are unchanged. A parent
-`dispose(true)` cascades only to children that are still live.
+stay. `dispose` does not erase the pair tombstone. `LifetimeScope`
+first-dispose semantics are unchanged. A parent `dispose(true)` cascades only
+to children that are still live.
+
+The static subset refuses `table`, `caption`, `colgroup`, `col`, `thead`,
+`tbody`, `tfoot`, `tr`, `td`, `th`, `select`, `optgroup`, `option`,
+`template`, `svg`, and `math` in any ASCII case. The refusal covers the
+directory parent, an ancestor, and any descendant inside a range. An element
+whose namespace is not the HTML namespace is refused whatever its local name
+is. The fixture DOM does not parse HTML. A passing shim is not browser proof.
 
 ## Seed and errors
 
