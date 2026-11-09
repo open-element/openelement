@@ -112,12 +112,14 @@ export {
  *
  * Re-exported here — an internal module, never a package export — so the
  * package entry graph typechecks them and the generated runtime has one import
- * surface. No Part Program path uses them: this slice ships primitives and
- * their G2 evidence only (Alpha16a M04), and M05 emits the call sites.
+ * surface. No Part Program path calls them. M05 emits the mount call sites.
+ * `claimRecipe` is the M07a adoption entry; production entries do not call it.
  */
 export {
+  claimRecipe,
   createRecipe,
   insertRecipe,
+  type ClaimFunction,
   type MountFunction,
   type Projection,
   type Recipe,

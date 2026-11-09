@@ -352,7 +352,13 @@ SSR and client setup each run once with matching serialized state; successful
 Claim preserves DOM, pre-activation user input, focus and selection; mismatch
 recovers within bounds with source locations. Phases: SSR, Claim, Update,
 Dispose. Negatives: a failed claim must not double-subscribe; a rebuild must
-dispose old resources first.
+dispose old resources first. Those sentences do not require the current claim
+runtime to restore every DOM byte on failure. Successful Claim still preserves
+pre-activation user input, focus and selection. A failed claim, under the
+current recipe contract, releases resources with `dispose(false)` and does not
+delete borrowed DOM: a validation failure writes nothing, and an activation
+failure may leave an earlier dynamic write. Restoring the whole region
+byte-for-byte would be a separate design.
 
 Same IR is not automatic parity: server and client may be generated from one
 semantic IR, but equivalence is asserted behaviourally **per phase** for the same
@@ -470,8 +476,12 @@ projection and every list entry, and the mode cascades (children inherit
 detach or non-detach from the parent call, `lifetime-scope.ts:100`); a second
 dispose is a no-op; a throwing cleanup does not prevent the remaining ones.
 Distinguish the two modes explicitly: plain `dispose()` keeps owned DOM (the
-disconnect/suspend path), `dispose(true)` removes it. Phases: Mount, Claim,
-Dispose.
+disconnect/suspend path), `dispose(true)` removes it. A later `dispose(true)`
+on the same scope does not upgrade a plain dispose: the second call returns
+without running the range cleanups that the first call already dropped.
+Parent `dispose(true)` cascades only to children still live. A descendant
+already disposed with the plain flag is not re-entered, and its DOM stays.
+Phases: Mount, Claim, Dispose.
 
 ### TSX-28 — expression evaluation counts
 

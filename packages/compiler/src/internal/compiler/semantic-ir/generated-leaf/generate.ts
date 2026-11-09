@@ -91,10 +91,21 @@
  * harness bundles the same M04 modules under the same names, so the artifact
  * under test uses the real primitives, not stubs.
  *
- * NOT claimed here: real-browser execution evidence for the M06b2a children
- * projection shapes and the repeated-projection isolation, unkeyed browser
- * scenarios, browser evidence for the M06b1a-2 projection shapes (M06b2b),
- * claim/SSR (M07/M08), production wiring, ABI/public API.
+ * M07a leaf claim (this file, optional `claim` on the recipe): a static leaf
+ * — elements, fragments, static text, static attributes, dynamic text and
+ * `attribute`/`boolean` slots — also emits `<Name>__claim`, which adopts the
+ * existing children of a parent in authored order. Structural mismatch throws
+ * `OEIR_LEAF_CLAIM_MISMATCH` before any subscription. A dynamic slot writes
+ * before it subscribes, so a throw after that write is not a DOM byte
+ * rollback; `claimRecipe` then `dispose(false)`s the child owner. Conditions, lists,
+ * component references, reusable JSX insertion, children projection and
+ * `property` channels omit `claim` and keep mount-only output. The claim does
+ * not encode repeated-insertion markers, keys, SSR seed bytes, or bounded
+ * rebuild recovery (those stay inside M07/M08).
+ *
+ * NOT claimed here: production wiring, a public ABI, SSR (M08), TSX-18/TSX-30
+ * as filled matrix rows, focus/input preservation, and packed-consumer
+ * qualification.
  */
 
 import ts from 'typescript';
@@ -154,6 +165,12 @@ const MOUNT_SUFFIX = '__mount';
 const MOUNT_SCOPE = `${INTERNAL_PREFIX}scope`;
 const MOUNT_PROPS = `${INTERNAL_PREFIX}props`;
 const MOUNT_HOST = `${INTERNAL_PREFIX}host`;
+/**
+ * Module-level claim (M07a): `<Name>__claim(scope, props, host, parent)` adopts
+ * the existing children of `parent`. Emitted only for the static leaf shape.
+ */
+const CLAIM_SUFFIX = '__claim';
+const CLAIM_PARENT = `${INTERNAL_PREFIX}parent`;
 /**
  * The module-level mount's host record: the parent-provided host bindings plus
  * the defining-scope signals a child instance refreshes props reads through.
@@ -1850,6 +1867,299 @@ interface EmittedComponent {
   readonly placements: readonly ExpressionPlacement[];
 }
 
+interface ClaimEmission {
+  readonly lines: string[];
+  readonly diagnostics: readonly IrDiagnostic[];
+  readonly segments: readonly EmissionSegment[];
+  readonly placements: readonly ExpressionPlacement[];
+}
+
+/** M07a admits a fixed leaf. Anything with a runtime structure is mount-only. */
+function nodeClaimable(node: FunctionModelNode): boolean {
+  switch (node.kind) {
+    case 'text':
+    case 'dynamic-text':
+      return true;
+    case 'fragment':
+      return node.children.every(nodeClaimable);
+    case 'element': {
+      if (!TAG_PATTERN.test(node.tag)) return false;
+      for (const attribute of node.attributes) {
+        if (attribute.kind === 'static') {
+          if (!ATTRIBUTE_PATTERN.test(attribute.name)) return false;
+          continue;
+        }
+        if (CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) continue;
+        // Property writes (`el.value = …`) can clobber pre-claim user input.
+        // That preservation is a later M07 slice, so the shape stays mount-only.
+        if (attribute.channel === 'property') return false;
+        if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
+      }
+      return node.children.every(nodeClaimable);
+    }
+    default:
+      return false;
+  }
+}
+
+function componentClaimable(component: FunctionModelComponent): boolean {
+  return component.roots.every(nodeClaimable);
+}
+
+function claimError(detail: string): string {
+  return JSON.stringify(`OEIR_LEAF_CLAIM_MISMATCH: ${detail}`);
+}
+
+function emitClaimTake(state: EmitState, cursor: string, name: string, where: string): void {
+  push(state, `const ${name} = ${cursor}.list[${cursor}.i];`);
+  push(state, `if (${name} == null) throw new Error(${claimError(`missing node at ${where}`)});`);
+  push(state, `${cursor}.i += 1;`);
+}
+
+function emitClaimCursorEnd(state: EmitState, cursor: string, where: string): void {
+  push(
+    state,
+    `if (${cursor}.i !== ${cursor}.list.length) throw new Error(${claimError(`extra node at ${where}`)});`,
+  );
+}
+
+interface PreparedSlot {
+  readonly record: LoweredExpressionRecord;
+  readonly dependencies: readonly Dependency[];
+}
+
+function prepareClaimSlot(
+  state: EmitState,
+  expression: FunctionExpressionRef,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): PreparedSlot | null {
+  const record = recordFor(state, expression, records);
+  if (record === null || !declareReads(state, record)) return null;
+  const dependencies = dependencyNames(state, record);
+  if (dependencies === null) return null;
+  return { record, dependencies };
+}
+
+/**
+ * Emit the initial write plus its refresh subscription. A zero-dependency slot
+ * writes once and registers nothing, matching the mount path.
+ */
+function emitClaimSlot(
+  state: EmitState,
+  dependencies: readonly Dependency[],
+  anchor: SpanLike,
+  write: () => void,
+): void {
+  if (dependencies.length === 0) {
+    write();
+    return;
+  }
+  const refresh = nextName(state, 'refresh');
+  push(state, `function ${refresh}() {`, anchor);
+  state.indent += 1;
+  write();
+  state.indent -= 1;
+  push(state, `}`);
+  push(state, `${refresh}();`);
+  emitDependencySubscriptions(state, dependencies, refresh, anchor);
+}
+
+function emitClaimInto(
+  state: EmitState,
+  nodes: readonly FunctionModelNode[],
+  cursor: string,
+  path: string,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+  phase2: Array<() => void>,
+  adopt: (name: string) => void,
+): void {
+  nodes.forEach((node, index) => {
+    if (state.diagnostics.length > 0) return;
+    const here = `${path}/${index}`;
+    if (node.kind === 'fragment') {
+      emitClaimInto(state, node.children, cursor, here, records, phase2, adopt);
+      return;
+    }
+    if (node.kind === 'text') {
+      const name = nextName(state, 'text');
+      emitClaimTake(state, cursor, name, here);
+      push(
+        state,
+        `if (${name}.nodeType !== 3 || ${name}.nodeValue !== ${JSON.stringify(node.value)}) throw new Error(${claimError(`static text at ${here}`)});`,
+      );
+      adopt(name);
+      return;
+    }
+    if (node.kind === 'dynamic-text') {
+      const slot = prepareClaimSlot(state, node.expression, records);
+      if (slot === null) return;
+      const name = nextName(state, 'text');
+      emitClaimTake(state, cursor, name, here);
+      push(
+        state,
+        `if (${name}.nodeType !== 3) throw new Error(${claimError(`expected text at ${here}`)});`,
+      );
+      adopt(name);
+      phase2.push(() =>
+        emitClaimSlot(state, slot.dependencies, node.span, () =>
+          emitTextWrite(state, name, slot.record),
+        ),
+      );
+      return;
+    }
+    if (node.kind === 'element') {
+      const name = nextName(state, 'el');
+      emitClaimTake(state, cursor, name, here);
+      push(
+        state,
+        `if (${name}.nodeType !== 1 || String(${name}.localName || ${name}.tagName || "").toLowerCase() !== ${JSON.stringify(node.tag)}) throw new Error(${claimError(`expected element '${node.tag}' at ${here}`)});`,
+      );
+      for (const attribute of node.attributes) {
+        if (attribute.kind === 'dynamic' && CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
+          continue;
+        }
+        if (attribute.kind === 'static') {
+          push(
+            state,
+            `if (${name}.getAttribute(${JSON.stringify(attribute.name)}) !== ${JSON.stringify(attribute.value)}) throw new Error(${claimError(`static attribute ${attribute.name} at ${here}`)});`,
+          );
+          continue;
+        }
+        const slot = prepareClaimSlot(state, attribute.expression, records);
+        if (slot === null) return;
+        const attributeName = attribute.name;
+        const channel = attribute.channel;
+        const span = attribute.span;
+        phase2.push(() =>
+          emitClaimSlot(state, slot.dependencies, span, () =>
+            emitAttributeWrite(state, name, attributeName, channel, slot.record, span),
+          ),
+        );
+      }
+      const childCursor = nextName(state, 'cursor');
+      push(state, `const ${childCursor} = { list: ${name}.childNodes, i: 0 };`);
+      emitClaimInto(state, node.children, childCursor, here, records, phase2, () => {});
+      emitClaimCursorEnd(state, childCursor, here);
+      adopt(name);
+    }
+  });
+}
+
+/**
+ * Emit `<Name>__claim` for a claimable component. Returns null when the shape
+ * is outside M07a; the caller then leaves the recipe mount-only.
+ */
+function emitClaimFunction(
+  file: string,
+  component: FunctionModelComponent,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): ClaimEmission | null {
+  if (!componentClaimable(component)) return null;
+  const propsName = component.propsParam;
+  const state: EmitState = {
+    component,
+    lines: [],
+    indent: 1,
+    diagnostics: [],
+    requiredBindings: new Set(),
+    requiredProps: new Set(),
+    hostBindings: new Set(),
+    localResources: new Set(),
+    counter: { value: 0 },
+    propsName,
+    requiresPropsChanged: false,
+    segments: [],
+    placements: [],
+    segmentKeys: new Set(),
+    scopeVar: MOUNT_SCOPE,
+    hostVar: MOUNT_HOST,
+    componentByName: new Map(),
+    declaredRecipeIds: new Set(),
+    recipeNames: new Set(),
+    recipeVars: new Map(),
+    entryNames: new Set(),
+    refreshStack: [],
+    listDepth: 0,
+    recipeDepth: 0,
+    childrenRecipeVar: null,
+  };
+  const localLines: Array<{
+    name: string;
+    record: LoweredExpressionRecord;
+    span: SpanLike;
+  }> = [];
+  for (const resource of component.resources) {
+    if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
+      continue;
+    }
+    if (resource.kind === 'local') {
+      if (resource.recipeId !== null || resource.expression === null) continue;
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) continue;
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, record, span: resource.span });
+      continue;
+    }
+    state.hostBindings.add(resource.name);
+    state.requiredBindings.add(resource.name);
+  }
+  const phase2: Array<() => void> = [];
+  const adopted: string[] = [];
+  const rootCursor = nextName(state, 'cursor');
+  push(state, `const ${rootCursor} = { list: ${CLAIM_PARENT}.childNodes, i: 0 };`);
+  emitClaimInto(state, component.roots, rootCursor, '', records, phase2, (name) => {
+    adopted.push(name);
+  });
+  emitClaimCursorEnd(state, rootCursor, '/');
+  if (state.diagnostics.length > 0) {
+    return {
+      lines: [],
+      diagnostics: state.diagnostics,
+      segments: [],
+      placements: [],
+    };
+  }
+  for (const line of localLines) {
+    pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+  }
+  for (const step of phase2) step();
+  push(state, `return [${adopted.join(', ')}];`);
+
+  const prologue: string[] = [
+    `function ${component.name}${CLAIM_SUFFIX}(${MOUNT_SCOPE}, ${MOUNT_PROPS}, ${MOUNT_HOST}, ${CLAIM_PARENT}) {`,
+  ];
+  if (
+    propsName !== null &&
+    IDENTIFIER_PATTERN.test(propsName) &&
+    !propsName.startsWith(INTERNAL_PREFIX)
+  ) {
+    prologue.push(`  const ${propsName} = ${MOUNT_PROPS};`);
+  }
+  if (state.requiredBindings.size > 0) {
+    prologue.push(
+      `  const ${INTERNAL_PREFIX}requireBinding = (name) => { const value = ${MOUNT_HOST}.bindings[name]; if (value === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: " + name); return value; };`,
+    );
+    for (const binding of [...state.requiredBindings].sort()) {
+      prologue.push(
+        `  const ${binding} = ${INTERNAL_PREFIX}requireBinding(${JSON.stringify(binding)});`,
+      );
+    }
+  }
+  const shift = prologue.length;
+  return {
+    lines: [...prologue, ...state.lines, '}', ''],
+    diagnostics: [],
+    segments: state.segments.map((segment) => ({
+      ...segment,
+      generatedLine: segment.generatedLine + shift,
+    })),
+    placements: state.placements.map((placement) => ({
+      ...placement,
+      generatedLine: placement.generatedLine + shift,
+    })),
+  };
+}
+
 function emitComponent(
   file: string,
   component: FunctionModelComponent,
@@ -2029,33 +2339,65 @@ function emitComponent(
       `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [] };`,
     );
   }
-  factoryLines.push(
+  const claim = state.diagnostics.length === 0 ? emitClaimFunction(file, component, records) : null;
+  if (claim !== null && claim.diagnostics.length > 0) {
+    return {
+      lines: [],
+      diagnostics: [...state.diagnostics, ...claim.diagnostics],
+      requiredBindings: [...state.requiredBindings].sort(),
+      requiredProps: [...state.requiredProps].sort(),
+      requiresPropsChanged: state.requiresPropsChanged,
+      segments: [],
+      placements: [],
+    };
+  }
+  const recipeFields = [
     '  return createRecipe({',
     `    definitionOwner: ${INTERNAL_PREFIX}owner,`,
     `    source: ${JSON.stringify(`${file}#${component.name}`)},`,
     '    mount(__oe_scope) {',
     `      return ${component.name}${MOUNT_SUFFIX}(${MOUNT_SCOPE}, ${INTERNAL_PREFIX}host.props, ${mountHostVar});`,
     '    },',
-    '  });',
-    '}',
-    '',
-  );
+  ];
+  if (claim !== null) {
+    recipeFields.push(
+      '    claim(__oe_scope, __oe_props, __oe_parent) {',
+      `      return ${component.name}${CLAIM_SUFFIX}(${MOUNT_SCOPE}, ${INTERNAL_PREFIX}host.props, ${mountHostVar}, __oe_parent);`,
+      '    },',
+    );
+  }
+  recipeFields.push('  });', '}', '');
+  factoryLines.push(...recipeFields);
   const mountLines = [...mountPrologue, ...state.lines, '}', ''];
+  const claimLines = claim?.lines ?? [];
+  const claimShift = mountLines.length + factoryLines.length;
   const shift = mountPrologue.length;
   return {
-    lines: [...mountLines, ...factoryLines],
+    lines: [...mountLines, ...factoryLines, ...claimLines],
     diagnostics: state.diagnostics,
     requiredBindings: [...state.requiredBindings].sort(),
     requiredProps: [...state.requiredProps].sort(),
     requiresPropsChanged: state.requiresPropsChanged,
-    segments: state.segments.map((segment) => ({
-      ...segment,
-      generatedLine: segment.generatedLine + shift,
-    })),
-    placements: state.placements.map((placement) => ({
-      ...placement,
-      generatedLine: placement.generatedLine + shift,
-    })),
+    segments: [
+      ...state.segments.map((segment) => ({
+        ...segment,
+        generatedLine: segment.generatedLine + shift,
+      })),
+      ...(claim?.segments ?? []).map((segment) => ({
+        ...segment,
+        generatedLine: segment.generatedLine + claimShift,
+      })),
+    ],
+    placements: [
+      ...state.placements.map((placement) => ({
+        ...placement,
+        generatedLine: placement.generatedLine + shift,
+      })),
+      ...(claim?.placements ?? []).map((placement) => ({
+        ...placement,
+        generatedLine: placement.generatedLine + claimShift,
+      })),
+    ],
   };
 }
 
@@ -2307,7 +2649,7 @@ export function generateLeafModule(
     };
   }
   const headerLines = [
-    '// <generated by openelement M06b2a leaf-codegen v2; do not edit>',
+    '// <generated by openelement M07a leaf-claim (mount M06b2a); do not edit>',
     `import { ${RUNTIME_IMPORTS.join(', ')} } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
     '',
   ];

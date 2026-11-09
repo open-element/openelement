@@ -202,7 +202,7 @@ disposal (abort signal, children in the same mode, `add()` cleanups LIFO) and
 | --- | --- | --- |
 | Component/resource disposal (owner leaves the tree) | `dispose(true)` on the owner | full disposal **plus** removal of the owned DOM range |
 | Branch replacement / keyed deletion (region removal) | `dispose(true)` on the branch/entry owner | full disposal plus range removal; existing precedent `blocks.ts:312,516` |
-| Parent owner disposal | `dispose(true)` cascades to children | children inherit the mode (`lifetime-scope.ts:100`) |
+| Parent owner disposal | `dispose(true)` cascades to children | still-live children inherit the mode (`lifetime-scope.ts:100`); a child already disposed with the plain flag is not upgraded |
 | Independent projection deletion | `dispose(true)` on that projection's owner only | sibling projection must stay live |
 | CE disconnect / suspend (DOM retained for reconnect) | plain `dispose()` | full disposal **except** range cleanups; owned DOM stays in place for revive |
 | "Detach DOM without disposing resources" | **does not exist** in this API | treat as unsupported; do not emulate it by calling `dispose(true)` early |
@@ -233,6 +233,13 @@ The contract must therefore be:
    discipline as `LifetimeScope.dispose`, `:88-108`).
 6. **No orphan region and no double ownership**: a scope that failed setup is
    never attached to a live parent as a functioning region.
+
+This matrix is the mount and insertion path (`insertRecipe` rolls back with
+`dispose(true)`). Claiming borrowed DOM is not this matrix: `claimRecipe`
+rolls back with `dispose(false)`, which releases resources without deleting
+the borrowed nodes and without restoring bytes written before the throw.
+Successful claim input, focus and selection preservation is unchanged
+(TSX-18). Whole-region byte rollback of a claim would be a separate design.
 
 Failure matrix that the implementation must satisfy explicitly:
 

@@ -130,6 +130,47 @@ describe('M05 leaf v2 — emitted module contract', () => {
     expect(module).not.toMatch(/\bas\s+[A-Z]/);
   });
 
+  test('M07a emits a structural claim for a static leaf and omits it for later shapes', () => {
+    const leaf = generate(COUNTER);
+    expect(leaf.module).not.toBeNull();
+    const module = leaf.module!;
+    expect(module).toContain(
+      'function Counter__claim(__oe_scope, __oe_props, __oe_host, __oe_parent)',
+    );
+    expect(module).toContain('OEIR_LEAF_CLAIM_MISMATCH');
+    expect(module).toContain(
+      'return Counter__claim(__oe_scope, __oe_host.props, __oe_mountHost, __oe_parent);',
+    );
+    expect(module).toContain('claim(__oe_scope, __oe_props, __oe_parent)');
+    // Mount stays the fresh-DOM path.
+    expect(module).toContain('document.createElement("section")');
+    expect(module).toContain('return Counter__mount(__oe_scope, __oe_host.props, __oe_mountHost);');
+
+    const conditional = generate(
+      'function C(props) { return <section>{props.ok ? <p>on</p> : <em>off</em>}</section>; }\n',
+    );
+    expect(conditional.module).not.toBeNull();
+    expect(conditional.module).not.toContain('function C__claim');
+    expect(conditional.module).not.toContain('claim(__oe_scope');
+
+    const listed = generate(
+      `import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([{ id: 'a', label: 'A' }]);
+  return <ul>{items.value.map((item) => <li key={item.id}>{item.label}</li>)}</ul>;
+}
+`,
+    );
+    expect(listed.module).not.toBeNull();
+    expect(listed.module).not.toContain('function List__claim');
+
+    // Property assignment can overwrite a pre-claim input value. M07a leaves it mount-only.
+    const property = generate('function Field(props) { return <input value={props.text} />; }\n');
+    expect(property.module).not.toBeNull();
+    expect(property.module).toContain('document.createElement("input")');
+    expect(property.module).not.toContain('function Field__claim');
+  });
+
   test('nested intrinsic children are modelled and emitted (M03 follow-up)', () => {
     const nested = generate(
       'function C(props) { return <section><p class="x"><b>bold</b></p><i>it</i></section>; }\n',

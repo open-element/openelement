@@ -66,6 +66,11 @@
  * @module ./recipe.ts
  */
 
+import {
+  raiseFrameworkError,
+  RUNTIME_MESSAGES_ENABLED,
+  RuntimeErrorCode,
+} from '@openelement/protocol/errors';
 import type { LifetimeScope } from '../lifetime-scope.ts';
 import { assertProjectionAllowed } from './lineage.ts';
 import {
@@ -80,12 +85,35 @@ import { removeNodes } from './values.ts';
 /** One generated mount: build this instance's detached DOM, owned by `scope`. */
 export type MountFunction<P = unknown> = (scope: LifetimeScope, props: Readonly<P>) => Node[];
 
+/**
+ * One generated claim: adopt the existing children of `parent` in place.
+ *
+ * The function returns the adopted top-level nodes. It must not create
+ * replacement nodes for a matching structure, and a structural mismatch must
+ * throw before any subscription is registered. A throw does not promise to
+ * restore bytes already written: validation that throws before a write leaves
+ * zero writes, and an activation throw may leave an earlier dynamic write.
+ * `claimRecipe` then releases resources without deleting the borrowed nodes.
+ * Absent on recipes whose shape is outside the M07a leaf slice; mount stays
+ * available either way.
+ */
+export type ClaimFunction<P = unknown> = (
+  scope: LifetimeScope,
+  props: Readonly<P>,
+  parent: Node,
+) => Node[];
+
 /** The options one generated recipe call site provides. */
 export interface RecipeOptions<P = unknown> {
   /** The owner the JSX value was created in (definition-site lineage anchor). */
   definitionOwner: LifetimeScope;
   /** The generated mount for one instance of the recipe. */
   mount: MountFunction<P>;
+  /**
+   * Optional generated claim for this recipe (M07a). Omitted recipes cannot
+   * be claimed; `claimRecipe` fails closed before allocating an owner.
+   */
+  claim?: ClaimFunction<P>;
   /**
    * Creates this insertion's props record; called exactly once per insertion,
    * at insertion time (never at recipe creation). Defaults to an empty record.
@@ -102,6 +130,8 @@ export interface RecipeOptions<P = unknown> {
 export interface Recipe<P = unknown> {
   readonly definitionOwner: LifetimeScope;
   readonly mount: MountFunction<P>;
+  /** Present only when this recipe was created with a generated claim. */
+  readonly claim?: ClaimFunction<P>;
   readonly createProps: () => P;
   readonly source: string;
 }
@@ -118,6 +148,7 @@ export function createRecipe<P = unknown>(options: RecipeOptions<P>): Recipe<P> 
     mount: options.mount,
     createProps: options.createProps ?? (() => ({}) as P),
     source: options.source ?? 'generated mount',
+    ...(options.claim === undefined ? {} : { claim: options.claim }),
   };
   return Object.freeze(recipe);
 }
@@ -208,6 +239,87 @@ export function insertRecipe<P>(
     throw error;
   }
 
+  recordProjection(nodes.length);
+  let disposed = false;
+  const projection: Projection<P> = {
+    region,
+    owner,
+    nodes,
+    props,
+    dispose(detachOwnedNodes = false): void {
+      if (disposed) return;
+      disposed = true;
+      recordProjectionDisposed();
+      owner.dispose(detachOwnedNodes);
+    },
+  };
+  return Object.freeze(projection);
+}
+
+/**
+ * Release resources from a failed claim without deleting borrowed DOM and
+ * without restoring bytes already written. Range cleanups are not run.
+ * Validation that throws before a write therefore leaves the parent unchanged.
+ * Activation that throws after a dynamic write may leave that write in place
+ * while non-range cleanups still run. Whole-region byte rollback is not this
+ * function; that would be a separate design.
+ */
+function rollbackClaim(owner: LifetimeScope): void {
+  try {
+    owner.dispose(false);
+  } catch {
+    // The claim error is what surfaces; every non-range cleanup was still attempted.
+  }
+}
+
+/**
+ * Claim one recipe onto an existing parent: lineage check, one child owner,
+ * one props record, and the nodes the generated claim adopts in place.
+ *
+ * Unlike {@link insertRecipe}, this does not create or move DOM, and it does
+ * not use §4.1b's detach rollback. A recipe without a claim function fails
+ * before any owner exists. A claim that throws disposes the child owner with
+ * `dispose(false)`: resources are released, borrowed nodes stay, and bytes
+ * written before the throw are not restored. A structural check that throws
+ * before writing leaves zero writes. A later throw may preserve an earlier
+ * dynamic write. This is not an entire-claim byte transaction.
+ */
+export function claimRecipe<P>(
+  insertingOwner: LifetimeScope,
+  recipe: Recipe<P>,
+  parent: Node,
+): Projection<P> {
+  assertProjectionAllowed(recipe.definitionOwner, insertingOwner, recipe.source);
+  if (recipe.claim === undefined) {
+    const where = `[compiled-runtime] ${recipe.source}`;
+    raiseFrameworkError(
+      'csr',
+      RuntimeErrorCode.LEAF_CLAIM_UNAVAILABLE,
+      RUNTIME_MESSAGES_ENABLED
+        ? `${where}: no generated claim`
+        : `${where}: ${RuntimeErrorCode.LEAF_CLAIM_UNAVAILABLE}`,
+    );
+  }
+
+  const owner = insertingOwner.child();
+  recordOwnerCreated();
+  const region = nextRegionId++;
+  recordRegionAllocated();
+
+  let props!: P;
+  let nodes: Node[];
+  try {
+    props = recipe.createProps();
+    nodes = recipe.claim(owner, props, parent);
+  } catch (error) {
+    rollbackClaim(owner);
+    throw error;
+  }
+
+  // The nodes are already in `parent`. Register removal only after claim
+  // succeeds, so a throwing claim cannot delete them.
+  owner.addRangeCleanup(() => removeNodes(nodes));
+  recordRangeCleanup();
   recordProjection(nodes.length);
   let disposed = false;
   const projection: Projection<P> = {
