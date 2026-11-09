@@ -1,23 +1,27 @@
 /**
- * M05 v2 — generated leaf mount/update/dispose (compiler-private).
+ * M06b1a-2 v2 — generated leaf/component mount with reusable JSX values
+ * (compiler-private).
  *
  * Consumes the merged M03 `FunctionModelModule` + `ExpressionRegistry` (never
  * re-derives resolution, lowering or erasure) and emits a real JavaScript
  * module whose `mount(scope)` builds detached DOM using the M04 runtime
- * primitives: one `createRecipe` per leaf component, `bindSignalWrites` for
- * tracked slots, and the canonical `displayValue`/`attributeValueOf`/
- * `assertSafeUrlAttribute` value semantics. The harness inserts generated
- * recipes through `insertRecipe` — the one insertion surface.
+ * primitives: one `createRecipe` per leaf component/recipe, `insertRecipe` at
+ * every insertion site, `bindSignalWrites` for tracked slots, and the canonical
+ * `displayValue`/`attributeValueOf`/`assertSafeUrlAttribute` value semantics.
+ * The harness inserts generated root recipes through `insertRecipe` — the one
+ * insertion surface.
  *
  * S1/M06a leaf + S2 scope: intrinsic elements, fragments, multi-root, empty
  * output, static text/attributes, dynamic text and `attribute`/`boolean`/
  * `property` channel attributes with signal/computed driven refresh,
- * conditions, lists, default + detach disposal, throwing cleanups, and (M06b1a-1)
+ * conditions, lists, default + detach disposal, throwing cleanups, (M06b1a-1)
  * module-level component mounts plus module-local component references
- * (`<Child prop={expr}/>`). One component body is emitted exactly once per
- * module: `function <Name>__mount(scope, props, host)` builds a detached
- * instance and returns its nodes; the exported `create<Name>Recipe(owner, host)`
- * factory keeps its name/signature and delegates its recipe mount to it, and a
+ * (`<Child prop={expr}/>`), and (M06b1a-2) reusable JSX values: one recipe per
+ * direct component-local JSX initializer and one `insertRecipe` projection per
+ * `{name}` slot. One component body is emitted exactly once per module:
+ * `function <Name>__mount(scope, props, host)` builds a detached instance and
+ * returns its nodes; the exported `create<Name>Recipe(owner, host)` factory
+ * keeps its name/signature and delegates its recipe mount to it, and a
  * component reference calls the child mount directly with a fresh child scope.
  *
  * Props passed to a child are a per-read getter record over the DEFINING
@@ -29,17 +33,32 @@
  * instance owns a fresh child scope of the parent; the parent appends the
  * returned nodes in authored order.
  *
- * Still fails closed with a coded diagnostic (M06b1a-2/M06b1a-3, M06b2, M07/M08
- * boundary): recipes/insertion sites, children projection, component references
- * to unknown/external components, component-reference cycles
- * (`OEIR_LEAF_COMPONENT_CYCLE`; a cycle would emit self-recursive mounts),
- * component references inside list entry templates (a keyed reuse would keep
- * the first mount's props without the child update hook — M06b1b),
- * child components with no named props parameter (destructured or absent) or
- * with signal/computed resources, `class`/`style`/`innerHTML`/`event`/`ref`
- * channels (on elements and on component props), and `key` as a DOM write.
- * `key` on a component reference is consumed as list identity only and is never
- * a DOM write or a child prop.
+ * Still fails closed with a coded diagnostic (M06b1a-3/M06b2, M07/M08
+ * boundary): recipes that are not a direct component-local JSX initializer (JSX
+ * inside an arbitrary expression lowers to a `__oe_recipe_ref` placeholder that
+ * the generated module cannot execute — `OEIR_LEAF_UNSUPPORTED_RECIPE`),
+ * children projection, component references to unknown/external components,
+ * mount cycles through component references or recipe targets
+ * (`OEIR_LEAF_COMPONENT_CYCLE` / `OEIR_LEAF_RECIPE_CYCLE`; a cycle would emit
+ * self-recursive mounts), component references inside list entry templates (a
+ * keyed reuse would keep the first mount's props without the child update hook —
+ * M06b1b), child components with no named props parameter (destructured or
+ * absent) or with signal/computed resources, `class`/`style`/`innerHTML`/
+ * `event`/`ref` channels (on elements and on component props), and `key` as a
+ * DOM write. `key` on a component reference is consumed as list identity only
+ * and is never a DOM write or a child prop.
+ *
+ * M06b1a-2 reusable JSX values: one `createRecipe` per component-local direct
+ * JSX initializer that at least one insertion site references, emitted inline
+ * in the component chunk with its own recipe scope so lowered expressions keep
+ * the A2 segments/placement ledger and refresh subscriptions bind on the recipe
+ * instance. Every `{name}` slot becomes a `DocumentFragment` + `insertRecipe`
+ * call on the inserting scope (component mount, condition-branch scope or
+ * list-entry scope — all live descendants of the definition owner, the M04
+ * lineage rule); the projection's `nodes` are spread into the enclosing sink in
+ * authored order. Insertion sites inside recipe bodies are admitted because the
+ * recipe scope handed to a mount is always a descendant of the same definition
+ * owner; a recipe-target insertion cycle is refused before emission.
  *
  * The emitted module imports from the compiler-private runtime entry
  * `@openelement/element/internal/compiled/runtime`. That entry is not a
@@ -47,9 +66,10 @@
  * harness bundles the same M04 modules under the same names, so the artifact
  * under test uses the real primitives, not stubs.
  *
- * NOT claimed here: generated-module source map (M05b named gap: A2 expression
- * segments exist, placement composition is a separate evidence slice),
- * claim/SSR, production wiring, ABI/public API.
+ * NOT claimed here: browser execution evidence for the M06b1a-2 projection
+ * shapes and repeated-insertion isolation (M06b1b), repeated children
+ * projection (M06b1a-3/M06b2), claim/SSR (M07/M08), production wiring,
+ * ABI/public API.
  */
 
 import ts from 'typescript';
@@ -60,9 +80,11 @@ import type {
   FunctionModelComponent,
   FunctionModelComponentRef,
   FunctionModelCondition,
+  FunctionModelInsertionSite,
   FunctionModelList,
   FunctionModelModule,
   FunctionModelNode,
+  FunctionModelRecipe,
 } from '../../semantic-core/function-frontend.ts';
 import type { LoweredExpressionRecord } from '../../semantic-core/expression-registry.ts';
 import type { BindingId } from '../../semantic-core/scope-resolution.ts';
@@ -82,10 +104,19 @@ const RUNTIME_IMPORTS = [
   'bindSignalWrites',
   'createRecipe',
   'displayValue',
+  'insertRecipe',
   'removeNodes',
 ] as const;
 
 const INTERNAL_PREFIX = '__oe_';
+/**
+ * The M02 marked-printer placeholder for a JSX value lowered inside an
+ * expression (`__oe_recipe_ref("id")`). The function model keeps the recipe
+ * identity for the M02 §recipe model, but the generated leaf module can only
+ * execute recipes created by a direct component-local JSX initializer, so any
+ * lowered record carrying this placeholder fails closed.
+ */
+const RECIPE_REFERENCE_CALLEE = '__oe_recipe_ref';
 /**
  * Module-level component mount (M06b1a-1): `<Name>__mount(scope, props, host)`.
  * The mount builds one detached instance and returns its top-level nodes; both
@@ -170,6 +201,20 @@ interface EmitState {
   readonly hostVar: string;
   /** Module component table: component references resolve against it. */
   readonly componentByName: ReadonlyMap<string, FunctionModelComponent>;
+  /**
+   * Recipe ids declared by a direct component-local JSX initializer (the model
+   * `resource.recipeId` link). An insertion site may only target one of these;
+   * a recipe created inside an arbitrary expression is never an insertion site.
+   */
+  readonly declaredRecipeIds: ReadonlySet<string>;
+  /**
+   * Component-local names bound to a reusable JSX value. Such a name is not a
+   * readable value: it may only appear as a `{name}` JSX child (insertion
+   * site), never inside an expression.
+   */
+  readonly recipeNames: ReadonlySet<string>;
+  /** Recipe id → generated recipe variable for the component being emitted. */
+  readonly recipeVars: Map<string, string>;
   /** Entry-mapper names bound in the current generated builder (not host bindings). */
   readonly entryNames: Set<string>;
   /** Refresh-function collectors for the enclosing list-entry builder (if any). */
@@ -293,7 +338,9 @@ function pushParts(state: EmitState, parts: readonly LinePart[], anchor?: SpanLi
 
 type SinkEntry =
   | { readonly kind: 'node'; readonly name: string }
-  | { readonly kind: 'spread'; readonly name: string };
+  | { readonly kind: 'spread'; readonly name: string }
+  /** One M04 projection (M06b1a-2): spread `projection.nodes` into the sink. */
+  | { readonly kind: 'projection'; readonly name: string };
 
 /** Register one generated refresh function with the enclosing entry builder. */
 function registerRefresh(state: EmitState, name: string): void {
@@ -309,6 +356,11 @@ function appendSinkToElement(
 ): void {
   for (const entry of sink) {
     if (entry.kind === 'node') push(state, `${targetVar}.appendChild(${entry.name});`);
+    else if (entry.kind === 'projection')
+      push(
+        state,
+        `for (const ${INTERNAL_PREFIX}child of ${entry.name}.nodes) ${targetVar}.appendChild(${INTERNAL_PREFIX}child);`,
+      );
     else
       push(
         state,
@@ -321,6 +373,11 @@ function appendSinkToElement(
 function appendSinkToArray(state: EmitState, sink: readonly SinkEntry[], targetVar: string): void {
   for (const entry of sink) {
     if (entry.kind === 'node') push(state, `${targetVar}.push(${entry.name});`);
+    else if (entry.kind === 'projection')
+      push(
+        state,
+        `for (const ${INTERNAL_PREFIX}child of ${entry.name}.nodes) ${targetVar}.push(${INTERNAL_PREFIX}child);`,
+      );
     else
       push(
         state,
@@ -735,8 +792,24 @@ function recordFor(
       line: 1,
       column: 1,
     });
+    return null;
   }
-  return record ?? null;
+  // M06b1a-2 boundary: only a direct component-local JSX initializer becomes a
+  // reusable recipe. A JSX value lowered inside an arbitrary expression keeps
+  // its `__oe_recipe_ref(...)` placeholder, which has no generated definition
+  // and no insertion site; emitting it would produce a module that cannot run.
+  if (record.lowered.includes(RECIPE_REFERENCE_CALLEE)) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_RECIPE',
+      'a JSX value inside an expression lowers to a recipe reference, but this slice only ' +
+        'admits direct component-local JSX initializers (`const x = <div/>;` + `{x}`); ' +
+        'move the JSX to a direct initializer or keep it as a JSX child',
+      toIrSpan(ref),
+    );
+    return null;
+  }
+  return record;
 }
 
 /** Declare the host bindings an expression reads (prologue) and validate names. */
@@ -765,6 +838,23 @@ function declareReads(state: EmitState, record: LoweredExpressionRecord): boolea
       state.entryNames.has(read.name)
     ) {
       continue;
+    }
+    // A reusable JSX value is a recipe, not a readable value: it only appears
+    // as a `{name}` JSX child (an insertion site), never inside an expression.
+    // The enclosing-builder check above wins first, so a list mapper parameter
+    // shadowing the component-local name stays an entry read.
+    if (state.recipeNames.has(read.name)) {
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_RECIPE',
+        `'${read.name}' is a reusable JSX value; it can only be projected with {${read.name}} in JSX child position, not read as an expression value`,
+        toIrSpan({
+          id: record.id,
+          mode: record.mode,
+          span: record.authoredSpan,
+        }),
+      );
+      return false;
     }
     if (!IDENTIFIER_PATTERN.test(read.name) || read.name.startsWith(INTERNAL_PREFIX)) {
       diag(
@@ -1165,6 +1255,157 @@ function emitComponentRef(
   sink.push({ kind: 'spread', name: nodesVar });
 }
 
+/**
+ * Collect the recipe ids referenced by at least one insertion site reachable
+ * from the component roots (M06b1a-2). Delivery is transitive: a site inside a
+ * recipe body keeps the referenced recipe alive, while a direct declaration no
+ * admitted site reaches is not emitted at all.
+ */
+function referencedRecipeIds(component: FunctionModelComponent): Set<string> {
+  const byId = new Map(component.recipes.map((recipe) => [recipe.id, recipe] as const));
+  const referenced = new Set<string>();
+  const pending: string[] = [];
+  const collect = (nodes: readonly FunctionModelNode[]): void => {
+    for (const node of nodes) {
+      switch (node.kind) {
+        case 'insertion-site':
+          if (!referenced.has(node.recipeId)) {
+            referenced.add(node.recipeId);
+            pending.push(node.recipeId);
+          }
+          break;
+        case 'element':
+        case 'fragment':
+          collect(node.children);
+          break;
+        case 'condition':
+          collect(node.consequent);
+          if (node.alternate !== null) collect(node.alternate);
+          break;
+        case 'list':
+          collect(node.template);
+          break;
+        default:
+          break;
+      }
+    }
+  };
+  collect(component.roots);
+  while (pending.length > 0) {
+    const recipe = byId.get(pending.pop()!);
+    if (recipe !== undefined) collect([recipe.target]);
+  }
+  return referenced;
+}
+
+/** One recipe's generated names plus its model entry. */
+interface PlannedRecipe {
+  readonly recipe: FunctionModelRecipe;
+  readonly recipeVar: string;
+  readonly scopeVar: string;
+  readonly nodesVar: string;
+}
+
+/**
+ * Emit one `createRecipe` per referenced reusable JSX value (M06b1a-2).
+ *
+ * The mount body stays inline in the component chunk with its own recipe scope:
+ * lowered expressions keep their A2 segments/placements (the per-chunk line
+ * rebase is unchanged) and refresh subscriptions bind on the recipe instance.
+ * Recipe variables are published before any body is emitted so an insertion
+ * site inside another recipe body can reference any referenced recipe; the
+ * recipe graph is acyclic (`findMountCycle` refuses cycles before emission).
+ */
+function emitRecipes(
+  state: EmitState,
+  file: string,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): void {
+  const referenced = referencedRecipeIds(state.component);
+  if (referenced.size === 0) return;
+  const plans: PlannedRecipe[] = [];
+  for (const recipe of state.component.recipes) {
+    if (!referenced.has(recipe.id)) continue;
+    const plan: PlannedRecipe = {
+      recipe,
+      recipeVar: nextName(state, 'recipe'),
+      scopeVar: nextName(state, 'recipeScope'),
+      nodesVar: nextName(state, 'recipeNodes'),
+    };
+    state.recipeVars.set(recipe.id, plan.recipeVar);
+    plans.push(plan);
+  }
+  // One createRecipe per value, in model (authored declaration) order.
+  for (const plan of plans) {
+    const { recipe } = plan;
+    push(state, `const ${plan.recipeVar} = createRecipe({`, recipe.span);
+    state.indent += 1;
+    push(state, `definitionOwner: ${MOUNT_SCOPE},`);
+    push(
+      state,
+      `source: ${JSON.stringify(`${file}#${state.component.name}:${recipe.id.replace(/^#/, '')}`)},`,
+    );
+    push(state, `mount(${plan.scopeVar}) {`, recipe.span);
+    state.indent += 1;
+    push(state, `const ${plan.nodesVar} = [];`);
+    const outerScope = state.scopeVar;
+    state.scopeVar = plan.scopeVar;
+    const sink: SinkEntry[] = [];
+    emitNode(state, recipe.target, sink, records);
+    appendSinkToArray(state, sink, plan.nodesVar);
+    state.scopeVar = outerScope;
+    push(state, `return ${plan.nodesVar};`);
+    state.indent -= 1;
+    push(state, '},');
+    state.indent -= 1;
+    push(state, '});');
+  }
+}
+
+/**
+ * Emit one insertion site (M06b1a-2): a temporary `DocumentFragment` target,
+ * one M04 `insertRecipe` projection on the current builder scope, and a sink
+ * entry spreading the projection's `nodes` into the enclosing sink in authored
+ * order. The fragment is only the insertion target: M04 registers a
+ * parentNode-based `removeNodes(nodes)` range cleanup, so moving the nodes into
+ * their final parent keeps the default-dispose-keeps-DOM / `dispose(true)`
+ * region contract.
+ */
+function emitInsertionSite(
+  state: EmitState,
+  node: FunctionModelInsertionSite,
+  sink: SinkEntry[],
+): void {
+  if (!state.declaredRecipeIds.has(node.recipeId)) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_RECIPE',
+      `insertion site '${node.recipeId}' does not target a direct component-local JSX initializer; only those values are reusable recipes in this slice`,
+      node.span,
+    );
+    return;
+  }
+  const recipeVar = state.recipeVars.get(node.recipeId);
+  if (recipeVar === undefined) {
+    diag(
+      state,
+      'OEIR_LEAF_MISSING_RECIPE',
+      `insertion site '${node.recipeId}' has no emitted recipe (the value is not reachable from any admitted root)`,
+      node.span,
+    );
+    return;
+  }
+  const fragmentVar = nextName(state, 'insertTarget');
+  const projectionVar = nextName(state, 'projection');
+  push(state, `const ${fragmentVar} = document.createDocumentFragment();`, node.span);
+  push(
+    state,
+    `const ${projectionVar} = insertRecipe(${state.scopeVar}, ${recipeVar}, ${fragmentVar});`,
+    node.span,
+  );
+  sink.push({ kind: 'projection', name: projectionVar });
+}
+
 function emitNode(
   state: EmitState,
   node: FunctionModelNode,
@@ -1294,10 +1535,16 @@ function emitNode(
     emitComponentRef(state, node, sink, records);
     return;
   }
+  if (node.kind === 'insertion-site') {
+    emitInsertionSite(state, node, sink);
+    return;
+  }
+  // children projection: M06b1a-3/M06b2 owns `props.children` projection and
+  // repeated projection; it stays fail-closed here.
   diag(
     state,
     'OEIR_LEAF_UNSUPPORTED_NODE',
-    `node '${node.kind}' is outside the M06b1 slice (recipes/insertion sites and children projection are M06b1a-2/M06b1a-3)`,
+    `node '${node.kind}' is outside the M06b1a-2 slice (children projection is M06b1a-3/M06b2)`,
     span,
   );
 }
@@ -1319,6 +1566,13 @@ function emitComponent(
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
 ): EmittedComponent {
   const propsName = component.propsParam;
+  const declaredRecipeIds = new Set<string>();
+  const recipeNames = new Set<string>();
+  for (const resource of component.resources) {
+    if (resource.recipeId === null) continue;
+    declaredRecipeIds.add(resource.recipeId);
+    recipeNames.add(resource.name);
+  }
   const state: EmitState = {
     component,
     lines: [],
@@ -1337,6 +1591,9 @@ function emitComponent(
     scopeVar: MOUNT_SCOPE,
     hostVar: MOUNT_HOST,
     componentByName,
+    declaredRecipeIds,
+    recipeNames,
+    recipeVars: new Map(),
     entryNames: new Set(),
     refreshStack: [],
     listDepth: 0,
@@ -1371,7 +1628,9 @@ function emitComponent(
       continue;
     }
     if (resource.kind === 'local') {
-      if (resource.expression === null) continue;
+      // A reusable JSX value has no lowered initializer: its recipe is emitted
+      // by `emitRecipes` only when at least one insertion site references it.
+      if (resource.recipeId !== null || resource.expression === null) continue;
       const record = recordFor(state, resource.expression, records);
       if (record === null) continue;
       if (!declareReads(state, record)) continue;
@@ -1383,23 +1642,6 @@ function emitComponent(
     state.requiredBindings.add(resource.name);
   }
   if (state.diagnostics.length > 0) {
-    return {
-      lines: [],
-      diagnostics: state.diagnostics,
-      requiredBindings: [],
-      requiredProps: [],
-      requiresPropsChanged: false,
-      segments: [],
-      placements: [],
-    };
-  }
-  if (component.recipes.length > 0) {
-    diag(
-      state,
-      'OEIR_LEAF_UNSUPPORTED_RECIPE',
-      'nested recipes/insertion sites are outside the M06b1a-1 slice (M06b1a-2 owns them)',
-      { file, start: 0, end: 0, line: 1, column: 1 },
-    );
     return {
       lines: [],
       diagnostics: state.diagnostics,
@@ -1432,6 +1674,10 @@ function emitComponent(
   for (const line of localLines) {
     pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
   }
+  // Reusable JSX values (M06b1a-2): recipes are declared before the roots so
+  // every insertion site — including one inside another recipe body — can
+  // reference them.
+  emitRecipes(state, file, records);
   for (const root of component.roots) {
     const sink: SinkEntry[] = [];
     emitNode(state, root, sink, records);
@@ -1506,74 +1752,102 @@ function emitComponent(
   };
 }
 
-/** One component-reference edge in the module's component graph. */
-interface ComponentRefEdge {
-  readonly from: string;
+/**
+ * One directed mount edge in the module's mount graph: a component instance or
+ * a reusable-JSX recipe instance can call another mount at instance time. Nodes
+ * are addressed by keys: `c:<Component>` for a component chunk and
+ * `r:<Component>:<recipeId>` for a recipe of that component.
+ */
+interface MountEdge {
   readonly to: string;
   readonly span: IrSpan;
 }
 
-/** Collect every component reference under one component's node tree. */
-function collectComponentRefs(
-  from: string,
+/** Collect every mount edge under one node tree, in authored order. */
+function collectMountEdges(
+  component: FunctionModelComponent,
   nodes: readonly FunctionModelNode[],
-  edges: ComponentRefEdge[],
+  edges: MountEdge[],
 ): void {
   for (const node of nodes) {
     switch (node.kind) {
       case 'component-ref':
-        edges.push({ from, to: node.name, span: node.span });
+        edges.push({ to: `c:${node.name}`, span: node.span });
+        break;
+      case 'insertion-site':
+        edges.push({ to: `r:${component.name}:${node.recipeId}`, span: node.span });
         break;
       case 'element':
       case 'fragment':
-        collectComponentRefs(from, node.children, edges);
+        collectMountEdges(component, node.children, edges);
         break;
       case 'condition':
-        collectComponentRefs(from, node.consequent, edges);
-        if (node.alternate !== null) collectComponentRefs(from, node.alternate, edges);
+        collectMountEdges(component, node.consequent, edges);
+        if (node.alternate !== null) collectMountEdges(component, node.alternate, edges);
         break;
       case 'list':
-        collectComponentRefs(from, node.template, edges);
+        collectMountEdges(component, node.template, edges);
         break;
       default:
-        // text / dynamic-text / insertion-site / children-projection carry no
-        // component references (recipes are refused before generation).
+        // text / dynamic-text / children-projection carry no mount edges.
         break;
     }
   }
 }
 
 /**
- * Fail closed on component-reference cycles: the emitted mounts would call
- * themselves at mount time (unbounded recursion). The authored node trees —
- * roots, condition branches, list templates — are walked in authored order and
- * the first cycle is reported with its path and the closing reference's span.
+ * Fail closed on mount cycles (M06b1a-2 extends the M06b1a-1 component-cycle
+ * DFS): a component reference and a reusable-JSX recipe both mount another
+ * mount at instance time, so a cycle would emit self-recursive mounts (unbounded
+ * recursion). Recipe targets are walked because a recipe can mount a component,
+ * and recipe bodies can insert another recipe. The first cycle in authored
+ * order is reported with its path and the closing edge's span; a cycle that
+ * passes through a recipe node gets `OEIR_LEAF_RECIPE_CYCLE`, a pure
+ * component-reference cycle keeps `OEIR_LEAF_COMPONENT_CYCLE`.
  */
-function findComponentCycle(module: FunctionModelModule): IrDiagnostic | null {
-  const edges = new Map<string, ComponentRefEdge[]>();
+function findMountCycle(module: FunctionModelModule): IrDiagnostic | null {
+  const edges = new Map<string, MountEdge[]>();
+  const labels = new Map<string, string>();
+  const addNode = (key: string, label: string, collected: MountEdge[]): void => {
+    labels.set(key, label);
+    edges.set(key, collected);
+  };
   for (const component of module.components) {
-    const collected: ComponentRefEdge[] = [];
-    collectComponentRefs(component.name, component.roots, collected);
-    edges.set(component.name, collected);
+    const componentEdges: MountEdge[] = [];
+    collectMountEdges(component, component.roots, componentEdges);
+    addNode(`c:${component.name}`, component.name, componentEdges);
+    for (const recipe of component.recipes) {
+      const recipeEdges: MountEdge[] = [];
+      collectMountEdges(component, [recipe.target], recipeEdges);
+      addNode(`r:${component.name}:${recipe.id}`, `${component.name}${recipe.id}`, recipeEdges);
+    }
   }
   const WHITE = 0;
   const GRAY = 1;
   const BLACK = 2;
   const color = new Map<string, number>();
   const path: string[] = [];
-  const visit = (name: string): IrDiagnostic | null => {
-    color.set(name, GRAY);
-    path.push(name);
-    for (const edge of edges.get(name) ?? []) {
-      // Unknown/external targets fail closed on their own during emission.
+  const visit = (key: string): IrDiagnostic | null => {
+    color.set(key, GRAY);
+    path.push(key);
+    for (const edge of edges.get(key) ?? []) {
+      // Unknown/external component targets have no node here and fail closed on
+      // their own during emission.
       if (!edges.has(edge.to)) continue;
       const targetColor = color.get(edge.to) ?? WHITE;
       if (targetColor === GRAY) {
-        const cycle = [...path.slice(path.indexOf(edge.to)), edge.to].join(' -> ');
+        const cycleKeys = path.slice(path.indexOf(edge.to));
+        const recipeCycle =
+          cycleKeys.some((entry) => entry.startsWith('r:')) || edge.to.startsWith('r:');
+        const cycle = [...cycleKeys, edge.to]
+          .map((entry) => labels.get(entry) ?? entry)
+          .join(' -> ');
         return {
           severity: 'error',
-          code: 'OEIR_LEAF_COMPONENT_CYCLE',
-          message: `component reference cycle: ${cycle}`,
+          code: recipeCycle ? 'OEIR_LEAF_RECIPE_CYCLE' : 'OEIR_LEAF_COMPONENT_CYCLE',
+          message: recipeCycle
+            ? `recipe insertion cycle: ${cycle}`
+            : `component reference cycle: ${cycle}`,
           span: edge.span,
           origin: 'ir-object',
         };
@@ -1584,12 +1858,13 @@ function findComponentCycle(module: FunctionModelModule): IrDiagnostic | null {
       }
     }
     path.pop();
-    color.set(name, BLACK);
+    color.set(key, BLACK);
     return null;
   };
   for (const component of module.components) {
-    if ((color.get(component.name) ?? WHITE) !== WHITE) continue;
-    const found = visit(component.name);
+    const key = `c:${component.name}`;
+    if ((color.get(key) ?? WHITE) !== WHITE) continue;
+    const found = visit(key);
     if (found !== null) return found;
   }
   return null;
@@ -1640,7 +1915,7 @@ export function generateLeafModule(
   const componentByName = new Map(
     module.components.map((component) => [component.name, component] as const),
   );
-  const cycle = findComponentCycle(module);
+  const cycle = findMountCycle(module);
   if (cycle !== null) {
     return {
       module: null,
@@ -1695,7 +1970,7 @@ export function generateLeafModule(
     };
   }
   const headerLines = [
-    '// <generated by openelement M06b1 leaf-codegen v2; do not edit>',
+    '// <generated by openelement M06b1a-2 leaf-codegen v2; do not edit>',
     `import { ${RUNTIME_IMPORTS.join(', ')} } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
     '',
   ];
