@@ -97,6 +97,13 @@ export class LifetimeScope {
     return id;
   }
 
+  /**
+   * Dispose once. A second call returns immediately, so `dispose(true)` does
+   * not upgrade a scope already disposed with `dispose(false)`: the range
+   * cleanups were dropped on the first call and are not run later. The flag
+   * cascades only through children still in `#children`; a child that already
+   * disposed itself has left that set and is not re-entered.
+   */
   dispose(detachOwnedNodes = false): void {
     if (this.#disposed) return;
     this.#disposed = true;

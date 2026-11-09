@@ -82,7 +82,10 @@ checkboxes: marker/order encoding, key alignment, permitted seed state, bounded
 mismatch recovery and duplicate-subscription accounting. M07 owns the leaf proof;
 M08 owns the stateful SSR→claim proof. The M07a slice (authored-order structural
 adoption of a static leaf, mismatch before subscribe, one subscription set per
-successful claim) does not fill TSX-18 or TSX-30.
+successful claim) does not fill TSX-18 or TSX-30. A validation failure writes
+nothing. An activation failure may leave an earlier dynamic write while
+resources are released with `dispose(false)`. That is not a whole-claim byte
+rollback, and it does not change the successful-claim input/focus obligation.
 
 ## Acceptance coverage (taskbook §18)
 

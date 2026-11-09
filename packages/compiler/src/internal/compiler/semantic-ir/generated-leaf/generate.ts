@@ -95,7 +95,9 @@
  * — elements, fragments, static text, static attributes, dynamic text and
  * `attribute`/`boolean` slots — also emits `<Name>__claim`, which adopts the
  * existing children of a parent in authored order. Structural mismatch throws
- * `OEIR_LEAF_CLAIM_MISMATCH` before any subscription. Conditions, lists,
+ * `OEIR_LEAF_CLAIM_MISMATCH` before any subscription. A dynamic slot writes
+ * before it subscribes, so a throw after that write is not a DOM byte
+ * rollback; `claimRecipe` then `dispose(false)`s the child owner. Conditions, lists,
  * component references, reusable JSX insertion, children projection and
  * `property` channels omit `claim` and keep mount-only output. The claim does
  * not encode repeated-insertion markers, keys, SSR seed bytes, or bounded

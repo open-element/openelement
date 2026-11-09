@@ -69,8 +69,9 @@ test('G2(c): default disposal keeps the owned DOM (the revive dependency) and re
   expect(observed).toEqual([1]);
   expect(runtimeProbe.snapshot().unsubscribed).toBe(1);
   projection.dispose(true);
-  // The range cleanup was released with the plain disposal: the region cannot
-  // be removed through the handle afterwards, and no second cleanup runs.
+  // Second dispose is a no-op. `false` does not upgrade to `true`: the range
+  // cleanup was released with the plain disposal, so the region cannot be
+  // removed through this handle afterwards, and no second cleanup runs.
   expect(parent.childNodes).toEqual([element]);
   expect(cleanups).toEqual(['resource']);
 });
@@ -154,6 +155,44 @@ test('G2(c): parent disposal cascades to every projection with the parents mode'
   secondHost.dispose(true);
   expect(secondCleanups).toEqual(['resource-1', 'resource-2']);
   expect(secondParent.childNodes).toEqual([]);
+});
+
+test('G2(c): parent dispose(true) cascades only to still-live children, not one already disposed false', () => {
+  const doc = new TestDocument();
+  const parent = doc.createElement('div');
+  const host = new LifetimeScope();
+  const cleanups: string[] = [];
+  let mounts = 0;
+
+  const recipe = createRecipe({
+    definitionOwner: host,
+    source: 'fixtures/CascadeLive.tsx',
+    mount(scope) {
+      mounts += 1;
+      const id = mounts;
+      const element = doc.createElement('span');
+      scope.addRangeCleanup(() => removeNodes([asNode(element)]));
+      scope.add(() => cleanups.push(`resource-${id}`));
+      return [asNode(element)];
+    },
+  });
+
+  const suspended = insertRecipe(host, recipe, asNode(parent), null);
+  const live = insertRecipe(host, recipe, asNode(parent), null);
+  const kept = suspended.nodes[0] as unknown as TestElement;
+  suspended.dispose(false);
+  expect(cleanups).toEqual(['resource-1']);
+  expect(parent.childNodes).toEqual([kept, live.nodes[0]]);
+
+  host.dispose(true);
+  expect(cleanups).toEqual(['resource-1', 'resource-2']);
+  expect(parent.childNodes).toEqual([kept]);
+  expect(kept.parentNode).not.toBeNull();
+  expect((live.nodes[0] as unknown as TestElement).parentNode).toBeNull();
+
+  suspended.dispose(true);
+  expect(parent.childNodes).toEqual([kept]);
+  expect(cleanups).toEqual(['resource-1', 'resource-2']);
 });
 
 test('G2(c): a throwing cleanup does not stop the remaining ones and the first error surfaces', () => {

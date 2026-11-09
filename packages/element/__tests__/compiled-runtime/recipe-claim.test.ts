@@ -6,7 +6,7 @@
  */
 
 import { beforeEach, expect, test } from 'vitest';
-import { OpenElementError } from '@openelement/protocol/errors';
+import { OpenElementError, RuntimeErrorCode } from '@openelement/protocol/errors';
 import { signal } from '../../src/internal/signal/framework.ts';
 import { LifetimeScope } from '../../src/internal/compiled/lifetime-scope.ts';
 import { bindSignalWrites } from '../../src/internal/compiled/runtime/bindings.ts';
@@ -190,6 +190,61 @@ test('lineage rejection happens before an owner is created and does not touch th
   expect(parent.childNodes).toEqual([child]);
 });
 
+test('validation failure writes nothing; activation failure may keep an earlier dynamic write', () => {
+  const doc = new TestDocument();
+  const parent = doc.createElement('div');
+  const element = doc.createElement('p');
+  element.setAttribute('data-n', 'server');
+  parent.appendChild(element);
+  const host = new LifetimeScope();
+
+  const validate = createRecipe({
+    definitionOwner: host,
+    source: 'fixtures/Leaf.tsx',
+    claim() {
+      throw new Error('OEIR_LEAF_CLAIM_MISMATCH: structure');
+    },
+    mount() {
+      throw new Error('mount must not run');
+    },
+  });
+  const beforeValidate = runtimeProbe.snapshot();
+  expect(() => claimRecipe(host, validate, asNode(parent))).toThrow(/OEIR_LEAF_CLAIM_MISMATCH/);
+  const afterValidate = runtimeProbe.snapshot();
+  expect(element.getAttribute('data-n')).toBe('server');
+  expect(parent.childNodes).toEqual([element]);
+  expect(afterValidate.subscriptions - beforeValidate.subscriptions).toBe(0);
+  expect(afterValidate.unsubscribed - beforeValidate.unsubscribed).toBe(0);
+
+  const count = signal(4);
+  const seen: number[] = [];
+  const activate = createRecipe({
+    definitionOwner: host,
+    source: 'fixtures/Leaf.tsx',
+    claim(scope) {
+      element.setAttribute('data-n', String(count.value));
+      bindSignalWrites(scope, count, 'count', (value) => {
+        seen.push(Number(value));
+        element.setAttribute('data-n', String(value));
+      });
+      throw new Error('OEIR_LEAF_CLAIM_MISMATCH: after write');
+    },
+    mount() {
+      throw new Error('mount must not run');
+    },
+  });
+  const beforeActivate = runtimeProbe.snapshot();
+  expect(() => claimRecipe(host, activate, asNode(parent))).toThrow(/after write/);
+  const afterActivate = runtimeProbe.snapshot();
+  expect(element.getAttribute('data-n')).toBe('4');
+  expect(parent.childNodes).toEqual([element]);
+  expect(afterActivate.subscriptions - beforeActivate.subscriptions).toBe(1);
+  expect(afterActivate.unsubscribed - beforeActivate.unsubscribed).toBe(1);
+  count.value = 9;
+  expect(seen).toEqual([]);
+  expect(element.getAttribute('data-n')).toBe('4');
+});
+
 test('a recipe without claim fails before an owner is created', () => {
   const doc = new TestDocument();
   const parent = doc.createElement('div');
@@ -202,7 +257,10 @@ test('a recipe without claim fails before an owner is created', () => {
     },
   });
   const before = runtimeProbe.snapshot();
-  expect(() => claimRecipe(host, recipe, asNode(parent))).toThrow(/OEIR_LEAF_CLAIM_UNAVAILABLE/);
+  const unavailable = capture(() => claimRecipe(host, recipe, asNode(parent)));
+  expect(unavailable).toBeInstanceOf(OpenElementError);
+  expect(unavailable.code).toBe(RuntimeErrorCode.LEAF_CLAIM_UNAVAILABLE);
+  expect(unavailable.message).toContain('fixtures/List.tsx');
   const after = runtimeProbe.snapshot();
   expect(after.owners - before.owners).toBe(0);
   expect(after.lineageAccepted - before.lineageAccepted).toBe(1);

@@ -198,6 +198,11 @@ export const RuntimeErrorCode = {
   ROOT_WITHOUT_DOCUMENT: 'OE_RUNTIME_ROOT_WITHOUT_DOCUMENT',
   /** Fresh-DOM creation was handed a root that is not empty. */
   FRESH_ROOT_NOT_EMPTY: 'OE_RUNTIME_FRESH_ROOT_NOT_EMPTY',
+  /**
+   * `claimRecipe` was asked to claim a recipe that has no generated claim.
+   * This is a caller/recipe-shape failure, not a DOM mismatch.
+   */
+  LEAF_CLAIM_UNAVAILABLE: 'OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE',
   /** A fixed Part has no serialized anchor to bind. */
   SERIALIZED_ANCHOR_MISSING: 'OE_RUNTIME_SERIALIZED_ANCHOR_MISSING',
   /** A when/each Block Part needs the Block builders, which this entry does not install (#1548). */
