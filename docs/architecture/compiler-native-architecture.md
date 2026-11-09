@@ -4,7 +4,7 @@ Date: 2026-11-03. Status: **ACCEPTED IN DIRECTION, INCLUDING THE FOURTH-PASS
 DECISION PACKAGE (P-1…P-5) APPROVED 2026-11-03**: the Class authoring API and the
 serialized Part Program protocol are retired as the target, `__partProgram` leaves
 the generated-module contract, and the old validator/version retire with the
-schema ([reassessment](./alpha16-18-fourth-pass-reassessment.md)). Approval is
+schema. Approval is
 policy-level: nothing is deleted and no ABI is frozen by this document.
 Baseline: `4f1f2001b24909086f7e7efe9e5016d48d615c91`.
 
@@ -16,8 +16,7 @@ Other documents link here instead of restating it:
 - the JSX value / Children execution model is
   [its own note](./jsx-value-and-children-model.md);
 - the author contract is [the TSX contract](./tsx-author-candidate-contract.md);
-- current state and evidence are [the audit](./alpha16-18-architecture-audit.md)
-  and [the current-reality matrix](./alpha16-18-current-reality.md);
+- the 2026-11-03 current-state audits were retired into Git history on 2026-11-10;
 - execution and acceptance are [the plan](./alpha16-18-execution-plan.md) and
   [the test matrix](./alpha16-18-semantic-test-matrix.md).
 
@@ -138,8 +137,7 @@ Binding consequences:
   not the old browser interpreter.**
 - Any change is a staged migration with per-consumer tracing and exit
   conditions, not a global deletion. The consumer map is maintained in
-  [the current-reality audit](./alpha16-18-current-reality.md) and
-  [the cleanup inventory](./alpha16-18-cleanup-inventory.md).
+  the 2026-11-03 current-state audits (retired into Git history on 2026-11-10).
 
 ### 4.2 One client execution backend, independent server rendering backend
 
@@ -284,7 +282,7 @@ an author-facing API either way.
 **SUPERSEDED HISTORY (2026-11-03 D-O3):** the earlier decision was a long-lived
 adapter. It is superseded by the approved fourth pass and retained as history; the
 cost evidence behind the change is in
-[the reassessment](./alpha16-18-fourth-pass-reassessment.md) §2.
+the fourth-pass reassessment (retired into Git history on 2026-11-10).
 
 The approved decision is made, so the statement is unconditional:
 

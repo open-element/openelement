@@ -10,7 +10,7 @@ author contract in [the TSX contract](./tsx-author-candidate-contract.md), the
 model in [JSX values and repeatable children](./jsx-value-and-children-model.md),
 the canonical architecture in
 [compiler-native-architecture](./compiler-native-architecture.md), and the state
-of the tree in [the current-reality audit](./alpha16-18-current-reality.md).
+of the tree as recorded on 2026-11-03 (retired into Git history on 2026-11-10).
 
 Nothing here is implemented. No dates are promised and no duration estimates are
 claimed: the order below is a **dependency spine**, not a critical path in the
@@ -106,7 +106,7 @@ Required before release:
     from production paths (approved fourth pass), with the ABI replaced per M01;
     class retirement requires a per-file class→function migration matrix **and**
     the capability inventory in
-    [the retirement roadmap](./alpha16-18-retirement-roadmap.md#class-retirement-capability-gate-alpha16b)
+    the retirement roadmap (retired into Git history on 2026-11-10)
     to show an approved replacement for every current class capability;
 4. Router integration (M11);
 5. independent packed-consumer qualification (M12);

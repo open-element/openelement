@@ -202,7 +202,7 @@ different fact from the owner declaration of 2026-11-03 that **no external users
 exist** — all npm downloads are CI and the owner's own pulls. The declaration is
 owner testimony, not telemetry, and it supersedes the "unknown" reading for this
 decision. Full analysis:
-[fourth-pass reassessment](../architecture/alpha16-18-fourth-pass-reassessment.md).
+fourth-pass reassessment (retired into Git history on 2026-11-10).
 
 The invariant that does not change: one semantic model, one generated execution
 backend, never two execution architectures. Native Custom Elements stay a

@@ -481,7 +481,7 @@ but it may not be deferred to Alpha17 with a callback or API name.
 ## 18. References
 
 - [Canonical architecture](./compiler-native-architecture.md)
-- [Fourth-pass reassessment (approved)](./alpha16-18-fourth-pass-reassessment.md)
+- Fourth-pass reassessment (approved 2026-11-03; retired into Git history on 2026-11-10)
 - [JSX value / Children model](./jsx-value-and-children-model.md)
 - [TSX author contract](./tsx-author-candidate-contract.md)
 - [Consumer migration matrix](./m01-consumer-migration-matrix.md)

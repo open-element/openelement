@@ -18,7 +18,7 @@
  *   4. package subpaths      -> the packages' own `exports` maps
  *   5. gate step counts      -> tools/repo|release package.json gate definitions
  *   6. CI job names/counts   -> .github/workflows/*.yml
- *   7. ADR references        -> docs/adr/ADR-*.md
+ *   7. ADR references        -> docs/adr/ADR-*.md + docs/legacy/adr/ADR-*.md
  *   8. repo path references  -> the tree itself
  *   9. bilingual parity      -> the content tree's own file pairs
  *  10. description budget    -> POLICY (a declared bound, not a fact): the
@@ -533,9 +533,13 @@ export function readAuthorities(root: string = repoRoot): Authorities {
   }
 
   const adrIds = new Set<string>();
-  for (const entry of readdirSync(join(root, 'docs/adr'))) {
-    const match = /^ADR-(\d{4})/.exec(entry);
-    if (match) adrIds.add(match[1]!);
+  for (const dir of ['docs/adr', 'docs/legacy/adr']) {
+    const path = join(root, dir);
+    if (!existsSync(path)) continue;
+    for (const entry of readdirSync(path)) {
+      const match = /^ADR-(\d{4})/.exec(entry);
+      if (match) adrIds.add(match[1]!);
+    }
   }
 
   return {
@@ -1224,7 +1228,7 @@ export function checkAdrReferences(files: Map<string, string>, corpus: Corpus): 
         text,
         match.index!,
         `ADR-${match[1]}`,
-        `references ADR-${match[1]}, which has no docs/adr/ADR-${match[1]}-*.md file`,
+        `references ADR-${match[1]}, which has no ADR file in docs/adr or docs/legacy/adr`,
       );
     }
   }

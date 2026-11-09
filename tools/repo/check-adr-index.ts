@@ -34,12 +34,14 @@
  * file:line).
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 export const ADR_DIR = 'docs/adr';
 export const ADR_INDEX_PATH = 'docs/adr/README.md';
+/** Closed records are archived here; they remain in the index but not in ADR_DIR. */
+export const LEGACY_ADR_DIR = 'docs/legacy/adr';
 
 /** The record-file spelling the index is required to cover. */
 export const RECORD_FILE_PATTERN = /^ADR-\d{4}-[A-Za-z0-9-]+\.md$/;
@@ -136,7 +138,7 @@ export function parseAdrIndex(markdown: string): {
     }
     const label = match[1]!.trim();
     const target = match[2]!.trim();
-    const file = target.startsWith('./') ? target.slice(2) : target;
+    const file = basename(target);
     if (!RECORD_FILE_PATTERN.test(file)) {
       violations.push({
         kind: 'entry-malformed',
@@ -329,22 +331,35 @@ export function checkAdrIndex(root: string): AdrIndexReport {
     };
   }
   const markdown = readFileSync(indexFile, 'utf8');
+  const readRecord = (file: string): string | undefined => {
+    for (const dir of [ADR_DIR, LEGACY_ADR_DIR]) {
+      const path = join(root, dir, file);
+      if (!existsSync(path)) continue;
+      try {
+        return readFileSync(path, 'utf8');
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  };
   return checkAdrIndexMarkdown(
     markdown,
     () => {
+      let files: string[];
       try {
-        return readdirSync(join(root, ADR_DIR));
+        files = readdirSync(join(root, ADR_DIR));
       } catch {
         return undefined;
       }
-    },
-    (file) => {
       try {
-        return readFileSync(join(root, ADR_DIR, file), 'utf8');
+        files = files.concat(readdirSync(join(root, LEGACY_ADR_DIR)));
       } catch {
-        return undefined;
+        // The archive is optional; an absent legacy directory is not a failure.
       }
+      return [...new Set(files)];
     },
+    readRecord,
   );
 }
 

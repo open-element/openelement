@@ -165,7 +165,7 @@ re-taken at execution), plus the generated CE platform boundary (M09). It is
 *not* evidence that a class frontend is preserved and shares a backend with
 function components. The per-file class→function migration matrix and capability
 inventory named as evidence in
-[the retirement roadmap](./alpha16-18-retirement-roadmap.md#class-retirement-capability-gate-alpha16b)
+the retirement roadmap (retired into Git history on 2026-11-10)
 are the record for the migration half; matrix rows TSX-14 and TSX-20 cover the
 CE-boundary slice.
 
