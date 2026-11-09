@@ -338,44 +338,18 @@ export function compileServerComponentModule(
   // module whose body contains JSX but is not an admitted shape would
   // otherwise ship as RUNTIME JSX — and the server lane has no JSX
   // interpreter. Refuse it with the code; never lower half a module.
-  const containsJsx = (node: ts.Node): boolean => {
-    let found = false;
-    const visit = (child: ts.Node): void => {
-      if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child) || ts.isJsxFragment(child)) {
-        found = true;
-      }
-      ts.forEachChild(child, visit);
-    };
-    visit(node);
-    return found;
-  };
-  for (const statement of sf.statements) {
-    if (candidates.includes(statement)) continue;
-    const modifiers = ts.canHaveModifiers(statement) ? (ts.getModifiers(statement) ?? []) : [];
-    if (!modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
-    if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) {
-      // Default exports are page/route surface, not composed components.
-      continue;
-    }
-    let body: ts.Node | undefined;
-    if (ts.isFunctionDeclaration(statement)) body = statement.body;
-    else if (
-      ts.isVariableStatement(statement) &&
-      statement.declarationList.declarations.length === 1 &&
-      statement.declarationList.declarations[0].initializer !== undefined &&
-      ts.isArrowFunction(statement.declarationList.declarations[0].initializer!)
-    ) {
-      body = statement.declarationList.declarations[0].initializer;
-    }
-    if (body !== undefined && containsJsx(body)) {
-      fail(
-        statement,
-        'OEC9032',
-        'this exported function renders JSX but is not an admitted server function component ' +
-          '(a component is a single return of one JSX element) — runtime JSX has no interpreter ' +
-          'in the server lane; fix the shape or move it out of the module',
-      );
-    }
+  // The same predicate gates {@link compileServerComponentIfAdmitted}: the
+  // fact scan only counts the admitted shape, so a near-miss module has an
+  // empty component list and must still reach this diagnostic.
+  const nearMiss = serverComponentNearMiss(sf, candidates);
+  if (nearMiss !== undefined) {
+    fail(
+      nearMiss,
+      'OEC9032',
+      'this exported function renders JSX but is not an admitted server function component ' +
+        '(a component is a single return of one JSX element) — runtime JSX has no interpreter ' +
+        'in the server lane; fix the shape or move it out of the module',
+    );
   }
   if (candidates.length === 0) return null;
 
@@ -545,18 +519,69 @@ export function compileServerComponentModule(
 }
 
 /**
+ * An exported function or arrow whose body contains JSX but is not the
+ * admitted single-return shape. Statements before the return and a
+ * block-bodied arrow are the shapes authors actually write; both carry JSX
+ * the server lane cannot leave for a runtime JSX transform. Default exports
+ * stay out: they are page/route surface, not composed components. The fact
+ * scan ({@link isExportedServerComponentDeclaration}) does not count these,
+ * so an admission bridge that stops on an empty component list would return
+ * null and the host would pass the module through unchanged.
+ */
+function serverComponentNearMiss(
+  sf: ts.SourceFile,
+  candidates: readonly ts.Statement[],
+): ts.Statement | undefined {
+  const containsJsx = (node: ts.Node): boolean => {
+    let found = false;
+    const visit = (child: ts.Node): void => {
+      if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child) || ts.isJsxFragment(child)) {
+        found = true;
+      }
+      ts.forEachChild(child, visit);
+    };
+    visit(node);
+    return found;
+  };
+  for (const statement of sf.statements) {
+    if (candidates.includes(statement)) continue;
+    const modifiers = ts.canHaveModifiers(statement) ? (ts.getModifiers(statement) ?? []) : [];
+    if (!modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
+    if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) continue;
+    let body: ts.Node | undefined;
+    if (ts.isFunctionDeclaration(statement)) body = statement.body;
+    else if (
+      ts.isVariableStatement(statement) &&
+      statement.declarationList.declarations.length === 1 &&
+      statement.declarationList.declarations[0].initializer !== undefined &&
+      ts.isArrowFunction(statement.declarationList.declarations[0].initializer)
+    ) {
+      body = statement.declarationList.declarations[0].initializer;
+    }
+    if (body !== undefined && containsJsx(body)) return statement;
+  }
+  return undefined;
+}
+
+/**
  * The host-build admission bridge: compile `code` through the server function
  * component lane when — and only when — this module belongs to it.
  *
  * - a module carrying a compiled-element decorator (or an unsupported
  *   decorator spelling, which the class lane compiles so it fails closed with
  *   OEC9027) belongs to the class lane: null;
- * - a module with no discovered server function component has nothing to
- *   admit: null;
+ * - a module with no admitted server function component and no near-miss
+ *   exported JSX function has nothing to admit: null;
+ * - a near-miss (statements before the return, a block-bodied arrow, or any
+ *   other exported function/arrow whose body contains JSX but is not the
+ *   single-return shape) is NOT null: it goes through
+ *   {@link compileServerComponentModule}, which fails closed with OEC9032.
+ *   Returning null would hand the authored module to another lane unchanged;
  * - a non-`.tsx` id can never carry the JSX grammar: null;
  * - the cheap `export` + `<` prefilter (the same conservative superset idea
  *   the class lane's prefilter uses) keeps plainly inert modules off the
- *   parse.
+ *   parse. A module that does not parse stays null so the host reports the
+ *   syntax error.
  *
  * Everything else goes through {@link compileServerComponentModule}, whose
  * diagnostics fail the build closed.
@@ -571,7 +596,11 @@ export function compileServerComponentIfAdmitted(
   const facts = analyzeModuleSemantics(code, id);
   if (facts.compiledElementDecorator || facts.unsupportedElementDecorator !== undefined)
     return null;
-  if (facts.serverFunctionComponents.length === 0) return null;
+  if (facts.serverFunctionComponents.length === 0) {
+    const parsed = typescriptParser.parseModule(code, id);
+    if (parsed.syntaxDiagnostics.length > 0) return null;
+    if (serverComponentNearMiss(parsed.sourceFile, []) === undefined) return null;
+  }
   return compileServerComponentModule(code, id, options);
 }
 

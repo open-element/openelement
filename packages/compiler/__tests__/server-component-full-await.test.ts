@@ -8,11 +8,18 @@
  * their previous emission. Everything else in this file is a located OEC9032.
  *
  * Executing the awaited HTML is the router function-page chain, which calls
- * the published renderFunctionPageAwaited seam. This file only proves the
- * lowering and the refusals.
+ * the published renderFunctionPageAwaited seam. Emission rows use the direct
+ * compile entry. Near-miss rows that the fact scan does not count (statements
+ * before the return, a block-bodied async arrow) go through
+ * `compiledElementPlugin`, the production transform: the admission bridge must
+ * report OEC9032 and must not return null.
  */
 import { describe, expect, test } from 'vitest';
-import { compileServerComponentModule } from '../src/internal/compiler/semantic-core/server-component.ts';
+import { compiledElementPlugin } from '../src/compiler.ts';
+import {
+  compileServerComponentIfAdmitted,
+  compileServerComponentModule,
+} from '../src/internal/compiler/semantic-core/server-component.ts';
 import { CompiledElementError } from '../src/internal/compiler/semantic-core/compiler-diagnostics.ts';
 
 const FILE = '/proj/app/server/page.tsx';
@@ -36,6 +43,63 @@ function codesOf(
     return (error as CompiledElementError).diagnostics.map((diagnostic) => diagnostic.code);
   }
   throw new Error('the compile returned; a diagnostic was expected');
+}
+
+/**
+ * The production transform. `compiledElementPlugin` calls
+ * `compileServerComponentIfAdmitted`; a near-miss must fail that hook closed
+ * (OEC9032 on `this.error`) and must not come back as null, which is how the
+ * host would leave the authored module on another lane.
+ */
+function productionRefusal(source: string): { returned: unknown; message: string } {
+  const plugin = compiledElementPlugin();
+  const transform = plugin.transform;
+  if (typeof transform !== 'function') {
+    throw new Error('compiledElementPlugin transform is not a function');
+  }
+  let returned: unknown = undefined;
+  let thrown: unknown;
+  try {
+    returned = transform.call(
+      {
+        error(message: unknown): never {
+          throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+        },
+      } as never,
+      source,
+      FILE,
+    );
+  } catch (error) {
+    thrown = error;
+  }
+  return {
+    returned,
+    message: thrown instanceof Error ? thrown.message : '',
+  };
+}
+
+function admissionRefusal(source: string): { returned: unknown; codes: string[] } {
+  try {
+    return { returned: compileServerComponentIfAdmitted(source, FILE), codes: [] };
+  } catch (error) {
+    expect(error).toBeInstanceOf(CompiledElementError);
+    return {
+      returned: undefined,
+      codes: (error as CompiledElementError).diagnostics.map((diagnostic) => diagnostic.code),
+    };
+  }
+}
+
+function expectProductionOEC9032(source: string): void {
+  const pluginResult = productionRefusal(source);
+  expect(pluginResult.returned).not.toBeNull();
+  expect(pluginResult.returned).toBeUndefined();
+  expect(pluginResult.message).toContain('OEC9032');
+  expect(pluginResult.message).toContain('not an admitted server function component');
+  const admitted = admissionRefusal(source);
+  expect(admitted.returned).not.toBeNull();
+  expect(admitted.returned).toBeUndefined();
+  expect(admitted.codes).toEqual(['OEC9032']);
 }
 
 describe('full-await emission stays inside the admitted grammar', () => {
@@ -123,15 +187,13 @@ describe('full-await refusals stay located OEC9032', () => {
     ).toEqual(['OEC9032']);
   });
 
-  test('statements before the return stay outside the slice', () => {
-    expect(
-      codesOf(`
-        export async function Page() {
-          const title = await pending();
-          return <p>{title}</p>;
-        }
-      `),
-    ).toEqual(['OEC9032']);
+  test('statements before the return fail closed on the production transform', () => {
+    expectProductionOEC9032(`
+      export async function Page() {
+        const title = await pending();
+        return <p>{title}</p>;
+      }
+    `);
   });
 
   test('an await in an attribute is refused', () => {
@@ -164,13 +226,11 @@ describe('full-await refusals stay located OEC9032', () => {
     ).toEqual(['OEC9032']);
   });
 
-  test('a block-bodied async arrow is refused', () => {
-    expect(
-      codesOf(`
-        export const Page = async () => {
-          return <p>{await pending()}</p>;
-        };
-      `),
-    ).toEqual(['OEC9032']);
+  test('a block-bodied async arrow fails closed on the production transform', () => {
+    expectProductionOEC9032(`
+      export const Page = async () => {
+        return <p>{await pending()}</p>;
+      };
+    `);
   });
 });
