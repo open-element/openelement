@@ -51,7 +51,9 @@ claim, including one made through the other view or by a previously held
 marker, fails `busy` and does not clear the holder's reservation. Opening
 again while the reservation is held also fails `busy`. After `dispose`, a
 later open of the same parent still rejects that ordinal and those marker
-nodes. A different parent element is a different identity.
+nodes. A different parent element is a different identity. That identity is
+not a global marker lock. Moving a committed start or end comment onto
+another parent and claiming it there is outside this slice.
 `openStaticSiblingDirectory` has no caller callback. The activation callback
 and a DOM getter are the reentry cases the fixture covers. There is no
 further dynamic-host reentry suite.
@@ -66,9 +68,12 @@ to children that are still live.
 The static subset refuses `table`, `caption`, `colgroup`, `col`, `thead`,
 `tbody`, `tfoot`, `tr`, `td`, `th`, `select`, `optgroup`, `option`,
 `template`, `svg`, and `math` in any ASCII case. The refusal covers the
-directory parent, an ancestor, and any descendant inside a range. An element
-whose namespace is not the HTML namespace is refused whatever its local name
-is. The fixture DOM does not parse HTML. A passing shim is not browser proof.
+directory parent, an ancestor, and any descendant inside a range. The
+directory parent, every element ancestor, and every element inside a range
+must have `namespaceURI === "http://www.w3.org/1999/xhtml"`. `null` is
+refused, as is every other namespace. Comments and text nodes are not element
+namespace checks. The fixture's admitted elements use that HTML namespace.
+The fixture DOM does not parse HTML. A passing shim is not browser proof.
 
 ## Seed and errors
 
@@ -89,5 +94,8 @@ member because `RuntimeErrorCode` is exported.
 Key alignment, dynamic seed, subscription multisets, property channels,
 input, focus, selection, bounded recovery, an SSR producer, mount emission of
 these markers, production wiring, and a public ABI freeze remain M07/M08 work.
+A global marker lock is not part of this slice. A committed node moved to a
+different parent is outside the supported domain. Different parents stay
+different identities.
 The same-list path SSR → claim → update → dispose is still required. These
 fixtures do not fill TSX-18 or TSX-30.

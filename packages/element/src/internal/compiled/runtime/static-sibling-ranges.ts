@@ -17,6 +17,11 @@
  * before `activate`. The reservation, the cursor, and the committed markers
  * belong to the parent element, so a second `openStaticSiblingDirectory` on
  * that parent is another view of the same pair identity, not a second owner.
+ * A different parent is a different identity. Moving a committed marker onto
+ * another parent is outside this slice; there is no global marker lock.
+ * The directory parent, its element ancestors, and every element inside a
+ * range must have `namespaceURI === "http://www.w3.org/1999/xhtml"`. `null`
+ * is refused, as is every other namespace.
  * Only the holder releases an uncommitted reservation. Commitment remembers
  * the ordinal and the start and end comments. `dispose` does not make that
  * pair claimable again. This is not a byte-level rollback. A validation
@@ -123,8 +128,9 @@ export interface StaticSiblingDirectory {
 /**
  * Ownership of one parent. Keyed by the element, so it survives a second open
  * and a `dispose` that removes the markers. The marker set keeps the committed
- * start and end nodes reachable for the parent's lifetime; it is not a global
- * registry.
+ * start and end nodes reachable for that parent's lifetime. It is not a global
+ * marker lock: a committed node moved under a different parent is outside
+ * this slice.
  */
 interface PairIdentity {
   next: number;
@@ -215,10 +221,14 @@ function asciiLower(value: string): string {
   return folded;
 }
 
-/** `null` means the element is in the static HTML subset. */
+/**
+ * Admitted only when `namespaceURI` is the HTML namespace. `null` and every
+ * other namespace are refused. The restricted local-name set is unchanged.
+ * Returns the rejection detail, or `null` when the element is admitted.
+ */
 function elementRejection(element: Element): string | null {
   const namespace = element.namespaceURI;
-  if (namespace !== null && namespace !== HTML_NAMESPACE) {
+  if (namespace !== HTML_NAMESPACE) {
     return `non-HTML namespace ${JSON.stringify(namespace)} on ${JSON.stringify(element.localName)}`;
   }
   const localName = typeof element.localName === 'string' ? element.localName : '';

@@ -126,6 +126,8 @@ class LogAttributes {
   }
 }
 
+const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+
 class LogElement extends LogNode {
   readonly attributes: LogAttributes;
   #nodeValue: string | null = null;
@@ -133,7 +135,7 @@ class LogElement extends LogNode {
   constructor(
     log: OperationLog,
     readonly localName: string,
-    readonly namespaceURI: string | null = null,
+    readonly namespaceURI: string | null = HTML_NAMESPACE,
   ) {
     super(log, 1);
     this.attributes = new LogAttributes(log);
@@ -157,7 +159,7 @@ class LogElement extends LogNode {
 class LogDocument {
   readonly log = new OperationLog();
 
-  element(localName: string, namespaceURI: string | null = null): LogElement {
+  element(localName: string, namespaceURI: string | null = HTML_NAMESPACE): LogElement {
     return new LogElement(this.log, localName, namespaceURI);
   }
 
@@ -1004,4 +1006,108 @@ test('restricted table, select, template, and non-HTML contexts write nothing', 
   );
   expect(admittedClaim.interior[0]).toBe(admittedParent.childNodes[1]);
   expect(runtimeProbe.snapshot().owners).toBe(1);
+});
+
+test('null namespaceURI is refused on the parent, ancestors, and in-range elements', () => {
+  function expectQuiet(
+    doc: LogDocument,
+    parent: LogElement,
+    mark: number,
+    held: readonly LogNode[],
+  ): void {
+    expect(doc.log.writesSince(mark)).toEqual([]);
+    const probe = runtimeProbe.snapshot();
+    expect(probe.owners).toBe(0);
+    expect(probe.regions).toBe(0);
+    expect(probe.rangeCleanups).toBe(0);
+    expect(probe.subscriptions).toBe(0);
+    expect(probe.projections).toBe(0);
+    expect(parent.childNodes).toHaveLength(held.length);
+    for (let index = 0; index < held.length; index += 1) {
+      expect(parent.childNodes[index]).toBe(held[index]);
+    }
+  }
+
+  runtimeProbe.reset();
+  const parentDoc = new LogDocument();
+  const nullParent = parentDoc.element('div', null);
+  buildRange(parentDoc, nullParent, 0, 'same');
+  const parentHeld = [...nullParent.childNodes];
+  const parentMark = parentDoc.log.events.length;
+  const parentError = capture(() =>
+    openStaticSiblingDirectory(asParent(nullParent), [paragraph('same')], 'fixtures/null-parent'),
+  );
+  expect(parentError.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+  expect(parentError.code).not.toBe(RuntimeErrorCode.LEAF_CLAIM_UNAVAILABLE);
+  expect(parentError.message).toContain('non-HTML namespace');
+  expect(parentError.message).toContain('null');
+  expect(parentError.message).not.toContain('static-seed');
+  expect(nullParent.namespaceURI).toBeNull();
+  expectQuiet(parentDoc, nullParent, parentMark, parentHeld);
+
+  runtimeProbe.reset();
+  const ancestorDoc = new LogDocument();
+  const nullAncestor = ancestorDoc.element('section', null);
+  const htmlParent = ancestorDoc.element('div');
+  nullAncestor.appendChild(htmlParent);
+  buildRange(ancestorDoc, htmlParent, 0, 'same');
+  const ancestorHeld = [...htmlParent.childNodes];
+  const ancestorMark = ancestorDoc.log.events.length;
+  const ancestorError = capture(() =>
+    openStaticSiblingDirectory(asParent(htmlParent), [paragraph('same')], 'fixtures/null-ancestor'),
+  );
+  expect(ancestorError.message).toContain('directory is inside');
+  expect(ancestorError.message).toContain('non-HTML namespace');
+  expect(ancestorError.message).toContain('null');
+  expect(htmlParent.namespaceURI).toBe(HTML_NAMESPACE);
+  expectQuiet(ancestorDoc, htmlParent, ancestorMark, ancestorHeld);
+
+  runtimeProbe.reset();
+  const rangeDoc = new LogDocument();
+  const rangeParent = rangeDoc.element('div');
+  const start = rangeDoc.comment('oe:r:0');
+  const nullParagraph = rangeDoc.element('p', null);
+  nullParagraph.appendChild(rangeDoc.text('same'));
+  const end = rangeDoc.comment('oe:/r:0');
+  rangeParent.appendChild(start);
+  rangeParent.appendChild(nullParagraph);
+  rangeParent.appendChild(end);
+  const rangeHeld = [...rangeParent.childNodes];
+  const rangeMark = rangeDoc.log.events.length;
+  const rangeError = capture(() =>
+    openStaticSiblingDirectory(
+      asParent(rangeParent),
+      [paragraph('same')],
+      'fixtures/null-interior',
+    ),
+  );
+  expect(rangeError.message).toContain('unsupported element');
+  expect(rangeError.message).toContain('non-HTML namespace');
+  expect(rangeError.message).toContain('null');
+  expect(rangeError.message).not.toContain('static-seed');
+  expectQuiet(rangeDoc, rangeParent, rangeMark, rangeHeld);
+
+  runtimeProbe.reset();
+  const nestedDoc = new LogDocument();
+  const nestedParent = nestedDoc.element('div');
+  const nestedStart = nestedDoc.comment('oe:r:0');
+  const admittedParagraph = nestedDoc.element('p');
+  admittedParagraph.appendChild(nestedDoc.element('span', null));
+  const nestedEnd = nestedDoc.comment('oe:/r:0');
+  nestedParent.appendChild(nestedStart);
+  nestedParent.appendChild(admittedParagraph);
+  nestedParent.appendChild(nestedEnd);
+  const nestedHeld = [...nestedParent.childNodes];
+  const nestedMark = nestedDoc.log.events.length;
+  const nestedError = capture(() =>
+    openStaticSiblingDirectory(
+      asParent(nestedParent),
+      [paragraph('same')],
+      'fixtures/null-descendant',
+    ),
+  );
+  expect(nestedError.message).toContain('non-HTML namespace');
+  expect(nestedError.message).toContain('null');
+  expect(nestedError.message).toContain('span');
+  expectQuiet(nestedDoc, nestedParent, nestedMark, nestedHeld);
 });
