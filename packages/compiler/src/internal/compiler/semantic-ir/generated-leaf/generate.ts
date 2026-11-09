@@ -31,11 +31,15 @@
  *
  * Still fails closed with a coded diagnostic (M06b1a-2/M06b1a-3, M06b2, M07/M08
  * boundary): recipes/insertion sites, children projection, component references
- * to unknown/external components, child components with no named props
- * parameter (destructured or absent) or with signal/computed resources,
- * `class`/`style`/`innerHTML`/`event`/`ref` channels (on elements and on
- * component props), and `key` as a DOM write. `key` on a component reference is
- * consumed as list identity only and is never a DOM write or a child prop.
+ * to unknown/external components, component-reference cycles
+ * (`OEIR_LEAF_COMPONENT_CYCLE`; a cycle would emit self-recursive mounts),
+ * component references inside list entry templates (a keyed reuse would keep
+ * the first mount's props without the child update hook — M06b1b),
+ * child components with no named props parameter (destructured or absent) or
+ * with signal/computed resources, `class`/`style`/`innerHTML`/`event`/`ref`
+ * channels (on elements and on component props), and `key` as a DOM write.
+ * `key` on a component reference is consumed as list identity only and is never
+ * a DOM write or a child prop.
  *
  * The emitted module imports from the compiler-private runtime entry
  * `@openelement/element/internal/compiled/runtime`. That entry is not a
@@ -170,6 +174,12 @@ interface EmitState {
   readonly entryNames: Set<string>;
   /** Refresh-function collectors for the enclosing list-entry builder (if any). */
   readonly refreshStack: string[][];
+  /**
+   * Number of enclosing list-entry templates. A component reference inside one
+   * is refused: a keyed reuse re-assigns the mapper parameter but the child
+   * instance has no update hook to re-read its props (M06b1b).
+   */
+  listDepth: number;
 }
 
 function diag(state: EmitState, code: string, message: string, span: IrSpan): void {
@@ -524,16 +534,21 @@ function emitList(
   push(state, `const ${anchorVar} = document.createComment("oe:each");`, node.span);
   sink.push({ kind: 'node', name: anchorVar });
   push(state, `let ${entriesVar} = [];`);
-  emitEntryBuilder(
-    state,
-    entryFn,
-    `${INTERNAL_PREFIX}eachScope${id}`,
-    `${INTERNAL_PREFIX}eachItem${id}`,
-    node.parameter,
-    node.template,
-    records,
-    node.span,
-  );
+  state.listDepth += 1;
+  try {
+    emitEntryBuilder(
+      state,
+      entryFn,
+      `${INTERNAL_PREFIX}eachScope${id}`,
+      `${INTERNAL_PREFIX}eachItem${id}`,
+      node.parameter,
+      node.template,
+      records,
+      node.span,
+    );
+  } finally {
+    state.listDepth -= 1;
+  }
 
   let keyDependencies: readonly Dependency[] = [];
   if (node.key !== null) {
@@ -986,6 +1001,15 @@ function emitComponentRef(
   records: ReadonlyMap<string, LoweredExpressionRecord>,
 ): void {
   const span: IrSpan = node.span;
+  if (state.listDepth > 0) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+      `component '<${node.name}>' inside a list entry template needs the child update hook (M06b1b); a keyed reuse would keep the first mount's props`,
+      span,
+    );
+    return;
+  }
   const target = state.componentByName.get(node.name);
   if (target === undefined) {
     diag(
@@ -1315,6 +1339,7 @@ function emitComponent(
     componentByName,
     entryNames: new Set(),
     refreshStack: [],
+    listDepth: 0,
   };
   if (
     propsName !== null &&
@@ -1481,6 +1506,95 @@ function emitComponent(
   };
 }
 
+/** One component-reference edge in the module's component graph. */
+interface ComponentRefEdge {
+  readonly from: string;
+  readonly to: string;
+  readonly span: IrSpan;
+}
+
+/** Collect every component reference under one component's node tree. */
+function collectComponentRefs(
+  from: string,
+  nodes: readonly FunctionModelNode[],
+  edges: ComponentRefEdge[],
+): void {
+  for (const node of nodes) {
+    switch (node.kind) {
+      case 'component-ref':
+        edges.push({ from, to: node.name, span: node.span });
+        break;
+      case 'element':
+      case 'fragment':
+        collectComponentRefs(from, node.children, edges);
+        break;
+      case 'condition':
+        collectComponentRefs(from, node.consequent, edges);
+        if (node.alternate !== null) collectComponentRefs(from, node.alternate, edges);
+        break;
+      case 'list':
+        collectComponentRefs(from, node.template, edges);
+        break;
+      default:
+        // text / dynamic-text / insertion-site / children-projection carry no
+        // component references (recipes are refused before generation).
+        break;
+    }
+  }
+}
+
+/**
+ * Fail closed on component-reference cycles: the emitted mounts would call
+ * themselves at mount time (unbounded recursion). The authored node trees —
+ * roots, condition branches, list templates — are walked in authored order and
+ * the first cycle is reported with its path and the closing reference's span.
+ */
+function findComponentCycle(module: FunctionModelModule): IrDiagnostic | null {
+  const edges = new Map<string, ComponentRefEdge[]>();
+  for (const component of module.components) {
+    const collected: ComponentRefEdge[] = [];
+    collectComponentRefs(component.name, component.roots, collected);
+    edges.set(component.name, collected);
+  }
+  const WHITE = 0;
+  const GRAY = 1;
+  const BLACK = 2;
+  const color = new Map<string, number>();
+  const path: string[] = [];
+  const visit = (name: string): IrDiagnostic | null => {
+    color.set(name, GRAY);
+    path.push(name);
+    for (const edge of edges.get(name) ?? []) {
+      // Unknown/external targets fail closed on their own during emission.
+      if (!edges.has(edge.to)) continue;
+      const targetColor = color.get(edge.to) ?? WHITE;
+      if (targetColor === GRAY) {
+        const cycle = [...path.slice(path.indexOf(edge.to)), edge.to].join(' -> ');
+        return {
+          severity: 'error',
+          code: 'OEIR_LEAF_COMPONENT_CYCLE',
+          message: `component reference cycle: ${cycle}`,
+          span: edge.span,
+          origin: 'ir-object',
+        };
+      }
+      if (targetColor === WHITE) {
+        const found = visit(edge.to);
+        if (found !== null) return found;
+      }
+    }
+    path.pop();
+    color.set(name, BLACK);
+    return null;
+  };
+  for (const component of module.components) {
+    if ((color.get(component.name) ?? WHITE) !== WHITE) continue;
+    const found = visit(component.name);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
 /** Fail-closed parse check of the emitted module text (no execution). */
 function parsesAsModule(text: string): boolean {
   const source = ts.createSourceFile(
@@ -1526,6 +1640,18 @@ export function generateLeafModule(
   const componentByName = new Map(
     module.components.map((component) => [component.name, component] as const),
   );
+  const cycle = findComponentCycle(module);
+  if (cycle !== null) {
+    return {
+      module: null,
+      sourceMap: null,
+      placements: [],
+      requiredBindings: [],
+      requiredProps: [],
+      requiresPropsChanged: false,
+      diagnostics: [cycle],
+    };
+  }
   const chunks: string[] = [];
   const diagnostics: IrDiagnostic[] = [];
   const requiredBindings = new Set<string>();

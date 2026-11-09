@@ -273,19 +273,60 @@ function C(props) { const label = signal('a'); return <Row text={label.value} />
     );
   });
 
-  test('key on a component reference is list identity, never a DOM write or a child prop', () => {
-    const module = generate(`import { signal } from '@openelement/element';
-function Row(props) { return <li>{props.text}</li>; }
-function C(props) {
-  const items = signal([]);
-  return <ul>{items.value.map((item) => <Row key={item.id} text={item.label} />)}</ul>;
-}
-`).module!;
-    // The enclosing list consumes the key thunk; the child never receives it.
-    expect(module).toContain('function __oe_eachKey1(');
+  test('key on a component reference is identity only, never a DOM write or a child prop', () => {
+    const module = generate(
+      'function Row(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <Row key="row-1" text="x" />; }\n',
+    ).module!;
+    // `key` is consumed as identity: no prop getter/data property, no DOM write.
     expect(module).not.toContain('get key()');
+    expect(module).not.toContain('"row-1"');
     expect(module).not.toMatch(/setAttribute\("key"/);
+    expect(module).toContain('text: "x",');
     expect(module).toContain('Row__mount(__oe_childScope');
+  });
+
+  test('a component-reference cycle is refused with its cycle path (OEIR_LEAF_COMPONENT_CYCLE)', () => {
+    const mutual = generate(
+      'function A(props) { return <B />; }\nfunction B(props) { return <A />; }\nfunction Root(props) { return <A />; }\n',
+    );
+    expect(mutual.module).toBeNull();
+    expect(codes(mutual)).toEqual(['OEIR_LEAF_COMPONENT_CYCLE']);
+    expect(mutual.diagnostics[0]!.message).toContain('component reference cycle: A -> B -> A');
+    const self = generate('function S(props) { return <S />; }\n');
+    expect(self.module).toBeNull();
+    expect(codes(self)).toEqual(['OEIR_LEAF_COMPONENT_CYCLE']);
+    expect(self.diagnostics[0]!.message).toContain('component reference cycle: S -> S');
+  });
+
+  test('a component reference inside a list entry template is refused (needs the M06b1b child update hook)', () => {
+    const result = generate(`import { signal } from '@openelement/element';
+function Item(props) { return <li>{props.text}</li>; }
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li><Item text={item.text} /></li>)}</ul>;
+}
+`);
+    expect(result.module).toBeNull();
+    expect(codes(result)).toEqual(['OEIR_LEAF_UNSUPPORTED_COMPONENT']);
+    expect(result.diagnostics[0]!.message).toContain('needs the child update hook (M06b1b)');
+    // A condition nested under the list template is still inside it.
+    const nested = generate(`import { signal } from '@openelement/element';
+function Item(props) { return <li>{props.text}</li>; }
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li>{props.ok ? <Item text="a" /> : null}</li>)}</ul>;
+}
+`);
+    expect(nested.module).toBeNull();
+    expect(codes(nested)).toEqual(['OEIR_LEAF_UNSUPPORTED_COMPONENT']);
+  });
+
+  test('component references in condition branches stay admitted', () => {
+    const result = generate(
+      'function Item(props) { return <li>{props.text}</li>; }\nfunction C(props) { return <ul>{props.ok ? <Item text="a" /> : <Item text="b" />}</ul>; }\n',
+    );
+    expect(result.module).not.toBeNull();
+    expect(result.module!.match(/Item__mount\(__oe_childScope/g)?.length).toBe(2);
   });
 
   test('module host contract unions the child props channel', () => {
