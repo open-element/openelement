@@ -152,7 +152,7 @@ function markerOrdinal(nodeValue: string | null, end: boolean): number | null {
   return canonicalOrdinal(nodeValue.slice(prefix.length));
 }
 
-function isHtmlElement(node: Node): node is Element {
+function isSupportedDirectoryElement(node: Node): boolean {
   if (node.nodeType !== 1) return false;
   const element = node as Element;
   const namespace = element.namespaceURI;
@@ -181,7 +181,7 @@ function rejectNestedMarker(node: Node, source: string): void {
   }
   if (node.nodeType !== 1) return;
   const element = node as Element;
-  if (!isHtmlElement(element)) {
+  if (!isSupportedDirectoryElement(element)) {
     fail(
       source,
       `parent: unsupported element ${JSON.stringify(element.localName)} inside a static range`,
@@ -282,7 +282,8 @@ function matches(node: Node, declared: DeclaredStaticNode, source: string): bool
   }
   if (node.nodeType !== 1) return false;
   const element = node as Element;
-  if (!isHtmlElement(element) || element.localName !== declared.localName) return false;
+  if (!isSupportedDirectoryElement(element) || element.localName !== declared.localName)
+    return false;
   if (!sameAttributes(element, declared.attributes ?? [])) return false;
   const children = childrenOf(element);
   const declaredChildren = declared.children ?? [];
@@ -321,13 +322,14 @@ export function openStaticSiblingDirectory(
   declaration: readonly (readonly DeclaredStaticNode[])[],
   source = 'static sibling range',
 ): StaticSiblingDirectory {
-  if (!isHtmlElement(parent)) {
+  if (parent.nodeType !== 1 || !isSupportedDirectoryElement(parent)) {
     const name = parent.nodeType === 1 ? (parent as Element).localName : String(parent.nodeType);
     fail(source, `parent: unsupported directory parent ${JSON.stringify(name)}`);
   }
-  parseDirectory(parent, declaration.length, source, 0);
+  const element = parent as Element;
+  parseDirectory(element, declaration.length, source, 0);
   const state: DirectoryState = {
-    parent,
+    parent: element,
     declaration,
     source,
     next: 0,
