@@ -287,3 +287,44 @@ qualification (`B`; M13), firefox/webkit, packed-consumer (`P`) and children
 projection (TSX-10; M06b2) remain unclaimed. M06 is **not** complete by these
 rows; M06b2 and M07/M08 are pending. LOCAL chromium only — no G1/G2 record and no
 Alpha16a exit claim is made here.
+
+## M06b2b recorded results — repeated children + unkeyed
+
+Evidence head: `241c1eef7` (LOCAL; branch `alpha16a/m06b2b-children-evidence`,
+merge head `32487fafb` includes the M06b2c generator fix from main `0ee78ec78`;
+PR opened by the Lead). Scope: the M06b2a component children-projection mechanics
+(`<Frame><Counter n={signal.value}/></Frame>` — one children recipe per reference
+site passed as the plain `children` prop, one M04 projection region per
+`{props.children}` site), the M06a unkeyed-list shape, and same-key keyed content
+replacement. **C+** = the production function frontend and the M05/M06b
+generator admit the fixture; **C−** = a source-located compile diagnostic is
+produced (the children refusals are unit contracts, not new fixtures here);
+**T+**/**T−** = the fixture type-checks / is a type error (TypeScript is the
+authority). Real-browser evidence is the recorded **LOCAL chromium
+`147.0.7727.15`** (Playwright default engine, `browser.version()` recorded by
+the harness); it is not a release qualification.
+
+| Case | T+ | T− | C+ | C− | Evidence artifact |
+| --- | --- | --- | --- | --- | --- |
+| TSX-10 repeatable children | pass | pass | pass | pass | `generated-leaf.browser.test.ts` M06b1b S2b "children projection: two sites build two independent instances that both refresh" — `<Frame>` projects `{props.children}` at TWO sites over one `App` children recipe: tags `div,p,p` in authored order, mount delta `projections`/`regions`/`owners`/`nodes`/`rangeCleanups`/`lineageAccepted` 3 (`subscriptions` 2, `lineageRejected` 0), ONE parent write refreshes both children in place, root detach dispose closes both subscriptions; plus "host-root children component without a recipe throws coded OEIR_LEAF_MISSING_CHILDREN" (host/root boundary, no DOM written). C+ = `generated-leaf.test.ts` M06b2a emission contract (one children recipe per ref site, one projection per `{props.children}` site); C− = the M06b2a coded refusals (`OEIR_LEAF_MISSING_CHILDREN`, `OEIR_LEAF_UNSUPPORTED_CHILDREN`, `OEIR_LEAF_RECIPE_CYCLE`, explicit `children=` prop → `OEIR_LEAF_UNSUPPORTED_COMPONENT`) and the frontend `OEC9042` TSX-10 row (`props.children` in an expression value) |
+| TSX-26 projection deletion/cross-owner | pass | pass | pass | pass | `generated-leaf.browser.test.ts` M06b1b S2b "children projection: disposing one generated site leaves the sibling subtree live" — the harness exposes each generated `__oe_childrenProjectionN` handle (test-harness text transform; generator unchanged): generated site A `dispose(true)` removes only A's subtree (`disposed` +1, `unsubscribed` +1), site B stays attached and keeps refreshing, B's default `dispose()` keeps its DOM (`disposed` +2, `unsubscribed` +2 total); cross-owner/dead-owner projections fail closed with `OE_KERNEL_ROOT_NOT_OWNED` / `OE_KERNEL_DISPOSED` (`lineageRejected` +1 each, zero allocation), recorded in the M06b S2b section above |
+| TSX-08 unkeyed positions | pass | pass | pass | pass | `generated-leaf.browser.test.ts` M06b1b S2b "unkeyed list: positional identity, authored order, insert/delete content, clean disposal" — `items.value.map((item) => <li>{item}</li>)` mounts empty, then `['a','b','c'] → ['a','b','c','d'] → ['b','d']` renders li texts exactly `['a','b','c']`, `['a','b','c','d']`, `['b','d']` (the M06b2c entry-local refresh re-renders positionally reused items; unkeyed means positional identity, DOM node identity is NOT claimed), updates add no projections, emptying keeps the `<ul>` anchor, detach dispose closes the one list subscription (`disposed` 1, `unsubscribed` 1). C+ = the M06a list emission contract; C− = the M03 TSX-08 row (`OEC9042`, non-inline mapper) and the frontend/compiler refusals already recorded there. **This row supersedes the M06 S2 section's "unkeyed browser scenario is not claimed" note.** Same-key keyed content replacement (`key={item.id}`, stable ids, changed label: node identity preserved, `['A','B'] → ['A2','B']`, no entry recreated) is recorded as TSX-04-adjacent supporting evidence below; the TSX-04 row itself is not claimed here |
+
+The children-projection evidence runs over the real M04 runtime bundle (no
+stubs): the harness injects the generated module, mounts the generated root
+factory, and asserts the `runtimeProbe` deltas above around every action. The
+deletion-isolation scenario's `window.__oeChildrenProjections` exposure is a
+test-harness transformation of the injected module text (mirroring the existing
+factory extraction), not a generator emission.
+
+The unkeyed and same-key scenarios above run on the post-M06b2c generator (the
+M06b2c fix makes zero-reactive-dependency entry-local slots register a refresh
+closure on the entry collector, so `update(next)` re-renders them for unkeyed
+positional reuse and same-key keyed replacement); the previously recorded
+stale-content observation is fixed and is not a pass claim for TSX-04.
+
+**Not run in this section:** every SSR/claim column (`S`, `K`), the three-engine
+qualification (`B`; M13), firefox/webkit, the TSX-04 matrix row, packed-consumer
+(`P`) and production wiring remain unclaimed. M06 completion itself is recorded in
+the progress ledger by the Lead, not by this evidence section. LOCAL chromium only
+— no G1/G2 record and no Alpha16a exit claim is made here.

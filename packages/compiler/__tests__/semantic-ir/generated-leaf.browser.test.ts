@@ -88,7 +88,23 @@ function generatedModule(source: string): string {
  * exposed for the driver. This is the harness adapter; the artifact itself keeps
  * the real import shape.
  */
-function harnessModule(module: string): string {
+/**
+ * Test-harness module transforms (the emitted artifact text itself is
+ * untouched by the generator).
+ */
+interface HarnessOptions {
+  /**
+   * Expose the generated children-projection handles: every
+   * `const __oe_childrenProjectionN = insertRecipe(...)` statement also pushes
+   * its handle onto `window.__oeChildrenProjections`, so the deletion-isolation
+   * scenario can dispose ONE generated projection site. This is a harness-only
+   * text transform mirroring the factory extraction; the generator does not
+   * emit it.
+   */
+  readonly exposeChildrenProjections?: boolean;
+}
+
+function harnessModule(module: string, options: HarnessOptions = {}): string {
   const importLine = new RegExp(
     `^import \\{[^}]+\\} from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};$`,
     'm',
@@ -100,10 +116,18 @@ function harnessModule(module: string): string {
     const imported = line.slice(line.indexOf('{') + 1, line.indexOf('}')).trim();
     return `const { ${imported} } = window.__oeRuntime;`;
   });
-  const body = withoutImport.replace(/^export function /gm, 'function ');
+  let body = withoutImport.replace(/^export function /gm, 'function ');
+  let preamble = '';
+  if (options.exposeChildrenProjections === true) {
+    body = body.replace(
+      /const (__oe_childrenProjection\d+) = (insertRecipe\([^;]*\));/g,
+      'const $1 = $2; window.__oeChildrenProjections.push($1);',
+    );
+    preamble = 'window.__oeChildrenProjections = [];\n';
+  }
   // Each scenario injects its own module: wrap in an IIFE so consecutive
   // script tags cannot collide on their top-level runtime destructuring.
-  return `(function () {\n${body}\nwindow.__oeModule = { ${names.join(', ')} };\n})();\n`;
+  return `(function () {\n${preamble}${body}\nwindow.__oeModule = { ${names.join(', ')} };\n})();\n`;
 }
 
 /** Build the M04 runtime primitives as a browser IIFE (real modules, not stubs). */
@@ -765,6 +789,49 @@ function Leaf(props) {
 }
 `;
 
+// M06b2a children projection: `<Frame>` projects `{props.children}` at TWO
+// sites, each site projecting the ONE children recipe built by `App` from
+// `<Counter n={total.value}/>` (dynamic content owned by the parent scope).
+const CHILDREN_SOURCE = `import { signal } from '@openelement/element';
+function Counter(props) {
+  return <p class="counter">{props.n}</p>;
+}
+function Frame(props) {
+  return <div class="frame">{props.children}{props.children}</div>;
+}
+function App(props) {
+  const total = signal(1);
+  return <Frame><Counter n={total.value} /></Frame>;
+}
+`;
+
+// Host/root boundary: `Frame` projects `props.children` but the root factory
+// gives it no children recipe, so the emitted mount throws the coded
+// `OEIR_LEAF_MISSING_CHILDREN` before building any DOM.
+const MISSING_CHILDREN_SOURCE = `function Frame(props) {
+  return <div class="frame">{props.children}</div>;
+}
+function App(props) { return <Frame><b>x</b></Frame>; }
+`;
+
+// M06a unkeyed list (browser evidence deferred from M06a; the M06b2c generator
+// fix made entry-local item snapshots refresh on positional reuse).
+const UNKEYED_SOURCE = `import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li>{item}</li>)}</ul>;
+}
+`;
+
+// Same-key keyed replacement (TSX-04-adjacent): stable `key={item.id}` while the
+// rendered label changes — identity must survive and the text must re-render.
+const KEYED_SOURCE = `import { signal } from '@openelement/element';
+function Keyed(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li key={item.id}>{item.label}</li>)}</ul>;
+}
+`;
+
 interface S2bSnapshot {
   readonly html: string;
   readonly text: string;
@@ -803,14 +870,17 @@ interface S2bResult {
   readonly flags: readonly boolean[];
   /** Caught lineage failure codes (`null` when the thrown error carries none). */
   readonly codes: readonly (string | null)[];
+  /** Caught failure messages (the compiled runtime's coded-Error text). */
+  readonly messages: readonly string[];
 }
 
 async function runS2bScenario(
   page: Page,
   moduleCode: string,
   scenario: string,
+  options: HarnessOptions = {},
 ): Promise<S2bResult> {
-  await page.addScriptTag({ content: harnessModule(moduleCode) });
+  await page.addScriptTag({ content: harnessModule(moduleCode, options) });
   return page.evaluate(
     ({ scenario }) => {
       interface SignalLike<T> {
@@ -868,6 +938,7 @@ async function runS2bScenario(
         identities: [],
         flags: [],
         codes: [],
+        messages: [],
       };
       const record = (): void => {
         result.steps.push(snapshot());
@@ -1059,6 +1130,156 @@ async function runS2bScenario(
           host.childNodes[0] === legal.nodes[0],
           host.childNodes[1] === descendantProjection.nodes[0],
         );
+        return result;
+      }
+
+      // 6. TSX-10: children projection — `<App>` builds ONE children recipe from
+      // `<Counter n={total.value}/>` and `<Frame>` projects `{props.children}` at
+      // TWO sites. Two independent instances/subtrees (distinct regions, owners
+      // and DOM), authored order, and ONE parent signal write refreshes both.
+      if (scenario === 'children-two-sites') {
+        const total = runtime.signal(1);
+        const recipe = factories.createAppRecipe!(scope, {
+          props: {},
+          bindings: { total },
+          propsChanged: runtime.signal(0),
+        });
+        const projection = runtime.insertRecipe(scope, recipe, host);
+        record();
+        const counters = [...host.querySelectorAll('p.counter')];
+        result.identities.push(
+          counters.length === 2,
+          counters[0] !== counters[1],
+          counters[0]?.parentElement?.className === 'frame',
+          counters[1]?.parentElement?.className === 'frame',
+          host.querySelector('div.frame')?.childNodes.length === 2,
+        );
+        total.value = 2;
+        record();
+        const refreshed = [...host.querySelectorAll('p.counter')];
+        result.identities.push(counters[0] === refreshed[0], counters[1] === refreshed[1]);
+        projection.dispose(true);
+        record();
+        total.value = 3;
+        record();
+        return result;
+      }
+
+      // 7. TSX-26: deletion isolation through the GENERATED children sites. The
+      // harness exposes each `__oe_childrenProjectionN` handle; disposing site A
+      // in detach mode must remove only A's subtree while site B stays attached
+      // and keeps refreshing. Default `dispose()` on B keeps its DOM attached
+      // (the M04 disconnect path) and closes its subscription.
+      if (scenario === 'children-deletion') {
+        const total = runtime.signal(1);
+        const recipe = factories.createAppRecipe!(scope, {
+          props: {},
+          bindings: { total },
+          propsChanged: runtime.signal(0),
+        });
+        runtime.insertRecipe(scope, recipe, host);
+        record();
+        const handles =
+          (window as unknown as { __oeChildrenProjections?: ProjectionHandle[] })
+            .__oeChildrenProjections ?? [];
+        result.identities.push(
+          handles.length === 2,
+          handles[0] !== handles[1],
+          handles[0]!.region !== handles[1]!.region,
+          handles[0]!.nodes.every((node) => node.isConnected),
+          handles[1]!.nodes.every((node) => node.isConnected),
+        );
+        handles[0]!.dispose(true);
+        record();
+        result.flags.push(
+          handles[0]!.nodes.every((node) => !node.isConnected),
+          handles[1]!.nodes.every((node) => node.isConnected),
+        );
+        total.value = 2;
+        record();
+        result.identities.push(handles[1]!.nodes[0] === host.querySelector('p.counter'));
+        handles[1]!.dispose();
+        record();
+        result.flags.push(handles[1]!.nodes.every((node) => node.isConnected));
+        total.value = 3;
+        record();
+        return result;
+      }
+
+      // 8. Host/root boundary: a children-projecting component mounted through
+      // its root factory without a real children recipe fails closed with the
+      // coded `OEIR_LEAF_MISSING_CHILDREN` error and writes no DOM.
+      if (scenario === 'children-missing') {
+        const recipe = factories.createFrameRecipe!(scope, {
+          props: {},
+          bindings: {},
+          propsChanged: runtime.signal(0),
+        });
+        try {
+          runtime.insertRecipe(scope, recipe, host);
+          result.codes.push('NO_THROW');
+        } catch (error) {
+          const code = (error as { code?: unknown }).code;
+          result.codes.push(typeof code === 'string' ? code : null);
+          result.messages.push(String((error as Error).message));
+        }
+        record();
+        return result;
+      }
+
+      // 9. TSX-08: unkeyed list (positional identity only — no node-identity
+      // claim). Authored order on mount; insert/delete writes land in position
+      // order with re-rendered content (the M06b2c entry-local refresh fix), and
+      // the list disposes cleanly.
+      if (scenario === 'unkeyed-list') {
+        const items = runtime.signal([] as string[]);
+        const recipe = factories.createListRecipe!(scope, {
+          props: {},
+          bindings: { items },
+          propsChanged: runtime.signal(0),
+        });
+        const projection = runtime.insertRecipe(scope, recipe, host);
+        record();
+        items.value = ['a', 'b', 'c'];
+        record();
+        items.value = ['a', 'b', 'c', 'd'];
+        record();
+        items.value = ['b', 'd'];
+        record();
+        items.value = [];
+        record();
+        projection.dispose(true);
+        record();
+        return result;
+      }
+
+      // 10. TSX-04-adjacent: same-key keyed replacement. Stable `key={item.id}`
+      // while the label changes keeps the entry's DOM node identity and
+      // re-renders the item-local text (the same M06b2c refresh path).
+      if (scenario === 'keyed-replacement') {
+        const items = runtime.signal([] as Array<{ id: string; label: string }>);
+        const recipe = factories.createKeyedRecipe!(scope, {
+          props: {},
+          bindings: { items },
+          propsChanged: runtime.signal(0),
+        });
+        const projection = runtime.insertRecipe(scope, recipe, host);
+        record();
+        items.value = [
+          { id: 'a', label: 'A' },
+          { id: 'b', label: 'B' },
+        ];
+        record();
+        const before = [...host.querySelectorAll('li')];
+        items.value = [
+          { id: 'a', label: 'A2' },
+          { id: 'b', label: 'B' },
+        ];
+        record();
+        const after = [...host.querySelectorAll('li')];
+        result.identities.push(before[0] === after[0], before[1] === after[1]);
+        projection.dispose(true);
+        record();
         return result;
       }
 
@@ -1262,6 +1483,178 @@ for (const engine of engines()) {
       expect(result.steps[6]?.childCount).toBe(2);
       expect(result.steps[6]?.text).toBe('xx');
       expect(result.identities).toEqual([true, true]);
+    });
+
+    test('children projection: two sites build two independent instances that both refresh', async () => {
+      const result = await runS2bScenario(
+        page,
+        generatedModule(CHILDREN_SOURCE),
+        'children-two-sites',
+      );
+      // One children recipe, two projection sites: two independent <p> instances
+      // in the frame's authored order.
+      expect(result.steps[1]?.tags).toEqual(['div', 'p', 'p']);
+      expect(result.steps[1]?.text).toBe('11');
+      expect(result.identities.slice(0, 5)).toEqual([true, true, true, true, true]);
+      // Root App projection + two generated children-site projections: one
+      // owner, region, range cleanup and lineage admission each; one Counter
+      // subscription per children instance (dynamic child prop reads the parent
+      // signal through propDeps).
+      expect(result.probes[1]).toMatchObject({
+        projections: 3,
+        regions: 3,
+        owners: 3,
+        nodes: 3,
+        rangeCleanups: 3,
+        subscriptions: 2,
+        unsubscribed: 0,
+        lineageAccepted: 3,
+        lineageRejected: 0,
+        disposed: 0,
+      });
+      // ONE parent signal write refreshes BOTH children instances in place.
+      expect(result.steps[2]?.text).toBe('22');
+      expect(
+        result.steps[2]?.elements
+          .filter((element) => element.tag === 'p')
+          .map((element) => element.text),
+      ).toEqual(['2', '2']);
+      expect(result.identities.slice(5)).toEqual([true, true]);
+      expect(result.probes[2]).toMatchObject({ projections: 3, subscriptions: 2 });
+      // Detach dispose of the root removes both subtrees and closes both child
+      // subscriptions; a later write renders nothing.
+      expect(result.steps[3]?.childCount).toBe(0);
+      expect(result.probes[3]).toMatchObject({ disposed: 1, unsubscribed: 2 });
+      expect(result.steps[4]?.text).toBe('');
+    });
+
+    test('children projection: disposing one generated site leaves the sibling subtree live', async () => {
+      const result = await runS2bScenario(
+        page,
+        generatedModule(CHILDREN_SOURCE),
+        'children-deletion',
+        { exposeChildrenProjections: true },
+      );
+      // The generated module emitted exactly two children projections, and both
+      // inserted their own nodes (distinct handles and regions).
+      expect(result.identities.slice(0, 5)).toEqual([true, true, true, true, true]);
+      expect(result.steps[1]?.tags).toEqual(['div', 'p', 'p']);
+      expect(result.steps[1]?.text).toBe('11');
+      // dispose(true) on generated site A removes only A's subtree ...
+      expect(result.steps[2]?.tags).toEqual(['div', 'p']);
+      expect(result.steps[2]?.text).toBe('1');
+      expect(result.flags.slice(0, 2)).toEqual([true, true]);
+      expect(result.probes[2]).toMatchObject({ disposed: 1, unsubscribed: 1 });
+      // ... and generated site B keeps refreshing on the next parent write.
+      expect(result.steps[3]?.text).toBe('2');
+      expect(result.identities[5]).toBe(true);
+      // Default dispose keeps B's node attached (M04 disconnect path) while
+      // closing its subscription; the later write no longer lands.
+      expect(result.steps[4]?.childCount).toBe(1);
+      expect(result.steps[4]?.tags).toEqual(['div', 'p']);
+      expect(result.steps[4]?.text).toBe('2');
+      expect(result.flags[2]).toBe(true);
+      expect(result.probes[4]).toMatchObject({ disposed: 2, unsubscribed: 2 });
+      expect(result.steps[5]?.text).toBe('2');
+    });
+
+    test('host-root children component without a recipe throws coded OEIR_LEAF_MISSING_CHILDREN', async () => {
+      const result = await runS2bScenario(
+        page,
+        generatedModule(MISSING_CHILDREN_SOURCE),
+        'children-missing',
+      );
+      // The emitted mount pins the children-recipe shape and throws before any
+      // DOM; the coded failure is the compiled runtime's plain Error text (no
+      // `.code` property), so the code is asserted from the message.
+      expect(result.codes).toEqual([null]);
+      expect(result.messages[0]).toContain('OEIR_LEAF_MISSING_CHILDREN');
+      expect(result.steps[1]?.childCount).toBe(0);
+      expect(result.steps[1]?.html).toBe('');
+      // Fail closed after the lineage admission and owner/region allocation, with
+      // the mount rolled back: no projection, range cleanup, node or
+      // subscription; nothing disposed through a projection handle.
+      expect(result.probes[1]).toMatchObject({
+        projections: 0,
+        regions: 1,
+        owners: 1,
+        nodes: 0,
+        rangeCleanups: 0,
+        subscriptions: 0,
+        unsubscribed: 0,
+        lineageAccepted: 1,
+        lineageRejected: 0,
+        disposed: 0,
+      });
+    });
+
+    test('unkeyed list: positional identity, authored order, insert/delete content, clean disposal', async () => {
+      const result = await runS2bScenario(page, generatedModule(UNKEYED_SOURCE), 'unkeyed-list');
+      const liTexts = (index: number): string[] =>
+        result.steps[index]!.elements.filter((element) => element.tag === 'li').map(
+          (element) => element.text,
+        );
+      // Empty mount: one list root, one projection.
+      expect(result.steps[1]?.tags).toEqual(['ul']);
+      expect(result.steps[1]?.text).toBe('');
+      expect(result.probes[1]).toMatchObject({
+        projections: 1,
+        regions: 1,
+        owners: 1,
+        nodes: 1,
+        rangeCleanups: 1,
+        subscriptions: 1,
+        lineageAccepted: 1,
+        lineageRejected: 0,
+      });
+      // Authored order on mount.
+      expect(result.steps[2]?.tags).toEqual(['ul', 'li', 'li', 'li']);
+      expect(result.steps[2]?.text).toBe('abc');
+      expect(liTexts(2)).toEqual(['a', 'b', 'c']);
+      // Append one entry: positions 0-2 keep their content, 'd' lands last.
+      expect(result.steps[3]?.tags).toEqual(['ul', 'li', 'li', 'li', 'li']);
+      expect(liTexts(3)).toEqual(['a', 'b', 'c', 'd']);
+      // Delete + positional reindex: the surviving positions render the NEW
+      // items (M06b2c entry-local refresh). Unkeyed means positional identity,
+      // so DOM node identity is NOT claimed across this write.
+      expect(result.steps[4]?.tags).toEqual(['ul', 'li', 'li']);
+      expect(liTexts(4)).toEqual(['b', 'd']);
+      expect(result.probes[4]?.projections).toBe(1);
+      // Emptying the list keeps the anchor comment inside <ul>; detach dispose
+      // removes the whole region and closes the list subscription.
+      expect(result.steps[5]?.tags).toEqual(['ul']);
+      expect(result.steps[5]?.text).toBe('');
+      expect(result.steps[6]?.childCount).toBe(0);
+      expect(result.probes[6]).toMatchObject({ disposed: 1, unsubscribed: 1 });
+    });
+
+    test('keyed same-key replacement: node identity preserved, item content updated', async () => {
+      const result = await runS2bScenario(page, generatedModule(KEYED_SOURCE), 'keyed-replacement');
+      const liTexts = (index: number): string[] =>
+        result.steps[index]!.elements.filter((element) => element.tag === 'li').map(
+          (element) => element.text,
+        );
+      expect(result.steps[1]?.tags).toEqual(['ul']);
+      expect(result.probes[1]).toMatchObject({
+        projections: 1,
+        regions: 1,
+        owners: 1,
+        nodes: 1,
+        rangeCleanups: 1,
+        subscriptions: 1,
+        lineageAccepted: 1,
+      });
+      // Initial keyed entries: one entry per key, authored order.
+      expect(liTexts(2)).toEqual(['A', 'B']);
+      // Same keys, first label changed: the keyed reuse keeps both <li> nodes
+      // and the entry local text refresh re-renders 'B' -> 'A2'.
+      expect(result.identities).toEqual([true, true]);
+      expect(liTexts(3)).toEqual(['A2', 'B']);
+      // No entry was recreated: still exactly the root projection.
+      expect(result.probes[3]?.projections).toBe(1);
+      // Clean detach disposal of the list region.
+      expect(result.steps[4]?.childCount).toBe(0);
+      expect(result.probes[4]).toMatchObject({ disposed: 1, unsubscribed: 1 });
     });
   });
 }
