@@ -135,11 +135,18 @@ export interface PagePropsRuntimeDeps {
  *   from loader/params data, so a `children` key there is a smuggling
  *   attempt and is refused before the render function runs.
  *
- * The render function returns a string (the constructors always do); the
- * type is widened to `unknown` so a hostile loader cannot make this seam
- * trust a descriptor the compiler never produced.
+ * The synchronous seam returns a string. A thenable is coerced with `String`
+ * and is not observed: that is the pre-M14 contract for a value the sync
+ * constructors never produced. It is not a new diagnostic, and nothing here
+ * attaches to the thenable (a later rejection is not swallowed).
+ *
+ * Full-await route rendering uses {@link renderFunctionPageAwaited}. Generated
+ * entries import that function from this same published module
+ * (`@openelement/router/server-runtime`); it is not a private binding.
+ * Both seams share {@link readFunctionPageRender}, so the function check,
+ * the `children` refusal, and the call itself are not copied.
  */
-export function renderFunctionPage(page: unknown, props: ProjectedProps): string {
+function readFunctionPageRender(page: unknown, props: ProjectedProps): unknown {
   const descriptor = (page ?? {}) as { render?: unknown };
   if (typeof descriptor.render !== 'function') {
     throw serveError(
@@ -157,7 +164,40 @@ export function renderFunctionPage(page: unknown, props: ProjectedProps): string
         'through page props.',
     );
   }
-  return String((descriptor.render as (props: ProjectedProps) => unknown)(props));
+  return (descriptor.render as (props: ProjectedProps) => unknown)(props);
+}
+
+/** True for a Promise or any other thenable. Strings and plain records are not. */
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    (typeof value === 'object' || typeof value === 'function') &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
+/**
+ * Synchronous server function page render. A sync render returns its HTML
+ * string on this turn. A thenable is still `String`'d, matching the previous
+ * contract; production routes do not use this function for async components.
+ */
+export function renderFunctionPage(page: unknown, props: ProjectedProps): string {
+  return String(readFunctionPageRender(page, props));
+}
+
+/**
+ * Full-await server function page render. Published from
+ * `@openelement/router/server-runtime` because the generated normal, error,
+ * 404, and SSG entries import it from that module. A sync render becomes a
+ * fulfilled promise of the same string. A thenable is adopted: fulfillment is
+ * coerced with `String` after it settles, and rejection rejects this promise
+ * with the original reason. Nothing is built into HTML before that settlement,
+ * and a rejection is not caught here.
+ */
+export function renderFunctionPageAwaited(page: unknown, props: ProjectedProps): Promise<string> {
+  const value = readFunctionPageRender(page, props);
+  if (isThenable(value)) return Promise.resolve(value).then((settled) => String(settled));
+  return Promise.resolve(String(value));
 }
 
 /**

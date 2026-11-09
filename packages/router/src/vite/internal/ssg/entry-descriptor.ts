@@ -158,18 +158,18 @@ export function buildEntryDescriptor(
       names: ['mergeChannelHeaders'],
       alias: '__mergeChannelHeaders',
     });
-    // The server function page render seam (alpha15 server lane): the
-    // compiled constructor function is called through the typed runtime
-    // module, which owns the two boundary checks (render is a function;
-    // props never carry the compiler-owned `children` channel). A function
-    // page produces HTML directly, so the site carries no renderer-specific
-    // branch. Emitted only when a function-page route exists, so a
-    // class-page-only entry stays byte-identical.
+    // The server function page render seam (alpha15 server lane, M14
+    // full-await): generated routes call the published awaited entry on
+    // `@openelement/router/server-runtime`. It shares the sync seam's
+    // boundary checks (render is a function; props never carry the
+    // compiler-owned `children` channel) and waits for an async render
+    // before the HTML string exists. Emitted only when a function-page
+    // route exists, so a class-page-only entry stays byte-identical.
     if (routes.some((route) => route.functionPage !== undefined)) {
       imports.push({
         from: '@openelement/router/server-runtime',
-        names: ['renderFunctionPage'],
-        alias: '__renderFunctionPage',
+        names: ['renderFunctionPageAwaited'],
+        alias: '__renderFunctionPageAwaited',
       });
     }
     // The action POST protocol (CSRF floor, dispatch, classification,

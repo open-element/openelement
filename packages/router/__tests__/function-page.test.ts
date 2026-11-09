@@ -14,9 +14,11 @@
  *
  * The rows below run against the REAL pipeline: the fixture route module is
  * compiled by the real compiler entry, transpiled, imported natively, and fed
- * to the real codegen. The harness routes call the REAL renderFunctionPage
- * seam and the REAL props projector, so the assertions see the wire bytes and
- * the boundary codes a browser/deploy would.
+ * to the real codegen. The harness routes call the REAL
+ * renderFunctionPageAwaited seam (the published full-await entry the generated
+ * normal/error/404/SSG paths import) and the REAL props projector, so the
+ * assertions see the wire bytes and the boundary codes a browser/deploy would.
+ * Direct renderFunctionPage calls stay on the synchronous string contract.
  */
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -24,12 +26,19 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import ts from 'typescript';
-import { analyzeModuleSemantics, compileServerComponentModule } from '@openelement/compiler';
+import {
+  analyzeModuleSemantics,
+  compiledElementPlugin,
+  compileServerComponentModule,
+} from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { definePage } from '../src/index.ts';
 import { PageErrorCode } from '../src/internal/error-codes.ts';
-import { renderFunctionPage } from '../src/vite/internal/server-runtime/page-render.ts';
+import {
+  renderFunctionPage,
+  renderFunctionPageAwaited,
+} from '../src/vite/internal/server-runtime/page-render.ts';
 import { createServerComponentSourceResolver } from '../src/vite/internal/server-component-host.ts';
 import { collectShadowClassCandidates } from '../src/vite/internal/collect-shadow-candidates.ts';
 import { createClassCandidateRegistry } from '@openelement/compiler';
@@ -37,6 +46,8 @@ import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.
 import { renderPageRoute } from '../src/vite/internal/ssg/entry-codegen.ts';
 import { renderSsgSection } from '../src/vite/internal/ssg/entry-render-ssg.ts';
 import { renderEntry } from '../src/vite/internal/ssg/entry-orchestrator.ts';
+import { renderNotFoundRoute } from '../src/vite/internal/ssg/entry-not-found-codegen.ts';
+import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codegen.ts';
 import { scanRoutes } from '../src/vite/internal/ssg/route-scanner.ts';
 import type { RouteEntry } from '@openelement/protocol/framework';
 
@@ -294,7 +305,9 @@ test('the generated entry registers nothing for a function page (zero element cl
   const entry = renderEntry(buildEntryDescriptor([functionRoute], { ssg: true }));
   expect(entry).not.toContain('__registerSsrComponent(__resolvePageTag($pageAbout)');
   // The handler renders through the descriptor render via the one runtime seam.
-  expect(entry).toContain('__renderFunctionPage(__page,');
+  expect(entry).toContain('renderFunctionPageAwaited as __renderFunctionPageAwaited');
+  expect(entry).toContain('await __renderFunctionPageAwaited(__page,');
+  expect(entry).not.toContain('renderFunctionPage as __renderFunctionPage');
 });
 
 test('the function-page GET handler emits no __ssr call for its route', () => {
@@ -308,7 +321,7 @@ test('the function-page GET handler emits no __ssr call for its route', () => {
     false,
   );
   const handler = lines.join('\n');
-  expect(handler).toContain('__renderFunctionPage(__page,');
+  expect(handler).toContain('await __renderFunctionPageAwaited(__page,');
   expect(handler).not.toContain('__ssr(');
 });
 
@@ -375,7 +388,7 @@ afterAll(async () => {
  * pure wrapping/document helpers are miniatured (the html-page.test pattern).
  */
 const HARNESS_RUNTIME = `
-import { renderFunctionPage as __renderFunctionPage, createPagePropsRuntime, pageDefinition as __pageDefinition, routeMeta as __routeMeta } from '@openelement/router/server-runtime';
+import { renderFunctionPageAwaited as __renderFunctionPageAwaited, createPagePropsRuntime, pageDefinition as __pageDefinition, routeMeta as __routeMeta } from '@openelement/router/server-runtime';
 const __propsRuntime = createPagePropsRuntime({ dangerousKeys: new Set(['__proto__', 'constructor', 'prototype', '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'hasOwnProperty']) });
 const __pageProps = __propsRuntime.pageProps;
 const __pageErrorProps = __propsRuntime.pageErrorProps;
@@ -797,7 +810,9 @@ test('renderFunctionPage refuses props carrying children — the composition cha
   );
   // A benign call renders through the descriptor render untouched.
   const benign = { kind: 'function-page', render: (_props?: unknown) => '<p>ok</p>' };
-  expect(renderFunctionPage(benign, { title: 'x' })).toEqual('<p>ok</p>');
+  const syncHtml: string = renderFunctionPage(benign, { title: 'x' });
+  expect(syncHtml).toEqual('<p>ok</p>');
+  expect(typeof syncHtml).toEqual('string');
 });
 
 // ─── 7. Resource collection: light-root class candidates ────────────────────
@@ -820,4 +835,353 @@ test('the shadow-candidate collection registers a function page module light-roo
   } finally {
     await rm(dir, { recursive: true }).catch(() => {});
   }
+});
+
+// ─── 8. M14 full-await: production transform → published awaited seam ───────
+
+test('renderFunctionPageAwaited is Promise<string>; a sync render still fulfills with that string', async () => {
+  const awaitedHtml: Promise<string> = renderFunctionPageAwaited(
+    { render: () => '<p>later</p>' },
+    {},
+  );
+  expect(await awaitedHtml).toEqual('<p>later</p>');
+});
+
+test('the sync seam still String()s a thenable and does not observe it', async () => {
+  let observed = 0;
+  const promise = Promise.resolve('<p>hidden</p>');
+  const originalThen = promise.then.bind(promise);
+  promise.then = ((...args: Parameters<Promise<string>['then']>) => {
+    observed += 1;
+    return originalThen(...args);
+  }) as Promise<string>['then'];
+  const coerced: string = renderFunctionPage({ render: () => promise }, {});
+  expect(coerced).toEqual('[object Promise]');
+  expect(observed).toEqual(0);
+  await promise;
+});
+
+test('renderFunctionPageAwaited rejects with the original reason', async () => {
+  const reason = new Error('boom-origin');
+  const awaited = renderFunctionPageAwaited({ render: () => Promise.reject(reason) }, {});
+  await expect(awaited).rejects.toBe(reason);
+});
+
+test('the awaited seam uses the same synchronous boundary codes', () => {
+  expect(codeOf(() => renderFunctionPageAwaited({ kind: 'function-page' }, {}))).toEqual(
+    PageErrorCode.FUNCTION_RENDER,
+  );
+  const page = { render: () => '<p>x</p>' };
+  expect(codeOf(() => renderFunctionPageAwaited(page, { children: '<script>' }))).toEqual(
+    PageErrorCode.FUNCTION_PROPS,
+  );
+});
+
+function productionTransform(
+  source: string,
+  id: string,
+  resolve?: (specifier: string, importer: string) => string | null,
+): Promise<string> {
+  const plugin = compiledElementPlugin(
+    resolve === undefined ? {} : { resolveServerComponentModule: resolve },
+  );
+  const transform = plugin.transform;
+  if (typeof transform !== 'function') {
+    throw new Error('compiledElementPlugin transform is not a function');
+  }
+  return Promise.resolve(
+    transform.call(
+      {
+        error(message: unknown): never {
+          throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+        },
+      } as never,
+      source,
+      id,
+    ),
+  ).then((result) => {
+    if (
+      result === null ||
+      result === undefined ||
+      typeof result === 'string' ||
+      !('code' in result)
+    ) {
+      throw new Error(`production transform did not emit a module for ${id}`);
+    }
+    return result.code;
+  });
+}
+
+async function writeTransformedRoute(
+  source: string,
+  id = ROUTE_FILE,
+  resolve?: (specifier: string, importer: string) => string | null,
+): Promise<{ file: string; code: string }> {
+  const code = await productionTransform(source, id, resolve);
+  const js = ts.transpileModule(code, {
+    fileName: id,
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const file = `route-${serial++}.mjs`;
+  await writeFile(join(scratch, file), js);
+  return { file, code };
+}
+
+/**
+ * Let the real handler reach its first unresolved await, and fail if HTML
+ * already exists. The tracked promise is returned inside a record: an async
+ * function that returned the promise itself would adopt it and never come
+ * back while the handler is still pending.
+ */
+async function blockUntilSuspended<T>(work: Promise<T>): Promise<{ tracked: Promise<T> }> {
+  let settled = false;
+  const tracked = work.then(
+    (value) => {
+      settled = true;
+      return value;
+    },
+    (error: unknown) => {
+      settled = true;
+      throw error;
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(settled).toEqual(false);
+  return { tracked };
+}
+
+const PENDING_PAGE = [
+  "import { definePage } from '@openelement/router';",
+  'export const gate: { resolve?: (value: string) => void } = {};',
+  'export function pending() {',
+  '  return new Promise<string>((resolve) => {',
+  '    gate.resolve = resolve;',
+  '  });',
+  '}',
+  'export const loader = async () => ({});',
+  'export async function AboutPage() {',
+  '  return <p>{await pending()}</p>;',
+  '}',
+  'export default definePage(AboutPage, { head: { title: "About" } });',
+].join('\n');
+
+test('production transform → request handler: no HTML until the awaited value settles', async () => {
+  const { file, code } = await writeTransformedRoute(PENDING_PAGE);
+  expect(code).toContain('export async function AboutPage');
+  expect(code).toContain('__t(await pending())');
+  expect(code).toContain("from '@openelement/element/server'");
+  expect(code).not.toContain("from '@openelement/element'");
+  const run = await loadRequestTimeHandler([functionRoute], file);
+  const { tracked } = await blockUntilSuspended(run('/about'));
+  const mod = (await import(pathToFileURL(join(scratch, file)).href)) as {
+    gate: { resolve?: (value: string) => void };
+  };
+  expect(typeof mod.gate.resolve).toEqual('function');
+  mod.gate.resolve?.('late-value');
+  const { status, html } = await tracked;
+  expect(status).toEqual(200);
+  expect(html).toContain('<p>late-value</p>');
+  expect(html).not.toContain('[object Promise]');
+  expect(html).not.toContain('<script');
+});
+
+test('production transform → SSG renderRoute waits for the same awaited seam', async () => {
+  const { file } = await writeTransformedRoute(PENDING_PAGE);
+  const renderRoute = await loadSsgRenderRoute([functionRoute], file);
+  const { tracked } = await blockUntilSuspended(renderRoute('/about'));
+  const mod = (await import(pathToFileURL(join(scratch, file)).href)) as {
+    gate: { resolve?: (value: string) => void };
+  };
+  mod.gate.resolve?.('ssg-value');
+  const result = await tracked;
+  expect(result.errors).toEqual([]);
+  expect(result.html).toContain('<p>ssg-value</p>');
+  expect(result.html).not.toContain('[object Promise]');
+});
+
+test('production transform → error re-render waits, then keeps the original failure channel', async () => {
+  const source = [
+    "import { definePage } from '@openelement/router';",
+    'export const gate: { resolve?: (value: string) => void } = {};',
+    'export function pending() {',
+    '  return new Promise<string>((resolve) => { gate.resolve = resolve; });',
+    '}',
+    "export const loader = async () => { throw new Error('loader exploded'); };",
+    'export async function AboutPage() {',
+    '  return <h1>{await pending()}</h1>;',
+    '}',
+    'export default definePage(AboutPage, { error: () => ({ title: "recovered" }) });',
+  ].join('\n');
+  const { file } = await writeTransformedRoute(source);
+  const run = await loadRequestTimeHandler([functionRoute], file);
+  const { tracked } = await blockUntilSuspended(run('/about'));
+  const mod = (await import(pathToFileURL(join(scratch, file)).href)) as {
+    gate: { resolve?: (value: string) => void };
+  };
+  expect(typeof mod.gate.resolve).toEqual('function');
+  mod.gate.resolve?.('recovered');
+  const { status, html } = await tracked;
+  expect(status).toEqual(500);
+  expect(html).toContain('<h1>recovered</h1>');
+  expect(html).not.toContain('[object Promise]');
+});
+
+test('production transform → 404 handler waits on the awaited seam', async () => {
+  const source = PENDING_PAGE.replace(
+    'export async function AboutPage()',
+    'export async function MissingPage()',
+  ).replace('definePage(AboutPage,', 'definePage(MissingPage,');
+  const { file, code } = await writeTransformedRoute(source, '/proj/app/routes/missing.tsx');
+  expect(code).toContain('__t(await pending())');
+  const notFoundRoute: RouteEntry = {
+    path: '/404',
+    filePath: 'missing.tsx',
+    type: 'page',
+    varName: 'pageMissing',
+    definePage: true,
+    functionPage: 'MissingPage',
+  };
+  const desc = buildEntryDescriptor([notFoundRoute], { layout: false });
+  const lines: string[] = [];
+  renderNotFoundRoute(
+    lines,
+    desc.pageRoutes[0],
+    desc.renderers,
+    { title: 't', lang: 'en', headExtras: '', allowHeadExtrasScripts: false },
+    false,
+  );
+  expect(lines.join('\n')).toContain('await __renderFunctionPageAwaited(');
+  const harness = `
+${HARNESS_RUNTIME}
+import * as $pageMissing from './${file}';
+let __notFound;
+const app = { notFound(fn) { __notFound = fn; } };
+function __requestScope(request) {
+  const headers = {};
+  return {
+    header: (name, value) => { headers[name] = value; },
+    get: () => undefined,
+    req: { raw: request, path: new URL(request.url).pathname },
+    env: {},
+    html: (body, status) => new Response(body, { status: status || 200, headers }),
+    redirect: (location, status) => new Response(null, { status: status || 302, headers: { Location: String(location) } }),
+  };
+}
+function __mergeChannelHeaders(promise) { return promise; }
+${lines.join('\n')}
+export async function run() {
+  const response = await __notFound(new Request('http://localhost/missing'));
+  return { status: response.status, html: await response.text() };
+}
+`.replaceAll('import.meta.env.PROD', 'false');
+  const harnessFile = join(scratch, `not-found-${serial++}.mjs`);
+  await writeFile(harnessFile, harness);
+  const mod = (await import(pathToFileURL(harnessFile).href)) as {
+    run: () => Promise<{ status: number; html: string }>;
+  };
+  const { tracked } = await blockUntilSuspended(mod.run());
+  const page = (await import(pathToFileURL(join(scratch, file)).href)) as {
+    gate: { resolve?: (value: string) => void };
+  };
+  expect(typeof page.gate.resolve).toEqual('function');
+  page.gate.resolve?.('missing-value');
+  const { status, html } = await tracked;
+  expect(status).toEqual(404);
+  expect(html).toContain('<p>missing-value</p>');
+  expect(html).not.toContain('[object Promise]');
+});
+
+test('a rejected async render reaches the handler with the original message', async () => {
+  const source = [
+    "import { definePage } from '@openelement/router';",
+    "export function fail() { return Promise.reject(new Error('boom-origin')); }",
+    'export async function AboutPage() {',
+    '  return <p>{await fail()}</p>;',
+    '}',
+    'export default definePage(AboutPage);',
+  ].join('\n');
+  const { file } = await writeTransformedRoute(source);
+  const run = await loadRequestTimeHandler([functionRoute], file);
+  const { status, html } = await run('/about');
+  expect(status).toEqual(500);
+  expect(html).toContain('boom-origin');
+  expect(html).not.toContain('[object Promise]');
+  expect(html).not.toContain('<p>');
+});
+
+test('nested async components settle left to right before the parent HTML exists', async () => {
+  const probe = [
+    'export const order = [];',
+    'export function mark(label) {',
+    '  order.push("start:" + label);',
+    '  return Promise.resolve(label).then((value) => {',
+    '    order.push("end:" + value);',
+    '    return value;',
+    '  });',
+    '}',
+  ].join('\n');
+  await writeFile(join(scratch, 'probe.mjs'), probe);
+  const childSource = [
+    "import { mark } from './probe.mjs';",
+    'export async function Child(props: { n: string }) {',
+    '  return <span>{await mark(props.n)}</span>;',
+    '}',
+  ].join('\n');
+  const childCode = await productionTransform(childSource, '/proj/app/routes/child.tsx');
+  expect(childCode).toContain('__t(await mark(props.n))');
+  const childJs = ts.transpileModule(childCode, {
+    fileName: '/proj/app/routes/child.tsx',
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  await writeFile(join(scratch, 'child.mjs'), childJs);
+  const parentSource = [
+    "import { definePage } from '@openelement/router';",
+    "import { mark } from './probe.mjs';",
+    "import { Child } from './child.tsx';",
+    'export async function AboutPage() {',
+    '  return <article>{await mark("a")}<Child n="b" /></article>;',
+    '}',
+    'export default definePage(AboutPage, { head: { title: "About" } });',
+  ].join('\n');
+  const parent = await productionTransform(parentSource, ROUTE_FILE, (specifier) =>
+    specifier === './child.tsx' ? childSource : null,
+  );
+  expect(parent).toContain('await Child({');
+  expect(parent).toContain('__t(await mark("a"))');
+  const parentJs = ts
+    .transpileModule(parent, {
+      fileName: ROUTE_FILE,
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+    })
+    .outputText.replace("from './child.tsx'", "from './child.mjs'");
+  const file = `route-${serial++}.mjs`;
+  await writeFile(join(scratch, file), parentJs);
+  const run = await loadRequestTimeHandler([functionRoute], file);
+  const { status, html } = await run('/about');
+  const probeMod = (await import(pathToFileURL(join(scratch, 'probe.mjs')).href)) as {
+    order: string[];
+  };
+  expect(status).toEqual(200);
+  expect(html).toContain('<article>a<span>b</span></article>');
+  expect(html).not.toContain('[object Promise]');
+  expect(probeMod.order).toEqual(['start:a', 'end:a', 'start:b', 'end:b']);
+});
+
+test('the sync production transform still emits the original HTML through the awaited seam', async () => {
+  const { file, code } = await writeTransformedRoute(FUNCTION_ROUTE_SOURCE);
+  expect(code).toContain('export function AboutPage(props: { title: string })');
+  expect(code).not.toContain('async function AboutPage');
+  const run = await loadRequestTimeHandler([functionRoute], file);
+  const { status, html } = await run('/about');
+  expect(status).toEqual(200);
+  expect(html).toContain('<h1>About</h1>');
+  expect(html).toContain('class="about-page"');
+});
+
+test('a function page does not put server helpers or the page function on the client entry', () => {
+  const client = generateClientEntry([]);
+  expect(client).not.toContain('@openelement/element/server');
+  expect(client).not.toContain('renderFunctionPage');
+  expect(client).not.toContain('AboutPage');
+  expect(client).not.toContain('__h(');
 });

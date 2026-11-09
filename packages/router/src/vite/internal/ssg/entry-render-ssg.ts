@@ -131,7 +131,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push('    let content;');
   if (hasFunctionPages) {
     lines.push('    if (page.kind === "function-page") {');
-    lines.push('      content = __renderFunctionPage(page, props);');
+    lines.push('      content = await __renderFunctionPageAwaited(page, props);');
     lines.push('    } else {');
     lines.push(
       '      content = __ssr(info.tagName, props, { route: routePath, documentStyles: __documentStyles });',
@@ -237,13 +237,16 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   // success path is (hasFunctionPages above), so the seam import cannot be
   // referenced unbound.
   if (hasFunctionPages) {
-    lines.push('        const __errorPageHtml = page.kind === "function-page"');
+    lines.push('        let __errorPageHtml;');
+    lines.push('        if (page.kind === "function-page") {');
     lines.push(
-      '          ? __renderFunctionPage(page, __pageErrorProps(info.module, error, __errorPageContext))',
+      '          __errorPageHtml = await __renderFunctionPageAwaited(page, __pageErrorProps(info.module, error, __errorPageContext));',
     );
+    lines.push('        } else {');
     lines.push(
-      '          : __ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath, documentStyles: __documentStyles });',
+      '          __errorPageHtml = __ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath, documentStyles: __documentStyles });',
     );
+    lines.push('        }');
   } else {
     lines.push(
       '        const __errorPageHtml = __ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath, documentStyles: __documentStyles });',

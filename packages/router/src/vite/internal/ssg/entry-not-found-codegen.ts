@@ -73,7 +73,7 @@ export function renderNotFoundRoute(
     // alpha15 server lane: a server function /404 page renders through the
     // typed renderFunctionPage seam — no host element exists to __ssr.
     lines.push(
-      `    let __content = __renderFunctionPage(__page, __pageProps(${route.varName}, __pageContext))`,
+      `    let __content = await __renderFunctionPageAwaited(__page, __pageProps(${route.varName}, __pageContext))`,
     );
   } else {
     lines.push(

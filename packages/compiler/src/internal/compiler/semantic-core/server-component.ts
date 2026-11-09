@@ -22,6 +22,9 @@
  * - a nested server function component composes by DIRECT function call to
  *   the imported binding, resolved from the authored imports at compile time
  *   (deterministic — the host hands the compiler the imported sources).
+ *   An async child is awaited by an async parent; a synchronous parent of an
+ *   async child is refused. Await inside the single returned JSX is admitted
+ *   only in the bounded full-await grammar (text children and nested props).
  *
  * The artifact is generated TS — not an IR, not an interpreter, no Part
  * Program, no element class, no client graph edge.
@@ -107,6 +110,8 @@ interface AdmittedComponent {
   readonly returned: ts.Expression;
   /** True for `export const X = (props) => jsx` (vs `export function X`). */
   readonly isArrow: boolean;
+  /** `async function` / `async` arrow. Sync components stay sync in the artifact. */
+  readonly isAsync: boolean;
 }
 
 /** Map one inline props-type member annotation to the walk's property-type labels. */
@@ -167,14 +172,7 @@ function admitComponent(statement: ts.Statement, fail: CompilerFail): AdmittedCo
   const name = serverComponentName(statement);
   if (ts.isFunctionDeclaration(statement)) {
     const modifiers = ts.getModifiers(statement) ?? [];
-    if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)) {
-      fail(
-        statement,
-        'OEC9032',
-        `server function component ${name} may not be async — a component returns its HTML ` +
-          'synchronously; async data belongs in the route loader',
-      );
-    }
+    const isAsync = modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword);
     if (statement.typeParameters?.length) {
       fail(
         statement,
@@ -210,7 +208,15 @@ function admitComponent(statement: ts.Statement, fail: CompilerFail): AdmittedCo
       parameter = parameters[0].name.text;
       fields = fieldsOfPropsType(parameters[0].type, fail);
     }
-    return { statement, name, parameter, fields, returned: returns[0].expression!, isArrow: false };
+    return {
+      statement,
+      name,
+      parameter,
+      fields,
+      returned: returns[0].expression!,
+      isArrow: false,
+      isAsync,
+    };
   }
   // export const Name = (props) => jsx
   const declaration = (statement as ts.VariableStatement).declarationList.declarations[0];
@@ -227,6 +233,7 @@ function admitComponent(statement: ts.Statement, fail: CompilerFail): AdmittedCo
     parameter = arrow.parameters[0].name.text;
     fields = fieldsOfPropsType(arrow.parameters[0].type, fail);
   }
+  const arrowModifiers = ts.canHaveModifiers(arrow) ? (ts.getModifiers(arrow) ?? []) : [];
   return {
     statement,
     name,
@@ -234,6 +241,7 @@ function admitComponent(statement: ts.Statement, fail: CompilerFail): AdmittedCo
     fields,
     returned: arrow.body as ts.Expression,
     isArrow: true,
+    isAsync: arrowModifiers.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword),
   };
 }
 
@@ -266,17 +274,30 @@ function parameterTextOf(component: AdmittedComponent): string {
   return found ? found.getText() : (component.parameter ?? '');
 }
 
-/** The exported server function component names of one (host-resolved) module source. */
-function exportedServerComponentNames(source: string, fileName: string): Set<string> {
+/** Exported server function components of one module: name → whether it is async. */
+function exportedServerComponents(source: string, fileName: string): Map<string, boolean> {
   const parsed = typescriptParser.parseModule(source, fileName);
-  const names = new Set<string>();
+  const components = new Map<string, boolean>();
   if (parsed.syntaxDiagnostics.length === 0) {
     for (const statement of parsed.sourceFile.statements) {
-      if (isExportedServerComponentDeclaration(statement))
-        names.add(serverComponentName(statement));
+      if (!isExportedServerComponentDeclaration(statement)) continue;
+      components.set(serverComponentName(statement), statementIsAsync(statement));
     }
   }
-  return names;
+  return components;
+}
+
+function statementIsAsync(statement: ts.Statement): boolean {
+  if (ts.isFunctionDeclaration(statement)) {
+    return (ts.getModifiers(statement) ?? []).some(
+      (modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword,
+    );
+  }
+  const initializer = (statement as ts.VariableStatement).declarationList.declarations[0]
+    .initializer;
+  if (initializer === undefined || !ts.isArrowFunction(initializer)) return false;
+  const modifiers = ts.canHaveModifiers(initializer) ? (ts.getModifiers(initializer) ?? []) : [];
+  return modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword);
 }
 
 /**
@@ -376,6 +397,7 @@ export function compileServerComponentModule(
   // function components of other modules (compile-time, deterministic; the
   // host supplies the imported sources).
   const componentBindings = new Map<string, string>();
+  const asyncComponents = new Set<string>();
   if (options.resolveModule !== undefined) {
     for (const statement of sf.statements) {
       if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
@@ -385,7 +407,7 @@ export function compileServerComponentModule(
       if (specifier === SERVER_HELPER_SPECIFIER) continue;
       const importedSource = options.resolveModule(specifier);
       if (importedSource === undefined) continue;
-      const importedNames = exportedServerComponentNames(
+      const importedComponents = exportedServerComponents(
         importedSource,
         `${fileName}→${specifier}`,
       );
@@ -393,8 +415,9 @@ export function compileServerComponentModule(
       if (!bindings || !ts.isNamedImports(bindings)) continue;
       for (const element of bindings.elements) {
         const imported = element.propertyName?.text ?? element.name.text;
-        if (importedNames.has(imported))
-          componentBindings.set(element.name.text, element.name.text);
+        if (!importedComponents.has(imported)) continue;
+        componentBindings.set(element.name.text, element.name.text);
+        if (importedComponents.get(imported) === true) asyncComponents.add(element.name.text);
       }
     }
   }
@@ -403,6 +426,7 @@ export function compileServerComponentModule(
     parameter: 'props',
     components: componentBindings,
     compiledTags: new Set(options.compiledTags ?? []),
+    asyncComponents,
   };
 
   // Pass 1: admit and lower every component; keep its generated pieces and
@@ -432,7 +456,7 @@ export function compileServerComponentModule(
     // THE semantic authority: the same walk the @element render body takes.
     const lowering = new Lowering(sf, component.fields, [], {
       computedLocal: null,
-      server: serverBinding,
+      server: { ...serverBinding, asyncFunction: component.isAsync },
     });
     const root = lowering.lowerRoot(component.returned);
     if (root.k !== 'el') {
@@ -447,10 +471,11 @@ export function compileServerComponentModule(
       signatureNode: statement,
       bodyNode: component.returned,
     };
+    const asyncKeyword = component.isAsync ? 'async ' : '';
     if (component.isArrow) {
-      piece.single = `export const ${component.name} = (${parameterText}) => ${body};`;
+      piece.single = `export const ${component.name} = ${asyncKeyword}(${parameterText}) => ${body};`;
     } else {
-      piece.signature = `export function ${component.name}(${parameterText}) {`;
+      piece.signature = `export ${asyncKeyword}function ${component.name}(${parameterText}) {`;
       piece.bodyLine = `  return ${body};`;
       piece.closing = '}';
     }
@@ -693,7 +718,10 @@ export class ConstructorEmitter {
         `sink ${part.k} cannot anchor in server function output`,
       );
     }
-    // Element node.
+    // Element node. An await text slot is recorded beside the tree so the
+    // protocol node vocabulary stays unchanged; it is not a tag.
+    const awaitedSlot = this.lowering.serverExpressionSlots?.get(node.id);
+    if (awaitedSlot !== undefined) return awaitedSlot;
     const componentCall = this.lowering.componentCalls.get(node.id);
     if (componentCall !== undefined) {
       const entries = componentCall.propsEntries.map(
@@ -707,7 +735,10 @@ export class ConstructorEmitter {
         );
       }
       const component = this.identifier(componentCall.component, 'the nested component binding');
-      return `${component}({ ${entries.join(', ')} })`;
+      const call = `${component}({ ${entries.join(', ')} })`;
+      // A partial lowering (the identifier-boundary fixture) has no async table.
+      const asyncChild = this.lowering.isServerAsyncComponent?.(component) === true;
+      return asyncChild ? `await ${call}` : call;
     }
     const sinks = this.sinksOf(node.id);
     const isSsr = this.lowering.ssrCalls.has(node.id);

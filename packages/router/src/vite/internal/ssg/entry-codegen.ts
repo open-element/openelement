@@ -178,7 +178,7 @@ function routeRenderStatement(
     // The handler preamble binds __page to the page descriptor; the server
     // function descriptor carries the compiled component function as its
     // render (alpha15 server lane).
-    return `${indent}let __content = __renderFunctionPage(__page, ${propsExpr})`;
+    return `${indent}let __content = await __renderFunctionPageAwaited(__page, ${propsExpr})`;
   }
   return `${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${ctx.pathLiteral}, documentStyles: __documentStyles })`;
 }
@@ -352,7 +352,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       // onto props and the function's own compiled markup decides the 500
       // body. No host element exists to __ssr.
       lines.push(
-        `        let __errorHtml = __renderFunctionPage(__page, __pageErrorProps(${ctx.route.varName}, err, __pageContext))`,
+        `        let __errorHtml = await __renderFunctionPageAwaited(__page, __pageErrorProps(${ctx.route.varName}, err, __pageContext))`,
       );
     } else {
       lines.push(

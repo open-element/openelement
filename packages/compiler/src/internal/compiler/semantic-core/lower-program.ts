@@ -68,6 +68,13 @@ export interface ServerComponentBindings {
   readonly components: ReadonlyMap<string, string>;
   /** Custom-element host tags the build admitted as compiled components (`__ssr`). */
   readonly compiledTags: ReadonlySet<string>;
+  /**
+   * Imported server function components whose declaration is `async`.
+   * An async parent awaits the direct call; a synchronous parent is refused.
+   */
+  readonly asyncComponents: ReadonlySet<string>;
+  /** This component is itself an async function or async arrow. */
+  readonly asyncFunction: boolean;
 }
 
 /** Lowering inputs beyond the analyzed module shape. */
@@ -121,6 +128,13 @@ type ProgramPartInput =
  */
 const BRANCH_BOUNDARY =
   'Block branches admit attribute bindings; events and refs stay outside blocks';
+
+/**
+ * The M14 full-await slice inside the alpha15 server function lane.
+ * Anything outside this sentence stays a located OEC9032, not a silent drop.
+ */
+const SERVER_AWAIT_SLICE =
+  'this full-await slice admits await only inside an async server function component, and only as a text child or a nested server-component prop: await load(), await load(<literal or props.field>), or await props.field. Statements before the return, attributes, conditions, list items, and synchronous parents of async children stay refused';
 
 function isIdentifier(value: string): boolean {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value);
@@ -240,6 +254,13 @@ export class Lowering {
     { component: string; propsEntries: Array<[string, string]>; children: ProgramTreeNode[] }
   >();
   readonly ssrCalls = new Set<string>();
+  /**
+   * Server-lane await text slots (element id → the expression the constructor
+   * emitter splices in place of a tag). The text is built only from the
+   * admitted await grammar, then wrapped in `__t`, so it crosses the one
+   * text escape. Absent on the class path.
+   */
+  readonly serverExpressionSlots = new Map<string, string>();
   private readonly server?: ServerComponentBindings;
   private readonly plainFieldNames: Set<string>;
   private readonly computedFieldNames: Set<string>;
@@ -372,6 +393,83 @@ export class Lowering {
       });
     }
     return index;
+  }
+
+  /** True when the generated server call must be awaited (async child). */
+  isServerAsyncComponent(name: string): boolean {
+    return this.server?.asyncComponents.has(name) === true;
+  }
+
+  private expressionContainsAwait(node: ts.Node): boolean {
+    if (ts.isAwaitExpression(node)) return true;
+    return ts.forEachChild(node, (child) => this.expressionContainsAwait(child)) === true;
+  }
+
+  /**
+   * Emit one admitted `await` operand. The result is spliced into the
+   * generated module, so the grammar is closed: a plain call, literal or
+   * `props.<field>` arguments, or a `props.<field>` read. Nothing else.
+   */
+  private serverAwaitExpression(node: ts.AwaitExpression): string {
+    if (this.server?.asyncFunction !== true) {
+      this.fail(
+        node,
+        'OEC9032',
+        'await is admitted only inside an async server function component',
+      );
+    }
+    return `await ${this.serverAwaitOperand(unwrapExpression(node.expression))}`;
+  }
+
+  private serverAwaitOperand(expr: ts.Expression): string {
+    const parameter = this.server?.parameter ?? 'props';
+    if (
+      ts.isPropertyAccessExpression(expr) &&
+      ts.isIdentifier(expr.expression) &&
+      expr.expression.text === parameter &&
+      isIdentifier(expr.name.text) &&
+      this.fieldNames.has(expr.name.text)
+    ) {
+      return `${parameter}.${expr.name.text}`;
+    }
+    if (
+      ts.isCallExpression(expr) &&
+      expr.questionDotToken === undefined &&
+      expr.typeArguments === undefined &&
+      ts.isIdentifier(expr.expression) &&
+      isIdentifier(expr.expression.text)
+    ) {
+      const callee = expr.expression.text;
+      if (
+        callee === '__h' ||
+        callee === '__t' ||
+        callee === '__ssr' ||
+        callee === 'eval' ||
+        this.server?.components.has(callee) === true
+      ) {
+        this.fail(expr, 'OEC9032', SERVER_AWAIT_SLICE);
+      }
+      const args = expr.arguments.map((argument) => {
+        if (ts.isSpreadElement(argument)) this.fail(argument, 'OEC9032', SERVER_AWAIT_SLICE);
+        return this.serverAwaitArgument(argument);
+      });
+      return `${callee}(${args.join(', ')})`;
+    }
+    this.fail(expr, 'OEC9032', SERVER_AWAIT_SLICE);
+  }
+
+  private serverAwaitArgument(expr: ts.Expression): string {
+    const value = unwrapExpression(expr);
+    if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) {
+      return JSON.stringify(value.text);
+    }
+    if (value.kind === ts.SyntaxKind.TrueKeyword) return 'true';
+    if (value.kind === ts.SyntaxKind.FalseKeyword) return 'false';
+    if (value.kind === ts.SyntaxKind.NullKeyword) return 'null';
+    if (ts.isNumericLiteral(value) && Number.isFinite(Number(value.text))) return value.text;
+    const field = this.fieldAccess(value);
+    if (field !== null && this.server !== undefined) return `${this.server.parameter}.${field}`;
+    this.fail(expr, 'OEC9032', SERVER_AWAIT_SLICE);
   }
 
   private fieldAccess(expr: ts.Expression): string | null {
@@ -624,6 +722,9 @@ export class Lowering {
       // custom-element hosts keep today's diagnostics. Both fail closed here
       // with the located boundary diagnostic instead of the generic
       // unsupported-expression one.
+      if (this.server !== undefined && this.expressionContainsAwait(expr)) {
+        this.fail(prop, 'OEC9032', SERVER_AWAIT_SLICE);
+      }
       if (name === 'class' && ts.isConditionalExpression(expr)) {
         if (staticOnly) {
           this.fail(
@@ -811,7 +912,15 @@ export class Lowering {
           'function component; @element components compose by tag name)',
       );
     }
-    const elementId = this.reserveElement(local!, path, sourceNode);
+    if (this.server!.asyncComponents.has(local) && this.server!.asyncFunction !== true) {
+      this.fail(
+        tagNameNode,
+        'OEC9032',
+        `<${name}> is an async server function component — a synchronous parent cannot call it, ` +
+          'because HTML is built only after the child settles. Mark the parent async.',
+      );
+    }
+    const elementId = this.reserveElement(local, path, sourceNode);
     const propsEntries: Array<[string, string]> = [];
     for (const prop of attributes.properties) {
       if (ts.isJsxSpreadAttribute(prop)) {
@@ -856,6 +965,13 @@ export class Lowering {
       if (field !== null) {
         propsEntries.push([propName, `${this.server!.parameter}.${field}`]);
         continue;
+      }
+      if (ts.isAwaitExpression(expr)) {
+        propsEntries.push([propName, this.serverAwaitExpression(expr)]);
+        continue;
+      }
+      if (this.expressionContainsAwait(expr)) {
+        this.fail(prop, 'OEC9032', SERVER_AWAIT_SLICE);
       }
       const literal = literalValue(expr, this.sf);
       if (literal === undefined) {
@@ -1197,6 +1313,15 @@ export class Lowering {
         `${this.server.parameter}.children is not declared — add \`children?: string\` to the ` +
           'props type: the JSX children a caller nests compose it as one final-HTML string',
       );
+    }
+    if (this.server !== undefined && ts.isAwaitExpression(expr)) {
+      if (staticOnly) this.fail(child, 'OEC9032', SERVER_AWAIT_SLICE);
+      const id = this.reserveElement('slot', path, child);
+      this.serverExpressionSlots.set(id, `__t(${this.serverAwaitExpression(expr)})`);
+      return this.addElement(id, 'slot', [], []);
+    }
+    if (this.server !== undefined && this.expressionContainsAwait(expr)) {
+      this.fail(child, 'OEC9032', SERVER_AWAIT_SLICE);
     }
     const field = this.fieldAccess(expr);
     if (field) {
@@ -1615,6 +1740,9 @@ export class Lowering {
       }
       if (ts.isJsxExpression(child) && child.expression) {
         const expr = unwrapExpression(child.expression);
+        if (this.server !== undefined && this.expressionContainsAwait(expr)) {
+          this.fail(child, 'OEC9032', SERVER_AWAIT_SLICE);
+        }
         if (
           ts.isPropertyAccessExpression(expr) &&
           ts.isIdentifier(expr.expression) &&
