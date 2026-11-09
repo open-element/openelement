@@ -243,3 +243,47 @@ evidence is the recorded LOCAL chromium S2 run, not a release qualification.
 `K`, `D`, `F`, `B`, `P`) — those remain M05+/M13 and are not implied by the LOCAL
 chromium S2 evidence. M06 is **not** claimed complete by these rows; M06b and
 M07/M08 are pending.
+
+## M06b S2b recorded results — owner isolation
+
+Evidence head: `55aec15b9` (LOCAL; branch `alpha16a/m06b-owner-isolation`, PR
+opened by the Lead). Scope: the M06b1a-1/-2 admitted generated composition
+shapes — module-level component mounts with module-local component references
+and per-read props, and one reusable-JSX recipe projected at two sites or
+inserted twice with isolated owners, regions, DOM nodes and cleanups. **C+** =
+the production function frontend and the M05/M06b generator admit the fixture;
+**C−** = a source-located diagnostic (the generator's fail-closed shapes are
+covered by the existing M06b1a-2 unit suite; no new negative fixture is added
+here); **T+**/**T−** = the fixture type-checks / is a type error (TypeScript is
+the authority). Real-browser evidence is the recorded **LOCAL chromium
+`147.0.7727.15`** (Playwright default engine, `browser.version()` recorded by
+the harness); it is not a release qualification.
+
+| Case | T+ | T− | C+ | C− | Evidence artifact |
+| --- | --- | --- | --- | --- | --- |
+| TSX-09 reusable JSX values | pass | pass | pass | pass | `generated-leaf.browser.test.ts` M06b1b S2b "reusable JSX value: one recipe projected at two sites yields two independent copies" — one inline `createRecipe` + two `{chip}` insertion sites; mount delta `projections`/`regions`/`owners`/`rangeCleanups`/`lineageAccepted` +3 (one root + two sites), `nodes` +3, `subscriptions` +4; one tone write refreshes both copies and default `dispose()` keeps the region while closing all four subscriptions. T+/T− = `m03-frontend-matrix.test.ts` TSX-09 row; C+ = `generated-leaf.test.ts` M06b1a-2 emission contract (one `createRecipe`, one `insertRecipe` per site); C− = the frontend `OEC9042` TSX-09 row plus the generator's `OEIR_LEAF_UNSUPPORTED_RECIPE` fail-closed test |
+| TSX-23 one recipe inserted twice | pass | pass | pass | pass | `generated-leaf.browser.test.ts` M06b1b S2b "one recipe inserted twice: isolated owners, regions and nodes, both refresh" — the same generated recipe inserted twice yields two projections with distinct `region`, `owner`, props record and DOM node; insertion delta `projections`/`regions`/`owners`/`nodes`/`rangeCleanups`/`subscriptions`/`lineageAccepted` +2 with `lineageRejected`/`unsubscribed`/`disposed` 0, and one signal write refreshes both copies. C+ = `generated-leaf.test.ts` M06b1a-2 same-recipe two-site contract; C− = the fail-closed shapes above (no separate TSX-23 negative fixture is claimed); T+/T− = recorded pass in the M06 S2 section at `74f7badc0` for the same admitted JSX-value grammar (`m03-frontend-matrix.test.ts` TSX-09 row is the frontend authority) |
+| TSX-10 repeatable children | pass | pass | n/a | n/a | **not run — M06b2** — children projection still fails closed; no browser evidence |
+| TSX-26 projection deletion/cross-owner | pass | pass | n/a | n/a | **not run — M06b2** — projection deletion through generated sites is not evidenced; the S2b lineage negatives below only assert the runtime-side coded rejections (see below) |
+
+Disposal isolation (feeds TSX-23/TSX-27 disposal accounting, not a matrix row of
+its own): the S2b "disposal isolation" scenario proves `dispose(true)` on one of
+two live projections removes only its own region (`disposed` +1, `unsubscribed`
++1) while the other projection stays attached and keeps refreshing, and the
+default `dispose()` keeps its DOM attached (the M04 disconnect/suspend contract)
+while releasing its subscription (`disposed` +2, `unsubscribed` +2 total).
+
+The S2b lineage scenario records the M04 fail-closed codes for the cross-owner
+and dead-owner shapes: cross-owner insertion raises `OE_KERNEL_ROOT_NOT_OWNED`;
+a disposed definition owner and a disposed projection site both raise
+`OE_KERNEL_DISPOSED`; each attempt increments `lineageRejected` +1, allocates no
+owner/region/DOM (`projections`/`regions`/`owners`/`nodes`/`rangeCleanups`/`subscriptions`
+deltas 0) and leaves the parent untouched, while the definition owner and one of
+its live descendants stay admitted (`lineageAccepted` +2). These are runtime-side
+negative inputs to TSX-26, not a TSX-26 result — deletion remains M06b2.
+
+**Not run in this section:** every SSR/claim column (`S`, `K`), the three-engine
+qualification (`B`; M13), firefox/webkit, packed-consumer (`P`) and children
+projection (TSX-10; M06b2) remain unclaimed. M06 is **not** complete by these
+rows; M06b2 and M07/M08 are pending. LOCAL chromium only — no G1/G2 record and no
+Alpha16a exit claim is made here.
