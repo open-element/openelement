@@ -86,6 +86,9 @@ successful claim) does not fill TSX-18 or TSX-30. A validation failure writes
 nothing. An activation failure may leave an earlier dynamic write while
 resources are released with `dispose(false)`. That is not a whole-claim byte
 rollback, and it does not change the successful-claim input/focus obligation.
+M07b static sibling ranges are DOM contract fixtures for one private directory.
+They are not SSR success evidence and do not fill TSX-18 or TSX-30 either.
+Zero subscriptions on a static range are not a dynamic-subscription account.
 
 ## Acceptance coverage (taskbook §18)
 

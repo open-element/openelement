@@ -203,6 +203,12 @@ export const RuntimeErrorCode = {
    * This is a caller/recipe-shape failure, not a DOM mismatch.
    */
   LEAF_CLAIM_UNAVAILABLE: 'OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE',
+  /**
+   * A static sibling-range directory did not match its declaration, was
+   * claimed out of order, or was reclaimed after commitment. Detail lives in
+   * the message; cases do not each get a code. Not `LEAF_CLAIM_UNAVAILABLE`.
+   */
+  STATIC_RANGE_MISMATCH: 'OE_RUNTIME_STATIC_RANGE_MISMATCH',
   /** A fixed Part has no serialized anchor to bind. */
   SERIALIZED_ANCHOR_MISSING: 'OE_RUNTIME_SERIALIZED_ANCHOR_MISSING',
   /** A when/each Block Part needs the Block builders, which this entry does not install (#1548). */
