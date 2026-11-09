@@ -728,3 +728,540 @@ for (const engine of engines()) {
     });
   });
 }
+
+// ─── M06b1b S2b: owner isolation evidence ──────────────────────────────────
+// The same real-M04 runtime bundle is used (no stubs). These scenarios evidence
+// the M06b1a-1/-2 generated composition shapes in a real engine: component-
+// reference mounts with per-read props, one reusable-JSX recipe inserted twice
+// (two isolated projections/owners/regions), projection disposal isolation and
+// the coded owner-lineage negatives. LOCAL chromium evidence only; three-engine
+// qualification is M13 and is not claimed here.
+
+const CHILD_PARENT_SOURCE = `import { signal } from '@openelement/element';
+function Child(props) {
+  return <li data-kind="child" data-label={props.label}>{props.text}</li>;
+}
+function Parent(props) {
+  const label = signal('a');
+  return <ul>
+    <Child text={label.value} label="static" />
+    <Child text="literal" label="second" />
+  </ul>;
+}
+`;
+
+const CHIP_SOURCE = `import { signal } from '@openelement/element';
+function Chip(props) {
+  const tone = signal('blue');
+  const chip = <i class="chip" title={tone.value}>{tone.value}</i>;
+  return <div><b>a</b>{chip}<span>{chip}</span></div>;
+}
+`;
+
+const LEAF_SOURCE = `import { signal } from '@openelement/element';
+function Leaf(props) {
+  const label = signal('x');
+  return <p class="leaf">{label.value}</p>;
+}
+`;
+
+interface S2bSnapshot {
+  readonly html: string;
+  readonly text: string;
+  readonly tags: string[];
+  readonly childCount: number;
+  readonly elements: readonly {
+    readonly tag: string;
+    readonly text: string;
+    readonly title: string | null;
+    readonly label: string | null;
+    readonly className: string | null;
+  }[];
+}
+
+interface S2bProbe {
+  readonly projections: number;
+  readonly regions: number;
+  readonly owners: number;
+  readonly nodes: number;
+  readonly rangeCleanups: number;
+  readonly subscriptions: number;
+  readonly unsubscribed: number;
+  readonly lineageAccepted: number;
+  readonly lineageRejected: number;
+  readonly disposed: number;
+}
+
+interface S2bResult {
+  /** Host snapshots, recorded one per {@linkcode record} call. */
+  readonly steps: readonly S2bSnapshot[];
+  /** `runtimeProbe.snapshot()` after each step (aligned 1:1 with `steps`). */
+  readonly probes: readonly S2bProbe[];
+  /** Scenario-specific DOM identity observations. */
+  readonly identities: readonly boolean[];
+  /** Scenario-specific boolean observations. */
+  readonly flags: readonly boolean[];
+  /** Caught lineage failure codes (`null` when the thrown error carries none). */
+  readonly codes: readonly (string | null)[];
+}
+
+async function runS2bScenario(
+  page: Page,
+  moduleCode: string,
+  scenario: string,
+): Promise<S2bResult> {
+  await page.addScriptTag({ content: harnessModule(moduleCode) });
+  return page.evaluate(
+    ({ scenario }) => {
+      interface SignalLike<T> {
+        readonly value: T;
+        subscribe(fn: (value: T) => void): () => void;
+      }
+      interface Scope {
+        child(): Scope;
+        dispose(detach?: boolean): void;
+      }
+      interface ProjectionHandle {
+        readonly region: number;
+        readonly owner: Scope;
+        readonly nodes: readonly Node[];
+        dispose(detach?: boolean): void;
+      }
+      interface Runtime {
+        insertRecipe: (
+          owner: Scope,
+          recipe: unknown,
+          parent: Node,
+          before?: Node | null,
+        ) => ProjectionHandle;
+        LifetimeScope: new () => Scope;
+        signal: <T>(value: T) => SignalLike<T> & { value: T };
+        runtimeProbe: { snapshot(): S2bProbe; reset(): void };
+      }
+      const runtime = (window as unknown as { __oeRuntime: Runtime }).__oeRuntime;
+      const factories = (
+        window as unknown as {
+          __oeModule: Record<string, (owner: unknown, host: unknown) => unknown>;
+        }
+      ).__oeModule;
+      const host = document.getElementById('host') as HTMLElement;
+      host.replaceChildren();
+      const scope = new runtime.LifetimeScope();
+      const probe = runtime.runtimeProbe;
+      probe.reset();
+      const snapshot = (): S2bSnapshot => ({
+        html: host.innerHTML,
+        text: host.textContent ?? '',
+        tags: [...host.querySelectorAll('*')].map((element) => element.tagName.toLowerCase()),
+        childCount: host.childNodes.length,
+        elements: [...host.querySelectorAll('*')].map((element) => ({
+          tag: element.tagName.toLowerCase(),
+          text: element.textContent ?? '',
+          title: element.getAttribute('title'),
+          label: element.getAttribute('data-label'),
+          className: element.getAttribute('class'),
+        })),
+      });
+      const result: S2bResult = {
+        steps: [],
+        probes: [],
+        identities: [],
+        flags: [],
+        codes: [],
+      };
+      const record = (): void => {
+        result.steps.push(snapshot());
+        result.probes.push(probe.snapshot());
+      };
+      record();
+
+      // 1. Module-level child mount + per-read props. Two `<Child>` instances in
+      // one parent: the dynamic prop is a per-read getter over the defining
+      // (parent) scope and refreshes through `host.propDeps`; the static prop is
+      // literal data. The parent keeps the two child instances' DOM distinct.
+      if (scenario === 'component-refs') {
+        const label = runtime.signal('a');
+        const recipe = factories.createParentRecipe!(scope, {
+          props: {},
+          bindings: { label },
+          propsChanged: runtime.signal(0),
+        });
+        const projection = runtime.insertRecipe(scope, recipe, host);
+        record();
+        const mountedChildren = [...host.querySelectorAll('li')];
+        result.identities.push(
+          mountedChildren.length === 2,
+          mountedChildren[0] !== mountedChildren[1],
+          mountedChildren[0]?.getAttribute('data-label') === 'static',
+          mountedChildren[1]?.getAttribute('data-label') === 'second',
+        );
+        label.value = 'b';
+        record();
+        const refreshedChildren = [...host.querySelectorAll('li')];
+        result.identities.push(
+          mountedChildren[0] === refreshedChildren[0],
+          mountedChildren[1] === refreshedChildren[1],
+        );
+        projection.dispose();
+        record();
+        label.value = 'c';
+        record();
+        return result;
+      }
+
+      // 2. TSX-09: one reusable-JSX value emitted as ONE inline `createRecipe`
+      // projected at TWO `{chip}` sites. The root insertion plus the two site
+      // insertions are three independent projections; a tone write refreshes
+      // both copies, and the copies are distinct DOM nodes in authored order.
+      if (scenario === 'reusable') {
+        const tone = runtime.signal('blue');
+        const recipe = factories.createChipRecipe!(scope, {
+          props: {},
+          bindings: { tone },
+          propsChanged: runtime.signal(0),
+        });
+        const projection = runtime.insertRecipe(scope, recipe, host);
+        record();
+        const chips = [...host.querySelectorAll('i.chip')];
+        result.identities.push(
+          chips.length === 2,
+          chips[0] !== chips[1],
+          chips[0]?.parentElement?.tagName === 'DIV',
+          chips[1]?.parentElement?.tagName === 'SPAN',
+        );
+        tone.value = 'red';
+        record();
+        const refreshedChips = [...host.querySelectorAll('i.chip')];
+        result.identities.push(
+          chips[0] === refreshedChips[0],
+          chips[1] === refreshedChips[1],
+          refreshedChips.every((chip) => chip.getAttribute('title') === 'red'),
+        );
+        projection.dispose();
+        record();
+        tone.value = 'green';
+        record();
+        return result;
+      }
+
+      // 3. TSX-23: the SAME generated recipe inserted twice through
+      // `insertRecipe`. Two isolated projections: distinct region ids, owners,
+      // props records and DOM nodes; a signal write refreshes both copies.
+      if (scenario === 'same-recipe-twice') {
+        const label = runtime.signal('x');
+        const recipe = factories.createLeafRecipe!(scope, {
+          props: {},
+          bindings: { label },
+          propsChanged: runtime.signal(0),
+        });
+        record();
+        const first = runtime.insertRecipe(scope, recipe, host);
+        const second = runtime.insertRecipe(scope, recipe, host);
+        record();
+        result.identities.push(
+          first.region !== second.region,
+          first.owner !== second.owner,
+          first.nodes[0] !== second.nodes[0],
+          host.childNodes[0] === first.nodes[0],
+          host.childNodes[1] === second.nodes[0],
+        );
+        label.value = 'y';
+        record();
+        const leaves = [...host.querySelectorAll('p.leaf')];
+        result.identities.push(
+          leaves[0] === first.nodes[0],
+          leaves[1] === second.nodes[0],
+          leaves[0]?.textContent === 'y' && leaves[1]?.textContent === 'y',
+        );
+        return result;
+      }
+
+      // 4. Disposal isolation: with two projections live, `dispose(true)` on A
+      // removes only A's region; B stays attached and keeps refreshing. Default
+      // `dispose()` on B keeps its DOM attached (M04 disconnect/suspend path)
+      // while closing its subscriptions.
+      if (scenario === 'disposal-isolation') {
+        const label = runtime.signal('x');
+        const recipe = factories.createLeafRecipe!(scope, {
+          props: {},
+          bindings: { label },
+          propsChanged: runtime.signal(0),
+        });
+        const a = runtime.insertRecipe(scope, recipe, host);
+        const b = runtime.insertRecipe(scope, recipe, host);
+        record();
+        a.dispose(true);
+        record();
+        result.flags.push(
+          a.nodes.every((node) => !node.isConnected),
+          b.nodes.every((node) => node.isConnected),
+        );
+        label.value = 'y';
+        record();
+        b.dispose();
+        record();
+        result.flags.push(b.nodes.every((node) => node.isConnected));
+        label.value = 'z';
+        record();
+        return result;
+      }
+
+      // 5. Owner-lineage negatives (TSX-26 shape, no children projection):
+      // cross-owner and dead-owner projections fail closed with the catalogue
+      // code, before any owner/DOM exists; a legal projection on the definition
+      // owner and on one of its descendants is still admitted.
+      if (scenario === 'lineage') {
+        const codeOf = (error: unknown): string | null => {
+          const code = (error as { code?: unknown }).code;
+          return typeof code === 'string' ? code : null;
+        };
+        const reject = (owner: Scope, candidate: unknown): void => {
+          try {
+            runtime.insertRecipe(owner, candidate, host);
+            result.codes.push('NO_THROW');
+          } catch (error) {
+            result.codes.push(codeOf(error));
+          }
+        };
+        const hostRecord = (): unknown => ({
+          props: {},
+          bindings: { label: runtime.signal('x') },
+          propsChanged: runtime.signal(0),
+        });
+        const definitionOwner = new runtime.LifetimeScope();
+        const recipe = factories.createLeafRecipe!(definitionOwner, hostRecord());
+        record();
+
+        // (a) projection owner outside the definition subtree.
+        const unrelated = new runtime.LifetimeScope();
+        reject(unrelated, recipe);
+        record();
+
+        // (b) projection of a recipe whose definition owner is disposed.
+        const deadDefinition = new runtime.LifetimeScope();
+        const deadRecipe = factories.createLeafRecipe!(deadDefinition, hostRecord());
+        deadDefinition.dispose();
+        reject(scope, deadRecipe);
+        record();
+
+        // (c) projection into a disposed owner.
+        const deadSite = new runtime.LifetimeScope();
+        deadSite.dispose();
+        reject(deadSite, recipe);
+        record();
+
+        // (d) legal: the definition owner itself and a live descendant.
+        const legal = runtime.insertRecipe(definitionOwner, recipe, host);
+        record();
+        const descendantProjection = runtime.insertRecipe(definitionOwner.child(), recipe, host);
+        record();
+        result.identities.push(
+          host.childNodes[0] === legal.nodes[0],
+          host.childNodes[1] === descendantProjection.nodes[0],
+        );
+        return result;
+      }
+
+      return result;
+    },
+    { scenario },
+  );
+}
+
+for (const engine of engines()) {
+  describe(`M06b1b S2b — owner isolation in ${engine.name} (LOCAL evidence)`, () => {
+    let browser: Browser;
+    let page: Page;
+    let engineVersion = '';
+
+    beforeAll(async () => {
+      const runtimeCode = await buildRuntimeBundle();
+      browser = await engine.launch();
+      engineVersion = browser.version();
+      console.log(`[M06b1b-S2b] engine=${engine.name} version=${engineVersion}`);
+      page = await browser.newPage();
+      await page.setContent('<!doctype html><html><body><div id="host"></div></body></html>');
+      await page.addScriptTag({ content: runtimeCode });
+    }, 180_000);
+
+    afterAll(async () => {
+      await browser?.close();
+    });
+
+    test('component reference: module-level child mount, per-read props refresh, distinct instances', async () => {
+      const result = await runS2bScenario(
+        page,
+        generatedModule(CHILD_PARENT_SOURCE),
+        'component-refs',
+      );
+      // Mounted: two child instances in authored order; static prop rendered
+      // from literal data, dynamic prop read through the parent-scope getter.
+      expect(result.steps[1]?.tags).toEqual(['ul', 'li', 'li']);
+      expect(result.steps[1]?.elements[1]).toMatchObject({ text: 'a', label: 'static' });
+      expect(result.steps[1]?.elements[2]).toMatchObject({ text: 'literal', label: 'second' });
+      expect(result.steps[1]?.text).toBe('aliteral');
+      expect(result.identities.slice(0, 4)).toEqual([true, true, true, true]);
+      // The dynamic child subscribes twice (data-label attribute + text) through
+      // the parent bindings its prop expressions depend on.
+      expect(result.probes[1]).toMatchObject({
+        projections: 1,
+        regions: 1,
+        owners: 1,
+        nodes: 1,
+        rangeCleanups: 1,
+        subscriptions: 2,
+        unsubscribed: 0,
+        lineageAccepted: 1,
+        lineageRejected: 0,
+        disposed: 0,
+      });
+      // A parent signal write refreshes the child's dynamic prop getter; the
+      // static child and both DOM nodes keep their identity.
+      expect(result.steps[2]?.elements[1]).toMatchObject({ text: 'b', label: 'static' });
+      expect(result.steps[2]?.elements[2]).toMatchObject({ text: 'literal', label: 'second' });
+      expect(result.steps[2]?.text).toBe('bliteral');
+      expect(result.identities.slice(4)).toEqual([true, true]);
+      // Default dispose keeps the parent region attached and closes the child
+      // subscription; a later write no longer leaks into the detached instance.
+      expect(result.steps[3]?.childCount).toBe(1);
+      expect(result.steps[3]?.tags).toEqual(['ul', 'li', 'li']);
+      expect(result.steps[3]?.text).toBe('bliteral');
+      expect(result.probes[3]).toMatchObject({ disposed: 1, unsubscribed: 2 });
+      expect(result.steps[4]?.text).toBe('bliteral');
+      expect(engineVersion.length).toBeGreaterThan(0);
+    });
+
+    test('reusable JSX value: one recipe projected at two sites yields two independent copies', async () => {
+      const result = await runS2bScenario(page, generatedModule(CHIP_SOURCE), 'reusable');
+      expect(result.steps[1]?.tags).toEqual(['div', 'b', 'i', 'span', 'i']);
+      expect(result.steps[1]?.elements[2]).toMatchObject({ tag: 'i', text: 'blue', title: 'blue' });
+      expect(result.steps[1]?.elements[4]).toMatchObject({ tag: 'i', text: 'blue', title: 'blue' });
+      expect(result.identities.slice(0, 4)).toEqual([true, true, true, true]);
+      // One root projection + the two `{chip}` site projections: each insertion
+      // owns one projection, region, owner and range cleanup; the two recipe
+      // instances subscribe twice each (title attribute + text).
+      expect(result.probes[1]).toMatchObject({
+        projections: 3,
+        regions: 3,
+        owners: 3,
+        nodes: 3,
+        rangeCleanups: 3,
+        subscriptions: 4,
+        unsubscribed: 0,
+        lineageAccepted: 3,
+        lineageRejected: 0,
+        disposed: 0,
+      });
+      // One tone write refreshes BOTH copies (distinct nodes, same signal).
+      expect(result.steps[2]?.text).toBe('aredred');
+      expect(result.identities.slice(4)).toEqual([true, true, true]);
+      // Default dispose keeps the region and closes every instance subscription.
+      expect(result.steps[3]?.childCount).toBe(1);
+      expect(result.probes[3]).toMatchObject({ disposed: 1, unsubscribed: 4 });
+      expect(result.steps[4]?.text).toBe('aredred');
+    });
+
+    test('one recipe inserted twice: isolated owners, regions and nodes, both refresh', async () => {
+      const result = await runS2bScenario(page, generatedModule(LEAF_SOURCE), 'same-recipe-twice');
+      // Creating a recipe allocates no owner, region or DOM (the insertion is
+      // the only place those exist).
+      expect(result.probes[1]).toEqual(result.probes[0]);
+      expect(result.steps[1]?.childCount).toBe(0);
+      // Two insertions => two projections/regions/owners/range cleanups/nodes
+      // and two write subscriptions; both lineage checks admitted.
+      const delta = (index: number): S2bProbe => {
+        const after = result.probes[index]!;
+        const before = result.probes[index - 1]!;
+        return {
+          projections: after.projections - before.projections,
+          regions: after.regions - before.regions,
+          owners: after.owners - before.owners,
+          nodes: after.nodes - before.nodes,
+          rangeCleanups: after.rangeCleanups - before.rangeCleanups,
+          subscriptions: after.subscriptions - before.subscriptions,
+          unsubscribed: after.unsubscribed - before.unsubscribed,
+          lineageAccepted: after.lineageAccepted - before.lineageAccepted,
+          lineageRejected: after.lineageRejected - before.lineageRejected,
+          disposed: after.disposed - before.disposed,
+        };
+      };
+      expect(delta(2)).toMatchObject({
+        projections: 2,
+        regions: 2,
+        owners: 2,
+        nodes: 2,
+        rangeCleanups: 2,
+        subscriptions: 2,
+        unsubscribed: 0,
+        lineageAccepted: 2,
+        lineageRejected: 0,
+        disposed: 0,
+      });
+      expect(result.identities.slice(0, 5)).toEqual([true, true, true, true, true]);
+      expect(result.steps[2]?.tags).toEqual(['p', 'p']);
+      expect(result.steps[2]?.text).toBe('xx');
+      // One write refreshes both projections.
+      expect(result.steps[3]?.text).toBe('yy');
+      expect(result.identities.slice(5)).toEqual([true, true, true]);
+    });
+
+    test('disposal isolation: detach dispose removes only its region; default dispose keeps DOM', async () => {
+      const result = await runS2bScenario(page, generatedModule(LEAF_SOURCE), 'disposal-isolation');
+      expect(result.steps[1]?.childCount).toBe(2);
+      // A's detach dispose removes A's region only; B's node stays attached.
+      expect(result.steps[2]?.childCount).toBe(1);
+      expect(result.steps[2]?.text).toBe('x');
+      expect(result.flags.slice(0, 2)).toEqual([true, true]);
+      expect(result.probes[2]).toMatchObject({ disposed: 1, unsubscribed: 1 });
+      // B keeps refreshing after A is gone.
+      expect(result.steps[3]?.text).toBe('y');
+      // Default dispose keeps B's node attached (the M04 disconnect path) while
+      // releasing its subscription; the subsequent write no longer lands.
+      expect(result.steps[4]?.childCount).toBe(1);
+      expect(result.steps[4]?.text).toBe('y');
+      expect(result.flags[2]).toBe(true);
+      expect(result.probes[4]).toMatchObject({ disposed: 2, unsubscribed: 2 });
+      expect(result.steps[5]?.text).toBe('y');
+    });
+
+    test('owner lineage negatives: cross-owner and dead-owner projections are rejected with codes', async () => {
+      const result = await runS2bScenario(page, generatedModule(LEAF_SOURCE), 'lineage');
+      expect(result.codes).toEqual([
+        'OE_KERNEL_ROOT_NOT_OWNED',
+        'OE_KERNEL_DISPOSED',
+        'OE_KERNEL_DISPOSED',
+      ]);
+      // Fail closed BEFORE any owner/region/DOM exists: the parent stays empty
+      // and the rejected attempts allocate nothing (recipe creation included);
+      // only the rejection counter moves.
+      for (const index of [1, 2, 3, 4]) {
+        expect(result.steps[index]?.childCount).toBe(0);
+        expect(result.probes[index]).toMatchObject({
+          projections: 0,
+          regions: 0,
+          owners: 0,
+          nodes: 0,
+          rangeCleanups: 0,
+          subscriptions: 0,
+          unsubscribed: 0,
+          lineageAccepted: 0,
+          disposed: 0,
+        });
+      }
+      expect(result.probes[1]?.lineageRejected).toBe(0);
+      expect(result.probes[2]?.lineageRejected).toBe(1);
+      expect(result.probes[3]?.lineageRejected).toBe(2);
+      expect(result.probes[4]?.lineageRejected).toBe(3);
+      expect(result.probes[4]?.lineageAccepted).toBe(0);
+      // Legal projections stay admitted: the definition owner itself, then one
+      // of its live descendants.
+      expect(result.probes[5]?.lineageAccepted).toBe(1);
+      expect(result.probes[6]?.lineageAccepted).toBe(2);
+      expect(result.probes[6]?.lineageRejected).toBe(3);
+      expect(result.probes[6]?.projections).toBe(2);
+      expect(result.steps[6]?.childCount).toBe(2);
+      expect(result.steps[6]?.text).toBe('xx');
+      expect(result.identities).toEqual([true, true]);
+    });
+  });
+}
