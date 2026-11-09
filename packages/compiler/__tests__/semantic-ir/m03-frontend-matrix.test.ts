@@ -159,7 +159,12 @@ function C(props) {
   {
     case: 'TSX-10 repeatable children',
     cPlus: 'function C(props) { return <section>{props.children}</section>; }\n',
-    cMinus: 'function C(props) { return <Box>{props.children}</Box>; }\n',
+    // M06b2a supersedes the `children on a component reference` C− shape: JSX
+    // children on `<Box>…</Box>` now lower to a children recipe passed as
+    // `props.children` (JSX value model §4.4, TSX-10 / TSX-23 mechanism). The
+    // C− boundary this row records is the value-position read: `props.children`
+    // inside an expression is a recipe channel, not a readable value.
+    cMinus: 'function C(props) { return <section>{String(props.children)}</section>; }\n',
     cMinusCodes: ['OEC9042'],
     tPlus: `${JSX_STUB}function C(props: { children?: unknown }) { return <section>{props.children}</section>; }\n`,
     tMinus: `${JSX_STUB}function C(props: { children?: unknown }) { return <section>{props.children.toFixed(2)}</section>; }\n`,

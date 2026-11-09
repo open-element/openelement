@@ -1,6 +1,6 @@
 /**
- * M06b1a-2 v2 — generated leaf/component mount with reusable JSX values
- * (compiler-private).
+ * M06b2a — generated leaf/component mount with reusable JSX values and
+ * component children projection (compiler-private).
  *
  * Consumes the merged M03 `FunctionModelModule` + `ExpressionRegistry` (never
  * re-derives resolution, lowering or erasure) and emits a real JavaScript
@@ -18,7 +18,11 @@
  * module-level component mounts plus module-local component references
  * (`<Child prop={expr}/>`), and (M06b1a-2) reusable JSX values: one recipe per
  * direct component-local JSX initializer and one `insertRecipe` projection per
- * `{name}` slot. One component body is emitted exactly once per module:
+ * `{name}` slot, and (M06b2a) component children projection: `<Frame>…</Frame>`
+ * passes one children fragment recipe per reference site as `props.children`, and
+ * every `{props.children}` in the child mount is its own `insertRecipe`
+ * projection (own child owner, instance, cleanup) of that same recipe value.
+ * One component body is emitted exactly once per module:
  * `function <Name>__mount(scope, props, host)` builds a detached instance and
  * returns its nodes; the exported `create<Name>Recipe(owner, host)` factory
  * keeps its name/signature and delegates its recipe mount to it, and a
@@ -33,11 +37,11 @@
  * instance owns a fresh child scope of the parent; the parent appends the
  * returned nodes in authored order.
  *
- * Still fails closed with a coded diagnostic (M06b1a-3/M06b2, M07/M08
- * boundary): recipes that are not a direct component-local JSX initializer (JSX
- * inside an arbitrary expression lowers to a `__oe_recipe_ref` placeholder that
- * the generated module cannot execute — `OEIR_LEAF_UNSUPPORTED_RECIPE`),
- * children projection, component references to unknown/external components,
+ * Still fails closed with a coded diagnostic (M06b2b/M07/M08 boundary): recipes
+ * that are not a direct component-local JSX initializer (JSX inside an
+ * arbitrary expression lowers to a `__oe_recipe_ref` placeholder that the
+ * generated module cannot execute — `OEIR_LEAF_UNSUPPORTED_RECIPE`),
+ * component references to unknown/external components,
  * mount cycles through component references or recipe targets
  * (`OEIR_LEAF_COMPONENT_CYCLE` / `OEIR_LEAF_RECIPE_CYCLE`; a cycle would emit
  * self-recursive mounts), component references inside list entry templates (a
@@ -47,6 +51,27 @@
  * `event`/`ref` channels (on elements and on component props), and `key` as a
  * DOM write. `key` on a component reference is consumed as list identity only
  * and is never a DOM write or a child prop.
+ *
+ * M06b2a children recipes: the children node list of `<Frame>…</Frame>` is
+ * emitted as one `createRecipe` per reference site with the definition owner =
+ * the mount scope the reference is emitted in (`source:
+ * "<file>#<Parent>:children<N>"`), and the child instance receives it as a plain
+ * `children` property on its props record — never a data attribute and never a
+ * per-read getter. The child mount reads `__oe_props.children` ONCE, fails
+ * closed with `OEIR_LEAF_MISSING_CHILDREN` when it is not a recipe (the
+ * host-supplied root instance boundary; a plain value must not render nothing),
+ * and projects it at each `{props.children}` site through the M06b1a-2
+ * `DocumentFragment` + `insertRecipe` mechanism. The child instance scope is a
+ * live descendant of the defining owner, so the M04 projection lineage admits;
+ * two sites are two owners/instances/regions. A reference to a
+ * children-projecting component without JSX children fails closed statically
+ * with the same code; children on a reference inside a reusable recipe body are
+ * refused (`OEIR_LEAF_UNSUPPORTED_CHILDREN`: the children recipe's definition
+ * owner would be the per-insertion recipe instance scope), as is a
+ * `{props.children}` projection inside a recipe body (`OEIR_LEAF_UNSUPPORTED_NODE`);
+ * the mount graph adds the conservative projection edge
+ * `c:<Child> -> r:<Definer>:<childrenRecipeId>` so a component projecting the
+ * children of a reference back to itself is a refused `OEIR_LEAF_RECIPE_CYCLE`.
  *
  * M06b1a-2 reusable JSX values: one `createRecipe` per component-local direct
  * JSX initializer that at least one insertion site references, emitted inline
@@ -66,10 +91,10 @@
  * harness bundles the same M04 modules under the same names, so the artifact
  * under test uses the real primitives, not stubs.
  *
- * NOT claimed here: browser execution evidence for the M06b1a-2 projection
- * shapes and repeated-insertion isolation (M06b1b), repeated children
- * projection (M06b1a-3/M06b2), claim/SSR (M07/M08), production wiring,
- * ABI/public API.
+ * NOT claimed here: real-browser execution evidence for the M06b2a children
+ * projection shapes and the repeated-projection isolation, unkeyed browser
+ * scenarios, browser evidence for the M06b1a-2 projection shapes (M06b2b),
+ * claim/SSR (M07/M08), production wiring, ABI/public API.
  */
 
 import ts from 'typescript';
@@ -77,6 +102,7 @@ import { unsafeStreamFrameAttribute } from '@openelement/protocol/stream-frame-p
 import type {
   FunctionExpressionRef,
   FunctionModelAttribute,
+  FunctionModelChildrenProjection,
   FunctionModelComponent,
   FunctionModelComponentRef,
   FunctionModelCondition,
@@ -225,6 +251,20 @@ interface EmitState {
    * instance has no update hook to re-read its props (M06b1b).
    */
   listDepth: number;
+  /**
+   * Number of enclosing reusable-recipe mount bodies being emitted (M06b2a). A
+   * children recipe or a children projection inside one is refused: the recipe
+   * instance scope exists per insertion, so the child/children recipe's
+   * definition-owner story is not established by this slice.
+   */
+  recipeDepth: number;
+  /**
+   * The component mount's one `__oe_props.children` read (M06b2a), or `null` when
+   * the component projects no children. Emitted before the roots so the nested
+   * branch/entry builders emitted inside the mount close over one value; every
+   * projection site inserts through this same recipe.
+   */
+  childrenRecipeVar: string | null;
 }
 
 function diag(state: EmitState, code: string, message: string, span: IrSpan): void {
@@ -1131,6 +1171,43 @@ function emitComponentRef(
     );
     return;
   }
+  // Children recipe (M06b2a). The definition site is the mount scope the ref is
+  // emitted in: a ref inside a reusable recipe body would need the children
+  // recipe to be created per insertion (its definition owner is the recipe
+  // instance scope), so that nesting stays refused with a stated reason.
+  if (node.childrenRecipeId !== null && state.recipeDepth > 0) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_CHILDREN',
+      `children on '<${node.name}>' inside a reusable JSX value body are outside the M06b2a slice: the children recipe would be created once per component mount, but its definition owner is the recipe instance scope (created per insertion)`,
+      span,
+    );
+    return;
+  }
+  // A component that projects `props.children` statically needs a recipe: a
+  // reference without JSX children would mount with an absent recipe (the
+  // runtime check below documents the host/root case). Fail closed at compile
+  // time where the absence is known.
+  if (node.childrenRecipeId === null && componentProjectsChildren(target)) {
+    diag(
+      state,
+      'OEIR_LEAF_MISSING_CHILDREN',
+      `component '<${node.name}>' projects props.children but this reference passes no JSX children; every projection needs a children recipe`,
+      span,
+    );
+    return;
+  }
+  const childrenRecipeVar =
+    node.childrenRecipeId === null ? null : (state.recipeVars.get(node.childrenRecipeId) ?? null);
+  if (node.childrenRecipeId !== null && childrenRecipeVar === null) {
+    diag(
+      state,
+      'OEIR_LEAF_MISSING_RECIPE',
+      `children recipe '${node.childrenRecipeId}' of '<${node.name}>' has no emitted recipe (it is not reachable from any admitted root)`,
+      span,
+    );
+    return;
+  }
   // Pass 1: admit the prop DOM channels. `key` is list identity, consumed by the
   // enclosing list emitter and never a DOM write or a child prop.
   let refused = false;
@@ -1149,7 +1226,7 @@ function emitComponentRef(
       diag(
         state,
         'OEIR_LEAF_UNSUPPORTED_COMPONENT',
-        `children on component '<${node.name}>' are outside the M06b1 slice (M06b1a-3 owns children projection)`,
+        `'children' on component '<${node.name}>' must be authored as JSX children, not a prop value: it is the recipe projection channel (JSX value model §4.4)`,
         span,
       );
       refused = true;
@@ -1211,9 +1288,13 @@ function emitComponentRef(
     });
   }
   if (failed) return;
-  if (resolved.length > 0) {
+  if (resolved.length > 0 || childrenRecipeVar !== null) {
     push(state, `const ${propsVar} = {`, span);
     state.indent += 1;
+    // The children channel is a plain property holding the recipe object, not a
+    // per-read getter: inserting it (and refreshing its dynamic content) is the
+    // children recipe body's own subscription work (M06b2a).
+    if (childrenRecipeVar !== null) push(state, `children: ${childrenRecipeVar},`, span);
     for (const prop of resolved) {
       if (prop.kind === 'static') {
         const key = IDENTIFIER_PATTERN.test(prop.name) ? prop.name : JSON.stringify(prop.name);
@@ -1246,7 +1327,7 @@ function emitComponentRef(
   state.indent += 1;
   push(
     state,
-    `${nodesVar} = ${node.name}${MOUNT_SUFFIX}(${scopeVar}, ${resolved.length > 0 ? propsVar : '{}'}, ${hostVar});`,
+    `${nodesVar} = ${node.name}${MOUNT_SUFFIX}(${scopeVar}, ${resolved.length > 0 || childrenRecipeVar !== null ? propsVar : '{}'}, ${hostVar});`,
     span,
   );
   state.indent -= 1;
@@ -1274,6 +1355,14 @@ function referencedRecipeIds(component: FunctionModelComponent): Set<string> {
             pending.push(node.recipeId);
           }
           break;
+        case 'component-ref':
+          // A component reference with JSX children passes its children recipe
+          // as `props.children` (M06b2a): it must be emitted wherever the ref is.
+          if (node.childrenRecipeId !== null && !referenced.has(node.childrenRecipeId)) {
+            referenced.add(node.childrenRecipeId);
+            pending.push(node.childrenRecipeId);
+          }
+          break;
         case 'element':
         case 'fragment':
           collect(node.children);
@@ -1296,6 +1385,92 @@ function referencedRecipeIds(component: FunctionModelComponent): Set<string> {
     if (recipe !== undefined) collect([recipe.target]);
   }
   return referenced;
+}
+
+/**
+ * Does this component's mount project `props.children`? Only roots (and their
+ * condition/list builders) count: a projection inside a reusable recipe body is
+ * refused (`recipeDepth`), so the mount-level read is needed exactly when a
+ * projection is reachable from the roots (M06b2a).
+ */
+function componentProjectsChildren(component: FunctionModelComponent): boolean {
+  const walk = (nodes: readonly FunctionModelNode[]): boolean => {
+    for (const node of nodes) {
+      switch (node.kind) {
+        case 'children-projection':
+          return true;
+        case 'element':
+        case 'fragment':
+          if (walk(node.children)) return true;
+          break;
+        case 'condition':
+          if (walk(node.consequent)) return true;
+          if (node.alternate !== null && walk(node.alternate)) return true;
+          break;
+        case 'list':
+          if (walk(node.template)) return true;
+          break;
+        default:
+          break;
+      }
+    }
+    return false;
+  };
+  return walk(component.roots);
+}
+
+/** One `childrenRecipeId` projection edge (M06b2a mount-graph input). */
+interface ChildrenProjectionEdge {
+  /** The component whose mount projects the children recipe (the child). */
+  readonly projectingComponent: string;
+  /** The defining component whose recipe it is, and the recipe id. */
+  readonly definingComponent: string;
+  readonly recipeId: string;
+  readonly span: IrSpan;
+}
+
+/**
+ * Collect every `<Child>…</Child>` reference site in one component's roots: the
+ * child mount will project that children recipe whenever `<Child>` itself
+ * projects `props.children` (M06b2a). Used by `findMountCycle` to add the
+ * conservative projection edge `c:<Child> -> r:<defining>:<childrenRecipeId>`,
+ * so a component that projects the children of a reference back to itself is
+ * refused instead of emitting an unbounded mount.
+ */
+function collectChildrenProjectionEdges(
+  component: FunctionModelComponent,
+  out: ChildrenProjectionEdge[],
+): void {
+  const walk = (nodes: readonly FunctionModelNode[]): void => {
+    for (const node of nodes) {
+      switch (node.kind) {
+        case 'component-ref':
+          if (node.childrenRecipeId !== null) {
+            out.push({
+              projectingComponent: node.name,
+              definingComponent: component.name,
+              recipeId: node.childrenRecipeId,
+              span: node.span,
+            });
+          }
+          break;
+        case 'element':
+        case 'fragment':
+          walk(node.children);
+          break;
+        case 'condition':
+          walk(node.consequent);
+          if (node.alternate !== null) walk(node.alternate);
+          break;
+        case 'list':
+          walk(node.template);
+          break;
+        default:
+          break;
+      }
+    }
+  };
+  walk(component.roots);
 }
 
 /** One recipe's generated names plus its model entry. */
@@ -1350,9 +1525,11 @@ function emitRecipes(
     push(state, `const ${plan.nodesVar} = [];`);
     const outerScope = state.scopeVar;
     state.scopeVar = plan.scopeVar;
+    state.recipeDepth += 1;
     const sink: SinkEntry[] = [];
     emitNode(state, recipe.target, sink, records);
     appendSinkToArray(state, sink, plan.nodesVar);
+    state.recipeDepth -= 1;
     state.scopeVar = outerScope;
     push(state, `return ${plan.nodesVar};`);
     state.indent -= 1;
@@ -1397,6 +1574,51 @@ function emitInsertionSite(
   }
   const fragmentVar = nextName(state, 'insertTarget');
   const projectionVar = nextName(state, 'projection');
+  push(state, `const ${fragmentVar} = document.createDocumentFragment();`, node.span);
+  push(
+    state,
+    `const ${projectionVar} = insertRecipe(${state.scopeVar}, ${recipeVar}, ${fragmentVar});`,
+    node.span,
+  );
+  sink.push({ kind: 'projection', name: projectionVar });
+}
+
+/**
+ * Emit one `{props.children}` projection (M06b2a, JSX value model §4.4): the
+ * mount's single `__oe_props.children` recipe inserted through the SAME
+ * `DocumentFragment` + `insertRecipe` mechanism as an insertion site, on the
+ * current builder scope (a live descendant of the defining owner, so the M04
+ * projection lineage admits). Every site is an independent projection — two
+ * sites against one recipe variable are two owners, two instances, two
+ * cleanups. Refresh of dynamic children content belongs to the children
+ * recipe body's own subscriptions; nothing here re-reads the child props.
+ */
+function emitChildrenProjection(
+  state: EmitState,
+  node: FunctionModelChildrenProjection,
+  sink: SinkEntry[],
+): void {
+  if (state.recipeDepth > 0) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_NODE',
+      `children projection inside a reusable JSX value body is outside the M06b2a slice: the projection would need the recipe instance scope, which exists only at insertion time`,
+      node.span,
+    );
+    return;
+  }
+  const recipeVar = state.childrenRecipeVar;
+  if (recipeVar === null) {
+    diag(
+      state,
+      'OEIR_LEAF_MISSING_CHILDREN',
+      'children projection has no mount-level `props.children` recipe read (internal model mismatch)',
+      node.span,
+    );
+    return;
+  }
+  const fragmentVar = nextName(state, 'childrenTarget');
+  const projectionVar = nextName(state, 'childrenProjection');
   push(state, `const ${fragmentVar} = document.createDocumentFragment();`, node.span);
   push(
     state,
@@ -1539,12 +1761,16 @@ function emitNode(
     emitInsertionSite(state, node, sink);
     return;
   }
-  // children projection: M06b1a-3/M06b2 owns `props.children` projection and
-  // repeated projection; it stays fail-closed here.
+  if (node.kind === 'children-projection') {
+    emitChildrenProjection(state, node, sink);
+    return;
+  }
+  // Defensive: a model node kind without a generator branch must fail closed,
+  // never be dropped silently.
   diag(
     state,
     'OEIR_LEAF_UNSUPPORTED_NODE',
-    `node '${node.kind}' is outside the M06b1a-2 slice (children projection is M06b1a-3/M06b2)`,
+    `node '${(node as { readonly kind: string }).kind}' is outside the generated-leaf slice`,
     span,
   );
 }
@@ -1566,6 +1792,7 @@ function emitComponent(
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
 ): EmittedComponent {
   const propsName = component.propsParam;
+  const projectsChildren = componentProjectsChildren(component);
   const declaredRecipeIds = new Set<string>();
   const recipeNames = new Set<string>();
   for (const resource of component.resources) {
@@ -1597,6 +1824,8 @@ function emitComponent(
     entryNames: new Set(),
     refreshStack: [],
     listDepth: 0,
+    recipeDepth: 0,
+    childrenRecipeVar: projectsChildren ? `${INTERNAL_PREFIX}childrenRecipe` : null,
   };
   if (
     propsName !== null &&
@@ -1673,6 +1902,19 @@ function emitComponent(
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
   for (const line of localLines) {
     pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+  }
+  // One read of the children recipe per mount (M06b2a): every projection site
+  // inserts this same recipe value, and dynamic children content refreshes
+  // through the recipe body's own subscriptions (never a props re-read here).
+  // The check is the documented runtime boundary for a host-supplied root
+  // instance: `props.children` may only be a real recipe built with
+  // `createRecipe`; a plain value fails coded instead of rendering nothing.
+  if (state.childrenRecipeVar !== null) {
+    push(state, `const ${state.childrenRecipeVar} = ${MOUNT_PROPS}.children;`);
+    push(
+      state,
+      `if (${state.childrenRecipeVar} == null || typeof ${state.childrenRecipeVar} !== "object" || typeof ${state.childrenRecipeVar}.mount !== "function" || ${state.childrenRecipeVar}.definitionOwner == null) throw new Error("OEIR_LEAF_MISSING_CHILDREN: component '<${component.name}>' projects props.children but the mounted instance was given no children recipe");`,
+    );
   }
   // Reusable JSX values (M06b1a-2): recipes are declared before the roots so
   // every insertion site — including one inside another recipe body — can
@@ -1789,7 +2031,10 @@ function collectMountEdges(
         collectMountEdges(component, node.template, edges);
         break;
       default:
-        // text / dynamic-text / children-projection carry no mount edges.
+        // text / dynamic-text carry no mount edges. A children projection is
+        // also not an edge here: the child mount does not know statically which
+        // reference site supplied its recipe, so `findMountCycle` adds that
+        // (conservative) projection edge separately (M06b2a).
         break;
     }
   }
@@ -1800,9 +2045,13 @@ function collectMountEdges(
  * DFS): a component reference and a reusable-JSX recipe both mount another
  * mount at instance time, so a cycle would emit self-recursive mounts (unbounded
  * recursion). Recipe targets are walked because a recipe can mount a component,
- * and recipe bodies can insert another recipe. The first cycle in authored
- * order is reported with its path and the closing edge's span; a cycle that
- * passes through a recipe node gets `OEIR_LEAF_RECIPE_CYCLE`, a pure
+ * and recipe bodies can insert another recipe. Children recipes (M06b2a) are
+ * component recipes too, so their target edges are already in the graph; the
+ * projection edge from the child component to the recipe is added conservatively
+ * (see the children-projection pass below) because only the runtime instance
+ * knows which reference site supplied its `props.children`. The first cycle in
+ * authored order is reported with its path and the closing edge's span; a cycle
+ * that passes through a recipe node gets `OEIR_LEAF_RECIPE_CYCLE`, a pure
  * component-reference cycle keeps `OEIR_LEAF_COMPONENT_CYCLE`.
  */
 function findMountCycle(module: FunctionModelModule): IrDiagnostic | null {
@@ -1820,6 +2069,29 @@ function findMountCycle(module: FunctionModelModule): IrDiagnostic | null {
       const recipeEdges: MountEdge[] = [];
       collectMountEdges(component, [recipe.target], recipeEdges);
       addNode(`r:${component.name}:${recipe.id}`, `${component.name}${recipe.id}`, recipeEdges);
+    }
+  }
+  // Children-projection edges (M06b2a): a component that projects
+  // `props.children` mounts the recipe supplied by whichever reference site
+  // created its instance; the instance cannot know that statically, so every
+  // `<Child>…</Child>` site whose `<Child>` projects children contributes the
+  // conservative edge `c:<Child> -> r:<Definer>:<childrenRecipeId>`. This is what
+  // refuses a component that projects the children of a reference back into
+  // itself (an unbounded mount, not just a static recursion).
+  const projectsChildrenByName = new Map(
+    module.components.map(
+      (component) => [component.name, componentProjectsChildren(component)] as const,
+    ),
+  );
+  for (const component of module.components) {
+    const projectionEdges: ChildrenProjectionEdge[] = [];
+    collectChildrenProjectionEdges(component, projectionEdges);
+    for (const edge of projectionEdges) {
+      if (projectsChildrenByName.get(edge.projectingComponent) !== true) continue;
+      const fromEdges = edges.get(`c:${edge.projectingComponent}`);
+      const toKey = `r:${edge.definingComponent}:${edge.recipeId}`;
+      if (fromEdges === undefined || !edges.has(toKey)) continue;
+      fromEdges.push({ to: toKey, span: edge.span });
     }
   }
   const WHITE = 0;
@@ -1970,7 +2242,7 @@ export function generateLeafModule(
     };
   }
   const headerLines = [
-    '// <generated by openelement M06b1a-2 leaf-codegen v2; do not edit>',
+    '// <generated by openelement M06b2a leaf-codegen v2; do not edit>',
     `import { ${RUNTIME_IMPORTS.join(', ')} } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
     '',
   ];

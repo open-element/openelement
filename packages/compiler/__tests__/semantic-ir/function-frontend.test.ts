@@ -195,11 +195,16 @@ describe('frontend fails closed with source-located OEC diagnostics', () => {
     expectDiagnostic(result, 'OEC9042', source);
   });
 
-  test('spread attributes and component children fail closed', () => {
+  test('spread attributes and value-position props.children fail closed', () => {
     const spread = `function C(props) { return <div {...props} />; }\n`;
     expectDiagnostic(compile(spread), 'OEC9042', spread);
-    const children = `function C(props) { return <Box><span /></Box>; }\n`;
-    expectDiagnostic(compile(children), 'OEC9042', children);
+    // M06b2a supersedes the whole-shape `children on a component reference`
+    // refusal: `<Box>…</Box>` now lowers its JSX children to a children recipe
+    // passed as `props.children` (JSX value model §4.4). The value-position
+    // boundary that remains is a `props.children` read inside an expression —
+    // it is a recipe projection channel, not a readable value.
+    const childrenValue = `function C(props) { return <Box title={String(props.children)} />; }\n`;
+    expectDiagnostic(compile(childrenValue), 'OEC9042', childrenValue);
   });
 
   test('an expression refused by A1/A2/A3 keeps the original code in the message', () => {
