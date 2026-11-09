@@ -57,9 +57,13 @@ interface Compiled {
 }
 
 function compile(source: string): Compiled {
-  const front = compileFunctionModule(source, FILE, { importClassifier: CLASSIFIER });
+  const front = compileFunctionModule(source, FILE, {
+    importClassifier: CLASSIFIER,
+  });
   expect(front.diagnostics, 'frontend admission').toEqual([]);
-  const generated = generateLeafModule(front.module!, { authoredSource: source });
+  const generated = generateLeafModule(front.module!, {
+    authoredSource: source,
+  });
   expect(generated.diagnostics).toEqual([]);
   expect(generated.module).not.toBeNull();
   expect(generated.sourceMap).not.toBeNull();
@@ -78,7 +82,10 @@ function consumer(map: CompiledElementSourceMap): TraceMap {
 
 function positionAt(text: string, offset: number): { line: number; column: number } {
   const before = text.slice(0, offset);
-  return { line: before.split('\n').length, column: offset - (before.lastIndexOf('\n') + 1) };
+  return {
+    line: before.split('\n').length,
+    column: offset - (before.lastIndexOf('\n') + 1),
+  };
 }
 
 /** Rebase one A2 expression segment into module coordinates for a placement. */
@@ -169,9 +176,13 @@ describe('M05b — end-to-end generated-module source map', () => {
   second */ + props.suffix}</p>;
 }
 `;
-    const front = compileFunctionModule(source, FILE, { importClassifier: CLASSIFIER });
+    const front = compileFunctionModule(source, FILE, {
+      importClassifier: CLASSIFIER,
+    });
     expect(front.diagnostics, 'frontend admission').toEqual([]);
-    const generated = generateLeafModule(front.module!, { authoredSource: source });
+    const generated = generateLeafModule(front.module!, {
+      authoredSource: source,
+    });
     expect(generated.diagnostics).toEqual([]);
     expect(generated.module).not.toBeNull();
     const records = new Map(
@@ -240,7 +251,10 @@ describe('M05b — end-to-end generated-module source map', () => {
     const map = consumer(compiled.map);
     const elementAuthored = source.indexOf('<section');
     const elementAuthoredPosition = positionAt(source, elementAuthored);
-    const decoded = originalPositionFor(map, { line: elementLine.line, column: 0 });
+    const decoded = originalPositionFor(map, {
+      line: elementLine.line,
+      column: 0,
+    });
     expect(decoded.line).toBe(elementAuthoredPosition.line);
     expect(decoded.column).toBe(elementAuthoredPosition.column);
 
@@ -360,6 +374,34 @@ function L(props) {
         expect(decoded.column).toBe(segment.sourceColumn);
       }
     }
+    expect(JSON.stringify(compile(source).map)).toBe(JSON.stringify(compiled.map));
+  });
+
+  test('M06b1a-1 nested components: every emitted chunk decodes at its module line', () => {
+    // Two component chunks: the child mount body and the parent prop getter both
+    // carry placements. A stale per-component line offset would misdecode the
+    // second chunk only, so both authored lines must be reachable.
+    const source = `function Row(props) { return <li>{props.text}</li>; }
+function C(props) { return <ul><Row text={props.label} /></ul>; }
+`;
+    const compiled = compile(source);
+    expect(compiled.module).toContain('function Row__mount(__oe_scope, __oe_props, __oe_host) {');
+    expect(compiled.module).toContain('get text() { return (props . label); }');
+    const map = consumer(compiled.map);
+    const authoredLines = new Set<number>();
+    for (const placement of compiled.placements) {
+      const decoded = originalPositionFor(map, {
+        line: placement.generatedLine,
+        column: placement.generatedColumn,
+      });
+      expect(decoded.line, placement.exprId).toBe(placement.authoredLine);
+      expect(decoded.column, placement.exprId).toBe(placement.authoredColumn);
+      authoredLines.add(placement.authoredLine);
+    }
+    // Placements exist for the child component body (line 1) and the parent prop
+    // expression (line 2): both chunks are mapped at their real module lines.
+    expect(authoredLines.has(1)).toBe(true);
+    expect(authoredLines.has(2)).toBe(true);
     expect(JSON.stringify(compile(source).map)).toBe(JSON.stringify(compiled.map));
   });
 
