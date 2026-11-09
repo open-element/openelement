@@ -1,3 +1,9 @@
+---
+status: active
+topic: Runtime architecture
+summary: One mandatory compiler, one signals engine and one owner per region; the runtime responsibility split for the two products.
+---
+
 # Compiler and element runtime
 
 The 1.0 Element baseline uses one mandatory compiler to lower supported TSX into

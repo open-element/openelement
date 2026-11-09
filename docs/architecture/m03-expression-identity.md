@@ -1,3 +1,9 @@
+---
+status: historical
+topic: M03-B expression identity
+summary: Design for the lowering route, registry/IR separation, source maps and identity limits.
+---
+
 # M03-B — Expression identity
 
 Date: 2026-11-03. Milestone: **Alpha16a M03-D (design)**. Base:

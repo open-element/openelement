@@ -1,3 +1,9 @@
+---
+status: active
+topic: Compiler IR and ABI boundary
+summary: The M01 six-layer contract, IR, server/client backends, narrow ABI, build metadata and wire; ABI freeze belongs to Alpha17.
+---
+
 # Compiler IR and ABI boundary (M01)
 
 Date: 2026-11-03. Milestone: **Alpha16a M01**. Status: **DESIGN — not implemented.**

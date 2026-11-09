@@ -21,6 +21,7 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD)
 node_modules/.bin/vp run --no-cache --fail-if-no-match --filter openelement fmt:check
 node_modules/.bin/vp run --no-cache --fail-if-no-match --filter openelement lint
 node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo lint:markdown
+node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo docs-index:check
 node_modules/.bin/vp run --no-cache --fail-if-no-match --filter openelement typecheck
 
 echo "=== pre-push gates for '$BRANCH' ==="

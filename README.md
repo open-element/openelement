@@ -138,8 +138,9 @@ pnpm run build
 
 ## Documentation
 
-- [Current architecture](./docs/architecture/README.md)
+- [Current architecture (in force)](./docs/architecture/README.md)
 - [Active decisions](./docs/adr/README.md)
+- [Archive and removal register](./docs/legacy/README.md)
 - [Security policy](./SECURITY.md)
 - [Contributing](./CONTRIBUTING.md)
 

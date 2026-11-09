@@ -1,3 +1,9 @@
+---
+status: active
+topic: Product scope and accepted direction
+summary: The two public products (Element and Router) and the accepted 2026-11-03 direction.
+---
+
 # Product model
 
 OpenElement has exactly two public core products: **Element** and **Router**.

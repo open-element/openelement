@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "826dead73ea38029262056d20a16f15ab06f24b7",
+  "entries": [
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-18-architecture-audit.md",
+      "date": "2026-11-10",
+      "title": "Alpha16–18 architecture audit and compatibility boundary",
+      "carried": "READ-ONLY audit of the alpha.15 tree: what it implements, the gap the target must close, the historical compatibility constraints it inherits and the coverage boundary of the evidence.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-native-architecture.md",
+        "docs/architecture/alpha16-18-progress.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/architecture/alpha16-18-architecture-audit.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-18-cleanup-inventory.md",
+      "date": "2026-11-10",
+      "title": "Alpha16–18 cleanup and migration inventory",
+      "carried": "APPROVED POLICY inventory of every cleanup and migration object: KEEP / REFACTOR / REPLACE / RETIRE-after-qualification rows with named consumers, blockers and exit criteria, and the rule that nothing may be deleted from this list alone.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/architecture/alpha16-18-cleanup-inventory.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-18-current-reality.md",
+      "date": "2026-11-10",
+      "title": "Alpha16–18 current reality and contradictions",
+      "carried": "READ-ONLY audit of the 2026-11-03 reality and contradiction matrices, the boundary answers, the `__partProgram` production consumer map, the approved D-O1…D-O3 owner decisions and the remaining OPEN register O-1…O-10.",
+      "nowLivesIn": [
+        "docs/architecture/m01-consumer-migration-matrix.md",
+        "docs/architecture/product-model.md",
+        "docs/adr/ADR-0174-generated-code-runtime-and-compatibility.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/architecture/alpha16-18-current-reality.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-18-fourth-pass-reassessment.md",
+      "date": "2026-11-10",
+      "title": "Alpha16–18 fourth-pass reassessment: legacy disposition",
+      "carried": "APPROVED 2026-11-03 decision package P-1…P-5: retire the Class authoring API and Part Program v2 as a serialized protocol, remove `__partProgram` from the target generated-module ABI, retire the old validator/version, and build no authoring adapter — with the cost and option analysis behind it.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-native-architecture.md",
+        "docs/architecture/alpha16-18-execution-plan.md",
+        "docs/adr/ADR-0173-component-execution-and-composition.md",
+        "docs/adr/ADR-0174-generated-code-runtime-and-compatibility.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/architecture/alpha16-18-fourth-pass-reassessment.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-18-freeze-audit.md",
+      "date": "2026-11-10",
+      "title": "Alpha16–18 freeze audit",
+      "carried": "The Alpha16–18 freeze gate: full chain map, source coverage ledger, consumer-matrix summary, contradiction register FR-01…FR-16, the remaining OPEN engineering register and the Alpha16a freeze statement.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/architecture/alpha16-18-freeze-audit.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-18-retirement-roadmap.md",
+      "date": "2026-11-10",
+      "title": "Alpha16–18 retirement roadmap",
+      "carried": "APPROVED POLICY retirement roadmap: per-object KEEP / REFACTOR / REPLACE / RETIRE disposition matrix with consumers and deletion preconditions, the phased Alpha16–18 plan, the Alpha16b class-retirement capability gate and the required evidence per retirement action.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/architecture/alpha16-18-retirement-roadmap.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-integration-workboard.md",
+      "date": "2026-11-10",
+      "title": "Alpha16 integration workboard",
+      "carried": "Coordination record: the M07 adjudications, the decided M07b technical plan (§13), evidence grades, merge order and the 2026-11-09 §14 Lead/QA acceptance.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-18-progress.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/architecture/alpha16-integration-workboard.md"
+      }
+    },
+    {
+      "kind": "archived",
+      "path": "docs/legacy/adr/ADR-0108-deno-native-npm-distribution.md",
+      "date": "2026-11-10",
+      "title": "ADR-0108: npm distribution via `deno pack`",
+      "carried": "Deno-native npm distribution: a Deno workspace whose public packages ship as ordinary npm artifacts via the `deno pack` tarball generator; the Deno-native toolchain and consumer requirement are retired and the npm-only publishing half is restated in ADR-0161.",
+      "status": "SUPERSEDED by ADR-0161",
+      "nowLivesIn": [],
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/adr/ADR-0108-deno-native-npm-distribution.md"
+      }
+    },
+    {
+      "kind": "archived",
+      "path": "docs/legacy/adr/ADR-0112-protocol-types-and-tiny-runtime.md",
+      "date": "2026-11-10",
+      "title": "ADR-0112: Protocol Types and Tiny Runtime",
+      "carried": "Standalone `@openelement/protocol` contracts package with a tiny runtime; the package left the tree at v0.40.0 and the shared contract types now live inside `@openelement/element`, whose multi-package boundary was superseded by ADR-0152.",
+      "status": "SUPERSEDED by ADR-0152",
+      "nowLivesIn": [],
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/adr/ADR-0112-protocol-types-and-tiny-runtime.md"
+      }
+    },
+    {
+      "kind": "archived",
+      "path": "docs/legacy/adr/ADR-0156-tree-sha-evidence-reuse.md",
+      "date": "2026-11-10",
+      "title": "ADR-0156: Tree-SHA evidence reuse for the candidate gate",
+      "carried": "Tree-SHA evidence reuse for the candidate gate: a reuse chain judged by the producer's tree, with a refused claim falling back to the real gate; the mechanism was removed by the #1567 CI/Release redesign.",
+      "status": "RETIRED by the #1567 CI/Release redesign",
+      "nowLivesIn": [],
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/adr/ADR-0156-tree-sha-evidence-reuse.md"
+      }
+    },
+    {
+      "kind": "archived",
+      "path": "docs/legacy/adr/ADR-0162-element-runtime-compiler-split-deferred.md",
+      "date": "2026-11-10",
+      "title": "ADR-0162: Element runtime/compiler package split — executed",
+      "carried": "Deferral of the Element runtime/compiler package split until measured evidence justified it; the split has since landed and the record is closed as executed.",
+      "status": "EXECUTED: the deferred split landed",
+      "nowLivesIn": [],
+      "recovery": {
+        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
+        "path": "docs/adr/ADR-0162-element-runtime-compiler-split-deferred.md"
+      }
+    }
+  ]
+}

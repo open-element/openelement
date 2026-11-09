@@ -1,3 +1,9 @@
+---
+status: active
+topic: Stage authority (M01–M14)
+summary: M01–M14, the 16a/16b/17/18 stage split, G1/G2/G3, work classes and the risk register; the dependency spine, not dates, is the authoritative stage definition.
+---
+
 # Alpha16–18 execution plan
 
 Date: 2026-11-03 (fourth pass). Status: **APPROVED DIRECTION**, owner decisions
@@ -342,7 +348,7 @@ Consequences for this plan:
 | Server runtime | SSR/streaming consumers read the new server structure, not the old schema |
 | Build/SSG | CSS recovery, blocks detection and route classification read build-time facts; CSS/blocks use emitted metadata/ABI facts, while route classification is a Router-plugin build-time fact — none re-parses the old schema or source-text markers |
 | ABI/module contract | generated modules carry the narrow ABI; no `__partProgram` in production output |
-| Public API | retired exports are gone or deprecated per the approved policy, with the migration note **and the class capability/replacement inventory complete** (see the roadmap) |
+| Public API | retired exports are gone or deprecated per the approved policy, with the migration note **and the class capability/replacement inventory complete** (the inventory is retired into Git history on 2026-11-10; see the [archive and removal register](../legacy/README.md)) |
 
 Generic-executor unreachability is **one** of the five. It does not stand in for the
 other four. Class-authoring migration is M10 partition evidence — public API **and**

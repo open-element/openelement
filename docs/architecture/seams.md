@@ -1,3 +1,9 @@
+---
+status: active
+topic: Cross-system seams
+summary: The live seam registry; every seam names one owner, derives what crosses it and carries a standing consumer-form test.
+---
+
 # Seams registry
 
 [P8 of the design principles](./design-principles.md#p8--seam-single-ownership)

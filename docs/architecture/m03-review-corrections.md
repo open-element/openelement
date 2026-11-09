@@ -1,3 +1,9 @@
+---
+status: historical
+topic: M03 review corrections
+summary: Which review findings were resolved and which questions stay open.
+---
+
 # M03 review corrections register
 
 Date: 2026-11-03. Scope: corrections applied to

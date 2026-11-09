@@ -1,3 +1,9 @@
+---
+status: active
+topic: Semantic evidence grid
+summary: Per-case evidence ledger; a case is done only when its required cells carry a recorded result at a recorded SHA.
+---
+
 # Alpha16–18 semantic test matrix
 
 Date: 2026-11-03. Status: **PROPOSED — results are recorded in the per-milestone

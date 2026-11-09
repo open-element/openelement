@@ -1,3 +1,9 @@
+---
+status: active
+topic: Design principles (P1–P8)
+summary: The design constitution; every change is reviewed against it and amending it requires an ADR.
+---
+
 # Design principles
 
 This document is the design constitution of OpenElement. It governs every

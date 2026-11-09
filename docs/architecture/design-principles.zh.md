@@ -1,3 +1,8 @@
+---
+status: active
+translation_of: design-principles.md
+---
+
 # 设计原则
 
 本文档是 OpenElement 的设计宪法，约束框架公共契约、运行期表面积与构建

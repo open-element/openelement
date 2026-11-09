@@ -1,11 +1,18 @@
+---
+status: active
+topic: Canonical target architecture
+summary: The single canonical statement of the Alpha16–18 target: P1–P5 and the responsibility split.
+---
+
 # Compiler-native architecture (canonical)
 
 Date: 2026-11-03. Status: **ACCEPTED IN DIRECTION, INCLUDING THE FOURTH-PASS
 DECISION PACKAGE (P-1…P-5) APPROVED 2026-11-03**: the Class authoring API and the
 serialized Part Program protocol are retired as the target, `__partProgram` leaves
 the generated-module contract, and the old validator/version retire with the
-schema. Approval is
-policy-level: nothing is deleted and no ABI is frozen by this document.
+schema (the fourth-pass reassessment, retired into Git history on 2026-11-10).
+Approval is policy-level: nothing is deleted and no ABI is frozen by this
+document.
 Baseline: `4f1f2001b24909086f7e7efe9e5016d48d615c91`.
 
 This is the single canonical statement of the Alpha16–18 target architecture.
@@ -136,8 +143,10 @@ Binding consequences:
   replaces the generic walker. **`program.parts[index]` use in server streaming is
   not the old browser interpreter.**
 - Any change is a staged migration with per-consumer tracing and exit
-  conditions, not a global deletion. The consumer map is maintained in
-  the 2026-11-03 current-state audits (retired into Git history on 2026-11-10).
+  conditions, not a global deletion. The consumer map was maintained in the
+  2026-11-03 current-state audits (retired into Git history on 2026-11-10;
+  see the [archive and removal register](../legacy/README.md)).
+  The active matrix is [the M01 consumer migration matrix](./m01-consumer-migration-matrix.md).
 
 ### 4.2 One client execution backend, independent server rendering backend
 
@@ -282,7 +291,11 @@ an author-facing API either way.
 **SUPERSEDED HISTORY (2026-11-03 D-O3):** the earlier decision was a long-lived
 adapter. It is superseded by the approved fourth pass and retained as history; the
 cost evidence behind the change is in
-the fourth-pass reassessment (retired into Git history on 2026-11-10).
+the fourth-pass reassessment (retired into Git history on 2026-11-10;
+see the [archive and removal register](../legacy/README.md)).
+The approved decision itself is in
+[ADR-0173](../adr/ADR-0173-component-execution-and-composition.md)'s 2026-11-03
+amendment.
 
 The approved decision is made, so the statement is unconditional:
 

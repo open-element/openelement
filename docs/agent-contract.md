@@ -1,3 +1,9 @@
+---
+status: active
+topic: Agent and gate contract
+summary: Canonical commands, generated surfaces, gate semantics and the diagnostics consumption contract.
+---
+
 # Agent Development Contract
 
 What a coding agent may rely on when working in this repository. The
@@ -34,6 +40,13 @@ There are three committed, public entry points for an agent:
 - the `AGENTS.md` a generated application ships (the starter template), which
   points a user's agents at the index, the lifecycle commands, the layout and
   the server/client boundary rules.
+
+The repository's current view is the generated
+[docs/architecture/README.md](architecture/README.md) index: each governing
+document carries its own `status:` / `topic:` / `summary:` front matter, and the
+[archive and removal register](legacy/README.md) records documents that left the
+tree. When two readings of the same topic appear to conflict, the generated
+index says which document is in force.
 
 A **root** `AGENTS.md` is deliberately not part of the committed tree.
 Owner ruling 2026-10-20: the working copy's root file is environment-local

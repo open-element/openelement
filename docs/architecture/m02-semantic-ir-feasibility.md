@@ -1,3 +1,9 @@
+---
+status: historical
+topic: M02 semantic IR spike
+summary: Feasibility spike report; five examples expressible, with the open items recorded.
+---
+
 # M02 Semantic IR feasibility spike — report
 
 Date: 2026-11-03. Milestone: **Alpha16a M02 (initial slice)**. Base:

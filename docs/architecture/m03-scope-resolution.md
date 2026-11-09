@@ -1,3 +1,9 @@
+---
+status: historical
+topic: M03-A lexical scope resolution
+summary: Design for BindingId vs classification, scope semantics, captures/dependencies and the host classifier contract.
+---
+
 # M03-A — Lexical scope resolution
 
 Date: 2026-11-03. Milestone: **Alpha16a M03-D (design)**. Base:
