@@ -80,6 +80,32 @@ test('an outer directory does not nest markers inside a static child', () => {
   expect(module).toContain('document.createElement("b")');
 });
 
+test('a fragment inside a directory range does not emit an inner directory', () => {
+  const module = generate(
+    'function Nested(props) { return <div><section><><p><span>a</span><em>b</em></p><div><span>c</span><em>d</em></div></></section><article><><p><span>e</span><em>f</em></p><div><span>g</span><em>h</em></div></></article></div>; }\n',
+  );
+  expect(module.match(/oe:r:\d+/g)).toEqual(['oe:r:0', 'oe:r:1']);
+  expect(module.match(/oe:\/r:\d+/g)).toEqual(['oe:/r:0', 'oe:/r:1']);
+  expect(module).not.toContain('oe:r:2');
+  expect(module).toContain('document.createElement("section")');
+  expect(module).toContain('document.createElement("article")');
+  expect(module).toContain('document.createElement("span")');
+  expect(module).toContain('openStaticSiblingDirectory(');
+});
+
+// Generated mount source only. Quality's adversarial shape; not a DOM claim.
+test('quality adversarial fragment shape keeps only the outer directory markers', () => {
+  const module = generate(
+    'function Adversarial(props) { return <div><p>a</p><section><><div><b>x</b><i>y</i></div></></section></div>; }\n',
+  );
+  expect(module.match(/oe:r:\d+/g)).toEqual(['oe:r:0', 'oe:r:1']);
+  expect(module.match(/oe:\/r:\d+/g)).toEqual(['oe:/r:0', 'oe:/r:1']);
+  expect(module).not.toContain('oe:r:2');
+  expect(module).toContain('document.createElement("section")');
+  expect(module).toContain('document.createElement("b")');
+  expect(module).toContain('document.createElement("i")');
+});
+
 test('mixed text, one child, insertion sites, and excluded parents do not become a directory', () => {
   const mixed = generate('function Mixed(props) { return <div>hello<p>a</p></div>; }\n');
   expect(mixed).not.toContain('oe:r:');
