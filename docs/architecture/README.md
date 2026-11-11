@@ -52,6 +52,7 @@ the ledger and the matrix can cite them; they are never cited as an active requi
 | M03-B expression identity | [M03-B — Expression identity](./m03-expression-identity.md) | Design for the lowering route, registry/IR separation, source maps and identity limits. |
 | M03-I-0 source-map prototype | [M03-I-0 — source-map prototype: decision record](./m03-i0-sourcemap-prototype.md) | Prototype and decision record; marker-based anchors adopted, the end-to-end map stayed open for M05. |
 | M05 leaf-codegen prototype | [M05 leaf-codegen prototype — status: PROTOTYPE, NOT G1](./m05-g1-leaf-prototype.md) | Prototype record, NOT G1; superseded by the M05a slice that landed generated leaf mount/update/dispose. |
+| Project history and pivot ledger | [Project history and pivot ledger](./project-history.md) | Record of the stack pivots from the Deno/Lit/Hono composition to the compiler-native path, with the reason and evidence for each turn. |
 
 ## Governing entry points outside this directory
 
