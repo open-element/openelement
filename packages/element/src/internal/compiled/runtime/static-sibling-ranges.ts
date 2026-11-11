@@ -22,13 +22,20 @@
  * The directory parent, its element ancestors, and every element inside a
  * range must have `namespaceURI === "http://www.w3.org/1999/xhtml"`. `null`
  * is refused, as is every other namespace.
- * Only the holder releases an uncommitted reservation. Commitment remembers
- * the ordinal and the start and end comments. `dispose` does not make that
- * pair claimable again. This is not a byte-level rollback. A validation
- * failure writes nothing and creates no owner. An activation failure disposes
- * the uncommitted scope with `dispose(false)`, which releases resources,
- * leaves borrowed nodes in place, and may leave a dynamic write that already
- * happened.
+ * Only the holder releases an uncommitted reservation. A successful range
+ * remembers the ordinal and the start and end comments and advances the
+ * cursor. Those records stay with the attempt until every declared range has
+ * committed. A failure after the reservation is taken rolls that attempt
+ * back: the reservation is released, tombstones and the success cursor
+ * committed in the attempt are cleared, and those ranges' owners are released
+ * with `dispose(false)`. Borrowed nodes are not deleted. A dynamic write that
+ * already happened may stay. This is not a byte-level restore of the claim.
+ * A directory claim that commits every declared range stays permanent,
+ * including after `dispose`. A validation failure of the range in hand writes
+ * nothing and creates no owner for that range. An activation failure disposes
+ * that uncommitted scope with `dispose(false)` before the attempt is rolled
+ * back. A failure before the reservation is taken does not roll the attempt
+ * back, and a `busy` reentry does not clear the holder's reservation.
  *
  * @module ./static-sibling-ranges.ts
  */
@@ -116,6 +123,18 @@ interface Reservation {
 }
 
 /**
+ * One range committed by the current incomplete directory attempt.
+ * `release` drops the owner without deleting borrowed nodes. A completed
+ * directory claim clears this list without calling `release`.
+ */
+interface ProvisionalCommit {
+  readonly ordinal: number;
+  readonly start: Node;
+  readonly end: Node;
+  readonly release: () => void;
+}
+
+/**
  * One open of a parent. The consumption and reservation live on the pair
  * identity below, not on this object: two opens of one parent share them.
  */
@@ -138,6 +157,12 @@ interface PairIdentity {
   readonly consumedMarkers: Set<Node>;
   reservation: Reservation | null;
   serial: number;
+  /**
+   * Ranges committed by the incomplete directory attempt. Empty once every
+   * declared range has committed, and empty again after a failed attempt
+   * rolls them back. Caller `dispose` does not clear it.
+   */
+  readonly provisional: ProvisionalCommit[];
 }
 
 const pairIdentities = new WeakMap<Element, PairIdentity>();
@@ -155,6 +180,7 @@ function pairIdentity(parent: Element): PairIdentity {
       consumedMarkers: new Set(),
       reservation: null,
       serial: 0,
+      provisional: [],
     };
     pairIdentities.set(parent, identity);
   }
@@ -435,9 +461,40 @@ function asState(directory: StaticSiblingDirectory): DirectoryState {
  * Claim the next range. `expected` is the caller's ordinal, or the start
  * comment the caller held before this call. The reservation is taken on the
  * parent's pair identity before any DOM read and before `activate`. A failure
- * does not advance the cursor. Success advances it permanently, including
- * after `dispose` and including a later open of the same parent.
+ * before that reservation does not roll back an earlier range. A failure
+ * after it releases the reservation and rolls back ranges committed earlier
+ * in the same incomplete directory attempt. When every declared range has
+ * committed, the tombstones stay, including after `dispose` and including a
+ * later open of the same parent.
  */
+
+/**
+ * Undo tombstones and the success cursor of the incomplete attempt, then
+ * release those owners. A directory claim that already committed every range
+ * has nothing provisional and is left alone. Dispose errors do not replace
+ * the claim error. Borrowed nodes are not removed: release uses
+ * `dispose(false)`.
+ */
+function rollbackProvisional(identity: PairIdentity): void {
+  const ranges = identity.provisional.splice(0);
+  if (ranges.length === 0) return;
+  let earliest = identity.next;
+  for (const range of ranges) {
+    identity.consumedOrdinals.delete(range.ordinal);
+    identity.consumedMarkers.delete(range.start);
+    identity.consumedMarkers.delete(range.end);
+    if (range.ordinal < earliest) earliest = range.ordinal;
+  }
+  identity.next = earliest;
+  for (const range of ranges) {
+    try {
+      range.release();
+    } catch {
+      // The claim error is what surfaces. Borrowed nodes stay.
+    }
+  }
+}
+
 export function claimStaticSiblingRange(
   directory: StaticSiblingDirectory,
   expected: number | StaticRangeHandle,
@@ -545,8 +602,19 @@ export function claimStaticSiblingRange(
         owner.dispose(detachOwnedNodes);
       },
     };
-    return Object.freeze(claim);
+    const frozen = Object.freeze(claim);
+    identity.provisional.push({
+      ordinal,
+      start: range.start,
+      end: range.end,
+      release(): void {
+        frozen.dispose(false);
+      },
+    });
+    if (identity.next === state.declaration.length) identity.provisional.length = 0;
+    return frozen;
   } catch (error) {
+    rollbackProvisional(identity);
     if (identity.reservation?.token === token) identity.reservation = null;
     throw error;
   }

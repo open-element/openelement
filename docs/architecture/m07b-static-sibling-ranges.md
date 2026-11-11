@@ -44,10 +44,19 @@ ordinal by searching for equal content. Identical ranges are distinguished by
 ordinal and by node identity. Tests hold start, end, and interior references
 before the call.
 
-Claims proceed in order. A failure does not advance. A success advances
-permanently, including after `dispose`. Reclaiming a committed ordinal fails.
-A failed attempt may be retried only while it is uncommitted and only after
-its cleanup; the caller calls the same API again. That is not bounded recovery.
+Claims proceed in order. A successful range records a tombstone and advances
+the cursor. Those records stay with the attempt until every declared range
+has committed. A failure after the reservation is taken rolls that attempt
+back: the reservation is released, the tombstones and success cursor
+committed in the attempt are cleared, and those ranges' owners are released
+with `dispose(false)`. Borrowed nodes stay. A dynamic write that already
+happened may stay. This is not a byte-level restore of the claim. The caller
+retries by calling the same API again, from the first rolled-back ordinal.
+
+A directory claim that commits every declared range is permanent, including
+after `dispose`. Reclaiming that ordinal fails. A failure before a reservation
+is taken does not roll the attempt back. Caller `dispose` still does not
+clear a tombstone by itself.
 
 ## Reservation
 
@@ -58,21 +67,25 @@ the committed start and end comments belong to the parent element. A second
 identity. Only the holder releases an uncommitted reservation. A reentered
 claim, including one made through the other view or by a previously held
 marker, fails `busy` and does not clear the holder's reservation. Opening
-again while the reservation is held also fails `busy`. After `dispose`, a
-later open of the same parent still rejects that ordinal and those marker
-nodes. A different parent element is a different identity. That identity is
+again while the reservation is held also fails `busy`. After `dispose` of a
+completed directory claim, a later open of the same parent still rejects that
+ordinal and those marker nodes. After a failed attempt rolls the tombstones
+back, the same parent can be claimed again. A different parent element is a
+different identity. That identity is
 not a global marker lock. Moving a committed start or end comment onto
 another parent and claiming it there is outside this slice.
 `openStaticSiblingDirectory` has no caller callback. The activation callback
 and a DOM getter are the reentry cases the fixture covers. There is no
 further dynamic-host reentry suite.
 
-A validation mismatch creates no owner and writes nothing. An activation
-failure disposes the uncommitted scope with `dispose(false)`: resources are
-released, borrowed nodes stay, and a dynamic write that already happened may
-stay. `dispose` does not erase the pair tombstone. `LifetimeScope`
-first-dispose semantics are unchanged. A parent `dispose(true)` cascades only
-to children that are still live.
+A validation mismatch of the range in hand creates no owner for that range
+and writes nothing. An activation failure disposes that uncommitted scope
+with `dispose(false)`: resources are released, borrowed nodes stay, and a
+dynamic write that already happened may stay. Either failure then rolls back
+ranges committed earlier in the same attempt, using the same `dispose(false)`
+release. A completed directory claim's tombstone stays across `dispose`.
+`LifetimeScope` first-dispose semantics are unchanged. A parent `dispose(true)`
+cascades only to children that are still live.
 
 The static subset refuses `table`, `caption`, `colgroup`, `col`, `thead`,
 `tbody`, `tfoot`, `tr`, `td`, `th`, `select`, `optgroup`, `option`,
@@ -101,9 +114,9 @@ member because `RuntimeErrorCode` is exported.
 ## Still outside M07b
 
 Key alignment, dynamic seed, subscription multisets, property channels,
-input, focus, selection, bounded recovery, an SSR producer, production
-wiring, and a public ABI freeze remain M07/M08 work. Mount emission for a
-pure static directory is the bounded generator section below.
+input, focus, selection, byte-level restoration of a claim, an SSR producer,
+production wiring, and a public ABI freeze remain M07/M08 work. Mount emission
+for a pure static directory is the bounded generator section below.
 A global marker lock is not part of this slice. A committed node moved to a
 different parent is outside the supported domain. Different parents stay
 different identities.
@@ -188,18 +201,28 @@ claim, then `dispose(false)`s that owner when the claim throws. `runtimeProbe`
 owners and regions only increment. The +1 after a failed generated claim is an
 observation of that allocation. It is not a live owner and it is not a live
 region. On a first-range validation failure the consumer creates no range owner
-and registers no cleanup; on a mid-directory partial commit an earlier range
-keeps its owner and cleanup (see the known limitation below). A direct
+and registers no cleanup. On a mid-directory failure the earlier ranges of that
+attempt are rolled back with the directory consumer (see below). A direct
 `claimStaticSiblingRange` validation failure still creates no owner for that
 failed range. Static zero subscriptions remain not a dynamic subscription
 account.
 
-### Known limitation: no recovery after a mid-directory partial commit
+### Bounded recovery after a mid-directory partial commit
 
-Bounded recovery is M07-4 work, outside this slice. This slice claims ranges in
-order and does not batch-reserve. If range 0 commits and range 1 fails
-validation, the claim throws, the range-0 success tombstone remains, and a
-retry fails with `consumed:`. That directory is permanently unclaimable until
-the parent is replaced. A retry is not possible after a mid-directory partial
-commit. Only a first-range validation failure leaves the directory retryable
-after cleanup.
+M07-4 (in progress, not signed off; not an M07 exit) closes the previous
+limitation that a mid-directory partial commit was permanent. The directory
+still claims ranges in order. It does not batch-reserve up front. If an
+earlier range commits and a later range fails validation or activation, the
+failed claim releases the reservation, rolls back the tombstones and success
+cursor committed in that attempt, and releases those ranges' owners with
+`dispose(false)`. The same parent can be claimed again from the start of the
+rolled-back attempt. A retry does not fail with `consumed:` solely because of
+that partial commit. Borrowed nodes are not deleted. A dynamic write made
+during activation is not restored. A directory claim that commits every
+declared range stays permanent, including after `dispose`.
+
+Still outside this recovery: byte-level restoration of the whole claim,
+deleting borrowed nodes, undoing a fully successful claim, and moving a
+committed marker onto another parent. A first-range validation failure is
+unchanged: no owner, no DOM write, reservation released, and the same parent
+can be claimed again. This is not M07-5, not M08, and not SSR→claim.

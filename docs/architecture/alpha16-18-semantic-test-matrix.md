@@ -9,10 +9,12 @@ summary: Per-case evidence ledger; a case is done only when its required cells c
 Date: 2026-11-03. Status: **PROPOSED — results are recorded in the per-milestone
 annexes below; the grid cells are not filled**. Baseline:
 `4f1f2001b24909086f7e7efe9e5016d48d615c91`. Latest recorded annex: the M07-2
-leaf-scope browser clean-path annex (2026-11-12; in progress, not signed off).
-M07-1 is signed off on `ac8c218614e2d4749435c51edf3eaf15eb65f6fd` (Node DOM
-shim, 非浏览器资格). Neither annex fills the grid, TSX-18, or TSX-30. The grid
-cells stay `R`.
+leaf-scope browser clean-path annex, signed off on
+`70eb2381cab2ef238903cb583f3925976206e901` (browser qualification, chromium
+147.0.7727.15, LOCAL). M07-1 is signed off on
+`ac8c218614e2d4749435c51edf3eaf15eb65f6fd` (Node DOM shim, 非浏览器资格).
+M07-4 bounded mismatch recovery is in progress and is not signed off. None of
+these records fills the grid, TSX-18, or TSX-30. The grid cells stay `R`.
 
 Revision 2026-11-05: acceptance area 17 is redefined as **Class authoring
 migration coverage** — M10 partition evidence for the public API and browser
@@ -113,7 +115,10 @@ fill TSX-18 or TSX-30, and are not SSR→claim. Qualification is 非浏览器
 (Node DOM shim). M07-1 is signed off on
 `ac8c218614e2d4749435c51edf3eaf15eb65f6fd`; that sign-off is the Node DOM shim
 result and does not fill the grid. The M07-2 annex below records leaf-scope
-chromium evidence and is not signed off.
+chromium evidence and is signed off on
+`70eb2381cab2ef238903cb583f3925976206e901`. The M07-4 note records that
+bounded mismatch recovery is in progress and is not signed off. Neither fills
+TSX-18 or TSX-30.
 
 **TSX-04 row status (recorded 2026-11-09).** M06b2b's same-key keyed content
 replacement is TSX-04-adjacent supporting evidence only; the TSX-04 `M`/`U`/`D`
@@ -386,9 +391,10 @@ record. It does not fill TSX-18 or TSX-30. Grid cells above stay `R`.
 
 ## M07-2 recorded results — browser clean-path claim
 
-Scope: leaf-scope browser evidence only. Status: **in progress, not signed
-off**. This annex does not fill any grid cell, does not mark TSX-18 or TSX-30
-passing, and is not an M07 exit or an Alpha16 sign-off. Official
+Scope: leaf-scope browser evidence only. Status: **signed off on
+`70eb2381cab2ef238903cb583f3925976206e901`**. This annex does not fill any
+grid cell, does not mark TSX-18 or TSX-30 passing, and is not an M07 exit or
+an Alpha16 sign-off. Official
 `generated-leaf.order` / `generated-leaf.directory` stay a Node LOCAL regression
 gate and are not this slice's browser evidence. M05/M06 mount suites and the
 M07-1 Node DOM shim are not transferred as a browser pass. Skip / NOT RUN is
@@ -420,3 +426,20 @@ does not throw.
 | TSX-01 roots/fragments/empty | leaf-scope browser qualification (chromium 147.0.7727.15, LOCAL), not a grid fill | The adversarial shape and one wrapping composition. Claim consumes directory ordinals 0 then 1, the inner children stay `b` then `i`, `nestedMarkers` is empty, and the wrapping composition keeps that single marker layer. Author order and node identity hold. 0 product mutations during the claim. | Not the full TSX-01 row. Not SSR→claim. Not TSX-18 or TSX-30. |
 | input / focus / selection | leaf-scope browser qualification (chromium 147.0.7727.15, LOCAL), not a matrix row | Static `<input id="field" value="hello" />`. Focus and `setSelectionRange(1, 4)` are set before claim. After a successful claim it is the same node, focus and selection are preserved, and the 0-mutation rule holds. | M06 keyed-reorder mount-period focus evidence is not transferred. Not an update-period mutation acceptance. |
 | synchronous leaf | leaf-scope browser qualification (chromium 147.0.7727.15, LOCAL), not a grid fill | Fixture `export function Leaf(props: { name: string }) { return <p id="leaf">{props.name}</p>; }`. Path: 「服务端 HTML 字符串 → 生成叶 claim」. Seed string `<p id="leaf">seed</p>`, then `props.name = 'next'`. Claim of the equal seed skips the text write and still subscribes once; `dispose(false)` closes that subscription. | Not SSR→claim. Not TSX-18 or TSX-30. |
+
+## M07-4 recorded status — bounded mismatch recovery
+
+Status: **in progress, not signed off**. This note does not fill any grid
+cell, does not mark TSX-18 or TSX-30 passing, and is not an M07 exit, an
+M07-5 protocol record, or an M08 SSR→claim result. The M07-2 chromium
+clean-path is not transferred as this slice's recovery pass.
+
+ADR-0175 D-1 for a directory claim: a failed claim releases the reservation,
+rolls back tombstones and the success cursor committed in that attempt, and
+releases those owners. Borrowed nodes are not deleted. A dynamic write that
+already happened may stay. A directory claim that commits every declared
+range stays permanent, including after `dispose`. The evidence file is
+`packages/element/__tests__/compiled-runtime/static-sibling-ranges.test.ts`.
+Qualification for that suite is 非浏览器资格 (Node DOM shim). Firefox and
+WebKit remain M13. Skip / NOT RUN is not a pass. CI green is not this
+slice's qualification.

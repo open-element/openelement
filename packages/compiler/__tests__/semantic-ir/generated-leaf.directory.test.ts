@@ -6,9 +6,10 @@
  * subscriptions are not a dynamic subscription account. The generated
  * `activate` is the empty function because this directory has no binding. A
  * dynamic slot on a directory path has to wire `activate`; this file does
- * not treat the empty function as that claim. The mid-directory partial-commit
- * test records the bounded slice's known limitation: there is no recovery
- * after a range commits and a later range fails (M07-4 owns that).
+ * not treat the empty function as that claim. The mid-directory failure test
+ * only checks that the generated consumer follows the directory runtime:
+ * a later-range failure does not stick on `consumed:`. The recovery contract
+ * is the element suite, not this file.
  */
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -469,8 +470,8 @@ test('element children are a directory, and a validation failure writes nothing'
   // then dispose(false)s that owner. runtimeProbe owners and regions only
   // increment, so +1 is an observation of that allocation, not a live owner
   // or a live region. This is a first-range failure: the consumer creates no
-  // range owner and registers no cleanup. A mid-directory partial commit is
-  // different; see the test below.
+  // range owner and registers no cleanup. A later-range failure is different;
+  // see the test below.
   expect(after.subscriptions).toBe(owners.subscriptions);
   expect(after.rangeCleanups).toBe(owners.rangeCleanups);
   expect(after.projections).toBe(owners.projections);
@@ -488,7 +489,7 @@ test('element children are a directory, and a validation failure writes nothing'
   expect(String(duplicate.message)).toContain('consumed:');
 });
 
-test('a mid-directory partial commit is permanent: range 1 fails after range 0 commits', () => {
+test('a mid-directory validation failure does not stick on consumed:', () => {
   const doc = new DomDocument();
   useDocument(doc);
   const parent = doc.element('div');
@@ -507,22 +508,28 @@ test('a mid-directory partial commit is permanent: range 1 fails after range 0 c
   expect(error.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
   expect(String(error.message)).toContain('static-seed');
   // Range 0 committed before range 1 was validated: its success cleanup was
-  // registered, so this is not the first-range failure path.
+  // registered (the probe only increments), so this is not the first-range
+  // failure path. The directory runtime then rolls that commit back.
   const after = loaded.runtimeProbe.snapshot();
   expect(after.rangeCleanups - before.rangeCleanups).toBe(1);
   expect(after.projections - before.projections).toBe(1);
 
-  // Permanent unclaimability: the range-0 tombstone survives the failed claim,
-  // so a retry fails before the remaining range can commit. Bounded recovery
-  // is M07-4 work; this slice does not batch-reserve.
   const retry = capture(() => loaded.claimRecipe(owner.child(), recipe, parent));
   expect(retry.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
-  expect(String(retry.message)).toContain('consumed:');
+  expect(String(retry.message)).toContain('static-seed');
+  expect(String(retry.message)).not.toContain('consumed:');
   const afterRetry = loaded.runtimeProbe.snapshot();
-  expect(afterRetry.rangeCleanups).toBe(after.rangeCleanups);
-  // The borrowed DOM stays in place: a failed claim is not a byte rollback.
+  expect(afterRetry.rangeCleanups - after.rangeCleanups).toBe(1);
+  // The borrowed DOM stays in place: recovery is not a byte rollback.
   expect(parent.childNodes).toHaveLength(6);
   expect(range0.parentNode).toBe(parent);
+
+  (range1.childNodes[0] as DomText).nodeValue = 'same';
+  const claimed = loaded.claimRecipe(owner.child(), recipe, parent);
+  expect(claimed.nodes).toContain(range0);
+  expect(claimed.nodes).toContain(range1);
+  const duplicate = capture(() => loaded.claimRecipe(owner.child(), recipe, parent));
+  expect(String(duplicate.message)).toContain('consumed:');
 });
 
 test('a reentered claim through the generated consumer is busy and does not keep the reservation', () => {
