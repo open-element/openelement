@@ -53,6 +53,7 @@ interface ClaimNode {
   tagName?: string;
   childNodes?: ClaimNode[];
   getAttribute?(name: string): string | null;
+  hasAttribute?(name: string): boolean;
   setAttribute?(name: string, value: string): void;
   removeAttribute?(name: string): void;
   toggleAttribute?(name: string, force?: boolean): boolean;
@@ -69,6 +70,7 @@ function element(tag: string): ClaimNode {
     tagName: tag.toUpperCase(),
     childNodes: [],
     getAttribute: (name) => (attrs.has(name) ? attrs.get(name)! : null),
+    hasAttribute: (name) => attrs.has(name),
     setAttribute: (name, value) => {
       attrs.set(name, value);
     },

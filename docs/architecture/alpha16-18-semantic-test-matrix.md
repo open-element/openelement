@@ -8,9 +8,11 @@ summary: Per-case evidence ledger; a case is done only when its required cells c
 
 Date: 2026-11-03. Status: **PROPOSED — results are recorded in the per-milestone
 annexes below; the grid cells are not filled**. Baseline:
-`4f1f2001b24909086f7e7efe9e5016d48d615c91`. Latest recorded annex: the M07-1
-leaf-scope claim-order annex (2026-11-11; Node DOM shim, 非浏览器资格, not a
-browser claim and not TSX-18/TSX-30). The grid cells stay `R`.
+`4f1f2001b24909086f7e7efe9e5016d48d615c91`. Latest recorded annex: the M07-2
+leaf-scope browser clean-path annex (2026-11-12; in progress, not signed off).
+M07-1 is signed off on `ac8c218614e2d4749435c51edf3eaf15eb65f6fd` (Node DOM
+shim, 非浏览器资格). Neither annex fills the grid, TSX-18, or TSX-30. The grid
+cells stay `R`.
 
 Revision 2026-11-05: acceptance area 17 is redefined as **Class authoring
 migration coverage** — M10 partition evidence for the public API and browser
@@ -108,7 +110,10 @@ follow-up obligation).
 The M07-1 annex below records leaf-scope **K** notes for TSX-09, TSX-10,
 TSX-23 and a partial TSX-01 shape. Those notes do not fill the grid, do not
 fill TSX-18 or TSX-30, and are not SSR→claim. Qualification is 非浏览器
-(Node DOM shim). M07-1 is not signed off by this annex.
+(Node DOM shim). M07-1 is signed off on
+`ac8c218614e2d4749435c51edf3eaf15eb65f6fd`; that sign-off is the Node DOM shim
+result and does not fill the grid. The M07-2 annex below records leaf-scope
+chromium evidence and is not signed off.
 
 **TSX-04 row status (recorded 2026-11-09).** M06b2b's same-key keyed content
 replacement is TSX-04-adjacent supporting evidence only; the TSX-04 `M`/`U`/`D`
@@ -368,9 +373,9 @@ the progress ledger by the Lead, not by this evidence section. LOCAL chromium on
 Scope: leaf-scope **K (Claim)** only. The claim input is the generated mount
 tree after `dispose(false)`, or the same nodes. This is not SSR→claim. The
 harness is a Node DOM shim (`generated-leaf.order.test.ts`). Qualification:
-非浏览器资格. The tested SHA is the PR head recorded in the PR body; this
-annex does not sign M07-1 off, and it does not fill TSX-18 or TSX-30. Grid
-cells above stay `R`.
+非浏览器资格. M07-1 is signed off on
+`ac8c218614e2d4749435c51edf3eaf15eb65f6fd`. This annex stays the Node DOM shim
+record. It does not fill TSX-18 or TSX-30. Grid cells above stay `R`.
 
 | Case | K (leaf scope only) | What this annex records | What it does not record |
 | --- | --- | --- | --- |
@@ -378,3 +383,40 @@ cells above stay `R`.
 | TSX-10 repeatable children | leaf-scope partial, 非浏览器资格 | `Frame` projects `{props.children}` into `section` and `aside`. `Repeat` passes one children recipe (`<b>{label.value}</b><i>y</i>`). After claim, each site's children stay `b` then `i`, on distinct owners and regions, and the node identities match the mount. `label.value = 'z'` updates both texts and does not change order or identity. `dispose(true)` of the section projection empties only that site; the aside keeps `b` then `i`, and a later write updates only the aside. | Not SSR→claim. Not the full TSX-10 row. No browser qualification. |
 | TSX-09 reusable JSX values | leaf-scope partial, 非浏览器资格 | `Mixed` mounts `<b>b</b>{chip}<Child text="k" /><u>u</u>` with `const chip = <i>c</i>`. Mount and claim child order are both `b`, `i`, `em`, `u`, and the text values are `b`, `c`, `k`, `u`. The chip claim is its own projection (distinct owner and region) and adopts the same `i` node the mount inserted. | One insertion among static siblings and a component reference. Not the two-site reusable-value row (that claim/order note is TSX-23 above), not SSR, not a browser. Not the full TSX-09 row. |
 | TSX-01 roots/fragments/empty | leaf-scope partial, 非浏览器资格 | The adversarial shape `<div><p>a</p><section><><div><b>x</b><i>y</i></div></></section></div>` mounts one directory layer (`oe:r:0` / `oe:r:1` and the matching close comments). Claim consumes ordinals 0 then 1. The section's only child is the inner div, whose children are `b` then `i`, and `nestedMarkers` of the directory parent is empty. Wrapping that component in another `<div><Adversarial /></div>` keeps the same single marker layer on the inner div. | Not the full TSX-01 row (empty output, multi-root without a directory, SSR). Not a re-count of the #1753 clearance source test. Not TSX-18 or TSX-30. |
+
+## M07-2 recorded results — browser clean-path claim
+
+Scope: leaf-scope browser evidence only. Status: **in progress, not signed
+off**. This annex does not fill any grid cell, does not mark TSX-18 or TSX-30
+passing, and is not an M07 exit or an Alpha16 sign-off. Official
+`generated-leaf.order` / `generated-leaf.directory` stay a Node LOCAL regression
+gate and are not this slice's browser evidence. M05/M06 mount suites and the
+M07-1 Node DOM shim are not transferred as a browser pass. Skip / NOT RUN is
+not a pass. CI green is not browser qualification.
+
+Qualification: **browser qualification (chromium 147.0.7727.15, LOCAL)**.
+Playwright `browser.version()` on this run is `147.0.7727.15`. Firefox and
+WebKit are M13 and are not a gate. Artifact:
+`packages/compiler/__tests__/semantic-ir/generated-leaf.claim.browser.test.ts`.
+
+Claim input for the four frozen shapes is the generated mount tree after
+`dispose(false)`. That is not SSR→claim. The synchronous leaf path is
+「服务端 HTML 字符串 → 生成叶 claim」: the server constructor returns the HTML
+string `<p id="leaf">seed</p>`, the browser parses that string, and the
+generated leaf claims it. The generated module does not contain `__h(`.
+
+Claim-period first writes compare the current DOM to the value that would be
+written and skip the DOM API when they are equal. Mount writes stay
+unconditional. A later signal delivery shares the claim refresh body only as
+an implementation coupling. This annex does not accept update-period 0
+mutation, mismatch recovery, or reseeding. An unequal value still writes; it
+does not throw.
+
+| Case | K (leaf scope only) | What this annex records | What it does not record |
+| --- | --- | --- | --- |
+| TSX-23 one recipe inserted twice | leaf-scope browser qualification (chromium 147.0.7727.15, LOCAL), not a grid fill | The same recipe `<span><b>x</b><i>y</i></span>` inserted twice, and the flat shape `<span>x<i>y</i></span>` inserted twice. After a successful claim, author order, node identity, and two independent owners/regions still hold. `dispose(true)` of the first projection removes only that span. A MutationObserver on the observation root (`childList` / `characterData` / `attributes`) records 0 product mutations during the claim. | Not SSR→claim. Not the full TSX-23 row. Not TSX-18 or TSX-30. M06 mount evidence is not transferred. |
+| TSX-10 repeatable children | leaf-scope browser qualification (chromium 147.0.7727.15, LOCAL), not a grid fill | `Frame` projects `{props.children}` into `section` and `aside`. After a successful claim each site stays `b` then `i` on a distinct owner and region, and the node identities match the mount. Each site subscribes to `label` exactly once (probe delta 2, site deltas `[1, 1]`). `dispose(false)` closes those subscriptions and leaves the DOM. 0 product mutations during the claim. | Not SSR→claim. Not the full TSX-10 row. Not a signed-off duplicate-subscription exit. Not TSX-18 or TSX-30. |
+| TSX-09 reusable JSX values | leaf-scope browser qualification (chromium 147.0.7727.15, LOCAL), not a grid fill | `Mixed` claims `<b>b</b>{chip}<Child text="k" /><u>u</u>` as `b`, `i`, `em`, `u` with texts `b`, `c`, `k`, `u`. The chip projection keeps a distinct owner and region and the same `i` node. 0 product mutations during the claim. | Not the full TSX-09 row. Not SSR→claim. Not TSX-18 or TSX-30. |
+| TSX-01 roots/fragments/empty | leaf-scope browser qualification (chromium 147.0.7727.15, LOCAL), not a grid fill | The adversarial shape and one wrapping composition. Claim consumes directory ordinals 0 then 1, the inner children stay `b` then `i`, `nestedMarkers` is empty, and the wrapping composition keeps that single marker layer. Author order and node identity hold. 0 product mutations during the claim. | Not the full TSX-01 row. Not SSR→claim. Not TSX-18 or TSX-30. |
+| input / focus / selection | leaf-scope browser qualification (chromium 147.0.7727.15, LOCAL), not a matrix row | Static `<input id="field" value="hello" />`. Focus and `setSelectionRange(1, 4)` are set before claim. After a successful claim it is the same node, focus and selection are preserved, and the 0-mutation rule holds. | M06 keyed-reorder mount-period focus evidence is not transferred. Not an update-period mutation acceptance. |
+| synchronous leaf | leaf-scope browser qualification (chromium 147.0.7727.15, LOCAL), not a grid fill | Fixture `export function Leaf(props: { name: string }) { return <p id="leaf">{props.name}</p>; }`. Path: 「服务端 HTML 字符串 → 生成叶 claim」. Seed string `<p id="leaf">seed</p>`, then `props.name = 'next'`. Claim of the equal seed skips the text write and still subscribes once; `dispose(false)` closes that subscription. | Not SSR→claim. Not TSX-18 or TSX-30. |
