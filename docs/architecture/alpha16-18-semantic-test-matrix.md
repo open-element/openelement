@@ -8,9 +8,9 @@ summary: Per-case evidence ledger; a case is done only when its required cells c
 
 Date: 2026-11-03. Status: **PROPOSED — results are recorded in the per-milestone
 annexes below; the grid cells are not filled**. Baseline:
-`4f1f2001b24909086f7e7efe9e5016d48d615c91`. Latest recorded annex: the M07
-static-claim slices (2026-11-09; Node DOM shim evidence for the M07b generator
-extension, no browser claim).
+`4f1f2001b24909086f7e7efe9e5016d48d615c91`. Latest recorded annex: the M07-1
+leaf-scope claim-order annex (2026-11-11; Node DOM shim, 非浏览器资格, not a
+browser claim and not TSX-18/TSX-30). The grid cells stay `R`.
 
 Revision 2026-11-05: acceptance area 17 is redefined as **Class authoring
 migration coverage** — M10 partition evidence for the public API and browser
@@ -104,6 +104,11 @@ mount/claim directory DOM shape is proved against a Node DOM shim, not a
 browser, and a mount-only pure-static directory also emits marker comments that
 no claim consumes (recorded as a known consequence in the M07b note and as a
 follow-up obligation).
+
+The M07-1 annex below records leaf-scope **K** notes for TSX-09, TSX-10,
+TSX-23 and a partial TSX-01 shape. Those notes do not fill the grid, do not
+fill TSX-18 or TSX-30, and are not SSR→claim. Qualification is 非浏览器
+(Node DOM shim). M07-1 is not signed off by this annex.
 
 **TSX-04 row status (recorded 2026-11-09).** M06b2b's same-key keyed content
 replacement is TSX-04-adjacent supporting evidence only; the TSX-04 `M`/`U`/`D`
@@ -357,3 +362,19 @@ qualification (`B`; M13), firefox/webkit, the TSX-04 matrix row, packed-consumer
 (`P`) and production wiring remain unclaimed. M06 completion itself is recorded in
 the progress ledger by the Lead, not by this evidence section. LOCAL chromium only
 — no G1/G2 record and no Alpha16a exit claim is made here.
+
+## M07-1 recorded results — composition / repeated-insertion claim order
+
+Scope: leaf-scope **K (Claim)** only. The claim input is the generated mount
+tree after `dispose(false)`, or the same nodes. This is not SSR→claim. The
+harness is a Node DOM shim (`generated-leaf.order.test.ts`). Qualification:
+非浏览器资格. The tested SHA is the PR head recorded in the PR body; this
+annex does not sign M07-1 off, and it does not fill TSX-18 or TSX-30. Grid
+cells above stay `R`.
+
+| Case | K (leaf scope only) | What this annex records | What it does not record |
+| --- | --- | --- | --- |
+| TSX-23 one recipe inserted twice | leaf-scope partial, 非浏览器资格 | `generated-leaf.order.test.ts`: `const item = <span><b>x</b><i>y</i></span>` inserted twice. Mount writes two spans; each span's children are `oe:r:0`, `b`, `oe:/r:0`, `oe:r:1`, `i`, `oe:/r:1`, with no nested directory. Claim adopts those two spans in that order as two projections with distinct owners and regions. `dispose(true)` of the first projection removes only the first span; the second span keeps its marker order. A second shape (`<span>x<i>y</i></span>` twice) claims each interior as text then `i`, with no `oe:r:` markers; swapping the first span's children throws `OEIR_LEAF_CLAIM_MISMATCH` and leaves the second span's order in place. | M06 mount browser evidence is not transferred. No SSR column, no browser, no three-engine `B`, no packed consumer. Not the full TSX-23 row. |
+| TSX-10 repeatable children | leaf-scope partial, 非浏览器资格 | `Frame` projects `{props.children}` into `section` and `aside`. `Repeat` passes one children recipe (`<b>{label.value}</b><i>y</i>`). After claim, each site's children stay `b` then `i`, on distinct owners and regions, and the node identities match the mount. `label.value = 'z'` updates both texts and does not change order or identity. `dispose(true)` of the section projection empties only that site; the aside keeps `b` then `i`, and a later write updates only the aside. | Not SSR→claim. Not the full TSX-10 row. No browser qualification. |
+| TSX-09 reusable JSX values | leaf-scope partial, 非浏览器资格 | `Mixed` mounts `<b>b</b>{chip}<Child text="k" /><u>u</u>` with `const chip = <i>c</i>`. Mount and claim child order are both `b`, `i`, `em`, `u`, and the text values are `b`, `c`, `k`, `u`. The chip claim is its own projection (distinct owner and region) and adopts the same `i` node the mount inserted. | One insertion among static siblings and a component reference. Not the two-site reusable-value row (that claim/order note is TSX-23 above), not SSR, not a browser. Not the full TSX-09 row. |
+| TSX-01 roots/fragments/empty | leaf-scope partial, 非浏览器资格 | The adversarial shape `<div><p>a</p><section><><div><b>x</b><i>y</i></div></></section></div>` mounts one directory layer (`oe:r:0` / `oe:r:1` and the matching close comments). Claim consumes ordinals 0 then 1. The section's only child is the inner div, whose children are `b` then `i`, and `nestedMarkers` of the directory parent is empty. Wrapping that component in another `<div><Adversarial /></div>` keeps the same single marker layer on the inner div. | Not the full TSX-01 row (empty output, multi-root without a directory, SSR). Not a re-count of the #1753 clearance source test. Not TSX-18 or TSX-30. |

@@ -97,9 +97,22 @@
  * existing children of a parent in authored order. Structural mismatch throws
  * `OEIR_LEAF_CLAIM_MISMATCH` before any subscription. A dynamic slot writes
  * before it subscribes, so a throw after that write is not a DOM byte
- * rollback; `claimRecipe` then `dispose(false)`s the child owner. Conditions, lists,
- * component references, reusable JSX insertion, children projection and
- * `property` channels omit `claim` and keep mount-only output.
+ * rollback; `claimRecipe` then `dispose(false)`s the child owner. Conditions, lists
+ * and `property` channels omit `claim` and keep mount-only output.
+ *
+ * M07-1 composition / repeated-insertion order (leaf scope only): a claimable
+ * component reference, reusable JSX insertion or `{props.children}` projection
+ * is adopted from the same authored sibling cursor the mount wrote. Each
+ * insertion or children projection is its own `claimRecipe` (own owner, region
+ * and node list). A claim-time recipe is created on the claim scope because
+ * the mount-time definition owner has been disposed before claim; its `mount`
+ * throws and is not a second mount path. Nested claims share one module cursor
+ * so two sites cannot take each other's nodes. A pure static directory still
+ * claims through the M07b consumer. A directory-root component (fragment roots
+ * that are themselves the directory) is not claimed from inside another
+ * sibling list: the directory contract requires the parent child list to be
+ * exactly that directory, and this slice does not change that runtime contract.
+ * This is not SSR→claim and it does not fill TSX-18 or TSX-30.
  *
  * M07b generator extension (bounded static directory): when an element's
  * children, or a fragment's children, flatten to two or more fully static
@@ -325,6 +338,16 @@ interface EmitState {
    * when at least one component chunk needs it; mount emission alone does not.
    */
   usesStaticSiblingDirectoryConsumer: boolean;
+  /**
+   * M07-1: claim walks `__oe_claimCursor` so a nested recipe or component claim
+   * continues the parent sibling list instead of restarting at `parent.childNodes`.
+   * Static-only claims leave this false and keep the M07a local cursor.
+   */
+  claimCursorShared: boolean;
+  /** Runtime array that collects adopted root nodes, or null for the M07a static return. */
+  claimAdoptedVar: string | null;
+  /** True once this claim chunk calls `claimRecipe`. */
+  usesClaimRecipe: boolean;
 }
 
 function diag(state: EmitState, code: string, message: string, span: IrSpan): void {
@@ -2056,6 +2079,8 @@ interface EmittedComponent {
   readonly placements: readonly ExpressionPlacement[];
   /** True when this component's generated claim calls the directory consumer. */
   readonly usesStaticSiblingDirectoryConsumer?: boolean;
+  /** True when this component's generated claim calls `claimRecipe`. */
+  readonly usesClaimRecipe?: boolean;
 }
 
 interface ClaimEmission {
@@ -2065,38 +2090,151 @@ interface ClaimEmission {
   readonly placements: readonly ExpressionPlacement[];
   /** True when the emitted claim calls the directory consumer. */
   readonly usesStaticSiblingDirectoryConsumer?: boolean;
+  /** True when the emitted claim calls `claimRecipe`. */
+  readonly usesClaimRecipe?: boolean;
 }
 
-/** M07a admits a fixed leaf. Anything with a runtime structure is mount-only. */
-function nodeClaimable(node: FunctionModelNode): boolean {
+interface ClaimContext {
+  readonly componentByName: ReadonlyMap<string, FunctionModelComponent>;
+  /** Components currently being tested, so a reference cycle fails closed. */
+  readonly stack: Set<string>;
+}
+
+function recipeMap(component: FunctionModelComponent): Map<string, FunctionModelRecipe> {
+  return new Map(component.recipes.map((recipe) => [recipe.id, recipe] as const));
+}
+
+function declaredRecipeIdSet(component: FunctionModelComponent): Set<string> {
+  const ids = new Set<string>();
+  for (const resource of component.resources) {
+    if (resource.recipeId !== null) ids.add(resource.recipeId);
+  }
+  return ids;
+}
+
+function componentOwnsReactiveResources(component: FunctionModelComponent): boolean {
+  return component.resources.some(
+    (resource) => resource.kind === 'signal' || resource.kind === 'computed',
+  );
+}
+
+/** Fragment roots that mount as one directory on their claim parent. */
+function isDirectoryRootComponent(component: FunctionModelComponent): boolean {
+  return staticElementDirectory(component.roots) !== null;
+}
+
+function attributesClaimable(attributes: readonly FunctionModelAttribute[]): boolean {
+  for (const attribute of attributes) {
+    if (attribute.kind === 'static') {
+      if (!ATTRIBUTE_PATTERN.test(attribute.name)) return false;
+      continue;
+    }
+    if (CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) continue;
+    // Property writes (`el.value = …`) can clobber pre-claim user input.
+    // That preservation is a later M07 slice, so the shape stays mount-only.
+    if (attribute.channel === 'property') return false;
+    if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
+  }
+  return true;
+}
+
+/**
+ * M07a static leaf, plus M07-1 composition that can adopt an existing sibling
+ * list in author order. Conditions, lists, property channels and a nested
+ * directory-root component stay mount-only: the directory consumer requires
+ * the parent's child list to be exactly that directory.
+ */
+function nodeClaimable(
+  node: FunctionModelNode,
+  component: FunctionModelComponent,
+  ctx: ClaimContext,
+): boolean {
   switch (node.kind) {
     case 'text':
     case 'dynamic-text':
       return true;
     case 'fragment':
-      return node.children.every(nodeClaimable);
+      return node.children.every((child) => nodeClaimable(child, component, ctx));
     case 'element': {
       if (!TAG_PATTERN.test(node.tag)) return false;
-      for (const attribute of node.attributes) {
-        if (attribute.kind === 'static') {
-          if (!ATTRIBUTE_PATTERN.test(attribute.name)) return false;
-          continue;
-        }
-        if (CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) continue;
-        // Property writes (`el.value = …`) can clobber pre-claim user input.
-        // That preservation is a later M07 slice, so the shape stays mount-only.
-        if (attribute.channel === 'property') return false;
-        if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
+      if (!attributesClaimable(node.attributes)) return false;
+      return node.children.every((child) => nodeClaimable(child, component, ctx));
+    }
+    case 'insertion-site': {
+      if (!declaredRecipeIdSet(component).has(node.recipeId)) return false;
+      const recipe = recipeMap(component).get(node.recipeId);
+      if (recipe === undefined) return false;
+      return nodeClaimable(recipe.target, component, ctx);
+    }
+    case 'children-projection':
+      return true;
+    case 'component-ref': {
+      if (node.props.some((prop) => prop.name === 'children')) return false;
+      const props = node.props.filter((prop) => prop.name !== 'key');
+      if (!attributesClaimable(props)) return false;
+      const target = ctx.componentByName.get(node.name);
+      if (target === undefined || target.propsParam === null) return false;
+      if (componentOwnsReactiveResources(target)) return false;
+      // The directory parent would be the shared sibling list, which the
+      // consumer rejects unless it is exactly one directory. Not this slice.
+      if (isDirectoryRootComponent(target)) return false;
+      if (!componentClaimable(target, ctx)) return false;
+      if (node.childrenRecipeId !== null) {
+        const recipe = recipeMap(component).get(node.childrenRecipeId);
+        if (recipe === undefined) return false;
+        return nodeClaimable(recipe.target, component, ctx);
       }
-      return node.children.every(nodeClaimable);
+      if (componentProjectsChildren(target)) return false;
+      return true;
     }
     default:
       return false;
   }
 }
 
-function componentClaimable(component: FunctionModelComponent): boolean {
-  return component.roots.every(nodeClaimable);
+function componentClaimable(component: FunctionModelComponent, ctx: ClaimContext): boolean {
+  if (ctx.stack.has(component.name)) return false;
+  ctx.stack.add(component.name);
+  try {
+    return component.roots.every((node) => nodeClaimable(node, component, ctx));
+  } finally {
+    ctx.stack.delete(component.name);
+  }
+}
+
+function treeHasComposition(nodes: readonly FunctionModelNode[]): boolean {
+  for (const node of nodes) {
+    switch (node.kind) {
+      case 'insertion-site':
+      case 'children-projection':
+      case 'component-ref':
+        return true;
+      case 'element':
+      case 'fragment':
+        if (treeHasComposition(node.children)) return true;
+        break;
+      case 'condition':
+        if (treeHasComposition(node.consequent)) return true;
+        if (node.alternate !== null && treeHasComposition(node.alternate)) return true;
+        break;
+      case 'list':
+        if (treeHasComposition(node.template)) return true;
+        break;
+      default:
+        break;
+    }
+  }
+  return false;
+}
+
+function moduleUsesSharedClaimCursor(
+  module: FunctionModelModule,
+  componentByName: ReadonlyMap<string, FunctionModelComponent>,
+): boolean {
+  const ctx: ClaimContext = { componentByName, stack: new Set() };
+  return module.components.some(
+    (component) => componentClaimable(component, ctx) && treeHasComposition(component.roots),
+  );
 }
 
 function claimError(detail: string): string {
@@ -2165,12 +2303,36 @@ function emitClaimInto(
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   phase2: Array<() => void>,
   adopt: (name: string) => void,
+  parentExpr: string,
+  collect: boolean,
 ): void {
   nodes.forEach((node, index) => {
     if (state.diagnostics.length > 0) return;
     const here = `${path}/${index}`;
     if (node.kind === 'fragment') {
-      emitClaimInto(state, node.children, cursor, here, records, phase2, adopt);
+      emitClaimInto(
+        state,
+        node.children,
+        cursor,
+        here,
+        records,
+        phase2,
+        adopt,
+        parentExpr,
+        collect,
+      );
+      return;
+    }
+    if (node.kind === 'insertion-site') {
+      emitClaimInsertion(state, node, parentExpr, collect);
+      return;
+    }
+    if (node.kind === 'children-projection') {
+      emitClaimChildrenProjection(state, node, parentExpr, collect);
+      return;
+    }
+    if (node.kind === 'component-ref') {
+      emitClaimComponentRef(state, node, records, parentExpr, collect);
       return;
     }
     if (node.kind === 'text') {
@@ -2236,24 +2398,311 @@ function emitClaimInto(
       else {
         const childCursor = nextName(state, 'cursor');
         push(state, `const ${childCursor} = { list: ${name}.childNodes, i: 0 };`);
-        emitClaimInto(state, node.children, childCursor, here, records, phase2, () => {});
+        const saved = state.claimCursorShared ? nextName(state, 'savedCursor') : null;
+        // Shared-cursor interiors are a `try` block. Child node bindings are
+        // block-scoped, so their refresh closures must be emitted in that
+        // same block; flushing them on the parent phase2 would name a binding
+        // the refresh cannot see.
+        const childPhase2: Array<() => void> = [];
+        if (saved !== null) {
+          push(state, `const ${saved} = __oe_claimCursor;`);
+          push(state, `__oe_claimCursor = ${childCursor};`);
+          push(state, 'try {');
+          state.indent += 1;
+        }
+        emitClaimInto(
+          state,
+          node.children,
+          childCursor,
+          here,
+          records,
+          saved !== null ? childPhase2 : phase2,
+          () => {},
+          name,
+          false,
+        );
         emitClaimCursorEnd(state, childCursor, here);
+        if (saved !== null) {
+          for (const step of childPhase2) step();
+          state.indent -= 1;
+          push(state, `} finally { __oe_claimCursor = ${saved}; }`);
+        }
       }
       adopt(name);
     }
   });
 }
 
+function emitClaimCollectedList(state: EmitState, listExpr: string, collect: boolean): void {
+  if (!collect || state.claimAdoptedVar === null) return;
+  const child = nextName(state, 'child');
+  push(state, `for (const ${child} of ${listExpr}) ${state.claimAdoptedVar}.push(${child});`);
+}
+
+/**
+ * One reusable-JSX insertion during claim. The recipe claim adopts its own
+ * nodes from the active cursor; this call only opens an independent projection.
+ */
+function emitClaimInsertion(
+  state: EmitState,
+  node: FunctionModelInsertionSite,
+  parentExpr: string,
+  collect: boolean,
+): void {
+  const recipeVar = state.recipeVars.get(node.recipeId);
+  if (recipeVar === undefined) {
+    diag(
+      state,
+      'OEIR_LEAF_MISSING_RECIPE',
+      `insertion site '${node.recipeId}' has no claim-time recipe`,
+      node.span,
+    );
+    return;
+  }
+  state.usesClaimRecipe = true;
+  const projection = nextName(state, 'projection');
+  push(
+    state,
+    `const ${projection} = claimRecipe(${state.scopeVar}, ${recipeVar}, ${parentExpr});`,
+    node.span,
+  );
+  emitClaimCollectedList(state, `${projection}.nodes`, collect);
+}
+
+/** One `{props.children}` site. The caller-supplied recipe owns the node shape. */
+function emitClaimChildrenProjection(
+  state: EmitState,
+  node: FunctionModelChildrenProjection,
+  parentExpr: string,
+  collect: boolean,
+): void {
+  const recipeVar = state.childrenRecipeVar;
+  if (recipeVar === null) {
+    diag(
+      state,
+      'OEIR_LEAF_MISSING_CHILDREN',
+      'children projection has no claim-level `props.children` recipe read',
+      node.span,
+    );
+    return;
+  }
+  state.usesClaimRecipe = true;
+  const projection = nextName(state, 'childrenProjection');
+  push(
+    state,
+    `const ${projection} = claimRecipe(${state.scopeVar}, ${recipeVar}, ${parentExpr});`,
+    node.span,
+  );
+  emitClaimCollectedList(state, `${projection}.nodes`, collect);
+}
+
+/**
+ * Claim one component reference in authored position. Mirrors the mount's
+ * child scope and per-read props, but adopts existing nodes and rolls a
+ * throwing claim back with `dispose(false)` so borrowed DOM stays.
+ */
+function emitClaimComponentRef(
+  state: EmitState,
+  node: FunctionModelComponentRef,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+  parentExpr: string,
+  collect: boolean,
+): void {
+  const span: IrSpan = node.span;
+  const childrenRecipeVar =
+    node.childrenRecipeId === null ? null : (state.recipeVars.get(node.childrenRecipeId) ?? null);
+  if (node.childrenRecipeId !== null && childrenRecipeVar === null) {
+    diag(
+      state,
+      'OEIR_LEAF_MISSING_RECIPE',
+      `children recipe '${node.childrenRecipeId}' of '<${node.name}>' has no claim-time recipe`,
+      span,
+    );
+    return;
+  }
+  const admitted: Array<
+    | { readonly kind: 'static'; readonly name: string; readonly value: string }
+    | {
+        readonly kind: 'dynamic';
+        readonly name: string;
+        readonly expression: FunctionExpressionRef;
+        readonly span: SpanLike;
+      }
+  > = [];
+  for (const attribute of node.props) {
+    if (attribute.name === 'key' || attribute.name === 'children') continue;
+    admitted.push(attribute);
+  }
+  const id = state.counter.value++;
+  const propsVar = `${INTERNAL_PREFIX}childProps${id}`;
+  const hostVar = `${INTERNAL_PREFIX}childHost${id}`;
+  const scopeVar = `${INTERNAL_PREFIX}childScope${id}`;
+  const nodesVar = `${INTERNAL_PREFIX}childNodes${id}`;
+  const propDeps = new Set<string>();
+  let needsParentProps = false;
+  type ResolvedProp =
+    | { readonly kind: 'static'; readonly name: string; readonly value: string }
+    | {
+        readonly kind: 'dynamic';
+        readonly name: string;
+        readonly record: LoweredExpressionRecord;
+        readonly span: SpanLike;
+      };
+  const resolved: ResolvedProp[] = [];
+  for (const prop of admitted) {
+    if (prop.kind === 'static') {
+      resolved.push(prop);
+      continue;
+    }
+    const record = recordFor(state, prop.expression, records);
+    if (record === null || !declareReads(state, record)) return;
+    const dependencies = dependencyNames(state, record);
+    if (dependencies === null) return;
+    for (const dependency of dependencies) {
+      if (dependency.fromProps) needsParentProps = true;
+      else propDeps.add(dependency.name);
+    }
+    resolved.push({ kind: 'dynamic', name: prop.name, record, span: prop.span });
+  }
+  if (resolved.length > 0 || childrenRecipeVar !== null) {
+    push(state, `const ${propsVar} = {`, span);
+    state.indent += 1;
+    if (childrenRecipeVar !== null) push(state, `children: ${childrenRecipeVar},`, span);
+    for (const prop of resolved) {
+      if (prop.kind === 'static') {
+        const key = IDENTIFIER_PATTERN.test(prop.name) ? prop.name : JSON.stringify(prop.name);
+        push(state, `${key}: ${JSON.stringify(prop.value)},`);
+        continue;
+      }
+      const key = IDENTIFIER_PATTERN.test(prop.name) ? prop.name : JSON.stringify(prop.name);
+      pushParts(state, [`get ${key}() { return (`, { record: prop.record }, '); },'], prop.span);
+    }
+    state.indent -= 1;
+    push(state, '};');
+  }
+  const depParts = [...propDeps];
+  if (needsParentProps) depParts.push(`...${state.hostVar}.propDeps`);
+  const propsExpr = resolved.length > 0 || childrenRecipeVar !== null ? propsVar : '{}';
+  push(
+    state,
+    `const ${hostVar} = { bindings: ${state.hostVar}.bindings, propDeps: [${depParts.join(', ')}] };`,
+    span,
+  );
+  push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
+  push(state, `let ${nodesVar};`);
+  push(state, 'try {');
+  state.indent += 1;
+  push(
+    state,
+    `${nodesVar} = ${node.name}${CLAIM_SUFFIX}(${scopeVar}, ${propsExpr}, ${hostVar}, ${parentExpr});`,
+    span,
+  );
+  state.indent -= 1;
+  push(state, `} catch (error) { ${scopeVar}.dispose(false); throw error; }`);
+  push(state, `${scopeVar}.addRangeCleanup(() => removeNodes(${nodesVar}));`);
+  emitClaimCollectedList(state, nodesVar, collect);
+}
+
+/**
+ * Claim-time recipes. The mount-time recipe's definition owner is the mount
+ * scope, which claim disposes before adoption, so lineage would reject it.
+ * These objects exist only so `claimRecipe` can open an independent projection;
+ * calling `mount` on them is a coded mismatch, not a second mount.
+ */
+function emitClaimTimeRecipes(
+  state: EmitState,
+  file: string,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): void {
+  const referenced = referencedRecipeIds(state.component);
+  if (referenced.size === 0) return;
+  const ctx: ClaimContext = { componentByName: state.componentByName, stack: new Set() };
+  for (const recipe of state.component.recipes) {
+    if (state.diagnostics.length > 0) return;
+    if (!referenced.has(recipe.id)) continue;
+    if (!nodeClaimable(recipe.target, state.component, ctx)) {
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_NODE',
+        `recipe '${recipe.id}' is outside the M07-1 claim slice`,
+        recipe.span,
+      );
+      return;
+    }
+    const recipeVar = nextName(state, 'claimRecipe');
+    state.recipeVars.set(recipe.id, recipeVar);
+    const scopeParam = nextName(state, 'recipeScope');
+    const propsParam = nextName(state, 'recipeProps');
+    const parentParam = nextName(state, 'recipeParent');
+    const adoptedVar = nextName(state, 'adopted');
+    push(state, `const ${recipeVar} = createRecipe({`, recipe.span);
+    state.indent += 1;
+    push(state, `definitionOwner: ${MOUNT_SCOPE},`);
+    push(
+      state,
+      `source: ${JSON.stringify(`${file}#${state.component.name}:${recipe.id.replace(/^#/, '')}`)},`,
+    );
+    push(state, `mount() { throw new Error(${claimError('claim-time recipe has no mount')}); },`);
+    push(state, `claim(${scopeParam}, ${propsParam}, ${parentParam}) {`, recipe.span);
+    state.indent += 1;
+    const outerScope = state.scopeVar;
+    const outerAdopted = state.claimAdoptedVar;
+    state.scopeVar = scopeParam;
+    state.claimAdoptedVar = adoptedVar;
+    const phase2: Array<() => void> = [];
+    push(state, 'const __oe_cursorOwned = __oe_claimCursor === null;');
+    push(
+      state,
+      `if (__oe_cursorOwned) __oe_claimCursor = { list: ${parentParam}.childNodes, i: 0 };`,
+    );
+    push(state, `const ${adoptedVar} = [];`);
+    push(state, 'try {');
+    state.indent += 1;
+    emitClaimInto(
+      state,
+      [recipe.target],
+      '__oe_claimCursor',
+      '',
+      records,
+      phase2,
+      (name) => {
+        push(state, `${adoptedVar}.push(${name});`);
+      },
+      parentParam,
+      true,
+    );
+    push(
+      state,
+      `if (__oe_cursorOwned && __oe_claimCursor.i !== __oe_claimCursor.list.length) throw new Error(${claimError('extra node at /')});`,
+    );
+    for (const step of phase2) step();
+    state.indent -= 1;
+    push(state, '} finally { if (__oe_cursorOwned) __oe_claimCursor = null; }');
+    push(state, `return ${adoptedVar};`);
+    state.scopeVar = outerScope;
+    state.claimAdoptedVar = outerAdopted;
+    state.indent -= 1;
+    push(state, '},');
+    state.indent -= 1;
+    push(state, '});');
+  }
+}
+
 /**
  * Emit `<Name>__claim` for a claimable component. Returns null when the shape
- * is outside M07a; the caller then leaves the recipe mount-only.
+ * is outside the admitted claim slice; the caller then leaves the recipe mount-only.
  */
 function emitClaimFunction(
   file: string,
   component: FunctionModelComponent,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  componentByName: ReadonlyMap<string, FunctionModelComponent>,
+  sharedClaimCursor: boolean,
 ): ClaimEmission | null {
-  if (!componentClaimable(component)) return null;
+  const ctx: ClaimContext = { componentByName, stack: new Set() };
+  if (!componentClaimable(component, ctx)) return null;
+  const useShared = sharedClaimCursor && !isDirectoryRootComponent(component);
+  const projectsChildren = componentProjectsChildren(component);
   const propsName = component.propsParam;
   const state: EmitState = {
     component,
@@ -2272,17 +2721,20 @@ function emitClaimFunction(
     segmentKeys: new Set(),
     scopeVar: MOUNT_SCOPE,
     hostVar: MOUNT_HOST,
-    componentByName: new Map(),
-    declaredRecipeIds: new Set(),
+    componentByName,
+    declaredRecipeIds: declaredRecipeIdSet(component),
     recipeNames: new Set(),
     recipeVars: new Map(),
     entryNames: new Set(),
     refreshStack: [],
     listDepth: 0,
     recipeDepth: 0,
-    childrenRecipeVar: null,
+    childrenRecipeVar: projectsChildren ? `${INTERNAL_PREFIX}childrenRecipe` : null,
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
+    claimCursorShared: useShared,
+    claimAdoptedVar: null,
+    usesClaimRecipe: false,
   };
   const localLines: Array<{
     name: string;
@@ -2307,15 +2759,68 @@ function emitClaimFunction(
   const phase2: Array<() => void> = [];
   const adopted: string[] = [];
   const rootDirectory = staticElementDirectory(component.roots);
-  if (rootDirectory !== null) {
+  if (!useShared && rootDirectory !== null) {
     adopted.push(...emitClaimedDirectory(state, CLAIM_PARENT, rootDirectory));
-  } else {
+  } else if (!useShared) {
     const rootCursor = nextName(state, 'cursor');
     push(state, `const ${rootCursor} = { list: ${CLAIM_PARENT}.childNodes, i: 0 };`);
-    emitClaimInto(state, component.roots, rootCursor, '', records, phase2, (name) => {
-      adopted.push(name);
-    });
+    emitClaimInto(
+      state,
+      component.roots,
+      rootCursor,
+      '',
+      records,
+      phase2,
+      (name) => {
+        adopted.push(name);
+      },
+      CLAIM_PARENT,
+      true,
+    );
     emitClaimCursorEnd(state, rootCursor, '/');
+  } else {
+    for (const line of localLines) {
+      pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+    }
+    if (state.childrenRecipeVar !== null) {
+      push(state, `const ${state.childrenRecipeVar} = ${MOUNT_PROPS}.children;`);
+      push(
+        state,
+        `if (${state.childrenRecipeVar} == null || typeof ${state.childrenRecipeVar} !== "object" || typeof ${state.childrenRecipeVar}.mount !== "function" || ${state.childrenRecipeVar}.definitionOwner == null) throw new Error("OEIR_LEAF_MISSING_CHILDREN: component '<${component.name}>' projects props.children but the mounted instance was given no children recipe");`,
+      );
+    }
+    emitClaimTimeRecipes(state, file, records);
+    const adoptedVar = nextName(state, 'adopted');
+    state.claimAdoptedVar = adoptedVar;
+    push(state, `const ${adoptedVar} = [];`);
+    push(state, 'const __oe_cursorOwned = __oe_claimCursor === null;');
+    push(
+      state,
+      `if (__oe_cursorOwned) __oe_claimCursor = { list: ${CLAIM_PARENT}.childNodes, i: 0 };`,
+    );
+    push(state, 'try {');
+    state.indent += 1;
+    emitClaimInto(
+      state,
+      component.roots,
+      '__oe_claimCursor',
+      '',
+      records,
+      phase2,
+      (name) => {
+        push(state, `${adoptedVar}.push(${name});`);
+      },
+      CLAIM_PARENT,
+      true,
+    );
+    push(
+      state,
+      `if (__oe_cursorOwned && __oe_claimCursor.i !== __oe_claimCursor.list.length) throw new Error(${claimError('extra node at /')});`,
+    );
+    for (const step of phase2) step();
+    state.indent -= 1;
+    push(state, '} finally { if (__oe_cursorOwned) __oe_claimCursor = null; }');
+    push(state, `return ${adoptedVar};`);
   }
   if (state.diagnostics.length > 0) {
     return {
@@ -2325,11 +2830,13 @@ function emitClaimFunction(
       placements: [],
     };
   }
-  for (const line of localLines) {
-    pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+  if (!useShared) {
+    for (const line of localLines) {
+      pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+    }
+    for (const step of phase2) step();
+    push(state, `return [${adopted.join(', ')}];`);
   }
-  for (const step of phase2) step();
-  push(state, `return [${adopted.join(', ')}];`);
 
   const prologue: string[] = [
     `function ${component.name}${CLAIM_SUFFIX}(${MOUNT_SCOPE}, ${MOUNT_PROPS}, ${MOUNT_HOST}, ${CLAIM_PARENT}) {`,
@@ -2356,6 +2863,7 @@ function emitClaimFunction(
     lines: [...prologue, ...state.lines, '}', ''],
     diagnostics: [],
     usesStaticSiblingDirectoryConsumer: state.usesStaticSiblingDirectoryConsumer,
+    usesClaimRecipe: state.usesClaimRecipe,
     segments: state.segments.map((segment) => ({
       ...segment,
       generatedLine: segment.generatedLine + shift,
@@ -2372,6 +2880,7 @@ function emitComponent(
   component: FunctionModelComponent,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
+  sharedClaimCursor: boolean,
 ): EmittedComponent {
   const propsName = component.propsParam;
   const projectsChildren = componentProjectsChildren(component);
@@ -2410,6 +2919,9 @@ function emitComponent(
     childrenRecipeVar: projectsChildren ? `${INTERNAL_PREFIX}childrenRecipe` : null,
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
+    claimCursorShared: false,
+    claimAdoptedVar: null,
+    usesClaimRecipe: false,
   };
   if (
     propsName !== null &&
@@ -2556,7 +3068,10 @@ function emitComponent(
       `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [] };`,
     );
   }
-  const claim = state.diagnostics.length === 0 ? emitClaimFunction(file, component, records) : null;
+  const claim =
+    state.diagnostics.length === 0
+      ? emitClaimFunction(file, component, records, componentByName, sharedClaimCursor)
+      : null;
   if (claim !== null && claim.diagnostics.length > 0) {
     return {
       lines: [],
@@ -2596,6 +3111,7 @@ function emitComponent(
     requiredProps: [...state.requiredProps].sort(),
     requiresPropsChanged: state.requiresPropsChanged,
     usesStaticSiblingDirectoryConsumer: claim?.usesStaticSiblingDirectoryConsumer === true,
+    usesClaimRecipe: claim?.usesClaimRecipe === true,
     segments: [
       ...state.segments.map((segment) => ({
         ...segment,
@@ -2832,14 +3348,23 @@ export function generateLeafModule(
   const placements: ExpressionPlacement[] = [];
   let requiresPropsChanged = false;
   let usesStaticSiblingDirectoryConsumer = false;
+  let usesClaimRecipe = false;
+  const sharedClaimCursor = moduleUsesSharedClaimCursor(module, componentByName);
   for (const component of module.components) {
-    const emitted = emitComponent(module.file, component, records, componentByName);
+    const emitted = emitComponent(
+      module.file,
+      component,
+      records,
+      componentByName,
+      sharedClaimCursor,
+    );
     diagnostics.push(...emitted.diagnostics);
     if (emitted.diagnostics.length > 0) continue;
     for (const name of emitted.requiredBindings) requiredBindings.add(name);
     for (const name of emitted.requiredProps) requiredProps.add(name);
     requiresPropsChanged ||= emitted.requiresPropsChanged;
     usesStaticSiblingDirectoryConsumer ||= emitted.usesStaticSiblingDirectoryConsumer === true;
+    usesClaimRecipe ||= emitted.usesClaimRecipe === true;
     // Component chunks are concatenated in module order: rebase this component's
     // segment/placement lines onto the lines already emitted before it.
     const lineOffset = chunks.length;
@@ -2869,15 +3394,17 @@ export function generateLeafModule(
     };
   }
   const runtimeImports: string[] = [...RUNTIME_IMPORTS];
+  if (usesClaimRecipe) runtimeImports.push('claimRecipe');
   if (usesStaticSiblingDirectoryConsumer) {
     runtimeImports.push('claimStaticSiblingRange', 'openStaticSiblingDirectory');
-    runtimeImports.sort();
   }
+  if (runtimeImports.length !== RUNTIME_IMPORTS.length) runtimeImports.sort();
   const headerLines = [
     '// <generated by openelement M07a leaf-claim (mount M06b2a); do not edit>',
     `import { ${runtimeImports.join(', ')} } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
     '',
   ];
+  if (sharedClaimCursor) headerLines.push('let __oe_claimCursor = null;', '');
   const text = [...headerLines, ...chunks].join('\n');
   if (!parsesAsModule(text)) {
     return {

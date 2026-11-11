@@ -142,6 +142,9 @@ describe('M05 leaf v2 — emitted module contract', () => {
       'return Counter__claim(__oe_scope, __oe_host.props, __oe_mountHost, __oe_parent);',
     );
     expect(module).toContain('claim(__oe_scope, __oe_props, __oe_parent)');
+    // A static leaf does not take the M07-1 shared sibling cursor.
+    expect(module).not.toContain('__oe_claimCursor');
+    expect(module).not.toContain('claimRecipe(');
     // Mount stays the fresh-DOM path.
     expect(module).toContain('document.createElement("section")');
     expect(module).toContain('return Counter__mount(__oe_scope, __oe_host.props, __oe_mountHost);');
@@ -420,8 +423,11 @@ function Chip(props) {
     const result = generate(RECIPE_TREE);
     expect(result.module).not.toBeNull();
     const module = result.module!;
-    // One recipe + the pinned root factory both call createRecipe.
-    expect(module.match(/createRecipe\(/g)?.length).toBe(2);
+    // Mount-time recipe + the pinned root factory. The claim-time recipe is a
+    // separate projection descriptor, not a second mount.
+    const beforeClaim = module.slice(0, module.indexOf('function Chip__claim'));
+    expect(beforeClaim.match(/createRecipe\(/g)?.length).toBe(2);
+    expect(module.match(/createRecipe\(/g)?.length).toBe(3);
     expect(module).toContain('definitionOwner: __oe_scope,');
     expect(module).toContain(`source: ${JSON.stringify(`${FILE}#Chip:recipe0`)},`);
     // Two `{chip}` slots: two projections of the SAME recipe variable.
@@ -449,8 +455,13 @@ function Chip(props) {
     // The dynamic text inside the recipe target subscribes on the recipe
     // instance scope, not on the component mount scope.
     // Both the recipe attribute and its text child read `tone`, each with its
-    // own refresh closure bound on the recipe instance scope.
-    expect(module.match(/bindSignalWrites\(__oe_recipeScope\d+, tone, "tone"/g)?.length).toBe(2);
+    // own refresh closure bound on the recipe instance scope. Claim repeats
+    // that pair on the claim-time recipe scope.
+    const beforeClaim = module.slice(0, module.indexOf('function Chip__claim'));
+    expect(beforeClaim.match(/bindSignalWrites\(__oe_recipeScope\d+, tone, "tone"/g)?.length).toBe(
+      2,
+    );
+    expect(module.match(/bindSignalWrites\(__oe_recipeScope\d+, tone, "tone"/g)?.length).toBe(4);
   });
 
   test('mixed intrinsic/insertion siblings keep authored order in the sink', () => {
@@ -477,8 +488,9 @@ function C(props) { const row = <Row text={props.label} />; return <ul>{row}{row
     // The recipe body calls the child mount on a fresh child scope of the
     // recipe scope (the recipe instance owns the child instance).
     expect(module.match(/mount\(__oe_recipeScope\d+\) \{/g)?.length).toBe(1);
+    const beforeClaim = module.slice(0, module.indexOf('function C__claim'));
     expect(
-      module.match(/const __oe_childScope\d+ = __oe_recipeScope\d+\.child\(\);/g)?.length,
+      beforeClaim.match(/const __oe_childScope\d+ = __oe_recipeScope\d+\.child\(\);/g)?.length,
     ).toBe(1);
     expect(
       module.match(
@@ -654,13 +666,16 @@ function C(props) {
     const result = generate(FRAME);
     expect(result.module).not.toBeNull();
     const module = result.module!;
-    // Two root factories + the one children recipe.
-    expect(module.match(/createRecipe\(/g)?.length).toBe(3);
+    // Two root factories + the mount-time children recipe. Claim adds one
+    // claim-time recipe with the same source label.
+    const beforeClaim = module.slice(0, module.indexOf('function C__claim'));
+    expect(beforeClaim.match(/createRecipe\(/g)?.length).toBe(3);
+    expect(module.match(/createRecipe\(/g)?.length).toBe(4);
     // Definition site = the mount scope the ref is emitted in, one per ref site.
     expect(module).toContain(`source: ${JSON.stringify(`${FILE}#C:children0`)},`);
     expect(module.match(/const __oe_recipe0 = createRecipe\(\{/g)?.length).toBe(1);
     expect(
-      module.match(/definitionOwner: __oe_scope,\n {4}source: ".*#C:children0",/g)?.length,
+      beforeClaim.match(/definitionOwner: __oe_scope,\n {4}source: ".*#C:children0",/g)?.length,
     ).toBe(1);
     // The props record carries the recipe as a plain property (a recipe channel,
     // never a per-read getter and never a data attribute).
@@ -686,8 +701,14 @@ function C(props) { return <Frame><i>a</i><b>b</b></Frame>; }
     expect(result.module).not.toBeNull();
     const module = result.module!;
     // One read + one coded host/root check per mount, however many sites.
-    expect(module.match(/const __oe_childrenRecipe = __oe_props\.children;/g)?.length).toBe(1);
-    expect(module.match(/OEIR_LEAF_MISSING_CHILDREN/g)?.length).toBe(1);
+    // Claim repeats the same guard; it is not a second mount-time read.
+    const frameMount = module.slice(
+      module.indexOf('function Frame__mount'),
+      module.indexOf('function Frame__claim'),
+    );
+    expect(frameMount.match(/const __oe_childrenRecipe = __oe_props\.children;/g)?.length).toBe(1);
+    expect(frameMount.match(/OEIR_LEAF_MISSING_CHILDREN/g)?.length).toBe(1);
+    expect(module.match(/const __oe_childrenRecipe = __oe_props\.children;/g)?.length).toBe(2);
     // Two sites: two projections of the SAME recipe variable ...
     expect(module.match(/insertRecipe\(__oe_scope, __oe_childrenRecipe, /g)?.length).toBe(2);
     const projections = [
