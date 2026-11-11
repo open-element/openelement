@@ -123,27 +123,32 @@ different identities.
 The same-list path SSR → claim → update → dispose is still required. These
 fixtures do not fill TSX-18 or TSX-30.
 
-## Open items for the M07 private contract
+## M07 private contract
 
-Recorded here, not decided by this slice; the M07 protocol record (M07-5) owns
-them:
+The directory behavior in this note is unchanged. The three surfaces that used
+to differ from the generated leaf are recorded in
+[the M07-5 protocol record](./m07-5-protocol-record.md). That record is in
+progress and is not signed off. It is not an M07 exit, not an SSR producer,
+and not a public ABI freeze. The marker/seed private contract stays OPEN.
 
-- **Attribute-seed strictness**: this slice compares parsed attributes as an
-  ordered, exact set (`sameAttributes`), which is stricter than "parsed DOM
-  values" and differs from the M07a leaf claim's lenient declared-attribute
-  compare. The contract must choose exact-set (order-insensitive) or state the
-  order requirement explicitly.
-- **Mismatch diagnostic identity**: this slice throws the catalogued
-  `OE_RUNTIME_STATIC_RANGE_MISMATCH`; the generated leaf claim throws a bare
-  `Error` carrying `OEIR_LEAF_CLAIM_MISMATCH`. One M07 chain must not ship two
-  incompatible mismatch surfaces.
-- **Namespace checks**: this slice requires the HTML namespace on the parent,
-  its ancestors and in-range elements; the M07a claim walk is namespace-agnostic.
-- **Mount/claim node-set asymmetry**: the bounded generator extension emits the
-  markers, so the asymmetry is now an explicit internal contract in that
-  section (mount projection nodes include the marker comments; claim projection
-  nodes are the range interiors only). The M07 protocol record (M07-5) still
-  owns the general contract for a directory that admits a dynamic slot.
+- **Attribute-seed strictness**: this directory still compares parsed
+  attributes as an ordered exact set (`sameAttributes`). The generated-leaf
+  static seed now uses that same exact set and order. This directory is not
+  loosened.
+- **Mismatch diagnostic identity**: this directory still throws the catalogued
+  `OE_RUNTIME_STATIC_RANGE_MISMATCH` with the existing case labels. The
+  generated leaf structural mismatch is a catalogued `OpenElementError` whose
+  code value stays `OEIR_LEAF_CLAIM_MISMATCH`. The leaf is not folded into the
+  directory code.
+- **Namespace checks**: this directory still requires the HTML namespace on
+  the parent, its element ancestors, and in-range elements. The generated-leaf
+  claim path now requires that namespace too. This directory check is not
+  loosened.
+- **Mount/claim node-set asymmetry**: for a directory whose component emits a
+  claim function, mount projection nodes include the marker comments and claim
+  projection nodes are the range interiors only. A pure-mount tree no longer
+  emits those markers (ADR-0175 D-2). The general contract for a directory
+  that admits a dynamic slot stays outside this note.
 
 ## M07b generator extension
 
@@ -185,16 +190,15 @@ is not a complete claim. A later path that admits a dynamic slot into a
 directory must pass an `activate` that performs those bindings. Keeping
 `() => {}` on that path would present an incomplete claim as complete.
 
-**Known consequence: mount-only trees also emit the markers.** The mount-side
-predicate is not gated on whether a claim is emitted, so a pure-static directory
-inside a reusable-JSX recipe body, a `props.children` recipe body, a
-condition/list template, or a component whose claim is omitted also gets the
-marker comments. No generated claim consumes them in those trees; they are
-inert comments, but they change `childNodes` and `innerHTML` (not `children` or
-`textContent`) of the affected subtrees. No product entry wires claim, so the
-consequence is bounded; a later slice must either suppress mount emission when
-no claim is emitted or assert and document it explicitly. The current tests do
-not cover this case (fixed-head QA gap, 2026-11-09).
+**Known consequence, closed for pure-mount trees by M07-5 (in progress, not
+signed off).** ADR-0175 D-2: mount emits `oe:r:` / `oe:/r:` pairs only when a
+claim function is emitted for that component. A pure-static directory inside a
+condition, a list template, a reusable-JSX recipe that belongs to a component
+whose claim is omitted, or any other pure-mount tree no longer carries those
+comments. `childNodes` / `innerHTML` do not gain the pair; `children` and
+`textContent` stay the element and text contract. A component that does emit
+a claim function still mounts the markers, and claim still consumes them.
+This is not an SSR producer and not SSR→claim.
 
 `claimRecipe` records one owner and one region before it calls the generated
 claim, then `dispose(false)`s that owner when the claim throws. `runtimeProbe`
@@ -209,7 +213,8 @@ account.
 
 ### Bounded recovery after a mid-directory partial commit
 
-M07-4 (in progress, not signed off; not an M07 exit) closes the previous
+M07-4 is signed off on `c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20` (not an M07
+exit). It closes the previous
 limitation that a mid-directory partial commit was permanent. The directory
 still claims ranges in order. It does not batch-reserve up front. If an
 earlier range commits and a later range fails validation or activation, the
@@ -225,4 +230,5 @@ Still outside this recovery: byte-level restoration of the whole claim,
 deleting borrowed nodes, undoing a fully successful claim, and moving a
 committed marker onto another parent. A first-range validation failure is
 unchanged: no owner, no DOM write, reservation released, and the same parent
-can be claimed again. This is not M07-5, not M08, and not SSR→claim.
+can be claimed again. This recovery is not the M07-5 protocol record, not M08,
+and not SSR→claim.

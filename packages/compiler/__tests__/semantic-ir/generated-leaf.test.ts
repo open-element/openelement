@@ -166,6 +166,19 @@ function List(props) {
     );
     expect(listed.module).not.toBeNull();
     expect(listed.module).not.toContain('function List__claim');
+    const listedDirectory = generate(
+      `import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([{ id: 'a' }]);
+  return <ul>{items.value.map((item) => <li key={item.id}><b>x</b><i>y</i></li>)}</ul>;
+}
+`,
+    );
+    expect(listedDirectory.module).not.toContain('function List__claim');
+    expect(listedDirectory.module).not.toContain('oe:r:');
+    expect(listedDirectory.module).not.toContain('oe:/r:');
+    expect(listedDirectory.module).toContain('document.createElement("b")');
+    expect(listedDirectory.module).toContain('document.createElement("i")');
 
     // Property assignment can overwrite a pre-claim input value. M07a leaves it mount-only.
     const property = generate('function Field(props) { return <input value={props.text} />; }\n');

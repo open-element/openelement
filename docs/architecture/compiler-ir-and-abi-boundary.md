@@ -506,6 +506,11 @@ claim):
 - Published `renderFunctionPageAwaited` (PR #1748) is recorded by the ADR-0169
   amendment (2026-11-09); `renderFunctionPage` keeps its synchronous string
   contract.
+- `RuntimeErrorCode.LEAF_CLAIM_MISMATCH` (`OEIR_LEAF_CLAIM_MISMATCH`) is a
+  further additive member for the generated-leaf structural mismatch. It is
+  not `STATIC_RANGE_MISMATCH`. It is candidate API for the internal Alpha16a
+  chain only: not an ABI freeze, not a release, and not a public contract
+  approval.
 - These are candidate API for the internal Alpha16a chain. The cross-module ABI
   freeze stays Alpha17 and still requires packed-consumer evidence; no version,
   tag or publication is implied.

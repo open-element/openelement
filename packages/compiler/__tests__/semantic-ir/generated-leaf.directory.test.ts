@@ -130,9 +130,29 @@ test('mixed text, one child, insertion sites, and excluded parents do not become
   expect(slotted).toContain('document.createElement("p")');
 });
 
+test('a pure-mount tree does not emit unconsumed range markers', () => {
+  const conditional = generate(
+    'function C(props) { return <div>{true ? <section><p>a</p><p>b</p></section> : <section><b>x</b><i>y</i></section>}</div>; }\n',
+  );
+  expect(conditional).not.toContain('function C__claim');
+  expect(conditional).not.toContain('oe:r:');
+  expect(conditional).not.toContain('oe:/r:');
+  expect(conditional).toContain('document.createElement("p")');
+  expect(conditional).toContain('document.createElement("b")');
+
+  const recipe = generate(
+    'function C(props) { const item = <span><b>x</b><i>y</i></span>; return <div><input value={props.text} />{item}</div>; }\n',
+  );
+  expect(recipe).not.toContain('function C__claim');
+  expect(recipe).not.toContain('oe:r:');
+  expect(recipe).not.toContain('oe:/r:');
+  expect(recipe).toContain('document.createElement("b")');
+});
+
 const EXECUTION = `function Pair(props) { return <div><p>same</p><p>same</p></div>; }
 function Roots(props) { return <><p>same</p><p>same</p></>; }
 function Mixed(props) { return <div>hello<p>a</p></div>; }
+function MountOnly(props) { return <div>{true ? <section><p>a</p><p>b</p></section> : <section><b>x</b><i>y</i></section>}</div>; }
 `;
 
 class Log {
@@ -271,6 +291,7 @@ interface Loaded {
   createPairRecipe: (owner: unknown, host: unknown) => unknown;
   createRootsRecipe: (owner: unknown, host: unknown) => unknown;
   createMixedRecipe: (owner: unknown, host: unknown) => unknown;
+  createMountOnlyRecipe: (owner: unknown, host: unknown) => unknown;
   claimRecipe: (owner: unknown, recipe: unknown, parent: unknown) => Projection;
   insertRecipe: (owner: unknown, recipe: unknown, parent: unknown) => Projection;
   runtimeProbe: {
@@ -307,6 +328,7 @@ beforeAll(async () => {
       `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
+      `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,
       `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
       '',
     ].join('\n'),
@@ -315,7 +337,7 @@ beforeAll(async () => {
   writeFileSync(
     entry,
     [
-      `export { createPairRecipe, createRootsRecipe, createMixedRecipe } from './leaf.js';`,
+      `export { createPairRecipe, createRootsRecipe, createMixedRecipe, createMountOnlyRecipe } from './leaf.js';`,
       `export { claimRecipe, insertRecipe, runtimeProbe, LifetimeScope } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
       '',
     ].join('\n'),
@@ -573,6 +595,52 @@ test('a mixed text parent keeps the text and does not emit a directory', () => {
     div.childNodes.map((node) => (node.nodeType === 3 ? node.nodeValue : node.localName)),
   ).toEqual(['hello', 'p']);
   expect(div.childNodes.some((node) => node.nodeType === 8)).toBe(false);
+});
+
+test('a pure-mount directory does not leave marker comments in the DOM', () => {
+  const doc = new DomDocument();
+  useDocument(doc);
+  const parent = doc.element('div');
+  const owner = new loaded.LifetimeScope();
+  const mounted = loaded.insertRecipe(owner, loaded.createMountOnlyRecipe(owner, host()), parent);
+  const div = mounted.nodes[0] as DomElement;
+  const section = div.childNodes.find(
+    (node) => node.nodeType === 1 && (node as DomElement).localName === 'section',
+  ) as DomElement;
+  expect(section).toBeDefined();
+  const labels = section.childNodes.map(nodeLabel);
+  expect(labels).toEqual(['p', 'p']);
+  expect(section.childNodes.some((node) => node.nodeType === 8)).toBe(false);
+  expect(section.childNodes.filter((node) => node.nodeType === 1).map(nodeLabel)).toEqual([
+    'p',
+    'p',
+  ]);
+  expect(
+    section.childNodes
+      .filter((node) => node.nodeType === 1)
+      .map((node) => (node.childNodes[0] as DomText).nodeValue)
+      .join(''),
+  ).toBe('ab');
+  const generated = String(generate(EXECUTION));
+  const mountOnly = generated.slice(generated.indexOf('function MountOnly__mount'));
+  expect(mountOnly).not.toContain('function MountOnly__claim');
+  expect(mountOnly).not.toContain('oe:r:');
+  expect(mountOnly).not.toContain('oe:/r:');
+});
+
+test('a non-HTML directory parent still fails with the directory code and writes nothing', () => {
+  const doc = new DomDocument();
+  useDocument(doc);
+  const parent = new DomElement(doc.log, 'div', null);
+  const owner = new loaded.LifetimeScope();
+  const recipe = loaded.createRootsRecipe(owner, host());
+  const mark = doc.log.events.length;
+  const error = capture(() => loaded.claimRecipe(owner, recipe, parent));
+  expect(error.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+  expect(error.code).not.toBe('OEIR_LEAF_CLAIM_MISMATCH');
+  expect(String(error.message)).toContain('parent:');
+  expect(doc.log.writesSince(mark)).toEqual([]);
+  expect(parent.childNodes).toEqual([]);
 });
 
 function capture(run: () => unknown): { code?: string; message?: string } {

@@ -209,6 +209,13 @@ export const RuntimeErrorCode = {
    * the message; cases do not each get a code. Not `LEAF_CLAIM_UNAVAILABLE`.
    */
   STATIC_RANGE_MISMATCH: 'OE_RUNTIME_STATIC_RANGE_MISMATCH',
+  /**
+   * A generated leaf claim did not match the existing DOM. The value is the
+   * existing identity `OEIR_LEAF_CLAIM_MISMATCH`; it is not
+   * `STATIC_RANGE_MISMATCH`. Additive candidate for the internal Alpha16a
+   * chain: not an ABI freeze and not a release.
+   */
+  LEAF_CLAIM_MISMATCH: 'OEIR_LEAF_CLAIM_MISMATCH',
   /** A fixed Part has no serialized anchor to bind. */
   SERIALIZED_ANCHOR_MISSING: 'OE_RUNTIME_SERIALIZED_ANCHOR_MISSING',
   /** A when/each Block Part needs the Block builders, which this entry does not install (#1548). */

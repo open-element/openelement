@@ -13,8 +13,12 @@ leaf-scope browser clean-path annex, signed off on
 `70eb2381cab2ef238903cb583f3925976206e901` (browser qualification, chromium
 147.0.7727.15, LOCAL). M07-1 is signed off on
 `ac8c218614e2d4749435c51edf3eaf15eb65f6fd` (Node DOM shim, 非浏览器资格).
-M07-4 bounded mismatch recovery is in progress and is not signed off. None of
-these records fills the grid, TSX-18, or TSX-30. The grid cells stay `R`.
+M07-4 bounded mismatch recovery is signed off on
+`c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`. M07-5 is in progress and is not
+signed off. None of these records fills the grid, TSX-18, or TSX-30. The grid
+cells stay `R`. Leaf-range protocol notes under TSX-18 / TSX-30 are
+非浏览器资格 (Node DOM shim, LOCAL) comments only; those rows are not passing
+and SSR→claim is not done.
 
 Revision 2026-11-05: acceptance area 17 is redefined as **Class authoring
 migration coverage** — M10 partition evidence for the public API and browser
@@ -105,9 +109,10 @@ Zero subscriptions on a static range are not a dynamic-subscription account.
 
 The M07b generator extension (PR #1749) adds no TSX-18/TSX-30 cell: its
 mount/claim directory DOM shape is proved against a Node DOM shim, not a
-browser, and a mount-only pure-static directory also emits marker comments that
-no claim consumes (recorded as a known consequence in the M07b note and as a
-follow-up obligation).
+browser. M07-5 (in progress, not signed off) suppresses `oe:r:` / `oe:/r:`
+markers on a pure-mount tree (ADR-0175 D-2). A tree that emits a claim function
+still mounts them. That suppression is not SSR→claim and does not fill
+TSX-18 or TSX-30.
 
 The M07-1 annex below records leaf-scope **K** notes for TSX-09, TSX-10,
 TSX-23 and a partial TSX-01 shape. Those notes do not fill the grid, do not
@@ -117,8 +122,10 @@ fill TSX-18 or TSX-30, and are not SSR→claim. Qualification is 非浏览器
 result and does not fill the grid. The M07-2 annex below records leaf-scope
 chromium evidence and is signed off on
 `70eb2381cab2ef238903cb583f3925976206e901`. The M07-4 note records that
-bounded mismatch recovery is in progress and is not signed off. Neither fills
-TSX-18 or TSX-30.
+bounded mismatch recovery is signed off on
+`c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`. The M07-5 note records a leaf-range
+protocol that is in progress and is not signed off. None of these fills
+TSX-18 or TSX-30, and none of them is SSR→claim.
 
 **TSX-04 row status (recorded 2026-11-09).** M06b2b's same-key keyed content
 replacement is TSX-04-adjacent supporting evidence only; the TSX-04 `M`/`U`/`D`
@@ -429,10 +436,11 @@ does not throw.
 
 ## M07-4 recorded status — bounded mismatch recovery
 
-Status: **in progress, not signed off**. This note does not fill any grid
-cell, does not mark TSX-18 or TSX-30 passing, and is not an M07 exit, an
-M07-5 protocol record, or an M08 SSR→claim result. The M07-2 chromium
-clean-path is not transferred as this slice's recovery pass.
+Status: **signed off** on `c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`. This note
+does not fill any grid cell, does not mark TSX-18 or TSX-30 passing, and is
+not an M07 exit, not the M07-5 protocol record, and not an M08 SSR→claim
+result. The M07-2 chromium clean-path is not transferred as this slice's
+recovery pass.
 
 ADR-0175 D-1 for a directory claim: a failed claim releases the reservation,
 rolls back tombstones and the success cursor committed in that attempt, and
@@ -443,3 +451,23 @@ range stays permanent, including after `dispose`. The evidence file is
 Qualification for that suite is 非浏览器资格 (Node DOM shim). Firefox and
 WebKit remain M13. Skip / NOT RUN is not a pass. CI green is not this
 slice's qualification.
+
+## M07-5 recorded status — protocol record
+
+Status: **in progress, not signed off**. This note does not fill any grid
+cell, does not mark TSX-18 or TSX-30 passing, and is not an M07 exit or an
+M08 SSR→claim result. There is no generated-leaf SSR producer and no
+permitted seed-state compare.
+
+ADR-0175 D-2 suppresses unconsumed `oe:r:` / `oe:/r:` markers on a pure-mount
+tree. A tree that emits a claim function still carries the marker pair.
+Generated-leaf static attribute seed is an ordered exact set. Structural
+mismatch is a catalogued `OpenElementError` identified as
+`OEIR_LEAF_CLAIM_MISMATCH`, not the directory code. The claim path requires
+the HTML namespace (XHTML URI). The directory exact-set, case labels, and
+namespace checks are unchanged. The record is
+[m07-5-protocol-record.md](./m07-5-protocol-record.md).
+
+TSX-18 and TSX-30 leaf-range cells: the protocol above is a 非浏览器资格
+(Node DOM shim, LOCAL) comment on the leaf claim surfaces. The grid cells
+stay `R`. They are not passing. SSR→claim is not done.

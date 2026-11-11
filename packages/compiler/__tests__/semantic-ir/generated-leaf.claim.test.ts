@@ -43,7 +43,17 @@ function Leaf(props) {
 function Empty(props) {
   return <></>;
 }
+function Plain(props) {
+  return <p id="a" class="b">x</p>;
+}
 `;
+
+const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+
+interface ClaimAttribute {
+  name: string;
+  value: string;
+}
 
 interface ClaimNode {
   nodeType: number;
@@ -51,7 +61,9 @@ interface ClaimNode {
   nodeValue?: string;
   localName?: string;
   tagName?: string;
+  namespaceURI?: string | null;
   childNodes?: ClaimNode[];
+  attributes?: { readonly length: number; item(index: number): ClaimAttribute | null };
   getAttribute?(name: string): string | null;
   hasAttribute?(name: string): boolean;
   setAttribute?(name: string, value: string): void;
@@ -61,26 +73,40 @@ interface ClaimNode {
   removeChild?(node: ClaimNode): ClaimNode;
 }
 
-function element(tag: string): ClaimNode {
-  const attrs = new Map<string, string>();
+function element(tag: string, namespaceURI: string | null = HTML_NAMESPACE): ClaimNode {
+  const attrs: ClaimAttribute[] = [];
+  const attributes = {
+    get length() {
+      return attrs.length;
+    },
+    item(index: number) {
+      return attrs[index] ?? null;
+    },
+  };
   const node: ClaimNode = {
     nodeType: 1,
     parentNode: null,
     localName: tag,
     tagName: tag.toUpperCase(),
+    namespaceURI,
     childNodes: [],
-    getAttribute: (name) => (attrs.has(name) ? attrs.get(name)! : null),
-    hasAttribute: (name) => attrs.has(name),
+    attributes,
+    getAttribute: (name) => attrs.find((entry) => entry.name === name)?.value ?? null,
+    hasAttribute: (name) => attrs.some((entry) => entry.name === name),
     setAttribute: (name, value) => {
-      attrs.set(name, value);
+      const found = attrs.find((entry) => entry.name === name);
+      if (found) found.value = value;
+      else attrs.push({ name, value });
     },
     removeAttribute: (name) => {
-      attrs.delete(name);
+      const index = attrs.findIndex((entry) => entry.name === name);
+      if (index >= 0) attrs.splice(index, 1);
     },
     toggleAttribute: (name, force) => {
-      const on = force === undefined ? !attrs.has(name) : force;
-      if (on) attrs.set(name, '');
-      else attrs.delete(name);
+      const has = attrs.some((entry) => entry.name === name);
+      const on = force === undefined ? !has : force;
+      if (on) node.setAttribute!(name, '');
+      else node.removeAttribute!(name);
       return on;
     },
     appendChild: (child) => {
@@ -130,6 +156,8 @@ interface Probe {
 interface Loaded {
   createLeafRecipe: (owner: unknown, host: unknown) => { claim?: unknown };
   createEmptyRecipe: (owner: unknown, host: unknown) => unknown;
+  createPlainRecipe: (owner: unknown, host: unknown) => unknown;
+  OpenElementError: new (...args: unknown[]) => Error & { code?: string };
   claimRecipe: (
     owner: unknown,
     recipe: unknown,
@@ -169,6 +197,7 @@ beforeAll(async () => {
       `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
+      `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,
       `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
       `export { signal } from ${JSON.stringify(join(element, 'signal/framework.ts'))};`,
       '',
@@ -178,8 +207,8 @@ beforeAll(async () => {
   writeFileSync(
     entry,
     [
-      `export { createLeafRecipe, createEmptyRecipe } from './leaf.js';`,
-      `export { claimRecipe, runtimeProbe, LifetimeScope, signal } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
+      `export { createLeafRecipe, createEmptyRecipe, createPlainRecipe } from './leaf.js';`,
+      `export { claimRecipe, runtimeProbe, LifetimeScope, signal, OpenElementError } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
       '',
     ].join('\n'),
   );
@@ -319,5 +348,126 @@ describe('M07a generated leaf claim', () => {
     );
     expect(occupied.childNodes).toHaveLength(1);
     expect(loaded.runtimeProbe.snapshot().subscriptions).toBe(0);
+  });
+});
+
+function plainDom(options: {
+  attributes?: ReadonlyArray<readonly [string, string]>;
+  namespaceURI?: string | null;
+  parentNamespace?: string | null;
+  ancestorNamespace?: string | null;
+  text?: string;
+}): { parent: ClaimNode; paragraph: ClaimNode; text: ClaimNode } {
+  const ancestor =
+    options.ancestorNamespace === undefined ? null : element('section', options.ancestorNamespace);
+  const parent = element(
+    'div',
+    options.parentNamespace === undefined ? HTML_NAMESPACE : options.parentNamespace,
+  );
+  if (ancestor) ancestor.appendChild!(parent);
+  const paragraph = element(
+    'p',
+    options.namespaceURI === undefined ? HTML_NAMESPACE : options.namespaceURI,
+  );
+  for (const [name, value] of options.attributes ?? [
+    ['id', 'a'],
+    ['class', 'b'],
+  ]) {
+    paragraph.setAttribute!(name, value);
+  }
+  const slot = text(options.text ?? 'x');
+  paragraph.appendChild!(slot);
+  parent.appendChild!(paragraph);
+  return { parent, paragraph, text: slot };
+}
+
+function captureClaim(run: () => unknown): Error & { code?: string } {
+  try {
+    run();
+  } catch (error) {
+    return error as Error & { code?: string };
+  }
+  throw new Error('expected a failure');
+}
+
+describe('M07-5 generated-leaf protocol (非浏览器资格, Node DOM shim, LOCAL)', () => {
+  function claimPlain(dom: { parent: ClaimNode }): void {
+    const owner = new loaded.LifetimeScope();
+    const recipe = loaded.createPlainRecipe(owner, {
+      bindings: {},
+      props: {},
+      propsChanged: loaded.signal(0),
+    });
+    loaded.claimRecipe(owner, recipe, dom.parent);
+  }
+
+  test('static attributes succeed only as an exact ordered set', () => {
+    const dom = plainDom({});
+    claimPlain(dom);
+    expect(dom.text.nodeValue).toBe('x');
+    expect(dom.paragraph.getAttribute!('id')).toBe('a');
+    expect(dom.paragraph.getAttribute!('class')).toBe('b');
+    expect(dom.paragraph.attributes!.length).toBe(2);
+  });
+
+  test('an extra static attribute fails before any write', () => {
+    const dom = plainDom({
+      attributes: [
+        ['id', 'a'],
+        ['class', 'b'],
+        ['data-x', 'extra'],
+      ],
+    });
+    const before = loaded.runtimeProbe.snapshot();
+    const error = captureClaim(() => claimPlain(dom));
+    expect(error).toBeInstanceOf(loaded.OpenElementError);
+    expect(error.constructor).not.toBe(Error);
+    expect(error.name).toBe('OpenElementError');
+    expect(error.code).toBe('OEIR_LEAF_CLAIM_MISMATCH');
+    expect(error.message).toContain('static attribute seed');
+    expect(dom.text.nodeValue).toBe('x');
+    expect(dom.paragraph.getAttribute!('data-x')).toBe('extra');
+    expect(loaded.runtimeProbe.snapshot().subscriptions - before.subscriptions).toBe(0);
+  });
+
+  test('a missing static attribute fails before any write', () => {
+    const dom = plainDom({ attributes: [['id', 'a']] });
+    const error = captureClaim(() => claimPlain(dom));
+    expect(error.code).toBe('OEIR_LEAF_CLAIM_MISMATCH');
+    expect(error.name).toBe('OpenElementError');
+    expect(dom.text.nodeValue).toBe('x');
+    expect(dom.paragraph.attributes!.length).toBe(1);
+  });
+
+  test('static attributes in the wrong order fail before any write', () => {
+    const dom = plainDom({
+      attributes: [
+        ['class', 'b'],
+        ['id', 'a'],
+      ],
+    });
+    const error = captureClaim(() => claimPlain(dom));
+    expect(error.code).toBe('OEIR_LEAF_CLAIM_MISMATCH');
+    expect(error.message).toContain('static attribute id');
+    expect(dom.paragraph.attributes!.item(0)?.name).toBe('class');
+    expect(dom.text.nodeValue).toBe('x');
+  });
+
+  test('a non-HTML parent, ancestor, or node is rejected before any write', () => {
+    const svg = 'http://www.w3.org/2000/svg';
+    for (const dom of [
+      plainDom({ parentNamespace: null }),
+      plainDom({ ancestorNamespace: svg }),
+      plainDom({ namespaceURI: svg }),
+    ]) {
+      const error = captureClaim(() => claimPlain(dom));
+      expect(error).toBeInstanceOf(loaded.OpenElementError);
+      expect(error.code).toBe('OEIR_LEAF_CLAIM_MISMATCH');
+      expect(error.code).not.toBe('OE_RUNTIME_STATIC_RANGE_MISMATCH');
+      expect(error.message).toContain('non-HTML namespace');
+      expect(dom.text.nodeValue).toBe('x');
+      expect(dom.paragraph.getAttribute!('id')).toBe('a');
+      expect(dom.paragraph.getAttribute!('class')).toBe('b');
+    }
   });
 });
