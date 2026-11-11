@@ -97,8 +97,15 @@
  * existing children of a parent in authored order. Structural mismatch throws
  * `OEIR_LEAF_CLAIM_MISMATCH` before any subscription. A dynamic slot writes
  * before it subscribes, so a throw after that write is not a DOM byte
- * rollback; `claimRecipe` then `dispose(false)`s the child owner. Conditions, lists
- * and `property` channels omit `claim` and keep mount-only output.
+ * rollback; `claimRecipe` then `dispose(false)`s the child owner. The
+ * claim-period write — the zero-dependency write and the `refresh()` that
+ * runs before subscribe — skips the DOM API when the current value already
+ * equals the value that would be written. Skipping that write does not skip
+ * the subscription. Mount and every non-claim refresh keep the unconditional
+ * write. A later signal delivery shares the claim refresh body only as an
+ * implementation coupling; that is not an update-period mutation acceptance,
+ * not mismatch recovery, and not SSR→claim. Conditions, lists and `property`
+ * channels omit `claim` and keep mount-only output.
  *
  * M07-1 composition / repeated-insertion order (leaf scope only): a claimable
  * component reference, reusable JSX insertion or `{props.children}` projection
@@ -129,7 +136,8 @@
  * slice.
  *
  * NOT claimed here: production wiring, a public ABI, SSR (M08), TSX-18/TSX-30
- * as filled matrix rows, focus/input preservation, and packed-consumer
+ * as filled matrix rows, an update-period zero-mutation acceptance, mismatch
+ * recovery, signed-off focus/input preservation, and packed-consumer
  * qualification.
  */
 
@@ -1131,6 +1139,21 @@ function emitTextWrite(state: EmitState, targetVar: string, record: LoweredExpre
   pushParts(state, [`${targetVar}.nodeValue = displayValue((`, { record }, '));']);
 }
 
+/**
+ * Claim-period text write. Mount and update keep {@link emitTextWrite}.
+ * The value is computed once with `displayValue`, the same conversion the
+ * unconditional write uses. An equal `nodeValue` does not assign.
+ */
+function emitClaimTextWrite(
+  state: EmitState,
+  targetVar: string,
+  record: LoweredExpressionRecord,
+): void {
+  const valueVar = nextName(state, 'value');
+  pushParts(state, [`const ${valueVar} = displayValue((`, { record }, '));']);
+  push(state, `if (${targetVar}.nodeValue !== ${valueVar}) ${targetVar}.nodeValue = ${valueVar};`);
+}
+
 function emitAttributeWrite(
   state: EmitState,
   elementVar: string,
@@ -1165,6 +1188,65 @@ function emitAttributeWrite(
   pushParts(state, [`const ${valueVar} = attributeValueOf((`, { record }, '));'], anchor);
   push(state, `if (${valueVar} === null) ${elementVar}.removeAttribute(${literal});`, anchor);
   push(state, `else {`, anchor);
+  push(state, `  assertSafeUrlAttribute(${literal}, ${valueVar});`, anchor);
+  push(state, `  ${elementVar}.setAttribute(${literal}, ${valueVar});`, anchor);
+  push(state, `}`, anchor);
+}
+
+/**
+ * Claim-period attribute write. Mount and update keep {@link emitAttributeWrite}.
+ * Each channel compares the current DOM to the same value the unconditional
+ * write would store. `assertSafeUrlAttribute` runs only when a string
+ * attribute will actually be set. Property channels stay mount-only today;
+ * the branch is here so a claim write cannot assign an equal property.
+ */
+function emitClaimAttributeWrite(
+  state: EmitState,
+  elementVar: string,
+  name: string,
+  channel: string,
+  record: LoweredExpressionRecord,
+  anchor: SpanLike,
+): void {
+  const literal = JSON.stringify(name);
+  if (channel === 'boolean') {
+    const valueVar = nextName(state, 'value');
+    pushParts(state, [`const ${valueVar} = Boolean((`, { record }, '));'], anchor);
+    push(
+      state,
+      `if (${elementVar}.hasAttribute(${literal}) !== ${valueVar}) ${elementVar}.toggleAttribute(${literal}, ${valueVar});`,
+      anchor,
+    );
+    return;
+  }
+  if (channel === 'property') {
+    if (!IDENTIFIER_PATTERN.test(name)) {
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
+        `property '${name}' is not a valid identifier`,
+        { file: '', start: 0, end: 0, line: 1, column: 1 },
+      );
+      return;
+    }
+    const valueVar = nextName(state, 'value');
+    pushParts(state, [`const ${valueVar} = (`, { record }, ');'], anchor);
+    push(
+      state,
+      `if (${elementVar}[${literal}] !== ${valueVar}) ${elementVar}[${literal}] = ${valueVar};`,
+      anchor,
+    );
+    return;
+  }
+  const valueVar = nextName(state, 'value');
+  pushParts(state, [`const ${valueVar} = attributeValueOf((`, { record }, '));'], anchor);
+  push(state, `if (${valueVar} === null) {`, anchor);
+  push(
+    state,
+    `  if (${elementVar}.hasAttribute(${literal})) ${elementVar}.removeAttribute(${literal});`,
+    anchor,
+  );
+  push(state, `} else if (${elementVar}.getAttribute(${literal}) !== ${valueVar}) {`, anchor);
   push(state, `  assertSafeUrlAttribute(${literal}, ${valueVar});`, anchor);
   push(state, `  ${elementVar}.setAttribute(${literal}, ${valueVar});`, anchor);
   push(state, `}`, anchor);
@@ -2273,7 +2355,8 @@ function prepareClaimSlot(
 
 /**
  * Emit the initial write plus its refresh subscription. A zero-dependency slot
- * writes once and registers nothing, matching the mount path.
+ * writes once and registers nothing. The write callback is the claim-period
+ * helper: an equal value skips the DOM API, and a dependency still subscribes.
  */
 function emitClaimSlot(
   state: EmitState,
@@ -2357,7 +2440,7 @@ function emitClaimInto(
       adopt(name);
       phase2.push(() =>
         emitClaimSlot(state, slot.dependencies, node.span, () =>
-          emitTextWrite(state, name, slot.record),
+          emitClaimTextWrite(state, name, slot.record),
         ),
       );
       return;
@@ -2387,7 +2470,7 @@ function emitClaimInto(
         const span = attribute.span;
         phase2.push(() =>
           emitClaimSlot(state, slot.dependencies, span, () =>
-            emitAttributeWrite(state, name, attributeName, channel, slot.record, span),
+            emitClaimAttributeWrite(state, name, attributeName, channel, slot.record, span),
           ),
         );
       }
