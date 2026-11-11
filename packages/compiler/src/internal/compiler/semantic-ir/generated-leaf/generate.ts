@@ -1877,7 +1877,10 @@ function emitNode(
     return;
   }
   if (node.kind === 'fragment') {
-    for (const child of node.children) emitNode(state, child, sink, records);
+    // A fragment is not a directory parent, but it is still inside the caller's
+    // range. Dropping `allowDirectory` restores the default and lets that
+    // interior emit its own `oe:r` pair.
+    for (const child of node.children) emitNode(state, child, sink, records, allowDirectory);
     return;
   }
   if (node.kind === 'condition') {
