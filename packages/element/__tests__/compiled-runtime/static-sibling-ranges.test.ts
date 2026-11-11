@@ -6,7 +6,7 @@
  * have zero subscriptions; that is not a dynamic-subscription account.
  */
 
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
 import { OpenElementError, RuntimeErrorCode } from '@openelement/protocol/errors';
 import { signal } from '../../src/internal/signal/framework.ts';
 import { LifetimeScope } from '../../src/internal/compiled/lifetime-scope.ts';
@@ -401,7 +401,9 @@ test('B: marker and static mismatches write nothing and keep borrowed nodes', ()
   expect(live.log.events.slice(mark).some((event) => event === 'read:nodeValue')).toBe(true);
   expect(first.element.parentNode).not.toBeNull();
   expect(second.element.parentNode).toBe(liveParent);
-  expect(kept.owner.disposed).toBe(false);
+  // The failed range writes nothing. Recovery releases the earlier range's
+  // owner; the borrowed nodes stay. Retry is covered by the M07-4 describe.
+  expect(kept.owner.disposed).toBe(true);
   expect(runtimeProbe.snapshot().subscriptions).toBe(0);
 });
 
@@ -469,7 +471,7 @@ test('C: non-canonical ordinals are rejected without parseInt truncation', () =>
   ).toContain('ordinal:');
 });
 
-test('D: a released failure can be retried by the caller; a commit cannot, and does not free the other range', () => {
+test('D: a released failure can be retried by the caller, and a completed directory commit cannot', () => {
   const doc = new LogDocument();
   const parent = doc.element('div');
   buildRange(doc, parent, '01', 'same');
@@ -504,12 +506,16 @@ test('D: a released failure can be retried by the caller; a commit cannot, and d
     claimStaticSiblingRange(paired, 1, new LifetimeScope(), () => undefined),
   );
   expect(seed.message).toContain('static-seed');
-  expect(first.owner.disposed).toBe(false);
+  expect(first.owner.disposed).toBe(true);
   expect(keptRange.element.parentNode).toBe(pairedParent);
+  expect(brokenRange.element.parentNode).toBe(pairedParent);
   brokenRange.text.nodeValue = 'right';
+  const restarted = claimStaticSiblingRange(paired, 0, new LifetimeScope(), () => undefined);
   const fixed = claimStaticSiblingRange(paired, 1, new LifetimeScope(), () => undefined);
+  expect(restarted.owner.disposed).toBe(false);
+  expect(restarted.owner).not.toBe(first.owner);
   expect(fixed.interior[0]).toBe(brokenRange.element);
-  expect(first.owner.disposed).toBe(false);
+  expect(first.owner.disposed).toBe(true);
 
   const contender = openPair();
   const owned = claimStaticSiblingRange(
@@ -523,16 +529,23 @@ test('D: a released failure can be retried by the caller; a commit cannot, and d
       throw new Error('activation failed');
     }),
   ).toThrow(/activation failed/);
-  expect(owned.owner.disposed).toBe(false);
+  expect(owned.owner.disposed).toBe(true);
   expect(contender.ranges[0].element.parentNode).toBe(contender.parent);
   const retried = claimStaticSiblingRange(
+    contender.directory,
+    0,
+    new LifetimeScope(),
+    () => undefined,
+  );
+  const retriedNext = claimStaticSiblingRange(
     contender.directory,
     1,
     new LifetimeScope(),
     () => undefined,
   );
   expect(retried.owner).not.toBe(owned.owner);
-  expect(owned.owner.disposed).toBe(false);
+  expect(retriedNext.start).toBe(contender.ranges[1].start);
+  expect(owned.owner.disposed).toBe(true);
 });
 
 test('E: activation and DOM getters reenter under the reservation; there is no separate dynamic-host suite', () => {
@@ -1110,4 +1123,399 @@ test('null namespaceURI is refused on the parent, ancestors, and in-range elemen
   expect(nestedError.message).toContain('null');
   expect(nestedError.message).toContain('span');
   expectQuiet(nestedDoc, nestedParent, nestedMark, nestedHeld);
+});
+
+/**
+ * ADR-0175 D-1. The harness is this file's Node DOM shim: 非浏览器资格.
+ * It is not the M07-2 chromium clean-path and it does not fill TSX-18 or
+ * TSX-30. A passing shim is not browser qualification.
+ */
+describe('M07-4 bounded mismatch recovery', () => {
+  function expectSameChildren(parent: LogElement, held: readonly LogNode[]): void {
+    expect(parent.childNodes).toHaveLength(held.length);
+    for (let index = 0; index < held.length; index += 1) {
+      expect(parent.childNodes[index]).toBe(held[index]);
+    }
+  }
+
+  test('a first-range validation failure creates no owner, writes nothing, and stays retryable', () => {
+    const doc = new LogDocument();
+    const parent = doc.element('div');
+    const range0 = buildRange(doc, parent, 0, 'wrong');
+    const range1 = buildRange(doc, parent, 1, 'next');
+    const declaration = [paragraph('right'), paragraph('next')];
+    const directory = openStaticSiblingDirectory(
+      asParent(parent),
+      declaration,
+      'fixtures/M07-4-first.tsx',
+    );
+    const held = [...parent.childNodes];
+    const mark = doc.log.events.length;
+    const before = runtimeProbe.snapshot();
+    const error = capture(() =>
+      claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined),
+    );
+    expect(error.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(error.message).toContain('static-seed');
+    expect(error.message).not.toContain('consumed:');
+    expect(error.message).not.toContain('busy:');
+    expect(doc.log.writesSince(mark)).toEqual([]);
+    const after = runtimeProbe.snapshot();
+    expect(after.owners).toBe(before.owners);
+    expect(after.rangeCleanups).toBe(before.rangeCleanups);
+    expect(after.projections).toBe(before.projections);
+    expect(after.subscriptions).toBe(before.subscriptions);
+    expectSameChildren(parent, held);
+    expect(range0.element.parentNode).toBe(parent);
+    expect(range1.element.parentNode).toBe(parent);
+
+    const reopened = openStaticSiblingDirectory(
+      asParent(parent),
+      declaration,
+      'fixtures/M07-4-first.tsx',
+    );
+    range0.text.nodeValue = 'right';
+    const claimed = claimStaticSiblingRange(reopened, 0, new LifetimeScope(), () => undefined);
+    expect(claimed.ordinal).toBe(0);
+    expect(claimed.start).toBe(range0.start);
+    expect(claimed.owner.disposed).toBe(false);
+    const second = claimStaticSiblingRange(reopened, 1, new LifetimeScope(), () => undefined);
+    expect(second.start).toBe(range1.start);
+    const duplicate = capture(() =>
+      claimStaticSiblingRange(reopened, 0, new LifetimeScope(), () => undefined),
+    );
+    expect(duplicate.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(duplicate.message).toContain('consumed:');
+  });
+
+  test('a range-1 validation failure rolls back the range committed in that attempt', () => {
+    const doc = new LogDocument();
+    const parent = doc.element('div');
+    const range0 = buildRange(doc, parent, 0, 'keep');
+    const range1 = buildRange(doc, parent, 1, 'wrong');
+    const directory = openStaticSiblingDirectory(
+      asParent(parent),
+      [paragraph('keep'), paragraph('right')],
+      'fixtures/M07-4-seed.tsx',
+    );
+    const held = [...parent.childNodes];
+    let released = false;
+    const first = claimStaticSiblingRange(directory, 0, new LifetimeScope(), (scope) => {
+      scope.add(() => {
+        released = true;
+      });
+    });
+    const mark = doc.log.events.length;
+    const seed = capture(() =>
+      claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined),
+    );
+    expect(seed.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(seed.message).toContain('static-seed');
+    expect(seed.message).not.toContain('consumed:');
+    expect(doc.log.writesSince(mark)).toEqual([]);
+    expect(released).toBe(true);
+    expect(first.owner.disposed).toBe(true);
+    expectSameChildren(parent, held);
+    expect(range0.element.parentNode).toBe(parent);
+    expect(range1.element.parentNode).toBe(parent);
+    expect(range0.start).toBe(held[0]);
+    expect(range1.end).toBe(held[held.length - 1]);
+
+    const tooSoon = capture(() =>
+      claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined),
+    );
+    expect(tooSoon.message).toContain('order:');
+    expect(tooSoon.message).not.toContain('consumed:');
+    expect(tooSoon.message).not.toContain('busy:');
+
+    const restarted = claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined);
+    expect(restarted.start).toBe(range0.start);
+    expect(restarted.owner).not.toBe(first.owner);
+    expect(restarted.owner.disposed).toBe(false);
+    const again = capture(() =>
+      claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined),
+    );
+    expect(again.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(again.message).toContain('static-seed');
+    expect(again.message).not.toContain('consumed:');
+    expect(restarted.owner.disposed).toBe(true);
+    expectSameChildren(parent, held);
+
+    range1.text.nodeValue = 'right';
+    const restored = claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined);
+    const fixed = claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined);
+    expect(restored.interior[0]).toBe(range0.element);
+    expect(fixed.interior[0]).toBe(range1.element);
+    const permanent = capture(() =>
+      claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined),
+    );
+    expect(permanent.message).toContain('consumed:');
+  });
+
+  test('a range-1 activation failure rolls the attempt back and leaves the dynamic write', () => {
+    const doc = new LogDocument();
+    const parent = doc.element('div');
+    const range0 = buildRange(doc, parent, 0, 'keep');
+    const range1 = buildRange(doc, parent, 1, 'keep');
+    const directory = openStaticSiblingDirectory(
+      asParent(parent),
+      [paragraph('keep'), paragraph('keep')],
+      'fixtures/M07-4-activate.tsx',
+    );
+    const held = [...parent.childNodes];
+    const first = claimStaticSiblingRange(directory, 0, new LifetimeScope(), (_scope, interior) => {
+      (interior[0] as unknown as LogElement).setAttribute('data-from', 'range-0');
+    });
+    const mark = doc.log.events.length;
+    let activationReleased = false;
+    expect(() =>
+      claimStaticSiblingRange(directory, 1, new LifetimeScope(), (scope, interior) => {
+        const element = interior[0] as unknown as LogElement;
+        element.setAttribute('data-from', 'range-1');
+        scope.add(() => {
+          activationReleased = true;
+        });
+        throw new Error('activation failed');
+      }),
+    ).toThrow(/activation failed/);
+    expect(activationReleased).toBe(true);
+    expect(first.owner.disposed).toBe(true);
+    expect(range0.element.attributes.entries).toEqual([{ name: 'data-from', value: 'range-0' }]);
+    expect(range1.element.attributes.entries).toEqual([{ name: 'data-from', value: 'range-1' }]);
+    expect(doc.log.writesSince(mark)).toContain('write:attribute');
+    expect(doc.log.writesSince(mark)).not.toContain('write:remove');
+    expectSameChildren(parent, held);
+    expect(range0.start.parentNode).toBe(parent);
+    expect(range0.element.parentNode).toBe(parent);
+    expect(range0.end.parentNode).toBe(parent);
+    expect(range1.start.parentNode).toBe(parent);
+    expect(range1.element.parentNode).toBe(parent);
+    expect(range1.end.parentNode).toBe(parent);
+
+    // The leftover attributes are not restored, so a fresh claim fails the
+    // seed compare. It must not fail with consumed: because of the partial commit.
+    const blocked = capture(() =>
+      claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined),
+    );
+    expect(blocked.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(blocked.message).toContain('static-seed');
+    expect(blocked.message).not.toContain('consumed:');
+    expect(range0.element.attributes.entries).toEqual([{ name: 'data-from', value: 'range-0' }]);
+    expect(range1.element.attributes.entries).toEqual([{ name: 'data-from', value: 'range-1' }]);
+    expectSameChildren(parent, held);
+
+    range0.element.attributes.entries.length = 0;
+    range1.element.attributes.entries.length = 0;
+    const retry0 = claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined);
+    const retry1 = claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined);
+    expect(retry0.start).toBe(range0.start);
+    expect(retry1.start).toBe(range1.start);
+    expect(retry0.owner.disposed).toBe(false);
+    expectSameChildren(parent, held);
+    const duplicate = capture(() =>
+      claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined),
+    );
+    expect(duplicate.message).toContain('consumed:');
+  });
+
+  test('a later validation failure rolls back every range committed in that attempt', () => {
+    const doc = new LogDocument();
+    const parent = doc.element('div');
+    const ranges = [0, 1, 2].map((ordinal) =>
+      buildRange(doc, parent, ordinal, ordinal === 2 ? 'wrong' : 'ok'),
+    );
+    const directory = openStaticSiblingDirectory(
+      asParent(parent),
+      [paragraph('ok'), paragraph('ok'), paragraph('ok')],
+      'fixtures/M07-4-three.tsx',
+    );
+    const held = [...parent.childNodes];
+    const first = claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined);
+    const second = claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined);
+    const error = capture(() =>
+      claimStaticSiblingRange(directory, 2, new LifetimeScope(), () => undefined),
+    );
+    expect(error.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(error.message).toContain('static-seed');
+    expect(first.owner.disposed).toBe(true);
+    expect(second.owner.disposed).toBe(true);
+    expectSameChildren(parent, held);
+    for (const range of ranges) {
+      expect(range.start.parentNode).toBe(parent);
+      expect(range.element.parentNode).toBe(parent);
+      expect(range.end.parentNode).toBe(parent);
+    }
+
+    const restarted = claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined);
+    expect(restarted.owner.disposed).toBe(false);
+    expect(
+      capture(() => claimStaticSiblingRange(directory, 2, new LifetimeScope(), () => undefined))
+        .message,
+    ).toContain('order:');
+    ranges[2]!.text.nodeValue = 'ok';
+    const retry1 = claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined);
+    const retry2 = claimStaticSiblingRange(directory, 2, new LifetimeScope(), () => undefined);
+    expect(retry1.start).toBe(ranges[1]!.start);
+    expect(retry2.start).toBe(ranges[2]!.start);
+    expect(
+      capture(() => claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined))
+        .message,
+    ).toContain('consumed:');
+  });
+
+  test('a completed directory claim stays consumed after dispose', () => {
+    const { parent, ranges, directory } = openPair();
+    const host = new LifetimeScope();
+    const first = claimStaticSiblingRange(directory, 0, host, () => undefined);
+    const second = claimStaticSiblingRange(directory, 1, host, () => undefined);
+    first.dispose(false);
+    second.dispose(false);
+    expect(ranges[0].element.parentNode).toBe(parent);
+    expect(ranges[1].element.parentNode).toBe(parent);
+    expect(first.owner.disposed).toBe(true);
+    expect(second.owner.disposed).toBe(true);
+    const again = capture(() =>
+      claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined),
+    );
+    expect(again.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(again.message).toContain('consumed:');
+    const byHandle = capture(() =>
+      claimStaticSiblingRange(
+        directory,
+        { start: asNode(ranges[1].start) },
+        new LifetimeScope(),
+        () => undefined,
+      ),
+    );
+    expect(byHandle.message).toContain('consumed:');
+
+    const removed = openPair();
+    const claimed = claimStaticSiblingRange(
+      removed.directory,
+      0,
+      new LifetimeScope(),
+      () => undefined,
+    );
+    const rest = claimStaticSiblingRange(
+      removed.directory,
+      1,
+      new LifetimeScope(),
+      () => undefined,
+    );
+    claimed.dispose(true);
+    rest.dispose(true);
+    expect(removed.ranges[0].element.parentNode).toBeNull();
+    expect(removed.ranges[1].start.parentNode).toBeNull();
+    const afterDetach = capture(() =>
+      claimStaticSiblingRange(removed.directory, 0, new LifetimeScope(), () => undefined),
+    );
+    expect(afterDetach.message).toContain('consumed:');
+  });
+
+  test('an unfinished reservation stays exclusive, and recovery can reserve again', () => {
+    const { directory, ranges, parent } = openPair();
+    const host = new LifetimeScope();
+    let busy: OpenElementError | undefined;
+    const claimed = claimStaticSiblingRange(directory, 0, host, () => {
+      try {
+        claimStaticSiblingRange(directory, 0, host, () => undefined);
+      } catch (error) {
+        if (error instanceof OpenElementError) busy = error;
+        else throw error;
+      }
+    });
+    expect(busy?.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(busy?.message).toContain('busy:');
+    expect(claimed.owner.disposed).toBe(false);
+    expect(claimed.start).toBe(ranges[0].start);
+    const duplicate = capture(() => claimStaticSiblingRange(directory, 0, host, () => undefined));
+    expect(duplicate.message).toContain('consumed:');
+    expect(duplicate.message).not.toContain('busy:');
+
+    expect(() =>
+      claimStaticSiblingRange(directory, 1, host, () => {
+        throw new Error('activation failed');
+      }),
+    ).toThrow(/activation failed/);
+    expect(claimed.owner.disposed).toBe(true);
+    expect(ranges[0].element.parentNode).toBe(parent);
+    expect(ranges[0].start.parentNode).toBe(parent);
+    expect(ranges[1].element.parentNode).toBe(parent);
+
+    let reentered: OpenElementError | undefined;
+    const recovered = claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => {
+      try {
+        claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined);
+      } catch (error) {
+        if (error instanceof OpenElementError) reentered = error;
+        else throw error;
+      }
+    });
+    expect(reentered?.message).toContain('busy:');
+    expect(recovered.owner.disposed).toBe(false);
+    expect(recovered.start).toBe(ranges[0].start);
+    const finished = claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined);
+    expect(finished.start).toBe(ranges[1].start);
+    expect(finished.owner.disposed).toBe(false);
+  });
+
+  test('rolled-back ranges release the owner, the cleanup, the subscription, and the reservation', () => {
+    const count = signal(1);
+    const seen: number[] = [];
+    const doc = new LogDocument();
+    const parent = doc.element('div');
+    buildRange(doc, parent, 0, 'keep');
+    const broken = buildRange(doc, parent, 1, 'wrong');
+    const declaration = [paragraph('keep'), paragraph('right')];
+    const directory = openStaticSiblingDirectory(
+      asParent(parent),
+      declaration,
+      'fixtures/M07-4-release.tsx',
+    );
+    let cleanups = 0;
+    const first = claimStaticSiblingRange(directory, 0, new LifetimeScope(), (scope) => {
+      scope.add(() => {
+        cleanups += 1;
+      });
+      bindSignalWrites(scope, count, 'count', (value) => {
+        seen.push(Number(value));
+      });
+    });
+    const beforeFail = runtimeProbe.snapshot();
+    expect(beforeFail.subscriptions).toBe(1);
+    expect(beforeFail.unsubscribed).toBe(0);
+    const error = capture(() =>
+      claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined),
+    );
+    expect(error.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(error.message).toContain('static-seed');
+    expect(first.owner.disposed).toBe(true);
+    expect(cleanups).toBe(1);
+    const after = runtimeProbe.snapshot();
+    expect(after.subscriptions).toBe(1);
+    expect(after.unsubscribed).toBe(1);
+    count.value = 9;
+    expect(seen).toEqual([]);
+    let late = 0;
+    first.owner.add(() => {
+      late += 1;
+    });
+    expect(late).toBe(1);
+
+    const opened = openStaticSiblingDirectory(
+      asParent(parent),
+      declaration,
+      'fixtures/M07-4-release.tsx',
+    );
+    broken.text.nodeValue = 'right';
+    const retry = claimStaticSiblingRange(opened, 0, new LifetimeScope(), () => undefined);
+    expect(retry.owner.disposed).toBe(false);
+    const rest = claimStaticSiblingRange(opened, 1, new LifetimeScope(), () => undefined);
+    expect(rest.owner.disposed).toBe(false);
+    expect(broken.element.parentNode).toBe(parent);
+    expect(
+      capture(() => claimStaticSiblingRange(opened, 0, new LifetimeScope(), () => undefined))
+        .message,
+    ).toContain('consumed:');
+  });
 });
