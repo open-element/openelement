@@ -13,13 +13,34 @@
  * @module ./markers.ts
  */
 
-/** The private marker spelling. One table, one owner. */
+/**
+ * A marker is a branded value, not a string. A generated module can only
+ * obtain one from this module (`MARKERS.*` or `rangeMarker(n)`), and the only
+ * way to turn one into a DOM comment is `emitComment(marker)` below. A future
+ * generator change that tried `emitComment("oe:something")` would fail the
+ * emitted-module type check rather than quietly inventing a second spelling —
+ * the constraint is the type system, not a linter, a registry or a test.
+ */
+const MARKER_BRAND: unique symbol = Symbol('openelement.marker');
+
+export interface Marker {
+  readonly [MARKER_BRAND]: true;
+  /** The comment text. Read it with `markerText`, never by string building. */
+  readonly text: string;
+}
+
+function makeMarker(text: string): Marker {
+  return { [MARKER_BRAND]: true, text };
+}
+
+/** The private marker vocabulary. One table, one owner, branded values. */
 export const MARKERS = {
-  rangeOpen: 'oe:r:',
-  rangeClose: 'oe:/r:',
-  when: 'oe:when',
-  each: 'oe:each',
+  when: makeMarker('oe:when'),
+  each: makeMarker('oe:each'),
 } as const;
+
+const RANGE_OPEN = 'oe:r:';
+const RANGE_CLOSE = 'oe:/r:';
 
 /**
  * Longest canonical decimal that still fits `Number.MAX_SAFE_INTEGER`.
@@ -45,13 +66,22 @@ export function canonicalOrdinal(digits: string): number | null {
   return value;
 }
 
+/** One static sibling range marker. `end` selects the closing marker. */
+export function rangeMarker(ordinal: number, end = false): Marker {
+  return makeMarker((end ? RANGE_CLOSE : RANGE_OPEN) + ordinal);
+}
+
+/** Read a marker's text. The only sanctioned way to get the string out. */
+export function markerText(marker: Marker): string {
+  return marker.text;
+}
+
 /**
- * The comment text a mount writes for one static sibling range. `end` selects
- * the closing marker. Generated modules call this instead of building the
- * string themselves.
+ * Write a marker comment. This is the only DOM entry for the vocabulary, so a
+ * generated module cannot create an unregistered comment through this path.
  */
-export function rangeMarkerText(ordinal: number, end = false): string {
-  return (end ? MARKERS.rangeClose : MARKERS.rangeOpen) + ordinal;
+export function emitComment(marker: Marker): Comment {
+  return document.createComment(marker.text);
 }
 
 /**
@@ -62,7 +92,7 @@ export function rangeMarkerText(ordinal: number, end = false): string {
 export function parseRangeMarker(value: string | null): { end: boolean; ordinal: number } | null {
   if (value === null) return null;
   for (const end of [false, true]) {
-    const prefix = end ? MARKERS.rangeClose : MARKERS.rangeOpen;
+    const prefix = end ? RANGE_CLOSE : RANGE_OPEN;
     if (!value.startsWith(prefix)) continue;
     const ordinal = canonicalOrdinal(value.slice(prefix.length));
     return ordinal === null ? null : { end, ordinal };

@@ -402,7 +402,7 @@ function Chip(props) {
       expect(decoded.line).toBe(placement.authoredLine);
       expect(decoded.column).toBe(placement.authoredColumn);
     }
-    expect(compiled.module).toContain('document.createComment(MARKERS.when)');
+    expect(compiled.module).toContain('emitComment(MARKERS.when)');
     // Structural anchors exist for the emitted branch builders.
     let mappedLines = 0;
     eachMapping(map, (mapping) => {
@@ -420,7 +420,7 @@ function L(props) {
 }
 `;
     const compiled = compile(source);
-    expect(compiled.module).toContain('document.createComment(MARKERS.each)');
+    expect(compiled.module).toContain('emitComment(MARKERS.each)');
     expect(compiled.placements.length).toBeGreaterThanOrEqual(3);
     const map = consumer(compiled.map);
     for (const placement of compiled.placements) {

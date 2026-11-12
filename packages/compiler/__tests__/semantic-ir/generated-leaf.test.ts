@@ -204,7 +204,7 @@ function List(props) {
     );
     expect(result.module).not.toBeNull();
     const module = result.module!;
-    expect(module).toContain('document.createComment(MARKERS.when)');
+    expect(module).toContain('emitComment(MARKERS.when)');
     expect(module).toContain('function __oe_whenThen');
     expect(module).toContain('function __oe_whenElse');
     expect(module).toContain('dispose(true)');
@@ -223,7 +223,7 @@ function C(props) {
 `);
     expect(result.module).not.toBeNull();
     const module = result.module!;
-    expect(module).toContain('document.createComment(MARKERS.each)');
+    expect(module).toContain('emitComment(MARKERS.each)');
     expect(module).toContain('function __oe_eachEntry');
     expect(module).toContain('function __oe_eachKey');
     expect(module).toContain('update(next)');
