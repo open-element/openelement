@@ -21,7 +21,11 @@ grid cell. The M08 text-boundary annex records the standard dynamic-text pair,
 the `{ node }` claim cursor, the lazy empty slot and the precise
 restricted-context refusal; the M08 condition annex records the fixed
 `oe:when`/`oe:/when` pair, the no-branch-id claim/SSR agreement and the
-Custom Element reconnect vertical. Neither annex loads a grid cell, is an M08
+Custom Element reconnect vertical. The M08 list annex records the
+`oe:each`/`oe:k:<token>`/`oe:/each` keyed-list wire, the canonical primitive-key
+tokens, duplicate-key multiplicity, read-only verify with phase-2 activation,
+the SSR producer and the parsed-DOM (not raw-byte) boundary, with Node and
+Chromium evidence. None of these annexes loads a grid cell, is an M08
 exit, or makes TSX-18 or TSX-30 passing. None of these records fills the grid,
 TSX-18, or TSX-30. The grid
 cells stay `R`. Leaf-range protocol notes under TSX-18 / TSX-30 are
@@ -598,7 +602,8 @@ not produce. Residuals 3–7 (permitted seed-state compare, per-phase equivalenc
 claim negatives, cross-engine and the absent list/component/reference/
 insertion-site/children/property/void producers) remain open; the condition
 producer covers only the admitted branch shapes recorded in the condition annex
-below. M08 is not complete and the list milestone has not started.
+below. M08 is not complete; the list slice is recorded in the last annex, but
+the list milestone is not an exit.
 
 **Failure and wire boundaries recorded here.** A structural negative observed
 before phase 2 writes nothing; the browser test also records a composition
@@ -665,4 +670,71 @@ milestone (`oe:/each`, keys, list claim/refresh/SSR) is not started. Condition
 SSR still reads `host.bindings[name]` directly; there is no request-scoped
 `props`/`bindings` lifecycle, no composition SSR and no production wiring.
 `runUntracked` is a built-in-engine escape, not an arbitrary-engine capability.
-The M08 exit is not claimed.
+The M08 exit is not claimed, including for the list annex below.
+
+## M08 list recorded results — `oe:each` / `oe:k:` / `oe:/each` (Node + chromium)
+
+Scope: leaf-scope **S (SSR)** and **K (Claim)** notes for the keyed list only.
+Status: **not signed off as an M08 exit and it fills no grid cell.** The grid
+cells above stay `R`; TSX-18 and TSX-30 are not passing. This is not full
+SSR→claim parity (M08-2), not per-phase equivalence (M08-3), not claim
+negatives (M08-4), not a filled matrix row (M08-5), and it does not make the
+list milestone an exit.
+
+Evidence: the list slice lands after the merged M08 text/condition consolidation
+(`431f1df59`, PR #1769; reviewed head `112037daa`, tree-equal). Qualification is
+Node v24.18.0 plus **chromium 147.0.7727.15, LOCAL**; Firefox and WebKit remain
+M13. Skip / NOT RUN is not a pass. Artifacts:
+`packages/compiler/__tests__/semantic-ir/generated-leaf.claim-list.test.ts`
+(15 tests, Node), `generated-leaf.claim-list.browser.test.ts` (10 tests,
+Chromium), `packages/element/__tests__/compiled-runtime/list-key.test.ts`
+(41 tests) and `list-wire.test.ts` (14 tests).
+
+The wire is the existing `oe:each` anchor plus one fixed list-level `oe:/each`
+tail and exactly one `oe:k:<token>` per entry; there is no per-entry end marker.
+Tokens are canonical: `s:` is UTF-8 lowercase hex, `n:` is the finite
+`String(value)` spelling (`-0`→`0`), `b:` is `0`/`1`; `isCanonicalListKeyToken`
+checks spelling without decoding. An unsupported key throws the internal
+`OEIR_LEAF_UNSUPPORTED_KEY`; mount alone writes the mount-only `u`, SSR never
+does, and claim rejects it. Duplicate keys keep mount's used-set semantics and
+are **legal** on the wire: SSR emits one marker per item, and `entrySeedMismatch`
+applies S1 (unsupported client key), S2 (wire multiplicity above the client
+count) and S3 (wire key with no client item) before any write. The Nth
+occurrence of a token is assigned to the Nth client occurrence, so duplicate
+identities are distinct and a cross-key reorder keeps each token group's
+occurrence order while the groups move as blocks.
+
+Claim verify is read-only: anchor, every entry marker/template adoption, end,
+one items evaluation and one key evaluation per item, then the seed predicate.
+Activation, subscriptions and the strict sync run only from the phase-2 queue
+after the enclosing structure check; a late enclosing mismatch opens nothing
+and deletes no borrowed node. An equal seed is 0-mutation; a server-empty (or
+client-more) insert is explicitly non-clean and reported as such. A claimed
+update preflights every key and never writes `u`, so an unsupported key fails
+closed with the previous DOM, owners, entries and subscriptions intact and the
+next legal value recovers.
+
+The claim checks the **parsed** tree at fixed positions. A marker removed or
+altered in a parser-preserved way fails closed; an EOF truncation the parser
+repairs into the same legal comment (`<!--oe:/each` at EOF) is structurally
+indistinguishable from the producer's DOM and is not detectable here. Raw-byte
+and transport completeness belong to the HTTP/build boundary; this slice adds no
+sentinel and makes no original-byte claim (B3).
+
+| Case | S / K (leaf scope only) | What this annex records | What it does not record |
+| --- | --- | --- | --- |
+| TSX-07 keyed movement | leaf-scope S + K note, LOCAL | SSR emits one key marker per item in authored order; claim matches by token and the existing minimal-move placement moves the same `<li>` and marker nodes on reorder, keeping entry identity and per-entry subscriptions. | Not the full TSX-07 row. No three-engine `B`, no per-phase equivalence and no update-period 0-mutation acceptance. |
+| TSX-08 unkeyed positions | leaf-scope S + K note, LOCAL | An unkeyed list uses the positional `n:<index>` token; SSR→parse→claim keeps same-position identity with 0 claim-period mutations, then insert (`n:2`) and shrink-to-one (`n:0`) update in place. | Not the full TSX-08 row. No three-engine `B`; positional identity only. |
+| TSX-04 keyed props replacement | leaf-scope note only, LOCAL | A same-key replacement keeps the seeded `<li>`/marker identity and updates the entry-local dynamic text in place; no entry is recreated. | Adjacent supporting evidence only; the TSX-04 row is not claimed. |
+| TSX-06 conditions/zero | leaf-scope note only, LOCAL | The S2 target puts the condition as a **sibling** of the list; the condition claim/SSR is recorded in the annex above. | Entry-internal conditions remain mount-only; not the full TSX-06 row. |
+| TSX-18 SSR seed/claim fidelity | leaf-scope S + K vertical, single engine | The list producer bytes, their real-parser parse, the read-only verify and phase-2 activation, equal-seed 0 mutation, duplicate multiplicity, and the fail-closed wire-more/`u` negatives. | **Does not fill TSX-18.** No full per-phase equivalence, no full claim-negative set, no duplicate-subscription account for all matrix rows. |
+| TSX-30 repeated instances SSR/claim | not recorded | — | No repeated-instance list server→claim shape was produced; the row stays `R`. |
+
+**Explicit entry-composition boundary.** A nested condition, nested list,
+component reference, insertion site, children projection or `property` channel
+inside an entry template keeps the whole component mount-only with no module
+diagnostic. A list inside a reusable-JSX element recipe is held mount-only by
+the `treeHasList` gate until it has a real consumer test of its own. A list
+under a restricted parser context is refused the same way. The actual M08 target
+— the authored S2 Board with the condition as a sibling of the list — is
+reachable; entry-internal condition support is not required by this slice.

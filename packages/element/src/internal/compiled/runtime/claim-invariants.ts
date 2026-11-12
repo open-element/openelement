@@ -28,7 +28,13 @@
  */
 
 import { OpenElementError } from '@openelement/protocol/errors';
-import { parseTextSlotMarker, parseWhenMarker } from './markers.ts';
+import { LIST_KEY_UNSUPPORTED } from './list-key.ts';
+import {
+  parseEachMarker,
+  parseEntryKeyMarker,
+  parseTextSlotMarker,
+  parseWhenMarker,
+} from './markers.ts';
 
 /** The HTML namespace. Every claimed element must be in it. */
 export const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
@@ -196,6 +202,117 @@ export function assertWhenEndMarker(node: Node | null | undefined, where: string
   if (parseWhenMarker((node as Comment).nodeValue) !== 'end') {
     throw leafClaimMismatch(`condition end at ${where} does not match`);
   }
+}
+
+/**
+ * The list anchor/end are fixed markers checked at one position. No scan, no
+ * ordinal, no per-entry end marker. A missing, foreign or swapped comment fails
+ * closed with the internal leaf mismatch identity.
+ *
+ * This is a check of the parsed DOM only. A raw-byte truncation that the HTML
+ * parser repairs into the same legal comment node (for example `<!--oe:/each`
+ * at EOF) is structurally indistinguishable from the producer's document here;
+ * original-byte/transport completeness belongs to the HTTP/build boundary and
+ * is not claimed by this check. No document/root sentinel is added.
+ */
+export function assertEachAnchor(node: Node | null | undefined, where: string): void {
+  if (node == null) {
+    throw leafClaimMismatch(`list anchor is missing at ${where}`);
+  }
+  if (node.nodeType !== 8) {
+    throw leafClaimMismatch(`list anchor at ${where} is not a comment`);
+  }
+  if (parseEachMarker((node as Comment).nodeValue) !== 'start') {
+    throw leafClaimMismatch(`list anchor at ${where} does not match`);
+  }
+}
+
+export function assertEachEndMarker(node: Node | null | undefined, where: string): void {
+  if (node == null) {
+    throw leafClaimMismatch(`list end is missing at ${where}`);
+  }
+  if (node.nodeType !== 8) {
+    throw leafClaimMismatch(`list end at ${where} is not a comment`);
+  }
+  if (parseEachMarker((node as Comment).nodeValue) !== 'end') {
+    throw leafClaimMismatch(`list end at ${where} does not match`);
+  }
+}
+
+/** `true` exactly when the node is the list-level closing marker. */
+export function isEachEndMarker(node: Node | null | undefined): boolean {
+  return (
+    node != null && node.nodeType === 8 && parseEachMarker((node as Comment).nodeValue) === 'end'
+  );
+}
+
+/**
+ * Read one entry-key marker at the current position. The comment must parse as
+ * `oe:k:<canonical token>`; the mount-only `u` payload is an explicit mismatch
+ * (`unsupported entry key kind`), never silently adopted. The token is returned
+ * as a string and never decoded.
+ */
+export function readEntryKeyMarker(node: Node | null | undefined, where: string): string {
+  if (node == null) {
+    throw leafClaimMismatch(`entry key marker is missing at ${where}`);
+  }
+  if (node.nodeType !== 8) {
+    throw leafClaimMismatch(`entry key marker at ${where} is not a comment`);
+  }
+  const parsed = parseEntryKeyMarker((node as Comment).nodeValue);
+  if (parsed === null) {
+    throw leafClaimMismatch(`entry key marker at ${where} does not match`);
+  }
+  if (parsed.token === LIST_KEY_UNSUPPORTED) {
+    throw leafClaimMismatch(`unsupported entry key kind at ${where}`);
+  }
+  return parsed.token;
+}
+
+/**
+ * Server/client entry-seed comparison. Pure string work: no DOM, no decode, no
+ * key recovery. The wire keeps the mount's duplicate-key semantics: the same
+ * token may appear more than once and every occurrence is a distinct entry
+ * identity. The rules run in order and the first failure wins:
+ *
+ *   S1 a client key outside the admitted primitives;
+ *   S2 a wire token occurs more often than the client list (ambiguous borrowed
+ *      identity: the extra server occurrence has no client item to adopt it);
+ *   S3 a wire token with no client item at all (would require deleting borrowed
+ *      DOM).
+ *
+ * Ordering is not compared: the claim matches by token and the existing
+ * minimal-move placement handles reorder. Wire-more is S2/S3; client-more is
+ * the insert path, not a mismatch here. Duplicate client keys are legal and are
+ * handled by the mount used-set rule. The caller pairs the Nth occurrence of a
+ * token with the Nth wire entry of that token, so cross-key reorder keeps each
+ * token's occurrence order stable while every entry identity is consumed at
+ * most once.
+ */
+export function entrySeedMismatch(
+  wireTokens: readonly string[],
+  clientTokens: readonly (string | null)[],
+): string | null {
+  for (const token of clientTokens) {
+    if (token === null) return 'client entry key is not a supported primitive';
+  }
+  const clientCounts = new Map<string, number>();
+  for (const token of clientTokens) {
+    if (token === null) continue;
+    clientCounts.set(token, (clientCounts.get(token) ?? 0) + 1);
+  }
+  const wireCounts = new Map<string, number>();
+  for (const token of wireTokens) {
+    wireCounts.set(token, (wireCounts.get(token) ?? 0) + 1);
+  }
+  for (const [token, wireCount] of wireCounts) {
+    const clientCount = clientCounts.get(token) ?? 0;
+    if (clientCount === 0) return 'server entry key has no client item';
+    if (wireCount > clientCount) {
+      return `server entry key ${token} occurs ${wireCount} times, client has ${clientCount}`;
+    }
+  }
+  return null;
 }
 
 /**
