@@ -296,13 +296,20 @@ describe('M08-2 condition — claimability boundaries (mount stays available)', 
     expect(property.module).not.toContain('function C__ssr');
   });
 
-  test('a void element in a branch keeps claim, but the existing SSR boundary omits __ssr', () => {
+  test('a void element in a branch keeps claim and enters the SSR producer', () => {
     const voided = compile('function C(props) { return <div>{props.ok ? <br /> : null}</div>; }\n');
     expect(voided.diagnostics).toEqual([]);
     expect(voided.module).not.toBeNull();
-    // Claim can adopt the element; the M08-1a SSR producer still refuses void
-    // elements. This is the recorded asymmetry, not a new rejection.
+    // M08 input slice: canonical void elements are admitted in a condition
+    // branch too. The start tag carries no close tag; the null branch is empty.
     expect(voided.module).toContain('function C__claim');
-    expect(voided.module).not.toContain('function C__ssr');
+    expect(voided.module).toContain('function C__ssr');
+    const loaded = instantiate(voided.module!);
+    expect(ssr(loaded, 'C')({ ok: true }, { bindings: {} })).toBe(
+      '<div><!--oe:when--><br><!--oe:/when--></div>',
+    );
+    expect(ssr(loaded, 'C')({ ok: false }, { bindings: {} })).toBe(
+      '<div><!--oe:when--><!--oe:/when--></div>',
+    );
   });
 });

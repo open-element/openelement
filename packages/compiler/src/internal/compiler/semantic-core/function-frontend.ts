@@ -39,6 +39,7 @@
 
 import ts from 'typescript';
 import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
+import { VOID_TAGS } from '@openelement/protocol/void-tags';
 import { classifyIntrinsicAttribute } from './attribute-classification.ts';
 import { isSafeAttributeName } from './analyze-module.ts';
 import { type CompilerDiagnostic, diagnosticAt } from './diagnostics/index.ts';
@@ -304,6 +305,18 @@ function isJsxLike(node: ts.Node): boolean {
 
 function isComponentTag(tag: string): boolean {
   return /^[A-Z]/.test(tag);
+}
+
+/**
+ * A void element has no content model. Whitespace-only JSX text and an empty
+ * JSX expression slot are formatting and emit no child; any real child is a
+ * source diagnostic rather than a child the mount appends and the SSR producer
+ * silently drops.
+ */
+function hasMeaningfulVoidChild(child: ts.JsxChild): boolean {
+  if (ts.isJsxText(child)) return child.text.trim() !== '';
+  if (ts.isJsxExpression(child)) return child.expression !== undefined;
+  return true;
 }
 
 /** A discovered component candidate: the function node plus its authored name. */
@@ -809,6 +822,16 @@ class FunctionFrontendBuilder {
     const tagReason = forbiddenSinkReason('tag', tag);
     if (tagReason !== null) {
       this.fail(opening.tagName, 'OEC9010', `tag <${tag}> is a ${tagReason}`);
+      return null;
+    }
+    // The HTML parser treats a void element as childless. Refuse authored
+    // children here, at the source, instead of letting mount append nodes the
+    // SSR producer would have to drop.
+    const voidChild = ts.isJsxElement(node)
+      ? node.children.find(hasMeaningfulVoidChild)
+      : undefined;
+    if (VOID_TAGS.has(tag) && voidChild !== undefined) {
+      this.fail(voidChild, 'OEC9013', `void element <${tag}> may not have children`);
       return null;
     }
     const attributes = this.buildAttributes(opening.attributes, tag, true);

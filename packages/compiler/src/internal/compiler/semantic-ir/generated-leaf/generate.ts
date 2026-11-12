@@ -175,11 +175,14 @@
  * The M08-2 condition slice extends the producer to a condition whose branches
  * contain already-admitted shapes: it emits the `oe:when` start marker, the
  * selected branch chunk (ordinals restarting at 0) and the `oe:/when` end
- * marker, evaluating the test once per call. Component references, insertion
- * sites, children projections, `property` channels, void elements, and any
- * condition branch shape the claim slice does not admit still emit no `__ssr`
- * (no partial producer). The M08 list slice below extends this producer to the
- * list wire. Seed/resource-lifecycle semantics are not defined here.
+ * marker, evaluating the test once per call. The void-element slice below
+ * admits the canonical `VOID_TAGS` shape for the producer: the start tag and
+ * its attributes, with no close tag and no children (authored void children are
+ * the source diagnostic `OEC9013`). Component references, insertion sites,
+ * children projections, `property` channels, and any condition branch shape the
+ * claim slice does not admit still emit no `__ssr` (no partial producer). The
+ * M08 list slice below extends this producer to the list wire.
+ * Seed/resource-lifecycle semantics are not defined here.
  *
  * M08 text boundary (M08-2 slice, not an M08 exit): every dynamic text slot in
  * a claimable chunk carries one standard HTML comment pair,
@@ -4744,10 +4747,12 @@ function emitClaimFunction(
  * module that can claim existing DOM can now also produce that DOM, which is
  * the precondition for the M08 SSR→claim parity proof.
  *
- * Boundary of this slice: dynamic text/attribute slots, conditions, lists,
- * component references and insertion sites return `null`, so no `__ssr` is
- * emitted for them. Slice M08-1b adds the dynamic slots; until then the absence
- * of `__ssr` is the honest shape of "this component is not SSR-producible yet".
+ * Boundary of this slice: dynamic text/attribute/property slots, conditions,
+ * lists, component references and insertion sites return `null`, so no `__ssr`
+ * is emitted for them. Slice M08-1b adds the admitted dynamic slots; the
+ * void-element slice admits canonical `VOID_TAGS` as a start tag + attributes
+ * with no close tag. For every other shape the absence of `__ssr` is the honest
+ * shape of "this component is not SSR-producible yet".
  *
  * Escaping is NOT re-implemented here: the emitted code calls the runtime's
  * `escapeText` / `escapeAttrValue`, which are the same contract the serializers
@@ -4793,7 +4798,10 @@ function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null
   if (node.kind !== 'element') return null;
   if (!TAG_PATTERN.test(node.tag)) return null;
   const isVoid = VOID_TAGS.has(node.tag);
-  if (isVoid) return null;
+  // A void element has no content model. The frontend refuses authored
+  // children with `OEC9013`; this null is the generator's fail-closed guard for
+  // a model that bypassed the source diagnostic (never a child drop).
+  if (isVoid && node.children.length > 0) return null;
   const attributes: string[] = [];
   for (const attribute of node.attributes) {
     // Slice 1a: static attributes only. A dynamic slot means the value is not
@@ -4809,6 +4817,11 @@ function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null
       ].join(' + '),
     );
   }
+  const open = `"<${node.tag}"`;
+  // HTML void elements: the start tag and its attributes, no close tag. A
+  // `</input>` would be parsed as a stray end tag by the HTML parser and the
+  // claim's fixed cursor never expects it.
+  if (isVoid) return [open, ...attributes, '">"'].join(' + ');
   // The mount wraps a static sibling directory in its marker comments; the SSR
   // form must carry the same comments or the claim cannot find its ranges.
   const directory = markers ? staticElementDirectory(node.children) : null;
@@ -4817,7 +4830,6 @@ function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null
       ? staticSsrExpression(node.children, markers)
       : staticSsrDirectory(directory);
   if (children === null) return null;
-  const open = `"<${node.tag}"`;
   const close = `"</${node.tag}>"`;
   return [open, ...attributes, '">"', children, close].join(' + ');
 }
@@ -5072,7 +5084,20 @@ function emitDynamicSsrNodes(
       continue;
     }
     if (node.kind !== 'element') return false;
-    if (!TAG_PATTERN.test(node.tag) || VOID_TAGS.has(node.tag)) return false;
+    if (!TAG_PATTERN.test(node.tag)) return false;
+    const isVoid = VOID_TAGS.has(node.tag);
+    if (isVoid && node.children.length > 0) {
+      // Source admission refuses this with `OEC9013`; a model that bypassed
+      // the source check still must not emit a start tag that silently omits
+      // its children. Fail the producer instead.
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_VOID_CHILDREN',
+        `void element <${node.tag}> may not have children`,
+        node.span,
+      );
+      return false;
+    }
     push(state, `${outVar}.push(${literalText(`<${node.tag}`)});`, node.span);
     for (const attribute of node.attributes) {
       if (attribute.kind === 'dynamic' && CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
@@ -5092,6 +5117,7 @@ function emitDynamicSsrNodes(
       if (!emitSsrDynamicAttribute(state, attribute, outVar, records)) return false;
     }
     push(state, `${outVar}.push(">");`, node.span);
+    if (isVoid) continue;
     const directory =
       markers && directoryParentAllowed(node.tag) ? staticElementDirectory(node.children) : null;
     if (directory !== null) {
@@ -5119,9 +5145,10 @@ function emitDynamicSsrNodes(
 /**
  * Emit `<Name>__ssr(props, host)` for a component with at least one admitted
  * dynamic slot. Returns null when the shape is outside the slice (for example
- * a condition, list, component reference, insertion site, property channel or
- * void element); diagnostics are returned as a failed emission so the module
- * fails closed the same way mount/claim failures do.
+ * a condition, list, component reference, insertion site or property channel);
+ * diagnostics are returned as a failed emission so the module fails closed the
+ * same way mount/claim failures do. Void elements are admitted: they emit the
+ * start tag and attributes only.
  */
 function emitDynamicSsrFunction(
   file: string,

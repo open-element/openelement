@@ -256,7 +256,7 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     expect((caught as { code?: string }).code).toBe('OE_UNSAFE_URL_SINK');
   });
 
-  test('conditions and keyed lists enter the producer; the remaining boundaries stay absent', () => {
+  test('conditions, keyed lists and void elements enter the producer; the remaining boundaries stay absent', () => {
     // M08-2 admits a condition: its branch selection is a request-time fact, so
     // the producer is present even when both branches are static.
     expect(generated.module).toContain('function Conditional__ssr');
@@ -273,7 +273,12 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     expect(ssr(generated.loaded, 'Listed')({}, { bindings: { items } })).toBe(
       '<ul><!--oe:each--><!--oe:k:s:61--><li><!--oe:t:0-->a<!--oe:/t:0--></li><!--oe:k:s:62--><li><!--oe:t:0-->b<!--oe:/t:0--></li><!--oe:/each--></ul>',
     );
-    for (const name of ['Propertied', 'Voided', 'Reused', 'Composed']) {
+    // M08 input slice: canonical void elements are an admitted producer shape
+    // (start tag + attributes, no close tag). `Voided` is fully static, so it
+    // keeps the parameterless form.
+    expect(generated.module).toContain('function Voided__ssr()');
+    expect(ssr(generated.loaded, 'Voided')()).toBe('<div><br></div>');
+    for (const name of ['Propertied', 'Reused', 'Composed']) {
       expect(generated.module, name).not.toContain(`function ${name}__ssr`);
     }
   });

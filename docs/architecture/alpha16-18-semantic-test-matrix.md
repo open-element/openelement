@@ -32,6 +32,15 @@ cells stay `R`. Leaf-range protocol notes under TSX-18 / TSX-30 are
 非浏览器资格 (Node DOM shim, LOCAL) comments only; those rows are not passing
 and SSR→claim is not done.
 
+The **permitted seed state** used by the M08 evidence is defined once in
+[the M08 list wire record](./m08-list-wire.md) §4.1; the annexes below reference
+it rather than restating it. It classifies equal slots as clean, unequal
+text/attribute/boolean values as permitted activation compare-writes recorded
+as non-clean, and structural/key/static-seed mismatches as fail closed. It adds
+no strict/default-refusal mode and no wire seed. A row that says "no permitted
+seed-state compare" means no reject/strict compare was proved; it does not mean
+the activation compare-write is absent.
+
 Revision 2026-11-05: acceptance area 17 is redefined as **Class authoring
 migration coverage** — M10 partition evidence for the public API and browser
 runtime. The earlier "class compatibility on the shared backend" reading is
@@ -688,7 +697,14 @@ M13. Skip / NOT RUN is not a pass. Artifacts:
 `packages/compiler/__tests__/semantic-ir/generated-leaf.claim-list.test.ts`
 (15 tests, Node), `generated-leaf.claim-list.browser.test.ts` (10 tests,
 Chromium), `packages/element/__tests__/compiled-runtime/list-key.test.ts`
-(41 tests) and `list-wire.test.ts` (14 tests).
+(41 tests) and `list-wire.test.ts` (14 tests). The permitted seed state is
+classified by the single definition in
+[the list wire record](./m08-list-wire.md) §4.1: the equal S2 seed is clean;
+a different dynamic value is a permitted activation write recorded as
+non-clean. The S2 acceptance vertical also has an independent source-map
+consumer test (authored positions decoded through
+`@jridgewell/trace-mapping@0.3.31`, not through the placement ledger alone).
+This annex does not turn those slice results into an exit.
 
 The wire is the existing `oe:each` anchor plus one fixed list-level `oe:/each`
 tail and exactly one `oe:k:<token>` per entry; there is no per-entry end marker.
@@ -727,7 +743,7 @@ sentinel and makes no original-byte claim (B3).
 | TSX-08 unkeyed positions | leaf-scope S + K note, LOCAL | An unkeyed list uses the positional `n:<index>` token; SSR→parse→claim keeps same-position identity with 0 claim-period mutations, then insert (`n:2`) and shrink-to-one (`n:0`) update in place. | Not the full TSX-08 row. No three-engine `B`; positional identity only. |
 | TSX-04 keyed props replacement | leaf-scope note only, LOCAL | A same-key replacement keeps the seeded `<li>`/marker identity and updates the entry-local dynamic text in place; no entry is recreated. | Adjacent supporting evidence only; the TSX-04 row is not claimed. |
 | TSX-06 conditions/zero | leaf-scope note only, LOCAL | The S2 target puts the condition as a **sibling** of the list; the condition claim/SSR is recorded in the annex above. | Entry-internal conditions remain mount-only; not the full TSX-06 row. |
-| TSX-18 SSR seed/claim fidelity | leaf-scope S + K vertical, single engine | The list producer bytes, their real-parser parse, the read-only verify and phase-2 activation, equal-seed 0 mutation, duplicate multiplicity, and the fail-closed wire-more/`u` negatives. | **Does not fill TSX-18.** No full per-phase equivalence, no full claim-negative set, no duplicate-subscription account for all matrix rows. |
+| TSX-18 SSR seed/claim fidelity | leaf-scope S + K vertical, single engine | The list producer bytes, their real-parser parse, the read-only verify and phase-2 activation, equal-seed 0 mutation, duplicate multiplicity, the fail-closed wire-more/`u` negatives, and the permitted-seed classification (equal clean; unequal write non-clean) defined in [the list wire record](./m08-list-wire.md) §4.1. The input/void annex below adds a real `<input>` SSR→claim vertical. | **Does not fill TSX-18.** No full per-phase equivalence, no full claim-negative set, no source-located claim diagnostics, no duplicate-subscription account for all matrix rows. |
 | TSX-30 repeated instances SSR/claim | not recorded | — | No repeated-instance list server→claim shape was produced; the row stays `R`. |
 
 **Explicit entry-composition boundary.** A nested condition, nested list,
@@ -738,3 +754,46 @@ the `treeHasList` gate until it has a real consumer test of its own. A list
 under a restricted parser context is refused the same way. The actual M08 target
 — the authored S2 Board with the condition as a sibling of the list — is
 reachable; entry-internal condition support is not required by this slice.
+
+## M08 input/void recorded results — canonical `VOID_TAGS` (Node + chromium)
+
+Scope: leaf-scope **S (SSR)** and **K (Claim)** notes for canonical void
+elements, centred on a real static `<input>`. Status: **not signed off as an
+M08 exit and it fills no grid cell.** The grid cells above stay `R`; TSX-18 and
+TSX-30 are not passing, and this is not M08-2 parity, M08-3 per-phase
+equivalence, M08-4 claim negatives or M08-5 matrix rows.
+
+The canonical void set has one owner, `@openelement/protocol/void-tags`
+(`VOID_TAGS`, 14 tags: `area base br col embed hr img input link meta param
+source track wbr`). Both the static and the dynamic producer emit a void
+element as `<tag` + attributes + `>`, with no close tag and no children; an
+authored void child is the existing source diagnostic `OEC9013` (same code and
+message as the class path — this slice reuses it, it does not add a code), and
+a model that bypasses source admission fails the producer closed with
+`OEIR_LEAF_UNSUPPORTED_VOID_CHILDREN` instead of dropping children. Static
+attributes keep the shared `escapeAttrValue`/`unsafeStreamFrameAttribute`
+contract; dynamic attributes keep `attributeValueOf`, `assertSafeUrlAttribute`
+and `escapeAttrValue`; no second escape or coercion table is added. The
+`property` channel stays unadmitted: `<input value={props.value} />` remains
+mount-only with no `__claim` and no `__ssr`.
+
+Evidence (LOCAL; Node v24.18.0 + chromium 147.0.7727.15):
+`packages/compiler/__tests__/semantic-ir/generated-leaf.input-ssr.test.ts`
+(13 Node contract tests: all 14 tags, exact attribute order/escaping, dynamic
+attribute/boolean, missing binding, unsafe URL/name, void children diagnostic,
+producer fail-closed guard, `property` absence) and
+`generated-leaf.input-ssr.browser.test.ts` (3 Chromium tests: Node bytes →
+real parser → pre-claim `value`/focus/selection edit → claim; 0 claim-period
+mutation, same node, live value/focus/selection preserved, the `value`
+attribute and `defaultValue` still the server seed; reordered static attributes
+fail closed). The existing `generated-leaf.ssr.test.ts`,
+`generated-leaf.ssr-dynamic.test.ts` and
+`generated-leaf.claim-condition.test.ts` are extended for the void shape.
+
+Not proved by this annex: the directory+void combination in a browser (Node
+structure only); browser-driven `checked` editing; the pre-existing
+`defaultChecked` plain-attribute classification gap (unchanged by this slice);
+full M08-2 parity (the entry-internal condition/list/composition shapes and the
+component-reference/insertion-site/children-projection producers are still
+absent); M08-3/4/5 and the TSX-18/TSX-30 rows; Firefox/WebKit/M13, production
+wiring, the packed consumer, ABI and release.
