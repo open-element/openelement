@@ -13,6 +13,10 @@
  *       no subscription, no insert, original error, claim owners disposed;
  *   B3  a keyed list entry whose condition branch owns a dynamic text refresh:
  *       a real same-key replacement must not throw from `update(next)`.
+ *   R1  the shared-cursor owner captures the activation queue in `try`, clears
+ *       cursor and queue in `finally`, and drains only the captured local: a
+ *       late root mismatch or a nested throw leaves the module queue null, and
+ *       the next owner executes only its own steps.
  *
  * LOCAL Chromium only; this is not M13 and not M08 exit. No source-string
  * assertion is used as runtime evidence.
@@ -68,6 +72,19 @@ function Panel(props) {
   const open = signal(true);
   const label = signal('open');
   return <section><Child />{open.value ? <p>{label.value}</p> : <em>off</em>}<span>after</span></section>;
+}
+`;
+
+// B2 (nested throw): Panel queues its own dynamic-text step first, then the
+// nested Child claim hits a substituted root. The nested claim must not clear
+// the owner's queue; the owner's finally must clear cursor and queue anyway.
+const NESTED_THROW_SOURCE = `import { signal } from '@openelement/element';
+function Child(props) {
+  return <b>child</b>;
+}
+function Panel(props) {
+  const label = signal('open');
+  return <section><p>{label.value}</p><Child /><span>after</span></section>;
 }
 `;
 
@@ -137,7 +154,7 @@ function ssr(loaded: Record<string, unknown>, name: string) {
   ) => string;
 }
 
-function harnessModule(module: string): string {
+function harnessModule(module: string, options: { exposeQueue?: boolean } = {}): string {
   const importMatch = module.match(RUNTIME_IMPORT);
   if (importMatch === null) throw new Error('generated module has no runtime import');
   const imported = importMatch[1]!
@@ -150,7 +167,10 @@ function harnessModule(module: string): string {
   const body = module
     .replace(RUNTIME_IMPORT, `const { ${imported.join(', ')} } = window.__oeRuntime;`)
     .replace(/^export function /gm, 'function ');
-  return `(function () {\n${body}\nwindow.__oeModule = { ${names.join(', ')} };\n})();\n`;
+  const expose = options.exposeQueue
+    ? '\nwindow.__oeGetQueue = () => __oe_claimPhase2;\nwindow.__oeGetCursor = () => __oe_claimCursor;\n'
+    : '';
+  return `(function () {\n${body}\n${expose}\nwindow.__oeModule = { ${names.join(', ')} };\n})();\n`;
 }
 
 let runtimeBundle = '';
@@ -207,10 +227,10 @@ afterAll(async () => {
   if (runtimeBundleDir !== '') rmSync(runtimeBundleDir, { recursive: true, force: true });
 });
 
-async function prepare(module: string): Promise<void> {
+async function prepare(module: string, options: { exposeQueue?: boolean } = {}): Promise<void> {
   page = await browser.newPage();
   await page.addScriptTag({ content: runtimeBundle });
-  await page.addScriptTag({ content: harnessModule(module) });
+  await page.addScriptTag({ content: harnessModule(module, options) });
 }
 
 interface RuntimePage {
@@ -350,11 +370,18 @@ describe('M08-2 condition review — Chromium red/green', () => {
 
   test('B2: a shared-cursor root late mismatch opens no subscription and writes nothing', async () => {
     const module = compile(SHARED_SOURCE);
-    await prepare(module);
+    await prepare(module, { exposeQueue: true });
 
     const result = (await page.evaluate(() => {
       const runtime = (window as unknown as { __oeRuntime: RuntimePage }).__oeRuntime;
       const factories = (window as unknown as { __oeModule: PageModule }).__oeModule;
+      const probeWindow = window as unknown as {
+        __oeGetQueue?: () => unknown[] | null;
+        __oeGetCursor?: () => unknown;
+      };
+      if (typeof probeWindow.__oeGetQueue !== 'function') {
+        throw new Error('harness did not expose the module claim queue');
+      }
       document.body.innerHTML = '<div id="host"></div>';
       const host = document.getElementById('host') as HTMLElement;
       // Composition has no SSR producer (M08-1b boundary), so build the server
@@ -414,6 +441,8 @@ describe('M08-2 condition review — Chromium red/green', () => {
       }
       for (const record of observer.takeRecords()) mutations.push(record.type);
       const probe = runtime.runtimeProbe.snapshot();
+      const failedQueue = probeWindow.__oeGetQueue?.() ?? null;
+      const failedCursor = probeWindow.__oeGetCursor?.() ?? null;
       const leakedScopes = created.filter((scoped) => !scoped.disposed).length;
       proto.child = originalChild;
       observer.disconnect();
@@ -430,14 +459,69 @@ describe('M08-2 condition review — Chromium red/green', () => {
         sectionSame: host.firstChild === section,
         lateStillThere: host.querySelector('#late') !== null,
         inner: section.innerHTML,
+        queueNull: failedQueue === null,
+        queueLength: failedQueue === null ? -1 : failedQueue.length,
+        cursorNull: failedCursor === null,
       };
+
+      // A second, structurally valid claim must initialize its own queue and
+      // never execute anything the failed owner left behind.
+      const host2 = document.createElement('div');
+      document.body.append(host2);
+      const mountOpen2 = runtime.signal(true);
+      const mountLabel2 = runtime.signal('open');
+      const mountScope2 = new runtime.LifetimeScope();
+      const mountRecipe2 = factories.createPanelRecipe!(mountScope2, {
+        props: {},
+        bindings: { open: mountOpen2, label: mountLabel2 },
+        propsChanged: runtime.signal(0),
+      }) as { mount(scope: unknown): Node[] };
+      host2.append(...mountRecipe2.mount(mountScope2));
+      mountScope2.dispose(false);
+      runtime.runtimeProbe.reset();
+      const open2 = runtime.signal(true);
+      const label2 = runtime.signal('second');
+      const scope2 = new runtime.LifetimeScope();
+      const recipe2 = factories.createPanelRecipe!(scope2, {
+        props: {},
+        bindings: { open: open2, label: label2 },
+        propsChanged: runtime.signal(0),
+      });
+      let secondError: string | null = null;
+      let projection2: ReturnType<RuntimePage['claimRecipe']> | null = null;
+      try {
+        projection2 = runtime.claimRecipe(scope2, recipe2, host2);
+      } catch (caught) {
+        secondError = caught instanceof Error ? caught.message : String(caught);
+      }
+      const secondProbe = runtime.runtimeProbe.snapshot();
+      const secondQueue = probeWindow.__oeGetQueue?.() ?? null;
+      const second = {
+        error: secondError,
+        queueNull: secondQueue === null,
+        cursorNull: (probeWindow.__oeGetCursor?.() ?? null) === null,
+        text: host2.querySelector('p')?.textContent ?? null,
+        subscriptions: secondProbe.subscriptions,
+      };
+      projection2?.dispose(true);
+      scope2.dispose(true);
       scope.dispose(true);
-      return after;
+      return { ...after, second };
     })) as ClaimFailure & {
       htmlSame: boolean;
       sectionSame: boolean;
       lateStillThere: boolean;
       inner: string;
+      queueNull: boolean;
+      queueLength: number;
+      cursorNull: boolean;
+      second: {
+        error: string | null;
+        queueNull: boolean;
+        cursorNull: boolean;
+        text: string | null;
+        subscriptions: number;
+      };
     };
 
     // The original late structural error, not an activation error.
@@ -455,16 +539,151 @@ describe('M08-2 condition review — Chromium red/green', () => {
     expect(result.lateStillThere).toBe(true);
     expect(result.inner).toContain('<!--oe:when-->');
     expect(result.inner).not.toContain('inserted');
+    // R1: the failed owner must clear the module-level queue as well as the
+    // cursor. Before the fix this was true/3 (three closures retained).
+    expect(result.queueNull).toBe(true);
+    expect(result.queueLength).toBe(-1);
+    expect(result.cursorNull).toBe(true);
+    // The next owner starts from null, drains only its own local steps, and
+    // produces the second seed; nothing from the failed claim runs.
+    expect(result.second.error).toBeNull();
+    expect(result.second.queueNull).toBe(true);
+    expect(result.second.cursorNull).toBe(true);
+    expect(result.second.text).toBe('second');
+    expect(result.second.subscriptions).toBe(2);
+    await page.close();
+  });
+
+  test('B2: a nested claim throw still clears the owner queue and cursor', async () => {
+    const module = compile(NESTED_THROW_SOURCE);
+    await prepare(module, { exposeQueue: true });
+
+    const result = (await page.evaluate(() => {
+      const runtime = (window as unknown as { __oeRuntime: RuntimePage }).__oeRuntime;
+      const factories = (window as unknown as { __oeModule: PageModule }).__oeModule;
+      const probeWindow = window as unknown as {
+        __oeGetQueue?: () => unknown[] | null;
+        __oeGetCursor?: () => unknown;
+      };
+      if (typeof probeWindow.__oeGetQueue !== 'function') {
+        throw new Error('harness did not expose the module claim queue');
+      }
+      document.body.innerHTML = '<div id="host"></div>';
+      const host = document.getElementById('host') as HTMLElement;
+      const mountLabel = runtime.signal('open');
+      const mountScope = new runtime.LifetimeScope();
+      const mountRecipe = factories.createPanelRecipe!(mountScope, {
+        props: {},
+        bindings: { label: mountLabel },
+        propsChanged: runtime.signal(0),
+      }) as { mount(scope: unknown): Node[] };
+      host.append(...mountRecipe.mount(mountScope));
+      mountScope.dispose(false);
+      const section = host.firstChild as Element;
+      // Panel's <p> dynamic-text step queues before the nested Child claim; the
+      // substituted root makes that nested claim throw.
+      (section.querySelector('b') as Element).replaceWith(document.createElement('i'));
+      const beforeHtml = host.innerHTML;
+
+      const created: Array<{ disposed: boolean }> = [];
+      const proto = runtime.LifetimeScope.prototype as {
+        child?: () => { disposed: boolean };
+      };
+      const originalChild = proto.child;
+      proto.child = function childScope(this: unknown) {
+        const scoped = originalChild!.call(this) as { disposed: boolean };
+        created.push(scoped);
+        return scoped;
+      };
+
+      const label = runtime.signal('open');
+      const scope = new runtime.LifetimeScope();
+      const recipe = factories.createPanelRecipe!(scope, {
+        props: {},
+        bindings: { label },
+        propsChanged: runtime.signal(0),
+      });
+      const mutations: string[] = [];
+      const observer = new MutationObserver((records) => {
+        for (const record of records) mutations.push(record.type);
+      });
+      observer.observe(host, { subtree: true, childList: true, characterData: true });
+      runtime.runtimeProbe.reset();
+      let error: string | null = null;
+      let code: string | null = null;
+      try {
+        runtime.claimRecipe(scope, recipe, host);
+      } catch (caught) {
+        error = caught instanceof Error ? caught.message : String(caught);
+        code =
+          typeof (caught as { code?: unknown }).code === 'string'
+            ? (caught as { code: string }).code
+            : null;
+      }
+      for (const record of observer.takeRecords()) mutations.push(record.type);
+      const probe = runtime.runtimeProbe.snapshot();
+      const queue = probeWindow.__oeGetQueue?.() ?? null;
+      const cursor = probeWindow.__oeGetCursor?.() ?? null;
+      const leakedScopes = created.filter((scoped) => !scoped.disposed).length;
+      proto.child = originalChild;
+      observer.disconnect();
+      const after = {
+        error,
+        code,
+        mutations: mutations.length,
+        subscriptions: probe.subscriptions,
+        unsubscribed: probe.unsubscribed,
+        leakedScopes,
+        owners: probe.owners,
+        queueNull: queue === null,
+        queueLength: queue === null ? -1 : queue.length,
+        cursorNull: cursor === null,
+        substituteStillThere: host.querySelector('i') !== null,
+        htmlSame: host.innerHTML === beforeHtml,
+        inner: section.innerHTML,
+      };
+      scope.dispose(true);
+      return after;
+    })) as ClaimFailure & {
+      htmlSame: boolean;
+      substituteStillThere: boolean;
+      inner: string;
+      queueNull: boolean;
+      queueLength: number;
+      cursorNull: boolean;
+    };
+
+    expect(result.error).toContain("OEIR_LEAF_CLAIM_MISMATCH: expected element 'b' at /");
+    expect(result.code).toBe('OEIR_LEAF_CLAIM_MISMATCH');
+    // R1-b: the owner finally clears both the cursor and the queue even though
+    // the throw came from a nested claim whose own finally is a no-op.
+    expect(result.queueNull).toBe(true);
+    expect(result.queueLength).toBe(-1);
+    expect(result.cursorNull).toBe(true);
+    expect(result.subscriptions).toBe(0);
+    expect(result.unsubscribed).toBe(0);
+    expect(result.mutations).toBe(0);
+    expect(result.leakedScopes).toBe(0);
+    expect(result.owners).toBe(1);
+    expect(result.substituteStillThere).toBe(true);
+    expect(result.htmlSame).toBe(true);
     await page.close();
   });
 
   test('B2: a server-empty branch late mismatch does not insert; setup JS still ran once', async () => {
     const module = compile(EMPTY_SOURCE);
-    await prepare(module);
+    await prepare(module, { exposeQueue: true });
 
     const result = (await page.evaluate(() => {
       const runtime = (window as unknown as { __oeRuntime: RuntimePage }).__oeRuntime;
       const factories = (window as unknown as { __oeModule: PageModule }).__oeModule;
+      const probeWindow = window as unknown as {
+        __oeGetQueue?: () => unknown[] | null;
+        __oeGetCursor?: () => unknown;
+      };
+      if (typeof probeWindow.__oeGetQueue !== 'function') {
+        throw new Error('harness did not expose the module claim queue');
+      }
       document.body.innerHTML = '<div id="host"></div>';
       const host = document.getElementById('host') as HTMLElement;
       const mountShow = runtime.signal(false);
@@ -527,6 +746,8 @@ describe('M08-2 condition review — Chromium red/green', () => {
       }
       for (const record of observer.takeRecords()) mutations.push(record.type);
       const probe = runtime.runtimeProbe.snapshot();
+      const queue = probeWindow.__oeGetQueue?.() ?? null;
+      const cursor = probeWindow.__oeGetCursor?.() ?? null;
       const leakedScopes = created.filter((scoped) => !scoped.disposed).length;
       proto.child = originalChild;
       observer.disconnect();
@@ -545,6 +766,9 @@ describe('M08-2 condition review — Chromium red/green', () => {
         lateStillThere: host.querySelector('#late') !== null,
         inner: div.innerHTML,
         p: div.querySelector('p') !== null,
+        queueNull: queue === null,
+        queueLength: queue === null ? -1 : queue.length,
+        cursorNull: cursor === null,
       };
       scope.dispose(true);
       return after;
@@ -555,6 +779,9 @@ describe('M08-2 condition review — Chromium red/green', () => {
       lateStillThere: boolean;
       inner: string;
       p: boolean;
+      queueNull: boolean;
+      queueLength: number;
+      cursorNull: boolean;
     };
 
     expect(result.error).toContain('OEIR_LEAF_CLAIM_MISMATCH: extra node at /');
@@ -572,6 +799,9 @@ describe('M08-2 condition review — Chromium red/green', () => {
     expect(result.lateStillThere).toBe(true);
     expect(result.p).toBe(false);
     expect(result.inner).toBe('<b>child</b><!--oe:when--><!--oe:/when--><span>after</span>');
+    expect(result.queueNull).toBe(true);
+    expect(result.queueLength).toBe(-1);
+    expect(result.cursorNull).toBe(true);
     await page.close();
   });
 

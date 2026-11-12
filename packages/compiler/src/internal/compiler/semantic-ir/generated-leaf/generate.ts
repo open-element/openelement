@@ -345,7 +345,9 @@ const CLAIM_PARENT = `${INTERNAL_PREFIX}parent`;
 /**
  * Module-level activation queue for the shared-cursor claim path (M08-2 B2).
  * The cursor owner initializes it, nested component/recipe claims append to it,
- * and only the owner drains it after the whole enclosing structure validated.
+ * and the owner captures it in `try`, clears it in `finally`, then drains the
+ * captured local after the whole enclosing structure validated. A verify throw
+ * therefore leaves no module-level queue behind.
  */
 const CLAIM_ACTIVATION = `${INTERNAL_PREFIX}claimPhase2`;
 /**
@@ -3081,9 +3083,11 @@ function prepareClaimSlot(
  * The shared-cursor path wraps each emission in a closure pushed onto the
  * module-level activation queue, so block-scoped node bindings stay visible
  * while no subscription/write runs before the cursor owner has validated the
- * whole enclosing structure. The non-shared path keeps inline emission: its
- * root structure check already runs first (and its bindings are function
- * scoped, so deferring would add no safety).
+ * whole enclosing structure. That owner captures the queue in `try`, clears the
+ * module global in `finally`, and drains the captured local afterwards. The
+ * non-shared path keeps inline emission: its root structure check already runs
+ * first (and its bindings are function scoped, so deferring would add no
+ * safety).
  */
 function emitPhase2Steps(state: EmitState, steps: readonly (() => void)[]): void {
   if (steps.length === 0) return;
@@ -3104,30 +3108,55 @@ function emitPhase2Steps(state: EmitState, steps: readonly (() => void)[]): void
 /**
  * Emit the shared-cursor owner check plus queue initialization. A nested claim
  * finds the module cursor non-null, appends to the owner's queue and never
- * initializes or drains it.
+ * initializes, captures, clears or drains it. The returned local is the
+ * owner-only handoff slot: the success-path capture lands here and the
+ * `finally` clears the module global on both exits.
  */
-function emitClaimQueueInit(state: EmitState, parentExpr: string): void {
+function emitClaimQueueInit(state: EmitState, parentExpr: string): string {
+  const stepsVar = nextName(state, 'phase2Steps');
+  push(state, `let ${stepsVar} = null;`);
   push(state, `const ${INTERNAL_PREFIX}cursorOwned = ${INTERNAL_PREFIX}claimCursor === null;`);
   push(
     state,
     `if (${INTERNAL_PREFIX}cursorOwned) { ${INTERNAL_PREFIX}claimCursor = { node: ${parentExpr}.firstChild }; ${CLAIM_ACTIVATION} = []; }`,
   );
+  return stepsVar;
 }
 
 /**
- * Drain the activation queue after the cursor owner restored the module cursor.
- * Only the owner drains: a nested shared claim or a claim-time recipe claim
- * appended work for this one commit point. `claimActivationVar` is null for the
- * non-shared path, which emits its phase 2 inline instead.
+ * Success-only handoff. Emitted after the final structure check and every
+ * owner-level phase-2 push, immediately before the `finally`: a verify throw
+ * therefore never reaches it, while a successful owner detaches the queue from
+ * the module global before the first step runs.
  */
-function emitClaimActivationDrain(state: EmitState): void {
+function emitClaimActivationCapture(state: EmitState, stepsVar: string): void {
   if (state.claimActivationVar !== CLAIM_ACTIVATION) return;
-  const stepsVar = nextName(state, 'phase2Steps');
+  push(state, `if (${INTERNAL_PREFIX}cursorOwned) ${stepsVar} = ${CLAIM_ACTIVATION};`);
+}
+
+/**
+ * Owner-only release. Runs on success and on every pre-drain throw: cursor and
+ * module queue both become null. A nested claim (`cursorOwned` false) is a
+ * no-op, so it never detaches the enclosing owner's queue.
+ */
+function emitClaimOwnerFinally(state: EmitState): void {
+  push(
+    state,
+    `} finally { if (${INTERNAL_PREFIX}cursorOwned) { ${INTERNAL_PREFIX}claimCursor = null; ${CLAIM_ACTIVATION} = null; } }`,
+  );
+}
+
+/**
+ * Drain the queue the owner captured in its `try`. Owner-only and success-only
+ * by construction: the local array is already detached from the module global,
+ * so an activation reentry started by a step owns a different queue and cannot
+ * overwrite or extend this drain.
+ */
+function emitClaimActivationDrain(state: EmitState, stepsVar: string): void {
+  if (state.claimActivationVar !== CLAIM_ACTIVATION) return;
   const stepVar = nextName(state, 'phase2Step');
   push(state, `if (${INTERNAL_PREFIX}cursorOwned) {`);
   state.indent += 1;
-  push(state, `const ${stepsVar} = ${CLAIM_ACTIVATION};`);
-  push(state, `${CLAIM_ACTIVATION} = null;`);
   push(state, `for (const ${stepVar} of ${stepsVar}) ${stepVar}();`);
   state.indent -= 1;
   push(state, '}');
@@ -3852,7 +3881,7 @@ function emitClaimTimeRecipes(
     // must never flush before the enclosing root structure check.
     state.claimActivationVar = CLAIM_ACTIVATION;
     const phase2: Array<() => void> = [];
-    emitClaimQueueInit(state, parentParam);
+    const activationSteps = emitClaimQueueInit(state, parentParam);
     push(state, `const ${adoptedVar} = [];`);
     push(state, 'try {');
     state.indent += 1;
@@ -3879,9 +3908,10 @@ function emitClaimTimeRecipes(
       `if (__oe_cursorOwned && __oe_claimCursor.node !== null) throw ${claimError('extra node at /')};`,
     );
     emitPhase2Steps(state, phase2);
+    emitClaimActivationCapture(state, activationSteps);
     state.indent -= 1;
-    push(state, '} finally { if (__oe_cursorOwned) __oe_claimCursor = null; }');
-    emitClaimActivationDrain(state);
+    emitClaimOwnerFinally(state);
+    emitClaimActivationDrain(state, activationSteps);
     push(state, `return ${adoptedVar};`);
     state.scopeVar = outerScope;
     state.claimAdoptedVar = outerAdopted;
@@ -4034,7 +4064,7 @@ function emitClaimFunction(
     const adoptedVar = nextName(state, 'adopted');
     state.claimAdoptedVar = adoptedVar;
     push(state, `const ${adoptedVar} = [];`);
-    emitClaimQueueInit(state, CLAIM_PARENT);
+    const activationSteps = emitClaimQueueInit(state, CLAIM_PARENT);
     push(state, 'try {');
     state.indent += 1;
     emitClaimInto(
@@ -4059,9 +4089,10 @@ function emitClaimFunction(
       `if (__oe_cursorOwned && __oe_claimCursor.node !== null) throw ${claimError('extra node at /')};`,
     );
     emitPhase2Steps(state, phase2);
+    emitClaimActivationCapture(state, activationSteps);
     state.indent -= 1;
-    push(state, '} finally { if (__oe_cursorOwned) __oe_claimCursor = null; }');
-    emitClaimActivationDrain(state);
+    emitClaimOwnerFinally(state);
+    emitClaimActivationDrain(state, activationSteps);
     push(state, `return ${adoptedVar};`);
   }
   if (state.diagnostics.length > 0) {
