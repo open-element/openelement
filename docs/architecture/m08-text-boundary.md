@@ -9,8 +9,9 @@ summary: The generated-leaf dynamic-text comment pair, node cursor, lazy empty s
 Date: 2026-11-13. Status: **LOCAL slice record, not signed off as an M08 exit.**
 The baseline recorded here is the last merged slice, `735749b1c` (the M09-0
 shell squash, PR #1768; the M08-1b producer is `df17534db`). The text and
-condition implementations land together in the M08 consolidation at
-`7bfbce00e`; this record mints no M08-exit SHA. Qualification is LOCAL only.
+condition implementations land together in the M08 consolidation (first
+landing `7bfbce00e`, review-closed head `eb82e0178`); this record mints no
+M08-exit SHA. Qualification is LOCAL only.
 
 This record extends the leaf-range protocol of
 [the M07-5 record](./m07-5-protocol-record.md) to dynamic text. It does not
@@ -297,17 +298,17 @@ Related suites updated by the same lane: `generated-leaf.claim.browser.test.ts`
 `generated-leaf.ssr-dynamic.test.ts`, `generated-leaf.sourcemap.test.ts`,
 `generated-leaf.test.ts` and `generated-leaf.browser.test.ts`.
 
-At the consolidation head the recorded results are: the compiler focused
-group 9 files / 112 tests passed, the element focused group 3 files / 37 tests
-passed, the Custom Element shell file 21/21 passed, full compiler 48 files /
-855 tests passed, and full element 115 files / 816 tests passed (clean worktree
-at the consolidation commit; all LOCAL;
-Chromium 147.0.7727.15 for the browser cases). These are focused and package
-results, not a release qualification.
+At the review-closed head `eb82e0178` the recorded results are: the focused
+condition/text + shell group 12 files / 208 tests passed (including the four
+B1/B2/B3 Chromium review cases), the element wire group 3 files / 37 tests
+passed, the Custom Element shell file 21/21 passed, the review file 4/4 passed,
+full compiler 49 files / 860 tests passed, and full element 115 files / 816
+tests passed (clean worktree; all LOCAL; Chromium 147.0.7727.15 for the browser
+cases). These are focused and package results, not a release qualification.
 
 The record is LOCAL. It is not a release qualification and not an Alpha16a or
-M08 exit. The implementation head is `7bfbce00e`; the exact command exits are
-recorded in the landing review, not in this protocol record.
+M08 exit. The review-closed implementation head is `eb82e0178`; the exact
+command exits are recorded in the landing review, not in this protocol record.
 
 ## 9. Related records
 

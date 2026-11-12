@@ -559,11 +559,11 @@ cells above stay `R`; TSX-18 and TSX-30 are not passing. This is not full
 SSR→claim parity (M08-2), not per-phase equivalence (M08-3), not claim
 negatives (M08-4) and not a filled matrix row (M08-5).
 
-Evidence at `7bfbce00e` (clean worktree at the M08 consolidation commit): the
-text+condition compiler focused group is **9 files / 112 tests passed**, the
-text browser file is **11/11**, and the Custom Element shell file is
-**21/21**. The earlier Lead run of 44/44 is superseded for committed-head
-status by these runs. The baseline of this annex is the last merged slice,
+Evidence at the review-closed head `eb82e0178` (clean worktree): the
+text+condition+review focused group is **12 files / 208 tests passed**, the
+text browser file is **11/11**, the condition review file is **4/4**, and the
+Custom Element shell file is **21/21**. The earlier Lead run of 44/44 is
+superseded for committed-head status by these runs. The baseline of this annex is the last merged slice,
 `df17534db` (M08-1b, PR #1767). Qualification: Node contract plus
 **chromium 147.0.7727.15, LOCAL**.
 Firefox and WebKit remain M13. Skip / NOT RUN is not a pass, and CI green is
@@ -619,9 +619,9 @@ SSR→claim parity (M08-2), not per-phase equivalence (M08-3), not claim
 negatives (M08-4), not a filled matrix row (M08-5), and it does not start the
 list milestone.
 
-Evidence: the condition and text slices land in one consolidation at
-`7bfbce00e`. Qualification is Node contract plus **chromium 147.0.7727.15,
-LOCAL**; Firefox and WebKit remain M13. Skip / NOT
+Evidence: the condition and text slices land in one consolidation whose
+review-closed head is `eb82e0178`. Qualification is Node contract plus
+**chromium 147.0.7727.15, LOCAL**; Firefox and WebKit remain M13. Skip / NOT
 RUN is not a pass. Artifacts:
 `packages/compiler/__tests__/semantic-ir/generated-leaf.claim-condition.test.ts`
 (Node), `generated-leaf.claim-condition.browser.test.ts` (Chromium),
