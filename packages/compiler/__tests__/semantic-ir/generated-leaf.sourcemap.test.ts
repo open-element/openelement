@@ -207,6 +207,53 @@ describe('M05b — end-to-end generated-module source map', () => {
     expect(multiLineRecord).toBeDefined();
   });
 
+  test('every placement points at the generated line that carries its lowered text', () => {
+    // The decoding tests above are self-consistent by construction: they decode
+    // at the coordinates the placement itself declares. This test anchors on the
+    // emitted module instead — the line a placement names must be the line that
+    // physically contains that expression. It is what catches a chunk offset
+    // that counted array elements rather than generated lines: a multi-line
+    // lowered expression occupies more generated lines than one element, and
+    // before the physical-line accounting every later chunk (claim, then SSR)
+    // drifted by the embedded-newline count.
+    const source = `function Multi(props) {
+  return <p>{props.label /* first
+  second */ + props.suffix}</p>;
+}
+`;
+    const front = compileFunctionModule(source, FILE, {
+      importClassifier: CLASSIFIER,
+    });
+    expect(front.diagnostics, 'frontend admission').toEqual([]);
+    const generated = generateLeafModule(front.module!, { authoredSource: source });
+    expect(generated.diagnostics).toEqual([]);
+    const records = new Map(
+      front.module!.expressions.expressions.map((record) => [record.id, record]),
+    );
+    const moduleLines = generated.module!.split('\n');
+    const map = consumer(generated.sourceMap!);
+    expect(generated.placements.length).toBeGreaterThanOrEqual(3);
+    let multiLinePlacements = 0;
+    for (const placement of generated.placements) {
+      const record = records.get(placement.exprId);
+      if (record === undefined) continue;
+      if (record.lowered.includes('\n')) multiLinePlacements += 1;
+      const firstLoweredLine = record.lowered.split('\n')[0]!.trim();
+      const generatedLine = moduleLines[placement.generatedLine - 1];
+      expect(generatedLine, placement.exprId).toBeDefined();
+      expect(generatedLine, placement.exprId).toContain(firstLoweredLine);
+      const decoded = originalPositionFor(map, {
+        line: placement.generatedLine,
+        column: placement.generatedColumn,
+      });
+      expect(decoded.source, placement.exprId).toBe(FILE);
+      expect(decoded.line, placement.exprId).toBe(placement.authoredLine);
+      expect(decoded.column, placement.exprId).toBe(placement.authoredColumn);
+    }
+    // mount, claim and SSR all reference the same multi-line record.
+    expect(multiLinePlacements).toBeGreaterThanOrEqual(3);
+  });
+
   test('erasure-shrunk lowered text maps to the surviving authored expression only', () => {
     const source = 'function Shrunk(props) { return <p>{props.value as number}</p>; }\n';
     const compiled = compile(source);

@@ -125,9 +125,12 @@ describe('M05 leaf v2 — emitted module contract', () => {
     expect(module).not.toMatch(/JSON\.(parse|stringify)/);
     expect(module).not.toMatch(/switch\s*\(\s*__oe_/);
     // Authored expressions are emitted through the M03 lowered text, never
-    // re-parsed: the module contains no TypeScript syntax or JSX.
-    expect(module).not.toContain('<section');
-    expect(module).not.toMatch(/\bas\s+[A-Z]/);
+    // re-parsed: the module contains no TypeScript syntax or JSX. The M08 SSR
+    // producer legitimately carries static element bytes as string literals,
+    // so strip quoted strings before asserting there is no raw JSX/TS syntax.
+    const withoutStrings = module.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+    expect(withoutStrings).not.toContain('<section');
+    expect(withoutStrings).not.toMatch(/\bas\s+[A-Z]/);
   });
 
   test('M07a emits a structural claim for a static leaf and omits it for later shapes', () => {

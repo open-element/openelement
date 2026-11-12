@@ -15,7 +15,9 @@ leaf-scope browser clean-path annex, signed off on
 `ac8c218614e2d4749435c51edf3eaf15eb65f6fd` (Node DOM shim, 非浏览器资格).
 M07-4 bounded mismatch recovery is signed off on
 `c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`. M07-5 is in progress and is not
-signed off. None of these records fills the grid, TSX-18, or TSX-30. The grid
+signed off. The M08-1b annex at the end records the dynamic SSR producer and a
+single-engine parse→claim vertical; it is not an M08 exit, and it loads no
+grid cell. None of these records fills the grid, TSX-18, or TSX-30. The grid
 cells stay `R`. Leaf-range protocol notes under TSX-18 / TSX-30 are
 非浏览器资格 (Node DOM shim, LOCAL) comments only; those rows are not passing
 and SSR→claim is not done.
@@ -476,3 +478,67 @@ stay `R`. They are not passing, and they are **M08 obligations** (progress
 ledger §4.3, 2026-11-12): the matrix `K`/`S` columns require SSR DOM, so a
 legal leaf cell cannot be produced before the M08 SSR producer. SSR→claim is
 not done.
+
+## M08-1b recorded results — dynamic SSR producer (Node + chromium parse → claim)
+
+Scope: leaf-scope **S (SSR)** producer notes and one **K (Claim)** vertical. Status:
+**not signed off as an M08 exit and it fills no grid cell.** The grid cells above
+stay `R`; TSX-18 and TSX-30 are not passing. This is not per-phase equivalence
+(M08-3), not claim negatives (M08-4), and not a filled matrix row (M08-5).
+
+Qualification: **Node DOM shim (LOCAL)** for the producer contract, and
+**browser qualification (chromium 147.0.7727.15, LOCAL)** for the parse → claim
+vertical. Firefox and WebKit remain M13 and are not a gate. Skip / NOT RUN is
+not a pass, and CI green is not this slice's browser qualification. Artifact:
+`packages/compiler/__tests__/semantic-ir/generated-leaf.ssr-dynamic.test.ts`,
+with the static producer suite `packages/compiler/__tests__/semantic-ir/generated-leaf.ssr.test.ts`.
+
+The claim input on this path is the generated `__ssr()` string: produced in
+Node by the emitted function, parsed by the browser, then adopted by the
+generated claim. It is never a generated mount tree. The producer emits the
+same lowered records the mount consumes, so no second evaluation model exists:
+`<Name>__ssr(props, host)` is one-shot request-time evaluation that allocates no
+owner, scope, subscription, DOM, cleanup or `onConnect`.
+
+| Case | S / K (leaf scope only) | What this annex records | What it does not record |
+| --- | --- | --- | --- |
+| TSX-01 roots/fragments/empty | leaf-scope S note, 非浏览器资格 | Static roots and fragments serialize in authored order; a static sibling directory inside a component that also has a dynamic slot keeps its paired `oe:r:<ordinal>` / `oe:/r:<ordinal>` comments, and the chromium vertical parses that string and claims it with 0 claim-period mutations. | Not the full TSX-01 row. No empty-root or void-element producer, no update-period claim. |
+| TSX-02 signal/computed | leaf-scope S note, 非浏览器资格 | `{count.value}` and `{doubled.value}` are read at request time: mutating the signal changes the next call's bytes. In chromium the parsed string claims unmutated, and a later signal write refreshes the claimed text, attribute and boolean slots. | Not the full TSX-02 row. No update-period zero-mutation acceptance, no multi-engine `B`. |
+| TSX-03 props/destructuring | leaf-scope S note, 非浏览器资格 | A props getter is read once per slot (the probe counts one read), a component-local snapshot is evaluated once, and a missing host binding keeps the mount identity `OEIR_LEAF_MISSING_VALUE: <name>`. | Only the admitted named props parameter is covered. Not the full TSX-03 row. |
+| TSX-18 SSR seed/claim fidelity | leaf-scope S + K vertical, single engine | The dynamic producer bytes, their parse, and the claim's adoption of those nodes on the listed shapes (text, attribute, boolean, plus a static directory beside a dynamic slot). | **Does not fill TSX-18.** No permitted-seed-state compare, no per-phase equivalence, no claim negatives, no duplicate-subscription account, no firefox/webkit, no update-period result. |
+| TSX-30 repeated instances SSR/claim | not recorded | — | No repeated-instance server→claim shape was produced by this slice; the row stays `R`. |
+
+**M08-2 residuals (explicit, not complete).** These are open work, not accepted
+results:
+
+1. **Adjacent text slots.** Authored `{a}: {b}` serializes correctly, but a real
+   HTML parser coalesces the three authored text slots into one `Text` node. The
+   claim walks one node per authored slot and therefore cannot adopt that string
+   (`OEIR_LEAF_CLAIM_MISMATCH`). Only the producer bytes are asserted today.
+2. **Nullish text slot.** A `null`/`undefined` dynamic text serializes to no
+   bytes, and the parser then produces no `Text` node where the mount creates an
+   empty one. Claiming that string is the same open boundary.
+3. **Permitted seed-state compare** is not implemented.
+4. **Per-phase equivalence** (mount bytes vs SSR bytes per phase) is not
+   measured; the M08-1a/1b pairing is one string against one mount serialization
+   on the recorded shapes.
+5. **Claim negatives** for the SSR string (structural mismatch, rollback) are
+   not produced by this slice.
+6. **Cross-engine `B`** is not claimed; chromium only.
+7. **No producer** is emitted for conditions, lists, component references,
+   insertion sites, children projections, `property` channels or void elements —
+   absence, not a pass.
+
+**Source-map correction recorded here.** The audit of the dynamic producer found
+a pre-existing chunk-offset defect: offsets were counted in `lines` array
+elements, but one multi-line lowered expression is a single element containing
+real newlines, so every later chunk drifted by the embedded-newline count. In
+the multi-line fixture the claim placement pointed one line above its expression
+(pre-existing since M05b) and the new SSR block two lines above. `generate.ts`
+now tracks physical generated lines for `push`/`pushParts` and for the
+`claimShift` / `ssrShift` / `lineOffset` offsets. The consumer test
+`every placement points at the generated line that carries its lowered text`
+(`packages/compiler/__tests__/semantic-ir/generated-leaf.sourcemap.test.ts`)
+anchors on the emitted module instead of the placement's own coordinates: it is
+red on the pre-fix generator and green after. This annex's map statement covers
+that property only; it is not a claim about any other editor consumer.

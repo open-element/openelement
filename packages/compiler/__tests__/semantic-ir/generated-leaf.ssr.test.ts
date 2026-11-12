@@ -8,8 +8,15 @@
  * contract**. That is the precondition for M08's SSR→claim parity; it is not
  * that proof yet (no browser, no claim of the SSR string).
  *
- * Boundary recorded by the last test: a component with a dynamic slot has no
- * `__ssr`. Slice M08-1b adds those.
+ * M08-1b widens the producer to the leaf claim's dynamic slot kinds: a
+ * component with a `dynamic-text`/`attribute`/`boolean` slot now emits
+ * `<Name>__ssr(props, host)` and evaluates the same lowered records at request
+ * time. A fully static component keeps the parameterless M08-1a shape, so that
+ * interface does not move.
+ *
+ * Boundary recorded by the last test: conditions, lists, `property` channels,
+ * component references, insertion sites and void elements still emit no
+ * `__ssr` (no partial producer). Those shapes stay mount/claim-only.
  *
  * Qualification: Node DOM shim, LOCAL. Not a browser, not SSR→claim.
  */
@@ -54,9 +61,19 @@ function Escaped(props) {
 function Nested(props) {
   return <section><p>one</p><p>two</p></section>;
 }
+function Deep(props) {
+  return <div><article><p>one</p><p>two</p></article><aside><i>a</i><i>b</i></aside></div>;
+}
 function Counter(props) {
   const count = signal(1);
   return <p>{count.value}</p>;
+}
+function Conditional(props) {
+  return <section>{props.ok ? <p>on</p> : <em>off</em>}</section>;
+}
+function Listed(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li key={item}>{item}</li>)}</ul>;
 }
 `;
 
@@ -163,10 +180,17 @@ interface Loaded {
   Plain__ssr?: () => string;
   Escaped__ssr?: () => string;
   Nested__ssr?: () => string;
-  Counter__ssr?: () => string;
+  Deep__ssr?: () => string;
+  /** M08-1b: a dynamic slot makes the producer request-time. */
+  Counter__ssr?: (
+    props?: Record<string, unknown>,
+    host?: { readonly bindings: Record<string, unknown> },
+  ) => string;
   createPlainRecipe: (owner: unknown, host: unknown) => unknown;
   createEscapedRecipe: (owner: unknown, host: unknown) => unknown;
   createNestedRecipe: (owner: unknown, host: unknown) => unknown;
+  createDeepRecipe: (owner: unknown, host: unknown) => unknown;
+  createCounterRecipe: (owner: unknown, host: unknown) => unknown;
   claimRecipe: (owner: unknown, recipe: unknown, parent: unknown) => { nodes: ShimNode[] };
   LifetimeScope: new () => unknown;
   signal: <T>(value: T) => { value: T };
@@ -215,8 +239,8 @@ beforeAll(async () => {
   writeFileSync(
     entry,
     [
-      `export { Plain__ssr, Escaped__ssr, Nested__ssr } from './leaf.js';`,
-      `export { createPlainRecipe, createEscapedRecipe, createNestedRecipe } from './leaf.js';`,
+      `export { Plain__ssr, Escaped__ssr, Nested__ssr, Deep__ssr, Counter__ssr } from './leaf.js';`,
+      `export { createPlainRecipe, createEscapedRecipe, createNestedRecipe, createDeepRecipe, createCounterRecipe } from './leaf.js';`,
       `export { claimRecipe, LifetimeScope, signal } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
       '',
     ].join('\n'),
@@ -295,9 +319,57 @@ describe('M08-1a static SSR producer', () => {
     expect(html).toBe(mountAndSerialize(loaded.createNestedRecipe));
   });
 
-  test('outside the slice a component has no SSR producer (recorded boundary)', () => {
-    // A dynamic slot is not known at compile time: M08-1b adds it.
-    expect(module_).not.toContain('function Counter__ssr');
-    expect(loaded.Counter__ssr).toBeUndefined();
+  test('a directory inside a range carries no nested markers, matching the mount', () => {
+    // The mount suppresses directory markers inside a range (`allowDirectory`
+    // false in emitMountedDirectory). The SSR form must apply the same
+    // suppression: the range interior is a plain static subtree, not another
+    // marker layer the claim would reject.
+    const html = loaded.Deep__ssr!();
+    const starts = [...html.matchAll(/<!--oe:r:(\d+)-->/g)].map((match) => match[1]);
+    const ends = [...html.matchAll(/<!--oe:\/r:(\d+)-->/g)].map((match) => match[1]);
+    expect(starts).toEqual(['0', '1']);
+    expect(ends).toEqual(['0', '1']);
+    expect(html).toBe(
+      '<div>' +
+        '<!--oe:r:0--><article><p>one</p><p>two</p></article><!--oe:/r:0-->' +
+        '<!--oe:r:1--><aside><i>a</i><i>b</i></aside><!--oe:/r:1-->' +
+        '</div>',
+    );
+    expect(html).toBe(mountAndSerialize(loaded.createDeepRecipe));
+  });
+
+  test('a dynamic leaf produces request-time bytes that match its mount (M08-1b)', () => {
+    // Counter used to be the recorded boundary of M08-1a: a dynamic text slot
+    // had no compile-time value, so it emitted no `__ssr`. M08-1b widens the
+    // producer instead of dropping the shape, so the assertion flips from
+    // absence to parity — the request-time string is the mount's serialized
+    // DOM under the same escape contract, for the same host binding.
+    expect(module_).toContain('export function Counter__ssr(__oe_props, __oe_host) {');
+    const count = loaded.signal(1);
+    const host = { bindings: { count } };
+    expect(loaded.Counter__ssr!({}, host)).toBe('<p>1</p>');
+    expect(loaded.Counter__ssr!({}, host)).toBe(
+      mountAndSerialize(loaded.createCounterRecipe, { bindings: { count } }),
+    );
+
+    // Request-time, not a compile-time snapshot: the next call re-reads the
+    // binding, and both sides move together.
+    count.value = 7;
+    expect(loaded.Counter__ssr!({}, host)).toBe('<p>7</p>');
+    expect(loaded.Counter__ssr!({}, host)).toBe(
+      mountAndSerialize(loaded.createCounterRecipe, { bindings: { count } }),
+    );
+  });
+
+  test('conditions and lists stay outside the SSR producer (new recorded boundary)', () => {
+    // The M08-1b slice admits the leaf claim's dynamic slot kinds only. A
+    // condition and a list remain mount/claim-refused shapes, so the producer
+    // stays absent rather than emitting a partial form the claim could not
+    // adopt. These are the shapes M08-2/M08-5 still owe.
+    expect(module_).not.toContain('function Conditional__ssr');
+    expect(module_).not.toContain('function Listed__ssr');
+    // The dynamic leaf itself is present, so the absence above is a boundary
+    // and not a producer that failed to emit anything.
+    expect(module_).toContain('function Counter__ssr');
   });
 });

@@ -148,10 +148,32 @@
  * names lowercased); dynamic slot names are not part of that seed. A directory claim still
  * reports `OE_RUNTIME_STATIC_RANGE_MISMATCH` and its existing case labels.
  *
- * NOT claimed here: production wiring, a public ABI, SSR (M08), TSX-18/TSX-30
- * as filled matrix rows, an update-period zero-mutation acceptance, mismatch
- * recovery, signed-off focus/input preservation, and packed-consumer
- * qualification.
+ * M08-1a static SSR producer: a claimable, fully static component also emits
+ * `<Name>__ssr()`, whose string is byte-identical to the mount DOM serialized
+ * under the shared escape contract (including the marker comments a static
+ * sibling directory carries). Escaping is delegated to the runtime
+ * `escapeText`/`escapeAttrValue`; the compiler carries no second table.
+ *
+ * M08-1b dynamic SSR producer: the same producer also admits the leaf claim's
+ * dynamic slot kinds — `dynamic-text`, `attribute` and `boolean` channels.
+ * A component with a dynamic slot emits `<Name>__ssr(props, host)` and
+ * evaluates the SAME lowering records (`record.lowered`) at request time;
+ * `host.bindings[name]` is the same binding record the mount receives, and a
+ * missing binding keeps the `OEIR_LEAF_MISSING_VALUE: <name>` identity. The
+ * request-time rules are the mount's: `displayValue` + `escapeText` for text,
+ * `attributeValueOf` + `assertSafeUrlAttribute` + `escapeAttrValue` for a
+ * quoted attribute, `Boolean` for a boolean channel. SSR creates no owner,
+ * scope, subscription, DOM, cleanup or `onConnect` invocation; it is one-shot
+ * evaluation, not a second execution mode. A fully static component keeps the
+ * M08-1a `__ssr()` shape (no parameters), so that interface is unchanged.
+ * Conditions, lists, component references, insertion sites, children
+ * projections, `property` channels and void elements still emit no `__ssr`.
+ * Seed/resource-lifecycle semantics are not defined here.
+ *
+ * NOT claimed here: production wiring, a public ABI, SSR→claim parity
+ * (M08-2), per-phase equivalence, claim negatives, TSX-18/TSX-30 as filled
+ * matrix rows, an update-period zero-mutation acceptance, mismatch recovery,
+ * signed-off focus/input preservation, and packed-consumer qualification.
  */
 
 import ts from 'typescript';
@@ -331,6 +353,13 @@ export interface GeneratedLeafModule {
 interface EmitState {
   readonly component: FunctionModelComponent;
   readonly lines: string[];
+  /**
+   * Physical generated lines emitted so far in this chunk. `lines` holds one
+   * array element per statement, but a multi-line lowered expression is ONE
+   * element containing real newlines; line numbers must count those, or every
+   * placement after it drifts by the embedded-newline count.
+   */
+  physicalLine: number;
   indent: number;
   readonly diagnostics: IrDiagnostic[];
   readonly requiredBindings: Set<string>;
@@ -440,6 +469,20 @@ function currentColumn(state: EmitState): number {
   return state.indent * 2;
 }
 
+/** Real newlines in one emitted line element (a multi-line lowered expression). */
+function countLineBreaks(line: string): number {
+  let count = 0;
+  for (const character of line) if (character === '\n') count += 1;
+  return count;
+}
+
+/** Physical lines a generated fragment occupies (elements may contain newlines). */
+function fragmentLineCount(lines: readonly string[]): number {
+  let count = 0;
+  for (const line of lines) count += 1 + countLineBreaks(line);
+  return count;
+}
+
 function addSegment(
   state: EmitState,
   generatedLine: number,
@@ -462,12 +505,14 @@ function addSegment(
 
 /** Append one generated line; an authored anchor maps its start position. */
 function push(state: EmitState, text: string, anchor?: SpanLike): void {
-  const lineNumber = state.lines.length + 1;
+  const lineNumber = state.physicalLine + 1;
   if (anchor !== undefined) {
     // Structural anchors map from the generated line start (statement position).
     addSegment(state, lineNumber, 0, anchor.line, anchor.column - 1);
   }
-  state.lines.push(`${'  '.repeat(state.indent)}${text}`);
+  const line = `${'  '.repeat(state.indent)}${text}`;
+  state.lines.push(line);
+  state.physicalLine += 1 + countLineBreaks(line);
 }
 
 /**
@@ -476,7 +521,7 @@ function push(state: EmitState, text: string, anchor?: SpanLike): void {
  * coordinates (multi-line lowering keeps later lines at their own columns).
  */
 function pushParts(state: EmitState, parts: readonly LinePart[], anchor?: SpanLike): void {
-  const lineNumber = state.lines.length + 1;
+  const lineNumber = state.physicalLine + 1;
   let column = currentColumn(state);
   let text = '  '.repeat(state.indent);
   if (anchor !== undefined) addSegment(state, lineNumber, column, anchor.line, anchor.column - 1);
@@ -523,6 +568,7 @@ function pushParts(state: EmitState, parts: readonly LinePart[], anchor?: SpanLi
     column = lines.length === 1 ? startColumn + lowered.length : lines[lines.length - 1]!.length;
   }
   state.lines.push(text);
+  state.physicalLine += 1 + countLineBreaks(text);
 }
 
 type SinkEntry =
@@ -2904,6 +2950,7 @@ function emitClaimFunction(
   const state: EmitState = {
     component,
     lines: [],
+    physicalLine: 0,
     indent: 1,
     diagnostics: [],
     requiredBindings: new Set(),
@@ -3060,7 +3107,7 @@ function emitClaimFunction(
       );
     }
   }
-  const shift = prologue.length;
+  const shift = fragmentLineCount(prologue);
   return {
     lines: [...prologue, ...state.lines, '}', ''],
     diagnostics: [],
@@ -3097,10 +3144,15 @@ function emitClaimFunction(
  * use. A second escape table in the compiler would be exactly the drift P6
  * forbids.
  */
-function staticSsrDirectory(ranges: readonly FunctionModelNode[], markers: boolean): string | null {
+function staticSsrDirectory(ranges: readonly FunctionModelNode[]): string | null {
   const parts: string[] = [];
   for (const [ordinal, range] of ranges.entries()) {
-    const inner = staticSsrNode(range, markers);
+    // The mount suppresses directories inside a range (`allowDirectory` false
+    // in emitMountedDirectory), so a range interior never carries its own
+    // `oe:r` pair. The SSR form is the same tree: markers stop at this range
+    // layer. Emitting markers into the interior would put nested comments
+    // there and the directory parser would refuse its own SSR output.
+    const inner = staticSsrNode(range, false);
     if (inner === null) return null;
     parts.push(
       `"<!--" + markerText(rangeMarker(${ordinal})) + "-->"`,
@@ -3153,7 +3205,7 @@ function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null
   const children =
     directory === null
       ? staticSsrExpression(node.children, markers)
-      : staticSsrDirectory(directory, markers);
+      : staticSsrDirectory(directory);
   if (children === null) return null;
   const open = `"<${node.tag}"`;
   const close = `"</${node.tag}>"`;
@@ -3161,21 +3213,300 @@ function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null
 }
 
 /**
- * Emit the static SSR function for a claimable, fully static component, or
- * `null` when the component is outside the slice or has a dynamic shape.
+ * M08-1b dynamic SSR producer. This is the emitted form for a component whose
+ * claimable tree contains a dynamic text/attribute/boolean slot. It walks the
+ * same `FunctionModelNode` and `LoweredExpressionRecord` inputs as mount and
+ * claim; nothing is re-resolved or stored as a program.
+ *
+ * The emitted body evaluates the lowered text once per call (request-time
+ * snapshot), through the runtime's one coercion/escape/security contract. It
+ * creates no owner, no DOM, no subscription and no cleanup; a missing host
+ * binding keeps the mount's `OEIR_LEAF_MISSING_VALUE: <name>` identity.
+ */
+interface SsrEmission {
+  readonly lines: readonly string[];
+  readonly diagnostics: readonly IrDiagnostic[];
+  readonly segments: readonly EmissionSegment[];
+  readonly placements: readonly ExpressionPlacement[];
+}
+
+/**
+ * A fresh `EmitState` for SSR. SSR uses only the expression placement/segment
+ * machinery and the binding declaration; the mount-only fields stay inert.
+ */
+function ssrEmitState(
+  component: FunctionModelComponent,
+  file: string,
+  propsName: string | null,
+): EmitState {
+  return {
+    component,
+    lines: [],
+    physicalLine: 0,
+    indent: 1,
+    diagnostics: [],
+    requiredBindings: new Set(),
+    requiredProps: new Set(),
+    hostBindings: new Set(),
+    localResources: new Set(),
+    counter: { value: 0 },
+    propsName,
+    requiresPropsChanged: false,
+    segments: [],
+    placements: [],
+    segmentKeys: new Set(),
+    scopeVar: MOUNT_SCOPE,
+    hostVar: MOUNT_HOST,
+    componentByName: new Map<string, FunctionModelComponent>(),
+    declaredRecipeIds: new Set(),
+    recipeNames: new Set(),
+    recipeVars: new Map(),
+    entryNames: new Set(),
+    refreshStack: [],
+    listDepth: 0,
+    recipeDepth: 0,
+    childrenRecipeVar: null,
+    directorySource: `${file}#${component.name}`,
+    usesStaticSiblingDirectoryConsumer: false,
+    claimCursorShared: false,
+    claimAdoptedVar: null,
+    usesClaimRecipe: false,
+    emitDirectoryMarkers: false,
+    usesLeafClaimMismatch: false,
+  };
+}
+
+function failedSsr(state: EmitState): SsrEmission {
+  return {
+    lines: [],
+    diagnostics: state.diagnostics,
+    segments: [],
+    placements: [],
+  };
+}
+
+/**
+ * One request-time attribute fragment. `channel` is admitted by the leaf claim
+ * boundary, so `attribute`/`boolean` are the only dynamic non-static channels
+ * that can reach this emitter.
+ */
+function emitSsrDynamicAttribute(
+  state: EmitState,
+  attribute: Extract<FunctionModelAttribute, { readonly kind: 'dynamic' }>,
+  outVar: string,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): boolean {
+  if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
+  const record = recordFor(state, attribute.expression, records);
+  if (record === null || !declareReads(state, record)) return false;
+  const literal = JSON.stringify(attribute.name);
+  if (attribute.channel === 'boolean') {
+    pushParts(
+      state,
+      [
+        `if (Boolean((`,
+        { record },
+        `))) ${outVar}.push(${JSON.stringify(` ${attribute.name}=""`)});`,
+      ],
+      attribute.span,
+    );
+    return true;
+  }
+  if (attribute.channel !== 'attribute') return false;
+  const valueVar = nextName(state, 'value');
+  pushParts(state, [`const ${valueVar} = attributeValueOf((`, { record }, '));'], attribute.span);
+  push(state, `if (${valueVar} !== null) {`, attribute.span);
+  push(state, `  assertSafeUrlAttribute(${literal}, ${valueVar});`, attribute.span);
+  push(
+    state,
+    `  ${outVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${valueVar}), ${JSON.stringify('"')});`,
+    attribute.span,
+  );
+  push(state, `}`, attribute.span);
+  return true;
+}
+
+/**
+ * Walk the admitted M08-1b tree into `outVar`. Returns false for any shape
+ * outside the dynamic leaf slice; the caller then emits no `__ssr` rather than
+ * a partial producer. The marker rule mirrors `staticSsrNode`: a range
+ * interior recurses with markers suppressed, so the SSR output is what the
+ * M07b directory parser accepts.
+ */
+function emitDynamicSsrNodes(
+  state: EmitState,
+  nodes: readonly FunctionModelNode[],
+  outVar: string,
+  markers: boolean,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): boolean {
+  for (const node of nodes) {
+    if (node.kind === 'text') {
+      push(state, `${outVar}.push(escapeText(${literalText(node.value)}));`, node.span);
+      continue;
+    }
+    if (node.kind === 'fragment') {
+      if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records)) return false;
+      continue;
+    }
+    if (node.kind === 'dynamic-text') {
+      const record = recordFor(state, node.expression, records);
+      if (record === null || !declareReads(state, record)) return false;
+      pushParts(
+        state,
+        [`${outVar}.push(escapeText(displayValue((`, { record }, '))));'], // displayValue((expr))
+        node.span,
+      );
+      continue;
+    }
+    if (node.kind !== 'element') return false;
+    if (!TAG_PATTERN.test(node.tag) || VOID_TAGS.has(node.tag)) return false;
+    push(state, `${outVar}.push(${literalText(`<${node.tag}`)});`, node.span);
+    for (const attribute of node.attributes) {
+      if (attribute.kind === 'dynamic' && CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
+        // `key` is list identity, never a DOM write (same rule as mount).
+        continue;
+      }
+      if (attribute.kind === 'static') {
+        if (!ATTRIBUTE_PATTERN.test(attribute.name)) return false;
+        if (unsafeStreamFrameAttribute(attribute.name, attribute.value)) return false;
+        push(
+          state,
+          `${outVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${literalText(attribute.value)}), ${JSON.stringify('"')});`,
+          attribute.span,
+        );
+        continue;
+      }
+      if (!emitSsrDynamicAttribute(state, attribute, outVar, records)) return false;
+    }
+    push(state, `${outVar}.push(">");`, node.span);
+    const directory =
+      markers && directoryParentAllowed(node.tag) ? staticElementDirectory(node.children) : null;
+    if (directory !== null) {
+      for (const [ordinal, range] of directory.entries()) {
+        push(
+          state,
+          `${outVar}.push("<!--", markerText(rangeMarker(${ordinal})), "-->");`,
+          range.span,
+        );
+        if (!emitDynamicSsrNodes(state, [range], outVar, false, records)) return false;
+        push(
+          state,
+          `${outVar}.push("<!--", markerText(rangeMarker(${ordinal}, true)), "-->");`,
+          range.span,
+        );
+      }
+    } else if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records)) {
+      return false;
+    }
+    push(state, `${outVar}.push(${literalText(`</${node.tag}>`)});`, node.span);
+  }
+  return true;
+}
+
+/**
+ * Emit `<Name>__ssr(props, host)` for a component with at least one admitted
+ * dynamic slot. Returns null when the shape is outside the slice (for example
+ * a condition, list, component reference, insertion site, property channel or
+ * void element); diagnostics are returned as a failed emission so the module
+ * fails closed the same way mount/claim failures do.
+ */
+function emitDynamicSsrFunction(
+  file: string,
+  component: FunctionModelComponent,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): SsrEmission | null {
+  const propsName = component.propsParam;
+  const state = ssrEmitState(component, file, propsName);
+  for (const resource of component.resources) {
+    if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
+      continue;
+    }
+    if (resource.kind === 'local') {
+      if (resource.recipeId !== null || resource.expression === null) continue;
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) return failedSsr(state);
+      state.localResources.add(resource.name);
+      pushParts(state, [`const ${resource.name} = (`, { record }, ');'], resource.span);
+      continue;
+    }
+    state.hostBindings.add(resource.name);
+    state.requiredBindings.add(resource.name);
+  }
+  if (state.diagnostics.length > 0) return failedSsr(state);
+  const outVar = nextName(state, 'out');
+  push(state, `const ${outVar} = [];`);
+  if (!emitDynamicSsrNodes(state, component.roots, outVar, true, records)) {
+    return state.diagnostics.length > 0 ? failedSsr(state) : null;
+  }
+  push(state, `return ${outVar}.join("");`);
+  if (state.diagnostics.length > 0) return failedSsr(state);
+
+  const prologue: string[] = [
+    `export function ${component.name}${SSR_SUFFIX}(${MOUNT_PROPS}, ${MOUNT_HOST}) {`,
+  ];
+  if (propsName !== null) {
+    prologue.push(`  const ${propsName} = ${MOUNT_PROPS};`);
+    state.requiredProps.add(propsName);
+  }
+  if (state.requiredBindings.size > 0) {
+    prologue.push(
+      `  const ${INTERNAL_PREFIX}requireBinding = (name) => { const value = ${MOUNT_HOST}.bindings[name]; if (value === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: " + name); return value; };`,
+    );
+    for (const binding of [...state.requiredBindings].sort()) {
+      prologue.push(
+        `  const ${binding} = ${INTERNAL_PREFIX}requireBinding(${JSON.stringify(binding)});`,
+      );
+    }
+  }
+  const shift = fragmentLineCount(prologue);
+  return {
+    lines: [...prologue, ...state.lines, '}', ''],
+    diagnostics: [],
+    segments: state.segments.map((segment) => ({
+      ...segment,
+      generatedLine: segment.generatedLine + shift,
+    })),
+    placements: state.placements.map((placement) => ({
+      ...placement,
+      generatedLine: placement.generatedLine + shift,
+    })),
+  };
+}
+
+/**
+ * Emit the SSR function for a claimable component. A fully static component
+ * keeps the M08-1a `__ssr()` form (no parameters, byte-identical output); a
+ * component with an admitted dynamic slot gets the M08-1b
+ * `__ssr(props, host)` form. Returns `null` when the tree is outside the
+ * producer slice.
  */
 function emitSsrFunction(
+  file: string,
   component: FunctionModelComponent,
   rootDirectory: readonly FunctionModelNode[] | null,
-): string[] | null {
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): SsrEmission | null {
   let expression: string | null;
   if (rootDirectory !== null) {
-    expression = staticSsrDirectory(rootDirectory, true);
+    expression = staticSsrDirectory(rootDirectory);
   } else {
     expression = staticSsrExpression(component.roots, true);
   }
-  if (expression === null) return null;
-  return [`export function ${component.name}${SSR_SUFFIX}() {`, `  return ${expression};`, '}', ''];
+  if (expression !== null) {
+    return {
+      lines: [
+        `export function ${component.name}${SSR_SUFFIX}() {`,
+        `  return ${expression};`,
+        '}',
+        '',
+      ],
+      diagnostics: [],
+      segments: [],
+      placements: [],
+    };
+  }
+  return emitDynamicSsrFunction(file, component, records);
 }
 
 function emitComponent(
@@ -3197,6 +3528,7 @@ function emitComponent(
   const state: EmitState = {
     component,
     lines: [],
+    physicalLine: 0,
     indent: 1,
     diagnostics: [],
     requiredBindings: new Set(),
@@ -3410,15 +3742,30 @@ function emitComponent(
   factoryLines.push(...recipeFields);
   const mountLines = [...mountPrologue, ...state.lines, '}', ''];
   const claimLines = claim?.lines ?? [];
-  // M08-1a: a component that can claim existing DOM also emits the HTML it
-  // would have produced, so the same proof surface exists on both sides. It is
-  // appended after the claim chunk, which keeps every already-recorded
+  // M08-1a/M08-1b: a component that can claim existing DOM also emits the HTML
+  // it would have produced, so the same proof surface exists on both sides. It
+  // is appended after the claim chunk, which keeps every already-recorded
   // segment/placement line offset untouched.
-  const ssrLines = claim === null ? null : emitSsrFunction(component, rootDirectory);
-  const claimShift = mountLines.length + factoryLines.length;
-  const shift = mountPrologue.length;
+  const ssr = claim === null ? null : emitSsrFunction(file, component, rootDirectory, records);
+  if (ssr !== null && ssr.diagnostics.length > 0) {
+    return {
+      lines: [],
+      diagnostics: [...state.diagnostics, ...ssr.diagnostics],
+      requiredBindings: [...state.requiredBindings].sort(),
+      requiredProps: [...state.requiredProps].sort(),
+      requiresPropsChanged: state.requiresPropsChanged,
+      segments: [],
+      placements: [],
+    };
+  }
+  const ssrLines = ssr?.lines ?? [];
+  // Chunk offsets are physical lines: a multi-line lowered expression inside an
+  // earlier chunk occupies more generated lines than one array element.
+  const claimShift = fragmentLineCount(mountLines) + fragmentLineCount(factoryLines);
+  const ssrShift = claimShift + fragmentLineCount(claimLines);
+  const shift = fragmentLineCount(mountPrologue);
   return {
-    lines: [...mountLines, ...factoryLines, ...claimLines, ...(ssrLines ?? [])],
+    lines: [...mountLines, ...factoryLines, ...claimLines, ...ssrLines],
     diagnostics: state.diagnostics,
     requiredBindings: [...state.requiredBindings].sort(),
     requiredProps: [...state.requiredProps].sort(),
@@ -3435,6 +3782,10 @@ function emitComponent(
         ...segment,
         generatedLine: segment.generatedLine + claimShift,
       })),
+      ...(ssr?.segments ?? []).map((segment) => ({
+        ...segment,
+        generatedLine: segment.generatedLine + ssrShift,
+      })),
     ],
     placements: [
       ...state.placements.map((placement) => ({
@@ -3444,6 +3795,10 @@ function emitComponent(
       ...(claim?.placements ?? []).map((placement) => ({
         ...placement,
         generatedLine: placement.generatedLine + claimShift,
+      })),
+      ...(ssr?.placements ?? []).map((placement) => ({
+        ...placement,
+        generatedLine: placement.generatedLine + ssrShift,
       })),
     ],
   };
@@ -3683,7 +4038,7 @@ export function generateLeafModule(
     usesLeafClaimMismatch ||= emitted.usesLeafClaimMismatch === true;
     // Component chunks are concatenated in module order: rebase this component's
     // segment/placement lines onto the lines already emitted before it.
-    const lineOffset = chunks.length;
+    const lineOffset = fragmentLineCount(chunks);
     segments.push(
       ...emitted.segments.map((segment) => ({
         ...segment,
