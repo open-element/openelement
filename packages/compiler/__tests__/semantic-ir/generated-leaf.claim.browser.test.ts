@@ -10,11 +10,19 @@
  * That input is not SSR→claim. The synchronous leaf is a separate path: a
  * server HTML string is parsed, then claimed. When that string is what the
  * server constructor returns, the path is 「服务端 HTML 字符串 → 生成叶 claim」.
+ *
+ * The static vertical (M08-2) is a different input: the generated `__ssr()`
+ * runs in Node, Chromium parses the returned string, and the generated claim
+ * adopts the parser's nodes. It covers a directory whose ranges themselves
+ * contain static element subtrees, so the proof includes a deep structure,
+ * node identity, zero claim-period mutations and both dispose modes. The
+ * mount tree is never the claim input on that path.
  */
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { chromium, firefox, webkit, type Browser, type Page } from 'playwright';
 import ts from 'typescript';
@@ -113,6 +121,9 @@ function Echo(props) {
 }
 function Field(props) {
   return <input id="field" value="hello" />;
+}
+function Deep(props) {
+  return <div><article><p>one</p><p>two</p></article><aside><i>a</i><i>b</i></aside></div>;
 }
 `;
 
@@ -222,6 +233,68 @@ async function buildRuntimeBundle(): Promise<string> {
   }
 }
 
+/**
+ * Node-side SSR production for the vertical proof. The real generated module is
+ * bundled with the same runtime shim the M08-1a suite uses and imported here;
+ * only its `__ssr()` is called. Chromium receives the resulting string, never
+ * a mount tree. This is what makes the path 「Node 生成 SSR HTML → Chromium
+ * 解析 → 生成叶 claim」 rather than a browser-side mount replay.
+ */
+async function buildNodeSsr(module: string): Promise<string> {
+  const dir = mkdtempSync(join(tmpdir(), 'oe-m08-2-ssr-'));
+  try {
+    const element = join(REPO_ROOT, 'packages/element/src/internal');
+    const runtime = join(element, 'compiled/runtime');
+    const shim = join(dir, 'runtime-shim.ts');
+    const leaf = join(dir, 'leaf.js');
+    const entry = join(dir, 'entry.ts');
+    writeFileSync(
+      shim,
+      [
+        `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
+        `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
+        `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
+        `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
+        `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+        `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+        `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
+        `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
+        `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
+        `export { signal } from ${JSON.stringify(join(element, 'signal/framework.ts'))};`,
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(leaf, module);
+    // Only the SSR producer is re-exported: the Node half cannot mount or
+    // claim, so a fallback to the mount tree is not even reachable here.
+    writeFileSync(entry, `export { Deep__ssr } from './leaf.js';\n`);
+    const result = await build({
+      configFile: false,
+      root: dir,
+      logLevel: 'silent',
+      resolve: { alias: { [GENERATED_LEAF_RUNTIME_SPECIFIER]: shim } },
+      build: {
+        write: false,
+        minify: false,
+        lib: { entry, formats: ['es'], fileName: () => 'ssr.mjs' },
+      },
+    });
+    const output = Array.isArray(result)
+      ? result[0]!.output
+      : (result as { output: unknown[] }).output;
+    const chunk = (output as Array<{ type: string; code?: string }>).find(
+      (item) => item.type === 'chunk',
+    );
+    if (chunk?.code === undefined) throw new Error('SSR bundle produced no chunk');
+    const out = join(dir, 'ssr.mjs');
+    writeFileSync(out, chunk.code);
+    const loaded = (await import(pathToFileURL(out).href)) as { Deep__ssr: () => string };
+    return loaded.Deep__ssr();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 interface MutationNote {
   readonly type: string;
   readonly target: string;
@@ -287,6 +360,8 @@ async function runClaim(
       interface RangeClaim {
         readonly ordinal: number;
         readonly owner: Scope;
+        readonly start: Node;
+        readonly end: Node;
         readonly interior: readonly Node[];
       }
       interface Probe {
@@ -803,6 +878,98 @@ async function runClaim(
         };
       }
 
+      if (scenario === 'ssr-directory') {
+        // `html` was produced by the generated `Deep__ssr()` in Node and is
+        // only parsed here. No mount runs in this branch: every node below is
+        // the browser parser's product of the server bytes.
+        host.innerHTML = html;
+        const div = host.firstElementChild as HTMLElement;
+        const divChildren = [...div.childNodes];
+        const article = div.children[0] as HTMLElement;
+        const aside = div.children[1] as HTMLElement;
+        const articleChildren = [...article.childNodes];
+        const asideChildren = [...aside.childNodes];
+        const scope = new runtime.LifetimeScope();
+        const recipe = factories.createDeepRecipe!(scope, hostFor());
+        resetLogs();
+        let claimed: Projection | undefined;
+        const observed = observe(host, () => {
+          claimed = runtime.claimRecipe(scope, recipe, host);
+        });
+        if (claimed === undefined) return { steps: [stepFrom(observed, undefined)] };
+        const claims = ranges();
+        const first = claims[0];
+        const second = claims[1];
+        const checks: Record<string, boolean> = {
+          parsedIdentity: claimed.nodes[0] === div && host.firstChild === div,
+          twoRanges: claims.length === 2,
+          ordinalOrder: claims.map((range) => range.ordinal).join(',') === '0,1',
+          startEndIdentity:
+            first?.start === divChildren[0] &&
+            first?.end === divChildren[2] &&
+            second?.start === divChildren[3] &&
+            second?.end === divChildren[5],
+          interiorIdentity: first?.interior[0] === article && second?.interior[0] === aside,
+          deepIdentity: sameList(articleChildren, article) && sameList(asideChildren, aside),
+          deepOrder:
+            labels(article).join('|') === 'p|p' &&
+            labels(aside).join('|') === 'i|i' &&
+            articleChildren.map((node) => node.textContent).join('|') === 'one|two' &&
+            asideChildren.map((node) => node.textContent).join('|') === 'a|b',
+          noNestedMarkers: nestedMarkers(div).length === 0,
+          rangeOwners:
+            first !== undefined &&
+            second !== undefined &&
+            first.owner !== claimed.owner &&
+            second.owner !== claimed.owner &&
+            first.owner !== second.owner,
+        };
+        claimed.dispose(false);
+        checks.domStaysAfterDispose = host.firstChild === div && sameList(divChildren, div);
+        checks.ownersClosed =
+          claimed.owner.disposed &&
+          first?.owner.disposed === true &&
+          second?.owner.disposed === true;
+
+        // The same server bytes go through a second parse to prove detach
+        // dispose; the input is still SSR HTML, not a generated mount tree.
+        const detachHost = document.createElement('div');
+        detachHost.innerHTML = html;
+        document.body.appendChild(detachHost);
+        const detachScope = new runtime.LifetimeScope();
+        const detachRecipe = factories.createDeepRecipe!(detachScope, hostFor());
+        resetLogs();
+        let detached: Projection | undefined;
+        const detachObserved = observe(detachHost, () => {
+          detached = runtime.claimRecipe(detachScope, detachRecipe, detachHost);
+        });
+        if (detached === undefined) {
+          return {
+            steps: [stepFrom(observed, claimed, { checks }), stepFrom(detachObserved, undefined)],
+          };
+        }
+        const detachClaims = ranges();
+        const detachChecks: Record<string, boolean> = {
+          claimClean: detachObserved.error === null && detachObserved.notes.length === 0,
+        };
+        detached.dispose(true);
+        detachChecks.detachCleared = detachHost.childNodes.length === 0;
+        detachChecks.rootDisposed = detached.owner.disposed;
+        detachChecks.rangesDisposed = detachClaims.every((range) => range.owner.disposed);
+        detachHost.remove();
+        return {
+          steps: [
+            stepFrom(observed, claimed, {
+              labels: labels(div),
+              interiors: [labels(article), labels(aside)],
+              texts: [article.textContent ?? '', aside.textContent ?? ''],
+              checks,
+            }),
+            stepFrom(detachObserved, detached, { checks: detachChecks }),
+          ],
+        };
+      }
+
       return { steps: [] };
     },
     { scenario, html },
@@ -853,6 +1020,12 @@ describe('M07-2 claim emission (not browser qualification)', () => {
 
 const ORDER_MODULE = generatedModule(SOURCE);
 const SYNC_MODULE = generatedModule(SYNC_LEAF_SOURCE);
+
+let deepSsrPromise: Promise<string> | null = null;
+function deepSsr(): Promise<string> {
+  deepSsrPromise ??= buildNodeSsr(ORDER_MODULE);
+  return deepSsrPromise;
+}
 
 for (const engine of engines()) {
   describe(`M07-2 browser clean-path claim in ${engine.name}`, () => {
@@ -1062,5 +1235,56 @@ for (const engine of engines()) {
         id: true,
       });
     });
+
+    // The static vertical: generated `__ssr()` runs in Node, Chromium parses
+    // the returned bytes, and the generated leaf claim adopts exactly those
+    // parsed nodes. The mount tree is never the claim input here.
+    test.runIf(engine.name === 'chromium')(
+      'Node-generated SSR HTML parsed by Chromium then claimed: deep directory, identity, 0 mutations, dispose',
+      async () => {
+        const html = await deepSsr();
+        const starts = [...html.matchAll(/<!--oe:r:(\d+)-->/g)].map((match) => match[1]);
+        const ends = [...html.matchAll(/<!--oe:\/r:(\d+)-->/g)].map((match) => match[1]);
+        // Two ranges at the directory layer; the articles/asides inside them
+        // are plain static subtrees, exactly as the mount writes them.
+        expect(starts).toEqual(['0', '1']);
+        expect(ends).toEqual(['0', '1']);
+        console.log(`[M08-2] path=Node SSR __ssr() -> chromium parse -> claim html=${html}`);
+        const result = await runClaim(page, ORDER_MODULE, 'ssr-directory', html);
+        expect(result.steps).toHaveLength(2);
+        const step = result.steps[0]!;
+        expect(step.error).toBeNull();
+        expect(step.mutations).toEqual([]);
+        expect(step.labels).toEqual(['oe:r:0', 'article', 'oe:/r:0', 'oe:r:1', 'aside', 'oe:/r:1']);
+        expect(step.interiors).toEqual([
+          ['p', 'p'],
+          ['i', 'i'],
+        ]);
+        expect(step.texts).toEqual(['onetwo', 'ab']);
+        expect(step.ranges.map((range) => range.ordinal)).toEqual([0, 1]);
+        expect(step.checks).toEqual({
+          parsedIdentity: true,
+          twoRanges: true,
+          ordinalOrder: true,
+          startEndIdentity: true,
+          interiorIdentity: true,
+          deepIdentity: true,
+          deepOrder: true,
+          noNestedMarkers: true,
+          rangeOwners: true,
+          domStaysAfterDispose: true,
+          ownersClosed: true,
+        });
+        const detach = result.steps[1]!;
+        expect(detach.error).toBeNull();
+        expect(detach.checks).toEqual({
+          claimClean: true,
+          detachCleared: true,
+          rootDisposed: true,
+          rangesDisposed: true,
+        });
+      },
+      180_000,
+    );
   });
 }
