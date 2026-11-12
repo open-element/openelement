@@ -98,16 +98,22 @@ test('claim source follows authored insertion order and keeps one directory laye
   const twiceMount = functionBody(module, 'Twice__mount');
   const twiceClaim = functionBody(module, 'Twice__claim');
   expect(twiceMount.match(/insertRecipe\(/g)?.length).toBe(2);
-  expect(twiceMount.match(/oe:r:\d+/g)).toEqual(['oe:r:0', 'oe:r:1']);
-  expect(twiceMount.match(/oe:\/r:\d+/g)).toEqual(['oe:/r:0', 'oe:/r:1']);
+  expect([...twiceMount.matchAll(/rangeMarkerText\((\d+)\)/g)].map((m) => m[1])).toEqual([
+    '0',
+    '1',
+  ]);
+  expect([...twiceMount.matchAll(/rangeMarkerText\((\d+), true\)/g)].map((m) => m[1])).toEqual([
+    '0',
+    '1',
+  ]);
   expect(twiceClaim.match(/claimRecipe\(/g)?.length).toBe(2);
   expect(twiceClaim).toMatch(/claimStaticSiblingRange\([^,]+, 0,/);
   expect(twiceClaim).toMatch(/claimStaticSiblingRange\([^,]+, 1,/);
-  expect(twiceClaim).not.toContain('oe:r:2');
+  expect(twiceClaim).not.toContain('rangeMarkerText(2');
 
   const flatClaim = functionBody(module, 'Flat__claim');
   expect(flatClaim.match(/claimRecipe\(/g)?.length).toBe(2);
-  expect(flatClaim).not.toContain('oe:r:');
+  expect(flatClaim).not.toContain('rangeMarkerText(');
 
   const frameClaim = functionBody(module, 'Frame__claim');
   expect(frameClaim.match(/claimRecipe\(/g)?.length).toBe(2);
@@ -115,12 +121,17 @@ test('claim source follows authored insertion order and keeps one directory laye
 
   const adversarialMount = functionBody(module, 'Adversarial__mount');
   const adversarialClaim = functionBody(module, 'Adversarial__claim');
-  expect(adversarialMount.match(/oe:r:\d+/g)).toEqual(['oe:r:0', 'oe:r:1']);
-  expect(adversarialMount.match(/oe:\/r:\d+/g)).toEqual(['oe:/r:0', 'oe:/r:1']);
-  expect(adversarialMount).not.toContain('oe:r:2');
+  expect([...adversarialMount.matchAll(/rangeMarkerText\((\d+)\)/g)].map((m) => m[1])).toEqual([
+    '0',
+    '1',
+  ]);
+  expect(
+    [...adversarialMount.matchAll(/rangeMarkerText\((\d+), true\)/g)].map((m) => m[1]),
+  ).toEqual(['0', '1']);
+  expect(adversarialMount).not.toContain('rangeMarkerText(2');
   expect(adversarialClaim).toMatch(/claimStaticSiblingRange\([^,]+, 0,/);
   expect(adversarialClaim).toMatch(/claimStaticSiblingRange\([^,]+, 1,/);
-  expect(adversarialClaim).not.toContain('oe:r:2');
+  expect(adversarialClaim).not.toContain('rangeMarkerText(2');
   expect(adversarialClaim).not.toContain('openStaticSiblingDirectory(__oe_parent');
 
   const mixedMount = functionBody(module, 'Mixed__mount');
@@ -141,8 +152,8 @@ test('claim source follows authored insertion order and keeps one directory laye
   expect(claimInsert).toBeGreaterThan(claimB);
   expect(claimChild).toBeGreaterThan(claimInsert);
   expect(claimU).toBeGreaterThan(claimChild);
-  expect(mixedMount).not.toContain('oe:r:');
-  expect(mixedClaim).not.toContain('oe:r:');
+  expect(mixedMount).not.toContain('rangeMarkerText(');
+  expect(mixedClaim).not.toContain('rangeMarkerText(');
 });
 
 class DomNode {
@@ -352,6 +363,8 @@ beforeAll(async () => {
       `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
+      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+      `export { MARKERS, parseRangeMarker, rangeMarkerText } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
       `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,
       `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
       `export { signal } from ${JSON.stringify(join(element, 'signal/framework.ts'))};`,

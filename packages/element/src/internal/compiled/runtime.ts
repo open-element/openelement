@@ -137,13 +137,27 @@ export {
   type StaticSiblingDirectory,
 } from './runtime/static-sibling-ranges.ts';
 /**
- * Generated-leaf mismatch class. Re-exported so a generated claim can throw the
- * real class. The code value stays the internal identity
- * `OEIR_LEAF_CLAIM_MISMATCH`; it is deliberately not a member of the exported
- * `RuntimeErrorCode` catalogue (that catalogue requires the `OE_` prefix, and
- * `OEIR_` is an internal generated-leaf identity). Not an ABI freeze and not a
- * release.
+ * Generated-leaf claim surface. A generated module calls into this module
+ * instead of restating a contract the runtime already owns:
+ *
+ *   - `claim-invariants.ts` owns the HTML-namespace rule, the static-attribute
+ *     seed rule and the internal mismatch identity;
+ *   - `markers.ts` owns the private marker vocabulary that mount writes and the
+ *     directory consumer reads back.
+ *
+ * Nothing here is a public ABI: the codes stay internal (`OEIR_…`, not a
+ * `RuntimeErrorCode` member) and no public subpath exposes them.
  */
+export {
+  assertElementInHtmlNamespace,
+  assertStaticAttributeSeed,
+  HTML_NAMESPACE,
+  LEAF_CLAIM_MISMATCH,
+  leafClaimMismatch,
+  staticAttributeSeedMismatch,
+  type DeclaredStaticAttribute,
+} from './runtime/claim-invariants.ts';
+export { MARKERS, parseRangeMarker, rangeMarkerText } from './runtime/markers.ts';
 export { OpenElementError } from '@openelement/protocol/errors';
 
 // ─── Seed serialization ────────────────────────────────────────────
