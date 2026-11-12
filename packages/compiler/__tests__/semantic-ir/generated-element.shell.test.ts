@@ -469,10 +469,39 @@ interface PreUpgradeDefaultRestatementResult {
 }
 
 interface NonConfigurableResult {
-  errors: Array<{ message: string; name: string | null }>;
+  errors: Array<{ code: string | null; message: string; name: string | null }>;
   ownLabel: boolean;
   label: unknown;
   childCount: number;
+}
+
+interface LockedReentrySnapshot {
+  errors: Array<{ code: string | null; message: string; name: string | null }>;
+  ownLabel: boolean;
+  ownLabelValue: unknown;
+  ownCount: boolean;
+  label: unknown;
+  count: unknown;
+  labelAttr: string | null;
+  childCount: number;
+  recipeCalls: number;
+}
+
+interface LockedReentryFinal {
+  errorCount: number;
+  ownLabel: boolean;
+  ownLabelValue: unknown;
+  ownCount: boolean;
+  labelAttr: string | null;
+  childCount: number;
+  recipeCalls: number;
+}
+
+interface LockedReentryResult {
+  first: LockedReentrySnapshot;
+  second: LockedReentrySnapshot;
+  manual: { code: string | null; message: string } | null;
+  final: LockedReentryFinal;
 }
 
 interface OwnershipDisposeResult {
@@ -905,6 +934,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
         });
         const errors = [];
         const onError = (event) => errors.push({
+          code: event.error?.code ?? null,
           message: event.error?.message ?? event.message,
           name: event.error?.name ?? null,
         });
@@ -933,6 +963,146 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
       expect(result.errors[0]!.message).toContain('label');
       expect(result.ownLabel).toBe(true);
       expect(result.label).toBe('locked');
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('a locked descriptor rejects every re-entry and never partially reconciles', async () => {
+    const page = await openPage();
+    try {
+      const result = (await page.evaluate(`(async () => {
+        const mod = window.__oeM09;
+        document.body.innerHTML = '<oe-m09-profile label="server"></oe-m09-profile>';
+        const el = document.body.firstElementChild;
+        // The first declared property is reconcilable; the second is locked.
+        // A one-pass reconciler deletes/writes the first before discovering the
+        // second and leaves a half-applied element behind.
+        Object.defineProperty(el, 'label', {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value: 'pre',
+        });
+        Object.defineProperty(el, 'count', {
+          configurable: false,
+          enumerable: true,
+          writable: true,
+          value: 7,
+        });
+        const seen = [];
+        const errors = [];
+        const onError = (event) => errors.push({
+          code: event.error?.code ?? null,
+          message: event.error?.message ?? event.message,
+          name: event.error?.name ?? null,
+        });
+        window.addEventListener('error', onError);
+        mod.defineGeneratedElement({
+          tag: 'oe-m09-profile',
+          properties: [
+            { name: 'label', attribute: 'label', type: 'string', reflect: true },
+            { name: 'count', attribute: 'count', type: 'number', reflect: true },
+            { name: 'enabled', attribute: 'enabled', type: 'boolean', reflect: true },
+          ],
+          createRecipe: (owner, host) => {
+            seen.push({ label: host.props.label, count: host.props.count });
+            return mod.createProfileRecipe(owner, host);
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const snapshot = (from) => ({
+          errors: errors.slice(from),
+          ownLabel: Object.prototype.hasOwnProperty.call(el, 'label'),
+          ownLabelValue: Object.getOwnPropertyDescriptor(el, 'label')?.value ?? null,
+          ownCount: Object.prototype.hasOwnProperty.call(el, 'count'),
+          label: el.label,
+          count: el.count,
+          labelAttr: el.getAttribute('label'),
+          childCount: el.childNodes.length,
+          recipeCalls: seen.length,
+        });
+        const first = snapshot(0);
+        // Real platform re-entry: disconnect and reconnect the same element.
+        el.remove();
+        document.body.append(el);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const second = snapshot(first.errors.length);
+        // Direct callback re-entry after the failed lifecycle must reject too
+        // instead of mounting the still-shadowed element.
+        let manual = null;
+        try {
+          el.connectedCallback();
+        } catch (error) {
+          manual = {
+            code: error?.code ?? null,
+            message: error?.message ?? String(error),
+          };
+        }
+        window.removeEventListener('error', onError);
+        return {
+          first,
+          second,
+          manual,
+          final: {
+            errorCount: errors.length,
+            ownLabel: Object.prototype.hasOwnProperty.call(el, 'label'),
+            ownLabelValue: Object.getOwnPropertyDescriptor(el, 'label')?.value ?? null,
+            ownCount: Object.prototype.hasOwnProperty.call(el, 'count'),
+            labelAttr: el.getAttribute('label'),
+            childCount: el.childNodes.length,
+            recipeCalls: seen.length,
+          },
+        };
+      })()`)) as LockedReentryResult;
+
+      // Red gate for the re-entry blocker: the second connection and a direct
+      // callback call must both reject the locked descriptor. A flag set before
+      // validation makes both silently return and mount the shadowed element.
+      expect({
+        reconnectErrors: result.second.errors.map((error) => error.code),
+        manualCode: result.manual?.code ?? null,
+      }).toEqual({
+        reconnectErrors: ['OEIR_SHELL_PRE_UPGRADE_PROPERTY_LOCKED'],
+        manualCode: 'OEIR_SHELL_PRE_UPGRADE_PROPERTY_LOCKED',
+      });
+
+      const expectLockedRejection = (snapshot: LockedReentrySnapshot): void => {
+        expect(snapshot.errors).toHaveLength(1);
+        expect(snapshot.errors[0]).toMatchObject({
+          code: 'OEIR_SHELL_PRE_UPGRADE_PROPERTY_LOCKED',
+          name: 'OpenElementError',
+        });
+        expect(snapshot.errors[0]!.message).toContain('non-configurable');
+        expect(snapshot.errors[0]!.message).toContain('"count"');
+        // Validation ran before any application: the earlier configurable
+        // property is untouched, the attribute replay is untouched, and no
+        // recipe/mount was attempted.
+        expect(snapshot.ownLabel).toBe(true);
+        expect(snapshot.ownLabelValue).toBe('pre');
+        expect(snapshot.ownCount).toBe(true);
+        expect(snapshot.label).toBe('pre');
+        expect(snapshot.count).toBe(7);
+        expect(snapshot.labelAttr).toBe('server');
+        expect(snapshot.childCount).toBe(0);
+        expect(snapshot.recipeCalls).toBe(0);
+      };
+      expectLockedRejection(result.first);
+      expectLockedRejection(result.second);
+      expect(result.manual).toMatchObject({
+        code: 'OEIR_SHELL_PRE_UPGRADE_PROPERTY_LOCKED',
+      });
+      expect(result.manual!.message).toContain('non-configurable');
+      expect(result.manual!.message).toContain('"count"');
+      expect(result.final).toEqual({
+        errorCount: 2,
+        ownLabel: true,
+        ownLabelValue: 'pre',
+        ownCount: true,
+        labelAttr: 'server',
+        childCount: 0,
+        recipeCalls: 0,
+      });
     } finally {
       await page.close();
     }

@@ -45,7 +45,10 @@
  * through the property contract, which makes a pre-upgrade JS set win over an
  * attribute while a value that merely restates the declared default is
  * ignored. A non-configurable own property fails loudly instead of being
- * silently left shadowing the accessor.
+ * silently left shadowing the accessor. Reconciliation validates the whole own
+ * descriptor set before applying anything, and only records completion after
+ * application, so a rejected connect can never leave a half-applied element or
+ * let a later connect skip the check.
  *
  * Supported reconnect boundary: the shell-owned `propsChanged` signal and the
  * optional `createBindings()` record are created once and retained across a
@@ -463,11 +466,24 @@ function restatesDefault(property: NormalizedProperty, value: unknown): boolean 
  * ignored. `null`/`undefined` carry no pre-upgrade assignment intent (old
  * facade contract) and are ignored too. A non-configurable own property cannot
  * be deleted: fail loudly instead of leaving the accessor silently shadowed.
+ *
+ * Two passes: validate every own data descriptor first, then apply. A locked
+ * descriptor discovered after a configurable one therefore leaves the element
+ * untouched (no earlier delete, write or reflection) instead of half-applied.
+ * The descriptor snapshot also means no getter is invoked to read a value. The
+ * completion flag is set only after the apply pass, so every later connect
+ * retries the same loud rejection rather than skipping validation and mounting
+ * the still-shadowed accessor.
  */
 function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState): void {
   if (state.ownPropertiesReconciled) return;
-  state.ownPropertiesReconciled = true;
   const record = element as unknown as Record<string, unknown>;
+  const pending: Array<{ property: NormalizedProperty; value: unknown }> = [];
+
+  // Validation pass: snapshot and check the whole declared own-descriptor set
+  // without touching the element. `descriptor.value` does not run a getter, and
+  // skipping accessor descriptors preserves the old "data properties only"
+  // contract instead of inventing extra property reads.
   for (const property of state.descriptor.properties) {
     if (!Object.prototype.hasOwnProperty.call(element, property.name)) continue;
     const descriptor = Object.getOwnPropertyDescriptor(element, property.name);
@@ -480,11 +496,20 @@ function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState
         { phase: 'csr' },
       );
     }
-    const value: unknown = descriptor.value;
+    pending.push({ property, value: descriptor.value });
+  }
+
+  // Application pass: every descriptor validated, so a rejection above cannot
+  // have produced a partial reconciliation.
+  for (const { property, value } of pending) {
     delete record[property.name];
     if (restatesDefault(property, value) || value === null || value === undefined) continue;
     setProperty(element, state, property, coercePropertyValue(property.conversion, value), true);
   }
+
+  // Completion is recorded last: a failed connect retries the whole check
+  // instead of skipping it on the next connect.
+  state.ownPropertiesReconciled = true;
 }
 
 /**
