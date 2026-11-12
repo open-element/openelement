@@ -25,14 +25,46 @@ if (typeof globalThis.URLPattern !== 'function') {
 }
 const NativeURLPattern = globalThis.URLPattern;
 
+/**
+ * The comparison baseline is a historical commit (the table predates the router
+ * package extraction, so it lived in `packages/app/src/internal/router/`).
+ *
+ * That commit is not guaranteed to exist in every clone: a shallow checkout, a
+ * CI job with `fetch-depth: 1`, or an exported source tarball has no such
+ * object. A measurement tool must not turn that into a failure — and must not
+ * silently compare against nothing either. So the baseline is resolved once and
+ * its absence is reported explicitly as a skip.
+ */
+const BASELINE_COMMIT = '0d826954cb96b3a9306119830defd6000a798c95';
+const BASELINE_PATH = 'packages/app/src/internal/router/route-table.ts';
+
+async function readBaseline(): Promise<string | null> {
+  try {
+    const { stdout } = await execFile('git', ['show', `${BASELINE_COMMIT}:${BASELINE_PATH}`]);
+    return stdout;
+  } catch {
+    return null;
+  }
+}
+
 async function main(): Promise<void> {
-  const base = '0d826954cb96b3a9306119830defd6000a798c95';
   // The baseline predates the router package extraction: the table lived in
   // packages/app/src/internal/router/.
-  const { stdout } = await execFile('git', [
-    'show',
-    `${base}:packages/app/src/internal/router/route-table.ts`,
-  ]);
+  const baselineSource = await readBaseline();
+  if (baselineSource === null) {
+    console.log(
+      JSON.stringify({
+        skipped: true,
+        reason:
+          'baseline commit is not present in this clone (shallow or exported tree); ' +
+          'run `git fetch --unshallow` to measure the comparison',
+        baseline: BASELINE_COMMIT,
+        path: BASELINE_PATH,
+      }),
+    );
+    return;
+  }
+  const stdout = baselineSource;
   const baselineCode = stdout
     .replace(
       '@openelement/element/build-utils',

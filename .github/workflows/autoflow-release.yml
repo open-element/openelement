@@ -139,6 +139,10 @@ jobs:
           esac
 
   # ── Job 1: Same-SHA CI evidence (publish only) ─────────────────────────
+  # Publishing is two steps since W4b (2026-11-12): first dispatch AutoFlow CI
+  # with `full_qualification=true` and `expected_sha=<candidate>` on main, wait
+  # for the heavy lane to conclude, then dispatch this workflow. This job does
+  # not take the operator's word for it: it discovers that run itself.
   # The official AutoFlow CI run for exactly the dispatched SHA is discovered
   # here over the API — the dispatcher never supplies a run id as proof — and
   # its EXACT qualification identity is checked instance by instance. The
@@ -195,12 +199,21 @@ jobs:
           CANDIDATE_SHA: ${{ github.sha }}
         run: |
           # Discovery, not a supplied run id: query the official AutoFlow CI
-          # workflow's runs by exact head_sha in THIS repository. The canonical
-          # evidence is the main push run — every main commit carries one.
+          # workflow's runs by exact head_sha in THIS repository.
+          #
+          # Since W4b (2026-11-12) the heavy qualification lane is dispatch-only,
+          # so the canonical release evidence is a `full_qualification` dispatch
+          # for the candidate SHA, not the main push run (which now carries only
+          # the base layer). A push run is still accepted as a fallback so a SHA
+          # qualified before the split keeps its evidence.
           gh api "repos/${REPOSITORY}/actions/workflows/autoflow-ci.yml/runs?head_sha=${CANDIDATE_SHA}&per_page=100" > /tmp/ci-runs.json
-          RUN_ID=$(jq -r '[.workflow_runs[] | select(.event == "push" and .head_branch == "main")] | sort_by(.created_at) | reverse | .[0].id // empty' /tmp/ci-runs.json)
+          RUN_ID=$(jq -r '[.workflow_runs[] | select(.event == "workflow_dispatch")] | sort_by(.created_at) | reverse | .[0].id // empty' /tmp/ci-runs.json)
           if [ -z "${RUN_ID}" ]; then
-            echo "::error::no AutoFlow CI push run found for ${CANDIDATE_SHA} in ${REPOSITORY}; publish refused (missing CI evidence)"
+            RUN_ID=$(jq -r '[.workflow_runs[] | select(.event == "push" and .head_branch == "main")] | sort_by(.created_at) | reverse | .[0].id // empty' /tmp/ci-runs.json)
+          fi
+          if [ -z "${RUN_ID}" ]; then
+            echo "::error::no full-qualification dispatch and no main push run found for ${CANDIDATE_SHA} in ${REPOSITORY}; publish refused (missing CI evidence)"
+            echo "::error::dispatch AutoFlow CI with full_qualification=true and expected_sha=${CANDIDATE_SHA}, wait for green, then publish."
             exit 1
           fi
           gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}" > /tmp/ci-run.json

@@ -6,11 +6,21 @@ name: AutoFlow CI
 # fresh-install).
 # Full audit trail: PR #1567 review + issue #1566.
 #
-# Two-tier qualification (alpha15 consolidation, Q-CI):
-#   Base CI — the four base jobs (lint, test, e2e, pack) run on every push
-#              to main and on PRs. The five heavy jobs are opt-in through
-#              `workflow_dispatch full_qualification=true` (the release
-#              evidence path), not an unconditioned push lane.
+# Two-tier qualification (2026-11-12, W4b):
+#   Base CI — the four base jobs (lint, test, e2e, pack) plus sha-guard run on
+#              every push to main and on PRs. They are the merge gate.
+#   Full qualification — the five heavy jobs (e2e-full, bfcache,
+#              node-serve-smoke, packed-consumer-matrix, fresh-install) run
+#              ONLY through `workflow_dispatch full_qualification=true` with an
+#              expected_sha. That dispatch IS the release evidence: the release
+#              workflow's `ci-evidence` job discovers it and verifies all
+#              thirteen instances before a publish.
+#
+#   Why the split: the heavy lane produced most of the main-push red (browser
+#   engine timeouts, packed-consumer installs) without gating a merge, so it
+#   ran on every commit while its evidence was only consumed at publish time.
+#   Publishing is now two steps — dispatch full qualification on the candidate
+#   SHA, wait for green, then dispatch publish.
 #   Full qualification — a main push still runs every qualification job
 #              (unchanged), and workflow_dispatch with
 #              full_qualification=true runs them on the dispatched ref's
@@ -75,15 +85,14 @@ concurrency:
   # a full dispatch lands in ci-…-full while a running Base CI push stays in
   # ci-…-base (and the reverse), instead of the old single
   # ci-${{ github.ref }} lane destroying one another's evidence. Correct for
-  # both events: push never reads a dispatch input (mode = full on main, base
-  # otherwise, matching the heavy-job gate), dispatch uses full_qualification.
+  # both events: a push is always the base lane (matching the heavy-job gate,
+  # which is dispatch-only since W4b), a dispatch uses its full_qualification.
   # Same-mode runs on a ref (push→push, or dispatch→dispatch of one mode) keep
   # today's cancel-in-progress semantics — the newer run supersedes the older
   # one in its own lane only.
   group: >-
     ci-${{ github.ref }}-${{
-      ((github.event_name == 'push' && github.ref == 'refs/heads/main')
-      || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true))
+      (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
       && 'full' || 'base'
     }}
   cancel-in-progress: true
@@ -419,7 +428,7 @@ jobs:
   # can run — let alone report success — without the guard's success.
   e2e-full:
     needs: [sha-guard]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
+    if: github.event_name == 'workflow_dispatch' && inputs.full_qualification == true
     # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
     runs-on: ubuntu-24.04
     # 45, not 30: the pre-split job was killed by the 30-minute cap once (run
@@ -502,7 +511,7 @@ jobs:
 
   bfcache:
     needs: [sha-guard]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
+    if: github.event_name == 'workflow_dispatch' && inputs.full_qualification == true
     # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -529,7 +538,7 @@ jobs:
 
   node-serve-smoke:
     needs: [sha-guard]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
+    if: github.event_name == 'workflow_dispatch' && inputs.full_qualification == true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -554,7 +563,7 @@ jobs:
 
   packed-consumer-matrix:
     needs: [sha-guard]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
+    if: github.event_name == 'workflow_dispatch' && inputs.full_qualification == true
     runs-on: ${{ matrix.os }}
     # 75, not 60 (2026-11-06 audit): the last full qualification run
     # 42190806989 spent 59m34s in this job on the ubuntu-24.04 leg against the
@@ -612,7 +621,7 @@ jobs:
 
   fresh-install:
     needs: [sha-guard]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.full_qualification == true)
+    if: github.event_name == 'workflow_dispatch' && inputs.full_qualification == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
