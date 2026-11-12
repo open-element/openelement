@@ -28,7 +28,8 @@
   "files": [
     "src/**",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "!src/internal/compiled/generated-element"
   ],
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",
