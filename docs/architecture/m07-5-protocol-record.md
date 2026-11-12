@@ -43,8 +43,11 @@ already-signed claimable fixture does not become markerless.
 ## Static attribute seed
 
 A generated-leaf claim checks static attributes as an ordered exact set, the
-same rule the directory uses in `sameAttributes`. Extra attributes, missing
-attributes, and a different order fail. The failure window does not write.
+same rule the directory uses in `sameAttributes`. Names are compared after
+HTML ASCII case folding: the claim path requires the HTML namespace, and the
+DOM exposes HTML attribute names lowercased, so both the live and the
+declared names are folded before the name comparison. Values stay exact.
+Extra attributes, missing attributes, and a different order fail. The failure window does not write.
 Dynamic slot names are not part of that static seed: their values are claim
 writes after validation, and a mount-produced value may already be present.
 On a fully static element the dynamic-name skip set is empty, so the check
@@ -54,15 +57,23 @@ set-and-order regression stays on `OE_RUNTIME_STATIC_RANGE_MISMATCH`.
 ## Mismatch identity
 
 A generated-leaf structural mismatch throws `OpenElementError`. The code
-value is `OEIR_LEAF_CLAIM_MISMATCH`
-(`RuntimeErrorCode.LEAF_CLAIM_MISMATCH`). It is not a bare `Error`. It is
-not folded into `OE_RUNTIME_STATIC_RANGE_MISMATCH`. The directory keeps that
+value is the internal generated-leaf identity `OEIR_LEAF_CLAIM_MISMATCH`,
+carried by the standard error class. It is not a bare `Error`. It is not
+folded into `OE_RUNTIME_STATIC_RANGE_MISMATCH`. The directory keeps that
 code and its existing case labels (`boundary`, `ordinal`, `order`,
 `static-seed`, `consumed`, `busy`, `parent`). Validation that fails still
 does not write.
 
-The new catalogue member is an additive candidate for the internal Alpha16a
-chain. It does not freeze the public ABI and it is not releasable.
+The identity is deliberately **not** a member of the exported
+`RuntimeErrorCode` catalogue. The catalogue requires every member to use the
+`OE_` prefix (`packages/protocol/src/errors.ts`), and the repository's
+error-dialect invariant test enforces that for every table
+(`packages/element/__tests__/error-dialect.test.ts`). `OEIR_` is an internal
+generated-leaf identity, so it stays internal: no public runtime code, no
+`RuntimeErrorCode` member, and no `public-interface-snapshot` change. If a
+future slice wants this identity as public API, it must first record an owner
+decision and either rename it into the `OE_` namespace or extend the dialect
+invariant explicitly.
 
 ## HTML namespace
 

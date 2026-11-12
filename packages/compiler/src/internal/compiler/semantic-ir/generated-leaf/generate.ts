@@ -95,8 +95,8 @@
  * — elements, fragments, static text, static attributes, dynamic text and
  * `attribute`/`boolean` slots — also emits `<Name>__claim`, which adopts the
  * existing children of a parent in authored order. Structural mismatch throws
- * a catalogued `OpenElementError` whose code is `OEIR_LEAF_CLAIM_MISMATCH`
- * before any subscription. That identity is not the directory code
+ * an `OpenElementError` whose code is the internal identity
+ * `OEIR_LEAF_CLAIM_MISMATCH` before any subscription. That identity is not the directory code
  * `OE_RUNTIME_STATIC_RANGE_MISMATCH`. A dynamic slot writes before it
  * subscribes, so a throw after that write is not a DOM byte rollback;
  * `claimRecipe` then `dispose(false)`s the child owner. The claim-period
@@ -142,8 +142,9 @@
  * M07-5 claim protocol (not an M07 exit, not a public ABI freeze): the M07a
  * walk requires the HTML namespace (`http://www.w3.org/1999/xhtml`) on the
  * claim parent, its element ancestors, and each claimed element. Static
- * attribute seed is the ordered exact set of declared static attributes;
- * dynamic slot names are not part of that seed. A directory claim still
+ * attribute seed is the ordered exact set of declared static attributes,
+ * compared after HTML ASCII case folding (the DOM exposes HTML attribute
+ * names lowercased); dynamic slot names are not part of that seed. A directory claim still
  * reports `OE_RUNTIME_STATIC_RANGE_MISMATCH` and its existing case labels.
  *
  * NOT claimed here: production wiring, a public ABI, SSR (M08), TSX-18/TSX-30
@@ -380,7 +381,7 @@ interface EmitState {
    * claim function. A pure-mount tree leaves the flag false.
    */
   emitDirectoryMarkers: boolean;
-  /** True once this chunk throws the catalogued leaf-claim mismatch. */
+  /** True once this chunk throws the leaf-claim mismatch. */
   usesLeafClaimMismatch: boolean;
 }
 
@@ -2190,7 +2191,7 @@ interface EmittedComponent {
   readonly usesStaticSiblingDirectoryConsumer?: boolean;
   /** True when this component's generated claim calls `claimRecipe`. */
   readonly usesClaimRecipe?: boolean;
-  /** True when the emitted claim throws the catalogued leaf mismatch. */
+  /** True when the emitted claim throws the leaf mismatch. */
   readonly usesLeafClaimMismatch?: boolean;
 }
 
@@ -2203,7 +2204,7 @@ interface ClaimEmission {
   readonly usesStaticSiblingDirectoryConsumer?: boolean;
   /** True when the emitted claim calls `claimRecipe`. */
   readonly usesClaimRecipe?: boolean;
-  /** True when the emitted claim throws the catalogued leaf mismatch. */
+  /** True when the emitted claim throws the leaf mismatch. */
   readonly usesLeafClaimMismatch?: boolean;
 }
 
@@ -2354,7 +2355,7 @@ function claimError(detail: string): string {
   return JSON.stringify(`${LEAF_CLAIM_MISMATCH_CODE}: ${detail}`);
 }
 
-/** Throw the catalogued leaf mismatch. Sets the runtime import flag. */
+/** Throw the leaf mismatch. Sets the runtime import flag. */
 function emitClaimMismatch(state: EmitState, condition: string, detail: string): void {
   emitClaimMismatchMessage(state, condition, claimError(detail));
 }
@@ -2396,7 +2397,10 @@ function emitClaimHtmlNamespace(state: EmitState, nodeExpr: string, where: strin
 
 /**
  * Static attribute seed: the live attributes, with dynamic slot names removed,
- * must equal the declared static attributes in name, value, and order. On a
+ * must equal the declared static attributes in value and order. Names are
+ * compared after HTML ASCII case folding: the claim path requires the HTML
+ * namespace and the DOM exposes HTML attribute names lowercased, so both the
+ * live and the declared names are folded before the name comparison. On a
  * fully static element the skip set is empty, which is the directory rule.
  * Dynamic slot values are claim writes after this check, not part of the seed.
  */
@@ -2425,17 +2429,17 @@ function emitClaimStaticAttributeSeed(
   push(state, `const ${item} = ${elementVar}.attributes.item(${index});`);
   push(state, `if (${item} == null) continue;`);
   if (dynamicNames.length > 0) {
-    const skip = `[${dynamicNames.map((name) => JSON.stringify(name)).join(', ')}]`;
-    push(state, `if (${skip}.indexOf(${item}.name) !== -1) continue;`);
+    const skip = `[${dynamicNames.map((name) => JSON.stringify(name.toLowerCase())).join(', ')}]`;
+    push(state, `if (${skip}.indexOf(${item}.name.toLowerCase()) !== -1) continue;`);
   }
-  push(state, `${live}.push({ name: ${item}.name, value: ${item}.value });`);
+  push(state, `${live}.push({ name: ${item}.name.toLowerCase(), value: ${item}.value });`);
   state.indent -= 1;
   push(state, '}');
   const expected = nextName(state, 'expectedAttrs');
   const declared = staticAttrs
     .map(
       (attribute) =>
-        `{ name: ${JSON.stringify(attribute.name)}, value: ${JSON.stringify(attribute.value)} }`,
+        `{ name: ${JSON.stringify(attribute.name.toLowerCase())}, value: ${JSON.stringify(attribute.value)} }`,
     )
     .join(', ');
   push(state, `const ${expected} = [${declared}];`);

@@ -461,9 +461,10 @@ permitted seed-state compare.
 
 ADR-0175 D-2 suppresses unconsumed `oe:r:` / `oe:/r:` markers on a pure-mount
 tree. A tree that emits a claim function still carries the marker pair.
-Generated-leaf static attribute seed is an ordered exact set. Structural
-mismatch is a catalogued `OpenElementError` identified as
-`OEIR_LEAF_CLAIM_MISMATCH`, not the directory code. The claim path requires
+Generated-leaf static attribute seed is an ordered exact set, compared after HTML ASCII case folding. Structural
+mismatch is an `OpenElementError` carrying the internal identity
+`OEIR_LEAF_CLAIM_MISMATCH` (not a member of the exported `RuntimeErrorCode`
+catalogue, and no public snapshot change); it is not the directory code. The claim path requires
 the HTML namespace (XHTML URI). The directory exact-set, case labels, and
 namespace checks are unchanged. The record is
 [m07-5-protocol-record.md](./m07-5-protocol-record.md).

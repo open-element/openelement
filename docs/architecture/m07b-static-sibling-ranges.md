@@ -137,8 +137,9 @@ and not a public ABI freeze. The marker/seed private contract stays OPEN.
   loosened.
 - **Mismatch diagnostic identity**: this directory still throws the catalogued
   `OE_RUNTIME_STATIC_RANGE_MISMATCH` with the existing case labels. The
-  generated leaf structural mismatch is a catalogued `OpenElementError` whose
-  code value stays `OEIR_LEAF_CLAIM_MISMATCH`. The leaf is not folded into the
+  generated leaf structural mismatch is an `OpenElementError` whose code value
+  stays the internal identity `OEIR_LEAF_CLAIM_MISMATCH`; it is not a member of
+  the exported `RuntimeErrorCode` catalogue. The leaf is not folded into the
   directory code.
 - **Namespace checks**: this directory still requires the HTML namespace on
   the parent, its element ancestors, and in-range elements. The generated-leaf

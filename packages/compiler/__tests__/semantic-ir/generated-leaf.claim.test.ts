@@ -46,6 +46,9 @@ function Empty(props) {
 function Plain(props) {
   return <p id="a" class="b">x</p>;
 }
+function Cased(props) {
+  return <p id="a" data-Mixed="V">x</p>;
+}
 `;
 
 const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
@@ -157,6 +160,7 @@ interface Loaded {
   createLeafRecipe: (owner: unknown, host: unknown) => { claim?: unknown };
   createEmptyRecipe: (owner: unknown, host: unknown) => unknown;
   createPlainRecipe: (owner: unknown, host: unknown) => unknown;
+  createCasedRecipe: (owner: unknown, host: unknown) => unknown;
   OpenElementError: new (...args: unknown[]) => Error & { code?: string };
   claimRecipe: (
     owner: unknown,
@@ -207,7 +211,7 @@ beforeAll(async () => {
   writeFileSync(
     entry,
     [
-      `export { createLeafRecipe, createEmptyRecipe, createPlainRecipe } from './leaf.js';`,
+      `export { createLeafRecipe, createEmptyRecipe, createPlainRecipe, createCasedRecipe } from './leaf.js';`,
       `export { claimRecipe, runtimeProbe, LifetimeScope, signal, OpenElementError } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
       '',
     ].join('\n'),
@@ -391,6 +395,16 @@ function captureClaim(run: () => unknown): Error & { code?: string } {
 }
 
 describe('M07-5 generated-leaf protocol (非浏览器资格, Node DOM shim, LOCAL)', () => {
+  function claimCased(dom: { parent: ClaimNode }): void {
+    const owner = new loaded.LifetimeScope();
+    const recipe = loaded.createCasedRecipe(owner, {
+      bindings: {},
+      props: {},
+      propsChanged: loaded.signal(0),
+    });
+    loaded.claimRecipe(owner, recipe, dom.parent);
+  }
+
   function claimPlain(dom: { parent: ClaimNode }): void {
     const owner = new loaded.LifetimeScope();
     const recipe = loaded.createPlainRecipe(owner, {
@@ -400,6 +414,23 @@ describe('M07-5 generated-leaf protocol (非浏览器资格, Node DOM shim, LOCA
     });
     loaded.claimRecipe(owner, recipe, dom.parent);
   }
+
+  test('static attribute names are HTML case-folded for the seed', () => {
+    // The HTML DOM lowercases attribute names; the Node DOM shim does not.
+    // Feed the lowercased form a browser exposes and assert the generated
+    // claim compares the declared authored name after the same case folding.
+    const dom = plainDom({
+      attributes: [
+        ['id', 'a'],
+        ['data-mixed', 'V'],
+      ],
+    });
+    claimCased(dom);
+    expect(dom.text.nodeValue).toBe('x');
+    expect(dom.paragraph.attributes!.length).toBe(2);
+    expect(dom.paragraph.attributes!.item(1)?.name).toBe('data-mixed');
+    expect(dom.paragraph.getAttribute!('data-mixed')).toBe('V');
+  });
 
   test('static attributes succeed only as an exact ordered set', () => {
     const dom = plainDom({});
