@@ -192,6 +192,8 @@ async function buildRuntimeBundle(): Promise<string> {
         `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
         `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
         `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+        `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
+        `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
         `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
         `export { signal } from ${JSON.stringify(join(element, 'signal/framework.ts'))};`,
         '',

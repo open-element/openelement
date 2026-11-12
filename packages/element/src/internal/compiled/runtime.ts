@@ -138,6 +138,10 @@ export {
   removeNodes,
 } from './runtime/values.ts';
 export { bindSignalWrites } from './runtime/bindings.ts';
+// The escape contract the generated SSR producer calls. One implementation,
+// shared with the serializers — the compiler never carries a second table.
+export { escapeText } from './escape-text.ts';
+export { escapeAttrValue } from '../core/html-escape.ts';
 export { createTrackedProps, type TrackedProps } from './runtime/props.ts';
 export { runtimeProbe, type RuntimeProbeCounts } from './runtime/observability.ts';
 export {
