@@ -126,7 +126,8 @@
  * M07b generator extension (bounded static directory): when an element's
  * children, or a fragment's children, flatten to two or more fully static
  * elements, and a claim function is emitted for that component, mount emits
- * private `oe:r:<ordinal>` / `oe:/r:<ordinal>` pairs in author order and
+ * the private range markers (spelling owned by the runtime `markers.ts`) in
+ * author order and
  * `claim` calls `openStaticSiblingDirectory` / `claimStaticSiblingRange`.
  * ADR-0175 D-2: a pure-mount component (no claim function) does not emit those
  * pairs. The expected ordinals are the generator's literals. Mixed text,
@@ -190,6 +191,37 @@ const RUNTIME_IMPORTS = [
   'removeNodes',
 ] as const;
 
+/**
+ * Runtime symbols a generated module imports only when it uses them. The
+ * predicate reads the emitted body, so a new emission site cannot forget to
+ * register its import (the symbol is named in the call it emits).
+ */
+const OPTIONAL_RUNTIME_IMPORTS: readonly {
+  readonly symbol: string;
+  readonly predicate: (body: string, usesClaimRecipe: boolean, usesDirectory: boolean) => boolean;
+}[] = [
+  { symbol: 'claimRecipe', predicate: (_body, usesClaimRecipe) => usesClaimRecipe },
+  { symbol: 'leafClaimMismatch', predicate: (body) => body.includes('leafClaimMismatch(') },
+  {
+    symbol: 'assertElementInHtmlNamespace',
+    predicate: (body) => body.includes('assertElementInHtmlNamespace('),
+  },
+  {
+    symbol: 'assertStaticAttributeSeed',
+    predicate: (body) => body.includes('assertStaticAttributeSeed('),
+  },
+  { symbol: 'rangeMarkerText', predicate: (body) => body.includes('rangeMarkerText(') },
+  { symbol: 'MARKERS', predicate: (body) => body.includes('MARKERS.') },
+  {
+    symbol: 'claimStaticSiblingRange',
+    predicate: (_body, _usesClaimRecipe, usesDirectory) => usesDirectory,
+  },
+  {
+    symbol: 'openStaticSiblingDirectory',
+    predicate: (_body, _usesClaimRecipe, usesDirectory) => usesDirectory,
+  },
+];
+
 const INTERNAL_PREFIX = '__oe_';
 /**
  * The M02 marked-printer placeholder for a JSX value lowered inside an
@@ -238,14 +270,6 @@ const CONSUMED_ATTRIBUTE_CHANNELS: ReadonlySet<string> = new Set(['key']);
  * emitted under or around these tags. ASCII lowercase, matching intrinsic tags
  * the generator already admits. This is not a new content model.
  */
-/** HTML namespace (XHTML URI). M07a claim refuses every other value, including null. */
-const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
-/**
- * Catalogued identity of a generated-leaf structural mismatch. The value stays
- * `OEIR_LEAF_CLAIM_MISMATCH`; it is not folded into the directory code.
- */
-const LEAF_CLAIM_MISMATCH_CODE = 'OEIR_LEAF_CLAIM_MISMATCH';
-
 const DIRECTORY_EXCLUDED_TAGS: ReadonlySet<string> = new Set([
   'table',
   'caption',
@@ -377,7 +401,7 @@ interface EmitState {
   /** True once this claim chunk calls `claimRecipe`. */
   usesClaimRecipe: boolean;
   /**
-   * ADR-0175 D-2. Mount emits `oe:r:` pairs only when this component emits a
+   * ADR-0175 D-2. Mount emits range markers only when this component emits a
    * claim function. A pure-mount tree leaves the flag false.
    */
   emitDirectoryMarkers: boolean;
@@ -669,7 +693,7 @@ function emitCondition(
   const alternateFn =
     node.alternate !== null && node.alternate.length > 0 ? `${INTERNAL_PREFIX}whenElse${id}` : null;
 
-  push(state, `const ${anchorVar} = document.createComment("oe:when");`, node.span);
+  push(state, `const ${anchorVar} = document.createComment(MARKERS.when);`, node.span);
   sink.push({ kind: 'node', name: anchorVar });
   if (consequentFn !== null) {
     emitNodesBuilder(
@@ -781,7 +805,7 @@ function emitList(
   const keyFn = `${INTERNAL_PREFIX}eachKey${id}`;
   const refreshVar = `${INTERNAL_PREFIX}eachRefresh${id}`;
 
-  push(state, `const ${anchorVar} = document.createComment("oe:each");`, node.span);
+  push(state, `const ${anchorVar} = document.createComment(MARKERS.each);`, node.span);
   sink.push({ kind: 'node', name: anchorVar });
   push(state, `let ${entriesVar} = [];`);
   state.listDepth += 1;
@@ -1934,11 +1958,7 @@ function emitMountedDirectory(
   ranges.forEach((range, ordinal) => {
     const span = range.span;
     const start = nextName(state, 'mark');
-    push(
-      state,
-      `const ${start} = document.createComment(${JSON.stringify(`oe:r:${ordinal}`)});`,
-      span,
-    );
+    push(state, `const ${start} = document.createComment(rangeMarkerText(${ordinal}));`, span);
     appendGeneratedNode(state, target, start);
     const sink: SinkEntry[] = [];
     emitNode(state, range, sink, records, false);
@@ -1946,11 +1966,7 @@ function emitMountedDirectory(
       if (entry.kind === 'node') appendGeneratedNode(state, target, entry.name);
     }
     const end = nextName(state, 'mark');
-    push(
-      state,
-      `const ${end} = document.createComment(${JSON.stringify(`oe:/r:${ordinal}`)});`,
-      span,
-    );
+    push(state, `const ${end} = document.createComment(rangeMarkerText(${ordinal}, true));`, span);
     appendGeneratedNode(state, target, end);
   });
 }
@@ -2351,21 +2367,19 @@ function moduleUsesSharedClaimCursor(
   );
 }
 
+/**
+ * The emitted mismatch expression. The message prefix, the code and the error
+ * options live in the runtime (`claim-invariants.ts`); the compiler names the
+ * helper and passes the detail, so no contract string is restated here.
+ */
 function claimError(detail: string): string {
-  return JSON.stringify(`${LEAF_CLAIM_MISMATCH_CODE}: ${detail}`);
+  return `leafClaimMismatch(${JSON.stringify(detail)})`;
 }
 
 /** Throw the leaf mismatch. Sets the runtime import flag. */
 function emitClaimMismatch(state: EmitState, condition: string, detail: string): void {
-  emitClaimMismatchMessage(state, condition, claimError(detail));
-}
-
-function emitClaimMismatchMessage(state: EmitState, condition: string, messageExpr: string): void {
   state.usesLeafClaimMismatch = true;
-  push(
-    state,
-    `if (${condition}) throw new OpenElementError(${messageExpr}, { code: ${JSON.stringify(LEAF_CLAIM_MISMATCH_CODE)}, phase: "csr", severity: "error", recoverable: false });`,
-  );
+  push(state, `if (${condition}) throw ${claimError(detail)};`);
 }
 
 /**
@@ -2374,25 +2388,8 @@ function emitClaimMismatchMessage(state: EmitState, condition: string, messageEx
  * A failure here is before any claim write.
  */
 function emitClaimHtmlNamespace(state: EmitState, nodeExpr: string, where: string): void {
-  const ns = JSON.stringify(HTML_NAMESPACE);
-  emitClaimMismatch(
-    state,
-    `${nodeExpr} == null || ${nodeExpr}.nodeType !== 1 || ${nodeExpr}.namespaceURI !== ${ns}`,
-    `non-HTML namespace at ${where}`,
-  );
-  const ancestor = nextName(state, 'ancestor');
-  push(
-    state,
-    `for (let ${ancestor} = ${nodeExpr}.parentNode; ${ancestor} != null; ${ancestor} = ${ancestor}.parentNode) {`,
-  );
-  state.indent += 1;
-  emitClaimMismatch(
-    state,
-    `${ancestor}.nodeType === 1 && ${ancestor}.namespaceURI !== ${ns}`,
-    `non-HTML namespace at ${where}`,
-  );
-  state.indent -= 1;
-  push(state, '}');
+  state.usesLeafClaimMismatch = true;
+  push(state, `assertElementInHtmlNamespace(${nodeExpr}, ${JSON.stringify(where)});`);
 }
 
 /**
@@ -2403,6 +2400,13 @@ function emitClaimHtmlNamespace(state: EmitState, nodeExpr: string, where: strin
  * live and the declared names are folded before the name comparison. On a
  * fully static element the skip set is empty, which is the directory rule.
  * Dynamic slot values are claim writes after this check, not part of the seed.
+ */
+/**
+ * Static attribute seed: emit one call into the runtime predicate. The rule
+ * itself (ordered exact set, HTML case-folded names, exact values) lives in
+ * `claim-invariants.ts` and is shared with the directory consumer; the
+ * generator only names the declared set and the dynamic names the claim writes
+ * itself. Nothing about the rule is restated here.
  */
 function emitClaimStaticAttributeSeed(
   state: EmitState,
@@ -2417,49 +2421,18 @@ function emitClaimStaticAttributeSeed(
         attribute.kind === 'dynamic' && !CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel),
     )
     .map((attribute) => attribute.name);
-  const live = nextName(state, 'staticAttrs');
-  const index = nextName(state, 'attrIndex');
-  const item = nextName(state, 'attr');
-  push(state, `const ${live} = [];`);
-  push(
-    state,
-    `for (let ${index} = 0; ${elementVar}.attributes != null && ${index} < ${elementVar}.attributes.length; ${index} += 1) {`,
-  );
-  state.indent += 1;
-  push(state, `const ${item} = ${elementVar}.attributes.item(${index});`);
-  push(state, `if (${item} == null) continue;`);
-  if (dynamicNames.length > 0) {
-    const skip = `[${dynamicNames.map((name) => JSON.stringify(name.toLowerCase())).join(', ')}]`;
-    push(state, `if (${skip}.indexOf(${item}.name.toLowerCase()) !== -1) continue;`);
-  }
-  push(state, `${live}.push({ name: ${item}.name.toLowerCase(), value: ${item}.value });`);
-  state.indent -= 1;
-  push(state, '}');
-  const expected = nextName(state, 'expectedAttrs');
   const declared = staticAttrs
     .map(
       (attribute) =>
-        `{ name: ${JSON.stringify(attribute.name.toLowerCase())}, value: ${JSON.stringify(attribute.value)} }`,
+        `{ name: ${JSON.stringify(attribute.name)}, value: ${JSON.stringify(attribute.value)} }`,
     )
     .join(', ');
-  push(state, `const ${expected} = [${declared}];`);
-  emitClaimMismatch(
+  const skip = `[${dynamicNames.map((name) => JSON.stringify(name)).join(', ')}]`;
+  state.usesLeafClaimMismatch = true;
+  push(
     state,
-    `${live}.length !== ${expected}.length`,
-    `static attribute seed at ${where}`,
+    `assertStaticAttributeSeed(${elementVar}, [${declared}], ${JSON.stringify(where)}, ${skip});`,
   );
-  const cursor = nextName(state, 'attrCursor');
-  push(state, `for (let ${cursor} = 0; ${cursor} < ${expected}.length; ${cursor} += 1) {`);
-  state.indent += 1;
-  const slot = nextName(state, 'declaredAttr');
-  push(state, `const ${slot} = ${expected}[${cursor}];`);
-  emitClaimMismatchMessage(
-    state,
-    `${live}[${cursor}] == null || ${live}[${cursor}].name !== ${slot}.name || ${live}[${cursor}].value !== ${slot}.value`,
-    `"${LEAF_CLAIM_MISMATCH_CODE}: static attribute " + ${slot}.name + " at " + ${JSON.stringify(where)}`,
-  );
-  state.indent -= 1;
-  push(state, '}');
 }
 
 function emitClaimTake(state: EmitState, cursor: string, name: string, where: string): void {
@@ -2857,10 +2830,7 @@ function emitClaimTimeRecipes(
       `source: ${JSON.stringify(`${file}#${state.component.name}:${recipe.id.replace(/^#/, '')}`)},`,
     );
     state.usesLeafClaimMismatch = true;
-    push(
-      state,
-      `mount() { throw new OpenElementError(${claimError('claim-time recipe has no mount')}, { code: ${JSON.stringify(LEAF_CLAIM_MISMATCH_CODE)}, phase: "csr", severity: "error", recoverable: false }); },`,
-    );
+    push(state, `mount() { throw ${claimError('claim-time recipe has no mount')}; },`);
     push(state, `claim(${scopeParam}, ${propsParam}, ${parentParam}) {`, recipe.span);
     state.indent += 1;
     const outerScope = state.scopeVar;
@@ -2893,7 +2863,7 @@ function emitClaimTimeRecipes(
     state.usesLeafClaimMismatch = true;
     push(
       state,
-      `if (__oe_cursorOwned && __oe_claimCursor.i !== __oe_claimCursor.list.length) throw new OpenElementError(${claimError('extra node at /')}, { code: ${JSON.stringify(LEAF_CLAIM_MISMATCH_CODE)}, phase: "csr", severity: "error", recoverable: false });`,
+      `if (__oe_cursorOwned && __oe_claimCursor.i !== __oe_claimCursor.list.length) throw ${claimError('extra node at /')};`,
     );
     for (const step of phase2) step();
     state.indent -= 1;
@@ -3040,7 +3010,7 @@ function emitClaimFunction(
     state.usesLeafClaimMismatch = true;
     push(
       state,
-      `if (__oe_cursorOwned && __oe_claimCursor.i !== __oe_claimCursor.list.length) throw new OpenElementError(${claimError('extra node at /')}, { code: ${JSON.stringify(LEAF_CLAIM_MISMATCH_CODE)}, phase: "csr", severity: "error", recoverable: false });`,
+      `if (__oe_cursorOwned && __oe_claimCursor.i !== __oe_claimCursor.list.length) throw ${claimError('extra node at /')};`,
     );
     for (const step of phase2) step();
     state.indent -= 1;
@@ -3627,11 +3597,12 @@ export function generateLeafModule(
       diagnostics,
     };
   }
+  const body = chunks.join('\n');
   const runtimeImports: string[] = [...RUNTIME_IMPORTS];
-  if (usesClaimRecipe) runtimeImports.push('claimRecipe');
-  if (usesLeafClaimMismatch) runtimeImports.push('OpenElementError');
-  if (usesStaticSiblingDirectoryConsumer) {
-    runtimeImports.push('claimStaticSiblingRange', 'openStaticSiblingDirectory');
+  for (const optional of OPTIONAL_RUNTIME_IMPORTS) {
+    if (optional.predicate(body, usesClaimRecipe, usesStaticSiblingDirectoryConsumer)) {
+      runtimeImports.push(optional.symbol);
+    }
   }
   if (runtimeImports.length !== RUNTIME_IMPORTS.length) runtimeImports.sort();
   const headerLines = [

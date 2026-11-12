@@ -2,7 +2,9 @@
  * M07b — a caller-declared directory of static sibling ranges.
  *
  * One HTML element parent, and nothing else: its child list is exactly the
- * paired comments `oe:r:<ordinal>` … `oe:/r:<ordinal>` for ordinals 0..N-1.
+ * paired range markers for ordinals 0..N-1. The marker spelling and its
+ * parser live in `./markers.ts`; this module consumes `parseRangeMarker` and
+ * never restates the text.
  * The spelling is private to this slice. It is not `oe:p`, `oe:when`, or
  * `oe:each`, and it is not a public ABI. Mount does not emit these markers.
  *
@@ -54,8 +56,8 @@ import {
   recordRegionAllocated,
 } from './observability.ts';
 import { removeNodes } from './values.ts';
-
-const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+import { HTML_NAMESPACE, staticAttributeSeedMismatch } from './claim-invariants.ts';
+import { parseRangeMarker } from './markers.ts';
 /**
  * HTML parsing contexts this static subset does not own. The names are the
  * table, select, and template families plus `svg` and `math`. ASCII case is
@@ -81,7 +83,6 @@ const RESTRICTED_HTML_LOCAL_NAMES = new Set([
   'svg',
   'math',
 ]);
-const MAX_ORDINAL_DIGITS = 16;
 
 /** One node the caller declares. Compared against the parsed DOM, not HTML source. */
 export interface DeclaredStaticNode {
@@ -213,31 +214,6 @@ function childrenOf(parent: Node): Node[] {
   return nodes;
 }
 
-/**
- * Canonical decimal, no sign, no leading zero, no truncation. `parseInt` is
- * intentionally not used: it accepts `01` and stops early on `1e2` / `1.0`.
- * A digit string that would exceed `Number.MAX_SAFE_INTEGER` is rejected
- * instead of being rounded.
- */
-function canonicalOrdinal(digits: string): number | null {
-  if (!/^(0|[1-9][0-9]*)$/.test(digits)) return null;
-  if (digits.length > MAX_ORDINAL_DIGITS) return null;
-  let value = 0;
-  for (const char of digits) {
-    const digit = char.charCodeAt(0) - 48;
-    if (value > (Number.MAX_SAFE_INTEGER - digit) / 10) return null;
-    value = value * 10 + digit;
-  }
-  return value;
-}
-
-function markerOrdinal(nodeValue: string | null, end: boolean): number | null {
-  if (nodeValue === null) return null;
-  const prefix = end ? 'oe:/r:' : 'oe:r:';
-  if (!nodeValue.startsWith(prefix)) return null;
-  return canonicalOrdinal(nodeValue.slice(prefix.length));
-}
-
 function asciiLower(value: string): string {
   let folded = '';
   for (let index = 0; index < value.length; index += 1) {
@@ -264,21 +240,10 @@ function elementRejection(element: Element): string | null {
   return null;
 }
 
-function readAttributes(element: Element): { name: string; value: string }[] {
-  const { attributes } = element;
-  const result: { name: string; value: string }[] = [];
-  for (let index = 0; index < attributes.length; index += 1) {
-    const attribute = attributes.item(index);
-    if (!attribute) continue;
-    result.push({ name: attribute.name, value: attribute.value });
-  }
-  return result;
-}
-
 function rejectNestedMarker(node: Node, source: string): void {
   if (node.nodeType === 8) {
     const value = node.nodeValue ?? '';
-    if (value.startsWith('oe:r:') || value.startsWith('oe:/r:')) {
+    if (parseRangeMarker(value) !== null) {
       fail(source, `boundary: nested or mismatched marker ${JSON.stringify(value)}`);
     }
     return;
@@ -316,7 +281,7 @@ function parseDirectory(
         `boundary: outside node is not a range start (${JSON.stringify(start?.nodeValue)})`,
       );
     }
-    const ordinal = markerOrdinal(start.nodeValue, false);
+    const ordinal = parseRangeMarker(start.nodeValue)?.ordinal ?? null;
     if (ordinal === null) {
       fail(source, `ordinal: non-canonical start ${JSON.stringify(start.nodeValue)}`);
     }
@@ -333,15 +298,18 @@ function parseDirectory(
     for (; index < children.length; index += 1) {
       const node = children[index];
       if (!node) break;
-      if (node.nodeType === 8 && markerOrdinal(node.nodeValue, true) === ordinal) {
-        closed = true;
-        break;
-      }
-      if (node.nodeType === 8 && markerOrdinal(node.nodeValue, false) !== null) {
-        fail(source, `boundary: crossed or nested start ${JSON.stringify(node.nodeValue)}`);
-      }
-      if (node.nodeType === 8 && markerOrdinal(node.nodeValue, true) !== null) {
-        fail(source, `boundary: mismatched end ${JSON.stringify(node.nodeValue)}`);
+      if (node.nodeType === 8) {
+        const marker = parseRangeMarker(node.nodeValue);
+        if (marker !== null && marker.end && marker.ordinal === ordinal) {
+          closed = true;
+          break;
+        }
+        if (marker !== null && !marker.end) {
+          fail(source, `boundary: crossed or nested start ${JSON.stringify(node.nodeValue)}`);
+        }
+        if (marker !== null) {
+          fail(source, `boundary: mismatched end ${JSON.stringify(node.nodeValue)}`);
+        }
       }
       rejectNestedMarker(node, source);
       interior.push(node);
@@ -364,15 +332,10 @@ function sameAttributes(
   element: Element,
   expected: readonly { readonly name: string; readonly value: string }[],
 ): boolean {
-  const live = readAttributes(element);
-  if (live.length !== expected.length) return false;
-  for (let index = 0; index < live.length; index += 1) {
-    const actual = live[index];
-    const declared = expected[index];
-    if (!actual || !declared) return false;
-    if (actual.name !== declared.name || actual.value !== declared.value) return false;
-  }
-  return true;
+  // One rule, one implementation: the seed predicate in `claim-invariants.ts`
+  // is what the generated leaf claim asserts too. Only the error identity
+  // differs (directory code here, leaf code there).
+  return staticAttributeSeedMismatch(element, expected) === null;
 }
 
 function matches(node: Node, declared: DeclaredStaticNode, source: string): boolean {

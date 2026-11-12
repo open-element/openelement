@@ -190,6 +190,8 @@ async function buildRuntimeBundle(): Promise<string> {
         `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
         `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
         `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
+        `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+        `export { MARKERS, parseRangeMarker, rangeMarkerText } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
         `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
         `export { signal } from ${JSON.stringify(join(element, 'signal/framework.ts'))};`,
         '',

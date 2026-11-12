@@ -1,0 +1,144 @@
+/**
+ * claim-invariants.ts — the single implementation of the generated-leaf claim
+ * invariants.
+ *
+ * Three rules decide whether a generated leaf claim may adopt existing DOM:
+ *
+ *   1. the claim parent, its element ancestors and each claimed element are in
+ *      the HTML namespace;
+ *   2. each claimed element's static attribute seed is exactly the declared
+ *      ordered set (names compared after HTML ASCII case folding, because the
+ *      DOM exposes HTML attribute names lowercased; values compared exactly);
+ *   3. a structural mismatch is reported as one catalogued internal identity.
+ *
+ * The generated claim calls into this module instead of emitting its own copy
+ * of the rule, so the rule exists once. The directory consumer
+ * (`./static-sibling-ranges.ts`) shares the same two predicates and maps a
+ * failure onto its own `OE_RUNTIME_STATIC_RANGE_MISMATCH` identity: the codes
+ * differ because the failure surfaces differ, the rule does not.
+ *
+ * `LEAF_CLAIM_MISMATCH` is deliberately not a member of the exported
+ * `RuntimeErrorCode` catalogue (that catalogue requires the `OE_` prefix). It
+ * is the internal generated-leaf identity and it stays internal: no public
+ * runtime code, no `public-interface-snapshot` change.
+ *
+ * @module ./claim-invariants.ts
+ */
+
+import { OpenElementError } from '@openelement/protocol/errors';
+
+/** The HTML namespace. Every claimed element must be in it. */
+export const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+
+/**
+ * Internal identity of a generated-leaf structural mismatch. The value is the
+ * long-standing wire string; it is not `OE_RUNTIME_STATIC_RANGE_MISMATCH` and
+ * it is not part of the exported code catalogue.
+ */
+export const LEAF_CLAIM_MISMATCH = 'OEIR_LEAF_CLAIM_MISMATCH';
+
+/** One declared static attribute, already authored order. */
+export interface DeclaredStaticAttribute {
+  readonly name: string;
+  readonly value: string;
+}
+
+function describe(value: unknown): string {
+  return JSON.stringify(value);
+}
+
+/**
+ * The one way a generated-leaf claim reports a mismatch. Generated modules
+ * call this instead of constructing the error and its options themselves, so
+ * the code, phase and recoverability live here too.
+ */
+export function leafClaimMismatch(detail: string): OpenElementError {
+  return new OpenElementError(`${LEAF_CLAIM_MISMATCH}: ${detail}`, {
+    code: LEAF_CLAIM_MISMATCH,
+    phase: 'csr',
+    severity: 'error',
+    recoverable: false,
+  });
+}
+
+/**
+ * `null` when the element's static attribute seed equals `declared` in name,
+ * value and order; otherwise a human-readable reason. Names are compared after
+ * HTML ASCII case folding; values stay exact. Attributes the caller owns
+ * dynamically are excluded by the caller, not here.
+ */
+export function staticAttributeSeedMismatch(
+  element: Element,
+  declared: readonly DeclaredStaticAttribute[],
+  dynamicNames: readonly string[] = [],
+): string | null {
+  const { attributes } = element;
+  const skip = new Set(dynamicNames.map((name) => name.toLowerCase()));
+  const live: { name: string; value: string }[] = [];
+  for (let index = 0; index < attributes.length; index += 1) {
+    const attribute = attributes.item(index);
+    if (attribute === null) continue;
+    const name = attribute.name.toLowerCase();
+    // A slot the claim writes itself is not part of the static seed.
+    if (skip.has(name)) continue;
+    live.push({ name, value: attribute.value });
+  }
+  if (live.length !== declared.length) {
+    return `static attribute seed count is ${live.length}, declared ${declared.length}`;
+  }
+  for (let index = 0; index < declared.length; index += 1) {
+    const actual = live[index];
+    const expected = declared[index];
+    if (actual === undefined || expected === undefined)
+      return 'static attribute seed is shorter than declared';
+    const name = expected.name.toLowerCase();
+    if (actual.name !== name) {
+      return `static attribute ${name} is out of order (found ${actual.name})`;
+    }
+    if (actual.value !== expected.value) {
+      return `static attribute ${name} has value ${describe(actual.value)}, declared ${describe(expected.value)}`;
+    }
+  }
+  return null;
+}
+
+/** Throw the catalogued leaf mismatch when the static attribute seed differs. */
+export function assertStaticAttributeSeed(
+  element: Element,
+  declared: readonly DeclaredStaticAttribute[],
+  where: string,
+  dynamicNames: readonly string[] = [],
+): void {
+  const reason = staticAttributeSeedMismatch(element, declared, dynamicNames);
+  if (reason !== null) throw leafClaimMismatch(`${reason} at ${where}`);
+}
+
+/**
+ * `null` when the node is an HTML element; otherwise a reason. Text and
+ * comment nodes are not element-namespace failures.
+ */
+export function elementHtmlNamespaceViolation(node: Node | null): string | null {
+  if (node === null) return 'no node';
+  if (node.nodeType !== 1) return 'not an element';
+  const element = node as Element;
+  if (element.namespaceURI !== HTML_NAMESPACE) {
+    return `non-HTML namespace ${describe(element.namespaceURI)} on ${describe(element.localName ?? element.nodeName)}`;
+  }
+  return null;
+}
+
+/**
+ * The claim parent, every element ancestor, and each claimed element must be
+ * in the HTML namespace. The failure window does not write.
+ */
+export function assertElementInHtmlNamespace(node: Node | null, where: string): void {
+  // The claim target itself must be an HTML element (a text or comment node is
+  // not a claim target at all). Element ancestors are checked above it.
+  const own = elementHtmlNamespaceViolation(node);
+  if (own !== null) throw leafClaimMismatch(`non-HTML namespace at ${where} (${own})`);
+  for (let current = node?.parentNode ?? null; current !== null; current = current.parentNode) {
+    if (current.nodeType !== 1) continue;
+    const reason = elementHtmlNamespaceViolation(current);
+    if (reason !== null) throw leafClaimMismatch(`non-HTML namespace at ${where} (${reason})`);
+  }
+}

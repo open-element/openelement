@@ -137,7 +137,7 @@ describe('M05 leaf v2 — emitted module contract', () => {
     expect(module).toContain(
       'function Counter__claim(__oe_scope, __oe_props, __oe_host, __oe_parent)',
     );
-    expect(module).toContain('OEIR_LEAF_CLAIM_MISMATCH');
+    expect(module).toContain('leafClaimMismatch(');
     expect(module).toContain(
       'return Counter__claim(__oe_scope, __oe_host.props, __oe_mountHost, __oe_parent);',
     );
@@ -204,7 +204,7 @@ function List(props) {
     );
     expect(result.module).not.toBeNull();
     const module = result.module!;
-    expect(module).toContain('document.createComment("oe:when")');
+    expect(module).toContain('document.createComment(MARKERS.when)');
     expect(module).toContain('function __oe_whenThen');
     expect(module).toContain('function __oe_whenElse');
     expect(module).toContain('dispose(true)');
@@ -223,7 +223,7 @@ function C(props) {
 `);
     expect(result.module).not.toBeNull();
     const module = result.module!;
-    expect(module).toContain('document.createComment("oe:each")');
+    expect(module).toContain('document.createComment(MARKERS.each)');
     expect(module).toContain('function __oe_eachEntry');
     expect(module).toContain('function __oe_eachKey');
     expect(module).toContain('update(next)');
