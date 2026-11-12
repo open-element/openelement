@@ -106,8 +106,13 @@
  * subscription. Mount and every non-claim refresh keep the unconditional
  * write. A later signal delivery shares the claim refresh body only as an
  * implementation coupling; that is not an update-period mutation acceptance,
- * not mismatch recovery, and not SSR→claim. Conditions, lists and `property`
- * channels omit `claim` and keep mount-only output.
+ * not mismatch recovery, and not SSR→claim. Lists and `property` channels omit
+ * `claim` and keep mount-only output. A condition is claimable by the M08-2
+ * condition slice when its selected branches contain shapes that slice already
+ * admits (text, dynamic-text pairs and attributes); a nested condition, list,
+ * component reference, insertion site, children projection or property channel
+ * inside a branch, and a condition under a restricted parser context, stay
+ * mount-only. That slice does not widen any earlier rejection.
  *
  * M07-1 composition / repeated-insertion order (leaf scope only): a claimable
  * component reference, reusable JSX insertion or `{props.children}` projection
@@ -166,9 +171,45 @@
  * scope, subscription, DOM, cleanup or `onConnect` invocation; it is one-shot
  * evaluation, not a second execution mode. A fully static component keeps the
  * M08-1a `__ssr()` shape (no parameters), so that interface is unchanged.
- * Conditions, lists, component references, insertion sites, children
- * projections, `property` channels and void elements still emit no `__ssr`.
- * Seed/resource-lifecycle semantics are not defined here.
+ * The M08-2 condition slice extends the producer to a condition whose branches
+ * contain already-admitted shapes: it emits the `oe:when` start marker, the
+ * selected branch chunk (ordinals restarting at 0) and the `oe:/when` end
+ * marker, evaluating the test once per call. Lists, component references,
+ * insertion sites, children projections, `property` channels, void elements,
+ * and any condition branch shape the claim slice does not admit still emit no
+ * `__ssr` (no partial producer). Seed/resource-lifecycle semantics are not
+ * defined here.
+ *
+ * M08 text boundary (M08-2 slice, not an M08 exit): every dynamic text slot in
+ * a claimable chunk carries one standard HTML comment pair,
+ * `<!--oe:t:<n>-->TEXT?<!--oe:/t:<n>-->`, in BOTH the generated mount and the
+ * generated SSR bytes. The pair is the slot identity and is value-independent;
+ * an empty value is two adjacent comments. Claim consumes `start, [0..1 Text],
+ * end` and performs no write while walking. Its phase-2 refresh creates the one
+ * allowed slot Text lazily (empty → non-empty), keeps it on non-empty → empty
+ * (`nodeValue = ""`), and registers a claim-scope range cleanup for the lazy
+ * node. Equal parsed values make the phase-2 write a no-op, so an equal seed has
+ * zero claim-period mutations; NUL/CR parser normalization is a recorded
+ * exception, not a 0-mutation claim. Static adjacent text in one claimable
+ * child list is normalized to one run (fragment-transparent), so mount/SSR/
+ * claim/directory seed all see the parser's node shape; a pure-mount component
+ * keeps authored granularity and emits no pair. Ordinals are chunk-local,
+ * pre-order, and computed by the same pure helper for mount/claim/SSR. Text
+ * that cannot be claimed in its parser context is refused with a source-located
+ * `OEIR_LEAF_UNSUPPORTED_TEXT_CONTEXT` diagnostic — RCDATA/rawtext comments
+ * become literal text, template content lives in `.content`, noscript depends
+ * on the scripting flag, table foster-parenting moves text out of the table,
+ * SVG/MathML are outside the HTML-namespace claim contract, and the select
+ * family is a stated conservative slice boundary. `td`/`th` and table-level
+ * `caption` reset to normal flow. This is never silently downgraded to
+ * mount-only. A failed claim is also not a byte transaction: the existing
+ * `dispose(false)` path releases resources but keeps borrowed DOM and any
+ * phase-2 write that already happened. The marker spelling/parser lives in
+ * the runtime `markers.ts`; the one-position check lives in
+ * `claim-invariants.ts`; the generator contains no raw marker literal. The claim
+ * cursor is `{ node }` (next node object), so a lazy insert before an already
+ * consumed close marker cannot desynchronize it; no index compensation is
+ * emitted.
  *
  * NOT claimed here: production wiring, a public ABI, SSR→claim parity
  * (M08-2), per-phase equivalence, claim negatives, TSX-18/TSX-30 as filled
@@ -239,6 +280,30 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
   { symbol: 'rangeMarker', predicate: (body) => body.includes('rangeMarker(') },
   { symbol: 'MARKERS', predicate: (body) => body.includes('MARKERS.') },
   { symbol: 'markerText', predicate: (body) => body.includes('markerText(') },
+  {
+    symbol: 'assertTextSlotMarker',
+    predicate: (body) => body.includes('assertTextSlotMarker('),
+  },
+  {
+    symbol: 'textSlotMarker',
+    predicate: (body) => body.includes('textSlotMarker('),
+  },
+  {
+    symbol: 'assertWhenAnchor',
+    predicate: (body) => body.includes('assertWhenAnchor('),
+  },
+  {
+    symbol: 'assertWhenEndMarker',
+    predicate: (body) => body.includes('assertWhenEndMarker('),
+  },
+  {
+    symbol: 'isWhenEndMarker',
+    predicate: (body) => body.includes('isWhenEndMarker('),
+  },
+  {
+    symbol: 'runUntracked',
+    predicate: (body) => body.includes('runUntracked('),
+  },
   {
     symbol: 'claimStaticSiblingRange',
     predicate: (_body, _usesClaimRecipe, usesDirectory) => usesDirectory,
@@ -317,6 +382,61 @@ const DIRECTORY_EXCLUDED_TAGS: ReadonlySet<string> = new Set([
   'svg',
   'math',
 ]);
+
+/**
+ * Parser contexts that cannot carry the generated text boundary. The split is
+ * by actual parser behavior, not by a sticky ancestor:
+ *
+ * - RCDATA (`textarea`, `title`) and rawtext turn `<!--...-->` into literal
+ *   text.
+ * - `<template>` puts its children in `.content`, not `childNodes`.
+ * - `<noscript>` parsing depends on the scripting flag, so the claim cannot
+ *   assume the comment is a stable Comment node.
+ * - The table family keeps comments in the table, but foster-parents
+ *   non-whitespace text. `td`/`th` (and `caption`) are normal flow content and
+ *   reset the context.
+ * - Foreign content (SVG/MathML) exposes comments as nodes, but the existing
+ *   generated claim is HTML-namespace-only, so it cannot claim those elements.
+ * - The select family is kept as a conservative slice boundary; its insertion
+ *   mode is not part of this slice's qualified contract.
+ *
+ * A dynamic-text slot under one of these cannot carry the boundary pair; the
+ * generator refuses the component with a source-located diagnostic instead of
+ * silently falling back to mount-only output. Static non-whitespace text in a
+ * foster-parenting context is refused for the same reason.
+ */
+const TEXT_RCDATA_TAGS: ReadonlySet<string> = new Set(['textarea', 'title']);
+
+const TEXT_RAWTEXT_TAGS: ReadonlySet<string> = new Set([
+  'script',
+  'style',
+  'xmp',
+  'iframe',
+  'noembed',
+  'noframes',
+  'plaintext',
+]);
+
+const TEXT_FOREIGN_TAGS: ReadonlySet<string> = new Set(['svg', 'math']);
+
+/** Table-family tags whose non-whitespace text is foster-parented. */
+const TEXT_FOSTER_TAGS: ReadonlySet<string> = new Set([
+  'table',
+  'colgroup',
+  'col',
+  'thead',
+  'tbody',
+  'tfoot',
+  'tr',
+]);
+
+/** Cell/caption boundaries are normal flow content. */
+const TEXT_TABLE_FLOW_TAGS: ReadonlySet<string> = new Set(['td', 'th', 'caption']);
+
+const TEXT_SELECT_TAGS: ReadonlySet<string> = new Set(['select', 'optgroup', 'option']);
+
+/** HTML "space characters": tab, LF, FF, CR, space (not JS `trim` whitespace). */
+const HTML_WHITESPACE_ONLY = /^[\t\n\f\r ]*$/;
 
 /** One lowered-expression placement in the emitted module (compiler-private). */
 export interface ExpressionPlacement {
@@ -441,6 +561,20 @@ interface EmitState {
    * claim function. A pure-mount tree leaves the flag false.
    */
   emitDirectoryMarkers: boolean;
+  /**
+   * M08 text boundary gate. True for a claimable component/chunk: mount emits
+   * the same `oe:t` pair the claim consumes, and static adjacent text is
+   * normalized to one run. A pure-mount tree leaves the flag false (authored
+   * granularity, no inert comments).
+   */
+  emitTextBoundaries: boolean;
+  /**
+   * Chunk-local pre-order ordinal for every `dynamic-text` node in the current
+   * emitted chunk (component roots or one recipe target). The map is built by
+   * the pure `textSlotOrdinals` helper; a missing entry is an internal
+   * diagnostic, never a guessed ordinal.
+   */
+  textOrdinals: ReadonlyMap<FunctionModelNode, number>;
   /** True once this chunk throws the leaf-claim mismatch. */
   usesLeafClaimMismatch: boolean;
 }
@@ -668,14 +802,21 @@ function emitNodesBuilder(
   push(state, `function ${functionName}(${scopeParam}) {`, anchor);
   state.indent += 1;
   const outerScope = state.scopeVar;
+  const outerOrdinals = state.textOrdinals;
+  const prepared = emissionNodes(state, nodes);
   state.scopeVar = scopeParam;
+  // Every generated builder is its own chunk: text-slot ordinals restart at 0
+  // and top-level static runs use the same normalized view the claim/SSR walk
+  // will consume. The save/restore is per builder, matching the recipe path.
+  state.textOrdinals = textSlotOrdinals(prepared);
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
-  for (const node of nodes) {
+  for (const node of prepared) {
     const sink: SinkEntry[] = [];
     emitNode(state, node, sink, records);
     appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
   }
   push(state, `return ${INTERNAL_PREFIX}nodes;`);
+  state.textOrdinals = outerOrdinals;
   state.scopeVar = outerScope;
   state.indent -= 1;
   push(state, '}');
@@ -739,6 +880,7 @@ function emitCondition(
   if (dependencies === null) return;
   const id = state.counter.value++;
   const anchorVar = `${INTERNAL_PREFIX}whenAnchor${id}`;
+  const endVar = `${INTERNAL_PREFIX}whenEnd${id}`;
   const activeVar = `${INTERNAL_PREFIX}whenActive${id}`;
   const ownerVar = `${INTERNAL_PREFIX}whenOwner${id}`;
   const refreshVar = `${INTERNAL_PREFIX}whenRefresh${id}`;
@@ -786,7 +928,7 @@ function emitCondition(
   const elseCall = alternateFn === null ? '[]' : `${alternateFn}(${INTERNAL_PREFIX}branchOwner)`;
   push(
     state,
-    `${INTERNAL_PREFIX}branchNodes = ${INTERNAL_PREFIX}next === 1 ? ${thenCall} : ${elseCall};`,
+    `${INTERNAL_PREFIX}branchNodes = runUntracked(() => ${INTERNAL_PREFIX}next === 1 ? ${thenCall} : ${elseCall});`,
   );
   state.indent -= 1;
   push(state, `} catch (error) { ${INTERNAL_PREFIX}branchOwner.dispose(true); throw error; }`);
@@ -797,7 +939,7 @@ function emitCondition(
   push(state, `const ${INTERNAL_PREFIX}parent = ${anchorVar}.parentNode;`);
   push(
     state,
-    `if (${INTERNAL_PREFIX}parent !== null) { let ${INTERNAL_PREFIX}reference = ${anchorVar}.nextSibling; for (const ${INTERNAL_PREFIX}child of ${INTERNAL_PREFIX}branchNodes) ${INTERNAL_PREFIX}parent.insertBefore(${INTERNAL_PREFIX}child, ${INTERNAL_PREFIX}reference); }`,
+    `if (${INTERNAL_PREFIX}parent !== null) { for (const ${INTERNAL_PREFIX}child of ${INTERNAL_PREFIX}branchNodes) ${INTERNAL_PREFIX}parent.insertBefore(${INTERNAL_PREFIX}child, ${endVar}); }`,
   );
   push(
     state,
@@ -826,7 +968,9 @@ function emitCondition(
     state,
     `${activeVar} = ${initialTestVar} ? 1 : ${alternateFn === null ? 0 : 2}; ${ownerVar} = ${initialOwnerVar};`,
   );
+  push(state, `const ${endVar} = emitComment(MARKERS.whenEnd);`, node.span);
   sink.push({ kind: 'spread', name: initialNodesVar });
+  sink.push({ kind: 'node', name: endVar });
   emitDependencySubscriptions(state, dependencies, refreshVar, node.span);
   registerRefresh(state, refreshVar);
 }
@@ -1244,18 +1388,35 @@ function emitTextWrite(state: EmitState, targetVar: string, record: LoweredExpre
 }
 
 /**
- * Claim-period text write. Mount and update keep {@link emitTextWrite}.
- * The value is computed once with `displayValue`, the same conversion the
- * unconditional write uses. An equal `nodeValue` does not assign.
+ * Claim-period dynamic-text slot write. The slot is a boundary pair plus an
+ * optional Text node: `null` means the server wire carried no text (an empty
+ * value), so an equal client value is a no-op and a non-empty one lazily
+ * inserts the slot's single Text before the closing marker. An existing Text
+ * is value-compared; it is never split, merged, normalized or removed.
+ *
+ * The lazy node is not part of the projected `nodes` array, so it is owned by a
+ * claim-scope range cleanup. The node cursor already points past the consumed
+ * close marker, so no index compensation is needed.
  */
-function emitClaimTextWrite(
+function emitClaimTextSlotWrite(
   state: EmitState,
-  targetVar: string,
+  slotVar: string,
+  endVar: string,
   record: LoweredExpressionRecord,
 ): void {
   const valueVar = nextName(state, 'value');
   pushParts(state, [`const ${valueVar} = displayValue((`, { record }, '));']);
-  push(state, `if (${targetVar}.nodeValue !== ${valueVar}) ${targetVar}.nodeValue = ${valueVar};`);
+  push(state, `if (${slotVar} === null) {`);
+  push(state, `  if (${valueVar} !== "") {`);
+  const lazyVar = nextName(state, 'text');
+  push(state, `    const ${lazyVar} = document.createTextNode(${valueVar});`);
+  push(state, `    ${endVar}.parentNode.insertBefore(${lazyVar}, ${endVar});`);
+  push(state, `    ${state.scopeVar}.addRangeCleanup(() => ${lazyVar}.remove());`);
+  push(state, `    ${slotVar} = ${lazyVar};`);
+  push(state, `  }`);
+  push(state, `} else if (${slotVar}.nodeValue !== ${valueVar}) {`);
+  push(state, `  ${slotVar}.nodeValue = ${valueVar};`);
+  push(state, `}`);
 }
 
 function emitAttributeWrite(
@@ -1818,6 +1979,13 @@ function emitRecipes(
   // One createRecipe per value, in model (authored declaration) order.
   for (const plan of plans) {
     const { recipe } = plan;
+    const outerOrdinals = state.textOrdinals;
+    const preparedTarget = normalizeTextRuns([recipe.target]);
+    state.textOrdinals = textSlotOrdinals(preparedTarget);
+    if (state.emitTextBoundaries && !assertTextBoundaryContext(state, preparedTarget)) {
+      state.textOrdinals = outerOrdinals;
+      return;
+    }
     push(state, `const ${plan.recipeVar} = createRecipe({`, recipe.span);
     state.indent += 1;
     push(state, `definitionOwner: ${MOUNT_SCOPE},`);
@@ -1841,6 +2009,7 @@ function emitRecipes(
     push(state, '},');
     state.indent -= 1;
     push(state, '});');
+    state.textOrdinals = outerOrdinals;
   }
 }
 
@@ -1942,6 +2111,290 @@ function flattenFragments(nodes: readonly FunctionModelNode[]): FunctionModelNod
   return flat;
 }
 
+/**
+ * M08 static text-run normalization. Fragments have no DOM identity, so they
+ * are flattened first; then each maximal run of adjacent `text` nodes becomes
+ * one shallow copy with the concatenated value and the first node's span. Only
+ * static text is merged: dynamic text is a slot identity and a pair boundary,
+ * never part of a run.
+ *
+ * The rule is a view, not an IR mutation: callers receive a new list and the
+ * model stays authored. It is idempotent, so a surface may normalize again
+ * without changing the result.
+ */
+function normalizeTextRuns(nodes: readonly FunctionModelNode[]): FunctionModelNode[] {
+  const flat: FunctionModelNode[] = [];
+  const append = (list: readonly FunctionModelNode[]): void => {
+    for (const node of list) {
+      if (node.kind === 'fragment') {
+        append(node.children);
+        continue;
+      }
+      if (node.kind === 'text') {
+        const previous = flat[flat.length - 1];
+        if (previous !== undefined && previous.kind === 'text') {
+          flat[flat.length - 1] = {
+            kind: 'text',
+            value: previous.value + node.value,
+            span: previous.span,
+          };
+          continue;
+        }
+      }
+      flat.push(node);
+    }
+  };
+  append(nodes);
+  return flat;
+}
+
+/** The child-list view a claimable chunk uses; pure-mount chunks stay authored. */
+function emissionNodes(
+  state: EmitState,
+  nodes: readonly FunctionModelNode[],
+): readonly FunctionModelNode[] {
+  return state.emitTextBoundaries ? normalizeTextRuns(nodes) : nodes;
+}
+
+/**
+ * Chunk-local pre-order ordinals for dynamic text slots. The walk descends
+ * through elements and fragments only: a component reference, insertion site,
+ * children projection, condition or list starts/owns another chunk and does not
+ * consume an ordinal in this one. Mount, claim and SSR call the same helper, so
+ * they agree on the sequence without sharing emission-order state.
+ */
+function textSlotOrdinals(
+  nodes: readonly FunctionModelNode[],
+): ReadonlyMap<FunctionModelNode, number> {
+  const ordinals = new Map<FunctionModelNode, number>();
+  let next = 0;
+  const visit = (list: readonly FunctionModelNode[]): void => {
+    for (const node of list) {
+      if (node.kind === 'dynamic-text') {
+        ordinals.set(node, next);
+        next += 1;
+        continue;
+      }
+      if (node.kind === 'element' || node.kind === 'fragment') visit(node.children);
+    }
+  };
+  visit(nodes);
+  return ordinals;
+}
+
+/** The slot ordinal for one node, or an internal diagnostic when unmapped. */
+function textOrdinal(state: EmitState, node: FunctionModelNode): number | null {
+  const ordinal = state.textOrdinals.get(node);
+  if (ordinal === undefined) {
+    diag(
+      state,
+      'OEIR_LEAF_TEXT_BOUNDARY_UNMAPPED',
+      'internal: dynamic text has no chunk-local ordinal; refusing to guess a marker',
+      node.span,
+    );
+    return null;
+  }
+  return ordinal;
+}
+
+type TextParserContext =
+  | { readonly kind: 'flow' }
+  | {
+      readonly kind:
+        | 'rcdata'
+        | 'rawtext'
+        | 'template'
+        | 'noscript'
+        | 'foreign'
+        | 'foster'
+        | 'select';
+      readonly tag: string;
+    };
+
+type RestrictedTextParserContext = Exclude<TextParserContext, { readonly kind: 'flow' }>;
+
+interface TextContextViolation {
+  readonly node: FunctionModelNode;
+  readonly context: RestrictedTextParserContext;
+  readonly detail: 'dynamic text' | 'static text' | 'a props.children projection';
+}
+
+interface TextContextWalker {
+  readonly component: (name: string) => FunctionModelComponent | undefined;
+  /** Recipes of the component whose nodes are currently being walked. */
+  readonly recipes: readonly FunctionModelRecipe[];
+  /** Active component/recipe path, not a global visited set: context matters. */
+  readonly stack: Set<string>;
+}
+
+function textContextWalker(state: EmitState): TextContextWalker {
+  return {
+    component: (name) => state.componentByName.get(name),
+    recipes: state.component.recipes,
+    stack: new Set(),
+  };
+}
+
+/**
+ * The parser context a child element establishes. RCDATA/rawtext/template/
+ * noscript/foreign content are sticky: every authored descendant is still
+ * parsed in that mode, so an `oe:t` pair cannot be placed there. Foster
+ * parenting is different: `td`, `th` and a table-level `caption` are normal
+ * flow content and reset it. This is what keeps legal `<td><p>{x}</p>` out of
+ * the refusal without accepting `<table>{x}</table>` or `<tr>{x}</tr>`.
+ */
+function textContextForChild(context: TextParserContext, tag: string): TextParserContext {
+  if (context.kind !== 'flow' && context.kind !== 'foster') return context;
+  if (context.kind === 'foster') {
+    if (TEXT_TABLE_FLOW_TAGS.has(tag)) {
+      return tag === 'caption' && context.tag !== 'table' ? context : { kind: 'flow' };
+    }
+    // A template is inserted inside the table; its children live in
+    // `.content`, so the template reason is more accurate than foster parenting.
+    if (tag === 'template') return { kind: 'template', tag };
+    if (TEXT_FOSTER_TAGS.has(tag)) return { kind: 'foster', tag };
+    return context;
+  }
+  if (TEXT_RCDATA_TAGS.has(tag)) return { kind: 'rcdata', tag };
+  if (TEXT_RAWTEXT_TAGS.has(tag)) return { kind: 'rawtext', tag };
+  if (tag === 'template') return { kind: 'template', tag };
+  if (tag === 'noscript') return { kind: 'noscript', tag };
+  if (TEXT_FOREIGN_TAGS.has(tag)) return { kind: 'foreign', tag };
+  if (TEXT_FOSTER_TAGS.has(tag)) return { kind: 'foster', tag };
+  if (TEXT_TABLE_FLOW_TAGS.has(tag)) return { kind: 'flow' };
+  if (TEXT_SELECT_TAGS.has(tag)) return { kind: 'select', tag };
+  return context;
+}
+
+function textContextReason(context: TextParserContext): string {
+  switch (context.kind) {
+    case 'rcdata':
+      return 'RCDATA parses comments as literal text';
+    case 'rawtext':
+      return 'rawtext parses comments as literal text';
+    case 'template':
+      return 'template content lives in .content, not childNodes';
+    case 'noscript':
+      return 'noscript parsing depends on the scripting flag, so comments are not stable Comment nodes';
+    case 'foreign':
+      return 'the generated claim is HTML-namespace-only; foreign content (SVG/MathML) is outside that contract';
+    case 'foster':
+      return `the HTML parser foster-parents non-whitespace text out of the table (current <${context.tag}>); the generated claim cannot find it in place`;
+    case 'select':
+      return 'the select family is a conservative boundary of this text-boundary slice; its insertion mode is not part of the qualified contract';
+    case 'flow':
+      return 'this context exposes comments as Comment nodes';
+  }
+}
+
+/**
+ * The first text that would land in a restricted parser context, or `null`.
+ * The walk crosses component references and insertion-site recipes only while
+ * the current context is restricted, because the parent's parser context
+ * applies to the child's emitted nodes too. A `props.children` projection under
+ * such a context cannot be proven safe at the producer, so it is refused at the
+ * projection source.
+ *
+ * `td`/`th` and table-level `caption` reset the context; table sections/rows
+ * and `colgroup` keep it because their text is foster-parented. Cycles are
+ * already refused by `findMountCycle`; the path stack keeps this scan finite.
+ */
+function findTextContextViolation(
+  nodes: readonly FunctionModelNode[],
+  context: TextParserContext,
+  walker: TextContextWalker,
+): TextContextViolation | null {
+  for (const node of nodes) {
+    if (node.kind === 'dynamic-text') {
+      if (context.kind !== 'flow') return { node, context, detail: 'dynamic text' };
+      continue;
+    }
+    if (node.kind === 'text') {
+      // Comments and whitespace-only text survive table parsing; non-whitespace
+      // static text is foster-parented just like a dynamic value would be.
+      if (context.kind === 'foster' && !HTML_WHITESPACE_ONLY.test(node.value)) {
+        return { node, context, detail: 'static text' };
+      }
+      continue;
+    }
+    if (node.kind === 'fragment') {
+      const found = findTextContextViolation(node.children, context, walker);
+      if (found !== null) return found;
+      continue;
+    }
+    if (node.kind === 'condition') {
+      // A condition branch is still emitted inside the parent's parser context
+      // (the branch comments/nodes do not establish a new parsing mode), so the
+      // scan must descend into both branches. Without this, a claimable
+      // condition branch could put an `oe:t` pair under `<textarea>`.
+      const thenFound = findTextContextViolation(node.consequent, context, walker);
+      if (thenFound !== null) return thenFound;
+      if (node.alternate !== null) {
+        const elseFound = findTextContextViolation(node.alternate, context, walker);
+        if (elseFound !== null) return elseFound;
+      }
+      continue;
+    }
+    if (node.kind === 'component-ref' && context.kind !== 'flow') {
+      const key = `c:${node.name}`;
+      if (walker.stack.has(key)) continue;
+      walker.stack.add(key);
+      const target = walker.component(node.name);
+      const found =
+        target === undefined
+          ? null
+          : findTextContextViolation(target.roots, context, {
+              ...walker,
+              recipes: target.recipes,
+            });
+      walker.stack.delete(key);
+      if (found !== null) return found;
+      continue;
+    }
+    if (node.kind === 'insertion-site' && context.kind !== 'flow') {
+      const key = `r:${node.recipeId}`;
+      if (walker.stack.has(key)) continue;
+      walker.stack.add(key);
+      const recipe = walker.recipes.find((entry) => entry.id === node.recipeId);
+      const found =
+        recipe === undefined ? null : findTextContextViolation([recipe.target], context, walker);
+      walker.stack.delete(key);
+      if (found !== null) return found;
+      continue;
+    }
+    if (node.kind === 'children-projection' && context.kind !== 'flow') {
+      return { node, context, detail: 'a props.children projection' };
+    }
+    if (node.kind !== 'element') continue;
+    const found = findTextContextViolation(
+      node.children,
+      textContextForChild(context, node.tag),
+      walker,
+    );
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/**
+ * Refuse a chunk whose text cannot be claimed in the target parser context.
+ * This is a source-located compile failure, not a silent mount-only fallback:
+ * the same authored component must not quietly change execution mode. The scan
+ * crosses component/insertion chunks because the parent's parser context
+ * applies to the child's emitted comments too.
+ */
+function assertTextBoundaryContext(state: EmitState, nodes: readonly FunctionModelNode[]): boolean {
+  const violation = findTextContextViolation(nodes, { kind: 'flow' }, textContextWalker(state));
+  if (violation === null) return true;
+  diag(
+    state,
+    'OEIR_LEAF_UNSUPPORTED_TEXT_CONTEXT',
+    `${violation.detail} under <${violation.context.tag}> cannot be claimed: ${textContextReason(violation.context)}`,
+    violation.node.span,
+  );
+  return false;
+}
+
 function directoryParentAllowed(tag: string): boolean {
   return TAG_PATTERN.test(tag) && !DIRECTORY_EXCLUDED_TAGS.has(tag);
 }
@@ -1966,7 +2419,7 @@ function isStaticDirectoryElement(node: FunctionModelNode): boolean {
  * so the parent is not wrapped and text is left where it is.
  */
 function staticElementDirectory(nodes: readonly FunctionModelNode[]): FunctionModelNode[] | null {
-  const flat = flattenFragments(nodes);
+  const flat = normalizeTextRuns(nodes);
   if (flat.length < 2) return null;
   if (!flat.every((node) => isStaticDirectoryElement(node))) return null;
   return flat;
@@ -1982,7 +2435,7 @@ function declaredStaticLiteral(node: FunctionModelNode): string {
         `{ name: ${JSON.stringify(attribute.name)}, value: ${JSON.stringify(attribute.value)} }`,
     )
     .join(', ');
-  const children = flattenFragments(node.children)
+  const children = normalizeTextRuns(node.children)
     .map((child) => declaredStaticLiteral(child))
     .join(', ');
   return `{ kind: "element", localName: ${JSON.stringify(node.tag)}, attributes: [${attributes}], children: [${children}] }`;
@@ -2081,8 +2534,10 @@ function emitNode(
   if (node.kind === 'fragment') {
     // A fragment is not a directory parent, but it is still inside the caller's
     // range. Dropping `allowDirectory` restores the default and lets that
-    // interior emit its own `oe:r` pair.
-    for (const child of node.children) emitNode(state, child, sink, records, allowDirectory);
+    // interior emit its own `oe:r` pair. The child list is normalized on the
+    // same gate as every other claimable surface.
+    for (const child of emissionNodes(state, node.children))
+      emitNode(state, child, sink, records, allowDirectory);
     return;
   }
   if (node.kind === 'condition') {
@@ -2184,7 +2639,7 @@ function emitNode(
     if (ranges !== null)
       emitMountedDirectory(state, ranges, records, { kind: 'element', name: varName });
     else {
-      for (const child of node.children) {
+      for (const child of emissionNodes(state, node.children)) {
         const childSink: SinkEntry[] = [];
         emitNode(state, child, childSink, records, allowDirectory);
         appendSinkToElement(state, childSink, varName);
@@ -2198,6 +2653,48 @@ function emitNode(
     if (record === null || !declareReads(state, record)) return;
     const dependencies = dependencyNames(state, record);
     if (dependencies === null) return;
+    let boundaryEnd: string | null = null;
+    if (state.emitTextBoundaries) {
+      const ordinal = textOrdinal(state, node);
+      if (ordinal === null) return;
+      const boundaryStart = nextName(state, 'textStart');
+      push(state, `const ${boundaryStart} = emitComment(textSlotMarker(${ordinal}));`, node.span);
+      sink.push({ kind: 'node', name: boundaryStart });
+      boundaryEnd = nextName(state, 'textEnd');
+      const textVar = nextName(state, 'text');
+      push(state, `const ${textVar} = document.createTextNode("");`, node.span);
+      sink.push({ kind: 'node', name: textVar });
+      push(
+        state,
+        `const ${boundaryEnd} = emitComment(textSlotMarker(${ordinal}, true));`,
+        node.span,
+      );
+      sink.push({ kind: 'node', name: boundaryEnd });
+      if (dependencies.length === 0) {
+        if (!readsEntryLocal(state, record)) {
+          emitTextWrite(state, textVar, record);
+          return;
+        }
+        // Entry-local read without a reactive dependency: the entry update hook
+        // re-binds the mapper parameter, so the text write must re-run from a
+        // registered refresh closure (M06b2c — unkeyed/same-key reuse).
+        registerRefresh(
+          state,
+          emitLocalRefresh(state, node.span, () => emitTextWrite(state, textVar, record)),
+        );
+        return;
+      }
+      const refresh = nextName(state, 'refresh');
+      push(state, `function ${refresh}() {`, node.span);
+      state.indent += 1;
+      emitTextWrite(state, textVar, record);
+      state.indent -= 1;
+      push(state, `}`);
+      push(state, `${refresh}();`);
+      emitDependencySubscriptions(state, dependencies, refresh, node.span);
+      registerRefresh(state, refresh);
+      return;
+    }
     const textVar = nextName(state, 'text');
     push(state, `const ${textVar} = document.createTextNode("");`, node.span);
     sink.push({ kind: 'node', name: textVar });
@@ -2323,35 +2820,70 @@ function attributesClaimable(attributes: readonly FunctionModelAttribute[]): boo
 
 /**
  * M07a static leaf, plus M07-1 composition that can adopt an existing sibling
- * list in author order. Conditions, lists, property channels and a nested
- * directory-root component stay mount-only: the directory consumer requires
- * the parent's child list to be exactly that directory.
+ * list in author order, plus M08-2 condition branches whose nodes were already
+ * claimable before the condition itself (text, dynamic-text pairs, attributes).
+ *
+ * The extra `insideTemplate` flag is the composition boundary: a component
+ * reference, insertion site or children projection inside a condition branch is
+ * refused (mount-only) because the branch chunk would have to align three
+ * ownership layers at once. Elements do not change "inside a template"; a
+ * condition is a new chunk for ordinals but not a second claim mechanism.
+ *
+ * The `context` parameter is the parser context the emitted nodes land in.
+ * Conditions write two comments, so a condition under RCDATA/rawtext/template/
+ * noscript/foreign/foster/select ancestry is not claimable; the same rule
+ * crosses a component reference. This is a claimability decision, never a
+ * silent marker emitted inside a context that would not parse it.
  */
 function nodeClaimable(
   node: FunctionModelNode,
   component: FunctionModelComponent,
   ctx: ClaimContext,
+  insideTemplate = false,
+  context: TextParserContext = { kind: 'flow' },
 ): boolean {
   switch (node.kind) {
     case 'text':
     case 'dynamic-text':
       return true;
     case 'fragment':
-      return node.children.every((child) => nodeClaimable(child, component, ctx));
+      return node.children.every((child) =>
+        nodeClaimable(child, component, ctx, insideTemplate, context),
+      );
     case 'element': {
       if (!TAG_PATTERN.test(node.tag)) return false;
       if (!attributesClaimable(node.attributes)) return false;
-      return node.children.every((child) => nodeClaimable(child, component, ctx));
+      const childContext = textContextForChild(context, node.tag);
+      return node.children.every((child) =>
+        nodeClaimable(child, component, ctx, insideTemplate, childContext),
+      );
+    }
+    case 'condition': {
+      // This slice admits the branch shapes that were already claimable (text,
+      // dynamic-text pairs and attributes). A nested condition/list inside a
+      // branch stays mount-only; the branch claim chunk is intentionally not a
+      // second condition/list mechanism.
+      if (insideTemplate) return false;
+      // The condition markers are comments. A restricted parser context turns
+      // them into literal text (or moves them outside `.childNodes`), so the
+      // shape stays mount-only rather than emitting an unreadable wire.
+      if (context.kind !== 'flow') return false;
+      const branches = [node.consequent, ...(node.alternate === null ? [] : [node.alternate])];
+      return branches.every((branch) =>
+        branch.every((child) => nodeClaimable(child, component, ctx, true, context)),
+      );
     }
     case 'insertion-site': {
+      if (insideTemplate) return false;
       if (!declaredRecipeIdSet(component).has(node.recipeId)) return false;
       const recipe = recipeMap(component).get(node.recipeId);
       if (recipe === undefined) return false;
-      return nodeClaimable(recipe.target, component, ctx);
+      return nodeClaimable(recipe.target, component, ctx, false, context);
     }
     case 'children-projection':
-      return true;
+      return !insideTemplate;
     case 'component-ref': {
+      if (insideTemplate) return false;
       if (node.props.some((prop) => prop.name === 'children')) return false;
       const props = node.props.filter((prop) => prop.name !== 'key');
       if (!attributesClaimable(props)) return false;
@@ -2361,11 +2893,11 @@ function nodeClaimable(
       // The directory parent would be the shared sibling list, which the
       // consumer rejects unless it is exactly one directory. Not this slice.
       if (isDirectoryRootComponent(target)) return false;
-      if (!componentClaimable(target, ctx)) return false;
+      if (!componentClaimable(target, ctx, context)) return false;
       if (node.childrenRecipeId !== null) {
         const recipe = recipeMap(component).get(node.childrenRecipeId);
         if (recipe === undefined) return false;
-        return nodeClaimable(recipe.target, component, ctx);
+        return nodeClaimable(recipe.target, component, ctx, false, context);
       }
       if (componentProjectsChildren(target)) return false;
       return true;
@@ -2375,11 +2907,15 @@ function nodeClaimable(
   }
 }
 
-function componentClaimable(component: FunctionModelComponent, ctx: ClaimContext): boolean {
+function componentClaimable(
+  component: FunctionModelComponent,
+  ctx: ClaimContext,
+  context: TextParserContext = { kind: 'flow' },
+): boolean {
   if (ctx.stack.has(component.name)) return false;
   ctx.stack.add(component.name);
   try {
-    return component.roots.every((node) => nodeClaimable(node, component, ctx));
+    return component.roots.every((node) => nodeClaimable(node, component, ctx, false, context));
   } finally {
     ctx.stack.delete(component.name);
   }
@@ -2489,13 +3025,13 @@ function emitClaimStaticAttributeSeed(
 }
 
 function emitClaimTake(state: EmitState, cursor: string, name: string, where: string): void {
-  push(state, `const ${name} = ${cursor}.list[${cursor}.i];`);
+  push(state, `const ${name} = ${cursor}.node;`);
   emitClaimMismatch(state, `${name} == null`, `missing node at ${where}`);
-  push(state, `${cursor}.i += 1;`);
+  push(state, `${cursor}.node = ${name}.nextSibling;`);
 }
 
 function emitClaimCursorEnd(state: EmitState, cursor: string, where: string): void {
-  emitClaimMismatch(state, `${cursor}.i !== ${cursor}.list.length`, `extra node at ${where}`);
+  emitClaimMismatch(state, `${cursor}.node !== null`, `extra node at ${where}`);
 }
 
 interface PreparedSlot {
@@ -2540,6 +3076,294 @@ function emitClaimSlot(
   emitDependencySubscriptions(state, dependencies, refresh, anchor);
 }
 
+/**
+ * One condition-branch claim chunk. The emitted function is the read-only half
+ * of the condition claim: it walks the client branch template against the
+ * shared `{node}` cursor, adopts its nodes, and returns an `activate` closure
+ * whose body is emitted only from the caller's phase-2 steps. Calling the
+ * function therefore performs no subscription and no DOM write; the claim walk
+ * for the enclosing tree stays read-only until the root flush.
+ *
+ * The function is a chunk: its text-slot ordinals restart at 0 and its static
+ * top-level runs use the same normalized view as mount/SSR. Its internal cursor
+ * is the explicit parameter, so the shared-cursor mode is disabled while its
+ * body is emitted; the caller passes either a local cursor object or the
+ * module-level shared cursor object.
+ */
+function emitClaimConditionBranchBuilder(
+  state: EmitState,
+  functionName: string,
+  scopeParam: string,
+  cursorParam: string,
+  nodes: readonly FunctionModelNode[],
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+  path: string,
+  anchor: SpanLike,
+): void {
+  push(state, `function ${functionName}(${scopeParam}, ${cursorParam}) {`, anchor);
+  state.indent += 1;
+  const outerScope = state.scopeVar;
+  const outerOrdinals = state.textOrdinals;
+  const outerShared = state.claimCursorShared;
+  state.scopeVar = scopeParam;
+  state.claimCursorShared = false;
+  const prepared = emissionNodes(state, nodes);
+  state.textOrdinals = textSlotOrdinals(prepared);
+  const nodesVar = nextName(state, 'branchNodes');
+  push(state, `const ${nodesVar} = [];`);
+  const phase2: Array<() => void> = [];
+  emitClaimInto(
+    state,
+    prepared,
+    cursorParam,
+    path,
+    records,
+    phase2,
+    (name) => {
+      push(state, `${nodesVar}.push(${name});`);
+    },
+    (name, condition) => {
+      push(state, `if (${condition}) ${nodesVar}.push(${name});`);
+    },
+    'null',
+    false,
+  );
+  push(state, 'function activate() {');
+  state.indent += 1;
+  for (const step of phase2) step();
+  state.indent -= 1;
+  push(state, '}');
+  push(state, `return { nodes: ${nodesVar}, activate };`);
+  state.textOrdinals = outerOrdinals;
+  state.claimCursorShared = outerShared;
+  state.scopeVar = outerScope;
+  state.indent -= 1;
+  push(state, '}');
+}
+
+/**
+ * Claim one condition. Verify is read-only: the anchor/end are asserted, the
+ * test is evaluated once, the selected client branch is adopted through its
+ * read-only claim chunk (or a server-empty branch is marked for insert), and
+ * the owner/nodes are registered. Subscription and writes are queued on
+ * `phase2`; the caller flushes them only after the whole claim walk succeeded.
+ *
+ * There is no branch id. A branch is identified by the client template's own
+ * structure, static attribute seed, text values and slot ordinals, which the
+ * ordinary claim walk already checks. A server branch that does not match the
+ * client branch is a mismatch; a server-empty branch is the only insertion
+ * path, and it is explicitly non-transactional activation work.
+ */
+function emitConditionClaim(
+  state: EmitState,
+  node: FunctionModelCondition,
+  cursor: string,
+  path: string,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+  phase2: Array<() => void>,
+  adopt: (name: string) => void,
+): void {
+  const slot = prepareClaimSlot(state, node.test, records);
+  if (slot === null) return;
+  const here = path;
+  const anchorVar = nextName(state, 'whenAnchor');
+  push(state, `const ${anchorVar} = ${cursor}.node;`, node.span);
+  push(state, `assertWhenAnchor(${anchorVar}, ${JSON.stringify(`${here}/anchor`)});`, node.span);
+  push(state, `${cursor}.node = ${anchorVar}.nextSibling;`);
+
+  // Mount-style create builders for later toggles and for the server-empty
+  // insert path. They are emitted once per condition into the same chunk the
+  // claim lives in; their scope parameter is the branch owner, so subscriptions
+  // and writes they create are owned by that branch.
+  const thenCreate = node.consequent.length > 0 ? nextName(state, 'whenThen') : null;
+  if (thenCreate !== null) {
+    emitNodesBuilder(
+      state,
+      thenCreate,
+      nextName(state, 'whenThenScope'),
+      node.consequent,
+      records,
+      node.span,
+    );
+  }
+  const elseCreate =
+    node.alternate !== null && node.alternate.length > 0 ? nextName(state, 'whenElse') : null;
+  if (elseCreate !== null) {
+    emitNodesBuilder(
+      state,
+      elseCreate,
+      nextName(state, 'whenElseScope'),
+      node.alternate!,
+      records,
+      node.span,
+    );
+  }
+
+  // Read-only adoption chunks for the client branches. A branch with no nodes
+  // has no builder: its whole verify is the end-marker check below.
+  const thenClaim = node.consequent.length > 0 ? nextName(state, 'whenThenClaim') : null;
+  if (thenClaim !== null) {
+    emitClaimConditionBranchBuilder(
+      state,
+      thenClaim,
+      nextName(state, 'whenThenClaimScope'),
+      cursor,
+      node.consequent,
+      records,
+      `${here}/then`,
+      node.span,
+    );
+  }
+  const elseClaim =
+    node.alternate !== null && node.alternate.length > 0 ? nextName(state, 'whenElseClaim') : null;
+  if (elseClaim !== null) {
+    emitClaimConditionBranchBuilder(
+      state,
+      elseClaim,
+      nextName(state, 'whenElseClaimScope'),
+      cursor,
+      node.alternate!,
+      records,
+      `${here}/else`,
+      node.span,
+    );
+  }
+
+  const testVar = nextName(state, 'whenTest');
+  pushParts(state, [`const ${testVar} = (`, { record: slot.record }, ');'], node.span);
+  const activeVar = nextName(state, 'whenActive');
+  const emptyActive = elseCreate === null ? 0 : 2;
+  push(state, `let ${activeVar} = ${testVar} ? 1 : ${emptyActive};`);
+  const ownerVar = nextName(state, 'whenOwner');
+  const nodesVar = nextName(state, 'whenNodes');
+  const adoptedVar = nextName(state, 'whenAdopted');
+  const insertVar = nextName(state, 'whenInsert');
+  push(state, `let ${ownerVar} = null;`);
+  push(state, `let ${nodesVar} = [];`);
+  push(state, `let ${adoptedVar} = null;`);
+  push(state, `let ${insertVar} = false;`);
+
+  const verifyBranch = (activeValue: number, claimFn: string | null): void => {
+    push(state, `if (${activeVar} === ${activeValue}) {`);
+    state.indent += 1;
+    if (claimFn !== null) {
+      push(state, `if (isWhenEndMarker(${cursor}.node)) {`);
+      state.indent += 1;
+      push(state, `${insertVar} = true;`);
+      state.indent -= 1;
+      push(state, `} else {`);
+      state.indent += 1;
+      push(state, `${ownerVar} = ${state.scopeVar}.child();`);
+      push(state, 'try {');
+      state.indent += 1;
+      push(state, `${adoptedVar} = ${claimFn}(${ownerVar}, ${cursor});`, node.span);
+      state.indent -= 1;
+      push(state, `} catch (error) { ${ownerVar}.dispose(false); throw error; }`);
+      push(state, `${nodesVar} = ${adoptedVar}.nodes;`);
+      state.indent -= 1;
+      push(state, '}');
+    }
+    state.indent -= 1;
+    push(state, '}');
+  };
+  verifyBranch(1, thenClaim);
+  verifyBranch(2, elseClaim);
+
+  push(state, `assertWhenEndMarker(${cursor}.node, ${JSON.stringify(`${here}/end`)});`, node.span);
+  const endVar = nextName(state, 'whenEnd');
+  push(state, `const ${endVar} = ${cursor}.node;`);
+  push(state, `${cursor}.node = ${endVar}.nextSibling;`);
+  push(state, `if (${ownerVar} === null) ${ownerVar} = ${state.scopeVar}.child();`);
+  push(state, `${ownerVar}.addRangeCleanup(() => removeNodes(${nodesVar}));`, node.span);
+
+  // Adopt the markers and any existing branch nodes. Server-empty insertion
+  // happens in phase 2, so its created nodes are intentionally not part of this
+  // adopted list; the two markers are the stable root-level nodes.
+  adopt(anchorVar);
+  const childVar = nextName(state, 'whenChild');
+  push(state, `for (const ${childVar} of ${nodesVar}) {`);
+  adopt(childVar);
+  push(state, '}');
+  adopt(endVar);
+
+  // The update path mirrors mount: dispose the old branch owner (range cleanup
+  // removes only that branch's adopted/created nodes), create the next branch on
+  // a fresh child scope and insert it before the end marker. The end marker
+  // itself belongs to the enclosing claim owner.
+  const refreshVar = nextName(state, 'whenRefresh');
+  const nextVar = nextName(state, 'whenNext');
+  const branchOwnerVar = nextName(state, 'whenBranchOwner');
+  const branchNodesVar = nextName(state, 'whenBranchNodes');
+  const refreshParentVar = nextName(state, 'whenParent');
+  push(state, `function ${refreshVar}(force) {`, node.span);
+  state.indent += 1;
+  pushParts(
+    state,
+    [`const ${nextVar} = (`, { record: slot.record }, `) ? 1 : ${emptyActive};`],
+    node.span,
+  );
+  push(state, `if (!force && ${nextVar} === ${activeVar}) return;`);
+  push(state, `if (${ownerVar} !== null) ${ownerVar}.dispose(true);`);
+  push(state, `${ownerVar} = null;`);
+  push(state, `const ${branchOwnerVar} = ${state.scopeVar}.child();`);
+  push(state, `let ${branchNodesVar};`);
+  push(state, 'try {');
+  state.indent += 1;
+  const thenCall = thenCreate === null ? '[]' : `${thenCreate}(${branchOwnerVar})`;
+  const elseCall = elseCreate === null ? '[]' : `${elseCreate}(${branchOwnerVar})`;
+  push(
+    state,
+    `${branchNodesVar} = runUntracked(() => ${nextVar} === 1 ? ${thenCall} : ${elseCall});`,
+  );
+  state.indent -= 1;
+  push(state, `} catch (error) { ${branchOwnerVar}.dispose(true); throw error; }`);
+  push(state, `${branchOwnerVar}.addRangeCleanup(() => removeNodes(${branchNodesVar}));`);
+  push(state, `const ${refreshParentVar} = ${endVar}.parentNode;`);
+  push(
+    state,
+    `if (${refreshParentVar} !== null) { for (const ${childVar} of ${branchNodesVar}) ${refreshParentVar}.insertBefore(${childVar}, ${endVar}); }`,
+  );
+  push(
+    state,
+    `${nodesVar} = ${branchNodesVar}; ${ownerVar} = ${branchOwnerVar}; ${activeVar} = ${nextVar};`,
+  );
+  state.indent -= 1;
+  push(state, '}');
+
+  phase2.push(() => {
+    push(state, `if (${adoptedVar} !== null) ${adoptedVar}.activate();`);
+  });
+  if (slot.dependencies.length > 0) {
+    phase2.push(() => {
+      emitDependencySubscriptions(state, slot.dependencies, refreshVar, node.span);
+    });
+  }
+  if (thenCreate !== null || elseCreate !== null) {
+    phase2.push(() => {
+      push(state, `if (${insertVar}) {`);
+      state.indent += 1;
+      const insertNodesVar = nextName(state, 'whenInsertNodes');
+      const insertParentVar = nextName(state, 'whenInsertParent');
+      push(state, `let ${insertNodesVar};`);
+      push(state, 'try {');
+      state.indent += 1;
+      const insertThen = thenCreate === null ? '[]' : `${thenCreate}(${ownerVar})`;
+      const insertElse = elseCreate === null ? '[]' : `${elseCreate}(${ownerVar})`;
+      push(state, `${insertNodesVar} = ${activeVar} === 1 ? ${insertThen} : ${insertElse};`);
+      state.indent -= 1;
+      push(state, `} catch (error) { ${ownerVar}.dispose(true); throw error; }`);
+      push(state, `const ${insertParentVar} = ${endVar}.parentNode;`);
+      push(
+        state,
+        `if (${insertParentVar} !== null) { for (const ${childVar} of ${insertNodesVar}) ${insertParentVar}.insertBefore(${childVar}, ${endVar}); }`,
+      );
+      push(state, `${nodesVar} = ${insertNodesVar};`);
+      state.indent -= 1;
+      push(state, '}');
+    });
+  }
+}
+
 function emitClaimInto(
   state: EmitState,
   nodes: readonly FunctionModelNode[],
@@ -2548,12 +3372,24 @@ function emitClaimInto(
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   phase2: Array<() => void>,
   adopt: (name: string) => void,
+  adoptIf: (name: string, condition: string) => void,
   parentExpr: string,
   collect: boolean,
 ): void {
-  nodes.forEach((node, index) => {
+  const list = state.emitTextBoundaries ? normalizeTextRuns(nodes) : nodes;
+  list.forEach((node, index) => {
     if (state.diagnostics.length > 0) return;
     const here = `${path}/${index}`;
+    if (node.kind === 'condition') {
+      emitConditionClaim(state, node, cursor, here, records, phase2, adopt);
+      return;
+    }
+    if (node.kind === 'list') {
+      // Lists are still outside this slice. The claimability gate never emits a
+      // claim for one; this is the fail-closed guard if that gate ever drifts.
+      emitClaimMismatch(state, 'true', `unsupported list at ${here}`);
+      return;
+    }
     if (node.kind === 'fragment') {
       emitClaimInto(
         state,
@@ -2563,6 +3399,7 @@ function emitClaimInto(
         records,
         phase2,
         adopt,
+        adoptIf,
         parentExpr,
         collect,
       );
@@ -2594,13 +3431,36 @@ function emitClaimInto(
     if (node.kind === 'dynamic-text') {
       const slot = prepareClaimSlot(state, node.expression, records);
       if (slot === null) return;
-      const name = nextName(state, 'text');
-      emitClaimTake(state, cursor, name, here);
-      emitClaimMismatch(state, `${name}.nodeType !== 3`, `expected text at ${here}`);
-      adopt(name);
+      const ordinal = textOrdinal(state, node);
+      if (ordinal === null) return;
+      const start = nextName(state, 'textStart');
+      emitClaimTake(state, cursor, start, `${here}/text-start`);
+      push(
+        state,
+        `assertTextSlotMarker(${start}, ${ordinal}, false, ${JSON.stringify(`${here}/text-start`)});`,
+        node.span,
+      );
+      const slotText = nextName(state, 'slotText');
+      push(state, `let ${slotText} = null;`);
+      const maybeText = nextName(state, 'maybeText');
+      push(state, `const ${maybeText} = ${cursor}.node;`);
+      push(state, `if (${maybeText} !== null && ${maybeText}.nodeType === 3) {`);
+      push(state, `  ${slotText} = ${maybeText};`);
+      push(state, `  ${cursor}.node = ${maybeText}.nextSibling;`);
+      push(state, `}`);
+      const end = nextName(state, 'textEnd');
+      emitClaimTake(state, cursor, end, `${here}/text-end`);
+      push(
+        state,
+        `assertTextSlotMarker(${end}, ${ordinal}, true, ${JSON.stringify(`${here}/text-end`)});`,
+        node.span,
+      );
+      adopt(start);
+      adoptIf(slotText, `${slotText} !== null`);
+      adopt(end);
       phase2.push(() =>
         emitClaimSlot(state, slot.dependencies, node.span, () =>
-          emitClaimTextWrite(state, name, slot.record),
+          emitClaimTextSlotWrite(state, slotText, end, slot.record),
         ),
       );
       return;
@@ -2637,7 +3497,7 @@ function emitClaimInto(
       if (ranges !== null) emitClaimedDirectory(state, name, ranges);
       else {
         const childCursor = nextName(state, 'cursor');
-        push(state, `const ${childCursor} = { list: ${name}.childNodes, i: 0 };`);
+        push(state, `const ${childCursor} = { node: ${name}.firstChild };`);
         const saved = state.claimCursorShared ? nextName(state, 'savedCursor') : null;
         // Shared-cursor interiors are a `try` block. Child node bindings are
         // block-scoped, so their refresh closures must be emitted in that
@@ -2657,6 +3517,7 @@ function emitClaimInto(
           here,
           records,
           saved !== null ? childPhase2 : phase2,
+          () => {},
           () => {},
           name,
           false,
@@ -2869,6 +3730,13 @@ function emitClaimTimeRecipes(
       );
       return;
     }
+    const outerOrdinals = state.textOrdinals;
+    const preparedTarget = normalizeTextRuns([recipe.target]);
+    state.textOrdinals = textSlotOrdinals(preparedTarget);
+    if (!assertTextBoundaryContext(state, preparedTarget)) {
+      state.textOrdinals = outerOrdinals;
+      return;
+    }
     const recipeVar = nextName(state, 'claimRecipe');
     state.recipeVars.set(recipe.id, recipeVar);
     const scopeParam = nextName(state, 'recipeScope');
@@ -2892,10 +3760,7 @@ function emitClaimTimeRecipes(
     state.claimAdoptedVar = adoptedVar;
     const phase2: Array<() => void> = [];
     push(state, 'const __oe_cursorOwned = __oe_claimCursor === null;');
-    push(
-      state,
-      `if (__oe_cursorOwned) __oe_claimCursor = { list: ${parentParam}.childNodes, i: 0 };`,
-    );
+    push(state, `if (__oe_cursorOwned) __oe_claimCursor = { node: ${parentParam}.firstChild };`);
     push(state, `const ${adoptedVar} = [];`);
     push(state, 'try {');
     state.indent += 1;
@@ -2910,13 +3775,16 @@ function emitClaimTimeRecipes(
       (name) => {
         push(state, `${adoptedVar}.push(${name});`);
       },
+      (name, condition) => {
+        push(state, `if (${condition}) ${adoptedVar}.push(${name});`);
+      },
       parentParam,
       true,
     );
     state.usesLeafClaimMismatch = true;
     push(
       state,
-      `if (__oe_cursorOwned && __oe_claimCursor.i !== __oe_claimCursor.list.length) throw ${claimError('extra node at /')};`,
+      `if (__oe_cursorOwned && __oe_claimCursor.node !== null) throw ${claimError('extra node at /')};`,
     );
     for (const step of phase2) step();
     state.indent -= 1;
@@ -2928,6 +3796,7 @@ function emitClaimTimeRecipes(
     push(state, '},');
     state.indent -= 1;
     push(state, '});');
+    state.textOrdinals = outerOrdinals;
   }
 }
 
@@ -2980,8 +3849,18 @@ function emitClaimFunction(
     claimAdoptedVar: null,
     usesClaimRecipe: false,
     emitDirectoryMarkers: false,
+    emitTextBoundaries: true,
+    textOrdinals: textSlotOrdinals(component.roots),
     usesLeafClaimMismatch: false,
   };
+  if (!assertTextBoundaryContext(state, component.roots)) {
+    return {
+      lines: [],
+      diagnostics: state.diagnostics,
+      segments: [],
+      placements: [],
+    };
+  }
   const localLines: Array<{
     name: string;
     record: LoweredExpressionRecord;
@@ -3003,14 +3882,17 @@ function emitClaimFunction(
     state.requiredBindings.add(resource.name);
   }
   const phase2: Array<() => void> = [];
-  const adopted: string[] = [];
+  const rootAdoptedVar = useShared ? null : nextName(state, 'adopted');
+  if (!useShared) push(state, `const ${rootAdoptedVar} = [];`);
   const rootDirectory = staticElementDirectory(component.roots);
   if (!useShared && rootDirectory !== null) {
-    adopted.push(...emitClaimedDirectory(state, CLAIM_PARENT, rootDirectory));
+    for (const interior of emitClaimedDirectory(state, CLAIM_PARENT, rootDirectory)) {
+      push(state, `${rootAdoptedVar}.push(${interior});`);
+    }
   } else if (!useShared) {
     emitClaimHtmlNamespace(state, CLAIM_PARENT, '/');
     const rootCursor = nextName(state, 'cursor');
-    push(state, `const ${rootCursor} = { list: ${CLAIM_PARENT}.childNodes, i: 0 };`);
+    push(state, `const ${rootCursor} = { node: ${CLAIM_PARENT}.firstChild };`);
     emitClaimInto(
       state,
       component.roots,
@@ -3019,7 +3901,10 @@ function emitClaimFunction(
       records,
       phase2,
       (name) => {
-        adopted.push(name);
+        push(state, `${rootAdoptedVar}.push(${name});`);
+      },
+      (name, condition) => {
+        push(state, `if (${condition}) ${rootAdoptedVar}.push(${name});`);
       },
       CLAIM_PARENT,
       true,
@@ -3042,10 +3927,7 @@ function emitClaimFunction(
     state.claimAdoptedVar = adoptedVar;
     push(state, `const ${adoptedVar} = [];`);
     push(state, 'const __oe_cursorOwned = __oe_claimCursor === null;');
-    push(
-      state,
-      `if (__oe_cursorOwned) __oe_claimCursor = { list: ${CLAIM_PARENT}.childNodes, i: 0 };`,
-    );
+    push(state, `if (__oe_cursorOwned) __oe_claimCursor = { node: ${CLAIM_PARENT}.firstChild };`);
     push(state, 'try {');
     state.indent += 1;
     emitClaimInto(
@@ -3058,13 +3940,16 @@ function emitClaimFunction(
       (name) => {
         push(state, `${adoptedVar}.push(${name});`);
       },
+      (name, condition) => {
+        push(state, `if (${condition}) ${adoptedVar}.push(${name});`);
+      },
       CLAIM_PARENT,
       true,
     );
     state.usesLeafClaimMismatch = true;
     push(
       state,
-      `if (__oe_cursorOwned && __oe_claimCursor.i !== __oe_claimCursor.list.length) throw ${claimError('extra node at /')};`,
+      `if (__oe_cursorOwned && __oe_claimCursor.node !== null) throw ${claimError('extra node at /')};`,
     );
     for (const step of phase2) step();
     state.indent -= 1;
@@ -3084,7 +3969,7 @@ function emitClaimFunction(
       pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
     }
     for (const step of phase2) step();
-    push(state, `return [${adopted.join(', ')}];`);
+    push(state, `return ${rootAdoptedVar};`);
   }
 
   const prologue: string[] = [
@@ -3165,7 +4050,7 @@ function staticSsrDirectory(ranges: readonly FunctionModelNode[]): string | null
 
 function staticSsrExpression(nodes: readonly FunctionModelNode[], markers: boolean): string | null {
   const parts: string[] = [];
-  for (const node of nodes) {
+  for (const node of normalizeTextRuns(nodes)) {
     const part = staticSsrNode(node, markers);
     if (part === null) return null;
     parts.push(part);
@@ -3272,6 +4157,8 @@ function ssrEmitState(
     claimAdoptedVar: null,
     usesClaimRecipe: false,
     emitDirectoryMarkers: false,
+    emitTextBoundaries: true,
+    textOrdinals: textSlotOrdinals(component.roots),
     usesLeafClaimMismatch: false,
   };
 }
@@ -3340,7 +4227,8 @@ function emitDynamicSsrNodes(
   markers: boolean,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
 ): boolean {
-  for (const node of nodes) {
+  const list = state.emitTextBoundaries ? normalizeTextRuns(nodes) : nodes;
+  for (const node of list) {
     if (node.kind === 'text') {
       push(state, `${outVar}.push(escapeText(${literalText(node.value)}));`, node.span);
       continue;
@@ -3352,11 +4240,59 @@ function emitDynamicSsrNodes(
     if (node.kind === 'dynamic-text') {
       const record = recordFor(state, node.expression, records);
       if (record === null || !declareReads(state, record)) return false;
+      const ordinal = textOrdinal(state, node);
+      if (ordinal === null) return false;
+      push(
+        state,
+        `${outVar}.push("<!--", markerText(textSlotMarker(${ordinal})), "-->");`,
+        node.span,
+      );
       pushParts(
         state,
         [`${outVar}.push(escapeText(displayValue((`, { record }, '))));'], // displayValue((expr))
         node.span,
       );
+      push(
+        state,
+        `${outVar}.push("<!--", markerText(textSlotMarker(${ordinal}, true)), "-->");`,
+        node.span,
+      );
+      continue;
+    }
+    if (node.kind === 'condition') {
+      const record = recordFor(state, node.test, records);
+      if (record === null || !declareReads(state, record)) return false;
+      // Evaluate the test once per __ssr call. The branch selection is a
+      // request-time fact, so a static branch body still needs this producer.
+      const testVar = nextName(state, 'whenTest');
+      pushParts(state, [`const ${testVar} = (`, { record }, ');'], node.span);
+      push(state, `${outVar}.push("<!--", markerText(MARKERS.when), "-->");`, node.span);
+      push(state, `if (${testVar}) {`, node.span);
+      state.indent += 1;
+      const thenOrdinals = state.textOrdinals;
+      const preparedThen = emissionNodes(state, node.consequent);
+      state.textOrdinals = textSlotOrdinals(preparedThen);
+      if (!emitDynamicSsrNodes(state, preparedThen, outVar, markers, records)) {
+        state.textOrdinals = thenOrdinals;
+        return false;
+      }
+      state.textOrdinals = thenOrdinals;
+      state.indent -= 1;
+      push(state, '} else {', node.span);
+      state.indent += 1;
+      if (node.alternate !== null && node.alternate.length > 0) {
+        const elseOrdinals = state.textOrdinals;
+        const preparedElse = emissionNodes(state, node.alternate);
+        state.textOrdinals = textSlotOrdinals(preparedElse);
+        if (!emitDynamicSsrNodes(state, preparedElse, outVar, markers, records)) {
+          state.textOrdinals = elseOrdinals;
+          return false;
+        }
+        state.textOrdinals = elseOrdinals;
+      }
+      state.indent -= 1;
+      push(state, '}', node.span);
+      push(state, `${outVar}.push("<!--", markerText(MARKERS.whenEnd), "-->");`, node.span);
       continue;
     }
     if (node.kind !== 'element') return false;
@@ -3418,6 +4354,7 @@ function emitDynamicSsrFunction(
 ): SsrEmission | null {
   const propsName = component.propsParam;
   const state = ssrEmitState(component, file, propsName);
+  if (!assertTextBoundaryContext(state, component.roots)) return failedSsr(state);
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
       continue;
@@ -3525,6 +4462,10 @@ function emitComponent(
     declaredRecipeIds.add(resource.recipeId);
     recipeNames.add(resource.name);
   }
+  const claimable = componentClaimable(component, {
+    componentByName,
+    stack: new Set(),
+  });
   const state: EmitState = {
     component,
     lines: [],
@@ -3557,12 +4498,22 @@ function emitComponent(
     claimCursorShared: false,
     claimAdoptedVar: null,
     usesClaimRecipe: false,
-    emitDirectoryMarkers: componentClaimable(component, {
-      componentByName,
-      stack: new Set(),
-    }),
+    emitDirectoryMarkers: claimable,
+    emitTextBoundaries: claimable,
+    textOrdinals: textSlotOrdinals(component.roots),
     usesLeafClaimMismatch: false,
   };
+  if (claimable && !assertTextBoundaryContext(state, component.roots)) {
+    return {
+      lines: [],
+      diagnostics: state.diagnostics,
+      requiredBindings: [],
+      requiredProps: [],
+      requiresPropsChanged: false,
+      segments: [],
+      placements: [],
+    };
+  }
   if (
     propsName !== null &&
     (!IDENTIFIER_PATTERN.test(propsName) || propsName.startsWith(INTERNAL_PREFIX))
@@ -3656,6 +4607,17 @@ function emitComponent(
   // every insertion site — including one inside another recipe body — can
   // reference them.
   emitRecipes(state, file, records);
+  if (state.diagnostics.length > 0) {
+    return {
+      lines: [],
+      diagnostics: state.diagnostics,
+      requiredBindings: [],
+      requiredProps: [],
+      requiresPropsChanged: false,
+      segments: [],
+      placements: [],
+    };
+  }
   const rootDirectory = state.emitDirectoryMarkers ? staticElementDirectory(component.roots) : null;
   if (rootDirectory !== null) {
     emitMountedDirectory(state, rootDirectory, records, {
@@ -3663,7 +4625,7 @@ function emitComponent(
       name: `${INTERNAL_PREFIX}nodes`,
     });
   } else {
-    for (const root of component.roots) {
+    for (const root of emissionNodes(state, component.roots)) {
       const sink: SinkEntry[] = [];
       emitNode(state, root, sink, records);
       appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);

@@ -28,6 +28,7 @@ import { chromium, firefox, webkit, type Browser, type Page } from 'playwright';
 import ts from 'typescript';
 import { build } from 'vite';
 import { __h, __t } from '../../../element/src/server.ts';
+import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { compileServerComponentModule } from '../../src/internal/compiler/semantic-core/server-component.ts';
 import {
@@ -199,10 +200,10 @@ async function buildRuntimeBundle(): Promise<string> {
         `  return projection;`,
         `}`,
         `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
-        `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
+        `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
         `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-        `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-        `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+        `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+        `export { emitComment, MARKERS, markerText, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
         `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
         `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
         `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
@@ -253,10 +254,10 @@ async function buildNodeSsr(module: string): Promise<string> {
       [
         `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
         `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
-        `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
+        `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
         `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-        `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-        `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+        `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+        `export { emitComment, MARKERS, markerText, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
         `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
         `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
         `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
@@ -833,7 +834,7 @@ async function runClaim(
       if (scenario === 'sync') {
         host.innerHTML = html;
         const paragraph = host.firstElementChild as HTMLElement;
-        const text = paragraph.firstChild;
+        const text = [...paragraph.childNodes].find((node) => node.nodeType === 3) ?? null;
         const props = { name: 'seed' };
         const propsChanged = runtime.signal(0);
         const scope = new runtime.LifetimeScope();
@@ -865,7 +866,7 @@ async function runClaim(
               texts: [seedText, nextText, text?.nodeValue ?? ''],
               checks: {
                 sameParagraph: claimed.nodes[0] === paragraph,
-                sameText: paragraph.firstChild === text,
+                sameText: text !== null && paragraph.contains(text),
                 seed: seedText === 'seed',
                 next: nextText === 'next',
                 closed: text?.nodeValue === 'next',
@@ -1020,6 +1021,40 @@ describe('M07-2 claim emission (not browser qualification)', () => {
 
 const ORDER_MODULE = generatedModule(SOURCE);
 const SYNC_MODULE = generatedModule(SYNC_LEAF_SOURCE);
+
+const SSR_EXPORT = /^export function ([\w$]+)\(/gm;
+const RUNTIME_IMPORT = /^import \{([^}]+)\} from [^;]+;$/m;
+
+/**
+ * Instantiate the generated module's SSR function in Node without a bundler:
+ * the runtime import is replaced by a destructure of the real runtime module,
+ * so the bytes under test are the same producer the browser claims. This is the
+ * generated wire, not the old server-constructor `__h`/`__t` output.
+ */
+function generatedLeafSsr(): string {
+  const exported = [...SYNC_MODULE.matchAll(SSR_EXPORT)].map((match) => match[1]!);
+  const importMatch = SYNC_MODULE.match(RUNTIME_IMPORT);
+  if (importMatch === null) throw new Error('generated leaf module has no runtime import');
+  const imported = importMatch[1]!
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+  const body = SYNC_MODULE.replace(
+    RUNTIME_IMPORT,
+    `const { ${imported.join(', ')} } = __oe_runtime;`,
+  ).replace(/^export function /gm, 'function ');
+  const factory = new Function(
+    '__oe_runtime',
+    `"use strict";\n${body}\nreturn { ${exported.join(', ')} };`,
+  ) as (runtime: Record<string, unknown>) => Record<string, unknown>;
+  const loaded = factory({ ...compiledRuntime });
+  const render = loaded.Leaf__ssr;
+  if (typeof render !== 'function') throw new Error('generated Leaf__ssr is missing');
+  return (render as (props: Record<string, unknown>, host: unknown) => string)(
+    { name: 'seed' },
+    { bindings: {} },
+  );
+}
 
 let deepSsrPromise: Promise<string> | null = null;
 function deepSsr(): Promise<string> {
@@ -1209,7 +1244,7 @@ for (const engine of engines()) {
       });
     });
 
-    test('synchronous leaf seed HTML string then next', async () => {
+    test('pair-free server-constructor output is refused; the generated SSR pair claims', async () => {
       const server = serverLeaf();
       expect(server.code).toContain('__h(');
       expect(typeof server.html).toBe('string');
@@ -1218,7 +1253,20 @@ for (const engine of engines()) {
       console.log(
         `[M07-2] path=${SERVER_HTML_CLAIM_PATH} seedHtml=${server.html} generatedHasHtmlReturn=${server.generatedHasHtmlReturn}`,
       );
-      const result = await runClaim(page, SYNC_MODULE, 'sync', server.html);
+
+      // The old server constructor (`__h`/`__t`) predates the text boundary and
+      // emits no `oe:t` pair. The generated claim must refuse it rather than
+      // fall back to per-node text alignment; this is the recorded cross-system
+      // boundary, not a silent pass.
+      const refused = await runClaim(page, SYNC_MODULE, 'sync', server.html);
+      expect(refused.steps[0]!.error).toContain('OEIR_LEAF_CLAIM_MISMATCH');
+      expect(refused.steps[0]!.mutations).toEqual([]);
+
+      // The generated producer emits the pair. The browser parses those bytes
+      // and the generated claim adopts them with zero equal-seed mutations.
+      const paired = generatedLeafSsr();
+      expect(paired).toBe('<p id="leaf"><!--oe:t:0-->seed<!--oe:/t:0--></p>');
+      const result = await runClaim(page, SYNC_MODULE, 'sync', paired);
       const step = result.steps[0]!;
       expect(step.error).toBeNull();
       expect(step.mutations).toEqual([]);

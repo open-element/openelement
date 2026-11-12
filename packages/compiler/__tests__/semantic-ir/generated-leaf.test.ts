@@ -133,7 +133,7 @@ describe('M05 leaf v2 — emitted module contract', () => {
     expect(withoutStrings).not.toMatch(/\bas\s+[A-Z]/);
   });
 
-  test('M07a emits a structural claim for a static leaf and omits it for later shapes', () => {
+  test('M07a emits a structural claim for a static leaf; M08-2 adds the condition shape', () => {
     const leaf = generate(COUNTER);
     expect(leaf.module).not.toBeNull();
     const module = leaf.module!;
@@ -156,8 +156,12 @@ describe('M05 leaf v2 — emitted module contract', () => {
       'function C(props) { return <section>{props.ok ? <p>on</p> : <em>off</em>}</section>; }\n',
     );
     expect(conditional.module).not.toBeNull();
-    expect(conditional.module).not.toContain('function C__claim');
-    expect(conditional.module).not.toContain('claim(__oe_scope');
+    // M08-2: the condition is claimable, so its anchor/end pair is consumed by
+    // the generated claim; the branch swap is still owned by mount/claim
+    // disposal, not by a second claim mechanism.
+    expect(conditional.module).toContain('function C__claim');
+    expect(conditional.module).toContain('emitComment(MARKERS.whenEnd)');
+    expect(conditional.module).toContain('claim(__oe_scope');
 
     const listed = generate(
       `import { signal } from '@openelement/element';
@@ -208,6 +212,7 @@ function List(props) {
     expect(result.module).not.toBeNull();
     const module = result.module!;
     expect(module).toContain('emitComment(MARKERS.when)');
+    expect(module).toContain('emitComment(MARKERS.whenEnd)');
     expect(module).toContain('function __oe_whenThen');
     expect(module).toContain('function __oe_whenElse');
     expect(module).toContain('dispose(true)');

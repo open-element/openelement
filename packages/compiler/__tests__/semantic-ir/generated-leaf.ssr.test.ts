@@ -85,10 +85,14 @@ interface ShimNode {
   namespaceURI?: string;
   childNodes: ShimNode[];
   parentNode: ShimNode | null;
+  readonly firstChild: ShimNode | null;
+  readonly nextSibling: ShimNode | null;
   readonly attributes: { name: string; value: string }[];
   setAttribute(name: string, value: string): void;
   appendChild(child: ShimNode): ShimNode;
+  insertBefore(child: ShimNode, reference: ShimNode | null): ShimNode;
   removeChild(child: ShimNode): ShimNode;
+  remove(): void;
   getAttribute(name: string): string | null;
   hasAttribute(name: string): boolean;
   removeAttribute(name: string): void;
@@ -96,32 +100,59 @@ interface ShimNode {
 }
 
 function makeDocument(): { document: unknown; root: ShimNode } {
-  const element = (tag: string): ShimNode => {
-    const attributes: { name: string; value: string }[] = [];
-    const node: ShimNode = {
-      nodeType: 1,
-      nodeValue: null,
-      localName: tag,
-      namespaceURI: 'http://www.w3.org/1999/xhtml',
+  const base = (properties: Partial<ShimNode>): ShimNode => {
+    const node = {
       childNodes: [],
       parentNode: null,
-      attributes,
-      setAttribute(name, value) {
-        const found = attributes.find((entry) => entry.name === name);
-        if (found) found.value = value;
-        else attributes.push({ name, value });
+      get firstChild(): ShimNode | null {
+        return node.childNodes[0] ?? null;
       },
-      appendChild(child) {
+      get nextSibling(): ShimNode | null {
+        if (node.parentNode === null) return null;
+        const index = node.parentNode.childNodes.indexOf(node);
+        return index < 0 ? null : (node.parentNode.childNodes[index + 1] ?? null);
+      },
+      appendChild(child: ShimNode): ShimNode {
+        if (child.parentNode !== null) child.parentNode.removeChild(child);
         child.parentNode = node;
         node.childNodes.push(child);
         return child;
       },
-      removeChild(child) {
+      insertBefore(child: ShimNode, reference: ShimNode | null): ShimNode {
+        if (child.parentNode !== null) child.parentNode.removeChild(child);
+        if (reference === null) return node.appendChild(child);
+        const index = node.childNodes.indexOf(reference);
+        if (index < 0) throw new Error('insertBefore reference is not a child');
+        child.parentNode = node;
+        node.childNodes.splice(index, 0, child);
+        return child;
+      },
+      removeChild(child: ShimNode): ShimNode {
         const index = node.childNodes.indexOf(child);
         if (index < 0) throw new Error('removeChild node is not a child');
         node.childNodes.splice(index, 1);
         child.parentNode = null;
         return child;
+      },
+      remove(): void {
+        node.parentNode?.removeChild(node);
+      },
+      ...properties,
+    } as ShimNode;
+    return node;
+  };
+  const element = (tag: string): ShimNode => {
+    const attributes: { name: string; value: string }[] = [];
+    const node = base({
+      nodeType: 1,
+      nodeValue: null,
+      localName: tag,
+      namespaceURI: 'http://www.w3.org/1999/xhtml',
+      attributes,
+      setAttribute(name, value) {
+        const found = attributes.find((entry) => entry.name === name);
+        if (found) found.value = value;
+        else attributes.push({ name, value });
       },
       getAttribute: (name) => attributes.find((entry) => entry.name === name)?.value ?? null,
       hasAttribute: (name) => attributes.some((entry) => entry.name === name),
@@ -136,24 +167,22 @@ function makeDocument(): { document: unknown; root: ShimNode } {
         else node.removeAttribute(name);
         return on;
       },
-    };
+    });
     return node;
   };
   const root = element('body');
   const document = {
     createElement: (tag: string) => element(tag),
-    createTextNode: (value: string) => ({
-      nodeType: 3,
-      nodeValue: value,
-      childNodes: [],
-      parentNode: null,
-    }),
-    createComment: (value: string) => ({
-      nodeType: 8,
-      nodeValue: value,
-      childNodes: [],
-      parentNode: null,
-    }),
+    createTextNode: (value: string) =>
+      base({
+        nodeType: 3,
+        nodeValue: value,
+      }),
+    createComment: (value: string) =>
+      base({
+        nodeType: 8,
+        nodeValue: value,
+      }),
     body: root,
   };
   return { document, root };
@@ -183,6 +212,11 @@ interface Loaded {
   Deep__ssr?: () => string;
   /** M08-1b: a dynamic slot makes the producer request-time. */
   Counter__ssr?: (
+    props?: Record<string, unknown>,
+    host?: { readonly bindings: Record<string, unknown> },
+  ) => string;
+  /** M08-2: a condition makes the producer request-time even with static branches. */
+  Conditional__ssr?: (
     props?: Record<string, unknown>,
     host?: { readonly bindings: Record<string, unknown> },
   ) => string;
@@ -224,10 +258,10 @@ beforeAll(async () => {
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
-      `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
+      `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+      `export { emitComment, MARKERS, markerText, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
@@ -239,7 +273,7 @@ beforeAll(async () => {
   writeFileSync(
     entry,
     [
-      `export { Plain__ssr, Escaped__ssr, Nested__ssr, Deep__ssr, Counter__ssr } from './leaf.js';`,
+      `export { Plain__ssr, Escaped__ssr, Nested__ssr, Deep__ssr, Counter__ssr, Conditional__ssr } from './leaf.js';`,
       `export { createPlainRecipe, createEscapedRecipe, createNestedRecipe, createDeepRecipe, createCounterRecipe } from './leaf.js';`,
       `export { claimRecipe, LifetimeScope, signal } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
       '',
@@ -347,7 +381,7 @@ describe('M08-1a static SSR producer', () => {
     expect(module_).toContain('export function Counter__ssr(__oe_props, __oe_host) {');
     const count = loaded.signal(1);
     const host = { bindings: { count } };
-    expect(loaded.Counter__ssr!({}, host)).toBe('<p>1</p>');
+    expect(loaded.Counter__ssr!({}, host)).toBe('<p><!--oe:t:0-->1<!--oe:/t:0--></p>');
     expect(loaded.Counter__ssr!({}, host)).toBe(
       mountAndSerialize(loaded.createCounterRecipe, { bindings: { count } }),
     );
@@ -355,18 +389,24 @@ describe('M08-1a static SSR producer', () => {
     // Request-time, not a compile-time snapshot: the next call re-reads the
     // binding, and both sides move together.
     count.value = 7;
-    expect(loaded.Counter__ssr!({}, host)).toBe('<p>7</p>');
+    expect(loaded.Counter__ssr!({}, host)).toBe('<p><!--oe:t:0-->7<!--oe:/t:0--></p>');
     expect(loaded.Counter__ssr!({}, host)).toBe(
       mountAndSerialize(loaded.createCounterRecipe, { bindings: { count } }),
     );
   });
 
-  test('conditions and lists stay outside the SSR producer (new recorded boundary)', () => {
-    // The M08-1b slice admits the leaf claim's dynamic slot kinds only. A
-    // condition and a list remain mount/claim-refused shapes, so the producer
-    // stays absent rather than emitting a partial form the claim could not
-    // adopt. These are the shapes M08-2/M08-5 still owe.
-    expect(module_).not.toContain('function Conditional__ssr');
+  test('conditions enter the producer; a list is still an absent boundary', () => {
+    // M08-2 adds the condition: the branch selection is request-time, so both
+    // a dynamic and a static branch body now go through `__ssr(props, host)`.
+    // A list remains outside this slice and must stay absent rather than emit a
+    // partial producer the claim could not adopt.
+    expect(module_).toContain('function Conditional__ssr');
+    expect(loaded.Conditional__ssr!({ ok: true }, { bindings: {} })).toBe(
+      '<section><!--oe:when--><p>on</p><!--oe:/when--></section>',
+    );
+    expect(loaded.Conditional__ssr!({ ok: false }, { bindings: {} })).toBe(
+      '<section><!--oe:when--><em>off</em><!--oe:/when--></section>',
+    );
     expect(module_).not.toContain('function Listed__ssr');
     // The dynamic leaf itself is present, so the absence above is a boundary
     // and not a producer that failed to emit anything.

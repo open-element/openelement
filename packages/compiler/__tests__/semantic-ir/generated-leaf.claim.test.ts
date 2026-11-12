@@ -66,6 +66,8 @@ interface ClaimNode {
   tagName?: string;
   namespaceURI?: string | null;
   childNodes?: ClaimNode[];
+  readonly firstChild?: ClaimNode | null;
+  readonly nextSibling?: ClaimNode | null;
   attributes?: { readonly length: number; item(index: number): ClaimAttribute | null };
   getAttribute?(name: string): string | null;
   hasAttribute?(name: string): boolean;
@@ -73,7 +75,9 @@ interface ClaimNode {
   removeAttribute?(name: string): void;
   toggleAttribute?(name: string, force?: boolean): boolean;
   appendChild?(node: ClaimNode): ClaimNode;
+  insertBefore?(node: ClaimNode, reference: ClaimNode | null): ClaimNode;
   removeChild?(node: ClaimNode): ClaimNode;
+  remove?(): void;
 }
 
 function element(tag: string, namespaceURI: string | null = HTML_NAMESPACE): ClaimNode {
@@ -94,6 +98,16 @@ function element(tag: string, namespaceURI: string | null = HTML_NAMESPACE): Cla
     namespaceURI,
     childNodes: [],
     attributes,
+    get firstChild() {
+      return node.childNodes![0] ?? null;
+    },
+    get nextSibling() {
+      const parent = node.parentNode;
+      if (parent === null) return null;
+      const siblings = parent.childNodes ?? [];
+      const index = siblings.indexOf(node);
+      return index < 0 ? null : (siblings[index + 1] ?? null);
+    },
     getAttribute: (name) => attrs.find((entry) => entry.name === name)?.value ?? null,
     hasAttribute: (name) => attrs.some((entry) => entry.name === name),
     setAttribute: (name, value) => {
@@ -113,8 +127,18 @@ function element(tag: string, namespaceURI: string | null = HTML_NAMESPACE): Cla
       return on;
     },
     appendChild: (child) => {
+      child.parentNode?.removeChild?.(child);
       child.parentNode = node;
       node.childNodes!.push(child);
+      return child;
+    },
+    insertBefore: (child, reference) => {
+      child.parentNode?.removeChild?.(child);
+      if (reference === null) return node.appendChild!(child);
+      const index = node.childNodes!.indexOf(reference);
+      if (index < 0) throw new Error('insertBefore reference is not a child');
+      child.parentNode = node;
+      node.childNodes!.splice(index, 0, child);
       return child;
     },
     removeChild: (child) => {
@@ -124,12 +148,43 @@ function element(tag: string, namespaceURI: string | null = HTML_NAMESPACE): Cla
       child.parentNode = null;
       return child;
     },
+    remove: () => {
+      node.parentNode?.removeChild?.(node);
+    },
   };
   return node;
 }
 
 function text(value: string): ClaimNode {
-  return { nodeType: 3, parentNode: null, nodeValue: value };
+  const node: ClaimNode = { nodeType: 3, parentNode: null, nodeValue: value };
+  Object.defineProperty(node, 'nextSibling', {
+    get() {
+      const parent = node.parentNode;
+      if (parent === null) return null;
+      const siblings = parent.childNodes ?? [];
+      const index = siblings.indexOf(node);
+      return index < 0 ? null : (siblings[index + 1] ?? null);
+    },
+  });
+  Object.defineProperty(node, 'firstChild', { value: null });
+  node.remove = () => node.parentNode?.removeChild?.(node);
+  return node;
+}
+
+function comment(value: string): ClaimNode {
+  const node: ClaimNode = { nodeType: 8, parentNode: null, nodeValue: value };
+  Object.defineProperty(node, 'nextSibling', {
+    get() {
+      const parent = node.parentNode;
+      if (parent === null) return null;
+      const siblings = parent.childNodes ?? [];
+      const index = siblings.indexOf(node);
+      return index < 0 ? null : (siblings[index + 1] ?? null);
+    },
+  });
+  Object.defineProperty(node, 'firstChild', { value: null });
+  node.remove = () => node.parentNode?.removeChild?.(node);
+  return node;
 }
 
 function leafDom(
@@ -144,8 +199,10 @@ function leafDom(
   const paragraph = element('p');
   paragraph.setAttribute!('id', options.id ?? 't');
   if (options.hidden === true) paragraph.setAttribute!('hidden', '');
+  paragraph.appendChild!(comment('oe:t:0'));
   const slot = text(textValue);
   paragraph.appendChild!(slot);
+  paragraph.appendChild!(comment('oe:/t:0'));
   parent.appendChild!(paragraph);
   return { parent, paragraph, text: slot };
 }
@@ -198,11 +255,11 @@ beforeAll(async () => {
     shim,
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
-      `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
+      `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+      `export { emitComment, MARKERS, markerText, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,

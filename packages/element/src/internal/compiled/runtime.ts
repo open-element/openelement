@@ -137,7 +137,7 @@ export {
   displayValue,
   removeNodes,
 } from './runtime/values.ts';
-export { bindSignalWrites } from './runtime/bindings.ts';
+export { bindSignalWrites, runUntracked } from './runtime/bindings.ts';
 // The escape contract the generated SSR producer calls. One implementation,
 // shared with the serializers — the compiler never carries a second table.
 export { escapeText } from './escape-text.ts';
@@ -167,7 +167,11 @@ export {
 export {
   assertElementInHtmlNamespace,
   assertStaticAttributeSeed,
+  assertTextSlotMarker,
+  assertWhenAnchor,
+  assertWhenEndMarker,
   HTML_NAMESPACE,
+  isWhenEndMarker,
   LEAF_CLAIM_MISMATCH,
   leafClaimMismatch,
   staticAttributeSeedMismatch,
@@ -178,7 +182,9 @@ export {
   MARKERS,
   markerText,
   parseRangeMarker,
+  parseTextSlotMarker,
   rangeMarker,
+  textSlotMarker,
   type Marker,
 } from './runtime/markers.ts';
 export { OpenElementError } from '@openelement/protocol/errors';

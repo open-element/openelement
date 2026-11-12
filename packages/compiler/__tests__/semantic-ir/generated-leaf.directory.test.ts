@@ -147,7 +147,9 @@ test('mixed text, one child, insertion sites, and excluded parents do not become
 
 test('a pure-mount tree does not emit unconsumed range markers', () => {
   const conditional = generate(
-    'function C(props) { return <div>{true ? <section><p>a</p><p>b</p></section> : <section><b>x</b><i>y</i></section>}</div>; }\n',
+    // The property channel keeps this tree mount-only; the condition branch
+    // structure itself is now claimable, so a claim would otherwise appear.
+    'function C(props) { return <div>{true ? <section><p>a</p><p>b</p></section> : <section><b>x</b><i>y</i></section>}<input value={props.text} /></div>; }\n',
   );
   expect(conditional).not.toContain('function C__claim');
   expect(conditional).not.toContain('emitComment(rangeMarker(');
@@ -167,7 +169,8 @@ test('a pure-mount tree does not emit unconsumed range markers', () => {
 const EXECUTION = `function Pair(props) { return <div><p>same</p><p>same</p></div>; }
 function Roots(props) { return <><p>same</p><p>same</p></>; }
 function Mixed(props) { return <div>hello<p>a</p></div>; }
-function MountOnly(props) { return <div>{true ? <section><p>a</p><p>b</p></section> : <section><b>x</b><i>y</i></section>}</div>; }
+function Leaf(props) { return <i>leaf</i>; }
+function MountOnly(props) { return <div>{true ? <section><p>a</p><p>b</p></section> : <section><b>x</b><i>y</i><Leaf /></section>}</div>; }
 `;
 
 class Log {
@@ -186,6 +189,15 @@ class DomNode {
     readonly log: Log,
     readonly nodeType: number,
   ) {}
+  get nextSibling(): DomNode | null {
+    const parent = this.parentNode;
+    if (parent === null) return null;
+    const index = parent.childNodes.indexOf(this);
+    return index < 0 ? null : (parent.childNodes[index + 1] ?? null);
+  }
+  remove(): void {
+    this.parentNode?.removeChild(this);
+  }
 }
 
 class DomText extends DomNode {
@@ -240,6 +252,9 @@ class DomAttributes {
 class DomElement extends DomNode {
   readonly childNodes: DomNode[] = [];
   readonly attributes: DomAttributes;
+  get firstChild(): DomNode | null {
+    return this.childNodes[0] ?? null;
+  }
   constructor(
     log: Log,
     readonly localName: string,
@@ -340,11 +355,11 @@ beforeAll(async () => {
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
-      `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
+      `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+      `export { emitComment, MARKERS, markerText, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,
@@ -503,7 +518,7 @@ test('element children are a directory, and a validation failure writes nothing'
   const mark = doc.log.events.length;
   const owners = loaded.runtimeProbe.snapshot();
   const error = capture(() => loaded.claimRecipe(owner, recipe, parent));
-  expect(error.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+  expect(error.code, String(error.message)).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
   expect(String(error.message)).toContain('static-seed');
   expect(doc.log.writesSince(mark)).toEqual([]);
   const after = loaded.runtimeProbe.snapshot();
@@ -546,7 +561,7 @@ test('a mid-directory validation failure does not stick on consumed:', () => {
   const before = loaded.runtimeProbe.snapshot();
 
   const error = capture(() => loaded.claimRecipe(owner, recipe, parent));
-  expect(error.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+  expect(error.code, String(error.message)).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
   expect(String(error.message)).toContain('static-seed');
   // Range 0 committed before range 1 was validated: its success cleanup was
   // registered (the probe only increments), so this is not the first-range

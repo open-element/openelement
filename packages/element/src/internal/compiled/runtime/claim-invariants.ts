@@ -2,14 +2,16 @@
  * claim-invariants.ts — the single implementation of the generated-leaf claim
  * invariants.
  *
- * Three rules decide whether a generated leaf claim may adopt existing DOM:
+ * Four rules decide whether a generated leaf claim may adopt existing DOM:
  *
  *   1. the claim parent, its element ancestors and each claimed element are in
  *      the HTML namespace;
  *   2. each claimed element's static attribute seed is exactly the declared
  *      ordered set (names compared after HTML ASCII case folding, because the
  *      DOM exposes HTML attribute names lowercased; values compared exactly);
- *   3. a structural mismatch is reported as one catalogued internal identity.
+ *   3. each dynamic-text slot consumes one expected start/end comment pair with
+ *      a matching canonical ordinal at the current position;
+ *   4. a structural mismatch is reported as one catalogued internal identity.
  *
  * The generated claim calls into this module instead of emitting its own copy
  * of the rule, so the rule exists once. The directory consumer
@@ -26,6 +28,7 @@
  */
 
 import { OpenElementError } from '@openelement/protocol/errors';
+import { parseTextSlotMarker, parseWhenMarker } from './markers.ts';
 
 /** The HTML namespace. Every claimed element must be in it. */
 export const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
@@ -125,6 +128,74 @@ export function elementHtmlNamespaceViolation(node: Node | null): string | null 
     return `non-HTML namespace ${describe(element.namespaceURI)} on ${describe(element.localName ?? element.nodeName)}`;
   }
   return null;
+}
+
+/**
+ * The generated dynamic-text claim consumes one expected boundary marker at the
+ * current position. It is a one-position check, not a protocol interpreter:
+ * there is no scan, no descriptor table and no recovery path.
+ *
+ * A missing/mistyped/foreign marker fails closed with the same internal
+ * `OEIR_LEAF_CLAIM_MISMATCH` identity the rest of the leaf claim uses. The
+ * comment's text is never echoed into the error: it may be arbitrary page
+ * content and is not useful to the caller.
+ */
+export function assertTextSlotMarker(
+  node: Node | null | undefined,
+  ordinal: number,
+  end: boolean,
+  where: string,
+): void {
+  const position = end ? 'end' : 'start';
+  if (node == null) {
+    throw leafClaimMismatch(`text boundary ${position} is missing at ${where}`);
+  }
+  if (node.nodeType !== 8) {
+    throw leafClaimMismatch(`text boundary ${position} at ${where} is not a comment`);
+  }
+  const parsed = parseTextSlotMarker((node as Comment).nodeValue);
+  if (parsed === null || parsed.end !== end || parsed.ordinal !== ordinal) {
+    throw leafClaimMismatch(
+      `text boundary ${position} at ${where} does not match ordinal ${ordinal}`,
+    );
+  }
+}
+
+/**
+ * The condition anchor/end are fixed markers, not a scan. A missing, foreign or
+ * swapped comment fails closed with the same internal leaf-claim identity. The
+ * condition has no branch id: the branch identity is the client branch
+ * template's structure, static attribute seed, values and slot ordinals, all
+ * checked by the ordinary claim walk.
+ */
+export function isWhenEndMarker(node: Node | null | undefined): boolean {
+  return (
+    node != null && node.nodeType === 8 && parseWhenMarker((node as Comment).nodeValue) === 'end'
+  );
+}
+
+export function assertWhenAnchor(node: Node | null | undefined, where: string): void {
+  if (node == null) {
+    throw leafClaimMismatch(`condition anchor is missing at ${where}`);
+  }
+  if (node.nodeType !== 8) {
+    throw leafClaimMismatch(`condition anchor at ${where} is not a comment`);
+  }
+  if (parseWhenMarker((node as Comment).nodeValue) !== 'start') {
+    throw leafClaimMismatch(`condition anchor at ${where} does not match`);
+  }
+}
+
+export function assertWhenEndMarker(node: Node | null | undefined, where: string): void {
+  if (node == null) {
+    throw leafClaimMismatch(`condition end is missing at ${where}`);
+  }
+  if (node.nodeType !== 8) {
+    throw leafClaimMismatch(`condition end at ${where} is not a comment`);
+  }
+  if (parseWhenMarker((node as Comment).nodeValue) !== 'end') {
+    throw leafClaimMismatch(`condition end at ${where} does not match`);
+  }
 }
 
 /**
