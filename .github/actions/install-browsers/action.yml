@@ -1,0 +1,63 @@
+name: Install browsers
+description: >-
+  The one browser-install implementation for every lane: cache the Playwright
+  browser directory, then install the requested engines with a bounded retry so
+  an apt/network wobble does not fail a required check.
+
+inputs:
+  engines:
+    description: Space-separated Playwright engine list.
+    required: false
+    default: chromium firefox webkit
+  with-deps:
+    description: >-
+      Pass `--with-deps`. Needed whenever the lane runs WebKit or the packed
+      starter on Linux (host libraries such as libgtk-4/gstreamer are not in
+      the plain browser download).
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    # Cache the browser binaries only. Before this action existed the cache
+    # step lived in one job and six other install sites ran uncached and
+    # unretried: the 2026-11-11 main-push failures (run 43060765423) were one
+    # apt mirror failure turning six jobs red at once.
+    - name: Cache Playwright browsers
+      # v4.3.0 — the pin `setup-node-workspace` already uses.
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        # Playwright's browser cache lives at a different path per OS.
+        path: ${{ runner.os == 'macOS' && '~/Library/Caches/ms-playwright' || '~/.cache/ms-playwright' }}
+        # The engine list is part of the key so a lane that later asks for
+        # WebKit cannot restore a chromium-only tree.
+        key: ${{ runner.os }}-playwright-${{ inputs.engines }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-playwright-${{ inputs.engines }}-
+          ${{ runner.os }}-playwright-
+    - name: Install browsers
+      # 2026-11-06 failure shape (run 42207927084): one `playwright install
+      # --with-deps` call stalled in apt/network for the whole job timeout.
+      # `timeout 600` bounds a single attempt and three attempts absorb a
+      # transient mirror failure instead of failing the required check; a
+      # cache hit skips the browser download portion entirely.
+      shell: bash
+      env:
+        ENGINES: ${{ inputs.engines }}
+        WITH_DEPS: ${{ inputs.with-deps }}
+      run: |
+        set -euo pipefail
+        deps_flag=""
+        if [ "${WITH_DEPS}" = "true" ]; then deps_flag="--with-deps"; fi
+        for attempt in 1 2 3; do
+          # Word splitting of ENGINES is intended: it is a space-separated list.
+          # shellcheck disable=SC2086
+          if timeout 600 ./node_modules/.bin/playwright install ${deps_flag} ${ENGINES}; then
+            exit 0
+          fi
+          echo "::warning::playwright install attempt ${attempt}/3 failed; retrying"
+          sleep 10
+        done
+        echo "::error::playwright install failed after 3 attempts (${ENGINES})"
+        exit 1
