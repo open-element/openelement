@@ -11,12 +11,17 @@
  * module may read these comments. There are two ordinal-bearing families with
  * deliberately distinct prefixes — static sibling ranges (`oe:r:` / `oe:/r:`)
  * and dynamic text slots (`oe:t:` / `oe:/t:`) — plus the fixed `when`/`each`
- * anchors. The `when` family has a closing marker (`oe:/when`) so an empty
- * branch is decidable; it deliberately has no branch id. Neither parser accepts
- * the other family's spelling.
+ * anchors, their closing markers, and the per-entry list key marker (`oe:k:`).
+ * The `when` family has a closing marker (`oe:/when`) so an empty branch is
+ * decidable; it deliberately has no branch id. The `each` family has a
+ * list-level closing marker (`oe:/each`) and exactly one `oe:k:` marker per
+ * entry; there is no per-entry end marker. Neither parser accepts the other
+ * family's spelling.
  *
  * @module ./markers.ts
  */
+
+import { isCanonicalListKeyToken, LIST_KEY_UNSUPPORTED } from './list-key.ts';
 
 /**
  * A marker is a branded value, not a string. A generated module can only
@@ -43,12 +48,46 @@ function makeMarker(text: string): Marker {
 const WHEN_OPEN = 'oe:when';
 const WHEN_CLOSE = 'oe:/when';
 
+/** The fixed list anchor and its list-level closing marker. */
+const EACH_OPEN = 'oe:each';
+const EACH_CLOSE = 'oe:/each';
+
 /** The private marker vocabulary. One table, one owner, branded values. */
 export const MARKERS = {
   when: makeMarker(WHEN_OPEN),
   whenEnd: makeMarker(WHEN_CLOSE),
-  each: makeMarker('oe:each'),
+  each: makeMarker(EACH_OPEN),
+  eachEnd: makeMarker(EACH_CLOSE),
 } as const;
+
+const ENTRY_KEY_PREFIX = 'oe:k:';
+
+/**
+ * One per-entry list identity marker (`oe:k:<token>`). The token comes from
+ * `encodeListKey` and never carries the marker prefix itself. The same token may
+ * appear more than once: mount's duplicate-key rule inserts after the first
+ * occurrence, and the claim pairs each wire occurrence with a distinct client
+ * occurrence. `null` writes the mount-only `u` payload: mount keeps its
+ * historical tolerance for unsupported key values, while SSR never emits `u`
+ * (and a claimed list never writes it) and claim rejects it.
+ */
+export function entryKeyMarker(token: string | null): Marker {
+  return makeMarker(ENTRY_KEY_PREFIX + (token ?? LIST_KEY_UNSUPPORTED));
+}
+
+/**
+ * Read an entry-key marker value. Returns `{ token }` for `oe:k:u` and for any
+ * canonical `s:`/`n:`/`b:` token; every other comment returns `null`. The
+ * claim uses this as a non-throwing lookahead (so the `u` case reaches the
+ * precise `readEntryKeyMarker` mismatch) and never parses a token back into a
+ * key.
+ */
+export function parseEntryKeyMarker(value: string | null): { readonly token: string } | null {
+  if (value === null || !value.startsWith(ENTRY_KEY_PREFIX)) return null;
+  const token = value.slice(ENTRY_KEY_PREFIX.length);
+  if (token === LIST_KEY_UNSUPPORTED) return { token };
+  return isCanonicalListKeyToken(token) ? { token } : null;
+}
 
 const RANGE_OPEN = 'oe:r:';
 const RANGE_CLOSE = 'oe:/r:';
@@ -159,5 +198,15 @@ export function parseTextSlotMarker(
 export function parseWhenMarker(value: string | null): 'start' | 'end' | null {
   if (value === WHEN_OPEN) return 'start';
   if (value === WHEN_CLOSE) return 'end';
+  return null;
+}
+
+/**
+ * Read a fixed list marker. Exact comparison only: `start` for `oe:each` and
+ * `end` for `oe:/each`; every other comment is foreign.
+ */
+export function parseEachMarker(value: string | null): 'start' | 'end' | null {
+  if (value === EACH_OPEN) return 'start';
+  if (value === EACH_CLOSE) return 'end';
   return null;
 }

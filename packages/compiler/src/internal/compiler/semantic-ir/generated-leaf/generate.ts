@@ -106,8 +106,9 @@
  * subscription. Mount and every non-claim refresh keep the unconditional
  * write. A later signal delivery shares the claim refresh body only as an
  * implementation coupling; that is not an update-period mutation acceptance,
- * not mismatch recovery, and not SSR→claim. Lists and `property` channels omit
- * `claim` and keep mount-only output. A condition is claimable by the M08-2
+ * not mismatch recovery, and not SSR→claim. `property` channels omit `claim`
+ * and keep mount-only output; the M08 list slice below adds the keyed list
+ * claim. A condition is claimable by the M08-2
  * condition slice when its selected branches contain shapes that slice already
  * admits (text, dynamic-text pairs and attributes); a nested condition, list,
  * component reference, insertion site, children projection or property channel
@@ -174,11 +175,11 @@
  * The M08-2 condition slice extends the producer to a condition whose branches
  * contain already-admitted shapes: it emits the `oe:when` start marker, the
  * selected branch chunk (ordinals restarting at 0) and the `oe:/when` end
- * marker, evaluating the test once per call. Lists, component references,
- * insertion sites, children projections, `property` channels, void elements,
- * and any condition branch shape the claim slice does not admit still emit no
- * `__ssr` (no partial producer). Seed/resource-lifecycle semantics are not
- * defined here.
+ * marker, evaluating the test once per call. Component references, insertion
+ * sites, children projections, `property` channels, void elements, and any
+ * condition branch shape the claim slice does not admit still emit no `__ssr`
+ * (no partial producer). The M08 list slice below extends this producer to the
+ * list wire. Seed/resource-lifecycle semantics are not defined here.
  *
  * M08 text boundary (M08-2 slice, not an M08 exit): every dynamic text slot in
  * a claimable chunk carries one standard HTML comment pair,
@@ -210,6 +211,49 @@
  * cursor is `{ node }` (next node object), so a lazy insert before an already
  * consumed close marker cannot desynchronize it; no index compensation is
  * emitted.
+ *
+ * M08 keyed list (list slice, not an M08 exit): a list is claimable when it is
+ * not inside a template, its parser context is flow, and every entry-template
+ * child is a previously admitted shape (text, dynamic-text pair, element or
+ * fragment); nested condition/list/composition inside an entry stays
+ * mount-only. The wire is the existing `oe:each` anchor, exactly one
+ * `oe:k:<token>` per entry (token from `encodeListKey`: `s:` UTF-8 lowercase
+ * hex, `n:` canonical finite number, `b:0/1`), and one list-level `oe:/each`
+ * end; there is no per-entry end marker. Mount writes the mount-only `oe:k:u`
+ * for an unsupported runtime key; SSR throws `OEIR_LEAF_UNSUPPORTED_KEY`, and
+ * claim rejects `u`. An unkeyed list keeps mount's positional identity (the
+ * index is the key, encoded as `n:<index>`). Duplicate keys keep mount's
+ * existing rule in every producer: the first occurrence reuses a previous entry
+ * and later occurrences insert, so the wire legitimately carries the same token
+ * more than once. SSR evaluates items once and each key once and emits one entry
+ * per item; it never returns a half string. Claim verify walks the entries
+ * read-only, asserts the end, evaluates items/keys once and applies
+ * `entrySeedMismatch` before any activation: S1 unsupported client key, S2 a
+ * wire token occurs more often than the client list (multiplicity exceeds),
+ * S3 wire key with no client item (borrowed DOM is never deleted). The seed
+ * assignment consumes the Nth occurrence of a token for the Nth wire entry of
+ * that token, so duplicate entries keep distinct identities and a cross-key
+ * reorder keeps each token's occurrence order stable. Activation activates
+ * every seeded entry (compare-write + subscriptions), binds the list/key outer
+ * reads, then runs one strict sync: matched entries rebind `item` and refresh
+ * in place, missing keys insert, reorder only moves before `oe:/each`. Client
+ * duplicate keys keep mount's used-set rule (first occurrence adopts, later
+ * ones insert). A claimed list that is later updated to an unsupported key
+ * preflights every key before any DOM write and throws the internal
+ * `OEIR_LEAF_UNSUPPORTED_KEY`; no `u` marker is written into claimed DOM, the
+ * previous DOM/owners/entries stay in place, and the list refresh recovers on
+ * the next legal signal value. The claim is non-transactional after activation
+ * starts, as the existing `dispose(false)` boundary says.
+ *
+ * The claim checks the PARSED tree, not the original bytes: a marker removed or
+ * altered in a way the parser preserves fails closed at its checked position,
+ * but an EOF truncation the HTML parser repairs into the same legal node (for
+ * example `<!--oe:/each` at EOF) is indistinguishable from the producer's DOM
+ * and is not detectable here. Raw-byte/transport completeness belongs to the
+ * HTTP/build boundary; this slice adds no document/root sentinel and makes no
+ * claim about truncation of the original bytes. The M08 target stays the
+ * authored S2 Board with the condition as a sibling of the list; an
+ * entry-internal condition is not required and remains mount-only.
  *
  * NOT claimed here: production wiring, a public ABI, SSR→claim parity
  * (M08-2), per-phase equivalence, claim negatives, TSX-18/TSX-30 as filled
@@ -299,6 +343,38 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
   {
     symbol: 'isWhenEndMarker',
     predicate: (body) => body.includes('isWhenEndMarker('),
+  },
+  {
+    symbol: 'assertEachAnchor',
+    predicate: (body) => body.includes('assertEachAnchor('),
+  },
+  {
+    symbol: 'assertEachEndMarker',
+    predicate: (body) => body.includes('assertEachEndMarker('),
+  },
+  {
+    symbol: 'parseEntryKeyMarker',
+    predicate: (body) => body.includes('parseEntryKeyMarker('),
+  },
+  {
+    symbol: 'readEntryKeyMarker',
+    predicate: (body) => body.includes('readEntryKeyMarker('),
+  },
+  {
+    symbol: 'entrySeedMismatch',
+    predicate: (body) => body.includes('entrySeedMismatch('),
+  },
+  {
+    symbol: 'entryKeyMarker',
+    predicate: (body) => body.includes('entryKeyMarker('),
+  },
+  {
+    symbol: 'encodeListKey',
+    predicate: (body) => body.includes('encodeListKey('),
+  },
+  {
+    symbol: 'tryEncodeListKey',
+    predicate: (body) => body.includes('tryEncodeListKey('),
   },
   {
     symbol: 'runUntracked',
@@ -590,6 +666,16 @@ interface EmitState {
    * diagnostic, never a guessed ordinal.
    */
   textOrdinals: ReadonlyMap<FunctionModelNode, number>;
+  /**
+   * M08 list entry-claim scratch, or null outside an entry claim chunk. The
+   * refreshes are function-scoped slot writes the entry's `update(next)` can
+   * force; the activate emitters are emitted inside the returned `activate`
+   * closure only, so verify performs no write and opens no subscription.
+   */
+  claimEntry: {
+    readonly refreshes: string[];
+    readonly activate: Array<() => void>;
+  } | null;
   /** True once this chunk throws the leaf-claim mismatch. */
   usesLeafClaimMismatch: boolean;
 }
@@ -744,7 +830,9 @@ function readsEntryLocal(state: EmitState, record: LoweredExpressionRecord): boo
   // Outside an entry builder there is nothing to re-run against (a component
   // mount has no `update` hook); keep today's static write byte-identical.
   if (state.refreshStack.length === 0) return false;
-  return record.reads.some((read) => state.entryNames.has(read.name));
+  return record.reads.some(
+    (read) => state.entryNames.has(read.name) || state.entryNames.has(read.binding.name),
+  );
 }
 
 /**
@@ -867,17 +955,23 @@ function emitEntryBuilder(
   push(state, `function ${functionName}(${scopeParam}, ${itemParam}) {`, anchor);
   state.indent += 1;
   const outerScope = state.scopeVar;
+  const outerOrdinals = state.textOrdinals;
   state.scopeVar = scopeParam;
   // Save/restore rather than add/delete: a nested list entry may shadow the same
   // mapper name, and deleting it on the way out would hide the outer entry-local
   // reads (refresh registration and `declareReads` both consult this set).
   const outerEntryNames = state.entryNames.has(itemName);
   state.entryNames.add(itemName);
+  // Every generated builder is its own text chunk: entry-local ordinals restart
+  // at 0 and top-level static runs use the normalized view the claim/SSR walk
+  // consumes. Mount, claim-create and SSR all go through this same chunk view.
+  const prepared = emissionNodes(state, nodes);
+  state.textOrdinals = textSlotOrdinals(prepared);
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
   push(state, `let ${itemName} = ${itemParam};`);
   const collector: string[] = [];
   state.refreshStack.push(collector);
-  for (const node of nodes) {
+  for (const node of prepared) {
     const sink: SinkEntry[] = [];
     emitNode(state, node, sink, records);
     appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
@@ -888,6 +982,7 @@ function emitEntryBuilder(
     ' ',
   );
   push(state, `return { nodes: ${INTERNAL_PREFIX}nodes, update(next) { ${updateBody} } };`);
+  state.textOrdinals = outerOrdinals;
   state.scopeVar = outerScope;
   state.indent -= 1;
   push(state, '}');
@@ -1001,6 +1096,47 @@ function emitCondition(
   registerRefresh(state, refreshVar);
 }
 
+/**
+ * Emit one list key thunk. Unkeyed lists keep the mount contract: the key is
+ * the item index, a finite number, so claim/SSR encode the same positional
+ * identity rather than inventing a second unkeyed rule. The mapper parameter is
+ * entry-local while the key record is validated; outer reads remain tracked.
+ */
+function emitListKeyFunction(
+  state: EmitState,
+  keyFn: string,
+  node: FunctionModelList,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): { readonly dependencies: readonly Dependency[] } | null {
+  if (node.key !== null) {
+    const keyRecord = recordFor(state, node.key, records);
+    if (keyRecord === null) return null;
+    const outerKeyEntryName = state.entryNames.has(node.parameter);
+    state.entryNames.add(node.parameter);
+    const declared = declareReads(state, keyRecord);
+    if (!outerKeyEntryName) state.entryNames.delete(node.parameter);
+    if (!declared) return null;
+    const keyDeps = dependencyNames(state, keyRecord);
+    if (keyDeps === null) return null;
+    pushParts(
+      state,
+      [
+        `function ${keyFn}(${INTERNAL_PREFIX}eachItem, ${INTERNAL_PREFIX}eachIndex) { const ${node.parameter} = ${INTERNAL_PREFIX}eachItem; return (`,
+        { record: keyRecord },
+        '); }',
+      ],
+      node.key.span,
+    );
+    return { dependencies: keyDeps };
+  }
+  push(
+    state,
+    `function ${keyFn}(${INTERNAL_PREFIX}eachItem, ${INTERNAL_PREFIX}eachIndex) { return ${INTERNAL_PREFIX}eachIndex; }`,
+    node.span,
+  );
+  return { dependencies: [] };
+}
+
 /** Emit `each`/map reconciliation with per-entry owners, keys and in-place updates. */
 function emitList(
   state: EmitState,
@@ -1030,6 +1166,12 @@ function emitList(
 
   push(state, `const ${anchorVar} = emitComment(MARKERS.each);`, node.span);
   sink.push({ kind: 'node', name: anchorVar });
+  // The list wire (end marker + per-entry key marker) exists only when this
+  // component emits a claim/SSR. A mount-only component keeps its historical
+  // shape: no inert comments and no second marker vocabulary to maintain.
+  const wire = state.emitTextBoundaries;
+  const endVar = `${INTERNAL_PREFIX}eachEnd${id}`;
+  if (wire) push(state, `const ${endVar} = emitComment(MARKERS.eachEnd);`, node.span);
   push(state, `let ${entriesVar} = [];`);
   state.listDepth += 1;
   try {
@@ -1047,36 +1189,9 @@ function emitList(
     state.listDepth -= 1;
   }
 
-  let keyDependencies: readonly Dependency[] = [];
-  if (node.key !== null) {
-    const keyRecord = recordFor(state, node.key, records);
-    if (keyRecord === null) return;
-    // The mapper parameter is entry-local (not a host binding); outer reads in a
-    // key thunk are validated as usual and refresh the list when written.
-    const outerKeyEntryName = state.entryNames.has(node.parameter);
-    state.entryNames.add(node.parameter);
-    const declared = declareReads(state, keyRecord);
-    if (!outerKeyEntryName) state.entryNames.delete(node.parameter);
-    if (!declared) return;
-    const keyDeps = dependencyNames(state, keyRecord);
-    if (keyDeps === null) return;
-    keyDependencies = keyDeps;
-    pushParts(
-      state,
-      [
-        `function ${keyFn}(${INTERNAL_PREFIX}eachItem, ${INTERNAL_PREFIX}eachIndex) { const ${node.parameter} = ${INTERNAL_PREFIX}eachItem; return (`,
-        { record: keyRecord },
-        '); }',
-      ],
-      node.key.span,
-    );
-  } else {
-    push(
-      state,
-      `function ${keyFn}(${INTERNAL_PREFIX}eachItem, ${INTERNAL_PREFIX}eachIndex) { return ${INTERNAL_PREFIX}eachIndex; }`,
-      node.span,
-    );
-  }
+  const keyInfo = emitListKeyFunction(state, keyFn, node, records);
+  if (keyInfo === null) return;
+  const keyDependencies: readonly Dependency[] = keyInfo.dependencies;
 
   push(state, `function ${refreshVar}() {`, node.span);
   state.indent += 1;
@@ -1118,6 +1233,15 @@ function emitList(
   );
   state.indent -= 1;
   push(state, `} catch (error) { ${INTERNAL_PREFIX}owner.dispose(true); throw error; }`);
+  if (wire) {
+    // One marker per entry, created exactly when the entry is created and
+    // unshifted into its node list so it moves/disposes with it. The token is a
+    // string comparison input, never decoded; an unsupported runtime key keeps
+    // mount tolerant with the mount-only `u` payload.
+    const tokenVar = nextName(state, 'token');
+    push(state, `const ${tokenVar} = tryEncodeListKey(${INTERNAL_PREFIX}key);`);
+    push(state, `${INTERNAL_PREFIX}built.nodes.unshift(emitComment(entryKeyMarker(${tokenVar})));`);
+  }
   push(
     state,
     `${INTERNAL_PREFIX}owner.addRangeCleanup(() => removeNodes(${INTERNAL_PREFIX}built.nodes));`,
@@ -1150,11 +1274,17 @@ function emitList(
     state,
     `for (const ${INTERNAL_PREFIX}entry of ${INTERNAL_PREFIX}previous) for (const ${INTERNAL_PREFIX}node of ${INTERNAL_PREFIX}entry.nodes) ${INTERNAL_PREFIX}previousNodes.add(${INTERNAL_PREFIX}node);`,
   );
-  push(state, `let ${INTERNAL_PREFIX}reference = ${anchorVar}.nextSibling;`);
-  push(
-    state,
-    `while (${INTERNAL_PREFIX}reference !== null && ${INTERNAL_PREFIX}previousNodes.has(${INTERNAL_PREFIX}reference)) ${INTERNAL_PREFIX}reference = ${INTERNAL_PREFIX}reference.nextSibling;`,
-  );
+  if (wire) {
+    // The list end is the fixed tail: every entry node belongs before it and a
+    // following sibling can never be mistaken for a list node.
+    push(state, `let ${INTERNAL_PREFIX}reference = ${endVar};`);
+  } else {
+    push(state, `let ${INTERNAL_PREFIX}reference = ${anchorVar}.nextSibling;`);
+    push(
+      state,
+      `while (${INTERNAL_PREFIX}reference !== null && ${INTERNAL_PREFIX}previousNodes.has(${INTERNAL_PREFIX}reference)) ${INTERNAL_PREFIX}reference = ${INTERNAL_PREFIX}reference.nextSibling;`,
+    );
+  }
   push(
     state,
     `for (let ${INTERNAL_PREFIX}entryIndex = ${INTERNAL_PREFIX}next.length - 1; ${INTERNAL_PREFIX}entryIndex >= 0; ${INTERNAL_PREFIX}entryIndex--) {`,
@@ -1196,6 +1326,7 @@ function emitList(
     `for (const ${INTERNAL_PREFIX}entry of ${entriesVar}) for (const ${INTERNAL_PREFIX}node of ${INTERNAL_PREFIX}entry.nodes) ${initialNodesVar}.push(${INTERNAL_PREFIX}node);`,
   );
   sink.push({ kind: 'spread', name: initialNodesVar });
+  if (wire) sink.push({ kind: 'node', name: endVar });
   const subscribed = new Set<string>();
   const uniqueDependencies: Dependency[] = [];
   for (const dependency of [...dependencies, ...keyDependencies]) {
@@ -1256,6 +1387,13 @@ function recordFor(
 /** Declare the host bindings an expression reads (prologue) and validate names. */
 function declareReads(state: EmitState, record: LoweredExpressionRecord): boolean {
   for (const read of record.reads) {
+    // The enclosing list-entry mapper shadows every same-named outer binding,
+    // including `props`. Check the entry binding before the component-props
+    // branch: a legal `items.map((props) => …)` read is entry-local, never a
+    // component props read.
+    if (state.entryNames.has(read.name) || state.entryNames.has(read.binding.name)) {
+      continue;
+    }
     if (read.name === 'props' || read.binding.name === 'props') {
       if (state.propsName === null) {
         diag(
@@ -1273,11 +1411,7 @@ function declareReads(state: EmitState, record: LoweredExpressionRecord): boolea
       state.requiredProps.add(state.propsName);
       continue;
     }
-    if (
-      state.localResources.has(read.name) ||
-      state.hostBindings.has(read.name) ||
-      state.entryNames.has(read.name)
-    ) {
+    if (state.localResources.has(read.name) || state.hostBindings.has(read.name)) {
       continue;
     }
     // A reusable JSX value is a recipe, not a readable value: it only appears
@@ -1362,7 +1496,13 @@ function dependencyNames(
       );
       return null;
     }
-    const fromProps = read.name === 'props';
+    // A read bound by the enclosing mapper parameter is entry-local: the entry
+    // `update(next)` re-binds the parameter, so it is not a host/props
+    // subscription (B2: `props` as a mapper name must not become fromProps).
+    if (state.entryNames.has(read.name) || state.entryNames.has(read.binding.name)) {
+      continue;
+    }
+    const fromProps = read.name === 'props' || read.binding.name === 'props';
     if (fromProps) {
       // Per-read props refresh: the leaf contract supplies a `propsChanged`
       // signal (the M04 tracked-props record's version channel analogue). The
@@ -2361,6 +2501,13 @@ function findTextContextViolation(
       }
       continue;
     }
+    if (node.kind === 'list') {
+      // Entry bytes are still emitted inside the parent's parser context; a
+      // claimable list template must not hide a text slot under textarea.
+      const entries = findTextContextViolation(node.template, context, walker);
+      if (entries !== null) return entries;
+      continue;
+    }
     if (node.kind === 'component-ref' && context.kind !== 'flow') {
       const key = `c:${node.name}`;
       if (walker.stack.has(key)) continue;
@@ -2899,11 +3046,26 @@ function nodeClaimable(
         branch.every((child) => nodeClaimable(child, component, ctx, true, context)),
       );
     }
+    case 'list': {
+      // The list claim is a chunk of its own: its entry template must be
+      // claimable with composition refused (`insideTemplate` true). Nested
+      // condition/list inside an entry stays mount-only in this slice. The
+      // list markers are comments, so a restricted parser context keeps the
+      // whole component mount-only (no unreadable wire; no module diagnostic).
+      if (insideTemplate) return false;
+      if (context.kind !== 'flow') return false;
+      return node.template.every((child) => nodeClaimable(child, component, ctx, true, context));
+    }
     case 'insertion-site': {
       if (insideTemplate) return false;
       if (!declaredRecipeIdSet(component).has(node.recipeId)) return false;
       const recipe = recipeMap(component).get(node.recipeId);
       if (recipe === undefined) return false;
+      // No real browser/consumer proof and no SSR producer for a reusable-JSX
+      // body yet, so a list inside that body stays mount-only rather than
+      // widening the claim surface on paper. Lift this once the consumer test
+      // exists.
+      if (treeHasList([recipe.target])) return false;
       return nodeClaimable(recipe.target, component, ctx, false, context);
     }
     case 'children-projection':
@@ -2964,6 +3126,31 @@ function treeHasComposition(nodes: readonly FunctionModelNode[]): boolean {
         break;
       case 'list':
         if (treeHasComposition(node.template)) return true;
+        break;
+      default:
+        break;
+    }
+  }
+  return false;
+}
+
+/**
+ * `true` when the node tree contains a list at any depth. Used to keep a list
+ * inside a reusable-JSX recipe body out of the claim/SSR surface until that
+ * composition has a real consumer test of its own.
+ */
+function treeHasList(nodes: readonly FunctionModelNode[]): boolean {
+  for (const node of nodes) {
+    switch (node.kind) {
+      case 'list':
+        return true;
+      case 'element':
+      case 'fragment':
+        if (treeHasList(node.children)) return true;
+        break;
+      case 'condition':
+        if (treeHasList(node.consequent)) return true;
+        if (node.alternate !== null && treeHasList(node.alternate)) return true;
         break;
       default:
         break;
@@ -3173,7 +3360,11 @@ function emitClaimSlot(
   anchor: SpanLike,
   write: () => void,
 ): void {
-  if (dependencies.length === 0) {
+  const entry = state.claimEntry;
+  // Outside a list-entry claim a zero-dependency slot is one write. Inside one
+  // the slot must stay re-runnable: a keyed reuse rebinds the mapper parameter
+  // and `update(next)` forces the same named refresh (the M06b2c rule).
+  if (dependencies.length === 0 && entry === null) {
     write();
     return;
   }
@@ -3183,6 +3374,16 @@ function emitClaimSlot(
   write();
   state.indent -= 1;
   push(state, `}`);
+  if (entry !== null) {
+    entry.refreshes.push(refresh);
+    entry.activate.push(() => {
+      push(state, `${refresh}();`);
+      if (dependencies.length > 0) {
+        emitDependencySubscriptions(state, dependencies, refresh, anchor);
+      }
+    });
+    return;
+  }
   push(state, `${refresh}();`);
   emitDependencySubscriptions(state, dependencies, refresh, anchor);
 }
@@ -3481,6 +3682,395 @@ function emitConditionClaim(
   }
 }
 
+/**
+ * One list-entry claim chunk. The walk is read-only: it adopts the entry's
+ * existing marker/content through the shared cursor and creates no DOM node,
+ * opens no subscription and writes no value. Every dynamic slot becomes a
+ * named refresh at this function's scope (zero-dependency slots included), so
+ * `update(next)` can rebind the mapper parameter and re-render the same nodes
+ * (the M06b2c entry-local rule). `activate(next)` rebinds the item, runs the
+ * compare-write refresh once and opens the entry-local subscriptions; the
+ * enclosing claim calls it only from the activation phase.
+ */
+function emitClaimEntryBuilder(
+  state: EmitState,
+  functionName: string,
+  scopeParam: string,
+  cursorParam: string,
+  itemParam: string,
+  itemName: string,
+  nodes: readonly FunctionModelNode[],
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+  path: string,
+  anchor: SpanLike,
+): void {
+  push(state, `function ${functionName}(${scopeParam}, ${cursorParam}, ${itemParam}) {`, anchor);
+  state.indent += 1;
+  const outerScope = state.scopeVar;
+  const outerOrdinals = state.textOrdinals;
+  const outerShared = state.claimCursorShared;
+  const outerActivation = state.claimActivationVar;
+  const outerEntry = state.claimEntry;
+  state.scopeVar = scopeParam;
+  state.claimCursorShared = false;
+  state.claimActivationVar = null;
+  const entry = { refreshes: [] as string[], activate: [] as Array<() => void> };
+  state.claimEntry = entry;
+  const outerEntryName = state.entryNames.has(itemName);
+  state.entryNames.add(itemName);
+  const prepared = emissionNodes(state, nodes);
+  state.textOrdinals = textSlotOrdinals(prepared);
+  const nodesVar = nextName(state, 'entryNodes');
+  push(state, `const ${nodesVar} = [];`);
+  push(state, `let ${itemName} = ${itemParam};`);
+  const phase2: Array<() => void> = [];
+  emitClaimInto(
+    state,
+    prepared,
+    cursorParam,
+    path,
+    records,
+    phase2,
+    (name) => push(state, `${nodesVar}.push(${name});`),
+    (name, condition) => push(state, `if (${condition}) ${nodesVar}.push(${name});`),
+    'null',
+    false,
+  );
+  // The slot refreshes are emitted at the builder scope, not inside `activate`;
+  // `update(next)` must be able to call the same closures after rebinding item.
+  emitPhase2Steps(state, phase2);
+  push(state, 'function activate(next) {');
+  state.indent += 1;
+  push(state, `${itemName} = next;`);
+  for (const step of entry.activate) step();
+  state.indent -= 1;
+  push(state, '}');
+  const update = [`${itemName} = next;`, ...entry.refreshes.map((name) => `${name}(true);`)].join(
+    ' ',
+  );
+  push(state, `return { nodes: ${nodesVar}, activate, update(next) { ${update} } };`);
+  if (!outerEntryName) state.entryNames.delete(itemName);
+  state.textOrdinals = outerOrdinals;
+  state.claimCursorShared = outerShared;
+  state.claimActivationVar = outerActivation;
+  state.claimEntry = outerEntry;
+  state.scopeVar = outerScope;
+  state.indent -= 1;
+  push(state, '}');
+}
+
+/**
+ * One claim-time keyed sync. `previous` is the seeded list on the strict first
+ * call and the live entry list afterwards. Matching keeps mount's
+ * `entry.key === key` identity plus the mount used-set rule, so duplicate
+ * client keys adopt the wire entry once per occurrence and insert the
+ * remainder. The strict call is the seed assignment's defense: an unmatched
+ * seeded entry is a mismatch, never a delete. The non-strict refresh disposes
+ * removed entries exactly like mount.
+ *
+ * Every key is preflighted with `encodeListKey` before any mutation, and an
+ * inserted entry writes its marker from `encodeListKey`, never the mount-only
+ * `u` payload. An unsupported update therefore fails closed with the old DOM,
+ * owners and entries intact; the caller's refresh assignment keeps the previous
+ * entry list, so a later legal signal value recovers.
+ */
+function emitClaimListSync(
+  state: EmitState,
+  functionName: string,
+  entryCreateFn: string,
+  endVar: string,
+  path: string,
+  anchor: SpanLike,
+): void {
+  push(state, `function ${functionName}(items, keys, previous, strict) {`, anchor);
+  state.indent += 1;
+  // A supported key is a precondition of every write below. The preflight runs
+  // before matching, updates, inserts and placement, so a claimed list that is
+  // updated to an unsupported key throws the internal unsupported identity with
+  // the claimed DOM, owners and entries untouched. The refresh assignment keeps
+  // the previous entry list, so the next legal signal value can recover.
+  push(state, 'for (const key of keys) encodeListKey(key);');
+  push(state, 'const next = [];');
+  push(state, 'const used = new Set();');
+  push(state, 'for (let index = 0; index < items.length; index++) {');
+  state.indent += 1;
+  push(state, 'const item = items[index];');
+  push(state, 'const key = keys[index];');
+  push(state, 'let found = null;');
+  push(
+    state,
+    'for (const entry of previous) { if (entry.key === key && !used.has(entry)) { found = entry; break; } }',
+  );
+  push(state, 'if (found !== null) {');
+  state.indent += 1;
+  push(state, 'used.add(found); found.item = item; found.update(item); next.push(found);');
+  state.indent -= 1;
+  push(state, '} else {');
+  state.indent += 1;
+  push(state, `const owner = ${state.scopeVar}.child();`);
+  push(state, 'let built;');
+  push(state, 'try {');
+  state.indent += 1;
+  push(state, `built = ${entryCreateFn}(owner, item);`);
+  state.indent -= 1;
+  push(state, '} catch (error) { owner.dispose(true); throw error; }');
+  push(state, 'const token = encodeListKey(key);');
+  push(state, 'built.nodes.unshift(emitComment(entryKeyMarker(token)));');
+  push(state, 'owner.addRangeCleanup(() => removeNodes(built.nodes));');
+  push(state, 'next.push({ key, item, owner, nodes: built.nodes, update: built.update });');
+  state.indent -= 1;
+  push(state, '}');
+  state.indent -= 1;
+  push(state, '}');
+  push(state, 'for (const entry of previous) if (!used.has(entry)) {');
+  state.indent += 1;
+  push(
+    state,
+    `if (strict) throw leafClaimMismatch(${JSON.stringify(`server entry key has no client item at ${path}/each`)});`,
+  );
+  push(state, 'entry.owner.dispose(true);');
+  state.indent -= 1;
+  push(state, '}');
+  push(state, `const parent = ${endVar}.parentNode;`);
+  push(state, 'if (parent !== null) {');
+  state.indent += 1;
+  push(state, `let reference = ${endVar};`);
+  push(state, 'for (let entryIndex = next.length - 1; entryIndex >= 0; entryIndex--) {');
+  state.indent += 1;
+  push(state, 'const nodes = next[entryIndex].nodes;');
+  push(state, 'for (let nodeIndex = nodes.length - 1; nodeIndex >= 0; nodeIndex--) {');
+  state.indent += 1;
+  push(state, 'const node = nodes[nodeIndex];');
+  push(
+    state,
+    'if (node.parentNode !== parent || node.nextSibling !== reference) parent.insertBefore(node, reference);',
+  );
+  push(state, 'reference = node;');
+  state.indent -= 1;
+  push(state, '}');
+  state.indent -= 1;
+  push(state, '}');
+  state.indent -= 1;
+  push(state, '}');
+  push(state, 'return next;');
+  state.indent -= 1;
+  push(state, '}');
+}
+
+/**
+ * Claim one keyed (or unkeyed positional) list.
+ *
+ * Verify order is deliberate: anchor, every `oe:k:` entry and its read-only
+ * template adoption, the `oe:/each` end, then one items evaluation and one key
+ * evaluation per item. The seed predicate runs before any assignment write or
+ * activation; a wire token with more occurrences than the client list, an extra
+ * wire token or an unsupported wire key leaves the borrowed DOM untouched and
+ * opens no subscription. The seed predicate's client-key failure is also the
+ * only place an unsupported client key can stop the claim. Each wire occurrence
+ * is assigned the next client occurrence of the same token, so duplicates are
+ * distinct identities and reorder is grouped per token.
+ *
+ * Activation is queued on the shared phase-2 path: every seeded entry activates
+ * (compare-write refresh + subscriptions), then the list/key outer
+ * subscriptions, then one strict sync. A client-more seed inserts after that;
+ * reorder only moves existing nodes. No seeded node is ever deleted. The strict
+ * sync preflights every key with `encodeListKey`, so an unsupported key throws
+ * before any DOM write (the claimed `u`-free contract).
+ */
+function emitClaimList(
+  state: EmitState,
+  node: FunctionModelList,
+  cursor: string,
+  path: string,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+  phase2: Array<() => void>,
+  adopt: (name: string) => void,
+): void {
+  const slot = prepareClaimSlot(state, node.items, records);
+  if (slot === null) return;
+  const here = path;
+  const anchorVar = nextName(state, 'eachAnchor');
+  push(state, `const ${anchorVar} = ${cursor}.node;`, node.span);
+  push(
+    state,
+    `assertEachAnchor(${anchorVar}, ${JSON.stringify(`${here}/each/anchor`)});`,
+    node.span,
+  );
+  push(state, `${cursor}.node = ${anchorVar}.nextSibling;`);
+  adopt(anchorVar);
+
+  const entryClaimFn = nextName(state, 'eachEntryClaim');
+  emitClaimEntryBuilder(
+    state,
+    entryClaimFn,
+    nextName(state, 'eachEntryClaimScope'),
+    cursor,
+    nextName(state, 'eachEntryItem'),
+    node.parameter,
+    node.template,
+    records,
+    `${here}/each/entry`,
+    node.span,
+  );
+  const entryCreateFn = nextName(state, 'eachEntryCreate');
+  state.listDepth += 1;
+  try {
+    emitEntryBuilder(
+      state,
+      entryCreateFn,
+      nextName(state, 'eachCreateScope'),
+      nextName(state, 'eachCreateItem'),
+      node.parameter,
+      node.template,
+      records,
+      node.span,
+    );
+  } finally {
+    state.listDepth -= 1;
+  }
+  const keyFn = nextName(state, 'eachKey');
+  const keyInfo = emitListKeyFunction(state, keyFn, node, records);
+  if (keyInfo === null) return;
+  const keyDependencies = keyInfo.dependencies;
+
+  const wireTokensVar = nextName(state, 'eachWireTokens');
+  const seededVar = nextName(state, 'eachSeeded');
+  push(state, `const ${wireTokensVar} = [];`);
+  push(state, `const ${seededVar} = [];`);
+  push(state, 'for (;;) {');
+  state.indent += 1;
+  const markerVar = nextName(state, 'entryMarker');
+  push(state, `const ${markerVar} = ${cursor}.node;`);
+  const parsedVar = nextName(state, 'entryParsed');
+  push(
+    state,
+    `const ${parsedVar} = ${markerVar} !== null && ${markerVar}.nodeType === 8 ? parseEntryKeyMarker(${markerVar}.nodeValue) : null;`,
+  );
+  push(state, `if (${parsedVar} === null) break;`);
+  const tokenVar = nextName(state, 'entryToken');
+  push(
+    state,
+    `const ${tokenVar} = readEntryKeyMarker(${markerVar}, ${JSON.stringify(`${here}/each/entry`)});`,
+  );
+  push(state, `${cursor}.node = ${markerVar}.nextSibling;`);
+  const ownerVar = nextName(state, 'entryOwner');
+  push(state, `const ${ownerVar} = ${state.scopeVar}.child();`);
+  const builtVar = nextName(state, 'entryBuilt');
+  push(state, `let ${builtVar};`);
+  push(state, 'try {');
+  state.indent += 1;
+  push(state, `${builtVar} = ${entryClaimFn}(${ownerVar}, ${cursor}, null);`);
+  state.indent -= 1;
+  push(state, `} catch (error) { ${ownerVar}.dispose(false); throw error; }`);
+  push(
+    state,
+    `${ownerVar}.addRangeCleanup(() => removeNodes([${markerVar}, ...${builtVar}.nodes]));`,
+  );
+  const seededEntryVar = nextName(state, 'entry');
+  push(
+    state,
+    `const ${seededEntryVar} = { token: ${tokenVar}, key: null, item: null, assigned: false, owner: ${ownerVar}, nodes: [${markerVar}, ...${builtVar}.nodes], activate: ${builtVar}.activate, update: ${builtVar}.update };`,
+  );
+  push(state, `${seededVar}.push(${seededEntryVar}); ${wireTokensVar}.push(${tokenVar});`);
+  adopt(markerVar);
+  const adoptedChildVar = nextName(state, 'entryChild');
+  push(state, `for (const ${adoptedChildVar} of ${builtVar}.nodes) {`);
+  adopt(adoptedChildVar);
+  push(state, '}');
+  state.indent -= 1;
+  push(state, '}');
+  push(
+    state,
+    `assertEachEndMarker(${cursor}.node, ${JSON.stringify(`${here}/each/end`)});`,
+    node.span,
+  );
+  const endVar = nextName(state, 'eachEnd');
+  push(state, `const ${endVar} = ${cursor}.node;`);
+  push(state, `${cursor}.node = ${endVar}.nextSibling;`);
+  adopt(endVar);
+
+  const itemsVar = nextName(state, 'eachItems');
+  pushParts(state, [`const ${itemsVar} = (`, { record: slot.record }, ');'], node.span);
+  const keysVar = nextName(state, 'eachKeys');
+  const tokensVar = nextName(state, 'eachTokens');
+  push(state, `const ${keysVar} = [];`);
+  push(state, `const ${tokensVar} = [];`);
+  push(state, `for (let index = 0; index < ${itemsVar}.length; index++) {`);
+  state.indent += 1;
+  push(state, `const key = ${keyFn}(${itemsVar}[index], index);`);
+  push(state, `${keysVar}.push(key); ${tokensVar}.push(tryEncodeListKey(key));`);
+  state.indent -= 1;
+  push(state, '}');
+  const mismatchVar = nextName(state, 'seedMismatch');
+  push(state, `const ${mismatchVar} = entrySeedMismatch(${wireTokensVar}, ${tokensVar});`);
+  push(
+    state,
+    `if (${mismatchVar} !== null) throw leafClaimMismatch(${mismatchVar} + ${JSON.stringify(` at ${here}/each`)});`,
+  );
+  push(state, `for (let index = 0; index < ${itemsVar}.length; index++) {`);
+  state.indent += 1;
+  push(state, `const token = ${tokensVar}[index];`);
+  push(state, 'if (token === null) continue;');
+  push(state, `for (const entry of ${seededVar}) {`);
+  state.indent += 1;
+  push(
+    state,
+    'if (!entry.assigned && entry.token === token) { entry.assigned = true; entry.key = ' +
+      `${keysVar}[index]; entry.item = ${itemsVar}[index]; break; }`,
+  );
+  state.indent -= 1;
+  push(state, '}');
+  state.indent -= 1;
+  push(state, '}');
+  push(
+    state,
+    `for (const entry of ${seededVar}) if (!entry.assigned) throw leafClaimMismatch(${JSON.stringify(`server entry key has no client item at ${here}/each`)});`,
+  );
+
+  const entriesVar = nextName(state, 'eachEntries');
+  push(state, `let ${entriesVar} = [];`);
+  const syncFn = nextName(state, 'eachSync');
+  emitClaimListSync(state, syncFn, entryCreateFn, endVar, here, node.span);
+  const refreshVar = nextName(state, 'eachRefresh');
+  push(state, `function ${refreshVar}() {`, node.span);
+  state.indent += 1;
+  const refreshItemsVar = nextName(state, 'eachItems');
+  pushParts(state, [`const ${refreshItemsVar} = (`, { record: slot.record }, ');'], node.span);
+  const refreshKeysVar = nextName(state, 'eachKeys');
+  push(state, `const ${refreshKeysVar} = [];`);
+  push(state, `for (let index = 0; index < ${refreshItemsVar}.length; index++) {`);
+  state.indent += 1;
+  push(state, `${refreshKeysVar}.push(${keyFn}(${refreshItemsVar}[index], index));`);
+  state.indent -= 1;
+  push(state, '}');
+  push(
+    state,
+    `${entriesVar} = ${syncFn}(${refreshItemsVar}, ${refreshKeysVar}, ${entriesVar}, false);`,
+  );
+  state.indent -= 1;
+  push(state, '}');
+
+  phase2.push(() => {
+    push(state, `for (const entry of ${seededVar}) entry.activate(entry.item);`);
+  });
+  const subscribed = new Set<string>();
+  const uniqueDependencies: Dependency[] = [];
+  for (const dependency of [...slot.dependencies, ...keyDependencies]) {
+    if (subscribed.has(dependency.name)) continue;
+    subscribed.add(dependency.name);
+    uniqueDependencies.push(dependency);
+  }
+  if (uniqueDependencies.length > 0) {
+    phase2.push(() => {
+      emitDependencySubscriptions(state, uniqueDependencies, refreshVar, node.span);
+    });
+  }
+  phase2.push(() => {
+    push(state, `${entriesVar} = ${syncFn}(${itemsVar}, ${keysVar}, ${seededVar}, true);`);
+  });
+  registerRefresh(state, refreshVar);
+}
+
 function emitClaimInto(
   state: EmitState,
   nodes: readonly FunctionModelNode[],
@@ -3502,9 +4092,7 @@ function emitClaimInto(
       return;
     }
     if (node.kind === 'list') {
-      // Lists are still outside this slice. The claimability gate never emits a
-      // claim for one; this is the fail-closed guard if that gate ever drifts.
-      emitClaimMismatch(state, 'true', `unsupported list at ${here}`);
+      emitClaimList(state, node, cursor, here, records, phase2, adopt);
       return;
     }
     if (node.kind === 'fragment') {
@@ -3976,6 +4564,7 @@ function emitClaimFunction(
     emitDirectoryMarkers: false,
     emitTextBoundaries: true,
     textOrdinals: textSlotOrdinals(component.roots),
+    claimEntry: null,
     usesLeafClaimMismatch: false,
   };
   if (!assertTextBoundaryContext(state, component.roots)) {
@@ -4296,6 +4885,7 @@ function ssrEmitState(
     emitDirectoryMarkers: false,
     emitTextBoundaries: true,
     textOrdinals: textSlotOrdinals(component.roots),
+    claimEntry: null,
     usesLeafClaimMismatch: false,
   };
 }
@@ -4430,6 +5020,55 @@ function emitDynamicSsrNodes(
       state.indent -= 1;
       push(state, '}', node.span);
       push(state, `${outVar}.push("<!--", markerText(MARKERS.whenEnd), "-->");`, node.span);
+      continue;
+    }
+    if (node.kind === 'list') {
+      const itemsRecord = recordFor(state, node.items, records);
+      if (itemsRecord === null || !declareReads(state, itemsRecord)) return false;
+      if (!IDENTIFIER_PATTERN.test(node.parameter) || node.parameter.startsWith(INTERNAL_PREFIX)) {
+        return false;
+      }
+      const itemsVar = nextName(state, 'eachItems');
+      pushParts(state, [`const ${itemsVar} = (`, { record: itemsRecord }, ');'], node.span);
+      push(state, `${outVar}.push("<!--", markerText(MARKERS.each), "-->");`, node.span);
+      const indexVar = nextName(state, 'eachIndex');
+      push(state, `for (let ${indexVar} = 0; ${indexVar} < ${itemsVar}.length; ${indexVar}++) {`);
+      state.indent += 1;
+      const itemVar = node.parameter;
+      push(state, `const ${itemVar} = ${itemsVar}[${indexVar}];`);
+      const outerEntryName = state.entryNames.has(node.parameter);
+      state.entryNames.add(node.parameter);
+      const tokenVar = nextName(state, 'eachToken');
+      if (node.key !== null) {
+        const keyRecord = recordFor(state, node.key, records);
+        if (keyRecord === null || !declareReads(state, keyRecord)) {
+          if (!outerEntryName) state.entryNames.delete(node.parameter);
+          return false;
+        }
+        pushParts(
+          state,
+          [`const ${tokenVar} = encodeListKey((`, { record: keyRecord }, '));'],
+          node.key.span,
+        );
+      } else {
+        // Unkeyed lists keep mount's positional key contract (index is the key).
+        push(state, `const ${tokenVar} = encodeListKey(${indexVar});`, node.span);
+      }
+      push(
+        state,
+        `${outVar}.push("<!--", markerText(entryKeyMarker(${tokenVar})), "-->");`,
+        node.span,
+      );
+      const outerOrdinals = state.textOrdinals;
+      const prepared = emissionNodes(state, node.template);
+      state.textOrdinals = textSlotOrdinals(prepared);
+      const entriesEmitted = emitDynamicSsrNodes(state, prepared, outVar, markers, records);
+      state.textOrdinals = outerOrdinals;
+      if (!outerEntryName) state.entryNames.delete(node.parameter);
+      if (!entriesEmitted) return false;
+      state.indent -= 1;
+      push(state, '}');
+      push(state, `${outVar}.push("<!--", markerText(MARKERS.eachEnd), "-->");`, node.span);
       continue;
     }
     if (node.kind !== 'element') return false;
@@ -4639,6 +5278,7 @@ function emitComponent(
     emitDirectoryMarkers: claimable,
     emitTextBoundaries: claimable,
     textOrdinals: textSlotOrdinals(component.roots),
+    claimEntry: null,
     usesLeafClaimMismatch: false,
   };
   if (claimable && !assertTextBoundaryContext(state, component.roots)) {

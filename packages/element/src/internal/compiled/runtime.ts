@@ -165,28 +165,42 @@ export {
  * `RuntimeErrorCode` member) and no public subpath exposes them.
  */
 export {
+  assertEachAnchor,
+  assertEachEndMarker,
   assertElementInHtmlNamespace,
   assertStaticAttributeSeed,
   assertTextSlotMarker,
   assertWhenAnchor,
   assertWhenEndMarker,
+  entrySeedMismatch,
   HTML_NAMESPACE,
+  isEachEndMarker,
   isWhenEndMarker,
   LEAF_CLAIM_MISMATCH,
   leafClaimMismatch,
+  readEntryKeyMarker,
   staticAttributeSeedMismatch,
   type DeclaredStaticAttribute,
 } from './runtime/claim-invariants.ts';
 export {
   emitComment,
+  entryKeyMarker,
   MARKERS,
   markerText,
+  parseEachMarker,
+  parseEntryKeyMarker,
   parseRangeMarker,
   parseTextSlotMarker,
   rangeMarker,
   textSlotMarker,
   type Marker,
 } from './runtime/markers.ts';
+export {
+  encodeListKey,
+  isCanonicalListKeyToken,
+  LEAF_UNSUPPORTED_KEY,
+  tryEncodeListKey,
+} from './runtime/list-key.ts';
 export { OpenElementError } from '@openelement/protocol/errors';
 
 // ─── Seed serialization ────────────────────────────────────────────

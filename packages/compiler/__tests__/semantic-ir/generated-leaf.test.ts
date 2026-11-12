@@ -172,7 +172,10 @@ function List(props) {
 `,
     );
     expect(listed.module).not.toBeNull();
-    expect(listed.module).not.toContain('function List__claim');
+    // M08 list: a keyed list is claimable and its mount carries the wire.
+    expect(listed.module).toContain('function List__claim');
+    expect(listed.module).toContain('emitComment(MARKERS.eachEnd)');
+    expect(listed.module).toContain('entryKeyMarker(');
     const listedDirectory = generate(
       `import { signal } from '@openelement/element';
 function List(props) {
@@ -181,9 +184,10 @@ function List(props) {
 }
 `,
     );
-    expect(listedDirectory.module).not.toContain('function List__claim');
-    expect(listedDirectory.module).not.toContain('oe:r:');
-    expect(listedDirectory.module).not.toContain('oe:/r:');
+    expect(listedDirectory.module).toContain('function List__claim');
+    // A claimable entry's static element children form a directory in both
+    // mount and claim, so the range markers are expected now.
+    expect(listedDirectory.module).toContain('rangeMarker(');
     expect(listedDirectory.module).toContain('document.createElement("b")');
     expect(listedDirectory.module).toContain('document.createElement("i")');
 
@@ -916,9 +920,16 @@ describe('M06b2c — list-entry item refresh (unkeyed / same-key reuse)', () => 
    * entry are projections whose recipes refresh through their own instances.
    */
 
-  /** The bodies of the generated entry `update(next) { ... }` hooks, in order. */
+  /**
+   * The bodies of the generated mount-entry `update(next) { ... }` hooks, in
+   * order. The M08 list claim emits its own entry builders (adopt + create),
+   * so `update` now appears more than once per list; these M06b2c assertions
+   * are about the mount entry hook that a fresh mount uses.
+   */
   function updateBodies(module: string): string[] {
-    return [...module.matchAll(/update\(next\) \{ ([^}]*) \}/g)].map((match) => match[1]!);
+    const claimAt = module.search(/function \w+__claim\(/);
+    const mountPart = claimAt === -1 ? module : module.slice(0, claimAt);
+    return [...mountPart.matchAll(/update\(next\) \{ ([^}]*) \}/g)].map((match) => match[1]!);
   }
 
   /** The plain refresh functions called by one entry update body. */
@@ -953,8 +964,10 @@ function List(props) {
     // ... and the initial build calls it immediately (one write, unchanged).
     expect(module).toContain(`${refresh}();`);
     // No reactive dependency exists on the slot, so only the list subscription
-    // is emitted — no bogus signal binding for the entry-local name.
-    expect(module.match(/bindSignalWrites\(/g)).toHaveLength(1);
+    // is emitted in the mount — no bogus signal binding for the entry-local name.
+    const claimAt = module.search(/function \w+__claim\(/);
+    const mountPart = claimAt === -1 ? module : module.slice(0, claimAt);
+    expect(mountPart.match(/bindSignalWrites\(/g)).toHaveLength(1);
     expect(result.requiredBindings).toEqual(['items']);
     expect(module).not.toContain('requireBinding("item")');
   });

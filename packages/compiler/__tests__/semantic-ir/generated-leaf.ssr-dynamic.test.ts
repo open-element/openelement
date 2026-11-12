@@ -256,10 +256,9 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     expect((caught as { code?: string }).code).toBe('OE_UNSAFE_URL_SINK');
   });
 
-  test('conditions enter the producer; the remaining slice boundaries stay absent', () => {
+  test('conditions and keyed lists enter the producer; the remaining boundaries stay absent', () => {
     // M08-2 admits a condition: its branch selection is a request-time fact, so
-    // the producer is present even when both branches are static. The other
-    // shapes still emit no partial SSR.
+    // the producer is present even when both branches are static.
     expect(generated.module).toContain('function Conditional__ssr');
     const render = ssr(generated.loaded, 'Conditional');
     expect(render({ ok: true }, { bindings: {} })).toBe(
@@ -268,7 +267,13 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     expect(render({ ok: false }, { bindings: {} })).toBe(
       '<section><!--oe:when--><em>off</em><!--oe:/when--></section>',
     );
-    for (const name of ['Listed', 'Propertied', 'Voided', 'Reused', 'Composed']) {
+    // M08 list: the keyed list has the same producer/claim wire.
+    expect(generated.module).toContain('function Listed__ssr');
+    const items = signal(['a', 'b']);
+    expect(ssr(generated.loaded, 'Listed')({}, { bindings: { items } })).toBe(
+      '<ul><!--oe:each--><!--oe:k:s:61--><li><!--oe:t:0-->a<!--oe:/t:0--></li><!--oe:k:s:62--><li><!--oe:t:0-->b<!--oe:/t:0--></li><!--oe:/each--></ul>',
+    );
+    for (const name of ['Propertied', 'Voided', 'Reused', 'Composed']) {
       expect(generated.module, name).not.toContain(`function ${name}__ssr`);
     }
   });

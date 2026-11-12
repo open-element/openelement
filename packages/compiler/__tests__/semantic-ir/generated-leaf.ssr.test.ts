@@ -220,6 +220,11 @@ interface Loaded {
     props?: Record<string, unknown>,
     host?: { readonly bindings: Record<string, unknown> },
   ) => string;
+  /** M08 keyed list: the producer carries the each/key/end wire. */
+  Listed__ssr?: (
+    props?: Record<string, unknown>,
+    host?: { readonly bindings: Record<string, unknown> },
+  ) => string;
   createPlainRecipe: (owner: unknown, host: unknown) => unknown;
   createEscapedRecipe: (owner: unknown, host: unknown) => unknown;
   createNestedRecipe: (owner: unknown, host: unknown) => unknown;
@@ -260,8 +265,9 @@ beforeAll(async () => {
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
       `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export { emitComment, MARKERS, markerText, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+      `export { assertEachAnchor, assertEachEndMarker, assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, entrySeedMismatch, isEachEndMarker, isWhenEndMarker, leafClaimMismatch, readEntryKeyMarker } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+      `export { emitComment, entryKeyMarker, MARKERS, markerText, parseEachMarker, parseEntryKeyMarker, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+      `export { encodeListKey, tryEncodeListKey } from ${JSON.stringify(join(runtime, 'list-key.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
@@ -273,7 +279,7 @@ beforeAll(async () => {
   writeFileSync(
     entry,
     [
-      `export { Plain__ssr, Escaped__ssr, Nested__ssr, Deep__ssr, Counter__ssr, Conditional__ssr } from './leaf.js';`,
+      `export { Plain__ssr, Escaped__ssr, Nested__ssr, Deep__ssr, Counter__ssr, Conditional__ssr, Listed__ssr } from './leaf.js';`,
       `export { createPlainRecipe, createEscapedRecipe, createNestedRecipe, createDeepRecipe, createCounterRecipe } from './leaf.js';`,
       `export { claimRecipe, LifetimeScope, signal } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
       '',
@@ -395,11 +401,9 @@ describe('M08-1a static SSR producer', () => {
     );
   });
 
-  test('conditions enter the producer; a list is still an absent boundary', () => {
+  test('conditions and keyed lists enter the producer', () => {
     // M08-2 adds the condition: the branch selection is request-time, so both
     // a dynamic and a static branch body now go through `__ssr(props, host)`.
-    // A list remains outside this slice and must stay absent rather than emit a
-    // partial producer the claim could not adopt.
     expect(module_).toContain('function Conditional__ssr');
     expect(loaded.Conditional__ssr!({ ok: true }, { bindings: {} })).toBe(
       '<section><!--oe:when--><p>on</p><!--oe:/when--></section>',
@@ -407,9 +411,12 @@ describe('M08-1a static SSR producer', () => {
     expect(loaded.Conditional__ssr!({ ok: false }, { bindings: {} })).toBe(
       '<section><!--oe:when--><em>off</em><!--oe:/when--></section>',
     );
-    expect(module_).not.toContain('function Listed__ssr');
-    // The dynamic leaf itself is present, so the absence above is a boundary
-    // and not a producer that failed to emit anything.
+    // M08 list: the keyed list now has the same producer/claim wire.
+    expect(module_).toContain('function Listed__ssr');
+    const items = loaded.signal(['a', 'b']);
+    expect(loaded.Listed__ssr!({}, { bindings: { items } })).toBe(
+      '<ul><!--oe:each--><!--oe:k:s:61--><li><!--oe:t:0-->a<!--oe:/t:0--></li><!--oe:k:s:62--><li><!--oe:t:0-->b<!--oe:/t:0--></li><!--oe:/each--></ul>',
+    );
     expect(module_).toContain('function Counter__ssr');
   });
 });
