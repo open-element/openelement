@@ -17,7 +17,13 @@ M07-4 bounded mismatch recovery is signed off on
 `c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`. M07-5 is in progress and is not
 signed off. The M08-1b annex at the end records the dynamic SSR producer and a
 single-engine parse→claim vertical; it is not an M08 exit, and it loads no
-grid cell. None of these records fills the grid, TSX-18, or TSX-30. The grid
+grid cell. The M08 text-boundary annex records the standard dynamic-text pair,
+the `{ node }` claim cursor, the lazy empty slot and the precise
+restricted-context refusal; the M08 condition annex records the fixed
+`oe:when`/`oe:/when` pair, the no-branch-id claim/SSR agreement and the
+Custom Element reconnect vertical. Neither annex loads a grid cell, is an M08
+exit, or makes TSX-18 or TSX-30 passing. None of these records fills the grid,
+TSX-18, or TSX-30. The grid
 cells stay `R`. Leaf-range protocol notes under TSX-18 / TSX-30 are
 非浏览器资格 (Node DOM shim, LOCAL) comments only; those rows are not passing
 and SSR→claim is not done.
@@ -525,9 +531,11 @@ results:
 5. **Claim negatives** for the SSR string (structural mismatch, rollback) are
    not produced by this slice.
 6. **Cross-engine `B`** is not claimed; chromium only.
-7. **No producer** is emitted for conditions, lists, component references,
-   insertion sites, children projections, `property` channels or void elements —
-   absence, not a pass.
+7. **No producer** is emitted for lists, component references, insertion
+   sites, children projections, `property` channels or void elements — absence,
+   not a pass. Conditions now have a producer only for the branch shapes the
+   condition annex records; the list/component/property/void absence is
+   unchanged.
 
 **Source-map correction recorded here.** The audit of the dynamic producer found
 a pre-existing chunk-offset defect: offsets were counted in `lines` array
@@ -542,3 +550,119 @@ now tracks physical generated lines for `push`/`pushParts` and for the
 anchors on the emitted module instead of the placement's own coordinates: it is
 red on the pre-fix generator and green after. This annex's map statement covers
 that property only; it is not a claim about any other editor consumer.
+
+## M08 text-boundary recorded results — dynamic-text pair (Node + chromium)
+
+Scope: leaf-scope **S (SSR)** and **K (Claim)** notes for dynamic text only.
+Status: **not signed off as an M08 exit and it fills no grid cell.** The grid
+cells above stay `R`; TSX-18 and TSX-30 are not passing. This is not full
+SSR→claim parity (M08-2), not per-phase equivalence (M08-3), not claim
+negatives (M08-4) and not a filled matrix row (M08-5).
+
+Evidence at the review-closed head `eb82e0178` (clean worktree): the
+text+condition+review focused group is **12 files / 208 tests passed**, the
+text browser file is **11/11**, the condition review file is **4/4**, and the
+Custom Element shell file is **21/21**. The earlier Lead run of 44/44 is
+superseded for committed-head status by these runs. The baseline of this annex is the last merged slice,
+`df17534db` (M08-1b, PR #1767). Qualification: Node contract plus
+**chromium 147.0.7727.15, LOCAL**.
+Firefox and WebKit remain M13. Skip / NOT RUN is not a pass, and CI green is
+not this slice's browser qualification. Artifacts:
+`packages/compiler/__tests__/semantic-ir/generated-leaf.text-boundary.test.ts`
+(Node), `generated-leaf.text-boundary.browser.test.ts` (Chromium), and the
+element-level marker and text-slot-invariant suites.
+
+The claim input is the generated `__ssr()` string: produced in Node, parsed by
+the browser, then adopted by the generated claim. It is never a generated
+mount tree. Each dynamic text slot carries the standard
+`<!--oe:t:<n>-->TEXT?<!--oe:/t:<n>-->` pair; the pair is value-independent and
+an empty value is two adjacent comments. The claim walks
+`start, [0..1 Text], end` on a `{ node }` cursor with a one-position marker
+check, and it performs no DOM write while walking. The protocol is recorded in
+[the M08 text boundary record](./m08-text-boundary.md).
+
+| Case | S / K (leaf scope only) | What this annex records | What it does not record |
+| --- | --- | --- | --- |
+| TSX-01 roots/fragments/empty | leaf-scope S + K note, LOCAL | Static adjacent text is one run in mount and SSR; an empty dynamic slot is two adjacent comments; a claim whose parsed values equal the client values has 0 claim-period mutations. | Not the full TSX-01 row. No update-period 0-mutation acceptance, no cross-engine `B`. |
+| TSX-02 signal/computed | leaf-scope S + K note, LOCAL | The producer reads the signal/computed at request time and changes the next call's bytes; the parsed pair is claimed and a later signal write changes only that slot's Text. An empty slot is filled lazily on update. | Not the full TSX-02 row. No per-phase equivalence and no duplicate-subscription account for the stateful list. |
+| TSX-03 props/destructuring | leaf-scope S + K note, LOCAL | A props getter is still read once per slot; an empty slot claims without a Text and the lazy writer creates at most one. | Only the admitted props shapes. Not the full TSX-03 row. |
+| TSX-18 SSR seed/claim fidelity | leaf-scope S + K vertical, single engine | Pair bytes, parser node shape, the `{ node }` cursor, the lazy empty slot and the restricted-context refusal on the listed dynamic-text shapes. | **Does not fill TSX-18.** No permitted seed-state compare, no full per-phase equivalence, no full claim-negative set and no update-period result. |
+| TSX-30 repeated instances SSR/claim | not recorded | — | No repeated-instance server→claim shape was produced by this slice; the row stays `R`. |
+
+**M08-1b residual update.** Residuals 1 (adjacent text slots coalesce) and 2
+(nullish text slot emits no Text node) in the M08-1b annex above are superseded
+for a claimable dynamic text slot by the standard pair: the pair keeps the slot
+identity in the bytes and the claim consumes `start, optional Text, end` instead
+of one node per authored slot. They remain open only for shapes this slice does
+not produce. Residuals 3–7 (permitted seed-state compare, per-phase equivalence,
+claim negatives, cross-engine and the absent list/component/reference/
+insertion-site/children/property/void producers) remain open; the condition
+producer covers only the admitted branch shapes recorded in the condition annex
+below. M08 is not complete and the list milestone has not started.
+
+**Failure and wire boundaries recorded here.** A structural negative observed
+before phase 2 writes nothing; the browser test also records a composition
+failure after an earlier child slot's lazy insert, where `dispose(false)`
+releases resources but keeps borrowed DOM and the inserted Text. That is
+non-transactional, not a byte rollback. The old server-constructor `__h`/`__t`
+string is pair-free and is refused with `OEIR_LEAF_CLAIM_MISMATCH`; no adapter
+was added and `server-component.ts` is untouched. This is an internal M08 wire
+change, not a production rollback. A value the parser normalizes (CR/NUL) is a
+legitimate first claim write, not 0 mutation.
+
+## M08 condition recorded results — `oe:when` / `oe:/when` (Node + chromium)
+
+Scope: leaf-scope **S (SSR)** and **K (Claim)** notes for conditions only.
+Status: **not signed off as an M08 exit and it fills no grid cell.** The grid
+cells above stay `R`; TSX-18 and TSX-30 are not passing. This is not full
+SSR→claim parity (M08-2), not per-phase equivalence (M08-3), not claim
+negatives (M08-4), not a filled matrix row (M08-5), and it does not start the
+list milestone.
+
+Evidence: the condition and text slices land in one consolidation whose
+review-closed head is `eb82e0178`. Qualification is Node contract plus
+**chromium 147.0.7727.15, LOCAL**; Firefox and WebKit remain M13. Skip / NOT
+RUN is not a pass. Artifacts:
+`packages/compiler/__tests__/semantic-ir/generated-leaf.claim-condition.test.ts`
+(Node), `generated-leaf.claim-condition.browser.test.ts` (Chromium),
+`packages/element/__tests__/compiled-runtime/condition-wire.test.ts` (wire), and
+the Custom Element vertical in `generated-element.shell.test.ts` (21/21).
+
+The wire is the existing `oe:when` start marker plus the fixed `oe:/when` end
+marker. There is no branch id and no ordinal; `parseWhenMarker` accepts exactly
+the two fixed values, and the text parser never accepts them. Mount emits
+`anchor + branch + end`; SSR evaluates the test once per call and emits the
+selected branch chunk between the markers with ordinals restarting at 0; the
+claim asserts one start/one end, evaluates the same test once, adopts the
+selected client branch and moves writes/subscriptions to phase 2.
+
+| Case | S / K (leaf scope only) | What this annex records | What it does not record |
+| --- | --- | --- | --- |
+| TSX-06 conditions/zero | leaf-scope S + K note, LOCAL | Ternary branches with static elements; false→true→false replaces only the branch; anchor/end node identity is stable; equal seed has 0 claim-period mutations. | Not the full TSX-06 row. No three-engine `B`, no update-period 0-mutation acceptance and no per-phase equivalence. |
+| TSX-01 roots/fragments | leaf-scope S + K note, LOCAL | A condition nested in an element root claims the selected branch through the shared `{ node }` cursor; branch text/attribute slots use the admitted shapes. | Not the full TSX-01 row. Nested condition/list/component-ref/property branch shapes remain mount-only. |
+| TSX-02 signal/computed | leaf-scope S + K note, LOCAL | The condition test is evaluated once per SSR call and once at claim; a later branch toggle replaces the branch without touching the anchor/end. | No computed-specific matrix row; no duplicate-subscription account for lists (list not started). |
+| TSX-03 props/destructuring | leaf-scope S + K note, LOCAL | The Custom Element shell passes its per-read props record through `propsChanged`; `el.ok = false/true` toggles the claimed branch after reconnect. | Only the admitted boolean/primitive prop shape. Not the full TSX-03 row. |
+| TSX-18 SSR seed/claim fidelity | leaf-scope S + K vertical, single engine | `__ssr` condition bytes → real parser → generated claim with anchor/branch/end identity; server-empty branch insertion is recorded as non-clean; server/client mismatch and a stripped end fail closed without deleting borrowed DOM. | **Does not fill TSX-18.** No permitted seed-state compare, no full per-phase equivalence and no full claim-negative set. |
+| TSX-30 repeated instances SSR/claim | not recorded | — | No repeated-instance condition server→claim shape was produced; the row stays `R`. |
+
+**Independent-review closure (B1/B2/B3).** B1 evaluates a component-local
+snapshot once before the claim walk (no TDZ); B2 commits shared-cursor
+activation only after the cursor owner's final structure check, so a late
+enclosing mismatch opens no subscription, writes no DOM and performs no
+server-empty insert while claim owners are still disposed and borrowed nodes
+kept; B3 keeps branch-builder refresh functions in their own function scope so
+a keyed-entry `update(next)` does not throw `__oe_refreshN is not defined`.
+`generated-leaf.condition-review.browser.test.ts` is the real-Chromium RED→GREEN
+evidence (4 tests, LOCAL). This is still a slice record, not an M08 exit.
+
+**Explicit boundaries.** Only the previously admitted branch shapes are
+claimable: static elements, static text, dynamic-text pairs and attributes. A
+nested condition, list, component reference, insertion site, children
+projection or `property` channel inside a branch stays mount-only, as does a
+condition under a restricted parser context (the text context scan descends the
+branch and refuses with `OEIR_LEAF_UNSUPPORTED_TEXT_CONTEXT`). The list
+milestone (`oe:/each`, keys, list claim/refresh/SSR) is not started. Condition
+SSR still reads `host.bindings[name]` directly; there is no request-scoped
+`props`/`bindings` lifecycle, no composition SSR and no production wiring.
+`runUntracked` is a built-in-engine escape, not an arbitrary-engine capability.
+The M08 exit is not claimed.

@@ -17,6 +17,7 @@
 import type { SignalLike } from '@openelement/protocol/signal';
 import { raiseFrameworkError, RuntimeErrorCode } from '@openelement/protocol/errors';
 import type { LifetimeScope } from '../lifetime-scope.ts';
+import { runUntracked } from '../../signal/preact-engine.ts';
 import { recordSubscriptionClosed, recordSubscriptionOpened } from './observability.ts';
 
 /**
@@ -71,6 +72,21 @@ export function bindSignalWrites(
     unsub();
   });
 }
+
+/**
+ * Run a generated branch/entry builder without letting its initial value reads
+ * become dependencies of the enclosing write subscription.
+ *
+ * A condition refresh runs inside the test signal's effect. Creating the selected
+ * branch there also evaluates that branch's dynamic slots and opens their own
+ * subscriptions. Without this boundary, one slot's `label.value` read would join
+ * the enclosing test subscription, so a label write would re-run the branch
+ * refresh (and rebuild the branch) even though the test did not change. The
+ * branch's own subscriptions are created inside the callback and still track
+ * their signals independently; only the enclosing subscription's dependency
+ * capture is suppressed.
+ */
+export { runUntracked };
 
 /**
  * Wrap one Block update callback with the update-phase isolation contract

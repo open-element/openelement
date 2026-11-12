@@ -157,6 +157,15 @@ test('claim source follows authored insertion order and keeps one directory laye
 class DomNode {
   parentNode: DomParent | null = null;
   constructor(readonly nodeType: number) {}
+  get nextSibling(): DomNode | null {
+    const parent = this.parentNode;
+    if (parent === null) return null;
+    const index = parent.childNodes.indexOf(this);
+    return index < 0 ? null : (parent.childNodes[index + 1] ?? null);
+  }
+  remove(): void {
+    this.parentNode?.removeChild(this);
+  }
 }
 
 interface DomParent {
@@ -210,6 +219,9 @@ class DomAttributes {
 class DomElement extends DomNode implements DomParent {
   readonly childNodes: DomNode[] = [];
   readonly attributes = new DomAttributes();
+  get firstChild(): DomNode | null {
+    return this.childNodes[0] ?? null;
+  }
   constructor(
     readonly localName: string,
     readonly namespaceURI: string | null = HTML_NAMESPACE,
@@ -262,6 +274,9 @@ class DomFragment extends DomNode implements DomParent {
   readonly childNodes: DomNode[] = [];
   constructor() {
     super(11);
+  }
+  get firstChild(): DomNode | null {
+    return this.childNodes[0] ?? null;
   }
   appendChild(node: DomNode): DomNode {
     node.parentNode?.removeChild(node);
@@ -358,11 +373,11 @@ beforeAll(async () => {
       `  return projection;`,
       `}`,
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
-      `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
+      `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+      `export { emitComment, MARKERS, markerText, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,
@@ -574,7 +589,11 @@ test('repeatable children keep author order and one site’s release or update l
   expect(aside.localName).toBe('aside');
   expect(childLabels(section)).toEqual(['b', 'i']);
   expect(childLabels(aside)).toEqual(['b', 'i']);
-  expect((section.childNodes[0] as DomElement).childNodes.map(nodeLabel)).toEqual(['"a"']);
+  expect((section.childNodes[0] as DomElement).childNodes.map(nodeLabel)).toEqual([
+    'oe:t:0',
+    '"a"',
+    'oe:/t:0',
+  ]);
   const sectionNodes = [...section.childNodes];
   const asideNodes = [...aside.childNodes];
   expect(sectionNodes[0]).not.toBe(asideNodes[0]);
@@ -595,8 +614,16 @@ test('repeatable children keep author order and one site’s release or update l
   expect(aside.childNodes).toEqual(asideNodes);
 
   label.value = 'z';
-  expect((sectionNodes[0] as DomElement).childNodes.map(nodeLabel)).toEqual(['"z"']);
-  expect((asideNodes[0] as DomElement).childNodes.map(nodeLabel)).toEqual(['"z"']);
+  expect((sectionNodes[0] as DomElement).childNodes.map(nodeLabel)).toEqual([
+    'oe:t:0',
+    '"z"',
+    'oe:/t:0',
+  ]);
+  expect((asideNodes[0] as DomElement).childNodes.map(nodeLabel)).toEqual([
+    'oe:t:0',
+    '"z"',
+    'oe:/t:0',
+  ]);
   expect(section.childNodes).toEqual(sectionNodes);
   expect(aside.childNodes).toEqual(asideNodes);
 
@@ -605,7 +632,11 @@ test('repeatable children keep author order and one site’s release or update l
   expect(aside.childNodes).toEqual(asideNodes);
   expect(inner[1]!.owner.disposed).toBe(false);
   label.value = 'q';
-  expect((asideNodes[0] as DomElement).childNodes.map(nodeLabel)).toEqual(['"q"']);
+  expect((asideNodes[0] as DomElement).childNodes.map(nodeLabel)).toEqual([
+    'oe:t:0',
+    '"q"',
+    'oe:/t:0',
+  ]);
   expect(aside.childNodes).toEqual(asideNodes);
   expect(childLabels(aside)).toEqual(['b', 'i']);
 });
@@ -668,7 +699,7 @@ test('static siblings, an insertion and a component ref claim in JSX author orde
   expect(
     div.childNodes.map((node) => {
       const element = node as DomElement;
-      return (element.childNodes[0] as DomText).nodeValue;
+      return (element.childNodes.find((child) => child.nodeType === 3) as DomText).nodeValue;
     }),
   ).toEqual(['b', 'c', 'k', 'u']);
   const order = [...div.childNodes];

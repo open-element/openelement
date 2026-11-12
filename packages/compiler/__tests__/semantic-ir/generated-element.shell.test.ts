@@ -112,16 +112,22 @@ const CLASSIFIER = {
 
 /**
  * `Profile` is a claimable static-shape leaf with three primitive props: string,
- * number, boolean. `Toggle` has a dynamic condition, so the M07/M08 slice emits
- * no claim for it — the shell's fail-closed path uses that real shape instead
- * of a hand-written fake recipe.
+ * number, boolean. `Conditional` is the claimable condition shape: its branches
+ * are static elements, so the M08-2 slice emits both `__claim` and `__ssr` for
+ * it. `Toggle` carries a `property` channel (`el.value = ...`); the
+ * generated-leaf slice still treats that channel as mount-only, so it emits no
+ * claim and no SSR. The shell's fail-closed path uses that real boundary
+ * instead of a hand-written fake recipe.
  */
 const SOURCE = `
 function Profile(props) {
   return <p id="profile" title={props.label} data-count={props.count} hidden={props.enabled}>{props.label}</p>;
 }
-function Toggle(props) {
+function Conditional(props) {
   return <div>{props.ok ? <p>on</p> : <em>off</em>}</div>;
+}
+function Toggle(props) {
+  return <div><input value={props.ok} />on</div>;
 }
 `;
 
@@ -137,8 +143,10 @@ interface PageRuntime {
   defineGeneratedElement: (descriptor: unknown) => CustomElementConstructor;
   runtimeProbe: { snapshot(): ProbeSnapshot };
   createProfileRecipe: (owner: unknown, host: unknown) => unknown;
+  createConditionalRecipe: (owner: unknown, host: unknown) => unknown;
   createToggleRecipe: (owner: unknown, host: unknown) => unknown;
   Profile__ssr: (props: unknown, host: unknown) => string;
+  Conditional__ssr: (props: unknown, host: unknown) => string;
 }
 
 declare global {
@@ -172,8 +180,13 @@ function generatedModule(): string {
   const module = generated.module!;
   expect(module).toContain('function Profile__claim');
   expect(module).toContain('function Profile__ssr');
+  expect(module).toContain('function Conditional__claim');
+  expect(module).toContain('function Conditional__ssr');
   expect(module).toContain('function Toggle__mount');
   expect(module).not.toContain('function Toggle__claim');
+  // The property channel is mount-only in this slice; pin the exact boundary so
+  // a future partial SSR producer cannot be mistaken for the claim boundary.
+  expect(module).not.toContain('function Toggle__ssr');
   return module;
 }
 
@@ -188,7 +201,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
     shim,
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
-      `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
+      `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
       // Namespace imports keep this shim buildable on both sides of the
@@ -196,7 +209,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
       // exist, and a static `export { … } from` makes the whole Vite build
       // fail even though the generated module does not reference them.
       `import * as claimInvariants from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export const { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } = claimInvariants;`,
+      `export const { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } = claimInvariants;`,
       `export const assertTextSlotMarker = claimInvariants.assertTextSlotMarker;`,
       `import * as markers from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
       `export const { emitComment, MARKERS, markerText, rangeMarker } = markers;`,
@@ -210,7 +223,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
   writeFileSync(
     entry,
     [
-      `export { createProfileRecipe, createToggleRecipe, Profile__ssr } from './leaf.js';`,
+      `export { createProfileRecipe, createConditionalRecipe, createToggleRecipe, Profile__ssr, Conditional__ssr } from './leaf.js';`,
       `export { createGeneratedElementClass, defineGeneratedElement } from ${JSON.stringify(join(element, 'compiled/generated-element/shell.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       '',
@@ -300,6 +313,15 @@ const DEFINE_PROFILE = `
       { name: 'enabled', attribute: 'enabled', type: 'boolean', reflect: true },
     ],
     createRecipe: mod.createProfileRecipe,
+  });
+`;
+
+const DEFINE_CONDITIONAL = `
+  const mod = window.__oeM09;
+  const ctor = mod.defineGeneratedElement({
+    tag: 'oe-m09-conditional',
+    properties: [{ name: 'ok', attribute: 'ok', type: 'boolean' }],
+    createRecipe: mod.createConditionalRecipe,
   });
 `;
 
@@ -401,6 +423,44 @@ interface MismatchResult {
     id: string | null;
     attached: boolean;
   };
+}
+
+interface ConditionalReconnectResult {
+  html: string;
+  errors: Array<{ message: string; code: string | null }>;
+  before: ProbeSnapshot;
+  afterClaim: ProbeSnapshot;
+  claimed: {
+    sameDiv: boolean;
+    sameAnchor: boolean;
+    sameEnd: boolean;
+    sameBranch: boolean;
+    text: string;
+    childCount: number;
+  };
+  afterToggle: { branchTag: string | null; sameAnchor: boolean; sameEnd: boolean; text: string };
+  beforeDisconnect: ProbeSnapshot;
+  retained: {
+    attached: boolean;
+    sameDiv: boolean;
+    sameAnchor: boolean;
+    sameEnd: boolean;
+    branchTag: string | null;
+    text: string;
+  };
+  afterDisconnect: ProbeSnapshot;
+  beforeReconnect: ProbeSnapshot;
+  afterReconnect: ProbeSnapshot;
+  reconnected: {
+    attached: boolean;
+    sameDiv: boolean;
+    sameAnchor: boolean;
+    sameEnd: boolean;
+    branchTag: string | null;
+    text: string;
+    childCount: number;
+  };
+  afterUpdate: { branchTag: string | null; sameAnchor: boolean; sameEnd: boolean; text: string };
 }
 
 interface NoClaimResult {
@@ -1509,6 +1569,164 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
     }
   });
 
+  test('condition claim survives branch toggle and disconnect/reconnect with live updates', async () => {
+    const page = await openPage();
+    try {
+      const result = (await page.evaluate(`(async () => {
+        ${DEFINE_CONDITIONAL}
+        document.body.innerHTML = '';
+        const errors = [];
+        const onError = (event) => errors.push({
+          message: event.error?.message ?? event.message,
+          code: event.error?.code ?? null,
+        });
+        window.addEventListener('error', onError);
+
+        // Node-produced condition bytes, parsed by the real browser parser. The
+        // claim must adopt the parsed anchor/branch/end instead of re-creating
+        // the branch; this is SSR -> claim, not a mount tree.
+        const html = mod.Conditional__ssr({ ok: true }, { bindings: {} });
+        const el = document.createElement('oe-m09-conditional');
+        el.setAttribute('ok', '');
+        el.innerHTML = html;
+        const div = el.firstElementChild;
+        const anchor = div.firstChild;
+        const end = div.lastChild;
+        const branch = div.firstElementChild;
+        const before = mod.runtimeProbe.snapshot();
+        document.body.append(el);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const afterClaim = mod.runtimeProbe.snapshot();
+        const claimed = {
+          sameDiv: el.firstElementChild === div,
+          sameAnchor: div.firstChild === anchor,
+          sameEnd: div.lastChild === end,
+          sameBranch: div.firstElementChild === branch,
+          text: el.textContent,
+          childCount: el.childNodes.length,
+        };
+
+        el.ok = false;
+        const afterToggle = {
+          branchTag: div.firstElementChild?.tagName ?? null,
+          sameAnchor: div.firstChild === anchor,
+          sameEnd: div.lastChild === end,
+          text: el.textContent,
+        };
+
+        const beforeDisconnect = mod.runtimeProbe.snapshot();
+        el.remove();
+        const afterDisconnect = mod.runtimeProbe.snapshot();
+        const retained = {
+          attached: el.isConnected,
+          sameDiv: el.firstElementChild === div,
+          sameAnchor: div.firstChild === anchor,
+          sameEnd: div.lastChild === end,
+          branchTag: div.firstElementChild?.tagName ?? null,
+          text: el.textContent,
+        };
+
+        const beforeReconnect = mod.runtimeProbe.snapshot();
+        document.body.append(el);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const afterReconnect = mod.runtimeProbe.snapshot();
+        const reconnected = {
+          attached: el.isConnected,
+          sameDiv: el.firstElementChild === div,
+          sameAnchor: div.firstChild === anchor,
+          sameEnd: div.lastChild === end,
+          branchTag: div.firstElementChild?.tagName ?? null,
+          text: el.textContent,
+          childCount: el.childNodes.length,
+        };
+
+        el.ok = true;
+        const afterUpdate = {
+          branchTag: div.firstElementChild?.tagName ?? null,
+          sameAnchor: div.firstChild === anchor,
+          sameEnd: div.lastChild === end,
+          text: el.textContent,
+        };
+        window.removeEventListener('error', onError);
+        return {
+          html,
+          errors,
+          before,
+          afterClaim,
+          claimed,
+          afterToggle,
+          beforeDisconnect,
+          retained,
+          afterDisconnect,
+          beforeReconnect,
+          afterReconnect,
+          reconnected,
+          afterUpdate,
+        };
+      })()`)) as ConditionalReconnectResult;
+
+      expect(result.errors).toEqual([]);
+      expect(result.claimed).toMatchObject({
+        sameDiv: true,
+        sameAnchor: true,
+        sameEnd: true,
+        sameBranch: true,
+        text: 'on',
+        childCount: 1,
+      });
+      expect(result.afterClaim.owners - result.before.owners).toBe(1);
+      expect(result.afterClaim.projections - result.before.projections).toBe(1);
+
+      expect(result.afterToggle).toMatchObject({
+        branchTag: 'EM',
+        sameAnchor: true,
+        sameEnd: true,
+        text: 'off',
+      });
+
+      expect(result.retained).toMatchObject({
+        attached: false,
+        sameDiv: true,
+        sameAnchor: true,
+        sameEnd: true,
+        branchTag: 'EM',
+        text: 'off',
+      });
+      expect(result.afterDisconnect.disposed - result.before.disposed).toBe(1);
+      expect(result.afterDisconnect.subscriptions - result.afterDisconnect.unsubscribed).toBe(0);
+
+      expect(result.reconnected).toMatchObject({
+        attached: true,
+        sameDiv: true,
+        sameAnchor: true,
+        sameEnd: true,
+        branchTag: 'EM',
+        text: 'off',
+        childCount: 1,
+      });
+      // The reconnect claim gets a fresh projection owner; the retained DOM
+      // (anchor, branch and end) is adopted in place, never re-mounted.
+      expect(result.afterReconnect.owners - result.beforeReconnect.owners).toBe(1);
+      expect(result.afterReconnect.projections - result.beforeReconnect.projections).toBe(1);
+      // No duplicate and no loss: the live subscription count returns exactly
+      // to its pre-disconnect value.
+      expect(result.afterReconnect.subscriptions - result.afterReconnect.unsubscribed).toBe(
+        result.beforeDisconnect.subscriptions - result.beforeDisconnect.unsubscribed,
+      );
+
+      // Updates still work after the reconnect claim, and replacing the branch
+      // does not move the anchor/end markers.
+      expect(result.afterUpdate).toMatchObject({
+        branchTag: 'P',
+        sameAnchor: true,
+        sameEnd: true,
+        text: 'on',
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
   test('a generated module without a claim fails closed on existing DOM and on reconnect', async () => {
     const page = await openPage();
     try {
@@ -1522,7 +1740,9 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
         });
         window.addEventListener('error', onError);
 
-        // 1. Existing DOM (the server-rendered shape this module cannot claim).
+        // 1. Existing DOM this mount-only module cannot claim. The property
+        //    channel emits no server string, so this seeded shape is an ordinary
+        //    pre-upgrade tree, not a server-rendered artifact.
         const seeded = document.createElement('oe-m09-toggle');
         seeded.setAttribute('ok', '');
         seeded.innerHTML = '<div><p>on</p></div>';

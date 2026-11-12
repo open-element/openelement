@@ -15,6 +15,7 @@ import {
   computed as preactComputed,
   effect as preactEffect,
   signal as preactSignal,
+  untracked as preactUntracked,
 } from '@preact/signals-core';
 import type { BatchedSignalEngine } from './types.ts';
 import { SIGNAL_BRAND } from '@openelement/protocol/signal';
@@ -68,4 +69,16 @@ export function createPreactEngine(): BatchedSignalEngine {
       return preactBatch(run);
     },
   };
+}
+
+/**
+ * Run a branch/entry builder without adding its slot reads to the enclosing
+ * write subscription. The generated condition refresh runs inside the test
+ * signal's effect; the selected branch's own slots must still open their own
+ * subscriptions, but their initial reads must not make the branch rebuild when
+ * one of those slot signals changes independently. This is the engine's
+ * dependency-tracking escape, kept inside the signal boundary.
+ */
+export function runUntracked<T>(fn: () => T): T {
+  return preactUntracked(fn);
 }

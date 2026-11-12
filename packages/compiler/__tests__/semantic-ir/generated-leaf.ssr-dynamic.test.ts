@@ -18,8 +18,9 @@
  *    claimed text/attribute/boolean slots. One engine only; this is not M13,
  *    not M08-2 per-phase equivalence and not M08-4 claim negatives.
  *
- * The existing dirty `generated-leaf.ssr.test.ts` and
- * `generated-leaf.claim.browser.test.ts` are deliberately not edited here.
+ * The claim/wire half lives in `generated-leaf.text-boundary.test.ts` and
+ * `generated-leaf.text-boundary.browser.test.ts`; this file keeps the producer's
+ * Node contract and its two original Chromium verticals.
  */
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -191,7 +192,7 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     const render = ssr(generated.loaded, 'Dynamic');
     const html = render({ title: 'a&b"c', label: 'x<y' }, host);
     expect(html).toBe(
-      '<section id="s" title="a&amp;b&quot;c" data-n="12"><p>x&lt;y</p><span>24</span></section>',
+      '<section id="s" title="a&amp;b&quot;c" data-n="12"><p><!--oe:t:0-->x&lt;y<!--oe:/t:0--></p><span><!--oe:t:1-->24<!--oe:/t:1--></span></section>',
     );
 
     // Request-time, not a compile-time snapshot: mutating the signal and the
@@ -199,7 +200,7 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     count.value = 3;
     shown.value = true;
     expect(render({ title: 'a&b"c', label: 'x<y' }, host)).toBe(
-      '<section id="s" title="a&amp;b&quot;c" data-n="3" hidden=""><p>x&lt;y</p><span>6</span></section>',
+      '<section id="s" title="a&amp;b&quot;c" data-n="3" hidden=""><p><!--oe:t:0-->x&lt;y<!--oe:/t:0--></p><span><!--oe:t:1-->6<!--oe:/t:1--></span></section>',
     );
   });
 
@@ -227,7 +228,9 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     expect(reads).toBe(1);
 
     const localized = ssr(generated.loaded, 'Localized');
-    expect(localized({ label: 'x' }, { bindings: {} })).toBe('<p>x!</p>');
+    expect(localized({ label: 'x' }, { bindings: {} })).toBe(
+      '<p><!--oe:t:0-->x!<!--oe:/t:0--></p>',
+    );
   });
 
   test('a missing host binding keeps the mount identity', () => {
@@ -253,8 +256,19 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     expect((caught as { code?: string }).code).toBe('OE_UNSAFE_URL_SINK');
   });
 
-  test('outside the slice the producer is still absent (no partial SSR)', () => {
-    for (const name of ['Conditional', 'Listed', 'Propertied', 'Voided', 'Reused', 'Composed']) {
+  test('conditions enter the producer; the remaining slice boundaries stay absent', () => {
+    // M08-2 admits a condition: its branch selection is a request-time fact, so
+    // the producer is present even when both branches are static. The other
+    // shapes still emit no partial SSR.
+    expect(generated.module).toContain('function Conditional__ssr');
+    const render = ssr(generated.loaded, 'Conditional');
+    expect(render({ ok: true }, { bindings: {} })).toBe(
+      '<section><!--oe:when--><p>on</p><!--oe:/when--></section>',
+    );
+    expect(render({ ok: false }, { bindings: {} })).toBe(
+      '<section><!--oe:when--><em>off</em><!--oe:/when--></section>',
+    );
+    for (const name of ['Listed', 'Propertied', 'Voided', 'Reused', 'Composed']) {
       expect(generated.module, name).not.toContain(`function ${name}__ssr`);
     }
   });
@@ -284,17 +298,19 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     }
   });
 
-  test('adjacent text slots serialize correctly (claim granularity is M08-2)', () => {
+  test('adjacent and empty text slots carry per-slot pairs', () => {
     const render = ssr(generated.loaded, 'MixedText');
-    // The producer's bytes are correct. A real HTML parser coalesces
-    // `text + static text + text` into one Text node; the current claim walk
-    // expects one node per authored text slot, so claiming this string is the
-    // recorded M08-2 text-granularity boundary, not an M08-1b producer defect.
-    expect(render({ a: '1', b: '2' }, { bindings: {} })).toBe('<p>1: 2</p>');
-    // A nullish text slot serializes as no bytes; the browser parser then
-    // yields no Text node, while the mount creates an empty one. That is the
-    // same M08-2 granularity boundary, not a producer byte defect.
-    expect(ssr(generated.loaded, 'EmptyText')({ value: null }, { bindings: {} })).toBe('<p></p>');
+    // Each dynamic slot has its own pair, so the parser cannot coalesce the
+    // two values or the static text between them. The text-boundary browser
+    // suite proves the parse -> claim -> update half.
+    expect(render({ a: '1', b: '2' }, { bindings: {} })).toBe(
+      '<p><!--oe:t:0-->1<!--oe:/t:0-->: <!--oe:t:1-->2<!--oe:/t:1--></p>',
+    );
+    // A nullish text slot is two adjacent comments and no Text bytes; the
+    // claim binds the slot to null and inserts lazily only on a later update.
+    expect(ssr(generated.loaded, 'EmptyText')({ value: null }, { bindings: {} })).toBe(
+      '<p><!--oe:t:0--><!--oe:/t:0--></p>',
+    );
   });
 
   test('a static directory and a dynamic slot share one producer', () => {
@@ -309,10 +325,12 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
       '<div><section>' +
         '<!--oe:r:0--><i>a</i><!--oe:/r:0-->' +
         '<!--oe:r:1--><i>b</i><!--oe:/r:1-->' +
-        '</section><span>a</span></div>',
+        '</section><span><!--oe:t:0-->a<!--oe:/t:0--></span></div>',
     );
     label.value = 'z';
-    expect(ssr(generated.loaded, 'Mixed')({}, { bindings: { label } })).toContain('<span>z</span>');
+    expect(ssr(generated.loaded, 'Mixed')({}, { bindings: { label } })).toContain(
+      '<span><!--oe:t:0-->z<!--oe:/t:0--></span>',
+    );
   });
 
   test('the emitted module parses and is deterministic', () => {
@@ -355,10 +373,10 @@ async function buildRuntimeBundle(): Promise<string> {
     entry,
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
-      `export { bindSignalWrites } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
+      `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+      `export { emitComment, MARKERS, markerText, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,

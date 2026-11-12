@@ -133,7 +133,7 @@ describe('M05 leaf v2 — emitted module contract', () => {
     expect(withoutStrings).not.toMatch(/\bas\s+[A-Z]/);
   });
 
-  test('M07a emits a structural claim for a static leaf and omits it for later shapes', () => {
+  test('M07a emits a structural claim for a static leaf; M08-2 adds the condition shape', () => {
     const leaf = generate(COUNTER);
     expect(leaf.module).not.toBeNull();
     const module = leaf.module!;
@@ -156,8 +156,12 @@ describe('M05 leaf v2 — emitted module contract', () => {
       'function C(props) { return <section>{props.ok ? <p>on</p> : <em>off</em>}</section>; }\n',
     );
     expect(conditional.module).not.toBeNull();
-    expect(conditional.module).not.toContain('function C__claim');
-    expect(conditional.module).not.toContain('claim(__oe_scope');
+    // M08-2: the condition is claimable, so its anchor/end pair is consumed by
+    // the generated claim; the branch swap is still owned by mount/claim
+    // disposal, not by a second claim mechanism.
+    expect(conditional.module).toContain('function C__claim');
+    expect(conditional.module).toContain('emitComment(MARKERS.whenEnd)');
+    expect(conditional.module).toContain('claim(__oe_scope');
 
     const listed = generate(
       `import { signal } from '@openelement/element';
@@ -208,6 +212,7 @@ function List(props) {
     expect(result.module).not.toBeNull();
     const module = result.module!;
     expect(module).toContain('emitComment(MARKERS.when)');
+    expect(module).toContain('emitComment(MARKERS.whenEnd)');
     expect(module).toContain('function __oe_whenThen');
     expect(module).toContain('function __oe_whenElse');
     expect(module).toContain('dispose(true)');
@@ -1000,28 +1005,35 @@ function List(props) {
     );
   });
 
-  test('a condition inside an entry whose test reads the item refreshes (covered)', () => {
+  test('a condition inside an entry refreshes only the condition collector', () => {
     const module = generate(`import { signal } from '@openelement/element';
 function List(props) {
   const items = signal([]);
   return <ul>{items.value.map((item) => <li>{item.on ? <b>{item.label}</b> : <em>off</em>}</li>)}</ul>;
 }
 `).module!;
-    // emitCondition already registered with the enclosing entry collector; the
-    // forced refresh rebuilds the branch from the re-bound parameter, and the
-    // branch slot reading `item.label` is registered by the M06b2c fix.
+    // B3: the branch-internal text refresh is function-scoped inside
+    // `__oe_whenThen`; it must not be registered with the entry update hook
+    // (that produced a ReferenceError on entry reuse). The condition refresh is
+    // registered and force-rebuilds the branch from the re-bound parameter.
     const updates = updateBodies(module);
     expect(updates).toHaveLength(1);
-    expect(updates[0]).toMatch(
-      /^item = next; __oe_refresh\d+\(true\); __oe_whenRefresh\d+\(true\);$/,
-    );
+    expect(updates[0]).toMatch(/^item = next; __oe_whenRefresh\d+\(true\);$/);
+    expect(updates[0]).not.toMatch(/__oe_refresh\d+/);
     expect(module).toMatch(/const __oe_next = \(item \. on\) \? 1 : 2;/);
-    const branchRefresh = refreshCalls(updates[0]!)[0]!;
-    expect(module).toMatch(
-      new RegExp(
-        `function ${branchRefresh}\\(\\) \\{\\n\\s+__oe_text\\d+\\.nodeValue = displayValue\\(\\(item \\. label\\)\\);`,
-      ),
-    );
+    // The branch text refresh still exists and is emitted inside the branch
+    // builder, where the slot variable is in scope. Exact generation is
+    // exercised by the real-list browser regression; this asserts the scope
+    // relationship the source text carries.
+    const branchRefresh =
+      /function (__oe_refresh\d+)\(\) \{\n\s+__oe_text\d+\.nodeValue = displayValue\(\(item \. label\)\);/.exec(
+        module,
+      )?.[1];
+    expect(branchRefresh).toBeDefined();
+    const thenStart = module.indexOf('function __oe_whenThen');
+    const thenEnd = module.indexOf('function __oe_whenElse', thenStart);
+    expect(module.indexOf(`function ${branchRefresh!}()`)).toBeGreaterThan(thenStart);
+    expect(module.indexOf(`function ${branchRefresh!}()`)).toBeLessThan(thenEnd);
   });
 
   test('a nested list builder inside an entry re-reads the entry-local name', () => {
