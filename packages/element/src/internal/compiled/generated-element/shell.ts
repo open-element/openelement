@@ -226,6 +226,13 @@ const RESERVED_PROPERTY_NAMES: ReadonlySet<string> = new Set([
   'dispose',
 ]);
 
+/**
+ * Internal shell identity for a declared property the page locked with a
+ * non-configurable own data property. `OEIR_` stays out of the exported
+ * catalogue (M07-5 record): no `OE_` public code, no snapshot change.
+ */
+const PRE_UPGRADE_PROPERTY_LOCKED = 'OEIR_SHELL_PRE_UPGRADE_PROPERTY_LOCKED';
+
 function descriptorError(
   message: string,
   code: string = CompilerErrorCode.INVALID_SOURCE,
@@ -466,9 +473,11 @@ function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState
     const descriptor = Object.getOwnPropertyDescriptor(element, property.name);
     if (descriptor === undefined || !('value' in descriptor)) continue;
     if (descriptor.configurable === false) {
-      throw new TypeError(
+      throw frameworkError(
+        PRE_UPGRADE_PROPERTY_LOCKED,
         `[generated-element] pre-upgrade own property "${property.name}" is non-configurable; ` +
           'the shell cannot reconcile it with the generated accessor.',
+        { phase: 'csr' },
       );
     }
     const value: unknown = descriptor.value;
