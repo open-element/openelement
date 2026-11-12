@@ -9,9 +9,8 @@ summary: The generated-leaf dynamic-text comment pair, node cursor, lazy empty s
 Date: 2026-11-13. Status: **LOCAL slice record, not signed off as an M08 exit.**
 The baseline recorded here is the last merged slice, `735749b1c` (the M09-0
 shell squash, PR #1768; the M08-1b producer is `df17534db`). The text and
-condition implementations land in the same M08 consolidation change; this
-record mints no SHA for them (the landing report carries the exact head).
-Qualification is LOCAL only.
+condition implementations land together in the M08 consolidation at
+`7bfbce00e`; this record mints no M08-exit SHA. Qualification is LOCAL only.
 
 This record extends the leaf-range protocol of
 [the M07-5 record](./m07-5-protocol-record.md) to dynamic text. It does not
@@ -272,8 +271,8 @@ Chromium 147.0.7727.15 for the browser cases). These are focused and package
 results, not a release qualification.
 
 The record is LOCAL. It is not a release qualification and not an Alpha16a or
-M08 exit. The exact consolidation head and command exits live in the landing
-report, not in this protocol record.
+M08 exit. The implementation head is `7bfbce00e`; the exact command exits are
+recorded in the landing review, not in this protocol record.
 
 ## 9. Related records
 
