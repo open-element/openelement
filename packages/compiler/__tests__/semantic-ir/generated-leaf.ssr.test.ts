@@ -15,8 +15,9 @@
  * interface does not move.
  *
  * Boundary recorded by the last test: conditions, lists, `property` channels,
- * component references, insertion sites and void elements still emit no
- * `__ssr` (no partial producer). Those shapes stay mount/claim-only.
+ * component references and insertion sites still emit no `__ssr` (no partial
+ * producer). Void elements are admitted by the M08 input slice: the canonical
+ * `VOID_TAGS` shape emits the start tag and attributes with no close tag.
  *
  * Qualification: Node DOM shim, LOCAL. Not a browser, not SSR→claim.
  */
@@ -27,6 +28,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { build } from 'vite';
+import { VOID_TAGS } from '@openelement/protocol/void-tags';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import {
   GENERATED_LEAF_RUNTIME_SPECIFIER,
@@ -74,6 +76,9 @@ function Conditional(props) {
 function Listed(props) {
   const items = signal([]);
   return <ul>{items.value.map((item) => <li key={item}>{item}</li>)}</ul>;
+}
+function Voids(props) {
+  return <div><input id="field" value="hello" /><br /><img src="a.png" alt="a&b" /></div>;
 }
 `;
 
@@ -195,8 +200,10 @@ function serialize(node: ShimNode): string {
   const attributes = node.attributes
     .map((entry) => ` ${entry.name}="${escapeAttrValue(entry.value)}"`)
     .join('');
+  const tag = node.localName ?? '';
+  if (VOID_TAGS.has(tag)) return `<${tag}${attributes}>`;
   const children = node.childNodes.map(serialize).join('');
-  return `<${node.localName}${attributes}>${children}</${node.localName}>`;
+  return `<${tag}${attributes}>${children}</${tag}>`;
 }
 
 // The SSR producer calls the runtime helpers; the test serializes with the same
@@ -225,11 +232,14 @@ interface Loaded {
     props?: Record<string, unknown>,
     host?: { readonly bindings: Record<string, unknown> },
   ) => string;
+  /** M08 input slice: a canonical void tree emits an open tag only. */
+  Voids__ssr?: () => string;
   createPlainRecipe: (owner: unknown, host: unknown) => unknown;
   createEscapedRecipe: (owner: unknown, host: unknown) => unknown;
   createNestedRecipe: (owner: unknown, host: unknown) => unknown;
   createDeepRecipe: (owner: unknown, host: unknown) => unknown;
   createCounterRecipe: (owner: unknown, host: unknown) => unknown;
+  createVoidsRecipe: (owner: unknown, host: unknown) => unknown;
   claimRecipe: (owner: unknown, recipe: unknown, parent: unknown) => { nodes: ShimNode[] };
   LifetimeScope: new () => unknown;
   signal: <T>(value: T) => { value: T };
@@ -279,8 +289,8 @@ beforeAll(async () => {
   writeFileSync(
     entry,
     [
-      `export { Plain__ssr, Escaped__ssr, Nested__ssr, Deep__ssr, Counter__ssr, Conditional__ssr, Listed__ssr } from './leaf.js';`,
-      `export { createPlainRecipe, createEscapedRecipe, createNestedRecipe, createDeepRecipe, createCounterRecipe } from './leaf.js';`,
+      `export { Plain__ssr, Escaped__ssr, Nested__ssr, Deep__ssr, Counter__ssr, Conditional__ssr, Listed__ssr, Voids__ssr } from './leaf.js';`,
+      `export { createPlainRecipe, createEscapedRecipe, createNestedRecipe, createDeepRecipe, createCounterRecipe, createVoidsRecipe } from './leaf.js';`,
       `export { claimRecipe, LifetimeScope, signal } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
       '',
     ].join('\n'),
@@ -418,5 +428,23 @@ describe('M08-1a static SSR producer', () => {
       '<ul><!--oe:each--><!--oe:k:s:61--><li><!--oe:t:0-->a<!--oe:/t:0--></li><!--oe:k:s:62--><li><!--oe:t:0-->b<!--oe:/t:0--></li><!--oe:/each--></ul>',
     );
     expect(module_).toContain('function Counter__ssr');
+  });
+
+  test('canonical void elements emit an open tag and attributes, never a close tag', () => {
+    // HTML void elements have no content model. The producer's bytes carry
+    // only the start tag; a `</input>` would be a stray end tag to the parser
+    // and the claim's fixed cursor never expects it.
+    expect(module_).toContain('function Voids__ssr()');
+    const html = loaded.Voids__ssr!();
+    expect(html).toBe(
+      '<div>' +
+        '<!--oe:r:0--><input id="field" value="hello"><!--oe:/r:0-->' +
+        '<!--oe:r:1--><br><!--oe:/r:1-->' +
+        '<!--oe:r:2--><img src="a.png" alt="a&amp;b"><!--oe:/r:2-->' +
+        '</div>',
+    );
+    expect(html).not.toContain('</input>');
+    expect(html).not.toContain('</br>');
+    expect(html).toBe(mountAndSerialize(loaded.createVoidsRecipe));
   });
 });

@@ -145,7 +145,7 @@ record and the owner signs it off before the §4 row flips (owner decision D2,
 | M05 | Met | G1 record compiled from PR #1736 and signed off by the owner 2026-11-09 (§4.1). M05a `70913e064` + M05b `896ee8fab`; S1 real-engine evidence at `0ffc89263` (LOCAL, chromium 147.0.7727.15): 5/5. NOT claimed: firefox/webkit/M13, claim/SSR, M06+, packed consumer. |
 | M06 | Met | Exit evidence recorded across M06a `9903570f1` (conditions + keyed lists, S2 browser), M06b1a-1 `05a89202b` / M06b1a-2 `70e43622f` (component references with per-read props; reusable-JSX recipes + insertion-site projections), M06b1b `3acca6e40` (chromium owner-isolation; matrix TSX-09/23), M06b2a `303637adf` / M06b2c `0ee78ec78` (children projection; list-entry item refresh for unkeyed/same-key updates), M06b2b `241c1eef7` (children-projection + unkeyed browser evidence; matrix TSX-10/26/08). Chromium 147.0.7727.15 LOCAL; unit + emitted-shape + source-map + real-engine evidence recorded above. NOT claimed: M13 three-engine qualification, TSX-04 row, nested children composition, claim/SSR (M07/M08), packed consumer, production wiring. |
 | M07 | Met (per the 2026-11-12 exit amendment, §4.3) | Exit set (§4.3): M07a static-leaf structural claim (`0a97602c4`), M07b static sibling ranges (`0df1621a5`), the bounded M07b generator extension (`2dcb57871` — mount-emitted marker/order for pure static directories; D5 closed), M07-1, M07-2 (subscription evidence), M07-4 and M07-5. M07-1 is signed off on `ac8c218614e2d4749435c51edf3eaf15eb65f6fd` (Node DOM shim, 非浏览器资格; claim input is the generated mount tree after `dispose(false)`, not SSR→claim; does not fill TSX-18 or TSX-30). M07-2 (browser clean-path claim) is signed off on `70eb2381cab2ef238903cb583f3925976206e901`. Its LOCAL browser qualification is chromium 147.0.7727.15: 0 product mutations on a successful claim of the four frozen shapes, one subscription per logical dependency closed by `dispose(false)`, and focus/selection preserved on a static input. The four shapes' claim input is still the generated mount tree after `dispose(false)`. The synchronous leaf path is 「服务端 HTML 字符串 → 生成叶 claim」. This is not SSR→claim, does not fill TSX-18 or TSX-30, and does not accept update-period 0 mutation. M07-4 bounded mismatch recovery is signed off on `c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`. M07-5 (the protocol record, D-2 suppression, and the three generated-leaf surfaces) is signed off on `b82e63bdfa1794897e9ddf1ef32c262f48368883` (§4.4). Under the 2026-11-12 amendment (§4.3) the M07 exit set is M07a, M07b, the bounded M07b generator extension, M07-1, M07-2 (its per-site subscription accounting is the duplicate-subscription evidence), M07-4 and M07-5. The TSX-18/TSX-30 leaf-scope cells move to M08 together with the generated-leaf SSR producer they require, so they are no longer an M07 exit item. Those rows are still not passing, and SSR→claim is still not done. The M07 exit amendment (owner-approved 2026-11-09, §4.2) moves the SSR producer/permitted seed and key alignment to M08. |
-| M08 | Not met | In progress: M08-1a static SSR producer merged (`edbbae02e`); the contract-review closure on `ae3046f5b` (LOCAL; squash SHA not yet recorded) fixes the start-slot marker check and the nested-marker suppression, and adds the real-Chromium static SSR→parse→claim vertical. Dynamic slots (M08-1b) are merged as `df17534db`: `<Name>__ssr(props, host)` for `dynamic-text`/`attribute`/`boolean` slots, with the M08-2 residual recorded (a coalesced or nullish text slot cannot be adopted by the claim cursor; superseded for a produced dynamic-text slot by the text-boundary slice below) and the pre-existing multi-line chunk-offset map drift fixed by physical-line accounting. Per-phase equivalence (M08-3), claim negatives (M08-4) and matrix rows (M08-5) remain open, and M08 is not complete. Load-bearing for Alpha16a exit: absorbs the SSR producer, the permitted seed-state compare, list key alignment and the TSX-18/TSX-30 leaf-scope cells. Start gate is the M07 exit sign-off (§4.4). The M08 text-boundary slice (LOCAL; not an exit) adds the dynamic-text `oe:t` pair, the `{ node }` claim cursor, the lazy empty slot and the precise restricted-context refusal; it closes the M08-1b adjacent/nullish dynamic-text residual. The same consolidation lands the condition slice: fixed `oe:when`/`oe:/when` (no branch id), mount/SSR/claim agreement, read-only verify with phase-2 activation, 0-mutation equal seed, fail-closed branch mismatch, admitted branch shapes only, and a real-Custom-Element condition claim/toggle/reconnect/update vertical. M08-2 remains partial (entry-internal conditions/lists/composition, component-reference/insertion-site/children-projection SSR and the wider branch matrix are not produced) and M08-3/4/5, TSX-18/TSX-30, Firefox/WebKit/M13, production wiring, ABI and release are unclaimed; the list slice is recorded, not an exit. See [the M08 text boundary protocol record](./m08-text-boundary.md) and [the M08 list wire record](./m08-list-wire.md). |
+| M08 | Not met | In progress: M08-1a static SSR producer merged (`edbbae02e`); the contract-review closure on `ae3046f5b` (LOCAL; squash SHA not yet recorded) fixes the start-slot marker check and the nested-marker suppression, and adds the real-Chromium static SSR→parse→claim vertical. Dynamic slots (M08-1b) are merged as `df17534db`: `<Name>__ssr(props, host)` for `dynamic-text`/`attribute`/`boolean` slots, with the M08-2 residual recorded (a coalesced or nullish text slot cannot be adopted by the claim cursor; superseded for a produced dynamic-text slot by the text-boundary slice below) and the pre-existing multi-line chunk-offset map drift fixed by physical-line accounting. Per-phase equivalence (M08-3), claim negatives (M08-4) and matrix rows (M08-5) remain open, and M08 is not complete. Load-bearing for Alpha16a exit: absorbs the SSR producer, the permitted seed-state compare, list key alignment and the TSX-18/TSX-30 leaf-scope cells. Start gate is the M07 exit sign-off (§4.4). The M08 text-boundary slice (LOCAL; not an exit) adds the dynamic-text `oe:t` pair, the `{ node }` claim cursor, the lazy empty slot and the precise restricted-context refusal; it closes the M08-1b adjacent/nullish dynamic-text residual. The same consolidation lands the condition slice: fixed `oe:when`/`oe:/when` (no branch id), mount/SSR/claim agreement, read-only verify with phase-2 activation, 0-mutation equal seed, fail-closed branch mismatch, admitted branch shapes only, and a real-Custom-Element condition claim/toggle/reconnect/update vertical. M08-2 remains partial (entry-internal conditions/lists/composition, component-reference/insertion-site/children-projection SSR and the wider branch matrix are not produced) and M08-3/4/5, TSX-18/TSX-30, Firefox/WebKit/M13, production wiring, ABI and release are unclaimed; the list slice is recorded, not an exit. The input/void slice (LOCAL; not an exit) admits the canonical `VOID_TAGS` open-tag form in both producers and records the real `<input>` SSR→parse→pre-claim edit→claim vertical, with the `property` channel still unadmitted. The permitted seed state is defined once in [the M08 list wire record](./m08-list-wire.md) §4.1, and the 2026-11-13 evidence-ready checkpoint is §4.5 (not a sign-off). See [the M08 text boundary protocol record](./m08-text-boundary.md) and [the M08 list wire record](./m08-list-wire.md). |
 | G1 (M05 exit: generated code executes in a browser at a recorded SHA) | **Recorded (signed off 2026-11-09)** | Record in §4.1: PR #1736 `70913e064`, chromium 147.0.7727.15 (LOCAL), 5/5 S1 shapes. Firefox/webkit stay M13 and are not claimed. |
 | G2 (ownership/recipe evidence: two insertions, keyed replacement, disposal modes) | **Recorded (signed off 2026-11-09)** | Record in §4.1: PR #1735 `a82ef5957`, probes (a)–(e) in the `compiled-runtime` suites (LOCAL). |
 
@@ -284,6 +284,56 @@ amend-never-rewrite form as §4.2. It does not rewrite the execution plan or
   rather than a silent continuation into Alpha16b.
 - **P0 formalization pilot.** Runs in parallel (1–2 week kill gate); it does not
   block the M08 start gate.
+
+### 4.5 M08 evidence-ready checkpoint (2026-11-13; not a sign-off)
+
+- **Permitted seed state is defined once** in
+  [the M08 list wire record](./m08-list-wire.md) §4.1. Equal value and structure
+  → clean (0 claim-period mutation, identity); a different text/attribute/boolean
+  value → permitted activation compare-write recorded as non-clean; structural
+  key/marker/static-seed mismatch → fail closed. There is no strict/default
+  refusal mode and no wire seed. The semantic matrix references that definition
+  and does not restate it.
+- **S2 acceptance evidence recorded (LOCAL).** The authored S2 Board vertical
+  (`generated-leaf.s2-ssr-claim.browser.test.ts`, 13 tests, Chromium
+  147.0.7727.15) records S/K/U/D, an explicit equal classification
+  (`{structure: equal, values: equal, clean: true}`), an explicit permitted
+  difference (`{structure: equal, values: different, clean: false}`), negatives,
+  dispose/reclaim and duplicate multiplicity. The independent
+  `generated-leaf.s2-sourcemap.test.ts` (2 Node tests) decodes the emitted SSR,
+  claim and update positions through the pinned
+  `@jridgewell/trace-mapping@0.3.31` against the authored expressions, not only
+  through the generator's placement ledger. The list contracts remain 15 Node +
+  10 Chromium tests. This is not an M08 exit and fills no TSX-18/TSX-30 cell.
+- **Input/void slice recorded (LOCAL; not an exit).** The canonical
+  `VOID_TAGS` set is admitted by both producers as a start tag plus attributes,
+  with no close tag and no children; authored void children keep the existing
+  `OEC9013` source diagnostic (reused from the class path, not a new code), and
+  a model that bypasses source admission fails the producer closed with
+  `OEIR_LEAF_UNSUPPORTED_VOID_CHILDREN`. A Node contract covers all 14 canonical
+  tags, attribute order and escaping, the admitted dynamic attribute/boolean
+  channels, unsafe URL/name refusals, and the still-unadmitted `property`
+  channel. The Chromium vertical
+  (`generated-leaf.input-ssr.browser.test.ts`, 3 tests) parses the Node-produced
+  `<input>` bytes, applies a pre-claim live value/focus/selection edit, then
+  claims with 0 claim-period mutation: the same node is adopted, the live
+  `value`/focus/selection survive, and the static `value` attribute plus
+  `defaultValue` remain the server seed; a reordered static attribute set still
+  fails closed. This closes the real void-input SSR→claim gap for the static
+  seed shape. It is not M08-2 parity and not an exit: the directory+void
+  browser combination, browser-driven `checked` editing, the existing
+  `defaultChecked` classification gap, production wiring and the packed
+  consumer remain unproved.
+- **Still open.** Full per-phase equivalence is M08-3; the full claim-negative/cleanup set is
+  M08-4 (list activation/cleanup failure, rebuild-while-live disposal-first and
+  source-located claim diagnostics are not proved); the full TSX-18/TSX-30 rows
+  and a repeated-instance SSR→claim shape are M08-5. The grid cells, including
+  the T+/T−/C+/C− and B/P cells, stay unfilled.
+- **Not an M08 blocker.** Firefox/WebKit/M13, the packed consumer, production
+  wiring and the ABI/release claims are Alpha16b or later; they are not used to
+  lower or raise the M08 status.
+- **Status unchanged: M08 is not met.** No exit SHA, sign-off or version claim
+  is opened by this checkpoint.
 
 ## 5. 2026-11-03 audit closure register
 

@@ -134,6 +134,50 @@ unconditional. That skip is an implementation coupling to the shared refresh,
 not an update-period zero-mutation acceptance, not mismatch recovery and not
 SSR→claim reseeding.
 
+### 4.1 Permitted seed state (the single M08 definition)
+
+This subsection is the one definition of **permitted seed state** used by the
+M08 evidence; [the progress ledger](./alpha16-18-progress.md) and
+[the semantic test matrix](./alpha16-18-semantic-test-matrix.md) reference it
+and do not restate it. It is a definition and an evidence classification, not a
+runtime mode, and it adds no marker or wire byte.
+
+> Permitted seed state = the DOM state produced by SSR from the caller's request
+> snapshot, which the claim is permitted to adopt. It is judged per admitted
+> slot: equal value **and** structure → clean; a text/attribute/boolean value
+> difference → a permitted activation compare-write recorded as non-clean;
+> structure/key/static-attribute mismatch → fail closed. The seed never travels
+> on the wire.
+
+- **P1 provenance.** SSR and claim receive the same caller request snapshot
+  (`props`/`host.bindings` values); SSR is one-shot and the claim reads the same
+  binding record shape. There is no JSON, `data-*`, wire seed or second state
+  channel. The generated leaf has no provenance bit, so the rule is about the
+  caller's input, not about detecting SSR input versus a mount tree.
+- **P2 equal → clean.** With the same value and structure at an admitted slot,
+  the claim performs 0 claim-period DOM mutations and keeps node identity. This
+  is parity evidence and may count toward the TSX-18 clean sub-obligation; it
+  does not by itself fill the TSX-18 row.
+- **P3 unequal value → permitted write, non-clean.** A different text
+  `nodeValue`, attribute string/presence or boolean value is **not** structural
+  mismatch. The claim computes the expected value from the same lowered record
+  and compare-writes at the first write; that write is allowed and the result is
+  recorded as **non-clean**. It must not be reported as 0-mutation, equal-seed
+  or TSX-18 parity. Rejection is not a requirement of TSX-18 or of this record,
+  so there is no strict/default-refusal mode.
+- **P4 structural mismatch → fail closed.** Missing/extra/duplicate/unordered
+  key markers, a missing/extra/wrong static attribute seed, a branch-shape
+  difference and an unsupported key still fail before subscription
+  (`OEIR_LEAF_CLAIM_MISMATCH` / `OEIR_LEAF_UNSUPPORTED_KEY`); borrowed DOM is
+  not deleted.
+- **P5 input.** A successful claim preserves pre-activation user input, focus
+  and selection. The real void `<input>` SSR→claim vertical is owned by the
+  input lane and is not claimed by this list slice.
+
+"Non-clean" is an evidence classification, not a runtime mode. This definition
+introduces no `seed: 'permitted'` option, no wire seed, no JSON state and no
+per-row resource gate.
+
 ## 5. SSR producer and the entry composition boundary
 
 The list is claimable only when it is not inside a template, its parser context
