@@ -136,6 +136,15 @@ export {
   type StaticSiblingClaim,
   type StaticSiblingDirectory,
 } from './runtime/static-sibling-ranges.ts';
+/**
+ * Generated-leaf mismatch class. Re-exported so a generated claim can throw the
+ * real class. The code value stays the internal identity
+ * `OEIR_LEAF_CLAIM_MISMATCH`; it is deliberately not a member of the exported
+ * `RuntimeErrorCode` catalogue (that catalogue requires the `OE_` prefix, and
+ * `OEIR_` is an internal generated-leaf identity). Not an ABI freeze and not a
+ * release.
+ */
+export { OpenElementError } from '@openelement/protocol/errors';
 
 // ─── Seed serialization ────────────────────────────────────────────
 
