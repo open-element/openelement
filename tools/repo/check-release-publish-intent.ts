@@ -21,22 +21,31 @@
  *     nine qualification IDs / twelve instances — must each appear once and
  *     conclude success; a missing or duplicated instance, an unexpected
  *     instance, a partial listing, or a failed/cancelled/skipped required
- *     instance ⇒ refusal), the release-gate requirement, the pre-publish
- *     re-verification, publish-vs-repoint separation, and registry
+ *     instance ⇒ refusal). A real Base run is a DIFFERENT listing: the guard +
+ *     four base jobs conclude success and the five heavy jobs appear once each
+ *     by bare job ID, skipped, because a job skipped by its job-level `if:`
+ *     never expands its matrix — ten instances, not thirteen. That exact shape
+ *     is skipped as non-evidence (softly, with a notice); any other ten-instance
+ *     listing is malformed and refused. The release-gate requirement, the
+ *     pre-publish re-verification, publish-vs-repoint separation, and registry
  *     truthfulness (E404 = confirmed absent = the only publish candidate; any
  *     other query error — E403 included — is a refusal, never read as "not
- *     yet published").
+ *     yet published") are also evaluated here.
  *
  * The negative matrix this harness evaluates:
  *   push to main → CI runs, no publish; merge/version-bump commit → no
  *   publish; CI success → no publish; CI failure → no publish;
  *   full-qualification dispatch → no publish; manual publish with wrong SHA →
  *   DENY; manual publish with missing CI evidence → DENY; manual publish with
- *   a skipped required job → DENY; manual publish with a missing matrix leg,
- *   a duplicated instance, an unexpected instance or a non-success sha-guard
- *   → DENY; manual publish with a failed release gate → DENY; manual publish
- *   with all gates satisfied → ELIGIBLE (evaluated, never executed); manual
- *   repoint to an existing version → REPOINT ONLY; manual repoint to a
+ *   a skipped required job → DENY; manual publish with a Base-only dispatch
+ *   (run-level green, heavy instances skipped) → DENY; manual publish with a
+ *   complete thirteen-instance dispatch → ELIGIBLE, including when a newer
+ *   Base-only dispatch also exists for the SHA; a newer failed Full attempt is
+ *   never bypassed for an older green run; manual publish with a missing
+ *   matrix leg, a duplicated instance, an unexpected instance or a non-success
+ *   sha-guard → DENY; manual publish with a failed release gate → DENY; manual
+ *   publish with all gates satisfied → ELIGIBLE (evaluated, never executed);
+ *   manual repoint to an existing version → REPOINT ONLY; manual repoint to a
  *   nonexistent version → DENY. The post-publish read-back must keep
  *   `always()` so a failed publish still records registry-state forensics.
  *
@@ -68,6 +77,8 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { spawnCommandSync } from './node-command.ts';
 import {
+  CI_BASE_LISTING,
+  CI_BASE_TOTAL_RUN_INSTANCES,
   CI_GUARD_JOB,
   CI_QUALIFICATION_JOBS,
   CI_RUN_INSTANCES,
@@ -358,8 +369,20 @@ const FAKE_GH = `#!/usr/bin/env bash
 set -euo pipefail
 args="$*"
 case "$args" in
-  *jobs*) cat "\${FAKE_GH_DIR}/jobs.json" ;;
-  *actions/runs/*) cat "\${FAKE_GH_DIR}/run.json" ;;
+  *jobs*)
+    run_id=$(printf '%s' "$args" | sed -E 's#.*/actions/runs/([0-9]+)/jobs.*#\\1#')
+    if [ -f "\${FAKE_GH_DIR}/jobs-\${run_id}.json" ]; then
+      cat "\${FAKE_GH_DIR}/jobs-\${run_id}.json"
+    else
+      cat "\${FAKE_GH_DIR}/jobs.json"
+    fi ;;
+  *actions/runs/*)
+    run_id=$(printf '%s' "$args" | sed -E 's#.*/actions/runs/([0-9]+).*#\\1#')
+    if [ -f "\${FAKE_GH_DIR}/run-\${run_id}.json" ]; then
+      cat "\${FAKE_GH_DIR}/run-\${run_id}.json"
+    else
+      cat "\${FAKE_GH_DIR}/run.json"
+    fi ;;
   *workflows/autoflow-ci.yml/runs*) cat "\${FAKE_GH_DIR}/runs.json" ;;
   *) echo "fake gh: unexpected invocation: $args" >&2; exit 2 ;;
 esac
@@ -754,8 +777,23 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
     };
   });
 
-  const evidenceRun = (runs: string, run: string | null, jobs: string | null): ShellRun => {
+  const evidenceRun = (
+    runs: string,
+    run: string | null,
+    jobs: string | null,
+    candidates: readonly { id: number; run: string; jobs: string }[] = [],
+  ): ShellRun => {
+    // Per-run fixtures model a SHA with several evidence runs (the production
+    // candidate selector probes them in order). Shared run.json/jobs.json stay
+    // the single-run fixture the older scenarios use.
+    for (const file of readdirSync(ghDir)) {
+      if (/^(?:run|jobs)-\d+\.json$/u.test(file)) rmSync(join(ghDir, file));
+    }
     writeFileSync(join(ghDir, 'runs.json'), runs);
+    for (const candidate of candidates) {
+      writeFileSync(join(ghDir, `run-${candidate.id}.json`), candidate.run);
+      writeFileSync(join(ghDir, `jobs-${candidate.id}.json`), candidate.jobs);
+    }
     if (run !== null) writeFileSync(join(ghDir, 'run.json'), run);
     if (jobs !== null) writeFileSync(join(ghDir, 'jobs.json'), jobs);
     return runExtractedStep(
@@ -773,6 +811,47 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
   const pushRun = runsJson([
     { id: 111, event: 'push', head_branch: 'main', created_at: '2026-10-13T00:00:00Z' },
   ]);
+  // The REAL Base listing (ten instances), built from the shared contract:
+  // sha-guard + lint/test/e2e/pack success; e2e-full, bfcache,
+  // node-serve-smoke, packed-consumer-matrix and fresh-install appear ONCE by
+  // bare job ID, skipped, because a job skipped by its job-level `if:` never
+  // expands its matrix. A 13-instance listing with eight expanded heavy legs is
+  // NOT a real Base run and must be refused as malformed, not skipped.
+  const baseJobsJson = (
+    fixture: {
+      overrides?: Readonly<Record<string, string>>;
+      drop?: readonly string[];
+      duplicate?: readonly string[];
+      extra?: readonly { name: string; conclusion?: string }[];
+    } = {},
+  ): string => {
+    const jobs: Array<{ name: string; conclusion: string }> = [];
+    for (const entry of CI_BASE_LISTING) {
+      if (fixture.drop?.includes(entry.name)) continue;
+      jobs.push({
+        name: entry.name,
+        conclusion: fixture.overrides?.[entry.name] ?? entry.conclusion,
+      });
+    }
+    for (const name of fixture.duplicate ?? []) {
+      const source = jobs.find((job) => job.name === name);
+      if (source) jobs.push({ ...source });
+    }
+    for (const entry of fixture.extra ?? []) {
+      jobs.push({ name: entry.name, conclusion: entry.conclusion ?? 'success' });
+    }
+    return JSON.stringify({ total_count: jobs.length, jobs });
+  };
+  const baseDispatchJobs = (): string => baseJobsJson();
+  // The old, wrong fixture shape: all thirteen Full instances present with the
+  // eight expanded heavy legs marked skipped. Retained only as a negative: it
+  // is not what GitHub lists for a Base run.
+  const expandedHeavySkippedJobs = (): string => {
+    const heavy = CI_QUALIFICATION_JOBS.filter((job) => job.lane === 'heavy').flatMap(
+      (job) => job.instances,
+    );
+    return ciJobsJson({ overrides: Object.fromEntries(heavy.map((name) => [name, 'skipped'])) });
+  };
 
   // ── 6. Missing CI evidence is refused ───────────────────────────────────
   scenario('manual-publish-missing-ci-evidence-is-refused', 'DENY', () => {
@@ -905,6 +984,279 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
         problems.length === 0
           ? 'DENY (exact identity: missing/duplicate/unexpected/non-success)'
           : 'NOT DENIED',
+      ok: problems.length === 0,
+      detail: problems.join('; '),
+    };
+  });
+
+  // ── 7b. W4b dispatch evidence: the REAL Base listing is skipped, Full is
+  // accepted ────────────────────────────────────────────────────────────────
+  // A real Base run lists TEN instances (guard + four base jobs success, five
+  // heavy job IDs skipped because a skipped job never expands its matrix) and
+  // is run-level green. Neither the run conclusion nor "every non-success is
+  // skipped" can carry the proof: the candidate selector must skip that exact
+  // shape with a notice and keep probing, while a wrong-SHA dispatch, a
+  // malformed listing, or a newer failed Full attempt refuses instead.
+  scenario('manual-publish-base-dispatch-is-refused', 'DENY', () => {
+    const problems: string[] = [];
+    const baseRun = JSON.stringify({
+      head_sha: headSha,
+      conclusion: 'success',
+      event: 'workflow_dispatch',
+    });
+    const expectDenied = (
+      label: string,
+      result: ShellRun,
+      marker: string,
+      { baseNotice = false }: { baseNotice?: boolean } = {},
+    ): void => {
+      const text = `${result.stdout}${result.stderr}`;
+      if (result.status === 0) problems.push(`${label} was accepted`);
+      if (!text.includes(marker)) problems.push(`${label} refusal does not mention '${marker}'`);
+      if (baseNotice && !text.includes('Base-only')) {
+        problems.push(`${label} was not recognised as the legal ten-instance Base listing`);
+      }
+      if (!baseNotice && text.includes('Base-only')) {
+        problems.push(`${label} was wrongly skipped as Base evidence`);
+      }
+    };
+
+    const baseOnly = evidenceRun(
+      runsJson([{ id: 201, event: 'workflow_dispatch', created_at: '2026-11-12T00:00:00Z' }]),
+      null,
+      null,
+      [{ id: 201, run: baseRun, jobs: baseDispatchJobs() }],
+    );
+    expectDenied('a real ten-instance Base dispatch', baseOnly, 'missing CI evidence', {
+      baseNotice: true,
+    });
+    // The normal Base skip is a notice, not an error annotation. Only the
+    // final "no evidence" refusal may be an error in the Base-only case.
+    if (!baseOnly.stdout.includes('::notice::')) {
+      problems.push('the Base-only skip did not emit a ::notice:: annotation');
+    }
+
+    // A malformed ten-instance listing: a base job skipped. It must be refused
+    // as malformed, never swallowed as Base evidence.
+    const baseJobSkipped = evidenceRun(
+      runsJson([{ id: 206, event: 'workflow_dispatch', created_at: '2026-11-12T00:30:00Z' }]),
+      null,
+      null,
+      [{ id: 206, run: baseRun, jobs: baseJobsJson({ overrides: { lint: 'skipped' } }) }],
+    );
+    expectDenied(
+      'a base job skipped in a ten-instance listing',
+      baseJobSkipped,
+      'concluded skipped',
+    );
+
+    // Missing heavy placeholder + an unexpected job (still ten entries).
+    const unexpected = evidenceRun(
+      runsJson([{ id: 207, event: 'workflow_dispatch', created_at: '2026-11-12T00:45:00Z' }]),
+      null,
+      null,
+      [
+        {
+          id: 207,
+          run: baseRun,
+          jobs: baseJobsJson({ drop: ['fresh-install'], extra: [{ name: 'rogue' }] }),
+        },
+      ],
+    );
+    expectDenied(
+      'a ten-instance listing with an unexpected job',
+      unexpected,
+      'unexpected CI job instance',
+    );
+
+    // Duplicate base instance + a missing heavy placeholder (still ten entries).
+    const duplicate = evidenceRun(
+      runsJson([{ id: 208, event: 'workflow_dispatch', created_at: '2026-11-12T00:50:00Z' }]),
+      null,
+      null,
+      [
+        {
+          id: 208,
+          run: baseRun,
+          jobs: baseJobsJson({ drop: ['fresh-install'], duplicate: ['lint'] }),
+        },
+      ],
+    );
+    expectDenied('a ten-instance listing with a duplicated job', duplicate, 'appears 2 times');
+
+    // The old (unreal) thirteen-instance shape with eight expanded heavy legs
+    // skipped must not be mistaken for a Base run.
+    const expandedSkipped = evidenceRun(
+      runsJson([{ id: 209, event: 'workflow_dispatch', created_at: '2026-11-12T00:55:00Z' }]),
+      null,
+      null,
+      [{ id: 209, run: baseRun, jobs: expandedHeavySkippedJobs() }],
+    );
+    expectDenied(
+      'the unreal thirteen-instance expanded-skip listing',
+      expandedSkipped,
+      'qualification contract',
+    );
+
+    // A newer malformed ten-instance run must not be skipped for an older Full.
+    const malformedBeforeFull = evidenceRun(
+      runsJson([
+        { id: 210, event: 'workflow_dispatch', created_at: '2026-11-12T06:00:00Z' },
+        { id: 202, event: 'workflow_dispatch', created_at: '2026-11-12T01:00:00Z' },
+      ]),
+      null,
+      null,
+      [
+        {
+          id: 210,
+          run: baseRun,
+          jobs: baseJobsJson({ overrides: { lint: 'skipped' } }),
+        },
+        { id: 202, run: baseRun, jobs: ciJobsJson() },
+      ],
+    );
+    expectDenied(
+      'a newer malformed ten-instance run before an older Full',
+      malformedBeforeFull,
+      'concluded skipped',
+    );
+    if (malformedBeforeFull.output.includes('run_id=202')) {
+      problems.push('a newer malformed ten-instance run fell through to older Full evidence');
+    }
+
+    const wrongShaRun = JSON.stringify({
+      head_sha: '2'.repeat(40),
+      conclusion: 'success',
+      event: 'workflow_dispatch',
+    });
+    const wrongSha = evidenceRun(
+      runsJson([{ id: 204, event: 'workflow_dispatch', created_at: '2026-11-12T00:00:00Z' }]),
+      null,
+      null,
+      [{ id: 204, run: wrongShaRun, jobs: ciJobsJson() }],
+    );
+    if (wrongSha.status === 0) {
+      problems.push('a dispatch bound to another SHA was accepted');
+    } else if (!`${wrongSha.stdout}${wrongSha.stderr}`.includes('bound to')) {
+      problems.push('the wrong-SHA refusal does not name the binding mismatch');
+    }
+    // Candidate fallback must not walk past a newer Full-qualification
+    // attempt that failed: an older green run may not mask the latest failure.
+    const fullRun = JSON.stringify({
+      head_sha: headSha,
+      conclusion: 'success',
+      event: 'workflow_dispatch',
+    });
+    const failedRun = JSON.stringify({
+      head_sha: headSha,
+      conclusion: 'failure',
+      event: 'workflow_dispatch',
+    });
+    const failedFull = evidenceRun(
+      runsJson([
+        { id: 205, event: 'workflow_dispatch', created_at: '2026-11-12T05:00:00Z' },
+        { id: 202, event: 'workflow_dispatch', created_at: '2026-11-12T01:00:00Z' },
+      ]),
+      null,
+      null,
+      [
+        { id: 205, run: failedRun, jobs: ciJobsJson() },
+        { id: 202, run: fullRun, jobs: ciJobsJson() },
+      ],
+    );
+    if (failedFull.status === 0) {
+      problems.push('a newer failed Full qualification was skipped for older green evidence');
+    } else if (!`${failedFull.stdout}${failedFull.stderr}`.includes('failure')) {
+      problems.push('the failed-Full refusal does not name the failed conclusion');
+    }
+    return {
+      observed:
+        problems.length === 0
+          ? 'DENY (real Base skipped with a notice; malformed/wrong-SHA/failed-Full refused)'
+          : 'NOT DENIED',
+      ok: problems.length === 0,
+      detail: problems.join('; '),
+    };
+  });
+
+  // A complete Full-qualification dispatch (all thirteen instances success) is
+  // eligible. Candidate selection must also find it when a newer Base dispatch
+  // exists: evidence is the SHA's contract-complete run, not the newest run.
+  scenario('manual-publish-full-dispatch-is-eligible', 'ELIGIBLE', () => {
+    const problems: string[] = [];
+    const fullRun = JSON.stringify({
+      head_sha: headSha,
+      conclusion: 'success',
+      event: 'workflow_dispatch',
+    });
+    const fullJobs = ciJobsJson();
+    const onlyFull = evidenceRun(
+      runsJson([{ id: 202, event: 'workflow_dispatch', created_at: '2026-11-12T01:00:00Z' }]),
+      null,
+      null,
+      [{ id: 202, run: fullRun, jobs: fullJobs }],
+    );
+    if (onlyFull.status !== 0) {
+      problems.push(`a full thirteen-instance dispatch was refused: ${onlyFull.stderr.trim()}`);
+    } else if (!onlyFull.output.includes('run_id=202')) {
+      problems.push('the full dispatch run id was not recorded');
+    }
+    const baseRun = JSON.stringify({
+      head_sha: headSha,
+      conclusion: 'success',
+      event: 'workflow_dispatch',
+    });
+    const shadowed = evidenceRun(
+      runsJson([
+        { id: 203, event: 'workflow_dispatch', created_at: '2026-11-12T03:00:00Z' },
+        { id: 202, event: 'workflow_dispatch', created_at: '2026-11-12T01:00:00Z' },
+      ]),
+      null,
+      null,
+      [
+        { id: 203, run: baseRun, jobs: baseDispatchJobs() },
+        { id: 202, run: fullRun, jobs: fullJobs },
+      ],
+    );
+    if (shadowed.status !== 0) {
+      problems.push(
+        `a newer Base dispatch shadowed older Full evidence: ${shadowed.stderr.trim()}`,
+      );
+    } else if (!shadowed.output.includes('run_id=202')) {
+      problems.push('the shadowed case did not record the Full run id');
+    }
+    if (!shadowed.stdout.includes('Base-only') || !shadowed.stdout.includes('::notice::')) {
+      problems.push('the newer Base run was not skipped with a ::notice:: annotation');
+    }
+    if (`${shadowed.stdout}${shadowed.stderr}`.includes('::error::')) {
+      problems.push('skipping a normal Base run emitted an error annotation');
+    }
+    const preferred = evidenceRun(
+      runsJson([
+        { id: 111, event: 'push', head_branch: 'main', created_at: '2026-11-12T04:00:00Z' },
+        { id: 202, event: 'workflow_dispatch', created_at: '2026-11-12T01:00:00Z' },
+      ]),
+      null,
+      null,
+      [
+        {
+          id: 111,
+          run: JSON.stringify({ head_sha: headSha, conclusion: 'success', event: 'push' }),
+          jobs: ciJobsJson(),
+        },
+        { id: 202, run: fullRun, jobs: fullJobs },
+      ],
+    );
+    if (preferred.status !== 0) {
+      problems.push(`a valid dispatch plus push evidence was refused: ${preferred.stderr.trim()}`);
+    } else if (!preferred.output.includes('run_id=202')) {
+      problems.push('dispatch evidence was not preferred over the push run');
+    }
+    return {
+      observed:
+        problems.length === 0
+          ? 'ELIGIBLE (a Full dispatch is evidence even with a newer Base run)'
+          : 'NOT ELIGIBLE',
       ok: problems.length === 0,
       detail: problems.join('; '),
     };
@@ -1170,6 +1522,25 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
     const problems: string[] = [];
     const derived = deriveRunInstanceNames(ci.doc.jobs ?? {});
     problems.push(...derived.problems);
+    // The lane classification is a checked projection of the workflow too:
+    // the four base jobs must not carry the full_qualification gate, and each
+    // of the five heavy jobs must. A lane that drifts from autoflow-ci.yml
+    // would make the ten-instance Base fixture and the release skip agree with
+    // each other but disagree with CI.
+    for (const job of CI_QUALIFICATION_JOBS) {
+      const workflowJob = ci.doc.jobs?.[job.id];
+      if (workflowJob === undefined) {
+        problems.push(`contract job ${job.id} is absent from autoflow-ci.yml`);
+        continue;
+      }
+      const heavyGate = /full_qualification\s*==\s*true/u.test(workflowJob.if ?? '');
+      if (job.lane === 'heavy' && !heavyGate) {
+        problems.push(`heavy job ${job.id} is not gated on full_qualification in autoflow-ci.yml`);
+      }
+      if (job.lane === 'base' && heavyGate) {
+        problems.push(`base job ${job.id} is gated on full_qualification in autoflow-ci.yml`);
+      }
+    }
     const expected = [...CI_RUN_INSTANCES].sort();
     const observed = [...derived.instances].sort();
     if (JSON.stringify(observed) !== JSON.stringify(expected)) {
@@ -1188,6 +1559,49 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
     }
     if (CI_RUN_INSTANCES[0] !== CI_GUARD_JOB) {
       problems.push('the sha-guard instance must lead the required instance list');
+    }
+    // The Base listing is a distinct shape, not a Full listing with skipped
+    // legs: ten instances, five success (guard + four base jobs) and five
+    // job-level skipped heavy IDs. The matrix legs must NOT appear in it.
+    if (CI_BASE_TOTAL_RUN_INSTANCES !== 10) {
+      problems.push(
+        `the real Base listing must contain ten instances, got ${CI_BASE_TOTAL_RUN_INSTANCES}`,
+      );
+    }
+    if (CI_BASE_LISTING.length !== CI_BASE_TOTAL_RUN_INSTANCES) {
+      problems.push(
+        `the Base listing has ${CI_BASE_LISTING.length} entries but claims ${CI_BASE_TOTAL_RUN_INSTANCES} instances`,
+      );
+    }
+    if (new Set(CI_BASE_LISTING.map((entry) => entry.name)).size !== CI_BASE_LISTING.length) {
+      problems.push('the Base listing carries duplicate instance names');
+    }
+    const baseSuccess = CI_BASE_LISTING.filter((entry) => entry.conclusion === 'success');
+    const baseSkipped = CI_BASE_LISTING.filter((entry) => entry.conclusion === 'skipped');
+    if (baseSuccess.length !== 5 || baseSuccess[0]?.name !== CI_GUARD_JOB) {
+      problems.push(
+        `the Base listing must have five successes led by ${CI_GUARD_JOB}, got ${baseSuccess
+          .map((entry) => entry.name)
+          .join(',')}`,
+      );
+    }
+    const heavyIds = CI_QUALIFICATION_JOBS.filter((job) => job.lane === 'heavy').map(
+      (job) => job.id,
+    );
+    if (
+      baseSkipped.length !== heavyIds.length ||
+      baseSkipped.some((entry, index) => entry.name !== heavyIds[index])
+    ) {
+      problems.push(
+        `the Base skipped instances must be the heavy job IDs ${heavyIds.join(',')}, got ${baseSkipped
+          .map((entry) => entry.name)
+          .join(',')}`,
+      );
+    }
+    for (const leg of ['e2e-full (site-e2e)', 'node-serve-smoke (24)']) {
+      if (CI_BASE_LISTING.some((entry) => entry.name === leg)) {
+        problems.push(`the Base listing must not contain the expanded matrix leg '${leg}'`);
+      }
     }
     if (new Set(CI_RUN_INSTANCES).size !== CI_RUN_INSTANCES.length) {
       problems.push('the shared contract carries duplicate instance names');
@@ -1229,7 +1643,7 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
     return {
       observed:
         problems.length === 0
-          ? 'ONE CONTRACT (13 instances derived from autoflow-ci.yml)'
+          ? 'ONE CONTRACT (13 Full + 10 Base instances derived from autoflow-ci.yml)'
           : 'CONTRACT DRIFT',
       ok: problems.length === 0,
       detail: problems.join('; '),
