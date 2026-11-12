@@ -156,6 +156,7 @@
 
 import ts from 'typescript';
 import { unsafeStreamFrameAttribute } from '@openelement/protocol/stream-frame-policy';
+import { VOID_TAGS } from '@openelement/protocol/part-program';
 import type {
   FunctionExpressionRef,
   FunctionModelAttribute,
@@ -211,8 +212,11 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     predicate: (body) => body.includes('assertStaticAttributeSeed('),
   },
   { symbol: 'emitComment', predicate: (body) => body.includes('emitComment(') },
+  { symbol: 'escapeAttrValue', predicate: (body) => body.includes('escapeAttrValue(') },
+  { symbol: 'escapeText', predicate: (body) => body.includes('escapeText(') },
   { symbol: 'rangeMarker', predicate: (body) => body.includes('rangeMarker(') },
   { symbol: 'MARKERS', predicate: (body) => body.includes('MARKERS.') },
+  { symbol: 'markerText', predicate: (body) => body.includes('markerText(') },
   {
     symbol: 'claimStaticSiblingRange',
     predicate: (_body, _usesClaimRecipe, usesDirectory) => usesDirectory,
@@ -248,6 +252,8 @@ const MOUNT_HOST = `${INTERNAL_PREFIX}host`;
  * the existing children of `parent`. Emitted only for the static leaf shape.
  */
 const CLAIM_SUFFIX = '__claim';
+/** Static SSR producer (M08-1a): `<Name>__ssr()` returns the mount HTML. */
+const SSR_SUFFIX = '__ssr';
 const CLAIM_PARENT = `${INTERNAL_PREFIX}parent`;
 /**
  * The module-level mount's host record: the parent-provided host bindings plus
@@ -3072,6 +3078,106 @@ function emitClaimFunction(
   };
 }
 
+/**
+ * SSR producer, static slice (M08-1a).
+ *
+ * A claimable component whose roots are fully static also emits `<Name>__ssr()`,
+ * which returns the HTML the mount would build — at compile time, because a
+ * static subtree's bytes are known then. The point is the pairing: a generated
+ * module that can claim existing DOM can now also produce that DOM, which is
+ * the precondition for the M08 SSR→claim parity proof.
+ *
+ * Boundary of this slice: dynamic text/attribute slots, conditions, lists,
+ * component references and insertion sites return `null`, so no `__ssr` is
+ * emitted for them. Slice M08-1b adds the dynamic slots; until then the absence
+ * of `__ssr` is the honest shape of "this component is not SSR-producible yet".
+ *
+ * Escaping is NOT re-implemented here: the emitted code calls the runtime's
+ * `escapeText` / `escapeAttrValue`, which are the same contract the serializers
+ * use. A second escape table in the compiler would be exactly the drift P6
+ * forbids.
+ */
+function staticSsrDirectory(ranges: readonly FunctionModelNode[], markers: boolean): string | null {
+  const parts: string[] = [];
+  for (const [ordinal, range] of ranges.entries()) {
+    const inner = staticSsrNode(range, markers);
+    if (inner === null) return null;
+    parts.push(
+      `"<!--" + markerText(rangeMarker(${ordinal})) + "-->"`,
+      inner,
+      `"<!--" + markerText(rangeMarker(${ordinal}, true)) + "-->"`,
+    );
+  }
+  return parts.length === 0 ? '""' : parts.join(' + ');
+}
+
+function staticSsrExpression(nodes: readonly FunctionModelNode[], markers: boolean): string | null {
+  const parts: string[] = [];
+  for (const node of nodes) {
+    const part = staticSsrNode(node, markers);
+    if (part === null) return null;
+    parts.push(part);
+  }
+  return parts.length === 0 ? '""' : parts.join(' + ');
+}
+
+function literalText(value: string): string {
+  return JSON.stringify(value);
+}
+
+function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null {
+  if (node.kind === 'text') return `escapeText(${literalText(node.value)})`;
+  if (node.kind === 'fragment') return staticSsrExpression(node.children, markers);
+  if (node.kind !== 'element') return null;
+  if (!TAG_PATTERN.test(node.tag)) return null;
+  const isVoid = VOID_TAGS.has(node.tag);
+  if (isVoid) return null;
+  const attributes: string[] = [];
+  for (const attribute of node.attributes) {
+    // Slice 1a: static attributes only. A dynamic slot means the value is not
+    // known at compile time, so this component has no static SSR form yet.
+    if (attribute.kind !== 'static') return null;
+    if (unsafeStreamFrameAttribute(attribute.name, attribute.value)) return null;
+    attributes.push(
+      [
+        '" "',
+        literalText(`${attribute.name}="`),
+        `escapeAttrValue(${literalText(attribute.value)})`,
+        literalText('"'),
+      ].join(' + '),
+    );
+  }
+  // The mount wraps a static sibling directory in its marker comments; the SSR
+  // form must carry the same comments or the claim cannot find its ranges.
+  const directory = markers ? staticElementDirectory(node.children) : null;
+  const children =
+    directory === null
+      ? staticSsrExpression(node.children, markers)
+      : staticSsrDirectory(directory, markers);
+  if (children === null) return null;
+  const open = `"<${node.tag}"`;
+  const close = `"</${node.tag}>"`;
+  return [open, ...attributes, '">"', children, close].join(' + ');
+}
+
+/**
+ * Emit the static SSR function for a claimable, fully static component, or
+ * `null` when the component is outside the slice or has a dynamic shape.
+ */
+function emitSsrFunction(
+  component: FunctionModelComponent,
+  rootDirectory: readonly FunctionModelNode[] | null,
+): string[] | null {
+  let expression: string | null;
+  if (rootDirectory !== null) {
+    expression = staticSsrDirectory(rootDirectory, true);
+  } else {
+    expression = staticSsrExpression(component.roots, true);
+  }
+  if (expression === null) return null;
+  return [`export function ${component.name}${SSR_SUFFIX}() {`, `  return ${expression};`, '}', ''];
+}
+
 function emitComponent(
   file: string,
   component: FunctionModelComponent,
@@ -3304,10 +3410,15 @@ function emitComponent(
   factoryLines.push(...recipeFields);
   const mountLines = [...mountPrologue, ...state.lines, '}', ''];
   const claimLines = claim?.lines ?? [];
+  // M08-1a: a component that can claim existing DOM also emits the HTML it
+  // would have produced, so the same proof surface exists on both sides. It is
+  // appended after the claim chunk, which keeps every already-recorded
+  // segment/placement line offset untouched.
+  const ssrLines = claim === null ? null : emitSsrFunction(component, rootDirectory);
   const claimShift = mountLines.length + factoryLines.length;
   const shift = mountPrologue.length;
   return {
-    lines: [...mountLines, ...factoryLines, ...claimLines],
+    lines: [...mountLines, ...factoryLines, ...claimLines, ...(ssrLines ?? [])],
     diagnostics: state.diagnostics,
     requiredBindings: [...state.requiredBindings].sort(),
     requiredProps: [...state.requiredProps].sort(),
