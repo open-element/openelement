@@ -454,10 +454,11 @@ slice's qualification.
 
 ## M07-5 recorded status — protocol record
 
-Status: **in progress, not signed off**. This note does not fill any grid
-cell, does not mark TSX-18 or TSX-30 passing, and is not an M07 exit or an
-M08 SSR→claim result. There is no generated-leaf SSR producer and no
-permitted seed-state compare.
+Status: **signed off on `b82e63bdfa1794897e9ddf1ef32c262f48368883`** (owner decision 2026-11-12; see the progress
+ledger §4.3/§4.4). This note still fills no grid cell and does not mark TSX-18
+or TSX-30 passing: those leaf-scope cells moved to M08 with the generated-leaf
+SSR producer they require (progress ledger §4.3). There is no generated-leaf
+SSR producer and no permitted seed-state compare.
 
 ADR-0175 D-2 suppresses unconsumed `oe:r:` / `oe:/r:` markers on a pure-mount
 tree. A tree that emits a claim function still carries the marker pair.
@@ -471,4 +472,7 @@ namespace checks are unchanged. The record is
 
 TSX-18 and TSX-30 leaf-range cells: the protocol above is a 非浏览器资格
 (Node DOM shim, LOCAL) comment on the leaf claim surfaces. The grid cells
-stay `R`. They are not passing. SSR→claim is not done.
+stay `R`. They are not passing, and they are **M08 obligations** (progress
+ledger §4.3, 2026-11-12): the matrix `K`/`S` columns require SSR DOM, so a
+legal leaf cell cannot be produced before the M08 SSR producer. SSR→claim is
+not done.

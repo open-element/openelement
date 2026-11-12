@@ -1,15 +1,17 @@
 ---
 status: active
 topic: M07-5 protocol record
-summary: Leaf-range protocol for D-2 marker suppression and the three generated-leaf surfaces; in progress, not an M07 exit.
+summary: Leaf-range protocol for D-2 marker suppression and the three generated-leaf surfaces; signed off 2026-11-12 on the PR #1757 merge commit, not an Alpha16a exit.
 ---
 
 # M07-5 protocol record
 
-Status: **in progress, not signed off**. This is the M07 protocol record. It is
-not an M07 exit, not whole-stage Alpha16 sign-off, not a publish
-authorization, and not an alignment of the published baseline
-`1.0.0-alpha.15`. It does not start M08, P0, or Alpha17.
+Status: **signed off 2026-11-12 on `b82e63bdfa1794897e9ddf1ef32c262f48368883`** (owner decision; the PR #1757
+merge commit). This is the M07 protocol record. M07 is met under the 2026-11-12
+exit amendment (progress ledger §4.3), but this is not whole-stage Alpha16
+sign-off, not a publish authorization, and not an alignment of the published
+baseline `1.0.0-alpha.15`. M08 still needs its own owner start authorization;
+the TSX-18/TSX-30 leaf-scope cells and the SSR producer are M08 obligations.
 
 M07-4 (ADR-0175 D-1, bounded mismatch recovery) is signed off on
 `c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`. This note records that sign-off.
