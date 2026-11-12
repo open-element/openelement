@@ -343,6 +343,12 @@ const CLAIM_SUFFIX = '__claim';
 const SSR_SUFFIX = '__ssr';
 const CLAIM_PARENT = `${INTERNAL_PREFIX}parent`;
 /**
+ * Module-level activation queue for the shared-cursor claim path (M08-2 B2).
+ * The cursor owner initializes it, nested component/recipe claims append to it,
+ * and only the owner drains it after the whole enclosing structure validated.
+ */
+const CLAIM_ACTIVATION = `${INTERNAL_PREFIX}claimPhase2`;
+/**
  * The module-level mount's host record: the parent-provided host bindings plus
  * the defining-scope signals a child instance refreshes props reads through.
  * The root factory supplies `[host.propsChanged]`; a component-reference call
@@ -554,6 +560,13 @@ interface EmitState {
   claimCursorShared: boolean;
   /** Runtime array that collects adopted root nodes, or null for the M07a static return. */
   claimAdoptedVar: string | null;
+  /**
+   * M08-2 B2: the generated activation-queue variable for the claim being
+   * emitted, or null when phase-2 work is emitted inline. Only the shared
+   * cursor path queues: its per-element blocks cannot be flushed until the
+   * enclosing cursor owner has validated its final structure.
+   */
+  claimActivationVar: string | null;
   /** True once this claim chunk calls `claimRecipe`. */
   usesClaimRecipe: boolean;
   /**
@@ -810,10 +823,21 @@ function emitNodesBuilder(
   // will consume. The save/restore is per builder, matching the recipe path.
   state.textOrdinals = textSlotOrdinals(prepared);
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
-  for (const node of prepared) {
-    const sink: SinkEntry[] = [];
-    emitNode(state, node, sink, records);
-    appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
+  // B3: a branch builder is its own function scope. Refresh functions emitted
+  // inside it are not visible to an enclosing list entry's `update(next)` hook,
+  // so they must not join that collector. The condition's own refresh (which is
+  // registered with the entry) force-rebuilds the branch when the entry updates,
+  // which re-runs these branch-internal writes against the re-bound parameter.
+  const outerCollector = state.refreshStack.length;
+  state.refreshStack.push([]);
+  try {
+    for (const node of prepared) {
+      const sink: SinkEntry[] = [];
+      emitNode(state, node, sink, records);
+      appendSinkToArray(state, sink, `${INTERNAL_PREFIX}nodes`);
+    }
+  } finally {
+    state.refreshStack.length = outerCollector;
   }
   push(state, `return ${INTERNAL_PREFIX}nodes;`);
   state.textOrdinals = outerOrdinals;
@@ -3052,6 +3076,64 @@ function prepareClaimSlot(
 }
 
 /**
+ * M08-2 B2: emit pending phase-2 steps at their current lexical position.
+ *
+ * The shared-cursor path wraps each emission in a closure pushed onto the
+ * module-level activation queue, so block-scoped node bindings stay visible
+ * while no subscription/write runs before the cursor owner has validated the
+ * whole enclosing structure. The non-shared path keeps inline emission: its
+ * root structure check already runs first (and its bindings are function
+ * scoped, so deferring would add no safety).
+ */
+function emitPhase2Steps(state: EmitState, steps: readonly (() => void)[]): void {
+  if (steps.length === 0) return;
+  const activation = state.claimActivationVar;
+  if (activation === null) {
+    for (const step of steps) step();
+    return;
+  }
+  for (const step of steps) {
+    push(state, `${activation}.push(() => {`);
+    state.indent += 1;
+    step();
+    state.indent -= 1;
+    push(state, '});');
+  }
+}
+
+/**
+ * Emit the shared-cursor owner check plus queue initialization. A nested claim
+ * finds the module cursor non-null, appends to the owner's queue and never
+ * initializes or drains it.
+ */
+function emitClaimQueueInit(state: EmitState, parentExpr: string): void {
+  push(state, `const ${INTERNAL_PREFIX}cursorOwned = ${INTERNAL_PREFIX}claimCursor === null;`);
+  push(
+    state,
+    `if (${INTERNAL_PREFIX}cursorOwned) { ${INTERNAL_PREFIX}claimCursor = { node: ${parentExpr}.firstChild }; ${CLAIM_ACTIVATION} = []; }`,
+  );
+}
+
+/**
+ * Drain the activation queue after the cursor owner restored the module cursor.
+ * Only the owner drains: a nested shared claim or a claim-time recipe claim
+ * appended work for this one commit point. `claimActivationVar` is null for the
+ * non-shared path, which emits its phase 2 inline instead.
+ */
+function emitClaimActivationDrain(state: EmitState): void {
+  if (state.claimActivationVar !== CLAIM_ACTIVATION) return;
+  const stepsVar = nextName(state, 'phase2Steps');
+  const stepVar = nextName(state, 'phase2Step');
+  push(state, `if (${INTERNAL_PREFIX}cursorOwned) {`);
+  state.indent += 1;
+  push(state, `const ${stepsVar} = ${CLAIM_ACTIVATION};`);
+  push(state, `${CLAIM_ACTIVATION} = null;`);
+  push(state, `for (const ${stepVar} of ${stepsVar}) ${stepVar}();`);
+  state.indent -= 1;
+  push(state, '}');
+}
+
+/**
  * Emit the initial write plus its refresh subscription. A zero-dependency slot
  * writes once and registers nothing. The write callback is the claim-period
  * helper: an equal value skips the DOM API, and a dependency still subscribes.
@@ -3105,8 +3187,13 @@ function emitClaimConditionBranchBuilder(
   const outerScope = state.scopeVar;
   const outerOrdinals = state.textOrdinals;
   const outerShared = state.claimCursorShared;
+  const outerActivation = state.claimActivationVar;
   state.scopeVar = scopeParam;
   state.claimCursorShared = false;
+  // This chunk's own phase 2 belongs to the returned `activate` closure: it is
+  // called by the enclosing condition step after branch structure was adopted,
+  // so it must not append to the module activation queue.
+  state.claimActivationVar = null;
   const prepared = emissionNodes(state, nodes);
   state.textOrdinals = textSlotOrdinals(prepared);
   const nodesVar = nextName(state, 'branchNodes');
@@ -3130,12 +3217,13 @@ function emitClaimConditionBranchBuilder(
   );
   push(state, 'function activate() {');
   state.indent += 1;
-  for (const step of phase2) step();
+  emitPhase2Steps(state, phase2);
   state.indent -= 1;
   push(state, '}');
   push(state, `return { nodes: ${nodesVar}, activate };`);
   state.textOrdinals = outerOrdinals;
   state.claimCursorShared = outerShared;
+  state.claimActivationVar = outerActivation;
   state.scopeVar = outerScope;
   state.indent -= 1;
   push(state, '}');
@@ -3524,7 +3612,7 @@ function emitClaimInto(
         );
         emitClaimCursorEnd(state, childCursor, here);
         if (saved !== null) {
-          for (const step of childPhase2) step();
+          emitPhase2Steps(state, childPhase2);
           state.indent -= 1;
           push(state, `} finally { __oe_claimCursor = ${saved}; }`);
         }
@@ -3756,11 +3844,15 @@ function emitClaimTimeRecipes(
     state.indent += 1;
     const outerScope = state.scopeVar;
     const outerAdopted = state.claimAdoptedVar;
+    const outerActivation = state.claimActivationVar;
     state.scopeVar = scopeParam;
     state.claimAdoptedVar = adoptedVar;
+    // This claim is either a top-level claim (it owns and drains the queue) or
+    // part of an enclosing verify walk (it appends to that owner's queue). It
+    // must never flush before the enclosing root structure check.
+    state.claimActivationVar = CLAIM_ACTIVATION;
     const phase2: Array<() => void> = [];
-    push(state, 'const __oe_cursorOwned = __oe_claimCursor === null;');
-    push(state, `if (__oe_cursorOwned) __oe_claimCursor = { node: ${parentParam}.firstChild };`);
+    emitClaimQueueInit(state, parentParam);
     push(state, `const ${adoptedVar} = [];`);
     push(state, 'try {');
     state.indent += 1;
@@ -3786,12 +3878,14 @@ function emitClaimTimeRecipes(
       state,
       `if (__oe_cursorOwned && __oe_claimCursor.node !== null) throw ${claimError('extra node at /')};`,
     );
-    for (const step of phase2) step();
+    emitPhase2Steps(state, phase2);
     state.indent -= 1;
     push(state, '} finally { if (__oe_cursorOwned) __oe_claimCursor = null; }');
+    emitClaimActivationDrain(state);
     push(state, `return ${adoptedVar};`);
     state.scopeVar = outerScope;
     state.claimAdoptedVar = outerAdopted;
+    state.claimActivationVar = outerActivation;
     state.indent -= 1;
     push(state, '},');
     state.indent -= 1;
@@ -3847,6 +3941,7 @@ function emitClaimFunction(
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: useShared,
     claimAdoptedVar: null,
+    claimActivationVar: null,
     usesClaimRecipe: false,
     emitDirectoryMarkers: false,
     emitTextBoundaries: true,
@@ -3882,8 +3977,21 @@ function emitClaimFunction(
     state.requiredBindings.add(resource.name);
   }
   const phase2: Array<() => void> = [];
+  // M08-2 B2: only the shared-cursor claim queues activation. Its per-element
+  // blocks are flushed before the enclosing cursor owner's final structure
+  // check, so they must append closures and let the owner drain after that
+  // check. The non-shared path already validates its root before phase 2.
+  state.claimActivationVar = useShared ? CLAIM_ACTIVATION : null;
   const rootAdoptedVar = useShared ? null : nextName(state, 'adopted');
-  if (!useShared) push(state, `const ${rootAdoptedVar} = [];`);
+  if (!useShared) {
+    // Local snapshots are setup work: evaluate them once, before the claim walk
+    // reads them (B1). This matches the shared path and mount setup order; a
+    // local initializer's authored side effects therefore run during claim.
+    for (const line of localLines) {
+      pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+    }
+    push(state, `const ${rootAdoptedVar} = [];`);
+  }
   const rootDirectory = staticElementDirectory(component.roots);
   if (!useShared && rootDirectory !== null) {
     for (const interior of emitClaimedDirectory(state, CLAIM_PARENT, rootDirectory)) {
@@ -3926,8 +4034,7 @@ function emitClaimFunction(
     const adoptedVar = nextName(state, 'adopted');
     state.claimAdoptedVar = adoptedVar;
     push(state, `const ${adoptedVar} = [];`);
-    push(state, 'const __oe_cursorOwned = __oe_claimCursor === null;');
-    push(state, `if (__oe_cursorOwned) __oe_claimCursor = { node: ${CLAIM_PARENT}.firstChild };`);
+    emitClaimQueueInit(state, CLAIM_PARENT);
     push(state, 'try {');
     state.indent += 1;
     emitClaimInto(
@@ -3951,9 +4058,10 @@ function emitClaimFunction(
       state,
       `if (__oe_cursorOwned && __oe_claimCursor.node !== null) throw ${claimError('extra node at /')};`,
     );
-    for (const step of phase2) step();
+    emitPhase2Steps(state, phase2);
     state.indent -= 1;
     push(state, '} finally { if (__oe_cursorOwned) __oe_claimCursor = null; }');
+    emitClaimActivationDrain(state);
     push(state, `return ${adoptedVar};`);
   }
   if (state.diagnostics.length > 0) {
@@ -3965,10 +4073,7 @@ function emitClaimFunction(
     };
   }
   if (!useShared) {
-    for (const line of localLines) {
-      pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
-    }
-    for (const step of phase2) step();
+    emitPhase2Steps(state, phase2);
     push(state, `return ${rootAdoptedVar};`);
   }
 
@@ -4155,6 +4260,7 @@ function ssrEmitState(
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: false,
     claimAdoptedVar: null,
+    claimActivationVar: null,
     usesClaimRecipe: false,
     emitDirectoryMarkers: false,
     emitTextBoundaries: true,
@@ -4497,6 +4603,7 @@ function emitComponent(
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: false,
     claimAdoptedVar: null,
+    claimActivationVar: null,
     usesClaimRecipe: false,
     emitDirectoryMarkers: claimable,
     emitTextBoundaries: claimable,
@@ -5039,7 +5146,9 @@ export function generateLeafModule(
     `import { ${runtimeImports.join(', ')} } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
     '',
   ];
-  if (sharedClaimCursor) headerLines.push('let __oe_claimCursor = null;', '');
+  if (sharedClaimCursor) {
+    headerLines.push('let __oe_claimCursor = null;', `let ${CLAIM_ACTIVATION} = null;`, '');
+  }
   const text = [...headerLines, ...chunks].join('\n');
   if (!parsesAsModule(text)) {
     return {

@@ -645,6 +645,16 @@ selected client branch and moves writes/subscriptions to phase 2.
 | TSX-18 SSR seed/claim fidelity | leaf-scope S + K vertical, single engine | `__ssr` condition bytes → real parser → generated claim with anchor/branch/end identity; server-empty branch insertion is recorded as non-clean; server/client mismatch and a stripped end fail closed without deleting borrowed DOM. | **Does not fill TSX-18.** No permitted seed-state compare, no full per-phase equivalence and no full claim-negative set. |
 | TSX-30 repeated instances SSR/claim | not recorded | — | No repeated-instance condition server→claim shape was produced; the row stays `R`. |
 
+**Independent-review closure (B1/B2/B3).** B1 evaluates a component-local
+snapshot once before the claim walk (no TDZ); B2 commits shared-cursor
+activation only after the cursor owner's final structure check, so a late
+enclosing mismatch opens no subscription, writes no DOM and performs no
+server-empty insert while claim owners are still disposed and borrowed nodes
+kept; B3 keeps branch-builder refresh functions in their own function scope so
+a keyed-entry `update(next)` does not throw `__oe_refreshN is not defined`.
+`generated-leaf.condition-review.browser.test.ts` is the real-Chromium RED→GREEN
+evidence (4 tests, LOCAL). This is still a slice record, not an M08 exit.
+
 **Explicit boundaries.** Only the previously admitted branch shapes are
 claimable: static elements, static text, dynamic-text pairs and attributes. A
 nested condition, list, component reference, insertion site, children

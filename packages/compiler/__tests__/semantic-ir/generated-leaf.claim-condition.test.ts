@@ -209,6 +209,25 @@ describe('M08-2 condition — generated wire, SSR bytes and source map', () => {
     expect(testExpected, 'condition test placement').toBe(true);
     expect(slotExpected, 'then slot placement').toBe(true);
   });
+
+  test('a local snapshot is declared before the non-shared claim walk (B1)', () => {
+    const local = compile(
+      'function Local(props) { const visible = props.visible; return <div>{visible ? <p>on</p> : <em>off</em>}</div>; }\n',
+    );
+    const module = local.module!;
+    const claimStart = module.indexOf('function Local__claim');
+    const localAt = module.indexOf('const visible = (props . visible);', claimStart);
+    const testAt = module.indexOf('const __oe_whenTest', claimStart);
+    expect(claimStart).toBeGreaterThanOrEqual(0);
+    expect(localAt).toBeGreaterThan(claimStart);
+    expect(testAt).toBeGreaterThan(localAt);
+    // One evaluation in the claim: the same declaration is not emitted twice.
+    expect(
+      module
+        .slice(claimStart, module.indexOf('export function Local__ssr'))
+        .match(/const visible = \(props \. visible\);/g),
+    ).toHaveLength(1);
+  });
 });
 
 describe('M08-2 condition — claimability boundaries (mount stays available)', () => {

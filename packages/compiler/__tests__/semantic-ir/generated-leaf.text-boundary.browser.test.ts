@@ -756,7 +756,7 @@ describe('M08 text boundary — Chromium parse and claim', () => {
     await page.close();
   });
 
-  test('a failure after a child lazy insert is non-transactional and keeps borrowed nodes', async () => {
+  test('a failure after a child lazy insert is queued away and keeps borrowed nodes', async () => {
     const { generated } = await prepare();
     const childHtml = ssr(generated.loaded, 'ChildSlot')({ text: '' }, { bindings: {} });
     expect(childHtml).toBe('<b><!--oe:t:0--><!--oe:/t:0--></b>');
@@ -858,7 +858,7 @@ describe('M08 text boundary — Chromium parse and claim', () => {
       await Promise.resolve();
       const afterMutationRecords = observer.takeRecords();
       observer.disconnect();
-      const bText = (b.childNodes[1] as Text | undefined)?.nodeValue ?? null;
+      const bText = b.childNodes[1]?.nodeType === 3 ? (b.childNodes[1] as Text).nodeValue : null;
       return {
         claimError,
         claimMutations,
@@ -891,20 +891,22 @@ describe('M08 text boundary — Chromium parse and claim', () => {
 
     expect(result.claimError).toContain('OEIR_LEAF_CLAIM_MISMATCH');
     expect(result.claimError).toContain('static text at /0/1/0');
-    // This is the recorded non-transactional shape: the child's phase-2 lazy
-    // insert is a real childList mutation before the parent fails. It is not a
-    // "zero mutation on every failure" guarantee.
-    expect(result.claimMutations).toEqual(['childList']);
-    expect(result.subscriptionDelta).toBe(1);
-    expect(result.unsubscribedDelta).toBe(1);
+    // B2 ordering: the child's phase-2 lazy insert is queued and never runs
+    // because the enclosing parent structure later fails. This is no longer a
+    // "child write leaked before the enclosing mismatch" shape: no DOM write and
+    // no subscription, while the claim/child owners are still released and the
+    // borrowed nodes are kept.
+    expect(result.claimMutations).toEqual([]);
+    expect(result.subscriptionDelta).toBe(0);
+    expect(result.unsubscribedDelta).toBe(0);
     expect(result.ownerDelta).toBeGreaterThanOrEqual(1);
     expect(result.childScopeStates.length).toBeGreaterThanOrEqual(1);
     expect(result.childScopeStates.every((disposed) => disposed)).toBe(true);
     expect(result.divNodes).toEqual(['E:b', 'E:span']);
-    expect(result.bNodes).toEqual(['C:oe:t:0', 'T:raised', 'C:oe:/t:0']);
+    expect(result.bNodes).toEqual(['C:oe:t:0', 'C:oe:/t:0']);
     expect(result.spanNodes).toEqual(['T:wrong']);
     expect(result.afterMutationMutations).toEqual([]);
-    expect(result.bText).toBe('raised');
+    expect(result.bText).toBeNull();
     expect(result.hostStillHasBorrowedNodes).toBe(true);
     await page.close();
   });

@@ -168,14 +168,44 @@ contract:
   through the ordinary claim walk. Equal parsed/client values make the claim
   phase-2 work a no-op (0 claim-period mutations) and preserve anchor, branch
   and text node identity.
-- **Verify is read-only.** Branch adoption, the server-empty insert and the
-  test subscription are phase-2 closures; the walk itself writes nothing. A
-  server-empty branch with a non-empty client branch inserts before the end
-  marker and is explicitly non-clean (a real `childList` mutation), not a
-  0-mutation claim. A server non-empty/client empty or structurally different
-  branch, a stripped end marker, or a branch mismatch fails closed with the
-  existing `OEIR_LEAF_CLAIM_MISMATCH` identity without deleting borrowed DOM
-  and without opening a subscription.
+- **Verify is DOM-read-only, not JS-free.** Claim verify reads the cursor/DOM,
+  evaluates the condition test and setup-local snapshots once, and adopts the
+  selected client branch. "Read-only" means it performs no DOM write, opens no
+  subscription and runs no server-empty insert; it does not mean no JavaScript
+  runs. A local snapshot such as `const visible = props.visible` is evaluated
+  once before the structure walk (setup order, the same snapshot mount uses), so
+  an authored side effect in that initializer is observable during claim. The
+  independent-review B1 TDZ regression is covered by a real Chromium local
+  snapshot case.
+- **Activation is committed by the cursor owner.** In a shared-cursor module,
+  per-element phase-2 work is appended to one module-level activation queue as
+  closures (the closures keep block-scoped node bindings visible). Nested
+  component and claim-time recipe claims append to the same queue and never
+  flush it. Only the cursor owner drains the queue, after every nested claim's
+  structure walk and its own final `extra node at /` check have succeeded. A
+  late enclosing mismatch therefore opens no subscription, writes no DOM and
+  performs no server-empty insert; `claimRecipe` rollback still releases the
+  claim owner, condition/branch owners and child owners while keeping borrowed
+  nodes. This is the independent-review B2 fix. In a module with no
+  composition the non-shared claim already validated its root before phase 2;
+  it keeps inline activation.
+- **Activation remains non-transactional after commit.** Once the owner starts
+  draining, a throwing activation step can leave earlier writes, as the
+  `dispose(false)` contract says; this fix moves the commit point, it does not
+  add a byte transaction or a rollback mechanism. A successful server-empty
+  branch with a non-empty client branch still inserts before the end marker and
+  is explicitly non-clean (a real `childList` mutation), not a 0-mutation claim.
+  A server non-empty/client empty or structurally different branch, a stripped
+  end marker, or a branch mismatch fails closed with the existing
+  `OEIR_LEAF_CLAIM_MISMATCH` identity without deleting borrowed DOM.
+- **List-entry condition mount (inherited M06 defect).** A condition inside a
+  keyed or unkeyed list entry emits its branch builders with their own refresh
+  collector. Branch-local refresh names no longer leak into the entry
+  `update(next)` hook (the `__oe_refreshN is not defined` failure); the
+  condition's own refresh stays registered and its forced rebuild re-runs the
+  branch against the re-bound mapper parameter. A real same-key replacement
+  case in Chromium covers the update path. This does not claim list SSR, list
+  claim, keyed-entry completion or a new list shape.
 - **Claimable branch shapes** are the previously admitted ones: static text,
   dynamic-text pairs, attributes and static elements. A nested condition,
   list, component reference, insertion site, children projection or property
@@ -248,6 +278,11 @@ Condition slice on the same head:
   false→true→false, empty-branch insert/removal, non-clean insert,
   server/client mismatch, stripped end, throwing activation, subscription
   isolation, shared cursor and both dispose modes.
+- `packages/compiler/__tests__/semantic-ir/generated-leaf.condition-review.browser.test.ts`
+  — Chromium red/green review closure for B1 (local snapshot TDZ), B2
+  (shared-cursor activation commit point: no subscription/DOM write/insert
+  before the enclosing mismatch) and B3 (keyed-entry condition branch refresh
+  on same-key replacement). Four LOCAL tests; not M13.
 - `packages/element/__tests__/compiled-runtime/condition-wire.test.ts` —
   spelling, parser mutual exclusion, one-position asserts, mismatch identity.
 - `packages/compiler/__tests__/semantic-ir/generated-element.shell.test.ts` —
