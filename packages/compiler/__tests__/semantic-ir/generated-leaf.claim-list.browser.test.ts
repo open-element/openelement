@@ -941,7 +941,7 @@ describe('M08 list — Chromium claim, update and dispose', () => {
         propsChanged: runtime.signal(0),
       });
       runtime.runtimeProbe.reset();
-      let unsupported: { error: string | null; code: string | null } = { error: null, code: null };
+      let unsupported: { error: string | null; code: string | null };
       const nodesBefore = [...container.childNodes];
       try {
         runtime.claimRecipe(claimScope, claimRecipe, container);
