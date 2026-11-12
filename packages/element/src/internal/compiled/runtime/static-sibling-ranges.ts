@@ -260,6 +260,8 @@ function rejectNestedMarker(node: Node, source: string): void {
 /**
  * The parent must be only sibling ranges. Ordinals are strictly increasing.
  * Every ordinal `>= requiredFrom` (the unconsumed suffix) must be present.
+ * The start slot must carry the start spelling `oe:r:<n>`; an end marker
+ * `oe:/r:<n>` there is malformed, not a start whose close happens to follow.
  * A consumed range may still be present after `dispose(false)`, or absent
  * after `dispose(true)`. Neither case rewinds the cursor.
  */
@@ -281,10 +283,17 @@ function parseDirectory(
         `boundary: outside node is not a range start (${JSON.stringify(start?.nodeValue)})`,
       );
     }
-    const ordinal = parseRangeMarker(start.nodeValue)?.ordinal ?? null;
-    if (ordinal === null) {
+    const startMarker = parseRangeMarker(start.nodeValue);
+    if (startMarker === null) {
       fail(source, `ordinal: non-canonical start ${JSON.stringify(start.nodeValue)}`);
     }
+    // The pair spelling has a start (`oe:r:<n>`) and an end (`oe:/r:<n>`). The
+    // start slot reads only the start spelling; an end marker there is a
+    // malformed skeleton, not a start that happens to close later.
+    if (startMarker.end) {
+      fail(source, `boundary: end marker in a start slot ${JSON.stringify(start.nodeValue)}`);
+    }
+    const ordinal = startMarker.ordinal;
     if (ordinal <= previous || ordinal >= count) {
       fail(source, `order: start ordinal ${ordinal} is duplicate, gapped, or out of bounds`);
     }
