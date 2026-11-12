@@ -295,8 +295,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .node-version
-      - name: Install all browser engines
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - uses: ./.github/actions/install-browsers
       # -w pins the workspace ROOT's gate:release: the bare task name would
       # also match @openelement/tools-repo#gate:release and run the train
       # twice. --no-cache: the train must execute, never replay a task cache.

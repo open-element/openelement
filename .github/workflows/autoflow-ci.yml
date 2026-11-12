@@ -8,9 +8,9 @@ name: AutoFlow CI
 #
 # Two-tier qualification (alpha15 consolidation, Q-CI):
 #   Base CI — the four base jobs (lint, test, e2e, pack) run on every push
-#              (main and alpha15-consolidation) and on PRs. On a plain
-#              alpha15-consolidation push the five heavy jobs stay skipped
-#              *by design*: that run is Base CI, not full qualification.
+#              to main and on PRs. The five heavy jobs are opt-in through
+#              `workflow_dispatch full_qualification=true` (the release
+#              evidence path), not an unconditioned push lane.
 #   Full qualification — a main push still runs every qualification job
 #              (unchanged), and workflow_dispatch with
 #              full_qualification=true runs them on the dispatched ref's
@@ -45,10 +45,11 @@ name: AutoFlow CI
 
 on:
   push:
-    # main keeps its existing layer; alpha15-consolidation is the Base CI
-    # branch for the alpha15 line. No path filters: they would create
-    # evidence gaps on exactly the changes that need the proof.
-    branches: [main, alpha15-consolidation]
+    # main is the only push lane. No path filters: they would create evidence
+    # gaps on exactly the changes that need the proof. The alpha15 release
+    # line is closed (its last branch pointer is retired); full qualification
+    # for a candidate SHA runs through workflow_dispatch with expected_sha.
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -71,11 +72,11 @@ concurrency:
   # One lane per (ref, qualification mode). The mode is the same predicate the
   # five heavy jobs use below, so a Base run and a Full run on one ref can
   # never cancel each other: a full_qualification dispatch on
-  # alpha15-consolidation lands in ci-…-full while the running Base CI push
-  # stays in ci-…-base (and the reverse), instead of the old single
+  # a full dispatch lands in ci-…-full while a running Base CI push stays in
+  # ci-…-base (and the reverse), instead of the old single
   # ci-${{ github.ref }} lane destroying one another's evidence. Correct for
   # both events: push never reads a dispatch input (mode = full on main, base
-  # elsewhere, matching the heavy-job gate), dispatch uses full_qualification.
+  # otherwise, matching the heavy-job gate), dispatch uses full_qualification.
   # Same-mode runs on a ref (push→push, or dispatch→dispatch of one mode) keep
   # today's cancel-in-progress semantics — the newer run supersedes the older
   # one in its own lane only.
@@ -288,35 +289,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - name: Cache Playwright browsers
-        # v4.3.0 — same pinned action as .github/actions/setup-node-workspace.
-        # A cache step cannot live in that composite (it restores the pnpm
-        # store), and the browser cache is per-job browser install state. The
-        # key hashes pnpm-lock.yaml because playwright is a pinned
-        # devDependency: a playwright bump changes the lockfile and therefore
-        # the key, so stale browser revisions are never restored.
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-      - name: Install all browser engines
-        # 2026-11-06 failure shape: one `playwright install --with-deps` call
-        # stalled in apt/network for the whole job timeout. `timeout 600`
-        # bounds a single attempt, and three attempts absorb a transient apt
-        # mirror/download failure instead of failing the required check; a
-        # cache hit skips the browser download portion.
-        run: |
-          for attempt in 1 2 3; do
-            if timeout 600 ./node_modules/.bin/playwright install --with-deps chromium firefox webkit; then
-              exit 0
-            fi
-            echo "::warning::playwright install attempt ${attempt}/3 failed; retrying"
-            sleep 10
-          done
-          echo "::error::playwright install failed after 3 attempts"
-          exit 1
+      - uses: ./.github/actions/install-browsers
       - name: Element tests
         run: vp run --no-cache --fail-if-no-match --filter @openelement/element test
       - name: Router tests (includes 3-engine browser tests)
@@ -361,8 +334,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - name: Install chromium
-        run: ./node_modules/.bin/playwright install --with-deps chromium
+      - uses: ./.github/actions/install-browsers
+        with:
+          engines: chromium
       - name: Build site
         run: vp run site:build
       - name: WWW unit tests (build-output invariants)
@@ -404,11 +378,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - name: Install browsers for packed consumers
-        # --with-deps: WebKit needs host libraries (libgtk-4, gstreamer, …)
-        # the plain browser download does not bring — the packed starter smoke
-        # drives all three engines (the old workflow's install-deps step).
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - uses: ./.github/actions/install-browsers
       - name: Pack dry-run
         run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack:dry-run
       - name: Prepacked artifact check (publint + attw)
@@ -444,7 +414,7 @@ jobs:
   # ── Heavy qualification layer (5 jobs) ────────────────────────────────
   # Runs on a main push (unchanged) and on a workflow_dispatch with
   # full_qualification=true (the re-runnable Full qualification path on the
-  # dispatched SHA). A plain push to alpha15-consolidation skips all five by
+  # dispatched SHA). A plain push that is not main skips all five by
   # design: that push is Base CI. Every job needs sha-guard, so none of them
   # can run — let alone report success — without the guard's success.
   e2e-full:
@@ -485,8 +455,7 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - name: Install all browser engines
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - uses: ./.github/actions/install-browsers
       # Both legs keep the build: the fixture gates and the element browser
       # gate read the same generated/build-time workspace artifacts the site
       # proof does, and a duplicated ~35 s build is cheaper than a hidden
@@ -545,9 +514,12 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      - name: Install Chrome channel and xvfb
+      - uses: ./.github/actions/install-browsers
+        with:
+          engines: chrome
+          with-deps: 'false'
+      - name: Install xvfb
         run: |
-          ./node_modules/.bin/playwright install chrome
           sudo apt-get update
           sudo apt-get install -y xvfb
       - name: Build the packed starter
@@ -606,31 +578,8 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-workspace
-      # Playwright's browser cache lives at a different path per OS, so each
-      # matrix leg gets a literal path instead of an expression. Key shape and
-      # restore-keys match the test job, so the Linux legs share browser cache
-      # entries with each other and with `test`.
-      - name: Cache Playwright browsers (Linux)
-        if: runner.os == 'Linux'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-      - name: Cache Playwright browsers (macOS)
-        if: runner.os == 'macOS'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ~/Library/Caches/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-      - name: Install browsers
-        run: ./node_modules/.bin/playwright install chromium firefox webkit
-      - name: Install system deps (Linux)
-        if: runner.os == 'Linux'
-        run: sudo ./node_modules/.bin/playwright install-deps chromium firefox webkit
+      # The browser cache path differs per OS; `install-browsers` resolves it.
+      - uses: ./.github/actions/install-browsers
       - name: Pack the release tarballs
         run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack:dry-run
       - name: Fresh packed-starter consumer proof
