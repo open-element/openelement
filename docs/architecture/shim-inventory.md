@@ -66,6 +66,8 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 16 | CEM 兼容分类（第三方 WC 准入） | `packages/router/src/vite/internal/ssg/cem-compat.ts` | 保留为平台边缘（产品互操作面） |
 | 17 | 渲染器适配缝（native / lit；lit 分支已删） | ~~`packages/router/src/lit.ts`~~、~~`packages/router/src/lit-ssr.ts`~~（native 选择缝保留于 `packages/router/src/vite/internal/ssg/renderer-adapter.ts`） | **已删（ADR-0152 2026-11-08 零兼容退役；native 为唯一渲染器）** |
 | 18 | legacy 虚拟入口 id（`virtual:open-hono-entry`，ADR-0152） | `packages/router/src/vite/plugin-virtual-modules.ts` | 条件到即删（随下一次产物命名不兼容变更一起改名） |
+| 19 | Part Program 执行器（旧执行后端） | `packages/element/src/internal/compiled/facade-host.ts`（Part Program → live element 行为的唯一入口；`packages/element/src/internal/compiled/runtime-program.ts` 与之同属该后端，`packages/element/src/internal/compiled/runtime/` 下的 hydrate/resume 的 Part 路径由它驱动） | 条件到即删（M08 的 SSR→claim 与 per-phase 等价在固定 SHA 签收后，下一个 release 周期随生成叶路径接入产品入口一起删除） |
+| 20 | Class authoring API（旧作者面） | `packages/element/src/open-element-implementation.ts`（`OpenElement` 基类；`base.ts`、`open-element-configuration.ts`、`error-boundary.ts` 的类形状同属该面） | 条件到即删（ADR-0173 第四轮已批准零兼容退役；Alpha16b 的 C-1/C-3 能力清单覆盖证据落地、starter/文档迁移完成后删除） |
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法
 散文）已在 alpha8/alpha10 清理；其余命中要么已含书面退役条件，要么是
@@ -348,6 +350,39 @@ native 选择缝是主产物，不再作为垫片登记。）
   `virtual:open-element-entry` 并删除旧前缀判定；单独为改名而改名已被
   ADR-0152 否决。
 - 处置：条件到即删（随下一次产物命名不兼容变更一起改名）。
+
+### 19. Part Program 执行器（旧执行后端）——条件到即删
+
+- 所有者：element runtime（`packages/element/src/internal/compiled/facade-host.ts`
+  与 `packages/element/src/internal/compiled/runtime-program.ts` 是 `__partProgram`
+  的消费者；`packages/element/src/open-element-implementation.ts` 是编译期产物
+  进入公开 facade 的唯一入口）。
+- 方向：编译器产物（`__compiledProperties` / `__partProgram`）→ 公开基类的
+  live element 行为。
+- 存在原因：alpha.15 及以前唯一的执行后端；ADR-0174 接受下一代
+  mount/claim/update/dispose 的直出路径，同时明示"旧执行器尚未退役"。生成叶
+  路径目前只被编译器内部与测试使用，尚未接入产品入口，因此这条后端仍然是
+  产品实际运行的路径。
+- 退役条件：M08 的 SSR→claim 与 per-phase 等价（S/K/U/D）在固定 SHA 上签收，
+  且生成叶路径已接入产品入口（同一入口只有一处路径决策点）之后，下一个
+  release 周期删除本后端；删除时必须同时移除 `__partProgram` 产物形状与
+  对应的 README/公开说明。条件事件而非日期。
+- 处置：条件到即删。
+
+### 20. Class authoring API（旧作者面）——条件到即删
+
+- 所有者：element 作者面（`packages/element/src/open-element-implementation.ts`
+  的 `OpenElement` 基类是唯一根；`base.ts` / `open-element-configuration.ts` /
+  `error-boundary.ts` 继承它）。
+- 方向：authoring 源（class + decorator）→ 编译期产物 → 上述执行器。
+- 存在原因：alpha.15 的公开作者面。ADR-0173 第四轮修正案（2026-11-03，
+  D-O3 取代）已批准**零兼容退役、不建迁移适配器**，但批准的形态变更不等于
+  实现证据：类作者面仍在树内。
+- 退役条件：Alpha16b 的 C-1（size attribution）与 C-3（base codegen）能力
+  清单覆盖证据落地，且 starter/docs 完成迁移（`docs/architecture/tsx-author-candidate-contract.md`
+  从候选转正）之后删除；删除时公开面只保留 Native Custom Element 边界，不留
+  适配器。
+- 处置：条件到即删。
 
 ## 审计中排除的非垫片（避免下次重查）
 
