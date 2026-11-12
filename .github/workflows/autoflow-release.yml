@@ -35,12 +35,17 @@ name: Release
 #
 # Release state machine — the states and where each transition is enforced:
 #   DEVELOPMENT           ordinary commits; nothing in this file runs.
-#   CI_VERIFIED           the AutoFlow CI push run on main concluded success
-#                         with every required job-instance conclusion success
-#                         (ten logical jobs / thirteen instances: sha-guard +
-#                         nine qualification IDs / twelve instances; enforced
-#                         in autoflow-ci.yml, re-discovered and re-checked for
-#                         the dispatched SHA in `ci-evidence`).
+#   CI_VERIFIED           the AutoFlow CI Full-qualification dispatch for the
+#                         SHA (or a pre-split push run) concluded success with
+#                         every required job-instance conclusion success (ten
+#                         logical jobs / thirteen instances: sha-guard + nine
+#                         qualification IDs / twelve instances; enforced in
+#                         autoflow-ci.yml, re-discovered and re-checked for the
+#                         dispatched SHA in `ci-evidence`). A Base-only run —
+#                         green at the run level, ten instances: the guard plus
+#                         four base jobs success and the five heavy job IDs
+#                         skipped (a skipped job never expands its matrix) — is
+#                         never evidence.
 #   RELEASE_CANDIDATE     the CI-verified main commit carrying the version
 #                         bump; candidate = main's HEAD at dispatch time.
 #   OWNER_INITIATED       the explicit dispatch with operation=publish
@@ -53,10 +58,10 @@ name: Release
 #                         per-package tag/Release step.
 #   POST_PUBLISH_VERIFIED published-consumers.yml (3 OS) and the
 #                         registry-state read-back artifact.
-#   Fail-closed rule: a missing piece — no push CI run for the SHA, a
-#   non-success, skipped, cancelled or missing required CI job, a failed or
-#   skipped release gate, an empty/unknown operation — aborts before any
-#   publish side effect.
+#   Fail-closed rule: a missing piece — no Full-qualification dispatch and no
+#   pre-split push run for the SHA, a non-success, skipped, cancelled or
+#   missing required CI job, a failed or skipped release gate, an empty/unknown
+#   operation — aborts before any publish side effect.
 #
 # Event → job → side-effect matrix:
 #
@@ -143,9 +148,9 @@ jobs:
   # with `full_qualification=true` and `expected_sha=<candidate>` on main, wait
   # for the heavy lane to conclude, then dispatch this workflow. This job does
   # not take the operator's word for it: it discovers that run itself.
-  # The official AutoFlow CI run for exactly the dispatched SHA is discovered
+  # The official AutoFlow CI runs for exactly the dispatched SHA are discovered
   # here over the API — the dispatcher never supplies a run id as proof — and
-  # its EXACT qualification identity is checked instance by instance. The
+  # the EXACT qualification identity is checked instance by instance. The
   # definition is not hand-maintained here: tools/repo/ci-qualification.ts is
   # the one shared contract (sha-guard plus nine qualification job IDs /
   # twelve matrix instances = thirteen instances), re-derived from
@@ -154,7 +159,14 @@ jobs:
   # an unexpected instance, a partial listing, or any non-success (skip,
   # cancel, failure, timeout) is a refusal. The run-level conclusion alone is
   # not evidence: a run can be green with the heavy jobs skipped on a
-  # non-qualifying lane.
+  # non-qualifying lane. A Base dispatch is also run-level green but lists TEN
+  # instances, not thirteen: the guard plus four base jobs conclude success and
+  # the five heavy jobs appear once each by bare job ID, skipped. Candidate
+  # discovery reads the jobs: it probes dispatch runs newest-first, then
+  # pre-split main push runs, and accepts the first exact-SHA run whose thirteen
+  # instance conclusions are all success. The exact ten-instance Base shape is
+  # skipped (with a notice) so it cannot shadow a full qualification; a malformed
+  # listing, a failed/cancelled conclusion, or a wrong SHA refuses.
   ci-evidence:
     needs: [dispatch-guard]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'publish'
@@ -204,36 +216,25 @@ jobs:
           # Since W4b (2026-11-12) the heavy qualification lane is dispatch-only,
           # so the canonical release evidence is a `full_qualification` dispatch
           # for the candidate SHA, not the main push run (which now carries only
-          # the base layer). A push run is still accepted as a fallback so a SHA
-          # qualified before the split keeps its evidence.
+          # the base layer). A Full dispatch lists thirteen instances; a Base
+          # dispatch lists ten (guard + four base jobs success, five heavy job
+          # IDs skipped because a skipped job never expands its matrix), so the
+          # run conclusion and the run-level lane alone cannot pick the evidence.
+          # Candidate discovery probes dispatches newest-first, then main push
+          # runs, and accepts the first exact-SHA run whose thirteen instances
+          # all concluded success. A newer Base-only run is not evidence and must
+          # not shadow an older Full qualification; a push run remains the
+          # fallback for a SHA qualified before the split.
           gh api "repos/${REPOSITORY}/actions/workflows/autoflow-ci.yml/runs?head_sha=${CANDIDATE_SHA}&per_page=100" > /tmp/ci-runs.json
-          RUN_ID=$(jq -r '[.workflow_runs[] | select(.event == "workflow_dispatch")] | sort_by(.created_at) | reverse | .[0].id // empty' /tmp/ci-runs.json)
-          if [ -z "${RUN_ID}" ]; then
-            RUN_ID=$(jq -r '[.workflow_runs[] | select(.event == "push" and .head_branch == "main")] | sort_by(.created_at) | reverse | .[0].id // empty' /tmp/ci-runs.json)
-          fi
-          if [ -z "${RUN_ID}" ]; then
+          CANDIDATE_IDS=$(jq -r '
+            ([.workflow_runs[] | select(.event == "workflow_dispatch")] | sort_by(.created_at) | reverse) as $dispatches |
+            ([.workflow_runs[] | select(.event == "push" and .head_branch == "main")] | sort_by(.created_at) | reverse) as $pushes |
+            ($dispatches + $pushes)[] | .id' /tmp/ci-runs.json)
+          if [ -z "${CANDIDATE_IDS}" ]; then
             echo "::error::no full-qualification dispatch and no main push run found for ${CANDIDATE_SHA} in ${REPOSITORY}; publish refused (missing CI evidence)"
             echo "::error::dispatch AutoFlow CI with full_qualification=true and expected_sha=${CANDIDATE_SHA}, wait for green, then publish."
             exit 1
           fi
-          gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}" > /tmp/ci-run.json
-          RUN_SHA=$(jq -r '.head_sha' /tmp/ci-run.json)
-          RUN_CONCLUSION=$(jq -r '.conclusion' /tmp/ci-run.json)
-          if [ "${RUN_SHA}" != "${CANDIDATE_SHA}" ]; then
-            echo "::error::CI run ${RUN_ID} is bound to ${RUN_SHA}, not ${CANDIDATE_SHA}; publish refused"
-            exit 1
-          fi
-          if [ "${RUN_CONCLUSION}" != "success" ]; then
-            echo "::error::CI run ${RUN_ID} for ${CANDIDATE_SHA} concluded '${RUN_CONCLUSION}'; publish refused"
-            exit 1
-          fi
-          # `filter=latest` is explicit, not inherited from the API default: a
-          # re-run (the whole run, or GitHub's "re-run failed jobs" subset)
-          # creates additional job attempts, and only each instance's latest
-          # attempt is evidence. With `latest`, a partial re-run still lists
-          # the same thirteen instances; including superseded attempts would
-          # make the exact-identity check below refuse a justified re-run.
-          gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100&filter=latest" > /tmp/ci-jobs.json
           # One shared qualification definition (tools/repo/ci-qualification.ts):
           # thirteen required instances = sha-guard + nine qualification job IDs
           # / twelve matrix instances. The tools tests re-derive this identity
@@ -241,42 +242,90 @@ jobs:
           # workflow cannot drift into hand-maintained duplicate lists.
           node "${GITHUB_WORKSPACE}/tools/repo/ci-qualification.ts" --json > /tmp/ci-qualification.json
           EXPECTED_TOTAL=$(jq -r '.totalInstances' /tmp/ci-qualification.json)
-          TOTAL=$(jq -r '.total_count' /tmp/ci-jobs.json)
-          LISTED=$(jq -r '.jobs | length' /tmp/ci-jobs.json)
-          if [ "${TOTAL}" != "${LISTED}" ]; then
-            echo "::error::the CI jobs listing for run ${RUN_ID} is incomplete (${LISTED}/${TOTAL}); publish refused"
-            exit 1
-          fi
-          if [ "${LISTED}" != "${EXPECTED_TOTAL}" ]; then
-            echo "::error::the CI run lists ${LISTED} job instance(s); the qualification contract requires ${EXPECTED_TOTAL} (ten logical jobs / thirteen instances: sha-guard plus nine qualification job IDs / twelve instances); publish refused"
-            exit 1
-          fi
-          # Exact identity, not a prefix match: every expected instance must
-          # appear exactly once, no unexpected instance may appear, and every
-          # conclusion must be success. A missing or duplicated matrix leg, an
-          # unexpected job, or any non-success (skipped/cancelled/failure) is
-          # a refusal — "roughly the right shape" is never evidence.
-          FAILURES=$(jq -r --arg run "${RUN_ID}" --slurpfile contract /tmp/ci-qualification.json '
-            ($contract[0].instances) as $expected |
-            ([.jobs[].name]) as $actual |
-            [
-              ( $expected[] as $name |
-                ([ $actual[] | select(. == $name) ] | length) as $count |
-                if $count == 0 then "required CI job instance \($name) is missing from run \($run)"
-                elif $count > 1 then "required CI job instance \($name) appears \($count) times in run \($run)"
-                else empty end ),
-              ( $actual[] as $name |
-                select(([ $expected[] | select(. == $name) ] | length) == 0) |
-                "unexpected CI job instance \($name) in run \($run)" ),
-              ( .jobs[] | select(.conclusion != "success") |
-                "required CI job instance \(.name) concluded \(.conclusion // .status)" )
-            ] | .[]' /tmp/ci-jobs.json)
-          if [ -n "${FAILURES}" ]; then
+          BASE_TOTAL=$(jq -r '.base.totalInstances' /tmp/ci-qualification.json)
+          RUN_ID=""
+          EVIDENCE_EVENT=""
+          while IFS= read -r CANDIDATE; do
+            [ -n "${CANDIDATE}" ] || continue
+            gh api "repos/${REPOSITORY}/actions/runs/${CANDIDATE}" > /tmp/ci-run.json
+            RUN_SHA=$(jq -r '.head_sha' /tmp/ci-run.json)
+            RUN_CONCLUSION=$(jq -r '.conclusion' /tmp/ci-run.json)
+            if [ "${RUN_SHA}" != "${CANDIDATE_SHA}" ]; then
+              echo "::error::CI run ${CANDIDATE} is bound to ${RUN_SHA}, not ${CANDIDATE_SHA}; publish refused (exact-SHA evidence required)"
+              exit 1
+            fi
+            if [ "${RUN_CONCLUSION}" != "success" ]; then
+              echo "::error::CI run ${CANDIDATE} for ${CANDIDATE_SHA} concluded '${RUN_CONCLUSION}'; publish refused (the latest full-qualification attempt does not pass)"
+              exit 1
+            fi
+            # `filter=latest` is explicit, not inherited from the API default: a
+            # re-run (the whole run, or GitHub's "re-run failed jobs" subset)
+            # creates additional job attempts, and only each instance's latest
+            # attempt is evidence. With `latest`, a partial re-run still lists
+            # the same thirteen instances; including superseded attempts would
+            # make the exact-identity check below refuse a justified re-run.
+            gh api "repos/${REPOSITORY}/actions/runs/${CANDIDATE}/jobs?per_page=100&filter=latest" > /tmp/ci-jobs.json
+            TOTAL=$(jq -r '.total_count' /tmp/ci-jobs.json)
+            LISTED=$(jq -r '.jobs | length' /tmp/ci-jobs.json)
+            if [ "${TOTAL}" != "${LISTED}" ]; then
+              echo "::error::the CI jobs listing for run ${CANDIDATE} is incomplete (${LISTED}/${TOTAL}); publish refused"
+              exit 1
+            fi
+            # Exact identity, not a prefix match: every expected instance must
+            # appear exactly once, no unexpected instance may appear, and every
+            # conclusion must be success. A missing or duplicated matrix leg, an
+            # unexpected job, or any non-success (skipped/cancelled/failure) is
+            # a refusal — "roughly the right shape" is never evidence.
+            FAILURES=$(jq -r --arg run "${CANDIDATE}" --slurpfile contract /tmp/ci-qualification.json '
+              ($contract[0].instances) as $expected |
+              ([.jobs[].name]) as $actual |
+              [
+                ( $expected[] as $name |
+                  ([ $actual[] | select(. == $name) ] | length) as $count |
+                  if $count == 0 then "required CI job instance \($name) is missing from run \($run)"
+                  elif $count > 1 then "required CI job instance \($name) appears \($count) times in run \($run)"
+                  else empty end ),
+                ( $actual[] as $name |
+                  select(([ $expected[] | select(. == $name) ] | length) == 0) |
+                  "unexpected CI job instance \($name) in run \($run)" ),
+                ( .jobs[] | select(.conclusion != "success") |
+                  "required CI job instance \(.name) concluded \(.conclusion // .status)" )
+              ] | .[]' /tmp/ci-jobs.json)
+            if [ -z "${FAILURES}" ]; then
+              RUN_ID="${CANDIDATE}"
+              EVIDENCE_EVENT=$(jq -r '.event' /tmp/ci-run.json)
+              break
+            fi
+            # A real Base run is a DISTINCT LISTING, not a Full run with its
+            # heavy legs skipped. GitHub does not expand the matrix of a job
+            # skipped by its job-level `if:`: the guard and the four base jobs
+            # conclude success, and each of the five heavy jobs appears ONCE by
+            # its bare job ID with conclusion `skipped`. That is ten instances,
+            # never the thirteen of a Full run with eight expanded legs marked
+            # skipped. Only this exact shape may be skipped; a malformed
+            # ten-instance listing (a missing, duplicated or unexpected job, or
+            # a base job skipped) is a refusal like any other, and so is an
+            # all-skipped thirteen-instance listing. The skip is a notice: a
+            # normal Base result must not annotate the run as an error.
+            if [ "${LISTED}" = "${BASE_TOTAL}" ]; then
+              BASE_MATCH=$(jq -r --slurpfile contract /tmp/ci-qualification.json '
+                (($contract[0].base.listing) | sort_by(.name)) as $expected |
+                (([.jobs[] | {name, conclusion}] | sort_by(.name))) as $actual |
+                if $actual == $expected then "yes" else "no" end' /tmp/ci-jobs.json)
+              if [ "${BASE_MATCH}" = "yes" ]; then
+                echo "::notice::CI run ${CANDIDATE} is Base-only evidence (${LISTED} instances: sha-guard plus four base jobs success, five heavy jobs skipped); candidate skipped, checking older evidence"
+                continue
+              fi
+            fi
             while IFS= read -r failure; do echo "::error::${failure}"; done <<< "${FAILURES}"
-            echo "::error::CI evidence for ${CANDIDATE_SHA} is not the complete qualification contract (ten logical jobs / thirteen instances: sha-guard plus nine job IDs / twelve instances); publish refused"
+            echo "::error::the qualification contract requires ${EXPECTED_TOTAL} instances for release evidence (ten logical jobs / thirteen instances: sha-guard plus nine job IDs / twelve instances); CI evidence for ${CANDIDATE_SHA} is not complete, and a Base run must list exactly ${BASE_TOTAL} instances (guard + four base jobs success, five heavy job IDs skipped); publish refused"
+            exit 1
+          done <<< "${CANDIDATE_IDS}"
+          if [ -z "${RUN_ID}" ]; then
+            echo "::error::no CI run for ${CANDIDATE_SHA} satisfied the complete qualification contract (ten logical jobs / thirteen instances: sha-guard plus nine job IDs / twelve instances); publish refused (missing CI evidence)"
             exit 1
           fi
-          echo "CI evidence verified: run ${RUN_ID} (push, ${CANDIDATE_SHA}) success; all thirteen required job instances (sha-guard plus nine qualification job IDs / twelve instances) concluded success."
+          echo "CI evidence verified: run ${RUN_ID} (${EVIDENCE_EVENT}, ${CANDIDATE_SHA}) success; all thirteen required job instances (sha-guard plus nine qualification job IDs / twelve instances) concluded success."
           {
             echo "run_id=${RUN_ID}"
             echo "sha=${CANDIDATE_SHA}"

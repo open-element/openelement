@@ -301,6 +301,18 @@ test('B: marker and static mismatches write nothing and keep borrowed nodes', ()
       },
     },
     {
+      // A start marker is `oe:r:<n>`; `oe:/r:<n>` is the close spelling. An
+      // end marker in the start slot used to be read as that range's start and
+      // then matched against the next identical end marker, so the directory
+      // opened on a malformed skeleton. The start slot must reject end=true.
+      name: 'end marker where a start is required',
+      declaration: [paragraph('same')],
+      build(doc, parent) {
+        parent.appendChild(doc.comment('oe:/r:0'));
+        parent.appendChild(doc.comment('oe:/r:0'));
+      },
+    },
+    {
       name: 'crossed markers',
       declaration: [paragraph('a'), paragraph('b')],
       build(doc, parent) {
