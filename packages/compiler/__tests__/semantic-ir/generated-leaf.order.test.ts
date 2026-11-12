@@ -98,14 +98,13 @@ test('claim source follows authored insertion order and keeps one directory laye
   const twiceMount = functionBody(module, 'Twice__mount');
   const twiceClaim = functionBody(module, 'Twice__claim');
   expect(twiceMount.match(/insertRecipe\(/g)?.length).toBe(2);
-  expect([...twiceMount.matchAll(/rangeMarkerText\((\d+)\)/g)].map((m) => m[1])).toEqual([
+  expect([...twiceMount.matchAll(/emitComment\(rangeMarker\((\d+)\)/g)].map((m) => m[1])).toEqual([
     '0',
     '1',
   ]);
-  expect([...twiceMount.matchAll(/rangeMarkerText\((\d+), true\)/g)].map((m) => m[1])).toEqual([
-    '0',
-    '1',
-  ]);
+  expect(
+    [...twiceMount.matchAll(/emitComment\(rangeMarker\((\d+), true\)/g)].map((m) => m[1]),
+  ).toEqual(['0', '1']);
   expect(twiceClaim.match(/claimRecipe\(/g)?.length).toBe(2);
   expect(twiceClaim).toMatch(/claimStaticSiblingRange\([^,]+, 0,/);
   expect(twiceClaim).toMatch(/claimStaticSiblingRange\([^,]+, 1,/);
@@ -121,12 +120,11 @@ test('claim source follows authored insertion order and keeps one directory laye
 
   const adversarialMount = functionBody(module, 'Adversarial__mount');
   const adversarialClaim = functionBody(module, 'Adversarial__claim');
-  expect([...adversarialMount.matchAll(/rangeMarkerText\((\d+)\)/g)].map((m) => m[1])).toEqual([
-    '0',
-    '1',
-  ]);
   expect(
-    [...adversarialMount.matchAll(/rangeMarkerText\((\d+), true\)/g)].map((m) => m[1]),
+    [...adversarialMount.matchAll(/emitComment\(rangeMarker\((\d+)\)/g)].map((m) => m[1]),
+  ).toEqual(['0', '1']);
+  expect(
+    [...adversarialMount.matchAll(/emitComment\(rangeMarker\((\d+), true\)/g)].map((m) => m[1]),
   ).toEqual(['0', '1']);
   expect(adversarialMount).not.toContain('rangeMarkerText(2');
   expect(adversarialClaim).toMatch(/claimStaticSiblingRange\([^,]+, 0,/);
@@ -364,7 +362,7 @@ beforeAll(async () => {
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
       `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export { MARKERS, parseRangeMarker, rangeMarkerText } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+      `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
       `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,
       `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
       `export { signal } from ${JSON.stringify(join(element, 'signal/framework.ts'))};`,

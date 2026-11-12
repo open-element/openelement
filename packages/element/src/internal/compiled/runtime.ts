@@ -126,6 +126,18 @@ export {
   type Recipe,
   type RecipeOptions,
 } from './runtime/recipe.ts';
+// The value/binding helpers a generated leaf module imports. They live in
+// `runtime/values.ts` and `runtime/bindings.ts`; this barrel is the single
+// specifier generated code resolves, so it must export exactly the surface
+// that specifier promises. The generated-module type check
+// (`generated-leaf.typecheck.test.ts`) is what keeps the two in agreement.
+export {
+  assertSafeUrlAttribute,
+  attributeValueOf,
+  displayValue,
+  removeNodes,
+} from './runtime/values.ts';
+export { bindSignalWrites } from './runtime/bindings.ts';
 export { createTrackedProps, type TrackedProps } from './runtime/props.ts';
 export { runtimeProbe, type RuntimeProbeCounts } from './runtime/observability.ts';
 export {
@@ -157,7 +169,14 @@ export {
   staticAttributeSeedMismatch,
   type DeclaredStaticAttribute,
 } from './runtime/claim-invariants.ts';
-export { MARKERS, parseRangeMarker, rangeMarkerText } from './runtime/markers.ts';
+export {
+  emitComment,
+  MARKERS,
+  markerText,
+  parseRangeMarker,
+  rangeMarker,
+  type Marker,
+} from './runtime/markers.ts';
 export { OpenElementError } from '@openelement/protocol/errors';
 
 // ─── Seed serialization ────────────────────────────────────────────

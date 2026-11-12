@@ -210,7 +210,8 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     symbol: 'assertStaticAttributeSeed',
     predicate: (body) => body.includes('assertStaticAttributeSeed('),
   },
-  { symbol: 'rangeMarkerText', predicate: (body) => body.includes('rangeMarkerText(') },
+  { symbol: 'emitComment', predicate: (body) => body.includes('emitComment(') },
+  { symbol: 'rangeMarker', predicate: (body) => body.includes('rangeMarker(') },
   { symbol: 'MARKERS', predicate: (body) => body.includes('MARKERS.') },
   {
     symbol: 'claimStaticSiblingRange',
@@ -693,7 +694,7 @@ function emitCondition(
   const alternateFn =
     node.alternate !== null && node.alternate.length > 0 ? `${INTERNAL_PREFIX}whenElse${id}` : null;
 
-  push(state, `const ${anchorVar} = document.createComment(MARKERS.when);`, node.span);
+  push(state, `const ${anchorVar} = emitComment(MARKERS.when);`, node.span);
   sink.push({ kind: 'node', name: anchorVar });
   if (consequentFn !== null) {
     emitNodesBuilder(
@@ -805,7 +806,7 @@ function emitList(
   const keyFn = `${INTERNAL_PREFIX}eachKey${id}`;
   const refreshVar = `${INTERNAL_PREFIX}eachRefresh${id}`;
 
-  push(state, `const ${anchorVar} = document.createComment(MARKERS.each);`, node.span);
+  push(state, `const ${anchorVar} = emitComment(MARKERS.each);`, node.span);
   sink.push({ kind: 'node', name: anchorVar });
   push(state, `let ${entriesVar} = [];`);
   state.listDepth += 1;
@@ -1958,7 +1959,7 @@ function emitMountedDirectory(
   ranges.forEach((range, ordinal) => {
     const span = range.span;
     const start = nextName(state, 'mark');
-    push(state, `const ${start} = document.createComment(rangeMarkerText(${ordinal}));`, span);
+    push(state, `const ${start} = emitComment(rangeMarker(${ordinal}));`, span);
     appendGeneratedNode(state, target, start);
     const sink: SinkEntry[] = [];
     emitNode(state, range, sink, records, false);
@@ -1966,7 +1967,7 @@ function emitMountedDirectory(
       if (entry.kind === 'node') appendGeneratedNode(state, target, entry.name);
     }
     const end = nextName(state, 'mark');
-    push(state, `const ${end} = document.createComment(rangeMarkerText(${ordinal}, true));`, span);
+    push(state, `const ${end} = emitComment(rangeMarker(${ordinal}, true));`, span);
     appendGeneratedNode(state, target, end);
   });
 }

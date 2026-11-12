@@ -48,10 +48,10 @@ function generate(source: string): string {
 
 test('a pure static element directory emits markers and calls the consumer with literal ordinals', () => {
   const module = generate('function Pair(props) { return <div><p>same</p><p>same</p></div>; }\n');
-  expect(module).toContain('document.createComment(rangeMarkerText(0))');
-  expect(module).toContain('document.createComment(rangeMarkerText(0, true))');
-  expect(module).toContain('document.createComment(rangeMarkerText(1))');
-  expect(module).toContain('document.createComment(rangeMarkerText(1, true))');
+  expect(module).toContain('emitComment(rangeMarker(0))');
+  expect(module).toContain('emitComment(rangeMarker(0, true))');
+  expect(module).toContain('emitComment(rangeMarker(1))');
+  expect(module).toContain('emitComment(rangeMarker(1, true))');
   expect(module).toContain('openStaticSiblingDirectory(');
   expect(module).toContain('claimStaticSiblingRange(');
   expect(module).toMatch(/claimStaticSiblingRange\([^,]+, 0,/);
@@ -59,7 +59,7 @@ test('a pure static element directory emits markers and calls the consumer with 
   const claimAt = module.indexOf('function Pair__claim');
   const claim = module.slice(claimAt);
   expect(claim.indexOf('claimStaticSiblingRange(')).toBeGreaterThanOrEqual(0);
-  expect(claim.indexOf('rangeMarkerText(')).toBe(-1);
+  expect(claim.indexOf('emitComment(rangeMarker(')).toBe(-1);
 });
 
 test('fragment roots are a directory on the claim parent, still calling the consumer', () => {
@@ -67,19 +67,21 @@ test('fragment roots are a directory on the claim parent, still calling the cons
   expect(module).toContain('openStaticSiblingDirectory(__oe_parent,');
   expect(module).toMatch(/claimStaticSiblingRange\([^,]+, 0,/);
   expect(module).toMatch(/claimStaticSiblingRange\([^,]+, 1,/);
-  expect(module).toContain('document.createComment(rangeMarkerText(0))');
+  expect(module).toContain('emitComment(rangeMarker(0))');
 });
 
 test('an outer directory does not nest markers inside a static child', () => {
   const module = generate(
     'function Outer(props) { return <div><p>a</p><section><b>x</b><i>y</i></section></div>; }\n',
   );
-  expect([...module.matchAll(/rangeMarkerText\((\d+)\)/g)].map((m) => m[1])).toEqual(['0', '1']);
-  expect([...module.matchAll(/rangeMarkerText\((\d+), true\)/g)].map((m) => m[1])).toEqual([
+  expect([...module.matchAll(/emitComment\(rangeMarker\((\d+)\)\)/g)].map((m) => m[1])).toEqual([
     '0',
     '1',
   ]);
-  expect(module).not.toContain('rangeMarkerText(2');
+  expect(
+    [...module.matchAll(/emitComment\(rangeMarker\((\d+), true\)\)/g)].map((m) => m[1]),
+  ).toEqual(['0', '1']);
+  expect(module).not.toContain('emitComment(rangeMarker(2');
   expect(module).toContain('document.createElement("section")');
   expect(module).toContain('document.createElement("b")');
 });
@@ -88,12 +90,14 @@ test('a fragment inside a directory range does not emit an inner directory', () 
   const module = generate(
     'function Nested(props) { return <div><section><><p><span>a</span><em>b</em></p><div><span>c</span><em>d</em></div></></section><article><><p><span>e</span><em>f</em></p><div><span>g</span><em>h</em></div></></article></div>; }\n',
   );
-  expect([...module.matchAll(/rangeMarkerText\((\d+)\)/g)].map((m) => m[1])).toEqual(['0', '1']);
-  expect([...module.matchAll(/rangeMarkerText\((\d+), true\)/g)].map((m) => m[1])).toEqual([
+  expect([...module.matchAll(/emitComment\(rangeMarker\((\d+)\)\)/g)].map((m) => m[1])).toEqual([
     '0',
     '1',
   ]);
-  expect(module).not.toContain('rangeMarkerText(2');
+  expect(
+    [...module.matchAll(/emitComment\(rangeMarker\((\d+), true\)\)/g)].map((m) => m[1]),
+  ).toEqual(['0', '1']);
+  expect(module).not.toContain('emitComment(rangeMarker(2');
   expect(module).toContain('document.createElement("section")');
   expect(module).toContain('document.createElement("article")');
   expect(module).toContain('document.createElement("span")');
@@ -105,12 +109,14 @@ test('quality adversarial fragment shape keeps only the outer directory markers'
   const module = generate(
     'function Adversarial(props) { return <div><p>a</p><section><><div><b>x</b><i>y</i></div></></section></div>; }\n',
   );
-  expect([...module.matchAll(/rangeMarkerText\((\d+)\)/g)].map((m) => m[1])).toEqual(['0', '1']);
-  expect([...module.matchAll(/rangeMarkerText\((\d+), true\)/g)].map((m) => m[1])).toEqual([
+  expect([...module.matchAll(/emitComment\(rangeMarker\((\d+)\)\)/g)].map((m) => m[1])).toEqual([
     '0',
     '1',
   ]);
-  expect(module).not.toContain('rangeMarkerText(2');
+  expect(
+    [...module.matchAll(/emitComment\(rangeMarker\((\d+), true\)\)/g)].map((m) => m[1]),
+  ).toEqual(['0', '1']);
+  expect(module).not.toContain('emitComment(rangeMarker(2');
   expect(module).toContain('document.createElement("section")');
   expect(module).toContain('document.createElement("b")');
   expect(module).toContain('document.createElement("i")');
@@ -118,23 +124,23 @@ test('quality adversarial fragment shape keeps only the outer directory markers'
 
 test('mixed text, one child, insertion sites, and excluded parents do not become a directory', () => {
   const mixed = generate('function Mixed(props) { return <div>hello<p>a</p></div>; }\n');
-  expect(mixed).not.toContain('rangeMarkerText(');
+  expect(mixed).not.toContain('emitComment(rangeMarker(');
   expect(mixed).toContain('document.createTextNode("hello")');
   expect(mixed).toContain('document.createElement("p")');
 
   const single = generate('function One(props) { return <div><p>only</p></div>; }\n');
-  expect(single).not.toContain('rangeMarkerText(');
+  expect(single).not.toContain('emitComment(rangeMarker(');
   expect(single).toContain('leafClaimMismatch(');
 
   const table = generate(
     'function Grid(props) { return <table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>; }\n',
   );
-  expect(table).not.toContain('rangeMarkerText(');
+  expect(table).not.toContain('emitComment(rangeMarker(');
 
   const slotted = generate(
     'function Slot(props) { const item = <span>x</span>; return <div>{item}<p>a</p></div>; }\n',
   );
-  expect(slotted).not.toContain('rangeMarkerText(');
+  expect(slotted).not.toContain('emitComment(rangeMarker(');
   expect(slotted).toContain('insertRecipe(');
   expect(slotted).toContain('document.createElement("p")');
 });
@@ -144,7 +150,7 @@ test('a pure-mount tree does not emit unconsumed range markers', () => {
     'function C(props) { return <div>{true ? <section><p>a</p><p>b</p></section> : <section><b>x</b><i>y</i></section>}</div>; }\n',
   );
   expect(conditional).not.toContain('function C__claim');
-  expect(conditional).not.toContain('rangeMarkerText(');
+  expect(conditional).not.toContain('emitComment(rangeMarker(');
   expect(conditional).not.toContain('oe:/r:');
   expect(conditional).toContain('document.createElement("p")');
   expect(conditional).toContain('document.createElement("b")');
@@ -153,7 +159,7 @@ test('a pure-mount tree does not emit unconsumed range markers', () => {
     'function C(props) { const item = <span><b>x</b><i>y</i></span>; return <div><input value={props.text} />{item}</div>; }\n',
   );
   expect(recipe).not.toContain('function C__claim');
-  expect(recipe).not.toContain('rangeMarkerText(');
+  expect(recipe).not.toContain('emitComment(rangeMarker(');
   expect(recipe).not.toContain('oe:/r:');
   expect(recipe).toContain('document.createElement("b")');
 });
@@ -338,7 +344,7 @@ beforeAll(async () => {
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
       `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export { MARKERS, parseRangeMarker, rangeMarkerText } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
+      `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
       `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,
       `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
       '',
@@ -635,7 +641,7 @@ test('a pure-mount directory does not leave marker comments in the DOM', () => {
   const generated = String(generate(EXECUTION));
   const mountOnly = generated.slice(generated.indexOf('function MountOnly__mount'));
   expect(mountOnly).not.toContain('function MountOnly__claim');
-  expect(mountOnly).not.toContain('rangeMarkerText(');
+  expect(mountOnly).not.toContain('emitComment(rangeMarker(');
   expect(mountOnly).not.toContain('oe:/r:');
 });
 

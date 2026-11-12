@@ -143,7 +143,7 @@ async function buildRuntimeBundle(): Promise<string> {
         `export { runtimeProbe } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/observability.ts`)};`,
         `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/values.ts`)};`,
         `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, leafClaimMismatch } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/claim-invariants.ts`)};`,
-        `export { MARKERS, parseRangeMarker, rangeMarkerText } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/markers.ts`)};`,
+        `export { emitComment, MARKERS, markerText, parseRangeMarker, rangeMarker } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/markers.ts`)};`,
         `export { LifetimeScope } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/lifetime-scope.ts`)};`,
         `export { signal, computed } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/signal/framework.ts`)};`,
         '',
