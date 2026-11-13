@@ -43,6 +43,8 @@ import {
   type StaticSidecarDescriptor,
 } from './semantic-core/module-analysis.ts';
 import { compileServerComponentIfAdmitted } from './semantic-core/server-component.ts';
+import { compileGeneratedElementIfAdmitted } from './semantic-ir/generated-element/compile.ts';
+import type { GeneratedElementSite } from './semantic-ir/generated-element/contract.ts';
 import {
   diagnosticPluginError,
   recordCompilerDiagnostics,
@@ -228,6 +230,26 @@ export interface CompiledElementPluginOptions {
 }
 
 /**
+ * The generated-element site option is INTERNAL in M09-1a.
+ *
+ * It is not part of the public {@link CompiledElementPluginOptions}: adding it
+ * there would change `compiledElementPlugin`'s public type (the interface
+ * snapshot gate refuses that, correctly — M09-1a adds no public API). The
+ * internal factory below is the only entry that accepts it, and it is not
+ * re-exported from `@openelement/compiler` or `@openelement/compiler/vite`.
+ * M09-1b owns the public option when the router actually supplies a site.
+ */
+interface GeneratedElementPluginOptions extends CompiledElementPluginOptions {
+  /**
+   * Host-supplied site fact for the generated Native Custom Element lane.
+   * Returning null (and omitting the option, which is what every production
+   * caller does in M09-1a) keeps the lane inert. The router wiring that
+   * supplies this closure is M09-1b.
+   */
+  generatedElementSite?: (moduleId: string) => GeneratedElementSite | null;
+}
+
+/**
  * Register one module's style edges (the registry's one write path, S-C1.4).
  *
  * The importing component's root scope is part of every edge it registers
@@ -263,8 +285,29 @@ export function registerStyleEdges(
  * module with a canonically bound `@element` decorator, and leaves all other
  * modules untouched. `workspaceRoot` anchors generated source-map ids for
  * linked workspace packages.
+ *
+ * This public entry's options are exactly the published
+ * {@link CompiledElementPluginOptions}; the generated-element site option is
+ * internal (see {@link GeneratedElementPluginOptions}), so this entry cannot
+ * turn the M09-1a lane on. It delegates to the one implementation and is inert
+ * for that lane in every real build.
  */
 export function compiledElementPlugin(options: CompiledElementPluginOptions = {}): Plugin {
+  return createCompiledElementPlugin(options);
+}
+
+/**
+ * The M09-1a internal entry used by the emitter tests: accepts the site option
+ * without changing the public plugin type. Not re-exported by any package
+ * entry; the router wiring is M09-1b.
+ */
+export function compiledElementPluginWithGeneratedElements(
+  options: GeneratedElementPluginOptions = {},
+): Plugin {
+  return createCompiledElementPlugin(options);
+}
+
+function createCompiledElementPlugin(options: GeneratedElementPluginOptions = {}): Plugin {
   let viteRoot: string | undefined;
   const workspaceRoot = options.workspaceRoot;
   return {
@@ -284,6 +327,18 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
         const compiled = compileElementModule(code, moduleId, {
           staticSidecars: options.staticSidecars,
         });
+        // The generated Native Custom Element lane (M09-1a) sits between the
+        // class lane and the server function lane: the class lane owns every
+        // decorated module, and a module the generated lane admits is not a
+        // server component. No production caller passes a site fact in M09-1a,
+        // so this expression is null for every real build (the router wiring is
+        // M09-1b).
+        const generated =
+          compiled === null && options.generatedElementSite !== undefined
+            ? compileGeneratedElementIfAdmitted(code, moduleId, {
+                site: options.generatedElementSite(moduleId),
+              })
+            : null;
         // The server function component lane (alpha15): the class lane
         // declined (no compiled-element decorator), so the module may still
         // be a server function page/component — an exported JSX-returning
@@ -295,7 +350,7 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
         // orphan CSS asset (the demand-shape discipline the style pipeline
         // documents).
         const serverCompiled =
-          compiled === null
+          compiled === null && generated === null
             ? compileServerComponentIfAdmitted(code, moduleId, {
                 ...(options.resolveServerComponentModule === undefined
                   ? {}
@@ -317,7 +372,9 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
         // form is admitted identically to the workspace-source form (#1558/
         // KR-10). This transform stays the registry's one writer.
         const artifact =
-          compiled || serverCompiled ? undefined : readCompiledArtifactStyles(code, id);
+          compiled || generated || serverCompiled
+            ? undefined
+            : readCompiledArtifactStyles(code, id);
         const styleRequests = compiled?.styleRequests ?? artifact?.requests;
         // The compiled module's `.css` edges travel to the intercepting host
         // plugin through the style-edge registry — keyed by the id the
@@ -355,6 +412,13 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
             options.candidates.register(id, serverCompiled.classCandidates ?? [], {
               shadow: false,
             });
+          } else if (generated !== null) {
+            // A generated Native Custom Element in M09-1a is light-root only;
+            // its classes are document-DOM facts. The function frontend carries
+            // no class-token collector yet, so the authoritative fact for this
+            // lane is "none" until M09-1b adds the collection (registering the
+            // artifact branch's `shadow: true` here would be wrong).
+            options.candidates.register(id, [], { shadow: false });
           } else {
             // An already-compiled artifact (a shipped package module): its
             // candidates were proven at pack time and travel in the module
@@ -364,6 +428,14 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
               shadow: true,
             });
           }
+        }
+        // The generated lane owns the module: return its code and the leaf's
+        // unchanged map. The appended tail has no authored source and no map
+        // segments. Type-checking and the packed shell specifier are M09-1b
+        // work: the lane has no production caller here, and the internal
+        // specifier is intentionally unresolved until packaging lands.
+        if (generated !== null) {
+          return { code: generated.code, map: generated.map };
         }
         if (serverCompiled !== null) {
           if (options.typeCheckEmitted) {

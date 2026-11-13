@@ -31,6 +31,7 @@
     "src/css-modules.d.ts",
     "src/no-blocks.ts",
     "src/base.ts",
-    "src/server.ts"
+    "src/server.ts",
+    "src/internal/compiled/generated-element/shell.ts"
   ]
 }
