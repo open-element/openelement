@@ -222,9 +222,9 @@ test('the typed props extraction refuses shapes it cannot prove', () => {
   const cases: Array<[string, string, string]> = [
     ['no annotation', 'props', 'has no type annotation'],
     ['destructured', '{ count }: { count: number }', 'destructured'],
-    ['non-primitive member', 'props: { count: number[] }', 'non-primitive type'],
+    ['non-primitive member', 'props: { count: ReadonlyArray<number> }', 'ReadonlyArray'],
     ['optional member', 'props: { count?: number }', 'is optional'],
-    ['union member', 'props: { count: number | string }', 'non-primitive type'],
+    ['union member', 'props: { count: number | string }', 'not an admitted value type'],
     ['imported type', 'props: CounterProps', 'is not declared in this module'],
   ];
   for (const [name, parameters, message] of cases) {

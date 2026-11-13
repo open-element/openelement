@@ -1422,7 +1422,11 @@ function admitGeneratedElementProperties(
             propertyDiagnostic(
               sourceFile,
               declaration.node,
-              `the primitive property "${declaration.name}" cannot default to trustedHtml(...)`,
+              declaration.default.kind === 'trustedHtml'
+                ? `the primitive property "${declaration.name}" cannot default to trustedHtml(...)`
+                : `the property "${declaration.name}" default must be a static ${member.type} ` +
+                    'literal to match the typed member; array/object defaults belong to ' +
+                    'property-only non-primitive members',
             ),
           ],
         };

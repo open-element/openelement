@@ -468,6 +468,20 @@ test('defineIslandConfig() carries the declared primitive property table', () =>
     slug: { attribute: 'data-Slug' },
   });
 
+  // Property-only non-primitive literal defaults are part of the same table;
+  // the build (not this evaluated-value guard) cross-checks the typed member.
+  expect(
+    defineIslandConfig({
+      properties: {
+        events: { attribute: false, default: [{ id: 'a', body: 'hi' }] },
+        model: { attribute: false, default: { nested: { x: 1 } } },
+      },
+    }).properties,
+  ).toEqual({
+    events: { attribute: false, default: [{ id: 'a', body: 'hi' }] },
+    model: { attribute: false, default: { nested: { x: 1 } } },
+  });
+
   const cases: Array<[unknown, string]> = [
     [[], 'properties must be an object map'],
     [{ count: 1 }, 'properties.count must be an object'],
@@ -476,7 +490,10 @@ test('defineIslandConfig() carries the declared primitive property table', () =>
     [{ count: { reflect: 'yes' } }, 'reflect must be a boolean'],
     [{ count: { attribute: 1 } }, 'attribute must be a string or false'],
     [{ count: { attribute: 'onclick' } }, 'not a safe HTML attribute name'],
-    [{ count: { default: [1] } }, 'default must be a string, number, or boolean'],
+    [
+      { count: { default: () => 1 } },
+      'default must be a static primitive, a recursively literal array/object graph',
+    ],
     [{ count: { attribute: false, reflect: true } }, 'cannot reflect without an attribute'],
     [
       { count: { attribute: 'n' }, label: { attribute: 'n' } },
