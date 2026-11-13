@@ -112,6 +112,8 @@ interface AdmittedComponent {
   readonly isArrow: boolean;
   /** `async function` / `async` arrow. Sync components stay sync in the artifact. */
   readonly isAsync: boolean;
+  /** Props fields annotated `Promise<...>` — refused when read at a sink (M14-2). */
+  readonly promiseFields: ReadonlySet<string>;
 }
 
 /** Map one inline props-type member annotation to the walk's property-type labels. */
@@ -129,9 +131,35 @@ function propsTypeOf(type: ts.TypeNode | undefined): PropertyValueType {
   return 'string';
 }
 
+/**
+ * True when the annotation is exactly `Promise<...>` (M14-2: "a Promise is not
+ * a normal child"). The only type fact this lane reads — it is NOT a type
+ * checker: `Promise<T>[]`, aliases and conditional types stay unknown.
+ */
+function isPromiseAnnotation(type: ts.TypeNode | undefined): boolean {
+  if (type === undefined) return false;
+  let node: ts.TypeNode = type;
+  while (ts.isParenthesizedTypeNode(node)) node = node.type;
+  return (
+    ts.isTypeReferenceNode(node) &&
+    ts.isIdentifier(node.typeName) &&
+    node.typeName.text === 'Promise'
+  );
+}
+
+/** One props type literal's synthetic field table and its Promise-typed reads. */
+interface PropsTypeFacts {
+  readonly fields: CompiledField[];
+  /**
+   * Fields annotated `Promise<...>`: reading one at a text or attribute sink
+   * would stringify the pending thenable, so the walk refuses the read.
+   */
+  readonly promiseFields: ReadonlySet<string>;
+}
+
 /** Build the synthetic field table one props type literal admits. */
-function fieldsOfPropsType(typeNode: ts.TypeNode | undefined, fail: CompilerFail): CompiledField[] {
-  if (typeNode === undefined) return [];
+function fieldsOfPropsType(typeNode: ts.TypeNode | undefined, fail: CompilerFail): PropsTypeFacts {
+  if (typeNode === undefined) return { fields: [], promiseFields: new Set() };
   let literal: ts.TypeNode = typeNode;
   while (ts.isParenthesizedTypeNode(literal)) literal = literal.type;
   if (!ts.isTypeLiteralNode(literal)) {
@@ -144,10 +172,12 @@ function fieldsOfPropsType(typeNode: ts.TypeNode | undefined, fail: CompilerFail
     );
   }
   const fields: CompiledField[] = [];
+  const promiseFields = new Set<string>();
   for (const member of literal.members) {
     if (!ts.isPropertySignature(member) || !ts.isIdentifier(member.name)) {
       fail(member, 'OEC9032', 'the props type admits property signatures only');
     }
+    if (isPromiseAnnotation(member.type)) promiseFields.add(member.name.text);
     const label = propsTypeOf(member.type);
     fields.push({
       name: member.name.text,
@@ -164,7 +194,7 @@ function fieldsOfPropsType(typeNode: ts.TypeNode | undefined, fail: CompilerFail
       node: member as unknown as ts.PropertyDeclaration,
     });
   }
-  return fields;
+  return { fields, promiseFields };
 }
 
 /** One component's admitted shape, with the diagnostics every other shape rejects. */
@@ -201,12 +231,15 @@ function admitComponent(statement: ts.Statement, fail: CompilerFail): AdmittedCo
     }
     let parameter: string | null = null;
     let fields: CompiledField[] = [];
+    let promiseFields: ReadonlySet<string> = new Set();
     if (parameters.length === 1) {
       if (!ts.isIdentifier(parameters[0].name)) {
         fail(parameters[0], 'OEC9032', 'the props parameter must be a plain identifier');
       }
       parameter = parameters[0].name.text;
-      fields = fieldsOfPropsType(parameters[0].type, fail);
+      const facts = fieldsOfPropsType(parameters[0].type, fail);
+      fields = facts.fields;
+      promiseFields = facts.promiseFields;
     }
     return {
       statement,
@@ -216,6 +249,7 @@ function admitComponent(statement: ts.Statement, fail: CompilerFail): AdmittedCo
       returned: returns[0].expression!,
       isArrow: false,
       isAsync,
+      promiseFields,
     };
   }
   // export const Name = (props) => jsx
@@ -226,12 +260,15 @@ function admitComponent(statement: ts.Statement, fail: CompilerFail): AdmittedCo
   }
   let parameter: string | null = null;
   let fields: CompiledField[] = [];
+  let promiseFields: ReadonlySet<string> = new Set();
   if (arrow.parameters.length === 1) {
     if (!ts.isIdentifier(arrow.parameters[0].name)) {
       fail(arrow.parameters[0], 'OEC9032', 'the props parameter must be a plain identifier');
     }
     parameter = arrow.parameters[0].name.text;
-    fields = fieldsOfPropsType(arrow.parameters[0].type, fail);
+    const facts = fieldsOfPropsType(arrow.parameters[0].type, fail);
+    fields = facts.fields;
+    promiseFields = facts.promiseFields;
   }
   const arrowModifiers = ts.canHaveModifiers(arrow) ? (ts.getModifiers(arrow) ?? []) : [];
   return {
@@ -242,6 +279,7 @@ function admitComponent(statement: ts.Statement, fail: CompilerFail): AdmittedCo
     returned: arrow.body as ts.Expression,
     isArrow: true,
     isAsync: arrowModifiers.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword),
+    promiseFields,
   };
 }
 
@@ -430,7 +468,11 @@ export function compileServerComponentModule(
     // THE semantic authority: the same walk the @element render body takes.
     const lowering = new Lowering(sf, component.fields, [], {
       computedLocal: null,
-      server: { ...serverBinding, asyncFunction: component.isAsync },
+      server: {
+        ...serverBinding,
+        asyncFunction: component.isAsync,
+        promiseFields: component.promiseFields,
+      },
     });
     const root = lowering.lowerRoot(component.returned);
     if (root.k !== 'el') {

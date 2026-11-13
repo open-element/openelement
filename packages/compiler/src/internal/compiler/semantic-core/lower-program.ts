@@ -75,6 +75,14 @@ export interface ServerComponentBindings {
   readonly asyncComponents: ReadonlySet<string>;
   /** This component is itself an async function or async arrow. */
   readonly asyncFunction: boolean;
+  /**
+   * Props fields whose annotation is `Promise<...>` (M14-2, "a Promise is not
+   * a normal child"). Reading one at a text or attribute sink would stringify
+   * the pending thenable, so the read is refused; `{await props.<field>}` is
+   * the sanctioned spelling and never passes through that guard. Only the
+   * `Promise<...>` annotation is recognised — this is not a type checker.
+   */
+  readonly promiseFields: ReadonlySet<string>;
 }
 
 /** Lowering inputs beyond the analyzed module shape. */
@@ -130,11 +138,66 @@ const BRANCH_BOUNDARY =
   'Block branches admit attribute bindings; events and refs stay outside blocks';
 
 /**
- * The M14 full-await slice inside the alpha15 server function lane.
- * Anything outside this sentence stays a located OEC9032, not a silent drop.
+ * The stable M14 full-await head sentence (D9 ruling, 2026-11-13): which
+ * component admits an await and which two positions do. Every refusal appends
+ * exactly one {@link SERVER_AWAIT_POSITION} clause below, so the author reads
+ * the boundary they actually met — and the nearest lawful spelling for it —
+ * instead of one paragraph listing positions they are not in. The diagnostic
+ * code stays OEC9032 for every refusal: this is a message contract, not an
+ * admission change.
  */
-const SERVER_AWAIT_SLICE =
-  'this full-await slice admits await only inside an async server function component, and only as a text child or a nested server-component prop: await load(), await load(<literal or props.field>), or await props.field. Statements before the return, attributes, conditions, list items, and synchronous parents of async children stay refused';
+const SERVER_AWAIT_HEAD =
+  'this full-await slice admits await only inside an async server function component, and only as a text child or a nested server-component prop: await load(), await load(<literal or props.field>), or await props.field';
+
+/** The authored position (or operand shape) an await was refused in. */
+type ServerAwaitPosition =
+  | 'attribute'
+  | 'condition'
+  | 'listItem'
+  | 'staticBranch'
+  | 'componentProp'
+  | 'operand'
+  | 'reservedCallee';
+
+/**
+ * One clause per refused position: the position named, then the nearest
+ * lawful spelling today. No clause promises a future position — the admitted
+ * set is the two positions in {@link SERVER_AWAIT_HEAD}, and stays there.
+ */
+const SERVER_AWAIT_POSITION: Readonly<Record<ServerAwaitPosition, string>> = {
+  attribute:
+    'the refused position is an attribute value (including a custom-element host prop); await the value into a nested server-component prop, or await it in a text child',
+  condition:
+    'the refused position is a condition test; await the value into a nested server-component prop and branch in a sync child component, or await it in a text child first',
+  listItem:
+    'the refused position is a list item or mapper body; await the whole list into a nested server-component prop and map it in a sync child component',
+  staticBranch:
+    'the refused position is a static branch; await the value into a nested server-component prop, or move the branch into a sync child component',
+  componentProp:
+    'the refused position is inside a nested server-component prop, and a prop admits one leading await as its whole value; await the value in its own prop first',
+  operand:
+    'the refused shape is the awaited operand or a larger expression; the await must be the whole child and its operand must be await load(), await load(<literal or props.field>), or await props.field',
+  reservedCallee:
+    'the refused shape is a reserved callee; that callee belongs to the generated constructor module — await the authored function instead',
+};
+
+/** The one full-await refusal sentence for one refused position. */
+function serverAwaitRefusal(position: ServerAwaitPosition): string {
+  return `${SERVER_AWAIT_HEAD} — ${SERVER_AWAIT_POSITION[position]}`;
+}
+
+/** The M14-2 defect sentence: a `Promise<...>`-annotated prop read at a sink. */
+function promiseSinkRefusal(read: string, position: 'child' | 'attribute'): string {
+  const spelling =
+    position === 'child'
+      ? `await it first: {await ${read}}`
+      : `await it into a nested server-component prop (<Child value={await ${read}} />), or render it as a text child`;
+  return (
+    `a Promise is not a normal ${position === 'child' ? 'child' : 'attribute value'} — ${read} is ` +
+    'annotated Promise<...>, so this read would stringify the pending value ("[object Promise]"); ' +
+    spelling
+  );
+}
 
 function isIdentifier(value: string): boolean {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value);
@@ -447,15 +510,17 @@ export class Lowering {
         callee === 'eval' ||
         this.server?.components.has(callee) === true
       ) {
-        this.fail(expr, 'OEC9032', SERVER_AWAIT_SLICE);
+        this.fail(expr, 'OEC9032', serverAwaitRefusal('reservedCallee'));
       }
       const args = expr.arguments.map((argument) => {
-        if (ts.isSpreadElement(argument)) this.fail(argument, 'OEC9032', SERVER_AWAIT_SLICE);
+        if (ts.isSpreadElement(argument)) {
+          this.fail(argument, 'OEC9032', serverAwaitRefusal('operand'));
+        }
         return this.serverAwaitArgument(argument);
       });
       return `${callee}(${args.join(', ')})`;
     }
-    this.fail(expr, 'OEC9032', SERVER_AWAIT_SLICE);
+    this.fail(expr, 'OEC9032', serverAwaitRefusal('operand'));
   }
 
   private serverAwaitArgument(expr: ts.Expression): string {
@@ -469,7 +534,7 @@ export class Lowering {
     if (ts.isNumericLiteral(value) && Number.isFinite(Number(value.text))) return value.text;
     const field = this.fieldAccess(value);
     if (field !== null && this.server !== undefined) return `${this.server.parameter}.${field}`;
-    this.fail(expr, 'OEC9032', SERVER_AWAIT_SLICE);
+    this.fail(expr, 'OEC9032', serverAwaitRefusal('operand'));
   }
 
   private fieldAccess(expr: ts.Expression): string | null {
@@ -494,6 +559,34 @@ export class Lowering {
       return value.name.text;
     }
     return null;
+  }
+
+  /**
+   * The M14-2 "a Promise is not a normal child" guard: a props field annotated
+   * `Promise<...>` read at a text or attribute sink. The check is on the READ,
+   * never on the declaration — `{await props.<field>}` is the sanctioned
+   * spelling and splices through {@link serverAwaitExpression}, which never
+   * reaches this guard. Server mode only: the class path has no promise-field
+   * table, so its diagnostics do not move.
+   */
+  private refusePromiseField(
+    expr: ts.Expression,
+    node: ts.Node,
+    position: 'child' | 'attribute',
+  ): void {
+    const server = this.server;
+    if (server === undefined || server.promiseFields.size === 0) return;
+    const value = unwrapExpression(expr);
+    if (
+      !ts.isPropertyAccessExpression(value) ||
+      !ts.isIdentifier(value.expression) ||
+      value.expression.text !== server.parameter ||
+      !server.promiseFields.has(value.name.text)
+    ) {
+      return;
+    }
+    const read = `${server.parameter}.${value.name.text}`;
+    this.fail(node, 'OEC9032', promiseSinkRefusal(read, position));
   }
 
   private methodAccess(expr: ts.Expression): string | null {
@@ -723,7 +816,7 @@ export class Lowering {
       // with the located boundary diagnostic instead of the generic
       // unsupported-expression one.
       if (this.server !== undefined && this.expressionContainsAwait(expr)) {
-        this.fail(prop, 'OEC9032', SERVER_AWAIT_SLICE);
+        this.fail(prop, 'OEC9032', serverAwaitRefusal('attribute'));
       }
       if (name === 'class' && ts.isConditionalExpression(expr)) {
         if (staticOnly) {
@@ -740,6 +833,7 @@ export class Lowering {
       }
       const field = this.fieldAccess(expr);
       if (field) {
+        this.refusePromiseField(expr, prop, 'attribute');
         // alpha15: a when-branch element admits `this.<property>` attribute
         // sinks — the sink Part's path is branch-relative (the branch tree has
         // no anchors of its own), the runtime binds it branch-scoped, and the
@@ -971,7 +1065,7 @@ export class Lowering {
         continue;
       }
       if (this.expressionContainsAwait(expr)) {
-        this.fail(prop, 'OEC9032', SERVER_AWAIT_SLICE);
+        this.fail(prop, 'OEC9032', serverAwaitRefusal('componentProp'));
       }
       const literal = literalValue(expr, this.sf);
       if (literal === undefined) {
@@ -1287,6 +1381,27 @@ export class Lowering {
     }
   }
 
+  /**
+   * Which refused position a child expression's await actually sits in — the
+   * M14-1 message contract. The generic child gate sees one expression; the
+   * position decides which clause the author reads: an awaited condition test,
+   * an awaited static branch, an awaited list mapper, or the operand itself
+   * (a larger expression an await is embedded in). No classifier here admits
+   * anything; every branch still fails closed with OEC9032.
+   */
+  private refusedAwaitChildPosition(expr: ts.Expression): ServerAwaitPosition {
+    if (ts.isConditionalExpression(expr)) {
+      return this.expressionContainsAwait(expr.condition) ? 'condition' : 'staticBranch';
+    }
+    if (ts.isCallExpression(expr)) {
+      const callee = expr.expression;
+      return ts.isPropertyAccessExpression(callee) && callee.name.text === 'map'
+        ? 'listItem'
+        : 'operand';
+    }
+    return 'operand';
+  }
+
   private lowerExpressionChild(
     child: ts.JsxExpression,
     staticOnly: boolean,
@@ -1315,14 +1430,15 @@ export class Lowering {
       );
     }
     if (this.server !== undefined && ts.isAwaitExpression(expr)) {
-      if (staticOnly) this.fail(child, 'OEC9032', SERVER_AWAIT_SLICE);
+      if (staticOnly) this.fail(child, 'OEC9032', serverAwaitRefusal('staticBranch'));
       const id = this.reserveElement('slot', path, child);
       this.serverExpressionSlots.set(id, `__t(${this.serverAwaitExpression(expr)})`);
       return this.addElement(id, 'slot', [], []);
     }
     if (this.server !== undefined && this.expressionContainsAwait(expr)) {
-      this.fail(child, 'OEC9032', SERVER_AWAIT_SLICE);
+      this.fail(child, 'OEC9032', serverAwaitRefusal(this.refusedAwaitChildPosition(expr)));
     }
+    this.refusePromiseField(expr, child, 'child');
     const field = this.fieldAccess(expr);
     if (field) {
       // alpha15 widened branches to admit this.<property> attribute sinks; text
@@ -1741,7 +1857,7 @@ export class Lowering {
       if (ts.isJsxExpression(child) && child.expression) {
         const expr = unwrapExpression(child.expression);
         if (this.server !== undefined && this.expressionContainsAwait(expr)) {
-          this.fail(child, 'OEC9032', SERVER_AWAIT_SLICE);
+          this.fail(child, 'OEC9032', serverAwaitRefusal('listItem'));
         }
         if (
           ts.isPropertyAccessExpression(expr) &&
