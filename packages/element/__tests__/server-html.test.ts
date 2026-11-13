@@ -69,6 +69,29 @@ describe('__t — the dynamic text boundary', () => {
     expect(__t(undefined)).toBe('');
     expect(__t(false)).toBe('false');
   });
+
+  test('a thenable is refused before coercion (a Promise is not a normal child)', () => {
+    // M14-2 backstop: the compiler refuses a `Promise<...>`-annotated prop read
+    // at a text/attribute sink, but an untyped (`any`) prop is invisible to it.
+    // `__t` must fail loudly instead of rendering `[object Promise]` — and it
+    // must not change the sync page seam's own String(thenable) contract.
+    for (const value of [Promise.resolve('x'), { then: () => {} }]) {
+      let thrown: unknown;
+      try {
+        __t(value);
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(OpenElementError);
+      expect((thrown as OpenElementError).code).toBe('OE_SERVER_TEXT_THENABLE');
+      expect((thrown as OpenElementError).phase).toBe('ssr');
+      expect((thrown as OpenElementError).message).toContain('a Promise is not a normal child');
+    }
+  });
+
+  test('an awaited value is ordinary text again once it settles', async () => {
+    expect(__t(await Promise.resolve('<ok>'))).toBe('&lt;ok&gt;');
+  });
 });
 
 describe('__h — the element constructor', () => {
