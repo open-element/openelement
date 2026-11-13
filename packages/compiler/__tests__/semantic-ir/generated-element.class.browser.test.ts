@@ -77,9 +77,13 @@ export default Profile;
 `;
 
 /**
- * The old Part Program backend plus the server-only DSD/serializer leaves. The
+ * The old Part Program backend plus the server-only serializer leaves. The
  * generated bundle may share the neutral recipe/value primitives, but it must
- * never acquire these modules.
+ * never acquire these modules. `internal/compiled/dsd.ts` is deliberately NOT
+ * in this list: since M09-2a the generated element's internal entry re-exports
+ * the browser-safe DSD producer (`generated-element/dsd-ssr.ts`), so `dsd.ts`
+ * is in the light module's PARSE graph. The rendered graph — what ships — is
+ * asserted separately below and must not contain it.
  */
 const FORBIDDEN_MODULE_SUFFIXES = [
   '/internal/compiled/facade-host.ts',
@@ -101,7 +105,6 @@ const FORBIDDEN_MODULE_SUFFIXES = [
   '/internal/compiled/server/index.ts',
   '/internal/compiled/server/shared.ts',
   '/internal/compiled/serializer/serialize-program.ts',
-  '/internal/compiled/dsd.ts',
 ] as const;
 
 interface BundleResult {
@@ -257,6 +260,22 @@ describe('M09-1a generated element class (Chromium)', () => {
         ).toBe(false);
       }
     }
+    // M09-2a, converted not weakened: the generated element's ONE internal
+    // entry now also re-exports the browser-safe DSD host producer, so the
+    // light module's PARSE graph carries `dsd.ts` (and its producer leaf). The
+    // shipped artifact is the RENDERED graph, and there the producer must be
+    // gone: a light module emits no `<Name>__ssrHost` and never calls it, so
+    // tree-shaking drops both modules from the chunk. The light tail's bytes
+    // are asserted unchanged in `generated-element.shadow-authoring.test.ts`.
+    const rendered = lightBundle.moduleIds;
+    expect(rendered.some((id) => id.endsWith('/internal/compiled/dsd.ts'))).toBe(false);
+    expect(rendered.some((id) => id.endsWith('/generated-element/dsd-ssr.ts'))).toBe(false);
+    expect(
+      lightBundle.parsedModuleIds.some((id) => id.endsWith('/generated-element/dsd-ssr.ts')),
+    ).toBe(true);
+    expect(lightBundle.parsedModuleIds.some((id) => id.endsWith('/internal/compiled/dsd.ts'))).toBe(
+      true,
+    );
   });
 
   test('a hostless module bundle never reaches the shell', () => {

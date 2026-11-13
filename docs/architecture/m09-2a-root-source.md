@@ -9,6 +9,11 @@ summary: The island sidecar's documented `root` key is accepted by the static sc
 Date: 2026-11-13. Status: **bounded implemented — not the M09 exit.**
 Baseline: `origin/main@48e81b9ca`.
 
+This is the first half of the M09-2a record: where the root fact comes from.
+The second half — what the fact is for (the authored shadow island end to end,
+the host-level DSD producer and the R7 shadow-including ancestor walk) — is
+[`m09-2a-shadow-authoring.md`](./m09-2a-shadow-authoring.md).
+
 The owner ruling this slice implements is **D-root-source = the compiler lane
 re-reads the authored sidecar** instead of receiving the root on the host site
 fact. The bug it repairs and the ruling are one change: the sidecar accepted

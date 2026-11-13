@@ -413,15 +413,41 @@ export function entrySeedMismatch(
 }
 
 /**
+ * The shadow-including ancestor step (R7).
+ *
+ * `ShadowRoot.parentNode` is `null` by platform definition, so a plain
+ * `parentNode` walk stops at a shadow boundary: a claim parent — or a claim
+ * target — nested inside ANOTHER shadow tree would never have the outer host's
+ * element ancestors checked. The composed parent of a node with no `parentNode`
+ * is therefore the host of the shadow root that node is, and only a real
+ * `ShadowRoot` answers that question (the same native brand predicate the claim
+ * parent check uses; no polyfill, no structural fallback).
+ *
+ * Nothing else moves: an element in the document tree still answers its
+ * `parentNode`, a `Document`, a bare `DocumentFragment`, a text node and a
+ * comment node still answer `null`, and the existing `nodeType !== 1` skip
+ * still ignores the non-element nodes the walk passes through. The walk is
+ * strictly stricter than before — it can only add a failure for a claim whose
+ * ancestor chain crosses a shadow boundary into a non-HTML element.
+ */
+function composedParent(node: Node): Node | null {
+  const parent = node.parentNode;
+  if (parent !== null) return parent;
+  return isClaimParentShadowRoot(node) ? node.host : null;
+}
+
+/**
  * The claim parent, every element ancestor, and each claimed element must be
  * in the HTML namespace. The failure window does not write.
  *
  * A shadow root is a legal claim parent: its host is the element that owns the
  * tree, so the host and the host's element ancestors take the place of an
- * element parent's ancestors. A bare `DocumentFragment` is not a ShadowRoot,
- * is not an element, and stays rejected. The function name is retained because
- * generated claims already call it; renaming it would require an emitter change
- * for the same rule.
+ * element parent's ancestors. The ancestor walk is shadow-including
+ * ({@linkcode composedParent}): a host nested inside another shadow tree has
+ * THAT tree's host ancestors checked too, up to the document (R7). A bare
+ * `DocumentFragment` is not a ShadowRoot, is not an element, and stays
+ * rejected. The function name is retained because generated claims already call
+ * it; renaming it would require an emitter change for the same rule.
  */
 export function assertElementInHtmlNamespace(
   node: Node | null,
@@ -434,7 +460,7 @@ export function assertElementInHtmlNamespace(
     if (hostReason !== null) {
       throw leafClaimMismatch(`non-HTML namespace at ${where} (${hostReason})`, origin);
     }
-    for (let current = host.parentNode; current !== null; current = current.parentNode) {
+    for (let current = composedParent(host); current !== null; current = composedParent(current)) {
       if (current.nodeType !== 1) continue;
       const reason = elementHtmlNamespaceViolation(current);
       if (reason !== null) {
@@ -447,7 +473,11 @@ export function assertElementInHtmlNamespace(
   // not a claim target at all). Element ancestors are checked above it.
   const own = elementHtmlNamespaceViolation(node);
   if (own !== null) throw leafClaimMismatch(`non-HTML namespace at ${where} (${own})`, origin);
-  for (let current = node?.parentNode ?? null; current !== null; current = current.parentNode) {
+  for (
+    let current = node === null ? null : composedParent(node);
+    current !== null;
+    current = composedParent(current)
+  ) {
     if (current.nodeType !== 1) continue;
     const reason = elementHtmlNamespaceViolation(current);
     if (reason !== null) {

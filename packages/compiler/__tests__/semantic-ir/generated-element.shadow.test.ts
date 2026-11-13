@@ -30,8 +30,11 @@
  * - a multi-root static directory claim works with a real ShadowRoot parent,
  *   while a bare `DocumentFragment` is still refused; the claim parent rule
  *   validates the host and its HTML ancestors;
- * - the generated bundle module graph never reaches the old server/executor
- *   or the new server-side DSD leaf.
+ * - the generated bundle's RENDERED module graph never reaches the old
+ *   server/executor or the server-side DSD serializer. Since M09-2a the
+ *   generated element's one internal entry also re-exports the browser-safe DSD
+ *   host producer, so `internal/compiled/dsd.ts` is in the PARSE graph while
+ *   staying out of the shipped chunk when nothing calls the producer.
  *
  * This is one Chromium engine (147) and LOCAL evidence. It is not M09 exit,
  * not the M13 matrix, not the style consumer, not forms, and not author API.
@@ -60,9 +63,15 @@ const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
 /**
- * The old Part Program execution backend plus the server-only DSD/serializer
+ * The old Part Program execution backend plus the server-only serializer
  * leaves. The shell may share neutral recipe/value/invariant primitives; the
  * generated browser bundle must not acquire any of these modules.
+ *
+ * `internal/compiled/dsd.ts` is deliberately NOT listed: since M09-2a the
+ * generated element's one internal entry re-exports the browser-safe DSD host
+ * producer (`generated-element/dsd-ssr.ts`), so `dsd.ts` is in the bundle's
+ * PARSE graph. The shipped artifact is the RENDERED graph, asserted separately
+ * below, and there the DSD leaf must still be absent.
  */
 const FORBIDDEN_MODULE_SUFFIXES = [
   '/internal/compiled/facade-host.ts',
@@ -84,7 +93,6 @@ const FORBIDDEN_MODULE_SUFFIXES = [
   '/internal/compiled/server/index.ts',
   '/internal/compiled/server/shared.ts',
   '/internal/compiled/serializer/serialize-program.ts',
-  '/internal/compiled/dsd.ts',
 ] as const;
 
 const CLASSIFIER = {
@@ -648,7 +656,7 @@ describe('canonical DSD spelling leaf', () => {
 });
 
 describe('M09-shadow generated element — Chromium (LOCAL)', () => {
-  test('the bundle reaches the shell and never the old backend or server DSD leaf', () => {
+  test('the rendered bundle reaches the shell and never the old backend or server DSD leaf', () => {
     expect(bundleModuleIds.length).toBeGreaterThan(0);
     expect(bundleParsedModuleIds.length).toBeGreaterThan(0);
     const has = (suffix: string) => bundleModuleIds.some((id) => id.endsWith(suffix));
@@ -657,7 +665,14 @@ describe('M09-shadow generated element — Chromium (LOCAL)', () => {
     expect(has('/internal/compiled/runtime/claim-invariants.ts')).toBe(true);
     expect(has('/internal/compiled/runtime/static-sibling-ranges.ts')).toBe(true);
     expect(has('/internal/compiled/dsd.ts')).toBe(false);
-    expect(parsedHas('/internal/compiled/dsd.ts')).toBe(false);
+    // M09-2a, converted not weakened: this bundle is hand-built and its tail is
+    // a light-root generated module, so nothing calls the host producer. The
+    // producer leaf and `dsd.ts` are therefore PARSED (the one internal entry
+    // re-exports the producer) but must be tree-shaken out of the shipped
+    // chunk. The rendered-graph refusal above is unchanged; the parse-graph
+    // fact is asserted explicitly instead of being left implicit.
+    expect(parsedHas('/internal/compiled/dsd.ts')).toBe(true);
+    expect(parsedHas('/generated-element/dsd-ssr.ts')).toBe(true);
     const leaked = bundleModuleIds.filter((id) =>
       FORBIDDEN_MODULE_SUFFIXES.some((suffix) => id.endsWith(suffix)),
     );
