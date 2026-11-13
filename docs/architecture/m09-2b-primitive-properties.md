@@ -348,7 +348,8 @@ real shell.
 - **No array/object/`trustedHtml` conversion and no custom converters.** The
   shell's primitive set is unchanged. This is a recorded capability gap, not a
   safe waiver — see "Scope boundary: primitive channels only" below.
-- **No CEM output** for generated elements (recorded exception, Alpha17).
+- **No CEM output** for generated elements in this lane; CEM generation is
+  retained as an Alpha16 obligation (plan §14).
 - **No forms, events, styles.** Unchanged by this slice.
 - **No class-lane change.** `@property`/`@element` keep their existing path.
 - **No production wiring / SSR host attributes.** M11 owns request-time

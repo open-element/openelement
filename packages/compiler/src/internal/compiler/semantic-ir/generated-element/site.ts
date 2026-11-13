@@ -327,6 +327,7 @@ function readIslandPropertyTable(
     return refuse(node, 'openElement.properties must be an object of static property entries');
   }
   const declarations: IslandPropertyDeclaration[] = [];
+  const names = new Set<string>();
   const attributes = new Set<string>();
   for (const entry of node.properties) {
     if (!ts.isPropertyAssignment(entry)) {
@@ -350,6 +351,17 @@ function readIslandPropertyTable(
         `openElement.properties key "${name}" must be an identifier naming a typed props member`,
       );
     }
+    // A duplicate NAME is refused before any attribute resolution: with
+    // `attribute: false` (or distinct explicit attributes) the resolved
+    // attribute set cannot see it, and the shell would throw a duplicate
+    // property at class creation instead of the build failing here (D2).
+    if (names.has(name)) {
+      return refuse(
+        entry.name,
+        `openElement.properties declares property "${name}" more than once`,
+      );
+    }
+    names.add(name);
     const table = entry.initializer;
     if (!ts.isObjectLiteralExpression(table)) {
       return refuse(table, `openElement.properties.${name} must be an object`);
@@ -674,6 +686,28 @@ function zeroPropertyValue(type: GeneratedElementPrimitiveType): string | number
   return '';
 }
 
+/** Why a props annotation could not be resolved, with the offending node. */
+type PropsTypeResolution =
+  | { readonly members: readonly ts.TypeElement[] }
+  | { readonly reason: string; readonly node?: ts.Node };
+
+/** Same-module `interface`/`type` declarations with the given name. */
+function propsTypeDeclarations(
+  sourceFile: ts.SourceFile,
+  name: string,
+): readonly (ts.InterfaceDeclaration | ts.TypeAliasDeclaration)[] {
+  const declarations: Array<ts.InterfaceDeclaration | ts.TypeAliasDeclaration> = [];
+  for (const statement of sourceFile.statements) {
+    if (
+      (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
+      statement.name.text === name
+    ) {
+      declarations.push(statement);
+    }
+  }
+  return declarations;
+}
+
 /**
  * Resolve a props annotation to its member list without a type checker.
  *
@@ -683,48 +717,86 @@ function zeroPropertyValue(type: GeneratedElementPrimitiveType): string | number
  * not provable from this file). An imported, generic, union or otherwise
  * computed type refuses: the generated props record cannot be cross-checked
  * against a declaration this module does not own.
+ *
+ * Two author-reachable shapes that a naive first-match walk gets wrong are
+ * refused here, not guessed:
+ *
+ * - a cyclic alias chain (`type A = A`, `type A = B; type B = A`, longer
+ *   cycles). The visited-name set turns the walk into a finite proof and the
+ *   cycle refuses with `PROPS_TYPE_UNSUPPORTED` instead of overflowing the
+ *   compiler stack (B1);
+ * - a props name with more than one same-module declaration (TypeScript
+ *   declaration merging). Reading only the first declaration would either
+ *   refuse a legal merged interface or silently emit rows for half of it, so
+ *   the merged shape is refused as unprovable (D1).
  */
 function resolvePropsTypeMembers(
   sourceFile: ts.SourceFile,
   typeNode: ts.TypeNode,
-): { readonly members: readonly ts.TypeElement[] } | { readonly reason: string } {
+  visited: ReadonlySet<string> = new Set(),
+): PropsTypeResolution {
   if (ts.isParenthesizedTypeNode(typeNode)) {
-    return resolvePropsTypeMembers(sourceFile, typeNode.type);
+    return resolvePropsTypeMembers(sourceFile, typeNode.type, visited);
   }
   if (ts.isTypeLiteralNode(typeNode)) return { members: typeNode.members };
   if (!ts.isTypeReferenceNode(typeNode) || !ts.isIdentifier(typeNode.typeName)) {
     return {
       reason: `the props type "${typeNode.getText(sourceFile)}" is not an object type literal`,
+      node: typeNode,
     };
   }
   if (typeNode.typeArguments !== undefined && typeNode.typeArguments.length > 0) {
-    return { reason: `the props type "${typeNode.getText(sourceFile)}" is generic` };
+    return {
+      reason: `the props type "${typeNode.getText(sourceFile)}" is generic`,
+      node: typeNode,
+    };
   }
   const name = typeNode.typeName.text;
-  for (const statement of sourceFile.statements) {
-    if (ts.isInterfaceDeclaration(statement) && statement.name.text === name) {
-      if (statement.typeParameters !== undefined) {
-        return { reason: `the props interface "${name}" is generic` };
-      }
-      if ((statement.heritageClauses ?? []).length > 0) {
-        return {
-          reason: `the props interface "${name}" has extends clauses this lane cannot prove`,
-        };
-      }
-      return { members: statement.members };
-    }
-    if (ts.isTypeAliasDeclaration(statement) && statement.name.text === name) {
-      if (statement.typeParameters !== undefined) {
-        return { reason: `the props type alias "${name}" is generic` };
-      }
-      return resolvePropsTypeMembers(sourceFile, statement.type);
-    }
+  if (visited.has(name)) {
+    return {
+      reason:
+        `the props type "${name}" is cyclic/self-referential; the lane cannot prove a ` +
+        'member list from it — declare the members inline or in an acyclic local alias',
+      node: typeNode,
+    };
   }
-  return {
-    reason:
-      `the props type "${name}" is not declared in this module; the generated element lane ` +
-      'admits an inline object type literal or a local type/interface alias',
-  };
+  const declarations = propsTypeDeclarations(sourceFile, name);
+  if (declarations.length === 0) {
+    return {
+      reason:
+        `the props type "${name}" is not declared in this module; the generated element lane ` +
+        'admits an inline object type literal or a local type/interface alias',
+      node: typeNode,
+    };
+  }
+  if (declarations.length > 1) {
+    return {
+      reason:
+        `the props type "${name}" is declared more than once in this module (merged ` +
+        'declarations are not admitted); declare one interface or type alias so its member ' +
+        'list is provable',
+      node: declarations[1]!.name,
+    };
+  }
+  const nextVisited = new Set(visited);
+  nextVisited.add(name);
+  const declaration = declarations[0]!;
+  if (ts.isInterfaceDeclaration(declaration)) {
+    if (declaration.typeParameters !== undefined) {
+      return { reason: `the props interface "${name}" is generic`, node: declaration.name };
+    }
+    if ((declaration.heritageClauses ?? []).length > 0) {
+      return {
+        reason: `the props interface "${name}" has extends clauses this lane cannot prove`,
+        node: declaration.name,
+      };
+    }
+    return { members: declaration.members };
+  }
+  if (declaration.typeParameters !== undefined) {
+    return { reason: `the props type alias "${name}" is generic`, node: declaration.name };
+  }
+  return resolvePropsTypeMembers(sourceFile, declaration.type, nextVisited);
 }
 
 /**
@@ -776,7 +848,7 @@ function readTypedProps(
       kind: 'refused',
       diagnostic: propertyDiagnostic(
         sourceFile,
-        parameter.type,
+        resolved.node ?? parameter.type,
         resolved.reason,
         GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
       ),
@@ -859,8 +931,9 @@ function readTypedProps(
           member,
           `the props member "${name}" has a non-primitive type ` +
             `"${typeNode === undefined ? 'none' : typeNode.getText(sourceFile)}"; this lane ` +
-            'admits only string, number and boolean (array/object/trustedHtml conversion is a ' +
-            'recorded Alpha17 exception)',
+            'admits only string, number and boolean (array/object/trustedHtml conversion is ' +
+            'retained as an Alpha16 obligation, plan §14; this lane fails closed until it is ' +
+            'implemented)',
           GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
         ),
       };
@@ -888,7 +961,7 @@ type GeneratedElementPropertiesAdmission =
  * (so the shell's props record exposes it with a declared type/default) and
  * every entry needs a typed member (so a typo or a stale entry cannot silently
  * produce an attribute nobody reads). Nothing is inferred silently in either
- * direction; `properties: []` with a type-literal `{}` parameter is the one
+ * direction; `properties: {}` with a type-literal `{}` parameter is the one
  * empty-match shape and emits `properties: []`.
  */
 function admitGeneratedElementProperties(

@@ -714,8 +714,9 @@ export type { IslandDeliveryStrategy };
  * The table is deliberately the `@property` option vocabulary minus `type`
  * and `converter`: the typed member IS the type (a duplicated `type` field
  * would be a second source with no added power), and a custom converter is not
- * expressible on this lane (array/object/trustedHtml conversion is a recorded
- * Alpha17 exception).
+ * expressible on this lane. Non-primitive conversion (array/object/`trustedHtml`)
+ * is retained as an Alpha16 obligation (plan §14), not waived, and this table
+ * cannot express it.
  */
 export interface IslandPropertyConfig {
   /**
@@ -876,8 +877,22 @@ function validateIslandProperties(properties: unknown): void {
         'Write properties: { label: { reflect: true }, count: { default: 0 } }.',
     );
   }
+  const names = new Set<string>();
   const attributes = new Set<string>();
   for (const [name, raw] of Object.entries(properties as Record<string, unknown>)) {
+    if (names.has(name)) {
+      // Defensive: an evaluated JS object cannot carry duplicate string keys
+      // (the static scan and the compiler lane are where authored duplicate
+      // keys are refused), but the runtime contract is NAME-based so a
+      // non-standard properties object cannot smuggle one past the attribute
+      // set, which only covers attribute-channel entries (D2).
+      throw authoringError(
+        IslandErrorCode.DESCRIPTOR_SHAPE,
+        `${ERROR_PREFIX} defineIslandConfig() properties declares property "${name}" more than ` +
+          'once. Keep one entry per typed props member.',
+      );
+    }
+    names.add(name);
     if (!IDENTIFIER_NAME.test(name)) {
       throw authoringError(
         IslandErrorCode.DESCRIPTOR_SHAPE,

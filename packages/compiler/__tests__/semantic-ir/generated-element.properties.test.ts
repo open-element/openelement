@@ -42,6 +42,7 @@ import {
   GENERATED_ELEMENT_DIAGNOSTIC,
   type GeneratedElementSite,
 } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
+import { compiledElementPlugin } from '../../src/internal/compiler/plugin.ts';
 import {
   admitGeneratedElementSite,
   readIslandMetadata,
@@ -371,4 +372,129 @@ test('a property row is a plain descriptor input the shell normalizes', () => {
   expect((ctor as unknown as { observedAttributes: readonly string[] }).observedAttributes).toEqual(
     ['count'],
   );
+});
+
+test('a cyclic props type alias refuses instead of overflowing the stack (B1)', () => {
+  const cases: Array<[string, string, string]> = [
+    ['self alias', 'type CounterProps = CounterProps;\n', 'props: CounterProps'],
+    ['two-hop cycle', 'type A = B;\ntype B = A;\n', 'props: A'],
+    ['three-hop cycle', 'type A = B;\ntype B = C;\ntype C = A;\n', 'props: A'],
+  ];
+  for (const [name, extra, parameters] of cases) {
+    const error = laneError(island('properties: { count: {} }', counter(parameters), extra));
+    expect(codes(error), name).toEqual([GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED]);
+    expect(error.diagnostics[0]!.message, name).toContain('cyclic');
+    expect(error.diagnostics[0]!.file, name).toBe(FILE);
+    // Located at the cyclic reference inside the alias, not at the module start.
+    expect(error.diagnostics[0]!.line, name).toBeGreaterThan(1);
+  }
+});
+
+test('the plugin boundary reports the coded cycle refusal, never a RangeError (B1)', () => {
+  type TransformHook = (
+    this: unknown,
+    code: string,
+    id: string,
+  ) => { code: string; map: unknown } | null;
+  const source = island(
+    'properties: { count: {} }',
+    counter('props: A'),
+    'type A = B;\ntype B = C;\ntype C = A;\n',
+  );
+  const plugin = compiledElementPlugin({
+    generatedElementSite: () => ({ tag: 'x-cycle' }),
+  });
+  let thrown: unknown;
+  const context = {
+    error(payload: unknown): never {
+      thrown = payload;
+      throw payload;
+    },
+  };
+  const transform = (plugin.transform as unknown as TransformHook).bind(context);
+  try {
+    transform(source, FILE);
+  } catch (error) {
+    // The plugin's this.error path is the expected refusal channel.
+    expect(error).toBe(thrown);
+  }
+  expect(thrown, 'the plugin transform must throw the coded diagnostic').toBeDefined();
+  expect(thrown).not.toBeInstanceOf(RangeError);
+  const payload = thrown as {
+    readonly message?: string;
+    readonly loc?: { readonly file?: string; readonly line?: number };
+    readonly diagnostics?: readonly { readonly code: string }[];
+  };
+  expect(payload.message).toContain('OEIR_GENERATED_ELEMENT_PROPS_TYPE_UNSUPPORTED');
+  expect(payload.diagnostics?.[0]?.code).toBe(GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED);
+  expect(payload.loc?.file).toBe(FILE);
+  expect(payload.loc?.line ?? 0).toBeGreaterThan(1);
+});
+
+test('merged same-name interface declarations are refused, never partially read (D1)', () => {
+  const merged =
+    'interface CounterProps { label: string }\n' + 'interface CounterProps { count: number }\n';
+  // Both members declared: the old first-match read produced a WRONG mismatch.
+  const both = laneError(
+    island('properties: { label: {}, count: {} }', counter('props: CounterProps'), merged),
+  );
+  expect(codes(both)).toEqual([GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED]);
+  expect(both.diagnostics[0]!.message).toContain('declared more than once');
+  expect(both.diagnostics[0]!.file).toBe(FILE);
+
+  // Only the first declaration's member declared: the old read silently
+  // compiled and left `props.count` undefined at runtime.
+  const partial = laneError(
+    island('properties: { label: {} }', counter('props: CounterProps'), merged),
+  );
+  expect(codes(partial)).toEqual([GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED]);
+  expect(partial.diagnostics[0]!.message).toContain('declared more than once');
+
+  // An interface and a type alias with one name are equally unprovable.
+  const mixed = laneError(
+    island(
+      'properties: { label: {}, count: {} }',
+      counter('props: CounterProps'),
+      'interface CounterProps { label: string }\ntype CounterProps = { count: number };\n',
+    ),
+  );
+  expect(codes(mixed)).toEqual([GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED]);
+  expect(mixed.diagnostics[0]!.message).toContain('declared more than once');
+});
+
+test('duplicate sidecar property names refuse independent of the attribute channel (D2)', () => {
+  const cases: Array<[string, string]> = [
+    [
+      'property-only duplicates',
+      'properties: { label: { attribute: false }, label: { attribute: false } }',
+    ],
+    [
+      'distinct-attribute duplicates',
+      "properties: { label: { attribute: 'a' }, label: { attribute: 'b' } }",
+    ],
+  ];
+  for (const [name, entries] of cases) {
+    const error = laneError(island(entries, counter('props: { label: string }')));
+    expect(codes(error), name).toEqual([GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID]);
+    expect(error.diagnostics[0]!.message, name).toContain('more than once');
+    expect(error.diagnostics[0]!.file, name).toBe(FILE);
+  }
+});
+
+test('duplicate sidecar property names are refused before any attribute resolution', () => {
+  // The same name twice must be located as a duplicate NAME even when the
+  // entries would derive distinct attributes (the old attribute-set check
+  // could not see it) and even when there is no attribute channel at all.
+  const read = readIslandMetadata(
+    parse(
+      island(
+        'properties: { label: { attribute: false }, label: { attribute: false } }',
+        counter('props: { label: string }'),
+      ),
+    ),
+  );
+  expect(read.kind).toBe('refused');
+  if (read.kind !== 'refused') throw new Error('unreachable');
+  expect(read.diagnostic.code).toBe(GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID);
+  expect(read.diagnostic.message).toContain('more than once');
 });

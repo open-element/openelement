@@ -41,11 +41,15 @@ interface PropertyFacts {
   readonly default?: string | number | boolean;
 }
 
-/** The descriptor-behavior facts both readers must agree on. */
+/**
+ * The descriptor-behavior facts both readers must agree on. Properties stay an
+ * ordered pair list, never an object map: `Object.fromEntries` would collapse
+ * duplicate keys and hide the very multiplicity the guard must compare (D2).
+ */
 interface Facts {
   readonly root: string | undefined;
   readonly delegatesFocus: boolean;
-  readonly properties: Record<string, PropertyFacts> | undefined;
+  readonly properties: readonly (readonly [string, PropertyFacts])[] | undefined;
 }
 
 /**
@@ -66,7 +70,8 @@ function scannerOutcome(source: string): Outcome {
       facts: {
         root: descriptorRoot(config?.root),
         delegatesFocus: config?.delegatesFocus === true,
-        properties: config?.properties,
+        properties:
+          config?.properties === undefined ? undefined : Object.entries(config.properties),
       },
     };
   } catch (error) {
@@ -88,15 +93,16 @@ function compilerOutcome(source: string): Outcome {
   const properties =
     read.facts.properties === undefined
       ? undefined
-      : Object.fromEntries(
-          read.facts.properties.map((entry) => [
-            entry.name,
-            {
-              attribute: entry.attribute,
-              reflect: entry.reflect,
-              ...(entry.default === undefined ? {} : { default: entry.default }),
-            },
-          ]),
+      : read.facts.properties.map(
+          (entry) =>
+            [
+              entry.name,
+              {
+                attribute: entry.attribute,
+                reflect: entry.reflect,
+                ...(entry.default === undefined ? {} : { default: entry.default }),
+              },
+            ] as const,
         );
   return {
     kind: 'read',
@@ -189,6 +195,14 @@ ${module('properties: { count: { default: defaultValue } }')}`,
     name: 'invalid (properties non-object)',
     source: module('properties: 1'),
   },
+  {
+    name: 'invalid (duplicate property name, property-only)',
+    source: module('properties: { label: { attribute: false }, label: { attribute: false } }'),
+  },
+  {
+    name: 'invalid (duplicate property name, distinct attributes)',
+    source: module("properties: { label: { attribute: 'a' }, label: { attribute: 'b' } }"),
+  },
   { name: 'absent (sidecar without root)', source: module("ssr: false, hydrate: 'idle'") },
   { name: 'absent (empty sidecar)', source: module('') },
   { name: 'absent (no sidecar at all)', source: 'export default function ProfileCard() {}\n' },
@@ -256,13 +270,12 @@ test('both readers agree on every corpus entry (the drift guard)', () => {
     row.kind === 'read' ? [row.facts.properties] : [],
   );
   expect(propertyShapes).toContain(undefined);
-  expect(propertyShapes.some((shape) => shape !== undefined && Object.keys(shape).length > 0)).toBe(
-    true,
-  );
-  expect(
-    propertyShapes.some((shape) => shape !== undefined && Object.keys(shape).length === 0),
-  ).toBe(true);
-  expect(rows.filter((row) => row.scanner.kind === 'rejected').length).toBeGreaterThanOrEqual(11);
+  expect(propertyShapes.some((shape) => shape !== undefined && shape.length > 0)).toBe(true);
+  expect(propertyShapes.some((shape) => shape !== undefined && shape.length === 0)).toBe(true);
+  // The guard must see multiplicity, not a collapsed map: at least one
+  // admissible entry keeps two distinct properties (D2 regression guard).
+  expect(propertyShapes.some((shape) => shape !== undefined && shape.length >= 2)).toBe(true);
+  expect(rows.filter((row) => row.scanner.kind === 'rejected').length).toBeGreaterThanOrEqual(13);
 });
 
 test('the scanner keeps the authority: a sidecar it rejects is refused, never read', () => {
@@ -299,11 +312,11 @@ test('the properties table resolves the same way on both readers', () => {
     facts: {
       root: 'shadow-open',
       delegatesFocus: false,
-      properties: {
-        count: { attribute: 'count', reflect: true, default: 0 },
-        label: { attribute: 'label', reflect: false, default: 'untitled' },
-        padding: { attribute: null, reflect: false },
-      },
+      properties: [
+        ['count', { attribute: 'count', reflect: true, default: 0 }],
+        ['label', { attribute: 'label', reflect: false, default: 'untitled' }],
+        ['padding', { attribute: null, reflect: false }],
+      ],
     },
   });
 });

@@ -460,6 +460,7 @@ function parseStaticPropertyTable(
     throw staticOpenElementError(context + ' must be an object of static property entries');
   }
   const result: Record<string, LocalIslandPropertyConfig> = {};
+  const names = new Set<string>();
   const attributes = new Set<string>();
   for (const [name, entry] of staticEntries(node)) {
     if (!ISLAND_PROPERTY_NAME.test(name)) {
@@ -467,6 +468,13 @@ function parseStaticPropertyTable(
         `${context} key "${name}" must be an identifier naming a typed props member`,
       );
     }
+    // A duplicate NAME is a shape defect independent of the attribute channel:
+    // with `attribute: false` or distinct explicit attributes no resolved
+    // attribute collides, so the attribute set alone would miss it (D2).
+    if (names.has(name)) {
+      throw staticOpenElementError(`${context} declares property "${name}" more than once`);
+    }
+    names.add(name);
     if (!ts.isObjectLiteralExpression(entry)) {
       throw staticOpenElementError(context + '.' + name + ' must be an object');
     }

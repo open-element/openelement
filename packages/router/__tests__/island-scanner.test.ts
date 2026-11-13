@@ -252,3 +252,17 @@ test('readIslandConfig: the accepted-shape message advertises properties', () =>
   );
   expect(error.message).toContain('Accepted shape:');
 });
+
+test('readIslandConfig: throws on duplicate property names independent of the attribute channel', () => {
+  const cases = [
+    'properties: { label: { attribute: false }, label: { attribute: false } }',
+    "properties: { label: { attribute: 'a' }, label: { attribute: 'b' } }",
+  ];
+  for (const entries of cases) {
+    assertThrowsIncludes(
+      () => readIslandConfig(`export const openElement = defineIslandConfig({ ${entries} });\n`),
+      Error,
+      'declares property "label" more than once',
+    );
+  }
+});
