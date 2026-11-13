@@ -27,7 +27,7 @@
  * @module ./claim-invariants.ts
  */
 
-import { OpenElementError } from '@openelement/protocol/errors';
+import { frameworkError, OpenElementError } from '@openelement/protocol/errors';
 import { LIST_KEY_UNSUPPORTED } from './list-key.ts';
 import {
   parseEachMarker,
@@ -92,6 +92,21 @@ function describe(value: unknown): string {
  * in `detail` are unchanged, and no structured position field is added to the
  * error.
  */
+/**
+ * The ONE coded-error constructor for generated-leaf runtime failures that are
+ * not structural claim mismatches (currently the event/ref invalid-callable
+ * guard). The code is an internal identity (`OEIR_...`), never a public
+ * catalogue member; `locatedDetail` is the one origin formatter and the phase
+ * is always \`csr\` for these client-only attachment guards.
+ */
+export function leafRuntimeError(
+  code: string,
+  detail: string,
+  origin?: ClaimOrigin,
+): OpenElementError {
+  return frameworkError(code, locatedDetail(detail, origin), { phase: 'csr' });
+}
+
 export function leafClaimMismatch(detail: string, origin?: ClaimOrigin): OpenElementError {
   return new OpenElementError(`${LEAF_CLAIM_MISMATCH}: ${locatedDetail(detail, origin)}`, {
     code: LEAF_CLAIM_MISMATCH,

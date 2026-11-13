@@ -1698,6 +1698,16 @@ class ScopeResolver {
         }
         const tdz = this.tdzDiagnostic(current, binding);
         if (tdz !== null) diagnostics.push(tdz);
+        // A binding DECLARED inside the expression being lowered (an arrow or
+        // function parameter, or a nested local) is expression-local: it is
+        // not a component/host read and must not become a host binding. The
+        // handler/ref channels make this reachable from authored JSX
+        // (`onClick={(event) => ...}`, `ref={(el) => ...}`).
+        const expressionStart = node.getStart(this.sf);
+        const declaredInsideExpression =
+          binding.declarationSpan.start >= expressionStart &&
+          binding.declarationSpan.start < node.getEnd();
+        if (declaredInsideExpression) return;
         const key = bindingKey(binding.id);
         if (!seen.has(key)) {
           seen.add(key);

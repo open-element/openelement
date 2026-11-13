@@ -1192,11 +1192,6 @@ describe('M05 leaf v2 — fail-closed boundary (M05b/M06 shapes refused)', () =>
       code: 'OEIR_LEAF_UNSUPPORTED_NODE',
     },
     {
-      label: 'event attribute',
-      source: 'function C(props) { return <button onClick={() => props.onHit()}>go</button>; }\n',
-      code: 'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
-    },
-    {
       label: 'class channel attribute',
       source: 'function C(props) { return <div class={props.className}></div>; }\n',
       code: 'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',

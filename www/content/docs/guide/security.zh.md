@@ -60,13 +60,15 @@ export default async function csrfGuard(request: Request, next: () => Promise<Re
 
 ## 内容安全策略（CSP）
 
-`middleware.csp`（`{ policy, nonce, reportOnly }`）为请求时响应输出 Content-Security-Policy。与所有内置中间件一样，它只守卫请求时派发路径：预渲染的静态页面不经过中间件链，因此 SSG 产物改由构建期 `<meta http-equiv="Content-Security-Policy">` 标签承载策略，而不是 HTTP 头。
+`middleware.csp`（`{ policy, nonce, reportOnly }`）为请求时响应输出 Content-Security-Policy。与所有内置中间件一样，它只守卫请求时派发路径：预渲染的静态页面不经过中间件链，因此 SSG 产物改由构建期 `<meta http-equiv="Content-Security-Policy">` 标签承载策略，而不是 HTTP 头——并且只有在配置了 `middleware.csp.policy` 时才如此：未配置 CSP 时两条通道都不输出策略。
+
+meta 形态比 header 窄：携带 `frame-ancestors`、`report-uri`、`report-to` 或 `sandbox` 的策略会让 SSG 构建以 `OE_SSG_CSP_META_UNSUPPORTED` fail-closed，而不是输出一个会忽略这些指令的标签；report-only 策略则完全没有静态交付形态（见下文 `reportOnly` 说明）。nonce 按构造就是逐请求的，静态字节里不可能存在；下一段说明该回退。
 
 开启 `nonce: true` 后，生成的服务器为每个请求铸造一枚 nonce（随机 32 位十六进制值，逐请求更新），以请求级 `cspNonce` 暴露给渲染管线，并把 `'nonce-<值>'` 前置到 `script-src`（策略没有 `script-src` 指令时自动补上）。框架生成的每一个 `<script>`——island 客户端入口、dev 客户端、styled 404/500 页面——都经 `wrapInDocument` 的脚本描述符这一单点挂接，因此都携带本响应的 nonce。nonce 建议搭配 `script-src 'strict-dynamic'`：带 nonce 的 island 客户端入口即可 import 自己的 chunk，无需主机白名单。原始 head 片段永远无法注入 `<script>`（见下文「默认安全 HTML」），描述符管线因此始终是唯一的脚本来源。结构化数据不是这条规则的旁路：`structuredData` 只接受普通对象（永不接受标记），由框架自己序列化成单个 `application/ld+json` 元素，并把载荷中的每个 `<` 转义为 `\u003C`，因此值既无法闭合该标签，也无法开出新标签。
 
 nonce 按构造就是逐请求的，静态文件里不可能存在：纯静态（SSG）构建开启 `nonce: true` 会记录一条警告并回退为仅含策略的 `<meta>` 标签。该回退是 fail-closed 的——在 `script-src 'strict-dynamic'` 下，仅有策略的页面既没有 nonce 来源也没有白名单，浏览器会屏蔽**全部**脚本，island 永不 hydrate。纯静态站点要么写一份不依赖 nonce 的策略（例如 `script-src 'self'`，足以覆盖外部 island 客户端），要么只在伺服请求时路由的项目里保留 `nonce: true`。
 
-设置 `reportOnly: true` 会把响应头（以及 SSG meta 标签）换成 `Content-Security-Policy-Report-Only`：浏览器只上报违规而不执行拦截，这是新策略上线前的灰度姿态。
+设置 `reportOnly: true` 会把请求时响应头换成 `Content-Security-Policy-Report-Only`：浏览器只上报违规而不执行拦截，这是新策略上线前的灰度姿态。静态 `<meta>` 通道没有 report-only 形态——纯静态（SSG）构建开启 `reportOnly: true` 会以 `OE_SSG_CSP_META_UNSUPPORTED` fail-closed，而不是输出一个看起来像已执行的标签。report-only 请由请求时路由交付，或对纯静态部署由宿主自己的响应头交付。
 
 ### vite.config.ts —— 逐请求 nonce 的 CSP
 

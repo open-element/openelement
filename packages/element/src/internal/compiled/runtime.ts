@@ -177,6 +177,7 @@ export {
   isEachEndMarker,
   isWhenEndMarker,
   LEAF_CLAIM_MISMATCH,
+  leafRuntimeError,
   leafClaimMismatch,
   readEntryKeyMarker,
   staticAttributeSeedMismatch,

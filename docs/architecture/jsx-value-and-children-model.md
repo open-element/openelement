@@ -396,6 +396,18 @@ contract, with decided parts labelled and open parts named:
 | 8 | Client initialization | setup once | per client instance |
 | 9 | Claim | setup once; the fixture's expected logical subscriptions are established once | setup 1; each expected logical subscription appears once — no duplicates, no loss; a dynamic branch may legitimately have zero or several, so no universal count of 1 |
 
+**M09-2c phase-labelled addendum (client-only channels).** Rows 7–9 keep the
+same phase-specific rule for the generated element's intrinsic `onClick` /
+`ref` channels: a local setup resource reachable ONLY from a client-only
+event/ref attribute is pruned from the SSR producer (the client mount/claim
+sets it up; the server never evaluates it), while every local expression the
+server output does read is still evaluated once, in authored order. The
+contract is asserted as phase-labelled counts, never forced equal: a
+handler-only setup side effect is **0 in SSR** and **1 per client mount/claim**;
+a surviving local's side effect is 1 in SSR too and keeps its authored order.
+The tracked record and tests are
+[`m09-2c-intrinsic-event-ref.md`](./m09-2c-intrinsic-event-ref.md).
+
 The consequence authors will notice is row 2 + 3: `step={next()}` is **not**
 evaluated once when the JSX value is created. Two insertions can observe
 different values if captured state changed between them, and a side effect in a
