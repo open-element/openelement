@@ -504,8 +504,14 @@ function parseStaticDefaultGraph(
   if (ts.isObjectLiteralExpression(value)) {
     const object: Record<string, StaticDefaultGraph> = {};
     for (const [key, entry] of staticEntries(value)) {
-      if (key === '__proto__') {
-        throw staticOpenElementError(context + ' must not contain a __proto__ key');
+      // One canonical rule on every recursive default-graph key: the same
+      // property-sink predicate the compiler and the runtime authoring face
+      // use. No private `__proto__`-only list.
+      const sinkReason = forbiddenSinkReason('prop', key);
+      if (sinkReason !== null) {
+        throw staticOpenElementError(
+          context + ' must not contain a property-sink key "' + key + '" (' + sinkReason + ')',
+        );
       }
       object[key] = parseStaticDefaultGraph(entry, context + '.' + key, depth + 1);
     }

@@ -290,6 +290,18 @@ test('readIslandConfig: throws on malformed property tables', () => {
     ['properties: { __proto__: {} }', 'not an admissible property name'],
     ['properties: { constructor: {} }', 'not an admissible property name'],
     ['properties: { prototype: {} }', 'not an admissible property name'],
+    [
+      'properties: { model: { attribute: false, default: { constructor: 1 } } }',
+      'must not contain a property-sink key',
+    ],
+    [
+      'properties: { model: { attribute: false, default: { prototype: 1 } } }',
+      'must not contain a property-sink key',
+    ],
+    [
+      'properties: { model: { attribute: false, default: { nested: { constructor: 1 } } } }',
+      'must not contain a property-sink key',
+    ],
   ];
   for (const [entries, message] of cases) {
     assertThrowsIncludes(

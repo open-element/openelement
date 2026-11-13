@@ -533,6 +533,32 @@ test('defineIslandConfig() carries the declared primitive property table', () =>
     Error,
     'default must be a static primitive',
   );
+  // The same canonical property-sink predicate rejects the other sink keys at
+  // any depth of an evaluated default graph (three-face parity with the
+  // compiler and static scanner), and accepts an unrelated ordinary key.
+  for (const key of ['constructor', 'prototype']) {
+    const own = JSON.parse(`{"${key}":1}`) as Record<string, unknown>;
+    assertThrowsIncludes(
+      () => defineIslandConfig({ properties: { payload: { default: own } } } as never),
+      Error,
+      'default must be a static primitive',
+    );
+    assertThrowsIncludes(
+      () =>
+        defineIslandConfig({
+          properties: { payload: { default: { nested: own } } },
+        } as never),
+      Error,
+      'default must be a static primitive',
+    );
+  }
+  expect(() =>
+    defineIslandConfig({
+      properties: {
+        payload: { default: JSON.parse('{"description":"ok","nested":{"x":1}}') as never },
+      },
+    } as never),
+  ).not.toThrow();
   expect(({} as Record<string, unknown>).polluted).toBeUndefined();
 });
 

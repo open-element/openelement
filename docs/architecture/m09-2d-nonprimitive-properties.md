@@ -29,7 +29,9 @@ retention slice, not a generic conversion system.
   forms: `T[]`/`Array<T>` where `T` is a primitive keyword, an inline object
   type literal or a same-module single non-generic acyclic object ref; opaque
   object literals/local refs; and exactly the canonical named `TrustedHtml`
-  type import from `@openelement/element` (no alias, no shadowing). Imported
+  export from `@openelement/element` — TypeScript may spell the import as a
+  type-only import or as a value import of that named type (both legal for a
+  type-only export); aliases and local rebinding/shadowing refuse. Imported
   value shapes, tuples, `ReadonlyArray`, nested arrays and nested `TrustedHtml`
   stay refused.
 - **Descriptor + emitter.** Non-primitive rows spell `attribute: null`,

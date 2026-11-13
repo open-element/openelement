@@ -347,6 +347,26 @@ function defaultGraphDepthOk(value: unknown, depth: number): boolean {
 }
 
 /**
+ * Every recursively literal default-graph key must pass the canonical
+ * property-sink predicate. Three surfaces read one authored default graph — the
+ * compiler, the static scanner and the runtime authoring face — and all three
+ * use `forbiddenSinkReason('prop', key)` rather than a private deny list:
+ * `__proto__` would re-prototype an object built from the graph, while
+ * `constructor`/`prototype` are the canonical property-sink names the repo
+ * refuses for compiled property declarations as well.
+ */
+function defaultGraphKeysAdmissible(value: unknown): boolean {
+  if (Array.isArray(value)) return value.every(defaultGraphKeysAdmissible);
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).every(
+      ([key, entry]) =>
+        forbiddenSinkReason('prop', key) === null && defaultGraphKeysAdmissible(entry),
+    );
+  }
+  return true;
+}
+
+/**
  * The canonical trustedHtml TYPE provenance (design §3.3): exactly a named
  * `TrustedHtml` import from '@openelement/element', no alias, not shadowed by
  * a same-module declaration. Checked syntactically; the compiler does not
@@ -401,7 +421,11 @@ function canonicalTrustedHtmlTypeName(sourceFile: ts.SourceFile): boolean {
  * array/object graph (`literalValue`; spreads/identifiers/functions and
  * `__proto__` already refuse there), or a `trustedHtml('<literal>')` call whose
  * callee is the canonical runtime import (the class-lane provenance rule).
- * Anything else refuses with a source-located message.
+ * Every recursive object key in the graph is additionally checked with the
+ * canonical `forbiddenSinkReason('prop', …)` predicate — the same rule the
+ * scanner and the runtime authoring face apply — so `__proto__`,
+ * `constructor` and `prototype` are refused at any depth. Anything else
+ * refuses with a source-located message.
  */
 function readPropertyDefault(
   sourceFile: ts.SourceFile,
@@ -419,6 +443,14 @@ function readPropertyDefault(
       return {
         kind: 'refused',
         message: `openElement.properties.${context} must not be null; declare an explicit literal default`,
+      };
+    }
+    if (!defaultGraphKeysAdmissible(literal)) {
+      return {
+        kind: 'refused',
+        message:
+          `openElement.properties.${context}.default must not contain a property-sink key ` +
+          '("__proto__", "constructor" or "prototype") at any depth; use an ordinary data key',
       };
     }
     return { kind: 'read', value: { kind: 'literal', value: literal } };

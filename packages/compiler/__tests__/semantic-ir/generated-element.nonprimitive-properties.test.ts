@@ -265,6 +265,8 @@ describe('non-primitive grammar admission', () => {
       ['spread graph', 'const rows = [1];\n', 'events: { attribute: false, default: [...rows] }'],
       ['function graph', '', 'events: { attribute: false, default: () => [] }'],
       ['__proto__ key', '', "model: { attribute: false, default: { '__proto__': { x: 1 } } }"],
+      ['constructor key', '', 'model: { attribute: false, default: { constructor: 1 } }'],
+      ['prototype key', '', 'model: { attribute: false, default: { prototype: 1 } }'],
       [
         'too deep',
         '',
@@ -536,6 +538,42 @@ describe('resolveGeneratedElementProps (SSR folding helper)', () => {
     expect(resolved.model).toEqual({ nested: { x: 1 } });
     expect(reads.model).toBe(1);
     expect(counter.calls).toBe(0);
+  });
+
+  test('a throwing supplied getter is never read eagerly and preserves error identity', () => {
+    const counter = { calls: 0 };
+    const descriptor = descriptorWithFactories(counter);
+    const boom = new Error('getter-boom');
+    let reads = 0;
+    const supplied: Record<string, unknown> = {};
+    Object.defineProperty(supplied, 'events', {
+      enumerable: true,
+      get() {
+        reads += 1;
+        throw boom;
+      },
+    });
+    // Folding defines the per-row getter without reading it: no eager exec.
+    const resolved = resolveGeneratedElementProps(descriptor, supplied);
+    expect(reads).toBe(0);
+    expect(counter.calls).toBe(0);
+    // First read executes the caller getter once and surfaces the SAME error
+    // object (identity preserved, no wrapper, no eager pre-read).
+    let thrown: unknown;
+    try {
+      void resolved.events;
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBe(boom);
+    expect(reads).toBe(1);
+    // The fold is not partially applied: other declared rows remain resolvable
+    // and their lazy defaults still materialise on demand.
+    expect(reads).toBe(1);
+    expect((resolved.model as { nested: { x: number } }).nested.x).toBe(1);
+    expect(counter.calls).toBe(1);
+    expect(trustedHtmlValue(resolved.articleHtml)).toBe('<b>safe</b>');
+    expect(reads).toBe(1);
   });
 
   test('omitted rows remain lazy alongside supplied rows', () => {

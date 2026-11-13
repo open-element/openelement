@@ -274,6 +274,20 @@ ${module('properties: { count: { default: defaultValue } }')}`,
     source: module('properties: 1'),
   },
   {
+    name: 'invalid (default graph constructor key)',
+    source: module('properties: { model: { attribute: false, default: { constructor: 1 } } }'),
+  },
+  {
+    name: 'invalid (default graph prototype key)',
+    source: module('properties: { model: { attribute: false, default: { prototype: 1 } } }'),
+  },
+  {
+    name: 'valid (default graph unrelated key)',
+    source: module(
+      "properties: { model: { attribute: false, default: { description: 'ok', nested: { x: 1 } } } }",
+    ),
+  },
+  {
     name: 'invalid (duplicate property name, property-only)',
     source: module('properties: { label: { attribute: false }, label: { attribute: false } }'),
   },
@@ -376,6 +390,19 @@ test('the root vocabulary maps one way: shadow is the DSD default, closed is uns
   });
   // No authored spelling reaches the closed root mode (D-closed).
   expect(compilerOutcome(module("root: 'shadow-closed'")).kind).toBe('rejected');
+});
+
+test('a literal default graph with an unrelated key is read and sink keys refuse on both readers', () => {
+  const valid = module(
+    "properties: { model: { attribute: false, default: { description: 'ok', nested: { x: 1 } } } }",
+  );
+  expect(scannerOutcome(valid).kind).toBe('read');
+  expect(compilerOutcome(valid).kind).toBe('read');
+  for (const key of ['constructor', 'prototype']) {
+    const invalid = module(`properties: { model: { attribute: false, default: { ${key}: 1 } } }`);
+    expect(scannerOutcome(invalid).kind, key).toBe('rejected');
+    expect(compilerOutcome(invalid).kind, key).toBe('rejected');
+  }
 });
 
 test('the properties table resolves the same way on both readers', () => {
