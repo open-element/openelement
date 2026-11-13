@@ -1,7 +1,7 @@
 ---
 status: active
 topic: Stage authority (M01–M14)
-summary: M01–M14, the 16a/16b/17/18 stage split, G1/G2/G3, work classes and the risk register; the dependency spine, not dates, is the authoritative stage definition, with the owner-approved 2026-11-13 amendment on M10-final, M11, the five Alpha16b obligation slices and the scope-exception rule.
+summary: M01–M14, the 16a/16b/17/18 split, G1/G2/G3, work classes and risk register; the dependency spine is the stage definition, with the 2026-11-13 amendment (M10-final, M11, 16b slices) and the 2026-11-14 correction retaining the §13.3 capabilities as M09/M10 obligations.
 ---
 
 # Alpha16–18 execution plan
@@ -396,6 +396,11 @@ Alpha17-first implementation is permitted for any of them.
 
 ### 13.3 Scope exceptions: definition and the approved M09-2 set
 
+> **Superseded in part by §14 (2026-11-14).** The definition paragraph and the
+> three exception rows below are replaced: the three capabilities are retained as
+> Alpha16 obligations riding M09/M10, not waived. The text below stays as written
+> (amend-never-rewrite); §14 is the later reading.
+
 A **scope exception** is a recorded, owner-approved statement that one capability
 retires without a same-milestone replacement. It is admissible only when all four
 hold:
@@ -451,3 +456,79 @@ Every claim that cites this plan — in a ledger, a matrix cell, a closeout reco
 or a pull request — carries the four-part record (commit, worktree, command,
 result) defined in [the evidence baseline](./evidence-baseline.md). The canonical
 worktree is named there; other checkouts are advisory only.
+
+## 14. Dated amendment 2026-11-14 (owner-approved correction of §13.3)
+
+This section supersedes the §13.3 exception definition and the three §13.3
+exception rows. It adds; it does not rewrite §1, §2, §12a or the rest of §13. It
+creates no milestone evidence and no P5 evidence of its own (§13.5 stays in force).
+
+### 14.1 Scope exceptions: corrected definition (replaces the §13.3 definition paragraph)
+
+A **scope exception** is a recorded, owner-approved statement that one capability's
+same-surface replacement is deferred to a named later milestone. It is admissible
+only when all of the following hold at the recording SHA:
+
+1. **No Alpha16 consumer loses the capability.** No Alpha16 release-qualification
+   obligation (§2 items 1–8, §12a P1–P5) and no Alpha16-retained consumer — an
+   in-tree production app or package, a packed harness, a public-API consumer, or a
+   test that asserts the behaviour — depends on the capability at that SHA.
+2. **The absence is proven, not asserted.** Every "no consumer" claim carries a
+   four-part evidence record (commit, clean status, exact command, exact result;
+   §13.6 and [the evidence baseline](./evidence-baseline.md)) plus a per-file
+   search result at a recorded SHA, and is re-proven at the SHA that removes the
+   source.
+3. **No asserted behaviour disappears.** Removing the capability loses no behaviour
+   asserted by an in-tree test, a packed consumer, the public-interface snapshot or
+   a documented user-facing contract. If any consumer is affected, the capability
+   is retained in Alpha16 as a named obligation and cannot be an exception.
+4. **A named later milestone carries the replacement**, written down with its own
+   obligations. "Belongs to Alpha17" is never sufficient.
+5. **The loss is stated per affected party** (people using sites, authors, or
+   implementors) and per capability; a row that cannot name the affected party
+   cannot be recorded.
+6. **The row appears row-for-row in `16b-MN`**, one capability per row.
+7. **The row is a single capability.** An exception is not a package of
+   capabilities and may not cover any of the five obligation slices in §13.2.
+
+Retention is the default. If any condition fails, the capability is retained in
+Alpha16 as part of the M09/M10 obligations rather than waived; approval of plan
+text validates none of the factual claims inside a row.
+
+### 14.2 The three §13.3 rows are superseded: retained Alpha16 obligations
+
+The rows below replace the three rows of the §13.3 table. No capability is waived
+and no new milestone or slice label is introduced: each retained capability rides
+the existing M09 (generated native element platform surface) and M10 (legacy
+consumer migration and the five §12a proofs) obligations, with its migration-note
+row in `16b-MN`.
+
+| Capability (superseded §13.3 row) | Corrected record | Carried by | Minimum obligation in Alpha16 | Evidence |
+| --- | --- | --- | --- | --- |
+| `custom-elements.json` (CEM) generation for generated elements | **retained obligation** (was: exception) | M09 generated element platform surface; M10 P3/P5; M12 packed qualification | Generated-element CEM generation, or an owner-approved Alpha16 migration of the packed CEM artifact contract, so the packed qualification chain keeps component metadata through and after the class→function migration; `@openelement/ui#ui-cem:check`, `@openelement/tools-release#package-artifacts:check:prepacked` and the `customElements` metadata equality stay green | generated CEM structure test; packed `@openelement/ui` metadata read back by the CEM scanner; `gate:release` and `gate:packed` green at the same SHA |
+| array/object/`trustedHtml` property conversion | **retained obligation** (was: exception) | M09 generated element platform surface (property/attribute conversion); M10 P5 | Non-primitive property channels on the generated element descriptor and emitter: array/object value types (including the `trustedHtml` value model), `attribute: false` property path and SSR property folding; primitive conversion stays as delivered by M09-2 | property round-trip tests for the in-tree consumers (`notes-live`, `open-article-view`, `open-reading-shell`); packed ui-app/site build; the TSX rows that carry those components |
+| form validity policy (`setValidity` rules) | **retained obligation** (was: exception) | M09 forms on the generated element surface; M10 P5; `16b-MN` | Form association, value, reset and restore plus the `required → valueMissing` mapping and the `:invalid` / `checkValidity()` / blocked-submit contract of the migrating UI component; full constraint mirroring (type/email, minlength, …) may stay a deferred sub-obligation listed in `16b-MN`, never an exception | the existing form e2e contract re-run on the generated CE; form value/reset/restore tests on the generated path |
+
+### 14.3 No blanket waiver; factual claims require evidence
+
+1. A scope exception is never recorded for a package of capabilities, for a
+   capability with a live consumer, or for any obligation slice in §13.2.
+2. Every row's justification is evidence: the four-part record, a per-file list
+   and re-proof at the removal SHA. An unproven "no consumer" claim is a finding,
+   not a justification.
+3. A capability whose premise fails is retained, not deferred to Alpha17.
+4. Alpha17 implements no capability whose first implementation is required for
+   Alpha16 retirement (§13.4 stays in force).
+
+### 14.4 What this amendment does not change
+
+- §13.1 (M10-final, M11 start gate, P1/M11-3 joint integration) is unchanged.
+- §13.2's five obligation slices are unchanged; §14.2 introduces no new slice and
+  no new milestone — the three retained capabilities ride M09 and M10.
+- §13.3's two non-exception items are unchanged: client style declaration stays a
+  deferred obligation; utility/theme CSS stays outside the capability list.
+- §13.4, §13.5 and §13.6 are unchanged as written. §13.6's "other checkouts are
+  advisory only" is read with the 2026-11-14 evidence-baseline correction: the
+  four-part record decides admissibility, and any checkout at the cited commit
+  with clean status is legitimate (the baseline document carries the rule).
+- No version, tag, publication, public API freeze or release claim is created.
