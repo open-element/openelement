@@ -41,6 +41,7 @@
 import ts from 'typescript';
 import type { RootMode } from '@openelement/protocol/part-program';
 import { generateLeafModule, type GeneratedLeafModule } from '../generated-leaf/generate.ts';
+import { quoteGeneratedJavaScriptValue } from '../generated-leaf/codegen-literals.ts';
 import type { FunctionModelModule } from '../../semantic-core/function-frontend.ts';
 import type { IrDiagnostic } from '../types.ts';
 import {
@@ -191,14 +192,18 @@ function emptyResult(
 /** Render one admitted literal default graph as JavaScript source. */
 function renderDefaultGraph(graph: GeneratedElementDefaultGraph): string {
   if (graph === null) return 'null';
-  if (typeof graph === 'string') return JSON.stringify(graph);
+  // Authored default strings and keys are embedded in generated JavaScript:
+  // use the one compiler code-literal boundary (JSON.stringify plus the
+  // script-context escapes), never a bare JSON.stringify (CodeQL
+  // js/bad-code-sanitization; M09-2c helper).
+  if (typeof graph === 'string') return quoteGeneratedJavaScriptValue(graph);
   if (typeof graph === 'number' || typeof graph === 'boolean') return String(graph);
   if (Array.isArray(graph)) {
     return `[${graph.map((entry) => renderDefaultGraph(entry)).join(', ')}]`;
   }
   const entries = Object.entries(graph as Readonly<Record<string, GeneratedElementDefaultGraph>>);
   return `{ ${entries
-    .map(([key, value]) => `${JSON.stringify(key)}: ${renderDefaultGraph(value)}`)
+    .map(([key, value]) => `${quoteGeneratedJavaScriptValue(key)}: ${renderDefaultGraph(value)}`)
     .join(', ')} }`;
 }
 
@@ -250,10 +255,10 @@ function buildPropertyEmission(
       defaultValue = factoryName;
       usesPropsResolver = true;
     } else if (property.type === 'trustedHtml') {
-      defaultValue = JSON.stringify(property.default);
+      defaultValue = quoteGeneratedJavaScriptValue(property.default);
       usesPropsResolver = true;
     } else {
-      defaultValue = JSON.stringify(property.default);
+      defaultValue = quoteGeneratedJavaScriptValue(property.default);
     }
     return (
       `    { name: ${JSON.stringify(property.name)}, attribute: ${attribute}, ` +

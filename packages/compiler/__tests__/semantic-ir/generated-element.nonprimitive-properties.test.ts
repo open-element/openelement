@@ -114,7 +114,7 @@ describe('non-primitive grammar admission', () => {
     );
     expect(compiled).not.toBeNull();
     expect(compiled!.code).toContain('type: "trustedHtml"');
-    expect(compiled!.code).toContain('default: "<b>safe</b>"');
+    expect(compiled!.code).toContain('default: "\\u003Cb\\u003Esafe\\u003C/b\\u003E"');
   });
 
   test('non-primitive rows require explicit attribute:false instead of a JSON channel', () => {
@@ -379,7 +379,32 @@ describe('emitter rows and default factories', () => {
       FILE,
       { site: SITE },
     );
-    expect(compiled!.code).toContain('default: "<b>safe</b>"');
+    expect(compiled!.code).toContain('default: "\\u003Cb\\u003Esafe\\u003C/b\\u003E"');
+  });
+
+  test('default-graph and trustedHtml literals use the code-literal boundary', () => {
+    const compiled = compileGeneratedElementIfAdmitted(
+      island(
+        'model: { attribute: false, default: { title: "<\\/script><script>alert(1)<\\/script>", ' +
+          'rows: ["<\\/SCRIPT>"] } }, ' +
+          'articleHtml: { attribute: false, default: trustedHtml("<\\/script><b>safe</b>") }',
+        '{ model: { title: string; rows: string[] }; articleHtml: TrustedHtml }',
+      ),
+      FILE,
+      { site: SITE },
+    );
+    expect(compiled).not.toBeNull();
+    const code = compiled!.code;
+    // No script-breaking sequence reaches the generated JavaScript: authored
+    // default strings pass the one code-literal boundary (JSON.stringify plus
+    // the script-context escapes), not a bare JSON.stringify.
+    expect(code).not.toContain('</script>');
+    expect(code).not.toContain('</SCRIPT>');
+    expect(code).toContain('\\u003C');
+    expect(code).toContain('\\u003E');
+    // The descriptor still carries the authored values after escaping.
+    expect(code).toContain('__oePropertyDefault0');
+    expect(code).toContain('default: "');
   });
 
   test('the SSR host wrapper folds defaults through the shell resolver', () => {

@@ -168,7 +168,7 @@ beforeAll(async () => {
   expect(compiled).not.toBeNull();
   expect(compiled!.code).toContain('__oePropertyDefault0');
   expect(compiled!.code).toContain('resolveGeneratedElementProps');
-  expect(compiled!.code).toContain('default: "<b>safe</b>"');
+  expect(compiled!.code).toContain('default: "\\u003Cb\\u003Esafe\\u003C/b\\u003E"');
   bundleFile = await buildBundle(tempDir, compiled!.code);
   browser = await chromium.launch();
 }, 180_000);
