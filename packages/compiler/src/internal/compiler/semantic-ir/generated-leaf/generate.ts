@@ -449,13 +449,40 @@ const MOUNT_DEP_LOOP = `${INTERNAL_PREFIX}propDep`;
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const TAG_PATTERN = /^[a-z][a-z0-9-]*$/;
 const ATTRIBUTE_PATTERN = /^[A-Za-z_:][A-Za-z0-9_:.-]*$/;
+/**
+ * Dynamic intrinsic-element channels the generated leaf can install. `event`
+ * and `ref` are client-only attachment channels: they never become DOM
+ * attributes and never render SSR bytes.
+ */
 const ADMITTED_ATTRIBUTE_CHANNELS: ReadonlySet<string> = new Set([
+  'attribute',
+  'boolean',
+  'property',
+  'event',
+  'ref',
+]);
+/**
+ * The channels a component REFERENCE may pass as props. Event/ref stay refused
+ * here: a child callback prop would be a second callback API, not the
+ * intrinsic DOM-handler/ref channel this slice admits.
+ */
+const COMPONENT_PROP_ATTRIBUTE_CHANNELS: ReadonlySet<string> = new Set([
   'attribute',
   'boolean',
   'property',
 ]);
 /** Attributes the compiler consumes as identity (never a DOM write). */
 const CONSUMED_ATTRIBUTE_CHANNELS: ReadonlySet<string> = new Set(['key']);
+/**
+ * Client-only attachment channels: installed as listeners/handlers on the
+ * created/adopted element, excluded from SSR bytes and from the claim's
+ * attribute seed, and never DOM attributes. They are event handlers (called
+ * with the native event) and ref handlers (called with the element on attach,
+ * with the returned cleanup on detach, then with null).
+ */
+const CLIENT_ONLY_ATTRIBUTE_CHANNELS: ReadonlySet<string> = new Set(['event', 'ref']);
+const EVENT_HANDLER_INVALID = 'OEIR_LEAF_EVENT_HANDLER_INVALID';
+const REF_HANDLER_INVALID = 'OEIR_LEAF_REF_HANDLER_INVALID';
 /**
  * Table, select, template, svg, and math parsing contexts. A directory is not
  * emitted under or around these tags. ASCII lowercase, matching intrinsic tags
@@ -1612,6 +1639,119 @@ function emitClaimTextSlotWrite(
   push(state, `}`);
 }
 
+/** The DOM event name for one authored `onX` attribute (`onClick` -> `click`). */
+function clientOnlyEventName(attributeName: string): string | null {
+  const name = attributeName.slice(2).toLowerCase();
+  return name.length > 0 && /^[a-z][a-z0-9-]*$/.test(name) ? name : null;
+}
+
+/**
+ * Placement gate for the two client-only channels. Refused:
+ *
+ * - custom-element hosts (`<x-y>`): this slice admits the INTRINSIC DOM
+ *   handler/ref channel; a host's event/ref contract belongs to its owner.
+ * - list entry templates: a keyed entry update re-binds the mapper parameter
+ *   without re-running the mount, so an installed listener/ref would keep the
+ *   first entry's values over reused DOM. The M06b2c per-entry update hook owns
+ *   that shape.
+ */
+function clientOnlyAttributeAdmitted(
+  state: EmitState,
+  tag: string,
+  attributeName: string,
+  span: IrSpan,
+): boolean {
+  const label = attributeName.startsWith('on') ? 'event' : 'ref';
+  if (tag.includes('-')) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
+      `the ${label} channel on custom-element host <${tag}> is outside the generated-leaf slice; ` +
+        'bind it on an intrinsic element or in the host component',
+      span,
+    );
+    return false;
+  }
+  if (state.listDepth > 0) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
+      `the ${label} channel inside a list entry template needs the per-entry update hook ` +
+        '(M06b2c); keep the handler outside the list entry',
+      span,
+    );
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Install one client-only attachment on an already-created element.
+ *
+ * - event: evaluate the handler record once (attach-time, matching the class
+ *   path's handler Part), validate it is callable, then add one listener that
+ *   calls it with the native event. No wrapper/try-catch: a throwing handler is
+ *   platform dispatch, not a suppression point. The mount/claim scope owns the
+ *   removal, so a throwing later installation step (or a throwing claim) runs
+ *   this cleanup through the standard owner rollback while borrowed DOM stays.
+ * - ref: evaluate the handler record once, validate callable, call it with the
+ *   element and queue the class-path detach: call the returned unsubscribe (if
+ *   it is a function) and then call the handler with `null`, even when the
+ *   cleanup throws (`finally`).
+ */
+function emitClientOnlyInstall(
+  state: EmitState,
+  elementVar: string,
+  attribute: Extract<FunctionModelAttribute, { readonly kind: 'dynamic' }>,
+  record: LoweredExpressionRecord,
+): void {
+  const span = attribute.span;
+  const handlerVar = nextName(state, attribute.channel === 'event' ? 'eventHandler' : 'refHandler');
+  pushParts(state, [`const ${handlerVar} = (`, { record }, ');'], span);
+  if (attribute.channel === 'event') {
+    push(
+      state,
+      `if (typeof ${handlerVar} !== "function") throw new Error(${JSON.stringify(`${EVENT_HANDLER_INVALID}: ${attribute.name} handler is not callable`)});`,
+      span,
+    );
+    const eventName = clientOnlyEventName(attribute.name);
+    if (eventName === null) {
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
+        `event attribute '${attribute.name}' does not name a DOM event`,
+        span,
+      );
+      return;
+    }
+    const listenerVar = nextName(state, 'eventListener');
+    push(state, `const ${listenerVar} = (event) => ${handlerVar}(event);`, span);
+    push(
+      state,
+      `${elementVar}.addEventListener(${JSON.stringify(eventName)}, ${listenerVar});`,
+      span,
+    );
+    push(
+      state,
+      `${state.scopeVar}.add(() => ${elementVar}.removeEventListener(${JSON.stringify(eventName)}, ${listenerVar}));`,
+      span,
+    );
+    return;
+  }
+  push(
+    state,
+    `if (typeof ${handlerVar} !== "function") throw new Error(${JSON.stringify(`${REF_HANDLER_INVALID}: ${attribute.name} handler is not callable`)});`,
+    span,
+  );
+  const cleanupVar = nextName(state, 'refCleanup');
+  push(state, `const ${cleanupVar} = ${handlerVar}(${elementVar});`, span);
+  push(
+    state,
+    `${state.scopeVar}.add(() => { try { if (typeof ${cleanupVar} === "function") ${cleanupVar}(); } finally { ${handlerVar}(null); } });`,
+    span,
+  );
+}
+
 function emitAttributeWrite(
   state: EmitState,
   elementVar: string,
@@ -1758,7 +1898,7 @@ function componentPropAdmitted(
     }
     return true;
   }
-  if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
+  if (!COMPONENT_PROP_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
     diag(
       state,
       'OEIR_LEAF_UNSUPPORTED_ATTRIBUTE',
@@ -2788,6 +2928,13 @@ function emitNode(
         );
         continue;
       }
+      if (CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
+        if (!clientOnlyAttributeAdmitted(state, node.tag, attribute.name, span)) continue;
+        const record = recordFor(state, attribute.expression, records);
+        if (record === null || !declareReads(state, record)) continue;
+        emitClientOnlyInstall(state, varName, attribute, record);
+        continue;
+      }
       const record = recordFor(state, attribute.expression, records);
       if (record === null || !declareReads(state, record)) continue;
       const dependencies = dependencyNames(state, record);
@@ -3010,6 +3157,9 @@ function attributesClaimable(attributes: readonly FunctionModelAttribute[]): boo
       continue;
     }
     if (CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) continue;
+    // Client-only channels install nothing structural; they are attached in
+    // claim phase 2 after the walk verifies, so the shape stays claimable.
+    if (CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) continue;
     // Property writes (`el.value = …`) can clobber pre-claim user input.
     // That preservation is a later M07 slice, so the shape stays mount-only.
     if (attribute.channel === 'property') return false;
@@ -3279,7 +3429,9 @@ function emitClaimStaticAttributeSeed(
   const dynamicNames = attributes
     .filter(
       (attribute) =>
-        attribute.kind === 'dynamic' && !CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel),
+        attribute.kind === 'dynamic' &&
+        !CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel) &&
+        !CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel),
     )
     .map((attribute) => attribute.name);
   const declared = staticAttrs
@@ -4265,6 +4417,17 @@ function emitClaimInto(
         if (attribute.kind === 'dynamic' && CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
           continue;
         }
+        if (attribute.kind === 'dynamic' && CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
+          if (!clientOnlyAttributeAdmitted(state, node.tag, attribute.name, attribute.span)) {
+            return;
+          }
+          const record = recordFor(state, attribute.expression, records);
+          if (record === null || !declareReads(state, record)) return;
+          const elementName = name;
+          const clientAttribute = attribute;
+          phase2.push(() => emitClientOnlyInstall(state, elementName, clientAttribute, record));
+          continue;
+        }
         const slot = prepareClaimSlot(state, attribute.expression, records);
         if (slot === null) return;
         const attributeName = attribute.name;
@@ -4883,6 +5046,11 @@ function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null
   if (isVoid && node.children.length > 0) return null;
   const attributes: string[] = [];
   for (const attribute of node.attributes) {
+    // Client-only channels render no bytes: skipping them keeps a component
+    // with only handlers/refs on the M08-1a static producer path.
+    if (attribute.kind === 'dynamic' && CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
+      continue;
+    }
     // Slice 1a: static attributes only. A dynamic slot means the value is not
     // known at compile time, so this component has no static SSR form yet.
     if (attribute.kind !== 'static') return null;
@@ -5008,6 +5176,7 @@ function emitSsrDynamicAttribute(
   outVar: string,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
 ): boolean {
+  if (CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
   if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
   const record = recordFor(state, attribute.expression, records);
   if (record === null || !declareReads(state, record)) return false;
@@ -5458,8 +5627,13 @@ function emitDynamicSsrNodes(
     }
     push(state, `${outVar}.push(${literalText(`<${node.tag}`)});`, node.span);
     for (const attribute of node.attributes) {
-      if (attribute.kind === 'dynamic' && CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
-        // `key` is list identity, never a DOM write (same rule as mount).
+      if (
+        attribute.kind === 'dynamic' &&
+        (CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel) ||
+          CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel))
+      ) {
+        // `key` is list identity, never a DOM write; event/ref are client-only
+        // attachments that render no server bytes (same rule as mount).
         continue;
       }
       if (attribute.kind === 'static') {
@@ -5501,6 +5675,120 @@ function emitDynamicSsrNodes(
 }
 
 /**
+ * Which local setup resources the dynamic SSR producer actually evaluates.
+ *
+ * The producer used to declare/evaluate EVERY local setup resource, even one
+ * referenced only from a client-only channel (an event handler or ref
+ * callback). Those expressions can read imported callables, so an unused
+ * declaration made `__ssr` request a callable it never used. This walk mirrors
+ * the producer's traversal — server-rendered text, attribute/boolean values,
+ * condition/list expressions, component-reference prop records and every
+ * recipe target reachable from an insertion site — and then closes over local
+ * resources transitively: a reachable local's initializer may read another
+ * local. Resources used only by client-only attributes (or by other pruned
+ * locals) are not declared.
+ *
+ * Deliberately conservative in one direction: an entry-local mapper name that
+ * coincides with an outer local resource keeps the outer declaration.
+ * Over-declaration reproduces the old bytes; under-declaration would be a
+ * runtime ReferenceError. Evaluation order of the SURVIVING locals is the
+ * authored order (the loop keeps the component.resources order).
+ */
+function ssrReachableLocalResourceNames(
+  component: FunctionModelComponent,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): ReadonlySet<string> {
+  const localRecords = new Map<string, LoweredExpressionRecord>();
+  for (const resource of component.resources) {
+    if (resource.kind !== 'local' || resource.recipeId !== null || resource.expression === null) {
+      continue;
+    }
+    const record = records.get(resource.expression.id);
+    if (record !== undefined) localRecords.set(resource.name, record);
+  }
+  const recipes = new Map(component.recipes.map((recipe) => [recipe.id, recipe] as const));
+  const usedRecords = new Set<LoweredExpressionRecord>();
+  const visitedNodes = new Set<FunctionModelNode>();
+  const visitedRecipes = new Set<string>();
+  const collect = (ref: FunctionExpressionRef | null | undefined): void => {
+    if (ref === null || ref === undefined) return;
+    const record = records.get(ref.id);
+    if (record !== undefined) usedRecords.add(record);
+  };
+  const walkAttributes = (attributes: readonly FunctionModelAttribute[]): void => {
+    for (const attribute of attributes) {
+      if (attribute.kind !== 'dynamic') continue;
+      if (CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) continue;
+      collect(attribute.expression);
+    }
+  };
+  const walkNodes = (nodes: readonly FunctionModelNode[]): void => {
+    for (const node of nodes) walkNode(node);
+  };
+  const walkRecipe = (recipeId: string): void => {
+    if (visitedRecipes.has(recipeId)) return;
+    visitedRecipes.add(recipeId);
+    const recipe = recipes.get(recipeId);
+    if (recipe !== undefined) walkNode(recipe.target);
+  };
+  const walkNode = (node: FunctionModelNode): void => {
+    if (visitedNodes.has(node)) return;
+    visitedNodes.add(node);
+    if (node.kind === 'text') return;
+    if (node.kind === 'fragment') {
+      walkNodes(node.children);
+      return;
+    }
+    if (node.kind === 'dynamic-text') {
+      collect(node.expression);
+      return;
+    }
+    if (node.kind === 'element') {
+      walkAttributes(node.attributes);
+      walkNodes(node.children);
+      return;
+    }
+    if (node.kind === 'condition') {
+      collect(node.test);
+      walkNodes(node.consequent);
+      if (node.alternate !== null) walkNodes(node.alternate);
+      return;
+    }
+    if (node.kind === 'list') {
+      collect(node.items);
+      if (node.key !== null) collect(node.key);
+      walkNodes(node.template);
+      return;
+    }
+    if (node.kind === 'component-ref') {
+      walkAttributes(node.props);
+      if (node.childrenRecipeId !== null) walkRecipe(node.childrenRecipeId);
+      return;
+    }
+    if (node.kind === 'insertion-site') walkRecipe(node.recipeId);
+  };
+  walkNodes(component.roots);
+
+  // Transitive closure over the local initializers the server output reads.
+  const reachable = new Set<string>();
+  const queue: LoweredExpressionRecord[] = [...usedRecords];
+  const seen = new Set<LoweredExpressionRecord>(queue);
+  while (queue.length > 0) {
+    const record = queue.pop()!;
+    for (const read of record.reads) {
+      const localRecord = localRecords.get(read.name);
+      if (localRecord === undefined) continue;
+      reachable.add(read.name);
+      if (!seen.has(localRecord)) {
+        seen.add(localRecord);
+        queue.push(localRecord);
+      }
+    }
+  }
+  return reachable;
+}
+
+/**
  * Emit `<Name>__ssr(props, host)` for a component with at least one admitted
  * dynamic slot. Returns null when the shape is outside the slice (for example
  * a condition, list, component reference, insertion site or property channel);
@@ -5519,15 +5807,22 @@ function emitDynamicSsrFunction(
   const composition = treeHasComposition(component.roots);
   const state = ssrEmitState(component, file, propsName, componentByName, projectsChildren);
   if (!assertTextBoundaryContext(state, component.roots)) return failedSsr(state);
+  // Only locals the server output actually (transitively) evaluates are
+  // declared. A client-only handler/ref helper must not make `__ssr` request a
+  // callable it never reads; surviving locals keep their authored order.
+  const reachableLocalResources = ssrReachableLocalResourceNames(component, records);
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
       continue;
     }
     if (resource.kind === 'local') {
       if (resource.recipeId !== null || resource.expression === null) continue;
+      // Recognized as a local for read classification even when pruned, so a
+      // miss would fail as a missing declaration instead of a fake binding.
+      state.localResources.add(resource.name);
+      if (!reachableLocalResources.has(resource.name)) continue;
       const record = recordFor(state, resource.expression, records);
       if (record === null || !declareReads(state, record)) return failedSsr(state);
-      state.localResources.add(resource.name);
       pushParts(state, [`const ${resource.name} = (`, { record }, ');'], resource.span);
       continue;
     }

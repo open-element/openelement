@@ -899,8 +899,18 @@ class FunctionFrontendBuilder {
       const expressionNode = initializer.expression;
       const channel = classifyIntrinsicAttribute(name, tag);
       if (intrinsic && this.screenDynamicAttribute(name, tag, channel, property)) continue;
+      // Event and ref values are attach-once client channels, not tracked
+      // slots: handler mode records their reads (so the generator can declare
+      // them) without reactive dependencies, so a replacement cannot be
+      // mistaken for a tracked write and a ref handler is evaluated once at
+      // attach (element) / detach (null). Every other channel keeps the
+      // enclosing entry mode.
       const mode =
-        channel === 'event' ? 'handler' : channel === 'key' ? 'key' : this.currentEntryMode();
+        channel === 'event' || channel === 'ref'
+          ? 'handler'
+          : channel === 'key'
+            ? 'key'
+            : this.currentEntryMode();
       const expression = this.expression(expressionNode, mode);
       if (expression === null) continue;
       built.push({
