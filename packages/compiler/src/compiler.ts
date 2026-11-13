@@ -44,6 +44,16 @@ export {
   type CompileServerComponentResult,
   type ServerComponentCompileOptions,
 } from './internal/compiler/semantic-core/server-component.ts';
+// The generated Native Custom Element lane host bridge (M09-1b): the ONE
+// admission entry a host whose compiler binding is not the Vite plugin (the
+// Router's dev transform, plugin-hmr.ts) calls with its island-derived site
+// fact. It returns null for a module the lane does not own (no site fact, a
+// non-TSX id, or the class lane's grammar) and fails closed with the internal
+// `OEIR_GENERATED_ELEMENT_*` codes when it owns a module it must refuse.
+// `GeneratedElementSite` is the host-supplied fact (a tag plus the root mode
+// the shell will adopt); it is a host capability, never author syntax.
+export { compileGeneratedElementIfAdmitted } from './internal/compiler/semantic-ir/generated-element/compile.ts';
+export type { GeneratedElementSite } from './internal/compiler/semantic-ir/generated-element/contract.ts';
 // The ONE diagnostic projection every host of the compiler reports through
 // (the standalone Vite plugin and the Router's `open:core` transform): a
 // structured `{id, loc, frame, diagnostics}` record, so a consumer reads the

@@ -13,6 +13,8 @@
     "./server": "./src/server.ts",
     "./logger": "./src/logger.ts",
     "./build-utils": "./src/build-utils.ts",
+    "./internal/compiled/generated-element/shell": "./src/internal/compiled/generated-element/shell.ts",
+    "./internal/compiled/runtime": "./src/internal/compiled/runtime.ts",
     "./client-only": "./src/client-only.ts",
     "./no-blocks": "./src/no-blocks.ts",
     "./base": "./src/base.ts"
@@ -28,8 +30,7 @@
   "files": [
     "src/**",
     "README.md",
-    "LICENSE",
-    "!src/internal/compiled/generated-element"
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",

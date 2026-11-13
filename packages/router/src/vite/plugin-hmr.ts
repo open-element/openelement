@@ -15,6 +15,7 @@ import {
   CompiledElementError,
   compiledArtifactClassCandidates,
   compileElementModule,
+  compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
   diagnosticPluginError,
   lightRootScopeTag,
@@ -28,6 +29,7 @@ import {
   styleRequestModuleId,
 } from '@openelement/compiler';
 import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
+import { createGeneratedElementSiteResolver } from './generated-element-site.ts';
 import { styleAssetGraphId } from './internal/style-assets.ts';
 import { devClientModulePath } from './internal/dev-client-path.ts';
 import {
@@ -51,11 +53,26 @@ export function createCompilerHooks(
   // would force a full reload for every keystroke instead of only for
   // template/Part/Block shape changes.
   const compiledProgramShapes = new Map<string, string>();
+  // One site closure per plugin instance (one dev server), built from the
+  // resolved islands dir — the same invariant the island transform plugin
+  // captures. The generated lane needs the tag the island pipeline will
+  // register; the compiler transform runs before the island transform, so the
+  // host supplies it (M09-1b).
+  const generatedElementSite = createGeneratedElementSiteResolver(
+    state.resolvedOptions.islandsDir!,
+  );
 
   const programShape = (program: unknown): string => {
     const { sourceMap: _sourceMap, ...shape } = program as Record<string, unknown>;
     return JSON.stringify(shape);
   };
+
+  // A generated module has no Part Program to compare. Its emitted text IS the
+  // shape: any edit re-evaluates the class construction and the appended tail,
+  // and an already-upgraded element keeps the constructor it was defined with,
+  // so a changed generated module takes the bounded full-reload path instead of
+  // being mistaken for a class module's method-body edit (M09-1b).
+  const generatedShape = (code: string): string => JSON.stringify({ generatedElement: code });
 
   return {
     transform(code, id) {
@@ -70,19 +87,28 @@ export function createCompilerHooks(
           // registers.
           { staticSidecars: [ISLAND_ADMISSION] },
         );
+        // The generated Native Custom Element lane (M09-1b): when the class
+        // lane declined and the host resolved an island tag for this module,
+        // the lane emits the generated class instead of leaving the island's
+        // function default export to throw at `customElements.define`.
+        const site = generatedElementSite(moduleId);
+        const generatedResult =
+          result === null && site !== null
+            ? compileGeneratedElementIfAdmitted(code, moduleId, { site })
+            : null;
         // The server function component lane (alpha15): when the class lane
-        // declined, a route module carrying an exported JSX-returning
-        // function compiles into `__h`/`__t`/`__ssr` constructors. Nested
-        // composition resolves through the host resolver (the compiler never
-        // reads the filesystem); the tags the render can expand — renderable
-        // islands plus static compiled components — route nested hosts
-        // through `__ssr`.
+        // and the generated lane declined, a route module carrying an exported
+        // JSX-returning function compiles into `__h`/`__t`/`__ssr`
+        // constructors. Nested composition resolves through the host resolver
+        // (the compiler never reads the filesystem); the tags the render can
+        // expand — renderable islands plus static compiled components — route
+        // nested hosts through `__ssr`.
         const serverComponentResolver = createServerComponentSourceResolver({
           root: state.viteRoot ?? process.cwd(),
           workspaceRoot: state.workspaceRoot,
         });
         const serverResult =
-          result === null
+          result === null && generatedResult === null
             ? compileServerComponentIfAdmitted(code, moduleId, {
                 resolveModule: (specifier) =>
                   serverComponentResolver(specifier, moduleId) ?? undefined,
@@ -139,12 +165,23 @@ export function createCompilerHooks(
           state.classCandidates.register(id, serverResult.classCandidates ?? [], {
             shadow: false,
           });
+        } else if (generatedResult !== null) {
+          // A generated Native Custom Element is light-root only (M09-1b's
+          // production site passes `light`): its classes are document-DOM
+          // facts, and the function frontend carries no class-token collector
+          // yet, so the authoritative fact is "none".
+          state.classCandidates.register(id, [], { shadow: false });
         } else {
           // A shipped artifact module carries its candidates (S5-B): the dev
           // binding registers the packed form exactly as the build binding.
           state.classCandidates.register(id, compiledArtifactClassCandidates(code, id) ?? [], {
             shadow: true,
           });
+        }
+        if (generatedResult !== null) {
+          // Same shape as the build host: the leaf's unchanged map, no authored
+          // source for the appended tail, no inline map comment to strip.
+          return { code: generatedResult.code, map: generatedResult.map };
         }
         if (serverResult !== null) {
           return { code: serverResult.code, map: serverResult.map };
@@ -225,24 +262,33 @@ export function createCompilerHooks(
         return;
       }
       try {
+        const moduleId = stableModuleId(hmr.file, state.viteRoot, state.workspaceRoot);
         const result = compileElementModule(
           source,
-          stableModuleId(hmr.file, state.viteRoot, state.workspaceRoot),
+          moduleId,
           // Same admission as the transform.
           { staticSidecars: [ISLAND_ADMISSION] },
         );
-        if (!result) {
+        // The generated lane is part of the dev transform (M09-1b), so the HMR
+        // comparison must see the same module. A generated module never rides
+        // the class-shape map: the emitted text is its shape, because a changed
+        // class construction is unsafe to patch in place.
+        const site = result === null ? generatedElementSite(moduleId) : null;
+        const generatedResult =
+          site === null ? null : compileGeneratedElementIfAdmitted(source, moduleId, { site });
+        if (!result && !generatedResult) {
           compiledProgramShapes.delete(hmr.file);
           return;
         }
-        const nextShape = programShape(result.program);
+        const nextShape =
+          result !== null ? programShape(result.program) : generatedShape(generatedResult!.code);
         const previousShape = compiledProgramShapes.get(hmr.file);
         compiledProgramShapes.set(hmr.file, nextShape);
         if (previousShape !== undefined && previousShape !== nextShape) {
-          // A changed static tree or Part/Block instruction cannot be safely
-          // patched in place. Full reload is the bounded fail-closed path;
-          // same-program method/initializer edits retain the element module's
-          // live state through ordinary Vite HMR.
+          // A changed static tree or Part/Block instruction — or any changed
+          // generated class — cannot be safely patched in place. Full reload is
+          // the bounded fail-closed path; same-program method/initializer edits
+          // retain the element module's live state through ordinary Vite HMR.
           hmr.server.ws.send({ type: 'full-reload' });
           return [];
         }
