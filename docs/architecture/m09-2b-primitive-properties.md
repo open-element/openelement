@@ -75,9 +75,10 @@ keyed by the typed member name, with these deliberate omissions:
   and `@property`'s type constructor (`String`/`Number`/`Boolean`) has no
   meaning beside a TS type. The cross-check therefore keys on the member set
   and on the default's literal type, not on a second type spelling.
-- **no `converter`** — custom converters are not expressible on this lane
-  (array/object/`trustedHtml` conversion is a recorded Alpha17 exception), so a
-  converter field would be an unreachable option.
+- **no `converter`** — custom converters are not expressible on this lane, so a
+  converter field would be an unreachable option. Non-primitive conversion is
+  NOT claimed as safely waived: see "Scope boundary: primitive channels only"
+  below.
 - **`attribute: false` rather than `attribute: null | undefined`** — it is the
   class lane's existing spelling for "property-only" and it keeps the table
   JSON-ish for sidecar scanning.
@@ -165,6 +166,36 @@ declaration.
 | [`generated-element.properties.browser.test.ts`](../../packages/compiler/__tests__/semantic-ir/generated-element.properties.browser.test.ts) | The Chromium vertical (below). |
 | [`island-metadata-drift-guard.test.ts`](../../packages/router/__tests__/island-metadata-drift-guard.test.ts) / [`island-scanner.test.ts`](../../packages/router/__tests__/island-scanner.test.ts) / [`authoring.test.ts`](../../packages/router/__tests__/authoring.test.ts) | The shared drift guard extended to the table, plus the scanner/runtime acceptance and refusal expectations. |
 
+## Scope boundary: primitive channels only, typed props are not "all CE attributes"
+
+**This slice implements the primitive property set only.** Non-primitive
+property channels (arrays, objects and `trustedHtml`) remain a **required
+capability before retirement**, not a waived one: live in-tree consumers that
+declare non-primitive attributes are the evidence, and a governance record for
+that finding is maintained separately from this slice document. What this lane
+does today is fail closed: a props member whose type is not
+`string`/`number`/`boolean` refuses with
+`OEIR_GENERATED_ELEMENT_PROPS_TYPE_UNSUPPORTED`, the descriptor type cannot
+express array/object/`trustedHtml`, and no silent conversion or invented
+converter option exists. Closing the gap needs a deliberate widening of the
+sidecar/descriptor vocabulary (or a decided converter mechanism) plus shell
+conversion/reflection and consumer-form parity evidence — a separate
+owner-ruled slice.
+
+**The cross-check boundary, stated so it is not read as a product promise.**
+The current admission requires the typed props member set to equal the sidecar
+table: every typed member must be declared, and every entry must name a typed
+member. That is this slice's fail-closed rule for the *CE property surface it
+admits*, not a claim that every typed component prop must become a custom
+element attribute/property long term. Typed props that have no CE channel —
+event callbacks (`onClick`-style handlers), `children`, non-primitive values —
+are not representable here and refuse through the same cross-check (an
+undeclared member is a `PROPERTY_MISMATCH`; a non-primitive member is a
+`PROPS_TYPE_UNSUPPORTED`). A future admission will need an owner-ruled way to
+separate "props that are CE attributes/properties" from "component props with
+no CE channel" before that wider surface is claimed; this record does not
+pre-empt that decision.
+
 ## Public surface (regenerated, never hand-edited)
 
 `IslandConfig` is published on the router root, so this slice's declaration
@@ -242,7 +273,8 @@ real shell.
 ## What this slice does NOT do
 
 - **No array/object/`trustedHtml` conversion and no custom converters.** The
-  recorded Alpha17 exception stands; the shell's primitive set is unchanged.
+  shell's primitive set is unchanged. This is a recorded capability gap, not a
+  safe waiver — see "Scope boundary: primitive channels only" below.
 - **No CEM output** for generated elements (recorded exception, Alpha17).
 - **No forms, events, styles.** Unchanged by this slice.
 - **No class-lane change.** `@property`/`@element` keep their existing path.
