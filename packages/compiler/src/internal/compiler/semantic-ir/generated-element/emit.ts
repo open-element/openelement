@@ -41,11 +41,13 @@
 import ts from 'typescript';
 import type { RootMode } from '@openelement/protocol/part-program';
 import { generateLeafModule, type GeneratedLeafModule } from '../generated-leaf/generate.ts';
+import { quoteGeneratedJavaScriptValue } from '../generated-leaf/codegen-literals.ts';
 import type { FunctionModelModule } from '../../semantic-core/function-frontend.ts';
 import type { IrDiagnostic } from '../types.ts';
 import {
   GENERATED_ELEMENT_DIAGNOSTIC,
   GENERATED_ELEMENT_SHELL_SPECIFIER,
+  type GeneratedElementDefaultGraph,
   type GeneratedElementPlatformProperty,
   type GeneratedElementSite,
 } from './contract.ts';
@@ -187,29 +189,93 @@ function emptyResult(
   };
 }
 
-/**
- * The descriptor's `properties` rows, byte-for-byte. Every resolved row
- * spells all five descriptor facts explicitly (including `attribute: null` and
- * `reflect: false`) so the emitted declaration is reviewable without inferring
- * omitted-key semantics; the shell validates the same shape.
- */
-function propertyRows(properties: readonly GeneratedElementPlatformProperty[]): string[] {
-  if (properties.length === 0) return ['  properties: [],'];
-  return [
-    '  properties: [',
-    ...properties.map((property) => {
-      const attribute = property.attribute === null ? 'null' : JSON.stringify(property.attribute);
-      return (
-        `    { name: ${JSON.stringify(property.name)}, attribute: ${attribute}, ` +
-        `type: ${JSON.stringify(property.type)}, reflect: ${String(property.reflect)}, ` +
-        `default: ${JSON.stringify(property.default)} },`
-      );
-    }),
-    '  ],',
-  ];
+/** Render one admitted literal default graph as JavaScript source. */
+function renderDefaultGraph(graph: GeneratedElementDefaultGraph): string {
+  if (graph === null) return 'null';
+  // Authored default strings and keys are embedded in generated JavaScript:
+  // use the one compiler code-literal boundary (JSON.stringify plus the
+  // script-context escapes), never a bare JSON.stringify (CodeQL
+  // js/bad-code-sanitization; M09-2c helper).
+  if (typeof graph === 'string') return quoteGeneratedJavaScriptValue(graph);
+  if (typeof graph === 'number' || typeof graph === 'boolean') return String(graph);
+  if (Array.isArray(graph)) {
+    return `[${graph.map((entry) => renderDefaultGraph(entry)).join(', ')}]`;
+  }
+  const entries = Object.entries(graph as Readonly<Record<string, GeneratedElementDefaultGraph>>);
+  return `{ ${entries
+    .map(([key, value]) => `${quoteGeneratedJavaScriptValue(key)}: ${renderDefaultGraph(value)}`)
+    .join(', ')} }`;
+}
+
+interface PropertyEmission {
+  /** Module-level fresh-literal default factories (array/object rows). */
+  readonly factoryLines: readonly string[];
+  /** The descriptor row lines, including the trailing `,` on each row. */
+  readonly rowLines: readonly string[];
+  /** New module-scope identifiers the factory lines declare. */
+  readonly identifiers: readonly string[];
+  /** True when at least one non-primitive row needs the SSR props resolver. */
+  readonly usesPropsResolver: boolean;
 }
 
 /**
+ * The descriptor's `properties` rows, byte-for-byte.
+ *
+ * Primitive and trustedHtml rows spell the value directly (trustedHtml carries
+ * the literal HTML string; the shell brands it per materialisation). Array and
+ * object rows emit ONE module-level fresh-literal factory each and the row
+ * references that factory name, so the descriptor never holds a mutable shared
+ * default graph: the shell calls it once per element instance and the SSR
+ * resolver once per render. A module with no table keeps `properties: []`
+ * exactly as M09-1a.
+ */
+function buildPropertyEmission(
+  properties: readonly GeneratedElementPlatformProperty[],
+): PropertyEmission {
+  if (properties.length === 0) {
+    return {
+      factoryLines: [],
+      rowLines: ['  properties: [],'],
+      identifiers: [],
+      usesPropsResolver: false,
+    };
+  }
+  const factoryLines: string[] = [];
+  const identifiers: string[] = [];
+  let usesPropsResolver = false;
+  const rows = properties.map((property, index) => {
+    const attribute = property.attribute === null ? 'null' : JSON.stringify(property.attribute);
+    let defaultValue = '';
+    if (property.type === 'array' || property.type === 'object') {
+      const factoryName = `__oePropertyDefault${index}`;
+      identifiers.push(factoryName);
+      factoryLines.push(
+        `const ${factoryName} = () => (${renderDefaultGraph(property.defaultGraph!)});`,
+      );
+      defaultValue = factoryName;
+      usesPropsResolver = true;
+    } else if (property.type === 'trustedHtml') {
+      defaultValue = quoteGeneratedJavaScriptValue(property.default);
+      usesPropsResolver = true;
+    } else {
+      defaultValue = quoteGeneratedJavaScriptValue(property.default);
+    }
+    return (
+      `    { name: ${JSON.stringify(property.name)}, attribute: ${attribute}, ` +
+      `type: ${JSON.stringify(property.type)}, reflect: ${String(property.reflect)}, ` +
+      `default: ${defaultValue} },`
+    );
+  });
+  return {
+    factoryLines,
+    rowLines: ['  properties: [', ...rows, '  ],'],
+    identifiers,
+    usesPropsResolver,
+  };
+}
+
+/**
+ * Append the M09-1a CE tail to one generated leaf module./**
  * Append the M09-1a CE tail to one generated leaf module.
  *
  * `site` null is the hostless case: the result is byte-identical to
@@ -277,6 +343,7 @@ export function generateElementModule(
     tag: '__oeElementTag',
     shellImport: 'createGeneratedElementClass',
     ssrHostImport: 'serializeGeneratedElementHtml',
+    propsResolver: 'resolveGeneratedElementProps',
     ssrHost: `${rootName}__ssrHost`,
   };
   const root = options.root;
@@ -300,12 +367,15 @@ export function generateElementModule(
     templateRoot !== null && exportsSsrFunction(leafText, rootName)
       ? { root: templateRoot, name: names.ssrHost }
       : null;
+  const propertyEmission = buildPropertyEmission(options.properties ?? []);
   const collisionNames = [
     names.descriptor,
     names.element,
     names.alias,
     names.tag,
     names.shellImport,
+    ...propertyEmission.identifiers,
+    ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
     ...(hostWrapper === null ? [] : [names.ssrHostImport, names.ssrHost]),
   ];
   const collisions = collisionNames.filter((name) => identifierOccurs(leafText, name));
@@ -324,15 +394,21 @@ export function generateElementModule(
   const tail = [
     '',
     '// ---- generated native element (M09-1) ----',
-    `import { ${[names.shellImport, ...(hostWrapper === null ? [] : [names.ssrHostImport])].join(', ')} } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
+    `import { ${[
+      names.shellImport,
+      ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
+      ...(hostWrapper === null ? [] : [names.ssrHostImport]),
+    ].join(', ')} } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
     '',
+    ...propertyEmission.factoryLines,
+    ...(propertyEmission.factoryLines.length === 0 ? [] : ['']),
     `const ${names.descriptor} = {`,
     `  tag: ${JSON.stringify(site.tag)},`,
     // No authored root → no descriptor property: the shell's own
     // `descriptor.root ?? 'light'` default is the single default owner.
     ...(root === undefined ? [] : [`  root: ${JSON.stringify(root)},`]),
     ...(delegatesFocus ? ['  delegatesFocus: true,'] : []),
-    ...propertyRows(options.properties ?? []),
+    ...propertyEmission.rowLines,
     `  createRecipe: create${rootName}Recipe,`,
     '};',
     '',
@@ -354,7 +430,11 @@ export function generateElementModule(
           `    tag: ${JSON.stringify(site.tag)},`,
           `    root: ${JSON.stringify(hostWrapper.root)},`,
           ...(delegatesFocus ? ['    dsd: { delegatesFocus: true },'] : []),
-          `    content: ${rootName}__ssr(props, undefined),`,
+          `    content: ${rootName}__ssr(${
+            propertyEmission.usesPropsResolver
+              ? `${names.propsResolver}(${names.descriptor}, props)`
+              : 'props'
+          }, undefined),`,
           '    ...(lightChildren === undefined ? {} : { lightChildren }),',
           '  });',
           '}',

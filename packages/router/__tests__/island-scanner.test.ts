@@ -195,12 +195,79 @@ test('readIslandConfig: accepts a property table and resolves attributes', () =>
     ),
   ).toEqual({
     properties: {
-      count: { attribute: 'count', reflect: true, default: 0 },
-      label: { attribute: 'label', reflect: false, default: 'untitled' },
-      padding: { attribute: null, reflect: false },
-      slug: { attribute: 'data-slug', reflect: false },
+      count: { attribute: 'count', attributeExplicit: false, reflect: true, default: 0 },
+      label: { attribute: 'label', attributeExplicit: false, reflect: false, default: 'untitled' },
+      padding: { attribute: null, attributeExplicit: true, reflect: false },
+      slug: { attribute: 'data-slug', attributeExplicit: true, reflect: false },
     },
   });
+});
+
+test('readIslandConfig: property rows are own keys on a null-prototype record', () => {
+  const config = readIslandConfig(
+    `export const openElement = defineIslandConfig({ properties: { ` +
+      `count: { default: 0 }, label: { attribute: false, default: 'x' } } });\n`,
+  );
+  expect(config?.properties).toBeDefined();
+  expect(Object.getPrototypeOf(config!.properties)).toBeNull();
+  expect(Object.keys(config!.properties!)).toEqual(['count', 'label']);
+});
+
+test('readIslandConfig: dangerous property names are refused', () => {
+  for (const name of ['__proto__', 'constructor', 'prototype']) {
+    assertThrowsIncludes(
+      () =>
+        readIslandConfig(
+          `export const openElement = defineIslandConfig({ properties: { ${name}: { attribute: false, default: {} } } });\n`,
+        ),
+      Error,
+      'not an admissible property name',
+    );
+  }
+});
+
+test('readIslandConfig: trustedHtml provenance matches the compiler on type-only imports', () => {
+  for (const importLine of [
+    `import type { trustedHtml } from '@openelement/element';`,
+    `import { type trustedHtml } from '@openelement/element';`,
+  ]) {
+    assertThrowsIncludes(
+      () =>
+        readIslandConfig(
+          `${importLine}\n` +
+            `export const openElement = defineIslandConfig({ properties: { html: { attribute: false, default: trustedHtml('<b>x</b>') } } });\n`,
+        ),
+      Error,
+      'canonical trustedHtml import',
+    );
+  }
+  // A runtime aliased import follows the canonical binding and is admitted.
+  expect(
+    readIslandConfig(
+      `import { trustedHtml as th } from '@openelement/element';\n` +
+        `export const openElement = defineIslandConfig({ properties: { html: { attribute: false, default: th('<b>x</b>') } } });\n`,
+    ),
+  ).toEqual({
+    properties: {
+      html: {
+        attribute: null,
+        attributeExplicit: true,
+        reflect: false,
+        default: { trustedHtml: '<b>x</b>' },
+      },
+    },
+  });
+  // A local same-name callee is never given canonical provenance.
+  assertThrowsIncludes(
+    () =>
+      readIslandConfig(
+        `import { trustedHtml as canonicalHtml } from '@openelement/element';\n` +
+          `const trustedHtml = () => ({ html: 'local' });\n` +
+          `export const openElement = defineIslandConfig({ properties: { html: { attribute: false, default: trustedHtml('<b>x</b>') } } });\n`,
+      ),
+    Error,
+    'canonical trustedHtml import',
+  );
 });
 
 test('readIslandConfig: accepts an empty property table', () => {
@@ -220,6 +287,21 @@ test('readIslandConfig: throws on malformed property tables', () => {
     ['properties: { count: { attribute: "onclick" } }', 'not a safe HTML attribute name'],
     ['properties: { count: { attribute: false, reflect: true } }', 'cannot reflect'],
     ['properties: { count: { attribute: "n" }, label: { attribute: "n" } }', 'more than once'],
+    ['properties: { __proto__: {} }', 'not an admissible property name'],
+    ['properties: { constructor: {} }', 'not an admissible property name'],
+    ['properties: { prototype: {} }', 'not an admissible property name'],
+    [
+      'properties: { model: { attribute: false, default: { constructor: 1 } } }',
+      'must not contain a property-sink key',
+    ],
+    [
+      'properties: { model: { attribute: false, default: { prototype: 1 } } }',
+      'must not contain a property-sink key',
+    ],
+    [
+      'properties: { model: { attribute: false, default: { nested: { constructor: 1 } } } }',
+      'must not contain a property-sink key',
+    ],
   ];
   for (const [entries, message] of cases) {
     assertThrowsIncludes(
@@ -230,18 +312,39 @@ test('readIslandConfig: throws on malformed property tables', () => {
   }
 });
 
-test('readIslandConfig: throws on a dynamic property default', () => {
-  const source = `const defaultValue = 1;
+test('readIslandConfig: reads literal array/object defaults and refuses dynamic ones', () => {
+  // The static scanner records the literal graph; the compiler lane pairs it
+  // with the typed non-primitive member and rejects misuse.
+  expect(
+    readIslandConfig(
+      `export const openElement = defineIslandConfig({ properties: { ` +
+        `events: { attribute: false, default: [{ id: 'a' }] }, ` +
+        `model: { attribute: false, default: { nested: { x: 1 } } } } });\n`,
+    ),
+  ).toEqual({
+    properties: {
+      events: {
+        attribute: null,
+        attributeExplicit: true,
+        reflect: false,
+        default: [{ id: 'a' }],
+      },
+      model: {
+        attribute: null,
+        attributeExplicit: true,
+        reflect: false,
+        default: { nested: { x: 1 } },
+      },
+    },
+  });
+  const dynamic = `const defaultValue = 1;
 export const openElement = defineIslandConfig({ properties: { count: { default: defaultValue } } });
 `;
-  assertThrowsIncludes(() => readIslandConfig(source), Error, 'must be a static string, number');
-  const arrayDefault = `export const openElement = defineIslandConfig({ properties: { count: { default: [1] } } });
+  assertThrowsIncludes(() => readIslandConfig(dynamic), Error, 'must be a static string, number');
+  const spread = `const rows = [1];
+export const openElement = defineIslandConfig({ properties: { count: { default: [...rows] } } });
 `;
-  assertThrowsIncludes(
-    () => readIslandConfig(arrayDefault),
-    Error,
-    'must be a static string, number',
-  );
+  assertThrowsIncludes(() => readIslandConfig(spread), Error, 'must not contain spreads');
 });
 
 test('readIslandConfig: the accepted-shape message advertises properties', () => {

@@ -37,8 +37,10 @@ const FILE = '/proj/app/islands/profile-card.tsx';
 /** One sidecar property entry in the vocabulary both readers agree on. */
 interface PropertyFacts {
   readonly attribute: string | null;
+  readonly attributeExplicit: boolean;
   readonly reflect: boolean;
-  readonly default?: string | number | boolean;
+  /** Primitive literal, JSON-safe literal graph, or `{ trustedHtml }`. */
+  readonly default?: unknown;
 }
 
 /**
@@ -99,8 +101,16 @@ function compilerOutcome(source: string): Outcome {
               entry.name,
               {
                 attribute: entry.attribute,
+                attributeExplicit: entry.attributeExplicit,
                 reflect: entry.reflect,
-                ...(entry.default === undefined ? {} : { default: entry.default }),
+                ...(entry.default === undefined
+                  ? {}
+                  : {
+                      default:
+                        entry.default.kind === 'literal'
+                          ? entry.default.value
+                          : { trustedHtml: entry.default.html },
+                    }),
               },
             ] as const,
         );
@@ -120,8 +130,9 @@ function descriptorRoot(family: string | undefined): string | undefined {
   return family === 'light' ? 'light' : 'shadow-open';
 }
 
-function module(entries: string): string {
+function module(entries: string, imports = ''): string {
   return (
+    imports +
     "import { defineIslandConfig } from '@openelement/router';\n" +
     (entries === ''
       ? 'export const openElement = defineIslandConfig({});\n'
@@ -175,6 +186,73 @@ const CORPUS: ReadonlyArray<{ readonly name: string; readonly source: string }> 
   },
   { name: 'empty properties table', source: module('properties: {}') },
   {
+    name: 'non-primitive array/object literal defaults',
+    source: module(
+      "properties: { events: { attribute: false, default: [{ id: 'a', body: 'hi' }] }, " +
+        'model: { attribute: false, default: { nested: { x: 1, ok: true } } } }',
+    ),
+  },
+  {
+    name: 'trustedHtml literal default',
+    source: module(
+      "properties: { articleHtml: { attribute: false, default: trustedHtml('<b>safe</b>') } }",
+      "import { trustedHtml } from '@openelement/element';\n",
+    ),
+  },
+  {
+    name: 'aliased canonical trustedHtml runtime import',
+    source: module(
+      "properties: { articleHtml: { attribute: false, default: th('<b>alias</b>') } }",
+      "import { trustedHtml as th } from '@openelement/element';\n",
+    ),
+  },
+  {
+    name: 'invalid (type-only trustedHtml import call)',
+    source: module(
+      "properties: { articleHtml: { attribute: false, default: trustedHtml('<b>x</b>') } }",
+      "import type { trustedHtml } from '@openelement/element';\n",
+    ),
+  },
+  {
+    name: 'invalid (inline type modifier trustedHtml call)',
+    source: module(
+      "properties: { articleHtml: { attribute: false, default: trustedHtml('<b>x</b>') } }",
+      "import { type trustedHtml } from '@openelement/element';\n",
+    ),
+  },
+  {
+    name: 'invalid (shadowed trustedHtml callee)',
+    source:
+      "import { trustedHtml as canonicalHtml } from '@openelement/element';\n" +
+      "const trustedHtml = () => ({ html: 'local' });\n" +
+      module("properties: { articleHtml: { attribute: false, default: trustedHtml('<b>x</b>') } }"),
+  },
+  {
+    name: 'invalid (dangerous property name __proto__)',
+    source: module('properties: { __proto__: { attribute: false, default: {} } }'),
+  },
+  {
+    name: 'invalid (dangerous property name constructor)',
+    source: module('properties: { constructor: { attribute: false, default: {} } }'),
+  },
+  {
+    name: 'invalid (dangerous property name prototype)',
+    source: module('properties: { prototype: { attribute: false, default: {} } }'),
+  },
+  {
+    name: 'invalid (non-canonical trustedHtml default)',
+    source: module(
+      "properties: { articleHtml: { attribute: false, default: trustedHtml('<b>x</b>') } }",
+      "import { trustedHtml } from './local-html';\n",
+    ),
+  },
+  {
+    name: 'invalid (spread in default graph)',
+    source: `const rows = [1];\n${module(
+      'properties: { events: { attribute: false, default: [...rows] } }',
+    )}`,
+  },
+  {
     name: 'invalid (properties unknown option)',
     source: module('properties: { count: { type: "number" } }'),
   },
@@ -194,6 +272,20 @@ ${module('properties: { count: { default: defaultValue } }')}`,
   {
     name: 'invalid (properties non-object)',
     source: module('properties: 1'),
+  },
+  {
+    name: 'invalid (default graph constructor key)',
+    source: module('properties: { model: { attribute: false, default: { constructor: 1 } } }'),
+  },
+  {
+    name: 'invalid (default graph prototype key)',
+    source: module('properties: { model: { attribute: false, default: { prototype: 1 } } }'),
+  },
+  {
+    name: 'valid (default graph unrelated key)',
+    source: module(
+      "properties: { model: { attribute: false, default: { description: 'ok', nested: { x: 1 } } } }",
+    ),
   },
   {
     name: 'invalid (duplicate property name, property-only)',
@@ -300,6 +392,19 @@ test('the root vocabulary maps one way: shadow is the DSD default, closed is uns
   expect(compilerOutcome(module("root: 'shadow-closed'")).kind).toBe('rejected');
 });
 
+test('a literal default graph with an unrelated key is read and sink keys refuse on both readers', () => {
+  const valid = module(
+    "properties: { model: { attribute: false, default: { description: 'ok', nested: { x: 1 } } } }",
+  );
+  expect(scannerOutcome(valid).kind).toBe('read');
+  expect(compilerOutcome(valid).kind).toBe('read');
+  for (const key of ['constructor', 'prototype']) {
+    const invalid = module(`properties: { model: { attribute: false, default: { ${key}: 1 } } }`);
+    expect(scannerOutcome(invalid).kind, key).toBe('rejected');
+    expect(compilerOutcome(invalid).kind, key).toBe('rejected');
+  }
+});
+
 test('the properties table resolves the same way on both readers', () => {
   const read = compilerOutcome(
     module(
@@ -313,9 +418,12 @@ test('the properties table resolves the same way on both readers', () => {
       root: 'shadow-open',
       delegatesFocus: false,
       properties: [
-        ['count', { attribute: 'count', reflect: true, default: 0 }],
-        ['label', { attribute: 'label', reflect: false, default: 'untitled' }],
-        ['padding', { attribute: null, reflect: false }],
+        ['count', { attribute: 'count', attributeExplicit: false, reflect: true, default: 0 }],
+        [
+          'label',
+          { attribute: 'label', attributeExplicit: false, reflect: false, default: 'untitled' },
+        ],
+        ['padding', { attribute: null, attributeExplicit: true, reflect: false }],
       ],
     },
   });

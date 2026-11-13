@@ -468,6 +468,20 @@ test('defineIslandConfig() carries the declared primitive property table', () =>
     slug: { attribute: 'data-Slug' },
   });
 
+  // Property-only non-primitive literal defaults are part of the same table;
+  // the build (not this evaluated-value guard) cross-checks the typed member.
+  expect(
+    defineIslandConfig({
+      properties: {
+        events: { attribute: false, default: [{ id: 'a', body: 'hi' }] },
+        model: { attribute: false, default: { nested: { x: 1 } } },
+      },
+    }).properties,
+  ).toEqual({
+    events: { attribute: false, default: [{ id: 'a', body: 'hi' }] },
+    model: { attribute: false, default: { nested: { x: 1 } } },
+  });
+
   const cases: Array<[unknown, string]> = [
     [[], 'properties must be an object map'],
     [{ count: 1 }, 'properties.count must be an object'],
@@ -476,7 +490,10 @@ test('defineIslandConfig() carries the declared primitive property table', () =>
     [{ count: { reflect: 'yes' } }, 'reflect must be a boolean'],
     [{ count: { attribute: 1 } }, 'attribute must be a string or false'],
     [{ count: { attribute: 'onclick' } }, 'not a safe HTML attribute name'],
-    [{ count: { default: [1] } }, 'default must be a string, number, or boolean'],
+    [
+      { count: { default: () => 1 } },
+      'default must be a static primitive, a recursively literal array/object graph',
+    ],
     [{ count: { attribute: false, reflect: true } }, 'cannot reflect without an attribute'],
     [
       { count: { attribute: 'n' }, label: { attribute: 'n' } },
@@ -492,6 +509,57 @@ test('defineIslandConfig() carries the declared primitive property table', () =>
       message,
     );
   }
+
+  // Dangerous property names are refused through the canonical property-sink
+  // predicate, including own keys created by JSON.parse (not object-literal
+  // prototype assignment).
+  const dangerous = JSON.parse('{"__proto__":{},"constructor":{},"prototype":{}}') as Record<
+    string,
+    unknown
+  >;
+  assertThrowsIncludes(
+    () => defineIslandConfig({ properties: dangerous } as never),
+    Error,
+    'not an admissible property name',
+  );
+  // A default graph with an own dangerous key is refused without mutating any
+  // prototype.
+  const jsonDefault = JSON.parse('{"__proto__":{"polluted":true},"ok":1}') as Record<
+    string,
+    unknown
+  >;
+  assertThrowsIncludes(
+    () => defineIslandConfig({ properties: { payload: { default: jsonDefault } } } as never),
+    Error,
+    'default must be a static primitive',
+  );
+  // The same canonical property-sink predicate rejects the other sink keys at
+  // any depth of an evaluated default graph (three-face parity with the
+  // compiler and static scanner), and accepts an unrelated ordinary key.
+  for (const key of ['constructor', 'prototype']) {
+    const own = JSON.parse(`{"${key}":1}`) as Record<string, unknown>;
+    assertThrowsIncludes(
+      () => defineIslandConfig({ properties: { payload: { default: own } } } as never),
+      Error,
+      'default must be a static primitive',
+    );
+    assertThrowsIncludes(
+      () =>
+        defineIslandConfig({
+          properties: { payload: { default: { nested: own } } },
+        } as never),
+      Error,
+      'default must be a static primitive',
+    );
+  }
+  expect(() =>
+    defineIslandConfig({
+      properties: {
+        payload: { default: JSON.parse('{"description":"ok","nested":{"x":1}}') as never },
+      },
+    } as never),
+  ).not.toThrow();
+  expect(({} as Record<string, unknown>).polluted).toBeUndefined();
 });
 
 test('defineIslandConfig() rejects non-canonical island metadata', () => {

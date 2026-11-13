@@ -35,13 +35,17 @@ import ts from 'typescript';
 import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
 import type { RootMode } from '@openelement/protocol/part-program';
 import { literalValue } from '../../semantic-core/analyze-module.ts';
+import { createModuleIntrinsicBindings } from '../../semantic-core/module-analysis.ts';
+import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
 import { type SourceSpan } from '../../semantic-core/scope-resolution.ts';
 import { type FunctionModelComponent } from '../../semantic-core/function-frontend.ts';
 import type { IrDiagnostic } from '../types.ts';
 import type { GeneratedLeafModule } from '../generated-leaf/generate.ts';
 import {
   GENERATED_ELEMENT_DIAGNOSTIC,
+  type GeneratedElementDefaultGraph,
   type GeneratedElementPlatformProperty,
+  type GeneratedElementPlatformPropertyType,
   type GeneratedElementPrimitiveType,
   type GeneratedElementSite,
 } from './contract.ts';
@@ -230,12 +234,34 @@ export interface IslandMetadataFacts {
 export interface IslandPropertyDeclaration {
   readonly name: string;
   readonly attribute: string | null;
+  /**
+   * True when the sidecar spells `attribute` explicitly (a string or `false`).
+   * Non-primitive rows require the explicit `false` spelling; an omitted key
+   * would derive a kebab attribute and silently open the JSON-attribute path.
+   */
+  readonly attributeExplicit: boolean;
   readonly reflect: boolean;
-  /** Authored literal initial value, or undefined for the type's zero value. */
-  readonly default?: string | number | boolean;
+  /**
+   * Authored default. Primitives carry the literal value; non-primitive rows
+   * carry either the recursively literal array/object graph or the
+   * trustedHtml literal string (already proven from the canonical import).
+   */
+  readonly default?: IslandPropertyDefault;
   /** The table entry node, for source-located diagnostics. */
   readonly node: ts.Node;
 }
+
+/**
+ * The sidecar default forms this reader can prove statically. A
+ * `trustedHtml` default is kept as the literal HTML string plus its provenance
+ * tag; the compiler lane brands it only for a `trustedHtml` typed member.
+ */
+export type IslandPropertyDefault =
+  | {
+      readonly kind: 'literal';
+      readonly value: string | number | boolean | GeneratedElementDefaultGraph;
+    }
+  | { readonly kind: 'trustedHtml'; readonly html: string };
 
 /**
  * The result of reading the sidecar's platform facts from the authored AST.
@@ -300,6 +326,171 @@ function resolveDeclaredAttribute(name: string, raw: ts.Expression): string | nu
 }
 
 /**
+ * The bounded depth of an admitted literal default graph. The graph is known
+ * at compile time; the bound keeps the generated factory small and prevents a
+ * pathological nested default from becoming a build hazard.
+ */
+const PROPERTY_DEFAULT_MAX_DEPTH = 8;
+
+function defaultGraphDepthOk(value: unknown, depth: number): boolean {
+  if (depth > PROPERTY_DEFAULT_MAX_DEPTH) return false;
+  if (value === null) return true;
+  if (typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every((entry) => defaultGraphDepthOk(entry, depth + 1));
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).every((entry) =>
+      defaultGraphDepthOk(entry, depth + 1),
+    );
+  }
+  return false;
+}
+
+/**
+ * Every recursively literal default-graph key must pass the canonical
+ * property-sink predicate. Three surfaces read one authored default graph — the
+ * compiler, the static scanner and the runtime authoring face — and all three
+ * use `forbiddenSinkReason('prop', key)` rather than a private deny list:
+ * `__proto__` would re-prototype an object built from the graph, while
+ * `constructor`/`prototype` are the canonical property-sink names the repo
+ * refuses for compiled property declarations as well.
+ */
+function defaultGraphKeysAdmissible(value: unknown): boolean {
+  if (Array.isArray(value)) return value.every(defaultGraphKeysAdmissible);
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).every(
+      ([key, entry]) =>
+        forbiddenSinkReason('prop', key) === null && defaultGraphKeysAdmissible(entry),
+    );
+  }
+  return true;
+}
+
+/**
+ * The canonical trustedHtml TYPE provenance (design §3.3): exactly a named
+ * `TrustedHtml` import from '@openelement/element', no alias, not shadowed by
+ * a same-module declaration. Checked syntactically; the compiler does not
+ * import the element package.
+ */
+function canonicalTrustedHtmlTypeName(sourceFile: ts.SourceFile): boolean {
+  let imported = false;
+  let shadowed = false;
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== '@openelement/element'
+    ) {
+      continue;
+    }
+    const clause = statement.importClause;
+    if (clause === undefined || clause.namedBindings === undefined) continue;
+    if (!ts.isNamedImports(clause.namedBindings)) continue;
+    for (const element of clause.namedBindings.elements) {
+      // Alias-followed import spellings are deliberately NOT admitted: the
+      // reference must be the canonical `TrustedHtml` name.
+      if (element.propertyName === undefined && element.name.text === 'TrustedHtml')
+        imported = true;
+    }
+  }
+  for (const statement of sourceFile.statements) {
+    if (
+      (ts.isInterfaceDeclaration(statement) ||
+        ts.isTypeAliasDeclaration(statement) ||
+        ts.isClassDeclaration(statement) ||
+        ts.isFunctionDeclaration(statement)) &&
+      statement.name?.text === 'TrustedHtml'
+    ) {
+      shadowed = true;
+    }
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name) && declaration.name.text === 'TrustedHtml') {
+          shadowed = true;
+        }
+      }
+    }
+  }
+  return imported && !shadowed;
+}
+
+/**
+ * Read one sidecar `default` initializer into the proven default vocabulary.
+ *
+ * Accepted forms: a static primitive, a bounded recursively literal
+ * array/object graph (`literalValue`; spreads/identifiers/functions and
+ * `__proto__` already refuse there), or a `trustedHtml('<literal>')` call whose
+ * callee is the canonical runtime import (the class-lane provenance rule).
+ * Every recursive object key in the graph is additionally checked with the
+ * canonical `forbiddenSinkReason('prop', …)` predicate — the same rule the
+ * scanner and the runtime authoring face apply — so `__proto__`,
+ * `constructor` and `prototype` are refused at any depth. Anything else
+ * refuses with a source-located message.
+ */
+function readPropertyDefault(
+  sourceFile: ts.SourceFile,
+  initializer: ts.Expression,
+  context: string,
+):
+  | { readonly kind: 'read'; readonly value: IslandPropertyDefault }
+  | {
+      readonly kind: 'refused';
+      readonly message: string;
+    } {
+  const literal = literalValue(initializer, sourceFile);
+  if (literal !== undefined && defaultGraphDepthOk(literal, 0)) {
+    if (literal === null) {
+      return {
+        kind: 'refused',
+        message: `openElement.properties.${context} must not be null; declare an explicit literal default`,
+      };
+    }
+    if (!defaultGraphKeysAdmissible(literal)) {
+      return {
+        kind: 'refused',
+        message:
+          `openElement.properties.${context}.default must not contain a property-sink key ` +
+          '("__proto__", "constructor" or "prototype") at any depth; use an ordinary data key',
+      };
+    }
+    return { kind: 'read', value: { kind: 'literal', value: literal } };
+  }
+  if (ts.isCallExpression(initializer)) {
+    const intrinsics = createModuleIntrinsicBindings(sourceFile);
+    const resolution = intrinsics.resolveIntrinsic(initializer.expression, 'trustedHtml');
+    if (!resolution.canonical) {
+      return {
+        kind: 'refused',
+        message:
+          `openElement.properties.${context} must be created by the canonical ` +
+          "`trustedHtml(...)` import from '@openelement/element'; a same-name or aliased callee " +
+          'is not admitted',
+      };
+    }
+    if (initializer.arguments.length !== 1) {
+      return {
+        kind: 'refused',
+        message: `openElement.properties.${context} trustedHtml(...) takes exactly one literal string`,
+      };
+    }
+    const html = initializer.arguments[0]!;
+    if (!ts.isStringLiteral(html) && !ts.isNoSubstitutionTemplateLiteral(html)) {
+      return {
+        kind: 'refused',
+        message: `openElement.properties.${context} trustedHtml(...) requires a literal string argument`,
+      };
+    }
+    return { kind: 'read', value: { kind: 'trustedHtml', html: html.text } };
+  }
+  return {
+    kind: 'refused',
+    message:
+      `openElement.properties.${context} must be a static string, number, or boolean literal, ` +
+      'a recursively literal array/object graph, or trustedHtml(<literal string>)',
+  };
+}
+
+/**
  * Read the sidecar's `properties` table from the authored AST.
  *
  * The shape is the platform-fact complement of the typed props parameter:
@@ -351,6 +542,13 @@ function readIslandPropertyTable(
         `openElement.properties key "${name}" must be an identifier naming a typed props member`,
       );
     }
+    const sinkReason = forbiddenSinkReason('prop', name);
+    if (sinkReason !== null) {
+      return refuse(
+        entry.name,
+        `openElement.properties key "${name}" is not an admissible property name: ${sinkReason}`,
+      );
+    }
     // A duplicate NAME is refused before any attribute resolution: with
     // `attribute: false` (or distinct explicit attributes) the resolved
     // attribute set cannot see it, and the shell would throw a duplicate
@@ -369,7 +567,8 @@ function readIslandPropertyTable(
     const seenFields = new Set<string>();
     let reflect = false;
     let attribute: string | null | undefined;
-    let defaultValue: string | number | boolean | undefined;
+    let attributeExplicit = false;
+    let defaultValue: IslandPropertyDefault | undefined;
     for (const field of table.properties) {
       if (!ts.isPropertyAssignment(field)) {
         return refuse(
@@ -413,6 +612,7 @@ function readIslandPropertyTable(
           );
         }
         attribute = resolveDeclaredAttribute(name, field.initializer);
+        attributeExplicit = true;
         if (attribute !== null) {
           if (attribute.length === 0 || !isSafeAttributeName(attribute)) {
             return refuse(
@@ -423,22 +623,9 @@ function readIslandPropertyTable(
           }
         }
       } else {
-        const literal = literalValue(field.initializer, sourceFile);
-        if (
-          literal === undefined ||
-          literal === null ||
-          typeof literal === 'object' ||
-          (typeof literal !== 'string' &&
-            typeof literal !== 'number' &&
-            typeof literal !== 'boolean')
-        ) {
-          return refuse(
-            field.initializer,
-            `openElement.properties.${name}.default must be a static string, number, or boolean ` +
-              `literal, got "${field.initializer.getText(sourceFile)}"`,
-          );
-        }
-        defaultValue = literal;
+        const parsed = readPropertyDefault(sourceFile, field.initializer, `${name}.default`);
+        if (parsed.kind === 'refused') return refuse(field.initializer, parsed.message);
+        defaultValue = parsed.value;
       }
     }
     if (reflect && attribute === null) {
@@ -461,6 +648,7 @@ function readIslandPropertyTable(
     declarations.push({
       name,
       attribute: effectiveAttribute,
+      attributeExplicit,
       reflect,
       ...(defaultValue === undefined ? {} : { default: defaultValue }),
       node: entry,
@@ -663,10 +851,12 @@ export const RESERVED_GENERATED_ELEMENT_PROPERTY_NAMES: ReadonlySet<string> = ne
   'dispose',
 ]);
 
-/** One primitive member of the root component's typed props parameter. */
+/** One admitted member of the root component's typed props parameter. */
 interface TypedPropsMember {
   readonly name: string;
-  readonly type: GeneratedElementPrimitiveType;
+  /** Primitive member, or the property-only non-primitive family. */
+  readonly kind: 'primitive' | 'array' | 'object' | 'trustedHtml';
+  readonly type: GeneratedElementPlatformPropertyType;
   readonly node: ts.Node;
 }
 
@@ -800,7 +990,316 @@ function resolvePropsTypeMembers(
 }
 
 /**
- * Read the root component's typed props parameter as a primitive member list.
+ * Prove that a type node denotes an opaque object shape: an inline type
+ * literal, or a same-module single, non-generic, heritage-free, acyclic
+ * interface/type alias chain that ends in one. Members of the object are NOT
+ * inspected (the design keeps the shape opaque); only the default literal graph
+ * is checked.
+ */
+function proveObjectShape(
+  sourceFile: ts.SourceFile,
+  typeNode: ts.TypeNode,
+  visited: ReadonlySet<string> = new Set(),
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string; readonly node?: ts.Node } {
+  if (ts.isParenthesizedTypeNode(typeNode)) {
+    return proveObjectShape(sourceFile, typeNode.type, visited);
+  }
+  if (ts.isTypeLiteralNode(typeNode)) return { ok: true };
+  if (!ts.isTypeReferenceNode(typeNode) || !ts.isIdentifier(typeNode.typeName)) {
+    return {
+      ok: false,
+      reason: `the value type "${typeNode.getText(sourceFile)}" is not an object type literal`,
+      node: typeNode,
+    };
+  }
+  if (typeNode.typeArguments !== undefined && typeNode.typeArguments.length > 0) {
+    return {
+      ok: false,
+      reason: `the value type "${typeNode.getText(sourceFile)}" is generic`,
+      node: typeNode,
+    };
+  }
+  const name = typeNode.typeName.text;
+  if (visited.has(name)) {
+    return {
+      ok: false,
+      reason:
+        `the value type "${name}" is cyclic/self-referential; the lane cannot prove a ` +
+        'literal default graph for it',
+      node: typeNode,
+    };
+  }
+  const declarations = propsTypeDeclarations(sourceFile, name);
+  if (declarations.length === 0) {
+    return {
+      ok: false,
+      reason:
+        `the value type "${name}" is not declared in this module; only an inline object type ` +
+        'literal or a local type/interface alias is admitted',
+      node: typeNode,
+    };
+  }
+  if (declarations.length > 1) {
+    return {
+      ok: false,
+      reason:
+        `the value type "${name}" is declared more than once in this module (merged declarations ` +
+        'are not admitted)',
+      node: declarations[1]!.name,
+    };
+  }
+  const nextVisited = new Set(visited);
+  nextVisited.add(name);
+  const declaration = declarations[0]!;
+  if (ts.isInterfaceDeclaration(declaration)) {
+    if (declaration.typeParameters !== undefined) {
+      return {
+        ok: false,
+        reason: `the value interface "${name}" is generic`,
+        node: declaration.name,
+      };
+    }
+    if ((declaration.heritageClauses ?? []).length > 0) {
+      return {
+        ok: false,
+        reason: `the value interface "${name}" has extends clauses this lane cannot prove`,
+        node: declaration.name,
+      };
+    }
+    return { ok: true };
+  }
+  if (declaration.typeParameters !== undefined) {
+    return {
+      ok: false,
+      reason: `the value type alias "${name}" is generic`,
+      node: declaration.name,
+    };
+  }
+  return proveObjectShape(sourceFile, declaration.type, nextVisited);
+}
+
+/** Is this exactly the canonical `TrustedHtml` type reference? */
+function isCanonicalTrustedHtmlType(sourceFile: ts.SourceFile, typeNode: ts.TypeNode): boolean {
+  if (!ts.isTypeReferenceNode(typeNode) || !ts.isIdentifier(typeNode.typeName)) return false;
+  if (typeNode.typeName.text !== 'TrustedHtml') return false;
+  if (typeNode.typeArguments !== undefined && typeNode.typeArguments.length > 0) return false;
+  return canonicalTrustedHtmlTypeName(sourceFile);
+}
+
+/**
+ * The admitted value type of one props member:
+ * primitive keyword, `T[]`/`Array<T>` (primitive or opaque object element),
+ * opaque object shape, or the canonical TrustedHtml type. `ReadonlyArray`,
+ * tuples, nested arrays, nested TrustedHtml and imported non-brand types refuse.
+ */
+/**
+ * Local names bound to the canonical `TrustedHtml` type import, including
+ * aliases. Used only by the defensive nested-brand scan below; top-level type
+ * admission still requires the exact canonical name.
+ */
+function trustedHtmlTypeLocalNames(sourceFile: ts.SourceFile): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== '@openelement/element'
+    ) {
+      continue;
+    }
+    const clause = statement.importClause;
+    if (clause?.namedBindings === undefined || !ts.isNamedImports(clause.namedBindings)) continue;
+    for (const element of clause.namedBindings.elements) {
+      const importedName = element.propertyName?.text ?? element.name.text;
+      if (importedName === 'TrustedHtml') names.add(element.name.text);
+    }
+  }
+  return names;
+}
+
+/**
+ * Defensive nested-brand scan for opaque object shapes (design §3.3: nested
+ * `TrustedHtml` refuses until a type-honest nested carrier exists). The object
+ * shape stays opaque for ordinary members, but a type reference to the
+ * canonical `TrustedHtml` (or a canonical aliased import / local alias chain
+ * that resolves to it) anywhere inside the shape is rejected. Imported types
+ * that hide the brand behind an alias not visible in this module remain the
+ * documented opaque boundary.
+ */
+function findNestedTrustedHtml(
+  sourceFile: ts.SourceFile,
+  node: ts.Node,
+  brandLocals: ReadonlySet<string>,
+  visited: ReadonlySet<string> = new Set(),
+): ts.Node | null {
+  if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)) {
+    const name = node.typeName.text;
+    if (brandLocals.has(name)) return node;
+    const declarations = propsTypeDeclarations(sourceFile, name);
+    if (declarations.length === 1 && !visited.has(name)) {
+      const nextVisited = new Set(visited);
+      nextVisited.add(name);
+      const declaration = declarations[0]!;
+      if (ts.isInterfaceDeclaration(declaration)) {
+        for (const member of declaration.members) {
+          const found = findNestedTrustedHtml(sourceFile, member, brandLocals, nextVisited);
+          if (found !== null) return found;
+        }
+        return null;
+      }
+      if (ts.isTypeAliasDeclaration(declaration)) {
+        return findNestedTrustedHtml(sourceFile, declaration.type, brandLocals, nextVisited);
+      }
+    }
+  }
+  let found: ts.Node | null = null;
+  ts.forEachChild(node, (child) => {
+    if (found !== null) return;
+    found = findNestedTrustedHtml(sourceFile, child, brandLocals, visited);
+  });
+  return found;
+}
+
+function resolveValueMemberType(
+  sourceFile: ts.SourceFile,
+  typeNode: ts.TypeNode,
+):
+  | { readonly kind: TypedPropsMember['kind']; readonly type: GeneratedElementPlatformPropertyType }
+  | {
+      readonly reason: string;
+      readonly node: ts.Node;
+    } {
+  const brandLocals = trustedHtmlTypeLocalNames(sourceFile);
+  const primitive: GeneratedElementPrimitiveType | null =
+    typeNode.kind === ts.SyntaxKind.StringKeyword
+      ? 'string'
+      : typeNode.kind === ts.SyntaxKind.NumberKeyword
+        ? 'number'
+        : typeNode.kind === ts.SyntaxKind.BooleanKeyword
+          ? 'boolean'
+          : null;
+  if (primitive !== null) return { kind: 'primitive', type: primitive };
+  if (isCanonicalTrustedHtmlType(sourceFile, typeNode)) {
+    return { kind: 'trustedHtml', type: 'trustedHtml' };
+  }
+  if (
+    ts.isTypeReferenceNode(typeNode) &&
+    ts.isIdentifier(typeNode.typeName) &&
+    typeNode.typeName.text === 'TrustedHtml'
+  ) {
+    return {
+      reason:
+        'TrustedHtml must be exactly the canonical named type import from ' +
+        "'@openelement/element' (no alias, no local rebinding/shadowing)",
+      node: typeNode,
+    };
+  }
+  const arrayElement = (
+    element: ts.TypeNode,
+  ):
+    | { readonly ok: true }
+    | { readonly ok: false; readonly reason: string; readonly node?: ts.Node } => {
+    if (
+      element.kind === ts.SyntaxKind.StringKeyword ||
+      element.kind === ts.SyntaxKind.NumberKeyword ||
+      element.kind === ts.SyntaxKind.BooleanKeyword
+    ) {
+      return { ok: true };
+    }
+    return proveObjectShape(sourceFile, element);
+  };
+  if (ts.isTupleTypeNode(typeNode)) {
+    return {
+      reason:
+        `the props member type "${typeNode.getText(sourceFile)}" is a tuple; this lane admits ` +
+        'T[] or Array<T> with a primitive or opaque object element',
+      node: typeNode,
+    };
+  }
+  if (ts.isArrayTypeNode(typeNode)) {
+    const element = arrayElement(typeNode.elementType);
+    if (!element.ok) {
+      return {
+        reason:
+          `the array element type "${typeNode.elementType.getText(sourceFile)}" is not admitted ` +
+          `(${element.reason})`,
+        node: element.node ?? typeNode.elementType,
+      };
+    }
+    const nestedBrand = findNestedTrustedHtml(sourceFile, typeNode.elementType, brandLocals);
+    if (nestedBrand !== null) {
+      return {
+        reason:
+          'a nested TrustedHtml inside an opaque array element is not admitted; declare a ' +
+          'top-level property-only trustedHtml member instead',
+        node: nestedBrand,
+      };
+    }
+    return { kind: 'array', type: 'array' };
+  }
+  if (ts.isTypeReferenceNode(typeNode) && ts.isIdentifier(typeNode.typeName)) {
+    const referenceName = typeNode.typeName.text;
+    if (referenceName === 'ReadonlyArray') {
+      return {
+        reason:
+          `the props member type "${typeNode.getText(sourceFile)}" uses ReadonlyArray; this ` +
+          'lane admits T[] or Array<T>',
+        node: typeNode,
+      };
+    }
+    if (referenceName === 'Array') {
+      const args = typeNode.typeArguments;
+      if (args === undefined || args.length !== 1) {
+        return {
+          reason: `the props member type "${typeNode.getText(sourceFile)}" must have exactly one type argument`,
+          node: typeNode,
+        };
+      }
+      const element = arrayElement(args[0]!);
+      if (!element.ok) {
+        return {
+          reason: `the array element type "${args[0]!.getText(sourceFile)}" is not admitted (${element.reason})`,
+          node: element.node ?? args[0]!,
+        };
+      }
+      const nestedBrand = findNestedTrustedHtml(sourceFile, args[0]!, brandLocals);
+      if (nestedBrand !== null) {
+        return {
+          reason:
+            'a nested TrustedHtml inside an opaque array element is not admitted; declare a ' +
+            'top-level property-only trustedHtml member instead',
+          node: nestedBrand,
+        };
+      }
+      return { kind: 'array', type: 'array' };
+    }
+  }
+  const objectShape = proveObjectShape(sourceFile, typeNode);
+  if (objectShape.ok) {
+    const nestedBrand = findNestedTrustedHtml(sourceFile, typeNode, brandLocals);
+    if (nestedBrand !== null) {
+      return {
+        reason:
+          'a nested TrustedHtml inside an opaque object shape is not admitted; declare a ' +
+          'top-level property-only trustedHtml member instead',
+        node: nestedBrand,
+      };
+    }
+    return { kind: 'object', type: 'object' };
+  }
+  return {
+    reason:
+      `the props member type "${typeNode.getText(sourceFile)}" is not an admitted value type ` +
+      `(${objectShape.reason}); this lane admits string/number/boolean, T[] or Array<T> of a ` +
+      'primitive or opaque object, an opaque object shape, or the canonical TrustedHtml type',
+    node: objectShape.node ?? typeNode,
+  };
+}
+
+/**
+ * Read the root component's typed props parameter as an admitted member list.
  *
  * The parameter must be a named identifier (the generated props record is
  * exposed as `props.<member>`; a destructured parameter has no name to read)
@@ -886,6 +1385,18 @@ function readTypedProps(
         ),
       };
     }
+    const sinkReason = forbiddenSinkReason('prop', name);
+    if (sinkReason !== null) {
+      return {
+        kind: 'refused',
+        diagnostic: propertyDiagnostic(
+          sourceFile,
+          member.name,
+          `the props member "${name}" is not an admissible property name: ${sinkReason}`,
+          GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+        ),
+      };
+    }
     if (seen.has(name)) {
       return {
         kind: 'refused',
@@ -913,32 +1424,31 @@ function readTypedProps(
       };
     }
     const typeNode = member.type;
-    const primitive: GeneratedElementPrimitiveType | null =
-      typeNode === undefined
-        ? null
-        : typeNode.kind === ts.SyntaxKind.StringKeyword
-          ? 'string'
-          : typeNode.kind === ts.SyntaxKind.NumberKeyword
-            ? 'number'
-            : typeNode.kind === ts.SyntaxKind.BooleanKeyword
-              ? 'boolean'
-              : null;
-    if (primitive === null) {
+    if (typeNode === undefined) {
       return {
         kind: 'refused',
         diagnostic: propertyDiagnostic(
           sourceFile,
           member,
-          `the props member "${name}" has a non-primitive type ` +
-            `"${typeNode === undefined ? 'none' : typeNode.getText(sourceFile)}"; this lane ` +
-            'admits only string, number and boolean (array/object/trustedHtml conversion is ' +
-            'retained as an Alpha16 obligation, plan §14; this lane fails closed until it is ' +
-            'implemented)',
+          `the props member "${name}" has no type annotation; declare one so the sidecar ` +
+            'property table can be cross-checked',
           GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
         ),
       };
     }
-    members.push({ name, type: primitive, node: member });
+    const resolvedType = resolveValueMemberType(sourceFile, typeNode);
+    if ('reason' in resolvedType) {
+      return {
+        kind: 'refused',
+        diagnostic: propertyDiagnostic(
+          sourceFile,
+          resolvedType.node,
+          `the props member "${name}" is not admitted: ${resolvedType.reason}`,
+          GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+        ),
+      };
+    }
+    members.push({ name, kind: resolvedType.kind, type: resolvedType.type, node: member });
   }
   return { kind: 'read', parameter, members };
 }
@@ -1037,29 +1547,168 @@ function admitGeneratedElementProperties(
         ],
       };
     }
-    // An omitted sidecar `default` means the type zero value — never an
-    // "undefined" property channel: the resolved value is what the emitted row
-    // spells, and the shell's props record always exposes a value.
-    const defaultValue = declaration.default ?? zeroPropertyValue(member.type);
-    if (typeof defaultValue !== member.type) {
+    if (member.kind === 'primitive') {
+      // An omitted sidecar `default` means the type zero value — never an
+      // "undefined" property channel: the resolved value is what the emitted
+      // row spells, and the shell's props record always exposes a value.
+      const literalDefault =
+        declaration.default !== undefined && declaration.default.kind === 'literal'
+          ? declaration.default.value
+          : undefined;
+      const declaredDefault =
+        typeof literalDefault === 'string' ||
+        typeof literalDefault === 'number' ||
+        typeof literalDefault === 'boolean'
+          ? literalDefault
+          : undefined;
+      const defaultValue =
+        declaredDefault === undefined
+          ? zeroPropertyValue(member.type as GeneratedElementPrimitiveType)
+          : declaredDefault;
+      if (declaration.default !== undefined && declaredDefault === undefined) {
+        return {
+          kind: 'refused',
+          diagnostics: [
+            propertyDiagnostic(
+              sourceFile,
+              declaration.node,
+              declaration.default.kind === 'trustedHtml'
+                ? `the primitive property "${declaration.name}" cannot default to trustedHtml(...)`
+                : `the property "${declaration.name}" default must be a static ${member.type} ` +
+                    'literal to match the typed member; array/object defaults belong to ' +
+                    'property-only non-primitive members',
+            ),
+          ],
+        };
+      }
+      if (typeof defaultValue !== member.type) {
+        return {
+          kind: 'refused',
+          diagnostics: [
+            propertyDiagnostic(
+              sourceFile,
+              declaration.node,
+              `the property "${declaration.name}" default must be a ${member.type} literal to ` +
+                `match the typed member, got ${typeof defaultValue}`,
+            ),
+          ],
+        };
+      }
+      properties.push({
+        name: declaration.name,
+        attribute: declaration.attribute,
+        type: member.type,
+        reflect: declaration.reflect,
+        default: defaultValue,
+      });
+      continue;
+    }
+
+    // ── property-only non-primitive rows ───────────────────────────────────
+    if (!declaration.attributeExplicit || declaration.attribute !== null) {
       return {
         kind: 'refused',
         diagnostics: [
           propertyDiagnostic(
             sourceFile,
             declaration.node,
-            `the property "${declaration.name}" default must be a ${member.type} literal to ` +
-              `match the typed member, got ${typeof defaultValue}`,
+            `the non-primitive property "${declaration.name}" must declare attribute: false ` +
+              'explicitly: no attribute or JSON wire carries it',
+            GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID,
+          ),
+        ],
+      };
+    }
+    if (declaration.reflect) {
+      return {
+        kind: 'refused',
+        diagnostics: [
+          propertyDiagnostic(
+            sourceFile,
+            declaration.node,
+            `the non-primitive property "${declaration.name}" cannot reflect: it has no ` +
+              'attribute channel',
+            GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID,
+          ),
+        ],
+      };
+    }
+    if (declaration.default === undefined) {
+      return {
+        kind: 'refused',
+        diagnostics: [
+          propertyDiagnostic(
+            sourceFile,
+            declaration.node,
+            `the non-primitive property "${declaration.name}" requires an explicit literal ` +
+              'default (array/object literal graph or trustedHtml(<literal string>))',
+            GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID,
+          ),
+        ],
+      };
+    }
+    if (member.kind === 'trustedHtml') {
+      if (declaration.default.kind !== 'trustedHtml') {
+        return {
+          kind: 'refused',
+          diagnostics: [
+            propertyDiagnostic(
+              sourceFile,
+              declaration.node,
+              `the trustedHtml property "${declaration.name}" must default to the canonical ` +
+                'trustedHtml(<literal string>) value',
+              GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID,
+            ),
+          ],
+        };
+      }
+      properties.push({
+        name: declaration.name,
+        attribute: null,
+        type: member.type,
+        reflect: false,
+        default: declaration.default.html,
+      });
+      continue;
+    }
+    if (declaration.default.kind !== 'literal') {
+      return {
+        kind: 'refused',
+        diagnostics: [
+          propertyDiagnostic(
+            sourceFile,
+            declaration.node,
+            `the ${member.kind} property "${declaration.name}" cannot default to trustedHtml(...)`,
+            GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID,
+          ),
+        ],
+      };
+    }
+    const graph = declaration.default.value;
+    const shapeOk =
+      member.kind === 'array'
+        ? Array.isArray(graph)
+        : typeof graph === 'object' && graph !== null && !Array.isArray(graph);
+    if (!shapeOk) {
+      return {
+        kind: 'refused',
+        diagnostics: [
+          propertyDiagnostic(
+            sourceFile,
+            declaration.node,
+            `the ${member.kind} property "${declaration.name}" default must be a recursively ` +
+              `literal ${member.kind === 'array' ? 'array' : 'object'} graph`,
+            GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID,
           ),
         ],
       };
     }
     properties.push({
       name: declaration.name,
-      attribute: declaration.attribute,
+      attribute: null,
       type: member.type,
-      reflect: declaration.reflect,
-      default: defaultValue,
+      reflect: false,
+      defaultGraph: graph,
     });
   }
   return { kind: 'admitted', properties };

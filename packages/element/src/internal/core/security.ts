@@ -89,6 +89,16 @@ export function trustedHtml(html: string): TrustedHtml {
   return value;
 }
 
+/**
+ * Internal property-write guard: is this value one this module branded via
+ * `trustedHtml()`? Deliberately NOT a public capability check — it exists so
+ * the generated-element property channel accepts only branded values and never
+ * promotes a plain `{ html }` object or a string.
+ */
+export function isTrustedHtmlValue(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && trustedHtmlValues.has(value);
+}
+
 /** Internal sink guard. Serialization deliberately loses this capability. */
 export function trustedHtmlValue(value: unknown): string {
   if (typeof value !== 'object' || value === null || !trustedHtmlValues.has(value)) {

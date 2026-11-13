@@ -84,7 +84,11 @@
  * @module ./shell.ts
  */
 
-import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
+import {
+  camelToKebab,
+  forbiddenSinkReason,
+  isSafeAttributeName,
+} from '@openelement/protocol/forbidden-sinks';
 import {
   AuthoringErrorCode,
   CompilerErrorCode,
@@ -99,6 +103,7 @@ import {
   convertToAttribute,
   type PropertyConversionRecord,
 } from '../../core/property-conversion.ts';
+import { isTrustedHtmlValue, trustedHtml } from '../../core/security.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
 import { removeNodes } from '../runtime/values.ts';
@@ -113,8 +118,19 @@ import {
   type GeneratedRootKind,
 } from './root.ts';
 
-/** The three primitive property types this slice admits. */
-export type GeneratedElementPropertyType = 'string' | 'number' | 'boolean';
+/**
+ * Primitive property types (attribute/JS conversion) plus the property-only
+ * non-primitive retention family: `array`/`object` (caller-owned references,
+ * generated fresh-literal defaults) and `trustedHtml` (the existing brand).
+ * Non-primitive rows have no attribute channel and never reflect.
+ */
+export type GeneratedElementPropertyType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'array'
+  | 'object'
+  | 'trustedHtml';
 
 /**
  * The generated element's ONE internal entry: the emitted module imports this
@@ -148,8 +164,14 @@ export interface GeneratedElementProperty {
   readonly type: GeneratedElementPropertyType;
   /** Reflect property writes back to the attribute. Requires an attribute. */
   readonly reflect?: boolean;
-  /** Value used before any attribute or property write. */
-  readonly default?: string | number | boolean;
+  /**
+   * Declared default. Primitive rows carry the value; a `trustedHtml` row
+   * carries the literal HTML string the shell brands per materialisation; an
+   * array/object row carries the generated fresh-literal factory the shell
+   * calls ONCE per element instance (the descriptor never holds a mutable
+   * shared graph). Caller writes are never cloned.
+   */
+  readonly default?: string | number | boolean | (() => unknown);
 }
 
 /** The host record the generated recipe factory consumes. */
@@ -229,8 +251,14 @@ interface NormalizedProperty {
   readonly attribute: string | null;
   readonly type: GeneratedElementPropertyType;
   readonly reflect: boolean;
-  readonly defaultValue: string | number | boolean;
-  readonly conversion: PropertyConversionRecord;
+  /** Primitive value only; non-primitive defaults are materialised per owner. */
+  readonly defaultValue?: string | number | boolean;
+  /** Primitive-only conversion record; non-primitive rows bypass it entirely. */
+  readonly conversion?: PropertyConversionRecord;
+  /** Array/object fresh-literal factory (one call per element/SSR render). */
+  readonly defaultFactory?: () => unknown;
+  /** trustedHtml literal HTML; branded per materialisation. */
+  readonly defaultHtml?: string;
 }
 
 interface NormalizedDescriptor {
@@ -295,7 +323,20 @@ interface ElementState {
 
 const states = new WeakMap<HTMLElement, ElementState>();
 
-const PROPERTY_TYPES: ReadonlySet<string> = new Set(['string', 'number', 'boolean']);
+const PROPERTY_TYPES: ReadonlySet<string> = new Set([
+  'string',
+  'number',
+  'boolean',
+  'array',
+  'object',
+  'trustedHtml',
+]);
+const PRIMITIVE_PROPERTY_TYPES: ReadonlySet<string> = new Set(['string', 'number', 'boolean']);
+const NON_PRIMITIVE_PROPERTY_TYPES: ReadonlySet<string> = new Set([
+  'array',
+  'object',
+  'trustedHtml',
+]);
 
 /**
  * Property names that would replace platform/lifecycle surface on the element
@@ -317,6 +358,9 @@ const RESERVED_PROPERTY_NAMES: ReadonlySet<string> = new Set([
  * catalogue (M07-5 record): no `OE_` public code, no snapshot change.
  */
 const PRE_UPGRADE_PROPERTY_LOCKED = 'OEIR_SHELL_PRE_UPGRADE_PROPERTY_LOCKED';
+/** Internal write guards for the property-only non-primitive family. */
+const PROPERTY_TYPE_MISMATCH = 'OEIR_SHELL_PROPERTY_TYPE_MISMATCH';
+const UNTRUSTED_HTML_PROPERTY = 'OEIR_SHELL_UNTRUSTED_HTML_PROPERTY';
 
 function descriptorError(
   message: string,
@@ -334,8 +378,56 @@ function normalizeProperty(property: GeneratedElementProperty): NormalizedProper
   if (RESERVED_PROPERTY_NAMES.has(name)) {
     descriptorError(`property name "${name}" collides with the element lifecycle surface`);
   }
+  const sinkReason = forbiddenSinkReason('prop', name);
+  if (sinkReason !== null) {
+    descriptorError(`property name "${name}" is not admissible: ${sinkReason}`);
+  }
   if (!PROPERTY_TYPES.has(property.type)) {
     descriptorError(`property "${name}" has unsupported type ${String(property.type)}`);
+  }
+
+  if (NON_PRIMITIVE_PROPERTY_TYPES.has(property.type)) {
+    // Property-only retention: no attribute/JSON channel, no reflection, an
+    // explicit default carrier, and a write that never promotes an arbitrary
+    // value (plain object/string) into trustedHtml.
+    if (property.attribute !== null) {
+      descriptorError(
+        `property "${name}" type ${property.type} is property-only and must declare ` +
+          'attribute: null (no attribute or JSON wire exists for it)',
+      );
+    }
+    if (property.reflect === true) {
+      descriptorError(
+        `property "${name}" type ${property.type} cannot reflect: it has no attribute`,
+      );
+    }
+    if (property.type === 'trustedHtml') {
+      if (typeof property.default !== 'string') {
+        descriptorError(
+          `property "${name}" trustedHtml default must be the generated literal HTML string`,
+        );
+      }
+      return {
+        name,
+        attribute: null,
+        type: property.type,
+        reflect: false,
+        defaultHtml: property.default,
+      };
+    }
+    if (typeof property.default !== 'function') {
+      descriptorError(
+        `property "${name}" ${property.type} default must be a generated fresh-literal factory ` +
+          '(the descriptor never holds a mutable module-level default)',
+      );
+    }
+    return {
+      name,
+      attribute: null,
+      type: property.type,
+      reflect: false,
+      defaultFactory: property.default as () => unknown,
+    };
   }
 
   let attribute: string | null;
@@ -358,7 +450,24 @@ function normalizeProperty(property: GeneratedElementProperty): NormalizedProper
   }
   const defaultForType: string | number | boolean =
     property.type === 'boolean' ? false : property.type === 'number' ? 0 : '';
-  const defaultValue = property.default ?? defaultForType;
+  const rawDefault = property.default;
+  if (
+    rawDefault !== undefined &&
+    typeof rawDefault !== 'string' &&
+    typeof rawDefault !== 'number' &&
+    typeof rawDefault !== 'boolean'
+  ) {
+    descriptorError(
+      `property "${name}" default must be a ${property.type} primitive value; a factory/literal ` +
+        'carrier belongs only to a property-only non-primitive row',
+    );
+  }
+  const defaultValue =
+    typeof rawDefault === 'string' ||
+    typeof rawDefault === 'number' ||
+    typeof rawDefault === 'boolean'
+      ? rawDefault
+      : defaultForType;
   if (typeof defaultValue !== property.type) {
     descriptorError(
       `property "${name}" default must be a ${property.type}, got ${typeof defaultValue}`,
@@ -382,6 +491,62 @@ function normalizeProperty(property: GeneratedElementProperty): NormalizedProper
     defaultValue,
     conversion,
   };
+}
+
+/** Materialise one property's default for one owner (instance or SSR render). */
+function materialiseDefault(property: NormalizedProperty): unknown {
+  if (property.defaultFactory !== undefined) return property.defaultFactory();
+  if (property.type === 'trustedHtml') return trustedHtml(property.defaultHtml ?? '');
+  return property.defaultValue;
+}
+
+/**
+ * The write guard for one declared property. Primitives keep the landed
+ * coercion; array/object accept only a caller-owned value of the declared
+ * shape (preserved by reference, never cloned); trustedHtml accepts only a
+ * value this module branded (a plain `{ html }` object or a string fails
+ * closed).
+ */
+function coercePropertyWrite(property: NormalizedProperty, value: unknown): unknown {
+  if (property.type === 'array') {
+    if (!Array.isArray(value)) {
+      throw frameworkError(
+        PROPERTY_TYPE_MISMATCH,
+        `[generated-element] property "${property.name}" expects an array value`,
+        { phase: 'csr' },
+      );
+    }
+    return value;
+  }
+  if (property.type === 'object') {
+    const prototype =
+      typeof value === 'object' && value !== null ? Object.getPrototypeOf(value) : undefined;
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      Array.isArray(value) ||
+      (prototype !== Object.prototype && prototype !== null)
+    ) {
+      throw frameworkError(
+        PROPERTY_TYPE_MISMATCH,
+        `[generated-element] property "${property.name}" expects a plain object value`,
+        { phase: 'csr' },
+      );
+    }
+    return value;
+  }
+  if (property.type === 'trustedHtml') {
+    if (!isTrustedHtmlValue(value)) {
+      throw frameworkError(
+        UNTRUSTED_HTML_PROPERTY,
+        `[generated-element] property "${property.name}" requires a value created by ` +
+          'trustedHtml(); a plain object or string is not promoted',
+        { phase: 'csr' },
+      );
+    }
+    return value;
+  }
+  return coercePropertyValue(property.conversion!, value);
 }
 
 function normalizeDescriptor(descriptor: GeneratedElementDescriptor): NormalizedDescriptor {
@@ -438,11 +603,73 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
   };
 }
 
+/**
+ * One lazy, memoised default for one declared row of one SSR render. The
+ * factory/brand runs at most once, and only when the leaf actually reads the
+ * row; an unused declared row is never materialised.
+ */
+function lazyDefaultFor(property: NormalizedProperty): () => unknown {
+  let materialised = false;
+  let value: unknown;
+  return () => {
+    if (!materialised) {
+      materialised = true;
+      value = materialiseDefault(property);
+    }
+    return value;
+  };
+}
+
+/**
+ * Fold one in-process props record into a complete server-render props record.
+ *
+ * The record is getter-backed so the approved per-read props contract survives
+ * the fold:
+ * - a supplied row's getter delegates to the caller's record on every read
+ *   (supplied array/object values stay caller-owned references; trustedHtml
+ *   values are brand-checked on read; a supplied getter is never executed by
+ *   the resolver itself, so an unused supplied row has no side effect);
+ * - an omitted row (or a supplied row whose read yields `undefined`) uses a
+ *   lazy memoised default: the generated factory/brand runs at most once per
+ *   render and only if the leaf reads it;
+ * - readers see a null-prototype record, and no row is ever assigned through
+ *   `__proto__`-sensitive assignment.
+ *
+ * The generated `<Name>__ssrHost` calls this helper with the descriptor +
+ * caller props; M11 owns producing that in-process record (no server→client
+ * seed / JSON wire exists here).
+ */
+export function resolveGeneratedElementProps<P extends object = Record<string, unknown>>(
+  descriptor: GeneratedElementDescriptor<P>,
+  props?: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const normalized = normalizeDescriptor(descriptor as GeneratedElementDescriptor);
+  const resolved: Record<string, unknown> = Object.create(null);
+  for (const property of normalized.properties) {
+    const defaultForRow = lazyDefaultFor(property);
+    const supplied =
+      props !== undefined && Object.prototype.hasOwnProperty.call(props, property.name);
+    const readSupplied = (): unknown => {
+      const value = props![property.name];
+      if (value === undefined) return defaultForRow();
+      return PRIMITIVE_PROPERTY_TYPES.has(property.type)
+        ? value
+        : coercePropertyWrite(property, value);
+    };
+    Object.defineProperty(resolved, property.name, {
+      enumerable: true,
+      configurable: false,
+      get: supplied ? readSupplied : defaultForRow,
+    });
+  }
+  return resolved;
+}
+
 function createState(descriptor: NormalizedDescriptor): ElementState {
   const values = new Map<string, unknown>();
-  const props: Record<string, unknown> = {};
+  const props: Record<string, unknown> = Object.create(null);
   for (const property of descriptor.properties) {
-    values.set(property.name, property.defaultValue);
+    values.set(property.name, materialiseDefault(property));
     Object.defineProperty(props, property.name, {
       enumerable: true,
       configurable: false,
@@ -495,7 +722,7 @@ function reflectProperty(
   property: NormalizedProperty,
   value: unknown,
 ): void {
-  if (!property.reflect || property.attribute === null) return;
+  if (!property.reflect || property.attribute === null || property.conversion === undefined) return;
   const serialized = convertToAttribute(property.conversion, value);
   state.reflecting = true;
   try {
@@ -545,6 +772,10 @@ function captureCleanupFailures(cleanups: readonly (() => void)[]): void {
  * shell's property types are primitives, so identity is the whole comparison.
  */
 function restatesDefault(property: NormalizedProperty, value: unknown): boolean {
+  // Non-primitive defaults are per-owner materialisations; an own pre-upgrade
+  // value is a caller write, never a restated default (no deep compare, no
+  // shallow clone, identity preserved).
+  if (!PRIMITIVE_PROPERTY_TYPES.has(property.type)) return false;
   return value === property.defaultValue;
 }
 
@@ -603,7 +834,7 @@ function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState
   for (const { property, value } of pending) {
     delete record[property.name];
     if (restatesDefault(property, value) || value === null || value === undefined) continue;
-    setProperty(element, state, property, coercePropertyValue(property.conversion, value), true);
+    setProperty(element, state, property, coercePropertyWrite(property, value), true);
   }
 
   // Completion is recorded last: a failed connect retries the whole check
@@ -623,7 +854,7 @@ function restoreReflectedDefault(
   state: ElementState,
   property: NormalizedProperty,
 ): void {
-  if (!property.reflect || property.attribute === null) return;
+  if (!property.reflect || property.attribute === null || property.conversion === undefined) return;
   const serialized = convertToAttribute(property.conversion, state.values.get(property.name));
   if (serialized === null) return;
   if (element.getAttribute(property.attribute) === serialized) return;
@@ -641,6 +872,7 @@ function applyAttribute(
   property: NormalizedProperty,
   raw: string | null,
 ): void {
+  if (!PRIMITIVE_PROPERTY_TYPES.has(property.type) || property.conversion === undefined) return;
   const next =
     raw === null ? property.defaultValue : convertFromAttribute(property.conversion, raw);
   setProperty(element, state, property, next, false);
@@ -875,7 +1107,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       },
       set(this: HTMLElement, value: unknown): void {
         const state = stateOf(this);
-        setProperty(this, state, property, coercePropertyValue(property.conversion, value), true);
+        setProperty(this, state, property, coercePropertyWrite(property, value), true);
       },
     });
   }
