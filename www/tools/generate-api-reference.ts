@@ -569,6 +569,14 @@ export async function buildApiReference(): Promise<ApiReferenceBuild> {
         failures.push(`${info.name}: subpath '${subpath}' has no exports target`);
         continue;
       }
+      // Artifact-resolution subpaths (`/<pkg>/internal/...`) are emitted-code
+      // import targets, not author API: the compiler writes the specifier into
+      // a generated module so a packed consumer can resolve it. They carry no
+      // stability promise and no JSDoc summary obligation, and documenting
+      // their symbols would claim they are public surface. The convention is
+      // the rule, not a hand-maintained list, so a new internal subpath cannot
+      // silently enter the author-facing reference either.
+      if (/\/internal\//.test(subpath)) continue;
       // Non-module targets (the CSS style assets the Tailwind entry and
       // plain-CSS consumers import, #1505) declare no symbols: there is no
       // export surface to enumerate, so they are skipped rather than failed.
