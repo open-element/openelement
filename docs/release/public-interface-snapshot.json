@@ -968,7 +968,7 @@
           ]
         },
         "./internal/compiled/runtime": {
-          "publicShapeSha256": "343dc604d0d38ca28bc2e07f9fdf736fd9fb9cd1398ce2bf6d25ddf8a1f21097",
+          "publicShapeSha256": "15d9f4acca2540677f614a0fe9dca304010658936f684f152796884ebf7e99e3",
           "publicSymbols": [
             "BlockHydrationOwner=type:{anchor:Comment;end:Comment;kind:\"block\";parent:Node;part:union(ProgramEachPart|ProgramWhenPart)}",
             "ClaimFunction=type:{call:(scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},props:Readonly<P>,parent:Node)=>array(Node)}",
@@ -1031,6 +1031,7 @@
             "isEachEndMarker=value:{call:(node:union(Node|null|undefined))=>union(false|true)}",
             "isWhenEndMarker=value:{call:(node:union(Node|null|undefined))=>union(false|true)}",
             "leafClaimMismatch=value:{call:(detail:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>OpenElementError}",
+            "leafRuntimeError=value:{call:(code:string,detail:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>OpenElementError}",
             "markPreUpgradeIslandSettled=value:{call:(host:unknown)=>void}",
             "markerText=value:{call:(marker:{readonly [MARKER_BRAND]:true;readonly text:string})=>string}",
             "openStaticSiblingDirectory=value:{call:(parent:Node,declaration:array(array({readonly attributes?:union(array({readonly name:string;readonly value:string})|undefined);readonly children?:union(recursive(readonly DeclaredStaticNode[])|undefined);readonly kind:union(\"element\"|\"text\");readonly localName?:union(string|undefined);readonly nodeValue?:union(null|string|undefined)})),source:string)=>{readonly declaration:array(array({readonly attributes?:union(array({readonly name:string;readonly value:string})|undefined);readonly children?:union(recursive(readonly DeclaredStaticNode[])|undefined);readonly kind:union(\"element\"|\"text\");readonly localName?:union(string|undefined);readonly nodeValue?:union(null|string|undefined)}));readonly parent:union(Element|ShadowRoot);readonly source:string}}",

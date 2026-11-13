@@ -111,6 +111,16 @@ interface PageRuntime {
   createEventRefCardRecipe: (owner: unknown, host: unknown) => unknown;
   FailureCard__ssr: (props?: unknown, host?: unknown) => string;
   createFailureCardRecipe: (owner: unknown, host: unknown) => unknown;
+  EventFailureCard__ssr: (props?: unknown, host?: unknown) => string;
+  createEventFailureCardRecipe: (owner: unknown, host: unknown) => unknown;
+  ConditionalElement: CustomElementConstructor;
+  ConditionalCard__ssr: (props?: unknown, host?: unknown) => string;
+  ConditionalCard__ssrHost: (props: unknown, lightChildren?: string) => string;
+  createConditionalCardRecipe: (owner: unknown, host: unknown) => unknown;
+  PruneElement: CustomElementConstructor;
+  PruneCard__ssr: (props?: unknown, host?: unknown) => string;
+  PruneCard__ssrHost: (props: unknown, lightChildren?: string) => string;
+  createPruneCardRecipe: (owner: unknown, host: unknown) => unknown;
   createGeneratedElementClass: (descriptor: unknown) => CustomElementConstructor;
   serializeGeneratedElementHtml: (input: unknown) => string;
 }
@@ -121,6 +131,66 @@ declare global {
     __okHits?: number;
   }
 }
+
+const EVENT_FAILURE_SOURCE = `${SIDECAR}import { badHandler } from './bad-event-handler';
+function EventFailureCard() {
+  return (
+    <div>
+      <button id="event-bad" onClick={badHandler}>bad</button>
+    </div>
+  );
+}
+export default EventFailureCard;
+`;
+
+const CONDITIONAL_SOURCE =
+  "import { defineIslandConfig } from '@openelement/router';\n" +
+  "export const openElement = defineIslandConfig({ hydrate: 'idle', root: 'shadow', " +
+  'properties: { flag: { attribute: false, default: false } } });\n' +
+  `
+function ConditionalCard(props: { flag: boolean }) {
+  return (
+    <div>
+      {props.flag ? (
+        <button
+          id="branch"
+          onClick={() => (globalThis.__condHits = (globalThis.__condHits ?? 0) + 1)}
+          ref={(el) =>
+            el === null
+              ? undefined
+              : ((globalThis.__condRefSeen = (globalThis.__condRefSeen ?? 0) + 1),
+                () => (globalThis.__condRefNull = (globalThis.__condRefNull ?? 0) + 1))}
+        >
+          on
+        </button>
+      ) : (
+        <b>off</b>
+      )}
+    </div>
+  );
+}
+export default ConditionalCard;
+`;
+
+const PRUNE_SOURCE =
+  "import { defineIslandConfig } from '@openelement/router';\n" +
+  "export const openElement = defineIslandConfig({ hydrate: 'idle', root: 'shadow', " +
+  "properties: { label: { attribute: false, default: 'seed' } } });\n" +
+  `
+function PruneCard(props: { label: string }) {
+  const token = (globalThis.__setupCalls = (globalThis.__setupCalls ?? 0) + 1, props.label);
+  const firstUsed = (globalThis.__order = [...(globalThis.__order ?? []), 'first'], props.label);
+  const dead = (globalThis.__deadCalls = (globalThis.__deadCalls ?? 0) + 1, props.label);
+  const secondUsed = (globalThis.__order = [...(globalThis.__order ?? []), 'second'], props.label);
+  return (
+    <div onClick={() => (globalThis.__token = token)}>
+      {firstUsed}
+      {secondUsed}
+    </div>
+  );
+}
+export default PruneCard;
+`;
 
 let browser: Browser;
 let tempDir = '';
@@ -134,19 +204,22 @@ function frontModule(source: string, id: string): FunctionModelModule {
   return front.module!;
 }
 
-async function buildBundle(
-  dir: string,
-  islandModule: string,
-  failureModule: string,
-): Promise<string> {
+interface BundleModule {
+  readonly file: string;
+  readonly code: string;
+  readonly exports: readonly string[];
+}
+
+async function buildBundle(dir: string, modules: readonly BundleModule[]): Promise<string> {
   const element = join(REPO_ROOT, 'packages/element/src/internal');
   const runtime = join(element, 'compiled/runtime');
-  const islandFile = join(dir, 'island.js');
-  const failureFile = join(dir, 'failure.js');
   const shim = join(dir, 'runtime-shim.ts');
   const entry = join(dir, 'entry.ts');
-  writeFileSync(islandFile, islandModule);
-  writeFileSync(failureFile, failureModule);
+  const entryLines: string[] = [];
+  for (const module of modules) {
+    writeFileSync(join(dir, module.file), module.code);
+    entryLines.push(`export { ${module.exports.join(', ')} } from './${module.file}';`);
+  }
   writeFileSync(
     shim,
     [
@@ -155,24 +228,20 @@ async function buildBundle(
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
       `import * as claimInvariants from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export const { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, leafClaimMismatch } = claimInvariants;`,
+      `export const { assertEachAnchor, assertEachEndMarker, assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, entrySeedMismatch, isEachEndMarker, isWhenEndMarker, leafClaimMismatch, leafRuntimeError, readEntryKeyMarker } = claimInvariants;`,
       `import * as markers from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
-      `export const { emitComment, MARKERS, markerText, rangeMarker, textSlotMarker } = markers;`,
+      `export const { emitComment, entryKeyMarker, MARKERS, markerText, parseEachMarker, parseEntryKeyMarker, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } = markers;`,
+      `export { encodeListKey, tryEncodeListKey } from ${JSON.stringify(join(runtime, 'list-key.ts'))};`,
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       '',
     ].join('\n'),
   );
-  writeFileSync(
-    entry,
-    [
-      `export { default as EventRefElement, EventRefCard__ssr, EventRefCard__ssrHost, createEventRefCardRecipe } from './island.js';`,
-      `export { FailureCard__ssr, createFailureCardRecipe } from './failure.js';`,
-      `export { createGeneratedElementClass, serializeGeneratedElementHtml } from ${JSON.stringify(join(element, 'compiled/generated-element/shell.ts'))};`,
-      '',
-    ].join('\n'),
+  entryLines.push(
+    `export { createGeneratedElementClass, serializeGeneratedElementHtml } from ${JSON.stringify(join(element, 'compiled/generated-element/shell.ts'))};`,
   );
+  writeFileSync(entry, entryLines.join('\n'));
   const result = await build({
     configFile: false,
     root: dir,
@@ -224,11 +293,22 @@ beforeAll(async () => {
   const compiled = compileGeneratedElementIfAdmitted(ISLAND_SOURCE, FILE, { site: SITE });
   expect(compiled).not.toBeNull();
   expect(compiled!.code).toContain('addEventListener("click"');
-  expect(compiled!.code).toContain('OEIR_LEAF_REF_HANDLER_INVALID');
+  expect(compiled!.code).toContain('leafRuntimeError("OEIR_LEAF_REF_HANDLER_INVALID"');
 
-  // The failure island needs a host binding, which the generated-element lane
-  // deliberately refuses; the module is emitted through the same emitter for
-  // the runtime precondition test only (no production wiring claim).
+  const conditional = compileGeneratedElementIfAdmitted(CONDITIONAL_SOURCE, FILE, {
+    site: { tag: 'conditional-card' },
+  });
+  expect(conditional).not.toBeNull();
+  expect(conditional!.code).toContain('addEventListener("click"');
+
+  const prune = compileGeneratedElementIfAdmitted(PRUNE_SOURCE, FILE, {
+    site: { tag: 'prune-card' },
+  });
+  expect(prune).not.toBeNull();
+
+  // The two failure islands need host bindings, which the generated-element
+  // lane deliberately refuses; the modules are emitted through the same emitter
+  // for the runtime precondition tests only (no production wiring claim).
   const failure = generateElementModule(frontModule(FAILURE_SOURCE, FAILURE_FILE), FAILURE_SITE, {
     rootComponent: 'FailureCard',
     root: 'shadow-open',
@@ -236,9 +316,60 @@ beforeAll(async () => {
   expect(failure.diagnostics, failure.diagnostics.map((item) => item.message).join('\n')).toEqual(
     [],
   );
-  expect(failure.module).toContain('OEIR_LEAF_REF_HANDLER_INVALID');
+  expect(failure.module).toContain('leafRuntimeError("OEIR_LEAF_REF_HANDLER_INVALID"');
+  const eventFailure = generateElementModule(
+    frontModule(EVENT_FAILURE_SOURCE, FAILURE_FILE),
+    { tag: 'event-failure-card' },
+    { rootComponent: 'EventFailureCard', root: 'shadow-open' },
+  );
+  expect(
+    eventFailure.diagnostics,
+    eventFailure.diagnostics.map((item) => item.message).join('\n'),
+  ).toEqual([]);
+  expect(eventFailure.module).toContain('leafRuntimeError("OEIR_LEAF_EVENT_HANDLER_INVALID"');
 
-  bundleFile = await buildBundle(tempDir, compiled!.code, failure.module!);
+  bundleFile = await buildBundle(tempDir, [
+    {
+      file: 'island.js',
+      code: compiled!.code,
+      exports: [
+        'default as EventRefElement',
+        'EventRefCard__ssr',
+        'EventRefCard__ssrHost',
+        'createEventRefCardRecipe',
+      ],
+    },
+    {
+      file: 'failure.js',
+      code: failure.module!,
+      exports: ['FailureCard__ssr', 'createFailureCardRecipe'],
+    },
+    {
+      file: 'event-failure.js',
+      code: eventFailure.module!,
+      exports: ['EventFailureCard__ssr', 'createEventFailureCardRecipe'],
+    },
+    {
+      file: 'conditional.js',
+      code: conditional!.code,
+      exports: [
+        'default as ConditionalElement',
+        'ConditionalCard__ssr',
+        'ConditionalCard__ssrHost',
+        'createConditionalCardRecipe',
+      ],
+    },
+    {
+      file: 'prune.js',
+      code: prune!.code,
+      exports: [
+        'default as PruneElement',
+        'PruneCard__ssr',
+        'PruneCard__ssrHost',
+        'createPruneCardRecipe',
+      ],
+    },
+  ]);
   browser = await chromium.launch();
 }, 180_000);
 
@@ -473,17 +604,33 @@ describe('M09 intrinsic event/ref on the generated native element (Chromium)', (
         const shadow = host.shadowRoot!;
         const button = shadow.querySelector('#ok') as HTMLElement;
         const bad = shadow.querySelector('#bad') as HTMLElement;
-        let code: string | null = null;
-        let message = '';
+        const errorFacts = (error: unknown): Record<string, unknown> => {
+          const value = error as {
+            name?: string;
+            code?: string;
+            phase?: string;
+            severity?: string;
+            recoverable?: boolean;
+            message?: string;
+          };
+          return {
+            name: value.name,
+            code: value.code,
+            phase: value.phase,
+            severity: value.severity,
+            recoverable: value.recoverable,
+            authored: /\(authored .*:\d+:\d+\)$/.test(value.message ?? ''),
+            message: value.message,
+          };
+        };
+        let failure: Record<string, unknown> | null = null;
         try {
           host.connectedCallback();
         } catch (error) {
-          code = (error as { code?: string }).code ?? null;
-          message = String((error as { message?: string }).message ?? error);
+          failure = errorFacts(error);
         }
         const afterFailure = {
-          code,
-          message,
+          failure,
           hits: window.__okHits,
           refSeen: bad.dataset.refSeen ?? null,
           borrowedChildren: shadow.childNodes.length,
@@ -493,11 +640,241 @@ describe('M09 intrinsic event/ref on the generated native element (Chromium)', (
         button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         return { afterFailure, hitsAfterClick: window.__okHits };
       }, FAILURE_SITE.tag);
-      expect(result.afterFailure.message).toContain('OEIR_LEAF_REF_HANDLER_INVALID');
+      expect(result.afterFailure.failure).toMatchObject({
+        name: 'OpenElementError',
+        code: 'OEIR_LEAF_REF_HANDLER_INVALID',
+        phase: 'csr',
+        severity: 'error',
+        recoverable: false,
+        authored: true,
+      });
+      expect((result.afterFailure.failure as { message: string }).message).toContain(
+        'ref handler is not callable',
+      );
       expect(result.afterFailure.hits).toBe(0);
       expect(result.afterFailure.refSeen).toBeNull();
       expect(result.afterFailure.borrowedChildren).toBeGreaterThan(0);
       expect(result.hitsAfterClick).toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+  test('invalid callable errors use the shared coded dialect + authored origin (event)', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate((tagName) => {
+        const mod = window.__oeEventRef;
+        const EventFailureElement = mod.createGeneratedElementClass({
+          tag: tagName,
+          root: 'shadow-open',
+          createBindings: () => ({ badHandler: 'not-a-function' }),
+          createRecipe: mod.createEventFailureCardRecipe,
+        });
+        customElements.define(tagName, EventFailureElement);
+        const host = document.createElement(tagName);
+        let failure: Record<string, unknown> | null = null;
+        try {
+          host.connectedCallback();
+        } catch (error) {
+          const value = error as {
+            name?: string;
+            code?: string;
+            phase?: string;
+            severity?: string;
+            recoverable?: boolean;
+            message?: string;
+          };
+          failure = {
+            name: value.name,
+            code: value.code,
+            phase: value.phase,
+            severity: value.severity,
+            recoverable: value.recoverable,
+            authored: /\(authored .*:\d+:\d+\)$/.test(value.message ?? ''),
+            message: value.message,
+          };
+        }
+        return { failure, shadowChildren: host.shadowRoot?.childNodes.length ?? 0 };
+      }, 'event-failure-card');
+      expect(result.failure).toMatchObject({
+        name: 'OpenElementError',
+        code: 'OEIR_LEAF_EVENT_HANDLER_INVALID',
+        phase: 'csr',
+        severity: 'error',
+        recoverable: false,
+        authored: true,
+      });
+      expect((result.failure as { message: string }).message).toContain(
+        'onClick handler is not callable',
+      );
+      // The mount failed: the root may be resolved, but no projection/region exists.
+      expect(result.shadowChildren).toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('conditional branch event/ref installs and detaches exactly once per activation (CSR)', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeEventRef;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const win = window as unknown as {
+          __condHits?: number;
+          __condRefSeen?: number;
+          __condRefNull?: number;
+        };
+        win.__condHits = 0;
+        win.__condRefSeen = 0;
+        win.__condRefNull = 0;
+        customElements.define(tagName, mod.ConditionalElement);
+        const host = document.createElement(tagName);
+        document.body.append(host);
+        await tick();
+        const shadow = host.shadowRoot!;
+        const state = host as unknown as { flag: boolean };
+        const off = {
+          branch: shadow.querySelector('#branch') !== null,
+          refSeen: win.__condRefSeen,
+        };
+        state.flag = true;
+        await tick();
+        const button = shadow.querySelector('#branch') as HTMLElement;
+        const on = { branch: button !== null, refSeen: win.__condRefSeen };
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const hits = win.__condHits;
+        state.flag = false;
+        await tick();
+        const detached = {
+          branch: shadow.querySelector('#branch') !== null,
+          refNull: win.__condRefNull,
+        };
+        state.flag = true;
+        await tick();
+        const reinstalled = {
+          branch: shadow.querySelector('#branch') !== null,
+          refSeen: win.__condRefSeen,
+        };
+        (shadow.querySelector('#branch') as HTMLElement).dispatchEvent(
+          new MouseEvent('click', { bubbles: true }),
+        );
+        return { off, on, hits, detached, reinstalled, hitsAfter: win.__condHits };
+      }, 'conditional-card');
+      expect(result.off).toEqual({ branch: false, refSeen: 0 });
+      expect(result.on).toEqual({ branch: true, refSeen: 1 });
+      expect(result.hits).toBe(1);
+      expect(result.detached).toEqual({ branch: false, refNull: 1 });
+      expect(result.reinstalled).toEqual({ branch: true, refSeen: 2 });
+      expect(result.hitsAfter).toBe(2);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('conditional branch event/ref detaches and reinstalls exactly once across claim toggles', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeEventRef;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const win = window as unknown as {
+          __condHits?: number;
+          __condRefSeen?: number;
+          __condRefNull?: number;
+        };
+        win.__condHits = 0;
+        win.__condRefSeen = 0;
+        win.__condRefNull = 0;
+        // SSR with flag supplied true, so the claimed branch carries the button.
+        const hostHtml = mod.ConditionalCard__ssrHost({ flag: true });
+        const frame = document.createElement('div');
+        frame.setHTMLUnsafe(hostHtml);
+        const host = frame.firstElementChild as HTMLElement;
+        // No server→client seed exists: the claimed branch must match the
+        // client property, supplied here through the pre-upgrade own write.
+        (host as unknown as { flag: boolean }).flag = true;
+        customElements.define(tagName, mod.ConditionalElement);
+        document.body.append(frame);
+        await tick();
+        const shadow = host.shadowRoot!;
+        const state = host as unknown as { flag: boolean };
+        const claimed = {
+          branch: shadow.querySelector('#branch') !== null,
+          refSeen: win.__condRefSeen,
+        };
+        (shadow.querySelector('#branch') as HTMLElement).dispatchEvent(
+          new MouseEvent('click', { bubbles: true }),
+        );
+        const claimedHits = win.__condHits;
+        state.flag = false;
+        await tick();
+        const off = {
+          branch: shadow.querySelector('#branch') !== null,
+          refNull: win.__condRefNull,
+        };
+        state.flag = true;
+        await tick();
+        const on = { branch: shadow.querySelector('#branch') !== null, refSeen: win.__condRefSeen };
+        (shadow.querySelector('#branch') as HTMLElement).dispatchEvent(
+          new MouseEvent('click', { bubbles: true }),
+        );
+        return { claimed, claimedHits, off, on, hitsAfter: win.__condHits };
+      }, 'conditional-card');
+      expect(result.claimed).toEqual({ branch: true, refSeen: 1 });
+      expect(result.claimedHits).toBe(1);
+      expect(result.off).toEqual({ branch: false, refNull: 1 });
+      expect(result.on).toEqual({ branch: true, refSeen: 2 });
+      expect(result.hitsAfter).toBe(2);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('client-only setup is SSR-pruned and phase-labelled: SSR 0, CSR mount 1', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeEventRef;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const win = window as unknown as {
+          __setupCalls?: number;
+          __deadCalls?: number;
+          __order?: string[];
+        };
+        win.__setupCalls = 0;
+        win.__deadCalls = 0;
+        win.__order = [];
+        // SSR producer: the handler-only token and the dead local never run.
+        mod.PruneCard__ssrHost({ label: 'server' });
+        const afterSsr = {
+          setup: win.__setupCalls,
+          dead: win.__deadCalls,
+          order: win.__order,
+        };
+        win.__setupCalls = 0;
+        win.__deadCalls = 0;
+        win.__order = [];
+        customElements.define(tagName, mod.PruneElement);
+        const host = document.createElement(tagName);
+        document.body.append(host);
+        await tick();
+        const afterMount = {
+          setup: win.__setupCalls,
+          dead: win.__deadCalls,
+          order: win.__order,
+          text: host.shadowRoot!.textContent,
+        };
+        return { afterSsr, afterMount };
+      }, 'prune-card');
+      // SSR does not evaluate the client-only setup (token/dead); the locals
+      // it does read still run once in authored order.
+      expect(result.afterSsr).toEqual({ setup: 0, dead: 0, order: ['first', 'second'] });
+      expect(result.afterMount.setup).toBe(1);
+      expect(result.afterMount.dead).toBe(1);
+      // Surviving locals keep the authored order once.
+      expect(result.afterMount.order).toEqual(['first', 'second']);
+      expect(result.afterMount.text).toContain('seed');
     } finally {
       await page.close();
     }

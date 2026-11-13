@@ -313,6 +313,7 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
 }[] = [
   { symbol: 'claimRecipe', predicate: (_body, usesClaimRecipe) => usesClaimRecipe },
   { symbol: 'leafClaimMismatch', predicate: (body) => body.includes('leafClaimMismatch(') },
+  { symbol: 'leafRuntimeError', predicate: (body) => body.includes('leafRuntimeError(') },
   {
     symbol: 'assertElementInHtmlNamespace',
     predicate: (body) => body.includes('assertElementInHtmlNamespace('),
@@ -1711,7 +1712,7 @@ function emitClientOnlyInstall(
   if (attribute.channel === 'event') {
     push(
       state,
-      `if (typeof ${handlerVar} !== "function") throw new Error(${JSON.stringify(`${EVENT_HANDLER_INVALID}: ${attribute.name} handler is not callable`)});`,
+      `if (typeof ${handlerVar} !== "function") throw leafRuntimeError(${JSON.stringify(EVENT_HANDLER_INVALID)}, ${JSON.stringify(`${attribute.name} handler is not callable`)}${originArgs(span)});`,
       span,
     );
     const eventName = clientOnlyEventName(attribute.name);
@@ -1740,7 +1741,7 @@ function emitClientOnlyInstall(
   }
   push(
     state,
-    `if (typeof ${handlerVar} !== "function") throw new Error(${JSON.stringify(`${REF_HANDLER_INVALID}: ${attribute.name} handler is not callable`)});`,
+    `if (typeof ${handlerVar} !== "function") throw leafRuntimeError(${JSON.stringify(REF_HANDLER_INVALID)}, ${JSON.stringify(`${attribute.name} handler is not callable`)}${originArgs(span)});`,
     span,
   );
   const cleanupVar = nextName(state, 'refCleanup');

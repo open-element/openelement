@@ -101,7 +101,12 @@ function section(moduleText: string, prefix: string): string {
 }
 
 function ssrSection(compilation: LeafCompilation): string {
-  return section(compilation.module!, 'export function C__ssr(');
+  // A composition body lives in one module-local helper while the exported
+  // wrapper delegates to it; reachability evidence lives in that body.
+  return (
+    section(compilation.module!, 'export function C__ssr(') +
+    section(compilation.module!, 'function __oe_ssrComponent_C(')
+  );
 }
 
 function claimSection(compilation: LeafCompilation): string {
@@ -293,17 +298,25 @@ describe('handler/ref parameters stay expression-local', () => {
 describe('handler validation is emitted before installation', () => {
   test('event and ref values are screened for callability', () => {
     const event = compileLeaf('function C() { return <button onClick={() => {}}>go</button>; }\n');
-    expect(event.module).toContain('OEIR_LEAF_EVENT_HANDLER_INVALID');
-    expect(event.module!.indexOf('OEIR_LEAF_EVENT_HANDLER_INVALID')).toBeLessThan(
-      event.module!.indexOf('addEventListener("click"'),
-    );
+    expect(event.module).toContain('leafRuntimeError("OEIR_LEAF_EVENT_HANDLER_INVALID"');
+    expect(event.module).not.toContain('new Error("OEIR_LEAF_EVENT_HANDLER_INVALID');
+    expect(
+      event.module!.indexOf('leafRuntimeError("OEIR_LEAF_EVENT_HANDLER_INVALID"'),
+    ).toBeLessThan(event.module!.indexOf('addEventListener("click"'));
     const ref = compileLeaf(
       'function C() { const attach = (el) => {}; return <input ref={attach} />; }\n',
     );
-    expect(ref.module).toContain('OEIR_LEAF_REF_HANDLER_INVALID');
-    expect(ref.module!.indexOf('OEIR_LEAF_REF_HANDLER_INVALID')).toBeLessThan(
+    expect(ref.module).toContain('leafRuntimeError("OEIR_LEAF_REF_HANDLER_INVALID"');
+    expect(ref.module).not.toContain('new Error("OEIR_LEAF_REF_HANDLER_INVALID');
+    expect(ref.module!.indexOf('leafRuntimeError("OEIR_LEAF_REF_HANDLER_INVALID"')).toBeLessThan(
       ref.module!.indexOf('__oe_refCleanup'),
     );
+    // The reviewed contract is the shared coded-error helper + authored origin,
+    // not a raw Error: the emitted call carries the compile-time origin literal.
+    expect(ref.module).toContain(
+      'leafRuntimeError("OEIR_LEAF_REF_HANDLER_INVALID", "ref handler is not callable", { file: "/proj/src/islands/event-ref.tsx"',
+    );
+    expect(ref.module).toMatch(/line: \d+, column: \d+ \}\);/);
     // The validation throw happens before the scope owned side effect, so the
     // failed connect has nothing of its own to install (the shell/claim owner
     // rollback releases anything earlier, borrowed DOM stays).
@@ -416,6 +429,81 @@ describe('SSR producer excludes client-only channels and prunes unreachable loca
       'function C(props) { return <section title={props.t} onClick={() => {}}>{props.x}</section>; }\n',
     );
     expect(ssrSection(withHandler)).toBe(ssrSection(without));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SSR reachable-local closure (component-ref props, children recipe,
+// insertion target, typed condition) + client-only pruning
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SSR reachability covers every producer shape', () => {
+  test('a local read through a component-reference prop record survives', () => {
+    const compilation = compileLeaf(
+      'function Row(props) { return <i>{props.label}</i>; }\n' +
+        'function C(props) { const helper = () => props.label; return <div><Row label={helper()} /></div>; }\n',
+    );
+    expect(compilation.module).not.toBeNull();
+    expect(ssrSection(compilation)).toContain('const helper =');
+  });
+
+  test('a local read through a children recipe survives', () => {
+    const compilation = compileLeaf(
+      'function Frame(props) { return <div>{props.children}</div>; }\n' +
+        'function C(props) { const helper = () => props.label; return <Frame>{helper()}</Frame>; }\n',
+    );
+    expect(compilation.module).not.toBeNull();
+    expect(ssrSection(compilation)).toContain('const helper =');
+  });
+
+  test('a local read through an insertion-site recipe target survives', () => {
+    const compilation = compileLeaf(
+      'function C(props) { const helper = () => props.label; ' +
+        'const card = <span>{helper()}</span>; return <div>{card}</div>; }\n',
+    );
+    expect(compilation.module).not.toBeNull();
+    expect(ssrSection(compilation)).toContain('const helper =');
+  });
+
+  test('a local read by a typed condition test survives', () => {
+    const compilation = compileLeaf(
+      'function C(props) { const helper = () => props.label; ' +
+        'return <div>{helper() ? <b>a</b> : <i>b</i>}</div>; }\n',
+    );
+    expect(compilation.module).not.toBeNull();
+    expect(ssrSection(compilation)).toContain('const helper =');
+  });
+
+  test('client-only and dead locals are pruned; surviving locals keep authored order', () => {
+    const compilation = compileLeaf(
+      'function C(props) { ' +
+        'const first = () => props.label; ' +
+        'const dead = () => props.other; ' +
+        'const second = () => props.flag; ' +
+        'return <div onClick={() => first()}>{first()}{second()}</div>; }\n',
+    );
+    expect(compilation.module).not.toBeNull();
+    const ssr = ssrSection(compilation);
+    expect(ssr).toContain('const first =');
+    expect(ssr).toContain('const second =');
+    expect(ssr).not.toContain('const dead =');
+    expect(ssr.indexOf('const first =')).toBeLessThan(ssr.indexOf('const second ='));
+    // The mount still declares all three (client behavior unchanged).
+    expect(compilation.module!).toContain('const dead =');
+  });
+
+  test('an event/ref inside a conditional branch is admitted (branch-owned scope)', () => {
+    const compilation = compileLeaf(
+      'function C(props) { return <div>{props.flag ' +
+        '? <button onClick={() => {}} ref={(el) => {}}>on</button> ' +
+        ': <b>off</b>}</div>; }\n',
+    );
+    expect(compilation.module).not.toBeNull();
+    const claim = claimSection(compilation);
+    // The branch claim helper activates the listener/ref under the branch scope.
+    expect(claim).toContain('function __oe_whenThenClaim');
+    expect(claim).toContain('addEventListener("click"');
+    expect(claim).toMatch(/__oe_whenThenClaimScope\d+\.add\(/);
   });
 });
 
