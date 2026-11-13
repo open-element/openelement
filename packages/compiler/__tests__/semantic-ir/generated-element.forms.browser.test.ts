@@ -224,6 +224,7 @@ describe('bounded generated-element form mechanism (Chromium)', () => {
         await tick();
         const afterRestore = { value: host.value, formData: new FormData(form).get('q') };
         host.formStateRestoreCallback(new FormData(), 'restore');
+        host.formStateRestoreCallback(new File(['x'], 'x.txt'), 'restore');
         await tick();
         const afterUnsupportedRestore = host.value;
         return {
@@ -342,34 +343,71 @@ describe('bounded generated-element form mechanism (Chromium)', () => {
         form.append(fieldset);
         document.body.append(form);
         await tick();
-        const initial = { authorDisabled: host.disabled, formData: new FormData(form).get('q') };
+        const customStates = (): { disabled: boolean; enabled: boolean } => ({
+          disabled: host.matches(':state(disabled)'),
+          enabled: host.matches(':state(enabled)'),
+        });
+        const initial = {
+          authorDisabled: host.disabled,
+          formData: new FormData(form).get('q'),
+          states: customStates(),
+        };
         fieldset.disabled = true;
         await tick();
         const disabled = {
           authorDisabled: host.disabled,
           formData: new FormData(form).get('q'),
+          states: customStates(),
         };
         fieldset.disabled = false;
         await tick();
         const reenabled = {
           authorDisabled: host.disabled,
           formData: new FormData(form).get('q'),
+          states: customStates(),
         };
         host.disabled = true;
-        const authored = host.disabled;
+        const authored = {
+          authorDisabled: host.disabled,
+          states: customStates(),
+          hostAttribute: host.hasAttribute('disabled'),
+        };
         fieldset.disabled = true;
         await tick();
         fieldset.disabled = false;
         await tick();
-        const afterAuthored = host.disabled;
+        const afterAuthored = {
+          authorDisabled: host.disabled,
+          states: customStates(),
+          hostAttribute: host.hasAttribute('disabled'),
+        };
         return { initial, disabled, reenabled, authored, afterAuthored };
       }, SITE.tag);
-      expect(result.initial).toEqual({ authorDisabled: false, formData: 'd' });
-      expect(result.disabled.authorDisabled).toBe(false);
-      expect(result.disabled.formData).toBeNull();
-      expect(result.reenabled).toEqual({ authorDisabled: false, formData: 'd' });
-      expect(result.authored).toBe(true);
-      expect(result.afterAuthored).toBe(true);
+      expect(result.initial).toEqual({
+        authorDisabled: false,
+        formData: 'd',
+        states: { disabled: false, enabled: true },
+      });
+      expect(result.disabled).toEqual({
+        authorDisabled: false,
+        formData: null,
+        states: { disabled: true, enabled: false },
+      });
+      expect(result.reenabled).toEqual({
+        authorDisabled: false,
+        formData: 'd',
+        states: { disabled: false, enabled: true },
+      });
+      expect(result.authored).toEqual({
+        authorDisabled: true,
+        states: { disabled: true, enabled: false },
+        hostAttribute: false,
+      });
+      expect(result.afterAuthored).toEqual({
+        authorDisabled: true,
+        states: { disabled: true, enabled: false },
+        hostAttribute: false,
+      });
     } finally {
       await page.close();
     }
@@ -436,6 +474,244 @@ describe('bounded generated-element form mechanism (Chromium)', () => {
         // means no form value/support is published.
         expect(outcome.formData, label).toBeNull();
       }
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('SSR host bytes + parser attribute replay claim and publish the form value', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeForms;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.FormElement);
+        // Simulate a page-authored host tag with attributes around the generated
+        // DSD body: the parser replays them before the first connect/claim.
+        const body = mod
+          .FormCard__ssrHost({ value: 'ssr-value', name: 'q', required: false, disabled: false })
+          .replace(`<${tagName}>`, `<${tagName} name="q" value="ssr-value">`);
+        const form = document.createElement('form');
+        const frame = document.createElement('div');
+        frame.setHTMLUnsafe(body);
+        const host = frame.firstElementChild as FormHost;
+        form.append(host);
+        document.body.append(form);
+        await tick();
+        const claimed = {
+          value: host.value,
+          name: host.getAttribute('name'),
+          formData: new FormData(form).get('q'),
+          shadowText: host.shadowRoot?.textContent ?? null,
+        };
+        form.reset();
+        await tick();
+        const reset = { value: host.value, formData: new FormData(form).get('q') };
+        host.formStateRestoreCallback('restored-after-claim', 'restore');
+        await tick();
+        const restored = {
+          value: host.value,
+          formData: new FormData(form).get('q'),
+        };
+        return { claimed, reset, restored };
+      }, SITE.tag);
+      expect(result.claimed).toEqual({
+        value: 'ssr-value',
+        name: 'q',
+        formData: 'ssr-value',
+        shadowText: 'ssr-value',
+      });
+      expect(result.reset).toEqual({ value: '', formData: '' });
+      expect(result.restored).toEqual({
+        value: 'restored-after-claim',
+        formData: 'restored-after-claim',
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('a pre-upgrade own value is reconciled and published on connect', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeForms;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const host = document.createElement(tagName) as unknown as FormHost;
+        host.setAttribute('name', 'q');
+        (host as unknown as { value: string }).value = 'pre-upgrade';
+        customElements.define(tagName, mod.FormElement);
+        const form = document.createElement('form');
+        form.append(host);
+        document.body.append(form);
+        await tick();
+        return {
+          value: host.value,
+          formData: new FormData(form).get('q'),
+          shadowText: host.shadowRoot?.textContent ?? null,
+        };
+      }, SITE.tag);
+      expect(result).toEqual({
+        value: 'pre-upgrade',
+        formData: 'pre-upgrade',
+        shadowText: 'pre-upgrade',
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('pre-upgrade own required/disabled are reconciled; author disabled is state-only', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeForms;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const host = document.createElement(tagName) as unknown as FormHost;
+        host.setAttribute('name', 'q');
+        (host as unknown as { value: string }).value = '';
+        (host as unknown as { required: boolean }).required = true;
+        (host as unknown as { disabled: boolean }).disabled = true;
+        customElements.define(tagName, mod.FormElement);
+        const form = document.createElement('form');
+        form.append(host);
+        document.body.append(form);
+        await tick();
+        return {
+          value: host.value,
+          required: host.required,
+          disabled: host.disabled,
+          hasRequiredAttribute: host.hasAttribute('required'),
+          hasDisabledAttribute: host.hasAttribute('disabled'),
+          invalid: !form.checkValidity(),
+          states: {
+            disabled: host.matches(':state(disabled)'),
+            enabled: host.matches(':state(enabled)'),
+          },
+        };
+      }, SITE.tag);
+      expect(result).toEqual({
+        value: '',
+        required: true,
+        disabled: true,
+        hasRequiredAttribute: false,
+        hasDisabledAttribute: false,
+        invalid: true,
+        states: { disabled: true, enabled: false },
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('a declared disabled property/attribute disables submission and restores independently', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeForms;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.FormElement);
+        const form = document.createElement('form');
+        const host = document.createElement(tagName) as unknown as FormHost;
+        host.setAttribute('name', 'q');
+        host.setAttribute('value', 'disabled-value');
+        host.setAttribute('disabled', '');
+        form.append(host);
+        document.body.append(form);
+        await tick();
+        const disabled = {
+          authorDisabled: host.disabled,
+          formData: new FormData(form).get('q'),
+          state: host.matches(':state(disabled)'),
+        };
+        host.removeAttribute('disabled');
+        await tick();
+        const restored = {
+          authorDisabled: host.disabled,
+          formData: new FormData(form).get('q'),
+          enabled: host.matches(':state(enabled)'),
+        };
+        return { disabled, restored };
+      }, SITE.tag);
+      expect(result.disabled.authorDisabled).toBe(true);
+      expect(result.disabled.formData).toBeNull();
+      expect(result.disabled.state).toBe(true);
+      expect(result.restored).toEqual({
+        authorDisabled: false,
+        formData: 'disabled-value',
+        enabled: true,
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('a light-root generated form associates and submits through the host', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeForms;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const Ctor = mod.createGeneratedElementClass({
+          tag: tagName,
+          root: 'light',
+          formAssociated: true,
+          properties: [
+            { name: 'value', attribute: 'value', type: 'string', reflect: false, default: '' },
+            { name: 'name', attribute: 'name', type: 'string', reflect: false, default: '' },
+            {
+              name: 'required',
+              attribute: 'required',
+              type: 'boolean',
+              reflect: false,
+              default: false,
+            },
+            {
+              name: 'disabled',
+              attribute: 'disabled',
+              type: 'boolean',
+              reflect: false,
+              default: false,
+            },
+          ],
+          createRecipe: mod.createFormCardRecipe,
+        });
+        customElements.define(tagName, Ctor);
+        const form = document.createElement('form');
+        const host = document.createElement(tagName) as unknown as FormHost;
+        host.setAttribute('name', 'light');
+        host.setAttribute('value', 'light-value');
+        form.append(host);
+        document.body.append(form);
+        await tick();
+        const initial = {
+          formData: new FormData(form).get('light'),
+          text: host.textContent,
+          shadowRoot: host.shadowRoot,
+        };
+        host.value = 'light-typed';
+        await tick();
+        const updated = new FormData(form).get('light');
+        host.setAttribute('required', '');
+        host.value = '';
+        await tick();
+        const requiredBlocked = !form.checkValidity();
+        host.removeAttribute('required');
+        host.setAttribute('value', 'light-reset');
+        await tick();
+        form.reset();
+        await tick();
+        const reset = { value: host.value, formData: new FormData(form).get('light') };
+        return { initial, updated, requiredBlocked, reset };
+      }, 'x-form-light');
+      expect(result.initial).toEqual({
+        formData: 'light-value',
+        text: 'light-value',
+        shadowRoot: null,
+      });
+      expect(result.updated).toBe('light-typed');
+      expect(result.requiredBlocked).toBe(true);
+      expect(result.reset).toEqual({ value: '', formData: '' });
     } finally {
       await page.close();
     }

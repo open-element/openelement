@@ -1069,8 +1069,13 @@ function syncFormStates(state: ElementState): void {
   if (states === undefined) return;
   if (formRequiredOf(state) && formValueOf(state) === '') states.add('invalid');
   else states.delete('invalid');
-  if (formAuthorDisabledOf(state) || form.effectiveDisabled) states.add('disabled');
-  else states.delete('disabled');
+  if (formAuthorDisabledOf(state) || form.effectiveDisabled) {
+    states.delete('enabled');
+    states.add('disabled');
+  } else {
+    states.delete('disabled');
+    states.add('enabled');
+  }
 }
 
 function syncFormAll(state: ElementState): void {

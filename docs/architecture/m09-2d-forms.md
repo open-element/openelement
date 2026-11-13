@@ -65,12 +65,15 @@ channel.
   channel), then republishes/validates. It does not reset `required`, `disabled`,
   `name`, or other declared properties.
 - `formStateRestoreCallback`: a string state is written to the declared value;
-  `File`/`FormData` states are ignored (out of slice).
+  `File`/`FormData` states are ignored (out of slice; a File restore leaves the
+current value untouched).
 - `formDisabledCallback`: records the platform/ancestor-fieldset effective
   disabled state separately from the authored `disabled` property; the auth
-  property is never overwritten by the callback. `disabled` and `invalid` custom
-  states track the effective/authored state for the same styling hook the class
-  component uses.
+  property is never overwritten by the callback. The class contract's paired
+  custom states are reproduced: `disabled` is the inverse of `enabled`, driven
+  by `authorDisabled || effectiveDisabled`; `invalid` tracks
+  required/valueMissing. This is the same `:state(disabled)`/`:state(enabled)`
+  styling hook the class component uses (`syncDisabledState`).
 - `formAssociatedCallback`: class-parity no-op.
 - Reconnect keeps the one internals record and the form value; no second attach.
 
@@ -96,6 +99,67 @@ for custom validity/custom states and a fully official typing→value path remai
 a required later slice. Full `open-input` typing/interaction migration is **not**
 claimed.
 
+## Review follow-up: departures and coverage (2026-11-14)
+
+The Lead-approved bounded mechanism differs from the outer design/class path in
+two deliberate, recorded ways (F1/F2; no silent downgrade):
+
+1. **F1 — coded unsupported internals.** The outer plan/class path tolerates a
+   missing `attachInternals` (`attachFormInternals` returns `undefined`, class
+   callbacks become no-ops). This generated lane instead fails closed with the
+   internal `OEIR_SHELL_FORM_INTERNALS_UNAVAILABLE` when the platform lacks the
+   channel **or** the one-shot channel was already consumed outside the shell.
+   A form-associated generated element never silently claims working form
+   support. This is a deliberate strengthening over class-path tolerance,
+   approved by the Lead.
+2. **F2 — fieldset-effective disabled is separate from the author property.**
+   The class `OpenInput.formDisabledCallback` writes the author `disabled`
+   property (`this.disabled = disabled`). The generated shell records the
+   platform/ancestor-fieldset `effectiveDisabled` separately and never overwrites
+   the author property; custom state is driven by
+   `authorDisabled || effectiveDisabled`. This keeps fieldset disable/enable
+   reversible and the authored state independent, as approved by the Lead.
+
+   **Live UI migration gap (recorded limitation, not a promise).** The
+   fieldset-effective disabled state currently changes only the host internals
+   custom state/validity/submission behavior; it is **not visible to the
+   internal input or the generated component's own DOM**. A migrating class
+   component that visually mirrors `disabled` onto its inner control would need
+   that state to reach component code. Eventual visibility requires a host
+   capability/update-channel or lifecycle slice; this bounded forms slice does
+   not claim form/UI parity, and no such access API is invented here.
+
+Pending host-access gap: generated function components have no first-class host
+or `ElementInternals` access; the shell publishes from the declared `value`
+property, and inner-input typing→value/custom validity remains a later
+host-access prerequisite (documented above). No silent parity claim.
+
+Coverage added for the independent review (Chromium vertical):
+SSR host bytes + parser attribute replay → claim → form value; pre-upgrade own
+`value` reconciliation; declared `disabled` attribute submission exclusion and
+restoration; light-root form association/submission/reset; `File` restore
+ignored without touching the value; `disabled`/`enabled` custom states and
+fieldset disable/enable restoring the author `disabled` state independently.
+
+### Rebase delta (merged main `f69dde8bf`, nonprimitive #1789)
+
+The forms commit was rebased from `7581fbf60` onto the actual merged main
+`f69dde8bf94495f80992bb947ed6a913dfd26f95`. Conflict resolution was semantic:
+- nonprimitive property retention was preserved: `propertyEmission`/generated
+  fresh-literal factories, `defaultGraph`/`defaultFactory`, SSR
+  `resolveGeneratedElementProps` getter-backed supplied props, trustedHtml
+  brand/write guards, null-prototype records and property-name hardening;
+- event/ref and the security/docs corrections already in main were preserved;
+- forms added its `formAssociated` descriptor row and form mapping on top of the
+  nonprimitive property rows; `contract/site/emit/shell/scanner/authoring` now
+  carry both slices;
+- shared generated artifacts were regenerated, never hand-edited:
+  `interface:snapshot:write` (both `resolveGeneratedElementProps` and the form
+  facts) and `docs-index:write` (36 active docs: M09-2c, M09-2d nonprimitive,
+  M09-2d forms, etc.). Seams registry: 61/61 explicit rows.
+Nonprimitive and event suites were re-run on the consolidated tree; this record
+does not claim ownership of their implementations.
+
 ## Scope and non-claims
 
 - No `generate.ts`, class kernel/lane, UI source, router entry, or OpenInput
@@ -117,7 +181,11 @@ claimed.
 - Chromium vertical:
   [`generated-element.forms.browser.test.ts`](../../packages/compiler/__tests__/semantic-ir/generated-element.forms.browser.test.ts)
   (FormData/property writes, required blocked submission + `:invalid`, reset
-  value-only, string restore, fieldset-effective disabled vs author property,
+  value-only, string/`File` restore, fieldset-effective disabled vs author
+  property, `disabled`/`enabled` custom states (including author-disabled
+  state-only writes with no host attribute), SSR→claim attribute replay with
+  reset/restore after claim, pre-upgrade value and required/disabled
+  reconciliation, declared disabled submission, light root, `File` restore,
   reuse/reconnect, closed-descriptor single attach, missing/consumed internals
   coded failure, no-JS static baseline).
 - Controller injection / class-path preservation:
