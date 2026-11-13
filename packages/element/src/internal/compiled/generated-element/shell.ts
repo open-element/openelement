@@ -92,6 +92,7 @@ import {
   type ErrorPhase,
 } from '@openelement/protocol/errors';
 import type { RootMode } from '@openelement/protocol/part-program';
+import { OpenElementBase } from '../../../open-element-base.ts';
 import {
   coercePropertyValue,
   convertFromAttribute,
@@ -705,7 +706,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       .filter((attribute): attribute is string => attribute !== null),
   );
 
-  class GeneratedElementShell extends HTMLElement implements GeneratedElement {
+  class GeneratedElementShell extends OpenElementBase implements GeneratedElement {
     constructor() {
       super();
       const state = createState(normalized);

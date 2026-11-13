@@ -13,7 +13,8 @@
  * One implementation, many references — this module COPIES NO ESCAPER:
  *
  *   - `__t` is `escapeText` (the ONE DSD-serializer text escape, B1.1/F3)
- *     over the serializer's own displayValue coercion;
+ *     over the serializer's own displayValue coercion, refusing a thenable
+ *     first (a Promise is not a normal child — M14-2);
  *   - `__h` escapes every attribute value through `escapeAttr` (the ONE
  *     canonical attribute escape), validates names through the one canonical
  *     safe-attribute-name predicate, screens URL-carrying values through the
@@ -104,12 +105,49 @@ interface SsrComposition {
 }
 
 /**
+ * Internal identity of the `__t` thenable backstop (M14-2 — "a Promise is not
+ * a normal child"). Deliberately NOT a member of the exported
+ * `ServerErrorCode`/`RuntimeErrorCode` catalogues: the natural home would be a
+ * public addition, and this backstop exists only for the reads the compiler
+ * cannot type (an untyped `any` prop), so the public surface must not move for
+ * it — the same internal-identity treatment as `OEIR_LEAF_CLAIM_MISMATCH`.
+ */
+const SERVER_TEXT_THENABLE = 'OE_SERVER_TEXT_THENABLE';
+
+/**
+ * The four-line twin of the router's `isThenable` (`page-render.ts`): that
+ * module is not importable from here (dependency direction), and a Promise
+ * reaching a text sink must fail loudly instead of rendering
+ * `[object Promise]`.
+ */
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
+/**
  * Escape one dynamic text value (the ONLY channel untrusted text may take
  * into a server function component's output). Coercion matches the
  * serializer's text-Part pipeline exactly: displayValue, then the ONE
  * `escapeText`.
+ *
+ * A thenable is refused before coercion: a `Promise<...>`-annotated prop read
+ * at a text sink is already a located compile error (M14-2), and this guard is
+ * the untyped backstop for every read the compiler cannot see (an `any` prop).
+ * `{await props.p}` settles the value first and never reaches this branch.
  */
 export function __t(value: unknown): string {
+  if (isThenable(value)) {
+    throw frameworkError(
+      SERVER_TEXT_THENABLE,
+      '[openElement] __t received a thenable — a Promise is not a normal child; await the value ' +
+        'before it reaches a text sink (an annotated Promise prop is refused at the read site)',
+      { phase: 'ssr' },
+    );
+  }
   return escapeText(displayValue(value));
 }
 
