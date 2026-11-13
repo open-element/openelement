@@ -733,9 +733,11 @@ function resolvePropsTypeMembers(
  * The parameter must be a named identifier (the generated props record is
  * exposed as `props.<member>`; a destructured parameter has no name to read)
  * and its annotation must resolve to local object type members. Only
- * `string`/`number`/`boolean` members are admitted; an optional member is
+ * `string`/`number`/`boolean` members are admitted. An optional member is
  * refused because the generated record always supplies a declared value, so
- * the type would understate the runtime contract.
+ * the annotation would understate the runtime surface; that is this lane's
+ * fail-closed admission choice, not a platform constraint (a future decision
+ * could admit optional members by mapping absence to the declared default).
  */
 function readTypedProps(
   sourceFile: ts.SourceFile,
@@ -830,9 +832,10 @@ function readTypedProps(
         diagnostic: propertyDiagnostic(
           sourceFile,
           member.name,
-          `the props member "${name}" is optional; the generated element always supplies a ` +
-            'declared value, so declare the member required and put the initial value in the ' +
-            'sidecar default',
+          `the props member "${name}" is optional; this lane requires the declared type to ` +
+            'match the runtime surface (the generated element always supplies a value), so ' +
+            'declare the member required and put the initial value in the sidecar default. ' +
+            'This is a lane admission rule, not a platform requirement.',
           GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
         ),
       };
@@ -961,6 +964,9 @@ function admitGeneratedElementProperties(
         ],
       };
     }
+    // An omitted sidecar `default` means the type zero value — never an
+    // "undefined" property channel: the resolved value is what the emitted row
+    // spells, and the shell's props record always exposes a value.
     const defaultValue = declaration.default ?? zeroPropertyValue(member.type);
     if (typeof defaultValue !== member.type) {
       return {

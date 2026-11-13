@@ -98,8 +98,11 @@ type cannot carry while leaving the shell's descriptor shape untouched.
    of one. Imported, generic, union, intersection or otherwise computed types
    refuse (`PROPS_TYPE_UNSUPPORTED`). The parameter must be a named identifier
    — the generated record is read as `props.member` — and its annotation must
-   not be optional (the runtime record always supplies a declared value, so an
-   optional member would understate the contract).
+   not be optional. That optional refusal is a deliberate admission narrowing,
+   **not a platform necessity**: a custom-element property always has a
+   declared value, so an optional annotation would understate the runtime
+   surface; a future owner decision could admit optional members by mapping
+   absence to the declared default.
 3. **Only `string`, `number` and `boolean` members are admitted.** A
    non-primitive member (`string[]`, `Date`, a function) refuses; the shell's
    `PROPERTY_TYPES` is the final authority for the same set.
@@ -110,8 +113,14 @@ type cannot carry while leaving the shell's descriptor shape untouched.
 5. **`reflect: true` requires an attribute channel** (the class lane and the
    shell apply the same rule).
 6. **`default` must be a `string`/`number`/`boolean` literal matching the typed
-   member**, else the zero value (`''`/`0`/`false`) is used. A literal of the
-   wrong type refuses rather than being coerced.
+   member**, else the type's zero value (`''`/`0`/`false`) is used. The
+   omission semantics are explicit: a missing `default` key means "use the type
+   zero value", never an `undefined` property channel, and the emitted
+   descriptor row always spells the resolved value. The same defaulting rule
+   applies to `reflect` (omitted ⇒ `false`) and `attribute` (omitted ⇒
+   `camelToKebab(name)`), so an omitted key never produces a different runtime
+   channel than an explicitly-spelled default. A literal of the wrong type
+   refuses rather than being coerced.
 7. **Reserved lifecycle names** (`constructor`, the four callbacks,
    `observedAttributes`, `dispose`) refuse at the lane so the author gets a
    source-located build error. The shell owns that list and is the runtime
@@ -195,6 +204,63 @@ undeclared member is a `PROPERTY_MISMATCH`; a non-primitive member is a
 separate "props that are CE attributes/properties" from "component props with
 no CE channel" before that wider surface is claimed; this record does not
 pre-empt that decision.
+
+## Code size and duplication (honest tradeoff)
+
+Source delta from canonical `7632ab36c`: 7 source files, +1318/−53 lines.
+`site.ts` is the large one (458 → 1189 lines, +795); `island-scanner.ts` +199,
+`authoring.ts` +202, `contract.ts` +89, `emit.ts` +72, `compile.ts` +13. A
+large part of the growth is JSDoc, author-facing failure messages and explicit
+refusal branches, not machinery: there is **no generic metadata interpreter**.
+Two fixed keys and one fixed table shape are parsed by hand, and the typed
+props extraction is a syntax walk over the one props parameter.
+
+Single-owned helpers this slice reuses instead of re-deriving:
+
+- `camelToKebab` / `isSafeAttributeName`
+  ([`forbidden-sinks.ts`](../../packages/protocol/src/forbidden-sinks.ts)) —
+  the attribute spelling/validity table shared by the shell, the scanner and
+  the compiler reader;
+- `literalValue` ([`analyze-module.ts`](../../packages/compiler/src/internal/compiler/semantic-core/analyze-module.ts))
+  — the class lane's serializer-literal reader, reused for
+  `properties.*.default`;
+- `diagnosticAt`/`spanOf` — the one compiler diagnostic constructor;
+- the shell's landed `GeneratedElementProperty` and
+  [`property-conversion.ts`](../../packages/element/src/internal/core/property-conversion.ts)
+  — the conversion/reflection/default mechanism is untouched; the emitted
+  rows are that shape and the Chromium vertical exercises the real shell;
+- `RESERVED_GENERATED_ELEMENT_PROPERTY_NAMES` — one owner (the shell); the
+  compiler keeps a fast-fail subset with a consumer-form subset test.
+
+Unavoidable two-reader duplication (recorded and guarded):
+
+- The scanner's `parseStaticPropertyTable` and the compiler's
+  `readIslandPropertyTable` implement the same nested-table rules (field set,
+  literal-only values, reflect-without-channel, duplicate attribute, safety
+  check). They read one sidecar because the D-root-source ruling requires the
+  compiler to read the authored AST, and the package graph forbids the
+  compiler importing the router (the router depends on the compiler). The
+  guard is the shared corpus in
+  [`island-metadata-drift-guard.test.ts`](../../packages/router/__tests__/island-metadata-drift-guard.test.ts).
+- The root/delegatesFocus literal rules duplicate the scanner's per-key
+  branches in the same way (root was the pre-existing M09-2a cost; this slice
+  adds delegatesFocus to the same guard).
+- The runtime authoring validation in `authoring.ts` is a second surface by
+  design (module evaluation vs static build scan); every other `IslandConfig`
+  key already had that pair before this slice.
+- The typed props name/type cross-check exists only in the compiler lane: the
+  scanner cannot see the component's type, so that half is not duplicated.
+
+Why not consume the scanner's parsed metadata instead? The dependency runs
+router → compiler, so the compiler cannot import the router's
+`readIslandConfig`; carrying the facts on the host site fact was the
+alternative the D-root-source ruling rejected (the fact must be read from the
+authored AST, not a host scan); and a shared static-sidecar schema / generic
+literal interpreter would be new public contract surface — exactly the
+generic interpreter this slice must not add. The duplication cost is accepted
+and bounded by the drift guard; a future consolidation (for example a
+protocol-level literal-parse leaf, or an owner decision to pass parsed sidecar
+facts) is a separate change and is not pre-empted here.
 
 ## Public surface (regenerated, never hand-edited)
 
