@@ -256,7 +256,7 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     expect((caught as { code?: string }).code).toBe('OE_UNSAFE_URL_SINK');
   });
 
-  test('conditions, keyed lists and void elements enter the producer; the remaining boundaries stay absent', () => {
+  test('conditions, keyed lists, void elements and composition enter the producer; property stays absent', () => {
     // M08-2 admits a condition: its branch selection is a request-time fact, so
     // the producer is present even when both branches are static.
     expect(generated.module).toContain('function Conditional__ssr');
@@ -278,9 +278,12 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     // keeps the parameterless form.
     expect(generated.module).toContain('function Voided__ssr()');
     expect(ssr(generated.loaded, 'Voided')()).toBe('<div><br></div>');
-    for (const name of ['Propertied', 'Reused', 'Composed']) {
-      expect(generated.module, name).not.toContain(`function ${name}__ssr`);
-    }
+    // M08 composition slice: a component reference and a reusable-JSX
+    // insertion now emit a server producer (the new composition suite owns
+    // their bytes); the `property` channel remains mount-only.
+    expect(generated.module).toContain('function Reused__ssr');
+    expect(generated.module).toContain('function Composed__ssr');
+    expect(generated.module).not.toContain('function Propertied__ssr');
   });
 
   test('SSR expression placements decode back to the authored slots', () => {
