@@ -149,6 +149,9 @@ export function compileGeneratedElementIfAdmitted(
     // D-delegatesFocus (2026-11-14): the same lane-read sidecar source as the
     // root. Omitted when false so the descriptor keeps its M09-1a shape.
     ...(admission.delegatesFocus ? { delegatesFocus: true } : {}),
+    // M09-2d: the form fact is read from the same sidecar as root/focus; omitted
+    // when false so the descriptor keeps its pre-forms bytes.
+    ...(admission.formAssociated ? { formAssociated: true } : {}),
     // D-props (2026-11-14): the resolved rows of the cross-checked sidecar
     // table; empty keeps the M09-1a `properties: []` bytes.
     ...(admission.properties.length === 0 ? {} : { properties: admission.properties }),

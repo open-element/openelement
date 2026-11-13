@@ -424,6 +424,17 @@ test('defineIslandConfig() carries the declared root family', () => {
   );
 });
 
+test('defineIslandConfig() carries the bounded formAssociated fact', () => {
+  expect(defineIslandConfig({ formAssociated: true }).formAssociated).toBe(true);
+  expect(defineIslandConfig({ formAssociated: false }).formAssociated).toBe(false);
+  expect(defineIslandConfig({}).formAssociated).toBeUndefined();
+  assertThrowsIncludes(
+    () => defineIslandConfig({ formAssociated: 'yes' } as never),
+    Error,
+    'formAssociated must be a boolean',
+  );
+});
+
 test('defineIslandConfig() carries the declared delegatesFocus fact', () => {
   // D-delegatesFocus (2026-11-14): the existing @element vocabulary on the
   // island sidecar, meaningful only with root: 'shadow'.
@@ -643,6 +654,7 @@ test('#1413 authoring errors: defineIslandConfig() failure modes carry codes', (
     [{ exportNames: [] }, IslandErrorCode.EXPORT_NAMES],
     [{ tags: ['a-b'], exportNames: { 'c-d': 'X' } }, IslandErrorCode.EXPORT_NAMES],
     [{ delegatesFocus: 'yes' }, IslandErrorCode.DESCRIPTOR_SHAPE],
+    [{ formAssociated: 'yes' }, IslandErrorCode.DESCRIPTOR_SHAPE],
     [{ delegatesFocus: true }, IslandErrorCode.DESCRIPTOR_SHAPE],
     [{ root: 'light', delegatesFocus: true }, IslandErrorCode.DESCRIPTOR_SHAPE],
     [

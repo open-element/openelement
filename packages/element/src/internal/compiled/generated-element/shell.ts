@@ -97,6 +97,7 @@ import {
 } from '@openelement/protocol/errors';
 import type { RootMode } from '@openelement/protocol/part-program';
 import { OpenElementBase } from '../../../open-element-base.ts';
+import { ElementFormController } from '../../../open-element-form.ts';
 import {
   coercePropertyValue,
   convertFromAttribute,
@@ -114,7 +115,7 @@ import {
   generatedRootKind,
   resolveGeneratedElementRoot,
   SHELL_ROOT_MODE_MISMATCH,
-  type ClosedRootDiscovery,
+  type ElementInternalsRecord,
   type GeneratedRootKind,
 } from './root.ts';
 
@@ -206,6 +207,16 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
    * descriptor that sets it is a compiler bug and fails descriptor validation.
    */
   readonly delegatesFocus?: boolean;
+  /**
+   * Associate the host with its surrounding native form through the shell's
+   * ONE element-lifetime `ElementInternals` record (shared with closed-root
+   * discovery). The form value is the declared string `value` property; an
+   * optional declared boolean `required` enables the valueMissing mirror and an
+   * optional declared boolean non-reflecting `disabled` enables the
+   * fieldset-enabled state. The shell owns all platform callbacks; there is no
+   * author internals API and no separate `formValue` field.
+   */
+  readonly formAssociated?: boolean;
   readonly properties?: readonly GeneratedElementProperty[];
   readonly createRecipe: (owner: LifetimeScope, host: GeneratedElementHost<P>) => Recipe<P>;
   /**
@@ -261,9 +272,17 @@ interface NormalizedProperty {
   readonly defaultHtml?: string;
 }
 
+interface FormMapping {
+  readonly value: NormalizedProperty;
+  readonly required?: NormalizedProperty;
+  readonly disabled?: NormalizedProperty;
+}
+
 interface NormalizedDescriptor {
   readonly rootMode: RootMode;
   readonly delegatesFocus: boolean;
+  readonly formAssociated: boolean;
+  readonly form: FormMapping | null;
   readonly properties: readonly NormalizedProperty[];
   readonly byAttribute: ReadonlyMap<string, NormalizedProperty>;
   readonly createRecipe: (
@@ -271,6 +290,13 @@ interface NormalizedDescriptor {
     host: GeneratedElementHost<Record<string, unknown>>,
   ) => Recipe<Record<string, unknown>>;
   readonly createBindings?: () => Readonly<Record<string, unknown>>;
+}
+
+interface FormRuntime {
+  readonly controller: ElementFormController;
+  readonly mapping: FormMapping;
+  /** Platform/ancestor-fieldset effective disabled, separate from the author property. */
+  effectiveDisabled: boolean;
 }
 
 interface ElementState {
@@ -302,8 +328,13 @@ interface ElementState {
    * server-rendered content and is claimed on the first connect.
    */
   rootCreatedByShell: boolean;
-  /** The one owner of the closed-root internals, once the shell attaches them. */
-  readonly rootDiscovery: ClosedRootDiscovery;
+  /**
+   * The ONE element-lifetime ElementInternals record: closed-root discovery and
+   * form association share it. Null-safe until a lazy attach needs it.
+   */
+  readonly internalsRecord: ElementInternalsRecord;
+  /** Present only for a form-associated descriptor. */
+  readonly form: FormRuntime | null;
   /**
    * Whether a generated region is known to exist at the resolved parent.
    *
@@ -350,6 +381,10 @@ const RESERVED_PROPERTY_NAMES: ReadonlySet<string> = new Set([
   'adoptedCallback',
   'observedAttributes',
   'dispose',
+  'formAssociatedCallback',
+  'formResetCallback',
+  'formStateRestoreCallback',
+  'formDisabledCallback',
 ]);
 
 /**
@@ -361,6 +396,13 @@ const PRE_UPGRADE_PROPERTY_LOCKED = 'OEIR_SHELL_PRE_UPGRADE_PROPERTY_LOCKED';
 /** Internal write guards for the property-only non-primitive family. */
 const PROPERTY_TYPE_MISMATCH = 'OEIR_SHELL_PROPERTY_TYPE_MISMATCH';
 const UNTRUSTED_HTML_PROPERTY = 'OEIR_SHELL_UNTRUSTED_HTML_PROPERTY';
+/**
+ * The platform did not provide `attachInternals` (or the one-shot channel was
+ * already consumed outside this shell). A form-associated generated element
+ * must fail closed with this code instead of silently claiming form support it
+ * does not have.
+ */
+const FORM_INTERNALS_UNAVAILABLE = 'OEIR_SHELL_FORM_INTERNALS_UNAVAILABLE';
 
 function descriptorError(
   message: string,
@@ -574,6 +616,10 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
   if (rootMode === 'light' && delegatesFocus) {
     descriptorError('delegatesFocus requires a shadow root');
   }
+  if (descriptor.formAssociated !== undefined && typeof descriptor.formAssociated !== 'boolean') {
+    descriptorError('formAssociated must be a boolean when present');
+  }
+  const formAssociated = descriptor.formAssociated === true;
 
   const properties = (descriptor.properties ?? []).map(normalizeProperty);
   const names = new Set<string>();
@@ -591,9 +637,46 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
     }
   }
 
+  const byName = new Map(properties.map((property) => [property.name, property]));
+  let form: FormMapping | null = null;
+  if (formAssociated) {
+    const value = byName.get('value');
+    if (value === undefined) {
+      descriptorError('formAssociated requires a declared property named "value"');
+    }
+    if (value.type !== 'string') {
+      descriptorError(`the form value property "value" must be a string, got ${value.type}`);
+    }
+    const required = byName.get('required');
+    if (required !== undefined && required.type !== 'boolean') {
+      descriptorError(
+        `the optional form property "required" must be boolean, got ${required.type}`,
+      );
+    }
+    const disabled = byName.get('disabled');
+    if (disabled !== undefined && disabled.type !== 'boolean') {
+      descriptorError(
+        `the optional form property "disabled" must be boolean, got ${disabled.type}`,
+      );
+    }
+    if (disabled?.reflect === true) {
+      descriptorError(
+        'the form property "disabled" must not reflect: the fieldset/authored disabled state ' +
+          'must stay reversible',
+      );
+    }
+    form = {
+      value,
+      ...(required === undefined ? {} : { required }),
+      ...(disabled === undefined ? {} : { disabled }),
+    };
+  }
+
   return {
     rootMode,
     delegatesFocus,
+    formAssociated,
+    form,
     properties,
     byAttribute,
     createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
@@ -689,7 +772,15 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     root: null,
     rootKind: null,
     rootCreatedByShell: false,
-    rootDiscovery: { internals: null },
+    internalsRecord: { internals: null },
+    form:
+      descriptor.form === null
+        ? null
+        : {
+            controller: new ElementFormController(),
+            mapping: descriptor.form,
+            effectiveDisabled: false,
+          },
     regionState: 'unobserved',
     connecting: false,
     reflecting: false,
@@ -743,6 +834,7 @@ function setProperty(
   if (!writeValue(state, property, next)) return;
   if (reflect) reflectProperty(element, state, property, next);
   bumpProps(state);
+  syncFormProperty(state, property);
 }
 
 /**
@@ -895,6 +987,162 @@ function hostFor(state: ElementState): GeneratedElementHost<Record<string, unkno
 }
 
 /**
+ * Attach the one element-lifetime ElementInternals record, failing closed with
+ * a coded error when the platform cannot provide the channel. The record is
+ * shared with closed-root discovery; a second attach is impossible by
+ * construction (the record is checked first and the controller caches its
+ * injected result).
+ */
+function ensureFormInternals(element: HTMLElement, state: ElementState): ElementInternals {
+  const existing = state.internalsRecord.internals;
+  if (existing !== null) return existing;
+  const attachInternals = (element as { attachInternals?: () => ElementInternals }).attachInternals;
+  if (typeof attachInternals !== 'function') {
+    throw frameworkError(
+      FORM_INTERNALS_UNAVAILABLE,
+      '[generated-element] formAssociated requires ElementInternals.attachInternals(), which this ' +
+        'platform does not provide; form support is not claimed',
+      { phase: 'csr' },
+    );
+  }
+  let internals: ElementInternals;
+  try {
+    internals = attachInternals.call(element);
+  } catch (error) {
+    throw frameworkError(
+      FORM_INTERNALS_UNAVAILABLE,
+      '[generated-element] formAssociated could not attach ElementInternals; the one-shot ' +
+        'channel was already consumed or the platform refused it',
+      {
+        phase: 'csr',
+        cause: error instanceof Error ? error : new Error(String(error)),
+      },
+    );
+  }
+  state.internalsRecord.internals = internals;
+  return internals;
+}
+
+function attachForm(element: HTMLElement, state: ElementState): void {
+  state.form?.controller.attachWith(() => ensureFormInternals(element, state));
+}
+
+function formValueOf(state: ElementState): string {
+  const form = state.form;
+  if (form === null) return '';
+  const value = state.values.get(form.mapping.value.name);
+  return typeof value === 'string' ? value : '';
+}
+
+function formRequiredOf(state: ElementState): boolean {
+  const required = state.form?.mapping.required;
+  return required === undefined ? false : state.values.get(required.name) === true;
+}
+
+function formAuthorDisabledOf(state: ElementState): boolean {
+  const disabled = state.form?.mapping.disabled;
+  return disabled === undefined ? false : state.values.get(disabled.name) === true;
+}
+
+function syncFormValue(state: ElementState): void {
+  const form = state.form;
+  if (form === null) return;
+  form.controller.setFormValue(formValueOf(state));
+}
+
+function syncFormValidity(state: ElementState): void {
+  const form = state.form;
+  if (form === null) return;
+  const internals = form.controller.internals;
+  if (internals === undefined) return;
+  if (formRequiredOf(state) && formValueOf(state) === '') {
+    internals.setValidity({ valueMissing: true }, 'Please fill out this field.');
+  } else {
+    internals.setValidity({});
+  }
+}
+
+function syncFormStates(state: ElementState): void {
+  const form = state.form;
+  if (form === null) return;
+  const states = form.controller.internals?.states;
+  if (states === undefined) return;
+  if (formRequiredOf(state) && formValueOf(state) === '') states.add('invalid');
+  else states.delete('invalid');
+  if (formAuthorDisabledOf(state) || form.effectiveDisabled) states.add('disabled');
+  else states.delete('disabled');
+}
+
+function syncFormAll(state: ElementState): void {
+  if (state.form === null) return;
+  syncFormValue(state);
+  syncFormValidity(state);
+  syncFormStates(state);
+}
+
+/** Keep the form contract in step with one accepted declared-property write. */
+function syncFormProperty(state: ElementState, property: NormalizedProperty): void {
+  const form = state.form;
+  if (form === null || form.controller.internals === undefined) return;
+  if (property.name === form.mapping.value.name) {
+    syncFormAll(state);
+    return;
+  }
+  if (property.name === form.mapping.required?.name) {
+    syncFormValidity(state);
+    syncFormStates(state);
+    return;
+  }
+  if (property.name === form.mapping.disabled?.name) {
+    syncFormStates(state);
+    return;
+  }
+}
+
+/** Write the form value through the declared property and keep its attribute seed. */
+function writeFormValue(element: HTMLElement, state: ElementState, next: string): void {
+  const form = state.form;
+  if (form === null) return;
+  const property = form.mapping.value;
+  setProperty(element, state, property, next, false);
+  if (property.attribute !== null) {
+    const serialized = convertToAttribute(property.conversion!, next);
+    state.reflecting = true;
+    try {
+      if (serialized === null) element.removeAttribute(property.attribute);
+      else element.setAttribute(property.attribute, serialized);
+    } finally {
+      state.reflecting = false;
+    }
+  }
+}
+
+/** `form.reset()` restores only the declared value source (never every property). */
+function resetFormValue(element: HTMLElement, state: ElementState): void {
+  const form = state.form;
+  if (form === null) return;
+  writeFormValue(element, state, String(form.mapping.value.defaultValue));
+  syncFormAll(state);
+}
+
+function restoreFormValue(
+  element: HTMLElement,
+  state: ElementState,
+  restored: File | string | FormData | null,
+): void {
+  if (typeof restored !== 'string') return;
+  writeFormValue(element, state, restored);
+  syncFormAll(state);
+}
+
+function setFormDisabled(state: ElementState, disabled: boolean): void {
+  const form = state.form;
+  if (form === null || form.effectiveDisabled === disabled) return;
+  form.effectiveDisabled = disabled;
+  syncFormStates(state);
+}
+
+/**
  * Resolve the root once and retain it on the element state. The stored root is
  * the element's lifetime claim/mount parent: a later connect reuses it even
  * after a recipe/claim failure, so a retry cannot silently attach a second
@@ -928,7 +1176,7 @@ function rootFor(element: HTMLElement, state: ElementState): HTMLElement | Shado
     element,
     state.descriptor.rootMode,
     state.descriptor.delegatesFocus,
-    state.rootDiscovery,
+    state.internalsRecord,
   );
   state.root = resolved.root;
   state.rootKind = resolved.kind;
@@ -971,6 +1219,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     connectedCallback(): void {
       const state = stateOf(this);
       if (state.projection !== null || state.connecting) return;
+      // The one-shot ElementInternals record must exist before closed-root
+      // discovery; attach it before any property reconciliation so a form value
+      // write during reconciliation can publish immediately. A coded failure
+      // leaves no projection/DOM write.
+      if (state.form !== null) attachForm(this, state);
       // Must precede createRecipe: the recipe reads host.props on creation.
       reconcilePreUpgradeProperties(this, state);
       state.connecting = true;
@@ -982,6 +1235,9 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       const owner = new LifetimeScope();
       try {
         const parent = rootFor(this, state);
+        // Publish the reconciled initial value/validity/state once the root (and
+        // the shared internals record used by closed discovery) is resolved.
+        syncFormAll(state);
         // Observe the first-connect DOM once, then keep the fact on the state.
         // A shell-created root starts empty (mount); an adopted root may carry
         // SSR/DSD content (claim); a light host's children are its generated
@@ -1053,6 +1309,33 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       applyAttribute(this, state, property, newValue);
     }
 
+    /** Platform form hook: class parity no-op. */
+    formAssociatedCallback(_form: HTMLFormElement | null): void {}
+
+    /** Platform form reset hook: reset the declared value source only. */
+    formResetCallback(): void {
+      const state = stateOf(this);
+      if (state.form === null) return;
+      attachForm(this, state);
+      resetFormValue(this, state);
+    }
+
+    /** Platform form restore hook: only a string state is mapped onto `value`. */
+    formStateRestoreCallback(restored: File | string | FormData | null, _mode: string): void {
+      const state = stateOf(this);
+      if (state.form === null) return;
+      attachForm(this, state);
+      restoreFormValue(this, state, restored);
+    }
+
+    /** Platform fieldset-disabled hook: effective state, separate from the author property. */
+    formDisabledCallback(disabled: boolean): void {
+      const state = stateOf(this);
+      if (state.form === null) return;
+      attachForm(this, state);
+      setFormDisabled(state, disabled);
+    }
+
     /** Explicit teardown; internal escape hatch, not author API. */
     dispose(detachOwnedNodes = true): void {
       const state = stateOf(this);
@@ -1097,6 +1380,15 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     configurable: true,
     value: observedAttributes,
   });
+
+  if (normalized.formAssociated) {
+    // The platform reads the constructor static, not the descriptor; set it
+    // before the outer entry calls customElements.define.
+    Object.defineProperty(GeneratedElementShell, 'formAssociated', {
+      configurable: true,
+      value: true,
+    });
+  }
 
   for (const property of normalized.properties) {
     Object.defineProperty(GeneratedElementShell.prototype, property.name, {

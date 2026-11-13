@@ -95,6 +95,13 @@ export interface LocalIslandMeta {
    */
   delegatesFocus?: boolean;
   /**
+   * Associate the generated element host with its surrounding form. The form
+   * value is the declared string property named `value`; optional boolean
+   * `required`/`disabled` properties map the required/valueMissing and
+   * fieldset-disabled behavior. No `formValue` field exists.
+   */
+  formAssociated?: boolean;
+  /**
    * The island element's declared primitive properties, keyed by the typed
    * props member name. Parsed from the same sidecar as the delivery facts; the
    * compiler lane re-reads it and cross-checks it against the props type.
@@ -340,7 +347,7 @@ export function buildPackageIslandDecls(
 
 function staticOpenElementError(message: string): OpenElementError {
   return new OpenElementError(
-    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, root?: "light" | "shadow", delegatesFocus?: boolean, properties?: Record<string, { reflect?: boolean, attribute?: string | false, default?: string | number | boolean }> }).`,
+    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, root?: "light" | "shadow", delegatesFocus?: boolean, formAssociated?: boolean, properties?: Record<string, { reflect?: boolean, attribute?: string | false, default?: string | number | boolean }> }).`,
     {
       code: 'ISLAND_METADATA_ERROR',
       statusCode: 500,
@@ -358,6 +365,7 @@ type StaticIslandConfig = Pick<
   | 'media'
   | 'root'
   | 'delegatesFocus'
+  | 'formAssociated'
   | 'properties'
   | 'tags'
   | 'tagNames'
@@ -744,6 +752,7 @@ function parseStaticIslandConfig(
         'media',
         'root',
         'delegatesFocus',
+        'formAssociated',
         'properties',
         'tags',
         'tagNames',
@@ -794,6 +803,15 @@ function parseStaticIslandConfig(
         );
       }
       meta.delegatesFocus = raw.kind === ts.SyntaxKind.TrueKeyword;
+    } else if (key === 'formAssociated') {
+      if (raw.kind !== ts.SyntaxKind.TrueKeyword && raw.kind !== ts.SyntaxKind.FalseKeyword) {
+        throw staticOpenElementError(
+          `openElement.formAssociated must be a static literal, got dynamic value "${raw.getText(
+            sourceFile,
+          )}"`,
+        );
+      }
+      meta.formAssociated = raw.kind === ts.SyntaxKind.TrueKeyword;
     } else if (key === 'properties') {
       meta.properties = parseStaticPropertyTable(sourceFile, raw, 'openElement.properties');
     } else if (key === 'tags' || key === 'tagNames') {
@@ -1009,6 +1027,9 @@ export async function scanIslandMeta(
       ...(islandConfig.delegatesFocus === undefined
         ? {}
         : { delegatesFocus: islandConfig.delegatesFocus }),
+      ...(islandConfig.formAssociated === undefined
+        ? {}
+        : { formAssociated: islandConfig.formAssociated }),
       ...(islandConfig.properties === undefined ? {} : { properties: islandConfig.properties }),
       ...(islandConfig.tags === undefined ? {} : { tags: islandConfig.tags }),
       ...(islandConfig.tagNames === undefined ? {} : { tagNames: islandConfig.tagNames }),

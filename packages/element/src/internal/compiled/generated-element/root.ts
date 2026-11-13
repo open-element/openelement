@@ -61,9 +61,16 @@ export interface ResolvedGeneratedRoot {
  * every later resolution, so a retry cannot consume the one-shot channel again
  * or misreport the shell's own earlier attachment as another subsystem's.
  */
-export interface ClosedRootDiscovery {
+export interface ElementInternalsRecord {
   internals: ElementInternals | null;
 }
+
+/**
+ * Backward-compatible internal alias for the former closed-root-only record.
+ * The record is now the ONE element-lifetime `ElementInternals` owner shared by
+ * closed-root discovery and form association (M09-2d).
+ */
+export type ClosedRootDiscovery = ElementInternalsRecord;
 
 function fail(code: string, message: string, cause?: Error): never {
   throw frameworkError(code, `[generated-element] ${message}`, {
@@ -164,7 +171,10 @@ function closedRootFrom(internals: ElementInternals): ShadowRoot | null {
  * this shell before discovery, is unreachable because there is no second
  * `attachInternals()` and no safe `attachShadow()` fallback.
  */
-function discoverClosedRoot(host: HTMLElement, discovery: ClosedRootDiscovery): ShadowRoot | null {
+function discoverClosedRoot(
+  host: HTMLElement,
+  discovery: ElementInternalsRecord,
+): ShadowRoot | null {
   if (discovery.internals !== null) return closedRootFrom(discovery.internals);
   const attachInternals = (host as { attachInternals?: () => ElementInternals }).attachInternals;
   if (typeof attachInternals !== 'function') {
@@ -208,7 +218,7 @@ export function resolveGeneratedElementRoot(
   host: HTMLElement,
   mode: RootMode | undefined,
   delegatesFocus = false,
-  discovery: ClosedRootDiscovery = { internals: null },
+  discovery: ElementInternalsRecord = { internals: null },
 ): ResolvedGeneratedRoot {
   const kind = generatedRootKind(mode);
   if (kind === 'light') {

@@ -796,6 +796,18 @@ export interface IslandConfig {
    */
   delegatesFocus?: boolean;
   /**
+   * Associate the generated element host with its surrounding native form
+   * (`static formAssociated = true` + `ElementInternals`). The form value is
+   * the declared string property named `value`; optional boolean `required`
+   * and `disabled` properties enable the required/valueMissing mirror and the
+   * fieldset disabled state. There is deliberately no separate `formValue`
+   * field: one declared property is the source.
+   *
+   * The shell owns the single `ElementInternals` record shared with closed-root
+   * discovery; no author internals/host callback API exists in this slice.
+   */
+  formAssociated?: boolean;
+  /**
    * The island element's declared **primitive** properties, keyed by the root
    * component's typed props member names. Every typed member must have an entry
    * and every entry must name a typed member (the compiler lane refuses a
@@ -821,6 +833,7 @@ const ISLAND_CONFIG_FIELDS = new Set([
   'media',
   'root',
   'delegatesFocus',
+  'formAssociated',
   'properties',
   'tags',
   'tagNames',
@@ -1041,7 +1054,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       IslandErrorCode.DESCRIPTOR_SHAPE,
       `${ERROR_PREFIX} defineIslandConfig() requires an object descriptor. ` +
         'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, root, ' +
-        'delegatesFocus, properties, tags, tagNames, exportNames }).',
+        'delegatesFocus, formAssociated, properties, tags, tagNames, exportNames }).',
     );
   }
   for (const key of Object.keys(config)) {
@@ -1049,8 +1062,8 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       throw authoringError(
         IslandErrorCode.DESCRIPTOR_SHAPE,
         `${ERROR_PREFIX} defineIslandConfig() does not accept "${key}". ` +
-          'Use only ssr, dsd, hydrate, media, root, delegatesFocus, properties, tags, ' +
-          'tagNames, and exportNames. ' +
+          'Use only ssr, dsd, hydrate, media, root, delegatesFocus, formAssociated, ' +
+          'properties, tags, tagNames, and exportNames. ' +
           `Remove "${key}" from the descriptor.`,
       );
     }
@@ -1099,6 +1112,14 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       `${ERROR_PREFIX} defineIslandConfig() root must be "light" or "shadow". ` +
         "Write root: 'light' for a component compiled with @element(tag, { root: 'light' }), " +
         "or root: 'shadow' for the DSD default — the build fails closed when the two disagree.",
+    );
+  }
+  if (config.formAssociated !== undefined && typeof config.formAssociated !== 'boolean') {
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() formAssociated must be a boolean. ` +
+        'Write formAssociated: true to associate the host with its surrounding form, or remove ' +
+        'the field. The static island scan rejects a non-literal value for the same field.',
     );
   }
   if (config.delegatesFocus !== undefined && typeof config.delegatesFocus !== 'boolean') {

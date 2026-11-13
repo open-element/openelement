@@ -51,6 +51,7 @@ interface PropertyFacts {
 interface Facts {
   readonly root: string | undefined;
   readonly delegatesFocus: boolean;
+  readonly formAssociated: boolean;
   readonly properties: readonly (readonly [string, PropertyFacts])[] | undefined;
 }
 
@@ -72,6 +73,7 @@ function scannerOutcome(source: string): Outcome {
       facts: {
         root: descriptorRoot(config?.root),
         delegatesFocus: config?.delegatesFocus === true,
+        formAssociated: config?.formAssociated === true,
         properties:
           config?.properties === undefined ? undefined : Object.entries(config.properties),
       },
@@ -89,7 +91,12 @@ function compilerOutcome(source: string): Outcome {
   if (read.kind === 'absent') {
     return {
       kind: 'read',
-      facts: { root: undefined, delegatesFocus: false, properties: undefined },
+      facts: {
+        root: undefined,
+        delegatesFocus: false,
+        formAssociated: false,
+        properties: undefined,
+      },
     };
   }
   const properties =
@@ -119,6 +126,7 @@ function compilerOutcome(source: string): Outcome {
     facts: {
       root: read.facts.root,
       delegatesFocus: read.facts.delegatesFocus,
+      formAssociated: read.facts.formAssociated,
       properties,
     },
   };
@@ -326,6 +334,20 @@ ${module('properties: { count: { default: defaultValue } }')}`,
     name: 'invalid (duplicate delegatesFocus)',
     source: module("root: 'shadow', delegatesFocus: true, delegatesFocus: false"),
   },
+  { name: 'formAssociated true', source: module('formAssociated: true') },
+  { name: 'formAssociated false', source: module('formAssociated: false') },
+  {
+    name: 'invalid (dynamic formAssociated)',
+    source: `const form = true;\n${module('formAssociated: form')}`,
+  },
+  {
+    name: 'invalid (non-boolean formAssociated literal)',
+    source: module('formAssociated: 1'),
+  },
+  {
+    name: 'invalid (duplicate formAssociated)',
+    source: module('formAssociated: true, formAssociated: false'),
+  },
 ];
 
 test('both readers agree on every corpus entry (the drift guard)', () => {
@@ -341,6 +363,7 @@ test('both readers agree on every corpus entry (the drift guard)', () => {
       return (
         scanner.facts.root !== compiler.facts.root ||
         scanner.facts.delegatesFocus !== compiler.facts.delegatesFocus ||
+        scanner.facts.formAssociated !== compiler.facts.formAssociated ||
         JSON.stringify(scanner.facts.properties) !== JSON.stringify(compiler.facts.properties)
       );
     })
@@ -358,6 +381,9 @@ test('both readers agree on every corpus entry (the drift guard)', () => {
   expect(roots).toContain(undefined);
   expect(focus).toContain(true);
   expect(focus).toContain(false);
+  const forms = readFacts.flatMap((row) => (row.kind === 'read' ? [row.facts.formAssociated] : []));
+  expect(forms).toContain(true);
+  expect(forms).toContain(false);
   const propertyShapes = readFacts.flatMap((row) =>
     row.kind === 'read' ? [row.facts.properties] : [],
   );
@@ -382,11 +408,11 @@ test('the scanner keeps the authority: a sidecar it rejects is refused, never re
 test('the root vocabulary maps one way: shadow is the DSD default, closed is unspellable', () => {
   expect(compilerOutcome(module("root: 'shadow'"))).toEqual({
     kind: 'read',
-    facts: { root: 'shadow-open', delegatesFocus: false },
+    facts: { root: 'shadow-open', delegatesFocus: false, formAssociated: false },
   });
   expect(compilerOutcome(module("root: 'light'"))).toEqual({
     kind: 'read',
-    facts: { root: 'light', delegatesFocus: false },
+    facts: { root: 'light', delegatesFocus: false, formAssociated: false },
   });
   // No authored spelling reaches the closed root mode (D-closed).
   expect(compilerOutcome(module("root: 'shadow-closed'")).kind).toBe('rejected');
@@ -417,6 +443,7 @@ test('the properties table resolves the same way on both readers', () => {
     facts: {
       root: 'shadow-open',
       delegatesFocus: false,
+      formAssociated: false,
       properties: [
         ['count', { attribute: 'count', attributeExplicit: false, reflect: true, default: 0 }],
         [
@@ -432,7 +459,7 @@ test('the properties table resolves the same way on both readers', () => {
 test('the delegatesFocus vocabulary is a boolean and needs a shadow root', () => {
   expect(compilerOutcome(module("root: 'shadow', delegatesFocus: true"))).toEqual({
     kind: 'read',
-    facts: { root: 'shadow-open', delegatesFocus: true },
+    facts: { root: 'shadow-open', delegatesFocus: true, formAssociated: false },
   });
   const withoutShadow = compilerOutcome(module('delegatesFocus: true'));
   expect(withoutShadow.kind).toBe('rejected');
