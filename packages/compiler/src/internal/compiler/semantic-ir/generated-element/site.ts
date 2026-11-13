@@ -73,6 +73,12 @@ export interface GeneratedElementSiteAdmission {
    */
   readonly root: RootMode | undefined;
   /**
+   * The native `delegatesFocus` fact the sidecar declares; false covers both an
+   * absent key and an explicit `false` (the same descriptor behavior). The
+   * reader has already refused `true` without `root: 'shadow'`.
+   */
+  readonly delegatesFocus: boolean;
+  /**
    * The root component's props parameter spelling, or null when it takes none.
    *
    * This is deliberately derived from the AST parameter list rather than from
@@ -176,6 +182,31 @@ export type IslandRootRead =
   | { readonly kind: 'root'; readonly root: RootMode }
   | { readonly kind: 'refused'; readonly diagnostic: IrDiagnostic };
 
+/**
+ * The platform facts the compiler lane reads from the authored sidecar.
+ *
+ * `root` is the descriptor root mode (`light | shadow-open`), or undefined
+ * when the author pinned none (the shell's own `light` default then owns it).
+ * `delegatesFocus` is the native focus-delegation fact; false covers both an
+ * absent key and an explicit `false`, which are the same descriptor behavior.
+ */
+export interface IslandMetadataFacts {
+  readonly root: RootMode | undefined;
+  readonly delegatesFocus: boolean;
+}
+
+/**
+ * The result of reading the sidecar's platform facts from the authored AST.
+ *
+ * `absent` means the module has no island policy statement at all; a sidecar
+ * that declares no platform key still reads as `read` with the default facts,
+ * so the caller can tell "no sidecar" from "sidecar with no facts".
+ */
+export type IslandMetadataRead =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'read'; readonly facts: IslandMetadataFacts }
+  | { readonly kind: 'refused'; readonly diagnostic: IrDiagnostic };
+
 /** The static property name of a key/value pair, or null when unreadable. */
 function staticPropertyName(name: ts.PropertyName): string | null {
   if (ts.isIdentifier(name)) return name.text;
@@ -187,29 +218,49 @@ function rootDiagnostic(sourceFile: ts.SourceFile, node: ts.Node, message: strin
   return diagnosticAt(sourceFile, node, GENERATED_ELEMENT_DIAGNOSTIC.ROOT_INVALID, message);
 }
 
+function delegatesFocusDiagnostic(
+  sourceFile: ts.SourceFile,
+  node: ts.Node,
+  message: string,
+): IrDiagnostic {
+  return diagnosticAt(
+    sourceFile,
+    node,
+    GENERATED_ELEMENT_DIAGNOSTIC.DELEGATES_FOCUS_INVALID,
+    message,
+  );
+}
+
 /**
- * Read the sidecar's `root` from the authored AST (D-root-source, 2026-11-13).
+ * Read the sidecar's platform facts (`root`, `delegatesFocus`) from the
+ * authored AST (D-root-source, 2026-11-13).
  *
  * The router's static scanner is the authority for the sidecar's accepted
  * shape, its accepted key set and its error text; this reader exists because
- * the compiler lane must not carry a root fact across the host boundary. It is
- * deliberately narrower than the scanner: it reads the ONE key it needs, and
- * it refuses — instead of guessing — whenever the value cannot be proven from
- * the literal text (`OEIR_GENERATED_ELEMENT_ROOT_INVALID`, source-located).
+ * the compiler lane must not carry these facts across the host boundary. It is
+ * deliberately narrower than the scanner: it reads the keys it needs, and it
+ * refuses — instead of guessing — whenever a value cannot be proven from the
+ * literal text (`OEIR_GENERATED_ELEMENT_ROOT_INVALID` /
+ * `OEIR_GENERATED_ELEMENT_DELEGATES_FOCUS_INVALID`, source-located).
  *
  * The author-facing vocabulary is the sidecar's `'light' | 'shadow'`; the
  * descriptor's `'shadow'` is the DSD default, which the shell spells
  * `shadow-open`. Closed roots have no author spelling (`D-closed`), so no
- * mapping to `shadow-closed` exists here.
+ * mapping to `shadow-closed` exists here. `delegatesFocus: true` requires
+ * `root: 'shadow'`, exactly as the scanner and the runtime authoring surface
+ * enforce it: a light root has no shadow boundary to delegate focus through.
  */
-export function readIslandRoot(sourceFile: ts.SourceFile): IslandRootRead {
+export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRead {
   const descriptor = islandPolicyObjectLiteral(sourceFile);
   if (descriptor === null) return { kind: 'absent' };
   let seenRoot = false;
-  let declared: 'light' | 'shadow' | null = null;
+  let declaredRoot: 'light' | 'shadow' | null = null;
+  let seenDelegatesFocus = false;
+  let delegatesFocus = false;
+  let delegatesFocusSpan: ts.Node | null = null;
   for (const property of descriptor.properties) {
     // A spread, a shorthand, a method or a computed key makes the object's key
-    // set unprovable: the root fact could hide behind it, so nothing is read.
+    // set unprovable: a platform fact could hide behind it, so nothing is read.
     if (!ts.isPropertyAssignment(property)) {
       return {
         kind: 'refused',
@@ -217,7 +268,7 @@ export function readIslandRoot(sourceFile: ts.SourceFile): IslandRootRead {
           sourceFile,
           property,
           'the openElement sidecar must contain only static key/value pairs; ' +
-            `"${property.getText(sourceFile)}" cannot be read statically, so the root fact ` +
+            `"${property.getText(sourceFile)}" cannot be read statically, so the platform facts ` +
             'cannot be established',
         ),
       };
@@ -230,49 +281,108 @@ export function readIslandRoot(sourceFile: ts.SourceFile): IslandRootRead {
           sourceFile,
           property.name,
           `the openElement sidecar key "${property.name.getText(sourceFile)}" is not a static ` +
-            'property name, so the root fact cannot be established',
+            'property name, so the platform facts cannot be established',
         ),
       };
     }
-    if (name !== 'root') continue;
-    if (seenRoot) {
+    if (name === 'root') {
+      if (seenRoot) {
+        return {
+          kind: 'refused',
+          diagnostic: rootDiagnostic(
+            sourceFile,
+            property,
+            'the openElement sidecar declares root more than once, so the root fact is ambiguous',
+          ),
+        };
+      }
+      seenRoot = true;
+      const initializer = property.initializer;
+      if (!ts.isStringLiteral(initializer)) {
+        return {
+          kind: 'refused',
+          diagnostic: rootDiagnostic(
+            sourceFile,
+            initializer,
+            'openElement.root must be a static literal, got dynamic value ' +
+              `"${initializer.getText(sourceFile)}"`,
+          ),
+        };
+      }
+      if (initializer.text !== 'light' && initializer.text !== 'shadow') {
+        return {
+          kind: 'refused',
+          diagnostic: rootDiagnostic(
+            sourceFile,
+            initializer,
+            `openElement.root has unsupported value "${initializer.text}"; ` +
+              'use "light" or "shadow"',
+          ),
+        };
+      }
+      declaredRoot = initializer.text;
+      continue;
+    }
+    if (name !== 'delegatesFocus') continue;
+    if (seenDelegatesFocus) {
       return {
         kind: 'refused',
-        diagnostic: rootDiagnostic(
+        diagnostic: delegatesFocusDiagnostic(
           sourceFile,
           property,
-          'the openElement sidecar declares root more than once, so the root fact is ambiguous',
+          'the openElement sidecar declares delegatesFocus more than once, so the focus fact is ' +
+            'ambiguous',
         ),
       };
     }
-    seenRoot = true;
+    seenDelegatesFocus = true;
+    delegatesFocusSpan = property;
     const initializer = property.initializer;
-    if (!ts.isStringLiteral(initializer)) {
+    if (
+      initializer.kind !== ts.SyntaxKind.TrueKeyword &&
+      initializer.kind !== ts.SyntaxKind.FalseKeyword
+    ) {
       return {
         kind: 'refused',
-        diagnostic: rootDiagnostic(
+        diagnostic: delegatesFocusDiagnostic(
           sourceFile,
           initializer,
-          'openElement.root must be a static literal, got dynamic value ' +
+          'openElement.delegatesFocus must be a static literal, got dynamic value ' +
             `"${initializer.getText(sourceFile)}"`,
         ),
       };
     }
-    if (initializer.text !== 'light' && initializer.text !== 'shadow') {
-      return {
-        kind: 'refused',
-        diagnostic: rootDiagnostic(
-          sourceFile,
-          initializer,
-          `openElement.root has unsupported value "${initializer.text}"; ` +
-            'use "light" or "shadow"',
-        ),
-      };
-    }
-    declared = initializer.text;
+    delegatesFocus = initializer.kind === ts.SyntaxKind.TrueKeyword;
   }
-  if (declared === null) return { kind: 'absent' };
-  return { kind: 'root', root: declared === 'light' ? 'light' : 'shadow-open' };
+  const root: RootMode | undefined =
+    declaredRoot === null ? undefined : declaredRoot === 'light' ? 'light' : 'shadow-open';
+  if (delegatesFocus && root !== 'shadow-open') {
+    return {
+      kind: 'refused',
+      diagnostic: diagnosticAt(
+        sourceFile,
+        delegatesFocusSpan ?? descriptor,
+        GENERATED_ELEMENT_DIAGNOSTIC.DELEGATES_FOCUS_WITHOUT_SHADOW,
+        'openElement.delegatesFocus requires root: "shadow" — a light root has no shadow ' +
+          'boundary to delegate focus through',
+      ),
+    };
+  }
+  return { kind: 'read', facts: { root, delegatesFocus } };
+}
+
+/**
+ * The one-fact view of {@link readIslandMetadata} kept for the root-only
+ * callers and the drift guard's root half. It adds no parsing of its own: the
+ * `absent`/`root`/`refused` union is a projection of the platform read.
+ */
+export function readIslandRoot(sourceFile: ts.SourceFile): IslandRootRead {
+  const read = readIslandMetadata(sourceFile);
+  if (read.kind === 'absent') return { kind: 'absent' };
+  if (read.kind === 'refused') return read;
+  return read.facts.root === undefined
+    ? { kind: 'absent' }
+    : { kind: 'root', root: read.facts.root };
 }
 
 function localFunctionDeclaration(
@@ -392,16 +502,19 @@ export function admitGeneratedElementSite(
       ],
     };
   }
-  const rootRead = readIslandRoot(sourceFile);
-  if (rootRead.kind === 'refused') {
-    return { kind: 'refused', diagnostics: [rootRead.diagnostic] };
+  const metadata = readIslandMetadata(sourceFile);
+  if (metadata.kind === 'refused') {
+    return { kind: 'refused', diagnostics: [metadata.diagnostic] };
   }
+  const facts =
+    metadata.kind === 'read' ? metadata.facts : { root: undefined, delegatesFocus: false };
   return {
     kind: 'admitted',
     admission: {
       componentName: fact.name,
       defaultExportSpan: fact.span,
-      root: rootRead.kind === 'root' ? rootRead.root : undefined,
+      root: facts.root,
+      delegatesFocus: facts.delegatesFocus,
       propsParameter: propsParameterOf(fact.node),
     },
   };

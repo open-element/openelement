@@ -724,8 +724,24 @@ export interface IslandConfig {
    * declaration disagrees with the compiled program's root. Declaring it here
    * puts the island's root next to its delivery policy so a reader does not
    * have to open the component to learn it.
+   *
+   * For a function island the compiler lane re-reads this field from the
+   * authored sidecar (D-root-source, 2026-11-13), so the generated element's
+   * descriptor carries it without a second declaration.
    */
   root?: 'light' | 'shadow';
+  /**
+   * Delegate focus to this island's shadow root (`shadowrootdelegatesfocus`
+   * in the DSD template, `attachShadow({ delegatesFocus: true })` for a
+   * client-created root): focusing the host forwards focus to its first
+   * focusable descendant.
+   *
+   * Only valid with `root: 'shadow'` — a light root has no shadow boundary to
+   * delegate through, so `delegatesFocus: true` without `root: 'shadow'` is
+   * refused instead of silently ignored. This is the existing
+   * `@element(tag, { delegatesFocus })` vocabulary, not a second mechanism.
+   */
+  delegatesFocus?: boolean;
   /** Custom-element tags delivered by this one capability module. */
   tags?: readonly string[];
   /** Alias accepted by generated artifact producers. */
@@ -740,6 +756,7 @@ const ISLAND_CONFIG_FIELDS = new Set([
   'hydrate',
   'media',
   'root',
+  'delegatesFocus',
   'tags',
   'tagNames',
   'exportNames',
@@ -797,7 +814,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       IslandErrorCode.DESCRIPTOR_SHAPE,
       `${ERROR_PREFIX} defineIslandConfig() requires an object descriptor. ` +
         'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, root, ' +
-        'tags, tagNames, exportNames }).',
+        'delegatesFocus, tags, tagNames, exportNames }).',
     );
   }
   for (const key of Object.keys(config)) {
@@ -805,7 +822,8 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       throw authoringError(
         IslandErrorCode.DESCRIPTOR_SHAPE,
         `${ERROR_PREFIX} defineIslandConfig() does not accept "${key}". ` +
-          'Use only ssr, dsd, hydrate, media, root, tags, tagNames, and exportNames. ' +
+          'Use only ssr, dsd, hydrate, media, root, delegatesFocus, tags, tagNames, and ' +
+          'exportNames. ' +
           `Remove "${key}" from the descriptor.`,
       );
     }
@@ -854,6 +872,22 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       `${ERROR_PREFIX} defineIslandConfig() root must be "light" or "shadow". ` +
         "Write root: 'light' for a component compiled with @element(tag, { root: 'light' }), " +
         "or root: 'shadow' for the DSD default — the build fails closed when the two disagree.",
+    );
+  }
+  if (config.delegatesFocus !== undefined && typeof config.delegatesFocus !== 'boolean') {
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() delegatesFocus must be a boolean. ` +
+        'Write delegatesFocus: true to delegate focus to the shadow root, or remove the field. ' +
+        'The static island scan rejects a non-literal value for the same field.',
+    );
+  }
+  if (config.delegatesFocus === true && config.root !== 'shadow') {
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() delegatesFocus requires root: 'shadow'. ` +
+        "Write root: 'shadow' beside delegatesFocus: true — a light root has no shadow boundary " +
+        'to delegate focus through, and a generated element refuses the combination.',
     );
   }
   const tags = config.tags === undefined ? undefined : validateIslandTags(config.tags, 'tags');

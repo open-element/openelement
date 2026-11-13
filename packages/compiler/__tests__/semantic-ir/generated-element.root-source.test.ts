@@ -21,7 +21,7 @@
  *
  * The router scanner stays the authority for the sidecar's accepted shape and
  * error text; the compiler↔router agreement is guarded separately, in the
- * router's `island-root-drift-guard.test.ts` (P8 consumer form).
+ * router's `island-metadata-drift-guard.test.ts` (P8 consumer form).
  */
 
 import { describe, expect, test } from 'vitest';

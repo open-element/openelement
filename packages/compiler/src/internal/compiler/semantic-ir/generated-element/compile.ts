@@ -145,6 +145,9 @@ export function compileGeneratedElementIfAdmitted(
     // read from the authored sidecar, not a host fact; absent stays absent so
     // the shell applies `light`.
     ...(admission.root === undefined ? {} : { root: admission.root }),
+    // D-delegatesFocus (2026-11-14): the same lane-read sidecar source as the
+    // root. Omitted when false so the descriptor keeps its M09-1a shape.
+    ...(admission.delegatesFocus ? { delegatesFocus: true } : {}),
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
   });
   if (emitted.diagnostics.length > 0) {

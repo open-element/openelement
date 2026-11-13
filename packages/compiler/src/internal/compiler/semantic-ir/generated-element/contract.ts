@@ -17,11 +17,17 @@
  *   shell defaults to `light`; the emitter omits the property when the author
  *   pinned no root. Since D-root-source (2026-11-13) the value is read by the
  *   compiler lane from the authored island sidecar
- *   (`site.ts` `readIslandRoot`), not supplied on the host site fact: the host
- *   fact carries only the tag, so the root can never go stale between the
+ *   (`site.ts` `readIslandMetadata`), not supplied on the host site fact: the
+ *   host fact carries only the tag, so the root can never go stale between the
  *   host's scan and this transform. The sidecar's `'shadow'` is the DSD
  *   default and maps to `shadow-open`; closed roots have no author spelling
  *   (`D-closed`), so nothing maps to `shadow-closed` yet.
+ * - `delegatesFocus` (optional `boolean`) — the native shadow-root focus
+ *   delegation fact. The emitter emits it only when the sidecar declares
+ *   `delegatesFocus: true`; `true` with a non-shadow root is refused by the
+ *   sidecar reader (and again by the emitter), and the emitted
+ *   `<Name>__ssrHost` threads it into the DSD template's typed option set so
+ *   the parser-adopted root carries `shadowrootdelegatesfocus`.
  * - `properties` (optional array) — M09-1a always emits `[]`: the function
  *   model has no props type and the M09-1a admission gates refuse a props
  *   parameter outright. Property/attribute conversion is M09-2b.
@@ -94,6 +100,21 @@ export const GENERATED_ELEMENT_DIAGNOSTIC = {
    * fail-closed verdict inside the compiler.
    */
   ROOT_INVALID: 'OEIR_GENERATED_ELEMENT_ROOT_INVALID',
+  /**
+   * The sidecar's `delegatesFocus` cannot be read as one boolean literal (a
+   * dynamic value, a duplicate key, or a config object whose key set is not
+   * static). Like `ROOT_INVALID`, this is the lane's fail-closed verdict; the
+   * router scanner's `ISLAND_METADATA_ERROR` remains the author-facing
+   * authority and the two readers are held together by the seam drift guard.
+   */
+  DELEGATES_FOCUS_INVALID: 'OEIR_GENERATED_ELEMENT_DELEGATES_FOCUS_INVALID',
+  /**
+   * The sidecar declares `delegatesFocus: true` without `root: 'shadow'`. A
+   * light root has no shadow boundary to delegate focus through; the shell's
+   * descriptor validation refuses the pair too, so the lane refuses before a
+   * module exists instead of shipping a class that throws on evaluation.
+   */
+  DELEGATES_FOCUS_WITHOUT_SHADOW: 'OEIR_GENERATED_ELEMENT_DELEGATES_FOCUS_WITHOUT_SHADOW',
   /** The appended tail did not parse (an emitter invariant, not author input). */
   INVALID_ARTIFACT: 'OEIR_GENERATED_ELEMENT_INVALID_ARTIFACT',
 } as const;

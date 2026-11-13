@@ -45,6 +45,13 @@ export interface LocalIslandMeta {
    * root decision stands, and the generated shell applies its `light` default.
    */
   root?: 'light' | 'shadow';
+  /**
+   * Native `delegatesFocus` fact for the island's shadow root. Declared next
+   * to `root` because it is only meaningful with `root: 'shadow'`; the static
+   * scan refuses `true` with any other root, and the compiler lane re-reads
+   * the same field from the authored sidecar (the same seam as `root`).
+   */
+  delegatesFocus?: boolean;
   /** Optional one-to-many custom-element capability names. */
   tags?: string[];
   /** Alias accepted by generated artifact producers. */
@@ -285,7 +292,7 @@ export function buildPackageIslandDecls(
 
 function staticOpenElementError(message: string): OpenElementError {
   return new OpenElementError(
-    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, root?: "light" | "shadow" }).`,
+    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, root?: "light" | "shadow", delegatesFocus?: boolean }).`,
     {
       code: 'ISLAND_METADATA_ERROR',
       statusCode: 500,
@@ -297,7 +304,15 @@ function staticOpenElementError(message: string): OpenElementError {
 /** Static island metadata literal read from defineIslandConfig(). */
 type StaticIslandConfig = Pick<
   LocalIslandMeta,
-  'ssr' | 'dsd' | 'hydrate' | 'media' | 'root' | 'tags' | 'tagNames' | 'exportNames'
+  | 'ssr'
+  | 'dsd'
+  | 'hydrate'
+  | 'media'
+  | 'root'
+  | 'delegatesFocus'
+  | 'tags'
+  | 'tagNames'
+  | 'exportNames'
 >;
 
 function staticEntryKey(name: ts.PropertyName): string {
@@ -389,7 +404,17 @@ function parseStaticIslandConfig(
     if (seen.has(key)) throw staticOpenElementError(`duplicate metadata key "${key}"`);
     seen.add(key);
     if (
-      !['ssr', 'dsd', 'hydrate', 'media', 'root', 'tags', 'tagNames', 'exportNames'].includes(key)
+      ![
+        'ssr',
+        'dsd',
+        'hydrate',
+        'media',
+        'root',
+        'delegatesFocus',
+        'tags',
+        'tagNames',
+        'exportNames',
+      ].includes(key)
     ) {
       throw staticOpenElementError(`unsupported openElement metadata key "${key}"`);
     }
@@ -423,6 +448,18 @@ function parseStaticIslandConfig(
         throw staticOpenElementError(`openElement.root has unsupported value "${value}"`);
       }
       meta.root = value;
+    } else if (key === 'delegatesFocus') {
+      // The same static-literal rule as ssr/dsd: a boolean literal or a coded
+      // refusal. The runtime authoring surface validates the same field; this
+      // pass is the build-time authority for the authored sidecar.
+      if (raw.kind !== ts.SyntaxKind.TrueKeyword && raw.kind !== ts.SyntaxKind.FalseKeyword) {
+        throw staticOpenElementError(
+          `openElement.delegatesFocus must be a static literal, got dynamic value "${raw.getText(
+            sourceFile,
+          )}"`,
+        );
+      }
+      meta.delegatesFocus = raw.kind === ts.SyntaxKind.TrueKeyword;
     } else if (key === 'tags' || key === 'tagNames') {
       meta[key] = parseStaticStringArray(raw, `openElement.${key}`);
     } else {
@@ -457,6 +494,11 @@ function parseStaticIslandConfig(
   }
   if (meta.hydrate === 'media' && meta.media === undefined) {
     throw staticOpenElementError('openElement.media is required when hydrate is "media"');
+  }
+  if (meta.delegatesFocus === true && meta.root !== 'shadow') {
+    throw staticOpenElementError(
+      'openElement.delegatesFocus requires root: "shadow" — a light root has no shadow boundary',
+    );
   }
   return meta;
 }
@@ -628,6 +670,9 @@ export async function scanIslandMeta(
       hydrate,
       ...(islandConfig.media === undefined ? {} : { media: islandConfig.media }),
       ...(islandConfig.root === undefined ? {} : { root: islandConfig.root }),
+      ...(islandConfig.delegatesFocus === undefined
+        ? {}
+        : { delegatesFocus: islandConfig.delegatesFocus }),
       ...(islandConfig.tags === undefined ? {} : { tags: islandConfig.tags }),
       ...(islandConfig.tagNames === undefined ? {} : { tagNames: islandConfig.tagNames }),
       ...(islandConfig.exportNames === undefined ? {} : { exportNames: islandConfig.exportNames }),

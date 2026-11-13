@@ -424,6 +424,32 @@ test('defineIslandConfig() carries the declared root family', () => {
   );
 });
 
+test('defineIslandConfig() carries the declared delegatesFocus fact', () => {
+  // D-delegatesFocus (2026-11-14): the existing @element vocabulary on the
+  // island sidecar, meaningful only with root: 'shadow'.
+  expect(defineIslandConfig({ root: 'shadow', delegatesFocus: true }).delegatesFocus).toEqual(true);
+  // false is the documented default and needs no shadow root.
+  expect(defineIslandConfig({ delegatesFocus: false }).delegatesFocus).toEqual(false);
+  expect(defineIslandConfig({ root: 'shadow' }).delegatesFocus).toBeUndefined();
+  assertThrowsIncludes(
+    () => {
+      defineIslandConfig({ root: 'shadow', delegatesFocus: 'yes' } as never);
+    },
+    Error,
+    'delegatesFocus must be a boolean',
+  );
+  // A light root has no shadow boundary to delegate focus through.
+  for (const config of [{ delegatesFocus: true }, { root: 'light', delegatesFocus: true }]) {
+    assertThrowsIncludes(
+      () => {
+        defineIslandConfig(config as never);
+      },
+      Error,
+      "delegatesFocus requires root: 'shadow'",
+    );
+  }
+});
+
 test('defineIslandConfig() rejects non-canonical island metadata', () => {
   assertThrowsIncludes(
     () => {
@@ -504,6 +530,9 @@ test('#1413 authoring errors: defineIslandConfig() failure modes carry codes', (
     [{ tags: ['a-b'], tagNames: ['c-d'] }, IslandErrorCode.TAGS],
     [{ exportNames: [] }, IslandErrorCode.EXPORT_NAMES],
     [{ tags: ['a-b'], exportNames: { 'c-d': 'X' } }, IslandErrorCode.EXPORT_NAMES],
+    [{ delegatesFocus: 'yes' }, IslandErrorCode.DESCRIPTOR_SHAPE],
+    [{ delegatesFocus: true }, IslandErrorCode.DESCRIPTOR_SHAPE],
+    [{ root: 'light', delegatesFocus: true }, IslandErrorCode.DESCRIPTOR_SHAPE],
   ];
   for (const [config, code] of cases) {
     let thrown: unknown;

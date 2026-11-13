@@ -75,7 +75,7 @@ explicitly:
 | [`contract.ts`](../../packages/compiler/src/internal/compiler/semantic-ir/generated-element/contract.ts) | `GeneratedElementSite` loses `root` (the host fact carries the tag only) and the new internal `OEIR_GENERATED_ELEMENT_ROOT_INVALID` code is declared. Neither enters the public `RuntimeErrorCode` catalogue or the interface snapshot. |
 | [`emit.ts`](../../packages/compiler/src/internal/compiler/semantic-ir/generated-element/emit.ts) / [`compile.ts`](../../packages/compiler/src/internal/compiler/semantic-ir/generated-element/compile.ts) | The descriptor's `root` is the lane-read admission value; an absent root **omits the property** so the shell's own `descriptor.root ?? 'light'` stays the single default owner. |
 | [`generated-element.root-source.test.ts`](../../packages/compiler/__tests__/semantic-ir/generated-element.root-source.test.ts) | The compiler-side reader and lane contract (Node). |
-| [`island-root-drift-guard.test.ts`](../../packages/router/__tests__/island-root-drift-guard.test.ts) | The P8 consumer-form drift guard (below). |
+| [`island-metadata-drift-guard.test.ts`](../../packages/router/__tests__/island-metadata-drift-guard.test.ts) | The P8 consumer-form drift guard (below). |
 | [`island-scanner.test.ts`](../../packages/router/__tests__/island-scanner.test.ts) | The scanner's own acceptance/refusal/error-text expectations for `root`. |
 
 The author-facing vocabulary and the descriptor vocabulary differ by design:
@@ -85,7 +85,7 @@ spelling in this slice (`D-closed`).
 
 ### The two-parser drift guard
 
-`packages/router/__tests__/island-root-drift-guard.test.ts` runs the router
+`packages/router/__tests__/island-metadata-drift-guard.test.ts` runs the router
 scanner's static parse (`readIslandConfig`) and the compiler's `readIslandRoot`
 over one corpus with the four classes the ruling names — light, shadow, absent,
 invalid — and asserts they agree on every entry:
@@ -99,7 +99,10 @@ invalid — and asserts they agree on every entry:
   a descriptor the scanner never validated.
 
 The corpus is also asserted to keep covering all four classes, so a shrinking
-fixture list cannot turn the guard into a vacuous pass. A partial agreement is
+fixture list cannot turn the guard into a vacuous pass. (The
+`delegatesFocus` commit extended the same guard to that fact rather than
+standing up a second guard; see
+[`m09-2a-delegates-focus.md`](./m09-2a-delegates-focus.md).) A partial agreement is
 the failure the guard exists to catch.
 
 Negative proofs (run in this slice, then reverted): flipping the compiler's

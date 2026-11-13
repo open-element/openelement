@@ -115,3 +115,66 @@ test('readIslandConfig: the accepted-shape message advertises root', () => {
   );
   expect(error.message).toContain('Accepted shape:');
 });
+
+/**
+ * `delegatesFocus` (D-delegatesFocus, 2026-11-14) is the existing
+ * `@element(tag, { delegatesFocus })` vocabulary on the island sidecar: one
+ * boolean, meaningful only with `root: 'shadow'`. The static scan is the
+ * build-time authority for the same two rules the runtime authoring surface
+ * and the compiler lane apply.
+ */
+test('readIslandConfig: accepts delegatesFocus beside a shadow root', () => {
+  expect(
+    readIslandConfig(
+      `export const openElement = defineIslandConfig({ root: 'shadow', delegatesFocus: true });\n`,
+    ),
+  ).toEqual({ root: 'shadow', delegatesFocus: true });
+  // `false` is the documented default and carries no shadow requirement.
+  expect(
+    readIslandConfig(`export const openElement = defineIslandConfig({ delegatesFocus: false });\n`),
+  ).toEqual({ delegatesFocus: false });
+});
+
+test('readIslandConfig: throws on a dynamic delegatesFocus value', () => {
+  const source = `const configuredFocus = true;
+export const openElement = defineIslandConfig({ root: 'shadow', delegatesFocus: configuredFocus });
+`;
+  assertThrowsIncludes(
+    () => readIslandConfig(source),
+    Error,
+    'openElement.delegatesFocus must be a static literal',
+  );
+});
+
+test('readIslandConfig: throws on a non-boolean delegatesFocus literal', () => {
+  const source = `export const openElement = defineIslandConfig({ root: 'shadow', delegatesFocus: 1 });
+`;
+  assertThrowsIncludes(
+    () => readIslandConfig(source),
+    Error,
+    'openElement.delegatesFocus must be a static literal',
+  );
+});
+
+test('readIslandConfig: delegatesFocus true requires root "shadow"', () => {
+  for (const entries of ['delegatesFocus: true', "root: 'light', delegatesFocus: true"]) {
+    const source = `export const openElement = defineIslandConfig({ ${entries} });
+`;
+    assertThrowsIncludes(
+      () => readIslandConfig(source),
+      Error,
+      'openElement.delegatesFocus requires root: "shadow"',
+    );
+  }
+});
+
+test('readIslandConfig: the accepted-shape message advertises delegatesFocus', () => {
+  const error = assertThrowsIncludes(
+    () =>
+      readIslandConfig(`export const openElement = defineIslandConfig({ delegatesFocus: 1 });
+`),
+    Error,
+    'delegatesFocus?: boolean',
+  );
+  expect(error.message).toContain('Accepted shape:');
+});
