@@ -288,6 +288,7 @@ import {
   type CompiledElementSourceMap,
   type EmissionSegment,
 } from '../../semantic-core/source-map.ts';
+import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
 /** Compiler-private runtime entry the emitted module imports from. */
 export const GENERATED_LEAF_RUNTIME_SPECIFIER = '@openelement/element/internal/compiled/runtime';
@@ -1712,7 +1713,7 @@ function emitClientOnlyInstall(
   if (attribute.channel === 'event') {
     push(
       state,
-      `if (typeof ${handlerVar} !== "function") throw leafRuntimeError(${JSON.stringify(EVENT_HANDLER_INVALID)}, ${JSON.stringify(`${attribute.name} handler is not callable`)}${originArgs(span)});`,
+      `if (typeof ${handlerVar} !== "function") throw leafRuntimeError(${quoteGeneratedJavaScriptValue(EVENT_HANDLER_INVALID)}, ${quoteGeneratedJavaScriptValue(`${attribute.name} handler is not callable`)}${originArgs(span)});`,
       span,
     );
     const eventName = clientOnlyEventName(attribute.name);
@@ -1729,19 +1730,19 @@ function emitClientOnlyInstall(
     push(state, `const ${listenerVar} = (event) => ${handlerVar}(event);`, span);
     push(
       state,
-      `${elementVar}.addEventListener(${JSON.stringify(eventName)}, ${listenerVar});`,
+      `${elementVar}.addEventListener(${quoteGeneratedJavaScriptValue(eventName)}, ${listenerVar});`,
       span,
     );
     push(
       state,
-      `${state.scopeVar}.add(() => ${elementVar}.removeEventListener(${JSON.stringify(eventName)}, ${listenerVar}));`,
+      `${state.scopeVar}.add(() => ${elementVar}.removeEventListener(${quoteGeneratedJavaScriptValue(eventName)}, ${listenerVar}));`,
       span,
     );
     return;
   }
   push(
     state,
-    `if (typeof ${handlerVar} !== "function") throw leafRuntimeError(${JSON.stringify(REF_HANDLER_INVALID)}, ${JSON.stringify(`${attribute.name} handler is not callable`)}${originArgs(span)});`,
+    `if (typeof ${handlerVar} !== "function") throw leafRuntimeError(${quoteGeneratedJavaScriptValue(REF_HANDLER_INVALID)}, ${quoteGeneratedJavaScriptValue(`${attribute.name} handler is not callable`)}${originArgs(span)});`,
     span,
   );
   const cleanupVar = nextName(state, 'refCleanup');

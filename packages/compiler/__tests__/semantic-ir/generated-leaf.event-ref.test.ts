@@ -48,6 +48,7 @@ import {
   generateLeafModule,
   type GeneratedLeafModule,
 } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
+import { quoteGeneratedJavaScriptValue } from '../../src/internal/compiler/semantic-ir/generated-leaf/codegen-literals.ts';
 
 const FILE = '/proj/src/islands/event-ref.tsx';
 const SITE: GeneratedElementSite = { tag: 'x-event-ref' };
@@ -604,5 +605,52 @@ describe('existing leaf shape is preserved', () => {
     const parseDiagnostics = (source as unknown as { parseDiagnostics?: readonly unknown[] })
       .parseDiagnostics;
     expect(parseDiagnostics ?? []).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Generated-code literal boundary (CodeQL js/bad-code-sanitization, alert 4254)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('generated-code literal escaping', () => {
+  test('quoted JS literals escape the script-breaking characters and round-trip', () => {
+    const payload = [
+      'x</script><script>alert(1)//',
+      '"',
+      '\\',
+      '\n',
+      '\r',
+      '\t',
+      '\u2028',
+      '\u2029',
+    ].join('');
+    const quoted = quoteGeneratedJavaScriptValue(payload);
+    expect(quoted).not.toMatch(/[<>\u2028\u2029]/);
+    expect(quoted).toContain('\\u003C');
+    expect(new Function('return ' + quoted)()).toBe(payload);
+  });
+
+  test('event/ref code construction uses the quoted boundary', () => {
+    const compilation = compileLeaf(
+      'function C() { return <button onClick={() => {}} onX-foo={() => {}} ref={(el) => {}}>b</button>; }\n',
+    );
+    expect(compilation.module).not.toBeNull();
+    // DOM event names are embedded as JS string literals; the safe charset stays
+    // byte-identical, and no raw line-separator character reaches the module.
+    expect(compilation.module!).toContain('addEventListener("click",');
+    expect(compilation.module!).toContain('removeEventListener("click",');
+    expect(compilation.module!).toContain('addEventListener("x-foo",');
+    expect(compilation.module!).not.toMatch(/[\u2028\u2029]/);
+    expect(compilation.module!).not.toContain('x</script>');
+  });
+
+  test('a non-DOM-shaped event name is refused before code construction', () => {
+    for (const name of ['onX$', 'onX_foo', 'onX:y']) {
+      const compilation = compileLeaf(
+        `function C() { return <button ${name}={() => {}}>b</button>; }\n`,
+      );
+      expect(codes(compilation)).toEqual(['OEIR_LEAF_UNSUPPORTED_ATTRIBUTE']);
+      expect(compilation.module).toBeNull();
+    }
   });
 });
