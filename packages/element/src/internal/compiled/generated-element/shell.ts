@@ -116,6 +116,26 @@ import {
 /** The three primitive property types this slice admits. */
 export type GeneratedElementPropertyType = 'string' | 'number' | 'boolean';
 
+/**
+ * The generated element's ONE internal entry: the emitted module imports this
+ * module's specifier for the class factory AND (M09-2a) for the host-level DSD
+ * producer the appended `<Name>__ssrHost` calls. It is a re-export, not a
+ * second implementation: `./dsd-ssr.ts` composes the canonical DSD spelling
+ * (`../dsd.ts`) and is a browser-safe leaf. The producer is surfaced here
+ * because the element package has exactly one generated-element export
+ * subpath, and a second subpath would be new public surface (`D-packaging`).
+ *
+ * The consequence is stated rather than hidden: a module that imports this
+ * specifier also has `dsd.ts` in its parse graph. A light generated module
+ * never calls the producer and never emits `<Name>__ssrHost`, so the producer
+ * is tree-shaken out of its shipped chunk; the two module-graph guards
+ * (`generated-element.class.browser.test.ts` and
+ * `generated-element.shadow.test.ts`) assert the rendered graph, and the
+ * emitter's byte-identity test asserts the light tail text.
+ */
+export { serializeGeneratedElementHtml } from './dsd-ssr.ts';
+export type { GeneratedElementSsrInput, GeneratedElementSsrRoot } from './dsd-ssr.ts';
+
 /** One compiler-declared property. Internal contract; not author syntax. */
 export interface GeneratedElementProperty {
   /** JS property name and the key the generated props record exposes. */

@@ -19,7 +19,14 @@
  * - constructs the class and default-exports it, with one named alias and the
  *   tag constant, so the existing island entry (`mod[exportName] ?? mod.default`)
  *   receives a constructor without any entry-selection change;
- * - executes NO `customElements.define` and never mentions the registry.
+ * - executes NO `customElements.define` and never mentions the registry;
+ * - appends `<Name>__ssrHost(props, lightChildren?)` (M09-2a) ONLY when the
+ *   descriptor root is a shadow mode AND the leaf emitted `<Name>__ssr`. The
+ *   wrapper composes the content-only `<Name>__ssr` bytes with the canonical
+ *   DSD template through the `generated-element/dsd-ssr.ts` leaf, so the host
+ *   artifact the browser parser adopts and the root the descriptor pins come
+ *   from ONE declaration. A light root appends nothing: its tail keeps the
+ *   exact M09-1a bytes.
  *
  * Fixed identifier collisions fail closed instead of producing a module that
  * cannot parse: the tail's module-scope names, the alias and the import
@@ -89,6 +96,43 @@ function moduleDiagnostic(file: string, code: string, message: string): IrDiagno
 function identifierOccurs(text: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?<![A-Za-z0-9_$])${escaped}(?![A-Za-z0-9_$])`).test(text);
+}
+
+/**
+ * Does the leaf artifact export `<Name>__ssr`?
+ *
+ * The leaf generator emits `export function <Name>__ssr(…)` for every component
+ * inside its producer slice and no `__ssr` export at all for a shape outside it
+ * (its documented "no partial producer" rule: a condition, list, component
+ * reference or insertion site yields no producer). The M09-2a host wrapper
+ * calls that export, so it must be appended only when the declaration is there;
+ * referencing an absent symbol would turn a compile-time fact into a runtime
+ * `ReferenceError`. The check reads the leaf text this emitter itself produced,
+ * not author input.
+ */
+function exportsSsrFunction(leafText: string, componentName: string): boolean {
+  const escaped = componentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`export function ${escaped}__ssr\\s*\\(`).test(leafText);
+}
+
+/**
+ * The descriptor root's DSD wire spelling, or null for a root that has no host
+ * template. `light` (and an absent root, which the shell defaults to `light`)
+ * produces no template, so no host wrapper is appended and the light tail stays
+ * byte-identical. `D-closed` keeps `shadow-closed` unauthorable, but the
+ * mapping is total so a future closed spelling cannot silently fall through to
+ * an open template.
+ */
+function hostTemplateRoot(root: RootMode | undefined): 'open' | 'closed' | null {
+  switch (root) {
+    case 'shadow-open':
+      return 'open';
+    case 'shadow-closed':
+      return 'closed';
+    case 'light':
+    case undefined:
+      return null;
+  }
 }
 
 /** The parser check the leaf generator applies to its own artifact. */
@@ -189,8 +233,28 @@ export function generateElementModule(
     alias: `${rootName}Element`,
     tag: '__oeElementTag',
     shellImport: 'createGeneratedElementClass',
+    ssrHostImport: 'serializeGeneratedElementHtml',
+    ssrHost: `${rootName}__ssrHost`,
   };
-  const collisions = Object.values(names).filter((name) => identifierOccurs(leafText, name));
+  const root = options.root;
+  const templateRoot = hostTemplateRoot(root);
+  // The M09-2a host wrapper is appended only for a shadow descriptor whose leaf
+  // actually emitted the content-only `<Name>__ssr`. A light root (or an absent
+  // root, which the shell defaults to light) appends nothing at all, so the
+  // M09-1a light tail keeps its exact bytes.
+  const hostWrapper =
+    templateRoot !== null && exportsSsrFunction(leafText, rootName)
+      ? { root: templateRoot, name: names.ssrHost }
+      : null;
+  const collisionNames = [
+    names.descriptor,
+    names.element,
+    names.alias,
+    names.tag,
+    names.shellImport,
+    ...(hostWrapper === null ? [] : [names.ssrHostImport, names.ssrHost]),
+  ];
+  const collisions = collisionNames.filter((name) => identifierOccurs(leafText, name));
   if (collisions.length > 0) {
     return emptyResult(leaf, [
       moduleDiagnostic(
@@ -203,11 +267,10 @@ export function generateElementModule(
     ]);
   }
 
-  const root = options.root;
   const tail = [
     '',
     '// ---- generated native element (M09-1) ----',
-    `import { createGeneratedElementClass } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
+    `import { ${[names.shellImport, ...(hostWrapper === null ? [] : [names.ssrHostImport])].join(', ')} } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
     '',
     `const ${names.descriptor} = {`,
     `  tag: ${JSON.stringify(site.tag)},`,
@@ -223,6 +286,23 @@ export function generateElementModule(
     `export default ${names.element};`,
     `export { ${names.element} as ${names.alias} };`,
     `export const ${names.tag} = ${JSON.stringify(site.tag)};`,
+    // The host-level DSD producer (M09-2a). The content stays the leaf's
+    // content-only `<Name>__ssr` bytes; the wrapper only adds the canonical
+    // template through the one browser-safe producer leaf.
+    ...(hostWrapper === null
+      ? []
+      : [
+          '',
+          '// ---- generated shadow host SSR (M09-2a) ----',
+          `export function ${hostWrapper.name}(props, lightChildren) {`,
+          `  return ${names.ssrHostImport}({`,
+          `    tag: ${JSON.stringify(site.tag)},`,
+          `    root: ${JSON.stringify(hostWrapper.root)},`,
+          `    content: ${rootName}__ssr(props, undefined),`,
+          '    ...(lightChildren === undefined ? {} : { lightChildren }),',
+          '  });',
+          '}',
+        ]),
     '',
   ].join('\n');
 

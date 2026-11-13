@@ -32,6 +32,7 @@
     "src/no-blocks.ts",
     "src/base.ts",
     "src/server.ts",
-    "src/internal/compiled/generated-element/shell.ts"
+    "src/internal/compiled/generated-element/shell.ts",
+    "src/internal/compiled/generated-element/dsd-ssr.ts"
   ]
 }
