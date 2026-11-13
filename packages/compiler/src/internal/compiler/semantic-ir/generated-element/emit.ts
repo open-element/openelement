@@ -12,8 +12,10 @@
  *
  * - imports the internal M09-0/M09-shadow shell by its compiler-private
  *   specifier;
- * - builds a descriptor with `tag`, `root`, `properties: []` and the leaf's
- *   exported `create<Name>Recipe` factory;
+ * - builds a descriptor with `tag`, `properties: []`, the leaf's exported
+ *   `create<Name>Recipe` factory, and `root` only when the authored sidecar
+ *   pinned one (D-root-source: the lane reads it, the shell owns the `light`
+ *   default);
  * - constructs the class and default-exports it, with one named alias and the
  *   tag constant, so the existing island entry (`mod[exportName] ?? mod.default`)
  *   receives a constructor without any entry-selection change;
@@ -26,6 +28,7 @@
  */
 
 import ts from 'typescript';
+import type { RootMode } from '@openelement/protocol/part-program';
 import { generateLeafModule, type GeneratedLeafModule } from '../generated-leaf/generate.ts';
 import type { FunctionModelModule } from '../../semantic-core/function-frontend.ts';
 import type { IrDiagnostic } from '../types.ts';
@@ -54,6 +57,13 @@ export interface GenerateElementModuleOptions {
    * component module may omit it, which keeps direct emitter tests small.
    */
   readonly rootComponent?: string;
+  /**
+   * The root mode the lane read from the authored sidecar (`site.ts`
+   * `readIslandRoot`, D-root-source 2026-11-13). Omitted when the author
+   * pinned none, in which case the descriptor carries no `root` property and
+   * the shell applies its own `light` default.
+   */
+  readonly root?: RootMode;
   /** The authored source for the leaf source map (required for `sourcesContent`). */
   readonly authoredSource?: string;
 }
@@ -193,7 +203,7 @@ export function generateElementModule(
     ]);
   }
 
-  const root = site.root ?? 'light';
+  const root = options.root;
   const tail = [
     '',
     '// ---- generated native element (M09-1) ----',
@@ -201,7 +211,9 @@ export function generateElementModule(
     '',
     `const ${names.descriptor} = {`,
     `  tag: ${JSON.stringify(site.tag)},`,
-    `  root: ${JSON.stringify(root)},`,
+    // No authored root → no descriptor property: the shell's own
+    // `descriptor.root ?? 'light'` default is the single default owner.
+    ...(root === undefined ? [] : [`  root: ${JSON.stringify(root)},`]),
     '  properties: [],',
     `  createRecipe: create${rootName}Recipe,`,
     '};',

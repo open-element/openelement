@@ -59,7 +59,9 @@ import {
 
 const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 const FILE = '/proj/src/islands/profile.tsx';
-const SITE: GeneratedElementSite = { tag: 'x-profile', root: 'light' };
+// D-root-source (2026-11-13): the host fact carries the tag only; the root is
+// read by the lane from the authored sidecar (see generated-element.root-source.test.ts).
+const SITE: GeneratedElementSite = { tag: 'x-profile' };
 const SIDECAR =
   "import { defineIslandConfig } from '@openelement/router';\n" +
   "export const openElement = defineIslandConfig({ root: 'light' });\n";
@@ -141,8 +143,11 @@ describe('M09-1a generated element emitter', () => {
   });
 
   test('the tail has one constructor call, one default export, the alias and no registry', () => {
+    // The emitter receives the lane-read root (D-root-source); SITE no longer
+    // carries it.
     const emitted = generateElementModule(frontModule(PROFILE), SITE, {
       rootComponent: 'Profile',
+      root: 'light',
     });
     const tail = emitted.tail!;
     expect(tail.match(/createGeneratedElementClass\(/g)?.length).toBe(1);
@@ -157,6 +162,16 @@ describe('M09-1a generated element emitter', () => {
     expect(tail).toContain('export { __oeProfileElement as ProfileElement };');
     expect(tail).toContain('export const __oeElementTag = "x-profile";');
     expect(emitted.module).not.toContain('customElements');
+  });
+
+  test('an absent root omits the descriptor property so the shell owns the default', () => {
+    const emitted = generateElementModule(frontModule(PROFILE), SITE, {
+      rootComponent: 'Profile',
+    });
+    const tail = emitted.tail!;
+    expect(tail).toContain('tag: "x-profile"');
+    expect(tail).not.toContain('root:');
+    expect(tail).toContain('properties: []');
   });
 
   test('the emitted module with the tail parses as JavaScript', () => {
