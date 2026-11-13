@@ -24,6 +24,7 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
  */
 
 import { isDangerousKey, isValidTagName, OpenElementError } from '@openelement/element/authoring';
+import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
 import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
 import type { IslandDeliveryStrategy } from '@openelement/protocol/ssg';
 import { hasControlCharacter } from './internal/control-characters.ts';
@@ -700,6 +701,43 @@ export function projectPageProps(context: {
  */
 export type { IslandDeliveryStrategy };
 
+/**
+ * The per-property platform facts an island's typed props cannot express.
+ *
+ * The primitive **names and types** come from the root component's typed props
+ * parameter (an inline object type literal, or a local `type`/`interface` in
+ * the same module); this entry carries only what a TS type cannot say:
+ * reflection, the attribute channel and a declared initial value. The
+ * compiler lane cross-checks the two declarations and fails closed on any
+ * mismatch, so one side can never be silently inferred from the other.
+ *
+ * The table is deliberately the `@property` option vocabulary minus `type`
+ * and `converter`: the typed member IS the type (a duplicated `type` field
+ * would be a second source with no added power), and a custom converter is not
+ * expressible on this lane (array/object/trustedHtml conversion is a recorded
+ * Alpha17 exception).
+ */
+export interface IslandPropertyConfig {
+  /**
+   * Reflect property writes back to the attribute. Requires an attribute
+   * channel: `reflect: true` with `attribute: false` is refused.
+   */
+  reflect?: boolean;
+  /**
+   * Attribute name. Omitted derives `camelToKebab(propertyName)`; `false`
+   * declares a property with no attribute channel (property-only). A string is
+   * lowercased and must be a safe HTML attribute name — the shell applies the
+   * same normalization.
+   */
+  attribute?: string | false;
+  /**
+   * Declared initial value, used before any attribute or property write. Must
+   * be a `string`/`number`/`boolean` literal matching the typed member; omitted
+   * means the shell's zero value (`''`/`0`/`false`).
+   */
+  default?: string | number | boolean;
+}
+
 /** Per-island delivery configuration (SSR/DSD participation and hydration strategy). */
 export interface IslandConfig {
   ssr?: boolean;
@@ -742,6 +780,17 @@ export interface IslandConfig {
    * `@element(tag, { delegatesFocus })` vocabulary, not a second mechanism.
    */
   delegatesFocus?: boolean;
+  /**
+   * The island element's declared **primitive** properties, keyed by the root
+   * component's typed props member names. Every typed member must have an entry
+   * and every entry must name a typed member (the compiler lane refuses a
+   * mismatch); the entry supplies the platform facts a type cannot express.
+   *
+   * Only `string`, `number` and `boolean` members are admitted. Array, object
+   * and `trustedHtml` conversion, custom converters and form-value policy are
+   * out of this lane.
+   */
+  properties?: Readonly<Record<string, IslandPropertyConfig>>;
   /** Custom-element tags delivered by this one capability module. */
   tags?: readonly string[];
   /** Alias accepted by generated artifact producers. */
@@ -757,6 +806,7 @@ const ISLAND_CONFIG_FIELDS = new Set([
   'media',
   'root',
   'delegatesFocus',
+  'properties',
   'tags',
   'tagNames',
   'exportNames',
@@ -807,6 +857,119 @@ function validateIslandTags(value: unknown, field: 'tags' | 'tagNames'): string[
   });
 }
 
+const ISLAND_PROPERTY_FIELDS = new Set(['reflect', 'attribute', 'default']);
+const IDENTIFIER_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * Validate one island property table. This is the runtime authoring face of
+ * the same accepted shape the static island scan reads: an object map keyed by
+ * the typed props member name, each entry carrying only `reflect`, `attribute`
+ * and `default`. The type/default agreement is a compiler-lane check (the
+ * runtime has no props type to compare against).
+ */
+function validateIslandProperties(properties: unknown): void {
+  if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) {
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() properties must be an object map keyed by the ` +
+        "component's typed property names. " +
+        'Write properties: { label: { reflect: true }, count: { default: 0 } }.',
+    );
+  }
+  const attributes = new Set<string>();
+  for (const [name, raw] of Object.entries(properties as Record<string, unknown>)) {
+    if (!IDENTIFIER_NAME.test(name)) {
+      throw authoringError(
+        IslandErrorCode.DESCRIPTOR_SHAPE,
+        `${ERROR_PREFIX} defineIslandConfig() property name "${name}" must be an identifier. ` +
+          'Use only props member names such as label or count; the typed props parameter is ' +
+          'the name/type authority and this table only adds platform facts.',
+      );
+    }
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      throw authoringError(
+        IslandErrorCode.DESCRIPTOR_SHAPE,
+        `${ERROR_PREFIX} defineIslandConfig() properties.${name} must be an object. ` +
+          `Write properties: { ${name}: { reflect: true } } — or remove the entry.`,
+      );
+    }
+    for (const key of Object.keys(raw)) {
+      if (ISLAND_PROPERTY_FIELDS.has(key)) continue;
+      throw authoringError(
+        IslandErrorCode.DESCRIPTOR_SHAPE,
+        `${ERROR_PREFIX} defineIslandConfig() properties.${name} does not accept "${key}". ` +
+          'Use only reflect, attribute, and default. The property type comes from the typed ' +
+          'props parameter, not from this table.',
+      );
+    }
+    const entry = raw as IslandPropertyConfig;
+    if (entry.reflect !== undefined && typeof entry.reflect !== 'boolean') {
+      throw authoringError(
+        IslandErrorCode.DESCRIPTOR_SHAPE,
+        `${ERROR_PREFIX} defineIslandConfig() properties.${name}.reflect must be a boolean. ` +
+          'Write reflect: true to reflect property writes back to the attribute, or remove it.',
+      );
+    }
+    let attribute: string | null | undefined;
+    if (entry.attribute !== undefined) {
+      if (entry.attribute === false) {
+        attribute = null;
+      } else if (typeof entry.attribute === 'string' && entry.attribute.length > 0) {
+        attribute = entry.attribute.toLowerCase();
+        if (!isSafeAttributeName(attribute)) {
+          throw authoringError(
+            IslandErrorCode.DESCRIPTOR_SHAPE,
+            `${ERROR_PREFIX} defineIslandConfig() properties.${name}.attribute ` +
+              `"${entry.attribute}" is not a safe HTML attribute name. ` +
+              'Use plain lowercase attribute names (no on* handlers, no forbidden sinks).',
+          );
+        }
+      } else {
+        throw authoringError(
+          IslandErrorCode.DESCRIPTOR_SHAPE,
+          `${ERROR_PREFIX} defineIslandConfig() properties.${name}.attribute must be a string ` +
+            'or false. Write attribute: "data-label" to rename the attribute, or attribute: ' +
+            'false for a property with no attribute channel.',
+        );
+      }
+    }
+    if (
+      entry.default !== undefined &&
+      entry.default !== null &&
+      typeof entry.default !== 'string' &&
+      typeof entry.default !== 'number' &&
+      typeof entry.default !== 'boolean'
+    ) {
+      throw authoringError(
+        IslandErrorCode.DESCRIPTOR_SHAPE,
+        `${ERROR_PREFIX} defineIslandConfig() properties.${name}.default must be a ` +
+          'string, number, or boolean literal. ' +
+          'The declared default must match the typed property; remove it to use the zero value.',
+      );
+    }
+    if (entry.reflect === true && attribute === null) {
+      throw authoringError(
+        IslandErrorCode.DESCRIPTOR_SHAPE,
+        `${ERROR_PREFIX} defineIslandConfig() properties.${name} cannot reflect without an ` +
+          'attribute channel. ' +
+          'Remove reflect: true, or declare an attribute name instead of attribute: false.',
+      );
+    }
+    const effectiveAttribute = attribute === undefined ? camelToKebab(name) : attribute;
+    if (effectiveAttribute !== null) {
+      if (attributes.has(effectiveAttribute)) {
+        throw authoringError(
+          IslandErrorCode.DESCRIPTOR_SHAPE,
+          `${ERROR_PREFIX} defineIslandConfig() properties declare attribute ` +
+            `"${effectiveAttribute}" more than once. ` +
+            'Give each property a distinct attribute name (or attribute: false).',
+        );
+      }
+      attributes.add(effectiveAttribute);
+    }
+  }
+}
+
 /** Validate and register an island delivery descriptor; returns the normalized config. */
 export function defineIslandConfig(config: IslandConfig): IslandConfig {
   if (typeof config !== 'object' || config === null || Array.isArray(config)) {
@@ -814,7 +977,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       IslandErrorCode.DESCRIPTOR_SHAPE,
       `${ERROR_PREFIX} defineIslandConfig() requires an object descriptor. ` +
         'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, root, ' +
-        'delegatesFocus, tags, tagNames, exportNames }).',
+        'delegatesFocus, properties, tags, tagNames, exportNames }).',
     );
   }
   for (const key of Object.keys(config)) {
@@ -822,8 +985,8 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       throw authoringError(
         IslandErrorCode.DESCRIPTOR_SHAPE,
         `${ERROR_PREFIX} defineIslandConfig() does not accept "${key}". ` +
-          'Use only ssr, dsd, hydrate, media, root, delegatesFocus, tags, tagNames, and ' +
-          'exportNames. ' +
+          'Use only ssr, dsd, hydrate, media, root, delegatesFocus, properties, tags, ' +
+          'tagNames, and exportNames. ' +
           `Remove "${key}" from the descriptor.`,
       );
     }
@@ -890,6 +1053,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
         'to delegate focus through, and a generated element refuses the combination.',
     );
   }
+  if (config.properties !== undefined) validateIslandProperties(config.properties);
   const tags = config.tags === undefined ? undefined : validateIslandTags(config.tags, 'tags');
   const tagNames =
     config.tagNames === undefined ? undefined : validateIslandTags(config.tagNames, 'tagNames');

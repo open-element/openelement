@@ -32,12 +32,19 @@
  */
 
 import ts from 'typescript';
+import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
 import type { RootMode } from '@openelement/protocol/part-program';
+import { literalValue } from '../../semantic-core/analyze-module.ts';
 import { type SourceSpan } from '../../semantic-core/scope-resolution.ts';
 import { type FunctionModelComponent } from '../../semantic-core/function-frontend.ts';
 import type { IrDiagnostic } from '../types.ts';
 import type { GeneratedLeafModule } from '../generated-leaf/generate.ts';
-import { GENERATED_ELEMENT_DIAGNOSTIC, type GeneratedElementSite } from './contract.ts';
+import {
+  GENERATED_ELEMENT_DIAGNOSTIC,
+  type GeneratedElementPlatformProperty,
+  type GeneratedElementPrimitiveType,
+  type GeneratedElementSite,
+} from './contract.ts';
 
 /** The default export is a local function declaration or local arrow/function const. */
 export interface LocalFunctionDefaultExport {
@@ -78,6 +85,18 @@ export interface GeneratedElementSiteAdmission {
    * reader has already refused `true` without `root: 'shadow'`.
    */
   readonly delegatesFocus: boolean;
+  /**
+   * Whether the sidecar declares a `properties` table at all (an empty table
+   * counts). A declared table replaces the M09-1a props gate with the
+   * type/table cross-check in {@link admitGeneratedElementProperties}.
+   */
+  readonly propertiesDeclared: boolean;
+  /**
+   * The resolved primitive property rows the emitter writes into the
+   * descriptor, in sidecar authored order. Empty when no table is declared or
+   * the declared table is empty.
+   */
+  readonly properties: readonly GeneratedElementPlatformProperty[];
   /**
    * The root component's props parameter spelling, or null when it takes none.
    *
@@ -193,6 +212,29 @@ export type IslandRootRead =
 export interface IslandMetadataFacts {
   readonly root: RootMode | undefined;
   readonly delegatesFocus: boolean;
+  /**
+   * The parsed `properties` table, or undefined when the sidecar declares no
+   * table at all (an empty table is `[]` and is a declaration). Resolution to
+   * the typed props member list happens in the admission, which is the layer
+   * that can see the root component's parameter.
+   */
+  readonly properties: readonly IslandPropertyDeclaration[] | undefined;
+}
+
+/**
+ * One sidecar `properties` entry as read from the authored AST: the platform
+ * facts a typed props member cannot express, with the attribute channel
+ * already resolved (omitted ⇒ `camelToKebab(name)`, `false` ⇒ null) so this
+ * reader and the router scanner compare one vocabulary.
+ */
+export interface IslandPropertyDeclaration {
+  readonly name: string;
+  readonly attribute: string | null;
+  readonly reflect: boolean;
+  /** Authored literal initial value, or undefined for the type's zero value. */
+  readonly default?: string | number | boolean;
+  /** The table entry node, for source-located diagnostics. */
+  readonly node: ts.Node;
 }
 
 /**
@@ -231,6 +273,190 @@ function delegatesFocusDiagnostic(
   );
 }
 
+function propertyDiagnostic(
+  sourceFile: ts.SourceFile,
+  node: ts.Node,
+  message: string,
+  code: string = GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID,
+): IrDiagnostic {
+  return diagnosticAt(sourceFile, node, code, message);
+}
+
+/** The identifier spelling the generated props record / accessors can expose. */
+const IDENTIFIER_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+const ISLAND_PROPERTY_FIELDS: ReadonlySet<string> = new Set(['reflect', 'attribute', 'default']);
+
+/**
+ * Resolve one declared attribute name the way the shell will: a missing
+ * `attribute` key derives `camelToKebab(name)`, `false` means no attribute
+ * channel, and a string is lowercased and screened by the canonical safe
+ * attribute predicate. The scanner applies the identical rule; the drift
+ * guard compares the resolved forms.
+ */
+function resolveDeclaredAttribute(name: string, raw: ts.Expression): string | null {
+  if (raw.kind === ts.SyntaxKind.FalseKeyword) return null;
+  return (ts.isStringLiteral(raw) ? raw.text : name).toLowerCase();
+}
+
+/**
+ * Read the sidecar's `properties` table from the authored AST.
+ *
+ * The shape is the platform-fact complement of the typed props parameter:
+ * an object map keyed by member name, each entry carrying `reflect`,
+ * `attribute` and `default` only. It is deliberately narrower than the
+ * scanner's parser in one direction (it needs the same facts) and identical
+ * in the other (fail closed on anything not provable from literal text). The
+ * type/name cross-check is the admission's job because only it sees the root
+ * component's parameter.
+ */
+function readIslandPropertyTable(
+  sourceFile: ts.SourceFile,
+  node: ts.Expression,
+):
+  | { readonly kind: 'read'; readonly declarations: readonly IslandPropertyDeclaration[] }
+  | {
+      readonly kind: 'refused';
+      readonly diagnostic: IrDiagnostic;
+    } {
+  const refuse = (at: ts.Node, message: string) => ({
+    kind: 'refused' as const,
+    diagnostic: propertyDiagnostic(sourceFile, at, message),
+  });
+  if (!ts.isObjectLiteralExpression(node)) {
+    return refuse(node, 'openElement.properties must be an object of static property entries');
+  }
+  const declarations: IslandPropertyDeclaration[] = [];
+  const attributes = new Set<string>();
+  for (const entry of node.properties) {
+    if (!ts.isPropertyAssignment(entry)) {
+      return refuse(
+        entry,
+        'openElement.properties must contain only static property entries; ' +
+          `"${entry.getText(sourceFile)}" cannot be read statically`,
+      );
+    }
+    const name = staticPropertyName(entry.name);
+    if (name === null) {
+      return refuse(
+        entry.name,
+        `the openElement.properties key "${entry.name.getText(sourceFile)}" is not a static ` +
+          'property name',
+      );
+    }
+    if (!IDENTIFIER_NAME.test(name)) {
+      return refuse(
+        entry.name,
+        `openElement.properties key "${name}" must be an identifier naming a typed props member`,
+      );
+    }
+    const table = entry.initializer;
+    if (!ts.isObjectLiteralExpression(table)) {
+      return refuse(table, `openElement.properties.${name} must be an object`);
+    }
+    const seenFields = new Set<string>();
+    let reflect = false;
+    let attribute: string | null | undefined;
+    let defaultValue: string | number | boolean | undefined;
+    for (const field of table.properties) {
+      if (!ts.isPropertyAssignment(field)) {
+        return refuse(
+          field,
+          `openElement.properties.${name} must contain only static key/value pairs; ` +
+            `"${field.getText(sourceFile)}" cannot be read statically`,
+        );
+      }
+      const fieldName = staticPropertyName(field.name);
+      if (fieldName === null || !ISLAND_PROPERTY_FIELDS.has(fieldName)) {
+        return refuse(
+          field.name,
+          `openElement.properties.${name} does not accept ` +
+            `"${field.name.getText(sourceFile)}" — admitted options are reflect, attribute, and ` +
+            'default (the property type comes from the typed props parameter)',
+        );
+      }
+      if (seenFields.has(fieldName)) {
+        return refuse(field, `openElement.properties.${name} declares ${fieldName} more than once`);
+      }
+      seenFields.add(fieldName);
+      if (fieldName === 'reflect') {
+        if (
+          field.initializer.kind !== ts.SyntaxKind.TrueKeyword &&
+          field.initializer.kind !== ts.SyntaxKind.FalseKeyword
+        ) {
+          return refuse(
+            field.initializer,
+            `openElement.properties.${name}.reflect must be a static boolean literal`,
+          );
+        }
+        reflect = field.initializer.kind === ts.SyntaxKind.TrueKeyword;
+      } else if (fieldName === 'attribute') {
+        if (
+          field.initializer.kind !== ts.SyntaxKind.FalseKeyword &&
+          !ts.isStringLiteral(field.initializer)
+        ) {
+          return refuse(
+            field.initializer,
+            `openElement.properties.${name}.attribute must be a static string literal or false`,
+          );
+        }
+        attribute = resolveDeclaredAttribute(name, field.initializer);
+        if (attribute !== null) {
+          if (attribute.length === 0 || !isSafeAttributeName(attribute)) {
+            return refuse(
+              field.initializer,
+              `openElement.properties.${name}.attribute "${attribute}" is not a safe HTML ` +
+                'attribute name',
+            );
+          }
+        }
+      } else {
+        const literal = literalValue(field.initializer, sourceFile);
+        if (
+          literal === undefined ||
+          literal === null ||
+          typeof literal === 'object' ||
+          (typeof literal !== 'string' &&
+            typeof literal !== 'number' &&
+            typeof literal !== 'boolean')
+        ) {
+          return refuse(
+            field.initializer,
+            `openElement.properties.${name}.default must be a static string, number, or boolean ` +
+              `literal, got "${field.initializer.getText(sourceFile)}"`,
+          );
+        }
+        defaultValue = literal;
+      }
+    }
+    if (reflect && attribute === null) {
+      return refuse(
+        entry,
+        `openElement.properties.${name} cannot reflect without an attribute channel ` +
+          '(attribute: false)',
+      );
+    }
+    const effectiveAttribute = attribute === undefined ? camelToKebab(name) : attribute;
+    if (effectiveAttribute !== null) {
+      if (attributes.has(effectiveAttribute)) {
+        return refuse(
+          entry,
+          `openElement.properties declares attribute "${effectiveAttribute}" more than once`,
+        );
+      }
+      attributes.add(effectiveAttribute);
+    }
+    declarations.push({
+      name,
+      attribute: effectiveAttribute,
+      reflect,
+      ...(defaultValue === undefined ? {} : { default: defaultValue }),
+      node: entry,
+    });
+  }
+  return { kind: 'read', declarations };
+}
+
 /**
  * Read the sidecar's platform facts (`root`, `delegatesFocus`) from the
  * authored AST (D-root-source, 2026-11-13).
@@ -258,6 +484,8 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   let seenDelegatesFocus = false;
   let delegatesFocus = false;
   let delegatesFocusSpan: ts.Node | null = null;
+  let seenProperties = false;
+  let properties: readonly IslandPropertyDeclaration[] | undefined;
   for (const property of descriptor.properties) {
     // A spread, a shorthand, a method or a computed key makes the object's key
     // set unprovable: a platform fact could hide behind it, so nothing is read.
@@ -323,6 +551,24 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
       declaredRoot = initializer.text;
       continue;
     }
+    if (name === 'properties') {
+      if (seenProperties) {
+        return {
+          kind: 'refused',
+          diagnostic: propertyDiagnostic(
+            sourceFile,
+            property,
+            'the openElement sidecar declares properties more than once, so the property table is ' +
+              'ambiguous',
+          ),
+        };
+      }
+      seenProperties = true;
+      const read = readIslandPropertyTable(sourceFile, property.initializer);
+      if (read.kind === 'refused') return read;
+      properties = read.declarations;
+      continue;
+    }
     if (name !== 'delegatesFocus') continue;
     if (seenDelegatesFocus) {
       return {
@@ -368,7 +614,7 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
       ),
     };
   }
-  return { kind: 'read', facts: { root, delegatesFocus } };
+  return { kind: 'read', facts: { root, delegatesFocus, properties } };
 }
 
 /**
@@ -383,6 +629,361 @@ export function readIslandRoot(sourceFile: ts.SourceFile): IslandRootRead {
   return read.facts.root === undefined
     ? { kind: 'absent' }
     : { kind: 'root', root: read.facts.root };
+}
+
+/**
+ * Property names that would replace platform/lifecycle surface on the element
+ * prototype. The shell owns this list (`generated-element/shell.ts`
+ * `RESERVED_PROPERTY_NAMES`) and refuses a descriptor that names one; the
+ * compiler lane refuses earlier so the author gets a source-located build
+ * error. The copy is a fast-fail SUBSET: the properties suite asserts every
+ * name here is refused by the shell too (an over-refusal is the drift that
+ * matters); a new shell-reserved name this list misses still fails closed at
+ * class creation, so no unguarded silent failure exists.
+ */
+export const RESERVED_GENERATED_ELEMENT_PROPERTY_NAMES: ReadonlySet<string> = new Set([
+  'constructor',
+  'connectedCallback',
+  'disconnectedCallback',
+  'attributeChangedCallback',
+  'adoptedCallback',
+  'observedAttributes',
+  'dispose',
+]);
+
+/** One primitive member of the root component's typed props parameter. */
+interface TypedPropsMember {
+  readonly name: string;
+  readonly type: GeneratedElementPrimitiveType;
+  readonly node: ts.Node;
+}
+
+type TypedPropsRead =
+  | { readonly kind: 'none' }
+  | {
+      readonly kind: 'read';
+      readonly parameter: ts.ParameterDeclaration;
+      readonly members: readonly TypedPropsMember[];
+    }
+  | { readonly kind: 'refused'; readonly diagnostic: IrDiagnostic };
+
+/** The type's zero value, matching the shell's `normalizeProperty` default. */
+function zeroPropertyValue(type: GeneratedElementPrimitiveType): string | number | boolean {
+  if (type === 'boolean') return false;
+  if (type === 'number') return 0;
+  return '';
+}
+
+/**
+ * Resolve a props annotation to its member list without a type checker.
+ *
+ * Two local, statically provable shapes are admitted: an inline object type
+ * literal, and a same-module non-generic `type`/`interface` alias of one
+ * (an interface with heritage clauses is refused because its member list is
+ * not provable from this file). An imported, generic, union or otherwise
+ * computed type refuses: the generated props record cannot be cross-checked
+ * against a declaration this module does not own.
+ */
+function resolvePropsTypeMembers(
+  sourceFile: ts.SourceFile,
+  typeNode: ts.TypeNode,
+): { readonly members: readonly ts.TypeElement[] } | { readonly reason: string } {
+  if (ts.isParenthesizedTypeNode(typeNode)) {
+    return resolvePropsTypeMembers(sourceFile, typeNode.type);
+  }
+  if (ts.isTypeLiteralNode(typeNode)) return { members: typeNode.members };
+  if (!ts.isTypeReferenceNode(typeNode) || !ts.isIdentifier(typeNode.typeName)) {
+    return {
+      reason: `the props type "${typeNode.getText(sourceFile)}" is not an object type literal`,
+    };
+  }
+  if (typeNode.typeArguments !== undefined && typeNode.typeArguments.length > 0) {
+    return { reason: `the props type "${typeNode.getText(sourceFile)}" is generic` };
+  }
+  const name = typeNode.typeName.text;
+  for (const statement of sourceFile.statements) {
+    if (ts.isInterfaceDeclaration(statement) && statement.name.text === name) {
+      if (statement.typeParameters !== undefined) {
+        return { reason: `the props interface "${name}" is generic` };
+      }
+      if ((statement.heritageClauses ?? []).length > 0) {
+        return {
+          reason: `the props interface "${name}" has extends clauses this lane cannot prove`,
+        };
+      }
+      return { members: statement.members };
+    }
+    if (ts.isTypeAliasDeclaration(statement) && statement.name.text === name) {
+      if (statement.typeParameters !== undefined) {
+        return { reason: `the props type alias "${name}" is generic` };
+      }
+      return resolvePropsTypeMembers(sourceFile, statement.type);
+    }
+  }
+  return {
+    reason:
+      `the props type "${name}" is not declared in this module; the generated element lane ` +
+      'admits an inline object type literal or a local type/interface alias',
+  };
+}
+
+/**
+ * Read the root component's typed props parameter as a primitive member list.
+ *
+ * The parameter must be a named identifier (the generated props record is
+ * exposed as `props.<member>`; a destructured parameter has no name to read)
+ * and its annotation must resolve to local object type members. Only
+ * `string`/`number`/`boolean` members are admitted; an optional member is
+ * refused because the generated record always supplies a declared value, so
+ * the type would understate the runtime contract.
+ */
+function readTypedProps(
+  sourceFile: ts.SourceFile,
+  node: ts.FunctionLikeDeclaration,
+): TypedPropsRead {
+  const parameter = node.parameters[0];
+  if (parameter === undefined) return { kind: 'none' };
+  if (!ts.isIdentifier(parameter.name)) {
+    return {
+      kind: 'refused',
+      diagnostic: propertyDiagnostic(
+        sourceFile,
+        parameter,
+        'the root component declares properties, but its props parameter is destructured; the ' +
+          'generated element reads a named props record — use `props: { … }` and `props.member`',
+        GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+      ),
+    };
+  }
+  if (parameter.type === undefined) {
+    return {
+      kind: 'refused',
+      diagnostic: propertyDiagnostic(
+        sourceFile,
+        parameter,
+        `the root component's props parameter "${parameter.name.text}" has no type annotation; ` +
+          'declare its primitive members inline (`props: { label: string }`) so the sidecar ' +
+          'property table can be cross-checked',
+        GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+      ),
+    };
+  }
+  const resolved = resolvePropsTypeMembers(sourceFile, parameter.type);
+  if ('reason' in resolved) {
+    return {
+      kind: 'refused',
+      diagnostic: propertyDiagnostic(
+        sourceFile,
+        parameter.type,
+        resolved.reason,
+        GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+      ),
+    };
+  }
+  const members: TypedPropsMember[] = [];
+  const seen = new Set<string>();
+  for (const member of resolved.members) {
+    if (!ts.isPropertySignature(member)) {
+      return {
+        kind: 'refused',
+        diagnostic: propertyDiagnostic(
+          sourceFile,
+          member,
+          'the props type must contain only primitive property signatures; ' +
+            `"${member.getText(sourceFile)}" is not one`,
+          GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+        ),
+      };
+    }
+    const name = ts.isIdentifier(member.name)
+      ? member.name.text
+      : ts.isStringLiteral(member.name)
+        ? member.name.text
+        : null;
+    if (name === null || !IDENTIFIER_NAME.test(name)) {
+      return {
+        kind: 'refused',
+        diagnostic: propertyDiagnostic(
+          sourceFile,
+          member.name,
+          `the props member "${member.name.getText(sourceFile)}" is not an identifier the ` +
+            'generated props record can expose',
+          GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+        ),
+      };
+    }
+    if (seen.has(name)) {
+      return {
+        kind: 'refused',
+        diagnostic: propertyDiagnostic(
+          sourceFile,
+          member.name,
+          `the props type declares "${name}" more than once`,
+          GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+        ),
+      };
+    }
+    seen.add(name);
+    if (member.questionToken !== undefined) {
+      return {
+        kind: 'refused',
+        diagnostic: propertyDiagnostic(
+          sourceFile,
+          member.name,
+          `the props member "${name}" is optional; the generated element always supplies a ` +
+            'declared value, so declare the member required and put the initial value in the ' +
+            'sidecar default',
+          GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+        ),
+      };
+    }
+    const typeNode = member.type;
+    const primitive: GeneratedElementPrimitiveType | null =
+      typeNode === undefined
+        ? null
+        : typeNode.kind === ts.SyntaxKind.StringKeyword
+          ? 'string'
+          : typeNode.kind === ts.SyntaxKind.NumberKeyword
+            ? 'number'
+            : typeNode.kind === ts.SyntaxKind.BooleanKeyword
+              ? 'boolean'
+              : null;
+    if (primitive === null) {
+      return {
+        kind: 'refused',
+        diagnostic: propertyDiagnostic(
+          sourceFile,
+          member,
+          `the props member "${name}" has a non-primitive type ` +
+            `"${typeNode === undefined ? 'none' : typeNode.getText(sourceFile)}"; this lane ` +
+            'admits only string, number and boolean (array/object/trustedHtml conversion is a ' +
+            'recorded Alpha17 exception)',
+          GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+        ),
+      };
+    }
+    members.push({ name, type: primitive, node: member });
+  }
+  return { kind: 'read', parameter, members };
+}
+
+type GeneratedElementPropertiesAdmission =
+  | { readonly kind: 'none' }
+  | {
+      readonly kind: 'admitted';
+      readonly properties: readonly GeneratedElementPlatformProperty[];
+    }
+  | { readonly kind: 'refused'; readonly diagnostics: readonly IrDiagnostic[] };
+
+/**
+ * Cross-check the sidecar declaration against the typed props parameter and
+ * resolve the descriptor rows.
+ *
+ * `none` means the sidecar declares no `properties` table at all: the M09-1a
+ * behavior stands (a props parameter is refused by the later gate). A declared
+ * table is a contract in BOTH directions — every typed member needs an entry
+ * (so the shell's props record exposes it with a declared type/default) and
+ * every entry needs a typed member (so a typo or a stale entry cannot silently
+ * produce an attribute nobody reads). Nothing is inferred silently in either
+ * direction; `properties: []` with a type-literal `{}` parameter is the one
+ * empty-match shape and emits `properties: []`.
+ */
+function admitGeneratedElementProperties(
+  sourceFile: ts.SourceFile,
+  node: ts.FunctionLikeDeclaration,
+  declared: readonly IslandPropertyDeclaration[] | undefined,
+): GeneratedElementPropertiesAdmission {
+  if (declared === undefined) return { kind: 'none' };
+  const typed = readTypedProps(sourceFile, node);
+  if (typed.kind === 'refused') return { kind: 'refused', diagnostics: [typed.diagnostic] };
+  if (typed.kind === 'none') {
+    if (declared.length === 0) return { kind: 'admitted', properties: [] };
+    return {
+      kind: 'refused',
+      diagnostics: [
+        propertyDiagnostic(
+          sourceFile,
+          node,
+          'the openElement sidecar declares properties, but the root component takes no props ' +
+            'parameter; add `props` with the same primitive members',
+          GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_MISMATCH,
+        ),
+      ],
+    };
+  }
+  const declaredNames = new Set(declared.map((entry) => entry.name));
+  const typedNames = new Set(typed.members.map((member) => member.name));
+  const missing = typed.members
+    .filter((member) => !declaredNames.has(member.name))
+    .map((member) => member.name);
+  const extra = declared.filter((entry) => !typedNames.has(entry.name)).map((entry) => entry.name);
+  if (missing.length > 0 || extra.length > 0) {
+    const parts: string[] = [];
+    if (missing.length > 0) {
+      parts.push(
+        `typed member(s) without a sidecar entry: ${missing.map((n) => `"${n}"`).join(', ')}`,
+      );
+    }
+    if (extra.length > 0) {
+      parts.push(
+        `sidecar entry(ies) without a typed member: ${extra.map((n) => `"${n}"`).join(', ')}`,
+      );
+    }
+    return {
+      kind: 'refused',
+      diagnostics: [
+        propertyDiagnostic(
+          sourceFile,
+          typed.parameter,
+          'the openElement properties table and the typed props parameter disagree — ' +
+            parts.join('; ') +
+            '. Every declared attribute must have a typed member that reads it, and every typed ' +
+            'primitive member must be declared so the element exposes it.',
+          GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_MISMATCH,
+        ),
+      ],
+    };
+  }
+  const byName = new Map(typed.members.map((member) => [member.name, member]));
+  const properties: GeneratedElementPlatformProperty[] = [];
+  for (const declaration of declared) {
+    const member = byName.get(declaration.name)!;
+    if (RESERVED_GENERATED_ELEMENT_PROPERTY_NAMES.has(declaration.name)) {
+      return {
+        kind: 'refused',
+        diagnostics: [
+          propertyDiagnostic(
+            sourceFile,
+            declaration.node,
+            `the property name "${declaration.name}" collides with the element lifecycle ` +
+              'surface; rename the props member and its sidecar entry',
+          ),
+        ],
+      };
+    }
+    const defaultValue = declaration.default ?? zeroPropertyValue(member.type);
+    if (typeof defaultValue !== member.type) {
+      return {
+        kind: 'refused',
+        diagnostics: [
+          propertyDiagnostic(
+            sourceFile,
+            declaration.node,
+            `the property "${declaration.name}" default must be a ${member.type} literal to ` +
+              `match the typed member, got ${typeof defaultValue}`,
+          ),
+        ],
+      };
+    }
+    properties.push({
+      name: declaration.name,
+      attribute: declaration.attribute,
+      type: member.type,
+      reflect: declaration.reflect,
+      default: defaultValue,
+    });
+  }
+  return { kind: 'admitted', properties };
 }
 
 function localFunctionDeclaration(
@@ -507,7 +1108,18 @@ export function admitGeneratedElementSite(
     return { kind: 'refused', diagnostics: [metadata.diagnostic] };
   }
   const facts =
-    metadata.kind === 'read' ? metadata.facts : { root: undefined, delegatesFocus: false };
+    metadata.kind === 'read'
+      ? metadata.facts
+      : { root: undefined, delegatesFocus: false, properties: undefined };
+  const propertiesAdmission = admitGeneratedElementProperties(
+    sourceFile,
+    fact.node,
+    facts.properties,
+  );
+  if (propertiesAdmission.kind === 'refused') {
+    return { kind: 'refused', diagnostics: propertiesAdmission.diagnostics };
+  }
+  const properties = propertiesAdmission.kind === 'admitted' ? propertiesAdmission.properties : [];
   return {
     kind: 'admitted',
     admission: {
@@ -515,6 +1127,8 @@ export function admitGeneratedElementSite(
       defaultExportSpan: fact.span,
       root: facts.root,
       delegatesFocus: facts.delegatesFocus,
+      propertiesDeclared: propertiesAdmission.kind === 'admitted',
+      properties,
       propsParameter: propsParameterOf(fact.node),
     },
   };
@@ -529,6 +1143,10 @@ export function gateGeneratedElementRootProps(
   admission: GeneratedElementSiteAdmission,
   component: FunctionModelComponent,
 ): readonly IrDiagnostic[] {
+  // A declared property table has already been cross-checked against the
+  // typed props parameter by the admission; the M09-1a "props with no
+  // attribute channel" refusal would be wrong for it.
+  if (admission.propertiesDeclared) return [];
   if (admission.propsParameter === null && component.propsParam === null) return [];
   const parameter = component.propsParam ?? admission.propsParameter ?? 'props';
   return [

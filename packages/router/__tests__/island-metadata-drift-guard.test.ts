@@ -8,8 +8,9 @@
  *    error text (`ISLAND_METADATA_ERROR`);
  * 2. the compiler lane's `readIslandMetadata` (`generated-element/site.ts`),
  *    which re-reads the same statement under D-root-source (2026-11-13,
- *    `root`) and D-delegatesFocus (2026-11-14, `delegatesFocus`) because those
- *    facts must not ride the host site fact.
+ *    `root`), D-delegatesFocus (2026-11-14, `delegatesFocus`) and D-props
+ *    (2026-11-14, the `properties` platform-fact table) because those facts
+ *    must not ride the host site fact.
  *
  * The duplication is deliberate and recorded; this guard is its cost control.
  * It runs BOTH readers over ONE fixture corpus and asserts they agree for every
@@ -33,10 +34,18 @@ import { readIslandMetadata } from '../../compiler/src/internal/compiler/semanti
 
 const FILE = '/proj/app/islands/profile-card.tsx';
 
+/** One sidecar property entry in the vocabulary both readers agree on. */
+interface PropertyFacts {
+  readonly attribute: string | null;
+  readonly reflect: boolean;
+  readonly default?: string | number | boolean;
+}
+
 /** The descriptor-behavior facts both readers must agree on. */
 interface Facts {
   readonly root: string | undefined;
   readonly delegatesFocus: boolean;
+  readonly properties: Record<string, PropertyFacts> | undefined;
 }
 
 /**
@@ -57,6 +66,7 @@ function scannerOutcome(source: string): Outcome {
       facts: {
         root: descriptorRoot(config?.root),
         delegatesFocus: config?.delegatesFocus === true,
+        properties: config?.properties,
       },
     };
   } catch (error) {
@@ -70,11 +80,31 @@ function compilerOutcome(source: string): Outcome {
   const read = readIslandMetadata(parsed.sourceFile);
   if (read.kind === 'refused') return { kind: 'rejected', reason: read.diagnostic.message };
   if (read.kind === 'absent') {
-    return { kind: 'read', facts: { root: undefined, delegatesFocus: false } };
+    return {
+      kind: 'read',
+      facts: { root: undefined, delegatesFocus: false, properties: undefined },
+    };
   }
+  const properties =
+    read.facts.properties === undefined
+      ? undefined
+      : Object.fromEntries(
+          read.facts.properties.map((entry) => [
+            entry.name,
+            {
+              attribute: entry.attribute,
+              reflect: entry.reflect,
+              ...(entry.default === undefined ? {} : { default: entry.default }),
+            },
+          ]),
+        );
   return {
     kind: 'read',
-    facts: { root: read.facts.root, delegatesFocus: read.facts.delegatesFocus },
+    facts: {
+      root: read.facts.root,
+      delegatesFocus: read.facts.delegatesFocus,
+      properties,
+    },
   };
 }
 
@@ -126,6 +156,39 @@ const CORPUS: ReadonlyArray<{ readonly name: string; readonly source: string }> 
     name: 'delegatesFocus false without a root',
     source: module('delegatesFocus: false'),
   },
+  {
+    name: 'properties table with reflection/default/attribute:false',
+    source: module(
+      "root: 'shadow', properties: { count: { reflect: true, default: 0 }, " +
+        "label: { default: 'untitled' }, padding: { attribute: false } }",
+    ),
+  },
+  {
+    name: 'properties table with explicit attribute spelling',
+    source: module("properties: { count: { attribute: 'data-Count' } }"),
+  },
+  { name: 'empty properties table', source: module('properties: {}') },
+  {
+    name: 'invalid (properties unknown option)',
+    source: module('properties: { count: { type: "number" } }'),
+  },
+  {
+    name: 'invalid (properties dynamic default)',
+    source: `const defaultValue = 1;
+${module('properties: { count: { default: defaultValue } }')}`,
+  },
+  {
+    name: 'invalid (properties reflect without channel)',
+    source: module('properties: { count: { attribute: false, reflect: true } }'),
+  },
+  {
+    name: 'invalid (properties duplicate attribute)',
+    source: module('properties: { count: { attribute: "n" }, label: { attribute: "n" } }'),
+  },
+  {
+    name: 'invalid (properties non-object)',
+    source: module('properties: 1'),
+  },
   { name: 'absent (sidecar without root)', source: module("ssr: false, hydrate: 'idle'") },
   { name: 'absent (empty sidecar)', source: module('') },
   { name: 'absent (no sidecar at all)', source: 'export default function ProfileCard() {}\n' },
@@ -171,7 +234,8 @@ test('both readers agree on every corpus entry (the drift guard)', () => {
       if (scanner.kind === 'rejected' || compiler.kind === 'rejected') return false;
       return (
         scanner.facts.root !== compiler.facts.root ||
-        scanner.facts.delegatesFocus !== compiler.facts.delegatesFocus
+        scanner.facts.delegatesFocus !== compiler.facts.delegatesFocus ||
+        JSON.stringify(scanner.facts.properties) !== JSON.stringify(compiler.facts.properties)
       );
     })
     .map((row) => JSON.stringify(row));
@@ -188,7 +252,17 @@ test('both readers agree on every corpus entry (the drift guard)', () => {
   expect(roots).toContain(undefined);
   expect(focus).toContain(true);
   expect(focus).toContain(false);
-  expect(rows.filter((row) => row.scanner.kind === 'rejected').length).toBeGreaterThanOrEqual(6);
+  const propertyShapes = readFacts.flatMap((row) =>
+    row.kind === 'read' ? [row.facts.properties] : [],
+  );
+  expect(propertyShapes).toContain(undefined);
+  expect(propertyShapes.some((shape) => shape !== undefined && Object.keys(shape).length > 0)).toBe(
+    true,
+  );
+  expect(
+    propertyShapes.some((shape) => shape !== undefined && Object.keys(shape).length === 0),
+  ).toBe(true);
+  expect(rows.filter((row) => row.scanner.kind === 'rejected').length).toBeGreaterThanOrEqual(11);
 });
 
 test('the scanner keeps the authority: a sidecar it rejects is refused, never read', () => {
@@ -211,6 +285,27 @@ test('the root vocabulary maps one way: shadow is the DSD default, closed is uns
   });
   // No authored spelling reaches the closed root mode (D-closed).
   expect(compilerOutcome(module("root: 'shadow-closed'")).kind).toBe('rejected');
+});
+
+test('the properties table resolves the same way on both readers', () => {
+  const read = compilerOutcome(
+    module(
+      "root: 'shadow', properties: { count: { reflect: true, default: 0 }, " +
+        "label: { default: 'untitled' }, padding: { attribute: false } }",
+    ),
+  );
+  expect(read).toEqual({
+    kind: 'read',
+    facts: {
+      root: 'shadow-open',
+      delegatesFocus: false,
+      properties: {
+        count: { attribute: 'count', reflect: true, default: 0 },
+        label: { attribute: 'label', reflect: false, default: 'untitled' },
+        padding: { attribute: null, reflect: false },
+      },
+    },
+  });
 });
 
 test('the delegatesFocus vocabulary is a boolean and needs a shadow root', () => {

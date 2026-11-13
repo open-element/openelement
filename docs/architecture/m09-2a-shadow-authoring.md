@@ -126,9 +126,10 @@ SHA-256.
 - **No `delegatesFocus`.** No author spelling, no sidecar field, no scanner key,
   no descriptor field (`D-delegatesFocus` is a separate commit). The producer
   accepts the existing typed DSD option set; nothing authors it here.
-- **No `properties` and no `formValue`.** Property/attribute conversion and the
-  form-value convention are separate slices (`D-props`, `D-forms`); the
-  descriptor still always emits `properties: []`.
+- **No `properties` and no `formValue`.** At this slice's baseline the
+  descriptor always emitted `properties: []`; the property declaration landed
+  in the later [`m09-2b-primitive-properties.md`](./m09-2b-primitive-properties.md)
+  commit, and the form-value convention stays a separate slice (`D-forms`).
 - **Closed roots stay unopened.** No `shadow-closed` author spelling and no
   closed authoring path (`D-closed` = defer). The emitter's root mapping is
   total, so a future closed spelling cannot fall through to an open template,

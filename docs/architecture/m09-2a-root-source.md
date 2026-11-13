@@ -140,9 +140,10 @@ descriptor { tag, root?, properties: [], createRecipe } → shell normalizeDescr
 - **No `delegatesFocus`.** The sidecar does not gain the field, the scanner does
   not accept it, and the descriptor does not carry it. It is a separate owner
   decision (`D-delegatesFocus`) with its own public-surface cost.
-- **No `properties` and no `formValue`.** Property/attribute conversion and the
-  form-value convention are separate slices (`D-props`, `D-forms`); the
-  descriptor still always emits `properties: []`.
+- **No `properties` and no `formValue`.** At this slice's baseline the
+  descriptor always emitted `properties: []`; the property declaration landed
+  in the later [`m09-2b-primitive-properties.md`](./m09-2b-primitive-properties.md)
+  commit, and the form-value convention stays a separate slice (`D-forms`).
 - **Closed roots stay unopened.** No `shadow-closed` mapping, no author
   spelling, no discovery channel work (`D-closed` unchanged).
 - **Not an M09 exit, not M09-1b.** No registration, packaging, export subpath,

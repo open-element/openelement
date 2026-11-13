@@ -28,9 +28,15 @@
  *   sidecar reader (and again by the emitter), and the emitted
  *   `<Name>__ssrHost` threads it into the DSD template's typed option set so
  *   the parser-adopted root carries `shadowrootdelegatesfocus`.
- * - `properties` (optional array) — M09-1a always emits `[]`: the function
- *   model has no props type and the M09-1a admission gates refuse a props
- *   parameter outright. Property/attribute conversion is M09-2b.
+ * - `properties` (optional array) — the declared primitive property rows the
+ *   M09-2b lane emits: exactly the shell's landed `GeneratedElementProperty`
+ *   shape (`name`, `attribute`, `type`, `reflect`, `default`). The authoring
+ *   source is the island sidecar `properties` table cross-checked against the
+ *   root component's typed props parameter; the shell owns observedAttributes,
+ *   conversion, reflection and defaults. A module with no declaration emits
+ *   `properties: []` exactly as M09-1a did. Array/object/`trustedHtml`
+ *   conversion and custom converters are NOT representable here (the shell's
+ *   `PROPERTY_TYPES` admits the three primitives only).
  * - `createRecipe` (required function) — the leaf's exported
  *   `create<Name>Recipe` factory. The claim stays reachable only through the
  *   returned `recipe.claim`; no leaf symbol is renamed.
@@ -76,6 +82,35 @@ export interface GeneratedElementSite {
 /** Host hook for the site fact; returning null keeps the lane inert. */
 export type GeneratedElementSiteResolver = (moduleId: string) => GeneratedElementSite | null;
 
+/** The three primitive property types the generated-element shell admits. */
+export type GeneratedElementPrimitiveType = 'string' | 'number' | 'boolean';
+
+/**
+ * One resolved property row the emitter writes into the descriptor.
+ *
+ * This is the compiler-side mirror of the shell's landed
+ * `GeneratedElementProperty`: the same five facts, already resolved from the
+ * sidecar table and the typed props member (attribute name, primitive type,
+ * reflection, declared/zero default). `attribute: null` is a property-only
+ * channel; the shell derives observedAttributes from the non-null rows.
+ *
+ * It is deliberately NOT `GeneratedElementProperty` itself: the compiler lane
+ * must not import the browser runtime shell (the emitted module is the only
+ * consumer of the shell specifier), so the descriptor ABI stays a structural
+ * contract on both sides of the boundary.
+ */
+export interface GeneratedElementPlatformProperty {
+  /** JS property name and the key the generated props record exposes. */
+  readonly name: string;
+  /** Resolved attribute name, or null for a property-only channel. */
+  readonly attribute: string | null;
+  readonly type: GeneratedElementPrimitiveType;
+  /** Reflect property writes back to the attribute. */
+  readonly reflect: boolean;
+  /** Declared literal initial value or the type's zero value. */
+  readonly default: string | number | boolean;
+}
+
 /**
  * The internal diagnostic codes this lane can raise. They follow the shell's
  * `OEIR_*` convention and are deliberately absent from the public error
@@ -115,6 +150,29 @@ export const GENERATED_ELEMENT_DIAGNOSTIC = {
    * module exists instead of shipping a class that throws on evaluation.
    */
   DELEGATES_FOCUS_WITHOUT_SHADOW: 'OEIR_GENERATED_ELEMENT_DELEGATES_FOCUS_WITHOUT_SHADOW',
+  /**
+   * The root component's props parameter cannot be read as a typed primitive
+   * member list: no annotation, a destructured/rest parameter, an imported or
+   * generic type, a non-property member, an optional member or a non-primitive
+   * member type. The generated element's props record is a fixed
+   * string/number/boolean table; anything it cannot express fails closed
+   * instead of being silently dropped from the attribute channel.
+   */
+  PROPS_TYPE_UNSUPPORTED: 'OEIR_GENERATED_ELEMENT_PROPS_TYPE_UNSUPPORTED',
+  /**
+   * The sidecar `properties` table and the typed props member list disagree
+   * (a declared key with no typed member or a typed member with no entry, or a
+   * declaration without a props parameter). The two declarations are
+   * cross-checked, never inferred one from the other.
+   */
+  PROPERTY_MISMATCH: 'OEIR_GENERATED_ELEMENT_PROPERTY_MISMATCH',
+  /**
+   * One sidecar property entry is not representable: an unknown option, a
+   * non-literal default, an unsafe attribute name, a duplicate attribute, a
+   * reflected property with no attribute channel, a reserved lifecycle name, or
+   * a default whose literal type does not match the typed member.
+   */
+  PROPERTY_INVALID: 'OEIR_GENERATED_ELEMENT_PROPERTY_INVALID',
   /** The appended tail did not parse (an emitter invariant, not author input). */
   INVALID_ARTIFACT: 'OEIR_GENERATED_ELEMENT_INVALID_ARTIFACT',
 } as const;

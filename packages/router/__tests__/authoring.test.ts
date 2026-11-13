@@ -450,6 +450,50 @@ test('defineIslandConfig() carries the declared delegatesFocus fact', () => {
   }
 });
 
+test('defineIslandConfig() carries the declared primitive property table', () => {
+  // D-props (2026-11-14): names/types come from the typed props parameter; the
+  // table only carries the platform facts a type cannot express.
+  const config = defineIslandConfig({
+    properties: {
+      count: { reflect: true, default: 0 },
+      label: {},
+      padding: { attribute: false },
+      slug: { attribute: 'data-Slug' },
+    },
+  });
+  expect(config.properties).toEqual({
+    count: { reflect: true, default: 0 },
+    label: {},
+    padding: { attribute: false },
+    slug: { attribute: 'data-Slug' },
+  });
+
+  const cases: Array<[unknown, string]> = [
+    [[], 'properties must be an object map'],
+    [{ count: 1 }, 'properties.count must be an object'],
+    [{ 'not-an-identifier': {} }, 'must be an identifier'],
+    [{ count: { type: 'number' } }, 'does not accept "type"'],
+    [{ count: { reflect: 'yes' } }, 'reflect must be a boolean'],
+    [{ count: { attribute: 1 } }, 'attribute must be a string or false'],
+    [{ count: { attribute: 'onclick' } }, 'not a safe HTML attribute name'],
+    [{ count: { default: [1] } }, 'default must be a string, number, or boolean'],
+    [{ count: { attribute: false, reflect: true } }, 'cannot reflect without an attribute'],
+    [
+      { count: { attribute: 'n' }, label: { attribute: 'n' } },
+      'declare attribute "n" more than once',
+    ],
+  ];
+  for (const [properties, message] of cases) {
+    assertThrowsIncludes(
+      () => {
+        defineIslandConfig({ properties } as never);
+      },
+      Error,
+      message,
+    );
+  }
+});
+
 test('defineIslandConfig() rejects non-canonical island metadata', () => {
   assertThrowsIncludes(
     () => {
@@ -533,6 +577,11 @@ test('#1413 authoring errors: defineIslandConfig() failure modes carry codes', (
     [{ delegatesFocus: 'yes' }, IslandErrorCode.DESCRIPTOR_SHAPE],
     [{ delegatesFocus: true }, IslandErrorCode.DESCRIPTOR_SHAPE],
     [{ root: 'light', delegatesFocus: true }, IslandErrorCode.DESCRIPTOR_SHAPE],
+    [
+      { properties: { count: { reflect: true, attribute: false } } },
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+    ],
+    [{ properties: { 'not-an-identifier': {} } }, IslandErrorCode.DESCRIPTOR_SHAPE],
   ];
   for (const [config, code] of cases) {
     let thrown: unknown;

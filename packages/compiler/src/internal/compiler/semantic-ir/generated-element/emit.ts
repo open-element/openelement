@@ -12,11 +12,11 @@
  *
  * - imports the internal M09-0/M09-shadow shell by its compiler-private
  *   specifier;
- * - builds a descriptor with `tag`, `properties: []`, the leaf's exported
- *   `create<Name>Recipe` factory, `root` only when the authored sidecar
- *   pinned one (D-root-source: the lane reads it, the shell owns the `light`
- *   default), and `delegatesFocus: true` only when the sidecar declares it
- *   (the shell owns the `false` default);
+ * - builds a descriptor with `tag`, the resolved `properties` rows (or `[]`),
+ *   the leaf's exported `create<Name>Recipe` factory, `root` only when the
+ *   authored sidecar pinned one (D-root-source: the lane reads it, the shell
+ *   owns the `light` default), and `delegatesFocus: true` only when the
+ *   sidecar declares it (the shell owns the `false` default);
  * - constructs the class and default-exports it, with one named alias and the
  *   tag constant, so the existing island entry (`mod[exportName] ?? mod.default`)
  *   receives a constructor without any entry-selection change;
@@ -46,6 +46,7 @@ import type { IrDiagnostic } from '../types.ts';
 import {
   GENERATED_ELEMENT_DIAGNOSTIC,
   GENERATED_ELEMENT_SHELL_SPECIFIER,
+  type GeneratedElementPlatformProperty,
   type GeneratedElementSite,
 } from './contract.ts';
 
@@ -84,6 +85,13 @@ export interface GenerateElementModuleOptions {
    * the pair at class creation time.
    */
   readonly delegatesFocus?: boolean;
+  /**
+   * The resolved primitive property rows, in sidecar authored order. Omitted
+   * (or empty) emits the M09-1a `properties: []` byte-for-byte; a non-empty
+   * list is the shell's landed `GeneratedElementProperty` shape, so no shell
+   * change is involved.
+   */
+  readonly properties?: readonly GeneratedElementPlatformProperty[];
   /** The authored source for the leaf source map (required for `sourcesContent`). */
   readonly authoredSource?: string;
 }
@@ -177,6 +185,28 @@ function emptyResult(
     leaf: null,
     tail: null,
   };
+}
+
+/**
+ * The descriptor's `properties` rows, byte-for-byte. Every resolved row
+ * spells all five descriptor facts explicitly (including `attribute: null` and
+ * `reflect: false`) so the emitted declaration is reviewable without inferring
+ * omitted-key semantics; the shell validates the same shape.
+ */
+function propertyRows(properties: readonly GeneratedElementPlatformProperty[]): string[] {
+  if (properties.length === 0) return ['  properties: [],'];
+  return [
+    '  properties: [',
+    ...properties.map((property) => {
+      const attribute = property.attribute === null ? 'null' : JSON.stringify(property.attribute);
+      return (
+        `    { name: ${JSON.stringify(property.name)}, attribute: ${attribute}, ` +
+        `type: ${JSON.stringify(property.type)}, reflect: ${String(property.reflect)}, ` +
+        `default: ${JSON.stringify(property.default)} },`
+      );
+    }),
+    '  ],',
+  ];
 }
 
 /**
@@ -302,7 +332,7 @@ export function generateElementModule(
     // `descriptor.root ?? 'light'` default is the single default owner.
     ...(root === undefined ? [] : [`  root: ${JSON.stringify(root)},`]),
     ...(delegatesFocus ? ['  delegatesFocus: true,'] : []),
-    '  properties: [],',
+    ...propertyRows(options.properties ?? []),
     `  createRecipe: create${rootName}Recipe,`,
     '};',
     '',
