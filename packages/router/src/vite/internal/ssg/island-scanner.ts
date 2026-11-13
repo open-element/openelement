@@ -10,7 +10,11 @@ import { formatError, isValidTagName, OpenElementError } from '@openelement/elem
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
-import { buildError, PackageIslandErrorCode } from '../../../internal/error-codes.ts';
+import {
+  buildError,
+  ClientAssetErrorCode,
+  PackageIslandErrorCode,
+} from '../../../internal/error-codes.ts';
 import { reportScanFatal } from '../build-diagnostics.ts';
 import { type DeclaredStyleSource, STYLE_DIALECTS } from '../style-plan.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
@@ -561,12 +565,26 @@ export async function scanIslands(islandsDir: string, relativeDir: string = ''):
  * fallback downstream where the configured strategy is known.
  *
  * If a module cannot be read, its metadata is silently skipped.
+ *
+ * Delivery-tag ownership is checked HERE, at scan time: this record is keyed
+ * by derived tag, so a second file deriving the same tag would silently
+ * overwrite the first entry — and every consumer that looks a tag up
+ * (build-postprocess, entry-descriptor, build-client) would then read the
+ * survivor's sidecar for both files. Two files can collide because
+ * pathToTagName is not injective (`a_b.tsx`/`a-b.tsx`, `about.tsx`/
+ * `about-page.tsx`, `Card.tsx`/`card.tsx`), so the second claimant fails
+ * `ISLAND_TAG_DUPLICATE` with both source paths named. This is the fail-early
+ * half of one ownership invariant: the client manifest and the SSR admission
+ * guards keep their own fail-late checks (defense in depth), and they only
+ * ever see islands a page reaches.
  */
 export async function scanIslandMeta(
   islandsDir: string,
   islandFiles: string[],
 ): Promise<Record<string, StoredIslandMeta>> {
   const meta: Record<string, LocalIslandMeta> = {};
+  /** tag -> the island file that first wrote it (islandsDir-relative). */
+  const tagClaimants = new Map<string, string>();
 
   for (const filePath of islandFiles) {
     const tagName = pathToTagName(filePath);
@@ -590,6 +608,17 @@ export async function scanIslandMeta(
       hydrate,
       media: islandConfig.media,
     });
+
+    const claimant = tagClaimants.get(tagName);
+    if (claimant !== undefined) {
+      throw buildError(
+        ClientAssetErrorCode.ISLAND_TAG_DUPLICATE,
+        `Derived tag "${tagName}" is claimed by two island files: "${claimant}" and ` +
+          `"${filePath}" — each island derives its tag from its path, so rename one file ` +
+          `or declare the tag explicitly with the sidecar tags/tagNames option`,
+      );
+    }
+    tagClaimants.set(tagName, filePath);
 
     meta[tagName] = {
       tagName,

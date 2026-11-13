@@ -1,7 +1,7 @@
 ---
 status: active
 topic: Stage authority (M01–M14)
-summary: M01–M14, the 16a/16b/17/18 stage split, G1/G2/G3, work classes and the risk register; the dependency spine, not dates, is the authoritative stage definition.
+summary: M01–M14, the 16a/16b/17/18 stage split, G1/G2/G3, work classes and the risk register; the dependency spine, not dates, is the authoritative stage definition, with the owner-approved 2026-11-13 amendment on M10-final, M11, the five Alpha16b obligation slices and the scope-exception rule.
 ---
 
 # Alpha16–18 execution plan
@@ -354,3 +354,100 @@ Generic-executor unreachability is **one** of the five. It does not stand in for
 other four. Class-authoring migration is M10 partition evidence — public API **and**
 browser runtime — not M09 evidence: M09 owns the generated Native Custom Element
 boundary only.
+
+## 13. Dated amendment 2026-11-13 (owner-approved)
+
+This section amends three cells and one rule. It **adds**; it does not rewrite
+§1, §2 or §12a, and the amended readings below are authoritative where they
+disagree with an earlier cell. Approval of this section creates no P5 evidence of
+its own (see 13.5).
+
+### 13.1 M10-final, M11 and the dependency cell
+
+**Supersedes the §1 M11 dependency cell (`M08, M10`) and its reading in §3.**
+
+- **M11 start gate** = M08 exit **+ M10-0 preparation**: the capability
+  inventory, replacement reachability and graph-tool design. M10-0 is a
+  document-local label for preparation; it is not a milestone, not a gate, does
+  not gate M11 on its own and does not rename M10a. The §1 M10a row keeps its
+  meaning ("Early packed-consumer smoke").
+- **M10-final closing gate.** P1–P5 are judged **separately at one SHA**. P1
+  (the old generic browser executor is unreachable from every applicable
+  production browser entry graph) and M11-3 (the client entry cutover) are **one
+  joint integration with two independent verdicts**: landing them together is
+  allowed; a green joint integration does not lower either verdict, and neither
+  verdict is inferred from the other. M10-final closes after M11-3.
+- The dependency spine in §3 stays the ordering authority; this clause only fixes
+  *which* M10 obligation gates M11 and when M10 closes.
+
+### 13.2 Five Alpha16b obligation slices
+
+Lifecycle, error boundary, context, refs and the migration note are Alpha16b
+obligations with named slices. They are **not** scope exceptions, and no
+Alpha17-first implementation is permitted for any of them.
+
+| Slice | Capability | Minimum Alpha16b obligation | Evidence the slice must produce |
+| --- | --- | --- | --- |
+| `16b-LC` | Class lifecycle (CAP-03) | Generated owner plus `LifetimeScope`, with the author `setup`/`onDispose` (or replacement) decision made inside Alpha16b | setup-once, dispose, reconnect and exception-cleanup matrix on the generated path |
+| `16b-EB` | Error boundary (CAP-05) | Boundary API plus capture at connect/claim/update and an SSR fallback | capture points, retry/reset, SSR fallback, no silent swallow |
+| `16b-CTX` | Context (CAP-09) | Provider/consumer API and generated wiring with provider/consumer lifecycle | nested providers, consumer update on provider change, disconnect cleanup, TSX-13 |
+| `16b-REF` | Refs (CAP-11) | Generated ref API with cleanup and reconnect semantics | ref lifetime across mount/claim/update/disconnect |
+| `16b-MN` | Migration note (CAP-26) | The minimum migration guide ships **with Alpha16**: what changes, per-capability mapping and the function replacement for each consumed capability | the note itself, linked from the release-facing surface; Alpha17 only expands it |
+
+### 13.3 Scope exceptions: definition and the approved M09-2 set
+
+A **scope exception** is a recorded, owner-approved statement that one capability
+retires without a same-milestone replacement. It is admissible only when all four
+hold:
+
+1. the capability is not required by any Alpha16 release-qualification obligation
+   (§2 items 1–8 and §12a P1–P5);
+2. a named later milestone carries it, and that carrying is written down;
+3. the loss is stated in terms of who is affected (people using sites, authors,
+   or implementors) and what they can no longer do;
+4. it appears row-for-row in `16b-MN`.
+
+An exception may **not** cover a capability with no replacement, and may **not**
+cover the five obligation slices in 13.2. "Belongs to Alpha17" is not by itself a
+justification: the retirement-required argument (2) must be made per row.
+
+The approved Alpha16 exceptions for the generated native element boundary are:
+
+| Capability | Recorded as | Carried by | Why it is not required for Alpha16 retirement |
+| --- | --- | --- | --- |
+| `custom-elements.json` (CEM) generation for generated elements | exception | Alpha17 productization | No Alpha16 qualification path reads a generated element's CEM; the class-only CEM keeps serving the existing corpus unchanged |
+| array/object/`trustedHtml` property conversion | exception | Alpha17 | No in-tree consumer declares a non-primitive attribute; conversion of the primitive set is delivered in M09-2 |
+| form validity policy (`setValidity` rules) | exception | Alpha17 | Form association, value, reset and restore ship in M09-2; validity *policy* is a product decision, not a mechanism the retirement depends on |
+
+Two items that earlier drafts carried as exceptions are **not** exceptions:
+
+- **Client style declaration for generated islands** is a **deferred
+  obligation**, not an exception: a replacement path exists (the router style
+  plan and authored `.css` imports), so §13.3's first condition fails. M11
+  re-verifies it on a real build and Alpha17 may consolidate it.
+- **Utility and theme CSS** is **removed from the list entirely**: it is a
+  build-side capability that depends on no authoring model, so it is not a
+  capability gap at all. M11 re-verifies it.
+
+### 13.4 Alpha17 boundary
+
+Alpha17 implements no capability whose first implementation is required for
+Alpha16 retirement. It owns Full TSX productization, the cross-module ABI freeze
+with packed-consumer evidence, precompiled distribution, and the Starter, docs
+and example migration. It expands `16b-MN`; it does not become the first home of
+a 13.2 obligation, and it does not carry a 13.3 exception as its only record.
+
+### 13.5 P5 evidence
+
+P5 evidence is the **tracked** capability inventory, the final-SHA matrix, the
+migration note and the owner sign-off. A draft does not satisfy P5, and applying
+this amendment creates none of them. The inventory that this section refers to
+stays a working draft until it is tracked and signed; until then, P5 is not
+claimable and Alpha16 release qualification is not openable.
+
+### 13.6 Evidence provenance
+
+Every claim that cites this plan — in a ledger, a matrix cell, a closeout record
+or a pull request — carries the four-part record (commit, worktree, command,
+result) defined in [the evidence baseline](./evidence-baseline.md). The canonical
+worktree is named there; other checkouts are advisory only.
