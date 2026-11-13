@@ -72,3 +72,46 @@ export const openElement = defineIslandConfig({
 `;
   expect(readIslandConfig(source)).toEqual({ ssr: false, hydrate: 'idle' });
 });
+
+/**
+ * `root` is a published `IslandConfig` field the runtime already validates;
+ * the static scan used to reject it (the documented-contract/build
+ * disagreement), and now accepts the same two values with the same
+ * fail-closed literal rule as the other keys.
+ */
+test('readIslandConfig: accepts the documented root key', () => {
+  expect(
+    readIslandConfig(
+      `export const openElement = defineIslandConfig({ hydrate: 'idle', root: 'shadow' });\n`,
+    ),
+  ).toEqual({ hydrate: 'idle', root: 'shadow' });
+  expect(
+    readIslandConfig(`export const openElement = defineIslandConfig({ root: 'light' });\n`),
+  ).toEqual({ root: 'light' });
+});
+
+test('readIslandConfig: throws on dynamic root value', () => {
+  const source = `const configuredRoot = 'light';
+export const openElement = defineIslandConfig({ root: configuredRoot });
+`;
+  assertThrowsIncludes(
+    () => readIslandConfig(source),
+    Error,
+    'openElement.root must be a static literal',
+  );
+});
+
+test('readIslandConfig: throws on unsupported root literal', () => {
+  const source = `export const openElement = defineIslandConfig({ root: 'shadow-closed' });
+`;
+  assertThrowsIncludes(() => readIslandConfig(source), Error, 'unsupported value');
+});
+
+test('readIslandConfig: the accepted-shape message advertises root', () => {
+  const error = assertThrowsIncludes(
+    () => readIslandConfig(`export const openElement = defineIslandConfig({ root: 1 });\n`),
+    Error,
+    'root?: "light" | "shadow"',
+  );
+  expect(error.message).toContain('Accepted shape:');
+});

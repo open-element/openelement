@@ -32,6 +32,7 @@
  */
 
 import ts from 'typescript';
+import type { RootMode } from '@openelement/protocol/part-program';
 import { type SourceSpan } from '../../semantic-core/scope-resolution.ts';
 import { type FunctionModelComponent } from '../../semantic-core/function-frontend.ts';
 import type { IrDiagnostic } from '../types.ts';
@@ -61,6 +62,16 @@ export interface GeneratedElementSiteAdmission {
   readonly componentName: string;
   /** The default-export node, used for source-located refusals. */
   readonly defaultExportSpan: SourceSpan;
+  /**
+   * The root mode the sidecar itself declares, or undefined when the author
+   * pinned none.
+   *
+   * D-root-source (2026-11-13): the compiler lane re-reads the authored
+   * sidecar instead of receiving the root on the host site fact, so the fact
+   * cannot go stale between the host's scan and this transform. The host fact
+   * still owns the tag.
+   */
+  readonly root: RootMode | undefined;
   /**
    * The root component's props parameter spelling, or null when it takes none.
    *
@@ -128,6 +139,15 @@ function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
  * in depth the `OEIR_GENERATED_ELEMENT_MISSING_SITE_MARKER` code names.
  */
 export function hasIslandPolicyStatement(sourceFile: ts.SourceFile): boolean {
+  return islandPolicyObjectLiteral(sourceFile) !== null;
+}
+
+/**
+ * The one locator for the sidecar statement's config object literal. Both the
+ * marker check and {@link readIslandRoot} read through it, so the two can never
+ * disagree about which statement is the island policy.
+ */
+function islandPolicyObjectLiteral(sourceFile: ts.SourceFile): ts.ObjectLiteralExpression | null {
   for (const statement of sourceFile.statements) {
     if (!ts.isVariableStatement(statement)) continue;
     const modifiers = ts.getModifiers(statement) ?? [];
@@ -139,9 +159,120 @@ export function hasIslandPolicyStatement(sourceFile: ts.SourceFile): boolean {
     const initializer = declaration.initializer;
     if (initializer === undefined || !ts.isCallExpression(initializer)) continue;
     if (initializer.arguments.length !== 1) continue;
-    if (ts.isObjectLiteralExpression(initializer.arguments[0]!)) return true;
+    const descriptor = initializer.arguments[0]!;
+    if (ts.isObjectLiteralExpression(descriptor)) return descriptor;
   }
-  return false;
+  return null;
+}
+
+/**
+ * The result of reading the sidecar's `root` from the authored AST.
+ *
+ * `absent` covers both "no sidecar in this module" and "a sidecar that pins no
+ * root"; the caller distinguishes them with {@link hasIslandPolicyStatement}.
+ */
+export type IslandRootRead =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'root'; readonly root: RootMode }
+  | { readonly kind: 'refused'; readonly diagnostic: IrDiagnostic };
+
+/** The static property name of a key/value pair, or null when unreadable. */
+function staticPropertyName(name: ts.PropertyName): string | null {
+  if (ts.isIdentifier(name)) return name.text;
+  if (ts.isStringLiteral(name) && name.text.length > 0) return name.text;
+  return null;
+}
+
+function rootDiagnostic(sourceFile: ts.SourceFile, node: ts.Node, message: string): IrDiagnostic {
+  return diagnosticAt(sourceFile, node, GENERATED_ELEMENT_DIAGNOSTIC.ROOT_INVALID, message);
+}
+
+/**
+ * Read the sidecar's `root` from the authored AST (D-root-source, 2026-11-13).
+ *
+ * The router's static scanner is the authority for the sidecar's accepted
+ * shape, its accepted key set and its error text; this reader exists because
+ * the compiler lane must not carry a root fact across the host boundary. It is
+ * deliberately narrower than the scanner: it reads the ONE key it needs, and
+ * it refuses — instead of guessing — whenever the value cannot be proven from
+ * the literal text (`OEIR_GENERATED_ELEMENT_ROOT_INVALID`, source-located).
+ *
+ * The author-facing vocabulary is the sidecar's `'light' | 'shadow'`; the
+ * descriptor's `'shadow'` is the DSD default, which the shell spells
+ * `shadow-open`. Closed roots have no author spelling (`D-closed`), so no
+ * mapping to `shadow-closed` exists here.
+ */
+export function readIslandRoot(sourceFile: ts.SourceFile): IslandRootRead {
+  const descriptor = islandPolicyObjectLiteral(sourceFile);
+  if (descriptor === null) return { kind: 'absent' };
+  let seenRoot = false;
+  let declared: 'light' | 'shadow' | null = null;
+  for (const property of descriptor.properties) {
+    // A spread, a shorthand, a method or a computed key makes the object's key
+    // set unprovable: the root fact could hide behind it, so nothing is read.
+    if (!ts.isPropertyAssignment(property)) {
+      return {
+        kind: 'refused',
+        diagnostic: rootDiagnostic(
+          sourceFile,
+          property,
+          'the openElement sidecar must contain only static key/value pairs; ' +
+            `"${property.getText(sourceFile)}" cannot be read statically, so the root fact ` +
+            'cannot be established',
+        ),
+      };
+    }
+    const name = staticPropertyName(property.name);
+    if (name === null) {
+      return {
+        kind: 'refused',
+        diagnostic: rootDiagnostic(
+          sourceFile,
+          property.name,
+          `the openElement sidecar key "${property.name.getText(sourceFile)}" is not a static ` +
+            'property name, so the root fact cannot be established',
+        ),
+      };
+    }
+    if (name !== 'root') continue;
+    if (seenRoot) {
+      return {
+        kind: 'refused',
+        diagnostic: rootDiagnostic(
+          sourceFile,
+          property,
+          'the openElement sidecar declares root more than once, so the root fact is ambiguous',
+        ),
+      };
+    }
+    seenRoot = true;
+    const initializer = property.initializer;
+    if (!ts.isStringLiteral(initializer)) {
+      return {
+        kind: 'refused',
+        diagnostic: rootDiagnostic(
+          sourceFile,
+          initializer,
+          'openElement.root must be a static literal, got dynamic value ' +
+            `"${initializer.getText(sourceFile)}"`,
+        ),
+      };
+    }
+    if (initializer.text !== 'light' && initializer.text !== 'shadow') {
+      return {
+        kind: 'refused',
+        diagnostic: rootDiagnostic(
+          sourceFile,
+          initializer,
+          `openElement.root has unsupported value "${initializer.text}"; ` +
+            'use "light" or "shadow"',
+        ),
+      };
+    }
+    declared = initializer.text;
+  }
+  if (declared === null) return { kind: 'absent' };
+  return { kind: 'root', root: declared === 'light' ? 'light' : 'shadow-open' };
 }
 
 function localFunctionDeclaration(
@@ -261,11 +392,16 @@ export function admitGeneratedElementSite(
       ],
     };
   }
+  const rootRead = readIslandRoot(sourceFile);
+  if (rootRead.kind === 'refused') {
+    return { kind: 'refused', diagnostics: [rootRead.diagnostic] };
+  }
   return {
     kind: 'admitted',
     admission: {
       componentName: fact.name,
       defaultExportSpan: fact.span,
+      root: rootRead.kind === 'root' ? rootRead.root : undefined,
       propsParameter: propsParameterOf(fact.node),
     },
   };

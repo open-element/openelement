@@ -83,9 +83,10 @@ function notAComponent(componentName: string, moduleFile: string): IrDiagnostic 
  * when — the host supplied a site fact for it.
  *
  * Admission order (design §4.2): site fact → class-lane ownership → syntactic
- * default-export/sidecar admission → props parameter → leaf generation →
- * bindings requirement. The final emitter step is append-only over the leaf
- * text, so every refusal happens before a half-built module can be returned.
+ * default-export/sidecar admission (the root included: the lane reads it from
+ * the sidecar, D-root-source) → props parameter → leaf generation → bindings
+ * requirement. The final emitter step is append-only over the leaf text, so
+ * every refusal happens before a half-built module can be returned.
  */
 export function compileGeneratedElementIfAdmitted(
   code: string,
@@ -140,6 +141,10 @@ export function compileGeneratedElementIfAdmitted(
 
   const emitted = generateElementModule(frontend.module, options.site, {
     rootComponent: root.name,
+    // D-root-source (2026-11-13): the descriptor root is the value the lane
+    // read from the authored sidecar, not a host fact; absent stays absent so
+    // the shell applies `light`.
+    ...(admission.root === undefined ? {} : { root: admission.root }),
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
   });
   if (emitted.diagnostics.length > 0) {

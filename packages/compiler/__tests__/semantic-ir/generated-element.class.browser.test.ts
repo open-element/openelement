@@ -61,6 +61,22 @@ export default Profile;
 `;
 
 /**
+ * The same root component with a shadow sidecar. D-root-source (2026-11-13)
+ * moved the root out of the host site fact and into the authored sidecar, so
+ * the shadow evidence declares it where an author would: `root: 'shadow'`
+ * (the DSD default) maps to the descriptor's `shadow-open`.
+ */
+const SHADOW_SIDECAR =
+  "import { defineIslandConfig } from '@openelement/router';\n" +
+  "export const openElement = defineIslandConfig({ root: 'shadow' });\n";
+const SHADOW_SOURCE = `${SHADOW_SIDECAR}
+function Profile() {
+  return <p id="profile">hello</p>;
+}
+export default Profile;
+`;
+
+/**
  * The old Part Program backend plus the server-only DSD/serializer leaves. The
  * generated bundle may share the neutral recipe/value primitives, but it must
  * never acquire these modules.
@@ -201,10 +217,10 @@ beforeAll(async () => {
   tempDir = mkdtempSync(join(tmpdir(), 'oe-m09-1a-'));
   const module = frontModule(SOURCE);
   const light = compileGeneratedElementIfAdmitted(SOURCE, FILE, {
-    site: { tag: 'x-profile', root: 'light' },
+    site: { tag: 'x-profile' },
   });
-  const shadow = compileGeneratedElementIfAdmitted(SOURCE, FILE, {
-    site: { tag: 'x-shadow-profile', root: 'shadow-open' },
+  const shadow = compileGeneratedElementIfAdmitted(SHADOW_SOURCE, FILE, {
+    site: { tag: 'x-shadow-profile' },
   });
   expect(light).not.toBeNull();
   expect(shadow).not.toBeNull();
