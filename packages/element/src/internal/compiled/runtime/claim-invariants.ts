@@ -52,6 +52,32 @@ export interface DeclaredStaticAttribute {
   readonly value: string;
 }
 
+/**
+ * Compile-time authored origin of a generated-leaf mismatch. The generated
+ * call passes literals next to the existing marker/`where` strings; the
+ * runtime never parses a source map. `line` and `column` are the authored,
+ * 1-based source positions.
+ *
+ * This is internal to the compiled runtime, not part of
+ * `@openelement/protocol` and not a public entry point.
+ */
+export interface ClaimOrigin {
+  readonly file: string;
+  readonly line: number;
+  readonly column: number;
+}
+
+/**
+ * Append the authored location to an existing detail, or leave it untouched
+ * when the caller has no compile-time origin. `file` is used as-is: no path
+ * normalization and no escaping beyond the message itself.
+ */
+function locatedDetail(detail: string, origin: ClaimOrigin | undefined): string {
+  return origin === undefined
+    ? detail
+    : `${detail} (authored ${origin.file}:${origin.line}:${origin.column})`;
+}
+
 function describe(value: unknown): string {
   return JSON.stringify(value);
 }
@@ -60,9 +86,14 @@ function describe(value: unknown): string {
  * The one way a generated-leaf claim reports a mismatch. Generated modules
  * call this instead of constructing the error and its options themselves, so
  * the code, phase and recoverability live here too.
+ *
+ * The optional `origin` only appends ` (authored file:line:column)` to the
+ * message. The code, phase, severity, recoverability and the existing DOM path
+ * in `detail` are unchanged, and no structured position field is added to the
+ * error.
  */
-export function leafClaimMismatch(detail: string): OpenElementError {
-  return new OpenElementError(`${LEAF_CLAIM_MISMATCH}: ${detail}`, {
+export function leafClaimMismatch(detail: string, origin?: ClaimOrigin): OpenElementError {
+  return new OpenElementError(`${LEAF_CLAIM_MISMATCH}: ${locatedDetail(detail, origin)}`, {
     code: LEAF_CLAIM_MISMATCH,
     phase: 'csr',
     severity: 'error',
@@ -111,15 +142,20 @@ export function staticAttributeSeedMismatch(
   return null;
 }
 
-/** Throw the catalogued leaf mismatch when the static attribute seed differs. */
+/**
+ * Throw the catalogued leaf mismatch when the static attribute seed differs.
+ * `origin` is the owning element's authored position, when the emitted claim
+ * has one.
+ */
 export function assertStaticAttributeSeed(
   element: Element,
   declared: readonly DeclaredStaticAttribute[],
   where: string,
   dynamicNames: readonly string[] = [],
+  origin?: ClaimOrigin,
 ): void {
   const reason = staticAttributeSeedMismatch(element, declared, dynamicNames);
-  if (reason !== null) throw leafClaimMismatch(`${reason} at ${where}`);
+  if (reason !== null) throw leafClaimMismatch(`${reason} at ${where}`, origin);
 }
 
 /**
@@ -190,18 +226,20 @@ export function assertTextSlotMarker(
   ordinal: number,
   end: boolean,
   where: string,
+  origin?: ClaimOrigin,
 ): void {
   const position = end ? 'end' : 'start';
   if (node == null) {
-    throw leafClaimMismatch(`text boundary ${position} is missing at ${where}`);
+    throw leafClaimMismatch(`text boundary ${position} is missing at ${where}`, origin);
   }
   if (node.nodeType !== 8) {
-    throw leafClaimMismatch(`text boundary ${position} at ${where} is not a comment`);
+    throw leafClaimMismatch(`text boundary ${position} at ${where} is not a comment`, origin);
   }
   const parsed = parseTextSlotMarker((node as Comment).nodeValue);
   if (parsed === null || parsed.end !== end || parsed.ordinal !== ordinal) {
     throw leafClaimMismatch(
       `text boundary ${position} at ${where} does not match ordinal ${ordinal}`,
+      origin,
     );
   }
 }
@@ -219,27 +257,35 @@ export function isWhenEndMarker(node: Node | null | undefined): boolean {
   );
 }
 
-export function assertWhenAnchor(node: Node | null | undefined, where: string): void {
+export function assertWhenAnchor(
+  node: Node | null | undefined,
+  where: string,
+  origin?: ClaimOrigin,
+): void {
   if (node == null) {
-    throw leafClaimMismatch(`condition anchor is missing at ${where}`);
+    throw leafClaimMismatch(`condition anchor is missing at ${where}`, origin);
   }
   if (node.nodeType !== 8) {
-    throw leafClaimMismatch(`condition anchor at ${where} is not a comment`);
+    throw leafClaimMismatch(`condition anchor at ${where} is not a comment`, origin);
   }
   if (parseWhenMarker((node as Comment).nodeValue) !== 'start') {
-    throw leafClaimMismatch(`condition anchor at ${where} does not match`);
+    throw leafClaimMismatch(`condition anchor at ${where} does not match`, origin);
   }
 }
 
-export function assertWhenEndMarker(node: Node | null | undefined, where: string): void {
+export function assertWhenEndMarker(
+  node: Node | null | undefined,
+  where: string,
+  origin?: ClaimOrigin,
+): void {
   if (node == null) {
-    throw leafClaimMismatch(`condition end is missing at ${where}`);
+    throw leafClaimMismatch(`condition end is missing at ${where}`, origin);
   }
   if (node.nodeType !== 8) {
-    throw leafClaimMismatch(`condition end at ${where} is not a comment`);
+    throw leafClaimMismatch(`condition end at ${where} is not a comment`, origin);
   }
   if (parseWhenMarker((node as Comment).nodeValue) !== 'end') {
-    throw leafClaimMismatch(`condition end at ${where} does not match`);
+    throw leafClaimMismatch(`condition end at ${where} does not match`, origin);
   }
 }
 
@@ -254,27 +300,35 @@ export function assertWhenEndMarker(node: Node | null | undefined, where: string
  * original-byte/transport completeness belongs to the HTTP/build boundary and
  * is not claimed by this check. No document/root sentinel is added.
  */
-export function assertEachAnchor(node: Node | null | undefined, where: string): void {
+export function assertEachAnchor(
+  node: Node | null | undefined,
+  where: string,
+  origin?: ClaimOrigin,
+): void {
   if (node == null) {
-    throw leafClaimMismatch(`list anchor is missing at ${where}`);
+    throw leafClaimMismatch(`list anchor is missing at ${where}`, origin);
   }
   if (node.nodeType !== 8) {
-    throw leafClaimMismatch(`list anchor at ${where} is not a comment`);
+    throw leafClaimMismatch(`list anchor at ${where} is not a comment`, origin);
   }
   if (parseEachMarker((node as Comment).nodeValue) !== 'start') {
-    throw leafClaimMismatch(`list anchor at ${where} does not match`);
+    throw leafClaimMismatch(`list anchor at ${where} does not match`, origin);
   }
 }
 
-export function assertEachEndMarker(node: Node | null | undefined, where: string): void {
+export function assertEachEndMarker(
+  node: Node | null | undefined,
+  where: string,
+  origin?: ClaimOrigin,
+): void {
   if (node == null) {
-    throw leafClaimMismatch(`list end is missing at ${where}`);
+    throw leafClaimMismatch(`list end is missing at ${where}`, origin);
   }
   if (node.nodeType !== 8) {
-    throw leafClaimMismatch(`list end at ${where} is not a comment`);
+    throw leafClaimMismatch(`list end at ${where} is not a comment`, origin);
   }
   if (parseEachMarker((node as Comment).nodeValue) !== 'end') {
-    throw leafClaimMismatch(`list end at ${where} does not match`);
+    throw leafClaimMismatch(`list end at ${where} does not match`, origin);
   }
 }
 
@@ -291,19 +345,23 @@ export function isEachEndMarker(node: Node | null | undefined): boolean {
  * (`unsupported entry key kind`), never silently adopted. The token is returned
  * as a string and never decoded.
  */
-export function readEntryKeyMarker(node: Node | null | undefined, where: string): string {
+export function readEntryKeyMarker(
+  node: Node | null | undefined,
+  where: string,
+  origin?: ClaimOrigin,
+): string {
   if (node == null) {
-    throw leafClaimMismatch(`entry key marker is missing at ${where}`);
+    throw leafClaimMismatch(`entry key marker is missing at ${where}`, origin);
   }
   if (node.nodeType !== 8) {
-    throw leafClaimMismatch(`entry key marker at ${where} is not a comment`);
+    throw leafClaimMismatch(`entry key marker at ${where} is not a comment`, origin);
   }
   const parsed = parseEntryKeyMarker((node as Comment).nodeValue);
   if (parsed === null) {
-    throw leafClaimMismatch(`entry key marker at ${where} does not match`);
+    throw leafClaimMismatch(`entry key marker at ${where} does not match`, origin);
   }
   if (parsed.token === LIST_KEY_UNSUPPORTED) {
-    throw leafClaimMismatch(`unsupported entry key kind at ${where}`);
+    throw leafClaimMismatch(`unsupported entry key kind at ${where}`, origin);
   }
   return parsed.token;
 }
@@ -365,18 +423,22 @@ export function entrySeedMismatch(
  * generated claims already call it; renaming it would require an emitter change
  * for the same rule.
  */
-export function assertElementInHtmlNamespace(node: Node | null, where: string): void {
+export function assertElementInHtmlNamespace(
+  node: Node | null,
+  where: string,
+  origin?: ClaimOrigin,
+): void {
   if (isClaimParentShadowRoot(node)) {
     const host = node.host;
     const hostReason = elementHtmlNamespaceViolation(host);
     if (hostReason !== null) {
-      throw leafClaimMismatch(`non-HTML namespace at ${where} (${hostReason})`);
+      throw leafClaimMismatch(`non-HTML namespace at ${where} (${hostReason})`, origin);
     }
     for (let current = host.parentNode; current !== null; current = current.parentNode) {
       if (current.nodeType !== 1) continue;
       const reason = elementHtmlNamespaceViolation(current);
       if (reason !== null) {
-        throw leafClaimMismatch(`non-HTML namespace at ${where} (${reason})`);
+        throw leafClaimMismatch(`non-HTML namespace at ${where} (${reason})`, origin);
       }
     }
     return;
@@ -384,10 +446,12 @@ export function assertElementInHtmlNamespace(node: Node | null, where: string): 
   // The claim target itself must be an HTML element (a text or comment node is
   // not a claim target at all). Element ancestors are checked above it.
   const own = elementHtmlNamespaceViolation(node);
-  if (own !== null) throw leafClaimMismatch(`non-HTML namespace at ${where} (${own})`);
+  if (own !== null) throw leafClaimMismatch(`non-HTML namespace at ${where} (${own})`, origin);
   for (let current = node?.parentNode ?? null; current !== null; current = current.parentNode) {
     if (current.nodeType !== 1) continue;
     const reason = elementHtmlNamespaceViolation(current);
-    if (reason !== null) throw leafClaimMismatch(`non-HTML namespace at ${where} (${reason})`);
+    if (reason !== null) {
+      throw leafClaimMismatch(`non-HTML namespace at ${where} (${reason})`, origin);
+    }
   }
 }

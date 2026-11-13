@@ -3197,18 +3197,41 @@ function moduleUsesSharedClaimCursor(
 }
 
 /**
+ * The optional trailing origin argument: `, { file, line, column }` or empty
+ * when the emitter has no authored anchor. Both values are compile-time
+ * constants; the runtime never parses a source map. `line`/`column` are the
+ * 1-based `SpanLike` values, used as-is.
+ */
+function originArgs(anchor: SpanLike | undefined): string {
+  if (anchor === undefined) return '';
+  return `, { file: ${JSON.stringify(anchor.file)}, line: ${anchor.line}, column: ${anchor.column} }`;
+}
+
+/**
  * The emitted mismatch expression. The message prefix, the code and the error
  * options live in the runtime (`claim-invariants.ts`); the compiler names the
- * helper and passes the detail, so no contract string is restated here.
+ * helper and passes the detail, so no contract string is restated here. The
+ * optional authored `anchor` only makes the runtime append its additive
+ * ` (authored file:line:column)` suffix.
  */
-function claimError(detail: string): string {
-  return `leafClaimMismatch(${JSON.stringify(detail)})`;
+function claimError(detail: string, anchor?: SpanLike): string {
+  return `leafClaimMismatch(${JSON.stringify(detail)}${originArgs(anchor)})`;
+}
+
+/** Same, for a generated detail expression (the strict list seed mismatch). */
+function claimErrorFrom(detailExpr: string, anchor?: SpanLike): string {
+  return `leafClaimMismatch(${detailExpr}${originArgs(anchor)})`;
 }
 
 /** Throw the leaf mismatch. Sets the runtime import flag. */
-function emitClaimMismatch(state: EmitState, condition: string, detail: string): void {
+function emitClaimMismatch(
+  state: EmitState,
+  condition: string,
+  detail: string,
+  anchor?: SpanLike,
+): void {
   state.usesLeafClaimMismatch = true;
-  push(state, `if (${condition}) throw ${claimError(detail)};`);
+  push(state, `if (${condition}) throw ${claimError(detail, anchor)};`);
 }
 
 /**
@@ -3216,9 +3239,17 @@ function emitClaimMismatch(state: EmitState, condition: string, detail: string):
  * in the HTML namespace. Text and comment ancestors are not element checks.
  * A failure here is before any claim write.
  */
-function emitClaimHtmlNamespace(state: EmitState, nodeExpr: string, where: string): void {
+function emitClaimHtmlNamespace(
+  state: EmitState,
+  nodeExpr: string,
+  where: string,
+  anchor?: SpanLike,
+): void {
   state.usesLeafClaimMismatch = true;
-  push(state, `assertElementInHtmlNamespace(${nodeExpr}, ${JSON.stringify(where)});`);
+  push(
+    state,
+    `assertElementInHtmlNamespace(${nodeExpr}, ${JSON.stringify(where)}${originArgs(anchor)});`,
+  );
 }
 
 /**
@@ -3242,6 +3273,7 @@ function emitClaimStaticAttributeSeed(
   elementVar: string,
   attributes: readonly FunctionModelAttribute[],
   where: string,
+  anchor?: SpanLike,
 ): void {
   const staticAttrs = attributes.filter((attribute) => attribute.kind === 'static');
   const dynamicNames = attributes
@@ -3260,18 +3292,29 @@ function emitClaimStaticAttributeSeed(
   state.usesLeafClaimMismatch = true;
   push(
     state,
-    `assertStaticAttributeSeed(${elementVar}, [${declared}], ${JSON.stringify(where)}, ${skip});`,
+    `assertStaticAttributeSeed(${elementVar}, [${declared}], ${JSON.stringify(where)}, ${skip}${originArgs(anchor)});`,
   );
 }
 
-function emitClaimTake(state: EmitState, cursor: string, name: string, where: string): void {
+function emitClaimTake(
+  state: EmitState,
+  cursor: string,
+  name: string,
+  where: string,
+  anchor?: SpanLike,
+): void {
   push(state, `const ${name} = ${cursor}.node;`);
-  emitClaimMismatch(state, `${name} == null`, `missing node at ${where}`);
+  emitClaimMismatch(state, `${name} == null`, `missing node at ${where}`, anchor);
   push(state, `${cursor}.node = ${name}.nextSibling;`);
 }
 
-function emitClaimCursorEnd(state: EmitState, cursor: string, where: string): void {
-  emitClaimMismatch(state, `${cursor}.node !== null`, `extra node at ${where}`);
+function emitClaimCursorEnd(
+  state: EmitState,
+  cursor: string,
+  where: string,
+  anchor?: SpanLike,
+): void {
+  emitClaimMismatch(state, `${cursor}.node !== null`, `extra node at ${where}`, anchor);
 }
 
 interface PreparedSlot {
@@ -3513,7 +3556,11 @@ function emitConditionClaim(
   const here = path;
   const anchorVar = nextName(state, 'whenAnchor');
   push(state, `const ${anchorVar} = ${cursor}.node;`, node.span);
-  push(state, `assertWhenAnchor(${anchorVar}, ${JSON.stringify(`${here}/anchor`)});`, node.span);
+  push(
+    state,
+    `assertWhenAnchor(${anchorVar}, ${JSON.stringify(`${here}/anchor`)}${originArgs(node.span)});`,
+    node.span,
+  );
   push(state, `${cursor}.node = ${anchorVar}.nextSibling;`);
 
   // Mount-style create builders for later toggles and for the server-empty
@@ -3614,7 +3661,11 @@ function emitConditionClaim(
   verifyBranch(1, thenClaim);
   verifyBranch(2, elseClaim);
 
-  push(state, `assertWhenEndMarker(${cursor}.node, ${JSON.stringify(`${here}/end`)});`, node.span);
+  push(
+    state,
+    `assertWhenEndMarker(${cursor}.node, ${JSON.stringify(`${here}/end`)}${originArgs(node.span)});`,
+    node.span,
+  );
   const endVar = nextName(state, 'whenEnd');
   push(state, `const ${endVar} = ${cursor}.node;`);
   push(state, `${cursor}.node = ${endVar}.nextSibling;`);
@@ -3853,7 +3904,7 @@ function emitClaimListSync(
   state.indent += 1;
   push(
     state,
-    `if (strict) throw leafClaimMismatch(${JSON.stringify(`server entry key has no client item at ${path}/each`)});`,
+    `if (strict) throw ${claimError(`server entry key has no client item at ${path}/each`, anchor)};`,
   );
   push(state, 'entry.owner.dispose(true);');
   state.indent -= 1;
@@ -3920,7 +3971,7 @@ function emitClaimList(
   push(state, `const ${anchorVar} = ${cursor}.node;`, node.span);
   push(
     state,
-    `assertEachAnchor(${anchorVar}, ${JSON.stringify(`${here}/each/anchor`)});`,
+    `assertEachAnchor(${anchorVar}, ${JSON.stringify(`${here}/each/anchor`)}${originArgs(node.span)});`,
     node.span,
   );
   push(state, `${cursor}.node = ${anchorVar}.nextSibling;`);
@@ -3977,7 +4028,7 @@ function emitClaimList(
   const tokenVar = nextName(state, 'entryToken');
   push(
     state,
-    `const ${tokenVar} = readEntryKeyMarker(${markerVar}, ${JSON.stringify(`${here}/each/entry`)});`,
+    `const ${tokenVar} = readEntryKeyMarker(${markerVar}, ${JSON.stringify(`${here}/each/entry`)}${originArgs(node.span)});`,
   );
   push(state, `${cursor}.node = ${markerVar}.nextSibling;`);
   const ownerVar = nextName(state, 'entryOwner');
@@ -4008,7 +4059,7 @@ function emitClaimList(
   push(state, '}');
   push(
     state,
-    `assertEachEndMarker(${cursor}.node, ${JSON.stringify(`${here}/each/end`)});`,
+    `assertEachEndMarker(${cursor}.node, ${JSON.stringify(`${here}/each/end`)}${originArgs(node.span)});`,
     node.span,
   );
   const endVar = nextName(state, 'eachEnd');
@@ -4030,10 +4081,10 @@ function emitClaimList(
   push(state, '}');
   const mismatchVar = nextName(state, 'seedMismatch');
   push(state, `const ${mismatchVar} = entrySeedMismatch(${wireTokensVar}, ${tokensVar});`);
-  push(
-    state,
-    `if (${mismatchVar} !== null) throw leafClaimMismatch(${mismatchVar} + ${JSON.stringify(` at ${here}/each`)});`,
-  );
+  // The detail stays a generated expression; the origin is still the authored
+  // list node, so the strict seed mismatch reports where the list was written.
+  const seedDetail = `${mismatchVar} + ${JSON.stringify(` at ${here}/each`)}`;
+  push(state, `if (${mismatchVar} !== null) throw ${claimErrorFrom(seedDetail, node.span)};`);
   push(state, `for (let index = 0; index < ${itemsVar}.length; index++) {`);
   state.indent += 1;
   push(state, `const token = ${tokensVar}[index];`);
@@ -4051,7 +4102,7 @@ function emitClaimList(
   push(state, '}');
   push(
     state,
-    `for (const entry of ${seededVar}) if (!entry.assigned) throw leafClaimMismatch(${JSON.stringify(`server entry key has no client item at ${here}/each`)});`,
+    `for (const entry of ${seededVar}) if (!entry.assigned) throw ${claimError(`server entry key has no client item at ${here}/each`, node.span)};`,
   );
 
   const entriesVar = nextName(state, 'eachEntries');
@@ -4151,11 +4202,12 @@ function emitClaimInto(
     }
     if (node.kind === 'text') {
       const name = nextName(state, 'text');
-      emitClaimTake(state, cursor, name, here);
+      emitClaimTake(state, cursor, name, here, node.span);
       emitClaimMismatch(
         state,
         `${name}.nodeType !== 3 || ${name}.nodeValue !== ${JSON.stringify(node.value)}`,
         `static text at ${here}`,
+        node.span,
       );
       adopt(name);
       return;
@@ -4166,10 +4218,10 @@ function emitClaimInto(
       const ordinal = textOrdinal(state, node);
       if (ordinal === null) return;
       const start = nextName(state, 'textStart');
-      emitClaimTake(state, cursor, start, `${here}/text-start`);
+      emitClaimTake(state, cursor, start, `${here}/text-start`, node.span);
       push(
         state,
-        `assertTextSlotMarker(${start}, ${ordinal}, false, ${JSON.stringify(`${here}/text-start`)});`,
+        `assertTextSlotMarker(${start}, ${ordinal}, false, ${JSON.stringify(`${here}/text-start`)}${originArgs(node.span)});`,
         node.span,
       );
       const slotText = nextName(state, 'slotText');
@@ -4181,10 +4233,10 @@ function emitClaimInto(
       push(state, `  ${cursor}.node = ${maybeText}.nextSibling;`);
       push(state, `}`);
       const end = nextName(state, 'textEnd');
-      emitClaimTake(state, cursor, end, `${here}/text-end`);
+      emitClaimTake(state, cursor, end, `${here}/text-end`, node.span);
       push(
         state,
-        `assertTextSlotMarker(${end}, ${ordinal}, true, ${JSON.stringify(`${here}/text-end`)});`,
+        `assertTextSlotMarker(${end}, ${ordinal}, true, ${JSON.stringify(`${here}/text-end`)}${originArgs(node.span)});`,
         node.span,
       );
       adopt(start);
@@ -4199,14 +4251,15 @@ function emitClaimInto(
     }
     if (node.kind === 'element') {
       const name = nextName(state, 'el');
-      emitClaimTake(state, cursor, name, here);
+      emitClaimTake(state, cursor, name, here, node.span);
       emitClaimMismatch(
         state,
         `${name}.nodeType !== 1 || String(${name}.localName || ${name}.tagName || "").toLowerCase() !== ${JSON.stringify(node.tag)}`,
         `expected element '${node.tag}' at ${here}`,
+        node.span,
       );
-      emitClaimHtmlNamespace(state, name, here);
-      emitClaimStaticAttributeSeed(state, name, node.attributes, here);
+      emitClaimHtmlNamespace(state, name, here, node.span);
+      emitClaimStaticAttributeSeed(state, name, node.attributes, here, node.span);
       for (const attribute of node.attributes) {
         if (attribute.kind === 'static') continue;
         if (attribute.kind === 'dynamic' && CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
@@ -4254,7 +4307,7 @@ function emitClaimInto(
           name,
           false,
         );
-        emitClaimCursorEnd(state, childCursor, here);
+        emitClaimCursorEnd(state, childCursor, here, node.span);
         if (saved !== null) {
           emitPhase2Steps(state, childPhase2);
           state.indent -= 1;
@@ -4483,7 +4536,7 @@ function emitClaimTimeRecipes(
       `source: ${JSON.stringify(`${file}#${state.component.name}:${recipe.id.replace(/^#/, '')}`)},`,
     );
     state.usesLeafClaimMismatch = true;
-    push(state, `mount() { throw ${claimError('claim-time recipe has no mount')}; },`);
+    push(state, `mount() { throw ${claimError('claim-time recipe has no mount', recipe.span)}; },`);
     push(state, `claim(${scopeParam}, ${propsParam}, ${parentParam}) {`, recipe.span);
     state.indent += 1;
     const outerScope = state.scopeVar;
@@ -4500,7 +4553,7 @@ function emitClaimTimeRecipes(
     push(state, `const ${adoptedVar} = [];`);
     push(state, 'try {');
     state.indent += 1;
-    emitClaimHtmlNamespace(state, parentParam, '/');
+    emitClaimHtmlNamespace(state, parentParam, '/', recipe.span);
     emitClaimInto(
       state,
       [recipe.target],
@@ -4520,7 +4573,7 @@ function emitClaimTimeRecipes(
     state.usesLeafClaimMismatch = true;
     push(
       state,
-      `if (__oe_cursorOwned && __oe_claimCursor.node !== null) throw ${claimError('extra node at /')};`,
+      `if (__oe_cursorOwned && __oe_claimCursor.node !== null) throw ${claimError('extra node at /', recipe.span)};`,
     );
     emitPhase2Steps(state, phase2);
     emitClaimActivationCapture(state, activationSteps);
@@ -4646,7 +4699,7 @@ function emitClaimFunction(
       push(state, `${rootAdoptedVar}.push(${interior});`);
     }
   } else if (!useShared) {
-    emitClaimHtmlNamespace(state, CLAIM_PARENT, '/');
+    emitClaimHtmlNamespace(state, CLAIM_PARENT, '/', component.span);
     const rootCursor = nextName(state, 'cursor');
     push(state, `const ${rootCursor} = { node: ${CLAIM_PARENT}.firstChild };`);
     emitClaimInto(
@@ -4665,7 +4718,7 @@ function emitClaimFunction(
       CLAIM_PARENT,
       true,
     );
-    emitClaimCursorEnd(state, rootCursor, '/');
+    emitClaimCursorEnd(state, rootCursor, '/', component.span);
   } else {
     for (const line of localLines) {
       pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
@@ -4677,7 +4730,7 @@ function emitClaimFunction(
         `if (${state.childrenRecipeVar} == null || typeof ${state.childrenRecipeVar} !== "object" || typeof ${state.childrenRecipeVar}.mount !== "function" || ${state.childrenRecipeVar}.definitionOwner == null) throw new Error("OEIR_LEAF_MISSING_CHILDREN: component '<${component.name}>' projects props.children but the mounted instance was given no children recipe");`,
       );
     }
-    emitClaimHtmlNamespace(state, CLAIM_PARENT, '/');
+    emitClaimHtmlNamespace(state, CLAIM_PARENT, '/', component.span);
     emitClaimTimeRecipes(state, file, records);
     const adoptedVar = nextName(state, 'adopted');
     state.claimAdoptedVar = adoptedVar;
@@ -4704,7 +4757,7 @@ function emitClaimFunction(
     state.usesLeafClaimMismatch = true;
     push(
       state,
-      `if (__oe_cursorOwned && __oe_claimCursor.node !== null) throw ${claimError('extra node at /')};`,
+      `if (__oe_cursorOwned && __oe_claimCursor.node !== null) throw ${claimError('extra node at /', component.span)};`,
     );
     emitPhase2Steps(state, phase2);
     emitClaimActivationCapture(state, activationSteps);
