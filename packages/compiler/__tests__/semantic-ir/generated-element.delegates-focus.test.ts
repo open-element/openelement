@@ -92,36 +92,61 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
   test('a shadow sidecar reads delegatesFocus true', () => {
     expect(readIslandMetadata(parse(island("root: 'shadow', delegatesFocus: true")))).toEqual({
       kind: 'read',
-      facts: { root: 'shadow-open', delegatesFocus: true },
+      facts: {
+        root: 'shadow-open',
+        delegatesFocus: true,
+        formAssociated: false,
+        properties: undefined,
+      },
     });
   });
 
   test('false is read as the default fact and needs no shadow root', () => {
     expect(readIslandMetadata(parse(island('delegatesFocus: false')))).toEqual({
       kind: 'read',
-      facts: { root: undefined, delegatesFocus: false },
+      facts: {
+        root: undefined,
+        delegatesFocus: false,
+        formAssociated: false,
+        properties: undefined,
+      },
     });
     expect(readIslandMetadata(parse(island("root: 'light', delegatesFocus: false")))).toEqual({
       kind: 'read',
-      facts: { root: 'light', delegatesFocus: false },
+      facts: { root: 'light', delegatesFocus: false, formAssociated: false, properties: undefined },
     });
   });
 
   test('an absent delegatesFocus reads false beside the root fact', () => {
     expect(readIslandMetadata(parse(island("root: 'shadow'")))).toEqual({
       kind: 'read',
-      facts: { root: 'shadow-open', delegatesFocus: false },
+      facts: {
+        root: 'shadow-open',
+        delegatesFocus: false,
+        formAssociated: false,
+        properties: undefined,
+      },
     });
     expect(readIslandMetadata(parse(island("hydrate: 'idle'")))).toEqual({
       kind: 'read',
-      facts: { root: undefined, delegatesFocus: false },
+      facts: {
+        root: undefined,
+        delegatesFocus: false,
+        formAssociated: false,
+        properties: undefined,
+      },
     });
   });
 
   test('a string-literal key is read like an identifier key', () => {
     expect(readIslandMetadata(parse(island('root: \'shadow\', "delegatesFocus": true')))).toEqual({
       kind: 'read',
-      facts: { root: 'shadow-open', delegatesFocus: true },
+      facts: {
+        root: 'shadow-open',
+        delegatesFocus: true,
+        formAssociated: false,
+        properties: undefined,
+      },
     });
   });
 

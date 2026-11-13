@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { ElementParams } from '../src/open-element-params.ts';
 import { LifetimeScope } from '../src/internal/compiled/lifetime-scope.ts';
-import { attachFormInternals } from '../src/open-element-form.ts';
+import { attachFormInternals, ElementFormController } from '../src/open-element-form.ts';
 // The hydration executor is installed by the package entry, not by the kernel
 // (#1416); the kernel case below reconnects into retained content, which is a
 // claim. This file reaches the kernel directly, so it installs it exactly as
@@ -166,4 +166,54 @@ test('form: attaches internals only when opted in', () => {
   expect(attachFormInternals(withAttach, { formAssociated: true })).toEqual(fakeInternals);
   expect(attachFormInternals(withAttach, {})).toEqual(undefined);
   expect(attachFormInternals({}, { formAssociated: true })).toEqual(undefined);
+});
+
+test('form: injected internals mode consumes the shell record exactly once', () => {
+  const calls: string[] = [];
+  const fakeInternals = {
+    setFormValue: (value: unknown) => calls.push(`value:${String(value)}`),
+    setValidity: (flags?: ValidityStateFlags) =>
+      calls.push(`validity:${String(flags?.valueMissing ?? false)}`),
+  } as unknown as ElementInternals;
+  let attached = 0;
+  const getInternals = () => {
+    attached += 1;
+    return fakeInternals;
+  };
+  const controller = new ElementFormController();
+  expect(controller.attachWith(getInternals)).toBe(fakeInternals);
+  expect(controller.attachWith(getInternals)).toBe(fakeInternals);
+  expect(attached).toBe(1);
+  controller.setFormValue('x');
+  controller.setValidity({ valueMissing: true }, 'required');
+  controller.setValidity();
+  expect(calls).toEqual(['value:x', 'validity:true', 'validity:false']);
+  expect(controller.internals).toBe(fakeInternals);
+});
+
+test('form: class-path attach remains the unchanged element/ctor mode', () => {
+  const calls: string[] = [];
+  const fakeInternals = {
+    setFormValue: (value: unknown) => calls.push(String(value)),
+  } as unknown as ElementInternals;
+  const controller = new ElementFormController();
+  expect(
+    controller.attach({ attachInternals: () => fakeInternals }, { formAssociated: true }),
+  ).toBe(fakeInternals);
+  expect(controller.attach({}, { formAssociated: true })).toBe(fakeInternals);
+  expect(calls).toEqual([]);
+});
+
+test('form: reset/restore callbacks delegate exactly as before', () => {
+  const controller = new ElementFormController();
+  const events: string[] = [];
+  controller.onReset(() => events.push('reset'));
+  controller.onRestore((state, mode) => events.push(`restore:${String(state)}:${mode}`));
+  controller.formResetCallback();
+  controller.formStateRestoreCallback('restored', 'autocomplete');
+  expect(events).toEqual(['reset', 'restore:restored:autocomplete']);
+  controller.dispose();
+  controller.formResetCallback();
+  controller.formStateRestoreCallback('ignored', 'restore');
+  expect(events).toEqual(['reset', 'restore:restored:autocomplete']);
 });

@@ -45,6 +45,18 @@ export class ElementFormController {
     return this.#internals;
   }
 
+  /**
+   * Injected-internals mode (M09-2d): the shell already owns the single
+   * element-lifetime `ElementInternals` record shared with closed-root
+   * discovery, so the controller consumes that record instead of calling
+   * `attachInternals` a second time. The class path keeps using `attach`.
+   */
+  attachWith(getInternals: () => ElementInternals | undefined): ElementInternals | undefined {
+    if (this.#internals) return this.#internals;
+    this.#internals = getInternals();
+    return this.#internals;
+  }
+
   get internals(): ElementInternals | undefined {
     return this.#internals;
   }

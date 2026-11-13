@@ -213,6 +213,14 @@ export const GENERATED_ELEMENT_DIAGNOSTIC = {
    * a default whose literal type does not match the typed member.
    */
   PROPERTY_INVALID: 'OEIR_GENERATED_ELEMENT_PROPERTY_INVALID',
+  /** The sidecar's `formAssociated` is not one boolean literal. */
+  FORM_ASSOCIATED_INVALID: 'OEIR_GENERATED_ELEMENT_FORM_ASSOCIATED_INVALID',
+  /**
+   * The form-associated declaration cannot be mapped to the bounded mechanics:
+   * no declared string `value` property, a non-boolean `required`/`disabled`,
+   * or a reflected `disabled` row (the fieldset state must stay reversible).
+   */
+  FORM_VALUE_UNSUPPORTED: 'OEIR_GENERATED_ELEMENT_FORM_VALUE_UNSUPPORTED',
   /** The appended tail did not parse (an emitter invariant, not author input). */
   INVALID_ARTIFACT: 'OEIR_GENERATED_ELEMENT_INVALID_ARTIFACT',
 } as const;

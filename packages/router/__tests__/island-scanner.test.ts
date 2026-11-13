@@ -135,6 +135,22 @@ test('readIslandConfig: accepts delegatesFocus beside a shadow root', () => {
   ).toEqual({ delegatesFocus: false });
 });
 
+test('readIslandConfig: accepts a static formAssociated boolean', () => {
+  expect(
+    readIslandConfig(`export const openElement = defineIslandConfig({ formAssociated: true });\n`),
+  ).toEqual({ formAssociated: true });
+  expect(
+    readIslandConfig(`export const openElement = defineIslandConfig({ formAssociated: false });\n`),
+  ).toEqual({ formAssociated: false });
+  for (const source of [
+    `const form = true;\nexport const openElement = defineIslandConfig({ formAssociated: form });\n`,
+    `export const openElement = defineIslandConfig({ formAssociated: 1 });\n`,
+    `export const openElement = defineIslandConfig({ formAssociated: true, formAssociated: false });\n`,
+  ]) {
+    assertThrowsIncludes(() => readIslandConfig(source), Error, 'formAssociated');
+  }
+});
+
 test('readIslandConfig: throws on a dynamic delegatesFocus value', () => {
   const source = `const configuredFocus = true;
 export const openElement = defineIslandConfig({ root: 'shadow', delegatesFocus: configuredFocus });

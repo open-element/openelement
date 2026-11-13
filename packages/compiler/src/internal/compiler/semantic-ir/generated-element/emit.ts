@@ -88,6 +88,12 @@ export interface GenerateElementModuleOptions {
    */
   readonly delegatesFocus?: boolean;
   /**
+   * The `formAssociated` fact the lane read from the authored sidecar. True
+   * writes the descriptor row and lets the shell install the native static and
+   * its single ElementInternals owner; false/absent emits nothing.
+   */
+  readonly formAssociated?: boolean;
+  /**
    * The resolved primitive property rows, in sidecar authored order. Omitted
    * (or empty) emits the M09-1a `properties: []` byte-for-byte; a non-empty
    * list is the shell's landed `GeneratedElementProperty` shape, so no shell
@@ -353,6 +359,7 @@ export function generateElementModule(
   // root, which the shell defaults to light) appends nothing at all, so the
   // M09-1a light tail keeps its exact bytes.
   const delegatesFocus = options.delegatesFocus === true;
+  const formAssociated = options.formAssociated === true;
   if (delegatesFocus && templateRoot === null) {
     return emptyResult(leaf, [
       moduleDiagnostic(
@@ -408,6 +415,7 @@ export function generateElementModule(
     // `descriptor.root ?? 'light'` default is the single default owner.
     ...(root === undefined ? [] : [`  root: ${JSON.stringify(root)},`]),
     ...(delegatesFocus ? ['  delegatesFocus: true,'] : []),
+    ...(formAssociated ? ['  formAssociated: true,'] : []),
     ...propertyEmission.rowLines,
     `  createRecipe: create${rootName}Recipe,`,
     '};',

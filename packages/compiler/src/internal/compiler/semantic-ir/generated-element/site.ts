@@ -89,6 +89,8 @@ export interface GeneratedElementSiteAdmission {
    * reader has already refused `true` without `root: 'shadow'`.
    */
   readonly delegatesFocus: boolean;
+  /** Sidecar `formAssociated: true`; the shell sets the native static. */
+  readonly formAssociated: boolean;
   /**
    * Whether the sidecar declares a `properties` table at all (an empty table
    * counts). A declared table replaces the M09-1a props gate with the
@@ -216,6 +218,8 @@ export type IslandRootRead =
 export interface IslandMetadataFacts {
   readonly root: RootMode | undefined;
   readonly delegatesFocus: boolean;
+  /** Sidecar `formAssociated: true`; false covers absent/explicit false. */
+  readonly formAssociated: boolean;
   /**
    * The parsed `properties` table, or undefined when the sidecar declares no
    * table at all (an empty table is `[]` and is a declaration). Resolution to
@@ -684,6 +688,8 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   let seenDelegatesFocus = false;
   let delegatesFocus = false;
   let delegatesFocusSpan: ts.Node | null = null;
+  let seenFormAssociated = false;
+  let formAssociated = false;
   let seenProperties = false;
   let properties: readonly IslandPropertyDeclaration[] | undefined;
   for (const property of descriptor.properties) {
@@ -769,6 +775,39 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
       properties = read.declarations;
       continue;
     }
+    if (name === 'formAssociated') {
+      if (seenFormAssociated) {
+        return {
+          kind: 'refused',
+          diagnostic: diagnosticAt(
+            sourceFile,
+            property,
+            GENERATED_ELEMENT_DIAGNOSTIC.FORM_ASSOCIATED_INVALID,
+            'the openElement sidecar declares formAssociated more than once, so the form fact is ' +
+              'ambiguous',
+          ),
+        };
+      }
+      seenFormAssociated = true;
+      const initializer = property.initializer;
+      if (
+        initializer.kind !== ts.SyntaxKind.TrueKeyword &&
+        initializer.kind !== ts.SyntaxKind.FalseKeyword
+      ) {
+        return {
+          kind: 'refused',
+          diagnostic: diagnosticAt(
+            sourceFile,
+            initializer,
+            GENERATED_ELEMENT_DIAGNOSTIC.FORM_ASSOCIATED_INVALID,
+            'openElement.formAssociated must be a static literal, got dynamic value ' +
+              `"${initializer.getText(sourceFile)}"`,
+          ),
+        };
+      }
+      formAssociated = initializer.kind === ts.SyntaxKind.TrueKeyword;
+      continue;
+    }
     if (name !== 'delegatesFocus') continue;
     if (seenDelegatesFocus) {
       return {
@@ -814,7 +853,10 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
       ),
     };
   }
-  return { kind: 'read', facts: { root, delegatesFocus, properties } };
+  return {
+    kind: 'read',
+    facts: { root, delegatesFocus, formAssociated, properties },
+  };
 }
 
 /**
@@ -849,6 +891,10 @@ export const RESERVED_GENERATED_ELEMENT_PROPERTY_NAMES: ReadonlySet<string> = ne
   'adoptedCallback',
   'observedAttributes',
   'dispose',
+  'formAssociatedCallback',
+  'formResetCallback',
+  'formStateRestoreCallback',
+  'formDisabledCallback',
 ]);
 
 /** One admitted member of the root component's typed props parameter. */
@@ -1838,7 +1884,7 @@ export function admitGeneratedElementSite(
   const facts =
     metadata.kind === 'read'
       ? metadata.facts
-      : { root: undefined, delegatesFocus: false, properties: undefined };
+      : { root: undefined, delegatesFocus: false, formAssociated: false, properties: undefined };
   const propertiesAdmission = admitGeneratedElementProperties(
     sourceFile,
     fact.node,
@@ -1848,6 +1894,16 @@ export function admitGeneratedElementSite(
     return { kind: 'refused', diagnostics: propertiesAdmission.diagnostics };
   }
   const properties = propertiesAdmission.kind === 'admitted' ? propertiesAdmission.properties : [];
+  const formDiagnostics = admitGeneratedElementForm(
+    sourceFile,
+    fact.node,
+    facts.formAssociated,
+    facts.properties,
+    properties,
+  );
+  if (formDiagnostics.length > 0) {
+    return { kind: 'refused', diagnostics: formDiagnostics };
+  }
   return {
     kind: 'admitted',
     admission: {
@@ -1855,11 +1911,79 @@ export function admitGeneratedElementSite(
       defaultExportSpan: fact.span,
       root: facts.root,
       delegatesFocus: facts.delegatesFocus,
+      formAssociated: facts.formAssociated,
       propertiesDeclared: propertiesAdmission.kind === 'admitted',
       properties,
       propsParameter: propsParameterOf(fact.node),
     },
   };
+}
+
+/**
+ * The bounded M09-2d form mapping gate.
+ *
+ * The author declares `formAssociated: true` and an ordinary declared string
+ * `value` property; there is no separate `formValue` field. Optional declared
+ * boolean `required`/`disabled` properties enable the required→valueMissing
+ * mirror and the fieldset-disabled state. A reflected `disabled` row is refused
+ * because the class path deliberately writes the property, not the attribute,
+ * so the fieldset/authored state stays reversible (#1226).
+ */
+function admitGeneratedElementForm(
+  sourceFile: ts.SourceFile,
+  defaultExport: ts.Node,
+  formAssociated: boolean,
+  declarations: readonly IslandPropertyDeclaration[] | undefined,
+  properties: readonly GeneratedElementPlatformProperty[],
+): readonly IrDiagnostic[] {
+  if (!formAssociated) return [];
+  const refuse = (node: ts.Node, message: string): IrDiagnostic =>
+    diagnosticAt(sourceFile, node, GENERATED_ELEMENT_DIAGNOSTIC.FORM_VALUE_UNSUPPORTED, message);
+  const byName = new Map(properties.map((property) => [property.name, property]));
+  const declarationByName = new Map(
+    (declarations ?? []).map((declaration) => [declaration.name, declaration]),
+  );
+  const value = byName.get('value');
+  if (value === undefined) {
+    return [
+      refuse(
+        defaultExport,
+        'a form-associated generated element requires a declared property named "value" ' +
+          '(the existing declared string property is the form value source; no formValue field ' +
+          'is introduced)',
+      ),
+    ];
+  }
+  if (value.type !== 'string') {
+    return [
+      refuse(
+        declarationByName.get('value')?.node ?? defaultExport,
+        `the form value property "value" must be a string, got ${value.type}`,
+      ),
+    ];
+  }
+  for (const name of ['required', 'disabled'] as const) {
+    const property = byName.get(name);
+    if (property === undefined) continue;
+    if (property.type !== 'boolean') {
+      return [
+        refuse(
+          declarationByName.get(name)?.node ?? defaultExport,
+          `the optional form property "${name}" must be a boolean, got ${property.type}`,
+        ),
+      ];
+    }
+    if (name === 'disabled' && property.reflect) {
+      return [
+        refuse(
+          declarationByName.get(name)?.node ?? defaultExport,
+          'the form property "disabled" must not reflect to its attribute: the fieldset/authored ' +
+            'disabled state must stay reversible',
+        ),
+      ];
+    }
+  }
+  return [];
 }
 
 /**
