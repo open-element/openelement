@@ -35,6 +35,12 @@ export interface LocalIslandMeta {
   hydrate?: IslandDeliveryStrategy;
   /** Required when hydrate is media; kept as build metadata, not runtime. */
   media?: string;
+  /**
+   * The root family the sidecar declares: `'light'`, or `'shadow'` for the DSD
+   * default. Absent when the author pinned none: the compiled program's own
+   * root decision stands, and the generated shell applies its `light` default.
+   */
+  root?: 'light' | 'shadow';
   /** Optional one-to-many custom-element capability names. */
   tags?: string[];
   /** Alias accepted by generated artifact producers. */
@@ -275,7 +281,7 @@ export function buildPackageIslandDecls(
 
 function staticOpenElementError(message: string): OpenElementError {
   return new OpenElementError(
-    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string }).`,
+    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, root?: "light" | "shadow" }).`,
     {
       code: 'ISLAND_METADATA_ERROR',
       statusCode: 500,
@@ -287,7 +293,7 @@ function staticOpenElementError(message: string): OpenElementError {
 /** Static island metadata literal read from defineIslandConfig(). */
 type StaticIslandConfig = Pick<
   LocalIslandMeta,
-  'ssr' | 'dsd' | 'hydrate' | 'media' | 'tags' | 'tagNames' | 'exportNames'
+  'ssr' | 'dsd' | 'hydrate' | 'media' | 'root' | 'tags' | 'tagNames' | 'exportNames'
 >;
 
 function staticEntryKey(name: ts.PropertyName): string {
@@ -378,7 +384,9 @@ function parseStaticIslandConfig(
   for (const [key, raw] of staticEntries(objectLiteral)) {
     if (seen.has(key)) throw staticOpenElementError(`duplicate metadata key "${key}"`);
     seen.add(key);
-    if (!['ssr', 'dsd', 'hydrate', 'media', 'tags', 'tagNames', 'exportNames'].includes(key)) {
+    if (
+      !['ssr', 'dsd', 'hydrate', 'media', 'root', 'tags', 'tagNames', 'exportNames'].includes(key)
+    ) {
       throw staticOpenElementError(`unsupported openElement metadata key "${key}"`);
     }
     if (key === 'ssr' || key === 'dsd') {
@@ -401,6 +409,16 @@ function parseStaticIslandConfig(
         literalText(raw, 'openElement.media'),
         'openElement.media',
       );
+    } else if (key === 'root') {
+      // `IslandConfig.root` is a published field the runtime already validates;
+      // the static scan is the build-time authority for the same two values and
+      // fails closed on anything else (P8: one sidecar, two readers, one
+      // accepted set).
+      const value = literalText(raw, 'openElement.root');
+      if (value !== 'light' && value !== 'shadow') {
+        throw staticOpenElementError(`openElement.root has unsupported value "${value}"`);
+      }
+      meta.root = value;
     } else if (key === 'tags' || key === 'tagNames') {
       meta[key] = parseStaticStringArray(raw, `openElement.${key}`);
     } else {
@@ -580,6 +598,7 @@ export async function scanIslandMeta(
       dsd,
       hydrate,
       ...(islandConfig.media === undefined ? {} : { media: islandConfig.media }),
+      ...(islandConfig.root === undefined ? {} : { root: islandConfig.root }),
       ...(islandConfig.tags === undefined ? {} : { tags: islandConfig.tags }),
       ...(islandConfig.tagNames === undefined ? {} : { tagNames: islandConfig.tagNames }),
       ...(islandConfig.exportNames === undefined ? {} : { exportNames: islandConfig.exportNames }),

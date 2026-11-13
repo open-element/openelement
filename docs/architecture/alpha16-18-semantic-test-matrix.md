@@ -6,31 +6,28 @@ summary: Per-case evidence ledger; a case is done only when its required cells c
 
 # Alpha16–18 semantic test matrix
 
-Date: 2026-11-03. Status: **PROPOSED — results are recorded in the per-milestone
-annexes below; the grid cells are not filled**. Baseline:
-`4f1f2001b24909086f7e7efe9e5016d48d615c91`. Latest recorded annex: the M07-2
-leaf-scope browser clean-path annex, signed off on
-`70eb2381cab2ef238903cb583f3925976206e901` (browser qualification, chromium
-147.0.7727.15, LOCAL). M07-1 is signed off on
-`ac8c218614e2d4749435c51edf3eaf15eb65f6fd` (Node DOM shim, 非浏览器资格).
-M07-4 bounded mismatch recovery is signed off on
-`c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`. M07-5 is in progress and is not
-signed off. The M08-1b annex at the end records the dynamic SSR producer and a
-single-engine parse→claim vertical; it is not an M08 exit, and it loads no
-grid cell. The M08 text-boundary annex records the standard dynamic-text pair,
-the `{ node }` claim cursor, the lazy empty slot and the precise
-restricted-context refusal; the M08 condition annex records the fixed
-`oe:when`/`oe:/when` pair, the no-branch-id claim/SSR agreement and the
-Custom Element reconnect vertical. The M08 list annex records the
-`oe:each`/`oe:k:<token>`/`oe:/each` keyed-list wire, the canonical primitive-key
-tokens, duplicate-key multiplicity, read-only verify with phase-2 activation,
-the SSR producer and the parsed-DOM (not raw-byte) boundary, with Node and
-Chromium evidence. None of these annexes loads a grid cell, is an M08
-exit, or makes TSX-18 or TSX-30 passing. None of these records fills the grid,
-TSX-18, or TSX-30. The grid
-cells stay `R`. Leaf-range protocol notes under TSX-18 / TSX-30 are
-非浏览器资格 (Node DOM shim, LOCAL) comments only; those rows are not passing
-and SSR→claim is not done.
+Date: 2026-11-03. Status: **results are recorded in the per-milestone annexes
+below; a grid cell carries a result only where an annex names the artifact and
+the SHA**. Baseline:
+`4f1f2001b24909086f7e7efe9e5016d48d615c91`. Latest recorded annex: the **M08
+recorded results** annex at the end of this document (the same stateful list
+across S → K → U → D, the composition shapes, the claim negatives and the
+authored-location diagnostics), recorded by
+[the M08 closeout record](./m08-closeout.md) at `116f4b5dffc2a4b8eb0aa730cb5208b7b142c59f`. The M07
+annexes below are unchanged history: M07-1 is signed off on
+`ac8c218614e2d4749435c51edf3eaf15eb65f6fd` (Node DOM shim, 非浏览器资格), M07-2
+on `70eb2381cab2ef238903cb583f3925976206e901` (browser qualification, chromium
+147.0.7727.15, LOCAL), M07-4 on
+`c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`, and M07-5 on
+`b82e63bdfa1794897e9ddf1ef32c262f48368883` (owner decision 2026-11-12, progress
+ledger §4.4). The M08-1b, M08 text-boundary, M08 condition, M08 list and M08
+input/void annexes are LOCAL slice records: each states what it does not
+record, and none of them fills a grid cell by itself. The M08 annex at the end
+is the one record that fills TSX-18 and TSX-30, for the cells it names; every
+other cell stays `R`, including `T+`/`T−`/`C−` for those two rows, the
+cross-engine `B` (M13) and the packed `P` (M12). Leaf-range protocol notes
+under TSX-18 / TSX-30 that are not browser evidence stay 非浏览器资格 (Node DOM
+shim, LOCAL) comments only.
 
 The **permitted seed state** used by the M08 evidence is defined once in
 [the M08 list wire record](./m08-list-wire.md) §4.1; the annexes below reference
@@ -98,7 +95,7 @@ the slices that the release gates on (TSX-04, 06, 07, 09, 10, 14, 18, 23, 30).
 | TSX-15 runtime renderability | R | R | R | R | R | R | R | R | n/a | R | R | o |
 | TSX-16 iterables | R | R | R | R | R | R | R | R | n/a | R | R | o |
 | TSX-17 server async boundary | R | R | R | R | n/a | n/a | R | n/a | n/a | R | o | o |
-| TSX-18 SSR seed/claim fidelity | R | R | R | R | n/a | R | R | R | R | R | R | o |
+| TSX-18 SSR seed/claim fidelity | R | R | pass | R | n/a | pass | pass | pass | pass | pass | R | o |
 | TSX-19 error/cleanup containment | R | R | R | R | R | R | R | R | R | R | R | o |
 | TSX-20 native CE / third-party WC | R | R | R | R | R | R | n/a | R | R | R | R | R |
 | TSX-21 precompiled package | R | R | R | R | R | R | R | R | R | R | o | R |
@@ -110,10 +107,14 @@ the slices that the release gates on (TSX-04, 06, 07, 09, 10, 14, 18, 23, 30).
 | TSX-27 parent owner disposal | R | R | R | R | R | n/a | n/a | R | R | R | R | o |
 | TSX-28 evaluation counts | R | R | R | R | R | R | R | R | n/a | R | R | o |
 | TSX-29 dynamic component type | R | R | R | R | n/a | n/a | n/a | n/a | n/a | R | n/a | n/a |
-| TSX-30 repeated instances SSR/claim | R | R | R | R | n/a | n/a | R | R | R | R | R | R |
+| TSX-30 repeated instances SSR/claim | R | R | pass | R | n/a | n/a | pass | pass | pass | R | R | R |
 
 `n/a` reasons live in the contract's applicability matrix and must not be
 invented per row.
+
+`pass` appears only where the M08 annex names the artifact and the SHA; a cell
+that annex does not name stays `R`, even when the same phase is recorded
+elsewhere for another case. `B` is M13 and `P` is M12 in every Alpha16a row.
 
 **Claim acceptance chain.** Rows TSX-18 and TSX-30 are one chain, not separate
 checkboxes: marker/order encoding, key alignment, permitted seed state, bounded
@@ -144,9 +145,23 @@ result and does not fill the grid. The M07-2 annex below records leaf-scope
 chromium evidence and is signed off on
 `70eb2381cab2ef238903cb583f3925976206e901`. The M07-4 note records that
 bounded mismatch recovery is signed off on
-`c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`. The M07-5 note records a leaf-range
-protocol that is in progress and is not signed off. None of these fills
+`c4bff6dfc7efbdf2d5ad65442b82f1ccd4b3bb20`. The M07-5 note records the signed-off leaf-range protocol
+(`b82e63bdfa1794897e9ddf1ef32c262f48368883`; progress ledger §4.4). None of these fills
 TSX-18 or TSX-30, and none of them is SSR→claim.
+
+**Chain complete at M08 (2026-11-13).** M07 proved the leaf half and that
+history is unchanged. M08 supplies the stateful half on the same list:
+marker/order encoding and key alignment (`df17534db`, `431f1df59`,
+`61efa69cb`); the permitted seed state defined once in
+[the M08 list wire record](./m08-list-wire.md) §4.1 and classified in the S2
+vertical at `fcb8d4ae6` (equal → clean, a value difference → non-clean, a
+structural mismatch → fail closed); bounded mismatch recovery and the
+fail-closed negative set at `92a16e902`, with the directory rollback at
+`c4bff6dfc`; duplicate-subscription accounting (the exact multiset and the
+reclaim count at `92a16e902`, the two-region account at `116f4b5dffc2a4b8eb0aa730cb5208b7b142c59f`); and
+the authored mismatch location at `0e67e176b`. TSX-18 and TSX-30 carry those
+cells; the M08 annex below is the per-cell record. Cross-engine `B` and packed
+`P` are not part of this chain at Alpha16a (M13/M12).
 
 **TSX-04 row status (recorded 2026-11-09).** M06b2b's same-key keyed content
 replacement is TSX-04-adjacent supporting evidence only; the TSX-04 `M`/`U`/`D`
@@ -797,3 +812,105 @@ full M08-2 parity (the entry-internal condition/list/composition shapes and the
 component-reference/insertion-site/children-projection producers are still
 absent); M08-3/4/5 and the TSX-18/TSX-30 rows; Firefox/WebKit/M13, production
 wiring, the packed consumer, ABI and release.
+
+## M08 recorded results
+
+Scope: the M08 exit evidence, as the per-cell record behind the TSX-18 and
+TSX-30 rows. Status: **signed off by the M08 exit record (2026-11-13)**;
+LOCAL only — chromium `147.0.7727.15` (Playwright `browser.version()`) plus Node
+`v24.18.0`. Not M13, not a packed consumer, not production wiring.
+
+The rows fill exactly these cells: TSX-18 `C+`, `S`, `K`, `U`, `D`, `F`;
+TSX-30 `C+`, `S`, `K`, `D`. `T+`/`T−`/`C−` for both rows, `B` (M13), `P`
+(M12) and TSX-30's `F` stay `R`; the reasons are in
+[the closeout record](./m08-closeout.md#row-cells-recorded).
+
+**C+** is the production function frontend plus the generator admitting the
+fixture with an empty diagnostic list: the shared harness
+`testlib/m08-browser-harness.ts` throws on a non-empty frontend or generator
+diagnostic list, and `generated-leaf.composition-ssr.test.ts` asserts both
+lists empty directly. The M08 shapes therefore compile cleanly; `T+`/`T−` are
+not claimed because no TypeScript type-check fixture exists for these two
+cases, and `C−` is not claimed because their negatives are runtime.
+
+| Case | C+ | S | K | U | D | F | Artifact | Head |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TSX-18 SSR seed/claim fidelity | pass | pass | pass | pass | pass | pass | `generated-leaf.phase-equivalence.browser.test.ts` (2), `generated-leaf.claim-negatives.browser.test.ts` (3), `generated-leaf.s2-ssr-claim.browser.test.ts` (13), `generated-leaf.authored-diagnostic.browser.test.ts` (7), `generated-leaf.m08-resource-parity.browser.test.ts` | `92a16e902`, `fcb8d4ae6`, `0e67e176b`, `116f4b5dffc2a4b8eb0aa730cb5208b7b142c59f` |
+| TSX-30 repeated instances SSR/claim | pass | pass | pass | n/a | pass | R | `generated-leaf.composition-ssr.test.ts` (12), `generated-leaf.composition-ssr.browser.test.ts` (2) | `5ada043bf` |
+
+**S (SSR).** `92a16e902`: the S2 Board's server bytes are asserted exactly —
+`<section>`, one props text pair, the fixed `oe:when` branch, the `oe:each`
+anchor with one `oe:k:s:*` per entry, the entry text pairs and the focus
+carrier. The request probe is all-zero (owners, projections, regions, nodes,
+range cleanups, subscriptions, unsubscribed, lineage, disposed), the three
+request bindings are read once each, and `connect`/`onConnect`/`disconnect` are
+never called. Six placements decode to the authored expressions through the
+pinned `@jridgewell/trace-mapping@0.3.31`. `5ada043bf` adds the composition
+producer: `Twice__ssr` returns
+`<div class="twice"><span class="item">x</span><span class="item">x</span></div>`
+from one local recipe render function called twice, a component-reference body
+is shared by two sites with a per-read props record rebuilt per site, and a
+children renderer is called once per projection site.
+
+**K (Claim).** `92a16e902`: the Chromium-parsed bytes are claimed with 0
+claim-period mutations, 1 owner, 1 projection, 1 region, 1 range cleanup and 5
+subscriptions with the exact multiset
+`[["count",2],["items",1],["open",1],["props",1]]`; focus and selection are
+preserved, the section/ul/li/text/h1/branch node identities are the parsed
+objects, and the classification is
+`{structure: "equal", values: "equal", clean: true}`. A permitted difference
+(`count=7` against `count=0` bytes) is `{structure: "equal", values:
+"different", clean: false}` with the two `characterData` writes recorded at
+`fcb8d4ae6`. Ten claim placements decode to the authored expressions.
+`5ada043bf` records `projections=3 regions=3 owners=3 subs=2` for the
+same-recipe claim and the same probe for the two-site children claim.
+
+**U (Update).** `92a16e902`: the keyed reorder `a,c → c,a` produces only
+`childList` records, 0 subscription/owner/projection deltas and the same two
+`<li>` objects in swapped positions; the props replacement (`Board` →
+`Board v2`) produces exactly one `characterData` record, 1 props read and keeps
+the h1 text-node identity. Twelve update placements decode to the authored
+expressions. TSX-30 records `n/a` for `U`: the contract's applicability matrix
+gives the repeated-instance case no update phase.
+
+**D (Dispose).** `92a16e902`: `dispose(false)` closes exactly the 5 live
+subscriptions, increments `disposed` once and keeps the parsed DOM; a fresh
+parse plus claim then `dispose(true)` removes the one owned `<section>`, leaves
+the claim parent with 0 children and leaves a foreign sibling marker connected
+with unchanged identity. A throwing cleanup runs LIFO
+(`normal-after` > `throwing` > `normal-before`), surfaces the first error
+unchanged, still closes all 5 subscriptions and still removes the region.
+`5ada043bf` closes 2 and re-claims 2 (not 4) on the same-recipe shape.
+
+**F (failure recovery).** `92a16e902` records the negatives: a stripped
+condition anchor (`condition anchor at /0/1/anchor is not a comment`), a
+foreign condition end (`condition end at /0/1/end does not match`), list-entry
+template structure (`expected element 'li' at /0/0/each/entry/0`,
+`expected element 'b' at /0/0/each/entry/0/0`, `extra node at /0/0/each/entry/0`)
+and a nested static-directory seed (`static attribute class is out of order
+(found data-kind) at /0/0`). Every case is `OEIR_LEAF_CLAIM_MISMATCH` with 0
+mutations, 0 subscriptions, 0 unsubscriptions and unchanged borrowed DOM. A
+removed `oe:k:` marker is recorded in the per-phase row as
+`OEIR_LEAF_CLAIM_MISMATCH: list end at /0/2/0/each/end is not a comment` with
+the same zero-resource result. `116f4b5dffc2a4b8eb0aa730cb5208b7b142c59f` adds the activation-throw
+release, the throwing-cleanup multiset, the consumer-first rebuild and the
+no-registry rebuild observation (the last one recorded as consumer obligation,
+not accepted behavior).
+
+**Diagnostics.** `0e67e176b`: a claim mismatch keeps its detail, DOM path,
+`code` (`OEIR_LEAF_CLAIM_MISMATCH`), `phase` (`csr`), `severity` (`error`) and
+`recoverable` (`false`), and appends exactly
+` (authored <file>:<line>:<column>)`. The origin is a compile-time literal
+emitted by `originArgs` / `claimError` / `claimErrorFrom` and formatted by
+`locatedDetail`; it is not a source-map lookup and adds no structured field to
+the error or its `toJSON()`. Seven tests assert the exact whole message for
+text start, static-attribute count, static-attribute order, child order, list
+end, list seed and condition branch; ten assert the formatter and every
+helper's optional last argument. The directory range interior is excluded:
+`OE_RUNTIME_STATIC_RANGE_MISMATCH` keeps its `file#Component` label.
+
+**What this annex does not record.** No `T+`/`T−`/`C−` cell, no cross-engine
+`B`, no packed consumer `P`, no TSX-30 `F`, no directory range-interior DOM
+path, no entry-internal condition/list/composition, no `property` channel, no
+request-scoped props/bindings lifecycle, no production wiring, no public ABI.
+Skip / NOT RUN is not a pass, and CI green is not browser qualification.

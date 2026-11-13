@@ -14,10 +14,14 @@
  *   from the host site fact; the emitter never derives it and never invents a
  *   second source.
  * - `root` (optional `RootMode`) — `light | shadow-open | shadow-closed`. The
- *   shell defaults to `light`; M09-1a emits the site's value when present.
- *   Production authoring cannot declare a shadow root until M09-2a, but the
- *   emitter accepts one so the browser evidence can prove DSD through the
- *   generated class.
+ *   shell defaults to `light`; the emitter omits the property when the author
+ *   pinned no root. Since D-root-source (2026-11-13) the value is read by the
+ *   compiler lane from the authored island sidecar
+ *   (`site.ts` `readIslandRoot`), not supplied on the host site fact: the host
+ *   fact carries only the tag, so the root can never go stale between the
+ *   host's scan and this transform. The sidecar's `'shadow'` is the DSD
+ *   default and maps to `shadow-open`; closed roots have no author spelling
+ *   (`D-closed`), so nothing maps to `shadow-closed` yet.
  * - `properties` (optional array) — M09-1a always emits `[]`: the function
  *   model has no props type and the M09-1a admission gates refuse a props
  *   parameter outright. Property/attribute conversion is M09-2b.
@@ -31,7 +35,6 @@
  * the router entry's decision and belongs to M09-1b.
  */
 
-import type { RootMode } from '@openelement/protocol/part-program';
 import type { ImportClassifier } from '../../semantic-core/scope-resolution.ts';
 
 /**
@@ -53,15 +56,15 @@ export const GENERATED_ELEMENT_SHELL_SPECIFIER =
  * It is an internal compiler option value, never author syntax: the router
  * derives it from the island path (M09-1b) and the compiler cannot derive it
  * itself because the island transform runs after this compiler plugin.
+ *
+ * The fact carries the TAG only. The root used to ride here too; D-root-source
+ * (2026-11-13) moved it to the compiler lane's own read of the authored
+ * sidecar (`site.ts` `readIslandRoot`), so one stale host scan can no longer
+ * pin a root that the source no longer declares.
  */
 export interface GeneratedElementSite {
   /** The custom-element tag the host's island pipeline will register. */
   readonly tag: string;
-  /**
-   * Root ownership mode. M09-1b's production site helper passes `light` only;
-   * tests may pass a shadow mode to prove DSD through the generated class.
-   */
-  readonly root?: RootMode;
 }
 
 /** Host hook for the site fact; returning null keeps the lane inert. */
@@ -83,6 +86,14 @@ export const GENERATED_ELEMENT_DIAGNOSTIC = {
   NAME_COLLISION: 'OEIR_GENERATED_ELEMENT_NAME_COLLISION',
   /** The host admitted the module but the island sidecar is absent. */
   MISSING_SITE_MARKER: 'OEIR_GENERATED_ELEMENT_MISSING_SITE_MARKER',
+  /**
+   * The sidecar's `root` cannot be read as one of `'light' | 'shadow'`
+   * (a dynamic value, another literal, a duplicate key, or a config object
+   * whose key set is not static). The router scanner's `ISLAND_METADATA_ERROR`
+   * remains the author-facing authority; this code is the lane's own
+   * fail-closed verdict inside the compiler.
+   */
+  ROOT_INVALID: 'OEIR_GENERATED_ELEMENT_ROOT_INVALID',
   /** The appended tail did not parse (an emitter invariant, not author input). */
   INVALID_ARTIFACT: 'OEIR_GENERATED_ELEMENT_INVALID_ARTIFACT',
 } as const;
