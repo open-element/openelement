@@ -26,6 +26,7 @@ import {
 } from '../vite/internal/ssg/index.ts';
 import { runtimeModulePath } from '../vite/internal/runtime-module-path.ts';
 import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
+import { createGeneratedElementSiteResolver } from '../vite/generated-element-site.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
 import { resolveElementServicesRuntimeModule } from '../vite/internal/ssg/entry-client-codegen.ts';
 import {
@@ -998,6 +999,12 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
           ctx.phase1.staticComponents,
           ctx.phase1.ssrAdmissionPlan?.renderableTags,
         ),
+        // The generated Native Custom Element site (M09-1b): an island file
+        // whose tag the island pipeline already decided admits the lane, so a
+        // local default-exported function component ships as a real
+        // constructor for the existing entry-driven registration. The same
+        // resolver is the dev host's and the SSG host's (one tag source).
+        generatedElementSite: createGeneratedElementSiteResolver(islandsDir),
       }),
       // intercepts the compiled modules' authored `.css` imports before
       // vite's CSS plugin, emits the real `.css` assets, and hands the sheet

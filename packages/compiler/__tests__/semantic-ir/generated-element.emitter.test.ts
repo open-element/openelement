@@ -52,10 +52,7 @@ import {
   type GeneratedElementSite,
 } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
 import { generateElementModule } from '../../src/internal/compiler/semantic-ir/generated-element/emit.ts';
-import {
-  compiledElementPlugin,
-  compiledElementPluginWithGeneratedElements,
-} from '../../src/internal/compiler/plugin.ts';
+import { compiledElementPlugin } from '../../src/internal/compiler/plugin.ts';
 
 const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 const FILE = '/proj/src/islands/profile.tsx';
@@ -205,7 +202,7 @@ describe('M09-1a generated element emitter', () => {
     const inert = (compiledElementPlugin().transform as unknown as TransformHook).bind(context);
     expect(inert(PROFILE, FILE)).toBeNull();
 
-    const activePlugin = compiledElementPluginWithGeneratedElements({
+    const activePlugin = compiledElementPlugin({
       generatedElementSite: (moduleId) => (moduleId === FILE ? SITE : null),
     });
     const active = (activePlugin.transform as unknown as TransformHook).bind(context);

@@ -227,24 +227,19 @@ export interface CompiledElementPluginOptions {
    * `__ssr(tag, props)` for those tags and an emitted-as-is tag otherwise.
    */
   compiledTags?: readonly string[];
-}
-
-/**
- * The generated-element site option is INTERNAL in M09-1a.
- *
- * It is not part of the public {@link CompiledElementPluginOptions}: adding it
- * there would change `compiledElementPlugin`'s public type (the interface
- * snapshot gate refuses that, correctly — M09-1a adds no public API). The
- * internal factory below is the only entry that accepts it, and it is not
- * re-exported from `@openelement/compiler` or `@openelement/compiler/vite`.
- * M09-1b owns the public option when the router actually supplies a site.
- */
-interface GeneratedElementPluginOptions extends CompiledElementPluginOptions {
   /**
-   * Host-supplied site fact for the generated Native Custom Element lane.
-   * Returning null (and omitting the option, which is what every production
-   * caller does in M09-1a) keeps the lane inert. The router wiring that
-   * supplies this closure is M09-1b.
+   * Host-supplied site fact for the generated Native Custom Element lane
+   * (M09-1b): return `{ tag }` for a module the host resolved as an island
+   * whose registration tag is already decided, and null for every other
+   * module. Returning null (or omitting the option) keeps the lane inert and
+   * the module with the class/server/passthrough lanes.
+   *
+   * This is a host capability, never author syntax: the compiler transform
+   * runs before the island transform, so the tag cannot be derived here. The
+   * router supplies the one production closure
+   * (`createGeneratedElementSiteResolver`); the lane itself still requires the
+   * island sidecar and a local default-exported function component, and fails
+   * closed on a props parameter or a required host binding.
    */
   generatedElementSite?: (moduleId: string) => GeneratedElementSite | null;
 }
@@ -286,28 +281,15 @@ export function registerStyleEdges(
  * modules untouched. `workspaceRoot` anchors generated source-map ids for
  * linked workspace packages.
  *
- * This public entry's options are exactly the published
- * {@link CompiledElementPluginOptions}; the generated-element site option is
- * internal (see {@link GeneratedElementPluginOptions}), so this entry cannot
- * turn the M09-1a lane on. It delegates to the one implementation and is inert
- * for that lane in every real build.
+ * The generated-element site option is a host capability (M09-1b): hosts that
+ * resolve islands before the compiler transform supply the tag fact; hosts
+ * that do not (a plain standalone build) omit it and the lane stays inert.
  */
 export function compiledElementPlugin(options: CompiledElementPluginOptions = {}): Plugin {
   return createCompiledElementPlugin(options);
 }
 
-/**
- * The M09-1a internal entry used by the emitter tests: accepts the site option
- * without changing the public plugin type. Not re-exported by any package
- * entry; the router wiring is M09-1b.
- */
-export function compiledElementPluginWithGeneratedElements(
-  options: GeneratedElementPluginOptions = {},
-): Plugin {
-  return createCompiledElementPlugin(options);
-}
-
-function createCompiledElementPlugin(options: GeneratedElementPluginOptions = {}): Plugin {
+function createCompiledElementPlugin(options: CompiledElementPluginOptions = {}): Plugin {
   let viteRoot: string | undefined;
   const workspaceRoot = options.workspaceRoot;
   return {
@@ -327,12 +309,11 @@ function createCompiledElementPlugin(options: GeneratedElementPluginOptions = {}
         const compiled = compileElementModule(code, moduleId, {
           staticSidecars: options.staticSidecars,
         });
-        // The generated Native Custom Element lane (M09-1a) sits between the
+        // The generated Native Custom Element lane (M09-1) sits between the
         // class lane and the server function lane: the class lane owns every
         // decorated module, and a module the generated lane admits is not a
-        // server component. No production caller passes a site fact in M09-1a,
-        // so this expression is null for every real build (the router wiring is
-        // M09-1b).
+        // server component. A host without a site fact (a standalone build)
+        // keeps this lane inert; the router passes its island closure (M09-1b).
         const generated =
           compiled === null && options.generatedElementSite !== undefined
             ? compileGeneratedElementIfAdmitted(code, moduleId, {
@@ -413,10 +394,11 @@ function createCompiledElementPlugin(options: GeneratedElementPluginOptions = {}
               shadow: false,
             });
           } else if (generated !== null) {
-            // A generated Native Custom Element in M09-1a is light-root only;
-            // its classes are document-DOM facts. The function frontend carries
-            // no class-token collector yet, so the authoritative fact for this
-            // lane is "none" until M09-1b adds the collection (registering the
+            // A generated Native Custom Element is light-root only
+            // (M09-1b's production site passes `light`; a shadow root needs
+            // M09-2a's scan key). Its classes are document-DOM facts, and the
+            // function frontend carries no class-token collector yet, so the
+            // authoritative fact for this lane is "none" (registering the
             // artifact branch's `shadow: true` here would be wrong).
             options.candidates.register(id, [], { shadow: false });
           } else {
@@ -431,9 +413,9 @@ function createCompiledElementPlugin(options: GeneratedElementPluginOptions = {}
         }
         // The generated lane owns the module: return its code and the leaf's
         // unchanged map. The appended tail has no authored source and no map
-        // segments. Type-checking and the packed shell specifier are M09-1b
-        // work: the lane has no production caller here, and the internal
-        // specifier is intentionally unresolved until packaging lands.
+        // segments. The shell specifier resolves through the element package's
+        // `./internal/compiled/generated-element/shell` export subpath, which
+        // M09-1b adds to the packed manifest.
         if (generated !== null) {
           return { code: generated.code, map: generated.map };
         }

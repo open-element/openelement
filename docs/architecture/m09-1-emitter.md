@@ -1,23 +1,25 @@
 ---
 status: active
 topic: M09-1a generated Native Custom Element emitter
-summary: The compiler lane that appends one Native Custom Element tail to a generated leaf module and admits only island files with a local default-exported function component; bounded LOCAL evidence, not the M09 exit and not registration or packaging.
+summary: The compiler lane that appends one Native Custom Element tail to a generated leaf module, admits island function components, and (M09-1b) wires the router site, packed subpaths and one packed consumer; bounded LOCAL, not the M09 exit.
 ---
 
-# M09-1a: generated Native Custom Element emitter
+# M09-1a/M09-1b: generated Native Custom Element emitter, registration and packaging
 
 Date: 2026-11-13. Status: **bounded implemented — not the M09 exit.**
 Baseline: `origin/main@92a16e902` (`test(compiler): land M08 phase-equivalence
 and claim-negative evidence`). The M09-0 shell is #1768 (`735749b1c`); the
-M09-shadow root/DSD slice is #1772. Evidence is LOCAL: one Node run and one
+M09-shadow root/DSD slice is #1772. Evidence is LOCAL: one Node run, one
 Chromium engine (147, Playwright 1.59.1), the two package typechecks, the full
-compiler and element projects, and the source gates.
+compiler and element projects, the router project, the pack/dry-run and
+pack-surface gates, and one extended packed consumer.
 
-This record covers one compiler slice: the emitted class and its site
-admission. It is **not** the M09 exit, **not** M09-1b registration/packaging,
-**not** M09-2's platform surface, **not** M11 router wiring, and **not** an
-author-facing API. The lane is deliberately inert in a real build: no
-production caller passes a site fact yet.
+This record covers M09-1a (the emitted class and its site admission) and
+M09-1b (the production registration wiring, the packaged shell/runtime
+subpaths and the first packed generated-element consumer). It is **not** the
+M09 exit, **not** M09-2's platform surface, **not** M11 router wiring, and
+**not** an author-facing API. M09-1a's lane was inert in a real build; M09-1b
+turns it on at the three real router call sites.
 
 ## Landing scope
 
@@ -42,16 +44,15 @@ deliberately untouched.
 
 ## Public surface
 
-The site option lives on an internal plugin factory, not on the published
-`CompiledElementPluginOptions`. The interface snapshot gate proved that adding
-it to the public option type changes `compiledElementPlugin`'s published
-signature (`docs/release/public-interface-snapshot.json` drifted), and M09-1a is
-explicitly a no-public-API slice. `compiledElementPlugin` therefore keeps its
-exact published type and delegates to the one implementation; the internal
-factory (`compiledElementPluginWithGeneratedElements`) is not re-exported from
-`@openelement/compiler` or `@openelement/compiler/vite`, and the router does not
-call it. M09-1b owns the public option together with the router wiring and the
-snapshot regeneration.
+M09-1a kept the site option on an internal plugin factory, not on the published
+`CompiledElementPluginOptions`: adding it to the public option type changed
+`compiledElementPlugin`'s published signature, and M09-1a was a no-public-API
+slice. M09-1b owns that change and lands it deliberately (see the M09-1b
+section): `generatedElementSite?: (moduleId) => GeneratedElementSite | null`
+is a host capability on the public options interface, the lane entry
+`compileGeneratedElementIfAdmitted` and the `GeneratedElementSite` type are
+exported from `@openelement/compiler`, and `docs/release/public-interface-snapshot.json`
+is regenerated. The option remains a host hook, never author syntax.
 
 ## The author site and the admission gates
 
@@ -191,17 +192,88 @@ specifier to `shell.ts` therefore reports
 `TS2345` ("Recipe<unknown> is not assignable to Recipe<object>"), and an
 explicit `root` literal in a plain-JS descriptor const widens to `string` and
 reports a second `TS2345`. No test fakes a clean pass and no product code was
-bent to hide it. Reconciling the leaf factory's generic with the shell
-descriptor (or emitting a typed adapter) belongs to M09-1b, which is also the
-first PR that turns this lane on in a production build and therefore the first
-place the typecheck gate can matter. The rest of §5.2 A.1–A.6 is covered by the
-14 Node tests above.
+bent to hide it.
+
+M09-1b did **not** widen the shell descriptor and did **not** turn on
+`typeCheckEmitted` in any production host, so the production build still does
+not exercise that typecheck; the limitation moves to the PR that first turns
+`typeCheckEmitted` on for the generated lane (it must reconcile the leaf
+factory's generic or emit a typed adapter). The rest of §5.2 A.1–A.6 is
+covered by the 14 Node tests above.
+
+## M09-1b: registration wiring, packaging and the first packed consumer
+
+Date: 2026-11-13. Status: **bounded implemented — not the M09 exit.** No emitter
+behavior changed: `emit.ts`, `site.ts`, `compile.ts` and `contract.ts` are
+untouched, and the emitted tail text is byte-identical to M09-1a's.
+
+### Registration wiring
+
+The registration point is unchanged: the island entry still resolves
+`mod[exportName] ?? mod.default` and guards `customElements.define(tag, Ctor)`
+with `customElements.get(tag)`. M09-1b makes the default export a real
+constructor for an admitted island and gives the compiler the one fact it
+cannot derive (the tag; the compiler transform runs before the island
+transform).
+
+| Piece | Change |
+| --- | --- |
+| [`generated-element-site.ts`](../../packages/router/src/vite/generated-element-site.ts) | **New** — the ONE host site closure, `createGeneratedElementSiteResolver(islandsDir)`. It reuses the island transform's own admission and tag derivation, so the emitted element and `__tagName` cannot drift; the layout is excluded (its tag is a router constant, M09-2a); the production root is `light` only. |
+| [`plugin.ts`](../../packages/compiler/src/internal/compiler/plugin.ts) | `generatedElementSite` moves from the M09-1a internal factory to the published `CompiledElementPluginOptions`; the internal factory is deleted. |
+| [`compiler.ts`](../../packages/compiler/src/compiler.ts) | Exports `compileGeneratedElementIfAdmitted` (the dev host's bridge, mirroring `compileServerComponentIfAdmitted`) and the `GeneratedElementSite` type. |
+| [`build-client.ts`](../../packages/router/src/cli/build-client.ts) / [`build-ssg.ts`](../../packages/router/src/cli/build-ssg.ts) | Pass the resolver to their `compiledElementPlugin` call (the design's production site). |
+| [`plugin-hmr.ts`](../../packages/router/src/vite/plugin-hmr.ts) | The dev host calls the lane entry directly (it is not the Vite plugin) and records a generated module's emitted text as its HMR shape, so a changed generated class takes the bounded full-reload path and is never compared as a class program. |
+
+Call-site map: exactly these three sites. The two routers that compile modules
+only to read class facts (`internal/collect-shadow-candidates.ts`,
+`internal/style-assets.ts`) intentionally do not run the lane — the function
+lane's CE output carries no class program to scan. No fourth site exists.
+
+An island whose root takes props or whose generated body requires host bindings
+now fails the production build with the coded `OEIR_GENERATED_ELEMENT_*` refusal
+the M09-1a lane already defined. No island in this tree has that shape today
+(all sidecar islands default-export a class), so no existing build changes.
+
+### Packaging
+
+| Change | Why |
+| --- | --- |
+| `packages/element/package.json` — delete `!src/internal/compiled/generated-element` from `files` | The directory is no longer a release boundary; the pack's reachability guard now sees it. |
+| Add `"./internal/compiled/generated-element/shell"` → `./src/internal/compiled/generated-element/shell.ts` | Exactly the emitted module's `GENERATED_ELEMENT_SHELL_SPECIFIER` (unchanged), so the packed import resolves alias-free. |
+| Add `"./internal/compiled/runtime"` → `./src/internal/compiled/runtime.ts` | The generated leaf module's runtime specifier. `runtime.ts` is the contract surface the leaf typecheck already maps this specifier to; without the subpath no generated module can be built from the tarball. |
+| Regenerate `docs/release/public-interface-snapshot.json` and `packages/router/src/vite/generated-export-files.ts` | Both are generated from the `exports` maps; the two new subpaths are a public surface change (D-pack) and are recorded, never hand-edited. |
+
+Both subpaths are public and their names say "internal"; the packed surface is
+the shell, its root module and the existing leaf-runtime facade — no author
+API, no new runtime module.
+
+### First packed generated-element consumer
+
+`consumer:packaged-element` keeps its three-engine class-authored proof and
+adds the generated leg on the same installed tarballs: it passes the packed
+`generatedElementSite` option to the packed `element()` plugin, builds an
+island-shaped module, asserts the packed element ships
+`src/internal/compiled/generated-element/shell.js`, registers the emitted
+default export from plain HTML and asserts the browser upgrade. The generated
+leg is Chromium only (LOCAL); the class-authored leg keeps its three engines.
+This is not M12 packed qualification.
+
+### Evidence
+
+| Command | Result |
+| --- | --- |
+| `vp run --no-cache --fail-if-no-match --filter @openelement/router test` | see the landing record; the new `generated-element-site.test.ts` pins the resolver matrix, the dev emission, the coded refusals and the generated HMR shape |
+| `pack:dry-run` | 6 packages, `@openelement/element` declaration closure includes the two subpaths |
+| `pack-surface:check` | packed facade matches the metadata table |
+| `consumer:packaged-element` | chromium/firefox/webkit class leg + chromium generated leg PASS |
+| `interface:snapshot` | matches after regeneration |
 
 ## Not claimed
 
-This record does not claim M09 completion, a production island that emits a CE
-(the router does not pass a site; M09-1b does), a registration-policy change,
+This record does not claim M09 completion, a registration-policy change,
 property/attribute conversion, events, slots beyond native DSD, forms, styles
 or theme, closed-root authoring, CEM, third-party Web Component qualification,
-a packed consumer, three engines, M11/M12/M13, a public export, or an ABI
-freeze. It is one bounded compiler slice with LOCAL evidence.
+M12 packed qualification, three engines for the generated desktop surface,
+M11/M12/M13, an author-facing API, or an ABI freeze. It is one bounded
+M09-1 slice (emitter, registration wiring, packaging, one packed consumer) with
+LOCAL evidence.

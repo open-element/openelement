@@ -18,6 +18,8 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     'client-only': 'src/client-only.ts',
     'css-modules': 'src/css-modules.d.ts',
     html: 'src/html.ts',
+    'internal/compiled/generated-element/shell': 'src/internal/compiled/generated-element/shell.ts',
+    'internal/compiled/runtime': 'src/internal/compiled/runtime.ts',
     'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
     'jsx-runtime': 'src/jsx-runtime.ts',
     logger: 'src/logger.ts',
