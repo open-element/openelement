@@ -714,9 +714,9 @@ export type { IslandDeliveryStrategy };
  * The table is deliberately the `@property` option vocabulary minus `type`
  * and `converter`: the typed member IS the type (a duplicated `type` field
  * would be a second source with no added power), and a custom converter is not
- * expressible on this lane. Non-primitive conversion (array/object/`trustedHtml`)
- * is retained as an Alpha16 obligation (plan §14), not waived, and this table
- * cannot express it.
+ * expressible on this lane. Array/object/`trustedHtml` members are retained as
+ * PROPERTY-ONLY rows (plan §14): they must spell `attribute: false`, require an
+ * explicit literal default, and never become an attribute or a JSON wire.
  */
 export interface IslandPropertyConfig {
   /**
@@ -732,11 +732,21 @@ export interface IslandPropertyConfig {
    */
   attribute?: string | false;
   /**
-   * Declared initial value, used before any attribute or property write. Must
-   * be a `string`/`number`/`boolean` literal matching the typed member; omitted
-   * means the shell's zero value (`''`/`0`/`false`).
+   * Declared initial value, used before any property write. A
+   * `string`/`number`/`boolean` literal matching a primitive typed member may
+   * be omitted (the shell applies the type zero value). A property-only
+   * array/object member requires an explicit recursively literal graph
+   * (`[]`, `{…}`, nested values); `trustedHtml` requires the canonical
+   * `trustedHtml('…')` value. The build validates the shape and provenance;
+   * defaults are materialised fresh per element instance / SSR render.
    */
-  default?: string | number | boolean;
+  default?:
+    | string
+    | number
+    | boolean
+    | readonly unknown[]
+    | Readonly<Record<string, unknown>>
+    | { readonly html: string };
 }
 
 /** Per-island delivery configuration (SSR/DSD participation and hydration strategy). */
@@ -860,6 +870,32 @@ function validateIslandTags(value: unknown, field: 'tags' | 'tagNames'): string[
 
 const ISLAND_PROPERTY_FIELDS = new Set(['reflect', 'attribute', 'default']);
 const IDENTIFIER_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const PROPERTY_DEFAULT_MAX_DEPTH = 8;
+
+/**
+ * Runtime shape admission for one declared property default. Primitives and
+ * recursively literal arrays/plain objects are admitted (a branded
+ * `trustedHtml()` value is a frozen plain object and is admitted here); a
+ * function/symbol/class instance/cyclic graph is refused. The BUILD scan and
+ * compiler lane own the stricter static-literal and trustedHtml-provenance
+ * checks; this is the evaluated-value shape guard.
+ */
+function isAdmittedIslandDefault(value: unknown, depth: number, seen: Set<object>): boolean {
+  if (depth > PROPERTY_DEFAULT_MAX_DEPTH) return false;
+  if (typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value !== 'object' || value === null) return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.every((entry) => isAdmittedIslandDefault(entry, depth + 1, seen));
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  return Object.values(value as Record<string, unknown>).every((entry) =>
+    isAdmittedIslandDefault(entry, depth + 1, seen),
+  );
+}
 
 /**
  * Validate one island property table. This is the runtime authoring face of
@@ -950,16 +986,13 @@ function validateIslandProperties(properties: unknown): void {
     }
     if (
       entry.default !== undefined &&
-      entry.default !== null &&
-      typeof entry.default !== 'string' &&
-      typeof entry.default !== 'number' &&
-      typeof entry.default !== 'boolean'
+      !isAdmittedIslandDefault(entry.default, 0, new Set<object>())
     ) {
       throw authoringError(
         IslandErrorCode.DESCRIPTOR_SHAPE,
-        `${ERROR_PREFIX} defineIslandConfig() properties.${name}.default must be a ` +
-          'string, number, or boolean literal. ' +
-          'The declared default must match the typed property; remove it to use the zero value.',
+        `${ERROR_PREFIX} defineIslandConfig() properties.${name}.default must be a static ` +
+          'primitive, a recursively literal array/object graph, or a trustedHtml(...) value. ' +
+          'The build validates the typed member match and trustedHtml provenance.',
       );
     }
     if (entry.reflect === true && attribute === null) {

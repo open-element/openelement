@@ -37,8 +37,10 @@ const FILE = '/proj/app/islands/profile-card.tsx';
 /** One sidecar property entry in the vocabulary both readers agree on. */
 interface PropertyFacts {
   readonly attribute: string | null;
+  readonly attributeExplicit: boolean;
   readonly reflect: boolean;
-  readonly default?: string | number | boolean;
+  /** Primitive literal, JSON-safe literal graph, or `{ trustedHtml }`. */
+  readonly default?: unknown;
 }
 
 /**
@@ -99,8 +101,16 @@ function compilerOutcome(source: string): Outcome {
               entry.name,
               {
                 attribute: entry.attribute,
+                attributeExplicit: entry.attributeExplicit,
                 reflect: entry.reflect,
-                ...(entry.default === undefined ? {} : { default: entry.default }),
+                ...(entry.default === undefined
+                  ? {}
+                  : {
+                      default:
+                        entry.default.kind === 'literal'
+                          ? entry.default.value
+                          : { trustedHtml: entry.default.html },
+                    }),
               },
             ] as const,
         );
@@ -120,8 +130,9 @@ function descriptorRoot(family: string | undefined): string | undefined {
   return family === 'light' ? 'light' : 'shadow-open';
 }
 
-function module(entries: string): string {
+function module(entries: string, imports = ''): string {
   return (
+    imports +
     "import { defineIslandConfig } from '@openelement/router';\n" +
     (entries === ''
       ? 'export const openElement = defineIslandConfig({});\n'
@@ -174,6 +185,33 @@ const CORPUS: ReadonlyArray<{ readonly name: string; readonly source: string }> 
     source: module("properties: { count: { attribute: 'data-Count' } }"),
   },
   { name: 'empty properties table', source: module('properties: {}') },
+  {
+    name: 'non-primitive array/object literal defaults',
+    source: module(
+      "properties: { events: { attribute: false, default: [{ id: 'a', body: 'hi' }] }, " +
+        'model: { attribute: false, default: { nested: { x: 1, ok: true } } } }',
+    ),
+  },
+  {
+    name: 'trustedHtml literal default',
+    source: module(
+      "properties: { articleHtml: { attribute: false, default: trustedHtml('<b>safe</b>') } }",
+      "import { trustedHtml } from '@openelement/element';\n",
+    ),
+  },
+  {
+    name: 'invalid (non-canonical trustedHtml default)',
+    source: module(
+      "properties: { articleHtml: { attribute: false, default: trustedHtml('<b>x</b>') } }",
+      "import { trustedHtml } from './local-html';\n",
+    ),
+  },
+  {
+    name: 'invalid (spread in default graph)',
+    source: `const rows = [1];\n${module(
+      'properties: { events: { attribute: false, default: [...rows] } }',
+    )}`,
+  },
   {
     name: 'invalid (properties unknown option)',
     source: module('properties: { count: { type: "number" } }'),
@@ -313,9 +351,12 @@ test('the properties table resolves the same way on both readers', () => {
       root: 'shadow-open',
       delegatesFocus: false,
       properties: [
-        ['count', { attribute: 'count', reflect: true, default: 0 }],
-        ['label', { attribute: 'label', reflect: false, default: 'untitled' }],
-        ['padding', { attribute: null, reflect: false }],
+        ['count', { attribute: 'count', attributeExplicit: false, reflect: true, default: 0 }],
+        [
+          'label',
+          { attribute: 'label', attributeExplicit: false, reflect: false, default: 'untitled' },
+        ],
+        ['padding', { attribute: null, attributeExplicit: true, reflect: false }],
       ],
     },
   });

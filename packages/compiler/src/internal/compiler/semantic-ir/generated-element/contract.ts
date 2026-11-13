@@ -86,6 +86,32 @@ export type GeneratedElementSiteResolver = (moduleId: string) => GeneratedElemen
 export type GeneratedElementPrimitiveType = 'string' | 'number' | 'boolean';
 
 /**
+ * The property-only non-primitive types this lane retains (plan §14): no
+ * attribute channel, no JSON wire, no converter. `trustedHtml` is the existing
+ * brand; array/object values are caller-owned references.
+ */
+export type GeneratedElementNonPrimitiveType = 'array' | 'object' | 'trustedHtml';
+
+/** Every property type a descriptor row may declare. */
+export type GeneratedElementPlatformPropertyType =
+  | GeneratedElementPrimitiveType
+  | GeneratedElementNonPrimitiveType;
+
+/**
+ * The literal default graph an array/object row may carry: JSON-safe values
+ * only (the emitter renders it as a fresh-literal factory; the shell never
+ * clones caller writes). `trustedHtml` calls are not part of this graph; a
+ * trustedHtml default is the literal HTML string carried separately.
+ */
+export type GeneratedElementDefaultGraph =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly GeneratedElementDefaultGraph[]
+  | { readonly [key: string]: GeneratedElementDefaultGraph };
+
+/**
  * One resolved property row the emitter writes into the descriptor.
  *
  * This is the compiler-side mirror of the shell's landed
@@ -104,11 +130,25 @@ export interface GeneratedElementPlatformProperty {
   readonly name: string;
   /** Resolved attribute name, or null for a property-only channel. */
   readonly attribute: string | null;
-  readonly type: GeneratedElementPrimitiveType;
+  readonly type: GeneratedElementPlatformPropertyType;
   /** Reflect property writes back to the attribute. */
   readonly reflect: boolean;
-  /** Declared literal initial value or the type's zero value. */
-  readonly default: string | number | boolean;
+  /**
+   * Declared initial value. Primitive rows carry the value; a `trustedHtml`
+   * row carries the literal HTML string the shell brands per materialisation;
+   * array/object rows carry the generated fresh-literal factory NAME in
+   * `defaultFactory` instead (the emitter declares one module-level factory),
+   * so the descriptor never holds a mutable module-level default graph.
+   */
+  readonly default?: string | number | boolean;
+  /**
+   * Emitted module-level factory for an array/object default. Re-evaluating it
+   * builds a deep-fresh literal graph; the shell calls it once per element
+   * instance and the SSR resolver once per render.
+   */
+  readonly defaultFactory?: string;
+  /** The literal graph the emitted factory returns (array/object rows). */
+  readonly defaultGraph?: GeneratedElementDefaultGraph;
 }
 
 /**

@@ -41,11 +41,32 @@ const log = createLogger('island-scan');
 export interface LocalIslandPropertyConfig {
   /** Resolved attribute name, or null for a property-only channel. */
   attribute: string | null;
+  /**
+   * True when the sidecar spells `attribute` explicitly. Non-primitive
+   * property-only rows require the explicit `false`; an omitted key would
+   * derive a kebab attribute and open the JSON-attribute path.
+   */
+  attributeExplicit: boolean;
   /** Reflect property writes back to the attribute. */
   reflect: boolean;
-  /** Declared literal initial value; omitted means the type's zero value. */
-  default?: string | number | boolean;
+  /** Declared default (primitive literal, literal graph, or trustedHtml literal). */
+  default?: LocalIslandPropertyDefault;
 }
+
+/**
+ * The statically provable sidecar default vocabulary: a primitive, a bounded
+ * recursively literal array/object graph, or the literal HTML string of a
+ * canonical `trustedHtml('<literal>')` default. The compiler lane pairs the
+ * trustedHtml tag with a `TrustedHtml`-typed member and brands it in the shell.
+ */
+export type LocalIslandPropertyDefault =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly LocalIslandPropertyDefault[]
+  | { readonly [key: string]: LocalIslandPropertyDefault }
+  | { readonly trustedHtml: string };
 
 /** Local island metadata indexed by tag name. */
 export interface LocalIslandMeta {
@@ -417,30 +438,6 @@ function parseStaticBoolean(node: ts.Expression, context: string): boolean {
   throw staticOpenElementError(context + ' must be a boolean literal');
 }
 
-/** A string/number/boolean literal, or a coded static-metadata refusal. */
-function parseStaticPrimitive(node: ts.Expression, context: string): string | number | boolean {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
-  if (ts.isNumericLiteral(node)) {
-    const number = Number(node.text);
-    if (!Number.isFinite(number))
-      throw staticOpenElementError(context + ' must be a finite number');
-    return number;
-  }
-  if (
-    ts.isPrefixUnaryExpression(node) &&
-    node.operator === ts.SyntaxKind.MinusToken &&
-    ts.isNumericLiteral(node.operand)
-  ) {
-    const number = -Number(node.operand.text);
-    if (!Number.isFinite(number))
-      throw staticOpenElementError(context + ' must be a finite number');
-    return number;
-  }
-  if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
-  if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
-  throw staticOpenElementError(context + ' must be a static string, number, or boolean literal');
-}
-
 const ISLAND_PROPERTY_FIELDS: ReadonlySet<string> = new Set(['reflect', 'attribute', 'default']);
 const ISLAND_PROPERTY_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
@@ -452,7 +449,164 @@ const ISLAND_PROPERTY_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
  * the two declarations, and this scan validates the same accepted shape the
  * runtime authoring surface validates.
  */
+const PROPERTY_DEFAULT_MAX_DEPTH = 8;
+
+/** One bounded, recursively literal JSON-safe default graph. */
+type StaticDefaultGraph =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly StaticDefaultGraph[]
+  | { readonly [key: string]: StaticDefaultGraph };
+
+function parseStaticDefaultGraph(
+  node: ts.Expression,
+  context: string,
+  depth = 0,
+): StaticDefaultGraph {
+  if (depth > PROPERTY_DEFAULT_MAX_DEPTH) {
+    throw staticOpenElementError(context + ' is nested deeper than the admitted literal depth');
+  }
+  const value = ts.isParenthesizedExpression(node) ? node.expression : node;
+  if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) return value.text;
+  if (ts.isNumericLiteral(value)) {
+    const number = Number(value.text);
+    if (!Number.isFinite(number))
+      throw staticOpenElementError(context + ' must be a finite number');
+    return number;
+  }
+  if (
+    ts.isPrefixUnaryExpression(value) &&
+    value.operator === ts.SyntaxKind.MinusToken &&
+    ts.isNumericLiteral(value.operand)
+  ) {
+    const number = -Number(value.operand.text);
+    if (!Number.isFinite(number))
+      throw staticOpenElementError(context + ' must be a finite number');
+    return number;
+  }
+  if (value.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (value.kind === ts.SyntaxKind.FalseKeyword) return false;
+  if (value.kind === ts.SyntaxKind.NullKeyword) return null;
+  if (ts.isArrayLiteralExpression(value)) {
+    return value.elements.map((element) => {
+      if (ts.isSpreadElement(element)) {
+        throw staticOpenElementError(context + ' must not contain spreads');
+      }
+      return parseStaticDefaultGraph(element, context, depth + 1);
+    });
+  }
+  if (ts.isObjectLiteralExpression(value)) {
+    const object: Record<string, StaticDefaultGraph> = {};
+    for (const [key, entry] of staticEntries(value)) {
+      if (key === '__proto__') {
+        throw staticOpenElementError(context + ' must not contain a __proto__ key');
+      }
+      object[key] = parseStaticDefaultGraph(entry, context + '.' + key, depth + 1);
+    }
+    return object;
+  }
+  throw staticOpenElementError(
+    context + ' must be a static string, number, boolean, null, array, or object literal',
+  );
+}
+
+/**
+ * The canonical `trustedHtml` import bindings in one island module. Mirrors the
+ * class-lane provenance rule: a named import of `trustedHtml` from
+ * '@openelement/element' (aliases followed, no local shadowing); a same-name
+ * binding from anywhere else is reported as non-canonical instead of being
+ * read as the capability.
+ */
+function staticTrustedHtmlBinding(sourceFile: ts.SourceFile): {
+  readonly canonicalLocals: ReadonlySet<string>;
+  readonly nonCanonicalLocals: ReadonlySet<string>;
+  readonly shadowed: ReadonlySet<string>;
+} {
+  const canonicalLocals = new Set<string>();
+  const nonCanonicalLocals = new Set<string>();
+  const shadowed = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (ts.isImportDeclaration(statement)) {
+      const moduleName = ts.isStringLiteral(statement.moduleSpecifier)
+        ? statement.moduleSpecifier.text
+        : null;
+      const clause = statement.importClause;
+      if (clause?.namedBindings === undefined || !ts.isNamedImports(clause.namedBindings)) continue;
+      for (const element of clause.namedBindings.elements) {
+        const importedName = element.propertyName?.text ?? element.name.text;
+        if (importedName !== 'trustedHtml') continue;
+        if (moduleName === '@openelement/element') canonicalLocals.add(element.name.text);
+        else nonCanonicalLocals.add(element.name.text);
+      }
+      continue;
+    }
+    const declaredName =
+      (ts.isFunctionDeclaration(statement) ||
+        ts.isInterfaceDeclaration(statement) ||
+        ts.isTypeAliasDeclaration(statement) ||
+        ts.isClassDeclaration(statement)) &&
+      statement.name?.text !== undefined
+        ? statement.name.text
+        : undefined;
+    if (declaredName !== undefined) shadowed.add(declaredName);
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name)) shadowed.add(declaration.name.text);
+      }
+    }
+  }
+  return { canonicalLocals, nonCanonicalLocals, shadowed };
+}
+
+function parseStaticPropertyDefault(
+  sourceFile: ts.SourceFile,
+  raw: ts.Expression,
+  context: string,
+): LocalIslandPropertyDefault {
+  const value = ts.isParenthesizedExpression(raw) ? raw.expression : raw;
+  if (ts.isCallExpression(value)) {
+    const callee = value.expression;
+    if (!ts.isIdentifier(callee)) {
+      throw staticOpenElementError(
+        context + ' must be a static literal or the canonical trustedHtml(<literal string>)',
+      );
+    }
+    const bindings = staticTrustedHtmlBinding(sourceFile);
+    const canonical =
+      bindings.canonicalLocals.has(callee.text) &&
+      !bindings.nonCanonicalLocals.has(callee.text) &&
+      !bindings.shadowed.has(callee.text);
+    if (!canonical) {
+      throw staticOpenElementError(
+        context +
+          ' must be created by the canonical trustedHtml import from ' +
+          "'@openelement/element'; a same-name or aliased-to-other-module callee is not admitted",
+      );
+    }
+    if (value.arguments.length !== 1) {
+      throw staticOpenElementError(context + ' trustedHtml(...) takes exactly one literal string');
+    }
+    const html = value.arguments[0]!;
+    if (!ts.isStringLiteral(html) && !ts.isNoSubstitutionTemplateLiteral(html)) {
+      throw staticOpenElementError(
+        context + ' trustedHtml(...) requires a literal string argument',
+      );
+    }
+    return { trustedHtml: html.text };
+  }
+  const graph = parseStaticDefaultGraph(value, context);
+  if (graph === null) {
+    throw staticOpenElementError(
+      context + ' must not be null; declare an explicit literal default',
+    );
+  }
+  return graph;
+}
+
 function parseStaticPropertyTable(
+  sourceFile: ts.SourceFile,
   node: ts.Expression,
   context: string,
 ): Record<string, LocalIslandPropertyConfig> {
@@ -481,7 +635,8 @@ function parseStaticPropertyTable(
     const seenFields = new Set<string>();
     let reflect = false;
     let attribute: string | null | undefined;
-    let defaultValue: string | number | boolean | undefined;
+    let attributeExplicit = false;
+    let defaultValue: LocalIslandPropertyDefault | undefined;
     for (const [field, raw] of staticEntries(entry)) {
       if (!ISLAND_PROPERTY_FIELDS.has(field)) {
         throw staticOpenElementError(
@@ -498,6 +653,7 @@ function parseStaticPropertyTable(
       } else if (field === 'attribute') {
         if (raw.kind === ts.SyntaxKind.FalseKeyword) {
           attribute = null;
+          attributeExplicit = true;
         } else if (ts.isStringLiteral(raw) && raw.text.length > 0) {
           const normalized = raw.text.toLowerCase();
           if (!isSafeAttributeName(normalized)) {
@@ -506,13 +662,14 @@ function parseStaticPropertyTable(
             );
           }
           attribute = normalized;
+          attributeExplicit = true;
         } else {
           throw staticOpenElementError(
             `${context}.${name}.attribute must be a string literal or false`,
           );
         }
       } else {
-        defaultValue = parseStaticPrimitive(raw, `${context}.${name}.default`);
+        defaultValue = parseStaticPropertyDefault(sourceFile, raw, `${context}.${name}.default`);
       }
     }
     if (reflect && attribute === null) {
@@ -531,6 +688,7 @@ function parseStaticPropertyTable(
     }
     result[name] = {
       attribute: effectiveAttribute,
+      attributeExplicit,
       reflect,
       ...(defaultValue === undefined ? {} : { default: defaultValue }),
     };
@@ -614,7 +772,7 @@ function parseStaticIslandConfig(
       }
       meta.delegatesFocus = raw.kind === ts.SyntaxKind.TrueKeyword;
     } else if (key === 'properties') {
-      meta.properties = parseStaticPropertyTable(raw, 'openElement.properties');
+      meta.properties = parseStaticPropertyTable(sourceFile, raw, 'openElement.properties');
     } else if (key === 'tags' || key === 'tagNames') {
       meta[key] = parseStaticStringArray(raw, `openElement.${key}`);
     } else {
