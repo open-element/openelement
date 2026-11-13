@@ -180,8 +180,9 @@ declaration.
 **This slice implements the primitive property set only.** Non-primitive
 property channels (arrays, objects and `trustedHtml`) remain a **required
 capability before retirement**, not a waived one: live in-tree consumers that
-declare non-primitive attributes are the evidence, and a governance record for
-that finding is maintained separately from this slice document. What this lane
+declare non-primitive attributes are the evidence, and the plan's 2026-11-14
+§14 amendment retains these capabilities as Alpha16 obligations (no blanket
+waiver). What this lane
 does today is fail closed: a props member whose type is not
 `string`/`number`/`boolean` refuses with
 `OEIR_GENERATED_ELEMENT_PROPS_TYPE_UNSUPPORTED`, the descriptor type cannot
