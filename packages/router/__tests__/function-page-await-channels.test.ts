@@ -163,7 +163,6 @@ async function loadRequestTimeHandler(routes: RouteEntry[], routeModuleFile: str
         allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
       },
       desc.isSSG,
-      desc.renderer,
     );
   }
   const emitted = lines.join('\n');
