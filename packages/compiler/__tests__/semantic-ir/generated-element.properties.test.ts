@@ -300,7 +300,9 @@ test('a reserved lifecycle name refuses at the lane, and the shell refuses the s
       island(`properties: { ${name}: {} }`, counter(`props: { ${name}: string }`)),
     );
     expect(codes(error), name).toEqual([GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID]);
-    expect(error.diagnostics[0]!.message, name).toContain('collides with the element lifecycle');
+    expect(error.diagnostics[0]!.message, name).toMatch(
+      /collides with the element lifecycle|unsafe property sink name/,
+    );
 
     // Consumer-form guard for the one duplicated list: the shell (the runtime
     // owner) must refuse every name this early check refuses. An over-refusal

@@ -36,6 +36,7 @@ import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidd
 import type { RootMode } from '@openelement/protocol/part-program';
 import { literalValue } from '../../semantic-core/analyze-module.ts';
 import { createModuleIntrinsicBindings } from '../../semantic-core/module-analysis.ts';
+import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
 import { type SourceSpan } from '../../semantic-core/scope-resolution.ts';
 import { type FunctionModelComponent } from '../../semantic-core/function-frontend.ts';
 import type { IrDiagnostic } from '../types.ts';
@@ -507,6 +508,13 @@ function readIslandPropertyTable(
       return refuse(
         entry.name,
         `openElement.properties key "${name}" must be an identifier naming a typed props member`,
+      );
+    }
+    const sinkReason = forbiddenSinkReason('prop', name);
+    if (sinkReason !== null) {
+      return refuse(
+        entry.name,
+        `openElement.properties key "${name}" is not an admissible property name: ${sinkReason}`,
       );
     }
     // A duplicate NAME is refused before any attribute resolution: with
@@ -1054,6 +1062,74 @@ function isCanonicalTrustedHtmlType(sourceFile: ts.SourceFile, typeNode: ts.Type
  * opaque object shape, or the canonical TrustedHtml type. `ReadonlyArray`,
  * tuples, nested arrays, nested TrustedHtml and imported non-brand types refuse.
  */
+/**
+ * Local names bound to the canonical `TrustedHtml` type import, including
+ * aliases. Used only by the defensive nested-brand scan below; top-level type
+ * admission still requires the exact canonical name.
+ */
+function trustedHtmlTypeLocalNames(sourceFile: ts.SourceFile): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== '@openelement/element'
+    ) {
+      continue;
+    }
+    const clause = statement.importClause;
+    if (clause?.namedBindings === undefined || !ts.isNamedImports(clause.namedBindings)) continue;
+    for (const element of clause.namedBindings.elements) {
+      const importedName = element.propertyName?.text ?? element.name.text;
+      if (importedName === 'TrustedHtml') names.add(element.name.text);
+    }
+  }
+  return names;
+}
+
+/**
+ * Defensive nested-brand scan for opaque object shapes (design §3.3: nested
+ * `TrustedHtml` refuses until a type-honest nested carrier exists). The object
+ * shape stays opaque for ordinary members, but a type reference to the
+ * canonical `TrustedHtml` (or a canonical aliased import / local alias chain
+ * that resolves to it) anywhere inside the shape is rejected. Imported types
+ * that hide the brand behind an alias not visible in this module remain the
+ * documented opaque boundary.
+ */
+function findNestedTrustedHtml(
+  sourceFile: ts.SourceFile,
+  node: ts.Node,
+  brandLocals: ReadonlySet<string>,
+  visited: ReadonlySet<string> = new Set(),
+): ts.Node | null {
+  if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)) {
+    const name = node.typeName.text;
+    if (brandLocals.has(name)) return node;
+    const declarations = propsTypeDeclarations(sourceFile, name);
+    if (declarations.length === 1 && !visited.has(name)) {
+      const nextVisited = new Set(visited);
+      nextVisited.add(name);
+      const declaration = declarations[0]!;
+      if (ts.isInterfaceDeclaration(declaration)) {
+        for (const member of declaration.members) {
+          const found = findNestedTrustedHtml(sourceFile, member, brandLocals, nextVisited);
+          if (found !== null) return found;
+        }
+        return null;
+      }
+      if (ts.isTypeAliasDeclaration(declaration)) {
+        return findNestedTrustedHtml(sourceFile, declaration.type, brandLocals, nextVisited);
+      }
+    }
+  }
+  let found: ts.Node | null = null;
+  ts.forEachChild(node, (child) => {
+    if (found !== null) return;
+    found = findNestedTrustedHtml(sourceFile, child, brandLocals, visited);
+  });
+  return found;
+}
+
 function resolveValueMemberType(
   sourceFile: ts.SourceFile,
   typeNode: ts.TypeNode,
@@ -1063,6 +1139,7 @@ function resolveValueMemberType(
       readonly reason: string;
       readonly node: ts.Node;
     } {
+  const brandLocals = trustedHtmlTypeLocalNames(sourceFile);
   const primitive: GeneratedElementPrimitiveType | null =
     typeNode.kind === ts.SyntaxKind.StringKeyword
       ? 'string'
@@ -1119,6 +1196,15 @@ function resolveValueMemberType(
         node: element.node ?? typeNode.elementType,
       };
     }
+    const nestedBrand = findNestedTrustedHtml(sourceFile, typeNode.elementType, brandLocals);
+    if (nestedBrand !== null) {
+      return {
+        reason:
+          'a nested TrustedHtml inside an opaque array element is not admitted; declare a ' +
+          'top-level property-only trustedHtml member instead',
+        node: nestedBrand,
+      };
+    }
     return { kind: 'array', type: 'array' };
   }
   if (ts.isTypeReferenceNode(typeNode) && ts.isIdentifier(typeNode.typeName)) {
@@ -1146,11 +1232,31 @@ function resolveValueMemberType(
           node: element.node ?? args[0]!,
         };
       }
+      const nestedBrand = findNestedTrustedHtml(sourceFile, args[0]!, brandLocals);
+      if (nestedBrand !== null) {
+        return {
+          reason:
+            'a nested TrustedHtml inside an opaque array element is not admitted; declare a ' +
+            'top-level property-only trustedHtml member instead',
+          node: nestedBrand,
+        };
+      }
       return { kind: 'array', type: 'array' };
     }
   }
   const objectShape = proveObjectShape(sourceFile, typeNode);
-  if (objectShape.ok) return { kind: 'object', type: 'object' };
+  if (objectShape.ok) {
+    const nestedBrand = findNestedTrustedHtml(sourceFile, typeNode, brandLocals);
+    if (nestedBrand !== null) {
+      return {
+        reason:
+          'a nested TrustedHtml inside an opaque object shape is not admitted; declare a ' +
+          'top-level property-only trustedHtml member instead',
+        node: nestedBrand,
+      };
+    }
+    return { kind: 'object', type: 'object' };
+  }
   return {
     reason:
       `the props member type "${typeNode.getText(sourceFile)}" is not an admitted value type ` +
@@ -1243,6 +1349,18 @@ function readTypedProps(
           member.name,
           `the props member "${member.name.getText(sourceFile)}" is not an identifier the ` +
             'generated props record can expose',
+          GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
+        ),
+      };
+    }
+    const sinkReason = forbiddenSinkReason('prop', name);
+    if (sinkReason !== null) {
+      return {
+        kind: 'refused',
+        diagnostic: propertyDiagnostic(
+          sourceFile,
+          member.name,
+          `the props member "${name}" is not an admissible property name: ${sinkReason}`,
           GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
         ),
       };

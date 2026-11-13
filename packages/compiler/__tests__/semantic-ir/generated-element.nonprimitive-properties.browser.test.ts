@@ -693,10 +693,20 @@ describe('non-primitive property retention on the generated element (Chromium)',
         };
         const hostHtml = mod.NpCard__ssrHost(supplied);
         let forgedCode: string | null = null;
+        // The wrong-shape supplied row is read by the component (events.map),
+        // so the getter-backed resolver validates it and fails closed.
+        try {
+          mod.NpCard__ssrHost({ events: { id: 'not-array' } });
+        } catch (error) {
+          forgedCode = (error as { code?: string }).code ?? 'no-code';
+        }
+        // An unused supplied trustedHtml row is never read, so a forged plain
+        // value is not promoted and not executed.
+        let unusedForgedCode: string | null = null;
         try {
           mod.NpCard__ssrHost({ articleHtml: { html: '<b>forged</b>' } });
         } catch (error) {
-          forgedCode = (error as { code?: string }).code ?? 'no-code';
+          unusedForgedCode = (error as { code?: string }).code ?? 'no-code';
         }
         const frame = document.createElement('div');
         frame.setHTMLUnsafe(hostHtml);
@@ -710,6 +720,7 @@ describe('non-primitive property retention on the generated element (Chromium)',
           hostHtml,
           claimedList,
           forgedCode,
+          unusedForgedCode,
           clientEvents: (host as unknown as { events: Array<{ id: string }> }).events[0]!.id,
         };
       }, SITE.tag);
@@ -721,7 +732,103 @@ describe('non-primitive property retention on the generated element (Chromium)',
       // own defaults because no seed wire exists (M11 transport gap).
       expect(result.claimedList).toBe('server-row');
       expect(result.clientEvents).toBe('seed');
-      expect(result.forgedCode).toBe('OEIR_SHELL_UNTRUSTED_HTML_PROPERTY');
+      expect(result.forgedCode).toBe('OEIR_SHELL_PROPERTY_TYPE_MISMATCH');
+      expect(result.unusedForgedCode).toBeNull();
+    } finally {
+      await page.close();
+    }
+  });
+  test('SSR host reads supplied getters per read and never executes unused getters', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate((tagName) => {
+        const mod = window.__oeNp;
+        const reads = { events: 0, model: 0, articleHtml: 0 };
+        const props = {
+          get events() {
+            reads.events += 1;
+            return [{ id: 'getter', body: `row-${reads.events}` }];
+          },
+          get model() {
+            reads.model += 1;
+            return { title: `title-${reads.model}`, rows: ['r'] };
+          },
+          get articleHtml() {
+            reads.articleHtml += 1;
+            return mod.trustedHtml('<b>unused</b>');
+          },
+        };
+        const before = { ...reads };
+        const html = mod.NpCard__ssrHost(props);
+        return {
+          before,
+          after: reads,
+          html,
+          site: tagName,
+        };
+      }, SITE.tag);
+      // The fold itself executes no supplied getter.
+      expect(result.before).toEqual({ events: 0, model: 0, articleHtml: 0 });
+      // The leaf reads the two rendered rows once; the unused trustedHtml row
+      // is not read at all.
+      expect(result.after.events).toBeGreaterThanOrEqual(1);
+      expect(result.after.model).toBeGreaterThanOrEqual(1);
+      expect(result.after.articleHtml).toBe(0);
+      expect(result.html).toContain('row-1');
+      expect(result.html).toContain('title-1');
+      expect(result.html).not.toContain('unused');
+    } finally {
+      await page.close();
+    }
+  });
+  test('the shell materialises a client default once per instance (not per read)', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(() => {
+        const mod = window.__oeNp;
+        let factoryCalls = 0;
+        const Ctor = mod.createGeneratedElementClass({
+          tag: 'np-default-count',
+          root: 'light',
+          properties: [
+            {
+              name: 'events',
+              attribute: null,
+              type: 'array',
+              reflect: false,
+              default: () => {
+                factoryCalls += 1;
+                return [{ id: 'seed' }];
+              },
+            },
+          ],
+          createRecipe: () => ({ mount: () => [], createProps: () => ({}) }),
+        });
+        customElements.define('np-default-count', Ctor);
+        const first = document.createElement('np-default-count') as HTMLElement & {
+          events: unknown[];
+        };
+        const second = document.createElement('np-default-count') as HTMLElement & {
+          events: unknown[];
+        };
+        const afterConstruction = factoryCalls;
+        // Reads reuse the instance's materialised graph; they never invoke the
+        // factory again.
+        const firstReads = [first.events, first.events];
+        const secondReads = [second.events, second.events];
+        return {
+          afterConstruction,
+          afterReads: factoryCalls,
+          sameRef: firstReads[0] === firstReads[1],
+          distinctInstances: firstReads[0] !== secondReads[0],
+        };
+      });
+      expect(result).toEqual({
+        afterConstruction: 2,
+        afterReads: 2,
+        sameRef: true,
+        distinctInstances: true,
+      });
     } finally {
       await page.close();
     }

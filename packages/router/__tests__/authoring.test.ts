@@ -509,6 +509,31 @@ test('defineIslandConfig() carries the declared primitive property table', () =>
       message,
     );
   }
+
+  // Dangerous property names are refused through the canonical property-sink
+  // predicate, including own keys created by JSON.parse (not object-literal
+  // prototype assignment).
+  const dangerous = JSON.parse('{"__proto__":{},"constructor":{},"prototype":{}}') as Record<
+    string,
+    unknown
+  >;
+  assertThrowsIncludes(
+    () => defineIslandConfig({ properties: dangerous } as never),
+    Error,
+    'not an admissible property name',
+  );
+  // A default graph with an own dangerous key is refused without mutating any
+  // prototype.
+  const jsonDefault = JSON.parse('{"__proto__":{"polluted":true},"ok":1}') as Record<
+    string,
+    unknown
+  >;
+  assertThrowsIncludes(
+    () => defineIslandConfig({ properties: { payload: { default: jsonDefault } } } as never),
+    Error,
+    'default must be a static primitive',
+  );
+  expect(({} as Record<string, unknown>).polluted).toBeUndefined();
 });
 
 test('defineIslandConfig() rejects non-canonical island metadata', () => {

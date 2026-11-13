@@ -84,6 +84,41 @@ reconnect retains, and both `dispose(false)` (owned DOM stays) and
 matches the claimed SSR structure also wins and refreshes; a structurally
 divergent one fails closed as above.
 
+## Hardening from the self-risk review
+
+- **Property names are canonical dangerous keys.** `__proto__`, `constructor`
+  and `prototype` are refused as property names in every authored reader
+  (router scanner, compiler sidecar/typed-props, runtime `defineIslandConfig`)
+  and in the shell descriptor, through the canonical protocol
+  `forbiddenSinkReason('prop', …)` predicate — no local denylist. The scanner's
+  property table and the SSR resolved-props record are null-prototype records,
+  and rows are written with `Object.defineProperty`, so a name can never mutate
+  a record's prototype. An evaluated default object carrying an own dangerous
+  key (e.g. `JSON.parse('{"__proto__":…}')`) is refused by the runtime guard;
+  default-graph literal keys already refuse `__proto__` in both readers. Tests:
+  compiler dangerous-name refusals, scanner/authoring own-key and prototype
+  checks, drift corpus dangerous rows, shell descriptor refusals.
+- **SSR folding keeps the approved per-read props contract.** The resolved
+  record is getter-backed: a supplied row delegates to the caller's props on
+  every read (array/object references stay caller-owned; trustedHtml is
+  brand-checked on read), the fold itself executes no supplied getter, and an
+  unused supplied getter never runs. Omitted rows use a lazy memoised default:
+  the generated factory/brand runs at most once per render and only when read;
+  an unused declared row is never materialised. The client shell still
+  materialises each instance's default exactly once at state creation (reads
+  reuse it). Tests pin SSR Host getter counts (eager fold: 0, used rows per
+  read, unused 0), Node lazy-default counts, and the per-instance client count.
+- **Nested `TrustedHtml` is refused until a type-honest carrier exists.**
+  Opaque object/array element shapes are scanned (including local alias/interface
+  chains and canonical aliased type imports) and a nested canonical brand
+  reference refuses with `PROPS_TYPE_UNSUPPORTED`; the top-level property-only
+  `trustedHtml` member remains the only admitted brand row. The scanner now
+  rejects type-only `trustedHtml` imports exactly like the compiler, and the
+  drift corpus covers canonical aliases, type-only forms and shadowed callees.
+- **Defensive descriptor validation.** The shell now fails closed on an invalid
+  primitive default carrier and on duplicate descriptor property names instead
+  of silently zeroing/overwriting; generated descriptors are unaffected.
+
 ## Refusals / non-claims
 
 - No server→client props seed/JSON wire; M11 owns a future transport. Host bytes

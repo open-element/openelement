@@ -7,7 +7,11 @@ import { join, resolve } from 'pathe';
 import type { HydrationStrategy, OpenElementPackageManifest } from '../../framework.ts';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import { formatError, isValidTagName, OpenElementError } from '@openelement/element';
-import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
+import {
+  camelToKebab,
+  forbiddenSinkReason,
+  isSafeAttributeName,
+} from '@openelement/protocol/forbidden-sinks';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
@@ -534,11 +538,18 @@ function staticTrustedHtmlBinding(sourceFile: ts.SourceFile): {
         : null;
       const clause = statement.importClause;
       if (clause?.namedBindings === undefined || !ts.isNamedImports(clause.namedBindings)) continue;
+      const clauseTypeOnly = clause.isTypeOnly;
       for (const element of clause.namedBindings.elements) {
         const importedName = element.propertyName?.text ?? element.name.text;
         if (importedName !== 'trustedHtml') continue;
-        if (moduleName === '@openelement/element') canonicalLocals.add(element.name.text);
-        else nonCanonicalLocals.add(element.name.text);
+        // A type-only import can never supply the runtime capability; the
+        // compiler's intrinsic resolver refuses it, so the scanner must agree.
+        const typeOnly = clauseTypeOnly || element.isTypeOnly;
+        if (moduleName === '@openelement/element' && !typeOnly) {
+          canonicalLocals.add(element.name.text);
+        } else {
+          nonCanonicalLocals.add(element.name.text);
+        }
       }
       continue;
     }
@@ -613,13 +624,19 @@ function parseStaticPropertyTable(
   if (!ts.isObjectLiteralExpression(node)) {
     throw staticOpenElementError(context + ' must be an object of static property entries');
   }
-  const result: Record<string, LocalIslandPropertyConfig> = {};
+  const result: Record<string, LocalIslandPropertyConfig> = Object.create(null);
   const names = new Set<string>();
   const attributes = new Set<string>();
   for (const [name, entry] of staticEntries(node)) {
     if (!ISLAND_PROPERTY_NAME.test(name)) {
       throw staticOpenElementError(
         `${context} key "${name}" must be an identifier naming a typed props member`,
+      );
+    }
+    const sinkReason = forbiddenSinkReason('prop', name);
+    if (sinkReason !== null) {
+      throw staticOpenElementError(
+        `${context} key "${name}" is not an admissible property name: ${sinkReason}`,
       );
     }
     // A duplicate NAME is a shape defect independent of the attribute channel:

@@ -288,6 +288,68 @@ describe('non-primitive grammar admission', () => {
   });
 });
 
+describe('authoritative dangerous-name and nested-brand boundaries', () => {
+  test('dangerous property names are refused at the authored sidecar table', () => {
+    for (const name of ['__proto__', 'constructor', 'prototype']) {
+      const error = laneError(
+        island(`${name}: { attribute: false, default: 0 }`, `{ ${name}: number }`),
+      );
+      expect(codes(error), name).toEqual([GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID]);
+      expect(error.diagnostics[0]!.message, name).toContain('not an admissible property name');
+    }
+  });
+
+  test('nested TrustedHtml in opaque object/array shapes refuses until a type-honest carrier exists', () => {
+    const cases: Array<[string, string, string, string]> = [
+      [
+        'inline object member',
+        'model',
+        'model: { attribute: false, default: { html: "x" } }',
+        '{ model: { html: TrustedHtml } }',
+      ],
+      [
+        'array inline object member',
+        'rows',
+        'rows: { attribute: false, default: [{ html: "x" }] }',
+        '{ rows: Array<{ html: TrustedHtml }> }',
+      ],
+      [
+        'local interface member',
+        'model',
+        'model: { attribute: false, default: { html: "x" } }',
+        '{ model: ModelWithHtml }',
+      ],
+      [
+        'aliased canonical type import member',
+        'model',
+        'model: { attribute: false, default: { html: "x" } }',
+        '{ model: { html: TH } }',
+      ],
+    ];
+    for (const [label, member, entries, propsType] of cases) {
+      let extra = '';
+      if (label === 'local interface member') {
+        extra = 'interface ModelWithHtml { html: TrustedHtml }\n';
+      }
+      if (label === 'aliased canonical type import member') {
+        extra = "import type { TrustedHtml as TH } from '@openelement/element';\n";
+      }
+      const source =
+        "import { defineIslandConfig } from '@openelement/router';\n" +
+        "import { trustedHtml, type TrustedHtml } from '@openelement/element';\n" +
+        extra +
+        `export const openElement = defineIslandConfig({ root: 'shadow', properties: { ${entries} } });\n` +
+        `function C(props: ${propsType}) {\n` +
+        `  return <div>{String(props.${member})}</div>;\n` +
+        '}\n' +
+        'export default C;\n';
+      const error = laneError(source);
+      expect(codes(error), label).toEqual([GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED]);
+      expect(error.diagnostics[0]!.message, label).toContain('nested TrustedHtml');
+    }
+  });
+});
+
 describe('emitter rows and default factories', () => {
   test('array/object rows reference one generated fresh-literal factory each', () => {
     const compiled = compileGeneratedElementIfAdmitted(
@@ -396,23 +458,123 @@ function descriptorWithFactories(counter: { calls: number }): GeneratedElementDe
 }
 
 describe('resolveGeneratedElementProps (SSR folding helper)', () => {
-  test('materialises deep-independent defaults per render', () => {
+  test('defaults are lazy, deep-independent and materialised at most once per render', () => {
     const counter = { calls: 0 };
     const descriptor = descriptorWithFactories(counter);
     const first = resolveGeneratedElementProps(descriptor);
     const second = resolveGeneratedElementProps(descriptor);
+    // Nothing supplied, nothing read yet: no factory ran during folding.
+    expect(counter.calls).toBe(0);
+    expect(Object.getPrototypeOf(first)).toBeNull();
+    const firstEvents = first.events as Array<{ id: string }>;
+    const firstModel = first.model as { nested: { x: number } };
+    // Reading the same row twice still materialises its default once.
+    expect(first.events).toBe(first.events);
+    expect(first.model).toBe(first.model);
+    expect(counter.calls).toBe(2);
+    const secondEvents = second.events as Array<{ id: string }>;
+    const secondModel = second.model as { nested: { x: number } };
     expect(counter.calls).toBe(4);
-    expect(first.events).not.toBe(second.events);
-    expect((first.events as Array<{ id: string }>)[0]).not.toBe(
-      (second.events as Array<{ id: string }>)[0],
-    );
-    expect((first.model as { nested: { x: number } }).nested).not.toBe(
-      (second.model as { nested: { x: number } }).nested,
-    );
-    // trustedHtml defaults are branded per materialisation.
+    expect(firstEvents).not.toBe(secondEvents);
+    expect(firstEvents[0]).not.toBe(secondEvents[0]);
+    expect(firstModel.nested).not.toBe(secondModel.nested);
+    // trustedHtml defaults are branded per render, also lazily.
+    expect(counter.calls).toBe(4);
     expect((first.articleHtml as { html: string }).html).toBe('<b>safe</b>');
     expect(first.articleHtml).not.toBe(second.articleHtml);
     expect(trustedHtmlValue(first.articleHtml)).toBe('<b>safe</b>');
+  });
+
+  test('unused defaults are never materialised', () => {
+    const counter = { calls: 0 };
+    const descriptor = descriptorWithFactories(counter);
+    const resolved = resolveGeneratedElementProps(descriptor);
+    expect(counter.calls).toBe(0);
+    // Read one row only: the other default factory stays unexecuted.
+    expect(resolved.model).toEqual({ nested: { x: 1 } });
+    expect(counter.calls).toBe(1);
+    expect(trustedHtmlValue(resolved.articleHtml)).toBe('<b>safe</b>');
+    expect(counter.calls).toBe(1);
+  });
+
+  test('supplied getters are read per read, never by the fold, and unused getters do not run', () => {
+    const counter = { calls: 0 };
+    const descriptor = descriptorWithFactories(counter);
+    const reads = { events: 0, model: 0, articleHtml: 0 };
+    const supplied = {
+      get events() {
+        reads.events += 1;
+        return [{ id: `supplied-${reads.events}` }];
+      },
+      get model() {
+        reads.model += 1;
+        return { nested: { x: reads.model } };
+      },
+      get articleHtml() {
+        reads.articleHtml += 1;
+        return trustedHtml('<i>supplied</i>');
+      },
+    };
+    const resolved = resolveGeneratedElementProps(descriptor, supplied);
+    // Folding must not execute any supplied getter and must not materialise
+    // the omitted rows' defaults.
+    expect(reads).toEqual({ events: 0, model: 0, articleHtml: 0 });
+    expect(counter.calls).toBe(0);
+
+    const firstEvents = resolved.events as Array<{ id: string }>;
+    const secondEvents = resolved.events as Array<{ id: string }>;
+    expect(reads.events).toBe(2);
+    expect(firstEvents[0]!.id).toBe('supplied-1');
+    expect(secondEvents[0]!.id).toBe('supplied-2');
+    expect(reads.model).toBe(0);
+    expect(reads.articleHtml).toBe(0);
+    expect(counter.calls).toBe(0);
+    // Reading the unused trustedHtml row is caller-driven and preserves brand.
+    expect(trustedHtmlValue(resolved.articleHtml)).toBe('<i>supplied</i>');
+    expect(reads.articleHtml).toBe(1);
+    // The supplied model getter itself is read on demand.
+    expect(resolved.model).toEqual({ nested: { x: 1 } });
+    expect(reads.model).toBe(1);
+    expect(counter.calls).toBe(0);
+  });
+
+  test('omitted rows remain lazy alongside supplied rows', () => {
+    const counter = { calls: 0 };
+    const descriptor = descriptorWithFactories(counter);
+    const reads = { events: 0 };
+    const supplied = {
+      get events() {
+        reads.events += 1;
+        return [{ id: 'supplied' }];
+      },
+    };
+    const resolved = resolveGeneratedElementProps(descriptor, supplied);
+    expect(reads.events).toBe(0);
+    expect(resolved.events).toEqual([{ id: 'supplied' }]);
+    expect(reads.events).toBe(1);
+    expect(counter.calls).toBe(0);
+    expect(resolved.model).toEqual({ nested: { x: 1 } });
+    expect(counter.calls).toBe(1);
+    expect(reads.events).toBe(1);
+  });
+
+  test('a supplied getter returning undefined falls back to the lazy default once', () => {
+    const counter = { calls: 0 };
+    const descriptor = descriptorWithFactories(counter);
+    let reads = 0;
+    const supplied = {
+      get events() {
+        reads += 1;
+        return undefined;
+      },
+    };
+    const resolved = resolveGeneratedElementProps(descriptor, supplied);
+    expect(reads).toBe(0);
+    expect(counter.calls).toBe(0);
+    expect(resolved.events).toEqual([{ id: 'default' }]);
+    expect(resolved.events).toEqual([{ id: 'default' }]);
+    expect(reads).toBe(2);
+    expect(counter.calls).toBe(1);
   });
 
   test('supplied array/object props are caller-owned references (never cloned)', () => {
@@ -423,9 +585,10 @@ describe('resolveGeneratedElementProps (SSR folding helper)', () => {
     const resolved = resolveGeneratedElementProps(descriptor, { events, model });
     expect(resolved.events).toBe(events);
     expect(resolved.model).toBe(model);
-    // Only the omitted trustedHtml row materialised its default.
+    // Only rows that are read can materialise an untouched default.
     expect(counter.calls).toBe(0);
     expect(trustedHtmlValue(resolved.articleHtml)).toBe('<b>safe</b>');
+    expect(counter.calls).toBe(0);
   });
 
   function errorCode(run: () => unknown): string | undefined {
@@ -437,31 +600,37 @@ describe('resolveGeneratedElementProps (SSR folding helper)', () => {
     return undefined;
   }
 
-  test('supplied trustedHtml must carry the brand; plain objects/strings refuse', () => {
+  test('supplied trustedHtml must carry the brand; plain objects/strings refuse on read', () => {
     const counter = { calls: 0 };
     const descriptor = descriptorWithFactories(counter);
     expect(
-      errorCode(() =>
-        resolveGeneratedElementProps(descriptor, { articleHtml: { html: '<b>x</b>' } }),
-      ),
+      errorCode(() => {
+        resolveGeneratedElementProps(descriptor, { articleHtml: { html: '<b>x</b>' } }).articleHtml;
+      }),
     ).toBe('OEIR_SHELL_UNTRUSTED_HTML_PROPERTY');
     expect(
-      errorCode(() => resolveGeneratedElementProps(descriptor, { articleHtml: '<b>x</b>' })),
+      errorCode(() => {
+        resolveGeneratedElementProps(descriptor, { articleHtml: '<b>x</b>' }).articleHtml;
+      }),
     ).toBe('OEIR_SHELL_UNTRUSTED_HTML_PROPERTY');
     const branded = trustedHtml('<i>ok</i>');
     const resolved = resolveGeneratedElementProps(descriptor, { articleHtml: branded });
     expect(resolved.articleHtml).toBe(branded);
   });
 
-  test('supplied wrong-shape array/object values refuse', () => {
+  test('supplied wrong-shape array/object values refuse on read', () => {
     const counter = { calls: 0 };
     const descriptor = descriptorWithFactories(counter);
     expect(
-      errorCode(() => resolveGeneratedElementProps(descriptor, { events: { id: 'not-array' } })),
+      errorCode(() => {
+        resolveGeneratedElementProps(descriptor, { events: { id: 'not-array' } }).events;
+      }),
     ).toBe('OEIR_SHELL_PROPERTY_TYPE_MISMATCH');
-    expect(errorCode(() => resolveGeneratedElementProps(descriptor, { model: [1, 2] }))).toBe(
-      'OEIR_SHELL_PROPERTY_TYPE_MISMATCH',
-    );
+    expect(
+      errorCode(() => {
+        resolveGeneratedElementProps(descriptor, { model: [1, 2] }).model;
+      }),
+    ).toBe('OEIR_SHELL_PROPERTY_TYPE_MISMATCH');
   });
 
   test('a descriptor with a mutable default literal for array/object is refused', () => {
@@ -473,5 +642,42 @@ describe('resolveGeneratedElementProps (SSR folding helper)', () => {
     expect(() =>
       resolveGeneratedElementProps(descriptor as unknown as GeneratedElementDescriptor),
     ).toThrow(/generated fresh-literal factory/);
+  });
+
+  test('dangerous descriptor property names, duplicate names and invalid primitive defaults refuse', () => {
+    const base = {
+      tag: 'x-np-ssr',
+      createRecipe: (() => ({ mount: () => [], createProps: () => ({}) })) as never,
+    };
+    const counter = { calls: 0 };
+    const dangerous = descriptorWithFactories(counter) as unknown as {
+      properties: Array<Record<string, unknown>>;
+    };
+    dangerous.properties[0]!.name = '__proto__';
+    dangerous.properties[0]!.default = () => ({ x: 1 });
+    expect(() =>
+      resolveGeneratedElementProps(dangerous as unknown as GeneratedElementDescriptor),
+    ).toThrow(/not admissible/);
+
+    const duplicate = {
+      ...base,
+      properties: [
+        { name: 'label', attribute: null, type: 'string', reflect: false, default: 'a' },
+        { name: 'label', attribute: null, type: 'string', reflect: false, default: 'b' },
+      ],
+    };
+    expect(() => resolveGeneratedElementProps(duplicate as GeneratedElementDescriptor)).toThrow(
+      /duplicate property/,
+    );
+
+    const invalidPrimitive = {
+      ...base,
+      properties: [
+        { name: 'label', attribute: null, type: 'string', reflect: false, default: () => 'x' },
+      ],
+    };
+    expect(() =>
+      resolveGeneratedElementProps(invalidPrimitive as unknown as GeneratedElementDescriptor),
+    ).toThrow(/default must be a string primitive value/);
   });
 });

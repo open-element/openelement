@@ -84,7 +84,11 @@
  * @module ./shell.ts
  */
 
-import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
+import {
+  camelToKebab,
+  forbiddenSinkReason,
+  isSafeAttributeName,
+} from '@openelement/protocol/forbidden-sinks';
 import {
   AuthoringErrorCode,
   CompilerErrorCode,
@@ -374,6 +378,10 @@ function normalizeProperty(property: GeneratedElementProperty): NormalizedProper
   if (RESERVED_PROPERTY_NAMES.has(name)) {
     descriptorError(`property name "${name}" collides with the element lifecycle surface`);
   }
+  const sinkReason = forbiddenSinkReason('prop', name);
+  if (sinkReason !== null) {
+    descriptorError(`property name "${name}" is not admissible: ${sinkReason}`);
+  }
   if (!PROPERTY_TYPES.has(property.type)) {
     descriptorError(`property "${name}" has unsupported type ${String(property.type)}`);
   }
@@ -443,6 +451,17 @@ function normalizeProperty(property: GeneratedElementProperty): NormalizedProper
   const defaultForType: string | number | boolean =
     property.type === 'boolean' ? false : property.type === 'number' ? 0 : '';
   const rawDefault = property.default;
+  if (
+    rawDefault !== undefined &&
+    typeof rawDefault !== 'string' &&
+    typeof rawDefault !== 'number' &&
+    typeof rawDefault !== 'boolean'
+  ) {
+    descriptorError(
+      `property "${name}" default must be a ${property.type} primitive value; a factory/literal ` +
+        'carrier belongs only to a property-only non-primitive row',
+    );
+  }
   const defaultValue =
     typeof rawDefault === 'string' ||
     typeof rawDefault === 'number' ||
@@ -585,40 +604,70 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
 }
 
 /**
- * Fold one in-process props record into a complete server-render props record:
- * every declared row gets the caller-supplied value when one is present and a
- * freshly materialised default otherwise. Array/object defaults call their
- * generated fresh-literal factory once per render (deep-independent between
- * renders); trustedHtml defaults are branded per render. Supplied array/object
- * values are passed through BY REFERENCE (never cloned); supplied trustedHtml
- * values must carry the brand. The generated `<Name>__ssrHost` calls this
- * helper with the descriptor + caller props; M11 owns producing that in-process
- * record (no server→client seed / JSON wire exists here).
+ * One lazy, memoised default for one declared row of one SSR render. The
+ * factory/brand runs at most once, and only when the leaf actually reads the
+ * row; an unused declared row is never materialised.
+ */
+function lazyDefaultFor(property: NormalizedProperty): () => unknown {
+  let materialised = false;
+  let value: unknown;
+  return () => {
+    if (!materialised) {
+      materialised = true;
+      value = materialiseDefault(property);
+    }
+    return value;
+  };
+}
+
+/**
+ * Fold one in-process props record into a complete server-render props record.
+ *
+ * The record is getter-backed so the approved per-read props contract survives
+ * the fold:
+ * - a supplied row's getter delegates to the caller's record on every read
+ *   (supplied array/object values stay caller-owned references; trustedHtml
+ *   values are brand-checked on read; a supplied getter is never executed by
+ *   the resolver itself, so an unused supplied row has no side effect);
+ * - an omitted row (or a supplied row whose read yields `undefined`) uses a
+ *   lazy memoised default: the generated factory/brand runs at most once per
+ *   render and only if the leaf reads it;
+ * - readers see a null-prototype record, and no row is ever assigned through
+ *   `__proto__`-sensitive assignment.
+ *
+ * The generated `<Name>__ssrHost` calls this helper with the descriptor +
+ * caller props; M11 owns producing that in-process record (no server→client
+ * seed / JSON wire exists here).
  */
 export function resolveGeneratedElementProps<P extends object = Record<string, unknown>>(
   descriptor: GeneratedElementDescriptor<P>,
   props?: Readonly<Record<string, unknown>>,
 ): Record<string, unknown> {
   const normalized = normalizeDescriptor(descriptor as GeneratedElementDescriptor);
-  const resolved: Record<string, unknown> = {};
+  const resolved: Record<string, unknown> = Object.create(null);
   for (const property of normalized.properties) {
+    const defaultForRow = lazyDefaultFor(property);
     const supplied =
-      props !== undefined && Object.prototype.hasOwnProperty.call(props, property.name)
-        ? props[property.name]
-        : undefined;
-    resolved[property.name] =
-      supplied === undefined
-        ? materialiseDefault(property)
-        : PRIMITIVE_PROPERTY_TYPES.has(property.type)
-          ? supplied
-          : coercePropertyWrite(property, supplied);
+      props !== undefined && Object.prototype.hasOwnProperty.call(props, property.name);
+    const readSupplied = (): unknown => {
+      const value = props![property.name];
+      if (value === undefined) return defaultForRow();
+      return PRIMITIVE_PROPERTY_TYPES.has(property.type)
+        ? value
+        : coercePropertyWrite(property, value);
+    };
+    Object.defineProperty(resolved, property.name, {
+      enumerable: true,
+      configurable: false,
+      get: supplied ? readSupplied : defaultForRow,
+    });
   }
   return resolved;
 }
 
 function createState(descriptor: NormalizedDescriptor): ElementState {
   const values = new Map<string, unknown>();
-  const props: Record<string, unknown> = {};
+  const props: Record<string, unknown> = Object.create(null);
   for (const property of descriptor.properties) {
     values.set(property.name, materialiseDefault(property));
     Object.defineProperty(props, property.name, {

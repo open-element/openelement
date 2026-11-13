@@ -200,6 +200,46 @@ const CORPUS: ReadonlyArray<{ readonly name: string; readonly source: string }> 
     ),
   },
   {
+    name: 'aliased canonical trustedHtml runtime import',
+    source: module(
+      "properties: { articleHtml: { attribute: false, default: th('<b>alias</b>') } }",
+      "import { trustedHtml as th } from '@openelement/element';\n",
+    ),
+  },
+  {
+    name: 'invalid (type-only trustedHtml import call)',
+    source: module(
+      "properties: { articleHtml: { attribute: false, default: trustedHtml('<b>x</b>') } }",
+      "import type { trustedHtml } from '@openelement/element';\n",
+    ),
+  },
+  {
+    name: 'invalid (inline type modifier trustedHtml call)',
+    source: module(
+      "properties: { articleHtml: { attribute: false, default: trustedHtml('<b>x</b>') } }",
+      "import { type trustedHtml } from '@openelement/element';\n",
+    ),
+  },
+  {
+    name: 'invalid (shadowed trustedHtml callee)',
+    source:
+      "import { trustedHtml as canonicalHtml } from '@openelement/element';\n" +
+      "const trustedHtml = () => ({ html: 'local' });\n" +
+      module("properties: { articleHtml: { attribute: false, default: trustedHtml('<b>x</b>') } }"),
+  },
+  {
+    name: 'invalid (dangerous property name __proto__)',
+    source: module('properties: { __proto__: { attribute: false, default: {} } }'),
+  },
+  {
+    name: 'invalid (dangerous property name constructor)',
+    source: module('properties: { constructor: { attribute: false, default: {} } }'),
+  },
+  {
+    name: 'invalid (dangerous property name prototype)',
+    source: module('properties: { prototype: { attribute: false, default: {} } }'),
+  },
+  {
     name: 'invalid (non-canonical trustedHtml default)',
     source: module(
       "properties: { articleHtml: { attribute: false, default: trustedHtml('<b>x</b>') } }",

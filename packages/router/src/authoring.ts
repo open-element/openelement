@@ -24,7 +24,11 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
  */
 
 import { isDangerousKey, isValidTagName, OpenElementError } from '@openelement/element/authoring';
-import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
+import {
+  camelToKebab,
+  forbiddenSinkReason,
+  isSafeAttributeName,
+} from '@openelement/protocol/forbidden-sinks';
 import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
 import type { IslandDeliveryStrategy } from '@openelement/protocol/ssg';
 import { hasControlCharacter } from './internal/control-characters.ts';
@@ -892,9 +896,13 @@ function isAdmittedIslandDefault(value: unknown, depth: number, seen: Set<object
   }
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) return false;
-  return Object.values(value as Record<string, unknown>).every((entry) =>
-    isAdmittedIslandDefault(entry, depth + 1, seen),
-  );
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    if (forbiddenSinkReason('prop', key) !== null) return false;
+    if (!isAdmittedIslandDefault((value as Record<string, unknown>)[key], depth + 1, seen)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -935,6 +943,14 @@ function validateIslandProperties(properties: unknown): void {
         `${ERROR_PREFIX} defineIslandConfig() property name "${name}" must be an identifier. ` +
           'Use only props member names such as label or count; the typed props parameter is ' +
           'the name/type authority and this table only adds platform facts.',
+      );
+    }
+    const sinkReason = forbiddenSinkReason('prop', name);
+    if (sinkReason !== null) {
+      throw authoringError(
+        IslandErrorCode.DESCRIPTOR_SHAPE,
+        `${ERROR_PREFIX} defineIslandConfig() property name "${name}" is not an admissible ` +
+          `property name: ${sinkReason}. Rename the typed props member and the sidecar entry.`,
       );
     }
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {

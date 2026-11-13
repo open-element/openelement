@@ -203,6 +203,73 @@ test('readIslandConfig: accepts a property table and resolves attributes', () =>
   });
 });
 
+test('readIslandConfig: property rows are own keys on a null-prototype record', () => {
+  const config = readIslandConfig(
+    `export const openElement = defineIslandConfig({ properties: { ` +
+      `count: { default: 0 }, label: { attribute: false, default: 'x' } } });\n`,
+  );
+  expect(config?.properties).toBeDefined();
+  expect(Object.getPrototypeOf(config!.properties)).toBeNull();
+  expect(Object.keys(config!.properties!)).toEqual(['count', 'label']);
+});
+
+test('readIslandConfig: dangerous property names are refused', () => {
+  for (const name of ['__proto__', 'constructor', 'prototype']) {
+    assertThrowsIncludes(
+      () =>
+        readIslandConfig(
+          `export const openElement = defineIslandConfig({ properties: { ${name}: { attribute: false, default: {} } } });\n`,
+        ),
+      Error,
+      'not an admissible property name',
+    );
+  }
+});
+
+test('readIslandConfig: trustedHtml provenance matches the compiler on type-only imports', () => {
+  for (const importLine of [
+    `import type { trustedHtml } from '@openelement/element';`,
+    `import { type trustedHtml } from '@openelement/element';`,
+  ]) {
+    assertThrowsIncludes(
+      () =>
+        readIslandConfig(
+          `${importLine}\n` +
+            `export const openElement = defineIslandConfig({ properties: { html: { attribute: false, default: trustedHtml('<b>x</b>') } } });\n`,
+        ),
+      Error,
+      'canonical trustedHtml import',
+    );
+  }
+  // A runtime aliased import follows the canonical binding and is admitted.
+  expect(
+    readIslandConfig(
+      `import { trustedHtml as th } from '@openelement/element';\n` +
+        `export const openElement = defineIslandConfig({ properties: { html: { attribute: false, default: th('<b>x</b>') } } });\n`,
+    ),
+  ).toEqual({
+    properties: {
+      html: {
+        attribute: null,
+        attributeExplicit: true,
+        reflect: false,
+        default: { trustedHtml: '<b>x</b>' },
+      },
+    },
+  });
+  // A local same-name callee is never given canonical provenance.
+  assertThrowsIncludes(
+    () =>
+      readIslandConfig(
+        `import { trustedHtml as canonicalHtml } from '@openelement/element';\n` +
+          `const trustedHtml = () => ({ html: 'local' });\n` +
+          `export const openElement = defineIslandConfig({ properties: { html: { attribute: false, default: trustedHtml('<b>x</b>') } } });\n`,
+      ),
+    Error,
+    'canonical trustedHtml import',
+  );
+});
+
 test('readIslandConfig: accepts an empty property table', () => {
   expect(
     readIslandConfig(`export const openElement = defineIslandConfig({ properties: {} });\n`),
@@ -220,6 +287,9 @@ test('readIslandConfig: throws on malformed property tables', () => {
     ['properties: { count: { attribute: "onclick" } }', 'not a safe HTML attribute name'],
     ['properties: { count: { attribute: false, reflect: true } }', 'cannot reflect'],
     ['properties: { count: { attribute: "n" }, label: { attribute: "n" } }', 'more than once'],
+    ['properties: { __proto__: {} }', 'not an admissible property name'],
+    ['properties: { constructor: {} }', 'not an admissible property name'],
+    ['properties: { prototype: {} }', 'not an admissible property name'],
   ];
   for (const [entries, message] of cases) {
     assertThrowsIncludes(
