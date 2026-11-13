@@ -420,6 +420,16 @@ const MOUNT_HOST = `${INTERNAL_PREFIX}host`;
 const CLAIM_SUFFIX = '__claim';
 /** Static SSR producer (M08-1a): `<Name>__ssr()` returns the mount HTML. */
 const SSR_SUFFIX = '__ssr';
+/**
+ * M08 composition SSR: the third parameter of the module-local
+ * `__oe_ssrComponent_<Component>` helper. It renders the children recipe a
+ * `<Frame>…</Frame>` reference passed, once per `{props.children}` projection.
+ * The exported `<Name>__ssr(props, host)` wrapper passes null, so a root
+ * instance of a children-projecting component still fails closed.
+ */
+const SSR_CHILDREN_RENDER = `${INTERNAL_PREFIX}renderChildren`;
+/** Module-local helper name prefix for a composition component (`__oe_ssrComponent_<Name>`). */
+const SSR_HELPER_PREFIX = `${INTERNAL_PREFIX}ssrComponent_`;
 const CLAIM_PARENT = `${INTERNAL_PREFIX}parent`;
 /**
  * Module-level activation queue for the shared-cursor claim path (M08-2 B2).
@@ -625,6 +635,20 @@ interface EmitState {
    * projection site inserts through this same recipe.
    */
   childrenRecipeVar: string | null;
+  /**
+   * M08 composition SSR: recipe id → the module-local render function emitted
+   * inside this component's SSR body. One function per referenced recipe, so
+   * the same recipe inserted twice calls one function twice. Empty outside
+   * composition SSR.
+   */
+  readonly ssrRecipeVars: Map<string, string>;
+  /**
+   * M08 composition SSR: the `props.children` renderer parameter of a
+   * children-projecting component, or null when this component projects no
+   * children. The exported `<Name>__ssr` wrapper supplies null; a component
+   * reference supplies the render function of the children recipe it passes.
+   */
+  ssrChildrenRenderVar: string | null;
   /** `file#Component` label passed to a static sibling directory. */
   directorySource: string;
   /**
@@ -4558,6 +4582,8 @@ function emitClaimFunction(
     listDepth: 0,
     recipeDepth: 0,
     childrenRecipeVar: projectsChildren ? `${INTERNAL_PREFIX}childrenRecipe` : null,
+    ssrRecipeVars: new Map(),
+    ssrChildrenRenderVar: null,
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: useShared,
@@ -4860,6 +4886,8 @@ function ssrEmitState(
   component: FunctionModelComponent,
   file: string,
   propsName: string | null,
+  componentByName: ReadonlyMap<string, FunctionModelComponent>,
+  projectsChildren: boolean,
 ): EmitState {
   return {
     component,
@@ -4879,8 +4907,11 @@ function ssrEmitState(
     segmentKeys: new Set(),
     scopeVar: MOUNT_SCOPE,
     hostVar: MOUNT_HOST,
-    componentByName: new Map<string, FunctionModelComponent>(),
-    declaredRecipeIds: new Set(),
+    // Composition SSR consumes the SAME model links the mount/claim use: the
+    // component map for a component reference and the declared recipe ids for
+    // an insertion site. It never re-derives them.
+    componentByName,
+    declaredRecipeIds: declaredRecipeIdSet(component),
     recipeNames: new Set(),
     recipeVars: new Map(),
     entryNames: new Set(),
@@ -4888,6 +4919,8 @@ function ssrEmitState(
     listDepth: 0,
     recipeDepth: 0,
     childrenRecipeVar: null,
+    ssrRecipeVars: new Map(),
+    ssrChildrenRenderVar: projectsChildren ? SSR_CHILDREN_RENDER : null,
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: false,
@@ -4949,6 +4982,225 @@ function emitSsrDynamicAttribute(
     attribute.span,
   );
   push(state, `}`, attribute.span);
+  return true;
+}
+
+/**
+ * M08 composition SSR — one component reference. The emitted call uses the
+ * SAME model component map and the SAME per-read props record the mount builds:
+ * a fresh `{ get name() { return <lowered record>; } }` object at this call
+ * site, never a cached value. The child body is emitted once per module
+ * (`<Child>__ssr`), so two references with different props call one function
+ * twice and each call evaluates its own record.
+ *
+ * A children-projecting target is called through its module-local
+ * `__oe_ssrComponent_<Child>` helper with the children recipe's render function as the
+ * third argument; that function is the one referenced-recipe helper, so a
+ * child projecting twice calls it twice. A reference with JSX children to a
+ * child that ignores them passes no renderer, exactly like mount's unused
+ * children channel.
+ */
+function emitSsrComponentRef(
+  state: EmitState,
+  node: FunctionModelComponentRef,
+  outVar: string,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): boolean {
+  const span: IrSpan = node.span;
+  if (state.listDepth > 0) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+      `component '<${node.name}>' inside a list entry template needs the child update hook (M06b1b); a keyed reuse would keep the first mount's props`,
+      span,
+    );
+    return false;
+  }
+  const target = state.componentByName.get(node.name);
+  if (target === undefined) {
+    diag(
+      state,
+      'OEIR_LEAF_UNKNOWN_COMPONENT',
+      `component '<${node.name}>' is not declared in this module (external components are M06b2)`,
+      span,
+    );
+    return false;
+  }
+  if (target.propsParam === null) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+      `component '<${node.name}>' has no named props parameter (destructured or absent); component references need a named props parameter (M06b2 owns destructuring)`,
+      span,
+    );
+    return false;
+  }
+  const ownedBindings = target.resources.filter(
+    (resource) => resource.kind === 'signal' || resource.kind === 'computed',
+  );
+  if (ownedBindings.length > 0) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+      `component '<${node.name}>' owns signal/computed resources; a child instance cannot resolve host bindings without sharing the parent instance (M06b2/M07 own it)`,
+      span,
+    );
+    return false;
+  }
+  if (node.childrenRecipeId !== null && state.recipeDepth > 0) {
+    diag(
+      state,
+      'OEIR_LEAF_UNSUPPORTED_CHILDREN',
+      `children on '<${node.name}>' inside a reusable JSX value body are outside the M06b2a slice: the children recipe would be created once per component mount, but its definition owner is the recipe instance scope (created per insertion)`,
+      span,
+    );
+    return false;
+  }
+  if (node.childrenRecipeId === null && componentProjectsChildren(target)) {
+    diag(
+      state,
+      'OEIR_LEAF_MISSING_CHILDREN',
+      `component '<${node.name}>' projects props.children but this reference passes no JSX children; every projection needs a children recipe`,
+      span,
+    );
+    return false;
+  }
+  const childrenRenderVar =
+    node.childrenRecipeId === null
+      ? null
+      : (state.ssrRecipeVars.get(node.childrenRecipeId) ?? null);
+  if (node.childrenRecipeId !== null && childrenRenderVar === null) {
+    diag(
+      state,
+      'OEIR_LEAF_MISSING_RECIPE',
+      `children recipe '${node.childrenRecipeId}' of '<${node.name}>' has no emitted SSR render function (it is not reachable from any admitted root)`,
+      span,
+    );
+    return false;
+  }
+  const admitted: Array<
+    | { readonly kind: 'static'; readonly name: string; readonly value: string }
+    | {
+        readonly kind: 'dynamic';
+        readonly name: string;
+        readonly expression: FunctionExpressionRef;
+        readonly span: SpanLike;
+      }
+  > = [];
+  let refused = false;
+  for (const attribute of node.props) {
+    if (attribute.name === 'key') continue;
+    if (attribute.name === 'children') {
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_COMPONENT',
+        `'children' on component '<${node.name}>' must be authored as JSX children, not a prop value: it is the recipe projection channel (JSX value model §4.4)`,
+        span,
+      );
+      refused = true;
+      continue;
+    }
+    if (!componentPropAdmitted(state, attribute, node.name, span)) {
+      refused = true;
+      continue;
+    }
+    admitted.push(attribute);
+  }
+  if (refused) return false;
+  type ResolvedProp =
+    | { readonly kind: 'static'; readonly name: string; readonly value: string }
+    | {
+        readonly kind: 'dynamic';
+        readonly name: string;
+        readonly record: LoweredExpressionRecord;
+        readonly span: SpanLike;
+      };
+  const resolved: ResolvedProp[] = [];
+  for (const prop of admitted) {
+    if (prop.kind === 'static') {
+      resolved.push(prop);
+      continue;
+    }
+    const record = recordFor(state, prop.expression, records);
+    if (record === null || !declareReads(state, record)) return false;
+    resolved.push({ kind: 'dynamic', name: prop.name, record, span: prop.span });
+  }
+  let propsExpr = '{}';
+  if (resolved.length > 0) {
+    const id = state.counter.value++;
+    const propsVar = `${INTERNAL_PREFIX}childProps${id}`;
+    push(state, `const ${propsVar} = {`, span);
+    state.indent += 1;
+    for (const prop of resolved) {
+      const key = IDENTIFIER_PATTERN.test(prop.name) ? prop.name : JSON.stringify(prop.name);
+      if (prop.kind === 'static') {
+        push(state, `${key}: ${JSON.stringify(prop.value)},`);
+        continue;
+      }
+      pushParts(state, [`get ${key}() { return (`, { record: prop.record }, '); },'], prop.span);
+    }
+    state.indent -= 1;
+    push(state, '};');
+    propsExpr = propsVar;
+  }
+  if (componentProjectsChildren(target)) {
+    if (childrenRenderVar === null) return false;
+    push(
+      state,
+      `${outVar}.push(${SSR_HELPER_PREFIX}${target.name}(${propsExpr}, ${state.hostVar}, ${childrenRenderVar}));`,
+      span,
+    );
+  } else {
+    // A fully static child keeps the parameterless M08-1a function; extra
+    // arguments are harmless and the static body reads no prop by definition.
+    push(state, `${outVar}.push(${node.name}${SSR_SUFFIX}(${propsExpr}, ${state.hostVar}));`, span);
+  }
+  return true;
+}
+
+/**
+ * M08 composition SSR — one module-local render function per referenced
+ * reusable-JSX/children recipe. All function names are published before any
+ * body is emitted so a site inside another recipe body can reference any
+ * recipe (the mount graph is acyclic, so this cannot recurse unboundedly).
+ * Each helper is its own text/ordinal chunk, matching the mount recipe body and
+ * the claim-time recipe chunk.
+ */
+function emitSsrRecipeHelpers(
+  state: EmitState,
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): boolean {
+  const referenced = referencedRecipeIds(state.component);
+  if (referenced.size === 0) return true;
+  const plans: Array<{ readonly recipe: FunctionModelRecipe; readonly name: string }> = [];
+  for (const recipe of state.component.recipes) {
+    if (!referenced.has(recipe.id)) continue;
+    const name = nextName(state, 'ssrRecipe');
+    state.ssrRecipeVars.set(recipe.id, name);
+    plans.push({ recipe, name });
+  }
+  for (const plan of plans) {
+    const outerOrdinals = state.textOrdinals;
+    const prepared = normalizeTextRuns([plan.recipe.target]);
+    state.textOrdinals = textSlotOrdinals(prepared);
+    if (!assertTextBoundaryContext(state, prepared)) {
+      state.textOrdinals = outerOrdinals;
+      return false;
+    }
+    push(state, `function ${plan.name}() {`, plan.recipe.span);
+    state.indent += 1;
+    const outVar = nextName(state, 'ssrOut');
+    push(state, `const ${outVar} = [];`);
+    const outerDepth = state.recipeDepth;
+    state.recipeDepth = outerDepth + 1;
+    const emitted = emitDynamicSsrNodes(state, prepared, outVar, true, records);
+    state.recipeDepth = outerDepth;
+    state.textOrdinals = outerOrdinals;
+    if (!emitted) return false;
+    push(state, `return ${outVar}.join("");`);
+    state.indent -= 1;
+    push(state, '}');
+  }
   return true;
 }
 
@@ -5074,13 +5326,66 @@ function emitDynamicSsrNodes(
       const outerOrdinals = state.textOrdinals;
       const prepared = emissionNodes(state, node.template);
       state.textOrdinals = textSlotOrdinals(prepared);
+      // A component reference inside an entry cannot re-read props on a keyed
+      // reuse (M06b1b), so the SSR walk keeps mount's refusal.
+      state.listDepth += 1;
       const entriesEmitted = emitDynamicSsrNodes(state, prepared, outVar, markers, records);
+      state.listDepth -= 1;
       state.textOrdinals = outerOrdinals;
       if (!outerEntryName) state.entryNames.delete(node.parameter);
       if (!entriesEmitted) return false;
       state.indent -= 1;
       push(state, '}');
       push(state, `${outVar}.push("<!--", markerText(MARKERS.eachEnd), "-->");`, node.span);
+      continue;
+    }
+    if (node.kind === 'component-ref') {
+      if (!emitSsrComponentRef(state, node, outVar, records)) return false;
+      continue;
+    }
+    if (node.kind === 'insertion-site') {
+      if (!state.declaredRecipeIds.has(node.recipeId)) {
+        diag(
+          state,
+          'OEIR_LEAF_UNSUPPORTED_RECIPE',
+          `insertion site '${node.recipeId}' does not target a direct component-local JSX initializer; only those values are reusable recipes in this slice`,
+          node.span,
+        );
+        return false;
+      }
+      const renderRecipe = state.ssrRecipeVars.get(node.recipeId);
+      if (renderRecipe === undefined) {
+        diag(
+          state,
+          'OEIR_LEAF_MISSING_RECIPE',
+          `insertion site '${node.recipeId}' has no emitted SSR render function (the value is not reachable from any admitted root)`,
+          node.span,
+        );
+        return false;
+      }
+      push(state, `${outVar}.push(${renderRecipe}());`, node.span);
+      continue;
+    }
+    if (node.kind === 'children-projection') {
+      if (state.recipeDepth > 0) {
+        diag(
+          state,
+          'OEIR_LEAF_UNSUPPORTED_NODE',
+          `children projection inside a reusable JSX value body is outside the M06b2a slice: the projection would need the recipe instance scope, which exists only at insertion time`,
+          node.span,
+        );
+        return false;
+      }
+      if (state.ssrChildrenRenderVar === null) {
+        diag(
+          state,
+          'OEIR_LEAF_MISSING_CHILDREN',
+          'children projection has no server children renderer (internal model mismatch)',
+          node.span,
+        );
+        return false;
+      }
+      push(state, `${outVar}.push(${state.ssrChildrenRenderVar}());`, node.span);
       continue;
     }
     if (node.kind !== 'element') return false;
@@ -5154,9 +5459,12 @@ function emitDynamicSsrFunction(
   file: string,
   component: FunctionModelComponent,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  componentByName: ReadonlyMap<string, FunctionModelComponent>,
 ): SsrEmission | null {
   const propsName = component.propsParam;
-  const state = ssrEmitState(component, file, propsName);
+  const projectsChildren = componentProjectsChildren(component);
+  const composition = treeHasComposition(component.roots);
+  const state = ssrEmitState(component, file, propsName, componentByName, projectsChildren);
   if (!assertTextBoundaryContext(state, component.roots)) return failedSsr(state);
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
@@ -5174,6 +5482,25 @@ function emitDynamicSsrFunction(
     state.requiredBindings.add(resource.name);
   }
   if (state.diagnostics.length > 0) return failedSsr(state);
+  // Mount reads `props.children` once before the roots and fails closed when
+  // the host supplied no recipe (M06b2a). The server root instance has the
+  // same boundary: it has no children renderer, so a children projection must
+  // not render nothing. A component reference supplies the renderer instead.
+  if (projectsChildren) {
+    push(
+      state,
+      `if (${SSR_CHILDREN_RENDER} === null) throw new Error("OEIR_LEAF_MISSING_CHILDREN: component '<${component.name}>' projects props.children but the server instance was given no children renderer");`,
+      component.span,
+    );
+  }
+  if (composition) {
+    // One local render function per referenced recipe (reusable JSX value or
+    // children recipe), then calls at every projection. Same recipe twice =
+    // one function, two calls; this is not a second AST and not serialized JSON.
+    if (!emitSsrRecipeHelpers(state, records)) {
+      return state.diagnostics.length > 0 ? failedSsr(state) : null;
+    }
+  }
   const outVar = nextName(state, 'out');
   push(state, `const ${outVar} = [];`);
   if (!emitDynamicSsrNodes(state, component.roots, outVar, true, records)) {
@@ -5182,9 +5509,16 @@ function emitDynamicSsrFunction(
   push(state, `return ${outVar}.join("");`);
   if (state.diagnostics.length > 0) return failedSsr(state);
 
-  const prologue: string[] = [
-    `export function ${component.name}${SSR_SUFFIX}(${MOUNT_PROPS}, ${MOUNT_HOST}) {`,
-  ];
+  // A composition body is reachable from two call sites (the exported wrapper
+  // and a component reference that must pass a children renderer), so it
+  // lives in one module-local helper. The exported interface keeps its
+  // existing M08-1b `(props, host)` shape; the helper name never leaves the
+  // generated module (no cross-module/A17 ABI).
+  const prologue: string[] = composition
+    ? [
+        `function ${SSR_HELPER_PREFIX}${component.name}(${MOUNT_PROPS}, ${MOUNT_HOST}, ${SSR_CHILDREN_RENDER}) {`,
+      ]
+    : [`export function ${component.name}${SSR_SUFFIX}(${MOUNT_PROPS}, ${MOUNT_HOST}) {`];
   if (propsName !== null) {
     prologue.push(`  const ${propsName} = ${MOUNT_PROPS};`);
     state.requiredProps.add(propsName);
@@ -5199,9 +5533,17 @@ function emitDynamicSsrFunction(
       );
     }
   }
+  const wrapper: string[] = composition
+    ? [
+        `export function ${component.name}${SSR_SUFFIX}(${MOUNT_PROPS}, ${MOUNT_HOST}) {`,
+        `  return ${SSR_HELPER_PREFIX}${component.name}(${MOUNT_PROPS}, ${MOUNT_HOST}, null);`,
+        '}',
+        '',
+      ]
+    : [];
   const shift = fragmentLineCount(prologue);
   return {
-    lines: [...prologue, ...state.lines, '}', ''],
+    lines: [...prologue, ...state.lines, '}', ...wrapper],
     diagnostics: [],
     segments: state.segments.map((segment) => ({
       ...segment,
@@ -5226,6 +5568,7 @@ function emitSsrFunction(
   component: FunctionModelComponent,
   rootDirectory: readonly FunctionModelNode[] | null,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  componentByName: ReadonlyMap<string, FunctionModelComponent>,
 ): SsrEmission | null {
   let expression: string | null;
   if (rootDirectory !== null) {
@@ -5246,7 +5589,7 @@ function emitSsrFunction(
       placements: [],
     };
   }
-  return emitDynamicSsrFunction(file, component, records);
+  return emitDynamicSsrFunction(file, component, records, componentByName);
 }
 
 function emitComponent(
@@ -5296,6 +5639,8 @@ function emitComponent(
     listDepth: 0,
     recipeDepth: 0,
     childrenRecipeVar: projectsChildren ? `${INTERNAL_PREFIX}childrenRecipe` : null,
+    ssrRecipeVars: new Map(),
+    ssrChildrenRenderVar: null,
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: false,
@@ -5513,7 +5858,10 @@ function emitComponent(
   // it would have produced, so the same proof surface exists on both sides. It
   // is appended after the claim chunk, which keeps every already-recorded
   // segment/placement line offset untouched.
-  const ssr = claim === null ? null : emitSsrFunction(file, component, rootDirectory, records);
+  const ssr =
+    claim === null
+      ? null
+      : emitSsrFunction(file, component, rootDirectory, records, componentByName);
   if (ssr !== null && ssr.diagnostics.length > 0) {
     return {
       lines: [],
