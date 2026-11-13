@@ -34,6 +34,17 @@
  *   releases it, so a later `dispose(true)` cannot upgrade the released handle
  *   into a detach (the same one-shot ownership rule as
  *   `LifetimeScope`/`Projection`).
+ * - resolves the root once (`./root.ts`), before the recipe: `light` uses the
+ *   host, `shadow-open` adopts `host.shadowRoot` or attaches an open root, and
+ *   `shadow-closed` adopts `ElementInternals.shadowRoot` or attaches a closed
+ *   root. An existing DSD root is never replaced by `attachShadow`; the
+ *   resolved ShadowRoot is retained across disconnect/reconnect/teardown. A
+ *   shadow element's host light children are slotted content and are never
+ *   claimed, owned or deleted by the shell. The first connect observes whether
+ *   a generated region already exists (adopted SSR/DSD content) once and stores
+ *   that fact on the element state; reconnect and teardown use that fact, not
+ *   the current `parent.childNodes`, so foreign nodes left after `dispose(true)`
+ *   never masquerade as a region that must be claimed.
  *
  * Upgrade contract: the constructor inspects no attributes and no children.
  * Parser-created markup is seeded by the platform's observed-attribute replay,
@@ -64,9 +75,11 @@
  * module is not re-exported from a package barrel and the descriptor is built
  * by the compiler.
  *
- * Out of scope for this slice: shadow DOM / DSD, slots, event declarations,
- * forms, `delegatesFocus`, styles/theme, property reflection beyond the three
- * primitive types, and third-party Web Component qualification.
+ * M09-shadow now covers shadow DOM / DSD, native slots and `delegatesFocus`.
+ * Out of scope for this slice: styles/theme (the separate style consumer),
+ * event declarations, forms (`formAssociated`/`ElementInternals` ownership),
+ * property reflection beyond the three primitive types, the M09-1 class
+ * emitter/registration decision, and third-party Web Component qualification.
  *
  * @module ./shell.ts
  */
@@ -78,6 +91,7 @@ import {
   frameworkError,
   type ErrorPhase,
 } from '@openelement/protocol/errors';
+import type { RootMode } from '@openelement/protocol/part-program';
 import {
   coercePropertyValue,
   convertFromAttribute,
@@ -89,6 +103,14 @@ import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runt
 import { removeNodes } from '../runtime/values.ts';
 import { signal } from '../../signal/framework.ts';
 import type { WritableSignal } from '../../signal/types.ts';
+import {
+  assertGeneratedRootOptions,
+  generatedRootKind,
+  resolveGeneratedElementRoot,
+  SHELL_ROOT_MODE_MISMATCH,
+  type ClosedRootDiscovery,
+  type GeneratedRootKind,
+} from './root.ts';
 
 /** The three primitive property types this slice admits. */
 export type GeneratedElementPropertyType = 'string' | 'number' | 'boolean';
@@ -129,6 +151,18 @@ export interface GeneratedElementHost<P extends object = Record<string, unknown>
  */
 export interface GeneratedElementDescriptor<P extends object = Record<string, unknown>> {
   readonly tag: string;
+  /**
+   * Root ownership mode. The three values are the protocol's existing
+   * `RootMode`; `light` is the default. This is a compiler-private fact (the
+   * same `root` fact the author's `@element(tag, { root })` already carries),
+   * never a new author API.
+   */
+  readonly root?: RootMode;
+  /**
+   * Native `delegatesFocus` fact. Meaningful only for a shadow root; a light
+   * descriptor that sets it is a compiler bug and fails descriptor validation.
+   */
+  readonly delegatesFocus?: boolean;
   readonly properties?: readonly GeneratedElementProperty[];
   readonly createRecipe: (owner: LifetimeScope, host: GeneratedElementHost<P>) => Recipe<P>;
   /**
@@ -179,6 +213,8 @@ interface NormalizedProperty {
 }
 
 interface NormalizedDescriptor {
+  readonly rootMode: RootMode;
+  readonly delegatesFocus: boolean;
   readonly properties: readonly NormalizedProperty[];
   readonly byAttribute: ReadonlyMap<string, NormalizedProperty>;
   readonly createRecipe: (
@@ -203,8 +239,33 @@ interface ElementState {
    */
   ownedNodes: readonly Node[] | null;
   bindings: Readonly<Record<string, unknown>> | null;
-  /** A generated region exists (including an empty-output region). */
-  mounted: boolean;
+  /**
+   * The resolved claim/mount parent and its platform kind. Light holds the
+   * host; shadow modes hold the ShadowRoot. The root is retained for the
+   * element lifetime (disconnect, reconnect, teardown), never re-discovered.
+   */
+  root: HTMLElement | ShadowRoot | null;
+  rootKind: GeneratedRootKind | null;
+  /**
+   * True only when `root` was created by this shell's `attachShadow()`.
+   * A shell-created root has no pre-existing generated region, so its first
+   * connect mounts; an adopted root (DSD or a foreign `attachShadow`) may carry
+   * server-rendered content and is claimed on the first connect.
+   */
+  rootCreatedByShell: boolean;
+  /** The one owner of the closed-root internals, once the shell attaches them. */
+  readonly rootDiscovery: ClosedRootDiscovery;
+  /**
+   * Whether a generated region is known to exist at the resolved parent.
+   *
+   * `unobserved` is the first-connect state. It is observed exactly once from
+   * the DOM the platform handed us (light children, or an adopted shadow root's
+   * children), then the shell owns this fact. Reconnect never re-infers it from
+   * `parent.childNodes`: after `dispose(true)` the root can legally retain
+   * foreign nodes that are not a generated region, and treating their presence
+   * as SSR input would force a claim that can never match (B2).
+   */
+  regionState: 'unobserved' | 'present' | 'absent';
   connecting: boolean;
   reflecting: boolean;
   /** The first connect reconciled pre-upgrade own data properties. */
@@ -316,6 +377,17 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
   if (descriptor.createBindings !== undefined && typeof descriptor.createBindings !== 'function') {
     descriptorError('createBindings must be a function when present');
   }
+  const rootMode = descriptor.root ?? 'light';
+  if (rootMode !== 'light' && rootMode !== 'shadow-open' && rootMode !== 'shadow-closed') {
+    descriptorError(`root must be light, shadow-open or shadow-closed, got ${String(rootMode)}`);
+  }
+  if (descriptor.delegatesFocus !== undefined && typeof descriptor.delegatesFocus !== 'boolean') {
+    descriptorError('delegatesFocus must be a boolean when present');
+  }
+  const delegatesFocus = descriptor.delegatesFocus === true;
+  if (rootMode === 'light' && delegatesFocus) {
+    descriptorError('delegatesFocus requires a shadow root');
+  }
 
   const properties = (descriptor.properties ?? []).map(normalizeProperty);
   const names = new Set<string>();
@@ -334,6 +406,8 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
   }
 
   return {
+    rootMode,
+    delegatesFocus,
     properties,
     byAttribute,
     createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
@@ -364,7 +438,11 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     projection: null,
     ownedNodes: null,
     bindings: null,
-    mounted: false,
+    root: null,
+    rootKind: null,
+    rootCreatedByShell: false,
+    rootDiscovery: { internals: null },
+    regionState: 'unobserved',
     connecting: false,
     reflecting: false,
     ownPropertiesReconciled: false,
@@ -564,6 +642,55 @@ function hostFor(state: ElementState): GeneratedElementHost<Record<string, unkno
 }
 
 /**
+ * Resolve the root once and retain it on the element state. The stored root is
+ * the element's lifetime claim/mount parent: a later connect reuses it even
+ * after a recipe/claim failure, so a retry cannot silently attach a second
+ * root or clear borrowed DOM.
+ *
+ * Existing-root option validation happens AFTER the root is recorded. A
+ * mismatch therefore keeps the resolved root (and closed internals) for the
+ * next connect, which re-reports the same coded failure instead of falling
+ * through to a second `attachInternals()` and a different error identity.
+ */
+function rootFor(element: HTMLElement, state: ElementState): HTMLElement | ShadowRoot {
+  if (state.root !== null) {
+    const expected = generatedRootKind(state.descriptor.rootMode);
+    if (state.rootKind !== expected) {
+      throw frameworkError(
+        SHELL_ROOT_MODE_MISMATCH,
+        `[generated-element] retained root kind ${String(state.rootKind)} does not match descriptor root ${JSON.stringify(state.descriptor.rootMode)}`,
+        { phase: 'csr' },
+      );
+    }
+    if (state.rootKind !== 'light') {
+      assertGeneratedRootOptions(
+        state.root as ShadowRoot,
+        state.rootKind,
+        state.descriptor.delegatesFocus,
+      );
+    }
+    return state.root;
+  }
+  const resolved = resolveGeneratedElementRoot(
+    element,
+    state.descriptor.rootMode,
+    state.descriptor.delegatesFocus,
+    state.rootDiscovery,
+  );
+  state.root = resolved.root;
+  state.rootKind = resolved.kind;
+  state.rootCreatedByShell = resolved.created;
+  if (resolved.kind !== 'light') {
+    assertGeneratedRootOptions(
+      resolved.root as ShadowRoot,
+      resolved.kind,
+      state.descriptor.delegatesFocus,
+    );
+  }
+  return resolved.root;
+}
+
+/**
  * Build the element class for one descriptor without registering it. Exposed so
  * the M09-1 emitter can decide its registration point; consumers normally use
  * {@linkcode defineGeneratedElement}.
@@ -594,19 +721,38 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // Must precede createRecipe: the recipe reads host.props on creation.
       reconcilePreUpgradeProperties(this, state);
       state.connecting = true;
+      // This connection owner exists before root resolution. A coded root
+      // failure creates no projection, no subscription and no generated DOM
+      // write, but it is not a zero-allocation or zero-write connect: the
+      // owner is released below and pre-upgrade reconciliation may already
+      // have reflected a property to an attribute.
       const owner = new LifetimeScope();
       try {
+        const parent = rootFor(this, state);
+        // Observe the first-connect DOM once, then keep the fact on the state.
+        // A shell-created root starts empty (mount); an adopted root may carry
+        // SSR/DSD content (claim); a light host's children are its generated
+        // region. A shadow parent's light children are slotted content, so
+        // they are never inspected here.
+        if (state.regionState === 'unobserved') {
+          const preexisting =
+            state.rootKind === 'light'
+              ? this.childNodes.length > 0
+              : !state.rootCreatedByShell && parent.childNodes.length > 0;
+          state.regionState = preexisting ? 'present' : 'absent';
+        }
         const recipe = normalized.createRecipe(owner, hostFor(state));
-        // Claim when a generated region already exists (disconnect retained the
-        // DOM, or the element was server-rendered). Otherwise mount.
+        // Reconnect and dispose(false) retain the region; dispose(true) marks it
+        // absent and the next connect mounts even when foreign nodes remain in
+        // the root. The decision is never re-derived from current childNodes.
         const projection =
-          state.mounted || this.childNodes.length > 0
-            ? claimRecipe(owner, recipe, this)
-            : insertRecipe(owner, recipe, this);
+          state.regionState === 'present'
+            ? claimRecipe(owner, recipe, parent)
+            : insertRecipe(owner, recipe, parent);
         state.owner = owner;
         state.projection = projection;
         state.ownedNodes = projection.nodes;
-        state.mounted = true;
+        state.regionState = 'present';
       } catch (error) {
         state.owner = null;
         state.projection = null;
@@ -660,6 +806,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       const projection = state.projection;
       const owner = state.owner;
       const owned = state.ownedNodes;
+      const hadOwnedRegion = projection !== null || owned !== null;
       state.projection = null;
       state.owner = null;
       state.ownedNodes = null;
@@ -668,19 +815,23 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // Plain disposal releases the ownership record with the projection. It
         // does not leave a retained range behind for a later dispose(true) to
         // "upgrade" into a detach: the range cleanup is gone on the first
-        // disposal (the LifetimeScope one-shot rule). `mounted` stays as-is so
-        // a reconnect can still claim the retained DOM.
+        // disposal (the LifetimeScope one-shot rule). The region fact stays
+        // present so a reconnect can still claim the retained DOM.
         captureCleanupFailures([() => projection?.dispose(false), () => owner?.dispose(false)]);
         return;
       }
 
-      state.mounted = false;
+      // Only a teardown that actually released an owned region makes the next
+      // connect mount. A dispose(true) before any projection/claim (for example
+      // on a not-yet-connected DSD host) removes nothing, so the borrowed SSR
+      // content is still there and the next connect must still claim it.
+      if (hadOwnedRegion) state.regionState = 'absent';
       captureCleanupFailures([
         () => projection?.dispose(true),
         // The projection's range cleanup normally removes the region; remove
         // the recorded owned range explicitly as well so a throwing cleanup
         // cannot leave it behind. This is still only the owned range: never
-        // `childNodes` (host-appended / borrowed / never-mounted DOM stays).
+        // `childNodes` (host-appended / foreign / never-mounted DOM stays).
         () => {
           if (owned !== null) removeNodes(owned);
         },

@@ -123,6 +123,45 @@ export function assertStaticAttributeSeed(
 }
 
 /**
+ * The native `ShadowRoot.prototype.host` getter is the brand check. The getter
+ * reads the platform's internal slot and throws for any object that is not a
+ * real ShadowRoot, in this realm or another one. Unlike
+ * `Object.prototype.toString`/`Symbol.toStringTag` or `host`/`mode` data
+ * properties, it cannot be forged by a `DocumentFragment`; and unlike a
+ * constructor-name comparison it does not depend on the caller's realm.
+ *
+ * The getter is captured once at module load. If the platform has no
+ * `ShadowRoot` global (for example a DOM-less Node import), there is no native
+ * brand to check and the predicate fails closed; no polyfill or duck-typed
+ * fallback is invented.
+ */
+const shadowRootHostGetter: (() => unknown) | undefined =
+  typeof ShadowRoot === 'undefined'
+    ? undefined
+    : Object.getOwnPropertyDescriptor(ShadowRoot.prototype, 'host')?.get;
+
+/**
+ * True only when the value is a REAL ShadowRoot platform object, checked by the
+ * native brand accessor. A bare `DocumentFragment` shares `nodeType === 11` but
+ * has no ShadowRoot internal slot (and cannot gain one by spoofing
+ * `Symbol.toStringTag`, `host` or `mode`), so it is never accepted as a claim
+ * parent by accident. The check stays valid across realms because it exercises
+ * the platform's internal slot rather than a realm-local constructor or a
+ * structural surface.
+ */
+export function isClaimParentShadowRoot(node: Node | null): node is ShadowRoot {
+  if (node === null || node.nodeType !== 11) return false;
+  if (shadowRootHostGetter === undefined) return false;
+  try {
+    const host = Reflect.apply(shadowRootHostGetter, node, []) as Node | null;
+    return host !== null && host.nodeType === 1;
+  } catch {
+    // A non-ShadowRoot throws the native brand error: fail closed.
+    return false;
+  }
+}
+
+/**
  * `null` when the node is an HTML element; otherwise a reason. Text and
  * comment nodes are not element-namespace failures.
  */
@@ -318,8 +357,30 @@ export function entrySeedMismatch(
 /**
  * The claim parent, every element ancestor, and each claimed element must be
  * in the HTML namespace. The failure window does not write.
+ *
+ * A shadow root is a legal claim parent: its host is the element that owns the
+ * tree, so the host and the host's element ancestors take the place of an
+ * element parent's ancestors. A bare `DocumentFragment` is not a ShadowRoot,
+ * is not an element, and stays rejected. The function name is retained because
+ * generated claims already call it; renaming it would require an emitter change
+ * for the same rule.
  */
 export function assertElementInHtmlNamespace(node: Node | null, where: string): void {
+  if (isClaimParentShadowRoot(node)) {
+    const host = node.host;
+    const hostReason = elementHtmlNamespaceViolation(host);
+    if (hostReason !== null) {
+      throw leafClaimMismatch(`non-HTML namespace at ${where} (${hostReason})`);
+    }
+    for (let current = host.parentNode; current !== null; current = current.parentNode) {
+      if (current.nodeType !== 1) continue;
+      const reason = elementHtmlNamespaceViolation(current);
+      if (reason !== null) {
+        throw leafClaimMismatch(`non-HTML namespace at ${where} (${reason})`);
+      }
+    }
+    return;
+  }
   // The claim target itself must be an HTML element (a text or comment node is
   // not a claim target at all). Element ancestors are checked above it.
   const own = elementHtmlNamespaceViolation(node);

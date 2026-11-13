@@ -58,6 +58,9 @@ import { eachItemKey, EachKeyError } from '../each-key.ts';
 // Canonical when-Block condition evaluation (#1372): single source shared
 // with the runtime executors; do not reintroduce a private comparison.
 import { conditionHolds } from '../condition-holds.ts';
+// The ONE DSD attribute spelling, shared with the M09-shadow producer. The
+// old server keeps only the wire composition; it owns no private copy.
+import { serializeDsdAttributes, type CompiledDsdOptions } from '../dsd.ts';
 // The ONE tree-walking serializer (issue #1469): the server
 // serializer and the runtime seed serializer delegate their walk to this
 // kernel.
@@ -70,14 +73,6 @@ import {
 export type { CompiledProgramHost, CompiledSignalLike } from './shared.ts';
 export { assertCompiledProgram, CompiledProgramValidationError } from './shared.ts';
 export type { CompiledRootMode };
-
-interface CompiledDsdOptions {
-  delegatesFocus?: boolean;
-  clonable?: boolean;
-  serializable?: boolean;
-  slotAssignment?: 'named' | 'manual';
-  customElementRegistry?: boolean;
-}
 
 type CompiledHostAttribute = readonly [name: string, value: unknown];
 
@@ -214,33 +209,6 @@ function serializeHostAttributes(
     result += ` ${DATA_OE_LIGHT}`;
   }
   return result;
-}
-
-function serializeDsdAttributes(options: CompiledDsdOptions | undefined): string {
-  if (!options) return '';
-  const booleans = ['delegatesFocus', 'clonable', 'serializable', 'customElementRegistry'] as const;
-  for (const key of booleans) {
-    if (options[key] !== undefined && typeof options[key] !== 'boolean') {
-      throw new CompiledProgramValidationError(`dsd.${key}`, 'DSD option must be boolean');
-    }
-  }
-  if (
-    options.slotAssignment !== undefined &&
-    options.slotAssignment !== 'named' &&
-    options.slotAssignment !== 'manual'
-  ) {
-    throw new CompiledProgramValidationError(
-      'dsd.slotAssignment',
-      'DSD slotAssignment must be "named" or "manual"',
-    );
-  }
-  const parts: string[] = [];
-  if (options.delegatesFocus) parts.push(' shadowrootdelegatesfocus');
-  if (options.clonable) parts.push(' shadowrootclonable');
-  if (options.serializable) parts.push(' shadowrootserializable');
-  if (options.slotAssignment === 'manual') parts.push(' shadowrootslotassignment="manual"');
-  if (options.customElementRegistry) parts.push(' shadowrootcustomelementregistry');
-  return parts.join('');
 }
 
 function itemsFor(part: ProgramEachPart, value: unknown): Array<Record<string, unknown>> {

@@ -56,7 +56,11 @@ import {
   recordRegionAllocated,
 } from './observability.ts';
 import { removeNodes } from './values.ts';
-import { HTML_NAMESPACE, staticAttributeSeedMismatch } from './claim-invariants.ts';
+import {
+  HTML_NAMESPACE,
+  isClaimParentShadowRoot,
+  staticAttributeSeedMismatch,
+} from './claim-invariants.ts';
 import { parseRangeMarker } from './markers.ts';
 /**
  * HTML parsing contexts this static subset does not own. The names are the
@@ -136,11 +140,18 @@ interface ProvisionalCommit {
 }
 
 /**
+ * The directory parent is an HTML element or a real ShadowRoot. A bare
+ * `DocumentFragment` is not a claim parent: it has no HTML host and no shadow
+ * root platform surface.
+ */
+export type StaticSiblingDirectoryParent = Element | ShadowRoot;
+
+/**
  * One open of a parent. The consumption and reservation live on the pair
  * identity below, not on this object: two opens of one parent share them.
  */
 export interface StaticSiblingDirectory {
-  readonly parent: Element;
+  readonly parent: StaticSiblingDirectoryParent;
   readonly declaration: readonly (readonly DeclaredStaticNode[])[];
   readonly source: string;
 }
@@ -166,13 +177,13 @@ interface PairIdentity {
   readonly provisional: ProvisionalCommit[];
 }
 
-const pairIdentities = new WeakMap<Element, PairIdentity>();
+const pairIdentities = new WeakMap<StaticSiblingDirectoryParent, PairIdentity>();
 
 interface DirectoryState extends StaticSiblingDirectory {
   readonly identity: PairIdentity;
 }
 
-function pairIdentity(parent: Element): PairIdentity {
+function pairIdentity(parent: StaticSiblingDirectoryParent): PairIdentity {
   let identity = pairIdentities.get(parent);
   if (!identity) {
     identity = {
@@ -266,7 +277,7 @@ function rejectNestedMarker(node: Node, source: string): void {
  * after `dispose(true)`. Neither case rewinds the cursor.
  */
 function parseDirectory(
-  parent: Element,
+  parent: StaticSiblingDirectoryParent,
   count: number,
   source: string,
   requiredFrom: number,
@@ -399,13 +410,21 @@ export function openStaticSiblingDirectory(
   declaration: readonly (readonly DeclaredStaticNode[])[],
   source = 'static sibling range',
 ): StaticSiblingDirectory {
-  if (parent.nodeType !== 1) {
+  const directoryParent: StaticSiblingDirectoryParent | null =
+    parent.nodeType === 1 ? (parent as Element) : isClaimParentShadowRoot(parent) ? parent : null;
+  if (directoryParent === null) {
     fail(source, `parent: unsupported directory parent ${JSON.stringify(String(parent.nodeType))}`);
   }
-  const element = parent as Element;
-  const rejection = elementRejection(element);
+  // A ShadowRoot parent is checked through its host: the host is the element
+  // that owns the tree, and the host's element ancestors take the place of an
+  // element parent's ancestors. A plain DocumentFragment never reaches here.
+  const anchor: Element =
+    directoryParent.nodeType === 1
+      ? (directoryParent as Element)
+      : (directoryParent as ShadowRoot).host;
+  const rejection = elementRejection(anchor);
   if (rejection) fail(source, `parent: unsupported directory parent (${rejection})`);
-  let ancestor: Node | null = element.parentNode;
+  let ancestor: Node | null = anchor.parentNode;
   while (ancestor) {
     if (ancestor.nodeType === 1) {
       const ancestorRejection = elementRejection(ancestor as Element);
@@ -413,11 +432,11 @@ export function openStaticSiblingDirectory(
     }
     ancestor = ancestor.parentNode;
   }
-  const identity = pairIdentity(element);
+  const identity = pairIdentity(directoryParent);
   if (identity.reservation) fail(source, 'busy: directory reservation is held');
-  parseDirectory(element, declaration.length, source, identity.next);
+  parseDirectory(directoryParent, declaration.length, source, identity.next);
   const state: DirectoryState = {
-    parent: element,
+    parent: directoryParent,
     declaration,
     source,
     identity,
