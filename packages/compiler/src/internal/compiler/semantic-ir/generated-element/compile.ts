@@ -83,9 +83,10 @@ function notAComponent(componentName: string, moduleFile: string): IrDiagnostic 
  * when — the host supplied a site fact for it.
  *
  * Admission order (design §4.2): site fact → class-lane ownership → syntactic
- * default-export/sidecar admission (the root included: the lane reads it from
- * the sidecar, D-root-source) → props parameter → leaf generation → bindings
- * requirement. The final emitter step is append-only over the leaf text, so
+ * default-export/sidecar admission (the root and focus facts and the property
+ * table included: the lane reads them from the sidecar, D-root-source /
+ * D-delegatesFocus / D-props) → props parameter/type cross-check → leaf
+ * generation → bindings requirement. The final emitter step is append-only over the leaf text, so
  * every refusal happens before a half-built module can be returned.
  */
 export function compileGeneratedElementIfAdmitted(
@@ -145,6 +146,12 @@ export function compileGeneratedElementIfAdmitted(
     // read from the authored sidecar, not a host fact; absent stays absent so
     // the shell applies `light`.
     ...(admission.root === undefined ? {} : { root: admission.root }),
+    // D-delegatesFocus (2026-11-14): the same lane-read sidecar source as the
+    // root. Omitted when false so the descriptor keeps its M09-1a shape.
+    ...(admission.delegatesFocus ? { delegatesFocus: true } : {}),
+    // D-props (2026-11-14): the resolved rows of the cross-checked sidecar
+    // table; empty keeps the M09-1a `properties: []` bytes.
+    ...(admission.properties.length === 0 ? {} : { properties: admission.properties }),
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
   });
   if (emitted.diagnostics.length > 0) {

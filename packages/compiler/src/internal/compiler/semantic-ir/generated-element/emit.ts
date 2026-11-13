@@ -12,10 +12,11 @@
  *
  * - imports the internal M09-0/M09-shadow shell by its compiler-private
  *   specifier;
- * - builds a descriptor with `tag`, `properties: []`, the leaf's exported
- *   `create<Name>Recipe` factory, and `root` only when the authored sidecar
- *   pinned one (D-root-source: the lane reads it, the shell owns the `light`
- *   default);
+ * - builds a descriptor with `tag`, the resolved `properties` rows (or `[]`),
+ *   the leaf's exported `create<Name>Recipe` factory, `root` only when the
+ *   authored sidecar pinned one (D-root-source: the lane reads it, the shell
+ *   owns the `light` default), and `delegatesFocus: true` only when the
+ *   sidecar declares it (the shell owns the `false` default);
  * - constructs the class and default-exports it, with one named alias and the
  *   tag constant, so the existing island entry (`mod[exportName] ?? mod.default`)
  *   receives a constructor without any entry-selection change;
@@ -25,8 +26,11 @@
  *   wrapper composes the content-only `<Name>__ssr` bytes with the canonical
  *   DSD template through the `generated-element/dsd-ssr.ts` leaf, so the host
  *   artifact the browser parser adopts and the root the descriptor pins come
- *   from ONE declaration. A light root appends nothing: its tail keeps the
- *   exact M09-1a bytes.
+ *   from ONE declaration. A `delegatesFocus: true` descriptor threads the typed
+ *   DSD option into the same template (`shadowrootdelegatesfocus`), so the
+ *   claimed root reports the same fact the descriptor does; without it the
+ *   shell's root-option check would refuse the claim. A light root appends
+ *   nothing: its tail keeps the exact M09-1a bytes.
  *
  * Fixed identifier collisions fail closed instead of producing a module that
  * cannot parse: the tail's module-scope names, the alias and the import
@@ -42,6 +46,7 @@ import type { IrDiagnostic } from '../types.ts';
 import {
   GENERATED_ELEMENT_DIAGNOSTIC,
   GENERATED_ELEMENT_SHELL_SPECIFIER,
+  type GeneratedElementPlatformProperty,
   type GeneratedElementSite,
 } from './contract.ts';
 
@@ -66,11 +71,27 @@ export interface GenerateElementModuleOptions {
   readonly rootComponent?: string;
   /**
    * The root mode the lane read from the authored sidecar (`site.ts`
-   * `readIslandRoot`, D-root-source 2026-11-13). Omitted when the author
+   * `readIslandMetadata`, D-root-source 2026-11-13). Omitted when the author
    * pinned none, in which case the descriptor carries no `root` property and
    * the shell applies its own `light` default.
    */
   readonly root?: RootMode;
+  /**
+   * The `delegatesFocus` fact the lane read from the authored sidecar.
+   * Omitted (or false) when the author pinned none, in which case the
+   * descriptor carries no property and the shell applies its own `false`
+   * default. `true` without a shadow descriptor root is refused here as well
+   * as in the sidecar reader: the shell's descriptor validation would reject
+   * the pair at class creation time.
+   */
+  readonly delegatesFocus?: boolean;
+  /**
+   * The resolved primitive property rows, in sidecar authored order. Omitted
+   * (or empty) emits the M09-1a `properties: []` byte-for-byte; a non-empty
+   * list is the shell's landed `GeneratedElementProperty` shape, so no shell
+   * change is involved.
+   */
+  readonly properties?: readonly GeneratedElementPlatformProperty[];
   /** The authored source for the leaf source map (required for `sourcesContent`). */
   readonly authoredSource?: string;
 }
@@ -167,6 +188,28 @@ function emptyResult(
 }
 
 /**
+ * The descriptor's `properties` rows, byte-for-byte. Every resolved row
+ * spells all five descriptor facts explicitly (including `attribute: null` and
+ * `reflect: false`) so the emitted declaration is reviewable without inferring
+ * omitted-key semantics; the shell validates the same shape.
+ */
+function propertyRows(properties: readonly GeneratedElementPlatformProperty[]): string[] {
+  if (properties.length === 0) return ['  properties: [],'];
+  return [
+    '  properties: [',
+    ...properties.map((property) => {
+      const attribute = property.attribute === null ? 'null' : JSON.stringify(property.attribute);
+      return (
+        `    { name: ${JSON.stringify(property.name)}, attribute: ${attribute}, ` +
+        `type: ${JSON.stringify(property.type)}, reflect: ${String(property.reflect)}, ` +
+        `default: ${JSON.stringify(property.default)} },`
+      );
+    }),
+    '  ],',
+  ];
+}
+
+/**
  * Append the M09-1a CE tail to one generated leaf module.
  *
  * `site` null is the hostless case: the result is byte-identical to
@@ -242,6 +285,17 @@ export function generateElementModule(
   // actually emitted the content-only `<Name>__ssr`. A light root (or an absent
   // root, which the shell defaults to light) appends nothing at all, so the
   // M09-1a light tail keeps its exact bytes.
+  const delegatesFocus = options.delegatesFocus === true;
+  if (delegatesFocus && templateRoot === null) {
+    return emptyResult(leaf, [
+      moduleDiagnostic(
+        module.file,
+        GENERATED_ELEMENT_DIAGNOSTIC.DELEGATES_FOCUS_WITHOUT_SHADOW,
+        'delegatesFocus requires a shadow descriptor root; the shell refuses the pair at class ' +
+          'creation time',
+      ),
+    ]);
+  }
   const hostWrapper =
     templateRoot !== null && exportsSsrFunction(leafText, rootName)
       ? { root: templateRoot, name: names.ssrHost }
@@ -277,7 +331,8 @@ export function generateElementModule(
     // No authored root → no descriptor property: the shell's own
     // `descriptor.root ?? 'light'` default is the single default owner.
     ...(root === undefined ? [] : [`  root: ${JSON.stringify(root)},`]),
-    '  properties: [],',
+    ...(delegatesFocus ? ['  delegatesFocus: true,'] : []),
+    ...propertyRows(options.properties ?? []),
     `  createRecipe: create${rootName}Recipe,`,
     '};',
     '',
@@ -298,6 +353,7 @@ export function generateElementModule(
           `  return ${names.ssrHostImport}({`,
           `    tag: ${JSON.stringify(site.tag)},`,
           `    root: ${JSON.stringify(hostWrapper.root)},`,
+          ...(delegatesFocus ? ['    dsd: { delegatesFocus: true },'] : []),
           `    content: ${rootName}__ssr(props, undefined),`,
           '    ...(lightChildren === undefined ? {} : { lightChildren }),',
           '  });',

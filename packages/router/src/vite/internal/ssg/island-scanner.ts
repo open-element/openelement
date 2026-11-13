@@ -7,6 +7,7 @@ import { join, resolve } from 'pathe';
 import type { HydrationStrategy, OpenElementPackageManifest } from '../../framework.ts';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import { formatError, isValidTagName, OpenElementError } from '@openelement/element';
+import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
@@ -30,6 +31,22 @@ import {
 
 const log = createLogger('island-scan');
 
+/**
+ * One parsed sidecar property entry: the platform facts a typed props member
+ * cannot express. The name/type authority is the root component's typed props
+ * parameter; the build metadata carries the resolved attribute channel (a
+ * missing `attribute` key is already camel-to-kebab'd here) so the compiler
+ * lane and the static scan compare one vocabulary.
+ */
+export interface LocalIslandPropertyConfig {
+  /** Resolved attribute name, or null for a property-only channel. */
+  attribute: string | null;
+  /** Reflect property writes back to the attribute. */
+  reflect: boolean;
+  /** Declared literal initial value; omitted means the type's zero value. */
+  default?: string | number | boolean;
+}
+
 /** Local island metadata indexed by tag name. */
 export interface LocalIslandMeta {
   tagName: string;
@@ -45,6 +62,19 @@ export interface LocalIslandMeta {
    * root decision stands, and the generated shell applies its `light` default.
    */
   root?: 'light' | 'shadow';
+  /**
+   * Native `delegatesFocus` fact for the island's shadow root. Declared next
+   * to `root` because it is only meaningful with `root: 'shadow'`; the static
+   * scan refuses `true` with any other root, and the compiler lane re-reads
+   * the same field from the authored sidecar (the same seam as `root`).
+   */
+  delegatesFocus?: boolean;
+  /**
+   * The island element's declared primitive properties, keyed by the typed
+   * props member name. Parsed from the same sidecar as the delivery facts; the
+   * compiler lane re-reads it and cross-checks it against the props type.
+   */
+  properties?: Record<string, LocalIslandPropertyConfig>;
   /** Optional one-to-many custom-element capability names. */
   tags?: string[];
   /** Alias accepted by generated artifact producers. */
@@ -285,7 +315,7 @@ export function buildPackageIslandDecls(
 
 function staticOpenElementError(message: string): OpenElementError {
   return new OpenElementError(
-    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, root?: "light" | "shadow" }).`,
+    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, root?: "light" | "shadow", delegatesFocus?: boolean, properties?: Record<string, { reflect?: boolean, attribute?: string | false, default?: string | number | boolean }> }).`,
     {
       code: 'ISLAND_METADATA_ERROR',
       statusCode: 500,
@@ -297,7 +327,16 @@ function staticOpenElementError(message: string): OpenElementError {
 /** Static island metadata literal read from defineIslandConfig(). */
 type StaticIslandConfig = Pick<
   LocalIslandMeta,
-  'ssr' | 'dsd' | 'hydrate' | 'media' | 'root' | 'tags' | 'tagNames' | 'exportNames'
+  | 'ssr'
+  | 'dsd'
+  | 'hydrate'
+  | 'media'
+  | 'root'
+  | 'delegatesFocus'
+  | 'properties'
+  | 'tags'
+  | 'tagNames'
+  | 'exportNames'
 >;
 
 function staticEntryKey(name: ts.PropertyName): string {
@@ -371,6 +410,134 @@ function locateDefineIslandConfigCall(initializer: ts.Expression): ts.CallExpres
   }
 }
 
+/** A boolean literal, or a coded static-metadata refusal. */
+function parseStaticBoolean(node: ts.Expression, context: string): boolean {
+  if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
+  throw staticOpenElementError(context + ' must be a boolean literal');
+}
+
+/** A string/number/boolean literal, or a coded static-metadata refusal. */
+function parseStaticPrimitive(node: ts.Expression, context: string): string | number | boolean {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  if (ts.isNumericLiteral(node)) {
+    const number = Number(node.text);
+    if (!Number.isFinite(number))
+      throw staticOpenElementError(context + ' must be a finite number');
+    return number;
+  }
+  if (
+    ts.isPrefixUnaryExpression(node) &&
+    node.operator === ts.SyntaxKind.MinusToken &&
+    ts.isNumericLiteral(node.operand)
+  ) {
+    const number = -Number(node.operand.text);
+    if (!Number.isFinite(number))
+      throw staticOpenElementError(context + ' must be a finite number');
+    return number;
+  }
+  if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
+  throw staticOpenElementError(context + ' must be a static string, number, or boolean literal');
+}
+
+const ISLAND_PROPERTY_FIELDS: ReadonlySet<string> = new Set(['reflect', 'attribute', 'default']);
+const ISLAND_PROPERTY_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * Parse the sidecar's `properties` table: an object map keyed by the typed
+ * props member name, each entry carrying only the platform facts a type
+ * cannot express (`reflect`, `attribute`, `default`). The name/type pair is
+ * the root component's typed props parameter; the compiler lane cross-checks
+ * the two declarations, and this scan validates the same accepted shape the
+ * runtime authoring surface validates.
+ */
+function parseStaticPropertyTable(
+  node: ts.Expression,
+  context: string,
+): Record<string, LocalIslandPropertyConfig> {
+  if (!ts.isObjectLiteralExpression(node)) {
+    throw staticOpenElementError(context + ' must be an object of static property entries');
+  }
+  const result: Record<string, LocalIslandPropertyConfig> = {};
+  const names = new Set<string>();
+  const attributes = new Set<string>();
+  for (const [name, entry] of staticEntries(node)) {
+    if (!ISLAND_PROPERTY_NAME.test(name)) {
+      throw staticOpenElementError(
+        `${context} key "${name}" must be an identifier naming a typed props member`,
+      );
+    }
+    // A duplicate NAME is a shape defect independent of the attribute channel:
+    // with `attribute: false` or distinct explicit attributes no resolved
+    // attribute collides, so the attribute set alone would miss it (D2).
+    if (names.has(name)) {
+      throw staticOpenElementError(`${context} declares property "${name}" more than once`);
+    }
+    names.add(name);
+    if (!ts.isObjectLiteralExpression(entry)) {
+      throw staticOpenElementError(context + '.' + name + ' must be an object');
+    }
+    const seenFields = new Set<string>();
+    let reflect = false;
+    let attribute: string | null | undefined;
+    let defaultValue: string | number | boolean | undefined;
+    for (const [field, raw] of staticEntries(entry)) {
+      if (!ISLAND_PROPERTY_FIELDS.has(field)) {
+        throw staticOpenElementError(
+          `${context}.${name} does not accept "${field}" — admitted options are reflect, ` +
+            'attribute, and default',
+        );
+      }
+      if (seenFields.has(field)) {
+        throw staticOpenElementError(`${context}.${name} declares ${field} more than once`);
+      }
+      seenFields.add(field);
+      if (field === 'reflect') {
+        reflect = parseStaticBoolean(raw, `${context}.${name}.reflect`);
+      } else if (field === 'attribute') {
+        if (raw.kind === ts.SyntaxKind.FalseKeyword) {
+          attribute = null;
+        } else if (ts.isStringLiteral(raw) && raw.text.length > 0) {
+          const normalized = raw.text.toLowerCase();
+          if (!isSafeAttributeName(normalized)) {
+            throw staticOpenElementError(
+              `${context}.${name}.attribute "${raw.text}" is not a safe HTML attribute name`,
+            );
+          }
+          attribute = normalized;
+        } else {
+          throw staticOpenElementError(
+            `${context}.${name}.attribute must be a string literal or false`,
+          );
+        }
+      } else {
+        defaultValue = parseStaticPrimitive(raw, `${context}.${name}.default`);
+      }
+    }
+    if (reflect && attribute === null) {
+      throw staticOpenElementError(
+        `${context}.${name} cannot reflect without an attribute channel`,
+      );
+    }
+    const effectiveAttribute = attribute === undefined ? camelToKebab(name) : attribute;
+    if (effectiveAttribute !== null) {
+      if (attributes.has(effectiveAttribute)) {
+        throw staticOpenElementError(
+          `${context} declares attribute "${effectiveAttribute}" more than once`,
+        );
+      }
+      attributes.add(effectiveAttribute);
+    }
+    result[name] = {
+      attribute: effectiveAttribute,
+      reflect,
+      ...(defaultValue === undefined ? {} : { default: defaultValue }),
+    };
+  }
+  return result;
+}
+
 function parseStaticIslandConfig(
   objectLiteral: ts.ObjectLiteralExpression,
   sourceFile: ts.SourceFile,
@@ -389,7 +556,18 @@ function parseStaticIslandConfig(
     if (seen.has(key)) throw staticOpenElementError(`duplicate metadata key "${key}"`);
     seen.add(key);
     if (
-      !['ssr', 'dsd', 'hydrate', 'media', 'root', 'tags', 'tagNames', 'exportNames'].includes(key)
+      ![
+        'ssr',
+        'dsd',
+        'hydrate',
+        'media',
+        'root',
+        'delegatesFocus',
+        'properties',
+        'tags',
+        'tagNames',
+        'exportNames',
+      ].includes(key)
     ) {
       throw staticOpenElementError(`unsupported openElement metadata key "${key}"`);
     }
@@ -423,6 +601,20 @@ function parseStaticIslandConfig(
         throw staticOpenElementError(`openElement.root has unsupported value "${value}"`);
       }
       meta.root = value;
+    } else if (key === 'delegatesFocus') {
+      // The same static-literal rule as ssr/dsd: a boolean literal or a coded
+      // refusal. The runtime authoring surface validates the same field; this
+      // pass is the build-time authority for the authored sidecar.
+      if (raw.kind !== ts.SyntaxKind.TrueKeyword && raw.kind !== ts.SyntaxKind.FalseKeyword) {
+        throw staticOpenElementError(
+          `openElement.delegatesFocus must be a static literal, got dynamic value "${raw.getText(
+            sourceFile,
+          )}"`,
+        );
+      }
+      meta.delegatesFocus = raw.kind === ts.SyntaxKind.TrueKeyword;
+    } else if (key === 'properties') {
+      meta.properties = parseStaticPropertyTable(raw, 'openElement.properties');
     } else if (key === 'tags' || key === 'tagNames') {
       meta[key] = parseStaticStringArray(raw, `openElement.${key}`);
     } else {
@@ -457,6 +649,11 @@ function parseStaticIslandConfig(
   }
   if (meta.hydrate === 'media' && meta.media === undefined) {
     throw staticOpenElementError('openElement.media is required when hydrate is "media"');
+  }
+  if (meta.delegatesFocus === true && meta.root !== 'shadow') {
+    throw staticOpenElementError(
+      'openElement.delegatesFocus requires root: "shadow" — a light root has no shadow boundary',
+    );
   }
   return meta;
 }
@@ -628,6 +825,10 @@ export async function scanIslandMeta(
       hydrate,
       ...(islandConfig.media === undefined ? {} : { media: islandConfig.media }),
       ...(islandConfig.root === undefined ? {} : { root: islandConfig.root }),
+      ...(islandConfig.delegatesFocus === undefined
+        ? {}
+        : { delegatesFocus: islandConfig.delegatesFocus }),
+      ...(islandConfig.properties === undefined ? {} : { properties: islandConfig.properties }),
       ...(islandConfig.tags === undefined ? {} : { tags: islandConfig.tags }),
       ...(islandConfig.tagNames === undefined ? {} : { tagNames: islandConfig.tagNames }),
       ...(islandConfig.exportNames === undefined ? {} : { exportNames: islandConfig.exportNames }),

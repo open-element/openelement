@@ -18,6 +18,7 @@ export type {
   FunctionPageComponent,
   IslandConfig,
   IslandDeliveryStrategy,
+  IslandPropertyConfig,
   JsonValue,
   OpenElementFunctionPageDescriptor,
   OpenElementPageDescriptor,

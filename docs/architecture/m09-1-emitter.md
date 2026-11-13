@@ -118,6 +118,11 @@ export { __oeProfileElement as ProfileElement };
 export const __oeElementTag = 'x-profile';
 ```
 
+This M09-1a record's `properties: []` is the slice baseline; the later
+[`m09-2b-primitive-properties.md`](./m09-2b-primitive-properties.md) commit
+replaces the empty array with the declared primitive rows for a module whose
+island sidecar declares them, and keeps these bytes for a module that does not.
+
 The leaf's source map and placement ledger are **reused**, not rebuilt: the
 tail has no authored source and no map segments. The tail executes no
 `customElements.define` and never mentions the registry token; registration

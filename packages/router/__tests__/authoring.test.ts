@@ -424,6 +424,76 @@ test('defineIslandConfig() carries the declared root family', () => {
   );
 });
 
+test('defineIslandConfig() carries the declared delegatesFocus fact', () => {
+  // D-delegatesFocus (2026-11-14): the existing @element vocabulary on the
+  // island sidecar, meaningful only with root: 'shadow'.
+  expect(defineIslandConfig({ root: 'shadow', delegatesFocus: true }).delegatesFocus).toEqual(true);
+  // false is the documented default and needs no shadow root.
+  expect(defineIslandConfig({ delegatesFocus: false }).delegatesFocus).toEqual(false);
+  expect(defineIslandConfig({ root: 'shadow' }).delegatesFocus).toBeUndefined();
+  assertThrowsIncludes(
+    () => {
+      defineIslandConfig({ root: 'shadow', delegatesFocus: 'yes' } as never);
+    },
+    Error,
+    'delegatesFocus must be a boolean',
+  );
+  // A light root has no shadow boundary to delegate focus through.
+  for (const config of [{ delegatesFocus: true }, { root: 'light', delegatesFocus: true }]) {
+    assertThrowsIncludes(
+      () => {
+        defineIslandConfig(config as never);
+      },
+      Error,
+      "delegatesFocus requires root: 'shadow'",
+    );
+  }
+});
+
+test('defineIslandConfig() carries the declared primitive property table', () => {
+  // D-props (2026-11-14): names/types come from the typed props parameter; the
+  // table only carries the platform facts a type cannot express.
+  const config = defineIslandConfig({
+    properties: {
+      count: { reflect: true, default: 0 },
+      label: {},
+      padding: { attribute: false },
+      slug: { attribute: 'data-Slug' },
+    },
+  });
+  expect(config.properties).toEqual({
+    count: { reflect: true, default: 0 },
+    label: {},
+    padding: { attribute: false },
+    slug: { attribute: 'data-Slug' },
+  });
+
+  const cases: Array<[unknown, string]> = [
+    [[], 'properties must be an object map'],
+    [{ count: 1 }, 'properties.count must be an object'],
+    [{ 'not-an-identifier': {} }, 'must be an identifier'],
+    [{ count: { type: 'number' } }, 'does not accept "type"'],
+    [{ count: { reflect: 'yes' } }, 'reflect must be a boolean'],
+    [{ count: { attribute: 1 } }, 'attribute must be a string or false'],
+    [{ count: { attribute: 'onclick' } }, 'not a safe HTML attribute name'],
+    [{ count: { default: [1] } }, 'default must be a string, number, or boolean'],
+    [{ count: { attribute: false, reflect: true } }, 'cannot reflect without an attribute'],
+    [
+      { count: { attribute: 'n' }, label: { attribute: 'n' } },
+      'declare attribute "n" more than once',
+    ],
+  ];
+  for (const [properties, message] of cases) {
+    assertThrowsIncludes(
+      () => {
+        defineIslandConfig({ properties } as never);
+      },
+      Error,
+      message,
+    );
+  }
+});
+
 test('defineIslandConfig() rejects non-canonical island metadata', () => {
   assertThrowsIncludes(
     () => {
@@ -504,6 +574,14 @@ test('#1413 authoring errors: defineIslandConfig() failure modes carry codes', (
     [{ tags: ['a-b'], tagNames: ['c-d'] }, IslandErrorCode.TAGS],
     [{ exportNames: [] }, IslandErrorCode.EXPORT_NAMES],
     [{ tags: ['a-b'], exportNames: { 'c-d': 'X' } }, IslandErrorCode.EXPORT_NAMES],
+    [{ delegatesFocus: 'yes' }, IslandErrorCode.DESCRIPTOR_SHAPE],
+    [{ delegatesFocus: true }, IslandErrorCode.DESCRIPTOR_SHAPE],
+    [{ root: 'light', delegatesFocus: true }, IslandErrorCode.DESCRIPTOR_SHAPE],
+    [
+      { properties: { count: { reflect: true, attribute: false } } },
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+    ],
+    [{ properties: { 'not-an-identifier': {} } }, IslandErrorCode.DESCRIPTOR_SHAPE],
   ];
   for (const [config, code] of cases) {
     let thrown: unknown;
