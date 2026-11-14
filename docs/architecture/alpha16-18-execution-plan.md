@@ -532,3 +532,50 @@ row in `16b-MN`.
   four-part record decides admissibility, and any checkout at the cited commit
   with clean status is legitimate (the baseline document carries the rule).
 - No version, tag, publication, public API freeze or release claim is created.
+
+## 15. Dated amendment 2026-11-14 (release-prerequisite citation correction)
+
+This section **adds**; it does not rewrite §1, §2, §12a, §13 or §14. It follows
+the amend-never-rewrite form of §13 and §14: the earlier text stays as written
+and this is the later reading. It creates no milestone evidence, no P5 evidence,
+no gate record, and no version, tag, publication, public API freeze or release
+claim.
+
+### 15.1 Later reading of §2 item 3a and the §12a Public API proof
+
+§2:111-116 requires "the capability inventory in the retirement roadmap
+(retired into Git history on 2026-11-10)" for class retirement, and §12a:351
+requires the "class capability/replacement inventory complete (the inventory is
+retired into Git history on 2026-11-10; see the archive and removal register)".
+`alpha16-18-retirement-roadmap.md` was removed on 2026-11-10 with
+`docs/history.json`:83-93 recording `nowLivesIn: []` / `noSuccessor: true`, and
+`docs/legacy/README.md`:38 states "No in-tree successor; recover from Git
+history". A release prerequisite that points at a deliberately removed document
+with no in-tree successor is not satisfiable as an in-tree object.
+
+**Later reading:** the class-retirement capability inventory is the **tracked,
+signed inventory required by §13.5** — a tracked capability inventory, the
+final-SHA per-file class→function migration matrix, the migration note with its
+row-for-row entries in `16b-MN`, and the owner sign-off. Git history remains a
+recovery path for decision history; it is not an in-tree successor and does not
+satisfy "tracked" or "signed". The removed roadmap's `carried` disposition
+matrix (`docs/history.json`:87) describes what that inventory had to contain.
+
+§13.5 stays in force and is not relaxed: "P5 is not claimable and Alpha16 release
+qualification is not openable" until that inventory and the owner sign-off exist.
+`docs/architecture/16b-migration-note.md` is the tracked carrier of `16b-MN`; it
+is **not** the P5 capability inventory and records no sign-off.
+
+### 15.2 What this amendment does not change
+
+- §2 items 1–8 remain required. No item is removed, lowered or reordered; item
+  3a is re-read, not waived.
+- §12a's five proofs remain five **separate** proofs judged at one SHA
+  (§13.1:374-379); generic-executor unreachability is still one of five
+  (§12a:353-354).
+- §13.1 (M10-final / M11 start gate / the P1–M11-3 joint integration with two
+  independent verdicts), §13.2 (five obligation slices), §13.5, §13.6 and all of
+  §14 are unchanged. No new milestone or slice label is introduced.
+- §3's dependency spine remains the ordering authority: M10 cannot start before
+  M05–M09 (§3:160-161). This amendment adds no dependency edge.
+- No version, tag, publication, public API freeze or release claim is created.

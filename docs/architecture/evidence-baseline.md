@@ -52,14 +52,17 @@ that satisfies the record above — including an independent or ad-hoc worktree 
 legitimate evidence for the claim it records.
 
 Recorded anchor for this revision: HEAD
-`7632ab36cc9ada49525775897a5eab6177360a75` (`docs(architecture): record the
-middleware.use seam and the security baseline matrix`, the PR `#1786` squash),
-frozen 2026-11-14. Branch `docs/canonical-baseline` for governance commits;
-otherwise detached at the recorded SHA. Dependencies are the root `node_modules`
-plus each workspace package's `node_modules`, installed from the locked dependency
-set. When `origin/main` moves, re-point this row in the same pull request that
-cites the new SHA; re-pointing is bookkeeping for the anchor, never a gate on
-evidence taken elsewhere.
+`fa6e5232dd54520d100108b202a73a1d70341f11` (`feat(element): bounded form
+association on the generated element (M09-2d)`, the PR `#1790` squash),
+re-pointed 2026-11-14 by the Alpha16 governance restart change set
+(ADR-0176 / ADR-0177). The previous anchor
+`7632ab36cc9ada49525775897a5eab6177360a75` (PR #1786) stays valid **provenance**
+for records taken at that commit; this re-point does not re-adjudicate them.
+The canonical worktree is detached at the recorded SHA. Dependencies are the
+root `node_modules` plus each workspace package's `node_modules`, installed from
+the locked dependency set. When `origin/main` moves, re-point this row in the
+same pull request that cites the new SHA; re-pointing is bookkeeping for the
+anchor, never a gate on evidence taken elsewhere.
 
 ## The four-part evidence record
 

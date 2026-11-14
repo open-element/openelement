@@ -419,6 +419,45 @@ row move together (§7 rule 1). No later lane edits the M08 row; a correction
 after this merge is an amendment section in the same amend-never-rewrite form
 as §4.2/§4.3.
 
+### 4.7 M09 landing reconciliation (2026-11-14; later readings, not a status rewrite)
+
+This section follows the amend-never-rewrite form of §4.2/§4.3. Nine merged M09
+slice PRs did not carry the §3 row update required by §7 rule 1 (`:454-456`,
+"Do not batch status updates into a later docs PR"); the first three (#1768,
+#1772, #1778) were batched into the row after the fact by #1780, a docs PR, and
+this section adds **later readings** for the six not already enumerated in §3.
+The deviations are named, with the principles they trade against (P6 one
+writer, P8 one named owner), in
+[ADR-0176](../adr/ADR-0176-alpha16-plan-amendments-registry.md) under the
+owner ruling of 2026-11-14 — this is a comply-or-explain record, not a waiver.
+
+Baseline: `origin/main` = `fa6e5232dd54520d100108b202a73a1d70341f11`
+(PR #1790). Rows are keyed to the squash SHA each PR merged as; they are
+landing-range facts, not exit evidence.
+
+| PR | Squash SHA | Slice landed (subject) | Later reading |
+| --- | --- | --- | --- |
+| #1782 | `3d4992859` | M09-1b registration site and packaging | generated-element registration and the two artifact-resolution subpaths landed; §3 M09 row still reads "M09-1b open" |
+| #1785 | `d0ea3824b` | M09-2a core shadow island / DSD host producer | shadow root and DSD authoring landed; §3 M09 row still reads "M09-2 open" |
+| #1787 | `089ace0a8` | M09-2a/2b platform metadata (`delegatesFocus`, primitive properties) | primitive property descriptors landed; the same change set introduced execution-plan §14 |
+| #1788 | `7581fbf60` | M09-2c intrinsic event/ref channels | compiler-private event/ref codegen landed; no public API added |
+| #1789 | `f69dde8bf` | M09-2d property-only non-primitive props | bounded mechanism, LOCAL review pending, "not the M09 exit" (slice document `:9`) |
+| #1790 | `fa6e5232d` | M09-2d bounded form association | bounded mechanism, review pending, "not full OpenInput migration parity" (slice document `:9-12`) |
+
+**Status unchanged.** The §4 conclusion "Alpha16b (M09–M14) has no exit
+evidence" remains in force; this section corrects only the landing-range
+enumeration in §4:180-181, which listed "M09-0 and M09-shadow are LOCAL shell
+slices" and no longer enumerates the tree. The §3 M09 row is left as written —
+it is a historical single-writer record, and its "this row is not an M09 exit"
+statement stands. §4.6's Single writer clause constrains the M08 row only.
+
+No exit record, sign-off, version, tag, publication or release claim is opened
+here. When M09 exit evidence exists, it is recorded once by a consolidation PR
+under the §4.4 closeout form, never as a by-product of a WIP slice PR. In
+particular, the #1789/#1790 review notes are still
+open at this baseline, and the CEM retained obligation of §14.2 has no bounded
+mechanism in the tree.
+
 ## 5. 2026-11-03 audit closure register
 
 Source ledger: the 2026-11-03 audit ledger at baseline `ace820a74` (#1699),
