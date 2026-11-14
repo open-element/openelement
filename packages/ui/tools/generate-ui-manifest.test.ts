@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
@@ -104,18 +106,53 @@ test('layer/hydrate policies fail loud on unknown component classes', () => {
   expect(hydrateFromClass('OpenInput')).toEqual('load');
 });
 
+/**
+ * The published tag set: the public API surface of @openelement/ui. Renaming
+ * or removing a component is a breaking change, so it must edit this constant
+ * deliberately. Regenerating the manifest cannot absorb such a change
+ * silently, because the assertion below pins exactly these tags.
+ */
+const PUBLISHED_TAGS = [
+  'open-button',
+  'open-input',
+  'open-theme-toggle',
+  'open-code-block',
+  'open-dialog',
+  'open-dropdown',
+] as const;
+
+/**
+ * Tag names as declared in the component sources, read as TEXT rather than
+ * through the generator's AST reader. The generator walks the source tree
+ * recursively, so this reader must too; a nested component counts. Two
+ * independent readers over one fact guard the manifest: it can only stay
+ * correct while both agree, so a new component cannot land in the tree and be
+ * absent from the manifest, and a renamed tag cannot pass with a stale one.
+ */
+function tagsDeclaredInSource(): string[] {
+  const sourceRoot = join(import.meta.dirname!, '..', 'src');
+  return readdirSync(sourceRoot, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && /^open-.*\.tsx$/.test(entry.name))
+    .map((entry) => {
+      const declaration = /@element\(\s*'([^']+)'/.exec(
+        readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8'),
+      );
+      if (declaration === null) throw new Error(`${entry.name}: no @element('<tag>') declaration`);
+      return declaration[1]!;
+    })
+    .sort();
+}
+
 test('generated UI manifest covers every shipped component', () => {
   const manifest = buildManifest();
   expect(manifest.packageName).toEqual('@openelement/ui');
   expect(manifest.$comment).toContain('GENERATED FILE');
-  expect(manifest.declarations.map((declaration) => declaration.tagName)).toEqual([
-    'open-button',
-    'open-input',
-    'open-theme-toggle',
-    'open-code-block',
-    'open-dialog',
-    'open-dropdown',
-  ]);
+  // (1) Pin the published set: an addition, deletion or rename must fail here.
+  expect(tagsDeclaredInSource()).toEqual([...PUBLISHED_TAGS].sort());
+  // (2) Every component declared in source must reach the manifest.
+  expect(manifest.declarations.map((declaration) => declaration.tagName).sort()).toEqual(
+    tagsDeclaredInSource(),
+  );
   for (const declaration of manifest.declarations) {
     expect(declaration.className, `${declaration.tagName} missing className`).toBeTruthy();
     expect(declaration.openElement?.ssr).toEqual(true);

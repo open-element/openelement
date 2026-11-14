@@ -59,38 +59,55 @@ interface RoadmapListItem {
   value: string;
 }
 
+/**
+ * Planning labels, declared once for both locales. These are PLANNING targets,
+ * not published facts: published truth lives in `data/version.ts`
+ * (`SOURCE_VERSION` / `CURRENT_ALPHA_VERSION`, projected from
+ * `docs/release/release-state.json`). Spelling the same label into the en and
+ * zh rows made two copies of one claim, so a locale edit could move a version
+ * on one rendering of the page and not the other.
+ */
+const alphaLabel = (minor: number): string => `v1.0.0-alpha.${minor}`;
+/** Historical fact: the first public Alpha admission row. */
+const BASELINE_ALPHA = alphaLabel(1);
+const PLANNED_ALPHA_16 = alphaLabel(16);
+const PLANNED_ALPHA_17 = alphaLabel(17);
+const PLANNED_ALPHA_18 = alphaLabel(18);
+/** Target name, not a version: no number is claimed for the stable release. */
+const STABLE_TARGET_LABEL = 'v1.0 RC / Stable';
+
 const entries: Record<SiteLocale, TimelineEntry[]> = {
   en: [
     {
-      version: 'v1.0.0-alpha.1',
+      version: BASELINE_ALPHA,
       theme: 'Public Alpha admission',
       copy: 'Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Element and Router are the public core, Create is the supported entry, UI is experimental. 1.0 Alpha is a fresh baseline with no supported migration from 0.x.',
       state: 'baseline',
       stamp: 'BASELINE',
     },
     {
-      version: 'v1.0.0-alpha.16',
+      version: PLANNED_ALPHA_16,
       theme: 'Compilation and safe delivery',
       copy: 'The browser still executes Part Programs, so the backend must prepare for new composition. Generate direct DOM mount/claim/update/dispose, separate public and private output, extend existing server functions with async/full-await composition, and target zero JS only where there is no actual client need. Keep existing behavior and cleanup. Full function authoring belongs to Alpha17; new component defer to Alpha18. ADR-0174 formally accepts the generated-code/runtime direction and amends ADR-0148; implementation remains pending. ADR-0171 records the output-safety direction.',
       state: 'planned',
       status: 'Planning target; release depends on validation',
     },
     {
-      version: 'v1.0.0-alpha.17',
+      version: PLANNED_ALPHA_17,
       theme: 'Function components and composition',
       copy: 'Use Signals and setup-once for stateful composition without an extra host: props, children, conditions, keyed lists, explicit CE exports and independent precompiled component packages. Validate one recommended entry, starters, docs and migration; general upgrade tooling and URL-prefix removal are separate work. OpenElement has no React Hooks and promises no Hooks/React compatibility; old classes remain compatible without an immediate rewrite. ADR-0173 formally accepts the composition direction and amends ADR-0143; implementation and consumer validation remain pending. The distribution contract is not frozen.',
       state: 'planned',
       status: 'Planning target; recommendation changes after author and consumer validation',
     },
     {
-      version: 'v1.0.0-alpha.18',
+      version: PLANNED_ALPHA_18,
       theme: 'Component-level streaming',
       copy: 'Extend existing route/field channels to deferred component subtrees, coordinating CSS, scripts, failures, bounded resources, cancellation and navigation/HTML morph. Isolate stale responses and measure real deployment benefits, full-await and HTML fallback. No arbitrary nesting, forced termination of any user task, or universally script-free dynamic insertion is promised. Extend ADR-0158 resource/component contracts; material protocol changes get a successor record.',
       state: 'planned',
       status: 'Planning target; default enablement requires correctness and benefit evidence',
     },
     {
-      version: 'v1.0 RC / Stable',
+      version: STABLE_TARGET_LABEL,
       theme: 'Separately admitted releases',
       copy: 'Freeze contracts and dependencies after Alpha evidence; require at least fourteen days of RC soak, install/upgrade/security qualification and human GO. Element and Router do not mandate a package count.',
       state: 'planned',
@@ -99,35 +116,35 @@ const entries: Record<SiteLocale, TimelineEntry[]> = {
   ],
   zh: [
     {
-      version: 'v1.0.0-alpha.1',
+      version: BASELINE_ALPHA,
       theme: '公开 Alpha 准入',
       copy: '从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程。Element 与 Router 是公共核心，Create 是正式入口，UI 为实验性能力。1.0 Alpha 是新基线，不提供从 0.x 的受支持迁移。',
       state: 'baseline',
       stamp: 'BASELINE',
     },
     {
-      version: 'v1.0.0-alpha.16',
+      version: PLANNED_ALPHA_16,
       theme: '编译与安全交付',
       copy: '当前浏览器仍执行 Part Program，后端需为后续组合做准备。生成直接 DOM mount/claim/update/dispose，隔离公开与私有输出，扩展既有服务端函数的异步/full-await组合；无实际客户端需求的页面目标为零JS，保留既有行为与清理。完整函数作者API留在Alpha17，新组件defer留在Alpha18。ADR-0174已正式接受生成代码/运行时方向并修订ADR-0148，实现仍待完成；ADR-0171记录输出安全方向。',
       state: 'planned',
       status: '规划目标；发布取决于验证结果',
     },
     {
-      version: 'v1.0.0-alpha.17',
+      version: PLANNED_ALPHA_17,
       theme: '函数组件与组合',
       copy: '基于Signals和setup-once，让有状态业务组合无需额外host：props、children、条件、keyed list、显式CE出口与独立预编译组件包。验证统一推荐入口、starter、文档与迁移；通用升级工具和URL去前缀独立推进。当前没有React Hooks，也不承诺Hooks/React兼容；旧class兼容，用户无需立即重写。ADR-0173已正式接受组件组合方向并修订ADR-0143，实现与独立消费者验证仍待完成；分发契约尚未冻结。',
       state: 'planned',
       status: '规划目标；作者与消费者验证通过后切换推荐路径',
     },
     {
-      version: 'v1.0.0-alpha.18',
+      version: PLANNED_ALPHA_18,
       theme: '组件级流式交付',
       copy: '扩展既有route/field通道交付延迟组件子树，协调CSS、脚本、错误、有限资源、取消和导航/HTML morph。隔离过期响应，测量真实部署收益并验证完整等待与HTML fallback。不承诺任意嵌套、强制终止任意用户任务或所有动态回填完全无脚本。扩展ADR-0158资源与组件契约，协议实质变化另行记录。',
       state: 'planned',
       status: '规划目标；默认启用需要正确性与收益证据',
     },
     {
-      version: 'v1.0 RC / Stable',
+      version: STABLE_TARGET_LABEL,
       theme: '分别准入',
       copy: 'Alpha 证据充分后冻结接口与依赖，完成至少十四天 RC 持续运行及安装、升级、安全验证后取得人工 GO。两个产品不强制两个发布包。',
       state: 'planned',
@@ -139,14 +156,14 @@ const entries: Record<SiteLocale, TimelineEntry[]> = {
 const content = {
   en: {
     headTitle: 'Roadmap',
-    headDescription: `The openElement roadmap: the public Alpha admission (v1.0.0-alpha.1), the ${STABLE_LINE.series} stable maintenance line and the gated path to v1.0.`,
+    headDescription: `The openElement roadmap: the public Alpha admission (${BASELINE_ALPHA}), the ${STABLE_LINE.series} stable maintenance line and the gated path to v1.0.`,
     pageTitle: 'Roadmap',
     heroLede:
       'Compose native Web UI with TSX, deliver HTML first, and run interaction when needed. Alpha16–18 plan compilation and safe delivery, function components, then component-level streaming.',
     railItems:
       '[{"id":"release-line","label":"Release line"},{"id":"product-boundary","label":"Product boundary"},{"id":"decision-matrix","label":"Decision matrix"},{"id":"system-visual","label":"System visual"}]',
     architecture: 'Architecture',
-    freezeBadge: 'Alpha admission — v1.0.0-alpha.1',
+    freezeBadge: `Alpha admission — ${BASELINE_ALPHA}`,
     // The "now" band states the two lines the release record proves. Both
     // halves derive (data/version.ts ← the generated release-line module ←
     // CHANGELOG.md + docs/release/release-state.json): the series the stable
@@ -233,14 +250,14 @@ const content = {
   },
   zh: {
     headTitle: '路线图',
-    headDescription: `openElement 路线图：公开 Alpha 准入（v1.0.0-alpha.1）、${STABLE_LINE.series} 稳定维护线，以及通往 v1.0 的门禁路径。`,
+    headDescription: `openElement 路线图：公开 Alpha 准入（${BASELINE_ALPHA}）、${STABLE_LINE.series} 稳定维护线，以及通往 v1.0 的门禁路径。`,
     pageTitle: 'Roadmap',
     heroLede:
       '用 TSX 组合原生 Web UI，先交付 HTML，再按需运行交互。Alpha16–18 依次规划编译与安全交付、函数组件、组件级流式交付。',
     railItems:
       '[{"id":"release-line","label":"发布线"},{"id":"product-boundary","label":"产品边界"},{"id":"decision-matrix","label":"决策矩阵"},{"id":"system-visual","label":"系统图示"}]',
     architecture: '架构',
-    freezeBadge: 'Alpha 准入 — v1.0.0-alpha.1',
+    freezeBadge: `Alpha 准入 — ${BASELINE_ALPHA}`,
     // See the en block: the zh band derives the same two lines.
     nowTitle: stableLineTitle('zh'),
     nowCopy: stableLineNote('zh'),
