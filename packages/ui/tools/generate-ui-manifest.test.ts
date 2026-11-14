@@ -107,22 +107,35 @@ test('layer/hydrate policies fail loud on unknown component classes', () => {
 });
 
 /**
+ * The published tag set: the public API surface of @openelement/ui. Renaming
+ * or removing a component is a breaking change, so it must edit this constant
+ * deliberately. Regenerating the manifest cannot absorb such a change
+ * silently, because the assertion below pins exactly these tags.
+ */
+const PUBLISHED_TAGS = [
+  'open-button',
+  'open-input',
+  'open-theme-toggle',
+  'open-code-block',
+  'open-dialog',
+  'open-dropdown',
+] as const;
+
+/**
  * Tag names as declared in the component sources, read as TEXT rather than
- * through the generator's AST reader. Two different readers over one fact are
- * the guard: the manifest can only stay correct while both agree, so a new
- * component cannot land in the tree and be absent from the manifest, and a
- * renamed tag cannot pass with a stale manifest. A hand-written list of the
- * six known tags proves neither (it only proves the six are still there).
+ * through the generator's AST reader. The generator walks the source tree
+ * recursively, so this reader must too; a nested component counts. Two
+ * independent readers over one fact guard the manifest: it can only stay
+ * correct while both agree, so a new component cannot land in the tree and be
+ * absent from the manifest, and a renamed tag cannot pass with a stale one.
  */
 function tagsDeclaredInSource(): string[] {
   const sourceRoot = join(import.meta.dirname!, '..', 'src');
-  return readdirSync(sourceRoot, { withFileTypes: true })
-    .filter(
-      (entry) => entry.isFile() && entry.name.startsWith('open-') && entry.name.endsWith('.tsx'),
-    )
+  return readdirSync(sourceRoot, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && /^open-.*\.tsx$/.test(entry.name))
     .map((entry) => {
       const declaration = /@element\(\s*'([^']+)'/.exec(
-        readFileSync(join(sourceRoot, entry.name), 'utf8'),
+        readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8'),
       );
       if (declaration === null) throw new Error(`${entry.name}: no @element('<tag>') declaration`);
       return declaration[1]!;
@@ -134,6 +147,9 @@ test('generated UI manifest covers every shipped component', () => {
   const manifest = buildManifest();
   expect(manifest.packageName).toEqual('@openelement/ui');
   expect(manifest.$comment).toContain('GENERATED FILE');
+  // (1) Pin the published set: an addition, deletion or rename must fail here.
+  expect(tagsDeclaredInSource()).toEqual([...PUBLISHED_TAGS].sort());
+  // (2) Every component declared in source must reach the manifest.
   expect(manifest.declarations.map((declaration) => declaration.tagName).sort()).toEqual(
     tagsDeclaredInSource(),
   );
