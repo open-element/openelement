@@ -68,3 +68,4 @@ there (`git show 3b5c7a9a^:docs/audit/2026-07-27-application-loop-framework-rese
 - [ADR-0175-alpha16a-m07-decisions-and-current-view.md](./ADR-0175-alpha16a-m07-decisions-and-current-view.md)
 - [ADR-0176-alpha16-plan-amendments-registry.md](./ADR-0176-alpha16-plan-amendments-registry.md)
 - [ADR-0177-internal-artifact-resolution-subpaths.md](./ADR-0177-internal-artifact-resolution-subpaths.md)
+- [ADR-0178-release-line-qualification-anchor.md](./ADR-0178-release-line-qualification-anchor.md)

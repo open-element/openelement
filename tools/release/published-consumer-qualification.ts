@@ -52,6 +52,9 @@ import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import { runWithOutput } from '../lib/process.ts';
 import { CREATE_BIN } from './npm-manifest.ts';
 
+/** Repository root, the default cwd for reading a release line out of git. */
+const repoRoot = resolve(import.meta.dirname!, '../..');
+
 // ---------------------------------------------------------------------------
 // Release-gate verdict contract (#1216, A10.8)
 //
@@ -309,11 +312,18 @@ async function qualificationMain(): Promise<void> {
         }
       }
       // The published starter is the package-manager-neutral form (alpha15+):
-      // it pins `vite` itself at the router's own version and ships no
+      // it pins `vite` itself at its own release's version and ships no
       // pnpm-only specifier or workspace file. Asserted BEFORE the install so
       // a scaffold that regressed to the retired Vite+ catalog form fails the
       // gate with the precise cause instead of dying inside pnpm's resolver.
-      await assertStarterIsPackageManagerNeutral(starter, 'Published starter');
+      // The pin comes from the qualified version's own release tag, not from
+      // this checkout (#1717): `main`'s toolchain moved on after alpha.15
+      // shipped and the published artifact did not.
+      await assertStarterIsPackageManagerNeutral(
+        starter,
+        'Published starter',
+        await releaseLineVitePin(options.version),
+      );
       await runStep('install starter dependencies', 'pnpm', ['install'], starter);
       for (const task of ['typecheck', 'test', 'build']) {
         await runStep(`starter ${task}`, 'pnpm', ['run', task], starter);
@@ -576,6 +586,85 @@ async function prepublishAliasMain(args: readonly string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// The release line a published artifact is qualified against (#1717)
+// ---------------------------------------------------------------------------
+//
+// A published artifact is judged by the release it shipped in, never by
+// whatever this checkout pins today. `1.0.0-alpha.15`'s starter pins vite
+// `8.0.16` because that is the toolchain alpha.15 shipped; `main` moved to
+// `8.1.6` afterwards (#1683), so comparing the two turned every qualification
+// run of an older release into a guaranteed failure — a false negative about
+// the published artifact produced by a working-tree fact. The release line is
+// the only record that answers "what did this release carry", and the tag the
+// release created is that record: reading it there keeps exactly one authority
+// for the value, with no tracked copy and no drift guard to maintain (P6).
+
+/** The starter vite pin a release carried, and the record it was read from. */
+export interface ReleaseLineVitePin {
+  readonly pin: string;
+  readonly source: string;
+}
+
+/** Where a release tree states the starter's vite pin. */
+const RELEASE_LINE_TEMPLATE = 'packages/create/templates/package.json.tmpl';
+
+/**
+ * The tag that carries a release's create-package tree: the T7 per-package
+ * form the release workflow creates (`gh release create --target <sha>`,
+ * `.github/workflows/autoflow-release.yml` "Create per-package GitHub
+ * Releases"). `1.0.0-alpha.15` is the first release that has it; the retired
+ * `v<version>` umbrella tag is deliberately **not** consulted — it is the only
+ * record alpha.1–alpha.14 have, and those releases shipped the Vite+ catalog
+ * form whose starter had no vite devDependency of its own, so there is no pin
+ * to compare and no reason to keep a second candidate alive for them.
+ */
+function releaseLineTag(version: string): string {
+  return `create-v${version}`;
+}
+
+/**
+ * Read the starter vite pin `version`'s release carried, from the release tag's
+ * own copy of the create template.
+ *
+ * Fails closed. A release line that cannot be read from this checkout is
+ * neither a pass nor a refutation of the artifact — it is the absence of the
+ * record the qualification needs, and the throw names the fetch that restores
+ * it. Passing such a checkout through would be the `catch { return false }`
+ * shape this module exists to prevent, one level up.
+ */
+export async function releaseLineVitePin(
+  version: string,
+  cwd: string = repoRoot,
+): Promise<ReleaseLineVitePin> {
+  const tag = releaseLineTag(version);
+  const record = `${tag}:${RELEASE_LINE_TEMPLATE}`;
+  const result = await runWithOutput('git', ['show', record], { cwd });
+  if (!result.success) {
+    const reason = (result.stderr.trim() || `git show exited ${result.code}`).split('\n')[0];
+    throw new Error(
+      `no release-line record for ${version}: ${tag} (${reason}). A published starter is ` +
+        `qualified against the vite pin ${tag} carries, so a checkout without that tag cannot ` +
+        'judge it. Fetch the release tags (git fetch --tags origin) and re-run.',
+    );
+  }
+  let manifest: { devDependencies?: Record<string, string> };
+  try {
+    manifest = JSON.parse(result.stdout) as typeof manifest;
+  } catch (error) {
+    throw new Error(`${record} is unparseable: ${formatError(error)}`);
+  }
+  const pin = manifest.devDependencies?.vite;
+  if (typeof pin !== 'string' || !/^\d+\.\d+\.\d+/.test(pin)) {
+    throw new Error(
+      `${record} does not pin an exact vite version (devDependencies.vite=${pin ?? '<missing>'}); ` +
+        `the release line for ${version} cannot be read. Releases before alpha.15 shipped the ` +
+        'retired Vite+ catalog form, whose starter carried no vite devDependency of its own.',
+    );
+  }
+  return { pin, source: record };
+}
+
+// ---------------------------------------------------------------------------
 // Scaffold package-manager-neutrality guard (alpha15+)
 // ---------------------------------------------------------------------------
 //
@@ -595,8 +684,17 @@ async function prepublishAliasMain(args: readonly string[]): Promise<void> {
  * form. Pure (text in, verdict out) so both entry surfaces — the qualification
  * matrix and the exact-version smoke — funnel their scaffold reads through one
  * check, and the tests can drive it directly.
+ *
+ * `releaseVite` is the pin the scaffold's OWN release carried
+ * ({@link releaseLineVitePin}), not this checkout's: the caller owns which
+ * release is under qualification, and the exactness of the check belongs to
+ * that release's record rather than to a default (#1717).
  */
-export function assertPackageManagerNeutralManifest(manifestText: string, context: string): void {
+export function assertPackageManagerNeutralManifest(
+  manifestText: string,
+  context: string,
+  releaseVite: ReleaseLineVitePin,
+): void {
   let manifest: { packageManager?: string; devDependencies?: Record<string, string> };
   try {
     manifest = JSON.parse(manifestText) as typeof manifest;
@@ -605,13 +703,14 @@ export function assertPackageManagerNeutralManifest(manifestText: string, contex
   }
   const devDependencies = manifest.devDependencies ?? {};
   // The scaffold's vite is its own devDependency now (no catalog owns it), and
-  // it must be the version the router itself resolves: the generated project
-  // builds through the router's Vite plugin, so a drift or a range is a second
-  // vite tree in the consumer.
-  if (devDependencies.vite !== VITE_DEV_PIN) {
+  // it must be the version that release's own toolchain carried: the generated
+  // project builds through the router's Vite plugin, so a drift or a range is a
+  // second vite tree in the consumer.
+  if (devDependencies.vite !== releaseVite.pin) {
     throw new Error(
       `${context} is not the package-manager-neutral form: devDependency vite=` +
-        `${devDependencies.vite ?? '<missing>'}, expected the router's own pin ${VITE_DEV_PIN}`,
+        `${devDependencies.vite ?? '<missing>'}, expected the release's starter pin ` +
+        `${releaseVite.pin} (${releaseVite.source})`,
     );
   }
   if (devDependencies['vite-plus'] !== undefined) {
@@ -666,11 +765,14 @@ export async function assertStarterShipsNoWorkspaceFile(
  * The whole neutrality contract for one scaffolded starter directory: manifest
  * form plus the absence of a shipped workspace file. Both entry surfaces call
  * this single function, so the matrix and the smoke can never disagree about
- * what the shipped form is.
+ * what the shipped form is. Both also resolve `releaseVite` from the release
+ * they are qualifying, so neither compares a published artifact with this
+ * checkout's toolchain (#1717).
  */
 export async function assertStarterIsPackageManagerNeutral(
   starterDir: string,
   context: string,
+  releaseVite: ReleaseLineVitePin,
 ): Promise<void> {
   let manifestText: string;
   try {
@@ -681,7 +783,7 @@ export async function assertStarterIsPackageManagerNeutral(
     }
     throw error;
   }
-  assertPackageManagerNeutralManifest(manifestText, context);
+  assertPackageManagerNeutralManifest(manifestText, context, releaseVite);
   await assertStarterShipsNoWorkspaceFile(starterDir, context);
 }
 
@@ -885,10 +987,16 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
       }
     }
     // The package-manager-neutral form (alpha15+): the manifest pins `vite`
-    // itself at the router's own version and carries no pnpm-only specifier,
+    // itself at its own release's version and carries no pnpm-only specifier,
     // and the scaffold ships no workspace file — a scaffold that regressed to
-    // the retired Vite+ catalog form is named here, before the install.
-    await assertStarterIsPackageManagerNeutral(`${tmpDir}/starter`, 'Exact-version starter');
+    // the retired Vite+ catalog form is named here, before the install. The
+    // expected pin is read from `version`'s release tag, never from this
+    // checkout (#1717).
+    await assertStarterIsPackageManagerNeutral(
+      `${tmpDir}/starter`,
+      'Exact-version starter',
+      await releaseLineVitePin(version),
+    );
     await run('pnpm', ['install'], `${tmpDir}/starter`);
     const typecheck = await run('pnpm', ['run', 'typecheck'], `${tmpDir}/starter`);
     if (!typecheck.success) throw new Error(`starter typecheck failed:\n${typecheck.output}`);

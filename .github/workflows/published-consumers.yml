@@ -39,6 +39,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          # A published starter is qualified against the vite pin its own
+          # release carried, read from that release's tag (#1717). The tag
+          # points at the release commit, which a depth-1 graph does not hold
+          # once the release is older than the checkout.
+          fetch-depth: 0
+          fetch-tags: true
       - uses: ./.github/actions/setup-node-workspace
       - name: Generate and exercise the published starter
         env:
@@ -66,6 +72,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          # A published starter is qualified against the vite pin its own
+          # release carried, read from that release's tag (#1717). The tag
+          # points at the release commit, which a depth-1 graph does not hold
+          # once the release is older than the checkout.
+          fetch-depth: 0
+          fetch-tags: true
       - uses: ./.github/actions/setup-node-workspace
       # Same cache key shape as the autoflow browser jobs: playwright is a
       # pinned devDependency, so pnpm-lock.yaml identifies the browser
