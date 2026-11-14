@@ -114,6 +114,8 @@ HTTP 语义绝不静默降级。表单无 JavaScript 可用；GET 缓存语义�
 ## P5 — 为删除而设计
 
 每一层都必须可删。兼容仅限部署边界。每个 shim 落地时必须写明退役条件。
+可扩展性是**格式**的属性，不是表面积的属性：格式带版本号与自描述条款，
+因而可以生长；而为尚无人需要的功能预留扩展点，是没有 owner 的表面积。
 
 **APPROVED TARGET（2026-11-03）：** 公共 Class/Decorator 作者 API 退役，且
 **不为其构建兼容适配器**（ADR-0173 第四次修订）。原生 Custom Elements 仍是
@@ -174,7 +176,9 @@ SHA-256 与候选 SHA 绑定。
 （Polymer → [Lit][open-wc]）、[Enhance][enhance]（HTML-first、标准
 主义）、[Remix][remix]（HTTP 保真）、[Astro 岛屿架构][islands]
 （选择性 hydration）、[Svelte][svelte]（编译期支付）、
-[htmx essays][htmx]（行为局部性）、[WinterTC][wintertc]（服务端
+[htmx essays][htmx]（行为局部性）、[The Art of Unix
+Programming][taoup]（过程纪律：小部件、文本通道、以生成代替手工维护、
+失败要响），经 P5 与「输出纪律」收窄后适用、[WinterTC][wintertc]（服务端
 契约）。说不清与先例的差异 = 设计漂移，打回。
 
 ## P8 — 接缝单一所有权
@@ -196,6 +200,18 @@ SHA-256 与候选 SHA 绑定。
 
 判别问句：_这条边界是否只有一个写者？它的消费方形态测试抓得住第二个
 吗？_
+
+## 输出纪律
+
+命令的 stdout 是数据通道。工具没有意外要说时就不出声，其输出才能不经过
+滤直接被下一个程序读取；通过的检查只打印一行摘要。
+
+这一节把「沉默」收窄到**输出**，并禁止它的误读。沉默从不授权一条悄悄跳过
+工作、丢掉诊断、或把文件漏出生成产物的代码路径：那是 P4（失败关闭）与 P8
+（守卫接缝）的失败，必须报出来。失败的检查要给出路径、行号，以及它没有满足
+的期望。
+
+判别问句：_安静的是输出，还是工作本身？_
 
 ## 方向接受不等于能力已交付
 
@@ -226,6 +242,7 @@ SHA-256 与候选 SHA 绑定。
 - [Jason Miller — Islands Architecture][islands]
 - [htmx essays][htmx]
 - [tef — Write code that is easy to delete][tef]
+- [The Art of Unix Programming (2003)][taoup]
 
 [adr-0163]: ../adr/ADR-0163-seam-single-ownership.md
 [seams]: seams.md
@@ -241,3 +258,4 @@ SHA-256 与候选 SHA 绑定。
 [islands]: https://jasonformat.com/islands-architecture/
 [htmx]: https://htmx.org/essays/
 [tef]: https://programmingisterrible.com/post/139222674273/write-code-that-is-easy-to-delete-not-easy-to-extend
+[taoup]: http://www.catb.org/esr/writings/taoup/html/
