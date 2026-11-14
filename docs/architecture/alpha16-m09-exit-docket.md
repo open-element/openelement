@@ -34,6 +34,11 @@ them; each row names what it changed in this file.
 | D-③ | §13.5 P5 inventory: track as-is, complete-then-sign, or narrow the claim? | **Complete, in two steps.** Track the inventory now as a progress table with `sign-off: none`; take the §13.5 owner sign-off only when the count of production-equivalent replacements is no longer zero and the final-SHA matrix is filled. The claim is **not** narrowed. | B4 stays open, but its first half (a tracked inventory) becomes deliverable without pretending to be P5 evidence. |
 | D-④ | Who performs the M09-2d review? | **The owner, as a bounded self-review** of the two M09-2d slices. | B3 becomes closable by the owner, with the missing independent leg recorded instead of erased. |
 
+These four decisions are recorded here as the first written carrier of the
+owner's 2026-11-14 direction. No earlier record is cited because none exists:
+the docket is where the ruling is written down. They settle scope and method
+only and supply no evidence.
+
 ### What D-① resolves, exactly
 
 `M09-3` and `M09-4` were never plan labels: `alpha16-18-execution-plan.md`:58
@@ -90,8 +95,8 @@ one.
 
 ## 3. What is delivered
 
-Six merged PRs, keyed to the squash SHA each landed as (`alpha16-18-progress.md`
-§4.7 holds the same list with its later readings):
+Nine merged PRs (seven rows), keyed to the squash SHA each landed as
+(`alpha16-18-progress.md` §4.7 holds the same list with its later readings):
 
 | PR | Squash SHA | Slice |
 | --- | --- | --- |
@@ -123,8 +128,10 @@ the two M09-2d slices and nothing else, and it establishes no precedent that a
 later slice may be self-reviewed; a later self-review needs its own dated entry
 naming what independence would have added. D-④ is also **not** signature ④
 below: D-④ is the technical review, while signature ④ is the merge approval
-`CONTRIBUTING.md`:197 requires. A self-review does not discharge a maintainer
-approval, and vice versa.
+`CONTRIBUTING.md`:197 requires. This is a dated (2026-11-14) waiver of the
+independent-review leg, not a substitute for it: the independent review remains
+owed and is recorded above as an accepted risk, and the waiver discharges no
+maintainer approval.
 
 ## 5. NOT claimed
 
