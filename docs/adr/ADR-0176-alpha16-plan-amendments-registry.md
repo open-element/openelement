@@ -5,6 +5,7 @@
 - Owner authorization: 2026-11-14 session ruling — all recommendations accepted, with
   four binding constraints (no alias in the production path, single source of truth,
   no JSR/Deno, full compliance with `docs/architecture/design-principles.md` P1–P8).
+  This ADR is the first written carrier of that ruling.
 - Related: ADR-0173, ADR-0174, ADR-0175, ADR-0137, ADR-0177
 
 ## Context
@@ -53,15 +54,18 @@ source of truth (`design-principles.md`:174-180).
 
 `docs/architecture/alpha16-18-progress.md`:454-456 requires the slice PR that
 changes a milestone to update its row in the same change and says "Do not batch
-status updates into a later docs PR". Six merged M09 slice PRs did not carry that
-row: #1782 `3d4992859`, #1785 `d0ea3824b`, #1787 `089ace0a8`, #1788 `7581fbf60`,
-#1789 `f69dde8bf`, #1790 `fa6e5232d`. The deviation is named here, with the
-principles it trades against: **P6** (one writer for one status fact) and **P8**
-(a seam has exactly one named owner). It is registered by the owner ruling above
-and is not waived: the correction is recorded as later readings in
-`alpha16-18-progress.md` §4.7, in the amend-never-rewrite form of §4.2/§4.3,
-without editing §3 rows or batch-rewriting history. `design-principles.md`:16-19
-makes an unnamed deviation a defect to be reverted; this section is the naming.
+status updates into a later docs PR". Nine merged M09 slice PRs did not carry
+that row: #1768 `735749b1c`, #1772 `873435ae0`, #1778 `8ae4646d8`, #1782
+`3d4992859`, #1785 `d0ea3824b`, #1787 `089ace0a8`, #1788 `7581fbf60`, #1789
+`f69dde8bf`, #1790 `fa6e5232d`. The first three were batched into the §3 M09
+row after the fact by #1780 (squash `48e81b9ca`, a docs PR), while the later
+readings for the remaining six are in `alpha16-18-progress.md` §4.7. The
+deviation is named here, with the principles it trades against: **P6** (one
+writer for one status fact) and **P8** (a seam has exactly one named owner). It
+is registered by the owner ruling above and is not waived: the correction is
+recorded in the amend-never-rewrite form of §4.2/§4.3, without further editing
+§3 rows or batch-rewriting history. `design-principles.md`:16-19 makes an
+unnamed deviation a defect to be reverted; this section is the naming.
 
 No other deviation is registered here. In particular, the three retained
 capabilities of §14.2 are **not** waived and no governance exception is granted

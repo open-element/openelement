@@ -4,6 +4,7 @@
 - Date: 2026-11-14
 - Owner authorization: 2026-11-14 session ruling (all recommendations accepted;
   no alias, single source of truth, no JSR/Deno, full P1–P8 compliance).
+  This ADR is the first written carrier of that ruling.
 - Related: ADR-0137, ADR-0155, ADR-0166, ADR-0174, ADR-0176
 
 ## Context

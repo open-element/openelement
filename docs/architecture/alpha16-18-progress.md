@@ -421,11 +421,13 @@ as §4.2/§4.3.
 
 ### 4.7 M09 landing reconciliation (2026-11-14; later readings, not a status rewrite)
 
-This section follows the amend-never-rewrite form of §4.2/§4.3. It adds **later
-readings** for six merged M09 slice PRs whose change sets did not carry the §3
-row update required by §7 rule 1 (`:454-456`, "Do not batch status updates into
-a later docs PR"). The deviations are named, with the principles they trade
-against (P6 one writer, P8 one named owner), in
+This section follows the amend-never-rewrite form of §4.2/§4.3. Nine merged M09
+slice PRs did not carry the §3 row update required by §7 rule 1 (`:454-456`,
+"Do not batch status updates into a later docs PR"); the first three (#1768,
+#1772, #1778) were batched into the row after the fact by #1780, a docs PR, and
+this section adds **later readings** for the six not already enumerated in §3.
+The deviations are named, with the principles they trade against (P6 one
+writer, P8 one named owner), in
 [ADR-0176](../adr/ADR-0176-alpha16-plan-amendments-registry.md) under the
 owner ruling of 2026-11-14 — this is a comply-or-explain record, not a waiver.
 
