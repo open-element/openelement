@@ -55,6 +55,11 @@ import { CREATE_BIN } from './npm-manifest.ts';
 /** Repository root, the default cwd for reading a release line out of git. */
 const repoRoot = resolve(import.meta.dirname!, '../..');
 
+/** Bare version from a CLI/env input; a leading `v` is the tag spelling, not part of the version. */
+function normalizeVersion(version: string): string {
+  return version.startsWith('v') ? version.slice(1) : version;
+}
+
 // ---------------------------------------------------------------------------
 // Release-gate verdict contract (#1216, A10.8)
 //
@@ -191,7 +196,9 @@ export function parseQualificationOptions(
   return {
     mode,
     reportPath: read('--report') ?? 'published-consumer-report.json',
-    version: read('--version') || environment.OPEN_ELEMENT_PUBLISHED_VERSION || PACKAGE_VERSION,
+    version: normalizeVersion(
+      read('--version') || environment.OPEN_ELEMENT_PUBLISHED_VERSION || PACKAGE_VERSION,
+    ),
   };
 }
 
@@ -619,7 +626,7 @@ const RELEASE_LINE_TEMPLATE = 'packages/create/templates/package.json.tmpl';
  * to compare and no reason to keep a second candidate alive for them.
  */
 function releaseLineTag(version: string): string {
-  return `create-v${version}`;
+  return `create-v${normalizeVersion(version)}`;
 }
 
 /**
@@ -809,7 +816,7 @@ export function parseConsumerSmokeOptions(
     versionIndex !== -1 && versionIndex + 1 < args.length ? args[versionIndex + 1] : null;
   // An empty --version (e.g. an unset workflow input) falls back to the
   // workspace version instead of counting as an explicit npm version.
-  const version = versionArg || packageVersion;
+  const version = normalizeVersion(versionArg || packageVersion);
   const versionProvided = versionArg !== null && versionArg !== '';
   return {
     local,

@@ -98,6 +98,16 @@ test('consumer-smoke options: an explicit version enables CDN and Nitro probes u
   });
 });
 
+test('consumer-smoke options: a leading v is the tag spelling, not the version', () => {
+  expect(parseConsumerSmokeOptions(['--smoke', '--version', 'v1.0.0-alpha.1'], '0.0.0')).toEqual({
+    local: false,
+    version: '1.0.0-alpha.1',
+    versionProvided: true,
+    runJsDelivr: true,
+    runNitro: true,
+  });
+});
+
 test('consumer-smoke options: an empty --version falls back to the workspace version', () => {
   // Unset workflow inputs arrive as an empty string and must not count as an
   // explicit npm version.
@@ -554,6 +564,10 @@ test('release line is read from the release tag, not the working tree', async ()
 
   const template = 'packages/create/templates/package.json.tmpl';
   expect(await releaseLineVitePin('0.0.1', repo)).toEqual({
+    pin: '8.0.16',
+    source: `create-v0.0.1:${template}`,
+  });
+  expect(await releaseLineVitePin('v0.0.1', repo)).toEqual({
     pin: '8.0.16',
     source: `create-v0.0.1:${template}`,
   });
