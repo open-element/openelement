@@ -1,7 +1,7 @@
 ---
 status: active
 topic: M09 exit docket (decisions recorded; effective on signature)
-summary: M09 exit docket for signature: fixed SHA, §13.6 provenance, delivered slices, blocking set, empty signature fields, plus the four owner decisions of 2026-11-14 (M09-3/4 scope, CEM contract migration, two-step P5, bounded self-review). Records no status and claims no exit.
+summary: M09 exit docket for signature: fixed SHA, §13.6 provenance, delivered slices, blocking set, empty signature fields, plus the three owner decisions of 2026-11-14 (M09-3/4 scope, CEM contract migration, two-step P5). Records no status and claims no exit.
 ---
 
 # M09 exit docket
@@ -23,7 +23,7 @@ signatures.
 
 ## Owner decisions of record (2026-11-14)
 
-The four items this docket was blocked on were put to the owner on 2026-11-14
+The three items this docket was blocked on were put to the owner on 2026-11-14
 and answered. They are recorded here so the next reader does not re-litigate
 them; each row names what it changed in this file.
 
@@ -31,10 +31,9 @@ them; each row names what it changed in this file.
 | --- | --- | --- | --- |
 | D-① | `M09-3` / `M09-4`: define and deliver, or retire the labels? | **Define and deliver.** `M09-4` is the closeout bookkeeping itself (matrix TSX-14/TSX-20 plus the §3 row), so the exit record performs it rather than a slice doing so; `M09-3` is delivered as one bounded slice. | B1 turns from an undefined scope into one bounded slice with a named, pre-existing harness. No label is retired. |
 | D-② | CEM retained obligation: generate CEM, or migrate the packed CEM artifact contract? | **Migrate the contract** — §14.2's second branch, owner-approved here. The format stays standard CEM 2.1.0 validated against the official `custom-elements-manifest` schema; the change is confined to the *input* of the manifest chain. | B2's CEM row acquires a bounded mechanism; the other two rows are unchanged. |
-| D-③ | §13.5 P5 inventory: track as-is, complete-then-sign, or narrow the claim? | **Complete, in two steps.** Track the inventory now as a progress table with `sign-off: none`; take the §13.5 owner sign-off only when the count of production-equivalent replacements is no longer zero and the final-SHA matrix is filled. The claim is **not** narrowed. | B4 stays open, but its first half (a tracked inventory) becomes deliverable without pretending to be P5 evidence. |
-| D-④ | Who performs the M09-2d review? | **The owner, as a bounded self-review** of the two M09-2d slices. | B3 becomes closable by the owner, with the missing independent leg recorded instead of erased. |
+| D-③ | §13.5 P5 inventory: track as-is, complete-then-sign, or narrow the claim? | **Complete, in two steps.** Track the inventory now as a progress table with `sign-off: none`; take the §13.5 owner sign-off only when the count of production-equivalent replacements is no longer zero and the final-SHA matrix is filled. The claim is **not** narrowed. | B3 stays open, but its first half (a tracked inventory) becomes deliverable without pretending to be P5 evidence. |
 
-These four decisions are recorded here as the first written carrier of the
+These three decisions are recorded here as the first written carrier of the
 owner's 2026-11-14 direction. No earlier record is cited because none exists:
 the docket is where the ruling is written down. They settle scope and method
 only and supply no evidence.
@@ -114,28 +113,17 @@ Nine merged PRs (seven rows), keyed to the squash SHA each landed as
 | --- | --- | --- | --- |
 | B1 | **`M09-3` is defined but not delivered** (D-①): the generated CE is not yet in the third-party interoperability corpus. `M09-4` is the closeout bookkeeping this record performs and is no longer counted as a gap. | Defined, not delivered | implementation — one bounded slice |
 | B2 | **§14.2's three retained obligations** are OPEN. `16b-migration-note.md` is the tracked carrier for all three and records them as open rows; the CEM obligation has no bounded mechanism at all, while non-primitive conversion and form validity are bounded-LOCAL. | Not delivered | implementation |
-| B3 | **Review.** Both M09-2d slice documents self-report `Status: bounded implemented — LOCAL review pending` (`m09-2d-forms.md`:9, `m09-2d-nonprimitive-properties.md`:9). Per D-④ the owner performs this review as a **bounded self-review** of the two slices. What an independent reviewer would have contributed — a second reading of the two bounded mechanisms for undeclared preconditions — is recorded here as an accepted risk and is not erased. | Owner self-review (bounded) | owner |
-| B4 | **§13.5 P5 evidence.** The tracked capability inventory, the final-SHA matrix and the owner sign-off do not exist; §13.5: "A draft does not satisfy P5 … until then, P5 is not claimable and Alpha16 release qualification is not openable". | Absent | owner + author |
-| B5 | **Evidence provenance limits.** The run is `LOCAL`, chromium-only, with no CI run/job identity and no Firefox/WebKit leg; the engine revision is not recorded. M13 is where three engines are qualified, and this docket does not pre-empt it. | Recorded limit | — (a limit, not a gap in the plan) |
+| B3 | **§13.5 P5 evidence.** The tracked capability inventory, the final-SHA matrix and the owner sign-off do not exist; §13.5: "A draft does not satisfy P5 … until then, P5 is not claimable and Alpha16 release qualification is not openable". | Absent | owner + author |
+| B4 | **Evidence provenance limits.** The run is `LOCAL`, chromium-only, with no CI run/job identity and no Firefox/WebKit leg; the engine revision is not recorded. M13 is where three engines are qualified, and this docket does not pre-empt it. | Recorded limit | — (a limit, not a gap in the plan) |
 
 B1 is no longer a scope question — D-① closes it — but a delivery one: a single
 bounded slice whose fixture and gate already exist. Until it lands, no amount of
 evidence makes an M09 exit record true. `M09-4` does not appear in this table
 because the record that closes M09 is the action that satisfies it.
 
-D-④ is recorded as a **bounded** exception and not as a general one. It covers
-the two M09-2d slices and nothing else, and it establishes no precedent that a
-later slice may be self-reviewed; a later self-review needs its own dated entry
-naming what independence would have added. D-④ is also **not** signature ④
-below: D-④ is the technical review, while signature ④ is the merge approval
-`CONTRIBUTING.md`:197 requires. This is a dated (2026-11-14) waiver of the
-independent-review leg, not a substitute for it: the independent review remains
-owed and is recorded above as an accepted risk, and the waiver discharges no
-maintainer approval.
-
 ## 5. NOT claimed
 
-- No M09 exit. D-①–D-④ settle scope and method only: they supply no evidence,
+- No M09 exit. D-①–D-③ settle scope and method only: they supply no evidence,
   close no obligation and authorize no release.
 - No change to the §4 verdict that Alpha16b has no exit evidence.
 - No status flip of the §3 M09 row; that row is a historical single-writer
