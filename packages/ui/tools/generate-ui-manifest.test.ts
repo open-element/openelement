@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
@@ -104,18 +106,37 @@ test('layer/hydrate policies fail loud on unknown component classes', () => {
   expect(hydrateFromClass('OpenInput')).toEqual('load');
 });
 
+/**
+ * Tag names as declared in the component sources, read as TEXT rather than
+ * through the generator's AST reader. Two different readers over one fact are
+ * the guard: the manifest can only stay correct while both agree, so a new
+ * component cannot land in the tree and be absent from the manifest, and a
+ * renamed tag cannot pass with a stale manifest. A hand-written list of the
+ * six known tags proves neither (it only proves the six are still there).
+ */
+function tagsDeclaredInSource(): string[] {
+  const sourceRoot = join(import.meta.dirname!, '..', 'src');
+  return readdirSync(sourceRoot, { withFileTypes: true })
+    .filter(
+      (entry) => entry.isFile() && entry.name.startsWith('open-') && entry.name.endsWith('.tsx'),
+    )
+    .map((entry) => {
+      const declaration = /@element\(\s*'([^']+)'/.exec(
+        readFileSync(join(sourceRoot, entry.name), 'utf8'),
+      );
+      if (declaration === null) throw new Error(`${entry.name}: no @element('<tag>') declaration`);
+      return declaration[1]!;
+    })
+    .sort();
+}
+
 test('generated UI manifest covers every shipped component', () => {
   const manifest = buildManifest();
   expect(manifest.packageName).toEqual('@openelement/ui');
   expect(manifest.$comment).toContain('GENERATED FILE');
-  expect(manifest.declarations.map((declaration) => declaration.tagName)).toEqual([
-    'open-button',
-    'open-input',
-    'open-theme-toggle',
-    'open-code-block',
-    'open-dialog',
-    'open-dropdown',
-  ]);
+  expect(manifest.declarations.map((declaration) => declaration.tagName).sort()).toEqual(
+    tagsDeclaredInSource(),
+  );
   for (const declaration of manifest.declarations) {
     expect(declaration.className, `${declaration.tagName} missing className`).toBeTruthy();
     expect(declaration.openElement?.ssr).toEqual(true);
