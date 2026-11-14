@@ -66,9 +66,9 @@ import {
   convertToAttribute,
   type PropertyConversionRecord,
 } from '../../../element/src/internal/core/property-conversion.ts';
+import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/generated-element.tsx';
-const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 
 /**
  * The old Part Program execution backend. The shell may share the neutral
@@ -94,21 +94,6 @@ const OLD_BACKEND_MODULE_SUFFIXES = [
   '/internal/compiled/runtime/blocks-seam.ts',
   '/internal/compiled/runtime/hydrate-seam.ts',
 ] as const;
-
-const CLASSIFIER = {
-  classifySymbol: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal' || importedName === 'computed') return 'factory' as const;
-    return 'value' as const;
-  },
-  classifyValue: () => undefined,
-  classifyCall: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal') return { call: 'signal' as const };
-    if (importedName === 'computed') return { call: 'computed' as const };
-    return undefined;
-  },
-};
 
 /**
  * `Profile` is a claimable static-shape leaf with three primitive props: string,

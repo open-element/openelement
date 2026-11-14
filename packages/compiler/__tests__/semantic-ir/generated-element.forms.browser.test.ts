@@ -24,8 +24,8 @@ import {
   GENERATED_ELEMENT_SHELL_SPECIFIER,
   type GeneratedElementSite,
 } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
+import { REPO_ROOT } from './testlib/element-classifier.ts';
 
-const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 const FILE = '/proj/src/islands/form-card.tsx';
 const SITE: GeneratedElementSite = { tag: 'x-form-card' };
 

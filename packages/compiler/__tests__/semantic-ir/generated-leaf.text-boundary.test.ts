@@ -17,23 +17,9 @@ import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/gene
 import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
 import { LifetimeScope } from '../../../element/src/internal/compiled/lifetime-scope.ts';
 import { signal } from '../../../element/src/internal/signal/framework.ts';
+import { ELEMENT_CLASSIFIER as CLASSIFIER } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/text-boundary.tsx';
-
-const CLASSIFIER = {
-  classifySymbol: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal' || importedName === 'computed') return 'factory' as const;
-    return 'value' as const;
-  },
-  classifyValue: () => undefined,
-  classifyCall: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal') return { call: 'signal' as const };
-    if (importedName === 'computed') return { call: 'computed' as const };
-    return undefined;
-  },
-};
 
 const SOURCE = `import { signal } from '@openelement/element';
 function Adjacent(props) {

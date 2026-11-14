@@ -51,8 +51,8 @@ import {
   type GeneratedElementSite,
 } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
 import { generateElementModule } from '../../src/internal/compiler/semantic-ir/generated-element/emit.ts';
+import { REPO_ROOT } from './testlib/element-classifier.ts';
 
-const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 const FILE = '/proj/src/islands/event-ref-card.tsx';
 const FAILURE_FILE = '/proj/src/islands/failure-card.tsx';
 const SITE: GeneratedElementSite = { tag: 'event-ref-card' };

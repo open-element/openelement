@@ -21,25 +21,10 @@ import {
   GENERATED_LEAF_RUNTIME_SPECIFIER,
   generateLeafModule,
 } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
+import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/order.tsx';
-const REPO_ROOT = new URL('../../../..', import.meta.url).pathname;
 const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
-
-const CLASSIFIER = {
-  classifySymbol: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal' || importedName === 'computed') return 'factory' as const;
-    return 'value' as const;
-  },
-  classifyValue: () => undefined,
-  classifyCall: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal') return { call: 'signal' as const };
-    if (importedName === 'computed') return { call: 'computed' as const };
-    return undefined;
-  },
-};
 
 const SOURCE = `import { signal } from '@openelement/element';
 function Twice(props) {

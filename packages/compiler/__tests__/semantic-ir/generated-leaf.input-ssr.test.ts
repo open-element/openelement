@@ -29,23 +29,9 @@ import { compileFunctionModule } from '../../src/internal/compiler/semantic-core
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
 import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
 import { signal as nodeSignal } from '../../../element/src/internal/signal/framework.ts';
+import { ELEMENT_CLASSIFIER as CLASSIFIER } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/input-ssr.tsx';
-
-const CLASSIFIER = {
-  classifySymbol: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal' || importedName === 'computed') return 'factory' as const;
-    return 'value' as const;
-  },
-  classifyValue: () => undefined,
-  classifyCall: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal') return { call: 'signal' as const };
-    if (importedName === 'computed') return { call: 'computed' as const };
-    return undefined;
-  },
-};
 
 const SOURCE = `import { signal } from '@openelement/element';
 function StaticField(props) {

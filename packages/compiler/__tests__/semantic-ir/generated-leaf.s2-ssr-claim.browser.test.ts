@@ -42,24 +42,9 @@ import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/gene
 import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
 import { signal as nodeSignal } from '../../../element/src/internal/signal/framework.ts';
 import { LifetimeScope } from '../../../element/src/internal/compiled/lifetime-scope.ts';
+import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/m08-s2-acceptance.tsx';
-const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
-
-const CLASSIFIER = {
-  classifySymbol: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal' || importedName === 'computed') return 'factory' as const;
-    return 'value' as const;
-  },
-  classifyValue: () => undefined,
-  classifyCall: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal') return { call: 'signal' as const };
-    if (importedName === 'computed') return { call: 'computed' as const };
-    return undefined;
-  },
-};
 
 /**
  * The M06 authored S2 Board, with one qualification-only static focus carrier.

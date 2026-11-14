@@ -57,9 +57,9 @@ import {
   type CompiledDsdOptions,
 } from '../../../element/src/internal/compiled/dsd.ts';
 import { testProgram } from '../../../element/__tests__/compiled-runtime/test-program.ts';
+import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/generated-shadow.tsx';
-const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
 /**
@@ -95,20 +95,6 @@ const FORBIDDEN_MODULE_SUFFIXES = [
   '/internal/compiled/serializer/serialize-program.ts',
 ] as const;
 
-const CLASSIFIER = {
-  classifySymbol: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal' || importedName === 'computed') return 'factory' as const;
-    return 'value' as const;
-  },
-  classifyValue: () => undefined,
-  classifyCall: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal') return { call: 'signal' as const };
-    if (importedName === 'computed') return { call: 'computed' as const };
-    return undefined;
-  },
-};
 
 /**
  * `ShadowPanel` is a single dynamic root: native named slot + static input +
