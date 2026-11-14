@@ -98,9 +98,12 @@ export interface LocalIslandMeta {
    * M11 prerequisite — the compiler-owned generated-host identity resolved by
    * this scan from the source it already read (see
    * `generated-element-host-metadata.ts`). Build-only metadata that rides the
-   * existing scanned record; the public `IslandDecl` shape is unchanged and no
-   * consumer is wired to it yet. It is produced by the one scan the build and
-   * the dev island rescan share, so it cannot go stale without the descriptor.
+   * existing scanned record; the public `IslandDecl` shape is unchanged and the
+   * internal entry descriptor (`buildEntryDescriptor`) is its one consumer so
+   * far — it re-attaches the fact to the scanned local island declarations, and
+   * no renderer/registration consumer reads it yet. It is produced by the one
+   * scan the build and the dev island rescan share, so it cannot go stale
+   * without the descriptor.
    */
   generatedElementHost?: GeneratedElementHostIdentity;
   /**
@@ -998,7 +1001,9 @@ export async function scanIslands(islandsDir: string, relativeDir: string = ''):
  * `createGeneratedElementSiteResolver`, the ONE identity helper the transform
  * hosts use, so the scan's admission and tag cannot diverge from the
  * transform's. The identity is attached to the scanned record as
- * `generatedElementHost`; no consumer is wired to it in this slice.
+ * `generatedElementHost`; the internal entry descriptor (`buildEntryDescriptor`)
+ * re-attaches it to the scanned local island declarations (delivery aliases
+ * included), and no renderer/registration consumer reads it yet.
  *
  * `projectRoot` is the compiler identity anchor: the compile call receives
  * `stableModuleId(fullPath, projectRoot)` (the same anchoring

@@ -22,11 +22,12 @@ M10a. This is the first half of D-③ — a tracked inventory carrying
 - **No milestone/gate status.** No M09 exit, M10 progress, M11 start gate, gate/test/build/browser/packed record or release claim.
 - **No owner decision created or changed.** D-①/②/③ stand as docketed; D-② is the recorded input-migration method, D-③ the two-step tracking instruction. No new signature or scope selection is introduced.
 - **No status flip.** M10 stays "Not started", `16b-MN` rows stay OPEN, the docket blocking set is unchanged; facts landed by the baseline commit are recorded as facts only.
-- **No write outside this document and the generated architecture index.**
+- **No write outside this document, the existing generated-element seam row in the [seams registry](./seams.md), and the generated architecture index.**
 
-This working-tree addendum (§3.1) records two source facts — the compiler-owned
-host-export metadata and its first, build-scan-only consumer — and updates the
-existing generated-element seam row in the [seams registry](./seams.md) (P8); it
+This working-tree addendum (§3.1) records the source facts — the compiler-owned
+host-export metadata and its two build-time consumers (the island scan and the
+internal entry descriptor) — and updates the existing generated-element seam row
+in the [seams registry](./seams.md) (P8); it
 adds no front-matter change or generated-index write and flips no status or
 verdict.
 
@@ -34,7 +35,7 @@ verdict.
 
 Authorities: [execution plan](./alpha16-18-execution-plan.md) §13–§15, [M09 exit docket](./alpha16-m09-exit-docket.md), [16b-MN](./16b-migration-note.md), [M01 matrix](./m01-consumer-migration-matrix.md), [evidence baseline](./evidence-baseline.md), [compiler IR and ABI boundary](./compiler-ir-and-abi-boundary.md), [ADR-0174](../adr/ADR-0174-generated-code-runtime-and-compatibility.md). An external working draft informed this note; it is not authority and is not linked here. Every fact is re-derived at the baseline SHA.
 
-Provenance is **advisory**: read-only inspection at the cited commit (Appendix A) for the baseline facts, plus a source read of the entry-graph observer/checker added by this revision (§5), and in the §3.1 working-tree addendum a source read of the M11-prerequisite host-export metadata and its build-scan carrier plus LOCAL compiler and router test runs of their guards; no build/gate/browser/packed run; counts are source-shape counts, not a compiled graph; no machine-specific path is recorded. Not a §13.6 gate record.
+Provenance is **advisory**: read-only inspection at the cited commit (Appendix A) for the baseline facts, plus a source read of the entry-graph observer/checker added by this revision (§5), and in the §3.1 working-tree addendum a source read of the M11-prerequisite host-export metadata, its build-scan carrier and its entry-descriptor carrier plus LOCAL compiler and router test runs of their guards; no build/gate/browser/packed run; counts are source-shape counts, not a compiled graph; no machine-specific path is recorded. Not a §13.6 gate record.
 
 ## 2. Authoring lanes at the baseline
 
@@ -68,12 +69,13 @@ obligation. Every row is NOT production-equivalent; none is closed.
 | BUILD | Build/SSG | text readers: blocks scan `__partProgram` + `"blocks":[` (`island-blocks-scan.ts:117`), CSS/scope recovery parses `__partProgram` (`compiled-artifact-style-requests.ts:35-50,190-205`), class candidates read `__oeClassCandidates` (`compiled-artifact-class-candidates.ts:32`) | generated lane wired at the three build hosts; registration is constructor-based (`entry-client-codegen.ts:33-56,125-162`) | CSS recovery, blocks detection and route classification still read the old artifact. P3 NOT MET; M01 C12/C13 unchanged |
 | ROUTER | Page/route contract | `isElementPageClass` reads runtime `__partProgram` (`router/src/authoring.ts:445-448`); page tag from `__partProgram.tag` (`renderer-runtime.ts:141-155`); stream identity `{version,tag}` (`route-dispatch.ts:60-75`, `stream-runtime.ts:555-580`, `types.ts:36-56`); build-time `functionPage` fact (`route-scanner.ts:265-295,355-372`) | island registration accepts any constructor; build-time page facts exist for function pages | no build-time classification for class pages and no page-tag/stream facts for generated pages. M01 C07–C11 unchanged; P1/M11-3 not done |
 
-### 3.1 M11 prerequisite — compiler-owned host-export metadata (producer and build-scan carrier)
+### 3.1 M11 prerequisite — compiler-owned host-export metadata (producer, build-scan carrier and entry-descriptor carrier)
 
 Working-tree addendum, 2026-11-15: on top of `bc99cdee1` (which commits the
-SSR-metadata producer read here) plus the uncommitted build-scan-carrier lane
-(the tree also carries other lanes' edits; this addendum reads only the
-host-export metadata surface, its build-scan carrier and their guards). It is
+SSR-metadata producer read here) plus the uncommitted build-scan and
+entry-descriptor carrier lane (the tree also carries other lanes' edits; this
+addendum reads only the host-export metadata surface, its build-scan and
+entry-descriptor carriers and their guards). It is
 not a baseline-`e7aad2f1f` fact and not a §13.6 record.
 
 The generated-element emitter already owns the one decision that appends the DSD
@@ -108,7 +110,7 @@ re-inferred from the emitted text.
   refuses still returns no result at all. Whether an SSR-admitted shadow island
   may answer `null` is an owner policy decision and is not implemented here:
   `null` is metadata, never an admission verdict.
-- **One production consumer: the build-time island scan, and nothing at request time.**
+- **Two build-time consumers — the island scan and the internal entry descriptor — and nothing at request time.**
   `scanIslandMeta` (`packages/router/src/vite/internal/ssg/island-scanner.ts`)
   already reads every island source for its static sidecar facts; in the same
   pass it resolves each scanned `.tsx` island through
@@ -128,6 +130,18 @@ re-inferred from the emitted text.
   as its third argument (the Vite plugin's resolved root, the SSG build root, or
   the cwd fallback), so a carried refusal diagnostic stays project-relative
   instead of naming a machine path.
+  That carrier's one downstream consumer is the internal entry descriptor in the
+  same build stage: `buildEntryDescriptor`
+  (`packages/router/src/vite/internal/ssg/entry-descriptor.ts`) re-reads each
+  local island's `generatedElementHost` through the one typed accessor
+  `readGeneratedElementHost` and re-attaches it to the declaration it emits
+  (delivery aliases included), where the approved registration/renderer slice
+  will pair it with the class registration. The public
+  `IslandDecl`/`EntryDescriptor` protocol types are unchanged (the identity is
+  build-only runtime metadata on the declaration object), and the re-attachment
+  changes no generated-entry bytes — no generated host import, no registration
+  argument and no render invocation — and adds no policy, coded error or
+  admission status.
 - **Five distinct kinds, an admission-independent record.** The carrier is a
   discriminated union: `producer` (host export present, with the compiler's
   emitted name), `missing-producer` (a shadow root that was admitted but whose
@@ -155,14 +169,16 @@ re-inferred from the emitted text.
   reuses the source it already read) and no cache. The carrier adds no
   fail-closed admission, no new coded diagnostic or policy and no admission
   status change.
-- **No request-time consumer; M11 and P2 are not advanced.** The scan is the
-  field's only production consumer and it only records the identity. Nothing request-time
-  reads it: `renderEntry`/generated-entry codegen, the static host registration
-  in `entry-client-codegen.ts`, the registration seam and the SSR render path are
-  unchanged, `__ssrHost` still has no production caller, and the generated-host
-  fixture stays client-only. No entry wiring, SSR registration, host-attribute
-  normalization, packed or browser record is added. **M11 is not started and P2
-  remains NOT MET**; §7 is unchanged.
+- **No request-time consumer; M11 and P2 are not advanced.** The scan records the
+  identity and the internal entry descriptor re-attaches it; both sit in the
+  build stage. Nothing request-time reads it: `renderEntry`/generated-entry
+  codegen emits no generated host import, no registration argument and no render
+  invocation, the static host registration in `entry-client-codegen.ts`, the
+  registration seam and the SSR render path are unchanged, `__ssrHost` still has
+  no production caller, and the generated-host fixture stays client-only. No
+  entry wiring, SSR registration, host-attribute normalization, packed or
+  browser record is added. **M11 is not started and P2 remains NOT MET**; §7 is
+  unchanged.
 - **Guard (producer).** `packages/compiler/__tests__/semantic-ir/generated-element.ssr-host-export.test.ts`
   — 8 Node tests: the shadow producer's `ssrHostExport` is the named export its
   own emitted AST declares; `null` for a hostless emitter call, a light/absent
@@ -189,11 +205,25 @@ re-inferred from the emitted text.
   instead of being recorded as a refusal. LOCAL run on this dirty tree at this
   revision —
   `node_modules/.bin/vitest run --project router packages/router/__tests__/island-scanner-generated-host.test.ts`
-  → 12 passed; development feedback, not clean-SHA evidence. The existing
+  → 12 passed; development feedback, not clean-SHA evidence.
+- **Guard (entry-descriptor carrier).**
+  `packages/router/__tests__/entry-descriptor-generated-host.test.ts` — 7 Node
+  tests: `buildEntryDescriptor` re-attaches the scanner-resolved identity
+  through the one typed accessor `readGeneratedElementHost` for every local
+  island and every delivery alias; every identity kind is carried verbatim,
+  including `lane-declined` and `lane-refused`; an `ssr:false` island keeps the
+  identity while its admission plan stays client-only; generated-entry bytes
+  are unchanged by the carrier — no generated host import, no registration
+  argument and no render invocation; non-local and carrier-less declarations
+  expose no identity; an absent carrier reads as `undefined`. LOCAL run on this
+  dirty tree at this revision —
+  `node_modules/.bin/vitest run --project router packages/router/__tests__/entry-descriptor-generated-host.test.ts`
+  → 7 passed; development feedback, not clean-SHA evidence. The existing
   Generated Native Custom Element seam row in the [seams registry](./seams.md)
-  carries the producer contract, the build-scan carrier and both guards (P8); no
-  duplicate row is added, and the request-time host-build/render consumer guard
-  and registration remain owed by M11 and are not claimed here.
+  carries the producer contract, the build-scan and entry-descriptor carriers
+  and all three guards (P8); no duplicate row is added, and the request-time
+  host-build/render consumer guard and registration remain owed by M11 and are
+  not claimed here.
 
 ## 4. Replacement reachability
 

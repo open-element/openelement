@@ -39,6 +39,10 @@ import {
   validateIslandDeliveryExportNames,
 } from './delivery.ts';
 import { compilerBehaviorDeclarations } from './client-admission.ts';
+import {
+  type GeneratedElementHostCarrier,
+  readGeneratedElementHost,
+} from './generated-element-host-metadata.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
 import { buildError, DescriptorErrorCode } from '../../../internal/error-codes.ts';
 
@@ -495,41 +499,58 @@ export function buildEntryDescriptor(
   // #460: islandsDir comes from user config and islandFiles from scanIslands;
   // both must be POSIX-normalized before they become module specifiers.
   const islandsSpecifierDir = normalizeSeparators(islandsDir);
-  const localIslands: IslandDecl[] = islandTagNames.map((tagName, i) => {
-    const meta = islandMeta[tagName];
-    const deliveryMeta = (meta ?? {}) as Partial<IslandDecl> &
-      IslandDeliveryMeta & {
-        hydrate?: IslandDeliveryStrategy;
-      };
-    const hydrate = resolveIslandHydrate(
-      deliveryMeta.hydrate as IslandDeliveryStrategy | undefined,
-      options.upgradeStrategy,
-    );
-    const hasDeliveryTags = deliveryMeta.tags !== undefined || deliveryMeta.tagNames !== undefined;
-    const deliveryTags = hasDeliveryTags
-      ? resolveIslandDeliveryTags(tagName, deliveryMeta.tags, deliveryMeta.tagNames, tagName)
-      : undefined;
-    const exportNames = validateIslandDeliveryExportNames(
-      deliveryMeta.exportNames,
-      deliveryTags ?? [tagName],
-      tagName,
-    );
-    return {
-      tagName,
-      modulePath: islandFiles[i]
-        ? `/${islandsSpecifierDir}/${normalizeSeparators(islandFiles[i])}`
-        : `/${islandsSpecifierDir}/${tagName}.ts`,
-      source: 'local',
-      ...resolveIslandSsrDsd(deliveryMeta),
-      hydrate,
-      ...(hydrate === 'media' && deliveryMeta.media !== undefined
-        ? { media: deliveryMeta.media }
-        : {}),
-      ...(deliveryTags === undefined ? {} : { tags: deliveryTags }),
-      ...(exportNames === undefined ? {} : { exportNames }),
-      reason: meta?.reason,
-    } as IslandDecl;
-  });
+  // M11 prerequisite consumer: the island scan resolves every local island's
+  // compiler-owned generated-host identity onto `islandMeta`
+  // (`LocalIslandMeta.generatedElementHost`); this descriptor is the existing
+  // internal carrier, so the scan fact is re-attached here through the one
+  // typed accessor instead of stopping at the scan. The public `IslandDecl`
+  // protocol type stays unchanged: the identity rides the declaration object
+  // as build-only metadata, and `expandIslandDeliveryDecl`'s spread below keeps
+  // it on every delivery alias. Nothing consumes it yet — no admission verdict,
+  // no registration and no entry codegen — so generated-entry bytes are
+  // unchanged.
+  const localIslands: Array<IslandDecl & GeneratedElementHostCarrier> = islandTagNames.map(
+    (tagName, i) => {
+      const meta = islandMeta[tagName];
+      const deliveryMeta = (meta ?? {}) as Partial<IslandDecl> &
+        IslandDeliveryMeta & {
+          hydrate?: IslandDeliveryStrategy;
+        };
+      const hydrate = resolveIslandHydrate(
+        deliveryMeta.hydrate as IslandDeliveryStrategy | undefined,
+        options.upgradeStrategy,
+      );
+      const hasDeliveryTags =
+        deliveryMeta.tags !== undefined || deliveryMeta.tagNames !== undefined;
+      const deliveryTags = hasDeliveryTags
+        ? resolveIslandDeliveryTags(tagName, deliveryMeta.tags, deliveryMeta.tagNames, tagName)
+        : undefined;
+      const exportNames = validateIslandDeliveryExportNames(
+        deliveryMeta.exportNames,
+        deliveryTags ?? [tagName],
+        tagName,
+      );
+      const localIsland = {
+        tagName,
+        modulePath: islandFiles[i]
+          ? `/${islandsSpecifierDir}/${normalizeSeparators(islandFiles[i])}`
+          : `/${islandsSpecifierDir}/${tagName}.ts`,
+        source: 'local',
+        ...resolveIslandSsrDsd(deliveryMeta),
+        hydrate,
+        ...(hydrate === 'media' && deliveryMeta.media !== undefined
+          ? { media: deliveryMeta.media }
+          : {}),
+        ...(deliveryTags === undefined ? {} : { tags: deliveryTags }),
+        ...(exportNames === undefined ? {} : { exportNames }),
+        reason: meta?.reason,
+      } as IslandDecl;
+      const generatedElementHost = readGeneratedElementHost(meta);
+      return generatedElementHost === undefined
+        ? localIsland
+        : { ...localIsland, generatedElementHost };
+    },
+  );
 
   const packageIslandDecls: IslandDecl[] = buildPackageIslandDecls(
     packageManifests,

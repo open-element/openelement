@@ -29,11 +29,15 @@
  *   are carried, the scan does not throw and the refusal is never presented as
  *   a valid identity).
  *
- * No consumer is wired here: this slice adds no fail-closed admission verdict,
- * no registration and no entry codegen. The carrier is build metadata only and
- * the `IslandDecl`/`EntryDescriptor` protocol types are deliberately unchanged
- * (no public surface, no interface snapshot). Consumers read it through
- * {@linkcode readGeneratedElementHost} rather than a local cast.
+ * The one consumer is the internal entry descriptor: `buildEntryDescriptor`
+ * (entry-descriptor.ts) re-reads the scan fact through
+ * {@linkcode readGeneratedElementHost} and re-attaches it to every local island
+ * declaration, delivery aliases included, where the approved registration /
+ * renderer slice will pair it with the class registration. That consumer emits
+ * no fail-closed admission verdict, no registration call and no entry codegen,
+ * so generated-entry bytes are unchanged. The carrier is build metadata only
+ * and the `IslandDecl`/`EntryDescriptor` protocol types are deliberately
+ * unchanged (no public surface, no interface snapshot).
  */
 
 import {
