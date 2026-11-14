@@ -30,8 +30,8 @@ recorded here and no gate was run.** Every row below is OPEN.
 | Capability | Corrected record | Carried by | Current state | Evidence still owed |
 | --- | --- | --- | --- | --- |
 | `custom-elements.json` (CEM) generation for generated elements | retained obligation (was: §13.3 exception) | M09 platform surface; M10 P3/P5; M12 packed qualification | **OPEN — no bounded mechanism exists.** `m09-2b-primitive-properties.md`:348-352 "No CEM output"; `packages/ui/tools/generate-cem.ts` class-only; no generated-element CEM PR in history. | generated CEM structure test; packed `@openelement/ui` metadata read back by the CEM scanner; `gate:release` and `gate:packed` green at the same SHA. The alternative owner-approved migration of the packed CEM artifact contract is also unrecorded. |
-| array/object/`trustedHtml` property conversion | retained obligation (was: §13.3 exception) | M09 property/attribute conversion; M10 P5 | **OPEN — bounded mechanism only.** #1789 `f69dde8bf` lands property-only channels; the slice document self-describes "bounded implemented — LOCAL review pending", no server→client seed, "not the M09 exit". | property round-trip tests for the in-tree consumers (`notes-live`, `open-article-view`, `open-reading-shell`); packed ui-app/site build; the TSX rows that carry those components. |
-| form validity policy (`setValidity` rules) | retained obligation (was: §13.3 exception) | M09 forms; M10 P5; `16b-MN` | **OPEN — bounded mechanism only.** #1790 `fa6e5232d` lands `formAssociated`, value / required / disabled and `required → valueMissing`; the slice document declares an explicit "Host access gap" non-claim, "not full OpenInput migration parity", Chromium LOCAL only. | the existing form e2e contract re-run on the generated CE; form value / reset / restore tests on the generated path. Full constraint mirroring (type/email, minlength, …) may stay a **deferred sub-obligation listed in this row**, never an exception (§14.2:510). |
+| array/object/`trustedHtml` property conversion | retained obligation (was: §13.3 exception) | M09 property/attribute conversion; M10 P5 | **OPEN — bounded mechanism only.** #1789 `f69dde8bf` lands property-only channels; the slice document self-describes "bounded implemented — LOCAL review pending", no server→client seed, "not the M09 exit". Its Chromium vertical and Node contract pass at `2c645de28` (see the Verification appendix); the independent review and the consumer round-trip tests remain outstanding. | property round-trip tests for the in-tree consumers (`notes-live`, `open-article-view`, `open-reading-shell`); packed ui-app/site build; the TSX rows that carry those components. |
+| form validity policy (`setValidity` rules) | retained obligation (was: §13.3 exception) | M09 forms; M10 P5; `16b-MN` | **OPEN — bounded mechanism only.** #1790 `fa6e5232d` lands `formAssociated`, value / required / disabled and `required → valueMissing`; the slice document declares an explicit "Host access gap" non-claim, "not full OpenInput migration parity", Chromium LOCAL only. Its Chromium vertical and Node contract pass at `2c645de28` (see the Verification appendix); the independent review remains pending. | the existing form e2e contract re-run on the generated CE; form value / reset / restore tests on the generated path. Full constraint mirroring (type/email, minlength, …) may stay a **deferred sub-obligation listed in this row**, never an exception (§14.2:510). |
 | Two `/internal/*` artifact-resolution export subpaths | named deviation, no exemption | ADR-0137 §1 remains in force; ADR-0177 owns the written retirement condition | **OPEN — deviation registered 2026-11-14**; `packages/element/package.json`:16-17 unchanged. | `graph:check` zero importers outside `packages/element`; `esm:boundary-check` no external resolution; snapshot zero `publicSymbols`; `gate:release` + `gate:packed` green at one SHA. Byte attribution in the full reachable page closure also remains owed (ADR-0174:42-50, :12-13). |
 
 The five `16b-*` slices have no implementation slices yet. `16b-LC` (lifecycle),
@@ -66,6 +66,28 @@ artifact (module graph, type checker, Playwright report, packed tarball,
 procedural "needs its own PR" (`:440`), or a reference to a removed document
 (execution-plan §2:111-116, §12a:351 — see §15.1 of the execution plan for the
 later reading).
+
+## Verification appendix (LOCAL, advisory — not exit evidence)
+
+A read-only check of the two bounded M09-2d slices on the Gate A commit, recorded
+in the five-field form of `docs/architecture/evidence-baseline.md` §Evidence
+authority. It is **not** a milestone exit, a gate record, a browser qualification
+(M13), a P5 evidence item or a release claim.
+
+| Field | Record |
+| --- | --- |
+| commit | `2c645de28aace24fbcc0d38685bad3024e433a18` |
+| status | `git status --porcelain` empty (clean worktree) at that commit |
+| command | `node_modules/.bin/vitest run --project compiler packages/compiler/__tests__/semantic-ir/generated-element.nonprimitive-properties.browser.test.ts packages/compiler/__tests__/semantic-ir/generated-element.forms.browser.test.ts packages/compiler/__tests__/semantic-ir/generated-element.forms.test.ts packages/compiler/__tests__/semantic-ir/generated-element.nonprimitive-properties.test.ts` (Node v24.18.0) |
+| result | 4 files / 53 tests passed — browser 9/9 (non-primitive), 10/10 (forms); Node 28/28 (non-primitive), 6/6 (forms); no failures, no skips |
+| provenance | `LOCAL .artifacts/alpha16-restart-20261114/worktree`, chromium only; no CI run/job identity, no Firefox/WebKit, and the engine revision was not recorded — one reason this stays advisory |
+
+This resolves one factual question carried into the discussion: the #1789
+Chromium vertical **is green at the current tip**. It does not resolve the
+"independent review pending" notes in #1789 / #1790, the CEM retained
+obligation, the in-tree consumer round-trip tests, the full reachable page
+closure byte attribution (ADR-0174:12-13), or any M09 exit. §13.5 stays in
+force: P5 is not claimable and Alpha16 release qualification is not openable.
 
 ## What this note does not do
 
