@@ -19,7 +19,9 @@ M09-2 platform surface, and **not** an M13 browser-matrix or qualification
 claim. Evidence is LOCAL: one Chromium engine, 21 focused tests, the two
 package typechecks plus a direct typecheck of the new files, and the source
 gates. The M08 consolidation change owns the single-writer ledger/matrix update
-for the adjacent text and condition slices.
+for the adjacent text and condition slices. A dated 2026-11-15 working-tree
+amendment below records the internal LC-0 descriptor-fixture retention seam; it
+changes neither this record's status nor the landing counts in this section.
 
 ## Landing scope
 
@@ -196,11 +198,15 @@ This shell is a bounded M09-0 slice. It does **not** implement or claim:
 - **Author lifecycle hooks**: there is no author `onConnect` / `onDispose`,
   setup-once count, or focus/selection/scroll restoration across the
   disconnect window.
-- **The full §4.1d reconnect-resource contract**: only the narrow retained-DOM
-  + fresh root/projection owner + retained bindings/`propsChanged` path is
-  proven. `createBindings()` is allocation-only because the shell has no
-  element-lifetime cleanup owner; `propsChanged` is element-lifetime and is not
-  disposed.
+- **The full §4.1d reconnect-resource contract**: the landed M09-0 slice proved
+  only the narrow retained-DOM + fresh root/projection owner + retained
+  bindings/`propsChanged` path; in that slice `createBindings()` was
+  allocation-only because the shell had no element-lifetime cleanup owner, and
+  `propsChanged` is element-lifetime and is not disposed. The 2026-11-15
+  working-tree amendment below adds the internal `createInstance` retention
+  factory and the `instance` → `connection` → `projection` owner tree, but it
+  is descriptor-fixture only: no generated module emits it, generated root
+  setup is OWED, and nested hostless-child setup is OWED and unmeasured.
 - **SSR classification**: empty server output is indistinguishable from "no
   server DOM", so the first connect mounts an empty region; only a reconnect
   claims.
@@ -224,7 +230,11 @@ The new seam row in [`seams.md`](./seams.md) registers the generated leaf
 module ↔ shell boundary: the compiler-private descriptor and generated recipe
 are written by the compiler and read by the shell; the shell owns mount/claim,
 reflection, retained-DOM ownership and disposal. Its guard is the 21-test file
-above, plus the `facade-host.ts` re-export identity compatibility test.
+above, plus the `facade-host.ts` re-export identity compatibility test. The
+2026-11-15 amendment below updates that row's retention, descriptor-ABI and
+failure-mode clauses to the working-tree LC-0 seam; the same focused test file
+stays the guard (21 landed rows extended by the four LC-0 rows, and the row
+records the descriptor-fixture limit).
 
 `docs-index:write` regenerated the current architecture view in
 [`README.md`](./README.md) from this document's front matter in the same
@@ -276,6 +286,72 @@ outside the published package.
 
 Alpha15 verification at this change: `pack:dry-run` and `pack-surface:check`
 pass with the exclusion, and `docs-index:check` passes.
+
+## 2026-11-15 amendment — LC-0 descriptor-fixture retention seam (working tree)
+
+Status: **working-tree amendment — uncommitted, not a status flip, not the M09
+exit, not clean-SHA evidence.** Date: 2026-11-15 (Asia/Shanghai). Base:
+`feat/alpha16-integration` @ `acd6feaa3`, with an uncommitted change to
+[`shell.ts`](../../packages/element/src/internal/compiled/generated-element/shell.ts)
+and to the focused test file. The 2026-11-13 landing record above — its `21`
+counts, grouping table and verification rows — stays the dated record; this
+section only records the current seam.
+
+The shell now owns a three-tier owner tree (shell internals;
+`lifetime-scope.ts` and `recipe.ts` are unchanged):
+
+| Owner | Lifetime | Owns |
+| --- | --- | --- |
+| `instance` | element/island lifetime: created on the first connect, retained across a disconnect, destroyed once by explicit teardown | the retained setup record and the setup-owned resources whose cleanups register on the scope |
+| `connection` | one per successful connect (`instance.child()`), plain-disposed on disconnect | connection-scoped resources; parent of the projection; owns no DOM |
+| `projection` | the existing per-mount/claim `insertRecipe`/`claimRecipe` child of `connection` | the owned top-level node range (unchanged) |
+
+Internal descriptor ABI (compiler-private; no public export and no package
+`exports` change; the tracked interface snapshot is not written here):
+
+- `createInstance(owner, host)` is the optional setup/retention factory: called
+  once per element on the first connect; its returned record becomes the recipe
+  host's `bindings` and is retained; setup cleanups register on the passed
+  instance owner and run only at explicit teardown, never at a plain
+  disconnect.
+- `createBindings()` stays the legacy allocation-only factory for hosts/tests:
+  it receives no cleanup owner, so it must not allocate resources that need
+  cleanup.
+- The two factories are **mutually exclusive**: a descriptor naming both fails
+  closed with a coded descriptor error before `define` or any DOM write (one
+  call-once/retain setup site).
+- `dispose(true)` / `dispose(false)` destroys the retained instance once; a
+  later connect creates a new instance and re-runs setup (dispose is not
+  disconnect). A failed first connect rolls the new instance back with the
+  original setup error surfaced; a failed reconnect claim keeps the retained
+  instance.
+
+Limits — the part that must not be overstated:
+
+- **Descriptor-fixture only.** The LC-0 rows supply the descriptor factories by
+  hand. **No generated module emits `createInstance` yet** (the compiler-side
+  descriptor mirror and emitter are untouched in this working tree), so this is
+  not root generated setup evidence: the generated leaf still re-evaluates its
+  setup region inside `<Name>__claim`, and the compiler-emitted root setup
+  split remains **OWED**.
+- **Nested hostless children are not measured and not retained.** Their
+  retention is the OWED `16b-LC-2` row. The working-tree characterization row
+  wraps the **ROOT** recipe's `mount`/`claim` bodies only (the root recipe body
+  is re-invoked per connection while the retained `createInstance` counts 1);
+  it does not instantiate or count a nested hostless child, so no nested
+  "setup = 2" measurement is claimed.
+- **Evidence form.** The focused file declares 25 tests: the 21 dated
+  2026-11-13 rows above plus 4 LC-0 descriptor-fixture rows (retention,
+  failure rollback, the ROOT recipe-body OWED characterization, and the
+  plain-`dispose(false)` one-shot). LOCAL working-tree run: 25/25 passed, one
+  Chromium engine. This is dirty-tree development feedback, not clean-SHA
+  evidence; no progress ledger, semantic-test-matrix row, interface snapshot or
+  status row is written here.
+- **Seam duty and non-claims.** The [`seams.md`](./seams.md) M09-0 row is
+  amended in the same docs change and keeps the same consumer-form guard (the
+  focused test file). This amendment adds no public symbol or API, no owner
+  sign-off or approval, no M09/M09-0 status change, and no `16b-LC` /
+  `16b-LC-2` or §4.1d reconnect-resource completion claim.
 
 ## Not claimed
 
