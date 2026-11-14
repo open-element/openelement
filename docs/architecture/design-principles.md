@@ -136,6 +136,9 @@ hold?_
 
 Every layer must be deletable. Compatibility is restricted to deployment
 boundaries. Every shim lands with a written retirement condition.
+Extensibility is a property of formats, not of surface: a format ships with a
+version number and self-describing clauses so that it can grow, while an
+extension point for a feature nobody needs yet is surface with no owner.
 
 **APPROVED TARGET (2026-11-03):** the public Class/Decorator authoring API is
 retired, and **no compatibility adapter is built** for it (ADR-0173 fourth-pass
@@ -208,8 +211,10 @@ For question four, the working prior-art register is:
 [Enhance][enhance] (HTML-first, standards-first), [Remix][remix] (HTTP
 fidelity), [Astro's islands architecture][islands] (selective hydration),
 [Svelte][svelte] (compiler-pays), [htmx essays][htmx] (locality of behavior),
-and [WinterTC][wintertc] (server contract). A difference from prior art that
-cannot be articulated is design drift and is sent back.
+[The Art of Unix Programming][taoup] (process discipline — small parts, text
+channels, generation over hand-maintenance, fail loud), read through P5 and
+Output discipline, and [WinterTC][wintertc] (server contract). A difference
+from prior art that cannot be articulated is design drift and is sent back.
 
 ## P8 — Seam single ownership
 
@@ -235,6 +240,20 @@ temporary by intent, as in P6.
 
 Litmus: _Does this boundary have exactly one writer, and would its
 consumer-form test catch a second?_
+
+## Output discipline
+
+A command's stdout is a data channel. When a tool has nothing surprising to
+say it says nothing, so its output can be read by the next program without
+being filtered first; a passing check prints one summary line and no more.
+
+This scopes silence to output and forbids its misreading. Silence is never a
+licence for a code path that quietly skips work, drops a diagnostic, or omits a
+file from a generated artifact: those are failures of P4 (fail closed) and P8
+(guard the seam), and they are reported. A check that fails names the path, the
+line, and the expectation it did not meet.
+
+Litmus: _Is the quiet part the output, or the work?_
 
 ## Accepted direction versus shipped capability
 
@@ -267,6 +286,7 @@ same ruler at each review and must justify their surface or be retired.
 - [Jason Miller — Islands Architecture][islands]
 - [htmx essays][htmx]
 - [tef — Write code that is easy to delete][tef]
+- [The Art of Unix Programming (2003)][taoup]
 
 [adr-0163]: ../adr/ADR-0163-seam-single-ownership.md
 [seams]: seams.md
@@ -282,3 +302,4 @@ same ruler at each review and must justify their surface or be retired.
 [islands]: https://jasonformat.com/islands-architecture/
 [htmx]: https://htmx.org/essays/
 [tef]: https://programmingisterrible.com/post/139222674273/write-code-that-is-easy-to-delete-not-easy-to-extend
+[taoup]: http://www.catb.org/esr/writings/taoup/html/
