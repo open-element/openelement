@@ -47,8 +47,8 @@ import {
 } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
 import { generateElementModule } from '../../src/internal/compiler/semantic-ir/generated-element/emit.ts';
 import { serializeShadowTemplate } from '../../../element/src/internal/compiled/dsd.ts';
+import { REPO_ROOT } from './testlib/element-classifier.ts';
 
-const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 const FILE = '/proj/src/islands/profile.tsx';
 const SIDECAR =
   "import { defineIslandConfig } from '@openelement/router';\n" +

@@ -54,7 +54,7 @@ import {
 import { generateElementModule } from '../../src/internal/compiler/semantic-ir/generated-element/emit.ts';
 import { compiledElementPlugin } from '../../src/internal/compiler/plugin.ts';
 
-const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
+import { REPO_ROOT } from './testlib/element-classifier.ts';
 const FILE = '/proj/src/islands/profile.tsx';
 // D-root-source (2026-11-13): the host fact carries the tag only; the root is
 // read by the lane from the authored sidecar (see generated-element.root-source.test.ts).

@@ -20,23 +20,9 @@ import { createRequire } from 'node:module';
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
+import { ELEMENT_CLASSIFIER as CLASSIFIER } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/m08-s2-acceptance.tsx';
-
-const CLASSIFIER = {
-  classifySymbol: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal' || importedName === 'computed') return 'factory' as const;
-    return 'value' as const;
-  },
-  classifyValue: () => undefined,
-  classifyCall: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal') return { call: 'signal' as const };
-    if (importedName === 'computed') return { call: 'computed' as const };
-    return undefined;
-  },
-};
 
 /** The same authored S2 Board as the acceptance vertical. */
 const S2_BOARD = `import { signal } from '@openelement/element';

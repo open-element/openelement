@@ -49,24 +49,10 @@ import {
   type GeneratedLeafModule,
 } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
 import { quoteGeneratedJavaScriptValue } from '../../src/internal/compiler/semantic-ir/generated-leaf/codegen-literals.ts';
+import { ELEMENT_CLASSIFIER as CLASSIFIER } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/islands/event-ref.tsx';
 const SITE: GeneratedElementSite = { tag: 'x-event-ref' };
-
-const CLASSIFIER = {
-  classifySymbol: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal' || importedName === 'computed') return 'factory' as const;
-    return 'value' as const;
-  },
-  classifyValue: () => undefined,
-  classifyCall: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal') return { call: 'signal' as const };
-    if (importedName === 'computed') return { call: 'computed' as const };
-    return undefined;
-  },
-};
 
 interface LeafCompilation {
   readonly module: string | null;

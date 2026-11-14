@@ -24,9 +24,9 @@ import {
   GENERATED_LEAF_RUNTIME_SPECIFIER,
   generateLeafModule,
 } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
+import { REPO_ROOT } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/directory.tsx';
-const REPO_ROOT = new URL('../../../..', import.meta.url).pathname;
 const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
 const CLASSIFIER = {

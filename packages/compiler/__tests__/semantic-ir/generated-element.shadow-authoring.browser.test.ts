@@ -59,8 +59,8 @@ import {
 import { generateElementModule } from '../../src/internal/compiler/semantic-ir/generated-element/emit.ts';
 import { readIslandRoot } from '../../src/internal/compiler/semantic-ir/generated-element/site.ts';
 import { createGeneratedElementSiteResolver } from '../../../router/src/vite/generated-element-site.ts';
+import { REPO_ROOT } from './testlib/element-classifier.ts';
 
-const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 const ISLANDS_DIR = 'app/islands';
 
 const SIDECAR =

@@ -23,9 +23,9 @@ import {
   GENERATED_LEAF_RUNTIME_SPECIFIER,
   generateLeafModule,
 } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
+import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/leaf.tsx';
-const REPO_ROOT = new URL('../../../..', import.meta.url).pathname;
 
 interface Engine {
   readonly name: string;
@@ -53,21 +53,6 @@ function engines(): Engine[] {
       throw new Error(`unknown OE_BROWSER_MATRIX: ${process.env.OE_BROWSER_MATRIX}`);
   }
 }
-
-const CLASSIFIER = {
-  classifySymbol: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal' || importedName === 'computed') return 'factory' as const;
-    return 'value' as const;
-  },
-  classifyValue: () => undefined,
-  classifyCall: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal') return { call: 'signal' as const };
-    if (importedName === 'computed') return { call: 'computed' as const };
-    return undefined;
-  },
-};
 
 /** Compile one authored component and emit its generated leaf module. */
 function generatedModule(source: string): string {

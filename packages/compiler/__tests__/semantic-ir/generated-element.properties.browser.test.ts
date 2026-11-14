@@ -49,8 +49,8 @@ import { GENERATED_LEAF_RUNTIME_SPECIFIER } from '../../src/internal/compiler/se
 import { compileGeneratedElementIfAdmitted } from '../../src/internal/compiler/semantic-ir/generated-element/compile.ts';
 import { GENERATED_ELEMENT_SHELL_SPECIFIER } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
 import { createGeneratedElementSiteResolver } from '../../../router/src/vite/generated-element-site.ts';
+import { REPO_ROOT } from './testlib/element-classifier.ts';
 
-const REPO_ROOT = new URL('../../../../', import.meta.url).pathname;
 const ISLANDS_DIR = 'app/islands';
 const ISLAND_ID = `${ISLANDS_DIR}/counter-card.tsx`;
 

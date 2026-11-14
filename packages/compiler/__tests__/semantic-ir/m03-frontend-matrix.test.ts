@@ -15,23 +15,9 @@
 import { describe, expect, test } from 'vitest';
 import ts from 'typescript';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
+import { ELEMENT_CLASSIFIER as CLASSIFIER } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/matrix.tsx';
-
-const CLASSIFIER = {
-  classifySymbol: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal' || importedName === 'computed') return 'factory' as const;
-    return 'value' as const;
-  },
-  classifyValue: () => undefined,
-  classifyCall: (specifier: string, importedName: string | null) => {
-    if (specifier !== '@openelement/element') return undefined;
-    if (importedName === 'signal') return { call: 'signal' as const };
-    if (importedName === 'computed') return { call: 'computed' as const };
-    return undefined;
-  },
-};
 
 const JSX_STUB = 'declare namespace JSX { interface IntrinsicElements { [tag: string]: any } }\n';
 
