@@ -95,7 +95,6 @@ const FORBIDDEN_MODULE_SUFFIXES = [
   '/internal/compiled/serializer/serialize-program.ts',
 ] as const;
 
-
 /**
  * `ShadowPanel` is a single dynamic root: native named slot + static input +
  * one dynamic text/attribute pair. It therefore uses the ordinary claim path

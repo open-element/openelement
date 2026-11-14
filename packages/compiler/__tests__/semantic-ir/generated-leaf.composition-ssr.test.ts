@@ -29,7 +29,6 @@ import { ELEMENT_CLASSIFIER as CLASSIFIER } from './testlib/element-classifier.t
 
 const FILE = '/proj/src/m08-composition-ssr.tsx';
 
-
 const SSR_EXPORT = /^export function ([\w$]+)\(/gm;
 const RUNTIME_IMPORT = /^import \{([^}]+)\} from [^;]+;$/m;
 

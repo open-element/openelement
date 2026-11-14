@@ -34,7 +34,6 @@ import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-c
 
 const FILE = '/proj/src/m08-composition-ssr.tsx';
 
-
 const SOURCE = `import { signal } from '@openelement/element';
 function Duo(props) {
   const label = signal('x');
