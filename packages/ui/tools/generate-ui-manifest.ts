@@ -341,13 +341,34 @@ function buildMeta(file: string, source: string): ComponentMeta {
 
 function readComponentSources(): ComponentMeta[] {
   const metas: ComponentMeta[] = [];
+  // The `open-*.tsx` naming convention is the ONLY registration point for a
+  // shipped component, so a file that passes it and is then dropped is not
+  // filtered out — it disappears from the manifest, from custom-elements.json,
+  // from the packed tarball and from the API reference while `ui-manifest:check`,
+  // `ui-cem:check` and `gate:packed` all stay green, because all three compare
+  // against a file this loop never wrote. That is a silent capability loss, so
+  // the skip below refuses instead of filtering: it names the files.
+  const skipped: string[] = [];
   for (const entry of readdirSync(UI_SRC_DIR, { recursive: true, withFileTypes: true })) {
     if (entry.isDirectory() || !entry.name.startsWith('open-') || !entry.name.endsWith('.tsx')) {
       continue;
     }
     const source = readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8');
-    if (!source.includes('extends OpenElement')) continue;
+    if (!source.includes('extends OpenElement')) {
+      skipped.push(entry.name);
+      continue;
+    }
     metas.push(buildMeta(entry.name, source));
+  }
+  if (skipped.length > 0) {
+    throw new Error(
+      `open-*.tsx files must declare \`export [default] class <Name> extends OpenElement\`: ` +
+        `${skipped.join(', ')} passed the naming convention but not the shape, so it would be ` +
+        'dropped from the manifest, the Custom Elements Manifest, the packed artifact and the ' +
+        'API reference unnoticed. Declare the component shape, or rename the file so it is not ' +
+        'published. A function-component authoring form needs its own branch in this function ' +
+        'first (alpha16-18-execution-plan.md §14.2).',
+    );
   }
   const order = new Map(COMPONENT_ORDER.map((t, i) => [t, i]));
   metas.sort((a, b) => (order.get(a.tagName) ?? 999) - (order.get(b.tagName) ?? 999));

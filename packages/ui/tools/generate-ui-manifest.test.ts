@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { readdirSync } from 'node:fs';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   buildManifest,
@@ -121,4 +122,20 @@ test('generated UI manifest covers every shipped component', () => {
     expect(declaration.openElement?.ssr).toEqual(true);
     expect(declaration.openElement?.dsd).toEqual(true);
   }
+  // The hardcoded list above pins the shipped set (renaming a component is a
+  // breaking change and must be visible here). This asserts the other half:
+  // every `open-*.tsx` under src/ reached the manifest. Without it a file that
+  // stops declaring the class shape is dropped from the manifest, the CEM, the
+  // packed artifact and the API reference while every gate stays green — the
+  // generator now refuses that skip, and this pins the refusal to reality.
+  const sources = readdirSync(new URL('../src/', import.meta.url), {
+    recursive: true,
+    withFileTypes: true,
+  })
+    .filter((entry) => !entry.isDirectory() && /^open-.*\.tsx$/.test(entry.name))
+    .map((entry) => `@openelement/ui/${entry.name.replace(/\.tsx$/, '')}`);
+  expect(
+    manifest.declarations.map((declaration) => declaration.openElement?.module).sort(),
+    'every open-*.tsx must be represented in the manifest',
+  ).toEqual(sources.sort());
 });
