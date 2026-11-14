@@ -442,7 +442,7 @@ landing-range facts, not exit evidence.
 | #1787 | `089ace0a8` | M09-2a/2b platform metadata (`delegatesFocus`, primitive properties) | primitive property descriptors landed; the same change set introduced execution-plan §14 |
 | #1788 | `7581fbf60` | M09-2c intrinsic event/ref channels | compiler-private event/ref codegen landed; no public API added |
 | #1789 | `f69dde8bf` | M09-2d property-only non-primitive props | bounded mechanism, LOCAL review pending, "not the M09 exit" (slice document `:9`) |
-| #1790 | `fa6e5232d` | M09-2d bounded form association | bounded mechanism, "independent review pending", "not full OpenInput migration parity" (slice document `:9-12`) |
+| #1790 | `fa6e5232d` | M09-2d bounded form association | bounded mechanism, review pending, "not full OpenInput migration parity" (slice document `:9-12`) |
 
 **Status unchanged.** The §4 conclusion "Alpha16b (M09–M14) has no exit
 evidence" remains in force; this section corrects only the landing-range
@@ -454,7 +454,7 @@ statement stands. §4.6's Single writer clause constrains the M08 row only.
 No exit record, sign-off, version, tag, publication or release claim is opened
 here. When M09 exit evidence exists, it is recorded once by a consolidation PR
 under the §4.4 closeout form, never as a by-product of a WIP slice PR. In
-particular, #1789's Chromium vertical and #1790's independent review are still
+particular, the #1789/#1790 review notes are still
 open at this baseline, and the CEM retained obligation of §14.2 has no bounded
 mechanism in the tree.
 
