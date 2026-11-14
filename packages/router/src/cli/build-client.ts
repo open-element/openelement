@@ -60,6 +60,7 @@ import {
 } from '../vite/internal/element-runtime-chunk.ts';
 import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
 import { browserEntryBoundaryPlugin } from '../vite/internal/browser-entry-boundary.ts';
+import { browserEntryGraphPlugin } from '../vite/internal/browser-entry-graph.ts';
 import {
   analyzeModuleSemantics,
   clearStyleRequests,
@@ -1095,6 +1096,25 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
           },
         },
       },
+      // The browser-entry module-graph observer (M10-P1 evidence, REPORT-ONLY):
+      // it reads the emitted bundle and writes
+      // dist/client/.vite/oe-browser-entry-graph.json. It has no hook that can
+      // change the graph and no failure path that fails the build; the
+      // `tools/repo/check-browser-entry-graph.ts` checker judges the artifact.
+      browserEntryGraphPlugin({
+        root,
+        outDir: clientOutDir,
+        base: clientBase,
+        workspaceRoot: findBuildWorkspaceRoot(root) ?? root,
+        clientEntryModuleId: RESOLVED_CLIENT_ENTRY_ID,
+        getElementPackageRoot: () => elementRuntimeIdentity?.packageRoot ?? null,
+        islands: islandEntries.map((entry) => ({
+          tag: entry.tagName,
+          specifier: entry.modulePath,
+          strategy: entry.strategy,
+        })),
+        islandModuleIds,
+      }),
     ],
   };
 

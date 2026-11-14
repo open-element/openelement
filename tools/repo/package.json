@@ -4,6 +4,7 @@
   "version": "1.0.0-alpha.15",
   "type": "module",
   "scripts": {
+    "browser-graph:check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-browser-entry-graph.ts",
     "assets:check-provenance": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-assets-provenance.ts",
     "generate:all": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/generate-all.ts",
     "generator-gates:check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-generator-gates.ts",

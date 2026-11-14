@@ -28,7 +28,7 @@ M10a. This is the first half of D-③ — a tracked inventory carrying
 
 Authorities: [execution plan](./alpha16-18-execution-plan.md) §13–§15, [M09 exit docket](./alpha16-m09-exit-docket.md), [16b-MN](./16b-migration-note.md), [M01 matrix](./m01-consumer-migration-matrix.md), [evidence baseline](./evidence-baseline.md), [compiler IR and ABI boundary](./compiler-ir-and-abi-boundary.md), [ADR-0174](../adr/ADR-0174-generated-code-runtime-and-compatibility.md). An external working draft informed this note; it is not authority and is not linked here. Every fact is re-derived at the baseline SHA.
 
-Provenance is **advisory**: read-only inspection at the cited commit (Appendix A); no test/build/gate/browser/packed run; counts are source-shape counts, not a compiled graph; no machine-specific path is recorded. Not a §13.6 gate record.
+Provenance is **advisory**: read-only inspection at the cited commit (Appendix A) for the baseline facts, plus a source read of the entry-graph observer/checker added by this revision (§5); no test/build/gate/browser/packed run; counts are source-shape counts, not a compiled graph; no machine-specific path is recorded. Not a §13.6 gate record.
 
 ## 2. Authoring lanes at the baseline
 
@@ -72,42 +72,104 @@ policy do not exist, the author lifecycle/error/context/ref APIs are OPEN, and
 the narrow ABI has 0 production modules. The production-equivalent replacement
 count is not claimed (§Status).
 
-## 5. P1 graph observer over the emitted browser entry graph
+## 5. P1 graph observer and checker over the emitted browser entry graph
 
-P1: no production browser entry loads the generic executor or the old protocol
-(§12a; ADR-0174). Scope is the plan's existing one — **every applicable
-production browser entry graph** — not a selectable or narrowable set; this
-design adds no owner-signature input and no new gate.
+P1: no production browser entry **loads** the generic Part Program executor
+(plan §12a; ADR-0174). The observed surface is the plan's existing one —
+**every applicable production browser entry graph** — not a selectable or
+narrowable set; this design adds no owner-signature input and no new gate.
 
-Input is the client build's actual artifact,
-`dist/client/.vite/oe-browser-entry-graph` (emitted by the client-build lane;
-schema owned there), read with `dist/client/.vite/manifest.json`,
-`dist/island-manifests/*.json` and `dist/.openelement/ssg-pages.json`.
+The instrument is an observer/checker pair, read from the source added by this
+revision (read-only; no build or artifact run is recorded by this note):
 
-The observer is a report, not a gate:
+- **Writer.** `packages/router/src/vite/internal/browser-entry-graph.ts` is the
+  one observer: the `open:browser-entry-graph` plugin, mounted only by the
+  router client build (`packages/router/src/cli/build-client.ts`), with one
+  `moduleParsed` hook and one `generateBundle` hook. It has no
+  `resolveId`/`load`/`transform` hook and never calls `this.error`/`this.warn`:
+  a build must not fail because its evidence instrumentation had a bad day. A
+  capture it cannot complete is still emitted as `status: "incomplete"` with
+  internal reason/diagnostic codes only (no paths, no bundler messages).
+- **Artifact path.** One deterministic JSON document at
+  `<clientOutDir>/.vite/oe-browser-entry-graph.json` (for `www`:
+  `www/dist/client/.vite/oe-browser-entry-graph.json`), the same trust class as
+  Vite's own `.vite/manifest.json`: Git-ignored build output under `dist/`,
+  never a tracked generated surface. The schema, the id normalization and the
+  evaluator are owned by
+  `packages/router/src/vite/internal/browser-entry-graph-artifact.ts`.
+- **Complete artifact.** `schemaVersion: 1`,
+  `kind: "open-browser-entry-graph"`; `producer` (package + version; no
+  timestamp),
+  `app` (workspace-relative root, client outDir, base), `element` (packageRoot +
+  version), `entry` (moduleId + chunkFile), `islands` (tag, specifier,
+  moduleId, strategy, chunkFile), `chunks` (file, entry flags, facade,
+  static/dynamic/implicit edges, rendered modules and byte contribution) and
+  `parsedModuleIds` (pre-tree-shake), plus the writer's `predicate` summary.
+  The checker recomputes that summary from the chunk facts and compares it for
+  self-consistency only; it never trusts it.
+- **Determinism and privacy.** No timestamps; sorted arrays and stable JSON, so
+  two builds of the same input emit byte-identical artifacts. Module ids are
+  normalized, machine-independent spellings: query suffixes stripped; an
+  absolute id becomes workspace-relative; a `node_modules` id keeps only the
+  installed package spelling (the pnpm store collapsed); an outside-package id
+  becomes `pkg:<name>/<path>`; the style-asset `\0` virtual id (base64url of an
+  absolute sheet path) is decoded and re-anchored instead of published opaque.
+  An unknown virtual id, an unnormalizable id, two raw ids landing on one
+  emitted spelling, a module in two chunks, or an ambiguous entry makes the
+  capture `incomplete`, never an artifact carrying a machine path.
+- **Checker.** `tools/repo/check-browser-entry-graph.ts` (task
+  `@openelement/tools-repo#browser-graph:check`) is the one reader: it takes
+  one or more artifact paths and judges exactly those — there is no embedded
+  app list, no `--all`, no baseline, allowlist or update flag. Verdicts are
+  the evaluator's `MET`, `VIOLATED`, `UNPROVEN`; the process exits 0 when every
+  supplied artifact is MET, 1 when at least one is VIOLATED (a proven
+  violation dominates mixed inputs), and 2 when no VIOLATED artifact exists but
+  one is UNPROVEN (including a missing or unreadable file) or the CLI usage is
+  wrong. `--json` emits the deterministic
+  `openelement.browser-entry-graph-check/1` document with the same per-artifact
+  verdicts. The checker is a standalone report tool, not a gate step: no step
+  is added to `gate:source` or `gate:release`.
+- **Fail-closed.** A missing, unreadable, non-JSON, foreign/older-schema,
+  `incomplete`, malformed, structurally untrustworthy (dangling or unreachable
+  chunk, ambiguous module/chunk attribution, unparsed facade), drifted
+  gate-list or self-inconsistent-summary artifact is `UNPROVEN` — never `MET`,
+  never silently skipped. The gate is six executor **entry** modules matched by
+  exact identity (the resolved element package root plus the package-relative
+  path), never by suffix, substring or implementation closure; the frozen
+  table's `sha256` digest is recorded in the artifact, so a checker from another
+  revision refuses to judge rather than applying a different claim.
+- **Report-only.** Executor support modules, server-private
+  serializer/resources, the class-authoring surface, the generated-leaf/neutral
+  surface (including `@openelement/protocol`'s `part-program.ts`) and
+  parsed-only executor residues are reported for the evidence record and never
+  change the verdict. A protocol/service residue is a P4/P2 input, not a P1
+  hit.
+- **Trust boundary.** The artifact is **trusted build output, not
+  authenticated JSON**. Recomputing the predicate catches writer bugs,
+  truncated/partial captures, structural forgery and accidental exact-match
+  bypasses; it cannot authenticate provenance — an actor who can write the
+  artifact can write a coherent MET document. Trust is the provenance of the
+  evidence record: exact commit, clean tree, exact command, and the artifact
+  `sha256` recorded there. A green checker run is not an app-completeness
+  claim; which applications are covered is the evidence record's claim, not the
+  tool's.
 
-1. Read each emitted entry record as-is: its **actual chunk closure** and
-   **rendered modules**. No graph is re-derived from source, package manifests
-   or chunk file names.
-2. Parse the artifact's diagnostics and report them verbatim; a parse failure,
-   missing artifact or incomplete entry/closure is **UNPROVEN** — never pass,
-   never silently skipped.
-3. Intersect each entry's rendered modules and chunk closure with the artifact
-   classifier's **actual generic-executor identities** (owned by
-   `oe-browser-entry-graph`; this note re-lists none). Only those identities
-   feed `legacyHits` and the P1 verdict. A protocol/service residue that also
-   appears (the `./part-program` module or another old service module) is
-   **report-only**, never folded into P1.
-4. Emit a deterministic report `{entries, chunkClosure, renderedModules,
-   legacyHits, reportOnlyResidues, diagnostics, verdict: "hits" | "clean" |
-   "UNPROVEN"}`; empty input is UNPROVEN, not clean.
+The consumer tests pin the instrument, not the tree: the router suite
+(`packages/router/__tests__/browser-entry-graph.test.ts`) drives real router CLI
+and direct Vite builds (a class-island build evaluates VIOLATED; the generated
+shell/neutral build MET; forged, missing, malformed and incomplete artifacts
+UNPROVEN; observer purity and byte-determinism; the decoded style-asset id; no
+machine path), and the checker suite
+(`tools/repo/check-browser-entry-graph.test.ts`) pins the failure directions and
+the CLI contract. They are tool proof — they neither flip P1 nor certify a
+production app. The seam is registered in the
+[seams registry](./seams.md) with these consumer-form guards (P8).
 
-P1 owes a clean-SHA build that emits the artifact, an observer run with parsed
-diagnostics recorded and zero `legacyHits`, and that observation in the evidence
-form. No qualifying artifact run is recorded by this preparation (the
-client-build lane is in progress) and this note runs nothing: **P1 is UNPROVEN
-and NOT MET**. Protocol/service residues reported alongside are P4/P2 evidence
-inputs, not P1 hits.
+At this baseline no **qualifying** artifact run is recorded, so P1 remains
+**UNPROVEN and NOT MET**. A qualifying run owes a clean-SHA, clean-tree build
+that emits the artifact, the checker's `MET` verdict with the report-only
+categories and the gate-list digest recorded, and the artifact `sha256` in the
+evidence form.
 
 ## 6. Per-file class→function migration method
 
@@ -200,7 +262,7 @@ is a re-export shim, so the class module appears once under `site-ui/`.
 
 | Proof | Verdict | Current-source reason | Evidence owed |
 | --- | --- | --- | --- |
-| P1 browser runtime | **NOT MET** | production islands are class modules with `__partProgram`; the default element entry installs the compiled hydration executor (`packages/element/src/index.ts` imports `runtime/hydrate-install.ts`); 0 production generated-lane modules; no emitted entry-graph artifact in this checkout | clean-SHA `oe-browser-entry-graph` + observer run with parsed diagnostics and zero legacy hits (§5) |
+| P1 browser runtime | **NOT MET** | production islands are class modules with `__partProgram`; the default element entry installs the compiled hydration executor (`packages/element/src/index.ts` imports `runtime/hydrate-install.ts`); 0 production generated-lane modules; no qualifying entry-graph artifact run is recorded (the local Git-ignored build output is not evidence) | a clean-SHA, clean-tree build emitting `<clientOutDir>/.vite/oe-browser-entry-graph.json`, the `@openelement/tools-repo#browser-graph:check` `MET` verdict with the report-only categories and gate-list digest recorded, and the artifact `sha256` in the evidence form (§5) |
 | P2 server runtime | **NOT MET** | request-time `__ssr` reads `__compiledProperties`/`__partProgram`; `renderToString` fails closed without a program; `__ssrHost` has no production caller; the generated-host fixture is client-only | M11 server wiring + a generated-CE SSR path at one SHA |
 | P3 build/SSG | **NOT MET** | blocks scan, CSS recovery, class candidates and route classification read the emitted markers/runtime property | emitted build facts replacing the readers, at one SHA |
 | P4 ABI/module contract | **NOT MET** | 64 production modules compile to the six ABI v2 statics; narrow ABI 0 production modules; `./part-program` still public; snapshot unchanged | narrow ABI on every production module, no `__partProgram` in production output |
@@ -215,11 +277,11 @@ not satisfy P5.
 ## 9. Remaining gaps and unverified items
 
 1. **Final-SHA matrix absent.** §6 is a method table, not the §13.6-recorded per-file matrix P5 requires.
-2. **P1 unverified.** No qualifying `oe-browser-entry-graph` observer run is recorded by this preparation; P1 is UNPROVEN.
+2. **P1 unverified.** No qualifying entry-graph artifact run (clean SHA, clean tree, exact command, artifact `sha256`) is recorded by this preparation; the observer/checker source is read only, and P1 is UNPROVEN.
 3. **`16b-MN` evidence absent.** Per-capability rows and the `16b-LC`/`EB`/`CTX`/`REF` acceptance matrices are not delivered.
 4. **CEM live input absent (D-② phase 2).** Live `packages/ui/src` tag source, packed read-back and a one-SHA `gate:release`/`gate:packed` pair are missing.
 5. **Retained obligations open.** Non-primitive property seed (§14.2), forms policy (§14.2), deferred generated-island style declaration (§13.3/§14), and the author API questions behind the four `16b-*` slices.
-6. **Evidence limits.** No test/build/gate/browser/packed run backs this note; counts are source-shape, not a compiled graph; the local `www/dist` predates the entry-graph artifact and is not evidence.
+6. **Evidence limits.** No test/build/gate/browser/packed run backs this note; counts are source-shape, not a compiled graph; the local Git-ignored `www/dist` is unrecorded build output and is not evidence.
 7. **M11 start gate unmet.** Tracking M10-0 preparation does not satisfy it; P1–P5 remain NOT MET.
 
 ## Appendix A. Commands
@@ -241,7 +303,7 @@ done
 for f in $(git grep -l "defineIslandConfig" -- 'www/**/*.tsx' 'apps/**/*.tsx' 'tests/fixtures/**/*.tsx'); do
   grep -q "export default function" "$f" && ! grep -q "@element(" "$f" && echo "$f"   # 1: interop-generated-host
 done
-ls www/dist/client/.vite/ 2>/dev/null   # at this SHA: manifest.json only; no qualifying artifact run recorded
+ls www/dist/client/.vite/ 2>/dev/null   # Git-ignored build output; a local artifact is not evidence (no recorded run)
 git show e7aad2f1f:packages/element/src/open-element-implementation.ts | sed -n '286,306p'   # anchor form
 ```
 
@@ -249,5 +311,6 @@ git show e7aad2f1f:packages/element/src/open-element-implementation.ts | sed -n 
 
 Every `path:line` anchor is a baseline-tree anchor, readable with
 `git show e7aad2f1f:<path> | sed -n '<from>,<to>p'`; ranges name the symbol, not
-necessarily the minimal range. The Git-ignored `www/dist` in this checkout is a
-stale build with no `oe-browser-entry-graph`; it is not evidence for this note.
+necessarily the minimal range. The Git-ignored `www/dist` in this checkout is
+build output, not evidence: no exact-SHA, clean-tree, command or artifact-hash
+record backs any artifact a local build leaves there.
