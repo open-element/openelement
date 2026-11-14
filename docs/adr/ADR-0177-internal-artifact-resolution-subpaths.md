@@ -91,10 +91,15 @@ the naming-boundary assertion does not exist there today.
 | `@openelement/tools-release#graph:check` (`tools/release/check-package-graph.ts`) + `@openelement/tools-repo#esm:boundary-check` + `export-files:check` | zero importers / zero external resolution in the packed tarball and module graph — the only decidable source of that predicate. |
 | `@openelement/tools-release#package-artifacts:check:prepacked` + `gate:packed` + `@openelement/tools-repo#gate:release` | both green at the same SHA, per `alpha16-18-execution-plan.md`:508. A green CI run is not browser qualification (`docs/architecture/README.md`:96-98). |
 
-Adding a naming-boundary assertion to `check-public-interface-snapshot.ts` is a
-**gate-policy change** (execution-plan R14 `:283`: `Blocking gate = —`,
-`Owner decision? = No`; §14.1:494-496) and is therefore recorded as an
-owner-ruled candidate, not executed here.
+Adding a naming-boundary assertion to `check-public-interface-snapshot.ts` would
+be a **gate-policy change**, and this record does not make it. The risk register
+leaves it unassigned rather than owner-ruled: R14 (`execution-plan`:283,
+"documentation drift between canonical docs and ADRs") records
+`Blocking gate = —` and `Owner decision? = No`, so the plan authorizes no
+blocking assertion there and assigns the decision to no one. The gap is
+therefore recorded as **unassigned**, not queued as an owner candidate — no one
+is waiting on an owner ruling to close it, and saying otherwise would invent a
+queue that does not exist.
 
 ## Consequences
 
