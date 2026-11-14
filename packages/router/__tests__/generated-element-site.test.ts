@@ -6,12 +6,16 @@
  * 1. `createGeneratedElementSiteResolver` derives the SAME tag the island
  *    pipeline registers (`transformIslandSource` → `pathToTagName`) and admits
  *    nothing outside `islandsDir` (the layout included: its tag is a router
- *    constant, not a path derivation).
+ *    constant, not a path derivation). The site fact carries the TAG ONLY: the
+ *    descriptor root is the authored sidecar's fact (D-root-source), so the
+ *    exact-equality assertions below fail if this resolver ever pins a stale
+ *    `root` value again.
  * 2. The dev transform (`createCompilerHooks`) is a real host of the compiler:
  *    an island with the sidecar and a local default function component emits
  *    the generated class, the generated module's HMR comparison takes the
- *    full-reload path instead of being mistaken for a class module, and the
- *    lane's fail-closed refusals reach the dev overlay through `this.error`.
+ *    full-reload path instead of being mistaken for a class module, the lane's
+ *    fail-closed refusals reach the dev overlay through `this.error`, and an
+ *    authored shadow sidecar still reaches the emitted descriptor root.
  *
  * The two build call sites (`cli/build-client.ts`, `cli/build-ssg.ts`) pass the
  * same resolver to `compiledElementPlugin`; their end-to-end proof is the
@@ -41,6 +45,18 @@ export default DevCard;
 const PROFILE_CHANGED = `${SIDECAR}
 function DevCard() {
   return <p id="dev-card">generated v2</p>;
+}
+export default DevCard;
+`;
+
+/** The same island with the M09-2a authored shadow root in its sidecar. */
+const SHADOW_SIDECAR =
+  "import { defineIslandConfig } from '@openelement/element/authoring';\n" +
+  "export const openElement = defineIslandConfig({ hydrate: 'only', root: 'shadow' });\n";
+
+const SHADOW_PROFILE = `${SHADOW_SIDECAR}
+function DevCard() {
+  return <section><p id="dev-card">generated</p></section>;
 }
 export default DevCard;
 `;
@@ -118,7 +134,10 @@ describe('M09-1b generated element site resolver', () => {
       ['app/islands/single.tsx', 'single-page'],
       ['app/islands/Card_Probe.tsx', 'card-probe'],
     ] as const) {
-      expect(site(moduleId)).toEqual({ tag, root: 'light' });
+      // Exact equality, not a partial match: the host fact carries the tag
+      // only. A `root` (or any other) property appearing here is the stale
+      // host-side root the compiler lane no longer reads (D-root-source).
+      expect(site(moduleId)).toStrictEqual({ tag });
       // The pipeline's own derivation is the authority; a second spelling here
       // would let the class and the registration disagree.
       expect(
@@ -141,10 +160,9 @@ describe('M09-1b generated element site resolver', () => {
 
   test('a leading slash or an absolute project path still reduces to the tag', () => {
     const site = createGeneratedElementSiteResolver('app/islands');
-    expect(site('/app/islands/profile-card.tsx')).toEqual({ tag: 'profile-card', root: 'light' });
-    expect(site('/srv/app/app/islands/profile-card.tsx')).toEqual({
+    expect(site('/app/islands/profile-card.tsx')).toStrictEqual({ tag: 'profile-card' });
+    expect(site('/srv/app/app/islands/profile-card.tsx')).toStrictEqual({
       tag: 'profile-card',
-      root: 'light',
     });
   });
 });
@@ -167,6 +185,20 @@ describe('M09-1b router dev host', () => {
     expect(result!.code).toContain('export default __oeDevCardElement;');
     expect(result!.code).toContain('__oeElementTag = "dev-card"');
     expect(result!.code).not.toContain('customElements');
+    // A light island pins no descriptor root: the shell owns the `light`
+    // default, so a host-supplied root must never reappear in the bytes.
+    expect(result!.code).not.toContain('root: "light"');
+  });
+
+  test('an authored shadow sidecar still reaches the emitted descriptor root', () => {
+    const { hooks } = devHost({ viteRoot: '/proj' });
+    const { result } = transformCapturing(hooks, SHADOW_PROFILE, '/proj/app/islands/dev-card.tsx');
+    expect(result).not.toBeNull();
+    expect(result!.code).toContain('createGeneratedElementClass');
+    // The resolver supplies the tag only; the root is the authored sidecar's
+    // fact (D-root-source), so dropping the stale host-side root must not drop
+    // this channel. `'shadow'` is the DSD default and maps to `shadow-open`.
+    expect(result!.code).toContain('root: "shadow-open"');
   });
 
   test('a hostless module never acquires the generated class', () => {
@@ -190,6 +222,10 @@ export default DevCard;
 
   test('a props parameter refuses with the coded diagnostic', () => {
     const { hooks } = devHost({ viteRoot: '/proj' });
+    // The M09-1a props gate: no `properties` table is declared here, so the
+    // parameter has no attribute channel. A declared table replaces this gate
+    // with the M09-2b type/table cross-check, which is why the refusal is
+    // scoped to the undeclared shape.
     const source = `${SIDECAR}
 function DevCard(props) {
   return <p>{props.label}</p>;

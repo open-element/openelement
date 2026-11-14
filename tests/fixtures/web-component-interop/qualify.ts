@@ -32,11 +32,7 @@ import type {
   Package as CemPackage,
 } from 'custom-elements-manifest';
 import { extractSsrAdmissionPlan } from '../../lib/qualify-harness/admission-plan.ts';
-import {
-  findFile,
-  findServerEntry,
-  runRouterBuild,
-} from '../../lib/qualify-harness/build-router.ts';
+import { findServerEntry, runRouterBuild } from '../../lib/qualify-harness/build-router.ts';
 import { launchQualifyBrowser } from '../../lib/qualify-harness/drive-chromium.ts';
 import { jsonText, readJson } from '../../lib/qualify-harness/json-file.ts';
 import { pathFromRoot, scaffoldApp } from '../../lib/qualify-harness/scaffold-app.ts';
@@ -70,6 +66,16 @@ const requiredPlacements = ['child', 'application-dependency'] as const;
 const browserNames = ['chromium', 'firefox', 'webkit'] as const;
 const appProjectName = 'web-component-interop-corpus-app';
 
+/**
+ * The admission-plan reason the build writes for a local island whose sidecar
+ * declares `ssr: false` (island-scanner.ts writes it as scanned island
+ * metadata). Pinned as data because it records the M09-3 client-only boundary:
+ * entry-level DSD SSR for generated islands (the `__ssrHost` call target) has
+ * no production caller yet and belongs to M11 wiring, so this fixture must not
+ * pretend the host is server-rendered.
+ */
+const GENERATED_HOST_CLIENT_ONLY_REASON = 'local island exports openElement.ssr=false';
+
 export type InteropFramework = (typeof requiredFrameworks)[number];
 export type InteropProbe = (typeof requiredProbes)[number];
 export type InteropPlacement = (typeof requiredPlacements)[number];
@@ -97,10 +103,36 @@ interface InteropApplication {
   dependencyRootId: string;
 }
 
+/**
+ * The M09-3 generated-host block: the real generated Native Custom Element
+ * (compiled from the function island by the M09-1 lane) hosts the four
+ * canonical foreign probe tags as its light DOM children, and the authored
+ * caption is the named-slot projection.
+ */
+export interface GeneratedHostConfig {
+  /** The generated island's derived tag (`app/islands/interop-generated-host.tsx`). */
+  tag: string;
+  /** The host element's page id. */
+  id: string;
+  /** The authored named-slot light child's id. */
+  lightCaptionId: string;
+  /** The named slot the caption is assigned to. */
+  captionSlotName: string;
+  /** The authored shadow control's id. */
+  controlId: string;
+  /** The authored shadow control's `part` token. */
+  controlPart: string;
+  /** The global state counter the authored `onClick` handler increments. */
+  hitsStateKey: string;
+  /** The generated-host placement id of each foreign framework's probe. */
+  ids: Record<InteropFramework, string>;
+}
+
 interface CorpusConfig {
   schemaVersion: number;
   cem: string;
   application: InteropApplication;
+  generatedHost: GeneratedHostConfig;
   components: InteropComponent[];
 }
 
@@ -122,10 +154,24 @@ interface SsrComponentEvidence {
   admission: { renderPath: string; reason: string } | null;
 }
 
+/** The generated host's SSR form: a plain tag with the authored light children. */
+export interface GeneratedHostSsrEvidence {
+  tag: string;
+  id: string;
+  /** The rendered host tag carries exactly the corpus host id. */
+  idMatches: boolean;
+  tagPresent: boolean;
+  lightCaptionPresent: boolean;
+  lightChildrenPresent: Record<InteropFramework, boolean>;
+  dsdTemplate: boolean;
+  admission: { renderPath: string; reason: string } | null;
+}
+
 export interface SsrEvidence {
   htmlPath: string;
   fixture: { tag: string; tagPresent: boolean; dsdTemplate: boolean };
   foreignComponents: SsrComponentEvidence[];
+  generatedHost: GeneratedHostSsrEvidence;
 }
 
 interface BrowserComponentEvidence {
@@ -161,11 +207,60 @@ interface BrowserFreshComponentEvidence {
   assignedSlotNodes?: number;
 }
 
+/**
+ * One foreign probe rendered as the generated host's light child. The seven
+ * probes are the same contract as the two canonical placements; the extra
+ * `eventReachedDocument` fact proves the probe's own composed event crosses the
+ * generated host boundary to the document without any host-dispatched event.
+ */
+interface GeneratedHostComponentEvidence {
+  id: string;
+  tag: string;
+  framework: InteropFramework;
+  upgraded: boolean;
+  propertyAttribute: boolean;
+  event: boolean;
+  slot: boolean;
+  cssPart: boolean;
+  root: boolean;
+  upgradeOrder: boolean;
+  identityPreserved: boolean;
+  liveStatePreserved: boolean;
+  eventReachedDocument: boolean;
+  propertyValue?: string | boolean;
+  attributeValue?: string | null;
+  assignedSlotNodes?: number;
+}
+
+/** Host-level facts that only the generated Native CE can provide (M09-3). */
+interface GeneratedHostEvidence {
+  tag: string;
+  id: string;
+  /** The live host element carries exactly the corpus host id. */
+  hostIdMatches: boolean;
+  hostDefined: boolean;
+  hostUpgraded: boolean;
+  shadowRoot: boolean;
+  captionSlotAssigned: boolean;
+  defaultSlotAssigned: boolean;
+  defaultSlotAssignedIds: string[];
+  controlPartPresent: boolean;
+  controlPartToken: string | null;
+  authoredNoDomHandlerAttribute: boolean;
+  authoredHandlerHits: number;
+  authoredClickCrossedShadowBoundary: boolean;
+  foreignTagsRegisteredBeforeFixtureClient: boolean;
+  components: GeneratedHostComponentEvidence[];
+}
+
 export interface BrowserEvidence {
   browser: BrowserName;
+  /** The exact engine build reported by Playwright (LOCAL evidence, not CI identity). */
+  browserVersion: string;
   childHost: boolean;
   components: BrowserComponentEvidence[];
   fresh: BrowserFreshComponentEvidence[];
+  generatedHost: GeneratedHostEvidence;
   upgradeOrder: string[];
   pageErrors: string[];
 }
@@ -418,6 +513,63 @@ function validateCorpusConfig(raw: unknown): string[] {
   if (!equalArrays([...seenFrameworks], requiredFrameworks)) {
     errors.push('corpus framework order must be native, lit, fast, stencil');
   }
+
+  // The M09-3 generated-host block is validated with the same fail-closed
+  // discipline as the canonical corpus: it is hand-maintained source, and a
+  // missing or colliding id would silently turn a browser probe into a no-op.
+  const generatedHost = raw.generatedHost;
+  if (!isRecord(generatedHost)) {
+    errors.push('corpus generatedHost must be an object');
+    return errors;
+  }
+  for (const field of [
+    'tag',
+    'id',
+    'lightCaptionId',
+    'captionSlotName',
+    'controlId',
+    'controlPart',
+    'hitsStateKey',
+  ]) {
+    if (!stringField(generatedHost, field)) {
+      errors.push(`corpus.generatedHost.${field} must be a string`);
+    }
+  }
+  const generatedHostTag = stringField(generatedHost, 'tag');
+  if (!validCustomElementTag(generatedHostTag)) {
+    errors.push('corpus.generatedHost.tag is not a valid custom-element tag');
+  } else if (seenTags.has(generatedHostTag)) {
+    errors.push(`corpus.generatedHost.tag collides with corpus component ${generatedHostTag}`);
+  }
+
+  const generatedIds = generatedHost.ids;
+  if (!isRecord(generatedIds)) {
+    errors.push('corpus.generatedHost.ids must cover native, lit, fast, stencil');
+    return errors;
+  }
+  const usedIds = new Set<string>();
+  for (const field of ['id', 'lightCaptionId', 'controlId']) {
+    const value = stringField(generatedHost, field);
+    if (value !== undefined) usedIds.add(value);
+  }
+  for (const component of components) {
+    if (!isRecord(component) || !isRecord(component.ids)) continue;
+    for (const placement of requiredPlacements) {
+      const value = stringField(component.ids, placement);
+      if (value !== undefined) usedIds.add(value);
+    }
+  }
+  for (const framework of requiredFrameworks) {
+    const id = stringField(generatedIds, framework);
+    if (id === undefined) {
+      errors.push(`corpus.generatedHost.ids.${framework} must be a string`);
+      continue;
+    }
+    if (usedIds.has(id)) {
+      errors.push(`corpus.generatedHost.ids.${framework} duplicates the DOM id ${id}`);
+    }
+    usedIds.add(id);
+  }
   return errors;
 }
 
@@ -560,6 +712,7 @@ const FIXTURE_SOURCE_FILES = [
   'app/routes/index.tsx',
   'app/components/page-interop-home.tsx',
   'app/islands/interop-fixture.tsx',
+  'app/islands/interop-generated-host.tsx',
   'app/client/interop-client.ts',
 ] as const;
 
@@ -582,25 +735,64 @@ async function prepareInteropApp(tmpRoot: string, root: URL | string): Promise<s
   return appDir;
 }
 
+/**
+ * Read the ROOT page's generated HTML (`dist/index.html`).
+ *
+ * The qualification's SSR assertions describe the fixture route `/`. A tree
+ * walk that returns the first `index.html` it meets is order-dependent, and on
+ * case-insensitive macOS volumes `dist/about/index.html` sorts before
+ * `dist/index.html`. The canonical build output path is therefore read
+ * directly, and a missing root page is a hard failure: silently asserting
+ * against another route's page would turn the SSR contract into a false pass
+ * or an unexplainable mismatch, so this never guesses.
+ */
+async function readRootPageHtml(distDir: string): Promise<string> {
+  const rootPagePath = join(distDir, 'index.html');
+  try {
+    return await readFile(rootPagePath, 'utf8');
+  } catch {
+    throw new Error(
+      `SSG root page missing at ${rootPagePath} (canonical dist layout); refusing to ` +
+        'fall back to another index.html because the SSR assertions must read the fixture route "/"',
+    );
+  }
+}
+
 async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvidence> {
   const distDir = join(appDir, 'dist');
-  const htmlPath = await findFile(distDir, 'index.html');
-  if (!htmlPath) throw new Error(`SSG index.html not found under ${distDir}`);
-  const html = await readFile(htmlPath, 'utf8');
+  const html = await readRootPageHtml(distDir);
   const entryPath = await findServerEntry(distDir);
   const plan = extractSsrAdmissionPlan(await readFile(entryPath, 'utf8'));
   const decisions = new Map(plan.decisions.map((decision) => [decision.tagName, decision]));
   const foreignComponents: SsrComponentEvidence[] = [];
   const failures: string[] = [];
 
+  // The canonical fixture island's region. The generated-host block authors the
+  // same foreign tags and the same child texts, so the pre-existing
+  // `html.includes` / root-tag checks stay green even if the canonical
+  // placement regresses. Every pre-existing foreign-tag assertion therefore
+  // reads ONLY this region; the generated-host block has its own scoped region
+  // below.
+  const fixtureTag = corpus.application.fixtureTag;
+  const escapedFixture = escapeRegExp(fixtureTag);
+  const fixtureTagPattern = new RegExp(`<${escapedFixture}(?:\\s[^>]*)?>`, 'i');
+  const fixtureTagPresent = fixtureTagPattern.test(html);
+  const fixtureOpen = html.search(fixtureTagPattern);
+  const fixtureClose = html.lastIndexOf(`</${fixtureTag}>`);
+  const fixtureRegion =
+    fixtureOpen >= 0 && fixtureClose > fixtureOpen ? html.slice(fixtureOpen, fixtureClose) : '';
+  if (fixtureRegion === '') {
+    failures.push(`${fixtureTag}: canonical fixture region missing from SSR HTML`);
+  }
+
   for (const component of corpus.components) {
     const escapedTag = escapeRegExp(component.tag);
-    const tagPresent = new RegExp(`<${escapedTag}(?:\\s[^>]*)?>`, 'i').test(html);
-    const lightDomChildPresent = html.includes(component.slotText);
+    const tagPresent = new RegExp(`<${escapedTag}(?:\\s[^>]*)?>`, 'i').test(fixtureRegion);
+    const lightDomChildPresent = fixtureRegion.includes(component.slotText);
     const dsdTemplate = new RegExp(
       `<${escapedTag}(?:\\s[^>]*)?>\\s*<template\\s+shadowrootmode`,
       'i',
-    ).test(html);
+    ).test(fixtureRegion);
     const decision = decisions.get(component.tag) ?? null;
     foreignComponents.push({
       tag: component.tag,
@@ -625,9 +817,6 @@ async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvid
     }
   }
 
-  const fixtureTag = corpus.application.fixtureTag;
-  const escapedFixture = escapeRegExp(fixtureTag);
-  const fixtureTagPresent = new RegExp(`<${escapedFixture}(?:\\s[^>]*)?>`, 'i').test(html);
   const fixtureDsd = new RegExp(
     `<${escapedFixture}(?:\\s[^>]*)?>\\s*<template\\s+shadowrootmode`,
     'i',
@@ -638,6 +827,109 @@ async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvid
   if (!fixtureDsd) {
     failures.push(`${fixtureTag}: expected DSD fixture root missing`);
   }
+
+  // M09-3 generated-host block. The generated island declares `ssr: false`
+  // (M11 wiring owns entry-level DSD SSR), so its only honest server form is a
+  // plain host tag carrying the authored light children; the admission plan
+  // must say client-only and must not list the tag as renderable.
+  const generated = corpus.generatedHost;
+  const escapedGenerated = escapeRegExp(generated.tag);
+  const generatedTagPattern = new RegExp(`<${escapedGenerated}(?:\\s[^>]*)?>`, 'i');
+  const generatedTagPresent = generatedTagPattern.test(html);
+  const generatedDsdTemplate = new RegExp(
+    `<${escapedGenerated}(?:\\s[^>]*)?>\\s*<template\\s+shadowrootmode`,
+    'i',
+  ).test(html);
+  const generatedOpen = html.search(generatedTagPattern);
+  const generatedClose = html.lastIndexOf(`</${generated.tag}>`);
+  const generatedRegion =
+    generatedOpen >= 0 && generatedClose > generatedOpen
+      ? html.slice(generatedOpen, generatedClose)
+      : '';
+  const generatedOpenTag = new RegExp(`<${escapedGenerated}([^>]*)>`, 'i').exec(html);
+  const generatedIdMatches =
+    generatedOpenTag !== null &&
+    new RegExp(`\\sid="${escapeRegExp(generated.id)}"`, 'i').test(generatedOpenTag[1] ?? '');
+  const escapedCaption = escapeRegExp(generated.lightCaptionId);
+  const escapedSlotName = escapeRegExp(generated.captionSlotName);
+  const lightCaptionPresent =
+    new RegExp(`<span[^>]*\\sid="${escapedCaption}"[^>]*\\sslot="${escapedSlotName}"`, 'i').test(
+      generatedRegion,
+    ) ||
+    new RegExp(`<span[^>]*\\sslot="${escapedSlotName}"[^>]*\\sid="${escapedCaption}"`, 'i').test(
+      generatedRegion,
+    );
+  const lightChildrenPresent = Object.fromEntries(
+    corpus.components.map((component) => {
+      const id = escapeRegExp(generated.ids[component.framework]);
+      const tag = escapeRegExp(component.tag);
+      return [
+        component.framework,
+        new RegExp(`<${tag}[^>]*\\sid="${id}"`, 'i').test(generatedRegion),
+      ];
+    }),
+  ) as Record<InteropFramework, boolean>;
+  const generatedDecision = decisions.get(generated.tag) ?? null;
+  const generatedHostEvidence: GeneratedHostSsrEvidence = {
+    tag: generated.tag,
+    id: generated.id,
+    idMatches: generatedIdMatches,
+    tagPresent: generatedTagPresent,
+    lightCaptionPresent,
+    lightChildrenPresent,
+    dsdTemplate: generatedDsdTemplate,
+    admission: generatedDecision
+      ? { renderPath: generatedDecision.renderPath, reason: generatedDecision.reason }
+      : null,
+  };
+
+  if (!generatedTagPresent) {
+    failures.push(`${generated.tag}: generated host tag missing from SSR HTML`);
+  }
+  if (!generatedIdMatches) {
+    failures.push(
+      `${generated.tag}: generated host id is not ${JSON.stringify(generated.id)} in SSR HTML`,
+    );
+  }
+  if (generatedOpen < 0 || generatedClose <= generatedOpen) {
+    failures.push(`${generated.tag}: generated host is not a plain tag carrying light children`);
+  }
+  if (generatedDsdTemplate) {
+    failures.push(
+      `${generated.tag}: generated host received a DSD template (client-only boundary violated)`,
+    );
+  }
+  if (!lightCaptionPresent) {
+    failures.push(`${generated.lightCaptionId}: authored named-slot light child missing`);
+  }
+  for (const framework of requiredFrameworks) {
+    if (!lightChildrenPresent[framework]) {
+      failures.push(
+        `${generated.ids[framework]}: ${framework} probe missing from the generated host's light DOM`,
+      );
+    }
+  }
+  if (!generatedDecision) {
+    failures.push(`${generated.tag}: no admission decision was emitted`);
+  } else if (generatedDecision.renderPath !== 'client-only') {
+    failures.push(
+      `${generated.tag}: admission=${generatedDecision.renderPath}, expected client-only`,
+    );
+  } else if (generatedDecision.reason !== GENERATED_HOST_CLIENT_ONLY_REASON) {
+    failures.push(
+      `${generated.tag}: admission reason=${JSON.stringify(generatedDecision.reason)}, ` +
+        `expected ${JSON.stringify(GENERATED_HOST_CLIENT_ONLY_REASON)}`,
+    );
+  }
+  if (!plan.clientOnlyTags.includes(generated.tag)) {
+    failures.push(`${generated.tag}: tag is not in the admission plan's client-only set`);
+  }
+  if (plan.renderableTags.includes(generated.tag)) {
+    failures.push(
+      `${generated.tag}: tag was admitted as server-rendered without entry-level DSD SSR`,
+    );
+  }
+
   if (failures.length > 0) {
     throw new Error(`SSR interoperability mismatches:\n- ${failures.join('\n- ')}`);
   }
@@ -649,6 +941,7 @@ async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvid
       dsdTemplate: fixtureDsd,
     },
     foreignComponents,
+    generatedHost: generatedHostEvidence,
   };
 }
 
@@ -674,6 +967,54 @@ export async function verifyBrowser(
       { timeout: 20_000 },
     );
 
+    // The generated host is a real compiled Native CE registered by its island
+    // client entry; its shadow root is mounted by the shell on upgrade. Wait
+    // for both facts with a bounded, fail-closed timeout: a missing define or
+    // shadow root must report the generated host boundary, never silently skip
+    // the M09-3 probes.
+    const generatedHostInput = {
+      tag: corpus.generatedHost.tag,
+      id: corpus.generatedHost.id,
+      lightCaptionId: corpus.generatedHost.lightCaptionId,
+      captionSlotName: corpus.generatedHost.captionSlotName,
+      controlId: corpus.generatedHost.controlId,
+      controlPart: corpus.generatedHost.controlPart,
+      hitsStateKey: corpus.generatedHost.hitsStateKey,
+      ids: corpus.generatedHost.ids,
+    };
+    try {
+      await page.waitForFunction(
+        (tag) => {
+          if (customElements.get(tag) === undefined) return false;
+          const find = (root: Document | ShadowRoot): HTMLElement | null => {
+            const direct = root.querySelector(tag) as HTMLElement | null;
+            if (direct) return direct;
+            for (const element of root.querySelectorAll('*')) {
+              const shadow = (element as HTMLElement).shadowRoot;
+              if (!shadow) continue;
+              const found = find(shadow);
+              if (found) return found;
+            }
+            return null;
+          };
+          const host = find(document);
+          return host !== null && host.shadowRoot !== null;
+        },
+        generatedHostInput.tag,
+        { timeout: 20_000 },
+      );
+    } catch (error) {
+      // Fail closed with the tag and the recorded admission boundary instead
+      // of a bare timeout: a generated island that never defines, or defines
+      // without a mounted shadow root, must be named here.
+      throw new Error(
+        `${browserName}: generated host <${generatedHostInput.tag}> did not define a mounted ` +
+          `shadow root within the bounded wait (client-only island, admission reason ` +
+          `${JSON.stringify(GENERATED_HOST_CLIENT_ONLY_REASON)}; entry-level DSD SSR is M11 wiring): ` +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    }
+
     const components = corpus.components.map((component) => ({
       framework: component.framework,
       tag: component.tag,
@@ -685,6 +1026,7 @@ export async function verifyBrowser(
       ids: component.ids,
       placements: component.placements,
     }));
+    const evaluateInput = { components, generatedHost: generatedHostInput };
     const observed = await page.evaluate(async (input) => {
       type Placement = 'child' | 'application-dependency';
       type ComponentInput = {
@@ -698,8 +1040,38 @@ export async function verifyBrowser(
         ids: Record<Placement, string>;
         placements: Placement[];
       };
+      type GeneratedHostInput = {
+        tag: string;
+        id: string;
+        lightCaptionId: string;
+        captionSlotName: string;
+        controlId: string;
+        controlPart: string;
+        hitsStateKey: string;
+        ids: Record<string, string>;
+      };
+      type GeneratedHostFramework = 'native' | 'lit' | 'fast' | 'stencil';
+      type GeneratedHostComponentResult = {
+        id: string;
+        tag: string;
+        framework: GeneratedHostFramework;
+        upgraded: boolean;
+        propertyAttribute: boolean;
+        event: boolean;
+        slot: boolean;
+        cssPart: boolean;
+        root: boolean;
+        upgradeOrder: boolean;
+        identityPreserved: boolean;
+        liveStatePreserved: boolean;
+        eventReachedDocument: boolean;
+        propertyValue?: string | boolean;
+        attributeValue?: string | null;
+        assignedSlotNodes?: number;
+      };
       type UpgradeEntry = { phase: string; tag: string; id: string };
-      const componentInput = input as ComponentInput[];
+      const componentInput = input.components as ComponentInput[];
+      const generatedHostInput = input.generatedHost as GeneratedHostInput;
 
       const findTag = (root: Document | ShadowRoot, tag: string): HTMLElement | null => {
         const direct = root.querySelector(tag);
@@ -730,6 +1102,9 @@ export async function verifyBrowser(
             events?: string[];
             existingIdentity?: Record<string, boolean>;
             existingLiveState?: Record<string, boolean>;
+            generatedExistingIdentity?: Record<string, boolean>;
+            generatedExistingLiveState?: Record<string, boolean>;
+            foreignTagsRegisteredBeforeFixtureClient?: boolean;
           };
         }
       ).__interopState;
@@ -959,6 +1334,196 @@ export async function verifyBrowser(
             element.localName === component.tag
           );
         });
+
+      // ---- M09-3 generated host block -----------------------------------
+      // The real generated Native CE hosts the four foreign probes as light
+      // children. The host's authored shadow projects them through native
+      // slots; everything below is a platform fact, not a host-dispatched
+      // custom-event vocabulary (D-events stays closed).
+      const generatedHostElement = findTag(document, generatedHostInput.tag);
+      const generatedRoot = generatedHostElement?.shadowRoot ?? null;
+      const hostIdMatches = generatedHostElement?.id === generatedHostInput.id;
+      const generatedCaptionSlot = generatedRoot
+        ? (generatedRoot.querySelector(
+            `slot[name="${generatedHostInput.captionSlotName}"]`,
+          ) as HTMLSlotElement | null)
+        : null;
+      const captionSlotAssigned = generatedCaptionSlot
+        ? generatedCaptionSlot
+            .assignedElements()
+            .some((element) => (element as HTMLElement).id === generatedHostInput.lightCaptionId)
+        : false;
+      const generatedDefaultSlots = generatedRoot
+        ? (Array.from(generatedRoot.querySelectorAll('slot')) as HTMLSlotElement[]).filter(
+            (slot) => !slot.hasAttribute('name'),
+          )
+        : [];
+      const generatedDefaultSlot =
+        generatedDefaultSlots.length === 1 ? generatedDefaultSlots[0]! : null;
+      const defaultSlotAssignedIds = generatedDefaultSlot
+        ? generatedDefaultSlot.assignedElements().map((element) => (element as HTMLElement).id)
+        : [];
+      const expectedGeneratedIds = Object.values(generatedHostInput.ids);
+      const defaultSlotAssigned =
+        defaultSlotAssignedIds.length === expectedGeneratedIds.length &&
+        expectedGeneratedIds.every((id) => defaultSlotAssignedIds.includes(id));
+
+      const generatedControl = generatedRoot
+        ? (generatedRoot.querySelector(`#${generatedHostInput.controlId}`) as HTMLElement | null)
+        : null;
+      const controlPartToken = generatedControl?.getAttribute('part') ?? null;
+      const controlPartPresent =
+        !!generatedRoot &&
+        !!generatedRoot.querySelector(`[part="${generatedHostInput.controlPart}"]`) &&
+        (controlPartToken ?? '').split(/\s+/).includes(generatedHostInput.controlPart);
+      const authoredNoDomHandlerAttribute = generatedControl
+        ? !Array.from(generatedControl.attributes).some((attribute) => /^on/i.test(attribute.name))
+        : false;
+
+      const authoredClickPaths: Array<{
+        host: boolean;
+        root: boolean;
+        control: boolean;
+      }> = [];
+      const onAuthoredClick = (event: Event): void => {
+        authoredClickPaths.push({
+          host:
+            generatedHostElement !== null && event.composedPath().includes(generatedHostElement),
+          root: generatedRoot !== null && event.composedPath().includes(generatedRoot),
+          control: generatedControl !== null && event.composedPath().includes(generatedControl),
+        });
+      };
+      // The counter key is corpus data (`hitsStateKey`), read dynamically:
+      // the fixture must not quietly depend on a second hard-coded name that
+      // only the browser probe and the authored island share.
+      const hitsState = state as unknown as Record<string, unknown> | undefined;
+      const readGeneratedHits = (): number => {
+        const value = hitsState?.[generatedHostInput.hitsStateKey];
+        return typeof value === 'number' ? value : 0;
+      };
+      const hitsBefore = readGeneratedHits();
+      document.addEventListener('click', onAuthoredClick);
+      generatedControl?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      document.removeEventListener('click', onAuthoredClick);
+      const authoredHandlerHits = readGeneratedHits() - hitsBefore;
+      const authoredClickCrossedShadowBoundary = authoredClickPaths.some(
+        (path) => path.host && path.root && path.control,
+      );
+
+      const generatedComponents: GeneratedHostComponentResult[] = [];
+      for (const component of componentInput) {
+        const id = generatedHostInput.ids[component.framework] ?? '';
+        const element = generatedHostElement
+          ? (generatedHostElement.querySelector(`#${id}`) as HTMLElement | null)
+          : null;
+        if (!element) {
+          generatedComponents.push({
+            id,
+            tag: component.tag,
+            framework: component.framework as GeneratedHostFramework,
+            upgraded: false,
+            propertyAttribute: false,
+            event: false,
+            slot: false,
+            cssPart: false,
+            root: false,
+            upgradeOrder: false,
+            identityPreserved: false,
+            liveStatePreserved: false,
+            eventReachedDocument: false,
+          });
+          continue;
+        }
+
+        let propertyAttribute = false;
+        let propertyValue: string | boolean;
+        let attributeValue: string | null;
+        if (component.property === 'disabled') {
+          element.setAttribute(component.attribute, '');
+          await Promise.resolve();
+          propertyValue =
+            (element as HTMLElement & Record<string, unknown>)[component.property] === true
+              ? true
+              : false;
+          attributeValue = element.getAttribute(component.attribute);
+          propertyAttribute = propertyValue === true && element.hasAttribute(component.attribute);
+          element.removeAttribute(component.attribute);
+        } else {
+          const value = `generated-host-${component.framework}-property`;
+          (element as HTMLElement & Record<string, unknown>)[component.property] = value;
+          const updateComplete = (element as HTMLElement & { updateComplete?: Promise<unknown> })
+            .updateComplete;
+          if (updateComplete) await updateComplete;
+          propertyValue = String(
+            (element as HTMLElement & Record<string, unknown>)[component.property],
+          );
+          attributeValue = element.getAttribute(component.attribute);
+          propertyAttribute =
+            element.getAttribute(component.attribute) === value && propertyValue === value;
+        }
+
+        const shadow = element.shadowRoot;
+        const slots = Array.from(shadow?.querySelectorAll('slot') ?? []) as HTMLSlotElement[];
+        const assignedSlotNodes = slots.reduce(
+          (count, slot) => count + slot.assignedNodes({ flatten: true }).length,
+          0,
+        );
+        const slotWorks = slots.some((slot) =>
+          slot
+            .assignedNodes({ flatten: true })
+            .some((node) => node.textContent?.includes(component.slotText) === true),
+        );
+        const partWorks =
+          !!shadow &&
+          Array.from(shadow.querySelectorAll('[part]')).some((part) =>
+            (part.getAttribute('part') ?? '').split(/\s+/).includes(component.cssPart),
+          );
+
+        let eventObserved = false;
+        element.addEventListener(component.event, () => (eventObserved = true));
+        const eventReachedDocumentPaths: boolean[] = [];
+        const onDocumentEvent = (event: Event): void => {
+          if (event.composedPath().includes(element)) {
+            eventReachedDocumentPaths.push(
+              generatedHostElement !== null && event.composedPath().includes(generatedHostElement),
+            );
+          }
+        };
+        const componentControl = shadow?.querySelector('[part]') as HTMLElement | null;
+        document.addEventListener(component.event, onDocumentEvent);
+        componentControl?.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (component.event === 'click' && !eventObserved) element.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        document.removeEventListener(component.event, onDocumentEvent);
+        const eventReachedDocument =
+          eventReachedDocumentPaths.length > 0 && eventReachedDocumentPaths.every(Boolean);
+
+        const entries = upgradeOrder.filter((entry) => entry.id === id);
+        const constructorIndex = entries.findIndex((entry) => entry.phase === 'constructor');
+        const connectedIndex = entries.findIndex((entry) => entry.phase === 'connected');
+        generatedComponents.push({
+          id,
+          tag: component.tag,
+          framework: component.framework as GeneratedHostFramework,
+          upgraded:
+            customElements.get(component.tag) !== undefined && element.constructor !== HTMLElement,
+          propertyAttribute,
+          event: eventObserved,
+          slot: slotWorks,
+          cssPart: partWorks,
+          root: !!shadow,
+          upgradeOrder: constructorIndex >= 0 && connectedIndex > constructorIndex,
+          identityPreserved: state?.generatedExistingIdentity?.[id] === true,
+          liveStatePreserved: state?.generatedExistingLiveState?.[id] === true,
+          eventReachedDocument,
+          propertyValue,
+          attributeValue,
+          assignedSlotNodes,
+        });
+      }
+
       return {
         childHost:
           childHostWorks && dependencyWorks && dependencyTags.length === componentInput.length,
@@ -971,9 +1536,29 @@ export async function verifyBrowser(
           }),
         components: results,
         fresh,
+        generatedHost: {
+          tag: generatedHostInput.tag,
+          id: generatedHostInput.id,
+          hostIdMatches,
+          hostDefined: customElements.get(generatedHostInput.tag) !== undefined,
+          hostUpgraded:
+            generatedHostElement !== null && generatedHostElement.constructor !== HTMLElement,
+          shadowRoot: generatedRoot !== null,
+          captionSlotAssigned,
+          defaultSlotAssigned,
+          defaultSlotAssignedIds,
+          controlPartPresent,
+          controlPartToken,
+          authoredNoDomHandlerAttribute,
+          authoredHandlerHits,
+          authoredClickCrossedShadowBoundary,
+          foreignTagsRegisteredBeforeFixtureClient:
+            state?.foreignTagsRegisteredBeforeFixtureClient === true,
+          components: generatedComponents,
+        },
         upgradeOrder: upgradeOrder.map((entry) => `${entry.phase}:${entry.tag}#${entry.id}`),
       };
-    }, components);
+    }, evaluateInput);
 
     if (pageErrors.length > 0) {
       throw new Error(`${browserName}: browser errors: ${pageErrors.join(' | ')}`);
@@ -1011,11 +1596,83 @@ export async function verifyBrowser(
         `${browserName}: component probes failed: ${JSON.stringify(failedComponents)}`,
       );
     }
+    const generated = observed.generatedHost;
+    const generatedFailures: string[] = [];
+    if (!generated.hostDefined) {
+      generatedFailures.push(`${generated.tag}: generated host was not defined`);
+    }
+    if (!generated.hostUpgraded) {
+      generatedFailures.push(`${generated.tag}: generated host did not upgrade in place`);
+    }
+    if (!generated.hostIdMatches) {
+      generatedFailures.push(`${generated.tag}: host id does not match the corpus id`);
+    }
+    if (!generated.shadowRoot) {
+      generatedFailures.push(`${generated.tag}: generated host shadow root is missing`);
+    }
+    if (!generated.captionSlotAssigned) {
+      generatedFailures.push(`${generated.tag}: named-slot light child is not projected`);
+    }
+    if (!generated.defaultSlotAssigned) {
+      generatedFailures.push(
+        `${generated.tag}: default slot did not assign every foreign probe ` +
+          `(assigned ${JSON.stringify(generated.defaultSlotAssignedIds)})`,
+      );
+    }
+    if (!generated.controlPartPresent) {
+      generatedFailures.push(`${generated.tag}: authored control part is missing or mis-tokened`);
+    }
+    if (!generated.authoredNoDomHandlerAttribute) {
+      generatedFailures.push(`${generated.tag}: authored handler leaked to a DOM event attribute`);
+    }
+    if (generated.authoredHandlerHits !== 1) {
+      generatedFailures.push(
+        `${generated.tag}: authored onClick handler ran ${generated.authoredHandlerHits} time(s), expected 1`,
+      );
+    }
+    if (!generated.authoredClickCrossedShadowBoundary) {
+      generatedFailures.push(
+        `${generated.tag}: composed click did not cross the generated host shadow boundary`,
+      );
+    }
+    if (!generated.foreignTagsRegisteredBeforeFixtureClient) {
+      generatedFailures.push(
+        `${generated.tag}: a foreign probe tag was registered before the fixture client`,
+      );
+    }
+    const failedGeneratedComponents = generated.components.filter(
+      (component) =>
+        !component.upgraded ||
+        !component.propertyAttribute ||
+        !component.event ||
+        !component.slot ||
+        !component.cssPart ||
+        !component.root ||
+        !component.upgradeOrder ||
+        !component.identityPreserved ||
+        !component.liveStatePreserved ||
+        !component.eventReachedDocument,
+    );
+    if (generated.components.length !== corpus.components.length) {
+      generatedFailures.push(
+        `${generated.tag}: probed ${generated.components.length} of ${corpus.components.length} foreign children`,
+      );
+    }
+    if (generatedFailures.length > 0 || failedGeneratedComponents.length > 0) {
+      throw new Error(
+        `${browserName}: generated host probes failed: ${JSON.stringify({
+          host: generatedFailures,
+          components: failedGeneratedComponents,
+        })}`,
+      );
+    }
     return {
       browser: browserName,
+      browserVersion: await session.browser.version(),
       childHost: observed.childHost,
       components: observed.components,
       fresh: observed.fresh,
+      generatedHost: generated,
       upgradeOrder: observed.upgradeOrder,
       pageErrors,
     };

@@ -90,7 +90,13 @@ interface CemClassDeclaration {
   tagName: string;
   customElement: true;
   description?: string;
-  superclass: { name: string; package: string };
+  /**
+   * Emitted only when the internal declaration names a truthful public
+   * superclass. The generated native element's parent is the non-public
+   * `OpenElementBase`, so the emitted-class declaration carries no
+   * `superclass` (a fabricated `OpenElement` fallback was removed).
+   */
+  superclass?: { name: string; package: string };
   attributes?: CemAttribute[];
   members: unknown[];
   events?: CemEvent[];
@@ -116,7 +122,7 @@ export interface CustomElementsManifest {
  * generator adds it, the CEM path follows the declared file instead of the
  * package export map.
  */
-interface UiDeclaration extends OpenElementDeclaration {
+export interface UiDeclaration extends OpenElementDeclaration {
   file?: string;
   cssProperties?: Array<{
     name: string;
@@ -126,7 +132,7 @@ interface UiDeclaration extends OpenElementDeclaration {
   }>;
 }
 
-interface UiManifest extends OpenElementPackageManifest {
+export interface UiManifest extends OpenElementPackageManifest {
   declarations: UiDeclaration[];
 }
 
@@ -238,10 +244,16 @@ function buildClassDeclaration(
         tagName: declaration.tagName,
         customElement: true,
         description: declaration.description ?? '',
-        superclass: {
-          name: declaration.superclassName ?? 'OpenElement',
-          package: '@openelement/element',
-        },
+        // No `?? 'OpenElement'` fallback: a declaration without a superclass
+        // (the emitted generated element) must not claim a public parent.
+        ...(typeof declaration.superclassName === 'string' && declaration.superclassName !== ''
+          ? {
+              superclass: {
+                name: declaration.superclassName,
+                package: '@openelement/element',
+              },
+            }
+          : {}),
         members: [],
         ...(attributes.length > 0 ? { attributes } : {}),
         ...(events.length > 0 ? { events } : {}),
@@ -253,10 +265,24 @@ function buildClassDeclaration(
   };
 }
 
-export function buildCustomElementsManifest(): CustomElementsManifest {
-  const manifest = readJson(UI_MANIFEST) as UiManifest;
-  const packageJson = readJson(UI_PACKAGE_JSON) as UiPackageJson;
-  const exportsMap = packageJson.exports ?? {};
+/**
+ * In-memory projection input: an internal package manifest plus the package
+ * `exports` map that resolves each declaration's module path. The no-argument
+ * form of {@link buildCustomElementsManifest} reads the tracked files exactly
+ * as before, so the CLI/`--check` bytes are unchanged.
+ */
+export interface CustomElementsProjectionInput {
+  readonly manifest: UiManifest;
+  /** Package `exports` map; omit to read the tracked `packages/ui/package.json`. */
+  readonly exportsMap?: Record<string, unknown>;
+}
+
+export function buildCustomElementsManifest(
+  input?: CustomElementsProjectionInput,
+): CustomElementsManifest {
+  const manifest = input?.manifest ?? (readJson(UI_MANIFEST) as UiManifest);
+  const exportsMap =
+    input?.exportsMap ?? (readJson(UI_PACKAGE_JSON) as UiPackageJson).exports ?? {};
 
   // Declaration order is the generated manifest's own policy order, so the
   // output is deterministic without a second sort key.

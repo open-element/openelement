@@ -23,13 +23,15 @@ tracked capability inventory, a final-SHA matrix, `16b-MN` and the owner
 sign-off; "A draft does not satisfy P5 … until then, P5 is not claimable and
 Alpha16 release qualification is not openable". The untracked working draft
 `alpha16-migration-capabilities.md` is none of those. **No owner sign-off is
-recorded here and no gate was run.** Every row below is OPEN.
+recorded here and no gate was run.** Every row below is OPEN. An amendment of
+2026-11-15 records the CEM input fixture-first slice in the verification
+appendix; no row flips to closed and no milestone or P5 claim changes.
 
 ## Row-for-row obligations (§14.1 condition 6, §14.2:504)
 
 | Capability | Corrected record | Carried by | Current state | Evidence still owed |
 | --- | --- | --- | --- | --- |
-| `custom-elements.json` (CEM) generation for generated elements | retained obligation (was: §13.3 exception) | M09 platform surface; M10 P3/P5; M12 packed qualification | **OPEN — no bounded mechanism exists.** `m09-2b-primitive-properties.md`:348-352 "No CEM output"; `packages/ui/tools/generate-cem.ts` class-only; no generated-element CEM PR in history. | generated CEM structure test; packed `@openelement/ui` metadata read back by the CEM scanner; `gate:release` and `gate:packed` green at the same SHA. The alternative owner-approved migration of the packed CEM artifact contract is recorded in the M09 exit docket (D-2, PR #1793). |
+| `custom-elements.json` (CEM) generation for generated elements | retained obligation (was: §13.3 exception) | M09 platform surface; M10 P3/P5; M12 packed qualification | **OPEN — fixture-first bounded mechanism only.** D-② phase 1 lands the input path: `packages/ui/tools/generated-element-facts.ts` runs the real generated-element lane on a fixture module, reads the emitted constructor identity from the emitted module's own export table (never the author function name), and projects the lane's resolved descriptor rows, JSX slot/part names and authored JSDoc summary into the internal manifest; `packages/ui/tools/generate-ui-manifest.ts` gains an injectable fixture root plus host site-fact dispatch, and `packages/ui/tools/generate-cem.ts` gains an in-memory projection entry that validates the result against the official CEM 2.1.0 schema (attributes/slots/cssParts preserved; no fabricated superclass or events). The tracked `packages/ui/src/generated-manifest.json` and `packages/ui/custom-elements.json` stay byte-identical — the live `packages/ui/src` tag source is not wired, so no shipped build or packed artifact declares a generated element. `m09-2b-primitive-properties.md`:348-352 "No CEM output" remains true of the shipped class-lane build, and the phase-1 implementation is uncommitted at the `0b07e7ecb` baseline with no PR or gate record. | live-input (`packages/ui/src`) generated CEM structure test; packed `@openelement/ui` metadata read back by the CEM scanner; `gate:release` and `gate:packed` green at the same SHA; the fixture-first runs are LOCAL dev feedback at dirty baseline `0b07e7ecb`, not clean-SHA evidence. The alternative owner-approved migration of the packed CEM artifact contract is recorded in the M09 exit docket (D-2, PR #1793). |
 | array/object/`trustedHtml` property conversion | retained obligation (was: §13.3 exception) | M09 property/attribute conversion; M10 P5 | **OPEN — bounded mechanism only.** #1789 `f69dde8bf` lands property-only channels; the slice document self-describes "bounded implemented — LOCAL review pending", no server→client seed, "not the M09 exit". Its Chromium vertical and Node contract pass at `237e14bd2` (see the Verification appendix); the consumer round-trip tests remain outstanding. | property round-trip tests for the in-tree consumers (`notes-live`, `open-article-view`, `open-reading-shell`); packed ui-app/site build; the TSX rows that carry those components. |
 | form validity policy (`setValidity` rules) | retained obligation (was: §13.3 exception) | M09 forms; M10 P5; `16b-MN` | **OPEN — bounded mechanism only.** #1790 `fa6e5232d` lands `formAssociated`, value / required / disabled and `required → valueMissing`; the slice document declares an explicit "Host access gap" non-claim, "not full OpenInput migration parity", Chromium LOCAL only. Its Chromium vertical and Node contract pass at `237e14bd2` (see the Verification appendix). | the existing form e2e contract re-run on the generated CE; form value / reset / restore tests on the generated path. Full constraint mirroring (type/email, minlength, …) may stay a **deferred sub-obligation listed in this row**, never an exception (§14.2:510). |
 | Two `/internal/*` artifact-resolution export subpaths | named deviation, no exemption | ADR-0137 §1 remains in force; ADR-0177 owns the written retirement condition | **OPEN — deviation registered 2026-11-14**; `packages/element/package.json`:16-17 unchanged. | `graph:check` zero importers outside `packages/element`; `esm:boundary-check` no external resolution; snapshot zero `publicSymbols`; `gate:release` + `gate:packed` green at one SHA. Byte attribution in the full reachable page closure also remains owed (ADR-0174:42-50, :12-13). |
@@ -88,6 +90,27 @@ Chromium vertical **is green at the current tip**. It does not resolve the
 obligation, the in-tree consumer round-trip tests, the full reachable page
 closure byte attribution (ADR-0174:12-13), or any M09 exit. §13.5 stays in
 force: P5 is not claimable and Alpha16 release qualification is not openable.
+
+### CEM input fixture-first (D-② phase 1) — LOCAL, advisory
+
+A second five-field record, kept separate from the Gate A row above because it
+was taken on the dirty 2026-11-15 working tree. It records the fixture-first
+input slice only: a real function-component fixture root reaches the internal
+manifest and a schema-valid CEM class in memory. It is not a §13.6 record, a
+gate record, packed-artifact evidence or any M09 exit / M10 / P5 item.
+
+| Field | Record |
+| --- | --- |
+| commit | `0b07e7ecbe7dd797b88c858c530a000448f7b984` (`main` HEAD at the run) |
+| status | dirty — the slice's own files and other lanes' uncommitted work are present; not a clean worktree |
+| command | `node_modules/.bin/vitest run --root . --project ui packages/ui/tools/generated-element-facts.test.ts packages/ui/tools/generate-ui-manifest.generated-element.test.ts packages/ui/tools/generate-cem.fixture.test.ts` (Node v24.18.0); `node packages/ui/tools/generate-ui-manifest.ts --check`; `node packages/ui/tools/generate-cem.ts --check` |
+| result | 3 files / 15 tests passed; `UI manifest check passed (6 declarations)`; `CEM check passed (6 modules)`; the tracked manifest and CEM are byte-identical to a fresh in-memory projection |
+| provenance | `LOCAL` dirty checkout at `0b07e7ecb`; no CI run/job identity, no clean status, no packed run — advisory only |
+
+The fixture-first tests are LOCAL dev feedback, not clean-SHA evidence. They
+cannot close the `custom-elements.json` row: the live `packages/ui/src` scan has
+no tag source yet (phase 2), no packed `@openelement/ui` artifact was read back,
+and no `gate:release` / `gate:packed` pair ran at one SHA.
 
 ## What this note does not do
 

@@ -62,3 +62,33 @@ test('unknown SSR capability fails closed to documented client-only behavior', (
   expect(result.code).toEqual('OEI2001');
   expect(result.message).toContain('client-only');
 });
+
+test('generated-host block covers every framework id and the host shape', async () => {
+  const corpus = await loadInteropCorpus(fixtureRoot);
+  const generatedHost = corpus.generatedHost;
+
+  // The host is the real generated island's derived tag, not a component tag.
+  expect(generatedHost.tag).toMatch(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/);
+  expect(generatedHost.tag).not.toBe(corpus.application.fixtureTag);
+  for (const component of corpus.components) {
+    expect(generatedHost.tag).not.toBe(component.tag);
+  }
+
+  // One generated-host placement id per canonical framework origin, in order,
+  // with no duplicate DOM ids.
+  expect(Object.keys(generatedHost.ids)).toEqual(['native', 'lit', 'fast', 'stencil']);
+  const generatedIds = Object.values(generatedHost.ids);
+  expect(new Set(generatedIds).size).toEqual(generatedIds.length);
+  for (const component of corpus.components) {
+    expect(generatedHost.ids[component.framework]).toMatch(/^generated-/);
+  }
+  expect(generatedIds).not.toContain(generatedHost.id);
+  expect(generatedIds).not.toContain(generatedHost.lightCaptionId);
+  expect(generatedIds).not.toContain(generatedHost.controlId);
+
+  // The host-level probe facts the browser qualification asserts are declared
+  // as corpus data, not duplicated as literals inside the harness.
+  expect(generatedHost.captionSlotName.length > 0).toEqual(true);
+  expect(generatedHost.controlPart.length > 0).toEqual(true);
+  expect(generatedHost.hitsStateKey.length > 0).toEqual(true);
+});

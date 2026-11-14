@@ -21,6 +21,7 @@
   },
   "include": [
     "qualify.ts",
-    "interop-qualification.test.ts"
+    "interop-qualification.test.ts",
+    "generated-host-authority.test.ts"
   ]
 }
