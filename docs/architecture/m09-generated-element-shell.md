@@ -20,8 +20,9 @@ claim. Evidence is LOCAL: one Chromium engine, 21 focused tests, the two
 package typechecks plus a direct typecheck of the new files, and the source
 gates. The M08 consolidation change owns the single-writer ledger/matrix update
 for the adjacent text and condition slices. A dated 2026-11-15 working-tree
-amendment below records the internal LC-0 descriptor-fixture retention seam; it
-changes neither this record's status nor the landing counts in this section.
+amendment below records the internal LC-0 descriptor-fixture retention seam, and
+a later 2026-11-15 T3 amendment records the compiler-emitted root setup factory;
+neither changes this record's status or the landing counts in this section.
 
 ## Landing scope
 
@@ -48,7 +49,9 @@ allowlist or scanner. A separate packaging commit adds one whole-directory
 `customElements.define`. The descriptor is a compiler-private contract:
 `tag`, declared properties (`name`, optional `attribute`, `type` limited to
 `string` / `number` / `boolean`, `reflect`, `default`), the generated
-`create<Name>Recipe` factory, and an optional `createBindings()` factory. It is
+`create<Name>Recipe` factory, an optional internal `createInstance(owner, host)`
+retained setup factory (wired by the T3 amendment below), and an optional
+allocation-only `createBindings()` factory. It is
 not author syntax; `defineGeneratedElement` is a test/emitter hook, not the
 M09-1 registration decision.
 
@@ -202,11 +205,16 @@ This shell is a bounded M09-0 slice. It does **not** implement or claim:
   only the narrow retained-DOM + fresh root/projection owner + retained
   bindings/`propsChanged` path; in that slice `createBindings()` was
   allocation-only because the shell had no element-lifetime cleanup owner, and
-  `propsChanged` is element-lifetime and is not disposed. The 2026-11-15
-  working-tree amendment below adds the internal `createInstance` retention
-  factory and the `instance` → `connection` → `projection` owner tree, but it
-  is descriptor-fixture only: no generated module emits it, generated root
-  setup is OWED, and nested hostless-child setup is OWED and unmeasured.
+  `propsChanged` is element-lifetime and is not disposed. The 2026-11-15 LC-0
+  working-tree amendment adds the internal `createInstance` retention factory
+  and the `instance` → `connection` → `projection` owner tree; the later T3
+  amendment wires the generated root setup through that factory for supported
+  admitted setup locals (root-only, compiler-owned factory and metadata,
+  mount/claim aliases, SSR separate). Still OWED: nested hostless-child
+  retention (`16b-LC-2`) — the T3 Chromium nested fixture now measures the real
+  nested case (root retained, child re-evaluated, same root node) as
+  characterization, never acceptance — and the full §4.1d reconnect-resource /
+  `16b-LC` contract remains unclaimed.
 - **SSR classification**: empty server output is indistinguishable from "no
   server DOM", so the first connect mounts an empty region; only a reconnect
   claims.
@@ -231,10 +239,12 @@ module ↔ shell boundary: the compiler-private descriptor and generated recipe
 are written by the compiler and read by the shell; the shell owns mount/claim,
 reflection, retained-DOM ownership and disposal. Its guard is the 21-test file
 above, plus the `facade-host.ts` re-export identity compatibility test. The
-2026-11-15 amendment below updates that row's retention, descriptor-ABI and
-failure-mode clauses to the working-tree LC-0 seam; the same focused test file
-stays the guard (21 landed rows extended by the four LC-0 rows, and the row
-records the descriptor-fixture limit).
+2026-11-15 LC-0 amendment updates that row's retention, descriptor-ABI and
+failure-mode clauses; the later T3 amendment adds the compiler-owned root
+setup factory/metadata and its Node (7) and Chromium (4) guard files. The
+focused 25-test file stays the shell guard (21 landed rows plus the four LC-0
+descriptor-fixture rows), and the row records both the LC-0 fixture limit and
+the T3 root-only/nested-OWED limits.
 
 `docs-index:write` regenerated the current architecture view in
 [`README.md`](./README.md) from this document's front matter in the same
@@ -328,30 +338,92 @@ Internal descriptor ABI (compiler-private; no public export and no package
 
 Limits — the part that must not be overstated:
 
-- **Descriptor-fixture only.** The LC-0 rows supply the descriptor factories by
-  hand. **No generated module emits `createInstance` yet** (the compiler-side
-  descriptor mirror and emitter are untouched in this working tree), so this is
-  not root generated setup evidence: the generated leaf still re-evaluates its
-  setup region inside `<Name>__claim`, and the compiler-emitted root setup
-  split remains **OWED**.
-- **Nested hostless children are not measured and not retained.** Their
-  retention is the OWED `16b-LC-2` row. The working-tree characterization row
-  wraps the **ROOT** recipe's `mount`/`claim` bodies only (the root recipe body
-  is re-invoked per connection while the retained `createInstance` counts 1);
-  it does not instantiate or count a nested hostless child, so no nested
-  "setup = 2" measurement is claimed.
+- **Descriptor-fixture only at the LC-0 change.** The LC-0 rows supply the
+  descriptor factories by hand; at that change the compiler-side descriptor
+  mirror and emitter were untouched, so the generated leaf still re-evaluated
+  its setup region inside `<Name>__claim` and the compiler-emitted root setup
+  split was OWED. The T3 amendment below now emits that split for supported
+  admitted root setup locals; the LC-0 hand-fixture rows stay hand fixtures and
+  are not replaced by it.
+- **Nested hostless children are not retained by this seam.** Their retention
+  is the OWED `16b-LC-2` row. This record's characterization row wraps the
+  **ROOT** recipe's `mount`/`claim` bodies only (the root recipe body is
+  re-invoked per connection while the retained `createInstance` counts 1) and
+  does not instantiate or count a nested hostless child; that historical limit
+  stays dated here. The T3 amendment's nested Chromium fixture is a later,
+  separate real measurement of the nested case (root retained, child
+  re-evaluated, same root node) — characterization, not acceptance.
 - **Evidence form.** The focused file declares 25 tests: the 21 dated
   2026-11-13 rows above plus 4 LC-0 descriptor-fixture rows (retention,
   failure rollback, the ROOT recipe-body OWED characterization, and the
   plain-`dispose(false)` one-shot). LOCAL working-tree run: 25/25 passed, one
   Chromium engine. This is dirty-tree development feedback, not clean-SHA
   evidence; no progress ledger, semantic-test-matrix row, interface snapshot or
-  status row is written here.
+  status row is written here. The T3 amendment below is a separate additive
+  evidence set (7 Node + 4 Chromium tests), not a re-count of this file.
 - **Seam duty and non-claims.** The [`seams.md`](./seams.md) M09-0 row is
-  amended in the same docs change and keeps the same consumer-form guard (the
-  focused test file). This amendment adds no public symbol or API, no owner
-  sign-off or approval, no M09/M09-0 status change, and no `16b-LC` /
-  `16b-LC-2` or §4.1d reconnect-resource completion claim.
+  amended in the same docs change and keeps the focused test file as its shell
+  guard and registers the T3 Node/Chromium files as additional guard forms.
+  This amendment adds no public symbol or API, no owner sign-off or approval,
+  no M09/M09-0 status change, and no `16b-LC` / `16b-LC-2` or §4.1d
+  reconnect-resource completion claim.
+
+## 2026-11-15 amendment — T3 root generated setup retention (working tree)
+
+Status: **working-tree amendment — uncommitted, not a status flip, not the M09
+exit, not clean-SHA evidence.** Date: 2026-11-15 (Asia/Shanghai). Base:
+`feat/alpha16-integration` @ `77d50d513`, with the uncommitted SSR host-export
+and T3 lanes (plus the shell header-comment update that cites T3). The landing
+record and the LC-0 amendment above keep their dated counts; this section
+records the current seam only.
+
+For supported admitted root setup locals the compiler now emits the
+`createInstance` factory the LC-0 shell consumes:
+
+- **Root-only split.** [`generate.ts`](../../packages/compiler/src/internal/compiler/semantic-ir/generated-leaf/generate.ts)
+  moves the ROOT component's local setup snapshots into one module-local
+  `function __oe_rootInstance(__oe_owner, __oe_host) { … return { name: value, … }; }`.
+  `<Root>__mount` and both `<Root>__claim` branches alias the retained record
+  (`__oe_host.bindings ?? {}` plus an `Object.hasOwn` presence check) instead of
+  re-evaluating the initializers: a reconnect keeps the first-connect snapshot,
+  a legitimately `undefined` setup value is retained, and a non-root component
+  keeps per-mount/claim evaluation. A root whose setup reads a host binding is
+  not split — the unchanged `UNBOUND_BINDING` gate refuses it and no factory is
+  emitted (the instance record cannot carry a binding; T3 adds no channel).
+- **Compiler-owned metadata, not a scan.** The same emission decision reports
+  the factory name as return-only leaf metadata
+  (`GeneratedLeafModule.rootInstanceFactory`, non-null exactly when the
+  declaration was written); `generateElementModule` carries it and appends
+  `createInstance: __oe_rootInstance,` to the CE descriptor only when it is
+  non-null, passing the compiler-private root marker only for a site module (a
+  hostless leaf keeps its bytes exactly). `createBindings` is still never
+  emitted.
+- **SSR stays separate.** `<Root>__ssr` keeps its own per-request setup
+  evaluation and is byte-identical with and without the root marker; no factory
+  or alias marker appears in the server producer.
+- **Evidence (additive files, LOCAL).** The new
+  [`generated-element.root-instance.test.ts`](../../packages/compiler/__tests__/semantic-ir/generated-element.root-instance.test.ts)
+  declares 7 Node tests covering factory/alias shape and metadata, marker-absent
+  byte identity and the pre-change double evaluation, the root-only marker, the
+  no-setup root's descriptor bytes, SSR byte identity, source-map placements,
+  and the `UNBOUND_BINDING` refusal; the new
+  [`generated-element.root-instance.browser.test.ts`](../../packages/compiler/__tests__/semantic-ir/generated-element.root-instance.browser.test.ts)
+  declares 4 Chromium tests (retained setup across disconnect/reconnect with
+  same-node claim and post-`dispose(true)` re-run, failed-reconnect retention,
+  setup-throw rollback, and the nested case below). LOCAL runs: Node 7/7 and
+  Chromium 4/4 passed at dirty baseline `77d50d513`; dirty-tree development
+  feedback, not clean-SHA evidence.
+- **Nested hostless-child limit.** Retention stays OWED for `16b-LC-2`. The
+  nested Chromium fixture measures the real nested case as characterization,
+  not acceptance: with root setup value `1` and child snapshot `1` mounted, the
+  parent's reconnect leaves the retained root's text at `1` on the same `<b>`
+  node (identity preserved) while the nested hostless child's `<em>` text
+  becomes `3` from the live prop. This is NOT a nested-retention acceptance,
+  NOT §4.1d evidence, and it does not re-count or replace the dated 25-test
+  record above, whose OWED characterization wrapped only the ROOT recipe body
+  and did not measure a nested child.
+- **Non-claims.** No `16b-LC` / §4.1d completion, no author lifecycle or
+  setup-once API, no M13 matrix, no M09 exit, no clean-SHA evidence.
 
 ## Not claimed
 

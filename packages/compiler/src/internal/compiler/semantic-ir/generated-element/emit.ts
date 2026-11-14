@@ -13,7 +13,10 @@
  * - imports the internal M09-0/M09-shadow shell by its compiler-private
  *   specifier;
  * - builds a descriptor with `tag`, the resolved `properties` rows (or `[]`),
- *   the leaf's exported `create<Name>Recipe` factory, `root` only when the
+ *   the leaf's exported `create<Name>Recipe` factory, `createInstance` only
+ *   when the leaf generator reported a root setup factory (T3 / 16b-LC-1 —
+ *   the row is driven by `rootInstanceFactory`, the generator's own emission
+ *   decision, never by scanning the emitted text), `root` only when the
  *   authored sidecar pinned one (D-root-source: the lane reads it, the shell
  *   owns the `light` default), and `delegatesFocus: true` only when the
  *   sidecar declares it (the shell owns the `false` default);
@@ -36,6 +39,14 @@
  * cannot parse: the tail's module-scope names, the alias and the import
  * binding are checked against the leaf text before the tail is appended.
  * A hostless module (site null) returns the leaf result unchanged.
+ *
+ * The result also reports the emitted host-wrapper export name
+ * (`ssrHostExport`) as build metadata, produced by the SAME `hostWrapper`
+ * decision that appends the wrapper. It is return-only: the field never
+ * changes the module text, and callers must read it instead of re-deriving the
+ * name from the emitted artifact (M11 review §3/§4.1). The inherited
+ * `rootInstanceFactory` field is the same kind of return-only metadata for the
+ * T3 root setup factory: non-null exactly when the leaf wrote the declaration.
  */
 
 import ts from 'typescript';
@@ -62,6 +73,15 @@ export interface GeneratedElementModule extends GeneratedLeafModule {
    * segments; the returned `sourceMap` is the leaf's, unchanged.
    */
   readonly tail: string | null;
+  /**
+   * The emitted host-wrapper export name (`<root>__ssrHost`), or null when no
+   * wrapper was appended. It is the compiler-owned emitted export identity for
+   * the DSD host producer: null covers a hostless module (site absent), a
+   * light/absent descriptor root, and a shadow root whose leaf emitted no
+   * `<root>__ssr` producer. Callers carry this string as build metadata; they
+   * must not scan or suffix-derive it from the emitted module.
+   */
+  readonly ssrHostExport: string | null;
 }
 
 export interface GenerateElementModuleOptions {
@@ -186,12 +206,16 @@ function emptyResult(
     module: null,
     sourceMap: leaf.sourceMap,
     placements: leaf.placements,
+    // A refusal returns no module: keep the "non-null exactly when an emitted
+    // module carries the factory" invariant rather than echoing leaf metadata.
+    rootInstanceFactory: null,
     requiredBindings: leaf.requiredBindings,
     requiredProps: leaf.requiredProps,
     requiresPropsChanged: leaf.requiresPropsChanged,
     diagnostics,
     leaf: null,
     tail: null,
+    ssrHostExport: null,
   };
 }
 
@@ -294,8 +318,26 @@ export function generateElementModule(
   site: GeneratedElementSite | null,
   options: GenerateElementModuleOptions = {},
 ): GeneratedElementModule {
+  // T3 / 16b-LC-1: the root marker must be known BEFORE the leaf call because
+  // the leaf owns where the root setup initializers are evaluated. It is the
+  // SAME candidate the tail below validates; an invalid/absent root passes no
+  // marker, so the existing diagnostics and byte paths are unchanged. The
+  // option is compiler-private (never author syntax, never a site fact) and is
+  // passed only for a site module — a hostless leaf stays byte-identical.
+  const rootCandidate =
+    site === null
+      ? undefined
+      : (options.rootComponent ??
+        (module.components.length === 1 ? module.components[0]!.name : undefined));
+  const rootInstanceName =
+    rootCandidate !== undefined &&
+    IDENTIFIER.test(rootCandidate) &&
+    module.components.some((component) => component.name === rootCandidate)
+      ? rootCandidate
+      : undefined;
   const leaf = generateLeafModule(module, {
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
+    ...(rootInstanceName === undefined ? {} : { rootInstance: rootInstanceName }),
   });
   const leafText = leaf.module;
   if (leafText === null) {
@@ -311,18 +353,18 @@ export function generateElementModule(
       module: leafText,
       sourceMap: leaf.sourceMap,
       placements: leaf.placements,
+      rootInstanceFactory: leaf.rootInstanceFactory,
       requiredBindings: leaf.requiredBindings,
       requiredProps: leaf.requiredProps,
       requiresPropsChanged: leaf.requiresPropsChanged,
       diagnostics: leaf.diagnostics,
       leaf: leafText,
       tail: null,
+      ssrHostExport: null,
     };
   }
 
-  const rootName =
-    options.rootComponent ??
-    (module.components.length === 1 ? module.components[0]!.name : undefined);
+  const rootName = rootCandidate;
   if (rootName === undefined || !IDENTIFIER.test(rootName)) {
     return emptyResult(leaf, [
       moduleDiagnostic(
@@ -397,6 +439,13 @@ export function generateElementModule(
       ),
     ]);
   }
+  // T3 / 16b-LC-1: the descriptor row is driven by the leaf generator's OWN
+  // emission decision (`rootInstanceFactory` is non-null exactly when the
+  // factory declaration was written), never by scanning the emitted text. A
+  // root with no local setup snapshot keeps today's descriptor bytes (and the
+  // shell's `createBindings?.() ?? {}` path); the compiler-owned name is
+  // deliberately absent from the tail collision list above.
+  const rootInstanceFactory = leaf.rootInstanceFactory;
 
   const tail = [
     '',
@@ -418,6 +467,11 @@ export function generateElementModule(
     ...(formAssociated ? ['  formAssociated: true,'] : []),
     ...propertyEmission.rowLines,
     `  createRecipe: create${rootName}Recipe,`,
+    // T3 / 16b-LC-1: the root setup factory is the descriptor's call-once
+    // retained setup site (compiler-private member the shell already owns from
+    // LC-0). Emitted only when the leaf declared it; `createBindings` remains
+    // never emitted.
+    ...(rootInstanceFactory === null ? [] : [`  createInstance: ${rootInstanceFactory},`]),
     '};',
     '',
     `const ${names.element} = createGeneratedElementClass(${names.descriptor});`,
@@ -466,11 +520,16 @@ export function generateElementModule(
     // prefix lines; the appended tail has no authored source.
     sourceMap: leaf.sourceMap,
     placements: leaf.placements,
+    rootInstanceFactory: leaf.rootInstanceFactory,
     requiredBindings: leaf.requiredBindings,
     requiredProps: leaf.requiredProps,
     requiresPropsChanged: leaf.requiresPropsChanged,
     diagnostics: [],
     leaf: leafText,
     tail,
+    // Return-only build metadata from the SAME hostWrapper decision above: the
+    // name is exactly what the appended `export function` declares, or null
+    // when no wrapper exists. The emitted bytes never carry this field.
+    ssrHostExport: hostWrapper === null ? null : hostWrapper.name,
   };
 }

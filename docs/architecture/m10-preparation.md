@@ -24,11 +24,16 @@ M10a. This is the first half of D-③ — a tracked inventory carrying
 - **No status flip.** M10 stays "Not started", `16b-MN` rows stay OPEN, the docket blocking set is unchanged; facts landed by the baseline commit are recorded as facts only.
 - **No write outside this document and the generated architecture index.**
 
+This working-tree addendum (§3.1) records one source fact and updates the
+existing generated-element seam row in the [seams registry](./seams.md) (P8); it
+adds no front-matter change or generated-index write and flips no status or
+verdict.
+
 ## 1. Inputs and provenance
 
 Authorities: [execution plan](./alpha16-18-execution-plan.md) §13–§15, [M09 exit docket](./alpha16-m09-exit-docket.md), [16b-MN](./16b-migration-note.md), [M01 matrix](./m01-consumer-migration-matrix.md), [evidence baseline](./evidence-baseline.md), [compiler IR and ABI boundary](./compiler-ir-and-abi-boundary.md), [ADR-0174](../adr/ADR-0174-generated-code-runtime-and-compatibility.md). An external working draft informed this note; it is not authority and is not linked here. Every fact is re-derived at the baseline SHA.
 
-Provenance is **advisory**: read-only inspection at the cited commit (Appendix A) for the baseline facts, plus a source read of the entry-graph observer/checker added by this revision (§5); no test/build/gate/browser/packed run; counts are source-shape counts, not a compiled graph; no machine-specific path is recorded. Not a §13.6 gate record.
+Provenance is **advisory**: read-only inspection at the cited commit (Appendix A) for the baseline facts, plus a source read of the entry-graph observer/checker added by this revision (§5), and in the §3.1 working-tree addendum a source read of the M11-prerequisite host-export metadata plus one LOCAL compiler test run of its guard; no build/gate/browser/packed run; counts are source-shape counts, not a compiled graph; no machine-specific path is recorded. Not a §13.6 gate record.
 
 ## 2. Authoring lanes at the baseline
 
@@ -57,20 +62,80 @@ obligation. Every row is NOT production-equivalent; none is closed.
 | PROPS | Declared props | `@property` String/Number/Boolean/Array/Object/`trustedHtml`, `reflect`, `attribute:false`, computed (`semantic-core/analyze-module.ts:548-640`); non-primitive consumers `open-article-view`, `open-reading-shell`, `notes-live` | generated `properties` table + fresh-literal factories (`generated-element/site.ts:498-565`, `emit.ts:238-281`); shell conversion | no SSR property seed; `resolveGeneratedElementProps` (`shell.ts:725`) only inside `__ssrHost`, no production caller. §14.2 row; round-trip tests OPEN |
 | FORMS | Form association/validity | `formAssociated`; `ElementFormController` `setFormValue`/`setValidity`/`onReset`/`onRestore` (`open-element-form.ts:60-97`); protected `_internals` (`open-element-implementation.ts:313-317`) | generated `formAssociated`; shell owns internals, value/required/disabled, required→`valueMissing`, reset/restore (`shell.ts:635-677,1025-1145`) | no author validity-policy channel or full constraint mirroring; no form e2e re-run on a generated CE. §14.2 row + `16b-MN` OPEN |
 | CEM | Manifest chain | class-branch input reads `@element`/`extends OpenElement` (`packages/ui/tools/generate-ui-manifest.ts:344,389-444`); CEM 2.1.0 `generate-cem.ts`; tracked manifest/CEM; gates `ui-manifest:check`, `ui-cem:check`, packed-copy equality (`tools/release/check-package-artifacts.ts:318-330`) | D-② input migration, fixture-first committed at the baseline: `generated-element-facts.ts` reads the emitted constructor identity, `generate-ui-manifest.ts` gains injectable root/site-fact dispatch, `generate-cem.ts` an in-memory projection | live `packages/ui/src` tag source not wired; no packed read-back; no one-SHA gate pair. `16b-MN` CEM row OPEN |
-| SERVER | SSR/stream | `renderToString` reads program; request-time `__ssr` reads `__compiledProperties`/`__partProgram.metadata.properties` (`packages/element/src/server.ts:260-316`) | `__ssr` leaf producers + `__ssrHost` for shadow hosts (`generated-element/emit.ts:425-451`) | `__ssrHost` has no production caller; `renderToString` fails closed without a program (`public-runtime.ts:765-802`); local island default `ssr+client` (`entry-descriptor.ts:690-712`) would fail at build. P2 NOT MET |
+| SERVER | SSR/stream | `renderToString` reads program; request-time `__ssr` reads `__compiledProperties`/`__partProgram.metadata.properties` (`packages/element/src/server.ts:260-316`) | `__ssr` leaf producers + `__ssrHost` for shadow hosts (`generated-element/emit.ts:425-451`), and the same emitter decision returns the emitted host-export name as build-only metadata (`ssrHostExport`, §3.1) | `__ssrHost` has no production caller and the new build metadata has no consumer yet (§3.1); `renderToString` fails closed without a program (`public-runtime.ts:765-802`); local island default `ssr+client` (`entry-descriptor.ts:690-712`) would fail at build. P2 NOT MET |
 | ABI | Module contract/protocol | six ABI v2 statics; protocol `./part-program` export, versions 2/2 (`protocol/package.json:29`); runtime reads `__partProgram` (`public-runtime.ts:769-802`, `route-dispatch.ts:60-75`) | generated tail is the narrow ABI (descriptor + `createRecipe` + tag); shell subpath `./internal/compiled/generated-element/shell` (`element/package.json:16`, ADR-0177 deviation) | 64 production modules still compile to `__partProgram`; narrow ABI has 0 production modules; no protocol-export retirement; snapshot unchanged. P4 NOT MET |
 | BUILD | Build/SSG | text readers: blocks scan `__partProgram` + `"blocks":[` (`island-blocks-scan.ts:117`), CSS/scope recovery parses `__partProgram` (`compiled-artifact-style-requests.ts:35-50,190-205`), class candidates read `__oeClassCandidates` (`compiled-artifact-class-candidates.ts:32`) | generated lane wired at the three build hosts; registration is constructor-based (`entry-client-codegen.ts:33-56,125-162`) | CSS recovery, blocks detection and route classification still read the old artifact. P3 NOT MET; M01 C12/C13 unchanged |
 | ROUTER | Page/route contract | `isElementPageClass` reads runtime `__partProgram` (`router/src/authoring.ts:445-448`); page tag from `__partProgram.tag` (`renderer-runtime.ts:141-155`); stream identity `{version,tag}` (`route-dispatch.ts:60-75`, `stream-runtime.ts:555-580`, `types.ts:36-56`); build-time `functionPage` fact (`route-scanner.ts:265-295,355-372`) | island registration accepts any constructor; build-time page facts exist for function pages | no build-time classification for class pages and no page-tag/stream facts for generated pages. M01 C07–C11 unchanged; P1/M11-3 not done |
+
+### 3.1 M11 prerequisite — compiler-owned host-export metadata (producer only)
+
+Working-tree addendum, 2026-11-15: on top of `77d50d513` plus the uncommitted
+SSR-metadata lane (the tree also carries other lanes' edits; this addendum reads
+only the host-export metadata surface and its guard). It is not a
+baseline-`e7aad2f1f` fact and not a §13.6 record.
+
+The generated-element emitter already owns the one decision that appends the DSD
+host producer; that decision is now readable as build metadata instead of being
+re-inferred from the emitted text.
+
+- **One producer, the same decision.** `generateElementModule`
+  (`packages/compiler/src/internal/compiler/semantic-ir/generated-element/emit.ts`)
+  computes `hostWrapper` once (a shadow descriptor root plus a leaf-emitted
+  `<Name>__ssr`, the same decision that appends
+  `export function <Name>__ssrHost`) and returns the appended export name as
+  `ssrHostExport` on the same result. `compileGeneratedElementIfAdmitted`
+  (`.../generated-element/compile.ts`) copies it onto `CompiledGeneratedElement`.
+  That entry is already exported from the compiler's public entry
+  (`packages/compiler/src/compiler.ts`), so the field rides the existing public
+  return shape: no new export, subpath, runtime class static or module-shape
+  convention is added, but the already-public return shape gains one field — the
+  interface snapshot's shape delta is owed: consolidation regenerates
+  `docs/release/public-interface-snapshot.json`
+  (`@openelement/tools-repo#interface:snapshot:write`), and this lane does not
+  write it.
+- **Build-only, return-only.** The field adds no emitted byte, map segment or
+  tail line: the module stays the leaf prefix plus the unchanged tail, the
+  source map and placements stay the leaf's, and the field name never enters the
+  module text. The identity is the compiler's own emitted export name; a scan of
+  the module namespace or a re-derived `__ssrHost` suffix is a second naming
+  protocol (lossy, false-positive-prone and not bundler-rename safe) and is
+  rejected, so a consumer reads the metadata instead of guessing a name.
+- **`null` means no producer, not an error.** A hostless emitter call (no site
+  fact), a light or absent descriptor root, and a shadow root whose leaf emitted
+  no `<Name>__ssr` all answer `null`; a module the lane does not admit or
+  refuses still returns no result at all. Whether an SSR-admitted shadow island
+  may answer `null` is an owner policy decision and is not implemented here:
+  `null` is metadata, never an admission verdict.
+- **Producer only; M11 and P2 are not advanced.** Nothing reads the field: build
+  entry generation, the island scan, the registration seam and the SSR render
+  path are unchanged, `__ssrHost` still has no production caller, and the
+  generated-host fixture stays client-only. No entry wiring, SSR registration,
+  host-attribute normalization, packed or browser record is added. **M11 is not
+  started and P2 remains NOT MET**; §7 is unchanged.
+- **Guard.** `packages/compiler/__tests__/semantic-ir/generated-element.ssr-host-export.test.ts`
+  — 8 Node tests: the shadow producer's `ssrHostExport` is the named export its
+  own emitted AST declares; `null` for a hostless emitter call, a light/absent
+  root and a shadow root whose leaf has no `<Name>__ssr`; the compile result
+  adds exactly the one field over the pre-M11 keys with byte-identical
+  code/map/tail; non-admitted modules and the fixed-name-collision refusal still
+  return no result. LOCAL run on this dirty tree at this revision —
+  `node_modules/.bin/vitest run --project compiler packages/compiler/__tests__/semantic-ir/generated-element.ssr-host-export.test.ts`
+  → 8 passed; development feedback, not clean-SHA evidence. The existing
+  Generated Native Custom Element seam row in the [seams registry](./seams.md)
+  carries the producer contract and this guard (P8); no duplicate row is added,
+  and the host-build/registration consumer guard is owed by M11 and is not
+  claimed here.
 
 ## 4. Replacement reachability
 
 Replacement mechanisms exist in the tree; **none is reached from an actual
 production entry graph** at the baseline: the generated CE client lane has 0
-production modules, the generated-CE SSR host has no production caller, the CEM
-input path is fixture-only (no live tag source), non-primitive seed and form
-policy do not exist, the author lifecycle/error/context/ref APIs are OPEN, and
-the narrow ABI has 0 production modules. The production-equivalent replacement
-count is not claimed (§Status).
+production modules, the generated-CE SSR host has no production caller (the
+compiler can now name the emitted host export as build metadata, but no
+consumer reads it, §3.1), the CEM input path is fixture-only (no live tag
+source), non-primitive seed and form policy do not exist, the author
+lifecycle/error/context/ref APIs are OPEN, and the narrow ABI has 0 production
+modules. The production-equivalent replacement count is not claimed (§Status).
 
 ## 5. P1 graph observer and checker over the emitted browser entry graph
 
@@ -263,7 +328,7 @@ is a re-export shim, so the class module appears once under `site-ui/`.
 | Proof | Verdict | Current-source reason | Evidence owed |
 | --- | --- | --- | --- |
 | P1 browser runtime | **NOT MET** | production islands are class modules with `__partProgram`; the default element entry installs the compiled hydration executor (`packages/element/src/index.ts` imports `runtime/hydrate-install.ts`); 0 production generated-lane modules; no qualifying entry-graph artifact run is recorded (the local Git-ignored build output is not evidence) | a clean-SHA, clean-tree build emitting `<clientOutDir>/.vite/oe-browser-entry-graph.json`, the `@openelement/tools-repo#browser-graph:check` `MET` verdict with the report-only categories and gate-list digest recorded, and the artifact `sha256` in the evidence form (§5) |
-| P2 server runtime | **NOT MET** | request-time `__ssr` reads `__compiledProperties`/`__partProgram`; `renderToString` fails closed without a program; `__ssrHost` has no production caller; the generated-host fixture is client-only | M11 server wiring + a generated-CE SSR path at one SHA |
+| P2 server runtime | **NOT MET** | request-time `__ssr` reads `__compiledProperties`/`__partProgram`; `renderToString` fails closed without a program; `__ssrHost` has no production caller and its compiler-owned build identity (`ssrHostExport`, §3.1) has no consumer; the generated-host fixture is client-only | M11 server wiring + a generated-CE SSR path at one SHA |
 | P3 build/SSG | **NOT MET** | blocks scan, CSS recovery, class candidates and route classification read the emitted markers/runtime property | emitted build facts replacing the readers, at one SHA |
 | P4 ABI/module contract | **NOT MET** | 64 production modules compile to the six ABI v2 statics; narrow ABI 0 production modules; `./part-program` still public; snapshot unchanged | narrow ABI on every production module, no `__partProgram` in production output |
 | P5 public API | **NOT MET** | public surface still exports `OpenElement`, `ErrorBoundary`, `element`/`property`, context API, `StyleSheet` (`public-surface.ts:19-21,62-70,146-155`); `16b-MN` rows OPEN; no signed inventory, final-SHA matrix or owner sign-off | this inventory signed, final-SHA matrix, `16b-MN` evidence, owner sign-off |
@@ -281,8 +346,8 @@ not satisfy P5.
 3. **`16b-MN` evidence absent.** Per-capability rows and the `16b-LC`/`EB`/`CTX`/`REF` acceptance matrices are not delivered.
 4. **CEM live input absent (D-② phase 2).** Live `packages/ui/src` tag source, packed read-back and a one-SHA `gate:release`/`gate:packed` pair are missing.
 5. **Retained obligations open.** Non-primitive property seed (§14.2), forms policy (§14.2), deferred generated-island style declaration (§13.3/§14), and the author API questions behind the four `16b-*` slices.
-6. **Evidence limits.** No test/build/gate/browser/packed run backs this note; counts are source-shape, not a compiled graph; the local Git-ignored `www/dist` is unrecorded build output and is not evidence.
-7. **M11 start gate unmet.** Tracking M10-0 preparation does not satisfy it; P1–P5 remain NOT MET.
+6. **Evidence limits.** No test/build/gate/browser/packed run backs this note except the §3.1 LOCAL compiler guard run (dirty-tree development feedback, not clean-SHA evidence); counts are source-shape, not a compiled graph; the local Git-ignored `www/dist` is unrecorded build output and is not evidence.
+7. **M11 start gate unmet.** Tracking M10-0 preparation does not satisfy it; the §3.1 host-export metadata is producer-only and no M11 consumer/registration exists; P1–P5 remain NOT MET.
 
 ## Appendix A. Commands
 

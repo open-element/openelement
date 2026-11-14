@@ -34,8 +34,9 @@
  *   the projection's subscriptions and the per-connection scope are disposed
  *   (the next connect starts from a fresh connection scope);
  * - LC-0 descriptor-fixture retention seam (hand-written fixture descriptors;
- *   no generated module emits `createInstance` yet, so this is NOT root
- *   generated setup evidence): the optional `createInstance(owner, host)`
+ *   this file's rows are descriptor-fixture evidence, NOT generated-path
+ *   evidence — the compiler's `generated-element.root-instance.*` tests own the
+ *   generated root path): the optional `createInstance(owner, host)`
  *   setup factory runs once on first connect, its returned bindings record and
  *   the element/island-lifetime instance scope survive a disconnect (that
  *   factory is not repeated by the reconnect claim), connection-scoped
@@ -1636,9 +1637,10 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
       })()`)) as InstanceRetentionResult;
 
       // DESCRIPTOR-FIXTURE EVIDENCE: both LC-0 rows below use hand-written
-      // descriptor factories. No generated module emits `createInstance` yet,
-      // so this proves the shell retention seam only; root/generated setup is
-      // NOT complete and the compiler setup split stays OWED.
+      // descriptor factories, so this proves the shell retention seam only and
+      // is NOT generated-path evidence (the compiler's root-instance tests own
+      // that); this fixture's behavior is unchanged and does not measure a
+      // nested hostless child.
       // Setup ran once and allocated a retained record; no setup cleanup has
       // run and the connection has no cleanup to run yet.
       expect(result.afterMount).toMatchObject({

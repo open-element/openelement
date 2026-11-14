@@ -51,6 +51,17 @@ export interface CompiledGeneratedElement {
   readonly map: CompiledElementSourceMap | null;
   readonly tag: string;
   readonly component: string;
+  /**
+   * The emitted host-wrapper export name (`<component>__ssrHost`), or null when
+   * the emitter appended no host producer. It is the compiler-owned emitted
+   * export identity (M11 review §4.1/S1), produced by the same emitter
+   * `hostWrapper` decision that appends the function and returned here as
+   * build metadata: `null` means "this module has no host producer" (a light or
+   * absent root, a leaf without `<component>__ssr`, or a hostless/refused
+   * module), not an error. `code` is byte-identical whether or not the field is
+   * read; callers must not re-derive the name from the emitted text.
+   */
+  readonly ssrHostExport: string | null;
 }
 
 function toCompilerDiagnostic(diagnostic: IrDiagnostic): ElementCompilerDiagnostic {
@@ -177,5 +188,8 @@ export function compileGeneratedElementIfAdmitted(
     map: emitted.sourceMap,
     tag: options.site.tag,
     component: root.name,
+    // Additive build metadata from the emitter's one hostWrapper decision; the
+    // module text and map above are unchanged by this field.
+    ssrHostExport: emitted.ssrHostExport,
   };
 }

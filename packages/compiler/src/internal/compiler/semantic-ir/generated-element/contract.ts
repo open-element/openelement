@@ -40,8 +40,18 @@
  * - `createRecipe` (required function) — the leaf's exported
  *   `create<Name>Recipe` factory. The claim stays reachable only through the
  *   returned `recipe.claim`; no leaf symbol is renamed.
- * - `createBindings` — never emitted by M09-1a (the bindings gate fails closed
- *   before the tail is built).
+ * - `createInstance` (optional function) — the compiler-private call-once
+ *   retained setup site (T3 / 16b-LC-1). The leaf emits one module-local
+ *   `__oe_rootInstance(owner, host)` factory for the ROOT component when its
+ *   local setup snapshots exist; the tail emits
+ *   `createInstance: __oe_rootInstance,` exactly when the generator reports
+ *   that factory, so the shell creates the element/island-lifetime instance
+ *   once and the root mount/claim alias its returned bindings record. A root
+ *   with no setup snapshot emits neither, and the shell's
+ *   `createBindings?.() ?? {}` path stays in force.
+ * - `createBindings` — never emitted by the generated lane (the M09-1a
+ *   bindings gate fails closed before the tail is built, and T3 does not add a
+ *   binding source).
  *
  * The emitted tail executes no `customElements.define`; registration remains
  * the router entry's decision and belongs to M09-1b.

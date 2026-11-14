@@ -78,16 +78,20 @@
  * connection scope and does not repeat that factory. Setup cleanups register on
  * the instance owner and run only at explicit teardown. This is the O2
  * root-instance half of the `16b-LC` obligation, not the full §4.1d
- * reconnect-resource contract, and it is NOT root generated setup: no generated
- * module emits `createInstance` yet (the descriptor fixture is the only current
- * supplier), the generated leaf still re-evaluates its setup region inside
- * `<Name>__claim` (`generated-leaf/generate.ts`, the "local snapshots are setup
- * work" rule), and a compiler-emitted root setup split (moving that region into
- * `createInstance`) is still OWED; nested hostless children are not retained by
- * this seam and their retention remains OWED for `16b-LC-2` (NOT measured by
- * this slice's fixture, and never a claim of compliance). This shell has no
- * author `onConnect`/`onDispose` callbacks and makes no claim about
- * focus/selection or other platform state across the disconnect window.
+ * reconnect-resource contract. The ROOT generated setup split is now WIRED: the
+ * compiler emits one module-local `__oe_rootInstance(owner, host)` factory for
+ * the root and the emitted descriptor supplies it as `createInstance`
+ * (T3/`16b-LC-1`), so the generated root mount/claim alias that retained record
+ * instead of re-evaluating its setup locals inside `<Name>__claim`. THIS fixture
+ * still supplies the descriptor by hand (descriptor-fixture evidence, not
+ * generated-path evidence; the generated-path evidence is the compiler's
+ * `generated-element.root-instance.*` tests). Nested hostless children are NOT
+ * retained by this seam and this fixture neither instantiates nor counts one;
+ * the generated-path fixture MEASURES the child's setup re-evaluating on a
+ * parent reconnect, while nested retention itself remains OWED for `16b-LC-2`
+ * (never a claim of compliance). This shell has no author `onConnect`/
+ * `onDispose` callbacks and makes no claim about focus/selection or other
+ * platform state across the disconnect window.
  *
  * Explicit teardown is `dispose(true)` on the element; it removes only the node
  * range the shell mounted or claimed and destroys the retained instance in the
@@ -271,11 +275,16 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
    * private state survive the disconnect window; the reconnect claim runs
    * without repeating this factory.
    *
-   * This is the DESCRIPTOR-FIXTURE retention contract only in the current
-   * slice: no generated module emits `createInstance` yet, so a generated root's
-   * setup region still re-evaluates in `<Name>__claim` and root generated setup
-   * is NOT complete (the compiler setup split is OWED). Hosts/tests supply this
-   * factory directly; the generated emitter is a separate, unapproved change.
+   * In the generated path the compiler now emits this factory for the ROOT
+   * only (module-local `__oe_rootInstance`, T3/`16b-LC-1`) and the emitted
+   * descriptor supplies it here, so the generated root mount/claim alias the
+   * retained record instead of re-evaluating setup in `<Name>__claim`; a root
+   * with no local setup snapshot emits no factory and the shell keeps the
+   * `createBindings?.() ?? {}` fallback. Hosts/tests may still supply this
+   * factory directly (descriptor-fixture evidence). Nested hostless children
+   * keep their own per-claim evaluation: the generated-path fixture measures
+   * that re-evaluation, while nested child retention remains OWED for
+   * `16b-LC-2` and is not claimed here.
    *
    * The owner is a real cleanup channel: setup-owned effects, listeners, timers,
    * subscriptions and any other resource that needs cleanup register on it and

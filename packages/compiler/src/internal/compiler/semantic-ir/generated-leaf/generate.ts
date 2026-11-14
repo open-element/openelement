@@ -397,6 +397,29 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
 
 const INTERNAL_PREFIX = '__oe_';
 /**
+ * T3 / 16b-LC-1: the module-local ROOT setup factory name.
+ *
+ * The emitted CE descriptor's `createInstance` row references exactly this
+ * name (the tail appends the row when this declaration exists), and the root
+ * mount/claim alias the record it returns instead of re-evaluating the setup
+ * initializers. It is compiler-owned generated code, not an author hook and
+ * not a package export: the `__oe_` prefix is refused for every authored
+ * identifier, and `nextName` always emits a counter suffix, so neither an
+ * authored name nor a generator-local name can collide with this fixed
+ * module-scope declaration.
+ */
+const GENERATED_ROOT_INSTANCE_NAME = `${INTERNAL_PREFIX}rootInstance`;
+/**
+ * Root mount/claim alias of the retained setup record (`__oe_host.bindings`).
+ * Presence is checked with `Object.hasOwn`, so a legitimately `undefined` setup
+ * value is retained; the host-binding `__oe_requireBinding` helper keeps its
+ * documented undefined-means-missing identity (two records, two deliberate
+ * semantics).
+ */
+const ROOT_SETUP_RECORD = `${INTERNAL_PREFIX}setup`;
+/** The own-property presence helper used by the root mount/claim aliases. */
+const ROOT_SETUP_REQUIRE = `${INTERNAL_PREFIX}requireRootSetup`;
+/**
  * The M02 marked-printer placeholder for a JSX value lowered inside an
  * expression (`__oe_recipe_ref("id")`). The function model keeps the recipe
  * identity for the M02 §recipe model, but the generated leaf module can only
@@ -587,6 +610,16 @@ export interface GeneratedLeafModule {
   readonly sourceMap: CompiledElementSourceMap | null;
   /** Placement ledger for every lowered expression in the emitted module. */
   readonly placements: readonly ExpressionPlacement[];
+  /**
+   * T3 / 16b-LC-1: the module-local ROOT setup factory name the generator
+   * actually emitted (`__oe_rootInstance`), or null when no factory exists.
+   * It is produced by the SAME root-setup decision that writes the declaration,
+   * so the generated-element emitter appends the descriptor's `createInstance`
+   * row from this fact instead of scanning the emitted text (no second
+   * authority, no regex re-derivation). Return-only build metadata: it never
+   * changes the module bytes, and a hostless leaf always reports null.
+   */
+  readonly rootInstanceFactory: string | null;
   /** Host `bindings` names the module reads (signals/computeds/functions). */
   readonly requiredBindings: readonly string[];
   /** Host `props` names the module reads. */
@@ -3102,6 +3135,8 @@ interface EmittedComponent {
   readonly requiresPropsChanged: boolean;
   readonly segments: readonly EmissionSegment[];
   readonly placements: readonly ExpressionPlacement[];
+  /** The emitted root setup factory name, or null for a non-root/no-setup chunk. */
+  readonly rootInstanceFactory: string | null;
   /** True when this component's generated claim calls the directory consumer. */
   readonly usesStaticSiblingDirectoryConsumer?: boolean;
   /** True when this component's generated claim calls `claimRecipe`. */
@@ -4757,6 +4792,35 @@ function emitClaimTimeRecipes(
   }
 }
 
+/** One component-local setup snapshot (M03 "evaluate once" resource). */
+interface SetupLocal {
+  readonly name: string;
+  readonly record: LoweredExpressionRecord;
+  readonly span: SpanLike;
+}
+
+/**
+ * The root mount/claim alias prologue (T3 / 16b-LC-1).
+ *
+ * The retained setup record lives on `host.bindings` (the shell's
+ * `ensureInstance` publishes it before the recipe is created), so the root
+ * mount/claim reads each setup name from it by OWN-PROPERTY presence instead of
+ * re-evaluating the authored initializer. Presence, not value, is checked: a
+ * setup value that legitimately is `undefined` is retained. A missing key is
+ * the coded leaf missing-value failure, thrown before any claim write — the
+ * same fail-closed identity the host-binding helper uses for an absent binding.
+ */
+function emitRootSetupAlias(state: EmitState, localLines: readonly SetupLocal[]): void {
+  push(state, `const ${ROOT_SETUP_RECORD} = ${state.hostVar}.bindings ?? {};`);
+  push(
+    state,
+    `const ${ROOT_SETUP_REQUIRE} = (name) => { if (!Object.hasOwn(${ROOT_SETUP_RECORD}, name)) throw new Error("OEIR_LEAF_MISSING_VALUE: " + name); return ${ROOT_SETUP_RECORD}[name]; };`,
+  );
+  for (const line of localLines) {
+    push(state, `const ${line.name} = ${ROOT_SETUP_REQUIRE}(${JSON.stringify(line.name)});`);
+  }
+}
+
 /**
  * Emit `<Name>__claim` for a claimable component. Returns null when the shape
  * is outside the admitted claim slice; the caller then leaves the recipe mount-only.
@@ -4767,6 +4831,7 @@ function emitClaimFunction(
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
   sharedClaimCursor: boolean,
+  rootSetup: boolean,
 ): ClaimEmission | null {
   const ctx: ClaimContext = { componentByName, stack: new Set() };
   if (!componentClaimable(component, ctx)) return null;
@@ -4822,11 +4887,7 @@ function emitClaimFunction(
       placements: [],
     };
   }
-  const localLines: Array<{
-    name: string;
-    record: LoweredExpressionRecord;
-    span: SpanLike;
-  }> = [];
+  const localLines: SetupLocal[] = [];
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
       continue;
@@ -4850,11 +4911,16 @@ function emitClaimFunction(
   state.claimActivationVar = useShared ? CLAIM_ACTIVATION : null;
   const rootAdoptedVar = useShared ? null : nextName(state, 'adopted');
   if (!useShared) {
-    // Local snapshots are setup work: evaluate them once, before the claim walk
-    // reads them (B1). This matches the shared path and mount setup order; a
-    // local initializer's authored side effects therefore run during claim.
-    for (const line of localLines) {
-      pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+    // Local snapshots are setup work (B1). A non-root chunk evaluates them once
+    // before the claim walk reads them (authored side effects therefore run
+    // during claim); the ROOT aliases the retained `createInstance` record
+    // instead and never re-runs an initializer (T3 / 16b-LC-1).
+    if (rootSetup) {
+      emitRootSetupAlias(state, localLines);
+    } else {
+      for (const line of localLines) {
+        pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+      }
     }
     push(state, `const ${rootAdoptedVar} = [];`);
   }
@@ -4885,8 +4951,15 @@ function emitClaimFunction(
     );
     emitClaimCursorEnd(state, rootCursor, '/', component.span);
   } else {
-    for (const line of localLines) {
-      pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+    // Shared-cursor claim: both branches of the claim walk read the same setup
+    // names, so this branch aliases the retained root record exactly like the
+    // non-shared one instead of re-evaluating the setup initializers.
+    if (rootSetup) {
+      emitRootSetupAlias(state, localLines);
+    } else {
+      for (const line of localLines) {
+        pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+      }
     }
     if (state.childrenRecipeVar !== null) {
       push(state, `const ${state.childrenRecipeVar} = ${MOUNT_PROPS}.children;`);
@@ -5948,6 +6021,7 @@ function emitComponent(
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
   sharedClaimCursor: boolean,
+  rootInstance: string | undefined,
 ): EmittedComponent {
   const propsName = component.propsParam;
   const projectsChildren = componentProjectsChildren(component);
@@ -6010,6 +6084,7 @@ function emitComponent(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      rootInstanceFactory: null,
       segments: [],
       placements: [],
     };
@@ -6027,12 +6102,9 @@ function emitComponent(
     });
   }
   // Resources: signal/computed names are host bindings; local snapshots are
-  // evaluated inside the mount (setup mode), preserving M03 semantics.
-  const localLines: Array<{
-    name: string;
-    record: LoweredExpressionRecord;
-    span: SpanLike;
-  }> = [];
+  // evaluated inside the mount (setup mode), preserving M03 semantics. For the
+  // root they move into the `__oe_rootInstance` factory (T3 / 16b-LC-1).
+  const localLines: SetupLocal[] = [];
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
       diag(
@@ -6064,6 +6136,7 @@ function emitComponent(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      rootInstanceFactory: null,
       segments: [],
       placements: [],
     };
@@ -6081,14 +6154,128 @@ function emitComponent(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      rootInstanceFactory: null,
       segments: [],
       placements: [],
     };
   }
 
+  // T3 / 16b-LC-1: the ROOT's local snapshots are element-lifetime setup, not
+  // per-projection work. They move into one module-local factory the shell's
+  // `createInstance` calls once; mount/claim alias the retained record. A
+  // non-root component (and a root with no setup snapshot) keeps today's bytes
+  // exactly. `generateElementModule` passes the option only for site modules.
+  //
+  // A root setup that reads a HOST BINDING cannot be evaluated by the instance
+  // factory: the shell's `instanceHostFor` carries props/propsChanged only (no
+  // bindings record) and T3 adds no binding channel. The lane's unchanged
+  // `UNBOUND_BINDING` gate refuses such a module; keeping `rootSetup` false
+  // here preserves the pre-change emitted text instead of writing a factory
+  // that references a name it never declares.
+  const setupReadsHostBinding = localLines.some((line) =>
+    line.record.reads.some(
+      (read) =>
+        state.hostBindings.has(read.name) ||
+        state.hostBindings.has(read.binding.name) ||
+        state.requiredBindings.has(read.name) ||
+        state.requiredBindings.has(read.binding.name),
+    ),
+  );
+  const rootSetup =
+    rootInstance === component.name && localLines.length > 0 && !setupReadsHostBinding;
+  let setupLines: string[] = [];
+  let setupSegments: EmissionSegment[] = [];
+  let setupPlacements: ExpressionPlacement[] = [];
+  if (rootSetup) {
+    // Fail-closed belt: the factory and alias names are compiler-owned fixed
+    // names. The `__oe_` prefix refusal above makes an authored collision
+    // impossible and `nextName` always emits a counter suffix; refusing here
+    // keeps a model that bypassed both from emitting a duplicate declaration.
+    const fixedNames: readonly string[] = [
+      GENERATED_ROOT_INSTANCE_NAME,
+      ROOT_SETUP_RECORD,
+      ROOT_SETUP_REQUIRE,
+    ];
+    const authoredNames = new Set<string>([
+      component.name,
+      ...component.resources.map((resource) => resource.name),
+    ]);
+    const collision = fixedNames.find((name) => authoredNames.has(name));
+    if (collision !== undefined) {
+      diag(
+        state,
+        'OEIR_LEAF_INVALID_ARTIFACT',
+        `the root instance setup name '${collision}' collides with an authored identifier`,
+        component.span,
+      );
+    } else if (localLines.some((line) => line.name === propsName)) {
+      // A setup local named like the props parameter would emit a duplicate
+      // `const` when the factory carries the props alias (B2). Impossible in
+      // admitted source; fail closed instead of shipping an unparseable module.
+      diag(
+        state,
+        'OEIR_LEAF_INVALID_BINDING',
+        `the root setup local collides with the props parameter '${String(propsName)}'`,
+        component.span,
+      );
+    }
+    if (state.diagnostics.length > 0) {
+      return {
+        lines: [],
+        diagnostics: state.diagnostics,
+        requiredBindings: [],
+        requiredProps: [],
+        requiresPropsChanged: false,
+        rootInstanceFactory: null,
+        segments: [],
+        placements: [],
+      };
+    }
+    const setupReadsProps = localLines.some((line) =>
+      line.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
+    );
+    const setupPrologue: string[] = [
+      `function ${GENERATED_ROOT_INSTANCE_NAME}(${INTERNAL_PREFIX}owner, ${MOUNT_HOST}) {`,
+    ];
+    if (setupReadsProps && propsName !== null) {
+      // The shell passes the live frozen props record into `createInstance`;
+      // the factory snapshots its getters' VALUES once at first connect. That
+      // is the accepted ADR-0173 setup-once limitation: a prop seeded after the
+      // first connect is not observed by retained setup (mount/claim keep
+      // reading the same live record for non-setup reads).
+      setupPrologue.push(`  const ${propsName} = ${MOUNT_HOST}.props;`);
+    }
+    const setupState: EmitState = {
+      ...state,
+      lines: [],
+      physicalLine: 0,
+      segments: [],
+      placements: [],
+      segmentKeys: new Set(),
+    };
+    for (const line of localLines) {
+      pushParts(setupState, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+    }
+    const setupReturn = `  return { ${localLines.map((line) => line.name).join(', ')} };`;
+    setupLines = [...setupPrologue, ...setupState.lines, setupReturn, '}', ''];
+    const setupShift = fragmentLineCount(setupPrologue);
+    setupSegments = setupState.segments.map((segment) => ({
+      ...segment,
+      generatedLine: segment.generatedLine + setupShift,
+    }));
+    setupPlacements = setupState.placements.map((placement) => ({
+      ...placement,
+      generatedLine: placement.generatedLine + setupShift,
+    }));
+  }
+
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
-  for (const line of localLines) {
-    pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+  if (rootSetup) {
+    emitRootSetupAlias(state, localLines);
+  } else {
+    for (const line of localLines) {
+      pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+    }
   }
   // One read of the children recipe per mount (M06b2a): every projection site
   // inserts this same recipe value, and dynamic children content refreshes
@@ -6114,6 +6301,7 @@ function emitComponent(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      rootInstanceFactory: null,
       segments: [],
       placements: [],
     };
@@ -6172,7 +6360,7 @@ function emitComponent(
   }
   const claim =
     state.diagnostics.length === 0
-      ? emitClaimFunction(file, component, records, componentByName, sharedClaimCursor)
+      ? emitClaimFunction(file, component, records, componentByName, sharedClaimCursor, rootSetup)
       : null;
   if (claim !== null && claim.diagnostics.length > 0) {
     return {
@@ -6181,6 +6369,7 @@ function emitComponent(
       requiredBindings: [...state.requiredBindings].sort(),
       requiredProps: [...state.requiredProps].sort(),
       requiresPropsChanged: state.requiresPropsChanged,
+      rootInstanceFactory: null,
       segments: [],
       placements: [],
     };
@@ -6219,26 +6408,32 @@ function emitComponent(
       requiredBindings: [...state.requiredBindings].sort(),
       requiredProps: [...state.requiredProps].sort(),
       requiresPropsChanged: state.requiresPropsChanged,
+      rootInstanceFactory: null,
       segments: [],
       placements: [],
     };
   }
   const ssrLines = ssr?.lines ?? [];
   // Chunk offsets are physical lines: a multi-line lowered expression inside an
-  // earlier chunk occupies more generated lines than one array element.
-  const claimShift = fragmentLineCount(mountLines) + fragmentLineCount(factoryLines);
+  // earlier chunk occupies more generated lines than one array element. The
+  // root setup factory (when emitted) is the component chunk's first fragment,
+  // so every later chunk shifts by its ACTUAL line count — never a constant.
+  const setupShift = fragmentLineCount(setupLines);
+  const claimShift = setupShift + fragmentLineCount(mountLines) + fragmentLineCount(factoryLines);
   const ssrShift = claimShift + fragmentLineCount(claimLines);
-  const shift = fragmentLineCount(mountPrologue);
+  const shift = setupShift + fragmentLineCount(mountPrologue);
   return {
-    lines: [...mountLines, ...factoryLines, ...claimLines, ...ssrLines],
+    lines: [...setupLines, ...mountLines, ...factoryLines, ...claimLines, ...ssrLines],
     diagnostics: state.diagnostics,
     requiredBindings: [...state.requiredBindings].sort(),
     requiredProps: [...state.requiredProps].sort(),
     requiresPropsChanged: state.requiresPropsChanged,
+    rootInstanceFactory: rootSetup ? GENERATED_ROOT_INSTANCE_NAME : null,
     usesStaticSiblingDirectoryConsumer: claim?.usesStaticSiblingDirectoryConsumer === true,
     usesClaimRecipe: claim?.usesClaimRecipe === true,
     usesLeafClaimMismatch: claim?.usesLeafClaimMismatch === true,
     segments: [
+      ...setupSegments,
       ...state.segments.map((segment) => ({
         ...segment,
         generatedLine: segment.generatedLine + shift,
@@ -6253,6 +6448,7 @@ function emitComponent(
       })),
     ],
     placements: [
+      ...setupPlacements,
       ...state.placements.map((placement) => ({
         ...placement,
         generatedLine: placement.generatedLine + shift,
@@ -6437,7 +6633,19 @@ function parsesAsModule(text: string): boolean {
  */
 export function generateLeafModule(
   module: FunctionModelModule,
-  options: { readonly authoredSource?: string } = {},
+  options: {
+    readonly authoredSource?: string;
+    /**
+     * T3 / 16b-LC-1 compiler-private root marker: the name of the component
+     * whose local setup snapshots become a retained `__oe_rootInstance(owner,
+     * host)` factory instead of per-mount/claim evaluation. It is the ROOT
+     * component name the generated-element emitter already resolved; it is
+     * never author syntax, never a host site fact and never a package export.
+     * Omitted (hostless leaf, direct leaf tests) keeps today's bytes exactly,
+     * and a root with no setup snapshot also emits no factory.
+     */
+    readonly rootInstance?: string;
+  } = {},
 ): GeneratedLeafModule {
   const records = new Map(module.expressions.expressions.map((record) => [record.id, record]));
   if (module.components.length === 0) {
@@ -6445,6 +6653,7 @@ export function generateLeafModule(
       module: null,
       sourceMap: null,
       placements: [],
+      rootInstanceFactory: null,
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
@@ -6468,6 +6677,7 @@ export function generateLeafModule(
       module: null,
       sourceMap: null,
       placements: [],
+      rootInstanceFactory: null,
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
@@ -6484,6 +6694,10 @@ export function generateLeafModule(
   let usesStaticSiblingDirectoryConsumer = false;
   let usesClaimRecipe = false;
   let usesLeafClaimMismatch = false;
+  // T3 / 16b-LC-1: the root setup factory emitted by the component chunk (at
+  // most one component is the root), reported from the SAME decision that
+  // wrote the declaration. Null on every failure path and without the option.
+  let rootInstanceFactory: string | null = null;
   const sharedClaimCursor = moduleUsesSharedClaimCursor(module, componentByName);
   for (const component of module.components) {
     const emitted = emitComponent(
@@ -6492,9 +6706,11 @@ export function generateLeafModule(
       records,
       componentByName,
       sharedClaimCursor,
+      options.rootInstance,
     );
     diagnostics.push(...emitted.diagnostics);
     if (emitted.diagnostics.length > 0) continue;
+    rootInstanceFactory ??= emitted.rootInstanceFactory;
     for (const name of emitted.requiredBindings) requiredBindings.add(name);
     for (const name of emitted.requiredProps) requiredProps.add(name);
     requiresPropsChanged ||= emitted.requiresPropsChanged;
@@ -6523,6 +6739,9 @@ export function generateLeafModule(
       module: null,
       sourceMap: null,
       placements: [...placements],
+      // No module exists, so no declaration exists: keep the invariant
+      // "non-null exactly when the factory was emitted".
+      rootInstanceFactory: null,
       requiredBindings: [...requiredBindings].sort(),
       requiredProps: [...requiredProps].sort(),
       requiresPropsChanged,
@@ -6551,6 +6770,7 @@ export function generateLeafModule(
       module: null,
       sourceMap: null,
       placements: [...placements],
+      rootInstanceFactory: null,
       requiredBindings: [...requiredBindings].sort(),
       requiredProps: [...requiredProps].sort(),
       requiresPropsChanged,
@@ -6584,6 +6804,7 @@ export function generateLeafModule(
     module: text,
     sourceMap,
     placements: modulePlacements,
+    rootInstanceFactory,
     requiredBindings: [...requiredBindings].sort(),
     requiredProps: [...requiredProps].sort(),
     requiresPropsChanged,
