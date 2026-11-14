@@ -1,7 +1,7 @@
 ---
 status: active
-topic: M09 exit docket (prepared for signature; effective on signature)
-summary: Collects what an M09 exit record must carry — fixed SHA, §13.6 provenance, the delivered slice set, the blocking set and the empty signature fields — so the remaining work is a signature and one scope decision rather than research. It records no status and claims no exit.
+topic: M09 exit docket (decisions recorded; effective on signature)
+summary: M09 exit docket for signature: fixed SHA, §13.6 provenance, delivered slices, blocking set, empty signature fields, plus the four owner decisions of 2026-11-14 (M09-3/4 scope, CEM contract migration, two-step P5, bounded self-review). Records no status and claims no exit.
 ---
 
 # M09 exit docket
@@ -20,6 +20,48 @@ recorded **once**, by a consolidation PR naming the fixed SHA and carrying its
 own evidence (`alpha16-18-progress.md`:286-289, the adopted Closeout form), never
 as a by-product of a slice PR. This file is what that PR would contain minus the
 signatures.
+
+## Owner decisions of record (2026-11-14)
+
+The four items this docket was blocked on were put to the owner on 2026-11-14
+and answered. They are recorded here so the next reader does not re-litigate
+them; each row names what it changed in this file.
+
+| # | Question | Answer | Effect on this docket |
+| --- | --- | --- | --- |
+| D-① | `M09-3` / `M09-4`: define and deliver, or retire the labels? | **Define and deliver.** `M09-4` is the closeout bookkeeping itself (matrix TSX-14/TSX-20 plus the §3 row), so the exit record performs it rather than a slice doing so; `M09-3` is delivered as one bounded slice. | B1 turns from an undefined scope into one bounded slice with a named, pre-existing harness. No label is retired. |
+| D-② | CEM retained obligation: generate CEM, or migrate the packed CEM artifact contract? | **Migrate the contract** — §14.2's second branch, owner-approved here. The format stays standard CEM 2.1.0 validated against the official `custom-elements-manifest` schema; the change is confined to the *input* of the manifest chain. | B2's CEM row acquires a bounded mechanism; the other two rows are unchanged. |
+| D-③ | §13.5 P5 inventory: track as-is, complete-then-sign, or narrow the claim? | **Complete, in two steps.** Track the inventory now as a progress table with `sign-off: none`; take the §13.5 owner sign-off only when the count of production-equivalent replacements is no longer zero and the final-SHA matrix is filled. The claim is **not** narrowed. | B4 stays open, but its first half (a tracked inventory) becomes deliverable without pretending to be P5 evidence. |
+| D-④ | Who performs the M09-2d review? | **The owner, as a bounded self-review** of the two M09-2d slices. | B3 becomes closable by the owner, with the missing independent leg recorded instead of erased. |
+
+### What D-① resolves, exactly
+
+`M09-3` and `M09-4` were never plan labels: `alpha16-18-execution-plan.md`:58
+defines M09 as one milestone, and §14.4 (`:525-527`) states that no slice label
+is introduced. Their definitions exist only in the pre-slice working design
+(`review-deliverables/alpha16-execution-20261112/M09-0-design.md`:142-145 and
+`remaining-work-graph.md`:61-62), which is an input, not authority. As decided:
+
+- **M09-3 — third-party Web Component / foreign-framework interoperability
+  qualification.** The generated CE joins the `tests/fixtures/web-component-interop`
+  corpus, and the foreign-tag rules (no auto-registration, no SSR assumption)
+  are asserted on it. The harness pre-exists and is already gated:
+  `tests/fixtures/web-component-interop/{corpus.json,qualify.ts}` and
+  `@openelement/fixture-web-component-interop#test` inside `gate:release`.
+- **M09-4 — the matrix and ledger row set** (TSX-14 CE connection lifetime,
+  TSX-20 native CE / third-party WC, and the §3 M09 row). This is the closeout
+  bookkeeping the consolidation PR performs, not a separate deliverable.
+
+D-② is likewise narrower than "build CEM". `packages/ui/tools/generate-cem.ts`
+already projects onto CEM 2.1.0 and validates against the official schema
+shipped by `custom-elements-manifest`, `packages/ui/custom-elements.json` is
+tracked and shipped, and `ui-cem:check` plus the packed-copy check in
+`tools/release/check-package-artifacts.ts` are already in `gate:release`. The
+break is upstream: `packages/ui/tools/generate-ui-manifest.ts` requires an
+`@element('tag')` decorator (`:164-165`) and `extends OpenElement` (`:171`,
+`:349`), so the chain loses its input — not its format — when components become
+function components. The migration therefore changes the manifest chain's input
+and leaves the CEM format, the schema validation and every gate untouched.
 
 ## 1. Fixed SHA
 
@@ -65,21 +107,30 @@ Six merged PRs, keyed to the squash SHA each landed as (`alpha16-18-progress.md`
 
 | | Blocker | State | Who can close it |
 | --- | --- | --- | --- |
-| B1 | **`M09-3` and `M09-4` have no definition.** The §3 row (`:125`) lists them as open, and `m09-generated-element-shell.md`:211 says they are "not started", but neither label is defined anywhere in `docs/`. `alpha16-18-execution-plan.md`:58 defines M09 as **one** milestone and names no sub-slices, and §14.4 (`:525-527`) states that no new slice label is introduced. The remaining-open set therefore cannot be evaluated: it is either two undefined capabilities, or two labels that should be retired. | Undecided | owner (scope decision) |
+| B1 | **`M09-3` is defined but not delivered** (D-①): the generated CE is not yet in the third-party interoperability corpus. `M09-4` is the closeout bookkeeping this record performs and is no longer counted as a gap. | Defined, not delivered | implementation — one bounded slice |
 | B2 | **§14.2's three retained obligations** are OPEN. `16b-migration-note.md` is the tracked carrier for all three and records them as open rows; the CEM obligation has no bounded mechanism at all, while non-primitive conversion and form validity are bounded-LOCAL. | Not delivered | implementation |
-| B3 | **Independent review.** Both M09-2d slice documents self-report `Status: bounded implemented — LOCAL review pending` (`m09-2d-forms.md`:9, `m09-2d-nonprimitive-properties.md`:9). A slice PR self-reporting "review pending" cannot be an exit input. | Pending | independent reviewer |
+| B3 | **Review.** Both M09-2d slice documents self-report `Status: bounded implemented — LOCAL review pending` (`m09-2d-forms.md`:9, `m09-2d-nonprimitive-properties.md`:9). Per D-④ the owner performs this review as a **bounded self-review** of the two slices. What an independent reviewer would have contributed — a second reading of the two bounded mechanisms for undeclared preconditions — is recorded here as an accepted risk and is not erased. | Owner self-review (bounded) | owner |
 | B4 | **§13.5 P5 evidence.** The tracked capability inventory, the final-SHA matrix and the owner sign-off do not exist; §13.5: "A draft does not satisfy P5 … until then, P5 is not claimable and Alpha16 release qualification is not openable". | Absent | owner + author |
 | B5 | **Evidence provenance limits.** The run is `LOCAL`, chromium-only, with no CI run/job identity and no Firefox/WebKit leg; the engine revision is not recorded. M13 is where three engines are qualified, and this docket does not pre-empt it. | Recorded limit | — (a limit, not a gap in the plan) |
 
-B1 is the load-bearing one. It is a **decision**, not work: either M09-3/M09-4
-are defined and delivered, or the §3 row's label set is corrected by a dated
-amendment stating that M09 has no third and fourth slice. Until one of those
-happens, no amount of evidence makes an M09 exit record true.
+B1 is no longer a scope question — D-① closes it — but a delivery one: a single
+bounded slice whose fixture and gate already exist. Until it lands, no amount of
+evidence makes an M09 exit record true. `M09-4` does not appear in this table
+because the record that closes M09 is the action that satisfies it.
+
+D-④ is recorded as a **bounded** exception and not as a general one. It covers
+the two M09-2d slices and nothing else, and it establishes no precedent that a
+later slice may be self-reviewed; a later self-review needs its own dated entry
+naming what independence would have added. D-④ is also **not** signature ④
+below: D-④ is the technical review, while signature ④ is the merge approval
+`CONTRIBUTING.md`:197 requires. A self-review does not discharge a maintainer
+approval, and vice versa.
 
 ## 5. NOT claimed
 
-- No M09 exit, and no change to the §4 verdict that Alpha16b has no exit
-  evidence.
+- No M09 exit. D-①–D-④ settle scope and method only: they supply no evidence,
+  close no obligation and authorize no release.
+- No change to the §4 verdict that Alpha16b has no exit evidence.
 - No status flip of the §3 M09 row; that row is a historical single-writer
   record.
 - No P5 evidence, no §13.5 inventory, no owner sign-off.
@@ -105,6 +156,10 @@ interchangeable**:
 A signature here authorizes recording an M09 exit. It is **not** a release
 authorization (`CONTRIBUTING.md`:197), and it does not admit a publication: S4
 is the only step that ships `1.0.0-alpha.16`, and it is gated separately.
+
+D-③ does not move signature ③ earlier. The §13.5 sign-off stays unavailable
+while the inventory's count of production-equivalent replacements is zero, and
+"tracked" is not "signed".
 
 The record becomes effective only when all four are filled **and** B1 is closed
 by a decision or B1–B2 are explicitly accepted as scope in a dated
