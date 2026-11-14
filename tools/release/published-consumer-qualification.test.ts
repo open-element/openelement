@@ -1,7 +1,8 @@
 import { expect, test } from 'vitest';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import {
@@ -19,6 +20,8 @@ import {
   pass,
   type RegistryFetcher,
   releaseGateExitCode,
+  releaseLineVitePin,
+  type ReleaseLineVitePin,
   skipAllowed,
   unknown,
   VITE_SMOKE_SOURCE,
@@ -92,6 +95,16 @@ test('consumer-smoke options: an explicit version enables CDN and Nitro probes u
     versionProvided: true,
     runJsDelivr: false,
     runNitro: false,
+  });
+});
+
+test('consumer-smoke options: a leading v is the tag spelling, not the version', () => {
+  expect(parseConsumerSmokeOptions(['--smoke', '--version', 'v1.0.0-alpha.1'], '0.0.0')).toEqual({
+    local: false,
+    version: '1.0.0-alpha.1',
+    versionProvided: true,
+    runJsDelivr: true,
+    runNitro: true,
   });
 });
 
@@ -337,7 +350,7 @@ test('node runtime smoke stays on the plain-Node core surface', () => {
 // Scaffold package-manager-neutrality guard (alpha15+): both starter legs run
 // `pnpm install` inside the scaffolded project, so the harness must know the
 // shipped form before it runs anything. The Vite+ catalog form is retired —
-// the scaffold pins `vite` itself (at the router's own version), declares no
+// the scaffold pins `vite` itself (at its own release's version), declares no
 // `packageManager`, carries no pnpm-only `catalog:`/`vite-plus` specifier, and
 // ships NO pnpm-workspace.yaml. A create-side regression to any of those makes
 // the generated project installable only under pnpm; the guard must name it
@@ -347,24 +360,69 @@ const repoRoot = join(import.meta.dirname!, '..', '..');
 const scaffoldManifestTemplate = () =>
   readFile(join(repoRoot, 'packages', 'create', 'templates', 'package.json.tmpl'), 'utf8');
 
+/** A release-line record, as {@link releaseLineVitePin} returns one. */
+const releaseLine = (pin: string, source = 'test release line'): ReleaseLineVitePin => ({
+  pin,
+  source,
+});
+
 test('neutrality guard accepts the create template shipped manifest', async () => {
   // The real template payload (placeholders included — the `${...}` tokens sit
   // in string values, so it parses as JSON) must satisfy the guard, so a
   // create-side drift in the vite pin, the packageManager field, or a
-  // reintroduced catalog specifier fails here, on the repo surface.
+  // reintroduced catalog specifier fails here, on the repo surface. The
+  // working tree is the "release line" only because this file is not released:
+  // the guard is driven by the pin it is handed, and the working tree's pin is
+  // the one `deps:vite-check` holds the template to.
   const template = await scaffoldManifestTemplate();
-  expect(() => assertPackageManagerNeutralManifest(template, 'template starter')).not.toThrow();
+  expect(() =>
+    assertPackageManagerNeutralManifest(
+      template,
+      'template starter',
+      releaseLine(VITE_DEV_PIN, 'packages/create/templates/package.json.tmpl (working tree)'),
+    ),
+  ).not.toThrow();
 });
 
-test('neutrality guard rejects a scaffold whose vite pin drifts from the router', () => {
+test('neutrality guard judges a published starter against its own release line (#1717)', () => {
+  // alpha.15 shipped vite 8.0.16; `main` moved to 8.1.6 afterwards (#1683).
+  // The published starter IS the alpha.15 artifact, so alpha.15's record is
+  // what judges it — anchoring the check to the working tree made every
+  // qualification run of an older release fail by construction.
+  const alpha15 = releaseLine(
+    '8.0.16',
+    'v1.0.0-alpha.15:packages/create/templates/package.json.tmpl',
+  );
+  expect(() =>
+    assertPackageManagerNeutralManifest(
+      JSON.stringify({ devDependencies: { vite: '8.0.16' } }),
+      'Published starter',
+      alpha15,
+    ),
+  ).not.toThrow();
+  // Still exact, in both directions: the release line is a record, not a floor.
+  assertThrowsIncludes(
+    () =>
+      assertPackageManagerNeutralManifest(
+        JSON.stringify({ devDependencies: { vite: VITE_DEV_PIN } }),
+        'Published starter',
+        alpha15,
+      ),
+    Error,
+    "expected the release's starter pin 8.0.16 (v1.0.0-alpha.15:",
+  );
+});
+
+test('neutrality guard rejects a scaffold whose vite pin drifts from its release', () => {
   const err = assertThrowsIncludes(
     () =>
       assertPackageManagerNeutralManifest(
         JSON.stringify({ devDependencies: { vite: '8.0.17' } }),
         'drifted starter',
+        releaseLine(VITE_DEV_PIN),
       ),
     Error,
-    `expected the router's own pin ${VITE_DEV_PIN}`,
+    `expected the release's starter pin ${VITE_DEV_PIN}`,
   );
   expect(err.message).toContain('drifted starter');
   // A range is the same violation: the generated project must pin one version.
@@ -373,9 +431,10 @@ test('neutrality guard rejects a scaffold whose vite pin drifts from the router'
       assertPackageManagerNeutralManifest(
         JSON.stringify({ devDependencies: { vite: '^8.0.0' } }),
         'ranged starter',
+        releaseLine(VITE_DEV_PIN),
       ),
     Error,
-    `expected the router's own pin ${VITE_DEV_PIN}`,
+    `expected the release's starter pin ${VITE_DEV_PIN}`,
   );
 });
 
@@ -387,6 +446,7 @@ test('neutrality guard rejects the retired Vite+ manifest forms', () => {
       assertPackageManagerNeutralManifest(
         JSON.stringify({ devDependencies: { vite: VITE_DEV_PIN, 'vite-plus': 'catalog:' } }),
         'vite-plus starter',
+        releaseLine(VITE_DEV_PIN),
       ),
     Error,
     'still declares the retired Vite+ dependency: vite-plus=catalog:',
@@ -397,9 +457,10 @@ test('neutrality guard rejects the retired Vite+ manifest forms', () => {
       assertPackageManagerNeutralManifest(
         JSON.stringify({ devDependencies: { vite: `catalog:vite` } }),
         'catalog starter',
+        releaseLine(VITE_DEV_PIN),
       ),
     Error,
-    `expected the router's own pin ${VITE_DEV_PIN}`,
+    `expected the release's starter pin ${VITE_DEV_PIN}`,
   );
 });
 
@@ -411,6 +472,7 @@ test('neutrality guard rejects a packageManager pin on the scaffold', () => {
       assertPackageManagerNeutralManifest(
         JSON.stringify({ packageManager: 'pnpm@12.8.1', devDependencies: { vite: VITE_DEV_PIN } }),
         'pinned starter',
+        releaseLine(VITE_DEV_PIN),
       ),
     Error,
     'pins a package manager (packageManager=pnpm@12.8.1)',
@@ -428,7 +490,12 @@ test('neutrality guard fails closed when the scaffold ships a pnpm-specific file
     'catalog:\n  vite-plus: 1.1.0\noverrides:\n',
   );
   const err = await assertRejectsIncludes(
-    () => assertStarterIsPackageManagerNeutral(scaffold, 'regressed starter'),
+    () =>
+      assertStarterIsPackageManagerNeutral(
+        scaffold,
+        'regressed starter',
+        releaseLine(VITE_DEV_PIN),
+      ),
     Error,
     'ships a pnpm-workspace.yaml',
   );
@@ -441,12 +508,90 @@ test('neutrality guard passes the neutral scaffold in place', async () => {
     join(scaffold, 'package.json'),
     JSON.stringify({ devDependencies: { vite: VITE_DEV_PIN } }),
   );
-  await assertStarterIsPackageManagerNeutral(scaffold, 'neutral starter');
+  await assertStarterIsPackageManagerNeutral(
+    scaffold,
+    'neutral starter',
+    releaseLine(VITE_DEV_PIN),
+  );
   // The same directory with a workspace file added is exactly the regression.
   await writeFile(join(scaffold, 'pnpm-workspace.yaml'), 'packages: []\n');
   await assertRejectsIncludes(
-    () => assertStarterIsPackageManagerNeutral(scaffold, 'neutral starter'),
+    () =>
+      assertStarterIsPackageManagerNeutral(scaffold, 'neutral starter', releaseLine(VITE_DEV_PIN)),
     Error,
     'must carry no pnpm-specific file',
   );
+});
+
+// The release line itself: the qualification's expected pin is a fact about a
+// release tag, so it is read from git and never from a tracked copy (#1717).
+// A scratch repository proves all three paths hermetically — the T7 tag, the
+// absence of a compatibility candidate, and the fail-closed miss — without
+// depending on which tags this checkout happens to have fetched.
+
+async function scratchReleaseRepo(): Promise<{
+  repo: string;
+  repin: (pin: string) => Promise<void>;
+  git: (...args: string[]) => void;
+}> {
+  const repo = await mkdtemp(join(tmpdir(), 'pcq-release-line-'));
+  const templatePath = join(repo, 'packages', 'create', 'templates', 'package.json.tmpl');
+  await mkdir(dirname(templatePath), { recursive: true });
+  const git = (...args: string[]) => {
+    execFileSync(
+      'git',
+      ['-C', repo, '-c', 'user.name=pcq', '-c', 'user.email=pcq@test.invalid', ...args],
+      { stdio: 'pipe' },
+    );
+  };
+  git('init', '-q');
+  const repin = async (pin: string) => {
+    await writeFile(templatePath, JSON.stringify({ devDependencies: { vite: pin } }, null, 2));
+  };
+  await repin('8.0.16');
+  git('add', '.');
+  git('commit', '-qm', 'the release');
+  return { repo, repin, git };
+}
+
+test('release line is read from the release tag, not the working tree', async () => {
+  const { repo, repin, git } = await scratchReleaseRepo();
+  // T7 form: one tag per shipped package; `create` carries the template.
+  git('tag', 'create-v0.0.1');
+  // The working tree moves on after the release, exactly as `main` did after
+  // alpha.15 shipped.
+  await repin('9.9.9');
+
+  const template = 'packages/create/templates/package.json.tmpl';
+  expect(await releaseLineVitePin('0.0.1', repo)).toEqual({
+    pin: '8.0.16',
+    source: `create-v0.0.1:${template}`,
+  });
+  expect(await releaseLineVitePin('v0.0.1', repo)).toEqual({
+    pin: '8.0.16',
+    source: `create-v0.0.1:${template}`,
+  });
+  // The retired umbrella tag is NOT a candidate: alpha.1–alpha.14 predate the
+  // neutral form, so their starter has no pin to compare and a fallback would
+  // be a compatibility path with no reachable use.
+  git('tag', 'v0.0.2');
+  const err = await assertRejectsIncludes(
+    () => releaseLineVitePin('0.0.2', repo),
+    Error,
+    'no release-line record for 0.0.2',
+  );
+  expect(err.message).toContain('git fetch --tags origin');
+});
+
+test('release line fails closed on a tag whose template pins no exact vite', async () => {
+  const { repo, repin, git } = await scratchReleaseRepo();
+  await repin('^8.0.0');
+  git('commit', '-qam', 'a range is not a pin');
+  git('tag', 'create-v0.0.4');
+  const err = await assertRejectsIncludes(
+    () => releaseLineVitePin('0.0.4', repo),
+    Error,
+    'does not pin an exact vite version (devDependencies.vite=^8.0.0)',
+  );
+  expect(err.message).toContain('0.0.4');
 });
