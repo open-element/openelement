@@ -43,7 +43,7 @@ there (`git show 3b5c7a9a^:docs/audit/2026-07-27-application-loop-framework-rese
 - [ADR-0142-light-mode-in-place-activation.md](./ADR-0142-light-mode-in-place-activation.md)
 - [ADR-0143-0-44-compiled-element-model-reentry.md](./ADR-0143-0-44-compiled-element-model-reentry.md) — AMENDED: accepted next architecture; implementation pending (2026-10-31)
 - [ADR-0148-compiler-semantic-core-vite-integration-boundary.md](./ADR-0148-compiler-semantic-core-vite-integration-boundary.md) — AMENDED: accepted next architecture; implementation pending (2026-10-31)
-- [ADR-0152-product-router-and-alpha-convergence.md](./ADR-0152-product-router-and-alpha-convergence.md) — AMENDED: first-party Lit retirement initiated; alpha.15 support remains (2026-11-03)
+- [ADR-0152-product-router-and-alpha-convergence.md](./ADR-0152-product-router-and-alpha-convergence.md) — AMENDED: first-party Lit renderer retired with zero compatibility window (owner ruling 2026-11-08); the published alpha.15 artifact still contains the retired lane
 - [ADR-0153-beta2-2-document-seam-and-submission-tuple.md](./ADR-0153-beta2-2-document-seam-and-submission-tuple.md)
 - [ADR-0154-alpha-baseline-removals.md](./ADR-0154-alpha-baseline-removals.md)
 - [ADR-0155-client-only-entry-subpath.md](./ADR-0155-client-only-entry-subpath.md)
@@ -66,3 +66,5 @@ there (`git show 3b5c7a9a^:docs/audit/2026-07-27-application-loop-framework-rese
 - [ADR-0173-component-execution-and-composition.md](./ADR-0173-component-execution-and-composition.md) — AMENDED: author semantics, slice prerequisites, reusable JSX values; class authoring retirement approved (fourth pass); implementation pending (2026-11-03)
 - [ADR-0174-generated-code-runtime-and-compatibility.md](./ADR-0174-generated-code-runtime-and-compatibility.md) — AMENDED: slice order, Alpha16a/16b split with the release gate intact, and approved retirement of the serialized Part Program protocol; implementation pending (2026-11-03)
 - [ADR-0175-alpha16a-m07-decisions-and-current-view.md](./ADR-0175-alpha16a-m07-decisions-and-current-view.md)
+- [ADR-0176-alpha16-plan-amendments-registry.md](./ADR-0176-alpha16-plan-amendments-registry.md)
+- [ADR-0177-internal-artifact-resolution-subpaths.md](./ADR-0177-internal-artifact-resolution-subpaths.md)
