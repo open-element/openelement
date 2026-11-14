@@ -2,6 +2,7 @@
 import ts from 'typescript';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
+import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'pathe';
 import type { HydrationStrategy, OpenElementPackageManifest } from '../../framework.ts';
@@ -13,6 +14,7 @@ import {
   isSafeAttributeName,
 } from '@openelement/protocol/forbidden-sinks';
 import { createLogger } from '@openelement/element';
+import { stableModuleId } from '@openelement/compiler';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import {
@@ -20,8 +22,13 @@ import {
   ClientAssetErrorCode,
   PackageIslandErrorCode,
 } from '../../../internal/error-codes.ts';
+import { createGeneratedElementSiteResolver } from '../../generated-element-site.ts';
 import { reportScanFatal } from '../build-diagnostics.ts';
 import { type DeclaredStyleSource, STYLE_DIALECTS } from '../style-plan.ts';
+import {
+  type GeneratedElementHostIdentity,
+  resolveGeneratedElementHost,
+} from './generated-element-host-metadata.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import {
   ISLAND_DELIVERY_STRATEGIES,
@@ -87,6 +94,15 @@ export interface LocalIslandMeta {
    * root decision stands, and the generated shell applies its `light` default.
    */
   root?: 'light' | 'shadow';
+  /**
+   * M11 prerequisite — the compiler-owned generated-host identity resolved by
+   * this scan from the source it already read (see
+   * `generated-element-host-metadata.ts`). Build-only metadata that rides the
+   * existing scanned record; the public `IslandDecl` shape is unchanged and no
+   * consumer is wired to it yet. It is produced by the one scan the build and
+   * the dev island rescan share, so it cannot go stale without the descriptor.
+   */
+  generatedElementHost?: GeneratedElementHostIdentity;
   /**
    * Native `delegatesFocus` fact for the island's shadow root. Declared next
    * to `root` because it is only meaningful with `root: 'shadow'`; the static
@@ -973,14 +989,36 @@ export async function scanIslands(islandsDir: string, relativeDir: string = ''):
  * half of one ownership invariant: the client manifest and the SSR admission
  * guards keep their own fail-late checks (defense in depth), and they only
  * ever see islands a page reaches.
+ *
+ * M11 prerequisite: the same pass resolves each local island's compiler-owned
+ * generated-host identity from the source it just read (one extra compiler
+ * call per `.tsx` island, including `ssr: false` ones — the classification is
+ * admission-independent, so the scan never needs a second pass once a consumer
+ * asks for it). The host-site fact comes from the existing
+ * `createGeneratedElementSiteResolver`, the ONE identity helper the transform
+ * hosts use, so the scan's admission and tag cannot diverge from the
+ * transform's. The identity is attached to the scanned record as
+ * `generatedElementHost`; no consumer is wired to it in this slice.
+ *
+ * `projectRoot` is the compiler identity anchor: the compile call receives
+ * `stableModuleId(fullPath, projectRoot)` (the same anchoring
+ * `island-blocks-scan` uses) so a refusal diagnostic carries a stable
+ * project-relative id, never a machine path. Only the host-site resolver gets
+ * the absolute path, because it needs the `islandsDir` segment. Callers pass
+ * their real root (the Vite plugin's resolved root, the SSG build's root); the
+ * cwd default only serves hosts that never resolved one.
  */
 export async function scanIslandMeta(
   islandsDir: string,
   islandFiles: string[],
+  projectRoot: string = process.cwd(),
 ): Promise<Record<string, StoredIslandMeta>> {
   const meta: Record<string, LocalIslandMeta> = {};
   /** tag -> the island file that first wrote it (islandsDir-relative). */
   const tagClaimants = new Map<string, string>();
+  // One resolver per scan, over the same root the island loop reads: the
+  // generated host site fact is the transform's own admission identity.
+  const generatedElementSite = createGeneratedElementSiteResolver(normalizeSeparators(islandsDir));
 
   for (const filePath of islandFiles) {
     const tagName = pathToTagName(filePath);
@@ -1016,9 +1054,27 @@ export async function scanIslandMeta(
     }
     tagClaimants.set(tagName, filePath);
 
+    // The compiler identity is project-anchored (the same `stableModuleId`
+    // anchoring island-blocks-scan uses), so a refusal diagnostic carries a
+    // stable id instead of the machine path. The ABSOLUTE path is only for
+    // the host-site resolver, which anchors admission on the islandsDir
+    // segment.
+    const absoluteModuleId = normalizeSeparators(fullPath);
+    const moduleId = stableModuleId(absoluteModuleId, projectRoot);
+    const generatedElementHost = resolveGeneratedElementHost({
+      source,
+      moduleId,
+      filePath,
+      root: islandConfig.root,
+      // The same host-side site fact the compiler transform resolves for this
+      // module path (M09-1b); null means this host never admits the module.
+      site: generatedElementSite(absoluteModuleId),
+    });
+
     meta[tagName] = {
       tagName,
       filePath,
+      generatedElementHost,
       ssr,
       dsd,
       hydrate,
