@@ -3,11 +3,13 @@ import { tmpdir } from 'node:os';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { strict as assert } from 'node:assert/strict';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { chromium, firefox, webkit } from '@playwright/test';
 import ts from 'typescript';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import {
   assertPackedTarballsFresh,
+  assertAuthoredSourceMap,
   runConsumerOrThrow,
   walkPackedDeclarations,
 } from './consumer-packaged-shared.ts';
@@ -206,6 +208,7 @@ export default {
     join(consumer, 'generated.html'),
     '<!doctype html><proof-profile></proof-profile><script type="module" src="/generated.js"></script>',
   );
+
   // Qualification server on node:http via the shared fetch adapter.
   let serverOrigin = '';
   const serve = await import('../../packages/router/src/internal/node-http.ts');
@@ -221,10 +224,20 @@ export default {
             ? 'generated.js'
             : path === '/generated'
               ? 'generated.html'
-              : 'index.html';
+              : path === '/shadow.js'
+                ? 'shadow.js'
+                : path === '/shadow.js.map'
+                  ? 'shadow.js.map'
+                  : path === '/shadow-s3'
+                    ? 'shadow-s3.html'
+                    : 'index.html';
       return new Response(await readFile(join(consumer, file), 'utf8'), {
         headers: {
-          'content-type': /\.js$/.test(file) ? 'text/javascript' : 'text/html',
+          'content-type': /\.js$/.test(file)
+            ? 'text/javascript'
+            : /\.map$/.test(file)
+              ? 'application/json'
+              : 'text/html',
         },
       });
     },
@@ -280,6 +293,252 @@ export default {
       );
     } finally {
       await generatedBrowser.close();
+    }
+
+    // ---- M12 S3 slice: packed shadow-root generated island ----
+    //
+    // LOCAL evidence (never a gate/CI-required task). This leg builds the packed
+    // generated lane the S3 assertions need: a shadow-root generated island with
+    // a compiler-emitted host producer, a Node SSR artifact (packed compiler +
+    // packed shell), a browser bundle with an external source map, and then
+    // asserts on the installed tarballs' output only: no `__partProgram`, exact
+    // server SSR bytes preserved through parse/claim, zero claim-period
+    // mutations, pre-activation input retention, and a decodable authored map.
+    // It does not claim the full S2 stateful list matrix (M12/M13 stay owed).
+    await writeFile(
+      join(author, 'proof-shadow.tsx'),
+      `// The generated lane's island policy statement (no router is installed).
+function defineIslandConfig(config) { return config; }
+export const openElement = defineIslandConfig({
+  hydrate: 'only',
+  ssr: true,
+  root: 'shadow',
+  properties: {
+    title: { default: '' },
+    count: { default: 0 },
+  },
+});
+
+function ProofShadow(props: { title: string; count: number }) {
+  return (
+    <article id="proof-shadow-card" data-kind="packed-shadow">
+      <h1 id="shadow-title">{props.title}</h1>
+      <p id="shadow-count">{props.count}</p>
+      <input id="shadow-field" value="server" />
+    </article>
+  );
+}
+export default ProofShadow;
+`,
+    );
+    await writeFile(
+      join(author, 'register-shadow.js'),
+      `import ProofShadow from './proof-shadow.tsx'; customElements.define('proof-shadow', ProofShadow);`,
+    );
+    const shadowSitePlugin = `element({generatedElementSite: (moduleId) => moduleId.includes('proof-shadow.tsx') ? { tag: 'proof-shadow', root: 'shadow' } : null})`;
+    await writeFile(
+      join(author, 'vite.shadow.config.js'),
+      `import {writeFileSync} from 'node:fs';
+import {element} from '@openelement/compiler/vite';
+export default {
+  plugins: [
+    ${shadowSitePlugin},
+    {name:'proof-shadow-module-boundary',generateBundle(){for(const id of this.getModuleIds()){if(/compiler|router\\/src\\/(?:vite|cli)|node:/.test(id))this.error('Browser tooling leak: '+id)}}},
+    {name:'proof-shadow-emitted-capture',enforce:'post',transform(code,id){if(id.includes('proof-shadow.tsx'))writeFileSync(${JSON.stringify(join(author, 'captured-shadow-module.js'))},code)}},
+  ],
+  build:{sourcemap:true, minify:false, lib:{entry:'register-shadow.js',formats:['es'],fileName:'shadow'}},
+};`,
+    );
+    await runConsumerOrThrow(
+      'node',
+      ['node_modules/vite/bin/vite.js', 'build', '--config', 'vite.shadow.config.js'],
+      author,
+    );
+    await writeFile(
+      join(author, 'ssr-shadow-entry.js'),
+      `import {ProofShadow__ssrHost} from './proof-shadow.tsx';
+export function renderShadow() {
+  // Canonical host-attribute input only: the same standard SSR product path the
+  // router build uses; no fabricated property seed.
+  return ProofShadow__ssrHost(undefined, undefined, [['title', 'server title'], ['count', '2']]);
+}
+`,
+    );
+    await writeFile(
+      join(author, 'vite.shadow-ssr.config.js'),
+      `import {element} from '@openelement/compiler/vite';
+export default {
+  plugins: [${shadowSitePlugin}],
+  ssr: { noExternal: true },
+  build:{ssr:'ssr-shadow-entry.js', outDir:'dist-ssr', sourcemap:true, minify:false, emptyOutDir:true, rollupOptions:{output:{format:'es', entryFileNames:'ssr-shadow-entry.js'}}},
+};`,
+    );
+    await runConsumerOrThrow(
+      'node',
+      ['node_modules/vite/bin/vite.js', 'build', '--config', 'vite.shadow-ssr.config.js'],
+      author,
+    );
+    const shadowJs = await readFile(join(author, 'dist/shadow.js'), 'utf8');
+    const shadowMap = JSON.parse(
+      await readFile(join(author, 'dist/shadow.js.map'), 'utf8'),
+    ) as unknown;
+    // The packed compiler plugin's own emitted module is the artifact the S3
+    // no-__partProgram fact is about (the browser bundle legitimately carries the
+    // packed shell/runtime it imports). The config's post-transform capture plugin
+    // writes exactly the code the packed compiler emitted for this module.
+    const emittedShadow = await readFile(join(author, 'captured-shadow-module.js'), 'utf8');
+    assert(
+      emittedShadow.includes('ProofShadow__ssrHost'),
+      'packed compiler must emit the shadow host producer export',
+    );
+    assert(
+      !emittedShadow.includes('__partProgram'),
+      'packed generated shadow module must not carry __partProgram',
+    );
+    assert(
+      !emittedShadow.includes('customElements'),
+      'packed generated module must not register the element itself',
+    );
+    assert(
+      ts
+        .preProcessFile(shadowJs)
+        .importedFiles.every(
+          ({ fileName }) =>
+            !/workspace:|@openelement\/(?:router|compiler)\/(?:vite|cli)|^node:/.test(fileName),
+        ),
+      'packed generated shadow browser artifact boundary',
+    );
+    const shadowMapEvidence = assertAuthoredSourceMap(shadowMap, 'proof-shadow.tsx', 10);
+    const ssrModule = (await import(
+      pathToFileURL(join(author, 'dist-ssr/ssr-shadow-entry.js')).href
+    )) as { renderShadow: () => unknown };
+    const serverHostHtml = ssrModule.renderShadow();
+    assert(
+      typeof serverHostHtml === 'string' &&
+        serverHostHtml.includes('<template shadowrootmode="open">') &&
+        serverHostHtml.includes('server title') &&
+        serverHostHtml.includes('>2<'),
+      'packed compiler+shell must emit the shadow host DSD server markup',
+    );
+    const shadowPage = `<!doctype html><html><head><meta charset="utf-8"></head><body>${
+      serverHostHtml as string
+    }<script>
+(function () {
+  var host = document.querySelector('proof-shadow');
+  var shadow = host.shadowRoot;
+  var input = shadow.querySelector('#shadow-field');
+  var records = [];
+  window.__s3 = {
+    records: records,
+    preHost: host.outerHTML,
+    preShadow: shadow.innerHTML,
+    typed: 'typed before activation'
+  };
+  input.value = window.__s3.typed;
+  var observe = function (target) {
+    var observer = new MutationObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) records.push(entries[i].type);
+    });
+    observer.observe(target, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true
+    });
+    return observer;
+  };
+  observe(host);
+  observe(shadow);
+})();
+</script><script type="module" src="/shadow.js"></script></body></html>`;
+    await writeFile(join(consumer, 'shadow.js'), shadowJs);
+    await writeFile(join(consumer, 'shadow.js.map'), JSON.stringify(shadowMap));
+    await writeFile(join(consumer, 'shadow-s3.html'), shadowPage);
+    console.log(
+      `PASS packed S3 build: generated module ${shadowJs.length}B, SSR host ${(serverHostHtml as string).length}B, ` +
+        `source map ${shadowMapEvidence.matchingSegments}/${shadowMapEvidence.totalSegments} authored segments`,
+    );
+
+    // M12-S3: packed shadow generated island — SSR bytes -> browser parse ->
+    // claim. The observer and the pre-activation input are installed by the
+    // inline classic script, so both happen before the deferred module runs.
+    const shadowBrowser = await chromium.launch({ headless: true });
+    try {
+      const page = await shadowBrowser.newPage();
+      const response = await page.goto(`${serverOrigin}/shadow-s3`);
+      const responseText = await response!.text();
+      assert(
+        responseText.includes(serverHostHtml as string),
+        'served packed S3 page must carry the server SSR bytes verbatim',
+      );
+      await page.waitForFunction(
+        () =>
+          document.querySelector('proof-shadow')?.shadowRoot?.querySelector('#shadow-title')
+            ?.textContent === 'server title',
+      );
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      const evidence = await page.evaluate(() => {
+        const s3 = (
+          window as unknown as {
+            __s3: { records: string[]; preHost: string; preShadow: string; typed: string };
+          }
+        ).__s3;
+        const host = document.querySelector('proof-shadow')!;
+        const shadow = host.shadowRoot!;
+        return {
+          claimMutations: s3.records.length,
+          mutationTypes: s3.records,
+          preHost: s3.preHost,
+          preShadow: s3.preShadow,
+          postHost: host.outerHTML,
+          postShadow: shadow.innerHTML,
+          typed: s3.typed,
+          inputValue: (shadow.querySelector('#shadow-field') as HTMLInputElement).value,
+          title: shadow.querySelector('#shadow-title')?.textContent,
+          count: shadow.querySelector('#shadow-count')?.textContent,
+          defined: typeof customElements.get('proof-shadow'),
+        };
+      });
+      // DSD parsing moves the `<template shadowrootmode>` into host.shadowRoot,
+      // so `host.outerHTML` alone cannot carry it. Reconstruct the serialized DSD
+      // from the parsed host open tag + the parsed shadow content and compare it
+      // to the server bytes: the claim must not have changed either half.
+      const parsedDsa = `${evidence.postHost.slice(
+        0,
+        -'</proof-shadow>'.length,
+      )}<template shadowrootmode="open">${evidence.preShadow}</template></proof-shadow>`;
+      assert.strictEqual(
+        parsedDsa,
+        serverHostHtml,
+        'parsed host+shadow byte-equal to server SSR bytes',
+      );
+      assert.strictEqual(evidence.title, 'server title', 'SSR title reached the claimed DOM');
+      assert.strictEqual(evidence.count, '2', 'SSR count reached the claimed DOM');
+      assert.strictEqual(evidence.defined, 'function', 'packed generated class registered');
+      assert.strictEqual(
+        evidence.claimMutations,
+        0,
+        `claim-period mutations must be 0, saw ${evidence.mutationTypes.join(',')}`,
+      );
+      assert.strictEqual(evidence.postHost, evidence.preHost, 'claim kept the host bytes');
+      assert.strictEqual(evidence.postShadow, evidence.preShadow, 'claim kept the shadow bytes');
+      assert.strictEqual(evidence.typed, 'typed before activation');
+      assert.strictEqual(
+        evidence.inputValue,
+        'typed before activation',
+        'pre-activation input value must survive claim',
+      );
+      console.log(
+        `PASS chromium (packed, LOCAL): shadow generated S3 SSR->claim bytes, 0 claim mutations, ` +
+          `pre-activation input, source map ${shadowMapEvidence.matchingSegments}/${shadowMapEvidence.totalSegments} authored segments`,
+      );
+    } finally {
+      await shadowBrowser.close();
     }
   } finally {
     await new Promise<void>((resolve, reject) =>
