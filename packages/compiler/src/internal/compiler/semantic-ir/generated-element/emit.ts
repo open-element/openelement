@@ -391,6 +391,14 @@ export function generateElementModule(
     tag: '__oeElementTag',
     shellImport: 'createGeneratedElementClass',
     ssrHostImport: 'serializeGeneratedElementHtml',
+    // M11 complete vertical: the emitted host producer seeds its content props
+    // from the host's canonical attribute pairs through the shell's ONE
+    // attribute-conversion surface (the same leaf the client shell's
+    // `attributeChangedCallback` path uses) plus the declared primitive
+    // defaults. The descriptor rows emitted above ARE the input; nothing is
+    // re-derived and no second conversion table exists.
+    hostPropsSeed: 'seedGeneratedElementHostProperties',
+    hostPropsVar: '__oeHostProps',
     propsResolver: 'resolveGeneratedElementProps',
     ssrHost: `${rootName}__ssrHost`,
   };
@@ -425,7 +433,9 @@ export function generateElementModule(
     names.shellImport,
     ...propertyEmission.identifiers,
     ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
-    ...(hostWrapper === null ? [] : [names.ssrHostImport, names.ssrHost]),
+    ...(hostWrapper === null
+      ? []
+      : [names.ssrHostImport, names.hostPropsSeed, names.hostPropsVar, names.ssrHost]),
   ];
   const collisions = collisionNames.filter((name) => identifierOccurs(leafText, name));
   if (collisions.length > 0) {
@@ -453,7 +463,7 @@ export function generateElementModule(
     `import { ${[
       names.shellImport,
       ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
-      ...(hostWrapper === null ? [] : [names.ssrHostImport]),
+      ...(hostWrapper === null ? [] : [names.ssrHostImport, names.hostPropsSeed]),
     ].join(', ')} } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
     '',
     ...propertyEmission.factoryLines,
@@ -479,25 +489,31 @@ export function generateElementModule(
     `export default ${names.element};`,
     `export { ${names.element} as ${names.alias} };`,
     `export const ${names.tag} = ${JSON.stringify(site.tag)};`,
-    // The host-level DSD producer (M09-2a). The content stays the leaf's
-    // content-only `<Name>__ssr` bytes; the wrapper only adds the canonical
-    // template through the one browser-safe producer leaf.
+    // The host-level DSD producer (M09-2a; M11 complete vertical). The content
+    // stays the leaf's content-only `<Name>__ssr` bytes; the wrapper adds the
+    // canonical template through the one browser-safe producer leaf, and seeds
+    // the content props from the host's canonical attribute pairs through the
+    // shell's ONE attribute-conversion surface. Static/authored host attributes
+    // are therefore standard SSR input (not a dynamic-only channel), while the
+    // parent's in-process property channel still wins when both carry a value.
     ...(hostWrapper === null
       ? []
       : [
           '',
           '// ---- generated shadow host SSR (M09-2a) ----',
-          `export function ${hostWrapper.name}(props, lightChildren) {`,
+          `export function ${hostWrapper.name}(props, lightChildren, attributes) {`,
+          `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
           `  return ${names.ssrHostImport}({`,
           `    tag: ${JSON.stringify(site.tag)},`,
           `    root: ${JSON.stringify(hostWrapper.root)},`,
           ...(delegatesFocus ? ['    dsd: { delegatesFocus: true },'] : []),
           `    content: ${rootName}__ssr(${
             propertyEmission.usesPropsResolver
-              ? `${names.propsResolver}(${names.descriptor}, props)`
-              : 'props'
+              ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
+              : names.hostPropsVar
           }, undefined),`,
           '    ...(lightChildren === undefined ? {} : { lightChildren }),',
+          '    ...(attributes === undefined ? {} : { attributes }),',
           '  });',
           '}',
         ]),

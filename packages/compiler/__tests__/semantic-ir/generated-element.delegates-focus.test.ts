@@ -281,10 +281,10 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
       { site: SITE },
     );
     const tail = compiled!.code.slice(compiled!.code.indexOf('// ---- generated native element'));
-    expect(tail).toContain('export function Profile__ssrHost(props, lightChildren) {');
+    expect(tail).toContain('export function Profile__ssrHost(props, lightChildren, attributes) {');
     expect(tail).toContain('dsd: { delegatesFocus: true },');
     // The content stays the leaf's content-only <Name>__ssr bytes.
-    expect(tail).toContain('content: Profile__ssr(props, undefined),');
+    expect(tail).toContain('content: Profile__ssr(__oeHostProps, undefined),');
   });
 
   test('the emitter refuses the pair directly (defense in depth)', () => {

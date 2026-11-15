@@ -22,20 +22,24 @@ M10a. This is the first half of D-③ — a tracked inventory carrying
 - **No milestone/gate status.** No M09 exit, M10 progress, M11 start gate, gate/test/build/browser/packed record or release claim.
 - **No owner decision created or changed.** D-①/②/③ stand as docketed; D-② is the recorded input-migration method, D-③ the two-step tracking instruction. No new signature or scope selection is introduced.
 - **No status flip.** M10 stays "Not started", `16b-MN` rows stay OPEN, the docket blocking set is unchanged; facts landed by the baseline commit are recorded as facts only.
-- **No write outside this document, the existing generated-element seam row in the [seams registry](./seams.md), and the generated architecture index.**
+- **M11/P2 remain NOT MET overall.** The §3.2 working-tree reference vertical is fixture-only: it changes no verdict, is not an M11 start or exit, and creates no sign-off.
+- **No write outside this document and the [seams registry](./seams.md) rows it cites, and no front-matter change (the generated architecture index is unchanged).**
 
-This working-tree addendum (§3.1) records the source facts — the compiler-owned
-host-export metadata and its two build-time consumers (the island scan and the
-internal entry descriptor) — and updates the existing generated-element seam row
-in the [seams registry](./seams.md) (P8); it
-adds no front-matter change or generated-index write and flips no status or
+The §3.1 working-tree addendum records the source facts — the compiler-owned
+host-export metadata, its build-scan and entry-descriptor carriers and the
+generated-entry static import — and the §3.2 addendum records the complete
+in-tree reference vertical that consumes it at request time (the single-owner
+registry pair and the nested renderer over the canonical DSD producer). Both
+update the existing generated-element seam rows and register one new seam row in
+the [seams registry](./seams.md) (P8); they
+add no front-matter change or generated-index write and flip no status or
 verdict.
 
 ## 1. Inputs and provenance
 
 Authorities: [execution plan](./alpha16-18-execution-plan.md) §13–§15, [M09 exit docket](./alpha16-m09-exit-docket.md), [16b-MN](./16b-migration-note.md), [M01 matrix](./m01-consumer-migration-matrix.md), [evidence baseline](./evidence-baseline.md), [compiler IR and ABI boundary](./compiler-ir-and-abi-boundary.md), [ADR-0174](../adr/ADR-0174-generated-code-runtime-and-compatibility.md). An external working draft informed this note; it is not authority and is not linked here. Every fact is re-derived at the baseline SHA.
 
-Provenance is **advisory**: read-only inspection at the cited commit (Appendix A) for the baseline facts, plus a source read of the entry-graph observer/checker added by this revision (§5), and in the §3.1 working-tree addendum a source read of the M11-prerequisite host-export metadata, its build-scan carrier and its entry-descriptor carrier plus LOCAL compiler and router test runs of their guards; no build/gate/browser/packed run; counts are source-shape counts, not a compiled graph; no machine-specific path is recorded. Not a §13.6 gate record.
+Provenance is **advisory**: read-only inspection at the cited commit (Appendix A) for the baseline facts, plus a source read of the entry-graph observer/checker added by this revision (§5), and in the §3.1/§3.2 working-tree addenda a source read of the M11-prerequisite host-export metadata, its build-scan and entry-descriptor carriers, the generated-entry static import, the pairing guard, the serializer nested renderer and the canonical DSD producer, plus LOCAL Node test runs of their guards and one LOCAL three-engine fixture qualification run; no clean-SHA gate/packed run; counts are source-shape counts, not a compiled graph; no machine-specific path is recorded. Not a §13.6 gate record.
 
 ## 2. Authoring lanes at the baseline
 
@@ -61,22 +65,23 @@ obligation. Every row is NOT production-equivalent; none is closed.
 | CTX | Context | `create/provide/consume/releaseConsumedContext` (`public-surface.ts:62-70`); runtime service `runtime/context.ts` | none in function frontend or generated lane | authoring + generated wiring absent. `16b-CTX` OPEN (TSX-13) |
 | REF | Refs | class ref grammar (`semantic-core/lower-program.ts:785-808`) but public facade passes `refs: {}` (`open-element-implementation.ts:147`) → `HOST_REF_MISSING` (`runtime/hydrate.ts:795-805`, `runtime/parts.ts:359-363`) | intrinsic ref only, client-only; element → cleanup → null (`generated-leaf/generate.ts:459-487,1705-1755`) | host/component refs, lifetime and class-ref disposition undecided. `16b-REF` OPEN |
 | STYLE | Component styles | `static styles` from `.css` (`semantic-core/style-imports.ts:110-170`); style-edge registry, light `@scope(tag)`, shadow `adoptedStyleSheets`, SSR links | none: descriptor/shell/emit carry no style field; an island `.css` import has no registered edge | generated-island style declaration + shadow delivery; §13.3/§14 **deferred obligation** (replacement path exists); M11 re-verifies |
-| PROPS | Declared props | `@property` String/Number/Boolean/Array/Object/`trustedHtml`, `reflect`, `attribute:false`, computed (`semantic-core/analyze-module.ts:548-640`); non-primitive consumers `open-article-view`, `open-reading-shell`, `notes-live` | generated `properties` table + fresh-literal factories (`generated-element/site.ts:498-565`, `emit.ts:238-281`); shell conversion | no SSR property seed; `resolveGeneratedElementProps` (`shell.ts:725`) only inside `__ssrHost`, no production caller. §14.2 row; round-trip tests OPEN |
+| PROPS | Declared props | `@property` String/Number/Boolean/Array/Object/`trustedHtml`, `reflect`, `attribute:false`, computed (`semantic-core/analyze-module.ts:548-640`); non-primitive consumers `open-article-view`, `open-reading-shell`, `notes-live` | generated `properties` table + fresh-literal factories (`generated-element/site.ts:498-565`, `emit.ts:238-281`); shell conversion | primitive host-attribute seed only in the generated host producer (`seedGeneratedElementHostProperties`, §3.2); `resolveGeneratedElementProps` (`shell.ts:725`) only inside `__ssrHost`, no production caller. §14.2 row; round-trip tests OPEN; non-primitive/`attribute:false` seed parity not proved |
 | FORMS | Form association/validity | `formAssociated`; `ElementFormController` `setFormValue`/`setValidity`/`onReset`/`onRestore` (`open-element-form.ts:60-97`); protected `_internals` (`open-element-implementation.ts:313-317`) | generated `formAssociated`; shell owns internals, value/required/disabled, required→`valueMissing`, reset/restore (`shell.ts:635-677,1025-1145`) | no author validity-policy channel or full constraint mirroring; no form e2e re-run on a generated CE. §14.2 row + `16b-MN` OPEN |
 | CEM | Manifest chain | class-branch input reads `@element`/`extends OpenElement` (`packages/ui/tools/generate-ui-manifest.ts:344,389-444`); CEM 2.1.0 `generate-cem.ts`; tracked manifest/CEM; gates `ui-manifest:check`, `ui-cem:check`, packed-copy equality (`tools/release/check-package-artifacts.ts:318-330`) | D-② input migration, fixture-first committed at the baseline: `generated-element-facts.ts` reads the emitted constructor identity, `generate-ui-manifest.ts` gains injectable root/site-fact dispatch, `generate-cem.ts` an in-memory projection | live `packages/ui/src` tag source not wired; no packed read-back; no one-SHA gate pair. `16b-MN` CEM row OPEN |
-| SERVER | SSR/stream | `renderToString` reads program; request-time `__ssr` reads `__compiledProperties`/`__partProgram.metadata.properties` (`packages/element/src/server.ts:260-316`) | `__ssr` leaf producers + `__ssrHost` for shadow hosts (`generated-element/emit.ts:425-451`), and the same emitter decision returns the emitted host-export name as build-only metadata (`ssrHostExport`, §3.1) | `__ssrHost` has no production caller and the new build metadata has no request-time render consumer — only the build-time island scan carries it (§3.1); `renderToString` fails closed without a program (`public-runtime.ts:765-802`); local island default `ssr+client` (`entry-descriptor.ts:690-712`) would fail at build. P2 NOT MET |
+| SERVER | SSR/stream | `renderToString` reads program; request-time `__ssr` reads `__compiledProperties`/`__partProgram.metadata.properties` (`packages/element/src/server.ts:260-316`) | `__ssr` leaf producers + `__ssrHost` for shadow hosts (`generated-element/emit.ts:425-451`), and the same emitter decision returns the emitted host-export name as build-only metadata (`ssrHostExport`, §3.1) | `__ssrHost` has an in-tree request-time caller through the §3.2 fixture vertical (generated-entry static import, single-owner registry pair, serializer nested renderer) but no production module uses it; the metadata is carried by the build-time island scan and entry descriptor (§3.1); `renderToString` fails closed without a program (`public-runtime.ts:765-802`); the pre-M11 generated-host fixture stays `ssr: false` and the new §3.2 fixture is the only SSR generated host. P2 NOT MET |
 | ABI | Module contract/protocol | six ABI v2 statics; protocol `./part-program` export, versions 2/2 (`protocol/package.json:29`); runtime reads `__partProgram` (`public-runtime.ts:769-802`, `route-dispatch.ts:60-75`) | generated tail is the narrow ABI (descriptor + `createRecipe` + tag); shell subpath `./internal/compiled/generated-element/shell` (`element/package.json:16`, ADR-0177 deviation) | 64 production modules still compile to `__partProgram`; narrow ABI has 0 production modules; no protocol-export retirement; snapshot unchanged. P4 NOT MET |
 | BUILD | Build/SSG | text readers: blocks scan `__partProgram` + `"blocks":[` (`island-blocks-scan.ts:117`), CSS/scope recovery parses `__partProgram` (`compiled-artifact-style-requests.ts:35-50,190-205`), class candidates read `__oeClassCandidates` (`compiled-artifact-class-candidates.ts:32`) | generated lane wired at the three build hosts; registration is constructor-based (`entry-client-codegen.ts:33-56,125-162`) | CSS recovery, blocks detection and route classification still read the old artifact. P3 NOT MET; M01 C12/C13 unchanged |
 | ROUTER | Page/route contract | `isElementPageClass` reads runtime `__partProgram` (`router/src/authoring.ts:445-448`); page tag from `__partProgram.tag` (`renderer-runtime.ts:141-155`); stream identity `{version,tag}` (`route-dispatch.ts:60-75`, `stream-runtime.ts:555-580`, `types.ts:36-56`); build-time `functionPage` fact (`route-scanner.ts:265-295,355-372`) | island registration accepts any constructor; build-time page facts exist for function pages | no build-time classification for class pages and no page-tag/stream facts for generated pages. M01 C07–C11 unchanged; P1/M11-3 not done |
 
-### 3.1 M11 prerequisite — compiler-owned host-export metadata (producer, build-scan carrier and entry-descriptor carrier)
+### 3.1 M11 prerequisite — compiler-owned host-export metadata (producer, build-scan carrier, entry-descriptor carrier and generated-entry static import)
 
-Working-tree addendum, 2026-11-15: on top of `bc99cdee1` (which commits the
+Working-tree addenda, 2026-11-15: §3.1 sits on `bc99cdee1` (which commits the
 SSR-metadata producer read here) plus the uncommitted build-scan and
-entry-descriptor carrier lane (the tree also carries other lanes' edits; this
-addendum reads only the host-export metadata surface, its build-scan and
-entry-descriptor carriers and their guards). It is
-not a baseline-`e7aad2f1f` fact and not a §13.6 record.
+entry-descriptor carrier lane, and §3.2 sits on `287d2ba19` plus the uncommitted
+SSR vertical (the tree also carries other lanes' edits; these addenda read only
+the generated-host SSR surface — its carriers, pairing guard, serializer branch
+and canonical DSD producer — and their guards). Neither is a
+baseline-`e7aad2f1f` fact and neither is a §13.6 record.
 
 The generated-element emitter already owns the one decision that appends the DSD
 host producer; that decision is now readable as build metadata instead of being
@@ -110,7 +115,7 @@ re-inferred from the emitted text.
   refuses still returns no result at all. Whether an SSR-admitted shadow island
   may answer `null` is an owner policy decision and is not implemented here:
   `null` is metadata, never an admission verdict.
-- **Two build-time consumers — the island scan and the internal entry descriptor — and nothing at request time.**
+- **A three-stage build chain — the island scan, the internal entry descriptor and the generated-entry static import.**
   `scanIslandMeta` (`packages/router/src/vite/internal/ssg/island-scanner.ts`)
   already reads every island source for its static sidecar facts; in the same
   pass it resolves each scanned `.tsx` island through
@@ -130,18 +135,22 @@ re-inferred from the emitted text.
   as its third argument (the Vite plugin's resolved root, the SSG build root, or
   the cwd fallback), so a carried refusal diagnostic stays project-relative
   instead of naming a machine path.
-  That carrier's one downstream consumer is the internal entry descriptor in the
-  same build stage: `buildEntryDescriptor`
+  That carrier's downstream consumer in the same build stage is the internal
+  entry descriptor: `buildEntryDescriptor`
   (`packages/router/src/vite/internal/ssg/entry-descriptor.ts`) re-reads each
   local island's `generatedElementHost` through the one typed accessor
   `readGeneratedElementHost` and re-attaches it to the declaration it emits
-  (delivery aliases included), where the approved registration/renderer slice
-  will pair it with the class registration. The public
+  (delivery aliases included). The third consumer is the generated-entry
+  codegen, which reads the `producer` identity from that declaration and emits
+  ONE static named import of the compiler-returned `ssrHostExport` plus the
+  guard's atomic pairing call (§3.2). The public
   `IslandDecl`/`EntryDescriptor` protocol types are unchanged (the identity is
-  build-only runtime metadata on the declaration object), and the re-attachment
-  changes no generated-entry bytes — no generated host import, no registration
-  argument and no render invocation — and adds no policy, coded error or
-  admission status.
+  build-only runtime metadata on the declaration object); the re-attachment
+  itself changes no generated-entry bytes, and the codegen consumer adds exactly
+  the static host import and the pairing call — never a namespace/suffix scan, a
+  class static, `customElements.get` or `__partProgram` — while adding no policy
+  or admission status (the `missing-producer` and non-identifier refusals belong
+  to §3.2).
 - **Five distinct kinds, an admission-independent record.** The carrier is a
   discriminated union: `producer` (host export present, with the compiler's
   emitted name), `missing-producer` (a shadow root that was admitted but whose
@@ -169,16 +178,7 @@ re-inferred from the emitted text.
   reuses the source it already read) and no cache. The carrier adds no
   fail-closed admission, no new coded diagnostic or policy and no admission
   status change.
-- **No request-time consumer; M11 and P2 are not advanced.** The scan records the
-  identity and the internal entry descriptor re-attaches it; both sit in the
-  build stage. Nothing request-time reads it: `renderEntry`/generated-entry
-  codegen emits no generated host import, no registration argument and no render
-  invocation, the static host registration in `entry-client-codegen.ts`, the
-  registration seam and the SSR render path are unchanged, `__ssrHost` still has
-  no production caller, and the generated-host fixture stays client-only. No
-  entry wiring, SSR registration, host-attribute normalization, packed or
-  browser record is added. **M11 is not started and P2 remains NOT MET**; §7 is
-  unchanged.
+- **The request-time consumer — the §3.2 reference vertical, and what it does not advance.** The scan records the identity, the internal entry descriptor re-attaches it, and the generated-entry codegen turns an SSR-admitted `producer` identity into ONE static named import of the compiler-returned `ssrHostExport` plus the single-owner guard's atomic pair call `registerSsrIsland(tag, ctor, hostRenderer)`. The guard (`installSsrRegistryGuard` in `packages/router/src/vite/internal/server-runtime/security.ts`, the same owner as `registerSsrComponent`) validates both functions before any mutation, runs the EXISTING class define/ownership decision, and writes the `tag -> renderer` table under the protocol marker `SSR_REGISTRY_GENERATED_HOSTS` only when that decision owned the tag — so a foreign conflict pairs neither half and a dev re-evaluation replaces both halves. At request time the generated host's class carries no `__partProgram`; the serializer's nested-composition seam (`packages/element/src/public-runtime.ts`) reads the pair table after the admission gate and before any class read, hands canonical host-attribute pairs through `normalizeHostAttributePairs`, and invokes the emitted host producer. That producer is the arity-3 `<Name>__ssrHost(props, lightChildren, attributes)`; it seeds its content props through `seedGeneratedElementHostProperties` over the descriptor rows (declared primitive attribute rows plus declared primitive defaults, supplied values read per read and never eagerly, a supplied `undefined` falling back to the declared default lazily) and composes the ONE canonical DSD producer (`serializeGeneratedElementHtml`: host attributes, `<template shadowrootmode>`, then the parent's already-serialized light children). The chain is executable end to end in the working tree, but it is **fixture-only**: no production module uses a generated island, the top-level `renderToString('<generated-tag>')` path is out of the slice, the generated host has no general SSR property seed (non-primitive/`attribute:false` parity is not proved), and stream/deferred SSR is not widened. **M11 and P2 remain NOT MET overall**; §7 records the unchanged P2 verdict.
 - **Guard (producer).** `packages/compiler/__tests__/semantic-ir/generated-element.ssr-host-export.test.ts`
   — 8 Node tests: the shadow producer's `ssrHostExport` is the named export its
   own emitted AST declares; `null` for a hostless emitter call, a light/absent
@@ -206,33 +206,184 @@ re-inferred from the emitted text.
   revision —
   `node_modules/.bin/vitest run --project router packages/router/__tests__/island-scanner-generated-host.test.ts`
   → 12 passed; development feedback, not clean-SHA evidence.
-- **Guard (entry-descriptor carrier).**
-  `packages/router/__tests__/entry-descriptor-generated-host.test.ts` — 7 Node
-  tests: `buildEntryDescriptor` re-attaches the scanner-resolved identity
-  through the one typed accessor `readGeneratedElementHost` for every local
-  island and every delivery alias; every identity kind is carried verbatim,
+- **Guard (entry-descriptor carrier and vertical entry codegen).**
+  `packages/router/__tests__/entry-descriptor-generated-host.test.ts` — 11 Node
+  tests (2026-11-15 working tree): the carrier rows (typed accessor for every
+  local island and every delivery alias; every identity kind carried verbatim,
   including `lane-declined` and `lane-refused`; an `ssr:false` island keeps the
-  identity while its admission plan stays client-only; generated-entry bytes
-  are unchanged by the carrier — no generated host import, no registration
-  argument and no render invocation; non-local and carrier-less declarations
-  expose no identity; an absent carrier reads as `undefined`. LOCAL run on this
-  dirty tree at this revision —
+  identity while its admission plan stays client-only; non-local and
+  carrier-less declarations expose no identity; an absent carrier reads as
+  `undefined`) plus the §3.2 rows: the static named import and pairing call for
+  an SSR-admitted `producer`, byte-identical entry bytes where the class-only
+  path remains (client-only admission and non-`producer` identities), the coded
+  `missing-producer` build refusal and the forged non-identifier refusal. LOCAL
+  run on this dirty tree at this revision —
   `node_modules/.bin/vitest run --project router packages/router/__tests__/entry-descriptor-generated-host.test.ts`
-  → 7 passed; development feedback, not clean-SHA evidence. The existing
+  → 11 passed; development feedback, not clean-SHA evidence. The existing
   Generated Native Custom Element seam row in the [seams registry](./seams.md)
-  carries the producer contract, the build-scan and entry-descriptor carriers
-  and all three guards (P8); no duplicate row is added, and the request-time
-  host-build/render consumer guard and registration remain owed by M11 and are
-  not claimed here.
+  carries the producer contract and the build-scan/entry-descriptor carriers;
+  the new `Generated-host SSR vertical (M11)` row carries the static named
+  import, the atomic registry pair, the nested renderer and the DSD producer
+  chain and their guards (P8). The metadata contract is not duplicated, and the
+  request-time consumer is fixture-only — M11 and P2 remain NOT MET overall.
+
+## 3.2 M11 reference vertical — compiler host export → scan → descriptor → static named import → single-owner registry pair → nested renderer → canonical DSD producer
+
+Working-tree addendum, 2026-11-15: on `287d2ba19` (HEAD, branch
+`feat/alpha16-integration`) plus the uncommitted SSR vertical (19 tracked
+source/test/fixture files modified and 4 untracked files in the working tree
+when this addendum was written; the external round-7 handoff is the round
+record, not authority). This is a source read plus LOCAL Node test runs and one
+LOCAL three-engine qualification run, not a
+clean-SHA record, not a §13.6 gate record and not an M11 start or exit. The
+chain is executable in the tree but **fixture-only**: no production generated
+module uses it, so **M11 is not met and P2 remains NOT MET** overall.
+
+- **The chain.** `generateElementModule`
+  (`packages/compiler/src/internal/compiler/semantic-ir/generated-element/emit.ts`)
+  owns the host-wrapper decision and returns the emitted export name as
+  `ssrHostExport` (§3.1); the island scan resolves it into
+  `LocalIslandMeta.generatedElementHost`; the internal entry descriptor
+  re-attaches it; `renderEntry`
+  (`packages/router/src/vite/internal/ssg/entry-orchestrator.ts`) emits ONE
+  static named import `import { <ssrHostExport> as __ssrhost_<tag> }` and calls
+  `__registerSsrIsland(tag, ctor, __ssrhost_<tag>)` instead of the class-only
+  registration for an SSR-admitted `producer` identity. The pairing call is
+  `installSsrRegistryGuard().registerIsland`
+  (`packages/router/src/vite/internal/server-runtime/security.ts`), the same
+  single registration owner as `registerSsrComponent`: it validates both
+  functions before any mutation, re-runs the EXISTING define/ownership decision,
+  and writes the class plus the `tag -> renderer` pair atomically under the
+  protocol marker `SSR_REGISTRY_GENERATED_HOSTS`
+  (`packages/protocol/src/registry-markers.ts`); `GeneratedApp.registerSsrIsland`
+  exposes it (`server-runtime/app.ts`). At request time the element serializer's
+  `renderNestedElement` callback (`packages/element/src/public-runtime.ts`) reads
+  the pair table after the admission gate and before any class/`__partProgram`
+  read, normalizes the host attributes through the ONE value algebra
+  (`normalizeHostAttributePairs`, `internal/compiled/server/index.ts`), invokes
+  the emitted producer, and requires the canonical DSD host artifact from
+  `serializeGeneratedElementHtml` (`generated-element/dsd-ssr.ts`). The metadata
+  field is never read at request time: the registry pair is the lookup.
+- **Emitted host-producer ABI: arity 3.** The shadow tail is
+  `export function <Name>__ssrHost(props, lightChildren, attributes)` with
+  `const __oeHostProps = seedGeneratedElementHostProperties(...)` and
+  `...(attributes === undefined ? {} : { attributes })`. The third channel is
+  the canonical host-attribute `[name, value]` string pairs. This is an
+  emitted-artifact ABI decision, not a package export; the light tail and the
+  leaf bytes are unchanged, and the identity still never enters the module text.
+- **Primitive attributes and lazy defaults.**
+  `seedGeneratedElementHostProperties` seeds content props from the DECLARED
+  primitive attribute rows only: the attribute wire converts through the shell's
+  canonical conversion, a supplied value wins and is read per read (never
+  eagerly), a supplied `undefined` falls back to the declared primitive default
+  lazily (review B2), a value supplied by neither channel falls back to the
+  declared default, and only the DECLARED attribute name matches — a lowercased
+  property name is not a second attribute dialect (review B3). Non-primitive and
+  `attribute:false` rows are deliberately not seeded and no server→client value
+  wire is invented: their seed parity is NOT proved.
+- **Public/internal shape deltas (snapshot owed, not written here).** The
+  vertical adds one public protocol symbol
+  (`@openelement/protocol/registry-markers` gains
+  `SSR_REGISTRY_GENERATED_HOSTS`), one member on the router `./server-runtime`
+  public guard shape — both the `SsrRegistryGuard` type string and the
+  `installSsrRegistryGuard` value string gain
+  `registerIsland(tag, ctor, hostRenderer)` — and the same member on the public
+  `GeneratedApp` / `createGeneratedApp` shape; the element internal shell
+  subpath gains `seedGeneratedElementHostProperties`. `normalizeHostAttributePairs` stays
+  internal to the element package (its module is not a package subpath), so it
+  is not a snapshot symbol. No `IslandDecl`/`EntryDescriptor` public type
+  change, no new package subpath, no root barrel symbol and no
+  `RenderToStringOptions`/compiler-option change. The interface snapshot
+  (`docs/release/public-interface-snapshot.json`) is NOT regenerated by this
+  docs-only addendum; regenerating it with
+  `@openelement/tools-repo#interface:snapshot:write` and re-verifying the packed
+  surfaces is owed in the vertical's implementation commit.
+- **Review regressions (B1–B3, L1–L3) — fixed in the working tree, re-diagnosed
+  as fixed by the independent reviewer, and re-verified by the recovery
+  session's mutation → red → restore proofs.** The recovery run mutated each
+  blocker (B1 `clearPair` no-op; B2 fallback removed; B3 lowercased alias
+  re-added; L1 both throw guards removed; L2 admission gate removed), observed
+  the named test fail, restored the file and compared its sha256 to the
+  pre-mutation manifest; the restored tree is byte-identical. B1: a class-only
+  re-registration clears the stale pair, and a lost foreign or stub-registry
+  ownership conflict clears it too, so a prior renderer is never invoked against
+  a class the entry no longer owns. B2: a supplied `undefined` primitive no
+  longer bypasses the declared default (lazy fallback, the same rule the client
+  coercion and the shell resolver apply). B3: the seed matches only the DECLARED
+  attribute name, never a lowercased property-name dialect. L1: a malformed
+  marker table (non-Map) and a present-but-non-function table entry fail closed
+  with the existing coded `PROGRAM_MISSING` error instead of falling back to the
+  class path. L2: the admission-gate test now runs inside a live nested branch
+  with a non-empty admitted set (the earlier empty-set variant proved nothing).
+  L3: stream/deferred SSR is NOT widened — the stream executor structurally
+  refuses the nested-renderer seam, so a streamed component renders a generated
+  host as its plain tag markup with no producer call and no DSD; that boundary
+  is characterized and OWED, never claimed as support.
+- **What remains OWED / not proved.** Stream/deferred DSD for generated hosts
+  (L3, plain-host boundary only); non-primitive and `attribute:false` seed
+  parity; the top-level `renderToString('<generated-tag>')` path; any production
+  generated module (the only SSR generated host is the new fixture island); the
+  interface snapshot and packed read-back; a clean-SHA evidence run. The browser
+  qualification harness now passes its new-host probes on the working tree in
+  all three engines — real-build SSR, pre-definition DSD capture with the SAME
+  ShadowRoot and shadow nodes at the claim, 0 claim-period mutations, primitive
+  attribute/props parity, light children after `</template>`, and the
+  `wrong-props` / `no-client-registration` negatives red in all three — but that
+  is one LOCAL, dirty-tree, fixture-level run (chromium 147.0.7727.15, firefox
+  148.0.2, webkit 26.4), not a clean-SHA or browser-gate record, and it changes
+  no verdict.
+- **Guards, existing and new (LOCAL dirty-tree runs — development feedback, not
+  clean-SHA evidence; no count is a permanent promise).** End-to-end fixture
+  vertical: `packages/router/__tests__/generated-host-vertical.test.ts` — 5 Node
+  tests (real compiler lane × real guard × real serializer × real emitted
+  producer: literal attributes → canonical seed → DSD bytes → parser adoption →
+  claim; the dynamic channel winning; supplied-undefined default; atomic
+  pairing/foreign conflict). Serializer branch and algebra/seed boundaries:
+  `packages/element/__tests__/compiled-server/generated-host-nested.test.ts` —
+  16 Node tests (three-channel call, static attributes, live admission gate,
+  non-string refusal, classless/no-registry negatives, one value algebra and two
+  wire spellings, B2/B3 seed rows, L1 fail-closed rows, L3 stream boundary). The
+  real fixture product-fact layer:
+  `tests/fixtures/web-component-interop/generated-ssr-host.test.ts` — 4 Node
+  tests (derived tag, compiler identity, arity-3 ABI, authored page shape,
+  pre-M11 fixture unchanged). Entry codegen + pairing guard:
+  `packages/router/__tests__/entry-descriptor-generated-host.test.ts` — 11 Node
+  tests, and `packages/router/__tests__/registry-marker-drift.test.ts` — 11 Node
+  tests (marker value, atomic pair, B1 clears, non-function refusal). Existing
+  producer/arity guards re-run:
+  `packages/compiler/__tests__/semantic-ir/generated-element.ssr-host-export.test.ts`
+  (8) and
+  `packages/compiler/__tests__/semantic-ir/generated-element.shadow-authoring.test.ts`
+  (7).
+- **Verification record (LOCAL dirty tree — not clean-SHA evidence, and no count
+  is a permanent promise).** The same run records compiler 80 files / 1195
+  tests, element 122 files / 948 tests and router 150 files / 1712 tests green;
+  compiler, element, router and web-component-interop-fixture typechecks exit 0;
+  package lint 0 errors; `oxfmt --check` clean on the changed files; and
+  `@openelement/tools-repo#interface:snapshot` exit 1 — the expected drift from
+  the new public/internal symbols, with the snapshot deliberately NOT written (a
+  lead-owned step). The round-7 note's unattributed earlier router failure did
+  not reproduce in this run; it is neither claimed green-as-proof nor dismissed
+  as a flake.
+- **Seam registration (P8).** The existing generated-element seam rows are
+  updated for the new consumer and the arity-3 producer, and one new
+  `Generated-host SSR vertical (M11)` row is registered in
+  [seams.md](./seams.md). Its three new guard files are untracked in this
+  working tree, so `seams:check` reports exactly those `guard-not-tracked` rows
+  until the vertical is staged; that is expected, not a green gate claim.
+- **Scope of this note.** Only documentation was written: `seams.md` and this
+  file. No source, test, fixture, snapshot, generated artifact, worktree,
+  commit or push is part of it, and no status, sign-off or verdict changed.
 
 ## 4. Replacement reachability
 
 Replacement mechanisms exist in the tree; **none is reached from an actual
 production entry graph** at the baseline: the generated CE client lane has 0
-production modules, the generated-CE SSR host has no production caller (the
-compiler can now name the emitted host export as build metadata and the
-build-time island scan carries it, but no request-time render or registration
-path reads it, §3.1), the CEM input path is fixture-only (no live tag
+production modules, the generated-CE SSR host now has an in-tree request-time
+caller but only for a test fixture (the §3.2 entry pairing, registry pair,
+nested renderer and DSD producer form a complete reference vertical; no
+production module uses it and the top-level generated-tag render path is out of
+the slice), the CEM input path is fixture-only (no live tag
 source), non-primitive seed and form policy do not exist, the author
 lifecycle/error/context/ref APIs are OPEN, and the narrow ABI has 0 production
 modules. The production-equivalent replacement count is not claimed (§Status).
@@ -428,7 +579,7 @@ is a re-export shim, so the class module appears once under `site-ui/`.
 | Proof | Verdict | Current-source reason | Evidence owed |
 | --- | --- | --- | --- |
 | P1 browser runtime | **NOT MET** | production islands are class modules with `__partProgram`; the default element entry installs the compiled hydration executor (`packages/element/src/index.ts` imports `runtime/hydrate-install.ts`); 0 production generated-lane modules; no qualifying entry-graph artifact run is recorded (the local Git-ignored build output is not evidence) | a clean-SHA, clean-tree build emitting `<clientOutDir>/.vite/oe-browser-entry-graph.json`, the `@openelement/tools-repo#browser-graph:check` `MET` verdict with the report-only categories and gate-list digest recorded, and the artifact `sha256` in the evidence form (§5) |
-| P2 server runtime | **NOT MET** | request-time `__ssr` reads `__compiledProperties`/`__partProgram`; `renderToString` fails closed without a program; `__ssrHost` has no production caller and its compiler-owned build identity (`ssrHostExport`, §3.1) has only the build-time island scan as a carrier consumer, no request-time render or registration consumer; the generated-host fixture is client-only | M11 server wiring + a generated-CE SSR path at one SHA |
+| P2 server runtime | **NOT MET** | request-time `__ssr` reads `__compiledProperties`/`__partProgram`; `renderToString` fails closed without a program; the compiler-owned `ssrHostExport` (§3.1) now rides a complete in-tree reference vertical — generated-entry static named import, single-owner registry pair under the protocol marker, serializer nested renderer and canonical DSD producer (§3.2) — with a LOCAL three-engine fixture qualification green, but only for a test fixture: no production generated module is server-rendered, the pre-M11 fixture stays client-only, the top-level generated-tag render path is out of the slice, non-primitive/`attribute:false` seed parity is not proved and stream/deferred DSD is OWED; P2 NOT MET | M11 server wiring + a **production** generated-CE SSR path at one SHA |
 | P3 build/SSG | **NOT MET** | blocks scan, CSS recovery, class candidates and route classification read the emitted markers/runtime property | emitted build facts replacing the readers, at one SHA |
 | P4 ABI/module contract | **NOT MET** | 64 production modules compile to the six ABI v2 statics; narrow ABI 0 production modules; `./part-program` still public; snapshot unchanged | narrow ABI on every production module, no `__partProgram` in production output |
 | P5 public API | **NOT MET** | public surface still exports `OpenElement`, `ErrorBoundary`, `element`/`property`, context API, `StyleSheet` (`public-surface.ts:19-21,62-70,146-155`); `16b-MN` rows OPEN; no signed inventory, final-SHA matrix or owner sign-off | this inventory signed, final-SHA matrix, `16b-MN` evidence, owner sign-off |
@@ -446,8 +597,8 @@ not satisfy P5.
 3. **`16b-MN` evidence absent.** Per-capability rows and the `16b-LC`/`EB`/`CTX`/`REF` acceptance matrices are not delivered.
 4. **CEM live input absent (D-② phase 2).** Live `packages/ui/src` tag source, packed read-back and a one-SHA `gate:release`/`gate:packed` pair are missing.
 5. **Retained obligations open.** Non-primitive property seed (§14.2), forms policy (§14.2), deferred generated-island style declaration (§13.3/§14), and the author API questions behind the four `16b-*` slices.
-6. **Evidence limits.** No test/build/gate/browser/packed run backs this note except the §3.1 LOCAL compiler and router guard runs (dirty-tree development feedback, not clean-SHA evidence); counts are source-shape, not a compiled graph; the local Git-ignored `www/dist` is unrecorded build output and is not evidence.
-7. **M11 start gate unmet.** Tracking M10-0 preparation does not satisfy it; the §3.1 host-export metadata has only the build-time island-scan carrier and no request-time M11 render/registration consumer exists; P1–P5 remain NOT MET.
+6. **Evidence limits.** No test/build/gate/browser/packed run backs this note except the §3.1 LOCAL compiler and router guard runs, the §3.2 LOCAL Node vertical/guard runs and the §3.2 LOCAL three-engine fixture qualification (all dirty-tree development feedback, not clean-SHA evidence); counts are source-shape, not a compiled graph; the local Git-ignored `www/dist` is unrecorded build output and is not evidence.
+7. **M11 start gate unmet.** Tracking M10-0 preparation does not satisfy it; the §3.2 reference vertical is fixture-only and records no production render/registration path, no clean-SHA run and no snapshot regeneration; non-primitive/`attribute:false` seed parity is not proved and stream/deferred DSD is OWED; P1–P5 remain NOT MET.
 
 ## Appendix A. Commands
 

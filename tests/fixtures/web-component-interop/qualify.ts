@@ -19,6 +19,7 @@
  * committed as a second hand-written source of truth.
  */
 
+import { writeFileSync } from 'node:fs';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -133,7 +134,28 @@ interface CorpusConfig {
   cem: string;
   application: InteropApplication;
   generatedHost: GeneratedHostConfig;
+  /**
+   * M11 complete vertical: the real `ssr: true` generated shadow host island the
+   * class page nests. Its SSR form is the emitted host producer's DSD artifact
+   * (attributes + template + light children), served through the generated
+   * entry's static host import and single-owner registration pairing.
+   */
+  generatedSsrHost: GeneratedSsrHostConfig;
   components: InteropComponent[];
+}
+
+/** The corpus facts of the real ssr:true generated shadow host block. */
+export interface GeneratedSsrHostConfig {
+  /** The generated island's derived tag (`app/islands/interop-generated-ssr-card.tsx`). */
+  tag: string;
+  /** The host element's page id. */
+  id: string;
+  /** The authored literal/static host attribute values (standard SSR input). */
+  title: string;
+  note: string;
+  /** The light child slot the host's own `<slot name>` projects. */
+  lightChildSlot: string;
+  lightChildText: string;
 }
 
 export interface InteropCorpus extends Omit<CorpusConfig, 'cem'> {
@@ -151,6 +173,22 @@ interface SsrComponentEvidence {
   tagPresent: boolean;
   lightDomChildPresent: boolean;
   dsdTemplate: boolean;
+  admission: { renderPath: string; reason: string } | null;
+}
+
+/** The ssr:true generated shadow host's SSR form (M11 complete vertical). */
+export interface GeneratedSsrHostSsrEvidence {
+  tag: string;
+  id: string;
+  /** The rendered host tag carries exactly the corpus host id. */
+  idMatches: boolean;
+  tagPresent: boolean;
+  /** The canonical producer's one DSD spelling is present on the real build. */
+  dsdTemplate: boolean;
+  /** The page's light child lands AFTER `</template>` (native distribution). */
+  lightChildAfterTemplate: boolean;
+  /** The authored `<script>` payload never appears raw in the output. */
+  rawScriptAbsent: boolean;
   admission: { renderPath: string; reason: string } | null;
 }
 
@@ -172,6 +210,7 @@ export interface SsrEvidence {
   fixture: { tag: string; tagPresent: boolean; dsdTemplate: boolean };
   foreignComponents: SsrComponentEvidence[];
   generatedHost: GeneratedHostSsrEvidence;
+  generatedSsrHost: GeneratedSsrHostSsrEvidence;
 }
 
 interface BrowserComponentEvidence {
@@ -253,6 +292,37 @@ interface GeneratedHostEvidence {
   components: GeneratedHostComponentEvidence[];
 }
 
+/** The M11 new-host claim evidence: pre-definition DSD identity vs post-upgrade state. */
+export interface GeneratedSsrHostBrowserEvidence {
+  tag: string;
+  /** The Playwright init-script snapshot never ran: unprovable, treated as red. */
+  captureMissing: boolean;
+  /** The generated class upgraded the host in place (`host instanceof ctor`). */
+  upgraded: boolean;
+  /** The DSD shadow root existed while the generated class was still undefined. */
+  ssrRootBeforeDefinition: boolean;
+  /** customElements.get(tag) was still undefined when the snapshot was taken. */
+  undefinedAtCapture: boolean;
+  /** The parser-adopted DSD root mode (must be `open`). */
+  shadowRootMode: string | null;
+  /** The SAME ShadowRoot object after upgrade (no replacement/attachShadow). */
+  shadowRootIdentityPreserved: boolean;
+  /** The SAME first/last shadow child objects after upgrade (no re-mount). */
+  shadowNodesIdentityPreserved: boolean;
+  /** Mutation records observed inside the SSR shadow root during the claim window. */
+  claimMutations: number;
+  /** The pre-definition SSR markup equals the live shadow markup after upgrade. */
+  ssrMarkupPreserved: boolean;
+  /** The SSR text carries the authored literal attribute values. */
+  ssrTextMatchesAttributes: boolean;
+  /** Client props (attribute replay) equal the SSR attribute values. */
+  clientPropsMatch: boolean;
+  /** Live shadow text equals the SSR text (content not re-rendered). */
+  contentStableAfterUpgrade: boolean;
+  /** The page light child is projected by the host's own slot after upgrade. */
+  lightChildProjected: boolean;
+}
+
 export interface BrowserEvidence {
   browser: BrowserName;
   /** The exact engine build reported by Playwright (LOCAL evidence, not CI identity). */
@@ -261,8 +331,19 @@ export interface BrowserEvidence {
   components: BrowserComponentEvidence[];
   fresh: BrowserFreshComponentEvidence[];
   generatedHost: GeneratedHostEvidence;
+  generatedSsrHost: GeneratedSsrHostBrowserEvidence;
   upgradeOrder: string[];
   pageErrors: string[];
+}
+
+/** One negative proof: the new-host claim check MUST go red under this mutation. */
+export interface GeneratedSsrHostNegativeEvidence {
+  browser: BrowserName;
+  mode: 'wrong-props' | 'no-client-registration';
+  /** The qualification failed with the expected new-host claim diagnostic. */
+  red: boolean;
+  /** The observed failure line (truncated) for the audit record. */
+  observedFailure: string;
 }
 
 export interface InteropQualificationEvidence {
@@ -278,6 +359,8 @@ export interface InteropQualificationEvidence {
   ssr: SsrEvidence;
   admission: Record<string, SsrCapabilityDecision>;
   browsers: Record<BrowserName, BrowserEvidence>;
+  /** Three-engine negative controls for the new-host claim assertions. */
+  generatedSsrHostNegatives: GeneratedSsrHostNegativeEvidence[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -713,6 +796,10 @@ const FIXTURE_SOURCE_FILES = [
   'app/components/page-interop-home.tsx',
   'app/islands/interop-fixture.tsx',
   'app/islands/interop-generated-host.tsx',
+  // M11 complete vertical: the real ssr:true generated shadow host island the
+  // class page nests. The qualification build must carry the authored file so
+  // the generated entry's static host import resolves in the REAL build.
+  'app/islands/interop-generated-ssr-card.tsx',
   'app/client/interop-client.ts',
 ] as const;
 
@@ -930,6 +1017,76 @@ async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvid
     );
   }
 
+  // M11 complete vertical: the REAL build must serve the page's `ssr: true`
+  // generated shadow host through the generated entry's static host import +
+  // single-owner registration pairing + serializer nested seam + emitted
+  // producer. Structural facts only (the byte-level escaping is pinned by the
+  // Node vertical suite); the admission decision must be server-rendered.
+  const generatedSsr = corpus.generatedSsrHost;
+  const generatedSsrOpenTagPattern = new RegExp(`<${escapeRegExp(generatedSsr.tag)}([^>]*)>`, 'i');
+  const generatedSsrOpenTag = generatedSsrOpenTagPattern.exec(html);
+  const generatedSsrOpen = generatedSsrOpenTag?.index ?? -1;
+  const generatedSsrClose = html.indexOf(`</${generatedSsr.tag}>`, generatedSsrOpen);
+  const generatedSsrRegion =
+    generatedSsrOpen >= 0 && generatedSsrClose > generatedSsrOpen
+      ? html.slice(generatedSsrOpen, generatedSsrClose + generatedSsr.tag.length + 3)
+      : '';
+  const generatedSsrTagPresent = generatedSsrOpen >= 0;
+  const generatedSsrIdMatches =
+    generatedSsrOpenTag !== null &&
+    new RegExp(`\\sid="${escapeRegExp(generatedSsr.id)}"`, 'i').test(generatedSsrOpenTag[1] ?? '');
+  const generatedSsrDsdTemplate = /<template\s+shadowrootmode="open"/i.test(generatedSsrRegion);
+  const generatedSsrTemplateClose = generatedSsrRegion.indexOf('</template>');
+  const generatedSsrLightChild = generatedSsrRegion.indexOf(
+    `<span slot="${generatedSsr.lightChildSlot}">`,
+  );
+  const generatedSsrLightChildAfterTemplate =
+    generatedSsrTemplateClose >= 0 &&
+    generatedSsrLightChild > generatedSsrTemplateClose &&
+    generatedSsrTemplateClose < generatedSsrLightChild;
+  const generatedSsrRawScriptAbsent = !generatedSsrRegion.includes('<script');
+  const generatedSsrDecision = decisions.get(generatedSsr.tag) ?? null;
+  const generatedSsrHostEvidence: GeneratedSsrHostSsrEvidence = {
+    tag: generatedSsr.tag,
+    id: generatedSsr.id,
+    idMatches: generatedSsrIdMatches,
+    tagPresent: generatedSsrTagPresent,
+    dsdTemplate: generatedSsrDsdTemplate,
+    lightChildAfterTemplate: generatedSsrLightChildAfterTemplate,
+    rawScriptAbsent: generatedSsrRawScriptAbsent,
+    admission: generatedSsrDecision
+      ? { renderPath: generatedSsrDecision.renderPath, reason: generatedSsrDecision.reason }
+      : null,
+  };
+  if (!generatedSsrTagPresent) {
+    failures.push(`${generatedSsr.tag}: ssr:true generated host tag missing from SSR HTML`);
+  }
+  if (!generatedSsrIdMatches) {
+    failures.push(
+      `${generatedSsr.tag}: generated host id is not ${JSON.stringify(generatedSsr.id)} in SSR HTML`,
+    );
+  }
+  if (!generatedSsrDsdTemplate) {
+    failures.push(
+      `${generatedSsr.tag}: ssr:true generated host has no canonical DSD template in the real build`,
+    );
+  }
+  if (!generatedSsrLightChildAfterTemplate) {
+    failures.push(
+      `${generatedSsr.tag}: the page light child is not after </template> (slot distribution)`,
+    );
+  }
+  if (!generatedSsrRawScriptAbsent) {
+    failures.push(`${generatedSsr.tag}: raw script markup reached the generated host content`);
+  }
+  if (!generatedSsrDecision) {
+    failures.push(`${generatedSsr.tag}: no admission decision was emitted`);
+  } else if (generatedSsrDecision.renderPath !== 'ssr+client') {
+    failures.push(
+      `${generatedSsr.tag}: admission=${generatedSsrDecision.renderPath}, expected ssr+client`,
+    );
+  }
+
   if (failures.length > 0) {
     throw new Error(`SSR interoperability mismatches:\n- ${failures.join('\n- ')}`);
   }
@@ -942,6 +1099,7 @@ async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvid
     },
     foreignComponents,
     generatedHost: generatedHostEvidence,
+    generatedSsrHost: generatedSsrHostEvidence,
   };
 }
 
@@ -955,6 +1113,106 @@ export async function verifyBrowser(
     const page = await session.browser.newPage();
     session.watchPageErrors(page);
     const pageErrors = session.pageErrors;
+    // M11 new-host claim: snapshot the parser-adopted DSD shadow root BEFORE the
+    // generated island client entry defines/upgrades the host. This is the one
+    // pre-definition window the claim assertion can compare against.
+    // The host lives inside the class page's own DSD shadow tree, so the
+    // snapshot walk must cross shadow boundaries: a document-only observer
+    // never sees the nested insertion. Every discovered shadow root joins the
+    // observation set, and the walk runs from the document and every known
+    // root until the host's parser-adopted DSD is found (still pre-definition:
+    // module scripts are deferred, so the observer microtask wins).
+    await page.addInitScript(
+      ({ tag, lightChildSlot }) => {
+        type Capture = {
+          seen: boolean;
+          undefinedAtCapture: boolean;
+          shadowMode: string | null;
+          innerHTML: string;
+          textContent: string;
+          firstChild: Node | null;
+          lastChild: Node | null;
+          lightChild: HTMLElement | null;
+          host: HTMLElement | null;
+          shadow: ShadowRoot | null;
+          claimMutations: number;
+        };
+        const globals = globalThis as typeof globalThis & {
+          __oeSsrHostCapture?: Capture;
+          __oeSsrHostShadowObserver?: MutationObserver;
+        };
+        const capture: Capture = {
+          seen: false,
+          undefinedAtCapture: false,
+          shadowMode: null,
+          innerHTML: '',
+          textContent: '',
+          firstChild: null,
+          lastChild: null,
+          lightChild: null,
+          host: null,
+          shadow: null,
+          claimMutations: 0,
+        };
+        globals.__oeSsrHostCapture = capture;
+        const attachClaimObserver = (shadow: ShadowRoot): void => {
+          if (globals.__oeSsrHostShadowObserver !== undefined) return;
+          const observer = new MutationObserver((records) => {
+            capture.claimMutations += records.length;
+          });
+          observer.observe(shadow, {
+            attributes: true,
+            characterData: true,
+            childList: true,
+            subtree: true,
+          });
+          globals.__oeSsrHostShadowObserver = observer;
+        };
+        const attach = (host: HTMLElement): void => {
+          if (capture.seen) return;
+          const shadow = host.shadowRoot;
+          if (shadow === null) return;
+          capture.seen = true;
+          capture.undefinedAtCapture = customElements.get(tag) === undefined;
+          capture.shadowMode = shadow.mode;
+          capture.host = host;
+          capture.shadow = shadow;
+          capture.innerHTML = shadow.innerHTML;
+          capture.textContent = shadow.textContent ?? '';
+          capture.firstChild = shadow.firstChild;
+          capture.lastChild = shadow.lastChild;
+          capture.lightChild = host.querySelector(
+            `[slot="${lightChildSlot}"]`,
+          ) as HTMLElement | null;
+          attachClaimObserver(shadow);
+        };
+        const observedRoots = new Set<Document | ShadowRoot>([document]);
+        const observer = new MutationObserver(() => {
+          scan(document);
+          for (const root of observedRoots) scan(root);
+        });
+        const scan = (root: Document | ShadowRoot): void => {
+          if (capture.seen) return;
+          const host = root.querySelector(tag) as HTMLElement | null;
+          if (host !== null) attach(host);
+          if (capture.seen) return;
+          for (const element of root.querySelectorAll('*')) {
+            const shadow = (element as HTMLElement).shadowRoot;
+            if (shadow === null || observedRoots.has(shadow)) continue;
+            observedRoots.add(shadow);
+            observer.observe(shadow, { childList: true, subtree: true });
+            scan(shadow);
+            if (capture.seen) return;
+          }
+        };
+        observer.observe(document, { childList: true, subtree: true });
+        scan(document);
+      },
+      {
+        tag: corpus.generatedSsrHost.tag,
+        lightChildSlot: corpus.generatedSsrHost.lightChildSlot,
+      },
+    );
     await page.goto(`${session.origin}/`, { waitUntil: 'networkidle' });
     await page.waitForFunction(
       () =>
@@ -1026,7 +1284,19 @@ export async function verifyBrowser(
       ids: component.ids,
       placements: component.placements,
     }));
-    const evaluateInput = { components, generatedHost: generatedHostInput };
+    const generatedSsrHostInput = {
+      tag: corpus.generatedSsrHost.tag,
+      id: corpus.generatedSsrHost.id,
+      title: corpus.generatedSsrHost.title,
+      note: corpus.generatedSsrHost.note,
+      lightChildSlot: corpus.generatedSsrHost.lightChildSlot,
+      lightChildText: corpus.generatedSsrHost.lightChildText,
+    };
+    const evaluateInput = {
+      components,
+      generatedHost: generatedHostInput,
+      generatedSsrHost: generatedSsrHostInput,
+    };
     const observed = await page.evaluate(async (input) => {
       type Placement = 'child' | 'application-dependency';
       type ComponentInput = {
@@ -1070,8 +1340,17 @@ export async function verifyBrowser(
         assignedSlotNodes?: number;
       };
       type UpgradeEntry = { phase: string; tag: string; id: string };
+      type GeneratedSsrHostInput = {
+        tag: string;
+        id: string;
+        title: string;
+        note: string;
+        lightChildSlot: string;
+        lightChildText: string;
+      };
       const componentInput = input.components as ComponentInput[];
       const generatedHostInput = input.generatedHost as GeneratedHostInput;
+      const generatedSsrHostInput = input.generatedSsrHost as GeneratedSsrHostInput;
 
       const findTag = (root: Document | ShadowRoot, tag: string): HTMLElement | null => {
         const direct = root.querySelector(tag);
@@ -1524,6 +1803,95 @@ export async function verifyBrowser(
         });
       }
 
+      // M11 new-host claim: compare the pre-definition DSD snapshot with the
+      // post-upgrade live state. Identity comparisons use the captured node
+      // references, so a re-mount/attachShadow path cannot pass by coincidence.
+      const capture = (
+        globalThis as typeof globalThis & {
+          __oeSsrHostCapture?: {
+            seen: boolean;
+            undefinedAtCapture: boolean;
+            shadowMode: string | null;
+            innerHTML: string;
+            textContent: string;
+            firstChild: Node | null;
+            lastChild: Node | null;
+            lightChild: HTMLElement | null;
+            host: HTMLElement | null;
+            shadow: ShadowRoot | null;
+            claimMutations: number;
+          };
+        }
+      ).__oeSsrHostCapture;
+      const generatedSsrHostClaim = await (async () => {
+        const empty = {
+          tag: generatedSsrHostInput.tag,
+          captureMissing: true,
+          upgraded: false,
+          ssrRootBeforeDefinition: false,
+          undefinedAtCapture: false,
+          shadowRootMode: null,
+          shadowRootIdentityPreserved: false,
+          shadowNodesIdentityPreserved: false,
+          claimMutations: 0,
+          ssrMarkupPreserved: false,
+          ssrTextMatchesAttributes: false,
+          clientPropsMatch: false,
+          contentStableAfterUpgrade: false,
+          lightChildProjected: false,
+        };
+        if (capture === undefined || !capture.seen) return empty;
+        if (customElements.get(generatedSsrHostInput.tag) === undefined) {
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, 5_000);
+            void customElements.whenDefined(generatedSsrHostInput.tag).then(() => {
+              clearTimeout(timer);
+              resolve();
+            });
+          });
+        }
+        // One microtask turn lets the custom-element upgrade reactions run.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const ctor = customElements.get(generatedSsrHostInput.tag);
+        const host = capture.host;
+        const shadow = host !== null ? host.shadowRoot : null;
+        const upgraded = typeof ctor === 'function' && host !== null && host instanceof ctor;
+        const sameShadow = shadow !== null && shadow === capture.shadow;
+        const firstChild = shadow !== null ? shadow.firstChild : null;
+        const lastChild = shadow !== null ? shadow.lastChild : null;
+        const innerHTMLNow = shadow !== null ? shadow.innerHTML : '';
+        const textNow = shadow !== null ? (shadow.textContent ?? '') : '';
+        const liveProps = host as (HTMLElement & { title?: unknown; note?: unknown }) | null;
+        return {
+          tag: generatedSsrHostInput.tag,
+          captureMissing: false,
+          upgraded,
+          ssrRootBeforeDefinition:
+            capture.undefinedAtCapture === true && capture.shadowMode === 'open',
+          undefinedAtCapture: capture.undefinedAtCapture === true,
+          shadowRootMode: capture.shadowMode,
+          shadowRootIdentityPreserved: sameShadow,
+          shadowNodesIdentityPreserved:
+            sameShadow &&
+            firstChild !== null &&
+            firstChild === capture.firstChild &&
+            lastChild === capture.lastChild,
+          claimMutations: capture.claimMutations,
+          ssrMarkupPreserved: capture.innerHTML.length > 0 && innerHTMLNow === capture.innerHTML,
+          ssrTextMatchesAttributes:
+            capture.textContent.includes(generatedSsrHostInput.title) &&
+            capture.textContent.includes(generatedSsrHostInput.note),
+          clientPropsMatch:
+            upgraded &&
+            liveProps !== null &&
+            liveProps.title === generatedSsrHostInput.title &&
+            liveProps.note === generatedSsrHostInput.note,
+          contentStableAfterUpgrade: capture.textContent === textNow,
+          lightChildProjected:
+            capture.lightChild !== null && capture.lightChild.assignedSlot !== null,
+        };
+      })();
+
       return {
         childHost:
           childHostWorks && dependencyWorks && dependencyTags.length === componentInput.length,
@@ -1556,12 +1924,68 @@ export async function verifyBrowser(
             state?.foreignTagsRegisteredBeforeFixtureClient === true,
           components: generatedComponents,
         },
+        generatedSsrHost: generatedSsrHostClaim,
         upgradeOrder: upgradeOrder.map((entry) => `${entry.phase}:${entry.tag}#${entry.id}`),
       };
     }, evaluateInput);
 
     if (pageErrors.length > 0) {
       throw new Error(`${browserName}: browser errors: ${pageErrors.join(' | ')}`);
+    }
+    // M11 new-host claim assertions: the SSR DSD must be captured BEFORE the
+    // class definition, upgraded in place on the SAME nodes, and its SSR
+    // content must equal the client props/content after claim.
+    const ssrHostClaim = observed.generatedSsrHost;
+    const ssrHostFailures: string[] = [];
+    if (ssrHostClaim.captureMissing) {
+      ssrHostFailures.push('no pre-definition DSD snapshot was captured');
+    }
+    if (!ssrHostClaim.upgraded) {
+      ssrHostFailures.push(
+        'the generated class did not upgrade the SSR host in place (client registration missing)',
+      );
+    }
+    if (!ssrHostClaim.ssrRootBeforeDefinition) {
+      ssrHostFailures.push(
+        'the DSD shadow root was not captured before the generated class definition',
+      );
+    }
+    if (ssrHostClaim.shadowRootMode !== 'open') {
+      ssrHostFailures.push(`shadow root mode is ${JSON.stringify(ssrHostClaim.shadowRootMode)}`);
+    }
+    if (!ssrHostClaim.shadowRootIdentityPreserved) {
+      ssrHostFailures.push('the shadow root object identity changed across upgrade');
+    }
+    if (!ssrHostClaim.shadowNodesIdentityPreserved) {
+      ssrHostFailures.push('the shadow node identities changed across upgrade (re-mount)');
+    }
+    if (ssrHostClaim.claimMutations !== 0) {
+      ssrHostFailures.push(
+        `the claim period mutated the SSR shadow tree ${ssrHostClaim.claimMutations} time(s)`,
+      );
+    }
+    if (!ssrHostClaim.ssrMarkupPreserved) {
+      ssrHostFailures.push('the SSR shadow markup was re-rendered during upgrade');
+    }
+    if (!ssrHostClaim.ssrTextMatchesAttributes) {
+      ssrHostFailures.push('the SSR content does not carry the authored literal attribute values');
+    }
+    if (!ssrHostClaim.clientPropsMatch) {
+      ssrHostFailures.push('client props do not match the SSR attribute values');
+    }
+    if (!ssrHostClaim.contentStableAfterUpgrade) {
+      ssrHostFailures.push('the live shadow content differs from the SSR content');
+    }
+    if (!ssrHostClaim.lightChildProjected) {
+      ssrHostFailures.push('the page light child is not projected by the host slot after upgrade');
+    }
+    if (ssrHostFailures.length > 0) {
+      throw new Error(
+        `${browserName}: generated SSR host claim probes failed: ${JSON.stringify({
+          tag: ssrHostClaim.tag,
+          failures: ssrHostFailures,
+        })}`,
+      );
     }
     const failedComponents = observed.components.filter(
       (component) =>
@@ -1673,12 +2097,106 @@ export async function verifyBrowser(
       components: observed.components,
       fresh: observed.fresh,
       generatedHost: generated,
+      generatedSsrHost: observed.generatedSsrHost,
       upgradeOrder: observed.upgradeOrder,
       pageErrors,
     };
   } finally {
     await session.close();
   }
+}
+
+/**
+ * M11 new-host claim NEGATIVE controls (all requested engines).
+ *
+ * Both mutations target ONLY the built artifacts of the temporary app:
+ * - `wrong-props`: rewrite the SSR host's literal `title` attribute in
+ *   `dist/index.html`. The client class replays the mutated attribute, so the
+ *   client props no longer match the SSR content/attribute facts and the claim
+ *   probe must fail closed.
+ * - `no-client-registration`: remove the generated client entry's
+ *   `customElements.define("interop-generated-ssr-card", …)` call. The DSD is
+ *   still SSR-adopted (identity capture works), but the class never upgrades;
+ *   the claim probe must fail closed instead of silently accepting a
+ *   never-upgraded host.
+ *
+ * The files are restored after each mode; nothing outside the temp app changes.
+ */
+export async function verifyGeneratedSsrHostNegatives(
+  distDir: string,
+  corpus: InteropCorpus,
+  browsers: readonly BrowserName[],
+): Promise<GeneratedSsrHostNegativeEvidence[]> {
+  const pagePath = join(distDir, 'index.html');
+  const clientEntryPath = join(distDir, 'client', 'islands', 'client.js');
+  const modes = [
+    { mode: 'wrong-props' as const, expected: 'client props do not match' },
+    { mode: 'no-client-registration' as const, expected: 'did not upgrade the SSR host in place' },
+  ];
+  const results: GeneratedSsrHostNegativeEvidence[] = [];
+  for (const { mode, expected } of modes) {
+    let restore = (): void => {};
+    if (mode === 'wrong-props') {
+      const original = await readFile(pagePath, 'utf8');
+      const pattern = new RegExp(
+        `(<${escapeRegExp(corpus.generatedSsrHost.tag)}(?:[^>]*?)\\stitle=")[^"]*(")`,
+      );
+      const patched = original.replace(pattern, '$1negative-wrong-props$2');
+      if (patched === original) {
+        throw new Error(
+          `${corpus.generatedSsrHost.tag}: negative setup failed (no SSR title attribute found)`,
+        );
+      }
+      await writeFile(pagePath, patched);
+      restore = () => {
+        writeFileSync(pagePath, original);
+      };
+    } else {
+      const original = await readFile(clientEntryPath, 'utf8');
+      const definePattern =
+        /customElements\.define\(`interop-generated-ssr-card`,[A-Za-z0-9_$]+\)/u;
+      const patched = original.replace(definePattern, 'void 0');
+      if (patched === original) {
+        throw new Error(
+          'no-client-registration: negative setup failed (no generated client define call found)',
+        );
+      }
+      await writeFile(clientEntryPath, patched);
+      restore = () => {
+        writeFileSync(clientEntryPath, original);
+      };
+    }
+    try {
+      for (const browserName of browsers) {
+        try {
+          await verifyBrowser(distDir, corpus, browserName);
+          results.push({
+            browser: browserName,
+            mode,
+            red: false,
+            observedFailure: 'the negative mutation passed (claim assertion did not fail)',
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          results.push({
+            browser: browserName,
+            mode,
+            red: message.includes(expected),
+            observedFailure: message.split('\n')[0]!.slice(0, 500),
+          });
+        }
+      }
+    } finally {
+      restore();
+    }
+  }
+  const notRed = results.filter((result) => !result.red);
+  if (notRed.length > 0) {
+    throw new Error(
+      `new-host claim negative controls did not fail closed: ${JSON.stringify(notRed)}`,
+    );
+  }
+  return results;
 }
 
 async function qualify(
@@ -1697,6 +2215,11 @@ async function qualify(
     for (const browserName of browserNames) {
       browsers[browserName] = await verifyBrowser(join(appDir, 'dist'), corpus, browserName);
     }
+    const generatedSsrHostNegatives = await verifyGeneratedSsrHostNegatives(
+      join(appDir, 'dist'),
+      corpus,
+      browserNames,
+    );
     const evidence: InteropQualificationEvidence = {
       schemaVersion: 1,
       source: 'tests/fixtures/web-component-interop/qualify.ts',
@@ -1713,6 +2236,7 @@ async function qualify(
       ssr,
       admission,
       browsers,
+      generatedSsrHostNegatives,
     };
     // Generated artifacts land in the temporary work directory only: the CEM
     // is regenerated from corpus.json and the evidence is regenerated on

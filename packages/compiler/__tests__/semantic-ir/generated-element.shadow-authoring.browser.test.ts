@@ -253,7 +253,7 @@ beforeAll(async () => {
   });
   expect(staticCompiled).not.toBeNull();
   expect(staticCompiled!.code).toContain(
-    'export function ProfileCard__ssrHost(props, lightChildren) {',
+    'export function ProfileCard__ssrHost(props, lightChildren, attributes) {',
   );
 
   // The refresh island's root is read from the sidecar by the SAME reader the
@@ -266,7 +266,9 @@ beforeAll(async () => {
     root: liveRoot,
   });
   expect(live.diagnostics, live.diagnostics.map((item) => item.message).join('\n')).toEqual([]);
-  expect(live.module).toContain('export function LiveCard__ssrHost(props, lightChildren) {');
+  expect(live.module).toContain(
+    'export function LiveCard__ssrHost(props, lightChildren, attributes) {',
+  );
 
   bundleFile = (await buildBundle(tempDir, staticCompiled!.code, live.module!)).file;
   browser = await chromium.launch();

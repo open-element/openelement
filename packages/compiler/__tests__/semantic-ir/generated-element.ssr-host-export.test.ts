@@ -152,8 +152,15 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
     // wrapper is still the M09-2a host producer.
     expect(exportedFunctionNames(emitted.module!)).toContain(emitted.ssrHostExport);
     expect(emitted.module).toContain(
-      `export function ${emitted.ssrHostExport}(props, lightChildren) {`,
+      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes) {`,
     );
+    // M11: the emitted producer's third channel is the host attribute wire, and
+    // its content props are seeded from the descriptor rows through the shell's
+    // canonical conversion — the metadata field itself still never enters text.
+    expect(emitted.module).toContain(
+      '  const __oeHostProps = seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes);',
+    );
+    expect(emitted.module).toContain('    ...(attributes === undefined ? {} : { attributes }),');
     // Return-only: the module text is unchanged (leaf prefix plus tail, byte
     // equality), the metadata field name never enters it, and the map and
     // placement ledger are still the leaf's reused ones.

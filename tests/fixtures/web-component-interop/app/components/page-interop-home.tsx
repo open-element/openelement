@@ -4,6 +4,10 @@ import { element, OpenElement } from '@openelement/element';
 // keeps them reachable from the generated client delivery graph.
 import '../islands/interop-fixture.tsx';
 import '../islands/interop-generated-host.tsx';
+// M11 complete vertical: the real ssr:true generated shadow host island. Its
+// DSD is produced by the canonical generated host producer through the
+// generated entry's static host import + single-owner registration pairing.
+import '../islands/interop-generated-ssr-card.tsx';
 
 /** / page element (compiled) — static page hosting the interop fixture islands. */
 @element('index-page', { root: 'shadow-open' })
@@ -36,6 +40,20 @@ export default class InteropHomePage extends OpenElement {
             Stencil child
           </interop-stencil-probe>
         </interop-generated-host>
+        {/*
+          M11 complete vertical: the real ssr:true generated shadow host. The
+          attributes are LITERAL/STATIC (the standard SSR semantics the host
+          producer seeds through the canonical attribute conversion), and the
+          span is the page's light child, projected by the host's own named
+          slot after the DSD template.
+        */}
+        <interop-generated-ssr-card
+          id='generated-ssr-host'
+          title='a "b" <c>'
+          note='<script>alert(1)</script>'
+        >
+          <span slot='x'>light & child</span>
+        </interop-generated-ssr-card>
       </div>
     );
   }

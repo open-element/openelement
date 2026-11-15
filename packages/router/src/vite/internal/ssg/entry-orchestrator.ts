@@ -51,10 +51,20 @@ import { renderNotFoundRoute } from './entry-not-found-codegen.ts';
 import { pageRouteTagExpr, renderImport } from './entry-route-helpers.ts';
 import { renderApiRoute, renderMiddleware } from './entry-server-codegen.ts';
 import { renderSsgSection } from './entry-render-ssg.ts';
+import { readGeneratedElementHost } from './generated-element-host-metadata.ts';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { buildError, DescriptorErrorCode } from '../../../internal/error-codes.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
+
+/**
+ * The exact identifier grammar a compiler-emitted generated host export name
+ * must satisfy before it is interpolated into a static named import. The
+ * compiler derives `${rootName}__ssrHost` from an already-validated identifier,
+ * so this gate only refuses a hand-built/forged descriptor carrier; it is not a
+ * naming rule (the name itself is always the compiler's return value).
+ */
+const GENERATED_HOST_EXPORT_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
 /**
  * One module import the generated entry embeds: `import * as $v from <q>`.
@@ -95,6 +105,56 @@ export function renderEntry(desc: EntryDescriptor): string {
   const ssrAdmissionPlan = desc.ssrAdmissionPlan;
   const adapter = selectRendererAdapter(desc.renderer);
   for (const island of desc.islands) validateIslandModuleSpecifier(island.modulePath);
+
+  // --- M11 generated host producers: compiler fact -> static named import ---
+  // The island scan resolved one compiler-owned host identity per local island
+  // (`generatedElementHost`); the descriptor re-attaches it. Only an
+  // ssr-admitted island whose identity is `producer` gets the host pairing: the
+  // name is the compiler's `ssrHostExport` return value, read (never re-derived
+  // and never scanned from the namespace). Every other island keeps its
+  // existing class-registration bytes.
+  const ssrRenderableTags = new Set(ssrAdmissionPlan.renderableTags);
+  const ssrIslands = desc.islands.filter((island) => ssrRenderableTags.has(island.tagName));
+  const generatedHostExports = new Map<string, string>();
+  for (const island of ssrIslands) {
+    const identity = readGeneratedElementHost(island);
+    if (
+      identity === undefined ||
+      identity.kind === 'lane-declined' ||
+      identity.kind === 'lane-refused'
+    ) {
+      continue;
+    }
+    if (identity.kind === 'light-no-producer') {
+      // A light/absent root never has a host producer by design. The island
+      // keeps the pre-existing class-only registration bytes (no DSD host, no
+      // pairing) — the admission decision, not this codegen, owns that path.
+      continue;
+    }
+    if (identity.kind === 'missing-producer') {
+      // Shadow lane the compiler admitted, but no `<Name>__ssr` was emitted, so
+      // there is no host artifact to serve: this island would fail every nested
+      // render with PROGRAM_MISSING at request time. Fail closed at build with
+      // the existing coded descriptor refusal instead of generating entry bytes
+      // the build could never honour.
+      throw buildError(
+        DescriptorErrorCode.MODULE_IMPORT,
+        `[openElement] SSR-admitted generated island <${island.tagName}> has no compiler-emitted ` +
+          'host producer (the shadow leaf emitted no __ssr). Set openElement.ssr to false for ' +
+          'a client-only island, or make the component emit the content-only __ssr producer.',
+      );
+    }
+    // kind === 'producer': the compiler-owned emitted export identity.
+    if (!GENERATED_HOST_EXPORT_IDENTIFIER.test(identity.ssrHostExport)) {
+      throw buildError(
+        DescriptorErrorCode.MODULE_IMPORT,
+        `[openElement] the compiler-returned generated host producer export ` +
+          `${JSON.stringify(identity.ssrHostExport)} for island <${island.tagName}> is not a ` +
+          'valid JavaScript identifier and cannot be statically imported.',
+      );
+    }
+    generatedHostExports.set(island.tagName, identity.ssrHostExport);
+  }
 
   lines.push(
     "import { createRouteMiddleware as __createRouteMiddleware } from '@openelement/router/http';",
@@ -343,6 +403,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push('  methodNotAllowed: __methodNotAllowed,');
   lines.push('  actionBodyLimit: __actionBodyLimit,');
   lines.push('  registerSsrComponent: __registerSsrComponent,');
+  if (generatedHostExports.size > 0) lines.push('  registerSsrIsland: __registerSsrIsland,');
   lines.push('  clientScriptDescriptors: __clientScriptDescriptors,');
   lines.push('  locales: __locales,');
   lines.push('  getDefaultLocale: __getDefaultLocale,');
@@ -404,11 +465,20 @@ export function renderEntry(desc: EntryDescriptor): string {
   }
 
   // --- Register island components in SSR customElements registry ---
-  const ssrRenderableTags = new Set(ssrAdmissionPlan.renderableTags);
-  const ssrIslands = desc.islands.filter((island) => ssrRenderableTags.has(island.tagName));
   for (const island of ssrIslands) {
     const varName = `__island_${island.tagName.replace(/-/g, '_')}`;
     lines.push(`import * as ${varName} from ${quoteGeneratedJavaScriptValue(island.modulePath)}`);
+    const hostExport = generatedHostExports.get(island.tagName);
+    if (hostExport !== undefined) {
+      // Static named import of the compiler-owned host export: the bundler
+      // resolves/renames it, and a lost export is a BUILD error rather than a
+      // silent runtime miss. The name is the descriptor carrier's fact, never a
+      // namespace suffix scan.
+      const hostVar = `__ssrhost_${island.tagName.replace(/-/g, '_')}`;
+      lines.push(
+        `import { ${hostExport} as ${hostVar} } from ${quoteGeneratedJavaScriptValue(island.modulePath)}`,
+      );
+    }
   }
   for (const island of ssrIslands) {
     const varName = `__island_${island.tagName.replace(/-/g, '_')}`;
@@ -418,11 +488,21 @@ export function renderEntry(desc: EntryDescriptor): string {
       : '?.default';
     lines.push(`const ${componentVar} = ${varName}${componentExport}`);
     lines.push(`if (${componentVar}) {`);
-    lines.push(
-      `  try { __registerSsrComponent(${quoteGeneratedJavaScriptValue(
-        island.tagName,
-      )}, ${componentVar}); } catch (err) { console.error('[ssg] Failed to register island custom element <${island.tagName}>:', err); throw err; }`,
-    );
+    const hostExport = generatedHostExports.get(island.tagName);
+    if (hostExport === undefined) {
+      lines.push(
+        `  try { __registerSsrComponent(${quoteGeneratedJavaScriptValue(
+          island.tagName,
+        )}, ${componentVar}); } catch (err) { console.error('[ssg] Failed to register island custom element <${island.tagName}>:', err); throw err; }`,
+      );
+    } else {
+      const hostVar = `__ssrhost_${island.tagName.replace(/-/g, '_')}`;
+      lines.push(
+        `  try { __registerSsrIsland(${quoteGeneratedJavaScriptValue(
+          island.tagName,
+        )}, ${componentVar}, ${hostVar}); } catch (err) { console.error('[ssg] Failed to register island custom element <${island.tagName}>:', err); throw err; }`,
+      );
+    }
     lines.push(`}`);
   }
   lines.push('');

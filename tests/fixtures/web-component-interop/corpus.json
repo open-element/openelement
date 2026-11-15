@@ -23,6 +23,14 @@
       "stencil": "generated-stencil"
     }
   },
+  "generatedSsrHost": {
+    "tag": "interop-generated-ssr-card",
+    "id": "generated-ssr-host",
+    "title": "a \"b\" <c>",
+    "note": "<script>alert(1)</script>",
+    "lightChildSlot": "x",
+    "lightChildText": "light & child"
+  },
   "components": [
     {
       "framework": "native",

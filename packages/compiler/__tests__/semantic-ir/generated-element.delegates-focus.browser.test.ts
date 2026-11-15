@@ -205,7 +205,9 @@ describe('M09-2a authored delegatesFocus island (Chromium)', () => {
     expect(compiledCode).toContain('root: "shadow-open"');
     expect(compiledCode).toContain('delegatesFocus: true');
     expect(compiledCode).toContain('dsd: { delegatesFocus: true },');
-    expect(compiledCode).toContain('export function ProfileFocus__ssrHost(props, lightChildren) {');
+    expect(compiledCode).toContain(
+      'export function ProfileFocus__ssrHost(props, lightChildren, attributes) {',
+    );
   });
 
   test('sidecar -> lane class -> DSD claim -> focus delegation -> reconnect -> dispose', async () => {

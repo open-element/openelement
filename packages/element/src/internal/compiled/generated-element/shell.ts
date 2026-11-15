@@ -202,6 +202,128 @@ export interface GeneratedElementProperty {
   readonly default?: string | number | boolean | (() => unknown);
 }
 
+/** The attribute name a declared row observes (the compiler's one derivation). */
+function hostPropertyAttribute(property: GeneratedElementProperty): string | null {
+  if (property.attribute === null) return null;
+  return property.attribute ?? camelToKebab(property.name);
+}
+
+/**
+ * Seed the generated host producer's content props from the host's canonical
+ * attribute pairs (M11 complete vertical).
+ *
+ * The generated element's server artifact is the emitted `<Name>__ssrHost`,
+ * which must produce the SAME content the client class renders after upgrade.
+ * Static/authored host attributes are standard SSR input, so the producer seeds
+ * them here through the canonical compiled-property conversion
+ * (`convertFromAttribute`, the same leaf the shell's own attribute channel
+ * uses) plus the declared primitive default — never a server-only second
+ * conversion table.
+ *
+ * Precedence mirrors the shell's initial state: a supplied property value (the
+ * parent's in-process channel, which also travelled as a host attribute) wins
+ * over the attribute wire; a primitive row supplied by neither falls back to
+ * its declared default. Non-primitive rows (`array`/`object`/`trustedHtml`)
+ * have no attribute channel and their generated factory default materialises
+ * per CLIENT instance; this host path deliberately does not fabricate one (no
+ * server->client value wire), so an unsupplied non-primitive row stays absent
+ * rather than pretending a seed exists.
+ *
+ * Pure: the input records are never mutated.
+ */
+export function seedGeneratedElementHostProperties<P extends object = Record<string, unknown>>(
+  properties: readonly GeneratedElementProperty[] | undefined,
+  props: P | undefined,
+  attributes: readonly (readonly [string, string])[] | undefined,
+): Record<string, unknown> {
+  const supplied = (props ?? {}) as Record<string, unknown>;
+  const seeded: Record<string, unknown> = {};
+  const pairs = attributes ?? [];
+  for (const property of properties ?? []) {
+    // A supplied property value (the parent's in-process channel, which also
+    // travelled as a host attribute) wins over the attribute wire. It is
+    // delegated LAZILY: the pre-M09-2b contract is that the producer fold never
+    // executes a supplied getter, and that each leaf read reads it again — an
+    // eager spread here would break both (see the non-primitive SSR host test).
+    // A supplied `undefined` is NOT a supplied value: the canonical client
+    // coercion resets it to the declared default, and this fold must produce the
+    // same content (review B2). The fallback is applied lazily inside the getter
+    // so the getter is still read per read, never during seeding.
+    if (Object.prototype.hasOwnProperty.call(supplied, property.name)) {
+      // Primitive rows carry a canonical default even when the descriptor omits
+      // the literal: `true` -> false/0/'' per the client's own coercion. This is
+      // the same undefined -> default rule the shell resolver and the client
+      // property conversion apply; non-primitive rows keep the resolver/factory
+      // boundary (no fabricated seed here).
+      const primitiveFallback = PRIMITIVE_PROPERTY_TYPES.has(property.type)
+        ? (property.default ??
+          (property.type === 'boolean' ? false : property.type === 'number' ? 0 : ''))
+        : undefined;
+      Object.defineProperty(seeded, property.name, {
+        enumerable: true,
+        configurable: false,
+        get: () => {
+          const value = supplied[property.name];
+          return value === undefined && primitiveFallback !== undefined ? primitiveFallback : value;
+        },
+      });
+      continue;
+    }
+    const propertyType = property.type;
+    if (propertyType !== 'string' && propertyType !== 'number' && propertyType !== 'boolean') {
+      // No attribute form and no fabricated factory default (documented above):
+      // the shell resolver still supplies the client default LAZILY, so an
+      // unused non-primitive row is never materialized by this fold.
+      continue;
+    }
+    // The seed input is the DECLARED attribute only (review B3): the compiler
+    // emits the row's attribute name and the parent serializer emits attributes
+    // under that name. Matching `property.name` (or a lowercased property name)
+    // would be a second, invented attribute dialect the client's
+    // `observedAttributes` does not observe. Wire attributes are compared
+    // case-insensitively (HTML attribute names are), but the DECLARED name is
+    // the only candidate.
+    const attribute = hostPropertyAttribute(property);
+    let matched: string | undefined;
+    if (attribute !== null) {
+      const wantedAttribute = attribute.toLowerCase();
+      for (const [name, value] of pairs) {
+        if (typeof name !== 'string' || typeof value !== 'string') continue;
+        if (name.toLowerCase() === wantedAttribute) {
+          matched = value;
+          break;
+        }
+      }
+    }
+    if (matched !== undefined) {
+      seeded[property.name] =
+        propertyType === 'string'
+          ? matched
+          : convertFromAttribute(
+              { converter: propertyType, type: propertyType, default: property.default },
+              matched,
+            );
+      continue;
+    }
+    // Neither the dynamic channel nor the attribute wire supplied the row: the
+    // declared primitive default is the client's initial state, so the server
+    // content must start from the same value.
+    if (property.default !== undefined) seeded[property.name] = property.default;
+  }
+  // A property the descriptor does not declare is not a content input; keep the
+  // historical pass-through so a supplied extra value is still readable by the
+  // leaf exactly as before, again without executing its getter eagerly.
+  for (const name of Object.keys(supplied)) {
+    if (Object.prototype.hasOwnProperty.call(seeded, name)) continue;
+    Object.defineProperty(seeded, name, {
+      enumerable: true,
+      configurable: false,
+      get: () => supplied[name],
+    });
+  }
+  return seeded;
+}
+
 /** The host record the generated recipe factory consumes. */
 export interface GeneratedElementHost<P extends object = Record<string, unknown>> {
   /**

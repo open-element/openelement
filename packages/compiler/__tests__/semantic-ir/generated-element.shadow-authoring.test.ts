@@ -132,13 +132,19 @@ describe('M09-2a generated shadow host producer', () => {
     expect(tail.match(/__ssrHost/g)?.length).toBe(1);
     expect(tail.match(/export function Profile__ssrHost\(/g)?.length).toBe(1);
     expect(tail).toContain(
-      `import { createGeneratedElementClass, serializeGeneratedElementHtml } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
+      `import { createGeneratedElementClass, serializeGeneratedElementHtml, seedGeneratedElementHostProperties } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
     );
     expect(tail).toContain('root: "shadow-open"');
-    expect(tail).toContain('export function Profile__ssrHost(props, lightChildren) {');
+    expect(tail).toContain('export function Profile__ssrHost(props, lightChildren, attributes) {');
+    // M11: the host producer seeds its content props from the canonical host
+    // attribute pairs through the shell's ONE conversion surface.
+    expect(tail).toContain(
+      '  const __oeHostProps = seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes);',
+    );
     expect(tail).toContain('    root: "open",');
-    expect(tail).toContain('    content: Profile__ssr(props, undefined),');
+    expect(tail).toContain('    content: Profile__ssr(__oeHostProps, undefined),');
     expect(tail).toContain('    ...(lightChildren === undefined ? {} : { lightChildren }),');
+    expect(tail).toContain('    ...(attributes === undefined ? {} : { attributes }),');
     expect(tail).toContain('tag: "profile-card"');
     // The leaf prefix is untouched: append-only still holds for a shadow root.
     expect(result.module!.startsWith(result.leaf!)).toBe(true);
@@ -177,7 +183,9 @@ describe('M09-2a generated shadow host producer', () => {
   test('the lane reads the authored sidecar and emits the wrapper only for shadow', () => {
     const shadow = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE });
     expect(shadow).not.toBeNull();
-    expect(shadow!.code).toContain('export function Profile__ssrHost(props, lightChildren) {');
+    expect(shadow!.code).toContain(
+      'export function Profile__ssrHost(props, lightChildren, attributes) {',
+    );
     expect(shadow!.code).toContain('root: "shadow-open"');
     expect(shadow!.code).toContain('    root: "open",');
 

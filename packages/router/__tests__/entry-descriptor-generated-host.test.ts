@@ -145,20 +145,103 @@ test('buildEntryDescriptor: ssr:false keeps the identity (admission-independent)
   expect(renderEntry(withCarrier)).not.toContain('__island_client_only_widget');
 });
 
-test('buildEntryDescriptor: SSR-admitted island entry bytes are unchanged by the carrier', () => {
-  const withCarrier = buildLocalDescriptor({
-    'profile-card': { generatedElementHost: producer() },
-  });
-  const withoutCarrier = buildLocalDescriptor({ 'profile-card': {} });
+test('buildEntryDescriptor: an ssr-admitted producer island emits the static host import', () => {
+  const desc = buildLocalDescriptor({ 'profile-card': { generatedElementHost: producer() } });
+  const code = renderEntry(desc);
 
-  // Local islands default to the SSR path; the class registration is the
-  // existing one, byte for byte — this slice emits no host import and no
-  // third registration argument.
-  expect(withCarrier.ssrAdmissionPlan.renderableTags).toEqual(['profile-card']);
+  // The compiler-returned name is the static named import; the namespace import
+  // stays because the class registration still needs the module's default.
+  expect(code).toContain(
+    'import { ProfileCard__ssrHost as __ssrhost_profile_card } from "/app/islands/profile-card.tsx"',
+  );
+  expect(code).toContain('import * as __island_profile_card from "/app/islands/profile-card.tsx"');
+  // One owner: the pairing call replaces the class-only register call, and every
+  // emitted host import is referenced by that call (no import-only residue).
+  expect(code).toContain('  registerSsrIsland: __registerSsrIsland,');
+  expect(code).toContain(
+    '__registerSsrIsland("profile-card", __island_component_profile_card, __ssrhost_profile_card)',
+  );
+  expect(code.includes('__registerSsrComponent("profile-card"')).toBe(false);
+  expect(code.match(/__ssrhost_profile_card/g)?.length).toBe(2);
+  // The classification is the build fact, not a runtime convention: no suffix
+  // scan, no namespace keys probe, no class static / module-shape read.
+  expect(code).not.toContain('.endsWith(');
+  expect(code).not.toContain('Object.keys(__island_');
+  expect(code).not.toContain('customElements.get');
+  expect(code).not.toContain('__partProgram');
+  expect(code).not.toContain('__ssrHost"');
+});
+
+test('buildEntryDescriptor: client-only admission keeps the producer out of the entry', () => {
+  // ssr:false keeps its admission verdict: the identity is carried but the
+  // island is not ssr renderable, so the entry bytes stay byte-identical.
+  const withCarrier = buildLocalDescriptor(
+    { 'client-only-widget': { ssr: false, generatedElementHost: producer() } },
+    'client-only-widget',
+  );
+  const withoutCarrier = buildLocalDescriptor(
+    { 'client-only-widget': { ssr: false } },
+    'client-only-widget',
+  );
+  expect(withCarrier.ssrAdmissionPlan.renderableTags).toEqual([]);
   expect(renderEntry(withCarrier)).toBe(renderEntry(withoutCarrier));
-  expect(renderEntry(withCarrier)).toContain('__registerSsrComponent("profile-card"');
-  expect(renderEntry(withCarrier)).not.toContain('__island_host_');
-  expect(renderEntry(withCarrier)).not.toContain('__ssrHost');
+  expect(renderEntry(withCarrier)).not.toContain('__ssrhost_');
+});
+
+test('buildEntryDescriptor: no-producer identities keep the existing class-only bytes', () => {
+  // A light root has no host producer by design and a lane-declined module is
+  // not a generated host at all: both keep today's registration bytes.
+  for (const identity of [
+    { kind: 'light-no-producer', component: 'LightCard' },
+    { kind: 'lane-declined', reason: 'non-tsx' },
+    { kind: 'lane-declined', reason: 'compiler-declined' },
+    {
+      kind: 'lane-refused',
+      diagnostics: [
+        {
+          code: 'OEC1001',
+          message: 'x',
+          file: 'app/islands/profile-card.tsx',
+          line: 1,
+          character: 1,
+        },
+      ],
+    },
+  ] satisfies GeneratedElementHostIdentity[]) {
+    const withCarrier = buildLocalDescriptor({
+      'profile-card': { generatedElementHost: identity },
+    });
+    const withoutCarrier = buildLocalDescriptor({ 'profile-card': {} });
+    expect(renderEntry(withCarrier), identity.kind).toBe(renderEntry(withoutCarrier));
+    expect(renderEntry(withCarrier)).toContain('__registerSsrComponent("profile-card"');
+    expect(renderEntry(withCarrier)).not.toContain('__ssrhost_');
+  }
+});
+
+test('buildEntryDescriptor: an ssr-admitted missing producer fails closed with the coded build refusal', () => {
+  const desc = buildLocalDescriptor({
+    'profile-card': { generatedElementHost: { kind: 'missing-producer', component: 'ShadowCard' } },
+  });
+  let thrown: unknown;
+  try {
+    renderEntry(desc);
+  } catch (error) {
+    thrown = error;
+  }
+  expect(thrown).toBeDefined();
+  // Existing coded descriptor refusal — no new error-catalog code in this slice.
+  expect((thrown as { code?: string }).code).toBe('OE_DESCRIPTOR_MODULE_IMPORT');
+  expect(String((thrown as Error).message)).toContain('profile-card');
+  expect(String((thrown as Error).message)).toContain('no compiler-emitted host producer');
+});
+
+test('buildEntryDescriptor: a forged non-identifier host export is refused at build', () => {
+  const desc = buildLocalDescriptor({
+    'profile-card': {
+      generatedElementHost: { kind: 'producer', component: 'Card', ssrHostExport: 'not a name' },
+    },
+  });
+  expect(() => renderEntry(desc)).toThrow(/not a valid JavaScript identifier/);
 });
 
 test('buildEntryDescriptor: non-local and carrier-less declarations expose no identity', () => {

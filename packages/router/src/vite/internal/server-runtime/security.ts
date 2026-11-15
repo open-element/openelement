@@ -26,6 +26,7 @@
 import { DANGEROUS_KEYS } from '@openelement/element/authoring';
 import {
   ENTRY_REGISTRATION_OWNERS,
+  SSR_REGISTRY_GENERATED_HOSTS,
   SSR_REGISTRY_ORIGINAL_DEFINE,
   SSR_REGISTRY_STUB_MARKER,
 } from '@openelement/protocol/registry-markers';
@@ -40,6 +41,19 @@ export interface SsrRegistryGuard {
    * (#952, #1339).
    */
   register(tag: string, ctor: unknown): void;
+  /**
+   * Registers one generated element class AND its compiler-emitted host
+   * renderer as ONE atomic pair (M11 complete vertical).
+   *
+   * The pair is written under {@linkcode SSR_REGISTRY_GENERATED_HOSTS} only
+   * when this call actually owns the class registration after running the
+   * EXISTING define/ownership decision: a foreign (entry-unowned) conflict
+   * pairs neither half, and a dev re-evaluation replaces both halves together.
+   * The renderer is the emitted `<Name>__ssrHost` the generated entry imports
+   * statically from the compiler fact; it is not a class static and never a
+   * namespace-suffix lookup.
+   */
+  registerIsland(tag: string, ctor: unknown, hostRenderer: unknown): void;
 }
 
 interface MinimalRegistry {
@@ -97,36 +111,89 @@ export function installSsrRegistryGuard(): SsrRegistryGuard {
       }
     };
   }
+  /**
+   * The ONE registration decision both the class-only call and the
+   * generated-island pairing call run. Returns whether this entry owns `tag`
+   * after the call — i.e. whether the class half is in place — so the pairing
+   * path can never write a renderer for a class it did not register.
+   */
+  const registerOwned = (tag: string, ctor: unknown): boolean => {
+    const current = registry.get(tag);
+    if ((registry as unknown as Record<string, unknown>)[SSR_REGISTRY_STUB_MARKER]) {
+      if (current && entryDefined.get(tag) !== current) return false;
+      registry.define(tag, ctor);
+      entryDefined.set(tag, ctor);
+      return true;
+    }
+    if (!current) {
+      registry.define(tag, ctor);
+      entryDefined.set(tag, ctor);
+      return true;
+    }
+    if (current === ctor) return entryDefined.get(tag) === ctor;
+    // #1339: the registry outlives vite dev SSR module re-evaluation, so a
+    // page/island edit re-registers the SAME tag with a FRESH class while
+    // the stale class is still registered. When the entry re-registers its
+    // OWN tag, the new class must win — through the TRUE original define
+    // (the wrapper early-returns on existing registrations for non-stub
+    // registries); the Map-backed dev SSR stub registry overwrites on
+    // duplicate define (#952) instead of rejecting the re-registration.
+    if (entryDefined.get(tag) === current) {
+      (
+        (registry as unknown as Record<string, unknown>)[
+          SSR_REGISTRY_ORIGINAL_DEFINE
+        ] as MinimalRegistry['define']
+      )(tag, ctor);
+      entryDefined.set(tag, ctor);
+      return true;
+    }
+    return false;
+  };
+  /**
+   * Drop any host renderer paired with `tag`. The pair is only meaningful for
+   * the class registration it was written with, so every path that does not
+   * (re)write the pair for this tag clears it: a class-only re-registration
+   * (the island lost its producer) and a lost ownership conflict (the class is
+   * no longer entry-owned) must never leave a stale renderer behind (review
+   * B1). Keeping an empty Map preserves the one-writer/one-reader contract.
+   */
+  const clearPair = (tag: string): void => {
+    const registryRecord = registry as unknown as Record<string, unknown>;
+    const hosts = registryRecord[SSR_REGISTRY_GENERATED_HOSTS] as Map<string, unknown> | undefined;
+    if (hosts instanceof Map) hosts.delete(tag);
+  };
   return {
     register(tag: string, ctor: unknown) {
-      const current = registry.get(tag);
-      if ((registry as unknown as Record<string, unknown>)[SSR_REGISTRY_STUB_MARKER]) {
-        if (current && entryDefined.get(tag) !== current) return;
-        registry.define(tag, ctor);
-        entryDefined.set(tag, ctor);
+      registerOwned(tag, ctor);
+      // The class-only path owns no host renderer: clear any stale pair so the
+      // serializer can never invoke an old producer against this registration.
+      clearPair(tag);
+    },
+    registerIsland(tag: string, ctor: unknown, hostRenderer: unknown) {
+      // Validate BEFORE any registry mutation: a generated entry can only pass
+      // the compiled class and the emitted producer function, so a mismatch is
+      // an internal defect that must not leave a half-registered tag.
+      if (typeof ctor !== 'function' || typeof hostRenderer !== 'function') {
+        throw new TypeError(
+          `[openElement] registerIsland(${JSON.stringify(tag)}) requires the generated element ` +
+            'class and its compiler-emitted host renderer; got class ' +
+            `${typeof ctor} and renderer ${typeof hostRenderer}. Both arguments come from the ` +
+            "compiler's own generated artifacts.",
+        );
+      }
+      if (!registerOwned(tag, ctor)) {
+        // Foreign conflict: the class half did not move, so any pair left from
+        // an earlier ownership must go with it (atomic pairing, review B1).
+        clearPair(tag);
         return;
       }
-      if (!current) {
-        registry.define(tag, ctor);
-        entryDefined.set(tag, ctor);
-        return;
+      const registryRecord = registry as unknown as Record<string, unknown>;
+      let hosts = registryRecord[SSR_REGISTRY_GENERATED_HOSTS] as Map<string, unknown> | undefined;
+      if (!hosts) {
+        hosts = new Map<string, unknown>();
+        registryRecord[SSR_REGISTRY_GENERATED_HOSTS] = hosts;
       }
-      if (current === ctor) return;
-      // #1339: the registry outlives vite dev SSR module re-evaluation, so a
-      // page/island edit re-registers the SAME tag with a FRESH class while
-      // the stale class is still registered. When the entry re-registers its
-      // OWN tag, the new class must win — through the TRUE original define
-      // (the wrapper early-returns on existing registrations for non-stub
-      // registries); the Map-backed dev SSR stub registry overwrites on
-      // duplicate define (#952) instead of rejecting the re-registration.
-      if (entryDefined.get(tag) === current) {
-        (
-          (registry as unknown as Record<string, unknown>)[
-            SSR_REGISTRY_ORIGINAL_DEFINE
-          ] as MinimalRegistry['define']
-        )(tag, ctor);
-        entryDefined.set(tag, ctor);
-      }
+      hosts.set(tag, hostRenderer);
     },
   };
 }
