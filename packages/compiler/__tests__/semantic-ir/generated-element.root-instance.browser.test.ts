@@ -241,6 +241,22 @@ interface InstrumentOptions {
   readonly legacySetupCounts?: boolean;
 }
 
+/**
+ * The harness composes JavaScript text, so every identifier it interpolates is
+ * screened first. The values are fixture-owned constants, but the screen makes
+ * the "no code construction from unsanitized input" property explicit (CodeQL
+ * `js/bad-code-sanitization`, alert #4256) and fails loudly instead of emitting
+ * a malformed module if a fixture ever changes the name.
+ */
+const SAFE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+function assertSafeIdentifier(value: string): string {
+  if (!SAFE_IDENTIFIER.test(value)) {
+    throw new Error(`the harness only interpolates identifiers, got ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
 function injectAfterSignature(source: string, fnName: string, lines: readonly string[]): string {
   const header = `function ${fnName}(`;
   const index = source.indexOf(header);
@@ -265,8 +281,9 @@ function instrumentModule(code: string, component: string, options: InstrumentOp
       `if (window.__oeFailSetupCleanup) __oe_owner.add(() => { throw new Error("child cleanup boom"); });`,
     );
   }
+  const safeComponent = assertSafeIdentifier(component);
   if (setupLines.length > 0) {
-    out = injectAfterSignature(out, `${component}__setup`, setupLines);
+    out = injectAfterSignature(out, `${safeComponent}__setup`, setupLines);
   }
   const mountLines: string[] = [];
   if (options.legacySetupCounts) {
@@ -284,9 +301,9 @@ function instrumentModule(code: string, component: string, options: InstrumentOp
     mountLines.push(`if (window.__oeFailChildMount) throw new Error("child mount boom");`);
   }
   if (mountLines.length > 0) {
-    out = injectAfterSignature(out, `${component}__mount`, mountLines);
-    if (out.includes(`function ${component}__claim(`)) {
-      out = injectAfterSignature(out, `${component}__claim`, mountLines);
+    out = injectAfterSignature(out, `${safeComponent}__mount`, mountLines);
+    if (out.includes(`function ${safeComponent}__claim(`)) {
+      out = injectAfterSignature(out, `${safeComponent}__claim`, mountLines);
     }
   }
   return out;
