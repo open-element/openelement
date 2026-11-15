@@ -914,6 +914,20 @@ export default {
         assert.deepStrictEqual([...teardown.reconnectTexts].sort(), ['A', 'B', 'C']);
         assert.deepStrictEqual([...teardown.reconnectKeys].sort(), ['a', 'b', 'c']);
 
+        // The force-leak fix pinned at the packed-artifact level: while the
+        // condition branch is present, an unrelated declared-property write must
+        // not re-create its node (the branch identity and presence survive).
+        assert.strictEqual(
+          conditionPresentGap.recreatedConditionNodes,
+          0,
+          'an unrelated declared-property write must not re-create the condition node',
+        );
+        assert.strictEqual(
+          conditionPresentGap.conditionStillPresent,
+          true,
+          'the condition branch stays present through the unrelated write',
+        );
+
         // Probe is an optional LOCAL diagnostic. If the packed shell and the
         // proof resolve different observability instances, report unavailable
         // instead of inventing subscription counts.
