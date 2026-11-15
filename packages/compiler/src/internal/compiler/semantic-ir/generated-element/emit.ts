@@ -84,6 +84,16 @@ export interface GeneratedElementModule extends GeneratedLeafModule {
   readonly ssrHostExport: string | null;
 }
 
+/**
+ * Compiler-private record key + local name of the generated host producer's
+ * canonical host-attribute projection (M11-2). The shell's seed helper attaches
+ * the merged caller+computed pairs under this ONE literal key; the emitted
+ * wrapper reads it with the same literal (like the other `__oe_` compiler-owned
+ * names, authored identifiers cannot carry the prefix).
+ */
+const HOST_ATTRIBUTES_KEY = '__oeHostAttributes';
+const HOST_ATTRIBUTES_VAR = '__oeHostAttrs';
+
 export interface GenerateElementModuleOptions {
   /**
    * The default-exported root component's local name. Required when a site is
@@ -253,6 +263,13 @@ interface PropertyEmission {
   readonly identifiers: readonly string[];
   /** True when at least one non-primitive row needs the SSR props resolver. */
   readonly usesPropsResolver: boolean;
+  /**
+   * True when at least one descriptor row has an attribute channel. Only then
+   * does the emitted host producer need the canonical attribute projection from
+   * the seeded record (M11-2 SSR->claim parity); a module without attribute rows
+   * keeps the pre-slice wrapper bytes exactly.
+   */
+  readonly hasAttributeRows: boolean;
 }
 
 /**
@@ -275,6 +292,7 @@ function buildPropertyEmission(
       rowLines: ['  properties: [],'],
       identifiers: [],
       usesPropsResolver: false,
+      hasAttributeRows: false,
     };
   }
   const factoryLines: string[] = [];
@@ -308,6 +326,7 @@ function buildPropertyEmission(
     rowLines: ['  properties: [', ...rows, '  ],'],
     identifiers,
     usesPropsResolver,
+    hasAttributeRows: properties.some((property) => property.attribute !== null),
   };
 }
 
@@ -532,21 +551,46 @@ export function generateElementModule(
                 '  if (!Array.isArray(styleLinks) || styleLinks.length === 0) throw new Error("OEIR_LEAF_MISSING_VALUE: styleLinks (the styled generated element received no declared stylesheet URLs; mixed generated-element/entry artifacts or a missing style-link carrier)");',
               ]
             : []),
-          `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
-          `  return ${names.ssrHostImport}({`,
-          `    tag: ${JSON.stringify(site.tag)},`,
-          `    root: ${JSON.stringify(hostWrapper.root)},`,
-          ...(delegatesFocus ? ['    dsd: { delegatesFocus: true },'] : []),
-          `    content: ${rootName}__ssr(${
-            propertyEmission.usesPropsResolver
-              ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
-              : names.hostPropsVar
-          }, undefined),`,
-          '    ...(lightChildren === undefined ? {} : { lightChildren }),',
-          '    ...(attributes === undefined ? {} : { attributes }),',
-          ...(styleLinkPrefix ? ['    ...(styleLinks === undefined ? {} : { styleLinks }),'] : []),
-          '  });',
-          '}',
+          ...(propertyEmission.hasAttributeRows
+            ? [
+                `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
+                `  const ${HOST_ATTRIBUTES_VAR} = ${names.hostPropsVar}.${HOST_ATTRIBUTES_KEY};`,
+                `  return ${names.ssrHostImport}({`,
+                `    tag: ${JSON.stringify(site.tag)},`,
+                `    root: ${JSON.stringify(hostWrapper.root)},`,
+                ...(delegatesFocus ? ['    dsd: { delegatesFocus: true },'] : []),
+                `    content: ${rootName}__ssr(${
+                  propertyEmission.usesPropsResolver
+                    ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
+                    : names.hostPropsVar
+                }, undefined),`,
+                '    ...(lightChildren === undefined ? {} : { lightChildren }),',
+                `    ...(attributes === undefined && ${HOST_ATTRIBUTES_VAR} === undefined ? {} : { attributes: ${HOST_ATTRIBUTES_VAR} === undefined ? attributes : ${HOST_ATTRIBUTES_VAR} }),`,
+                ...(styleLinkPrefix
+                  ? ['    ...(styleLinks === undefined ? {} : { styleLinks }),']
+                  : []),
+                '  });',
+                '}',
+              ]
+            : [
+                `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
+                `  return ${names.ssrHostImport}({`,
+                `    tag: ${JSON.stringify(site.tag)},`,
+                `    root: ${JSON.stringify(hostWrapper.root)},`,
+                ...(delegatesFocus ? ['    dsd: { delegatesFocus: true },'] : []),
+                `    content: ${rootName}__ssr(${
+                  propertyEmission.usesPropsResolver
+                    ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
+                    : names.hostPropsVar
+                }, undefined),`,
+                '    ...(lightChildren === undefined ? {} : { lightChildren }),',
+                '    ...(attributes === undefined ? {} : { attributes }),',
+                ...(styleLinkPrefix
+                  ? ['    ...(styleLinks === undefined ? {} : { styleLinks }),']
+                  : []),
+                '  });',
+                '}',
+              ]),
         ]),
     '',
   ].join('\n');

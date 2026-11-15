@@ -62,6 +62,10 @@ import {
 import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
 import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
 import { setClientIslandStyleAssets } from '../vite/internal/island-style-build-assets.ts';
+import {
+  buildPageClassificationContext,
+  resolvePageComponentIsland,
+} from '../vite/internal/ssg/page-classification.ts';
 import { browserEntryBoundaryPlugin } from '../vite/internal/browser-entry-boundary.ts';
 import { browserEntryGraphPlugin } from '../vite/internal/browser-entry-graph.ts';
 import {
@@ -348,9 +352,26 @@ export function findReachableIslandTags(
   }
 
   const routesDir = ctx.phase3.routesDir || 'app/routes';
+  // A generated page route imports its island component as a VALUE
+  // (`definePage(ImportedCard)`): the route source carries no tag string and the
+  // island module registers no element, so the source walk above cannot see the
+  // tag. The page-classification context (ONE builder, shared with the entry
+  // descriptor) resolves that import edge to the local island, and the tag joins
+  // the reachable set only when it is already admitted (`candidateSet`).
+  const pageClassificationContext = buildPageClassificationContext({
+    routesDir,
+    islandsDir: ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR,
+    islandTagNames: ctx.phase1.islandTagNames ?? [],
+    islandFiles: ctx.phase1.islandFiles ?? [],
+    islandMeta: ctx.phase1.islandMeta ?? {},
+  });
   for (const route of ctx.phase1.cachedRoutes ?? []) {
     if (route.type !== 'page' || route.special) continue;
     recordSourceFile(resolve(root, routesDir, route.filePath));
+    const pageIsland = resolvePageComponentIsland(route, pageClassificationContext);
+    if (pageIsland !== undefined && candidateSet.has(pageIsland.tagName)) {
+      reachable.add(pageIsland.tagName);
+    }
   }
 
   const layoutConfigs = [ctx.phase3.layout, ...Object.values(ctx.phase3.layouts ?? {})];
@@ -1221,23 +1242,25 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       [...styleAssetRecords.entries()].map(([key, record]) => [key, record.fileName]),
     );
 
-    // M09-2e / #1803: join every admitted generated SHADOW island's declared
-    // sheets to the client asset this build emitted. The join is the ONE check
-    // that the DSD template's link and the emitted bytes agree — a declared
-    // sheet with no emitted asset fails the build closed here, before any SSR
-    // entry can emit a link to a missing resource. A LIGHT-root declaration is
-    // not part of this channel (document delivery is the separate adoption
-    // slice); its asset still exists and is served by the same plan.
+    // M09-2e / #1803 shadow links + Alpha16 retained stylesheet delivery: join EVERY admitted
+    // generated island's declared sheets to the client asset this build
+    // emitted. The join is the ONE check that a declared link and the emitted
+    // bytes agree — a declared sheet with no emitted asset fails the build
+    // closed here, before any consumer can point at a missing resource. One
+    // map, two consumers of the SAME plan: a shadow root's DSD template declares
+    // its links (task4's channel), and a LIGHT root's sheet feeds the per-route
+    // document fact (route-style-links.ts, seeded into the existing head
+    // `styleLinks` sink). Delivery aliases are recorded too, because a page's
+    // JSX may reference the delivered alias tag rather than the primary one.
     const islandStyleAssets = new Map<string, string[]>();
     for (const declaration of islandStyleDeclarations()) {
-      if (declaration.root !== 'shadow') continue;
       const urls: string[] = [];
       for (const request of styleRequestsForImporter(declaration.moduleId)) {
         const emitted = ctx.clientStyleAssetFiles.get(request.moduleId);
         if (emitted === undefined) {
           throw buildError(
             ClientAssetErrorCode.STYLESHEET_MISSING,
-            `Generated shadow island <${declaration.tagName}> declares ` +
+            `Generated ${declaration.root} island <${declaration.tagName}> declares ` +
               `openElement.styles "${request.specifier}" but the client build emitted no ` +
               'stylesheet asset for it. A declared sheet is never silently dropped: fix the ' +
               'stylesheet edge or remove the declaration.',
@@ -1248,7 +1271,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       if (urls.length !== declaration.specifiers.length) {
         throw buildError(
           ClientAssetErrorCode.STYLESHEET_MISSING,
-          `Generated shadow island <${declaration.tagName}> declares ` +
+          `Generated ${declaration.root} island <${declaration.tagName}> declares ` +
             `${declaration.specifiers.length} stylesheet(s) but the client build joined ` +
             `${urls.length} emitted asset(s); the style plan and the declaration disagree.`,
         );
@@ -1256,11 +1279,25 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       if (urls.length === 0) {
         throw buildError(
           ClientAssetErrorCode.STYLESHEET_MISSING,
-          `Generated shadow island <${declaration.tagName}> is styled but produced no ` +
-            'stylesheet URL; an unstyled shadow host must not be rendered silently.',
+          `Generated ${declaration.root} island <${declaration.tagName}> is styled but ` +
+            'produced no stylesheet URL; an unstyled island must not be rendered silently.',
         );
       }
-      islandStyleAssets.set(declaration.tagName, urls);
+      const meta = ctx.phase1.islandMeta[declaration.tagName] as
+        | { tags?: readonly string[]; tagNames?: readonly string[] }
+        | undefined;
+      // The delivered tag set is the sidecar's own one-to-many list through the
+      // ONE resolver (primary tag when the sidecar declares no aliases), so a
+      // consumer that looks up the delivered tag never misses the sheet.
+      for (const tag of resolveIslandDeliveryTags(
+        declaration.tagName,
+        meta?.tags,
+        meta?.tagNames,
+        declaration.tagName,
+      )) {
+        if (islandStyleAssets.has(tag)) continue;
+        islandStyleAssets.set(tag, urls);
+      }
     }
     setClientIslandStyleAssets(ctx, islandStyleAssets);
 

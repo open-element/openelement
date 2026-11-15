@@ -312,6 +312,99 @@ function failUncompiled(ctor: object, tag: string): never {
   );
 }
 
+/** The compiler-emitted generated host producer the entry's registry guard pairs with a tag. */
+type RegisteredGeneratedHostRenderer = (
+  props: Readonly<Record<string, unknown>>,
+  lightChildren: string | undefined,
+  attributes: readonly (readonly [string, string])[] | undefined,
+  styleLinks?: readonly string[],
+) => unknown;
+
+/**
+ * Resolve one registered generated host renderer from the ONE protocol pair
+ * table the generated entry's registry guard writes
+ * (`SSR_REGISTRY_GENERATED_HOSTS`).
+ *
+ * `undefined` means "this tag is not a generated host": the caller keeps the
+ * compiled-class path byte-identical. A malformed table, or a present-but-
+ * invalid entry, fails closed with the existing program-missing identity —
+ * treating it as absent would silently dispatch the tag to a different renderer
+ * (L1 fail-closed rule, shared by the root page path and nested expansion).
+ */
+function registeredGeneratedHostRenderer(tag: string): RegisteredGeneratedHostRenderer | undefined {
+  const registry =
+    typeof customElements === 'undefined'
+      ? undefined
+      : (customElements as unknown as Record<string, unknown>);
+  const rawTable = registry === undefined ? undefined : registry[SSR_REGISTRY_GENERATED_HOSTS];
+  if (rawTable === undefined) return undefined;
+  if (!(rawTable instanceof Map)) {
+    throw new OpenElementError(
+      "[openElement] the SSR registry's generated-host table is malformed " +
+        '(expected a Map); the generated entry registry guard is its only writer.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
+  const table = rawTable as Map<string, unknown>;
+  if (!table.has(tag)) return undefined;
+  const hostRenderer = table.get(tag);
+  if (typeof hostRenderer !== 'function') {
+    throw new OpenElementError(
+      `[openElement] admitted generated host <${tag}> is paired with a ` +
+        `${typeof hostRenderer} renderer; the registry guard only writes the ` +
+        'compiler-emitted host function.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
+  return hostRenderer as RegisteredGeneratedHostRenderer;
+}
+
+/**
+ * Render one paired generated host through the ONE typed channel shared by the
+ * generated page ROOT path and nested expansion: the compiler-emitted host
+ * producer receives the props/lightChildren/attributes plus the per-island
+ * stylesheet URLs from the same request-time style-link channel the generated
+ * entry fills.
+ *
+ * `null` is the explicit "declared but carrier unavailable" state and fails
+ * closed instead of rendering the host silently unstyled (M09-2e / #1803).
+ * A non-string result is a malformed emitted artifact and fails closed too.
+ */
+function renderRegisteredGeneratedHost(
+  tag: string,
+  hostRenderer: RegisteredGeneratedHostRenderer,
+  props: Readonly<Record<string, unknown>> | undefined,
+  lightChildren: string | undefined,
+  attributes: readonly (readonly [string, string])[] | undefined,
+): string {
+  const islandStyleLinks = requestTimeIslandStyleLinks(tag);
+  if (islandStyleLinks === null) {
+    throw new OpenElementError(
+      `[openElement] admitted generated host <${tag}> declares ` +
+        'IslandConfig.styles on a shadow root, but this render has no DSD ' +
+        'style-link carrier for it (the dev server emits no style assets). ' +
+        'Run a production build, or remove the declaration; rendering it ' +
+        'unstyled would silently drop the authored sheets.',
+      { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
+    );
+  }
+  const rendered = hostRenderer(
+    props ?? {},
+    lightChildren,
+    attributes,
+    islandStyleLinks === undefined ? undefined : islandStyleLinks,
+  );
+  if (typeof rendered !== 'string') {
+    throw new OpenElementError(
+      `[openElement] admitted generated host <${tag}> produced ` +
+        `${typeof rendered} instead of an HTML string; the compiler-emitted host ` +
+        'producer must always return the serialized host markup.',
+      { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
+    );
+  }
+  return rendered;
+}
+
 /** Coerce a JS-side prop value per the compiled converter record. */
 function coerceServerProp(
   record: CompiledPropertyMetadata,
@@ -784,6 +877,25 @@ function renderToStringAtDepth(
       { code: FacadeErrorCode.COMPOSITION_DEPTH, phase: 'ssr' },
     );
   }
+  // M11-2 generated page root: a generated element page carries no
+  // `__partProgram`; its server artifact is the compiler-emitted host producer
+  // the entry paired with the tag through the ONE registry guard. Dispatch
+  // through the SAME pair channel the nested expansion uses, BEFORE any class
+  // or program probe, so the generated page root and a nested generated host
+  // cannot diverge. A tag that is not paired (every compiled class page) keeps
+  // the class path byte-identical.
+  if (typeof input === 'string') {
+    const rootGeneratedHostRenderer = registeredGeneratedHostRenderer(input);
+    if (rootGeneratedHostRenderer !== undefined) {
+      return renderRegisteredGeneratedHost(
+        input,
+        rootGeneratedHostRenderer,
+        options.props,
+        undefined,
+        undefined,
+      );
+    }
+  }
   const resolvedClass = (options.componentClass ??
     (typeof input === 'string'
       ? typeof customElements !== 'undefined'
@@ -868,12 +980,13 @@ function renderToStringAtDepth(
           ? undefined
           : (nested) => {
               if (!admitted.has(nested.tag)) return undefined;
-              // M11 complete vertical: a generated element class carries no
-              // `__partProgram`; its server artifact is the compiler-emitted
-              // `<Name>__ssrHost` the entry paired with the class through the
-              // ONE registry guard. The pair table is the protocol marker the
-              // guard writes; a hit is dispatched BEFORE the class path, with
-              // no class read, no static check and no program probe.
+              // M11-2: a generated element class carries no `__partProgram`;
+              // its server artifact is the compiler-emitted `<Name>__ssrHost`
+              // the entry paired with the class through the ONE registry guard.
+              // The pair table is the protocol marker the guard writes; a hit
+              // is dispatched BEFORE the class path, through the SAME helper the
+              // generated page root uses (styleLinks + fail-closed checks
+              // included), with no class read and no program probe.
               //
               // STREAM BOUNDARY (OWED, L3 — characterized, not supported):
               // the deferred/stream executor never reaches this branch — it
@@ -885,87 +998,22 @@ function renderToStringAtDepth(
               // only; streaming/deferred DSD for them is explicitly owed to a
               // later, separately approved slice and this branch claims no
               // stream support.
-              const generatedHostRegistry =
-                typeof customElements === 'undefined'
-                  ? undefined
-                  : (customElements as unknown as Record<string, unknown>);
-              const rawGeneratedHostTable =
-                generatedHostRegistry === undefined
-                  ? undefined
-                  : generatedHostRegistry[SSR_REGISTRY_GENERATED_HOSTS];
-              if (rawGeneratedHostTable !== undefined) {
-                // L1: the guard is the ONLY writer and always writes a Map. A
-                // marker value of another shape is a corrupted registry, not a
-                // reason to silently fall back to the class path.
-                if (!(rawGeneratedHostTable instanceof Map)) {
-                  throw new OpenElementError(
-                    "[openElement] the SSR registry's generated-host table is malformed " +
-                      '(expected a Map); the generated entry registry guard is its only writer.',
-                    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-                  );
-                }
-                const generatedHostTable = rawGeneratedHostTable as Map<string, unknown>;
-                // L1: an entry that EXISTS for the tag must be a callable
-                // compiler-emitted renderer. Treating a present-but-invalid entry
-                // as "absent" would silently dispatch to a different path.
-                if (generatedHostTable.has(nested.tag)) {
-                  const hostRenderer = generatedHostTable.get(nested.tag);
-                  if (typeof hostRenderer !== 'function') {
-                    throw new OpenElementError(
-                      `[openElement] admitted generated host <${nested.tag}> is paired with a ` +
-                        `${typeof hostRenderer} renderer; the registry guard only writes the ` +
-                        'compiler-emitted host function.',
-                      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-                    );
-                  }
-                  // The ONE host-attribute value algebra is reused: the class
-                  // serializer's host writer and this typed pair channel cannot
-                  // drift. Presence rides as the canonical empty-string pair.
-                  const normalizedAttributes = normalizeHostAttributePairs(nested.attributes);
-                  const hostAttributes = normalizedAttributes.attributes.map(
-                    (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
-                  );
-                  // M09-2e / #1803: the generated host's DSD template declares
-                  // the island's stylesheets INSIDE its shadow root. The emitted
-                  // host producer takes the typed styleLinks channel; a 3-arg
-                  // (unstyled) producer ignores the extra argument. `null` is the
-                  // explicit "declared but carrier unavailable" state (dev server
-                  // without the emitted assets) and fails closed rather than
-                  // silently rendering an unstyled shadow host.
-                  const islandStyleLinks = requestTimeIslandStyleLinks(nested.tag);
-                  if (islandStyleLinks === null) {
-                    throw new OpenElementError(
-                      `[openElement] admitted generated host <${nested.tag}> declares ` +
-                        'IslandConfig.styles on a shadow root, but this render has no DSD ' +
-                        'style-link carrier for it (the dev server emits no style assets). ' +
-                        'Run a production build, or remove the declaration; rendering it ' +
-                        'unstyled would silently drop the authored sheets.',
-                      { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
-                    );
-                  }
-                  const rendered = (
-                    hostRenderer as (
-                      props: Readonly<Record<string, unknown>>,
-                      lightChildren: string,
-                      attributes: readonly (readonly [string, string])[],
-                      styleLinks?: readonly string[],
-                    ) => unknown
-                  )(
-                    nested.properties,
-                    nested.children,
-                    hostAttributes,
-                    islandStyleLinks === undefined ? undefined : islandStyleLinks,
-                  );
-                  if (typeof rendered !== 'string') {
-                    throw new OpenElementError(
-                      `[openElement] admitted generated host <${nested.tag}> produced ` +
-                        `${typeof rendered} instead of an HTML string; the compiler-emitted host ` +
-                        'producer must always return the serialized host markup.',
-                      { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
-                    );
-                  }
-                  return rendered;
-                }
+              const generatedHostRenderer = registeredGeneratedHostRenderer(nested.tag);
+              if (generatedHostRenderer !== undefined) {
+                // The ONE host-attribute value algebra is reused: the class
+                // serializer's host writer and this typed pair channel cannot
+                // drift. Presence rides as the canonical empty-string pair.
+                const normalizedAttributes = normalizeHostAttributePairs(nested.attributes);
+                const hostAttributes = normalizedAttributes.attributes.map(
+                  (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
+                );
+                return renderRegisteredGeneratedHost(
+                  nested.tag,
+                  generatedHostRenderer,
+                  nested.properties,
+                  nested.children,
+                  hostAttributes,
+                );
               }
               const nestedClass =
                 typeof customElements === 'undefined'

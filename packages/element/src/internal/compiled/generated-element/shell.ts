@@ -146,7 +146,7 @@ import { isTrustedHtmlValue, trustedHtml } from '../../core/security.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
-import { removeNodes } from '../runtime/values.ts';
+import { CompiledProgramValidationError, removeNodes } from '../runtime/values.ts';
 import { signal } from '../../signal/framework.ts';
 import type { WritableSignal } from '../../signal/types.ts';
 import {
@@ -218,6 +218,32 @@ export interface GeneratedElementProperty {
 function hostPropertyAttribute(property: GeneratedElementProperty): string | null {
   if (property.attribute === null) return null;
   return property.attribute ?? camelToKebab(property.name);
+}
+
+/**
+ * Compiler-private record key carrying the merged host-attribute pairs from the
+ * generated host producer's seed. The emitted `__ssrHost` wrapper and the shell
+ * share this ONE literal (like the other compiler-owned `__oe_` names); authored
+ * identifiers cannot carry the prefix, so it cannot collide. Non-enumerable: the
+ * content record the leaf reads keeps exactly its declared keys.
+ */
+const GENERATED_HOST_ATTRIBUTES = '__oeHostAttributes';
+
+/**
+ * Internal identity for a supplied primitive value that has NO SSR→claim
+ * attribute channel: a `boolean false` against a presence-default `true`.
+ * Rendering it would silently diverge (the server content carries `false` while
+ * the claim can only re-read the presence default). The property-only
+ * (`attribute: false`) primitive case stays the recorded ADR-0181 A5 boundary.
+ * Fail closed with an internal `OEIR_LEAF_*` identity (no public catalogue row).
+ */
+const UNSEEDABLE_PROPERTY = 'OEIR_LEAF_UNSEEDABLE_PROPERTY';
+
+/** The canonical primitive fallback for a declared row (same rule as the client). */
+function primitiveRowFallback(property: GeneratedElementProperty): unknown {
+  return (
+    property.default ?? (property.type === 'boolean' ? false : property.type === 'number' ? 0 : '')
+  );
 }
 
 /**
@@ -333,6 +359,75 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
       get: () => supplied[name],
     });
   }
+
+  // M11-2 parity: project the SAME seeded record into the canonical host
+  // attribute pairs the client claim re-reads. The conversion is the canonical
+  // `convertToAttribute` over the descriptor row's declared type/default — never
+  // a field-name guess. One read per attribute-backed declared row (a supplied
+  // getter therefore runs exactly once here; leaf reads still read it again),
+  // and the pair is emitted only when the serialized value differs from the
+  // serialized declared default (the class lane's own host-attribute rule).
+  const computed: Array<readonly [string, string]> = [];
+  const computedByName = new Set<string>();
+  for (const property of properties ?? []) {
+    if (!PRIMITIVE_PROPERTY_TYPES.has(property.type)) continue;
+    const attribute = hostPropertyAttribute(property);
+    const record = { converter: property.type, type: property.type, default: property.default };
+    const fallback = primitiveRowFallback(property);
+    if (attribute === null) {
+      // Property-only primitive: no attribute carries the value to the claim.
+      // Supplied differing values stay a RECORDED boundary (ADR-0181 A5 does not
+      // claim attribute:false seed parity); only the boolean presence case below
+      // is provably divergent against a presence-true default and fails closed.
+      continue;
+    }
+    const seededValue = seeded[property.name];
+    const serialized = convertToAttribute(record as never, seededValue);
+    const serializedFallback = convertToAttribute(record as never, fallback);
+    if (serialized === null) {
+      // `boolean false` has no presence form. If the declared default is the
+      // presence-true boolean, the claim would restore `true`: fail closed.
+      if (!Object.is(seededValue, fallback)) {
+        throw new CompiledProgramValidationError(
+          'hostAttributes',
+          `${UNSEEDABLE_PROPERTY}: ${property.name} is a boolean whose false value cannot be ` +
+            'expressed as an attribute while its declared default renders as presence-true; the ' +
+            'claim would re-read the default.',
+        );
+      }
+      continue;
+    }
+    if (serialized === serializedFallback) continue;
+    const key = attribute.toLowerCase();
+    computedByName.add(key);
+    computed.push([attribute, serialized] as const);
+  }
+  const merged: Array<readonly [string, string]> = [];
+  for (const [name, value] of pairs) {
+    if (typeof name !== 'string' || typeof value !== 'string') continue;
+    const key = name.toLowerCase();
+    const replacement = computed.find((pair) => pair[0].toLowerCase() === key);
+    if (replacement !== undefined) {
+      merged.push(replacement);
+      computedByName.delete(key);
+      continue;
+    }
+    merged.push([name, value] as const);
+  }
+  for (const pair of computed) {
+    if (!computedByName.has(pair[0].toLowerCase())) continue;
+    merged.push(pair);
+  }
+  // A supplied prop wins over the attribute wire for CONTENT; the same precedence
+  // applies to the host tag so the SSR markup and the claim seed cannot disagree.
+  // No computed pair and no caller attributes keeps the historical shape (the
+  // emitted wrapper then falls back to the caller attributes verbatim).
+  Object.defineProperty(seeded, GENERATED_HOST_ATTRIBUTES, {
+    value: merged.length === 0 ? undefined : merged,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
   return seeded;
 }
 

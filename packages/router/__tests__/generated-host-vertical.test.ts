@@ -32,7 +32,7 @@ import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
 import { afterAll, expect, test } from 'vitest';
 import { compileElementProgram, compileGeneratedElementIfAdmitted } from '@openelement/compiler';
-import { renderToString } from '@openelement/element';
+import { __setRequestTimeStyleSheetUrls, renderToString } from '@openelement/element';
 import {
   SSR_REGISTRY_GENERATED_HOSTS,
   SSR_REGISTRY_STUB_MARKER,
@@ -49,6 +49,7 @@ type HostRenderer = (
   props: Readonly<Record<string, unknown>>,
   lightChildren: string,
   attributes: readonly (readonly [string, string])[] | undefined,
+  styleLinks?: readonly string[],
 ) => string;
 
 /** Real class page (class lane) nesting the generated host as its child. */
@@ -185,13 +186,33 @@ function hostPair(registry: Record<string, unknown>): {
   return { table: registry[SSR_REGISTRY_GENERATED_HOSTS] as Map<string, unknown> | undefined };
 }
 
+/**
+ * The REAL fixture island declares `styles` on a shadow root, so its emitted
+ * producer carries the generated host style-links guard. This harness builds
+ * the entry by hand (no generated entry module), so it must feed the SAME
+ * request-time style-link channel a production entry feeds from the build: the
+ * declared stylesheet URL for the island tag. Nothing is weakened: a missing
+ * carrier is still the producer's fail-closed condition.
+ */
+function withIslandStyleLink<T>(tag: string, run: () => T): T {
+  __setRequestTimeStyleSheetUrls(null, [[tag, ['/client/assets/generated-host.css']]]);
+  try {
+    return run();
+  } finally {
+    __setRequestTimeStyleSheetUrls(null);
+  }
+}
+
 test('literal host attributes render through the real generated shadow vertical', async () => {
   const { ctor, producer } = await loadRealGeneratedHost();
   await withStubRegistry(({ registry, elements, guard }) => {
     const calls: Array<Parameters<HostRenderer>> = [];
-    const host: HostRenderer = (props, lightChildren, attributes) => {
+    const host: HostRenderer = (props, lightChildren, attributes, styleLinks) => {
       calls.push([props, lightChildren, attributes]);
-      return producer(props, lightChildren, attributes);
+      // Forward the typed style-links channel the nested seam hands the pair:
+      // the production entry feeds it from the build; this harness feeds it
+      // through the same setter entry (see withIslandStyleLink).
+      return producer(props, lightChildren, attributes, styleLinks);
     };
     guard.registerIsland(HOST_TAG, ctor, host);
 
@@ -201,7 +222,9 @@ test('literal host attributes render through the real generated shadow vertical'
     expect(hostPair(registry).table?.get(HOST_TAG)).toBe(host);
 
     const { pageClass } = realPageProgram();
-    const html = renderToString(pageClass, { ssrRenderableTags: [HOST_TAG] });
+    const html = withIslandStyleLink(HOST_TAG, () =>
+      renderToString(pageClass, { ssrRenderableTags: [HOST_TAG] }),
+    );
 
     // One owner call, one producer call — no second registration/render path.
     expect(calls.length).toBe(1);
@@ -226,7 +249,14 @@ test('literal host attributes render through the real generated shadow vertical'
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     // The DSD template is the canonical producer's one spelling and the light
     // children are the parent's already-serialized markup after `</template>`.
-    expect(html).toContain('<template shadowrootmode="open"><article part="card">');
+    // The fixture island declares styles, so the production entry-shape carrier
+    // makes the canonical marked link the template's leading node (M09-2e);
+    // the authored content follows it inside the same DSD template.
+    expect(html).toContain(
+      '<template shadowrootmode="open"><link rel="stylesheet" ' +
+        'href="/client/assets/generated-host.css" data-oe-static-styles />' +
+        '<article part="card">',
+    );
     expect(html).toContain('</template><span slot="x">light &amp; child</span>');
     expect(html.indexOf('</template>')).toBeLessThan(
       html.indexOf('<span slot="x">light &amp; child</span>'),
@@ -239,7 +269,9 @@ test('the dynamic property channel wins over the attribute wire, one escaped wir
   await withStubRegistry(({ guard }) => {
     guard.registerIsland(HOST_TAG, ctor, producer);
     const { pageClass } = pageProgram(PAGE_SOURCE);
-    const html = renderToString(pageClass, { ssrRenderableTags: [HOST_TAG] });
+    const html = withIslandStyleLink(HOST_TAG, () =>
+      renderToString(pageClass, { ssrRenderableTags: [HOST_TAG] }),
+    );
 
     // The dynamic value (declared property default here) is the content source;
     // the wire attribute is the escaped host attribute, never double-escaped.

@@ -235,6 +235,30 @@ describe('M09-2a generated shadow host producer', () => {
     expect(light.code).not.toContain('data-oe-static-styles');
   });
 
+  test('attribute rows project canonical host attrs from the seeded record (M11-2)', () => {
+    const propsSidecar =
+      "import { defineIslandConfig } from '@openelement/router';\n" +
+      "export const openElement = defineIslandConfig({ root: 'shadow', " +
+      "properties: { title: { attribute: 'data-title', default: '' }, count: { default: 0 } } });\n";
+    const propsBody = `
+function Profile(props: { title: string; count: number }) {
+  return <p>{props.title}{props.count}</p>;
+}
+export default Profile;
+`;
+    const styled = compileGeneratedElementIfAdmitted(`${propsSidecar}${propsBody}`, FILE, {
+      site: SITE,
+    })!;
+    expect(styled.code).toContain('const __oeHostAttrs = __oeHostProps.__oeHostAttributes;');
+    expect(styled.code).toContain(
+      'attributes: __oeHostAttrs === undefined ? attributes : __oeHostAttrs',
+    );
+    // A module with no attribute-backed row keeps the pre-slice wrapper bytes.
+    const plain = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE })!;
+    expect(plain.code).not.toContain('__oeHostAttrs');
+    expect(plain.code).toContain('...(attributes === undefined ? {} : { attributes }),');
+  });
+
   test('the lane reads the authored sidecar and emits the wrapper only for shadow', () => {
     const shadow = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE });
     expect(shadow).not.toBeNull();

@@ -512,6 +512,14 @@ export const RouteScanErrorCode = {
   EQUIVALENT_FILES: 'OE_ROUTE_SCAN_EQUIVALENT_FILES',
   /** Two route files fold to the same generated identifier (#1029). */
   VAR_NAME_COLLISION: 'OE_ROUTE_SCAN_VAR_NAME_COLLISION',
+  /**
+   * The per-route document-stylesheet fact for styled light-root generated
+   * islands could not be derived completely: the route module walk hit a
+   * boundary (module bound, unreadable or unanalysable source) or the build has
+   * no bundler resolver. An under-linked page ships a styled island without its
+   * sheet, so the build fails closed instead of continuing with a partial map.
+   */
+  DOCUMENT_STYLE_LINKS_INCOMPLETE: 'OE_ROUTE_SCAN_DOCUMENT_STYLE_LINKS_INCOMPLETE',
 } as const;
 
 /**

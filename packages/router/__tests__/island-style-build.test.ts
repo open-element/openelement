@@ -153,7 +153,11 @@ async function createFixture(): Promise<string> {
       "@element('gen-style-live-page', { root: 'shadow-open' })",
       'export default class ProofLivePage extends OpenElement {',
       '  render() {',
-      "    return <div class='proof-live'>request-time proof</div>;",
+      '    return (',
+      "      <div class='proof-live'>",
+      '        <gen-style-card></gen-style-card>',
+      '      </div>',
+      '    );',
       '  }',
       '}',
       '',
@@ -259,6 +263,11 @@ let styledCssBytes: Map<string, string>;
 let plainCssAssets: string[];
 let styledManifest: { entry: string; styles: string[] };
 let plainManifest: { entry: string; styles: string[] };
+/** Build A's rendered page + request-time server entry (captured before build B). */
+let styledHtml: string;
+let styledServerEntry: string;
+/** Build B's rendered page (a styled island declaration must add no link). */
+let plainHtml: string;
 
 beforeAll(async () => {
   appDir = await createFixture();
@@ -276,6 +285,9 @@ beforeAll(async () => {
     );
   }
   styledManifest = await readClientAssetManifest(appDir);
+  // Capture build A's rendered artifacts before build B overwrites the output.
+  styledHtml = await readFile(join(appDir, 'dist', 'index.html'), 'utf8');
+  styledServerEntry = await readFile(join(appDir, 'dist', 'server', 'entry.js'), 'utf8');
 
   // Build B: the SAME fixture, with the declaration removed. The island source
   // line count changes (so that island's own chunk hash may change), while the
@@ -290,6 +302,7 @@ beforeAll(async () => {
   plainArtifacts = await clientIslandArtifacts(appDir);
   plainCssAssets = await emittedCssAssets(appDir);
   plainManifest = await readClientAssetManifest(appDir);
+  plainHtml = await readFile(join(appDir, 'dist', 'index.html'), 'utf8');
 }, 300_000);
 
 afterAll(async () => {
@@ -313,6 +326,39 @@ test('light-root generated island: the declared sheet is a real content-addresse
   expect(compact).toContain('.card-title{font-weight:700}');
   // The manifest records the preloadable style URL under the configured base.
   expect(styledManifest.styles).toEqual([`${BASE}client/${styleAssetFileName(css)}`]);
+});
+
+test('light-root generated island: the static document head declares the emitted sheet', () => {
+  expect(styledBuild.code).toBe(0);
+  const cssFile = styledCssAssets[0]!;
+  const href = `${BASE}client/assets/${cssFile}`;
+  const head = styledHtml.slice(0, styledHtml.indexOf('</head>'));
+  // Parser-visible, marked, exactly once in the head: the document is the light
+  // root's delivery, and the marker is what the client's adoption guard reads.
+  expect(head.split(`href="${href}" data-oe-static-styles`).length - 1).toBe(1);
+  // Exactly one declaration in the WHOLE document — no duplicate delivery.
+  expect(styledHtml.split(`href="${href}" data-oe-static-styles`).length - 1).toBe(1);
+  // The light host is the plain tag the compiler emits (no SSR producer, so no
+  // DSD template and no inline framework stylesheet papers over the link).
+  expect(styledHtml).toContain(`<${STYLED_TAG}></${STYLED_TAG}>`);
+  expect(/<style[^>]*data-oe-static-styles/.test(styledHtml)).toBe(false);
+});
+
+test('light-root generated island: the request-time entry carries the same route→sheet fact', () => {
+  expect(styledBuild.code).toBe(0);
+  const cssFile = styledCssAssets[0]!;
+  const href = `${BASE}client/assets/${cssFile}`;
+  // ONE fact, two renderers: the generated request-time server artifact carries
+  // the literal data channel the shared document renderer seeds into the head,
+  // and the live route's seed reads its own key.
+  expect(styledServerEntry).toContain('__routeDocumentStyleLinks');
+  expect(styledServerEntry).toContain(href);
+  expect(styledServerEntry).toContain('"/live"');
+});
+
+test('without any styles declaration the document declares no marked link', () => {
+  expect(plainBuild.code).toBe(0);
+  expect(plainHtml.includes('data-oe-static-styles')).toBe(false);
 });
 
 test('the emitted island chunks carry no CSS text (zero-inline guarantee)', () => {

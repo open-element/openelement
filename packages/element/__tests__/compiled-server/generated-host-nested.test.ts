@@ -426,7 +426,7 @@ describe('one host-attribute value algebra, two canonical wire spellings', () =>
 });
 
 describe('host producer property seeding (B2/B3)', () => {
-  test('a supplied undefined primitive falls back to the canonical declared default, lazily', () => {
+  test('a supplied undefined primitive falls back to the canonical declared default (one projection read)', () => {
     const properties = [
       {
         name: 'label',
@@ -444,18 +444,19 @@ describe('host producer property seeding (B2/B3)', () => {
       },
     };
     const seeded = seedGeneratedElementHostProperties(properties, props, undefined);
-    // Seeding itself never executes a supplied getter.
-    expect(reads).toBe(0);
+    // M11-2: the canonical host-attribute projection reads each attribute-backed
+    // supplied row exactly ONCE during the seed (it cannot project an attribute
+    // without the value); the content record itself stays per-read delegated.
+    expect(reads).toBe(1);
     // Reading the seeded row applies the client's canonical undefined->default.
     expect(seeded.label).toBe('untitled');
-    const afterFirst = reads;
-    expect(afterFirst).toBeGreaterThanOrEqual(1);
+    expect(reads).toBe(2);
     expect(seeded.label).toBe('untitled');
-    // Per-read delegation: a second read reads the supplied getter again.
-    expect(reads).toBeGreaterThan(afterFirst);
+    // Per-read delegation: a later read reads the supplied getter again.
+    expect(reads).toBe(3);
   });
 
-  test('a supplied real primitive wins and is never read eagerly', () => {
+  test('a supplied real primitive wins (one projection read, then per-read delegation)', () => {
     const properties = [
       { name: 'count', attribute: 'count', type: 'number' as const, reflect: false, default: 0 },
     ];
@@ -467,9 +468,11 @@ describe('host producer property seeding (B2/B3)', () => {
       },
     };
     const seeded = seedGeneratedElementHostProperties(properties, props, [['count', '1']]);
-    expect(reads).toBe(0);
+    // One canonical projection read during the seed; the supplied prop wins over
+    // the attribute wire for both content and the host tag.
+    expect(reads).toBe(1);
     expect(seeded.count).toBe(7);
-    expect(reads).toBeGreaterThanOrEqual(1);
+    expect(reads).toBe(2);
   });
 
   test('only the DECLARED attribute feeds the seed (no lowercased property-name dialect)', () => {
