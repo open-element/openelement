@@ -312,7 +312,7 @@ test('the merge-base Owner state is read from the registry revision, marked rows
       ]),
       'utf8',
     );
-    expect(git(['add', '-A']).success).toBe(true);
+    expect(git(['add', 'docs/architecture/seams.md']).success).toBe(true);
     const commit = git([
       '-c',
       'user.name=seams-base-probe',

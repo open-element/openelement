@@ -264,21 +264,83 @@ export function synthesizedPackedManifest(pkg: PackageInfo): Record<string, unkn
 }
 
 /**
+ * The committed-lockfile pins the staging install uses (#1715): the
+ * `pnpm-lock.yaml` importer resolutions for the DIRECT external entries, plus
+ * the workspace members that resolve through the staging symlinks. Published
+ * manifests keep their semver ranges; this pins only the ephemeral staging
+ * manifest (direct entries and their installed versions), not the transitive
+ * graph npm still resolves from package ranges.
+ */
+export interface StagingLock {
+  readonly lockedVersions: ReadonlyMap<string, string>;
+  readonly workspaceNames: ReadonlySet<string>;
+}
+
+/** The registry package a staging dependency entry names (alias-aware). */
+export function stagedDependencyName(key: string, spec: string): string {
+  if (!spec.startsWith('npm:')) return key;
+  const rest = spec.slice('npm:'.length);
+  const at = rest.lastIndexOf('@');
+  return at > 0 ? rest.slice(0, at) : rest;
+}
+
+/**
+ * Rewrite one derived dependency spec to the exact lockfile resolution. A
+ * workspace member keeps its in-tree version; an external name without a
+ * committed resolution fails closed instead of floating against the registry.
+ */
+function lockedStagingSpec(key: string, spec: string, lock: StagingLock, context: string): string {
+  const name = stagedDependencyName(key, spec);
+  if (lock.workspaceNames.has(key) || lock.workspaceNames.has(name)) return spec;
+  const version = lock.lockedVersions.get(name);
+  if (version === undefined) {
+    throw new Error(
+      `[vp-pack] ${context}: ${name} has no committed pnpm-lock.yaml resolution for the ` +
+        'staging install; run pnpm install so the lockfile records it before packing ' +
+        '(an unpinned staging install is the #1715 float)',
+    );
+  }
+  return spec.startsWith('npm:') ? `npm:${name}@${version}` : version;
+}
+
+/** The exact version a staging dependency entry must install to. */
+function expectedStagingVersion(key: string, spec: string, lock: StagingLock): string {
+  const name = stagedDependencyName(key, spec);
+  if (lock.workspaceNames.has(key) || lock.workspaceNames.has(name)) return '';
+  const version = lock.lockedVersions.get(name);
+  if (version === undefined) {
+    throw new Error(`[vp-pack] staging dependency ${name} has no committed lock resolution`);
+  }
+  return version;
+}
+
+/**
  * The staged per-package manifest. `dependencies` mirror the published
  * derivation plus the package's own name — tsdown externalizes `dependencies`,
  * which is what keeps bare specifiers (self-imports included) in the emitted
  * modules. Peers are not staged: they never resolve in the shared install, and
  * the published manifest applies them in the coordinator's post-processing.
+ *
+ * With a `lock`, every external entry is written at the lockfile's exact
+ * version; the published range derivation is untouched. The coordinator always
+ * passes one through `prepareVpStagingFiles`; the omitted form exists to model
+ * a pre-lock staging shape in fixtures.
  */
 export function stagingPackageJsonFor(
   pkg: PackageInfo,
   dependencies: Record<string, string>,
+  lock?: StagingLock,
 ): Record<string, unknown> {
+  const stagedDependencies: Record<string, string> = {};
+  for (const [key, spec] of Object.entries(dependencies)) {
+    stagedDependencies[key] =
+      lock === undefined ? spec : lockedStagingSpec(key, spec, lock, `staging ${pkg.name}`);
+  }
   return {
     name: pkg.name,
     version: pkg.version,
     type: 'module',
-    dependencies: { ...dependencies, [pkg.name]: pkg.version },
+    dependencies: { ...stagedDependencies, [pkg.name]: pkg.version },
     devDependencies: {
       vite: VITE_ALIAS_SPEC,
       'vite-plus': VP_TOOLCHAIN.vitePlus,
@@ -300,13 +362,15 @@ export function stagingPackageJsonFor(
 export function rootStagingPackageJsonFor(
   members: readonly PackageInfo[],
   dependencyMap: ReadonlyMap<string, Record<string, string>>,
+  lock?: StagingLock,
 ): Record<string, unknown> {
   const memberNames = new Set(members.map((member) => member.name));
   const dependencies: Record<string, string> = {};
   for (const member of members) {
     for (const [name, spec] of Object.entries(dependencyMap.get(member.name) ?? {})) {
       if (memberNames.has(name)) continue;
-      dependencies[name] = spec;
+      dependencies[name] =
+        lock === undefined ? spec : lockedStagingSpec(name, spec, lock, 'staging root');
     }
   }
   return {
@@ -549,6 +613,8 @@ export interface VpStagedWorkspace {
   packDir: string;
   /** `packDir/dist` — exists only after runVpPack succeeded. */
   distDir: string;
+  /** The committed-lockfile pins the install is verified against (#1715). */
+  lock: StagingLock;
   cleanup: () => Promise<void>;
 }
 
@@ -557,6 +623,8 @@ export interface PrepareVpStagingOptions {
   /** pkg plus every workspace member its sources import. */
   members: readonly PackageInfo[];
   dependencyMap: ReadonlyMap<string, Record<string, string>>;
+  /** The committed `pnpm-lock.yaml` resolutions (#1715). */
+  lock: StagingLock;
 }
 
 /**
@@ -566,13 +634,13 @@ export interface PrepareVpStagingOptions {
 export async function prepareVpStagingFiles(
   options: PrepareVpStagingOptions,
 ): Promise<VpStagedWorkspace> {
-  const { pkg, members, dependencyMap } = options;
+  const { pkg, members, dependencyMap, lock } = options;
   const stagingRoot = await mkdtemp(join(tmpdir(), 'openelement-vp-pack-'));
   const cleanup = () => rm(stagingRoot, { recursive: true }).catch(() => undefined);
   try {
     writeFileSync(
       `${stagingRoot}/package.json`,
-      formatJson(rootStagingPackageJsonFor(members, dependencyMap)),
+      formatJson(rootStagingPackageJsonFor(members, dependencyMap, lock)),
     );
     for (const member of members) {
       const base = member.dir.split('/').pop()!;
@@ -580,12 +648,12 @@ export async function prepareVpStagingFiles(
       copyPackageDir(member.dir, memberDir);
       writeFileSync(
         `${memberDir}/package.json`,
-        formatJson(stagingPackageJsonFor(member, dependencyMap.get(member.name) ?? {})),
+        formatJson(stagingPackageJsonFor(member, dependencyMap.get(member.name) ?? {}, lock)),
       );
     }
     const packDir = `${stagingRoot}/${pkg.dir.split('/').pop()!}`;
     writeFileSync(`${packDir}/vite.config.ts`, vpPackConfigFile(vpPackEntries(pkg)));
-    return { stagingRoot, packDir, distDir: `${packDir}/dist`, cleanup };
+    return { stagingRoot, packDir, distDir: `${packDir}/dist`, lock, cleanup };
   } catch (error) {
     await cleanup();
     throw error;
@@ -668,6 +736,43 @@ export function assertVpStagingCli(stagingRoot: string, installOutput = ''): voi
   );
 }
 
+/**
+ * Verify the installed staging tree carries the exact DIRECT lockfile versions
+ * the manifests asked for (#1715). npm resolving a direct entry differently (a
+ * stale cache, a duplicate, a future re-resolution path) must fail closed
+ * before the pack runs. Transitive ranges are not covered by this bounded
+ * check; see the `StagingLock` boundary note.
+ */
+export function assertStagedDependencyVersions(stagingRoot: string, lock: StagingLock): void {
+  const manifest = JSON.parse(readFileSync(`${stagingRoot}/package.json`, 'utf8')) as {
+    dependencies?: Record<string, string>;
+  };
+  for (const [key, spec] of Object.entries(manifest.dependencies ?? {})) {
+    const expected = expectedStagingVersion(key, spec, lock);
+    if (expected === '') continue;
+    let installed = '';
+    try {
+      installed = (
+        JSON.parse(readFileSync(`${stagingRoot}/node_modules/${key}/package.json`, 'utf8')) as {
+          version?: unknown;
+        }
+      ).version as string;
+    } catch {
+      throw new Error(
+        `[vp-pack] staging dependency ${key} is not installed at the staging root; ` +
+          `the staging install did not honour the manifest (expected ${expected})`,
+      );
+    }
+    if (installed !== expected) {
+      throw new Error(
+        `[vp-pack] staging dependency ${key} installed ${JSON.stringify(installed)} but ` +
+          `pnpm-lock.yaml pins ${JSON.stringify(expected)}; the staging install re-resolved a ` +
+          'floating range instead of the committed resolution',
+      );
+    }
+  }
+}
+
 export async function installVpStagingWorkspace(
   staged: VpStagedWorkspace,
   members: readonly PackageInfo[],
@@ -683,6 +788,7 @@ export async function installVpStagingWorkspace(
   // Fail fast, before the tarball assembler: a silently-skipped toolchain must
   // read as a toolchain error, not as an ENOENT from a later spawn.
   assertVpStagingCli(staged.stagingRoot, `${install.stdout}\n${install.stderr}`);
+  assertStagedDependencyVersions(staged.stagingRoot, staged.lock);
   const scopeDir = `${staged.stagingRoot}/node_modules/@openelement`;
   mkdirSync(scopeDir, { recursive: true });
   for (const member of members) {

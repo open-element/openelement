@@ -193,7 +193,8 @@ decision above and creates no milestone evidence.
 
 ### Enumerated interface deltas (diff this against the snapshot)
 
-Two additive shapes, no new symbol and no removed symbol. Both are necessary
+Two additive signature/shape changes, with no symbol added or removed: these
+are observable interface changes, not a claim of an unchanged API. Both are necessary
 because a shadow root's sheets must be declared inside its DSD template, and
 the existing delivery seams have no per-island half; a second setter or a
 second registry would be a second mechanism for one fact.
@@ -203,9 +204,10 @@ second registry would be a second mechanism for one fact.
 | `@openelement/element` `.`, `./base`, `./client-only`, `./no-blocks` | `__setRequestTimeStyleSheetUrls(urls, islandEntries?)` gains one optional parameter (`islandEntries` = per-tag URL lists; `null` = declared but carrier unavailable). | Reuses the existing internal-by-convention setter seam and the one generated-entry import; a one-argument call remains valid and behaves exactly as before, so no old caller or byte path changes. A second setter would have expanded the public surface with a duplicate mechanism. |
 | `@openelement/element` `./internal/compiled/generated-element/shell` (ADR-0177 internal subpath) | `GeneratedElementSsrInput` gains optional `styleLinks?: readonly string[]`; `serializeGeneratedElementHtml` reflects it. | The emitted host producer needs the typed channel to place the canonical marked links inside the template. This is emitted-artifact ABI on an internal subpath, not author API; omitted keeps the pre-slice shape and bytes. |
 
-The snapshot baseline is regenerated separately only after the release owner
-reviews this table; this amendment itself records no owner sign-off, no gate
-result, no status flip and no release claim.
+The source interface snapshot records these implemented shapes after code
+review; updating it is not release approval or a public API freeze. Owner
+release sign-off and mixed-artifact qualification remain separate obligations.
+This amendment records no owner sign-off, milestone exit or release claim.
 
 - Still open and not claimed: light-root document application and client/shadow
   adoption (GH #1800); the dev server has no emitted-asset carrier, records the

@@ -38,8 +38,11 @@ import {
   notIgnoredFiles,
   prepareVpStagingFiles,
   runVpPack,
+  stagedDependencyName,
   synthesizedPackedManifest,
+  type StagingLock,
 } from '../lib/vp-pack.ts';
+import { lockedDirectVersions, parsePnpmLockIndex } from '../repo/pnpm-lock-index.ts';
 import { npmView, verifyNpmRelease } from './npm-release-verifier.ts';
 import { type RegistrySyncResult, syncRegistryState } from './registry-sync.ts';
 import {
@@ -232,6 +235,7 @@ export async function packPackage(
   dependencies: Record<string, string>,
   dependencyMap: ReadonlyMap<string, Record<string, string>>,
   allPackages: PackageInfo[],
+  stagingLock: StagingLock,
 ): Promise<string> {
   const out = tarballPath(pkg);
   const sourceManifest = readPackageSourceManifest(pkg.dir);
@@ -257,6 +261,7 @@ export async function packPackage(
     pkg,
     members,
     dependencyMap,
+    lock: stagingLock,
   });
   try {
     if (compiledModules.length > 0) {
@@ -707,6 +712,28 @@ async function main(): Promise<void> {
   // Dependency versions resolve against the FULL tree even for a subset pack:
   // an unselected dependency's tree version is what the packed manifest pins.
   const dependencyMap = deriveAllDependencies(allPackages);
+  // #1715: the published manifests keep their semver ranges, but the ephemeral
+  // vp staging install must use the committed lockfile's exact resolutions for
+  // its DIRECT entries instead of letting npm float a range against the
+  // registry at pack time. Transitive ranges are not pinned here (bounded
+  // staging manifest, not a hermetic full-graph install).
+  const lockIndex = parsePnpmLockIndex(await readFile('pnpm-lock.yaml', 'utf8'));
+  const workspaceNames = new Set(allPackages.map((pkg) => pkg.name));
+  const stagingNames = new Set<string>();
+  for (const deps of dependencyMap.values()) {
+    for (const [key, spec] of Object.entries(deps)) {
+      const name = stagedDependencyName(key, spec);
+      if (!workspaceNames.has(name)) stagingNames.add(name);
+    }
+  }
+  const stagingLock: StagingLock = {
+    lockedVersions: lockedDirectVersions(
+      lockIndex,
+      ['.', ...allPackages.map((pkg) => pkg.dir)],
+      [...stagingNames].sort(),
+    ),
+    workspaceNames,
+  };
   if (packages.length === 0) {
     throw new Error('No packages found under packages/.');
   }
@@ -733,6 +760,7 @@ async function main(): Promise<void> {
       dependencyMap.get(pkg.name) ?? {},
       dependencyMap,
       allPackages,
+      stagingLock,
     );
     tarballs.push(tar);
   }

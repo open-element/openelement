@@ -6,9 +6,13 @@ import { assertRejectsIncludes, assertThrowsIncludes } from '../../tests/lib/vit
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { createServer } from 'node:http';
 import {
   assembleVpPackageTree,
+  assertStagedDependencyVersions,
   prepareVpStagingFiles,
+  stagedDependencyName,
+  type StagingLock,
   publishGlobToRegExp,
   rootStagingPackageJsonFor,
   ROUTER_BIN_ENTRY,
@@ -27,6 +31,7 @@ import {
   type VpStagedWorkspace,
 } from './vp-pack.ts';
 import type { PackageInfo } from './package-graph.ts';
+import { runWithOutput } from './process.ts';
 
 function pkg(name: string, exports: Record<string, string>, dir = `packages/foo`): PackageInfo {
   return {
@@ -323,6 +328,7 @@ test('prepareVpStagingFiles stages manifests and config without network', async 
         ['@openelement/element', { typescript: '6.0.3' }],
         ['@openelement/router', {}],
       ]),
+      lock: lockFixture({ typescript: '6.0.3' }, ['@openelement/element', '@openelement/router']),
     });
     try {
       expect(staged.packDir).toEqual(join(staged.stagingRoot, 'router'));
@@ -794,6 +800,7 @@ async function fakeStagedWorkspace(script: string): Promise<VpStagedWorkspace> {
     stagingRoot,
     packDir: stagingRoot,
     distDir: join(stagingRoot, 'dist'),
+    lock: { lockedVersions: new Map(), workspaceNames: new Set() },
     cleanup: async () => {},
   };
 }
@@ -835,3 +842,249 @@ test('runVpPack has a finite default budget', () => {
   expect(Number.isFinite(VP_PACK_TIMEOUT_MS)).toBeTruthy();
   expect(VP_PACK_TIMEOUT_MS).toBeGreaterThan(0);
 });
+
+// ── #1715: the vp staging install uses committed lockfile pins ─────────────
+
+function lockFixture(
+  versions: Record<string, string>,
+  workspace: readonly string[] = [],
+): StagingLock {
+  return {
+    lockedVersions: new Map(Object.entries(versions)),
+    workspaceNames: new Set(workspace),
+  };
+}
+
+test('stagedDependencyName resolves alias specs to the registry package name', () => {
+  expect(stagedDependencyName('marked', '^15.0.0')).toBe('marked');
+  expect(stagedDependencyName('alias', 'npm:@scope/real@^1.2.3')).toBe('@scope/real');
+});
+
+test('staging manifests are written with the lockfile exact versions only', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vp-pack-lock-'));
+  try {
+    const pkgDir = join(root, 'element');
+    mkdirSync(pkgDir, { recursive: true });
+    const element = pkg('@openelement/element', ELEMENT_EXPORTS, pkgDir);
+    const routerDir = join(root, 'router');
+    mkdirSync(routerDir, { recursive: true });
+    const router = pkg('@openelement/router', { '.': './src/index.ts' }, routerDir);
+    mkdirSync(join(pkgDir, 'src'), { recursive: true });
+    writeFileSync(join(pkgDir, 'src', 'index.ts'), 'export {};\n');
+    const lock = lockFixture({ marked: '15.0.12', '@scope/real': '1.2.3' }, [
+      '@openelement/element',
+      '@openelement/router',
+    ]);
+    const dependencyMap = new Map<string, Record<string, string>>([
+      ['@openelement/element', { marked: '^15.0.0', alias: 'npm:@scope/real@^1.2.3' }],
+      ['@openelement/router', {}],
+    ]);
+    const staged = await prepareVpStagingFiles({
+      pkg: router,
+      members: [element, router],
+      dependencyMap,
+      lock,
+    });
+    try {
+      const rootManifest = JSON.parse(
+        readFileSync(join(staged.stagingRoot, 'package.json'), 'utf8'),
+      ) as { dependencies: Record<string, string> };
+      expect(rootManifest.dependencies).toEqual({
+        marked: '15.0.12',
+        alias: 'npm:@scope/real@1.2.3',
+      });
+      const memberManifest = JSON.parse(
+        readFileSync(join(staged.stagingRoot, 'element', 'package.json'), 'utf8'),
+      ) as { dependencies: Record<string, string> };
+      expect(memberManifest.dependencies['marked']).toEqual('15.0.12');
+      expect(memberManifest.dependencies['alias']).toEqual('npm:@scope/real@1.2.3');
+      // A workspace member keeps its in-tree version, not a lock pin.
+      expect(memberManifest.dependencies['@openelement/element']).toEqual('1.0.0-test');
+    } finally {
+      await staged.cleanup();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a staging dependency without a committed lock resolution fails closed', () => {
+  const lock = lockFixture({}, ['@openelement/router']);
+  expect(() =>
+    rootStagingPackageJsonFor(
+      [pkg('@openelement/router', { '.': './src/index.ts' })],
+      new Map([['@openelement/router', { unocss: '^66.10.0' }]]),
+      lock,
+    ),
+  ).toThrow(/unocss has no committed pnpm-lock\.yaml resolution/);
+});
+
+test('assertStagedDependencyVersions verifies the installed lockfile pin', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vp-pack-verify-'));
+  try {
+    const lock = lockFixture({ marked: '15.0.12', '@scope/real': '1.2.3' });
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'staging',
+        private: true,
+        dependencies: { marked: '15.0.12', alias: 'npm:@scope/real@1.2.3' },
+      }),
+    );
+    mkdirSync(join(root, 'node_modules', 'marked'), { recursive: true });
+    writeFileSync(
+      join(root, 'node_modules', 'marked', 'package.json'),
+      JSON.stringify({ name: 'marked', version: '15.0.12' }),
+    );
+    mkdirSync(join(root, 'node_modules', 'alias'), { recursive: true });
+    writeFileSync(
+      join(root, 'node_modules', 'alias', 'package.json'),
+      JSON.stringify({ name: '@scope/real', version: '1.2.3' }),
+    );
+    expect(() => assertStagedDependencyVersions(root, lock)).not.toThrow();
+
+    // A floating install (15.0.13) is the non-hermetic case this prevents.
+    writeFileSync(
+      join(root, 'node_modules', 'marked', 'package.json'),
+      JSON.stringify({ name: 'marked', version: '15.0.13' }),
+    );
+    expect(() => assertStagedDependencyVersions(root, lock)).toThrow(
+      /installed "15\.0\.13" but pnpm-lock\.yaml pins "15\.0\.12"/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * #1715 offline reproduction: a local registry publishes the broken upstream
+ * shape (`@tailwindcss/vite`/`tailwindcss` 4.3.5 exist, `@tailwindcss/oxide`
+ * 4.3.5 does not). Note that this is npm's resolution behaviour, not a claim
+ * about the public semver ranges: the same caret manifest floats into ETARGET,
+ * while the lock-pinned staging manifest resolves the published 4.3.3 graph.
+ */
+posixOnly(
+  'staging without lockfile pins floats into the #1715 ETARGET; pinned staging resolves',
+  async () => {
+    const packument = (
+      name: string,
+      versions: Array<{ version: string; dependencies?: Record<string, string> }>,
+      latest: string,
+    ): unknown => ({
+      name,
+      'dist-tags': { latest },
+      versions: Object.fromEntries(
+        versions.map(({ version, dependencies = {} }) => [
+          version,
+          {
+            name,
+            version,
+            dependencies,
+            dist: {
+              tarball: `http://127.0.0.1:${
+                (server.address() as { port?: number } | null)?.port ?? 0
+              }/${name}-${version}.tgz`,
+              integrity:
+                'sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+            },
+          },
+        ]),
+      ),
+    });
+    const server = createServer((request, response) => {
+      const name = decodeURIComponent((request.url ?? '/').slice(1));
+      const body = packuments[name];
+      response.writeHead(body === undefined ? 404 : 200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(body ?? { error: 'not found' }));
+    });
+    const packuments: Record<string, unknown> = {
+      '@tailwindcss/vite': packument(
+        '@tailwindcss/vite',
+        [
+          { version: '4.3.3', dependencies: { tailwindcss: '4.3.3' } },
+          { version: '4.3.5', dependencies: { tailwindcss: '4.3.5' } },
+        ],
+        '4.3.5',
+      ),
+      tailwindcss: packument(
+        'tailwindcss',
+        [
+          { version: '4.3.3', dependencies: { '@tailwindcss/oxide': '4.3.3' } },
+          { version: '4.3.5', dependencies: { '@tailwindcss/oxide': '4.3.5' } },
+        ],
+        '4.3.5',
+      ),
+      '@tailwindcss/oxide': packument('@tailwindcss/oxide', [{ version: '4.3.3' }], '4.3.3'),
+      'vite-plus': packument('vite-plus', [{ version: '1.0.0' }], '1.0.0'),
+      '@voidzero-dev/vite-plus-core': packument(
+        '@voidzero-dev/vite-plus-core',
+        [{ version: '1.0.0' }],
+        '1.0.0',
+      ),
+    };
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const registry = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const root = await mkdtemp(join(tmpdir(), 'vp-pack-registry-'));
+    const members = [
+      pkg('@openelement/element', ELEMENT_EXPORTS, join(root, 'element')),
+      pkg('@openelement/router', { '.': './src/index.ts' }, join(root, 'router')),
+    ];
+    const dependencyMap = new Map<string, Record<string, string>>([
+      ['@openelement/element', { '@tailwindcss/vite': '^4.3.3' }],
+      ['@openelement/router', {}],
+    ]);
+    const runNpmLockOnly = (manifest: Record<string, unknown>, dir: string) => {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest));
+      writeFileSync(join(dir, '.npmrc'), '');
+      return runWithOutput(
+        'npm',
+        ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'],
+        {
+          cwd: dir,
+          env: {
+            ...process.env,
+            npm_config_registry: registry,
+            npm_config_cache: join(dir, '.npm-cache'),
+            npm_config_userconfig: join(dir, '.npmrc'),
+          },
+        },
+      );
+    };
+    try {
+      const floating = await runNpmLockOnly(
+        rootStagingPackageJsonFor(members, dependencyMap),
+        join(root, 'floating'),
+      );
+      expect(
+        floating.success,
+        `floating staging install must fail:\n${floating.stdout}\n${floating.stderr}`,
+      ).toBe(false);
+      expect(`${floating.stdout}\n${floating.stderr}`).toMatch(
+        /ETARGET|No matching version found for @tailwindcss\/oxide@4\.3\.5/,
+      );
+
+      const pinned = await runNpmLockOnly(
+        rootStagingPackageJsonFor(
+          members,
+          dependencyMap,
+          lockFixture({ '@tailwindcss/vite': '4.3.3' }, [
+            '@openelement/element',
+            '@openelement/router',
+          ]),
+        ),
+        join(root, 'pinned'),
+      );
+      expect(pinned.success, `pinned staging install must pass:\n${pinned.stderr}`).toBe(true);
+      const lock = JSON.parse(readFileSync(join(root, 'pinned', 'package-lock.json'), 'utf8')) as {
+        packages?: Record<string, { version?: string }>;
+      };
+      expect(lock.packages?.['node_modules/@tailwindcss/oxide']?.version).toBe('4.3.3');
+      expect(lock.packages?.['node_modules/@tailwindcss/vite']?.version).toBe('4.3.3');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  },
+  30_000,
+);
