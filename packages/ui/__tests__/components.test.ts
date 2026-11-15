@@ -310,6 +310,45 @@ test('open-theme-toggle: init never persists; explicit toggle persists and dispa
   expect(harness.dispatched.includes('open:theme-change')).toEqual(true);
 });
 
+test('open-theme-toggle: an explicit theme attribute overrides the pre-paint document theme (#1804)', async () => {
+  const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
+  // The pre-paint script already wrote `dark`; the authored attribute wins, so
+  // the hydration write that follows is deliberate — not a duplicate writer.
+  const harness = themeHarness({ savedTheme: 'dark', mediaLight: false, docTheme: 'dark' });
+  installThemeGlobals(harness);
+  const el = new (OpenThemeToggle as unknown as new () => AnyComponent)();
+  el.setAttribute('theme', 'light');
+  el.initTheme();
+
+  expect(el.theme).toEqual('light');
+  expect(harness.docAttributes).toEqual([['data-theme', 'light']]);
+  expect(harness.colorSchemes).toEqual(['light']);
+  // The event contract is unchanged: the first init announces the applied theme.
+  expect(harness.dispatched).toEqual(['open:theme-change']);
+  expect(harness.eventDetails).toEqual([{ theme: 'light' }]);
+  expect(harness.writes, 'the init path must not persist an explicit override').toEqual([]);
+});
+
+test('open-theme-toggle: a throwing matchMedia follows the dark default instead of aborting init (#1804)', async () => {
+  const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
+  const harness = themeHarness({ mediaThrows: true });
+  installThemeGlobals(harness);
+  const el = new (OpenThemeToggle as unknown as new () => AnyComponent)();
+  expect(() => el.initTheme()).not.toThrow();
+  expect(el.theme).toEqual('dark');
+  expect(harness.docAttributes).toEqual([['data-theme', 'dark']]);
+  expect(harness.dispatched).toEqual(['open:theme-change']);
+});
+
+test('open-theme-toggle: a legacy truthy saved value is not a theme; the system preference decides (#1804)', async () => {
+  const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
+  const harness = themeHarness({ savedTheme: 'garbage', mediaLight: true });
+  installThemeGlobals(harness);
+  const el = new (OpenThemeToggle as unknown as new () => AnyComponent)();
+  el.initTheme();
+  expect(el.theme).toEqual('light');
+});
+
 // ─── open-dropdown: pointerdown popover guard + per-instance anchor (#1061) ──
 
 test('open-dropdown: click toggles the native popover; pointerdown on an open popover swallows the re-open', async () => {

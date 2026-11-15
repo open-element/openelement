@@ -156,12 +156,19 @@ island was admitted `ssr+client` without any classifier having run.
 
 PR #1804 closes that gap the way this record prescribes for unavailable
 evidence — downgrade, not build failure. A skipped CEM now yields one
-synthetic `client-only` classification per declared island of that package
+synthetic `client-only` classification per DELIVERED tag of that package
 (`plugin-scanners.ts`, `scanCemClassificationsInto`), unless the tag already
-has real classification evidence from another manifest. The admission
-decision and its `reason` then state that the capability is unproven and the
-island is client-only; the build still proceeds and the skip remains a coded
-warning.
+has real classification evidence from another manifest. A declaration's
+one-to-many delivery shape (`tags` / `tagNames`, resolved by the shared
+`resolveIslandDeliveryTags`) expands to one island per delivered tag
+(`entry-descriptor.ts`, `expandIslandDeliveryDecl`), so the downgrade must
+cover that same tag set: keying it on `declaration.tagName` alone would leave
+the alias tags admitted `ssr+client` with an unproven capability. The
+admission decision and its `reason` then state that the capability is
+unproven and the island is client-only; the build still proceeds and the skip
+remains a coded warning that names how many delivered tags were downgraded
+(the warning claims no downgrade when the skipped package was not admitted or
+all its delivered tags carry real evidence).
 
 Scope: this is the pre-harness behavior only. It does not implement T0/T1/T2
 qualification, does not change the tier definitions, and does not promote

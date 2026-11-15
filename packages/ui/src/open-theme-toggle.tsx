@@ -27,7 +27,12 @@
 import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
 import { log } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
-import { applyDocumentTheme, THEME_STORAGE_KEY } from './theme-contract.ts';
+import {
+  applyDocumentTheme,
+  isSiteTheme,
+  resolveSiteTheme,
+  THEME_STORAGE_KEY,
+} from './theme-contract.ts';
 import openThemeToggleStyles from './open-theme-toggle.css';
 
 @element('open-theme-toggle', { root: 'shadow-open', delegatesFocus: true })
@@ -108,43 +113,54 @@ export class OpenThemeToggle extends OpenElement {
     this._requestAnimationFrame(() => this.initTheme());
   }
 
+  /**
+   * Resolve the theme once for this instance. Priority: the explicit `theme`
+   * attribute > the document's live `data-theme` (the owner's value, so
+   * multiple instances converge) > the seam's acceptance rule over the saved
+   * preference and the system light preference.
+   *
+   * The acceptance rule is the contract's (`resolveSiteTheme`), never copied
+   * here. The environment reads stay local: this consumer and the generated
+   * pre-paint script are different runtimes, so each reads the same key and
+   * media query at its own boundary.
+   */
   private initTheme(): void {
     if (readInstanceState(this, 'initDone', () => false)) return;
     writeInstanceState(this, 'initDone', true);
     const themeAttr = this.getAttribute('theme');
-    if (themeAttr === 'light') {
-      this.theme = 'light';
-    } else if (themeAttr === 'dark') {
-      this.theme = 'dark';
+    if (isSiteTheme(themeAttr)) {
+      this.theme = themeAttr;
     } else {
       const docTheme = document.documentElement?.dataset?.theme;
-      if (docTheme === 'light') {
-        this.theme = 'light';
-      } else if (docTheme === 'dark') {
-        this.theme = 'dark';
+      if (isSiteTheme(docTheme)) {
+        this.theme = docTheme;
       } else {
-        let resolved = false;
-        try {
-          const saved = localStorage.getItem(THEME_STORAGE_KEY);
-          if (saved === 'light') {
-            this.theme = 'light';
-            resolved = true;
-          } else if (saved === 'dark') {
-            this.theme = 'dark';
-            resolved = true;
-          }
-        } catch (e) {
-          log.debug('localStorage read unavailable:', e);
-        }
-        if (!resolved && globalThis.matchMedia) {
-          this.theme = globalThis.matchMedia('(prefers-color-scheme: light)').matches
-            ? 'light'
-            : 'dark';
-        }
+        this.theme = resolveSiteTheme(this.readSavedTheme(), this.prefersLight());
       }
     }
 
     this.applyTheme(this.theme);
+  }
+
+  /** Saved preference; a blocked storage read means "no preference". */
+  private readSavedTheme(): string | null {
+    try {
+      return localStorage.getItem(THEME_STORAGE_KEY);
+    } catch (e) {
+      log.debug('localStorage read unavailable:', e);
+      return null;
+    }
+  }
+
+  /** System light preference; missing or throwing matchMedia means no light preference. */
+  private prefersLight(): boolean {
+    try {
+      if (typeof globalThis.matchMedia !== 'function') return false;
+      return globalThis.matchMedia('(prefers-color-scheme: light)').matches === true;
+    } catch (e) {
+      log.debug('matchMedia unavailable:', e);
+      return false;
+    }
   }
 
   private applyTheme(theme: 'dark' | 'light'): void {

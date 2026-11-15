@@ -434,52 +434,73 @@ export async function scanCemClassificationsInto(
       ),
     );
   }
-  // A skipped manifest means this package's classifications are unavailable, so
-  // its islands must not be admitted on the strength of the package manifest's
-  // `openElement.ssr: true` alone: ADR-0157 defines that flag as a candidate
-  // signal, and the pre-harness admission path has no other proof here. Record
-  // one synthetic `client-only` classification per declared island (unless the
-  // tag already has real evidence) so the admission plan downgrades it with an
-  // explicit reason instead of silently trusting the declaration.
+  // A skipped manifest leaves its package's capability unproven, so record one
+  // synthetic `client-only` per DELIVERED tag (the same tag set
+  // `expandIslandDeliveryDecl` hands the plan) unless real classification
+  // evidence already exists; `openElement.ssr` is only a candidate signal
+  // (ADR-0157), never proof.
   const classifiedTags = new Set(detection.classifications.map((entry) => entry.tagName));
   for (const entry of detection.skipped) {
     const skippedManifest = state.ctx.phase1.packageManifests.find(
       (pkg) => pkg.packageName === entry.packageName,
     );
+    const downgradedTags: string[] = [];
     for (const declaration of skippedManifest?.declarations ?? []) {
-      const tagName = declaration.tagName;
-      if (!declaration.openElement?.module || !tagName || classifiedTags.has(tagName)) continue;
-      detection.classifications.push({
-        tagName,
-        tier: 'client-only',
-        reason:
-          `CEM manifest unparseable (${entry.reason}); the SSR capability is unproven, ` +
-          'downgraded to client-only',
-        source: 'package',
-        ssr: false,
-      });
-      classifiedTags.add(tagName);
+      if (!declaration.openElement?.module) continue;
+      const delivery = declaration as typeof declaration & {
+        tags?: readonly string[];
+        tagNames?: readonly string[];
+      };
+      const openElement = declaration.openElement as typeof declaration.openElement & {
+        tags?: readonly string[];
+        tagNames?: readonly string[];
+      };
+      const deliveredTags = resolveIslandDeliveryTags(
+        declaration.tagName,
+        delivery.tags ?? openElement.tags,
+        delivery.tagNames ?? openElement.tagNames,
+        declaration.tagName,
+      );
+      for (const tagName of deliveredTags) {
+        if (classifiedTags.has(tagName)) continue;
+        detection.classifications.push({
+          tagName,
+          tier: 'client-only',
+          reason:
+            `CEM manifest unparseable (${entry.reason}); the SSR capability is unproven, ` +
+            'downgraded to client-only',
+          source: 'package',
+          ssr: false,
+        });
+        classifiedTags.add(tagName);
+        downgradedTags.push(tagName);
+      }
     }
-  }
-  state.ctx.phase1.cemClassifications = detection.classifications;
-  for (const entry of detection.skipped) {
     const warning = {
       code: ScanSurfaceErrorCode.CEM_MANIFEST_SKIPPED,
       severity: 'warning',
       phase: 'build',
       message:
         `The CEM manifest of package "${entry.packageName}" could not be parsed, so its ` +
-        `components are not classified (${entry.reason}). Its package islands are downgraded ` +
-        `to client-only for this build: the manifest's openElement.ssr flag is a candidate ` +
-        `signal (ADR-0157), not proof, and no classifier ran.`,
+        `components are not classified (${entry.reason}). ` +
+        (downgradedTags.length > 0
+          ? `${downgradedTags.length} delivered tag(s) are downgraded to client-only for this ` +
+            "build: the manifest's openElement.ssr flag is a candidate signal (ADR-0157), not " +
+            'proof, and no classifier ran.'
+          : 'No delivered tag was downgraded: the package is not an admitted component package ' +
+            'here, or every delivered tag already has real classification evidence.'),
       file: entry.packageName,
       hint:
-        "Fix or remove the package's custom-elements.json; the client-only fallback keeps the " +
-        'site working but drops server rendering for these components.',
+        downgradedTags.length > 0
+          ? "Fix or remove the package's custom-elements.json; the client-only fallback keeps the " +
+            'site working but drops server rendering for these components.'
+          : "Fix or remove the package's custom-elements.json; existing classifications were " +
+            'preserved and no synthetic downgrade was applied.',
     } as const;
     recordBuildDiagnostic(warning);
     log.warn(formatDiagnosticLine(warning));
   }
+  state.ctx.phase1.cemClassifications = detection.classifications;
   if (detection.classifications.length > 0) {
     log.info(
       `CEM auto-detection: classified ${detection.classifications.length} component(s) from node_modules`,

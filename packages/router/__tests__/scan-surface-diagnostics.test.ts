@@ -10,9 +10,11 @@
  * - Tier-2 — per-item degradation (an unparseable CEM manifest, an
  *   unreadable module) rides the structured result envelope and surfaces as
  *   a coded warning through the build-diagnostics channel (#1612): reported,
- *   never silent, never fatal. An unparseable CEM also downgrades that
- *   package's declared islands to client-only (ADR-0157: the manifest's
- *   `openElement.ssr` flag is a candidate signal, not proof).
+ *   never silent, never fatal. An unparseable CEM also downgrades every
+ *   DELIVERED tag of that package's islands to client-only (ADR-0157: the
+ *   manifest's `openElement.ssr` flag is a candidate signal, not proof); a
+ *   declaration's `tags`/`tagNames` one-to-many delivery expands to one
+ *   admission island per delivered tag, so the downgrade must cover them all.
  *
  * The raise sites are `scanCemClassificationsInto` and `scanForeignTagsInto`;
  * the detector/scanner parameters are the injection seam these stubs drive.
@@ -31,6 +33,7 @@ import {
 } from '../src/vite/internal/build-diagnostics.ts';
 import { scanCemClassificationsInto, scanForeignTagsInto } from '../src/vite/plugin-scanners.ts';
 import { createOpenPluginState } from '../src/vite/plugin-config.ts';
+import { buildPackageIslandDecls } from '../src/vite/internal/ssg/island-scanner.ts';
 import {
   buildSsrAdmissionPlan,
   type CemDetectionResult,
@@ -204,6 +207,218 @@ test("scan: a skipped CEM downgrades that package's ssr=true island to client-on
   const decision = plan.decisions.find((entry) => entry.tagName === 'x-broken-island');
   expect(decision?.renderPath).toEqual('client-only');
   expect(decision?.reason).toContain('downgraded to client-only');
+});
+
+/**
+ * A package manifest carrying the documented one-to-many delivery alias
+ * (`tags` / `tagNames`, `vite/internal/ssg/delivery.ts`). The parsed manifest
+ * carries these fields, but the protocol's `OpenElementExtensions` type does
+ * not declare them yet — `buildPackageIslandDecls` reads them through the same
+ * structural cast.
+ */
+function deliveryManifest(): OpenElementPackageManifest {
+  return {
+    schemaVersion: '1',
+    packageName: '@broken/pkg',
+    version: '0.0.0',
+    declarations: [
+      {
+        tagName: 'x-widget',
+        openElement: {
+          module: '@broken/pkg/widget.js',
+          ssr: true,
+          tags: ['x-widget', 'x-widget-alt'],
+        },
+      },
+      {
+        tagName: 'x-gadget',
+        openElement: {
+          module: '@broken/pkg/gadget.js',
+          ssr: true,
+          // The artifact-producer alias for `tags`: same deliverable set.
+          tagNames: ['x-gadget', 'x-gadget-alt'],
+        },
+      },
+    ],
+  } as unknown as OpenElementPackageManifest;
+}
+
+test('scan: a skipped CEM downgrades every delivered tag, not only the primary tagName', async () => {
+  // A declaration may deliver several native custom elements through
+  // `openElement.tags`/`tagNames`. `buildPackageIslandDecls` keeps that list on
+  // the declaration and `buildSsrAdmissionPlan` expands it into one island per
+  // delivered tag, so a downgrade keyed on `declaration.tagName` alone leaves
+  // the alias tags admitted `ssr+client` with an unproven capability.
+  const state = createOpenPluginState({}, undefined, {});
+  state.ctx.phase1.packageManifests = [deliveryManifest()];
+  const deliveredTags = ['x-widget', 'x-widget-alt', 'x-gadget', 'x-gadget-alt'];
+  resetBuildExitRecords();
+  const capture = captureConsoleWarn();
+  try {
+    await scanCemClassificationsInto(state, () =>
+      Promise.resolve({
+        classifications: [],
+        skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
+      }),
+    );
+  } finally {
+    capture.spy.mockRestore();
+  }
+
+  // The scan→plan consumer form: the real declaration objects (delivery
+  // aliases included) go through the same builder the plugin uses.
+  const plan = buildSsrAdmissionPlan(
+    buildPackageIslandDecls(state.ctx.phase1.packageManifests),
+    state.ctx.phase1.cemClassifications,
+  );
+  for (const tagName of deliveredTags) {
+    const synthetic = state.ctx.phase1.cemClassifications.find(
+      (entry) => entry.tagName === tagName,
+    );
+    expect(synthetic, `expected a synthetic downgrade for <${tagName}>`).toEqual(
+      expect.objectContaining({ tier: 'client-only', source: 'package', ssr: false }),
+    );
+    expect(synthetic?.reason).toContain('unproven');
+    expect(plan.renderableTags).not.toContain(tagName);
+    expect(plan.clientOnlyTags).toContain(tagName);
+    const decision = plan.decisions.find((entry) => entry.tagName === tagName);
+    expect(decision?.renderPath).toEqual('client-only');
+    expect(decision?.reason).toContain('downgraded to client-only');
+  }
+
+  // The warning states the conditional outcome: a count of the tags that WERE
+  // downgraded, not a blanket "the package is downgraded".
+  const warning = takeBuildDiagnostics().find(
+    (candidate) => candidate.code === ScanSurfaceErrorCode.CEM_MANIFEST_SKIPPED,
+  );
+  expect(warning?.message).toContain('4 delivered tag(s) are downgraded to client-only');
+});
+
+test('scan: a skipped CEM for a package that is not admitted claims no downgrade', async () => {
+  // The skip can be observed for a package this app never admitted (no package
+  // manifest) or whose delivered tags all carry real evidence. The coded
+  // warning must state the conditional outcome, not claim the package's
+  // islands were downgraded when none were.
+  const state = createOpenPluginState({}, undefined, {});
+  state.ctx.phase1.packageManifests = [];
+  resetBuildExitRecords();
+  const capture = captureConsoleWarn();
+  try {
+    await scanCemClassificationsInto(state, () =>
+      Promise.resolve({
+        classifications: [],
+        skipped: [{ packageName: '@unrelated/broken-cem', reason: 'Unexpected token { in JSON' }],
+      }),
+    );
+  } finally {
+    capture.spy.mockRestore();
+  }
+
+  // No admission input, so no synthetic classification is fabricated.
+  expect(state.ctx.phase1.cemClassifications).toEqual([]);
+  const envelope = takeBuildDiagnostics().find(
+    (candidate) => candidate.code === ScanSurfaceErrorCode.CEM_MANIFEST_SKIPPED,
+  );
+  expect(envelope).toEqual(expect.anything());
+  expect(envelope?.severity).toEqual('warning');
+  expect(envelope?.message).toContain('No delivered tag was downgraded');
+  expect(envelope?.message).not.toContain('are downgraded to client-only');
+  expect(envelope?.hint).toContain('no synthetic downgrade was applied');
+  expect(envelope?.hint).not.toContain('admitted no tag');
+});
+
+test('scan: a skipped CEM whose delivered tags all carry real evidence preserves them and says so', async () => {
+  // The no-downgrade branch also covers an ADMITTED package whose delivered
+  // tags all have real evidence; the hint must stay neutral instead of
+  // claiming the build admitted no tag from the package.
+  const state = createOpenPluginState({}, undefined, {});
+  state.ctx.phase1.packageManifests = [deliveryManifest()];
+  const real = ['x-widget', 'x-widget-alt', 'x-gadget', 'x-gadget-alt'].map(
+    (tagName) =>
+      ({
+        tagName,
+        tier: 'ssr-capable',
+        reason: 'real CEM evidence from an admitted manifest',
+        source: 'package',
+        ssr: true,
+      }) as CompatibilityClassification,
+  );
+  resetBuildExitRecords();
+  const capture = captureConsoleWarn();
+  try {
+    await scanCemClassificationsInto(state, () =>
+      Promise.resolve({
+        classifications: [...real],
+        skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
+      }),
+    );
+  } finally {
+    capture.spy.mockRestore();
+  }
+
+  expect(state.ctx.phase1.cemClassifications).toEqual(real);
+  const envelope = takeBuildDiagnostics().find(
+    (candidate) => candidate.code === ScanSurfaceErrorCode.CEM_MANIFEST_SKIPPED,
+  );
+  expect(envelope?.message).toContain('No delivered tag was downgraded');
+  expect(envelope?.message).toContain(
+    'every delivered tag already has real classification evidence',
+  );
+  expect(envelope?.hint).toContain('existing classifications were preserved');
+  expect(envelope?.hint).toContain('no synthetic downgrade was applied');
+  // The package WAS admitted here; the hint must not claim otherwise.
+  expect(envelope?.hint).not.toContain('admitted no tag');
+  const plan = buildSsrAdmissionPlan(
+    buildPackageIslandDecls(state.ctx.phase1.packageManifests),
+    state.ctx.phase1.cemClassifications,
+  );
+  for (const { tagName } of real) expect(plan.renderableTags).toContain(tagName);
+});
+
+test('scan: real classification evidence outranks the synthetic downgrade for a delivered alias', async () => {
+  // The downgrade adds evidence; it does not take ownership of a tag. A real
+  // classification from any admitted manifest wins, including when it covers
+  // only one delivered alias. Cross-package tag ownership stays
+  // mergeAdmittedManifests's TAG_CONFLICT verdict — this scan introduces no
+  // package-scoped override.
+  const state = createOpenPluginState({}, undefined, {});
+  state.ctx.phase1.packageManifests = [deliveryManifest()];
+  const real: CompatibilityClassification = {
+    tagName: 'x-widget-alt',
+    tier: 'ssr-capable',
+    reason: 'real CEM evidence from an admitted manifest',
+    source: 'package',
+    ssr: true,
+  };
+  resetBuildExitRecords();
+  const capture = captureConsoleWarn();
+  try {
+    await scanCemClassificationsInto(state, () =>
+      Promise.resolve({
+        classifications: [real],
+        skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
+      }),
+    );
+  } finally {
+    capture.spy.mockRestore();
+  }
+
+  expect(
+    state.ctx.phase1.cemClassifications.filter((entry) => entry.tagName === 'x-widget-alt'),
+    'the real classification must not be replaced by a synthetic one',
+  ).toEqual([real]);
+  expect(
+    state.ctx.phase1.cemClassifications.find((entry) => entry.tagName === 'x-widget')?.tier,
+  ).toEqual('client-only');
+
+  const plan = buildSsrAdmissionPlan(
+    buildPackageIslandDecls(state.ctx.phase1.packageManifests),
+    state.ctx.phase1.cemClassifications,
+  );
+  expect(plan.renderableTags).toContain('x-widget-alt');
+  expect(plan.renderableTags).not.toContain('x-widget');
+  expect(plan.reasons['x-widget-alt']).toContain('CEM ssr-capable');
+  expect(plan.reasons['x-widget']).toContain('downgraded to client-only');
 });
 
 test('scan: unreadable foreign-tag modules surface as coded warnings through the envelope channel', async () => {

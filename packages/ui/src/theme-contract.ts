@@ -11,10 +11,16 @@
  *   `open-theme-toggle.tsx` — delegates its document write to
  *     `applyDocumentTheme` instead of calling `setAttribute` itself.
  *
- * "One owner" is enforced two ways: this is the only `setAttribute` call site
- * for the attribute, and `applyDocumentTheme` is idempotent — a second call
- * with the value already in place is a no-op, so hydrating the toggle after
- * the pre-paint script cannot produce a duplicate DOM mutation.
+ * "One owner" covers the acceptance rule (`resolveSiteTheme`) and the document
+ * write (`applyDocumentTheme`, the only writer of `html[data-theme]`, and
+ * idempotent: re-applying a value already in place is a no-op). It does NOT
+ * claim the environment reads are shared: the pre-paint script and the toggle
+ * are different runtimes, so each reads localStorage / `prefers-color-scheme`
+ * at its own boundary before calling the rule. Hydration writes nothing when
+ * the resolved theme matches the pre-paint value; an explicit `theme`
+ * attribute that overrides it is a deliberate, legal second write. The
+ * component's own `data-theme` attribute (host/button presentation) is a
+ * different sink, not this seam.
  *
  * Zero imports on purpose: the generator transpiles this file standalone, so
  * every symbol must be self-contained.

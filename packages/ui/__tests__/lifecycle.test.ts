@@ -189,6 +189,25 @@ test('open-theme-toggle: re-applying the current theme dispatches nothing and pe
   expect(el.theme).toEqual('dark');
 });
 
+test('open-theme-toggle: an attribute matching the live document theme writes nothing but still dispatches the first init', async () => {
+  // Same-value hydration is a no-op on the DOM (the owner write is idempotent),
+  // but the first init still announces its resolution once — the event contract
+  // subscribers rely on (#804/#1804).
+  const harness = themeHarness({ docTheme: 'light' });
+  installThemeGlobals(harness);
+  harness.colorSchemes.push('light'); // the pre-paint script already applied it
+  const el = await newToggle();
+  el.setAttribute('theme', 'light');
+  el.initTheme();
+
+  expect(el.theme).toEqual('light');
+  expect(harness.docAttributes, 'same-value hydration writes nothing').toEqual([]);
+  expect(harness.colorSchemes).toEqual(['light']);
+  expect(harness.dispatched).toEqual(['open:theme-change']);
+  expect(harness.eventDetails).toEqual([{ theme: 'light' }]);
+  expect(harness.writes).toEqual([]);
+});
+
 test('open-theme-toggle: reconnect re-runs initTheme zero times — resolution, writes and dispatch happen exactly once per instance', async () => {
   const harness = themeHarness({ savedTheme: 'dark' });
   installThemeGlobals(harness);

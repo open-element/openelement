@@ -127,12 +127,16 @@ export interface ThemeHarness {
   writes: string[];
   /** globalThis.dispatchEvent event types, in order. */
   dispatched: string[];
+  /** `CustomEvent.detail` of every dispatched event, in order (parallel array). */
+  eventDetails: unknown[];
   /** documentElement.setAttribute arguments, in order. */
   docAttributes: Array<readonly [string, string]>;
   /** documentElement.style.colorScheme assignments, in order. */
   colorSchemes: string[];
   docTheme?: string;
   mediaLight?: boolean;
+  /** Make matchMedia throw, like an embedded WebView with no media support. */
+  mediaThrows?: boolean;
 }
 
 export function themeHarness(init: Partial<ThemeHarness>): ThemeHarness {
@@ -140,6 +144,7 @@ export function themeHarness(init: Partial<ThemeHarness>): ThemeHarness {
     savedTheme: null,
     writes: [],
     dispatched: [],
+    eventDetails: [],
     docAttributes: [],
     colorSchemes: [],
     ...init,
@@ -150,7 +155,7 @@ export function themeHarness(init: Partial<ThemeHarness>): ThemeHarness {
  * Install the globals open-theme-toggle reads: a fresh capturing
  * document.documentElement (per call, so tests never leak dataset.theme into
  * each other), localStorage, matchMedia, CustomEvent and a dispatchEvent
- * wrapper that records every global event.
+ * wrapper that records every global event's type and detail.
  */
 export function installThemeGlobals(harness: ThemeHarness): void {
   const style: Record<string, string> = {};
@@ -164,7 +169,10 @@ export function installThemeGlobals(harness: ThemeHarness): void {
   const documentElement = {
     dataset: {} as Record<string, string>,
     style,
-    getAttribute: () => null,
+    // A realistic read-back: the seam owner's idempotent write compares against
+    // the attribute actually present, so a same-value hydration writes nothing.
+    getAttribute: (name: string) =>
+      name === 'data-theme' ? (documentElement.dataset.theme ?? null) : null,
     setAttribute: (name: string, value: string) => {
       harness.docAttributes.push([name, value]);
       if (name === 'data-theme') documentElement.dataset.theme = value;
@@ -187,9 +195,10 @@ export function installThemeGlobals(harness: ThemeHarness): void {
   });
   Object.defineProperty(globalThis, 'matchMedia', {
     configurable: true,
-    value: (query: string) => ({
-      matches: query.includes('light') ? harness.mediaLight === true : false,
-    }),
+    value: (query: string) => {
+      if (harness.mediaThrows === true) throw new Error('matchMedia unavailable');
+      return { matches: query.includes('light') ? harness.mediaLight === true : false };
+    },
   });
   Object.defineProperty(globalThis, 'CustomEvent', {
     configurable: true,
@@ -206,6 +215,7 @@ export function installThemeGlobals(harness: ThemeHarness): void {
     configurable: true,
     value: (event: Event) => {
       harness.dispatched.push((event as CustomEvent).type);
+      harness.eventDetails.push((event as CustomEvent).detail);
       return prevDispatch ? prevDispatch(event) : true;
     },
   });

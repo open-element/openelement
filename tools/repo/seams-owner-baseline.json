@@ -1,5 +1,5 @@
 {
-  "$comment": "R1 ratchet baseline (P8: exactly one named owner). Rows listed here predate the explicit \"ONE owner:\" marker in docs/architecture/seams.md. The set may only SHRINK: marking a row requires deleting its entry here, and adding a new row to this file is rejected (the entry would not exist at the merge base). Delete this file and the ratchet branch in tools/repo/check-seams.ts once every row carries the marker.",
+  "$comment": "R1 ratchet baseline (P8: exactly one named owner). Rows listed here predate the explicit \"ONE owner:\" marker in docs/architecture/seams.md and were still unmarked at the merge base. The set may only SHRINK: marking a row requires deleting its entry here in the same change (a marked row may not keep one), adding a new row to this file is rejected (the entry would not exist at the merge base), and re-adding a row that already carried the marker at the merge base is rejected as a demotion. Delete this file and the ratchet branch in tools/repo/check-seams.ts once every row carries the marker.",
   "unmarked": [
     "Positioner styles (search combobox)",
     "Color truth",

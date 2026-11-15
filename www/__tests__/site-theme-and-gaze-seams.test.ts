@@ -93,7 +93,7 @@ test('the pre-paint artifact is the generator output, byte for byte', async () =
   expect(onDisk).toMatch(/prefersLight\s*\?\s*'light'\s*:\s*'dark'/);
 });
 
-test('the toggle delegates the document write to the contract (no raw write)', async () => {
+test('the toggle delegates the resolution rule and the document write to the contract', async () => {
   const toggle = await THEME_TOGGLE_SOURCE;
 
   expect(toggle).toContain('applyDocumentTheme(document.documentElement, theme)');
@@ -101,6 +101,13 @@ test('the toggle delegates the document write to the contract (no raw write)', a
     /documentElement\.setAttribute\(\s*'data-theme'/,
   );
   expect(toggle).toContain('THEME_STORAGE_KEY');
+  // The acceptance rule is not copied into the consumer: the toggle resolves
+  // through the contract's rule and only reads its inputs locally.
+  expect(toggle).toContain('resolveSiteTheme(');
+  expect(toggle).toContain('isSiteTheme(');
+  expect(toggle, 'no second copy of the saved-value acceptance rule').not.toMatch(
+    /saved\s*===\s*'light'/,
+  );
 });
 
 test('the live-gaze controller and site-chrome CSS agree on the --gaze custom property name', async () => {

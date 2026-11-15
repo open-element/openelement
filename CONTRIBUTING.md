@@ -113,33 +113,38 @@ which selects by exact package name:
 
 The gates are split in two layers. CI's fast PR layer is the `lint`, `test`,
 `e2e`, and `pack` jobs in `.github/workflows/autoflow-ci.yml`, and it runs on
-every pull request targeting `main` and on pushes to `main` and
-`alpha15-consolidation`. `tools/repo#gate:source` (19
-steps: 18 `@`-qualified tasks plus `check:dep-age`) is the LOCAL source
-gate: no workflow invokes the aggregate task, and `pnpm run verify`
-and `pnpm run verify:core` are its entry points. Twelve of those steps also
-run in CI through the fast jobs — `@openelement/tools-repo#typecheck` (the
-`tools/` project), the dependency-age quarantine, markdown lint (inside
-`vp run check`), the vp-selector flags check, the seams registry, the
-docs-index drift check, the content-date manifest, the interface snapshot,
-`generate:all`, and the Element/Router unit suites plus the Chromium browser
-gate. The request-time and
-base-path fixture gates stay outside the fast layer, in the `e2e-full`
-full-qualification layer (main pushes and `full_qualification` dispatches), and
-`shims:check`, `adr-index:check` and `www#check:doc-claims` are local-only
-until a workflow adopts them —
-so run `pnpm run verify:core` before relying on those. The steps that need
-a built Site, coverage, deploy
+every pull request targeting `main` and on pushes to `main`.
+`tools/repo#gate:source` (20 steps: 19 `@`-qualified tasks plus `check:dep-age`)
+is the LOCAL source gate: no workflow invokes the aggregate task, and
+`pnpm run verify` and `pnpm run verify:core` are its entry points.
+Sixteen of those steps also run in CI through the fast jobs — the
+`@openelement/www#check:theme-init` byte check, `generate:all`,
+`@openelement/tools-repo#typecheck` (the `tools/` project), the dependency-age
+quarantine, markdown lint (inside `vp run check`), the vp-selector flags check,
+the seams registry, the output-discipline guard, the constitution parity check,
+the docs-index drift check, the doc-claims gate, the content-date manifest, the
+interface snapshot, and the Element/Router unit suites plus the Chromium
+browser gate. The request-time and base-path fixture gates stay outside the
+fast layer, in the `e2e-full` full-qualification layer (a
+`full_qualification` dispatch only), and `shims:check` and `adr-index:check`
+are local-only until a workflow adopts them — so run `pnpm run verify:core`
+before relying on those. The steps that need a built Site, coverage, deploy
 fixtures, or three-engine browser matrices live in `tools/repo#gate:release`
 and run on the release train via `release:check` before anything is published.
 
 ```bash
-pnpm run check                                    # fmt + lint + typecheck + markdown
-pnpm --dir tools/repo run release:registry-check  # one directory-scoped task
-pnpm --filter @openelement/router run test        # one task in one workspace member
-pnpm run verify:core                              # core candidate verification (no SaaS)
-pnpm run verify                                   # full repository (including SaaS)
-pnpm run gate:release                             # the release train (trimmed-out steps)
+# fmt + lint + typecheck + markdown
+vp run check
+# one directory-scoped task
+vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo release:registry-check
+# one task in one workspace member
+vp run --no-cache --fail-if-no-match --filter @openelement/router test
+# core candidate verification (no SaaS)
+vp run verify:core
+# full repository (including SaaS)
+vp run verify
+# the release train (trimmed-out steps)
+vp run gate:release
 ```
 
 Subtask areas: `tools/repo` (gates, release-state checks, coverage, hooks), `tools/release` (pack, publish dry-run, packaged consumers), `www` (site generation, content/link/theme checks, browser e2e), `apps/saas` (`check`, `test`, Nitro builds — separately governed, never blocking).
@@ -172,7 +177,7 @@ Package test tasks run vitest on the node host; a single file runs through the s
 
 ## Locating CI failures
 
-`autoflow-ci.yml` runs a `sha-guard` job first, then the fast PR layer (`lint`, `test`, `e2e`, `pack`); the heavy qualification jobs — `e2e-full` (two instances: the three-engine site E2E suite and the fixture gates), `bfcache`, `node-serve-smoke` (Node 24 and 26), `packed-consumer-matrix` (Linux and macOS), and `fresh-install` — run on a `main` push and on a `full_qualification` dispatch. There is no aggregation job: each required check is the job itself, so read the failing job's log directly. The Release workflow's `ci-evidence` job separately requires every one of the nine qualification job IDs (twelve instances) of the exact-SHA `main` push run to be `success`; `apps/saas` is never part of the candidate.
+`autoflow-ci.yml` runs a `sha-guard` job first, then the fast PR layer (`lint`, `test`, `e2e`, `pack`); the heavy qualification jobs — `e2e-full` (two instances: the three-engine site E2E suite and the fixture gates), `bfcache`, `node-serve-smoke` (Node 24 and 26), `packed-consumer-matrix` (Linux and macOS), and `fresh-install` — run only through a `full_qualification` dispatch on the candidate SHA: a `main` push runs the base layer only, and a Base-only run is never qualification evidence. There is no aggregation job: each required check is the job itself, so read the failing job's log directly. The Release workflow's `ci-evidence` job separately requires the exact-SHA `full_qualification` dispatch (a pre-split `main` push run is the fallback) to list every one of the nine qualification job IDs (twelve instances) as `success`; a Base-only run is not evidence, and `apps/saas` is never part of the candidate.
 
 ## Commits
 

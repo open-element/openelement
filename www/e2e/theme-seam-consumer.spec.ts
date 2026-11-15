@@ -4,9 +4,12 @@
  * After PR #1804 the attribute has ONE owner
  * (`packages/ui/src/theme-contract.ts`): the pre-paint script is generated
  * from it and the toggle delegates to it. This spec asserts the observable
- * consequence rather than the source shape: a page load performs EXACTLY ONE
- * mutation of `html[data-theme]`, hydration does not write it a second time,
- * and the applied theme still drives computed style.
+ * consequence rather than the source shape: a page load with no explicit
+ * `theme` attribute (the site layout ships none) performs EXACTLY ONE mutation
+ * of `html[data-theme]`, hydration does not write it a second time, and the
+ * applied theme still drives computed style. An explicit `theme` attribute
+ * that overrides the pre-paint result is a DELIBERATE second write — the
+ * "one mutation" claim is scoped to the no-override path.
  *
  * The static half of the same seam lives in
  * `www/__tests__/site-theme-and-gaze-seams.test.ts`; the byte-identity of the

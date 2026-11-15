@@ -160,7 +160,7 @@ command conformance alone does not validate prose about side effects.
 | `docs/release/public-interface-snapshot.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot:write` | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` (in `gate:source` and CI) |
 | `packages/ui/src/generated-manifest.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/ui generate:ui-manifest` | `@openelement/ui#ui-manifest:check` (in `gate:release`) |
 | `packages/ui/custom-elements.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/ui generate:ui-cem` | `@openelement/ui#ui-cem:check` (in `gate:release`) |
-| `www/public/theme-init.js` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/www generate:theme-init` (generated from `packages/ui/src/theme-contract.ts`) | `@openelement/www#check:theme-init` (in `gate:source`, `gate:release` and PR CI, before `generate:all`) |
+| `www/public/theme-init.js` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/www generate:theme-init` (generated from `packages/ui/src/theme-contract.ts`) | `@openelement/www#check:theme-init` (in `gate:source`, `gate:release`, the root `release:check` aggregate and PR CI, before `generate:all`) |
 | `www/dist/**` | **Git-ignored** (build output; `.gitignore`: `dist/`) | `vp run site:build` (redirects/sitemap/RSS emitters write into it) | the site build and consumer gates that read `dist` |
 
 Trackedness changes what a bad edit looks like, not whether the file is
@@ -203,7 +203,7 @@ graph; it does not execute the gate.
 | --- | --- |
 | `vp run check` | `fmt:check` → `lint` → `typecheck` → `@openelement/tools-repo#lint:markdown` → `@openelement/www#check:public-docs` |
 | `vp run gate:release` | `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` |
-| `vp run release:check` | `@openelement/ui#ui-manifest:check` → `@openelement/ui#ui-cem:check` → `@openelement/tools-repo#generate:all` → `@openelement/tools-repo#release:registry-check` → `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` → `@openelement/tools-release#publish:npm:dry-run` |
+| `vp run release:check` | `@openelement/ui#ui-manifest:check` → `@openelement/ui#ui-cem:check` → `@openelement/www#check:theme-init` → `@openelement/tools-repo#generate:all` → `@openelement/tools-repo#release:registry-check` → `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` → `@openelement/tools-release#publish:npm:dry-run` |
 | `vp run saas:verify` | `@openelement/saas#check` → `@openelement/saas#test` |
 | `vp run saas:workers` | `@openelement/saas#build` → `@openelement/saas#nitro:build-workers` → `@openelement/tools-repo#workers:boundary-check` |
 | `vp run site:build` | `@openelement/tools-repo#generate:all` → `@openelement/www#build` → `@openelement/www#pagefind` → `@openelement/www#emit:redirects` → `@openelement/www#emit:sitemap` → `@openelement/www#emit:rss` |
@@ -322,7 +322,7 @@ description states it.
 | Shim inventory | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo shims:check` | `docs/architecture/shim-inventory.md` is a hand-maintained registry with a mechanical reader: every row carries an existing tracked path, an owner, a status, and a non-empty retirement condition. The reader rides `gate:source`. |
 | Doc claims | `vp run --no-cache --fail-if-no-match --filter @openelement/www check:doc-claims` | Every machine-checkable factual claim in the covered docs (versions, commands, subpaths, gate and CI counts, ADR and path references, locale parity, the meta-description budget) must agree with the file that owns the fact. Narrative prose is explicitly out of scope; exemptions live in the checker's allowlist and each needs a reason. |
 | ADR index | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo adr-index:check` | A record must be listed, its links resolvable, and a non-active record annotated `SUPERSEDED` / `RETIRED` / `EXECUTED`; the reader rides `gate:source`. |
-| Publish dispatch | (GitHub Actions) | Requires main push CI green FIRST — the exact-SHA contract. |
+| Publish dispatch | (GitHub Actions) | Requires the exact-SHA `full_qualification` dispatch green FIRST — the exact-SHA contract; a Base-only push run is not evidence. |
 
 ## Maintaining this contract
 
