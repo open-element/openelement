@@ -49,7 +49,7 @@
  *   wrappers are observed re-invoked per connection while the retained
  *   `createInstance` factory stays at 1. A nested hostless child is neither
  *   instantiated nor counted here; nested child retention remains OWED for
- *   `16b-LC-2` and UNMEASURED, and no "must flip" contract is encoded;
+ *   `16b-LC retained-child` and UNMEASURED, and no "must flip" contract is encoded;
  * - a generated module without a claim fails closed on retained DOM/reconnect
  *   instead of silently becoming inert;
  * - a structural claim mismatch fails closed and leaves the DOM/subscriptions
@@ -235,7 +235,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
       `export const { emitComment, MARKERS, markerText, rangeMarker } = markers;`,
       `export const textSlotMarker = markers.textSlotMarker;`,
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
-      // 16b-LC-2 owner-teardown row: the page-side descriptor fixture retains a
+      // 16b-LC retained-child owner-teardown row: the page-side descriptor fixture retains a
       // real child instance through the SAME private ledger the generated path
       // consumes, so the shell's release placement is observable.
       `export { abortInstancePass, beginInstancePass, endInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
@@ -250,7 +250,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
       `export { createProfileRecipe, createConditionalRecipe, createToggleRecipe, Profile__ssr, Conditional__ssr } from './leaf.js';`,
       `export { createGeneratedElementClass, defineGeneratedElement } from ${JSON.stringify(join(element, 'compiled/generated-element/shell.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
-      // 16b-LC-2 owner-teardown row: the same private runtime surface the
+      // 16b-LC retained-child owner-teardown row: the same private runtime surface the
       // generated root body consumes, re-exported for the page-side fixture.
       `export { createRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
       `export { abortInstancePass, beginInstancePass, endInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
@@ -504,7 +504,7 @@ interface InstanceFailureResult {
  * being re-entered by the reconnect claim — it does NOT instantiate or count a
  * nested hostless child.
  *
- * Nested hostless child retention remains OWED (`16b-LC-2`) and UNMEASURED;
+ * Nested hostless child retention remains OWED (`16b-LC retained-child`) and UNMEASURED;
  * this fixture makes no claim about it and pins no flip expectation for it.
  */
 interface RootRecipeBodyReinvokeResult {
@@ -1939,7 +1939,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
             // recipe, so wrapping its mount/claim counts the ROOT body being
             // re-entered by the reconnect claim. This does NOT create, mount or
             // count a nested hostless child instance; nested child retention is
-            // OWED (16b-LC-2) and UNMEASURED here.
+            // OWED (16b-LC retained-child) and UNMEASURED here.
             return {
               ...base,
               mount: (scope, props) => {
@@ -1990,7 +1990,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
       // CHARACTERIZATION — the ROOT recipe body is re-invoked by the reconnect
       // claim (2) while the retained instance factory stays at 1. This is the
       // ROOT body re-entry, NOT a nested hostless child measurement and NOT
-      // acceptance: nested child retention remains OWED for 16b-LC-2 and
+      // acceptance: nested child retention remains OWED for 16b-LC retained-child and
       // UNMEASURED, and no flip expectation is encoded here.
       expect(result.afterReconnect).toMatchObject({
         instanceSetupCalls: 1,
@@ -2714,7 +2714,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
 });
 
 /**
- * T6 / `16b-LC-2` — owner teardown releases retained children EXPLICITLY.
+ * T6 / `16b-LC retained-child` — owner teardown releases retained children EXPLICITLY.
  *
  * Hand-written descriptor fixture (same evidence class as the LC-0 rows): the
  * recipe retains one real child instance through the SAME private ledger the

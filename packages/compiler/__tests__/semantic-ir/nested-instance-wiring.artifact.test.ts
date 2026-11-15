@@ -1,5 +1,5 @@
 /**
- * T4 / 16b-LC-2 — DEPTH-1 nested-instance wiring, artifact contract (LOCAL, Node).
+ * T4 / 16b-LC retained-child — DEPTH-1 nested-instance wiring, artifact contract (LOCAL, Node).
  *
  * The compiled module is the whole evidence surface here: no browser, no
  * runtime, no hand-written generated code. The plan v3 acceptance rows pinned
@@ -9,7 +9,7 @@
  *   emits a retain call: `beginInstancePass`/`endInstancePass` and
  *   `retainChildInstance` text appear exactly in the root mount/claim bodies and
  *   nowhere else (zero in recipe, claim-time-recipe, leaf and legacy bodies);
- * - `16b-LC-2` depth-1: a DIRECT hostless child is a leaf instance body — one
+ * - `16b-LC retained-child` depth-1: a DIRECT hostless child is a leaf instance body — one
  *   module-local `<Name>__setup` factory, both its mount and its claim alias the
  *   retained record from the child host literal's `setup` property, and its body
  *   contains no ledger text at all;

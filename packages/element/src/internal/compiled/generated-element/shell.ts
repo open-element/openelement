@@ -429,7 +429,7 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
    * factory directly (descriptor-fixture evidence). Nested hostless children
    * keep their own per-claim evaluation: the generated-path fixture measures
    * that re-evaluation, while nested child retention remains OWED for
-   * `16b-LC-2` and is not claimed here.
+   * `16b-LC retained-child` and is not claimed here.
    *
    * The owner is a real cleanup channel: setup-owned effects, listeners, timers,
    * subscriptions and any other resource that needs cleanup register on it and

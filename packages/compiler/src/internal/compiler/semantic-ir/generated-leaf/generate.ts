@@ -393,7 +393,7 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     symbol: 'openStaticSiblingDirectory',
     predicate: (_body, _usesClaimRecipe, usesDirectory) => usesDirectory,
   },
-  // 16b-LC-2 depth-1 nested retention: the root pass bracket, the ref-site
+  // 16b-LC retained-child depth-1 nested retention: the root pass bracket, the ref-site
   // retain/release and the R1–R6 structural release text name these runtime
   // functions, so the same body predicate registers their imports.
   {
@@ -451,7 +451,7 @@ const LIFECYCLE_HOOKS_VAR = `${INTERNAL_PREFIX}lifecycleHooks`;
 const LIFECYCLE_HOOK_VAR = `${INTERNAL_PREFIX}lifecycleHook`;
 const LIFECYCLE_CLEANUP_VAR = `${INTERNAL_PREFIX}lifecycleCleanup`;
 /**
- * 16b-LC-2: the module-local setup factory a RETAINED hostless child exposes to
+ * 16b-LC retained-child: the module-local setup factory a RETAINED hostless child exposes to
  * its retaining reference site (`<Name>__setup`). Synthesized from the
  * component's own name, exactly like `<Name>__mount`/`<Name>__claim`, so it can
  * never collide with another component's generated declarations; it adds no
@@ -470,7 +470,7 @@ const LEAF_SETUP_SUFFIX = '__setup';
 const ROOT_SETUP_HOST_PROPERTY = 'bindings';
 const LEAF_SETUP_HOST_PROPERTY = 'setup';
 /**
- * 16b-LC-2 site key: the ONE authored-span literal emitted by both the mount
+ * 16b-LC retained-child site key: the ONE authored-span literal emitted by both the mount
  * and the claim reference-site emitters. Identity is the authored span
  * (`IrSpan` UTF-16 start/end), so the same site re-claiming on a new connection
  * reuses the same ledger entry and two distinct sites can never share one. The
@@ -838,7 +838,7 @@ interface EmitState {
   /** True once this chunk throws the leaf-claim mismatch. */
   usesLeafClaimMismatch: boolean;
   /**
-   * Depth-1 nested-retention plan (`16b-LC-2`), or null when this module emits
+   * Depth-1 nested-retention plan (`16b-LC retained-child`), or null when this module emits
    * today's bytes. Reference sites resolve their retained-vs-legacy emission
    * against `retainedRefs` (reference identity), never a counter or a name.
    */
@@ -1169,7 +1169,7 @@ function emitEntryBuilder(
 }
 
 /**
- * 16b-LC-2 R1/R4: remove one `when` branch owner and release every retained
+ * 16b-LC retained-child R1/R4: remove one `when` branch owner and release every retained
  * child indexed under it (the branch is the structural owner of retained refs
  * emitted inside it).
  *
@@ -1194,7 +1194,7 @@ function emitBranchRelease(state: EmitState, ownerVar: string): void {
 }
 
 /**
- * 16b-LC-2 R2/R5: a `when` refresh failed while constructing the NEW branch.
+ * 16b-LC retained-child R2/R5: a `when` refresh failed while constructing the NEW branch.
  * Attempt the branch owner's `dispose(true)` and the structural release, drop
  * both cleanup errors and rethrow the ORIGINAL construction error (B2).
  */
@@ -2231,7 +2231,7 @@ function emitComponentRef(
   const id = state.counter.value++;
   const propsVar = `${INTERNAL_PREFIX}childProps${id}`;
   const nodesVar = `${INTERNAL_PREFIX}childNodes${id}`;
-  // 16b-LC-2: a site the module plan selected retains its child logical instance
+  // 16b-LC retained-child: a site the module plan selected retains its child logical instance
   // on the ROOT element instance (depth-1). Every other site keeps today's text
   // exactly: a demoted target, a recipe/claim-time-recipe body, a list entry or
   // any non-root body emits no ledger text.
@@ -2475,7 +2475,7 @@ function componentProjectsChildren(component: FunctionModelComponent): boolean {
 }
 
 /**
- * DEPTH-1 nested-retention plan (`16b-LC-2`, plan v3 §4.1).
+ * DEPTH-1 nested-retention plan (`16b-LC retained-child`, plan v3 §4.1).
  *
  * The generated ROOT mount/claim body is the ONE "root retaining body": it
  * brackets an instance pass and retains its DIRECT hostless child instances.
@@ -5068,7 +5068,7 @@ function emitClaimComponentRef(
   }
   const id = state.counter.value++;
   const propsVar = `${INTERNAL_PREFIX}childProps${id}`;
-  // 16b-LC-2: the claim mirror of the mount site. The same authored span yields
+  // 16b-LC retained-child: the claim mirror of the mount site. The same authored span yields
   // the same site key, the retained record is reused (setup never re-runs) and
   // the per-connect claim scope stays parented on the structural owner.
   const retained = state.retention !== null && state.retention.retainedRefs.has(node);
@@ -5325,7 +5325,7 @@ interface AdmittedLifecycleHook {
 }
 
 /**
- * The retained-setup alias prologue (T3 / 16b-LC-1 for the root, 16b-LC-2 for a
+ * The retained-setup alias prologue (T3 / 16b-LC-1 for the root, 16b-LC retained-child for a
  * leaf instance body).
  *
  * One body shape per component: a body that must NOT re-evaluate its setup
@@ -5474,7 +5474,7 @@ function emitClaimFunction(
     state.requiredBindings.add(resource.name);
   }
   const leafSetup = state.leafBody && localLines.length > 0;
-  // 16b-LC-2: the ROOT retaining body opens exactly one instance pass before
+  // 16b-LC retained-child: the ROOT retaining body opens exactly one instance pass before
   // any claim work, so a failed claim is evicted by the shell's abort. Only the
   // root body has a ledger; every leaf/legacy/recipe body emits no ledger text.
   if (state.retainBody) push(state, `beginInstancePass(${MOUNT_HOST}.instance);`);
@@ -6972,7 +6972,7 @@ function emitComponent(
     }));
   }
 
-  // 16b-LC-2: a LEAF instance body evaluates its setup exactly once on the
+  // 16b-LC retained-child: a LEAF instance body evaluates its setup exactly once on the
   // ledger-owned retained scope. The retaining reference site calls this
   // module-local factory inside `retainChildInstance`; the body itself only
   // aliases the returned record (never re-evaluates an initializer and never
@@ -7051,7 +7051,7 @@ function emitComponent(
     }));
   }
 
-  // 16b-LC-2: the ROOT retaining body opens exactly one instance pass before
+  // 16b-LC retained-child: the ROOT retaining body opens exactly one instance pass before
   // any setup/DOM work; the shell aborts it when mount/claim throws.
   if (state.retainBody) push(state, `beginInstancePass(${MOUNT_HOST}.instance);`);
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
@@ -7137,7 +7137,7 @@ function emitComponent(
   const factoryLines: string[] = [
     `export function create${component.name}Recipe(${INTERNAL_PREFIX}owner, ${INTERNAL_PREFIX}host) {`,
   ];
-  // 16b-LC-2: the root retaining body reads the logical instance scope from its
+  // 16b-LC retained-child: the root retaining body reads the logical instance scope from its
   // host record, so the factory forwards the shell's `instance` field. Only the
   // root component of a retained module changes bytes; every other factory keeps
   // today's literal exactly.
@@ -7506,7 +7506,7 @@ export function generateLeafModule(
   // wrote the declaration. Null on every failure path and without the option.
   let rootInstanceFactory: string | null = null;
   const sharedClaimCursor = moduleUsesSharedClaimCursor(module, componentByName);
-  // 16b-LC-2: one module-level retention plan decides every body mode and
+  // 16b-LC retained-child: one module-level retention plan decides every body mode and
   // every retained site before emission (monotone fixpoint over the emitted
   // references + the two whole-module guards). Null means "emit today's bytes".
   const retention = planRetention(module, componentByName, records, options.rootInstance);

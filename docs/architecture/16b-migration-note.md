@@ -9,6 +9,13 @@ summary: The tracked carrier for the row-for-row 16b-MN obligations. It records 
 Date: 2026-11-14. Baseline: `origin/main` =
 `fa6e5232dd54520d100108b202a73a1d70341f11` (PR #1790, M09-2d).
 
+Working-tree additions on 2026-11-15 (the Alpha16b capability train) are
+authorized by [ADR-0180](../adr/ADR-0180-function-component-lifecycle-intrinsics.md)
+and [ADR-0181](../adr/ADR-0181-generated-element-ssr-and-retention.md), and
+registered in [execution plan §16](./alpha16-18-execution-plan.md). Evidence for
+them lives in the [2026-11-15 appendix](./alpha16b-evidence-20261115.md). No row
+below is closed by that train; each keeps the state it records.
+
 ## Status and scope
 
 `alpha16-18-execution-plan.md` §13.2 names five Alpha16b obligation slices
@@ -130,7 +137,7 @@ clean-SHA evidence.
 
 - It flips no row to closed, records no capability-inventory row, no final-SHA
   matrix, no gate result, no clean-SHA evidence and no sign-off.
-- It does not claim `16b-LC`, `16b-LC-2`, §4.1d, M09 exit, M13 or any Alpha16
+- It does not claim `16b-LC`, `16b-LC retained-child`, §4.1d, M09 exit, M13 or any Alpha16
   exit / P5 item.
 - It does not rewrite the execution plan, the progress ledger, the semantic test
   matrix, the public-interface snapshot or any `packages/*` source/export map.

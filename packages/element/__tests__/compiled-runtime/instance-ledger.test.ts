@@ -1,5 +1,5 @@
 /**
- * The private instance-ledger prerequisite for `16b-LC-2` nested generated
+ * The private instance-ledger prerequisite for `16b-LC retained-child` nested generated
  * retention (design `nested-retention-design.md` §A Addendum, independent
  * review P1). These probes exercise the runtime primitive directly against
  * REAL `LifetimeScope` owners and REAL registered cleanups (including cleanups

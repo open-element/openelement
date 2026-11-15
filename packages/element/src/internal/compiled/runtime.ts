@@ -139,7 +139,7 @@ export {
 } from './runtime/values.ts';
 export { bindSignalWrites, runUntracked } from './runtime/bindings.ts';
 // The retained-logical-instance surface the depth-1 generated nested wiring
-// consumes (`16b-LC-2`): the generated root mount/claim pass bracket, the
+// consumes (`16b-LC retained-child`): the generated root mount/claim pass bracket, the
 // ref-site retain/release text, and the shell's connect abort and owner
 // teardown release. Exactly the seven consumed functions are re-exported —
 // this barrel is the single specifier generated code resolves, so a symbol

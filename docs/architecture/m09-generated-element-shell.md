@@ -219,7 +219,7 @@ This shell is a bounded M09-0 slice. It does **not** implement or claim:
   amendment wires the generated root setup through that factory for supported
   admitted setup locals (root-only, compiler-owned factory and metadata,
   mount/claim aliases, SSR separate). Still OWED: nested hostless-child
-  retention (`16b-LC-2`) — the T3 Chromium nested fixture now measures the real
+  retention (`16b-LC retained-child`) — the T3 Chromium nested fixture now measures the real
   nested case (root retained, child re-evaluated, same root node) as
   characterization, never acceptance — and the full §4.1d reconnect-resource /
   `16b-LC` contract remains unclaimed.
@@ -354,7 +354,7 @@ Limits — the part that must not be overstated:
   admitted root setup locals; the LC-0 hand-fixture rows stay hand fixtures and
   are not replaced by it.
 - **Nested hostless children are not retained by this seam.** Their retention
-  is the OWED `16b-LC-2` row. This record's characterization row wraps the
+  is the OWED `16b-LC retained-child` row. This record's characterization row wraps the
   **ROOT** recipe's `mount`/`claim` bodies only (the root recipe body is
   re-invoked per connection while the retained `createInstance` counts 1) and
   does not instantiate or count a nested hostless child; that historical limit
@@ -373,7 +373,7 @@ Limits — the part that must not be overstated:
   amended in the same docs change and keeps the focused test file as its shell
   guard and registers the T3 Node/Chromium files as additional guard forms.
   This amendment adds no public symbol or API, no owner sign-off or approval,
-  no M09/M09-0 status change, and no `16b-LC` / `16b-LC-2` or §4.1d
+  no M09/M09-0 status change, and no `16b-LC` / `16b-LC retained-child` or §4.1d
   reconnect-resource completion claim.
 
 ## 2026-11-15 amendment — T3 root generated setup retention (working tree)
@@ -421,7 +421,7 @@ For supported admitted root setup locals the compiler now emits the
   setup-throw rollback, and the nested case below). LOCAL runs: Node 7/7 and
   Chromium 4/4 passed at dirty baseline `77d50d513`; dirty-tree development
   feedback, not clean-SHA evidence.
-- **Nested hostless-child limit.** Retention stays OWED for `16b-LC-2`. The
+- **Nested hostless-child limit.** Retention stays OWED for `16b-LC retained-child`. The
   nested Chromium fixture measures the real nested case as characterization,
   not acceptance: with root setup value `1` and child snapshot `1` mounted, the
   parent's reconnect leaves the retained root's text at `1` on the same `<b>`
@@ -492,12 +492,12 @@ Limits — the part that must not be overstated:
   `generated-element.root-instance.browser.test.ts`,
   `generated-element.shell.test.ts` and `instance-ledger.test.ts` files; no count
   here is a permanent test-count promise.
-- **No completion claim.** No `16b-LC-2` or `16b-LC` completion, no §4.1d
+- **No completion claim.** No `16b-LC retained-child` or `16b-LC` completion, no §4.1d
   reconnect-resource contract, no author lifecycle or setup-once API, no M09 exit,
   no M13 matrix and no clean-SHA evidence. The LC-0/T3 amendments' non-claims
   stand.
 - **Seam duty.** [`seams.md`](./seams.md) gains the
-  `Generated-element depth-1 nested instance ledger (16b-LC-2; 2026-11-15 working
+  `Generated-element depth-1 nested instance ledger (16b-LC retained-child; 2026-11-15 working
   tree)` row and the M09-0 row is amended to point at it. The row's guard cell
   cites the tracked consumer form — the
   [`generated-element.root-instance.browser.test.ts`](../../packages/compiler/__tests__/semantic-ir/generated-element.root-instance.browser.test.ts)

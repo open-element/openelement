@@ -13,7 +13,7 @@
  *   exists (`createBindings` stays never emitted);
  * - the compiler-private root marker is ROOT-ONLY for the retained-settings
  *   factory; a DIRECT hostless child becomes a depth-1 LEAF instance body
- *   (`16b-LC-2`): it gets its own `<Child>__setup` factory and aliases the
+ *   (`16b-LC retained-child`): it gets its own `<Child>__setup` factory and aliases the
  *   record from its reference site's host literal, emitting no ledger text, and
  *   a marker naming the child makes the root-target guard emit the whole module
  *   as legacy bytes;
@@ -262,7 +262,7 @@ describe('T3 root generated setup retention (Node)', () => {
     expect(factory).toContain('return { rootSnapshot };');
     expect(factory).not.toContain('childSnapshot');
 
-    // 16b-LC-2 DEPTH-1: the direct hostless child is a LEAF instance body. Its
+    // 16b-LC retained-child DEPTH-1: the direct hostless child is a LEAF instance body. Its
     // setup moves into one module-local `<Child>__setup` factory, and its own
     // mount/claim alias the retained record from the child host literal's
     // `setup` property instead of re-evaluating the initializer. The leaf body

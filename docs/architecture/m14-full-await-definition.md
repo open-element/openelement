@@ -7,6 +7,9 @@ summary: Owner-approved Alpha16 definition of M14 full await: exactly two await 
 # M14 full await — the Alpha16 DEFINITION (exactly two positions)
 
 Date: 2026-11-15. Status: **DEFINITION — owner-approved, recorded; documentation-only.**
+Owner approval carrier: [execution plan §16.1 D-16b](./alpha16-18-execution-plan.md)
+(dated amendment 2026-11-15). This document is the definition itself; the
+amendment is the authorization that registers it.
 Baseline: the clean worktree at `6bd3667d4`. The bounded implementations this
 definition describes are PR #1748 (squash
 `bbe25445dda16afae0ba99e477eec55a96245844`, 2026-11-09) and PR #1776 (squash
@@ -25,7 +28,8 @@ it does not fill a semantic-matrix cell, and it is not the M14 exit (§6, §7).
 
 ## 1. What this record is, and is not
 
-**Is** — the tracked carrier of the owner-approved Alpha16 definition of M14
+**Is** — the tracked carrier of the Alpha16 definition of M14 registered by
+[execution plan §16.1 D-16b](./alpha16-18-execution-plan.md)
 full await; the located boundary table for every refused position; the
 extension carrier and its reason; the evidence that exists today; the evidence
 the consolidation PR still owes; the explicit non-claims.

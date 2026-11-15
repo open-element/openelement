@@ -26,7 +26,7 @@
  * - a setup factory throw fails the first connect, allocates no retained
  *   instance and mounts nothing; the next connect re-runs setup on a NEW
  *   instance and mounts successfully;
- * - T1 (`16b-LC-2` DEPTH-1): a DIRECT hostless child (a component reference in
+ * - T1 (`16b-LC retained-child` DEPTH-1): a DIRECT hostless child (a component reference in
  *   the same module's root body) retains its setup exactly once and the parent
  *   reconnect REUSES that record, so the reconnected child text stays the
  *   snapshot taken at first connect and the exported setup counter stays 1.
@@ -312,7 +312,7 @@ async function buildBundle(dir: string, islandModule: string, name: string): Pro
       `export const { emitComment, entryKeyMarker, MARKERS, markerText, parseEachMarker, parseEntryKeyMarker, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } = markers;`,
       `export { encodeListKey, tryEncodeListKey } from ${JSON.stringify(join(runtime, 'list-key.ts'))};`,
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
-      // 16b-LC-2 depth-1 nested retention: the generated root pass bracket and
+      // 16b-LC retained-child depth-1 nested retention: the generated root pass bracket and
       // the ref-site retain/release text import this surface.
       `export { abortInstancePass, beginInstancePass, endInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
@@ -592,7 +592,7 @@ describe('T3 root generated setup retention (Chromium)', () => {
         await tick();
         const rootNode = host.querySelector('b');
         const mounted = { ...read(), setups: setups() };
-        // 16b-LC-2 depth-1: remove -> change the prop while disconnected ->
+        // 16b-LC retained-child depth-1: remove -> change the prop while disconnected ->
         // re-append. The reconnect claim must REUSE the retained child record
         // (setup did not run again) and keep the snapshot taken at first
         // connect, while the root keeps its own retained setup too.

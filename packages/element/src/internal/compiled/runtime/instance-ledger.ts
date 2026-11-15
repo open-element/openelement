@@ -1,6 +1,6 @@
 /**
  * Retained logical instances for nested generated-element children — the
- * PRIVATE runtime prerequisite for `16b-LC-2` (design
+ * PRIVATE runtime prerequisite for `16b-LC retained-child` (design
  * `nested-retention-design.md` §A Addendum; independent review
  * `nested-retention-review.md` P1).
  *
