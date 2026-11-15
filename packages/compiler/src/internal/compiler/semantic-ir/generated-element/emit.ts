@@ -522,6 +522,16 @@ export function generateElementModule(
           styleLinkPrefix
             ? `export function ${hostWrapper.name}(props, lightChildren, attributes, styleLinks) {`
             : `export function ${hostWrapper.name}(props, lightChildren, attributes) {`,
+          // Mixed generated-element/entry artifacts: the new producer requires
+          // the declared stylesheet URLs, but an old 3-arg caller (or a missing
+          // carrier) would otherwise render the shadow host silently unstyled.
+          // Fail closed before any seed/serialization work; the per-URL shape
+          // stays owned by the canonical marked-link serializer.
+          ...(styleLinkPrefix
+            ? [
+                '  if (!Array.isArray(styleLinks) || styleLinks.length === 0) throw new Error("OEIR_LEAF_MISSING_VALUE: styleLinks (the styled generated element received no declared stylesheet URLs; mixed generated-element/entry artifacts or a missing style-link carrier)");',
+              ]
+            : []),
           `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
           `  return ${names.ssrHostImport}({`,
           `    tag: ${JSON.stringify(site.tag)},`,

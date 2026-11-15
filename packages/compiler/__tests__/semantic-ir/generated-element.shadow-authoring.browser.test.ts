@@ -604,4 +604,53 @@ describe('M09-2e styled shadow host DSD link prefix (Chromium)', () => {
       }
     }
   });
+
+  test('the styled producer refuses an old 3-arg caller and an empty styleLinks list', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(() => {
+        const mod = window.__oeVertical;
+        const attempt = (run: () => string): { ok: boolean; value?: string; message?: string } => {
+          try {
+            return { ok: true, value: run() };
+          } catch (error) {
+            return { ok: false, message: String((error as Error).message ?? error) };
+          }
+        };
+        return {
+          // The old caller model: exactly the pre-M09-2e three-argument call.
+          threeArg: attempt(() => mod.StyledCard__ssrHost(undefined, undefined, undefined)),
+          empty: attempt(() => mod.StyledCard__ssrHost(undefined, undefined, undefined, [])),
+          valid: attempt(() =>
+            mod.StyledCard__ssrHost(undefined, undefined, undefined, [
+              '/client/assets/styled-abc.css',
+            ]),
+          ),
+          // The guard does not replace the canonical per-URL validation: a
+          // non-empty list with an invalid href must still fail in the one
+          // marked-link serializer, not here.
+          invalidHref: attempt(() =>
+            mod.StyledCard__ssrHost(undefined, undefined, undefined, ['javascript:alert(1)']),
+          ),
+        };
+      });
+      for (const [name, refused] of [
+        ['three-argument caller', result.threeArg],
+        ['empty styleLinks', result.empty],
+      ] as const) {
+        expect(refused.ok, `${name}: styled producer must fail closed`).toBe(false);
+        expect(refused.message).toContain('OEIR_LEAF_MISSING_VALUE');
+        expect(refused.message).toContain('styleLinks');
+      }
+      expect(result.invalidHref.ok).toBe(false);
+      expect(result.invalidHref.message).toContain('component stylesheet href must be');
+      expect(result.valid.ok).toBe(true);
+      expect(result.valid.value).toContain(
+        '<link rel="stylesheet" href="/client/assets/styled-abc.css" data-oe-static-styles />',
+      );
+      expect((result.valid.value ?? '').match(/<link\b/g)?.length).toBe(1);
+    } finally {
+      await page.close();
+    }
+  });
 });

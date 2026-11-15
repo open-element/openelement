@@ -192,15 +192,34 @@ describe('M09-2a generated shadow host producer', () => {
       'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks) {',
     );
     expect(styled.code).toContain('    ...(styleLinks === undefined ? {} : { styleLinks }),');
+    // Mixed generated-element/entry artifacts: an old 3-arg caller (or a missing
+    // carrier) must fail closed instead of rendering the styled host unstyled.
+    const guard =
+      'if (!Array.isArray(styleLinks) || styleLinks.length === 0) throw new Error("OEIR_LEAF_MISSING_VALUE: styleLinks';
+    expect(styled.code).toContain(guard);
+    const producerStart = styled.code.indexOf(
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks) {',
+    );
+    expect(producerStart).toBeGreaterThan(-1);
+    const guardStart = styled.code.indexOf('OEIR_LEAF_MISSING_VALUE: styleLinks');
+    expect(guardStart).toBeGreaterThan(producerStart);
+    // The guard runs before the seed/serialization call, so no partial markup.
+    expect(guardStart).toBeLessThan(
+      styled.code.indexOf(
+        'const __oeHostProps = seedGeneratedElementHostProperties',
+        producerStart,
+      ),
+    );
     // The claim skips exactly the canonical marked link prefix.
     expect(styled.code).toContain('data-oe-static-styles');
     expect(styled.code).toContain('nodeName === "LINK"');
-    // The unstyled module keeps the 3-arg producer and no prefix walk.
+    // The unstyled module keeps the 3-arg producer, no prefix walk, no guard.
     const unstyled = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE })!;
     expect(unstyled.code).toContain(
       'export function Profile__ssrHost(props, lightChildren, attributes) {',
     );
     expect(unstyled.code).not.toContain('data-oe-static-styles');
+    expect(unstyled.code).not.toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
   });
 
   test('a light root keeps its bytes even when the sidecar declares styles', () => {
