@@ -36,7 +36,11 @@
  *   cleans grandchild resources through the `LifetimeScope` cascade (this
  *   module performs NO cross-ledger sweep, by contract);
  * - end-sweep cleanup errors: every swept scope is disposed, then the first
- *   error surfaces and the pass is already closed.
+ *   error surfaces and the pass is already closed;
+ * - owner-teardown release (`releaseRetainedChildren`): every entry is released
+ *   and deindexed, open pass state is discarded, later release paths are
+ *   no-ops, the first cleanup error surfaces once after every cleanup ran, and
+ *   retention on the disposed owner still fails closed.
  *
  * NON-CLAIMS: this is a runtime prerequisite only. Nested retention is not
  * wired by this slice, no compiler/shell/emitter text or descriptor is
@@ -55,6 +59,7 @@ import {
   INSTANCE_LEDGER_ROLLBACK,
   INSTANCE_LEDGER_STATE,
   releaseChildInstance,
+  releaseRetainedChildren,
   releaseUnderStructuralScope,
   retainChildInstance,
 } from '../../src/internal/compiled/runtime/instance-ledger.ts';
@@ -922,4 +927,142 @@ test('releaseUnderStructuralScope during an open pass evicts its current-pass en
   // Commit sees no entries; the stale marks cannot resurrect anything.
   endInstancePass(owner);
   owner.dispose();
+});
+
+// ─── T6: owner-teardown release (`releaseRetainedChildren`) ────────────────
+
+test('releaseRetainedChildren releases every retained entry, deindexes and is idempotent', () => {
+  const owner = new LifetimeScope();
+  const structuralA = owner.child();
+  const structuralB = owner.child();
+  const cleanups: string[] = [];
+
+  const a = retainChildInstance(owner, 'a', structuralA, (scope) => {
+    scope.add(() => cleanups.push('a'));
+    return {};
+  });
+  const b = retainChildInstance(owner, 'b', structuralA, (scope) => {
+    scope.add(() => cleanups.push('b'));
+    return {};
+  });
+  const c = retainChildInstance(owner, 'c', structuralB, (scope) => {
+    scope.add(() => cleanups.push('c'));
+    return {};
+  });
+  // An entry whose setup record legitimately is `undefined` must be released too.
+  const d = retainChildInstance<undefined>(owner, 'd', null, () => undefined);
+
+  releaseRetainedChildren(owner);
+  expect([a.scope.disposed, b.scope.disposed, c.scope.disposed, d.scope.disposed]).toEqual([
+    true,
+    true,
+    true,
+    true,
+  ]);
+  expect(cleanups.sort()).toEqual(['a', 'b', 'c']);
+
+  // Idempotent: a second call releases nothing and runs no cleanup again.
+  releaseRetainedChildren(owner);
+  expect(cleanups.length).toBe(3);
+
+  // Every later release path is a no-op (bookkeeping is gone, no re-dispose).
+  releaseChildInstance(owner, 'a');
+  releaseChildInstance(owner, 'b');
+  releaseUnderStructuralScope(structuralA);
+  releaseUnderStructuralScope(structuralB);
+  expect(cleanups.length).toBe(3);
+
+  // The owner itself still disposes cleanly; the already-released children do
+  // not re-run their cleanups through the cascade.
+  owner.dispose();
+  expect(cleanups.length).toBe(3);
+  expect(structuralA.disposed).toBe(true);
+  expect(structuralB.disposed).toBe(true);
+});
+
+test('releaseRetainedChildren discards an open pass: abort is a no-op afterwards', () => {
+  const owner = new LifetimeScope();
+
+  beginInstancePass(owner);
+  const created = retainChildInstance(owner, 'in-pass', null, () => ({}));
+  releaseRetainedChildren(owner);
+  expect(created.scope.disposed).toBe(true);
+
+  // The pass state went with the ledger: abort has nothing to abort.
+  abortInstancePass(owner);
+
+  // A later, fresh pass is a new ledger epoch on the still-live owner: it
+  // cannot resurrect the released entry (setup runs again, new scope).
+  let setups = 0;
+  beginInstancePass(owner);
+  const fresh = retainChildInstance(owner, 'in-pass', null, () => {
+    setups += 1;
+    return {};
+  });
+  endInstancePass(owner);
+  expect(setups).toBe(1);
+  expect(fresh).not.toBe(created);
+  expect(fresh.scope.disposed).toBe(false);
+  owner.dispose();
+});
+
+test('releaseRetainedChildren attempts every cleanup and surfaces the first failure once', () => {
+  const owner = new LifetimeScope();
+  const attempted: string[] = [];
+  const first = new Error('first retained cleanup failed');
+
+  const a = retainChildInstance(owner, 'a', null, (scope) => {
+    scope.add(() => {
+      attempted.push('a');
+      throw first;
+    });
+    return {};
+  });
+  const b = retainChildInstance(owner, 'b', null, (scope) => {
+    scope.add(() => attempted.push('b'));
+    return {};
+  });
+
+  expect(thrownBy(() => releaseRetainedChildren(owner))).toBe(first);
+  // Both cleanups ran despite the first throw, both scopes are disposed, and
+  // the ledger was already dropped before the disposals (second call is silent).
+  expect(attempted).toEqual(['a', 'b']);
+  expect(a.scope.disposed).toBe(true);
+  expect(b.scope.disposed).toBe(true);
+  expect(() => releaseRetainedChildren(owner)).not.toThrow();
+  owner.dispose();
+});
+
+test('releaseRetainedChildren clears a stale structural index before disposal', () => {
+  const owner = new LifetimeScope();
+  const structural = owner.child();
+  const entry = retainChildInstance(owner, 'site', structural, (scope) => {
+    scope.add(() => {
+      // A cleanup re-entering the structural release while the owner release is
+      // running must observe no entry and must not double-dispose anything.
+      releaseUnderStructuralScope(structural);
+    });
+    return {};
+  });
+
+  releaseRetainedChildren(owner);
+  expect(entry.scope.disposed).toBe(true);
+  // A second structural release sees an empty index (the entry was deindexed
+  // before its scope was disposed).
+  releaseUnderStructuralScope(structural);
+  owner.dispose();
+});
+
+test('releaseRetainedChildren then a disposed owner keeps retention failing closed', () => {
+  const owner = new LifetimeScope();
+  retainChildInstance(owner, 'site', null, () => ({}));
+  releaseRetainedChildren(owner);
+  owner.dispose();
+
+  const refused = codedFailure(() =>
+    retainChildInstance(owner, 'site', null, () => {
+      throw new Error('setup must never run on a disposed owner');
+    }),
+  );
+  expect(refused.code).toBe(KernelErrorCode.DISPOSED);
 });

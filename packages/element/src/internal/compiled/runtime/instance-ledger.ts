@@ -86,6 +86,14 @@
  *    strong hold while its scope lives (see the mandatory-release note below);
  *    there is no global identity-keyed strong registry, no DOM/signal import
  *    and no second reactive engine.
+ * 11. Owner-teardown release (`releaseRetainedChildren`): the explicit,
+ *    deterministic cleanup for the owner's WHOLE lifetime. It drops the
+ *    ledger first (so no cleanup can re-enter it), deindexes every entry,
+ *    plain-disposes every retained scope with all cleanups attempted, keeps
+ *    the first failure, discards open-pass state and deletes the ledger.
+ *    Idempotent, mode-independent, and never inferred from a dispose flag —
+ *    an owner that stops being externally reachable is not a cleanup
+ *    trigger.
  *
  * ## Eviction cleanup semantics (plain cleanups)
  *
@@ -128,8 +136,14 @@
  * owner that is still externally referenced survives its owner's disposal —
  * WeakMap keys are weak, not self-cleaning bookkeeping — so `retainChildInstance`
  * refuses that owner and the release functions remain the bookkeeping cleanup
- * channel. This is a prerequisite primitive: it does not claim nested
- * retention is wired, and no entry point imports it in this slice.
+ * channel.
+ *
+ * Consumption boundary: the DEPTH-1 wiring consumes this module (the root
+ * pass bracket, ref-site retention, the six structural/ref release sites, the
+ * shell connect abort and the three owner-teardown releases). Depth ≥ 2
+ * retention is NOT wired and stays OWED behind the cross-ledger transaction
+ * protocol (no child bracket and no second ledger in generated child bodies);
+ * that limit is a protocol obligation, not a missing call in this module.
  *
  * ## Failure identities
  *
@@ -460,6 +474,51 @@ export function releaseUnderStructuralScope(structuralScope: LifetimeScope): voi
   for (const entry of [...indexed]) {
     const ledger = ledgers.get(entry.owner);
     if (ledger !== undefined) dropEntry(ledger, entry);
+    failure = firstFailure(failure, disposeEntry(entry));
+  }
+  if (failure !== null) throw failure.error;
+}
+
+/**
+ * Release EVERY retained instance of one logical-instance owner and discard
+ * its ledger (R-1: the explicit owner-teardown release the shell consumes).
+ *
+ * Release is the only channel that ends a retained region, and the structural
+ * index is a strong hold while its structural scope lives, so an owner that
+ * stops being used must be released explicitly instead of relying on WeakMap
+ * collection. The generated-element shell calls this at explicit teardown
+ * (`dispose(false)` / `dispose(true)`) and at the failed-first-connect
+ * rollback, after the pre-existing projection/connection/range steps and
+ * before `instance.dispose`, so the retained scopes are released while the
+ * owner is still live (a cleanup observing `owner.disposed` sees `false`) and
+ * a later `instance.dispose` cascade only sees already-disposed scopes.
+ *
+ * Bookkeeping is dropped FIRST: the ledger leaves the owner map and every
+ * entry is deindexed before any scope is disposed, so a re-entrant call from a
+ * cleanup, a later `releaseChildInstance`/`releaseUnderStructuralScope`, and a
+ * second `releaseRetainedChildren` are all no-ops. Every retained scope is
+ * then plain-disposed (all cleanups attempted, first failure kept) and the
+ * first failure surfaces after the sweep. Open pass state is discarded with
+ * the ledger, so no pass can be ended or aborted afterwards.
+ *
+ * Idempotent and mode-independent: it never reads a dispose flag, never
+ * removes DOM, and never upgrades a plain disposal into a detach (`disposeEntry`
+ * is the same plain path every other eviction uses).
+ */
+export function releaseRetainedChildren(owner: LifetimeScope): void {
+  const ledger = ledgers.get(owner);
+  if (ledger === undefined) return;
+  // Bookkeeping first: remove the ledger before disposing anything, so a
+  // cleanup that re-enters this module cannot observe or resurrect half of it.
+  ledgers.delete(owner);
+  ledger.marks = null;
+  ledger.pending = null;
+  ledger.rollingBack = false;
+  ledger.inFlight.clear();
+  const entries = [...ledger.entries.values()];
+  let failure: CleanupFailure = null;
+  for (const entry of entries) {
+    dropEntry(ledger, entry);
     failure = firstFailure(failure, disposeEntry(entry));
   }
   if (failure !== null) throw failure.error;

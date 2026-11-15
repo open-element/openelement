@@ -6,6 +6,7 @@
  * the plain status page — the fallback itself never 500s.
  */
 import type { PageRouteDecl, RendererDecl } from '@openelement/protocol/ssg';
+import { isFunctionPage } from './page-classification.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   documentWrapOptionsLines,
@@ -69,7 +70,7 @@ export function renderNotFoundRoute(
     actionDataExpr: 'undefined',
     indent: '    ',
   });
-  if (route.functionPage !== undefined) {
+  if (isFunctionPage(route)) {
     // alpha15 server lane: a server function /404 page renders through the
     // typed renderFunctionPage seam — no host element exists to __ssr.
     lines.push(

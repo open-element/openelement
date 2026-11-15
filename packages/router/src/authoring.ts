@@ -432,18 +432,27 @@ export type FunctionPageComponent<
 const PAGE_DESCRIPTOR_FIELDS = new Set(['route', 'head', 'renderIntent', 'props', 'error']);
 
 /**
- * The class-branch discriminant of definePage()'s first argument. Two shapes
- * are element CLASSES: a value carrying the compiled Part Program
- * (`__partProgram` — the field every class the compiled-element transform
- * emits declares, so a compiled page class is recognized structurally), and
- * an ES class (class syntax defines `prototype` as a NON-writable own
- * property; a plain function's `prototype` is writable and an arrow function
- * has none). The second arm preserves the class path for classes that
- * legitimately carry no compiled program. Everything else function-shaped is
- * a server function page.
+ * The class-branch discriminant of definePage()'s first argument: an ES class.
+ *
+ * Class syntax defines `prototype` as a NON-writable own property; a plain
+ * function's `prototype` is writable and an arrow function has none, so this
+ * is the language's own class fact, not a module-shape convention.
+ *
+ * This is deliberately NOT the page classifier. Whether a route is a class
+ * page or a server function page is a BUILD-TIME fact owned by the route scan
+ * and consumed by route/page generation (`vite/internal/ssg/
+ * page-classification.ts`, M11-1). definePage only decides which descriptor
+ * shape to attach to the value the page module exports, and an ES class takes
+ * the class shape.
+ *
+ * No compiled-artifact field is read here. The retired M01 C07 form
+ * (`component.__partProgram !== undefined`) made an ABI field the page
+ * classifier for every route — including the build-only classification
+ * question — and turned the runtime module shape into a framework contract.
+ * The compiled page class is a real ES class, so it is recognized as a class
+ * by class syntax alone.
  */
 function isElementPageClass(component: (...args: never[]) => unknown): boolean {
-  if ((component as { __partProgram?: unknown }).__partProgram !== undefined) return true;
   const prototype = Object.getOwnPropertyDescriptor(component, 'prototype');
   return prototype !== undefined && prototype.writable === false;
 }
@@ -476,12 +485,14 @@ function isElementPageClass(component: (...args: never[]) => unknown): boolean {
  *   export const loader = async () => ({ heading: 'Home' });
  *   export default definePage(Home, { head: { title: 'Home' } });
  *
- * Runtime discriminant (one rule, no text sniffing): a first argument that is
- * an element CLASS — a value carrying `__partProgram` (what the compiled-
- * element transform emits) or class syntax (its `prototype` is a non-writable
- * own property; plain functions and arrows are not classes) — takes the class
+ * Descriptor-shape discriminant (one rule, no text sniffing, no ABI field): a
+ * first argument that is an ES class (its `prototype` is a non-writable own
+ * property; plain functions and arrows are not classes) takes the class
  * branch; any other function takes the function-page branch. Non-functions
- * fail closed with NOT_COMPILED_CLASS.
+ * fail closed with NOT_COMPILED_CLASS. The class-vs-function PAGE
+ * classification is a build-time route fact owned by the Router plugin, not
+ * this discriminant (M11-1 / M01 C07); definePage only picks the descriptor
+ * shape for the value it is handed.
  */
 export function definePage<
   Data = unknown,

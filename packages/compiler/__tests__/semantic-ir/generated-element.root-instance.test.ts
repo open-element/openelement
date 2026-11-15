@@ -11,9 +11,12 @@
  *   own-property check instead of re-evaluating the initializers, and the
  *   descriptor's `createInstance` row is emitted exactly when that factory
  *   exists (`createBindings` stays never emitted);
- * - the compiler-private root marker is ROOT-ONLY: a second component keeps
- *   today's per-mount/per-claim evaluation, and a marker naming the child
- *   moves only the child;
+ * - the compiler-private root marker is ROOT-ONLY for the retained-settings
+ *   factory; a DIRECT hostless child becomes a depth-1 LEAF instance body
+ *   (`16b-LC-2`): it gets its own `<Child>__setup` factory and aliases the
+ *   record from its reference site's host literal, emitting no ledger text, and
+ *   a marker naming the child makes the root-target guard emit the whole module
+ *   as legacy bytes;
  * - without the marker (hostless leaf, direct leaf tests) every byte path is
  *   unchanged: no factory, no alias, `rootInstanceFactory` null, and the
  *   pre-change two-mount/claim shape still holds;
@@ -245,7 +248,7 @@ describe('T3 root generated setup retention (Node)', () => {
     expect(emitted.module!.startsWith(emitted.leaf!)).toBe(true);
   });
 
-  test('R3 the marker is root-only: the child keeps per-mount/claim evaluation', () => {
+  test('R3 the marker is root-only for the factory; a direct child is a depth-1 leaf body', () => {
     const module = frontModule(TWO_COMPONENT_SOURCE);
     const emitted = generateElementModule(module, SITE, {
       rootComponent: 'SeedHost',
@@ -258,36 +261,75 @@ describe('T3 root generated setup retention (Node)', () => {
     const factory = functionText(leaf, '__oe_rootInstance');
     expect(factory).toContain('return { rootSnapshot };');
     expect(factory).not.toContain('childSnapshot');
-    // The child chunk is untouched: its initializer is still evaluated by both
-    // its own mount and claim, and it has no alias prologue.
+
+    // 16b-LC-2 DEPTH-1: the direct hostless child is a LEAF instance body. Its
+    // setup moves into one module-local `<Child>__setup` factory, and its own
+    // mount/claim alias the retained record from the child host literal's
+    // `setup` property instead of re-evaluating the initializer. The leaf body
+    // emits NO ledger text of its own.
+    expect(occurrences(leaf, 'function Child__setup(')).toBe(1);
+    const childSetup = functionText(leaf, 'Child__setup');
+    expect(childSetup).toContain('return { childSnapshot };');
+    expect(childSetup).toContain('const childSnapshot = (props . seed);');
     const childMount = functionText(leaf, 'Child__mount');
     const childClaim = functionText(leaf, 'Child__claim');
     for (const chunk of [childMount, childClaim]) {
-      expect(chunk).toContain('const childSnapshot = (');
-      expect(chunk).not.toContain('__oe_requireRootSetup');
+      expect(chunk).toContain('const childSnapshot = __oe_requireRootSetup("childSnapshot");');
+      expect(chunk).not.toContain('const childSnapshot = (');
+      expect(chunk).not.toContain('retainChildInstance(');
+      expect(chunk).not.toContain('beginInstancePass(');
+      expect(chunk).not.toContain('releaseChildInstance(');
     }
-    // The root chunk aliases instead of re-evaluating its setup snapshot, in
-    // BOTH the mount and the shared-cursor claim branch (this two-component
-    // module is the shared-cursor shape).
+
+    // The ROOT retaining body brackets exactly one instance pass (mount + the
+    // shared-cursor claim), retains the child once per body with the same
+    // authored-span site key, and aliases its own retained setup record.
     const rootMount = functionText(leaf, 'SeedHost__mount');
-    for (const chunk of [rootMount, functionText(leaf, 'SeedHost__claim')]) {
+    const rootClaim = functionText(leaf, 'SeedHost__claim');
+    for (const chunk of [rootMount, rootClaim]) {
+      expect(occurrences(chunk, 'beginInstancePass(__oe_host.instance);')).toBe(1);
+      expect(occurrences(chunk, 'endInstancePass(__oe_host.instance);')).toBe(1);
+      expect(occurrences(chunk, 'retainChildInstance(')).toBe(1);
       expect(chunk).toContain('const rootSnapshot = __oe_requireRootSetup("rootSnapshot");');
       expect(chunk).not.toContain('const rootSnapshot = (');
     }
+    // Mount and claim carry the SAME span key and one retain each.
+    const keys = [...leaf.matchAll(/retainChildInstance\(__oe_host\.instance, ("[^"]+")/g)].map(
+      (match) => match[1],
+    );
+    expect(keys.length).toBe(2);
+    expect(new Set(keys).size).toBe(1);
+    // A leaf body's factory call passes the per-read props record; the record
+    // is reused, never re-evaluated (`<Child>__setup(__oe_setupScopeN, ...)`).
+    expect(rootMount).toContain('Child__setup(__oe_setupScope');
+    expect(rootClaim).toContain('Child__setup(__oe_setupScope');
     // Only one descriptor row, for the root.
     expect(occurrences(emitted.tail!, 'createInstance: __oe_rootInstance,')).toBe(1);
 
-    // Leaf-level marker on the CHILD moves only the child.
+    // A marker naming the CHILD makes the module reference the module root from
+    // a non-root body, so the B3b conservative whole-module guard applies: the
+    // module is emitted legacy (today's bytes/semantics, no nested retention)
+    // while the root setup factory still exists for the marked component.
     const childMarked = generateLeafModule(module, { rootInstance: 'Child' });
     expect(childMarked.diagnostics).toEqual([]);
     expect(childMarked.rootInstanceFactory).toBe('__oe_rootInstance');
     const childModule = childMarked.module!;
     expect(occurrences(childModule, 'function __oe_rootInstance(')).toBe(1);
     expect(functionText(childModule, '__oe_rootInstance')).toContain('return { childSnapshot };');
-    // The root chunk now keeps the pre-change double evaluation.
+    expect(childModule).not.toContain('retainChildInstance(');
+    expect(childModule).not.toContain('beginInstancePass(');
+    expect(childModule).not.toContain('releaseChildInstance(');
+    // No nested-retention text anywhere: the module is legacy for the LC-2
+    // feature. Child is the marked ROOT, so its own setup is the T3 retained
+    // root setup (aliased from `host.bindings`); the SeedHost ancestor's setup
+    // keeps the pre-change inline text.
     expect(functionText(childModule, 'SeedHost__mount')).toContain(
       'const rootSnapshot = (props . seed);',
     );
+    expect(functionText(childModule, 'Child__mount')).toContain(
+      'const childSnapshot = __oe_requireRootSetup("childSnapshot");',
+    );
+    expect(occurrences(childModule, 'Child__setup(')).toBe(0);
   });
 
   test('R4 SSR keeps its own setup evaluation and its bytes', () => {

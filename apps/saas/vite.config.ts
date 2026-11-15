@@ -1,8 +1,9 @@
 /**
- * OpenElement SaaS (#983): first-party core consumer product. OpenElement app
- * shell + DSD-first SSR, deployed through the Nitro cloudflare_module output
- * (see `pnpm nitro:build-workers`). The notes route renders at request
- * time (session-aware); the home page is prerendered.
+ * OpenElement SaaS (#983): first-party core consumer product. The layout is
+ * the `app/layout.tsx` convention module (no option here), DSD-first SSR,
+ * deployed through the Nitro cloudflare_module output (see
+ * `pnpm nitro:build-workers`). The notes route renders at request time
+ * (session-aware); the home page is prerendered.
  */
 import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
@@ -19,10 +20,6 @@ export default defineConfig({
     ...openElement({
       routesDir: 'app/routes',
       islandsDir: 'app/islands',
-      appShell: {
-        tagName: 'ref-layout',
-        import: new URL('./app/shell.tsx', import.meta.url).pathname,
-      },
       head: {
         title: 'OpenElement SaaS',
       },

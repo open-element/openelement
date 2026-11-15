@@ -20,9 +20,11 @@ claim. Evidence is LOCAL: one Chromium engine, 21 focused tests, the two
 package typechecks plus a direct typecheck of the new files, and the source
 gates. The M08 consolidation change owns the single-writer ledger/matrix update
 for the adjacent text and condition slices. A dated 2026-11-15 working-tree
-amendment below records the internal LC-0 descriptor-fixture retention seam, and
-a later 2026-11-15 T3 amendment records the compiler-emitted root setup factory;
-neither changes this record's status or the landing counts in this section.
+amendment below records the internal LC-0 descriptor-fixture retention seam, a
+later 2026-11-15 T3 amendment records the compiler-emitted root setup factory,
+and a further 2026-11-15 LC-2 amendment records the depth-1 nested-instance
+retention wiring; none of the three amendments changes this record's status or
+the landing counts in this section.
 
 ## Landing scope
 
@@ -424,6 +426,83 @@ For supported admitted root setup locals the compiler now emits the
   and did not measure a nested child.
 - **Non-claims.** No `16b-LC` / §4.1d completion, no author lifecycle or
   setup-once API, no M13 matrix, no M09 exit, no clean-SHA evidence.
+
+## 2026-11-15 amendment — LC-2 depth-1 nested-instance retention (working tree)
+
+Status: **working-tree amendment — uncommitted, not a status flip, not the M09
+exit, not clean-SHA evidence.** Date: 2026-11-15 (Asia/Shanghai). Base:
+`feat/alpha16-integration` @ `2545e0ac6` plus the uncommitted depth-1 lane (the
+tree also carries other lanes' edits; this section reads only the retention
+surface). The landing record and the LC-0/T3 amendments above keep their dated
+counts; this section records the current depth-1 seam only, and it supersedes the
+LC-0/T3 "nested hostless children are not retained / OWED" limits **for depth 1
+only**.
+
+Direct hostless children are now retained. The generated module's ROOT
+mount/claim body is the ONE retaining body: it brackets one instance pass on the
+host's logical instance scope (`beginInstancePass`/`endInstancePass` over the
+`GeneratedElementHost.instance` the shell now delivers) and retains each
+retention-eligible DIRECT hostless child with `retainChildInstance` under one
+authored-span site key that is byte-identical at the mount and claim sites. A
+retained child's leaf body aliases the retained setup record from the
+compiler-private `setup` host property instead of re-evaluating its snapshot, and
+emits no ledger text. Eligibility is a monotone fixpoint over the emitted
+references — only root-body, non-recipe and non-list references qualify; a target
+referenced from a leaf/recipe/legacy body is demoted everywhere, and a module
+with no eligible site (or any reference targeting the module root) keeps HEAD's
+bytes. On the runtime side the ledger gains the explicit owner-teardown release
+(`releaseRetainedChildren`: bookkeeping dropped first, every retained scope
+plain-disposed, first failure kept, idempotent and mode-independent) and exactly
+the seven consumed ledger functions (the pass bracket, the ref-site
+retain/release, the structural release, the connect abort and the owner-teardown
+release) are re-exported through the compiled runtime barrel, the one specifier
+generated text resolves. Because the ledger is a strong hold while
+reachable, not a GC contract, the release sites are explicit: the generated
+structural/ref release sites (`releaseChildInstance`/`releaseUnderStructuralScope`),
+the shell's failed-connect abort (`abortInstancePass`, evicting only the attempt's
+entries), and the three owner-teardown releases (`releaseRetainedChildren` at
+`dispose(false)`, `dispose(true)` and the failed-first-connect rollback, always
+before `instance.dispose`).
+
+R4 characterization now reads root `1` / child `1`: on the mount the root and the
+direct child each snapshot `1`; after the parent disconnects and reconnects, the
+retained root still reads `1` on the same node AND the retained child still reads
+`1` with its setup counted once. The T3 amendment's root `1` / child `3`
+measurement stays the dated pre-wiring characterization, not the current one.
+
+Limits — the part that must not be overstated:
+
+- **Depth ≥ 2 is OWED.** A retained child's own children stay legacy text: the
+  child body emits today's per-connect setup evaluation for its own references
+  and no child bracket or second ledger exists, so the depth ≥ 2 transaction
+  protocol is a protocol obligation, not a missing call. The Chromium depth ≥ 2
+  row pins today's legacy re-evaluating semantics as OWED, never as support, and
+  cross-ledger transactions are likewise not claimed.
+- **Wired, not qualified.** This docs-only consolidation runs no test suite and
+  records no clean-SHA or Chromium run. The new evidence is a Node
+  artifact-contract sweep
+  ([`nested-instance-wiring.artifact.test.ts`](../../packages/compiler/__tests__/semantic-ir/nested-instance-wiring.artifact.test.ts),
+  untracked in this working tree) plus the added rows in the tracked
+  `generated-element.root-instance.browser.test.ts`,
+  `generated-element.shell.test.ts` and `instance-ledger.test.ts` files; no count
+  here is a permanent test-count promise.
+- **No completion claim.** No `16b-LC-2` or `16b-LC` completion, no §4.1d
+  reconnect-resource contract, no author lifecycle or setup-once API, no M09 exit,
+  no M13 matrix and no clean-SHA evidence. The LC-0/T3 amendments' non-claims
+  stand.
+- **Seam duty.** [`seams.md`](./seams.md) gains the
+  `Generated-element depth-1 nested instance ledger (16b-LC-2; 2026-11-15 working
+  tree)` row and the M09-0 row is amended to point at it. The row's guard cell
+  cites the tracked consumer form — the
+  [`generated-element.root-instance.browser.test.ts`](../../packages/compiler/__tests__/semantic-ir/generated-element.root-instance.browser.test.ts)
+  R4 depth-1 row, the
+  [`generated-element.shell.test.ts`](../../packages/compiler/__tests__/semantic-ir/generated-element.shell.test.ts)
+  LC-2 owner-teardown row and the
+  [`instance-ledger.test.ts`](../../packages/element/__tests__/compiled-runtime/instance-ledger.test.ts)
+  `releaseRetainedChildren` rows — while the untracked artifact-contract sweep is
+  recorded as pending, not as standing guard evidence (the seam checker requires
+  Git-tracked guard paths). No front-matter change and no `docs-index:write`: the
+  generated architecture view is unchanged.
 
 ## Not claimed
 

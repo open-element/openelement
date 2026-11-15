@@ -147,6 +147,24 @@ interface PageRuntime {
   createProfileRecipe: (owner: unknown, host: unknown) => unknown;
   createConditionalRecipe: (owner: unknown, host: unknown) => unknown;
   createToggleRecipe: (owner: unknown, host: unknown) => unknown;
+  createRecipe: (options: {
+    definitionOwner: unknown;
+    source: string;
+    mount: (scope: unknown) => Node[];
+    claim?: (scope: unknown, props: unknown, parent: Node) => Node[];
+  }) => unknown;
+  retainChildInstance: (
+    owner: unknown,
+    siteKey: string,
+    structuralOwner: unknown,
+    setup: (scope: unknown) => unknown,
+  ) => { scope: { disposed: boolean }; record: unknown };
+  beginInstancePass: (owner: unknown) => void;
+  endInstancePass: (owner: unknown) => void;
+  abortInstancePass: (owner: unknown) => void;
+  releaseChildInstance: (owner: unknown, siteKey: string) => void;
+  releaseUnderStructuralScope: (scope: unknown) => void;
+  releaseRetainedChildren: (owner: unknown) => void;
   Profile__ssr: (props: unknown, host: unknown) => string;
   Conditional__ssr: (props: unknown, host: unknown) => string;
 }
@@ -217,6 +235,10 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
       `export const { emitComment, MARKERS, markerText, rangeMarker } = markers;`,
       `export const textSlotMarker = markers.textSlotMarker;`,
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
+      // 16b-LC-2 owner-teardown row: the page-side descriptor fixture retains a
+      // real child instance through the SAME private ledger the generated path
+      // consumes, so the shell's release placement is observable.
+      `export { abortInstancePass, beginInstancePass, endInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       '',
@@ -228,6 +250,10 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
       `export { createProfileRecipe, createConditionalRecipe, createToggleRecipe, Profile__ssr, Conditional__ssr } from './leaf.js';`,
       `export { createGeneratedElementClass, defineGeneratedElement } from ${JSON.stringify(join(element, 'compiled/generated-element/shell.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
+      // 16b-LC-2 owner-teardown row: the same private runtime surface the
+      // generated root body consumes, re-exported for the page-side fixture.
+      `export { createRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
+      `export { abortInstancePass, beginInstancePass, endInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
       '',
     ].join('\n'),
   );
@@ -2685,4 +2711,259 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
       await page.close();
     }
   });
+});
+
+/**
+ * T6 / `16b-LC-2` — owner teardown releases retained children EXPLICITLY.
+ *
+ * Hand-written descriptor fixture (same evidence class as the LC-0 rows): the
+ * recipe retains one real child instance through the SAME private ledger the
+ * generated root body consumes. The observed ordering proves the shell's
+ * placement contract:
+ *
+ * - `releaseRetainedChildren(instance)` runs AFTER the pre-existing
+ *   projection/connection/range steps and BEFORE `instance.dispose(...)`, so a
+ *   retained cleanup observes `instance.disposed === false` (a cascade-only
+ *   implementation would observe `true`), and the release error wins over a
+ *   later `instance.dispose` error (`captureCleanupFailures` keeps the FIRST
+ *   error);
+ * - the same ordering holds for `dispose(false)` and for the failed-first-
+ *   connect rollback, and the retained entry is gone afterwards (a retain on
+ *   the destroyed owner fails closed, an explicit release is a no-op, and no
+ *   `OEIR_INSTANCE_LEDGER_*` identity leaks);
+ * - this row makes NO GC assertion: the release is explicit and observable.
+ */
+test('LC-2 owner teardown releases retained children before instance.dispose (no GC assumption)', async () => {
+  const page = await openPage();
+  try {
+    const result = (await page.evaluate(`(async () => {
+      const mod = window.__oeM09;
+      const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+      const grab = (code) => {
+        try {
+          code();
+          return null;
+        } catch (error) {
+          if (error && error.code) return error.code;
+          return error instanceof Error ? error.message : String(error);
+        }
+      };
+      const snapshot = () => {
+        const errors = [];
+        const onError = (event) => {
+          errors.push(event.error && event.error.message ? event.error.message : event.message);
+        };
+        window.addEventListener('error', onError);
+        return { errors, stop: () => window.removeEventListener('error', onError) };
+      };
+
+      // ── A) dispose(true): ordering + first-error precedence ──────────────
+      const orderA = [];
+      let instanceA = null;
+      let retainedA = null;
+      const ctorA = mod.defineGeneratedElement({
+        tag: 'oe-lc2-teardown-detach',
+        createInstance: (owner) => {
+          instanceA = owner;
+          owner.add(() => {
+            orderA.push('instance-cleanup');
+            throw new Error('instance cleanup boom');
+          });
+          return {};
+        },
+        createRecipe: (owner, host) =>
+          mod.createRecipe({
+            definitionOwner: owner,
+            source: 'lc2-teardown',
+            mount(scope) {
+              retainedA = mod.retainChildInstance(host.instance, 'lc2:site', scope, (childScope) => {
+                childScope.add(() => {
+                  orderA.push('child-cleanup:' + String(instanceA && instanceA.disposed));
+                  throw new Error('child cleanup boom');
+                });
+                return { value: 1 };
+              });
+              return [document.createElement('span')];
+            },
+          }),
+      });
+      const hostA = document.createElement('oe-lc2-teardown-detach');
+      document.body.append(hostA);
+      await tick();
+      const beforeDisposeA = {
+        disposed: retainedA.scope.disposed,
+        hasRangeCleanupOwner: hostA.firstChild !== null,
+      };
+      const teardownA = grab(() => hostA.dispose(true));
+      const afterDisposeA = {
+        retainedDisposed: retainedA.scope.disposed,
+        instanceDisposed: instanceA.disposed,
+        domRemoved: hostA.firstChild === null,
+        // The owner is gone: a fresh retain fails closed and both release paths
+        // are no-ops (the ledger was released, not left to GC).
+        retainAfter: grab(() => mod.retainChildInstance(instanceA, 'lc2:site', null, () => ({}))),
+        releaseAfter: grab(() => mod.releaseChildInstance(instanceA, 'lc2:site')),
+        structuralReleaseAfter: grab(() => mod.releaseUnderStructuralScope(null)),
+      };
+
+      // ── B) dispose(false): same release-before-dispose ordering ──────────
+      const orderB = [];
+      let instanceB = null;
+      let retainedB = null;
+      const ctorB = mod.defineGeneratedElement({
+        tag: 'oe-lc2-teardown-plain',
+        createInstance: (owner) => {
+          instanceB = owner;
+          owner.add(() => orderB.push('instance-cleanup'));
+          return {};
+        },
+        createRecipe: (owner, host) =>
+          mod.createRecipe({
+            definitionOwner: owner,
+            source: 'lc2-teardown-plain',
+            mount(scope) {
+              retainedB = mod.retainChildInstance(host.instance, 'lc2:plain', scope, (childScope) => {
+                childScope.add(() => {
+                  orderB.push('child-cleanup:' + String(instanceB && instanceB.disposed));
+                });
+                return { value: 2 };
+              });
+              return [document.createElement('em')];
+            },
+          }),
+      });
+      const hostB = document.createElement('oe-lc2-teardown-plain');
+      document.body.append(hostB);
+      await tick();
+      hostB.dispose(false);
+      const afterPlain = {
+        retainedDisposed: retainedB.scope.disposed,
+        instanceDisposed: instanceB.disposed,
+        domRetained: hostB.firstChild !== null,
+      };
+
+      // ── C) failed-first-connect rollback releases the retained entry ─────
+      const orderC = [];
+      let instanceC = null;
+      let retainedC = null;
+      let failMount = true;
+      const probe = snapshot();
+      const ctorC = mod.defineGeneratedElement({
+        tag: 'oe-lc2-rollback',
+        createInstance: (owner) => {
+          instanceC = owner;
+          owner.add(() => orderC.push('instance-cleanup'));
+          return {};
+        },
+        createRecipe: (owner, host) =>
+          mod.createRecipe({
+            definitionOwner: owner,
+            source: 'lc2-rollback',
+            mount(scope) {
+              retainedC = mod.retainChildInstance(host.instance, 'lc2:rollback', scope, (childScope) => {
+                childScope.add(() => {
+                  orderC.push('child-cleanup:' + String(instanceC && instanceC.disposed));
+                });
+                return { value: 3 };
+              });
+              if (failMount) throw new Error('mount boom');
+              return [document.createElement('i')];
+            },
+          }),
+      });
+      const hostC = document.createElement('oe-lc2-rollback');
+      document.body.append(hostC);
+      await tick();
+      const failedFirstConnect = {
+        childCount: hostC.childNodes.length,
+        retainedDisposed: retainedC.scope.disposed,
+        instanceDisposed: instanceC.disposed,
+        retainAfter: grab(() => mod.retainChildInstance(instanceC, 'lc2:rollback', null, () => ({}))),
+      };
+      // A later connect creates a NEW instance and mounts successfully.
+      failMount = false;
+      hostC.remove();
+      await tick();
+      document.body.append(hostC);
+      await tick();
+      probe.stop();
+      const retried = {
+        childCount: hostC.childNodes.length,
+        freshInstance: instanceC !== null && instanceC.disposed === false,
+      };
+      hostC.remove();
+      return {
+        beforeDisposeA,
+        teardownA,
+        afterDisposeA,
+        orderA,
+        afterPlain,
+        orderB,
+        failedFirstConnect,
+        orderC,
+        retried,
+        errors: probe.errors,
+      };
+    })()`)) as {
+      beforeDisposeA: { disposed: boolean; hasRangeCleanupOwner: boolean };
+      teardownA: string;
+      afterDisposeA: {
+        retainedDisposed: boolean;
+        instanceDisposed: boolean;
+        domRemoved: boolean;
+        retainAfter: string;
+        releaseAfter: string | null;
+        structuralReleaseAfter: string | null;
+      };
+      orderA: string[];
+      afterPlain: { retainedDisposed: boolean; instanceDisposed: boolean; domRetained: boolean };
+      orderB: string[];
+      failedFirstConnect: {
+        childCount: number;
+        retainedDisposed: boolean;
+        instanceDisposed: boolean;
+        retainAfter: string;
+      };
+      orderC: string[];
+      retried: { childCount: number; freshInstance: boolean };
+      errors: string[];
+    };
+
+    // A) release runs while the instance is still live, then the instance
+    // cleanup runs; the FIRST error (the release) is the one that surfaces.
+    expect(result.beforeDisposeA).toEqual({ disposed: false, hasRangeCleanupOwner: true });
+    expect(result.orderA).toEqual(['child-cleanup:false', 'instance-cleanup']);
+    expect(result.teardownA).toBe('child cleanup boom');
+    expect(result.afterDisposeA).toEqual({
+      retainedDisposed: true,
+      instanceDisposed: true,
+      domRemoved: true,
+      retainAfter: 'OE_KERNEL_DISPOSED',
+      releaseAfter: null,
+      structuralReleaseAfter: null,
+    });
+    // B) the plain mode has the same ordering and keeps the DOM.
+    expect(result.orderB).toEqual(['child-cleanup:false', 'instance-cleanup']);
+    expect(result.afterPlain).toEqual({
+      retainedDisposed: true,
+      instanceDisposed: true,
+      domRetained: true,
+    });
+    // C) failed first connect: the retained entry was released while the owner
+    // was live, the owner was then destroyed, and the retry mounts a NEW
+    // instance. The original mount error is the one that surfaces.
+    expect(result.orderC).toEqual(['child-cleanup:false', 'instance-cleanup']);
+    expect(result.failedFirstConnect.childCount).toBe(0);
+    expect(result.failedFirstConnect.retainedDisposed).toBe(true);
+    expect(result.failedFirstConnect.instanceDisposed).toBe(true);
+    expect(result.failedFirstConnect.retainAfter).toBe('OE_KERNEL_DISPOSED');
+    expect(result.retried).toEqual({ childCount: 1, freshInstance: true });
+    expect(result.errors).toEqual(['mount boom']);
+    // No ledger identity leaked anywhere (the release is explicit, not GC).
+    expect(result.errors.filter((message) => message.includes('OEIR_INSTANCE_LEDGER_'))).toEqual(
+      [],
+    );
+  } finally {
+    await page.close();
+  }
 });

@@ -85,13 +85,23 @@
  * instead of re-evaluating its setup locals inside `<Name>__claim`. THIS fixture
  * still supplies the descriptor by hand (descriptor-fixture evidence, not
  * generated-path evidence; the generated-path evidence is the compiler's
- * `generated-element.root-instance.*` tests). Nested hostless children are NOT
- * retained by this seam and this fixture neither instantiates nor counts one;
- * the generated-path fixture MEASURES the child's setup re-evaluating on a
- * parent reconnect, while nested retention itself remains OWED for `16b-LC-2`
- * (never a claim of compliance). This shell has no author `onConnect`/
- * `onDispose` callbacks and makes no claim about focus/selection or other
- * platform state across the disconnect window.
+ * `generated-element.root-instance.*` tests).
+ *
+ * DEPTH-1 NESTED RETENTION (LC-2) is wired here: the host record carries the
+ * logical `instance` scope, so the generated ROOT mount/claim body can open one
+ * instance pass on it and retain its DIRECT hostless children
+ * (`retainChildInstance` in `runtime/instance-ledger.ts`). On a failed connect
+ * the shell aborts that pass (evicting only entries created in the attempt and
+ * keeping committed entries for the retry); at explicit teardown
+ * (`dispose(false)`, `dispose(true)`) and at the failed-first-connect rollback
+ * it releases every retained child explicitly (`releaseRetainedChildren`)
+ * BEFORE destroying the instance scope, because ledger bookkeeping and the
+ * structural index are a strong hold while reachable, not a GC cleanup
+ * contract. Depth >= 2 retention (a retained child retaining its own children)
+ * and cross-ledger transactions remain OWED and are NOT claimed by this seam;
+ * a child body emits today's legacy text for its own references. The shell has
+ * no author `onConnect`/`onDispose` callbacks and makes no claim about
+ * focus/selection or other platform state across the disconnect window.
  *
  * Explicit teardown is `dispose(true)` on the element; it removes only the node
  * range the shell mounted or claimed and destroys the retained instance in the
@@ -133,6 +143,7 @@ import {
 } from '../../core/property-conversion.ts';
 import { isTrustedHtmlValue, trustedHtml } from '../../core/security.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
+import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
 import { removeNodes } from '../runtime/values.ts';
 import { signal } from '../../signal/framework.ts';
@@ -335,6 +346,18 @@ export interface GeneratedElementHost<P extends object = Record<string, unknown>
    * {@linkcode GeneratedElementDescriptor.createBindings}).
    */
   readonly bindings: Readonly<Record<string, unknown>>;
+  /**
+   * The enclosing LOGICAL instance scope (LC-2 nesting): the element/island
+   * instance that survives a disconnect and dies only at explicit teardown.
+   *
+   * It is delivered so the generated ROOT mount/claim body can open one
+   * instance pass on it and retain its direct hostless child instances
+   * (`retainChildInstance`). A retained child's narrower host record — the one
+   * supplied to the child's own body — is generated code (compiler-private),
+   * so this shell type never carries the setup record; no other consumer reads
+   * this field.
+   */
+  readonly instance?: LifetimeScope;
   readonly props: Readonly<P>;
   /** Shell-owned invalidation channel; the same signal survives reconnect. */
   readonly propsChanged: WritableSignal<number>;
@@ -1216,6 +1239,12 @@ function hostFor(state: ElementState): GeneratedElementHost<Record<string, unkno
     // built; the empty fallback keeps the contract total for a hand-built
     // descriptor that names neither factory.
     bindings: state.bindings ?? {},
+    // The one logical instance (LC-2 nesting): the generated root body opens a
+    // pass on it and retains direct hostless children. Omitted while no
+    // instance exists (hand-built descriptor without createInstance); the
+    // retention path is only emitted for a generated root, whose instance is
+    // always established before this host is built.
+    instance: state.instance ?? undefined,
     props: state.props,
     propsChanged: state.propsChanged,
   };
@@ -1567,6 +1596,13 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       } catch (error) {
         state.connection = null;
         state.projection = null;
+        // A failed mount/claim aborted the root instance pass (LC-2): evict
+        // exactly the entries created in this attempt and keep every
+        // pre-existing retained entry (with its previous structural index) for
+        // a retry. This runs before any release/disposal below; a disposal that
+        // follows must not observe an open pass. Cleanup errors are dropped —
+        // the original connect/claim error is what surfaces.
+        if (state.instance !== null) abortInstancePass(state.instance);
         // Keep any ownership recorded by an earlier successful mount/claim: a
         // failed re-claim borrowed no new DOM and must not adopt the host's
         // children. The recipe/projection rolled back its own child scope.
@@ -1580,6 +1616,13 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           const instance = state.instance;
           state.instance = null;
           state.bindings = null;
+          // Failed-first-connect rollback (LC-2): release every retained child
+          // bookkeeping entry and plain-dispose its retained scope BEFORE the
+          // instance is destroyed. The ledger is not a GC contract, and the
+          // owner-teardown release must run while the owner is still live (a
+          // cleanup observing `instance.disposed` sees false). Its errors never
+          // replace the original connect/claim error.
+          release.push(() => releaseRetainedChildren(instance));
           release.push(() => instance.dispose(true));
         }
         releaseIgnoringErrors(release);
@@ -1664,9 +1707,16 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // range cleanups are dropped, so it does not leave a retained range
         // behind for a later dispose(true) to "upgrade" into a detach. The
         // region fact stays present so a reconnect can still claim the DOM.
+        // `releaseRetainedChildren` (LC-2) runs after the pre-existing steps and
+        // before the instance is destroyed: `captureCleanupFailures` surfaces
+        // the FIRST error, so a projection/connection teardown error still wins,
+        // while a release error wins only over a later `instance.dispose` error.
         captureCleanupFailures([
           () => projection?.dispose(false),
           () => connection?.dispose(false),
+          () => {
+            if (instance !== null) releaseRetainedChildren(instance);
+          },
           () => instance?.dispose(false),
         ]);
         return;
@@ -1687,6 +1737,15 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           if (owned !== null) removeNodes(owned);
         },
         () => connection?.dispose(false),
+        // LC-2 owner teardown: release every retained child instance
+        // (bookkeeping + plain-disposed retained scopes) BEFORE the instance
+        // scope is destroyed, so no entry/record outlives the owner and the
+        // release runs while the owner is still live. First-error precedence is
+        // the `captureCleanupFailures` order above: earlier teardown errors
+        // win, a release error wins only over `instance.dispose`.
+        () => {
+          if (instance !== null) releaseRetainedChildren(instance);
+        },
         // Detach mode matches the owned-range handling above: the instance
         // itself owns setup resources, and only explicit detach teardown asks
         // its range cleanups to run (LIFO; first error surfaces after every

@@ -52,6 +52,7 @@ import { pageRouteTagExpr, renderImport } from './entry-route-helpers.ts';
 import { renderApiRoute, renderMiddleware } from './entry-server-codegen.ts';
 import { renderSsgSection } from './entry-render-ssg.ts';
 import { readGeneratedElementHost } from './generated-element-host-metadata.ts';
+import { isFunctionPage } from './page-classification.ts';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { buildError, DescriptorErrorCode } from '../../../internal/error-codes.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
@@ -439,7 +440,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     // export is the compiled component function, and no element class exists
     // to register.
     for (const route of desc.pageRoutes) {
-      if (route.functionPage !== undefined) continue;
+      if (isFunctionPage(route)) continue;
       const tagNameExpr = pageRouteTagExpr(route.varName, route.tagName);
       lines.push(
         `try { __registerSsrComponent(${tagNameExpr}, ${route.varName}.default); } catch (err) { console.error('[ssg] Failed to register route custom element ${tagNameExpr}:', err); throw err; }`,

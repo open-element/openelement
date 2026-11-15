@@ -19,11 +19,12 @@ M10a. This is the first half of D-③ — a tracked inventory carrying
 - **Owner sign-off: none.** No §13.5 sign-off is requested, recorded or implied.
 - **Production-equivalent replacement count: not claimed.** No number is asserted, including zero; it is the §13.5/§15.1 P5 metric.
 - **P1–P5 are independently NOT MET.** None is inferred from another; P1 and M11-3 remain two verdicts of one joint integration (§13.1).
-- **No milestone/gate status.** No M09 exit, M10 progress, M11 start gate, gate/test/build/browser/packed record or release claim.
+- **P1 stays NOT MET.** The §5 2026-11-15 working-tree pair of production-app builds (`www` and `apps/saas`) emits complete per-app artifacts and the P1 checker is VIOLATED (exit 1 on each); that is LOCAL dirty-tree development feedback, not a qualifying run, and it flips no verdict.
+- **No milestone/gate status.** No M09 exit, M10 progress, M11 start gate, formal gate/test/build/browser/packed evidence record at one SHA, or release claim.
 - **No owner decision created or changed.** D-①/②/③ stand as docketed; D-② is the recorded input-migration method, D-③ the two-step tracking instruction. No new signature or scope selection is introduced.
 - **No status flip.** M10 stays "Not started", `16b-MN` rows stay OPEN, the docket blocking set is unchanged; facts landed by the baseline commit are recorded as facts only.
 - **M11/P2 remain NOT MET overall.** The §3.2 working-tree reference vertical is fixture-only: it changes no verdict, is not an M11 start or exit, and creates no sign-off.
-- **No write outside this document and the [seams registry](./seams.md) rows it cites, and no front-matter change (the generated architecture index is unchanged).**
+- **Docs-only scope.** Every revision in this note writes documentation only: this document, the [seams registry](./seams.md) rows the revisions cite or register, and — in the 2026-11-15 consolidation — the [M01 matrix](./m01-consumer-migration-matrix.md) C07 row and the [M09 shell record](./m09-generated-element-shell.md) LC-2 amendment. No front-matter change (the generated architecture index is unchanged), no source, test, fixture, snapshot, generated artifact, worktree, commit or push.
 
 The §3.1 working-tree addendum records the source facts — the compiler-owned
 host-export metadata, its build-scan and entry-descriptor carriers and the
@@ -33,13 +34,15 @@ registry pair and the nested renderer over the canonical DSD producer). Both
 update the existing generated-element seam rows and register one new seam row in
 the [seams registry](./seams.md) (P8); they
 add no front-matter change or generated-index write and flip no status or
-verdict.
+verdict. A 2026-11-15 P1 addendum in §5 records a LOCAL dirty-tree pair of
+production-app builds and the checker's NOT-MET verdicts on both; it also flips
+no status or verdict.
 
 ## 1. Inputs and provenance
 
 Authorities: [execution plan](./alpha16-18-execution-plan.md) §13–§15, [M09 exit docket](./alpha16-m09-exit-docket.md), [16b-MN](./16b-migration-note.md), [M01 matrix](./m01-consumer-migration-matrix.md), [evidence baseline](./evidence-baseline.md), [compiler IR and ABI boundary](./compiler-ir-and-abi-boundary.md), [ADR-0174](../adr/ADR-0174-generated-code-runtime-and-compatibility.md). An external working draft informed this note; it is not authority and is not linked here. Every fact is re-derived at the baseline SHA.
 
-Provenance is **advisory**: read-only inspection at the cited commit (Appendix A) for the baseline facts, plus a source read of the entry-graph observer/checker added by this revision (§5), and in the §3.1/§3.2 working-tree addenda a source read of the M11-prerequisite host-export metadata, its build-scan and entry-descriptor carriers, the generated-entry static import, the pairing guard, the serializer nested renderer and the canonical DSD producer, plus LOCAL Node test runs of their guards and one LOCAL three-engine fixture qualification run; no clean-SHA gate/packed run; counts are source-shape counts, not a compiled graph; no machine-specific path is recorded. Not a §13.6 gate record.
+Provenance is **advisory**: read-only inspection at the cited commit (Appendix A) for the baseline facts, plus a source read of the entry-graph observer/checker added by this revision (§5), and in the §3.1/§3.2 working-tree addenda a source read of the M11-prerequisite host-export metadata, its build-scan and entry-descriptor carriers, the generated-entry static import, the pairing guard, the serializer nested renderer and the canonical DSD producer, plus LOCAL Node test runs of their guards and one LOCAL three-engine fixture qualification run, and one LOCAL pair of production-app builds with the P1 entry-graph checker runs (§5 addendum); no clean-SHA gate/packed run; counts are source-shape counts, not a compiled graph; no machine-specific path is recorded. Not a §13.6 gate record.
 
 ## 2. Authoring lanes at the baseline
 
@@ -396,7 +399,9 @@ P1: no production browser entry **loads** the generic Part Program executor
 narrowable set; this design adds no owner-signature input and no new gate.
 
 The instrument is an observer/checker pair, read from the source added by this
-revision (read-only; no build or artifact run is recorded by this note):
+revision and exercised by the LOCAL two-app build pair recorded in the
+2026-11-15 addendum below (read-only source read; the build pair is dirty-tree
+development feedback, not a qualifying artifact run):
 
 - **Writer.** `packages/router/src/vite/internal/browser-entry-graph.ts` is the
   one observer: the `open:browser-entry-graph` plugin, mounted only by the
@@ -486,6 +491,43 @@ At this baseline no **qualifying** artifact run is recorded, so P1 remains
 that emits the artifact, the checker's `MET` verdict with the report-only
 categories and the gate-list digest recorded, and the artifact `sha256` in the
 evidence form.
+
+**2026-11-15 working-tree addendum — two production-app builds, still not
+qualifying.** A LOCAL pair of production-app builds was run at HEAD `2545e0ac6`
+plus the dirty tree: `vp run --no-cache --fail-if-no-match --filter
+@openelement/www build` (exit 0) and `node ../../packages/router/src/cli/build.ts`
+in `apps/saas` (exit 0). Each emitted a complete per-app artifact
+(`status: "complete"`, `schemaVersion: 1`):
+`www/dist/client/.vite/oe-browser-entry-graph.json` (sha256
+`bf6d265c5f4047e0fc06e06d4566b31fa20f26b41989985096f611a4c4da88b2`, 44,742 B) and
+`apps/saas/dist/client/.vite/oe-browser-entry-graph.json` (sha256
+`5593de96d9aeb6b68e3e77b9b603eba131698e5185bcf806816a30cf1e429ed0`, 23,723 B);
+both are Git-ignored build outputs, so those hashes are the durable record, not
+the files. The checker judged exactly those two artifacts and exited 1 on each:
+`node tools/repo/check-browser-entry-graph.ts www/…/oe-browser-entry-graph.json`
+→ VIOLATED and the same for `apps/saas` → VIOLATED; the `--json` combination
+reports `0 MET / 2 VIOLATED / 0 UNPROVEN` with an identical `gateListDigest`
+(`sha256:626686d67c13c6708f7faec4a53862a43a268d61b2aedf445f7a4cc34d268ba7`).
+Both entry graphs load the same **six of six** generic Part Program executor
+entry modules (`facade-host.ts`, `runtime-program.ts`, `fresh-dom.ts`,
+`hydrate.ts`, `kernel.ts`, `program-kernel.ts`), each attributed to the shared
+element-runtime island chunk. P1 is therefore observed NOT MET for these two apps
+— the violation is real and not waived — and no other app, fixture, starter,
+packed consumer or release-train artifact is judged by this run. The run is
+dirty-tree development feedback, not a qualifying record: two other lanes were
+uncommitted under `packages/element` and `packages/compiler`, `www`'s artifact
+came from a local build (CI builds the site, but not this artifact run), and
+`apps/saas` is **CI-invisible** — no workflow builds it (`.github` contains no
+`saas` build reference), so its artifact exists only because it was built
+manually here. That invisibility had also hidden a stale consumer config: the
+`apps/saas` build failed with `CONFIG_RENAMED_KEY` because the app still passed
+the removed inline `appShell` option; the consumer migration moved the layout to
+the `app/layout.tsx` convention (the `appShell` option and `app/shell.tsx`
+deleted), after which the build exits 0 and the layout renders as the
+`app-layout` DSD host. The app coverage is exactly these two apps; a qualifying
+run still owes a clean-SHA, clean-tree build of each covered app, the checker's
+per-app verdict with the report-only categories and the gate-list digest, and
+the artifact `sha256` in the evidence form.
 
 ## 6. Per-file class→function migration method
 
@@ -578,7 +620,7 @@ is a re-export shim, so the class module appears once under `site-ui/`.
 
 | Proof | Verdict | Current-source reason | Evidence owed |
 | --- | --- | --- | --- |
-| P1 browser runtime | **NOT MET** | production islands are class modules with `__partProgram`; the default element entry installs the compiled hydration executor (`packages/element/src/index.ts` imports `runtime/hydrate-install.ts`); 0 production generated-lane modules; no qualifying entry-graph artifact run is recorded (the local Git-ignored build output is not evidence) | a clean-SHA, clean-tree build emitting `<clientOutDir>/.vite/oe-browser-entry-graph.json`, the `@openelement/tools-repo#browser-graph:check` `MET` verdict with the report-only categories and gate-list digest recorded, and the artifact `sha256` in the evidence form (§5) |
+| P1 browser runtime | **NOT MET** | production islands are class modules with `__partProgram`; the default element entry installs the compiled hydration executor (`packages/element/src/index.ts` imports `runtime/hydrate-install.ts`); 0 production generated-lane modules; a LOCAL 2026-11-15 dirty-tree pair of production-app builds (`www`, `apps/saas`) emitted complete per-app artifacts and the checker is VIOLATED (exit 1 on each, `0 MET / 2 VIOLATED / 0 UNPROVEN`), each graph loading all six generic executor entry modules, so P1 is observed NOT MET for both built apps (§5 addendum) — that run is dirty-tree development feedback, not a qualifying record, and the local Git-ignored build output is not evidence by itself | a clean-SHA, clean-tree build of each covered app emitting `<clientOutDir>/.vite/oe-browser-entry-graph.json`, the `@openelement/tools-repo#browser-graph:check` `MET` verdict with the report-only categories and gate-list digest recorded, the per-app artifact inventory and `sha256` values in the evidence form (§5) |
 | P2 server runtime | **NOT MET** | request-time `__ssr` reads `__compiledProperties`/`__partProgram`; `renderToString` fails closed without a program; the compiler-owned `ssrHostExport` (§3.1) now rides a complete in-tree reference vertical — generated-entry static named import, single-owner registry pair under the protocol marker, serializer nested renderer and canonical DSD producer (§3.2) — with a LOCAL three-engine fixture qualification green, but only for a test fixture: no production generated module is server-rendered, the pre-M11 fixture stays client-only, the top-level generated-tag render path is out of the slice, non-primitive/`attribute:false` seed parity is not proved and stream/deferred DSD is OWED; P2 NOT MET | M11 server wiring + a **production** generated-CE SSR path at one SHA |
 | P3 build/SSG | **NOT MET** | blocks scan, CSS recovery, class candidates and route classification read the emitted markers/runtime property | emitted build facts replacing the readers, at one SHA |
 | P4 ABI/module contract | **NOT MET** | 64 production modules compile to the six ABI v2 statics; narrow ABI 0 production modules; `./part-program` still public; snapshot unchanged | narrow ABI on every production module, no `__partProgram` in production output |
@@ -593,11 +635,11 @@ not satisfy P5.
 ## 9. Remaining gaps and unverified items
 
 1. **Final-SHA matrix absent.** §6 is a method table, not the §13.6-recorded per-file matrix P5 requires.
-2. **P1 unverified.** No qualifying entry-graph artifact run (clean SHA, clean tree, exact command, artifact `sha256`) is recorded by this preparation; the observer/checker source is read only, and P1 is UNPROVEN.
+2. **P1 unverified.** No *qualifying* entry-graph artifact run (clean SHA, clean tree, exact command, artifact `sha256` recorded as evidence) is recorded by this preparation; the observer/checker source is read only. The 2026-11-15 LOCAL dirty-tree pair of production-app builds (`www`, `apps/saas`) did emit complete per-app artifacts, and the checker is VIOLATED (exit 1 on each, `0 MET / 2 VIOLATED / 0 UNPROVEN`, all six executor entry modules loaded), so P1 is observed NOT MET for those two apps — development feedback, not qualifying evidence, and no other app is judged.
 3. **`16b-MN` evidence absent.** Per-capability rows and the `16b-LC`/`EB`/`CTX`/`REF` acceptance matrices are not delivered.
 4. **CEM live input absent (D-② phase 2).** Live `packages/ui/src` tag source, packed read-back and a one-SHA `gate:release`/`gate:packed` pair are missing.
 5. **Retained obligations open.** Non-primitive property seed (§14.2), forms policy (§14.2), deferred generated-island style declaration (§13.3/§14), and the author API questions behind the four `16b-*` slices.
-6. **Evidence limits.** No test/build/gate/browser/packed run backs this note except the §3.1 LOCAL compiler and router guard runs, the §3.2 LOCAL Node vertical/guard runs and the §3.2 LOCAL three-engine fixture qualification (all dirty-tree development feedback, not clean-SHA evidence); counts are source-shape, not a compiled graph; the local Git-ignored `www/dist` is unrecorded build output and is not evidence.
+6. **Evidence limits.** No test/build/gate/browser/packed run backs this note except the §3.1 LOCAL compiler and router guard runs, the §3.2 LOCAL Node vertical/guard runs, the §3.2 LOCAL three-engine fixture qualification and the §5 LOCAL two-app P1 build/checker pair (all dirty-tree development feedback, not clean-SHA evidence); counts are source-shape, not a compiled graph; the local Git-ignored `www/dist` and `apps/saas/dist` are build output — the §5 `sha256` values record what the checker judged, but no artifact is itself clean-SHA evidence.
 7. **M11 start gate unmet.** Tracking M10-0 preparation does not satisfy it; the §3.2 reference vertical is fixture-only and records no production render/registration path, no clean-SHA run and no snapshot regeneration; non-primitive/`attribute:false` seed parity is not proved and stream/deferred DSD is OWED; P1–P5 remain NOT MET.
 
 ## Appendix A. Commands
@@ -619,7 +661,7 @@ done
 for f in $(git grep -l "defineIslandConfig" -- 'www/**/*.tsx' 'apps/**/*.tsx' 'tests/fixtures/**/*.tsx'); do
   grep -q "export default function" "$f" && ! grep -q "@element(" "$f" && echo "$f"   # 1: interop-generated-host
 done
-ls www/dist/client/.vite/ 2>/dev/null   # Git-ignored build output; a local artifact is not evidence (no recorded run)
+ls www/dist/client/.vite/ 2>/dev/null   # Git-ignored build output; the §5 addendum records the 2026-11-15 local artifact hashes (not qualifying evidence)
 git show e7aad2f1f:packages/element/src/open-element-implementation.ts | sed -n '286,306p'   # anchor form
 ```
 
@@ -627,6 +669,7 @@ git show e7aad2f1f:packages/element/src/open-element-implementation.ts | sed -n 
 
 Every `path:line` anchor is a baseline-tree anchor, readable with
 `git show e7aad2f1f:<path> | sed -n '<from>,<to>p'`; ranges name the symbol, not
-necessarily the minimal range. The Git-ignored `www/dist` in this checkout is
-build output, not evidence: no exact-SHA, clean-tree, command or artifact-hash
-record backs any artifact a local build leaves there.
+necessarily the minimal range. The Git-ignored `www/dist` and `apps/saas/dist`
+in this checkout are build output, not evidence: the §5 addendum records the
+2026-11-15 commands, the per-app artifacts and their `sha256` values, but no
+exact-SHA/clean-tree record backs them.

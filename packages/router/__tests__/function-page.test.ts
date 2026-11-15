@@ -5,10 +5,10 @@
  * A server function page is the compile-architected page form: a route module
  * exports its TSX component function and the compiler lowers it into a
  * generative HTML constructor (`__h`/`__t`/`__ssr`). `definePage(component)`
- * admits that compiled function (the `__partProgram` discriminant: compiled
- * element CLASSES carry it, server function components never do), the route
- * scanner records the `functionPage` fact, and both render channels — the
- * request-time GET handler and the SSG renderRoute — render through the SAME
+ * admits that compiled function as an ES-function value (the class branch is
+ * ES class syntax only — no compiled-artifact property is read; M11-1); the
+ * route scanner records the `functionPage` fact, and both render channels —
+ * the request-time GET handler and the SSG renderRoute — render through the SAME
  * descriptor render, through the same renderer wraps, layout wrap and document
  * wrap the compiled path feeds.
  *
@@ -63,7 +63,7 @@ function codeOf(fn: () => unknown): string {
   throw new Error('the call returned; a coded rejection was expected');
 }
 
-/** A minimal compiled element class carrying the `__partProgram` discriminant. */
+/** A minimal compiled element class: a real ES class carrying the program statics. */
 function makeCompiledPageClass(tag: string): CustomElementConstructor {
   const Page = class {
     render() {}
@@ -101,7 +101,7 @@ test('definePage admits a plain function declaration as a function page', () => 
   expect(page).toEqual(Page);
 });
 
-test('a class carrying __partProgram stays on the class branch (kind page)', () => {
+test('a compiled page class (real ES class) stays on the class branch (kind page)', () => {
   const Page = makeCompiledPageClass('about-page');
   const page = definePage(Page);
   const descriptor = (page as unknown as { openElementPage: Record<string, unknown> })
