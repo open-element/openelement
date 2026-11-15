@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the claim classes share one mechanism — reading prose and its authority in one pass so a fact change fails the change that made it — and one coverage/report shape, so splitting per claim class would fork that contract; the boundary is honesty by construction: only machine-decidable claims (plus the two declared POLICY budgets) are owned, each mapped to the authority that owns the fact.
 /**
  * doc-claims: every machine-checkable factual claim in the covered docs must
  * agree with the source that owns the fact.

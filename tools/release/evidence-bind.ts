@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the qualification block joins every authority (AutoFlow runs and their job instances, artifacts, CodeQL alerts, npm dist-tags, tag/Release existence) into one fail-closed verdict, and the fail-closed rules only make sense over that whole join; the boundary is read-only consumption of the authoritative sources — a run bound to another head_sha, a failed required instance or a wrong-ref CodeQL answer is recorded history, never qualification, and exits non-zero.
 /**
  * REL-01 — exact-SHA release evidence binder.
  *

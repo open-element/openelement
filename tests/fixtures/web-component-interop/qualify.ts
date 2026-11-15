@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): one qualification run owns the whole chain — corpus validation, CEM artifact check, temporary app build, native Custom Element browser probes — because the stages share the corpus and the evidence shapes; the boundary is its consumption rule: workspace SOURCE artifacts in, corpus.json as the only hand-written truth, and the CEM + interop-evidence files as gitignored regenerated outputs that must never be committed.
 /**
  * Web Components interoperability qualification (#1175).
  *

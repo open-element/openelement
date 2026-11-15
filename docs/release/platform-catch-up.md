@@ -107,8 +107,9 @@ line rides one Node/pnpm/Vite/TypeScript set from the alpha.8 host port onward.
   - **Hono becomes optional** in the router's dependency surface (#1557).
 - **Platform-redundant code deleted.** The Deno-era file/`deno.json` export
   machinery and the monolithic element package (three-package split, #1557);
-  the island-CSS string-template authoring form (#1558); the Speculation Rules
-  emission.
+  the island-CSS string-template authoring form (#1558); the per-page island
+  Speculation Rules emission — fe39b1b02's actual scope; the document-level
+  Speculation Rules emission remains (#1561).
 - **Shim registry created here.** #1559 lands `docs/architecture/shim-inventory.md` (17 items,
   each with a retirement condition) — the P5 registry this file's reviews feed.
 - **Status: 当时未记录，补录.**

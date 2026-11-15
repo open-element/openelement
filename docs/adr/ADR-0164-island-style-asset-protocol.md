@@ -748,3 +748,51 @@ native form was never enabled, not as live policy. Appendices A/B/C remain the
 support-matrix record (rolldown MISSING_EXPORT, Safari gap, webpack silent
 inlining). Shim inventory entry #3 (CSS dual adapter) was retired in the same
 change; `shims:check` now reports 17 registered shims / 3 retired.
+
+## Prior art (P7.4)
+
+Added 2026-11-15 to complete the P7 four-question record; no decision text changes.
+
+The platform/ecosystem survey in Appendices B–D is this record's prior-art
+evidence; stated here as the question-four answer, with the deliberate
+differences named.
+
+1. **Native CSS Module Scripts** (`import sheet from './x.css' with
+   { type: 'css' }`) are the platform's own channel for delivering a
+   stylesheet as a constructable object — the nearest platform precedent, and
+   the shape this protocol's adapter form would have taken if it were
+   universal. Appendix C is the deliberate difference: Safari has no CSS
+   module scripts through Safari 27 (2026-09) and the repo toolchain's
+   rolldown fails the native form closed (`MISSING_EXPORT`, Appendix A), so
+   the shipped adapter is the fetch+`replace()` form over constructable
+   stylesheets — a platform basis (Chrome/Edge 73+, Firefox 101+, Safari
+   16.4+) that IS universal. The 2026-11-06 amendment reduced the protocol to
+   that one adapter form; the support matrix, not defensive engineering, made
+   the ruling.
+2. **Bundler CSS channels** (Vite's CSS pipeline, webpack's asset handling)
+   are the nearest ecosystem precedent for "CSS enters the graph as an
+   import". Appendix B is the deliberate difference: webpack silently inlines
+   the native import-attribute form back into the JS chunk (and once compiled
+   it to an empty chunk entirely), which voids the zero-inline guarantee
+   without a diagnostic; rolldown fails it closed. This protocol therefore
+   makes the cross-bundler contract the adapter module plus the content-hashed
+   asset URL — never the import attribute — and intercepts at `enforce: 'pre'`
+   ahead of Vite's own CSS plugin, a control point bundler CSS channels do not
+   offer for shadow-targeted sheets.
+3. **Constructable-stylesheet adoption practice** (Lit's `static styles`, the
+   wider shadow-DOM convention) is the nearest precedent for the runtime half:
+   sheets applied through `adoptedStyleSheets`, never document-head injection.
+   The deliberate difference: component ecosystems construct each sheet from
+   per-instance strings, while this protocol delivers one pre-parsed sheet
+   object per component type (O(1) adoption), served from an emitted asset
+   whose hash is decoupled from the JS chunk, and read by BOTH consumers — the
+   client adopter and the server's DSD serialization — from the same bytes so
+   the two halves cannot drift.
+4. **No ecosystem precedent exists for the claim handoff.** The
+   claim-then-delete lifecycle (DSD `<style data-oe-static-styles>` node for
+   first paint, skipped by claim, removed only after successful claim and part
+   binding, KEPT through claim failure and recovery) is this protocol's own;
+   hydration-adjacent frameworks either leave their server style output in
+   place or discard the DOM wholesale. Keeping the server-delivered styling
+   node until the client has proven ownership — then deleting it — is the part
+   this record adds rather than adopts.

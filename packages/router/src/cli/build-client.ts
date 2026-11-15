@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the client island build and the client asset manifest it emits are one fact — compile-time island identity joined with the build manifest and Rollup module metadata can only be authored where the build runs; the boundary is a library module exporting buildClient() for closeBundle() in the open:build plugin, producing dist/client/islands/*.js plus the manifest consumed by SSG post-processing, with a required ctx and no globalThis fallback.
 /**
  * @openelement/router - CLI: Client Island Build
  *
@@ -25,7 +26,7 @@ import {
   elementRuntimeBlocksAlias,
 } from '../vite/internal/ssg/index.ts';
 import { runtimeModulePath } from '../vite/internal/runtime-module-path.ts';
-import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
+import { findBuildWorkspaceRootOrUndefined } from '../vite/workspace-alias.ts';
 import { createGeneratedElementSiteResolver } from '../vite/generated-element-site.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
 import { resolveElementServicesRuntimeModule } from '../vite/internal/ssg/entry-client-codegen.ts';
@@ -978,7 +979,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       compiledElementPlugin({
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
-        workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
+        workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
         staticSidecars: [ISLAND_ADMISSION],
         // This build's own class-candidate registry (defect C): the transform's
         // write path and the discovery pass share exactly this instance, and no
@@ -991,7 +992,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         // module would ship authored JSX.
         resolveServerComponentModule: createServerComponentSourceResolver({
           root,
-          workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
+          workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
         }),
         // The union the entry's SSR registry carries (renderable islands plus
         // static compiled components): a function page's nested host rides
@@ -1105,7 +1106,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         root,
         outDir: clientOutDir,
         base: clientBase,
-        workspaceRoot: findBuildWorkspaceRoot(root) ?? root,
+        workspaceRoot: findBuildWorkspaceRootOrUndefined(root) ?? root,
         clientEntryModuleId: RESOLVED_CLIENT_ENTRY_ID,
         getElementPackageRoot: () => elementRuntimeIdentity?.packageRoot ?? null,
         islands: islandEntries.map((entry) => ({

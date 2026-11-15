@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): binding identity, lexical scope semantics, TDZ, and the reads/captures/dependencies/mode axes are one semantic model whose definitions a split would let diverge; the boundary is compiler-private and mechanism-free — no ts.Program and no type checker — with a host ImportClassifier answering module-symbol questions and docs/architecture/m03-scope-resolution.md as the design authority.
 /**
  * M03-I-1 — lexical scope resolution (Alpha16a, compiler-private).
  *

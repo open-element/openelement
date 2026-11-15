@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): site admission is one decision — the structural opt-out walk, the default-export fact and the fail-closed gates answer the same question ("does this module belong to the generated element lane?") and must agree in one place; the boundary is that the host supplies the one GeneratedElementSite fact (the lane cannot see __tagName) and this module re-derives no semantic model, refusing with OEIR_GENERATED_ELEMENT_NOT_A_COMPONENT instead of compiling something the function frontend does not model.
 /**
  * M09-1a — site admission for the generated native element lane.
  *

@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): every mount shape this codegen emits — intrinsics, fragments, conditions, lists, attribute/property channels, component children projection — is emitted by one walker against the same M04 recipe/insertion primitives, so the shared emission invariants cannot fork; the boundary is compiler-private: it consumes the merged M03 FunctionModelModule + ExpressionRegistry and emits one real JS module, re-deriving no resolution, lowering or erasure.
 /**
  * M06b2a — generated leaf/component mount with reusable JSX values and
  * component children projection (compiler-private).

@@ -50,8 +50,9 @@ parts, text channels, generation over hand-maintenance, fail loud — scoped by
 P5 and by Output discipline. It does not join as a source of new principles.
 
 **D-4 — No new principle, no new file, no numbering change.** P1–P8 keep their
-identifiers; the front matter still reads "P1–P8"; nothing outside this
-document and the ADR index changes.
+identifiers; the front matter still reads "P1–P8"; the only files this decision
+touches are design-principles.md, its Chinese twin (via D-1–D-3), and this ADR
+— no new principle, no new file, no numbering change.
 
 ## Consequences
 

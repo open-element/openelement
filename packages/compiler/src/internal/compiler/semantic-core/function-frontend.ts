@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the frontend is the one parallel entry joining the M03 slices (scope resolution, expression registry, type erasure) into a single component model with a shared OEC diagnostics dialect, which is what the Alpha15 parity harness compares field-for-field; the boundary is explicit — it emits no Part Program v2, no __partProgram, no module ABI and no generated module, and nothing here is serialized, package-exported or written to disk.
 /**
  * M03-I-4 — production function-component frontend (Alpha16a, compiler-private).
  *

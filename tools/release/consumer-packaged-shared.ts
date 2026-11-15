@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the shared consumer-qualification machinery — scratch-project lifecycle, cell framework, HTTP/form probes, dev-feedback session, Playwright continuation, boundary walks — is one harness because every leg must enforce the same observational rule from the same primitives; the boundary is that legs supply a PackedAppLegSpec and the staging stays OUTSIDE the repository so workspace auto-aliasing can never substitute workspace source for the packed tarballs.
 /**
  * Shared harness for packed-artifact consumer qualification of Framework Mode
  * applications (Beta.2.2, #1339 §11): prove that the pack:dry-run tarballs —

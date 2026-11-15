@@ -224,3 +224,61 @@ Web Components remain a client-only interoperability use case, with no automatic
 SSR and no openElement-managed Lit DSD hydration. The rest of this ADR — the
 generated-code runtime direction, the release gate and the Alpha16a/Alpha16b
 split — is unchanged.
+
+## Prior art (P7.4)
+
+Added 2026-11-15 to complete the P7 four-question record; no decision text changes.
+
+The nearest mature precedent for "the compiler emits the component's runtime
+code" is the compiled-framework generation this decision sits in. Four systems
+bracket the design space; each is stated with the difference this record takes
+deliberately.
+
+1. **Marko** compiles every template into a registered component plus
+   rendered-output code — the longest-running compiled-component precedent.
+   Its current-generation compiler moves further in this record's direction,
+   compiling to direct DOM instructions with no virtual DOM at runtime. The
+   deliberate difference: Marko ships compiled modules and its component
+   runtime as one coupled release surface, while this decision makes the
+   generated-module ABI an explicit compatibility contract — version,
+   capability and deployment build identity checked separately, incompatible
+   or mixed artifacts rejected early with package/component and
+   expected/actual diagnostics, and rollback that replaces server and client
+   together. None of that compatibility discipline is part of Marko's model.
+2. **Svelte** is the namesake precedent for P2's "the compiler pays": a
+   component compiles to plain JS plus small shared helpers, and updates are
+   generated assignments rather than a diff loop. The deliberate difference:
+   Svelte inlines the update logic into each component, while this record
+   keeps ONE shared runtime — one Signals engine, one owner per DOM region —
+   and measures generated code plus helpers together in the full reachable
+   page closure, so relocating bytes between generated output and helpers
+   cannot manufacture a size gain. Svelte's hydration also re-runs compiled
+   component code against server markup; it has no counterpart to claim
+   fidelity (form input, focus/selection, pre-activation events, styles,
+   refs) or to bounded recovery on claim failure.
+3. **Solid** compiles JSX to fine-grained DOM creation over reactive
+   computations, with components executing once and no virtual DOM — the same
+   generated-mount shape as this decision. The deliberate difference: Solid's
+   updates stay implicit inside a live reactive graph the runtime owns, while
+   this record generates explicit update and dispose code per structure,
+   refuses unsupported structures with source-located diagnostics instead of
+   falling back to another renderer, and pairs the client path with a
+   claim/stream wire contract the server render must satisfy.
+4. **Qwik** is the nearest precedent for treating the HTML wire as a
+   load-bearing serialization boundary: it serializes state and listener
+   references into the HTML so a page resumes without hydration replay. The
+   deliberate difference is the opposite serialization stance. Our wire
+   carries location markers, permitted seed data, resources and deployment
+   identity — never arbitrary closures, functions, DOM nodes or complete
+   Signals graphs — and interactivity is restored by generated claim code
+   re-binding to server-rendered DOM, not by deserializing a paused
+   application. Qwik accepts a serialization schema constraint on application
+   state; we accept an explicit claim protocol instead.
+
+What no one of the four carries — and what this record adds deliberately — is
+the three-contract split as separate, versioned surfaces: compiler-owned
+semantic IR, a generated-module ABI qualified against independent tarball
+consumers, and an HTML/claim/stream wire with its own admission rules. The
+single-artifact alternatives (a generic opcode interpreter, a serialized
+program the browser executes, a wire that ships the framework's closures) are
+exactly the shapes this decision rejects.

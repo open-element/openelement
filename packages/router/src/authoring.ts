@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the authoring API is one kernel-free surface — definePage, island specifier/style validation and the canonical predicate re-exports live together so a route module importing @openelement/router never pulls Vite or build tooling into the runtime graph; the boundary is that same rule: no Vite/build imports, and the generated server runtime reaches the canonical predicates through this leaf.
 import { ERROR_PREFIX } from '@openelement/element/authoring';
 /**
  * @openelement/router - application authoring API for the compiled architecture.
@@ -688,8 +689,10 @@ export function definePage<
  * Dangerous keys are filtered through the canonical isDangerousKey predicate
  * (#1214): a hostile loader payload such as JSON.parse('{"__proto__": ...}')
  * can never re-prototype the projection record or the page host it is
- * projected onto. The generated server runtime enforces the same rule with a
- * serialized copy of the canonical DANGEROUS_KEYS list.
+ * projected onto. The generated server runtime enforces the same rule by
+ * importing this canonical predicate through the kernel-free /authoring leaf
+ * (#1470 block e: the old build-time serialization copy of DANGEROUS_KEYS
+ * into generated code is retired).
  */
 export function projectPageProps(context: {
   params?: Record<string, string>;

@@ -262,3 +262,40 @@ prod" cannot happen for a declared requirement.
   superseded for the S lane (utilities are the intended first-party authoring
   form); that package-level change is recorded in `packages/ui/CUSTOMIZATION.md`,
   not as a protocol decision.
+
+## Prior art (P7.4)
+
+Added 2026-11-15 to complete the P7 four-question record; no decision text changes.
+
+1. **Tailwind 4's automatic content detection and `@source` directives** are
+   the nearest precedent for deciding which sources feed the compile. Tailwind
+   ships two answers: heuristic scanning of the project root, or author-written
+   `@source` lines inside CSS — both application-scoped. The deliberate
+   difference: this ADR moves the demand fact to the PACKAGE — `required` and
+   package-relative `sources` in the declaring package's own manifest, gated by
+   the one admission channel (`packageIslands`), ordered deterministically
+   (package name → declaration tag → declared order) and deduplicated by
+   resolved module identity. What is deliberately NOT adopted is the third
+   option Tailwind-style scanning suggests: inferring demand from class strings
+   ("does this module contain utility-looking tokens?"), which the Context
+   section rejects as a regex recognizer with no idea which strings the engine
+   would compile.
+2. **The npm optional-peer convention** (`peerDependenciesMeta.optional`) is
+   the nearest precedent for an engine present only when used: `tailwindcss` /
+   `@tailwindcss/vite` stay optional peers loaded lazily, and a disabled
+   pipeline needs no peer installed. The deliberate difference on top of that
+   convention: the demand signal is not the application guessing, it is an
+   admitted package declaration checked against the selected configuration —
+   `required: true` with `tailwind: false` fails closed with a coded
+   diagnostic naming the package and tag, and an unadmitted import degrades
+   with a warning naming the fix rather than silently shipping an unstyled
+   component beside an emitted-but-unreferenced asset.
+3. **Token/theme packages** (Open Props; the "import our `theme.css` once"
+   documentation convention of component libraries) are the nearest precedent
+   for package-owned role sheets. The deliberate difference: under the
+   declaration contract the owning package's source compiles by default and
+   the consumer stops repeating the path — while the application keeps the
+   authority (an application source always compiles after every declared
+   source, so application roles win; a resolved-identity duplicate changes
+   nothing). Ownership leaking into the consumer, the failure this ADR exists
+   to remove, is exactly that convention's steady state.

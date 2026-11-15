@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the frozen executor-load predicate, the artifact schema and its evaluator are deliberately one module so writer and checker cannot drift — the file owns exactly those three facts and nothing else; the boundary is the deterministic .vite/oe-browser-entry-graph.json artifact written by browser-entry-graph.ts in the router client build and re-evaluated by the checker from raw chunk/module facts, with anything missing, malformed or untrustworthy UNPROVEN (exit 2), never silently MET.
 /**
  * browser-entry-graph-artifact.ts — the M10-P1 browser-entry module-graph
  * artifact contract and its ONE evaluator.
