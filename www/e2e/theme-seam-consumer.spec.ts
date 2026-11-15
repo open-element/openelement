@@ -26,18 +26,30 @@ async function observeThemeMutations(page: Page): Promise<void> {
   await page.addInitScript(() => {
     window.__themeMutations = 0;
     window.__themeValues = [];
+    // Init scripts run before <html> exists, so observe the document subtree
+    // and filter to the document element's data-theme attribute.
     new MutationObserver((records) => {
       for (const record of records) {
-        if (record.type === 'attributes' && record.attributeName === 'data-theme') {
+        if (
+          record.type === 'attributes' &&
+          record.attributeName === 'data-theme' &&
+          record.target === document.documentElement
+        ) {
           window.__themeMutations = (window.__themeMutations ?? 0) + 1;
           window.__themeValues?.push(document.documentElement.getAttribute('data-theme'));
         }
       }
-    }).observe(document.documentElement, {
+    }).observe(document, {
       attributes: true,
       attributeFilter: ['data-theme'],
+      subtree: true,
     });
   });
+}
+
+/** Wait for the synchronous pre-paint script to have run. */
+async function waitForPrePaint(page: Page): Promise<void> {
+  await page.waitForFunction(() => document.documentElement.dataset.themeInit === '1');
 }
 
 function readTheme(page: Page): Promise<{ mutations: number; theme: string | null }> {
@@ -51,7 +63,7 @@ test('a dark-preference load mutates html[data-theme] exactly once', async ({ pa
   await page.emulateMedia({ colorScheme: 'dark' });
   await observeThemeMutations(page);
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForPrePaint(page);
 
   const { mutations, theme } = await readTheme(page);
   expect(theme).toBe('dark');
@@ -66,7 +78,7 @@ test('a saved light theme wins the one write, even with a dark OS preference', a
   });
   await observeThemeMutations(page);
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForPrePaint(page);
 
   const { mutations, theme } = await readTheme(page);
   expect(theme).toBe('light');
@@ -81,7 +93,7 @@ test('an unavailable matchMedia falls back to the dark default with one write', 
   });
   await observeThemeMutations(page);
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForPrePaint(page);
 
   const { mutations, theme } = await readTheme(page);
   expect(theme).toBe('dark');
@@ -94,7 +106,7 @@ test('a user toggle still propagates through the owner and changes computed styl
   await page.emulateMedia({ colorScheme: 'dark' });
   await observeThemeMutations(page);
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForPrePaint(page);
 
   const toggle = page.getByRole('button', { name: 'Toggle theme' });
   await expect(toggle).toBeVisible({ timeout: 10000 });
