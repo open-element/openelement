@@ -10,6 +10,7 @@
 import { readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
@@ -70,7 +71,7 @@ async function main(): Promise<void> {
     for (const failure of failures) console.error(`- ${failure.file}: ${failure.message}`);
     process.exit(1);
   }
-  console.log('Signal boundary check passed.');
+  emitSummary('Signal boundary check passed.');
 }
 
 if (import.meta.main) await main();

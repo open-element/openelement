@@ -60,6 +60,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { fileURLToPath } from 'node:url';
 
 export const SEAMS_PATH = 'docs/architecture/seams.md';
@@ -540,7 +541,7 @@ function main(): void {
     console.error('seams:check: no seam rows with guard tests found — refusing a vacuous pass.');
     process.exit(1);
   }
-  console.log(
+  emitSummary(
     `seams:check: ${report.rowCount} rows / ${report.explicitRows} explicit — ` +
       `${report.guardedRows} row(s) carry an existing consumer-form guard test, every guard path ` +
       'is Git-tracked, no guard spelling is .gitignore-only, and every row states its ' +

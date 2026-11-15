@@ -36,6 +36,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { fileURLToPath } from 'node:url';
 
 export const ADR_DIR = 'docs/adr';
@@ -387,7 +388,7 @@ function main(): void {
     console.error('adr-index:check: no records found — refusing a vacuous pass.');
     process.exit(1);
   }
-  console.log(
+  emitSummary(
     `adr-index:check: ${report.recordCount} record(s), ${report.resolvedCount}/${report.entryCount} ` +
       `entr(ies) resolved, ${report.annotatedCount} annotated — every record listed once and every ` +
       'annotation agrees with its record.',

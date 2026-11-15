@@ -16,7 +16,8 @@
  *   - report-only categories never gate: executor support, server-private,
  *     authoring and generated-leaf modules are reported but leave the verdict
  *     at MET; parsed-only executor residues are diagnosed, not gated;
- *   - the CLI contract: `--json` document shape, relative-path resolution,
+ *   - the CLI contract: `--json` document shape, the `--report <path>`
+ *     artifact, the one-line stdout summary, relative-path resolution,
  *     usage errors, and one real process spawn.
  *
  * The artifacts here are programmatically constructed fixtures for the
@@ -33,7 +34,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, expect, test } from 'vitest';
 import {
@@ -225,12 +226,18 @@ async function runCheckerInProcess(
   let stdout = '';
   let stderr = '';
   const io: BrowserEntryGraphCheckerIo = {
-    stdout: (text) => (stdout += text),
+    summary: (line) => (stdout += `${line}\n`),
+    machine: (text) => (stdout += text),
     stderr: (text) => (stderr += text),
     cwd,
   };
   const code = await runBrowserEntryGraphCheck(argv, io);
   return { code, stdout, stderr };
+}
+
+/** Output discipline: the passing human run's stdout is exactly one line. */
+function summaryLines(stdout: string): string[] {
+  return stdout.split('\n').filter((line) => line.length > 0);
 }
 
 async function writeArtifact(root: string, name: string, value: unknown): Promise<string> {
@@ -329,11 +336,12 @@ test('an artifact carrying the opaque style-asset id is malformed, not judged', 
   // have to come from the artifact itself.
   const human = await runCheckerInProcess([path.slice(REPO_ROOT.length + 1)]);
   expect(human.code, `${human.stdout}${human.stderr}`).toBe(2);
-  expect(human.stdout).toContain('malformed-artifact');
+  // A failing check names the expectation on stderr; stdout stays a data channel.
+  expect(human.stderr).toContain('malformed-artifact');
   // Neither the opaque id nor the machine path it encodes is echoed.
-  expect(human.stdout).not.toContain(legacyEncoded);
-  expect(human.stdout).not.toContain('/Users/');
-  expect(human.stdout).not.toContain(REPO_ROOT);
+  expect(human.stderr).not.toContain(legacyEncoded);
+  expect(human.stderr).not.toContain('/Users/');
+  expect(human.stderr).not.toContain(REPO_ROOT);
 });
 
 test('a canonical decoded style-asset id is accepted and does not gate', () => {
@@ -373,7 +381,7 @@ test('non-canonical gate spellings and unknown virtual schemes are malformed, ne
 /* Verdicts                                                                  */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-test('a MET artifact exits 0 and prints the report-only picture', async () => {
+test('a MET artifact exits 0, prints one summary line, and reports the picture via --report', async () => {
   const root = await makeTemporaryRoot();
   const artifactPath = await writeArtifact(root, 'met.json', metArtifact());
 
@@ -381,11 +389,19 @@ test('a MET artifact exits 0 and prints the report-only picture', async () => {
   expect(evaluation.verdict).toBe('MET');
   expect(evaluation.parsedOnlyExecutorResidues).toContain(FACADE_HOST_MODULE_ID);
 
-  const human = await runCheckerInProcess([artifactPath]);
+  const reportPath = join(root, 'report.txt');
+  const human = await runCheckerInProcess([artifactPath, '--report', reportPath]);
   expect(human.code, human.stderr).toBe(0);
-  expect(human.stdout).toContain('MET');
-  expect(human.stdout).toContain('parsed-only executor residues');
-  expect(human.stdout).toContain(FACADE_HOST_MODULE_ID);
+  // Output discipline: the passing run's stdout is exactly one summary line.
+  expect(summaryLines(human.stdout)).toHaveLength(1);
+  expect(human.stdout).toContain('1 MET, 0 VIOLATED, 0 UNPROVEN');
+  expect(human.stdout).toContain('this is not an app-completeness claim');
+  // The detailed verdict picture (per-artifact lines, report-only diagnostics)
+  // lives in the --report artifact, not on stdout.
+  const reportText = await readFile(reportPath, 'utf8');
+  expect(reportText).toContain('parsed-only executor residues');
+  expect(reportText).toContain(FACADE_HOST_MODULE_ID);
+  expect(human.stdout).not.toContain('parsed-only executor residues');
 
   const json = await runCheckerInProcess(['--json', artifactPath]);
   expect(json.code).toBe(0);
@@ -417,12 +433,14 @@ test('a VIOLATED artifact exits 1 and names module, chunk and island attribution
 
   const human = await runCheckerInProcess([artifactPath]);
   expect(human.code, human.stderr).toBe(1);
-  expect(human.stdout).toContain('VIOLATED');
-  expect(human.stdout).toContain(KERNEL_MODULE_ID);
-  expect(human.stdout).toContain(RUNTIME_CHUNK);
+  // Failing artifacts name their modules on stderr; stdout stays a data channel.
+  expect(human.stderr).toContain('VIOLATED');
+  expect(human.stderr).toContain(KERNEL_MODULE_ID);
+  expect(human.stderr).toContain(RUNTIME_CHUNK);
+  expect(human.stdout).toBe('');
 });
 
-test('report-only categories are printed but never gate', async () => {
+test('report-only categories are reported via --report but never gate', async () => {
   const artifact = reportOnlyArtifact();
   const evaluation = evaluateBrowserEntryGraphArtifact(artifact);
   expect(evaluation.verdict).toBe('MET');
@@ -432,12 +450,16 @@ test('report-only categories are printed but never gate', async () => {
   expect(evaluation.diagnostics.authoring).toEqual([AUTHORING_MODULE_ID]);
 
   const root = await makeTemporaryRoot();
+  const reportPath = join(root, 'report.txt');
   const human = await runCheckerInProcess([
     await writeArtifact(root, 'report-only.json', artifact),
+    '--report',
+    reportPath,
   ]);
   expect(human.code).toBe(0);
-  expect(human.stdout).toContain(PARTS_MODULE_ID);
-  expect(human.stdout).toContain(SERIALIZER_MODULE_ID);
+  const reportText = await readFile(reportPath, 'utf8');
+  expect(reportText).toContain(PARTS_MODULE_ID);
+  expect(reportText).toContain(SERIALIZER_MODULE_ID);
 });
 
 test('implicitly loaded chunk edges count as loaded — they are never ignored', () => {
@@ -471,7 +493,7 @@ test('the executor-entry gate list stays frozen: a renamed table is drift, not a
   artifact.predicate.gateListDigest = 'sha256:another-revision';
   const human = await runCheckerInProcess([await writeArtifact(root, 'drift.json', artifact)]);
   expect(human.code).toBe(2);
-  expect(human.stdout).toContain('gate-list-drift');
+  expect(human.stderr).toContain('gate-list-drift');
 });
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -512,8 +534,8 @@ test('missing, malformed and incomplete artifacts are UNPROVEN (exit 2)', async 
   for (const [label, argv, expectedReason] of cases) {
     const human = await runCheckerInProcess(argv);
     expect(human.code, `${label}: ${human.stdout}${human.stderr}`).toBe(2);
-    expect(human.stdout, label).toContain('UNPROVEN');
-    expect(human.stdout, label).toContain(expectedReason);
+    expect(human.stderr, label).toContain('UNPROVEN');
+    expect(human.stderr, label).toContain(expectedReason);
   }
 });
 
@@ -566,7 +588,7 @@ test('structurally untrustworthy artifacts are UNPROVEN, never MET', async () =>
     const path = await writeArtifact(root, `forged-${index++}.json`, artifact);
     const human = await runCheckerInProcess([path]);
     expect(human.code, `${label}: ${human.stdout}${human.stderr}`).toBe(2);
-    expect(human.stdout, label).toContain(expectedReason);
+    expect(human.stderr, label).toContain(expectedReason);
   }
 });
 
@@ -642,6 +664,8 @@ test('the real CLI process resolves relative artifact paths and exits with the v
     },
   );
   expect(result.code, result.stderr).toBe(0);
+  // The real process honors output discipline too: one summary line on stdout.
+  expect(summaryLines(result.stdout)).toHaveLength(1);
   expect(result.stdout).toContain('MET');
   expect(result.stdout).toContain('this is not an app-completeness claim');
 

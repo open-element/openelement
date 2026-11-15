@@ -20,6 +20,7 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 
 const MIN_AGE_DAYS = 3;
 const DAY_MS = 86_400_000;
@@ -310,7 +311,7 @@ if (import.meta.main) {
     for (const failure of failures) console.error(`- ${failure}`);
     process.exit(1);
   }
-  console.log(
+  emitSummary(
     `Dependency age check passed: ${packages.length} resolved packages, ${fetched} fetched, ${packages.length - fetched - rejected.size} cached, min age ${MIN_AGE_DAYS}d.`,
   );
 }

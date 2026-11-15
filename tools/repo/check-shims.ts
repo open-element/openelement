@@ -43,6 +43,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { fileURLToPath } from 'node:url';
 import { gitTrackedPaths, isTrackedPath } from './check-seams.ts';
 
@@ -528,7 +529,7 @@ function main(): void {
     console.error('shims:check: no shim rows found — refusing a vacuous pass.');
     process.exit(1);
   }
-  console.log(
+  emitSummary(
     `shims:check: ${report.rowCount} shim(s) / ${report.deletedRows} retired — every location ` +
       `tracked, every row owned with a retirement condition, ${report.citationCount} line ` +
       'citation(s) in range.',
