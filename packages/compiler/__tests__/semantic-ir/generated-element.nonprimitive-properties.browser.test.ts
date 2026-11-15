@@ -833,4 +833,114 @@ describe('non-primitive property retention on the generated element (Chromium)',
       await page.close();
     }
   });
+
+  test('consumer round-trip (mount -> update -> claim): array/object/trustedHtml property channel only, no SSR seed', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeNp;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.NpElement);
+        const list = (host: HTMLElement): string =>
+          [...host.shadowRoot!.querySelectorAll('li')].map((item) => item.textContent).join(',');
+        const title = (host: HTMLElement): string | null =>
+          host.shadowRoot!.querySelector('h2')?.textContent ?? null;
+
+        // 1) MOUNT: caller-owned references assigned before the first connect.
+        const host = document.createElement(tagName) as HTMLElement & {
+          events: Array<{ id: string; body: string }>;
+          model: { title: string; rows: string[] };
+          articleHtml: unknown;
+        };
+        const mountEvents = [{ id: 'mount', body: 'mount-row' }];
+        const mountModel = { title: 'mount-title', rows: ['mount'] };
+        const mountHtml = mod.trustedHtml('<b>mount-safe</b>');
+        host.events = mountEvents;
+        host.model = mountModel;
+        host.articleHtml = mountHtml;
+        document.body.append(host);
+        await tick();
+        const mounted = {
+          sameEvents: host.events === mountEvents,
+          sameModel: host.model === mountModel,
+          sameHtml: host.articleHtml === mountHtml,
+          list: list(host),
+          title: title(host),
+        };
+
+        // 2) UPDATE: every row takes a NEW caller reference; no clone.
+        const updateEvents = [{ id: 'update', body: 'update-row' }];
+        const updateModel = { title: 'update-title', rows: ['update'] };
+        host.events = updateEvents;
+        host.model = updateModel;
+        await tick();
+        const updated = {
+          sameEvents: host.events === updateEvents,
+          sameModel: host.model === updateModel,
+          list: list(host),
+          title: title(host),
+        };
+
+        // 3) CLAIM: retained-DOM claim on re-insert keeps the same instance
+        // state/references and re-renders the update.
+        host.remove();
+        await tick();
+        document.body.append(host);
+        await tick();
+        const claimed = {
+          sameEvents: host.events === updateEvents,
+          sameModel: host.model === updateModel,
+          list: list(host),
+          title: title(host),
+        };
+
+        // 4) NO SSR SEED: the emitted host producer folds only in-process props
+        // (none here), so the serializer/inline rows are defaults; the host tag
+        // carries no property payload/attribute channel (A5 boundary unchanged).
+        const frame = document.createElement('div');
+        frame.setHTMLUnsafe(mod.NpCard__ssrHost(undefined));
+        const ssrHost = frame.firstElementChild as HTMLElement & {
+          events: Array<{ id: string }>;
+        };
+        document.body.append(frame);
+        await tick();
+        const noSeed = {
+          hostAttributeNames: ssrHost.getAttributeNames(),
+          clientDefault: ssrHost.events?.[0]?.id ?? null,
+          claimedList: list(ssrHost),
+        };
+        return { mounted, updated, claimed, noSeed };
+      }, SITE.tag);
+      // MOUNT: property channel only; references preserved; content refreshed.
+      expect(result.mounted).toEqual({
+        sameEvents: true,
+        sameModel: true,
+        sameHtml: true,
+        list: 'mount-row',
+        title: 'mount-title',
+      });
+      // UPDATE: new references win (no clone) and refresh the DOM.
+      expect(result.updated).toEqual({
+        sameEvents: true,
+        sameModel: true,
+        list: 'update-row',
+        title: 'update-title',
+      });
+      // CLAIM: retained-DOM reconnect preserves the client instance state.
+      expect(result.claimed).toEqual({
+        sameEvents: true,
+        sameModel: true,
+        list: 'update-row',
+        title: 'update-title',
+      });
+      // NO SEED: no property attributes on the host tag; the claim starts from
+      // the client default (server folded content is shown, but it is not a
+      // transport seed for the client property — ADR-0181 A5).
+      expect(result.noSeed.hostAttributeNames).toEqual([]);
+      expect(result.noSeed.clientDefault).toBe('seed');
+      expect(result.noSeed.claimedList).toBe('default-row');
+    } finally {
+      await page.close();
+    }
+  });
 });

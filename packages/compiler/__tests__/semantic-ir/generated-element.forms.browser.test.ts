@@ -761,4 +761,150 @@ describe('bounded generated-element form mechanism (Chromium)', () => {
       await page.close();
     }
   });
+
+  test('the existing ui-form e2e contract subset re-runs on the generated CE (mirror, not composite-control parity)', async () => {
+    // Contract source: tests/fixtures/router-ui-dogfood/e2e/ui-form.spec.ts
+    // (open-input/open-button class lane). This test MIRRORS the subset that a
+    // single-value FACE can express: activation-time initial value -> FormData,
+    // property write, required/valueMissing blocked submit, native submit,
+    // form.reset() value clear, formStateRestoreCallback string restore,
+    // disabled fieldset drop/rejoin. It does NOT claim parity with the class
+    // lane's composite control: open-button submit choreography, delegatesFocus,
+    // inner-input events and type/email/minlength constraint mirroring are out
+    // of this bounded slice. Assertions are kept at the contract's semantic
+    // order; nothing is relaxed to make a step pass.
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeForms;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.FormElement);
+
+        // Activation-time initial value: the parser replays `name`/`value`
+        // before the first connect/claim (same authored host attributes shape).
+        const body = mod
+          .FormCard__ssrHost({ value: 'initial', name: 'q', required: false, disabled: false })
+          .replace(`<${tagName}>`, `<${tagName} name="q" value="initial">`);
+        const form = document.createElement('form');
+        const frame = document.createElement('div');
+        frame.setHTMLUnsafe(body);
+        const host = frame.firstElementChild as FormHost;
+        const submitter = document.createElement('button');
+        submitter.type = 'submit';
+        form.append(host, submitter);
+        document.body.append(form);
+        await tick();
+        const formData = (): Record<string, FormDataEntryValue> =>
+          Object.fromEntries(new FormData(form).entries());
+        const initial = {
+          listed: form.elements.namedItem('q') === host,
+          value: host.value,
+          attribute: host.getAttribute('value'),
+          formData: formData(),
+        };
+
+        // Property write: the property is the value channel; FormData follows.
+        host.value = 'typed';
+        await tick();
+        const afterPropertyWrite = formData();
+
+        // required + empty -> valueMissing; native submission is blocked.
+        host.setAttribute('required', '');
+        host.value = '';
+        await tick();
+        let invalidEvents = 0;
+        let submitEvents = 0;
+        let submittedValue: FormDataEntryValue | null = null;
+        host.addEventListener('invalid', () => invalidEvents++);
+        form.addEventListener('submit', (event) => {
+          submitEvents++;
+          submittedValue = new FormData(form).get('q');
+          event.preventDefault();
+        });
+        const checkValidity = form.checkValidity();
+        invalidEvents = 0;
+        const invalid = { checkValidity, invalidMatch: host.matches(':invalid') };
+        form.requestSubmit(submitter);
+        const blocked = { submitEvents, invalidEvents };
+
+        // Valid value -> native submit succeeds with the value in FormData.
+        host.required = false;
+        host.value = 'ok';
+        await tick();
+        const valid = form.checkValidity();
+        form.requestSubmit(submitter);
+        const submitted = { submitEvents, submittedValue };
+
+        // form.reset(): value/FormData clear (required was already false here).
+        host.value = 'typed-after';
+        await tick();
+        form.reset();
+        await tick();
+        const afterReset = { value: host.value, formData: formData() };
+
+        // String state restore (the supported bounded restore shape).
+        host.formStateRestoreCallback('restored', 'restore');
+        await tick();
+        const afterRestore = { value: host.value, formData: formData() };
+
+        // Disabled fieldset: the control drops out of FormData, then rejoins.
+        const fieldset = document.createElement('fieldset');
+        fieldset.disabled = true;
+        const secondForm = document.createElement('form');
+        const secondFrame = document.createElement('div');
+        secondFrame.setHTMLUnsafe(
+          mod
+            .FormCard__ssrHost({ value: 'locked', name: 'r', required: false, disabled: false })
+            .replace(`<${tagName}>`, `<${tagName} name="r" value="locked">`),
+        );
+        const second = secondFrame.firstElementChild as FormHost;
+        fieldset.append(second);
+        secondForm.append(fieldset);
+        document.body.append(secondForm);
+        await tick();
+        const disabled = {
+          stateDisabled: second.matches(':state(disabled)'),
+          formData: Object.fromEntries(new FormData(secondForm).entries()),
+        };
+        fieldset.disabled = false;
+        await tick();
+        const reenabled = {
+          stateDisabled: second.matches(':state(disabled)'),
+          formData: Object.fromEntries(new FormData(secondForm).entries()),
+        };
+        return {
+          initial,
+          afterPropertyWrite,
+          invalid,
+          blocked,
+          valid,
+          submitted,
+          afterReset,
+          afterRestore,
+          disabled,
+          reenabled,
+        };
+      }, SITE.tag);
+      expect(result.initial).toEqual({
+        listed: true,
+        value: 'initial',
+        attribute: 'initial',
+        formData: { q: 'initial' },
+      });
+      expect(result.afterPropertyWrite).toEqual({ q: 'typed' });
+      expect(result.invalid).toEqual({ checkValidity: false, invalidMatch: true });
+      expect(result.blocked).toEqual({ submitEvents: 0, invalidEvents: 1 });
+      expect(result.valid).toBe(true);
+      expect(result.submitted).toEqual({ submitEvents: 1, submittedValue: 'ok' });
+      // The class-lane contract expects cleared (not omitted) entries after
+      // reset (ui-form.spec.ts: {"username":"","email":""}); the generated
+      // single-value FACE mirrors that shape as `{ q: '' }`.
+      expect(result.afterReset).toEqual({ value: '', formData: { q: '' } });
+      expect(result.afterRestore).toEqual({ value: 'restored', formData: { q: 'restored' } });
+      expect(result.disabled).toEqual({ stateDisabled: true, formData: {} });
+      expect(result.reenabled).toEqual({ stateDisabled: false, formData: { r: 'locked' } });
+    } finally {
+      await page.close();
+    }
+  });
 });
