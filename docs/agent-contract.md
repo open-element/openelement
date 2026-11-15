@@ -160,6 +160,7 @@ command conformance alone does not validate prose about side effects.
 | `docs/release/public-interface-snapshot.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot:write` | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` (in `gate:source` and CI) |
 | `packages/ui/src/generated-manifest.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/ui generate:ui-manifest` | `@openelement/ui#ui-manifest:check` (in `gate:release`) |
 | `packages/ui/custom-elements.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/ui generate:ui-cem` | `@openelement/ui#ui-cem:check` (in `gate:release`) |
+| `www/public/theme-init.js` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/www generate:theme-init` (generated from `packages/ui/src/theme-contract.ts`) | `@openelement/www#check:theme-init` (in `gate:source`, `gate:release` and PR CI, before `generate:all`) |
 | `www/dist/**` | **Git-ignored** (build output; `.gitignore`: `dist/`) | `vp run site:build` (redirects/sitemap/RSS emitters write into it) | the site build and consumer gates that read `dist` |
 
 Trackedness changes what a bad edit looks like, not whether the file is

@@ -76,6 +76,23 @@ export const EXPECTED_HEADER = ['Seam', 'Owner', 'Direction', 'Crossing artifact
  */
 export const VACCINE_CLAUSE = 'Missing/unreadable behavior:';
 
+/**
+ * R1 increment enforcement (P8: exactly one named owner).
+ *
+ * A row that opts in carries this marker in its Owner cell and names exactly
+ * ONE repo path there. Rows without it are the frozen legacy set in
+ * `tools/repo/seams-owner-baseline.json`; that set may only shrink, and a new
+ * unmarked row (or a new baseline entry) fails closed.
+ *
+ * The marker is opt-in on purpose: most Owner cells legitimately name several
+ * supporting modules, so "count the paths in the Owner cell" is not a valid
+ * global rule and would red the whole table.
+ */
+export const OWNER_MARKER = 'ONE owner:';
+
+/** The frozen legacy set: seam rows that predate the marker. */
+export const OWNER_BASELINE_PATH = 'tools/repo/seams-owner-baseline.json';
+
 /** A path spelled as a test file: renamed/deleted ones must fail the check. */
 const TEST_FILE_SPELLING = /\.(?:test|spec)\.(?:ts|tsx|mts|js|mjs|cjs)$/;
 
@@ -101,6 +118,11 @@ export type SeamViolationKind =
   | 'guard-not-tracked'
   | 'guard-evidence-ignored'
   | 'tracking-unavailable'
+  | 'owner-ambiguous'
+  | 'owner-path-missing'
+  | 'owner-baseline-missing'
+  | 'owner-baseline-stale'
+  | 'owner-baseline-unverifiable'
   | 'vacuous';
 
 export interface SeamViolation {
@@ -122,6 +144,8 @@ export interface SeamReport {
   guardedRows: number;
   /** Rows carrying the literal `Missing/unreadable behavior:` clause. */
   explicitRows: number;
+  /** Rows carrying an explicit `ONE owner:` marker. */
+  markedRows: number;
   violations: SeamViolation[];
 }
 
@@ -314,6 +338,20 @@ export interface SeamCheckOptions {
    */
   tracked?: ReadonlySet<string>;
   /**
+   * R1 increment enforcement. Omitted keeps the structural check only (the
+   * unit tests use synthetic tables); the CLI always supplies it for the
+   * real registry.
+   *
+   * `unmarked` is the frozen legacy set (seam names). `baseRevisionSeams` is
+   * the set of seam names present at the merge base: a baseline entry that
+   * did not exist there is a new unmarked row smuggled into the baseline, so
+   * it fails. A non-empty baseline with an unreadable merge base fails closed.
+   */
+  ownerRatchet?: {
+    unmarked: ReadonlySet<string>;
+    baseRevisionSeams: ReadonlySet<string> | null;
+  };
+  /**
    * The guard-cell path tokens covered by `.gitignore`. Omitted means "ask
    * `git check-ignore`"; an unreadable Git fails the same way `tracked` does.
    */
@@ -331,7 +369,7 @@ export function checkSeamsMarkdown(
   const tableStart = lines.findIndex((line) => line.startsWith('|'));
   if (tableStart === -1) {
     violations.push({ kind: 'table-missing', line: 0, detail: 'no markdown table found' });
-    return { rowCount: 0, guardedRows: 0, explicitRows: 0, violations };
+    return { rowCount: 0, guardedRows: 0, explicitRows: 0, markedRows: 0, violations };
   }
   const tableLines: Array<{ line: number; text: string }> = [];
   for (let index = tableStart; index < lines.length; index++) {
@@ -344,7 +382,7 @@ export function checkSeamsMarkdown(
       line: tableStart + 1,
       detail: `table needs a header, a separator and at least one data row; found ${tableLines.length} line(s)`,
     });
-    return { rowCount: 0, guardedRows: 0, explicitRows: 0, violations };
+    return { rowCount: 0, guardedRows: 0, explicitRows: 0, markedRows: 0, violations };
   }
   const exists = (repoRelative: string): boolean => existsSync(join(root, repoRelative));
   const kindOf = (repoRelative: string): 'file' | 'dir' => {
@@ -416,6 +454,9 @@ export function checkSeamsMarkdown(
   let rowCount = 0;
   let guardedRows = 0;
   let explicitRows = 0;
+  let markedRows = 0;
+  const seamNames = new Map<string, number>();
+  const unmarkedSeams: Array<{ name: string; line: number }> = [];
   for (const { line, text } of tableLines.slice(2)) {
     rowCount++;
     const cells = splitTableCells(text);
@@ -429,6 +470,7 @@ export function checkSeamsMarkdown(
     }
     const row = cells as SeamRow['cells'];
     const seam = row[0];
+    seamNames.set(seam, line);
     let empty = false;
     row.forEach((cell, index) => {
       if (cell === '') {
@@ -487,6 +529,32 @@ export function checkSeamsMarkdown(
         });
       }
     }
+    // R1: an opted-in row names exactly one repo path as the owner; the path
+    // must exist. Rows without the marker join the frozen legacy set.
+    if (row[1]!.includes(OWNER_MARKER)) {
+      markedRows++;
+      const ownerPaths = [...backtickedTokens(row[1]!)].filter(looksLikeRepoPath);
+      if (ownerPaths.length !== 1) {
+        violations.push({
+          kind: 'owner-ambiguous',
+          line,
+          detail:
+            `row ${JSON.stringify(seam)}: an '${OWNER_MARKER}' row must name exactly ONE repo path ` +
+            `in its Owner cell; found ${ownerPaths.length}` +
+            (ownerPaths.length > 0 ? ` (${ownerPaths.join(', ')})` : ''),
+        });
+      } else if (!exists(ownerPaths[0]!)) {
+        violations.push({
+          kind: 'owner-path-missing',
+          line,
+          detail:
+            `row ${JSON.stringify(seam)}: the '${OWNER_MARKER}' path ` +
+            `${JSON.stringify(ownerPaths[0]!)} does not exist`,
+        });
+      }
+    } else {
+      unmarkedSeams.push({ name: seam, line });
+    }
     if (!guard.resolved.some((entry) => entry.test)) {
       violations.push({
         kind: 'guard-not-a-test',
@@ -502,7 +570,87 @@ export function checkSeamsMarkdown(
   if (rowCount === 0) {
     violations.push({ kind: 'vacuous', line: tableStart + 1, detail: 'table has no data rows' });
   }
-  return { rowCount, guardedRows, explicitRows, violations };
+  const ratchet = options.ownerRatchet;
+  if (ratchet) {
+    for (const { name, line } of unmarkedSeams) {
+      if (!ratchet.unmarked.has(name)) {
+        violations.push({
+          kind: 'owner-baseline-missing',
+          line,
+          detail:
+            `row ${JSON.stringify(name)}: no '${OWNER_MARKER}' marker and not in ` +
+            `${OWNER_BASELINE_PATH} — new seam rows must name one owner`,
+        });
+      }
+    }
+    if (ratchet.unmarked.size > 0 && ratchet.baseRevisionSeams === null) {
+      violations.push({
+        kind: 'owner-baseline-unverifiable',
+        line: 0,
+        detail:
+          `the merge base cannot be read, so ${OWNER_BASELINE_PATH}'s frozen set cannot be ` +
+          'distinguished from newly added rows — refusing to pass on an unverifiable tree',
+      });
+    } else if (ratchet.baseRevisionSeams !== null) {
+      for (const name of ratchet.unmarked) {
+        if (!seamNames.has(name)) {
+          violations.push({
+            kind: 'owner-baseline-stale',
+            line: 0,
+            detail:
+              `${OWNER_BASELINE_PATH} lists ${JSON.stringify(name)}, which is not a row in the ` +
+              'registry — delete the stale entry (the set may only shrink)',
+          });
+        } else if (!ratchet.baseRevisionSeams.has(name)) {
+          violations.push({
+            kind: 'owner-baseline-unverifiable',
+            line: 0,
+            detail:
+              `${OWNER_BASELINE_PATH} lists ${JSON.stringify(name)}, which did not exist at the ` +
+              'merge base — a baseline may only freeze pre-existing rows, never absorb a new one',
+          });
+        }
+      }
+    }
+  }
+  return { rowCount, guardedRows, explicitRows, markedRows, violations };
+}
+
+/** The frozen legacy set, or undefined when the file is missing/unreadable. */
+export function readOwnerBaseline(root: string): Set<string> | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(join(root, OWNER_BASELINE_PATH), 'utf8')) as {
+      unmarked?: unknown;
+    };
+    if (!Array.isArray(parsed.unmarked)) return undefined;
+    return new Set(parsed.unmarked.filter((name): name is string => typeof name === 'string'));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Seam names at the merge base with `origin/main`, or null when unreadable. */
+export function readBaseRevisionSeams(root: string): Set<string> | null {
+  try {
+    const mergeBase = execFileSync('git', ['-C', root, 'merge-base', 'HEAD', 'origin/main'], {
+      encoding: 'utf8',
+    }).trim();
+    if (mergeBase === '') return null;
+    const baseMarkdown = execFileSync('git', ['-C', root, 'show', `${mergeBase}:${SEAMS_PATH}`], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return new Set(
+      baseMarkdown
+        .split('\n')
+        .filter((line) => line.startsWith('|'))
+        .slice(2)
+        .map((line) => splitTableCells(line)[0])
+        .filter((cell): cell is string => cell !== undefined && cell !== ''),
+    );
+  } catch {
+    return null;
+  }
 }
 
 /** Read and check the registry at `<root>/docs/architecture/seams.md`. */
@@ -513,10 +661,36 @@ export function checkSeams(root: string, options: SeamCheckOptions = {}): SeamRe
       rowCount: 0,
       guardedRows: 0,
       explicitRows: 0,
+      markedRows: 0,
       violations: [{ kind: 'registry-missing', line: 0, detail: `${SEAMS_PATH} does not exist` }],
     };
   }
-  return checkSeamsMarkdown(readFileSync(file, 'utf8'), root, options);
+  let ownerRatchet = options.ownerRatchet;
+  if (!ownerRatchet) {
+    const unmarked = readOwnerBaseline(root);
+    if (unmarked === undefined) {
+      return {
+        rowCount: 0,
+        guardedRows: 0,
+        explicitRows: 0,
+        markedRows: 0,
+        violations: [
+          {
+            kind: 'owner-baseline-unverifiable',
+            line: 0,
+            detail:
+              `${OWNER_BASELINE_PATH} is missing or unreadable, so the frozen legacy set cannot ` +
+              `be verified; rows without '${OWNER_MARKER}' would silently pass`,
+          },
+        ],
+      };
+    }
+    ownerRatchet = {
+      unmarked,
+      baseRevisionSeams: unmarked.size === 0 ? new Set<string>() : readBaseRevisionSeams(root),
+    };
+  }
+  return checkSeamsMarkdown(readFileSync(file, 'utf8'), root, { ...options, ownerRatchet });
 }
 
 function formatViolation(violation: SeamViolation): string {
@@ -542,10 +716,12 @@ function main(): void {
     process.exit(1);
   }
   emitSummary(
-    `seams:check: ${report.rowCount} rows / ${report.explicitRows} explicit — ` +
+    `seams:check: ${report.rowCount} rows / ${report.explicitRows} explicit / ` +
+      `${report.markedRows} with '${OWNER_MARKER}' — ` +
       `${report.guardedRows} row(s) carry an existing consumer-form guard test, every guard path ` +
-      'is Git-tracked, no guard spelling is .gitignore-only, and every row states its ' +
-      'Missing/unreadable behavior.',
+      'is Git-tracked, no guard spelling is .gitignore-only, every row states its ' +
+      `Missing/unreadable behavior, and the unmarked rows are the frozen ${OWNER_BASELINE_PATH} set ` +
+      '(R1 ratchet: new seam rows must name one owner).',
   );
 }
 

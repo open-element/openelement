@@ -1,29 +1,40 @@
 import { expect, test } from 'vitest';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { renderThemeInit } from '../tools/generate-theme-init.ts';
 
 /**
  * P8 consumer-form guards for the two www-side seams registered in
  * docs/architecture/seams.md:
  *
- * 1. html[data-theme] broadcast — `www/public/theme-init.js` (the pre-paint
- *    boot writer) and `packages/ui/src/open-theme-toggle.tsx` `applyTheme`
- *    (the runtime propagation writer) must keep ONE saved-value acceptance
- *    rule: the localStorage `open-theme` value is honored only when it is
- *    exactly 'light' or 'dark'; anything else falls back to
- *    prefers-color-scheme with 'dark' as the no-preference default. The
- *    former divergence (theme-init honoring ANY non-empty saved value while
- *    the toggle only accepted the two exact spellings) is the defect this
- *    guard pins shut — a single-side rule change reds here.
+ * 1. html[data-theme] broadcast — ONE owner since PR #1804:
+ *    `packages/ui/src/theme-contract.ts`. The pre-paint boot script
+ *    `www/public/theme-init.js` is generated from it (P6 derived artifact) and
+ *    `open-theme-toggle.tsx` delegates its document write to it. Both
+ *    consumers share the contract's one acceptance rule, and the contract is
+ *    import-free so the classic script can carry it.
+ *
+ *    What used to be asserted here — "both writers contain the raw
+ *    setAttribute call" — was itself the defect: it pinned two writers in
+ *    place and would red any convergence. The guard now asserts the opposite:
+ *    exactly one write path, no raw write in either consumer.
  *
  * 2. --gaze stage gradient input — the live-gaze controller's written and
  *    removed custom property names and the site-chrome CSS reader's consumed
  *    name must keep co-occurring; a single-side rename would break the
  *    gradient feed silently.
  *
- * Both are static source contracts (the established www test style): the
- * sources are parsed and asserted against the same literals, no DOM needed.
+ * These are static source contracts (the established www test style); the
+ * generated-artifact test additionally compares the tracked bytes with the
+ * generator's in-memory output, so the registry row cannot describe a file
+ * that no longer derives from the owner.
  */
 
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+const THEME_CONTRACT_SOURCE = readFile(
+  new URL('../../packages/ui/src/theme-contract.ts', import.meta.url),
+  'utf8',
+);
 const THEME_INIT_SOURCE = readFile(new URL('../public/theme-init.js', import.meta.url), 'utf8');
 const THEME_TOGGLE_SOURCE = readFile(
   new URL('../../packages/ui/src/open-theme-toggle.tsx', import.meta.url),
@@ -53,50 +64,43 @@ function consumedPropertyNames(css: string): string[] {
   return names;
 }
 
-test('theme boot and toggle writers share the exact saved-value acceptance rule', async () => {
-  const init = await THEME_INIT_SOURCE;
-  const toggle = await THEME_TOGGLE_SOURCE;
+test('the theme contract is import-free and owns the one acceptance rule', async () => {
+  const contract = await THEME_CONTRACT_SOURCE;
 
-  // The saved value is honored only when it is exactly 'light' | 'dark' — in
-  // BOTH writers. The pre-paint boot script previously accepted any non-empty
-  // saved value (`saved || …`), a rule the toggle never had.
-  expect(init).toContain("saved === 'light'");
-  expect(init).toContain("saved === 'dark'");
-  expect(toggle).toContain("saved === 'light'");
-  expect(toggle).toContain("saved === 'dark'");
-  // The divergent truthy acceptance shape stays gone, and no inverted
-  // spelling (a `!==` short-circuit) may replace it on either side.
-  expect(init).not.toMatch(/saved\s*\|\|/);
-  expect(init).not.toMatch(/saved\s*!==\s*'(?:light|dark)'/);
-  expect(toggle).not.toMatch(/saved\s*\|\|/);
-  expect(toggle).not.toMatch(/saved\s*!==\s*'(?:light|dark)'/);
+  // The pre-paint artifact is transpiled standalone: an import here cannot be
+  // carried by the classic script and would break first paint.
+  expect(contract).not.toMatch(/^\s*import\s/m);
+  expect(contract).not.toMatch(/\brequire\s*\(/);
+  // The strict saved-value acceptance rule lives once, here.
+  expect(contract).toContain("value === 'light'");
+  expect(contract).toContain("value === 'dark'");
+  expect(contract).toMatch(/prefersLight\s*\?\s*'light'\s*:\s*'dark'/);
+  // The one storage key both consumers read.
+  expect(contract).toContain("'open-theme'");
 });
 
-test('theme boot and toggle writers share the same prefers-color-scheme fallback and default', async () => {
-  const init = await THEME_INIT_SOURCE;
-  const toggle = await THEME_TOGGLE_SOURCE;
+test('the pre-paint artifact is the generator output, byte for byte', async () => {
+  const onDisk = await THEME_INIT_SOURCE;
+  const regenerated = await renderThemeInit(repoRoot);
 
-  // Both writers query the LIGHT preference and default to 'dark' when it
-  // does not match (the toggle's no-preference default). Neither queries
-  // 'dark' directly — that spelling is how the old light-defaulting boot
-  // script diverged.
-  expect(init).toContain("'(prefers-color-scheme: light)'");
-  expect(toggle).toContain("'(prefers-color-scheme: light)'");
-  expect(init).not.toContain('(prefers-color-scheme: dark)');
-  expect(toggle).not.toContain('(prefers-color-scheme: dark)');
-  // The no-preference default is 'dark' in both writers.
-  expect(init).toMatch(/prefersLight\s*\?\s*'light'\s*:\s*'dark'/);
-  expect(toggle).toMatch(/\?\s*'light'\s*:\s*'dark'/);
-  // One localStorage key, read by both writers.
-  expect(init).toContain("localStorage.getItem('open-theme')");
-  expect(toggle).toContain("localStorage.getItem('open-theme')");
+  expect(onDisk, 'www/public/theme-init.js must be regenerated from theme-contract.ts').toBe(
+    regenerated,
+  );
+  expect(onDisk.split('\n')[0]).toContain('GENERATED FILE');
+  // Exactly one write site for the attribute survives in the derived artifact.
+  expect((onDisk.match(/setAttribute\('data-theme'/g) ?? []).length).toBe(1);
+  // The no-preference default stays 'dark' — the toggle's documented default.
+  expect(onDisk).toMatch(/prefersLight\s*\?\s*'light'\s*:\s*'dark'/);
 });
 
-test('both html[data-theme] writers broadcast through the same attribute write', async () => {
-  const init = await THEME_INIT_SOURCE;
+test('the toggle delegates the document write to the contract (no raw write)', async () => {
   const toggle = await THEME_TOGGLE_SOURCE;
-  expect(init).toContain("document.documentElement.setAttribute('data-theme'");
-  expect(toggle).toContain("document.documentElement.setAttribute('data-theme'");
+
+  expect(toggle).toContain('applyDocumentTheme(document.documentElement, theme)');
+  expect(toggle, 'the toggle must not write html[data-theme] itself').not.toMatch(
+    /documentElement\.setAttribute\(\s*'data-theme'/,
+  );
+  expect(toggle).toContain('THEME_STORAGE_KEY');
 });
 
 test('the live-gaze controller and site-chrome CSS agree on the --gaze custom property name', async () => {

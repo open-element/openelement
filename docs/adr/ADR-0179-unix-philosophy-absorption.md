@@ -77,3 +77,54 @@ touches are design-principles.md, its Chinese twin (via D-1–D-3), and this ADR
   deletion, so it cannot drift into a licence for surface.
 - P7: the register entry answers question four with a named, bounded prior art
   rather than an unbounded book.
+
+## Amendment (2026-11-15): authority-text corrections
+
+This amendment records two corrections to text this decision owns. It is the
+ADR instrument `docs/architecture/design-principles.md`:4 requires ("amending
+it requires an ADR"); it introduces no principle, no file and no numbering
+change, and it changes no normative P1–P8 clause.
+
+### A-1 — the P6 example sentence described a mechanism #1470 removed
+
+`docs/architecture/design-principles.md`:190-193 and its Chinese twin
+`:159-162` carried the example "one protocol-level forbidden-sink predicate
+serves the compiler, the client validator, and the server validator, **with a
+drift guard on the serialized `DANGEROUS_KEYS` copy**". #1470 removed that
+serialized copy; the predicate is now the single source, so the clause
+described a guard over an artifact that no longer exists. The clause is
+deleted. The normative P6 sentence and its Litmus question are unchanged.
+
+This is a fact correction, not a relaxation: a second copy that no longer
+exists cannot be "held to one owner", and keeping the sentence would have
+taught readers to look for a guard that is not there.
+
+### A-2 — D-4's file-scope sentence contradicted D-1–D-3
+
+D-4 said "nothing outside this document and the ADR index changes" while
+D-1–D-3 amend `docs/architecture/design-principles.md` and its Chinese twin.
+The sentence is rewritten to name the files this decision actually touches
+(design-principles.md, its Chinese twin, and this ADR) and keeps its operative
+claims: no new principle, no new file, no numbering change.
+
+### A-3 — deviations named here, not waived
+
+`docs/architecture/design-principles.md`:16-19 makes an unnamed deviation a
+defect to be reverted. Two deviations from this change set are named in this
+record:
+
+- **P6** — the constitution text and the D-4 sentence were edited before this
+  amendment existed. This section is the naming; the correction is the record
+  itself, in the amend-never-rewrite form of execution-plan §4.2/§4.3.
+- **P8** — `html[data-theme]` had two writers (`www/public/theme-init.js` and
+  `packages/ui/src/open-theme-toggle.tsx`). They are registered as one seam in
+  `docs/architecture/seams.md`:101 and converged in this change set onto the
+  single owner `packages/ui/src/theme-contract.ts`, with the pre-paint script
+  generated from that module and the toggle delegating its document write to
+  it. The retirement condition for the generated artifact lives in
+  `docs/architecture/seams.md`; there is no waiver.
+
+- Recorder: PR #1804 (`fix/taoup-remediation`)
+- Basis: `#1470` (predicate consolidation), PR #1804 head SHA, and the
+  `docs/adr/ADR-0163-seam-single-ownership.md` precedent
+- Owner sign-off: ____________________ (date: __________)

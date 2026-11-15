@@ -1,39 +1,64 @@
-// openElement Theme Initialization - L2 (browser API)
-// Runs before page render to prevent FOUC (Flash of Unstyled Content).
-// Reads saved theme from localStorage, falling back to prefers-color-scheme.
-// The public site is a violet, cinematic Web Standards Lab; light remains a
-// fully supported reading mode and the system preference wins when nothing
-// (or nothing valid) is saved.
+// GENERATED FILE — do not edit.
+// Source: packages/ui/src/theme-contract.ts
+// Generator: www/tools/generate-theme-init.ts (--check enforces byte equality).
 (function () {
   if (typeof document === 'undefined') return;
 
-  let saved;
+  const exports = {};
+  const module = { exports: exports };
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.THEME_STORAGE_KEY = void 0;
+exports.isSiteTheme = isSiteTheme;
+exports.resolveSiteTheme = resolveSiteTheme;
+exports.applyDocumentTheme = applyDocumentTheme;
+exports.THEME_STORAGE_KEY = 'open-theme';
+function isSiteTheme(value) {
+    return value === 'light' || value === 'dark';
+}
+function resolveSiteTheme(saved, prefersLight) {
+    if (isSiteTheme(saved))
+        return saved;
+    return prefersLight ? 'light' : 'dark';
+}
+function applyDocumentTheme(root, theme) {
+    let changed = false;
+    if (root.getAttribute('data-theme') !== theme) {
+        root.setAttribute('data-theme', theme);
+        changed = true;
+    }
+    if (root.style && root.style.colorScheme !== theme) {
+        root.style.colorScheme = theme;
+        changed = true;
+    }
+    return changed;
+}
+  const contract = module.exports;
+
+  let saved = null;
   try {
-    saved = localStorage.getItem('open-theme');
+    saved = localStorage.getItem(contract.THEME_STORAGE_KEY);
   } catch {
-    // localStorage may be blocked in private browsing or restricted contexts
+    // localStorage may be blocked in private browsing or restricted contexts.
   }
 
   let prefersLight = false;
   try {
-    prefersLight = globalThis.matchMedia?.('(prefers-color-scheme: light)').matches ?? false;
+    const matchMedia = globalThis.matchMedia;
+    if (typeof matchMedia === 'function') {
+      prefersLight = matchMedia.call(globalThis, '(prefers-color-scheme: light)').matches === true;
+    }
   } catch {
-    // matchMedia may be unavailable in old WebViews
+    // matchMedia may be unavailable or throw in old/embedded WebViews.
   }
 
-  // Same acceptance rule as OpenThemeToggle.initTheme()
-  // (packages/ui/src/open-theme-toggle.tsx): only the exact 'light' | 'dark'
-  // saved values are honored; anything else under the key falls back to
-  // prefers-color-scheme, and with no light preference the default is
-  // 'dark' — the toggle's no-preference default. This parity is the
-  // html[data-theme] broadcast seam registered in docs/architecture/seams.md;
-  // www/__tests__/site-theme-and-gaze-seams.test.ts holds both writers to it.
-  const theme = saved === 'light' || saved === 'dark' ? saved : prefersLight ? 'light' : 'dark';
+  const theme = contract.resolveSiteTheme(saved, prefersLight);
+  contract.applyDocumentTheme(document.documentElement, theme);
+
   try {
-    document.documentElement.setAttribute('data-theme', theme);
     // Synchronous marker proving theme-init ran before first paint.
     document.documentElement.dataset.themeInit = '1';
   } catch {
-    // Ignore errors
+    // Ignore errors: the marker is diagnostic only.
   }
 })();

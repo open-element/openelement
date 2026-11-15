@@ -92,6 +92,79 @@ test('a row with fewer than five cells is reported as malformed', () => {
   expect(report.violations[0]!.detail).toContain('expected 5 cells, found 4');
 });
 
+test('R1 ratchet: an unmarked row is reported once the frozen set does not list it', () => {
+  const report = checkSeamsMarkdown(
+    registry([
+      `| New seam | \`owner.ts\` | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
+    ]),
+    repoRoot,
+    { ownerRatchet: { unmarked: new Set(), baseRevisionSeams: new Set() } },
+  );
+  expect(kinds(report.violations)).toContain('owner-baseline-missing');
+});
+
+test('R1 ratchet: a marked row naming one existing repo path passes', () => {
+  const report = checkSeamsMarkdown(
+    registry([
+      `| New seam | ONE owner: \`tools/repo/checker-io.ts\` — the one writer | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
+    ]),
+    repoRoot,
+    { ownerRatchet: { unmarked: new Set(), baseRevisionSeams: new Set() } },
+  );
+  expect(kinds(report.violations)).not.toContain('owner-ambiguous');
+  expect(kinds(report.violations)).not.toContain('owner-baseline-missing');
+  expect(report.markedRows).toBe(1);
+});
+
+test('R1 ratchet: a marked row naming two repo paths is reported as ambiguous', () => {
+  const report = checkSeamsMarkdown(
+    registry([
+      `| New seam | ONE owner: \`tools/repo/checker-io.ts\` and \`tools/repo/check-seams.ts\` | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
+    ]),
+    repoRoot,
+    { ownerRatchet: { unmarked: new Set(), baseRevisionSeams: new Set() } },
+  );
+  expect(kinds(report.violations)).toContain('owner-ambiguous');
+});
+
+test('R1 ratchet: a marked row naming a missing path is reported', () => {
+  const report = checkSeamsMarkdown(
+    registry([
+      `| New seam | ONE owner: \`tools/repo/does-not-exist.ts\` | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
+    ]),
+    repoRoot,
+    { ownerRatchet: { unmarked: new Set(), baseRevisionSeams: new Set() } },
+  );
+  expect(kinds(report.violations)).toContain('owner-path-missing');
+});
+
+test('R1 ratchet: a baseline entry with no row is stale', () => {
+  const report = checkSeamsMarkdown(
+    registry([
+      `| Sample seam | \`owner.ts\` | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
+    ]),
+    repoRoot,
+    {
+      ownerRatchet: {
+        unmarked: new Set(['Sample seam', 'Ghost seam']),
+        baseRevisionSeams: new Set(['Sample seam', 'Ghost seam']),
+      },
+    },
+  );
+  expect(kinds(report.violations)).toContain('owner-baseline-stale');
+});
+
+test('R1 ratchet: a baseline entry that did not exist at the merge base is unverifiable', () => {
+  const report = checkSeamsMarkdown(
+    registry([
+      `| Sample seam | \`owner.ts\` | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
+    ]),
+    repoRoot,
+    { ownerRatchet: { unmarked: new Set(['Sample seam']), baseRevisionSeams: new Set() } },
+  );
+  expect(kinds(report.violations)).toContain('owner-baseline-unverifiable');
+});
+
 test('an empty owner cell is reported', () => {
   const report = checkSeamsMarkdown(
     registry([

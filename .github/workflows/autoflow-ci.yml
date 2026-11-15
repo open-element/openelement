@@ -211,6 +211,12 @@ jobs:
             git status --porcelain
             exit 1
           fi
+      - name: Theme-init artifact check (before generate:all)
+        # `www/public/theme-init.js` is a Git-tracked derived artifact. The
+        # byte check must run BEFORE generate:all: after it, the comparison
+        # sees bytes the generator just wrote and cannot detect a stale
+        # committed file (docs/agent-contract.md's generated-file map).
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/www check:theme-init
       - name: Generate all artifacts
         run: vp run generate:all
       - name: Tools typecheck (gate:source)
@@ -245,6 +251,8 @@ jobs:
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo workspace:links:check
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo docs-index:check
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo deps:vite-check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo output-discipline:check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo constitution-parity:check
       - name: vp selector flags (fail-closed task dispatch)
         # `vp run <pkg>#<task>` resolves the package part by exact package NAME
         # and exits 0 without running anything when nothing matches, so a

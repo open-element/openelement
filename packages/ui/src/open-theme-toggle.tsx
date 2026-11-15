@@ -27,6 +27,7 @@
 import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
 import { log } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
+import { applyDocumentTheme, THEME_STORAGE_KEY } from './theme-contract.ts';
 import openThemeToggleStyles from './open-theme-toggle.css';
 
 @element('open-theme-toggle', { root: 'shadow-open', delegatesFocus: true })
@@ -124,7 +125,7 @@ export class OpenThemeToggle extends OpenElement {
       } else {
         let resolved = false;
         try {
-          const saved = localStorage.getItem('open-theme');
+          const saved = localStorage.getItem(THEME_STORAGE_KEY);
           if (saved === 'light') {
             this.theme = 'light';
             resolved = true;
@@ -150,8 +151,10 @@ export class OpenThemeToggle extends OpenElement {
     const changed = readInstanceState(this, 'lastPropagated', () => undefined) !== theme;
     this.theme = theme;
     this.setAttribute('data-theme', theme);
-    document.documentElement.setAttribute('data-theme', theme);
-    if (document.documentElement.style) document.documentElement.style.colorScheme = theme;
+    // The document write is delegated to the seam's single owner
+    // (theme-contract.ts). It is idempotent: when the pre-paint script already
+    // applied this theme, hydration performs no second DOM mutation.
+    applyDocumentTheme(document.documentElement, theme);
 
     try {
       const root = this.getRootNode();
@@ -173,7 +176,7 @@ export class OpenThemeToggle extends OpenElement {
 
   private persistTheme(theme: 'dark' | 'light'): void {
     try {
-      localStorage.setItem('open-theme', theme);
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
     } catch (e) {
       log.debug('theme persistence unavailable:', e);
     }

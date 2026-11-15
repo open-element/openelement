@@ -16,6 +16,7 @@
     "**/*.css",
     "www/app/data/",
     "www/public/assets/",
+    "www/public/theme-init.js",
     "www/content/",
     "custom-dist/",
     "dist-test-ssg-render/",
